@@ -138,6 +138,8 @@ impl Fixture {
             before: Some(current),
             after: Some(content.to_string()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }]
     }

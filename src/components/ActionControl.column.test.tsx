@@ -7,6 +7,7 @@ import { EditSessionStore } from "../state/editSessions";
 import { clearAllDiscussionSessions } from "../state/discussionSession";
 import { resetDiscussionFocus } from "../state/discussionFocus";
 import { resetLayoutPreferencesCache } from "../state/layoutPreferences";
+import { CONTEXT_ESTIMATE } from "../test/invokeMocks";
 import {
   discussionColumnState,
   fileColumn,
@@ -104,6 +105,8 @@ function wire(b: Backend, artifactId: string) {
       }
       case "get_active_ai_api_catalog":
         return { resolution: "none_configured", catalog: null };
+      case "estimate_discussion_context":
+        return CONTEXT_ESTIMATE;
       default:
         if (KNOWN.has(cmd)) return cmd.startsWith("list") ? [] : undefined;
         throw new Error(`unexpected command ${cmd}`);

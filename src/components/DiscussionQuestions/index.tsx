@@ -22,11 +22,23 @@
  * move between presentations, and a refusal of the whole set all leave the work
  * where it was (DQA-FR-LSNW).
  *
+ * Where the set carries option descriptions, the answers stand in a left rail
+ * and one description in a right rail (DQA-FR-MIBQ), so the author scans short
+ * labels and reads the detail of the one they consider. The block measures its
+ * own width, and the rails stack where it is narrow (DQA-FR-OGVU).
+ *
  * The shape follows `../GraduationRuns/escalation.tsx` deliberately: an author
  * who has answered a graduation run's questions already knows how to answer
  * these.
  */
-import { useEffect, useReducer, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import { logError } from "../../logging";
 import {
@@ -40,7 +52,15 @@ import {
   type PendingQuestionSet,
   type QuestionAnswerInput,
 } from "../../types";
-import { composeAnswers, isAnswered, progressLine } from "./answers";
+import {
+  composeAnswers,
+  DESCRIPTION_PLACEHOLDER,
+  isAnswered,
+  progressLine,
+  setHasDescriptions,
+  shownOption,
+  type HoveredRow,
+} from "./answers";
 import { stripCitationMarkers } from "../../text/citationMarkers";
 
 export interface DiscussionQuestionsProps {
@@ -65,6 +85,15 @@ export function DiscussionQuestions({
   const [page, setPage] = useState(0);
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * DQA-FR-TKUM, DQA-FR-KBJA: the row under the pointer and the row the
+   * keyboard is on, held apart so that one leaving does not clear the other.
+   * The pointer wins where they differ, being the more recent intent.
+   */
+  const [pointed, setPointed] = useState<HoveredRow>(null);
+  const [focused, setFocused] = useState<HoveredRow>(null);
+  /** DQA-FR-CLHJ: unique per rendering, as one set can stand in two surfaces. */
+  const instance = useId();
   const questionRef = useRef<HTMLFieldSetElement | null>(null);
   const ownFieldRef = useRef<HTMLTextAreaElement | null>(null);
   const noteFieldRef = useRef<HTMLTextAreaElement | null>(null);
@@ -100,6 +129,13 @@ export function DiscussionQuestions({
     if (opened.current) ownFieldRef.current?.focus();
     opened.current = false;
   });
+
+  // DQA-FR-TKUM: a move to another question clears the hovered row, so the
+  // rail of the question that arrived starts from its own selection.
+  useEffect(() => {
+    setPointed(null);
+    setFocused(null);
+  }, [current, set.setId]);
 
   useEffect(() => {
     if (!paged.current) return;
@@ -155,10 +191,209 @@ export function DiscussionQuestions({
   // selected. A question answered in the author's own words offers none.
   const noteOffered = !draft.ownWords && draft.selected !== null;
 
+  // DQA-FR-MIBQ, DQA-FR-EWUG: two rails only where the set carries descriptions.
+  const railed = setHasDescriptions(set);
+  const shown = railed
+    ? shownOption(question, pointed ?? focused, draft)
+    : null;
+  /** DQA-FR-CLHJ: the hidden element an option row is described by. */
+  const descriptionId = (position: number) =>
+    `${instance}-question-${question.position}-option-${position}-description`;
+  /** Leaving a row clears it only while it is still the one held. */
+  const release = (row: HoveredRow) => (standing: HoveredRow) =>
+    standing === row ? null : standing;
+
   const turnTo = (next: number) => {
     paged.current = true;
     setPage(next);
   };
+
+  // DQA-FR-QWTB: the two or three recorded options as rows of one answer
+  // group, each reading as its recorded label, and none preselected.
+  const optionRows = question.options.map((option) => (
+    <Fragment key={option.position}>
+      <label
+        className="discussion-questions__choice"
+        data-selected={
+          !draft.ownWords && draft.selected === option.position
+            ? "true"
+            : undefined
+        }
+        // DQA-FR-TKUM: the right rail follows the pointer.
+        onPointerEnter={railed ? () => setPointed(option.position) : undefined}
+        onPointerLeave={
+          railed ? () => setPointed(release(option.position)) : undefined
+        }
+      >
+        <input
+          type="radio"
+          name={`discussion-question-${set.setId}-${question.position}`}
+          // DQA-FR-KBJA: and the keyboard, exactly as it follows the pointer.
+          onFocus={railed ? () => setFocused(option.position) : undefined}
+          onBlur={
+            railed ? () => setFocused(release(option.position)) : undefined
+          }
+          aria-describedby={
+            railed && option.description
+              ? descriptionId(option.position)
+              : undefined
+          }
+          // DQA-FR-HLDS: exactly one option stands selected. Choosing
+          // another replaces the selection rather than adding to it, which
+          // one radio group per question is what guarantees.
+          checked={!draft.ownWords && draft.selected === option.position}
+          disabled={locked}
+          // DQA-FR-ROXG: choosing leaves the note the author typed where it
+          // was — the note belongs to the question, not to the option.
+          // DQA-FR-HLDS: and it takes the answer off the own-answer row,
+          // the two being rows of one group.
+          onChange={() => write({ selected: option.position, ownWords: false })}
+        />
+        <span className="discussion-questions__option">
+          {stripCitationMarkers(option.value)}
+        </span>
+      </label>
+      {/* DQA-FR-CLHJ: the row's own description, read with its label by a
+            screen reader; the visible rail is not announced. Outside the label,
+            so it describes the row rather than becoming part of its name. */}
+      {railed && option.description && (
+        <span id={descriptionId(option.position)} className="sr-only">
+          {stripCitationMarkers(option.description)}
+        </span>
+      )}
+    </Fragment>
+  ));
+
+  // DQA-FR-LFIB: every description of the question and the placeholder stand
+  // in one cell, one shown and the rest hidden, so the rail is as tall as the
+  // longest of them and moving between options moves nothing else.
+  const descriptionLayers = [
+    ...question.options
+      .filter((option) => option.description)
+      .map((option) => (
+        <span
+          key={option.position}
+          className="discussion-questions__detail-text"
+          data-shown={shown === option.position ? "true" : undefined}
+        >
+          {/* DQA-FR-JADB: less any provider citation marker. */}
+          {stripCitationMarkers(option.description ?? "")}
+        </span>
+      )),
+    <span
+      key="placeholder"
+      className="discussion-questions__detail-text"
+      data-kind="placeholder"
+      data-shown={shown === null ? "true" : undefined}
+    >
+      {DESCRIPTION_PLACEHOLDER}
+    </span>,
+  ];
+
+  // The answer rows and the note, as one group.
+  const answerGroup = (
+    <div
+      className={
+        railed
+          ? "discussion-questions__group discussion-questions__group--railed"
+          : "discussion-questions__group"
+      }
+    >
+      {/* DQA-FR-MIBQ, DQA-FR-SRMF: where the set carries descriptions, the
+          option rows are the left rail and one description stands in the
+          right, both on the group's own background. DQA-FR-CLHJ: the rail
+          repeats what each row is described by, so it is hidden from
+          assistive technology rather than announced on every move. */}
+      {railed ? (
+        <div
+          className="discussion-questions__rails"
+          data-testid="discussion-questions-rails"
+        >
+          <div className="discussion-questions__options">{optionRows}</div>
+          <div
+            className="discussion-questions__detail"
+            data-testid="discussion-questions-detail"
+            // DQA-FR-USTA: while the own answer is chosen and no option row
+            // is hovered, the rail shows nothing, its rule included.
+            data-hidden={draft.ownWords && shown === null ? "true" : undefined}
+            aria-hidden="true"
+          >
+            {descriptionLayers}
+          </div>
+        </div>
+      ) : (
+        optionRows
+      )}
+
+      {/* DQA-FR-FCZL: the own answer, a row of the same group after the
+          recorded options, so exactly one answer stands (DQA-FR-HLDS). It
+          stands below the rails at the group's full width (DQA-FR-MIBQ). It is
+          offered on every question — the agent cannot withhold it. The label
+          wraps the radio and its words and stops there, so nothing the author
+          types becomes part of the name the row announces itself by. */}
+      <div
+        className="discussion-questions__choice discussion-questions__choice--own"
+        data-testid="discussion-questions-own"
+        data-selected={draft.ownWords ? "true" : undefined}
+        // DQA-FR-USTA: the own-answer row has no description, so pointing at
+        // it shows the placeholder.
+        onPointerEnter={railed ? () => setPointed("own") : undefined}
+        onPointerLeave={railed ? () => setPointed(release("own")) : undefined}
+      >
+        <label className="discussion-questions__own-head">
+          <input
+            type="radio"
+            name={`discussion-question-${set.setId}-${question.position}`}
+            checked={draft.ownWords}
+            disabled={locked}
+            onFocus={railed ? () => setFocused("own") : undefined}
+            onBlur={railed ? () => setFocused(release("own")) : undefined}
+            onChange={() => {
+              opened.current = true;
+              write({ ownWords: true });
+            }}
+          />
+          <span className="discussion-questions__option">
+            Something else — I will say
+          </span>
+        </label>
+        {draft.ownWords && (
+          <textarea
+            ref={ownFieldRef}
+            className="draft-review__feedback discussion-questions__typed"
+            data-testid="discussion-questions-own-field"
+            // One line until there is more than one line in it. Without this a
+            // textarea falls back to its own two rows when the effect above
+            // sets the height to `auto`, and the field measures itself as two
+            // lines tall however little is written in it.
+            rows={1}
+            aria-label={`Your own answer to question ${current + 1} of ${total}`}
+            value={draft.typed}
+            disabled={locked}
+            onChange={(event) => write({ typed: event.target.value })}
+          />
+        )}
+      </div>
+      {/* DQA-FR-ROXG: the note below the answer rows, marked by its placeholder
+          alone — there is nothing to press and nothing to open.
+          DQA-FR-JJON: and it is offered only beside a chosen option.
+          DQA-FR-UAKC: typing here chooses nothing, so a question carrying a note
+          and no answer is still unanswered. */}
+      {noteOffered && (
+        <textarea
+          ref={noteFieldRef}
+          className="draft-review__feedback discussion-questions__note-field"
+          data-testid="discussion-questions-note"
+          rows={1}
+          placeholder="Add a note…"
+          aria-label={`Note for question ${current + 1} of ${total}`}
+          value={draft.note}
+          disabled={locked}
+          onChange={(event) => write({ note: event.target.value })}
+        />
+      )}
+    </div>
+  );
 
   return (
     <section
@@ -214,100 +449,8 @@ export function DiscussionQuestions({
             needs the card to surround the answers alone — a legend notches the
             border of the box it is inside. It is `display: contents` by
             default, so every presentation that draws no card is unaffected. */}
-        <div className="discussion-questions__group">
-        {/* DQA-FR-QWTB: the two or three recorded options as rows of one answer
-            group, each reading as its recorded value, and none preselected. */}
-        {question.options.map((option) => (
-          <label
-            className="discussion-questions__choice"
-            key={option.position}
-            data-selected={
-              !draft.ownWords && draft.selected === option.position ? "true" : undefined
-            }
-          >
-            <input
-              type="radio"
-              name={`discussion-question-${set.setId}-${question.position}`}
-              // DQA-FR-HLDS: exactly one option stands selected. Choosing
-              // another replaces the selection rather than adding to it, which
-              // one radio group per question is what guarantees.
-              checked={!draft.ownWords && draft.selected === option.position}
-              disabled={locked}
-              // DQA-FR-ROXG: choosing leaves the note the author typed where it
-              // was — the note belongs to the question, not to the option.
-              // DQA-FR-HLDS: and it takes the answer off the own-answer row,
-              // the two being rows of one group.
-              onChange={() => write({ selected: option.position, ownWords: false })}
-            />
-            <span className="discussion-questions__option">
-              {stripCitationMarkers(option.value)}
-            </span>
-          </label>
-        ))}
-
-        {/* DQA-FR-FCZL: the own answer, a row of the same group after the
-            recorded options, so exactly one answer stands (DQA-FR-HLDS). It is
-            offered on every question — the agent cannot withhold it. The label
-            wraps the radio and its words and stops there, so nothing the author
-            types becomes part of the name the row announces itself by. */}
-        <div
-          className="discussion-questions__choice discussion-questions__choice--own"
-          data-testid="discussion-questions-own"
-          data-selected={draft.ownWords ? "true" : undefined}
-        >
-          <label className="discussion-questions__own-head">
-            <input
-              type="radio"
-              name={`discussion-question-${set.setId}-${question.position}`}
-              checked={draft.ownWords}
-              disabled={locked}
-              onChange={() => {
-                opened.current = true;
-                write({ ownWords: true });
-              }}
-            />
-            <span className="discussion-questions__option">
-              Something else — I will say
-            </span>
-          </label>
-          {draft.ownWords && (
-            <textarea
-              ref={ownFieldRef}
-              className="draft-review__feedback discussion-questions__typed"
-              data-testid="discussion-questions-own-field"
-              // One line until there is more than one line in it. Without this a
-              // textarea falls back to its own two rows when the effect above
-              // sets the height to `auto`, and the field measures itself as two
-              // lines tall however little is written in it.
-              rows={1}
-              aria-label={`Your own answer to question ${current + 1} of ${total}`}
-              value={draft.typed}
-              disabled={locked}
-              onChange={(event) => write({ typed: event.target.value })}
-            />
-          )}
-        </div>
-        {/* DQA-FR-ROXG: the note below the answer rows, marked by its placeholder
-            alone — there is nothing to press and nothing to open.
-            DQA-FR-JJON: and it is offered only beside a chosen option.
-            DQA-FR-UAKC: typing here chooses nothing, so a question carrying a note
-            and no answer is still unanswered. */}
-        {noteOffered && (
-          <textarea
-            ref={noteFieldRef}
-            className="draft-review__feedback discussion-questions__note-field"
-            data-testid="discussion-questions-note"
-            rows={1}
-            placeholder="Add a note…"
-            aria-label={`Note for question ${current + 1} of ${total}`}
-            value={draft.note}
-            disabled={locked}
-            onChange={(event) => write({ note: event.target.value })}
-          />
-        )}
-        </div>
+        {answerGroup}
       </fieldset>
-
 
       {refusal && (
         // DQA-FR-WKTP: the typed error inline at the foot of the block, with

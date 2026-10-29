@@ -79,6 +79,11 @@ pub(super) struct TurnPlan {
     /// it since. A comparison of second-granularity times cannot tell a
     /// resolution just before dispatch from one just after it.
     pub(super) resolution_baseline: Option<usize>,
+    /// AGC-FR-GMSF: the window and the percent resolved at dispatch.
+    pub(super) document_budget: DocumentBudget,
+    /// AGC-FR-OYVH: the size of the document the input was built from, or
+    /// `None` on a note target and where it could not be read.
+    pub(super) document: Option<DocumentSize>,
 }
 
 /// AGC-FR-24: `@<nickname> is thinking about <draft name>…` for a draft,
@@ -234,9 +239,14 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     // hand, and names the agent and the subject of the conversation.
     let progress_label = progress_label_of(roots, &origin, &agent.nickname);
 
+    // AGC-FR-GMSF: the document size limit of this turn — its agent's model on
+    // the resolved provider, and the stored percent. Read from the registry
+    // alone; no key is read here.
+    let document_budget = DocumentBudget::resolve(&store, &provider, &agent.model_id);
     // AGC-FR-13: input is assembled at dispatch, so a turn answers the
     // conversation as it stood when the agent was addressed.
-    let input = build_input(roots, &origin, trigger_comment_id);
+    let BuiltInput { sections: input, document } =
+        build_input_within(roots, &origin, trigger_comment_id, &document_budget);
     // The shape of the material and nothing of the material itself: which
     // sections a builder could produce, how much they came to, and whether the
     // bound of AGC-FR-11 bit — which is what explains a reply about half a
@@ -254,6 +264,15 @@ pub fn dispatch_impl<R: tauri::Runtime>(
             "tags" => input.iter().map(|s| s.tag.as_str()).collect::<Vec<_>>().join(","),
             "chars" => input.iter().map(|s| s.body.chars().count()).sum::<usize>(),
             "truncated" => input.iter().any(|s| s.truncated),
+            // AGC-FR-GMSF, AGC-FR-OYVH: the limit and the size of the document,
+            // numbers only.
+            "window" => document_budget.window.map(|w| w.to_string()).unwrap_or_default(),
+            "limitTokens" => document_budget
+                .limit_tokens()
+                .map(|l| l.to_string())
+                .unwrap_or_default(),
+            "documentTokens" => document.map(|d| d.estimated_tokens.to_string()).unwrap_or_default(),
+            "aboveLimit" => above_limit(document.as_ref(), document_budget.limit_tokens()),
         },
     );
     // Read before the origin is moved into the plan below.
@@ -293,6 +312,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         &origin,
         &author,
         ContributionFlags { asked: &asked, asked_questions: &asked_questions, proposed: &proposed },
+        document_budget,
     );
     let plan = TurnPlan {
         turn_id: turn.id.clone(),
@@ -332,6 +352,8 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         cancelled,
         progress_label,
         resolution_baseline,
+        document_budget,
+        document,
     };
 
     let app = app.clone();

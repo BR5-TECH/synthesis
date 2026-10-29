@@ -206,6 +206,9 @@ describe("the Custom token fields (AII-FR-UQLF, AII-FR-TWIR, AII-FR-FBVE)", () =
     expect(apiLevel().getByTestId("ai-api-max-context-size-note")).toHaveTextContent(
       /when the model reports no context size.*never sent to the host/i,
     );
+    expect(apiLevel().getByTestId("ai-api-max-context-size-note")).toHaveTextContent(
+      /the window the document size limit uses/i,
+    );
   });
 
   it("AII-FR-UQLF, AAP-FR-ITBL: a valid entry is committed on blur, and an empty field commits a clear", async () => {

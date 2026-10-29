@@ -46,7 +46,11 @@ fn prompt_path_is_informational_only() {
     // Passed as a draft id, it is the unknown-draft refusal.
     let as_id = crate::tools::draft_read::read(
         &root,
-        &crate::tools::draft_read::ReadDraftArgs { draft_id: m.prompt_path.clone() },
+        &crate::tools::draft_read::ReadDraftArgs {
+            draft_id: m.prompt_path.clone(),
+            offset: None,
+            limit: None,
+        },
     );
     assert_eq!(as_id.unwrap_err(), ToolRefusal::DraftNotFound);
 }
@@ -95,7 +99,11 @@ fn stale_and_inconsistent_hits_are_dropped() {
     let root = fixture.root();
     assert!(crate::tools::draft_read::read(
         &root,
-        &crate::tools::draft_read::ReadDraftArgs { draft_id: matches[0].draft_id.clone() }
+        &crate::tools::draft_read::ReadDraftArgs {
+            draft_id: matches[0].draft_id.clone(),
+            offset: None,
+            limit: None
+        }
     )
     .is_ok());
     // And the inconsistent one is exactly the condition DRS-FR-15 reports.

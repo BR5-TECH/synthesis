@@ -79,7 +79,8 @@ const TOKEN_FIELDS: Record<
     placeholder: "",
     note:
       "Used as the conversation budget when the model reports no context " +
-      "size. Never sent to the host.",
+      "size. It is then also the window the document size limit uses. " +
+      "Never sent to the host.",
     save: (tokens) => api.setAiApiMaxContextSize("custom", tokens),
   },
 };

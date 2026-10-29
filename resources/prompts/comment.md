@@ -10,7 +10,7 @@ Respond to the current comment because it has been directed to you.
 
 ## What you are given
 
-- `<artifact>` — the material the conversation is anchored in: a file the project holds, carrying its path, or a draft's prompt, carrying the draft's name and the prompt's path within it. It holds that material **in full**: if any of it had been left out, the section itself would say so in its own text. You already have this material and do not need to go and fetch it.
+- `<artifact>` — the material the conversation is anchored in: a file the project holds, carrying its path, or a draft's prompt, carrying the draft's name and the prompt's path within it. It holds that material **in full**, unless the material is too large to send whole. Then the section says so in its own text and holds the passage around the fragment under discussion, with the size of the whole document and the line numbers of the passage. You already have what the section holds and do not need to go and fetch it. The rest of a document the section holds only part of is material you may gather, a part at a time, when the comment turns on it.
 - `<discussion_history>` — the passage the thread is anchored to, then the comments already in this conversation, oldest first. A comment that quotes an earlier one carries the quoted passage attributed to whoever wrote it, above that comment's own words.
 - `<current_comment>` — the comment that addressed you, which is what you are answering.
 

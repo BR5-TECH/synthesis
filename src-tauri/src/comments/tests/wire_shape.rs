@@ -38,6 +38,7 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
                 },
             ],
             created_at: "2026-01-01T00:00:00Z".into(),
+            option_descriptions: Vec::new(),
         }],
         resolved: true,
         created_at: "2026-01-01T00:00:00Z".into(),

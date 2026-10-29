@@ -174,11 +174,26 @@
   font-size: var(--fs-ui-sm);
   color: var(--accent);
 }
-/* The caps micro-label is `.t-eyebrow`'s; this only says where it sits. */
-.dds-discussion__title { flex: 1; }
+/* The caps micro-label is `.t-eyebrow`'s; this only says where it sits.
+   DDS-FR-CTXI / DDS-FR-MZQJ: in a narrow column the header gives way from its
+   leading end. The title and the states shrink to an ellipsis; the context
+   indicator and the menu host keep their size, so the menu never leaves the
+   column. */
+.dds-discussion__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* DDS-FR-DPRJ / DDS-FR-GKMT: which of the two things the column is doing. The
    words carry it; the badge's colour only agrees with them. */
-.dds-discussion__state { white-space: nowrap; }
+.dds-discussion__state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* DDS-FR-MZQJ / DDS-FR-YSNB: a resolved discussion's state, as one lowercase
    word beside a six-pixel dot in the quiet tone. */
 .dds-discussion__state--resolved {
@@ -195,12 +210,97 @@
   border-radius: var(--r-full);
   background: var(--fg-4);
 }
+/* DDS-FR-CTXI / DDS-FR-ZQVE: the context indicator and the warning, before the
+   menu. Quiet by default: a number in the meta tone with a ring that fills with
+   the share of the window. Only the warning takes a colour of its own, and its
+   meaning is in its tooltip too, not in the colour alone. */
+.dds-context {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+}
+.dds-context__value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-ui-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+  white-space: nowrap;
+  border-radius: var(--r-xs);
+  cursor: default;
+}
+.dds-context__value[data-estimate] { color: var(--fg-3); }
+/* DDS-FR-CTXI: in a narrow column a value with a ring shows the ring alone, so
+   the header keeps room for the title and the menu. A value with no ring (no
+   known window) keeps its text, which is then the only thing that states it. */
+@container (max-width: 320px) {
+  .dds-context__ring + .dds-context__text { display: none; }
+}
+.dds-context__ring {
+  width: var(--sp-3);
+  height: var(--sp-3);
+  flex: none;
+}
+.dds-context__track {
+  fill: none;
+  stroke: var(--border-2);
+  stroke-width: 2.5;
+}
+.dds-context__fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.dds-context__warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--warn);
+  border-radius: var(--r-xs);
+  cursor: default;
+}
+.dds-context__value:focus-visible,
+.dds-context__warning:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* DDS-FR-WRNB: the split, as label and figure in two aligned columns. */
+.dds-context-tip {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: var(--sp-4);
+  row-gap: var(--sp-0-5);
+  min-width: max-content;
+  text-align: left;
+}
+.dds-context-tip__head,
+.dds-context-tip__row { display: contents; }
+.dds-context-tip__head > * {
+  color: var(--fg-1);
+  padding-bottom: var(--sp-1);
+}
+.dds-context-tip__row > :first-child { color: var(--fg-2); }
+.dds-context-tip__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dds-context-tip__foot {
+  grid-column: 1 / -1;
+  padding-top: var(--sp-1);
+  color: var(--fg-3);
+  max-width: 32ch;
+}
+
 /* DDS-FR-MZQJ: the discussion's own menu, at the header's trailing end. The
    menu opens below it, so the host is what it is placed against. */
 .dds-discussion__actions {
   position: relative;
   display: inline-flex;
   align-items: center;
+  flex: none;
 }
 
 /* DDS-FR-SVBL: the anchor bar. Between the header and the transcript, because

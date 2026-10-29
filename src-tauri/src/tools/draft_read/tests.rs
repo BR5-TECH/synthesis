@@ -54,7 +54,11 @@ impl DraftFixture {
     }
 
     fn read(&self, draft_id: &str) -> Result<ReadDraftOutput, ToolRefusal> {
-        block_on(self.tool().call(ReadDraftArgs { draft_id: draft_id.into() }))
+        block_on(self.tool().call(ReadDraftArgs {
+            draft_id: draft_id.into(),
+            offset: None,
+            limit: None,
+        }))
     }
 }
 
@@ -71,9 +75,10 @@ fn is_a_portable_tool_named_read_draft() {
     assert_eq!(rig::tool::tool_definition(&fixture.tool()).name, NAME);
 }
 
-/// RDT-FR-02: the fixed description, and a schema declaring `draftId` alone.
+/// RDT-FR-02: the fixed description, and a schema declaring `draft_id`,
+/// `offset`, and `limit` alone.
 #[test]
-fn definition_declares_one_parameter_and_no_other() {
+fn definition_declares_three_parameters_and_no_other() {
     let fixture = DraftFixture::new();
     let definition = rig::tool::tool_definition(&fixture.tool());
     assert_eq!(definition.description, DESCRIPTION);
@@ -81,12 +86,14 @@ fn definition_declares_one_parameter_and_no_other() {
     let schema = definition.parameters;
     assert_eq!(schema["required"], serde_json::json!(["draft_id"]));
     assert_eq!(schema["properties"]["draft_id"]["description"], DRAFT_ID_DESCRIPTION);
-    // RDT-FR-04: nothing here selects a version, and RDT-FR-06 offers no paging.
+    assert_eq!(schema["properties"]["offset"]["description"], OFFSET_DESCRIPTION);
+    assert_eq!(schema["properties"]["limit"]["description"], LIMIT_DESCRIPTION);
+    assert_eq!(schema["properties"]["offset"]["type"], "integer");
+    assert_eq!(schema["properties"]["limit"]["type"], "integer");
+    // RDT-FR-04: nothing here selects a version.
     let properties = schema["properties"].as_object().expect("an object");
-    assert_eq!(properties.len(), 1, "one parameter and no other");
-    for absent in
-        ["version", "entryId", "entry_id", "revision", "at", "path", "offset", "limit", "draftId"]
-    {
+    assert_eq!(properties.len(), 3, "three parameters and no other");
+    for absent in ["version", "entryId", "entry_id", "revision", "at", "path", "draftId"] {
         assert!(properties.get(absent).is_none(), "{absent} is not a parameter");
     }
 }
@@ -196,8 +203,8 @@ fn output_is_a_record_of_exactly_five_fields() {
     assert_eq!(json["content"], serde_json::json!("# Plan\n\nbody\n"));
 }
 
-/// RDT-FR-06, TLC-FR-07: the complete prompt, whatever its size, with no paging parameter
-/// having any effect.
+/// RDT-FR-06: with no `offset` and no `limit`, the complete prompt, whatever
+/// its size.
 #[test]
 fn returns_the_complete_prompt() {
     let fixture = DraftFixture::new();
@@ -207,17 +214,54 @@ fn returns_the_complete_prompt() {
 
     let output = fixture.read(&id).expect("reads");
     assert_eq!(output.content, body, "byte-for-byte, with no truncation");
+}
 
-    // TLC-FR-07: an `offset` and a `limit` carried over from `read_file` are
-    // ignored, and the complete prompt still comes back.
+fn read_range(
+    fixture: &DraftFixture,
+    id: &str,
+    offset: serde_json::Value,
+    limit: serde_json::Value,
+) -> ReadDraftOutput {
     let args: ReadDraftArgs = serde_json::from_value(serde_json::json!({
-        "draftId": id,
-        "offset": 5,
-        "limit": 1,
+        "draft_id": id,
+        "offset": offset,
+        "limit": limit,
     }))
-    .expect("unknown fields are ignored");
-    let paged = block_on(fixture.tool().call(args)).expect("reads");
-    assert_eq!(paged.content, body);
+    .expect("decodes");
+    block_on(fixture.tool().call(args)).expect("reads")
+}
+
+/// RDT-FR-VQYO: `offset` and `limit` select lines with the meaning of
+/// `read_file`, each line keeping its own terminator.
+#[test]
+fn a_range_returns_the_selected_lines() {
+    let fixture = DraftFixture::new();
+    let id = fixture.draft("ranged", "zero\none\ntwo\nthree");
+    let null = serde_json::Value::Null;
+
+    assert_eq!(read_range(&fixture, &id, 1.into(), 2.into()).content, "one\ntwo\n");
+    assert_eq!(read_range(&fixture, &id, 2.into(), null.clone()).content, "two\nthree");
+    assert_eq!(read_range(&fixture, &id, null.clone(), 1.into()).content, "zero\n");
+    // RFT-FR-07, RFT-FR-08: the same clamps, and lenient spellings.
+    assert_eq!(read_range(&fixture, &id, (-4).into(), 0.into()).content, "zero\n");
+    assert_eq!(read_range(&fixture, &id, "3".into(), 50.into()).content, "three");
+    // RFT-FR-09: an offset at or past the end is empty text, not a refusal.
+    assert_eq!(read_range(&fixture, &id, 4.into(), null.clone()).content, "");
+    assert_eq!(read_range(&fixture, &id, 99.into(), 1.into()).content, "");
+}
+
+/// RDT-FR-ANEC: a range read returns the same metadata as a whole read.
+#[test]
+fn a_range_read_keeps_the_metadata() {
+    let fixture = DraftFixture::new();
+    let id = fixture.draft("meta", "a\nb\nc\n");
+    let whole = fixture.read(&id).expect("reads");
+    let part = read_range(&fixture, &id, 1.into(), 1.into());
+    assert_eq!(part.content, "b\n");
+    assert_eq!(
+        (part.draft_id, part.name, part.status, part.prompt_path),
+        (whole.draft_id, whole.name, whole.status, whole.prompt_path)
+    );
 }
 
 /// RDT-FR-07: no field about how the author is managing the draft.
@@ -489,8 +533,12 @@ fn an_empty_prompt_reads_as_empty_content() {
 fn no_open_project_refuses() {
     let app = crate::tools::tests::closed_project();
     let tool = DraftReadTool::new(app.handle().clone(), "closed");
-    let error = block_on(tool.call(ReadDraftArgs { draft_id: "anything".into() }))
-        .expect_err("a closed project refuses");
+    let error = block_on(tool.call(ReadDraftArgs {
+        draft_id: "anything".into(),
+        offset: None,
+        limit: None,
+    }))
+    .expect_err("a closed project refuses");
     assert_eq!(error, ToolRefusal::NoProjectOpen);
     let execution = error.to_execution_error();
     assert_eq!(execution.kind(), rig::tool::ToolErrorKind::NotFound);
@@ -554,9 +602,15 @@ fn logs_the_draft_id_and_no_returned_material() {
     RDT_BUFFER.clear();
 
     let tool = fixture.logged(&RDT_BUFFER);
-    let output = block_on(tool.call(ReadDraftArgs { draft_id: id.clone() })).expect("reads");
-    block_on(tool.call(ReadDraftArgs { draft_id: "  missing-draft  ".into() }))
-        .expect_err("refuses");
+    let output =
+        block_on(tool.call(ReadDraftArgs { draft_id: id.clone(), offset: None, limit: None }))
+            .expect("reads");
+    block_on(tool.call(ReadDraftArgs {
+        draft_id: "  missing-draft  ".into(),
+        offset: None,
+        limit: None,
+    }))
+    .expect_err("refuses");
 
     // Querying either domain returns the same two records — a tool call is
     // work the backend performs because a model asked for it, and a reader
@@ -616,9 +670,11 @@ fn logs_a_bounded_draft_id() {
     let fixture = DraftFixture::new();
     RDT_BOUND_BUFFER.clear();
 
-    block_on(
-        fixture.logged(&RDT_BOUND_BUFFER).call(ReadDraftArgs { draft_id: "x".repeat(20_000) }),
-    )
+    block_on(fixture.logged(&RDT_BOUND_BUFFER).call(ReadDraftArgs {
+        draft_id: "x".repeat(20_000),
+        offset: None,
+        limit: None,
+    }))
     .expect_err("refuses");
 
     let records = RDT_BOUND_BUFFER

@@ -109,6 +109,7 @@ fn a_proposal_reaches_an_anchored_draft_thread_too() {
                     body: "@arch this heading".into(),
                     quotes: Vec::new(),
                     attachments: Vec::new(),
+                    option_descriptions: Vec::new(),
                 },
             ),
         ],

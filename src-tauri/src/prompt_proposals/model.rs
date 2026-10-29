@@ -50,6 +50,18 @@ pub enum RecordRefusal {
     NotAPromptArtifact,
     /// PCP-FR-07: the proposed text is what the artifact already holds.
     NoChange,
+    /// PCP-FR-CUTC: a `hunks` change with no hunks in it.
+    NoHunks,
+    /// PCP-FR-CUTC: a hunk's text is not in the file. Carries the one-based
+    /// place of the hunk in the list the caller passed, and how many it passed.
+    HunkAnchorLost { at: usize, of: usize },
+    /// PCP-FR-CUTC: a hunk's text is in the file more than once.
+    HunkAmbiguous { at: usize, of: usize },
+    /// PCP-FR-CUTC: two hunks cover the same text, and the later of them.
+    HunkOverlap { at: usize, of: usize },
+    /// PCP-FR-CUTC: a hunk's `lead` or `trail` is over its bound, and which of
+    /// the two (PPC-FR-KWQB).
+    HunkContextTooLong { at: usize, of: usize, side: crate::text_hunks::hunks::ContextSide },
     /// CMS-FR-17: the conversation takes no further comments.
     ThreadResolved,
     /// Anything else — a write that failed, a thread that is not there.

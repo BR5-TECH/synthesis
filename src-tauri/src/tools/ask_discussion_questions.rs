@@ -18,7 +18,8 @@
 //!
 //! ## Why nothing malformed is salvaged
 //!
-//! One bad question or one blank option refuses the **whole** call and records
+//! One bad question, one blank label, or one blank description refuses the
+//! **whole** call and records
 //! nothing (ADQ-FR-CJRM). A silently trimmed set costs a decision taken on less
 //! than the agent meant to ask, where a refused call costs one round of the
 //! loop.
@@ -29,9 +30,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, SET_OPTION_BLANK,
-    SET_OPTION_TOO_LONG, SET_QUESTION_BLANK, SET_QUESTION_TOO_LONG, WRONG_OPTION_COUNT,
-    WRONG_QUESTION_SET_COUNT,
+    log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal,
+    SET_LABEL_TOO_MANY_WORDS, SET_OPTION_BLANK, SET_OPTION_DESCRIPTION_BLANK,
+    SET_OPTION_DESCRIPTION_TOO_LONG, SET_OPTION_TOO_LONG, SET_QUESTION_BLANK,
+    SET_QUESTION_TOO_LONG, WRONG_OPTION_COUNT, WRONG_QUESTION_SET_COUNT,
 };
 
 use crate::agent_conversations::ConversationOrigin;
@@ -54,13 +56,17 @@ pub const NAME: &str = "ask_discussion_questions";
 /// Written so a model reading every tool description in a discussion turn can
 /// tell this one from `ask_user_comment`'s on its first sentence: this one asks
 /// several things with options, that one asks one thing openly.
-pub const DESCRIPTION: &str = "Put several questions to the author at once, when more than one thing about this discussion is unsettled and you can propose the likely answers to each. Ask up to ten, each with two or three options the author picks between. Reach for it instead of guessing and instead of answering every reading in turn. Your questions are recorded against this discussion and your turn ends there — this call brings you no answer back, and you will be asked again later with every question and the author's chosen answers in front of you. Ask everything you are stuck on here: anything else you asked for in the same message is not carried out. Use it only where you can propose options; for one open question with no options to offer, use `ask_user_comment` instead. It records against the discussion you were asked in and nowhere else, and it changes no file of the project.";
+pub const DESCRIPTION: &str = "Put several questions to the author at once, when more than one thing about this discussion is unsettled and you can propose the likely answers to each. Ask up to ten, each with two or three options the author picks between. Give each option a short label of at most 7 words and 50 characters, and a description of at most 300 characters that says its pros, cons, and impact, so the author can decide. Reach for it instead of guessing and instead of answering every reading in turn. Your questions are recorded against this discussion and your turn ends there — this call brings you no answer back, and you will be asked again later with every question and the author's chosen answers in front of you. Ask everything you are stuck on here: anything else you asked for in the same message is not carried out. Use it only where you can propose options; for one open question with no options to offer, use `ask_user_comment` instead. It records against the discussion you were asked in and nowhere else, and it changes no file of the project.";
 
 const QUESTIONS_DESCRIPTION: &str = "Everything about this discussion you are stuck on, between one and ten entries, in the order you want them answered. Ask them all here: your turn ends on this call, so a thing you leave out is a thing you cannot ask about later.";
 
 const QUESTION_DESCRIPTION: &str = "One question, written as you would put it to a colleague. Ask one thing; a question with three parts comes back with one answer to whichever part they read last.";
 
-const OPTIONS_DESCRIPTION: &str = "Two or three answers the author picks between, each a short phrase. Every question needs them. Where you have none to propose, do not use this tool: ask that one question with `ask_user_comment` instead.";
+const OPTIONS_DESCRIPTION: &str = "Two or three answers the author picks between. Every question needs them. Where you have none to propose, do not use this tool: ask that one question with `ask_user_comment` instead.";
+
+const LABEL_DESCRIPTION: &str = "The answer in a few words, at most 7 words and 50 characters. The author picks it, and the conversation records it. Put the detail in the description.";
+
+const OPTION_DESCRIPTION_DESCRIPTION: &str = "What choosing this answer means, at most 300 characters: its pros, cons, trade-offs, and impact. It helps the author decide. Every option needs one.";
 
 /// CVL-FR-15: what a second turn-ending call in one reply is told.
 ///
@@ -83,8 +89,14 @@ pub const MAX_OPTIONS: usize = 3;
 /// Each exists because the set is persisted and rendered, and the comments it
 /// generates travel to a later turn inside an input already bounded by
 /// `AGC-agent-conversations.md` AGC-FR-11.
+/// The question limit counts bytes; the label and description limits count
+/// characters (Unicode scalar values), because the author reads characters.
 pub const QUESTION_LIMIT: usize = 2 * 1024;
-pub const OPTION_LIMIT: usize = 512;
+pub const LABEL_CHAR_LIMIT: usize = 50;
+pub const DESCRIPTION_CHAR_LIMIT: usize = 300;
+
+/// ADQ-FR-LGKM: the most words one label may carry.
+pub const LABEL_WORD_LIMIT: usize = 7;
 
 /// The arguments, as the model composed them.
 ///
@@ -103,7 +115,46 @@ pub struct AskedQuestion {
     #[serde(default)]
     pub question: String,
     #[serde(default)]
-    pub options: Vec<String>,
+    pub options: Vec<AskedOption>,
+}
+
+/// One proposed answer as the model wrote it: a short label the author picks,
+/// and a description that helps them decide (ADQ-FR-PVXK).
+///
+/// A missing or null field reads as empty, and an option written as a bare
+/// string reads as a label with no description. Each is then refused as a
+/// blank value naming its question (ADQ-FR-PVXK), rather than failing the
+/// decode of the whole call with a refusal that names nothing.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(from = "OptionArg")]
+pub struct AskedOption {
+    pub label: String,
+    pub description: String,
+}
+
+/// The shapes an option arrives in, before [`AskedOption`] settles them.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OptionArg {
+    Bare(String),
+    Full {
+        #[serde(default)]
+        label: Option<String>,
+        #[serde(default)]
+        description: Option<String>,
+    },
+}
+
+impl From<OptionArg> for AskedOption {
+    fn from(arg: OptionArg) -> Self {
+        match arg {
+            OptionArg::Bare(label) => AskedOption { label, description: String::new() },
+            OptionArg::Full { label, description } => AskedOption {
+                label: label.unwrap_or_default(),
+                description: description.unwrap_or_default(),
+            },
+        }
+    }
 }
 
 /// TLC-FR-08: a JSON object with stable named fields.
@@ -135,7 +186,20 @@ pub fn parameters() -> serde_json::Value {
                         },
                         "options": {
                             "type": "array",
-                            "items": { "type": "string" },
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "label": {
+                                        "type": "string",
+                                        "description": LABEL_DESCRIPTION,
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": OPTION_DESCRIPTION_DESCRIPTION,
+                                    },
+                                },
+                                "required": ["label", "description"],
+                            },
                             "description": OPTIONS_DESCRIPTION,
                             "minItems": MIN_OPTIONS,
                             "maxItems": MAX_OPTIONS,
@@ -180,19 +244,41 @@ pub fn normalize(questions: &[AskedQuestion]) -> Result<Vec<PendingQuestion>, To
             return Err(ToolRefusal::InvalidQuestion(WRONG_OPTION_COUNT, position));
         }
         let mut options = Vec::with_capacity(asked.options.len());
-        for (option_index, value) in asked.options.iter().enumerate() {
-            let value = value.trim();
-            if value.is_empty() {
-                return Err(ToolRefusal::InvalidQuestion(SET_OPTION_BLANK, position));
-            }
-            if value.len() > OPTION_LIMIT {
-                return Err(ToolRefusal::InvalidQuestion(SET_OPTION_TOO_LONG, position));
-            }
-            options.push(QuestionOption { position: option_index + 1, value: value.to_string() });
+        for (option_index, option) in asked.options.iter().enumerate() {
+            let (label, description) = normalize_option(option)
+                .map_err(|message| ToolRefusal::InvalidQuestion(message, position))?;
+            options.push(QuestionOption {
+                position: option_index + 1,
+                value: label.to_string(),
+                description: Some(description.to_string()),
+            });
         }
         out.push(PendingQuestion { position, text: text.to_string(), options });
     }
     Ok(out)
+}
+
+/// Check one option and return its trimmed label and description, or the
+/// message of the refusal it causes (ADQ-FR-PVXK, ADQ-FR-ZBQH, ADQ-FR-LGKM).
+fn normalize_option(option: &AskedOption) -> Result<(&str, &str), &'static str> {
+    let label = option.label.trim();
+    if label.is_empty() {
+        return Err(SET_OPTION_BLANK);
+    }
+    if label.split_whitespace().count() > LABEL_WORD_LIMIT {
+        return Err(SET_LABEL_TOO_MANY_WORDS);
+    }
+    if label.chars().count() > LABEL_CHAR_LIMIT {
+        return Err(SET_OPTION_TOO_LONG);
+    }
+    let description = option.description.trim();
+    if description.is_empty() {
+        return Err(SET_OPTION_DESCRIPTION_BLANK);
+    }
+    if description.chars().count() > DESCRIPTION_CHAR_LIMIT {
+        return Err(SET_OPTION_DESCRIPTION_TOO_LONG);
+    }
+    Ok((label, description))
 }
 
 /// Which refusal a failed reservation is.

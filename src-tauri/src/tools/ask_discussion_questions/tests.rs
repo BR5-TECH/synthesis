@@ -6,11 +6,26 @@
 
 use super::*;
 
-fn asked(question: &str, options: &[&str]) -> AskedQuestion {
+/// A question whose options each carry the given label and a description
+/// derived from it.
+fn asked(question: &str, labels: &[&str]) -> AskedQuestion {
     AskedQuestion {
         question: question.into(),
-        options: options.iter().map(|o| (*o).to_string()).collect(),
+        options: labels.iter().map(|label| option(label, &format!("Why {label}."))).collect(),
     }
+}
+
+fn option(label: &str, description: &str) -> AskedOption {
+    AskedOption { label: label.into(), description: description.into() }
+}
+
+/// A label of `count` words, each `width` characters long, single-spaced.
+fn words(count: usize, width: usize) -> String {
+    vec!["w".repeat(width); count].join(" ")
+}
+
+fn asked_with(options: Vec<AskedOption>) -> AskedQuestion {
+    AskedQuestion { question: "q?".into(), options }
 }
 
 /// ADQ-FR-PVXK, ADQ-FR-TWNS: a valid set normalizes with positions assigned in
@@ -100,17 +115,98 @@ fn a_question_above_its_limit_is_refused() {
     ));
 }
 
-/// ADQ-FR-ZBQH: an option above its named limit is refused.
+/// ADQ-FR-GMDK, ADQ-FR-PZWD: each recorded option carries its trimmed label as
+/// its value and its trimmed description.
 #[test]
-fn an_option_above_its_limit_is_refused() {
-    let at_limit = "x".repeat(OPTION_LIMIT);
-    assert!(normalize(&[asked("q?", &["a", &at_limit])]).is_ok());
+fn each_option_records_its_trimmed_label_and_description() {
+    let questions = normalize(&[asked_with(vec![
+        option("  One spec ", "  Easy to find; it grows large.  "),
+        option("Paired specs", "Each stays small."),
+    ])])
+    .unwrap();
 
-    let over = "x".repeat(OPTION_LIMIT + 1);
+    let first = &questions[0].options[0];
+    assert_eq!(first.value, "One spec");
+    assert_eq!(first.description.as_deref(), Some("Easy to find; it grows large."));
+    assert_eq!(questions[0].options[1].description.as_deref(), Some("Each stays small."));
+}
+
+/// ADQ-FR-PVXK, ADQ-FR-CJRM: a blank or missing description refuses the whole
+/// call, retryably, and names the question at fault.
+#[test]
+fn a_blank_or_missing_description_refuses_the_whole_call() {
+    for description in ["", "   \n\t"] {
+        let refusal = normalize(&[
+            asked("first?", &["a", "b"]),
+            asked_with(vec![option("a", "Fine."), option("b", description)]),
+        ])
+        .unwrap_err();
+        assert!(
+            matches!(refusal, ToolRefusal::InvalidQuestion(SET_OPTION_DESCRIPTION_BLANK, 2)),
+            "{description:?}: {refusal:?}",
+        );
+        assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::InvalidArgs);
+        assert!(refusal.retryable());
+    }
+
+    // A description the model left out entirely decodes as blank rather than
+    // failing the decode, so it reaches the same refusal.
+    let args: AskDiscussionQuestionsArgs = serde_json::from_value(serde_json::json!({
+        "questions": [{ "question": "q?", "options": [
+            { "label": "a", "description": "Fine." },
+            { "label": "b" },
+        ] }],
+    }))
+    .unwrap();
     assert!(matches!(
-        normalize(&[asked("q?", &["a", &over])]).unwrap_err(),
-        ToolRefusal::InvalidQuestion(SET_OPTION_TOO_LONG, 1),
+        normalize(&args.questions).unwrap_err(),
+        ToolRefusal::InvalidQuestion(SET_OPTION_DESCRIPTION_BLANK, 1),
     ));
+}
+
+/// ADQ-FR-LGKM: a label of more than seven words is refused; seven is
+/// accepted, however the words are spaced.
+#[test]
+fn a_label_of_more_than_seven_words_is_refused() {
+    assert_eq!(LABEL_WORD_LIMIT, 7);
+    let at_limit = asked_with(vec![option(&words(LABEL_WORD_LIMIT, 3), "d"), option("b", "d")]);
+    assert!(normalize(&[at_limit]).is_ok());
+
+    let over = words(LABEL_WORD_LIMIT + 1, 3).replacen(' ', "  ", 1).replacen(' ', "\t", 1);
+    let refusal = normalize(&[asked_with(vec![option("a", "d"), option(&over, "d")])]).unwrap_err();
+    assert!(matches!(refusal, ToolRefusal::InvalidQuestion(SET_LABEL_TOO_MANY_WORDS, 1)));
+    assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::InvalidArgs);
+    assert!(refusal.retryable());
+}
+
+/// ADQ-FR-ZBQH: a label above 50 characters is refused and 50 is accepted. The
+/// limit counts characters, so 50 multibyte characters are accepted too.
+#[test]
+fn a_label_above_its_character_limit_is_refused() {
+    assert_eq!(LABEL_CHAR_LIMIT, 50);
+    let at_limit = "x".repeat(LABEL_CHAR_LIMIT);
+    assert!(normalize(&[asked("q?", &["a", &at_limit])]).is_ok());
+    let multibyte = "é".repeat(LABEL_CHAR_LIMIT);
+    assert!(normalize(&[asked("q?", &["a", &multibyte])]).is_ok());
+
+    let over = "x".repeat(LABEL_CHAR_LIMIT + 1);
+    let refusal = normalize(&[asked("q?", &["a", &over])]).unwrap_err();
+    assert!(matches!(refusal, ToolRefusal::InvalidQuestion(SET_OPTION_TOO_LONG, 1)));
+    assert!(refusal.retryable());
+}
+
+/// ADQ-FR-ZBQH: a description above 300 characters is refused and 300 is
+/// accepted, counted in characters rather than bytes.
+#[test]
+fn a_description_above_its_character_limit_is_refused() {
+    let at_limit = "é".repeat(DESCRIPTION_CHAR_LIMIT);
+    assert!(normalize(&[asked_with(vec![option("a", &at_limit), option("b", "d")])]).is_ok());
+
+    let over = "x".repeat(DESCRIPTION_CHAR_LIMIT + 1);
+    let refusal = normalize(&[asked_with(vec![option("a", "d"), option("b", &over)])]).unwrap_err();
+    assert!(matches!(refusal, ToolRefusal::InvalidQuestion(SET_OPTION_DESCRIPTION_TOO_LONG, 1)));
+    assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::InvalidArgs);
+    assert!(refusal.retryable());
 }
 
 /// ADQ-FR-QNJU, ADQ-FR-RWTP: the already-pending refusal is `PermissionDenied`
@@ -163,6 +259,13 @@ fn the_parameter_schema_declares_the_documented_argument_and_no_other() {
     assert_eq!(item["properties"]["options"]["minItems"], 2);
     assert_eq!(item["properties"]["options"]["maxItems"], 3);
 
+    // ADQ-FR-PVXK: each option is a label and a description, both required.
+    let option = &item["properties"]["options"]["items"];
+    assert_eq!(option["type"], "object");
+    assert_eq!(option["properties"]["label"]["description"], LABEL_DESCRIPTION);
+    assert_eq!(option["properties"]["description"]["description"], OPTION_DESCRIPTION_DESCRIPTION);
+    assert_eq!(option["required"], serde_json::json!(["label", "description"]));
+
     let properties = schema["properties"].as_object().unwrap();
     assert_eq!(properties.len(), 1, "{properties:?}");
 }
@@ -176,6 +279,117 @@ fn the_description_separates_it_from_the_single_question_tool() {
     // ADQ-FR-FQPA: it says the turn ends here, so the model does not expect an
     // answer back inside this call.
     assert!(DESCRIPTION.contains("your turn ends there"));
+}
+
+/// ADQ-FR-ZBQH, ADQ-FR-LGKM: the limits count the trimmed text, so whitespace
+/// around a value at its limit costs it nothing.
+#[test]
+fn the_limits_count_the_trimmed_text() {
+    let label = format!("  {}\t", "x".repeat(LABEL_CHAR_LIMIT));
+    let description = format!("\n {} ", "d".repeat(DESCRIPTION_CHAR_LIMIT));
+    let spaced = format!("  {}  ", words(LABEL_WORD_LIMIT, 3));
+    assert!(
+        normalize(&[asked_with(vec![option(&label, &description), option(&spaced, "d")])]).is_ok()
+    );
+}
+
+/// ADQ-FR-LGKM, ADQ-FR-ZBQH: the word limit is checked before the character
+/// limit, so a long label of few words is told it is too long and a label of
+/// many words is told to use fewer.
+#[test]
+fn the_word_limit_is_checked_before_the_character_limit() {
+    let long_at_limit = words(LABEL_WORD_LIMIT, 10);
+    assert!(long_at_limit.chars().count() > LABEL_CHAR_LIMIT);
+    assert!(matches!(
+        normalize(&[asked("q?", &["a", &long_at_limit])]).unwrap_err(),
+        ToolRefusal::InvalidQuestion(SET_OPTION_TOO_LONG, 1),
+    ));
+
+    let long_over = words(LABEL_WORD_LIMIT + 1, 10);
+    assert!(matches!(
+        normalize(&[asked("q?", &["a", &long_over])]).unwrap_err(),
+        ToolRefusal::InvalidQuestion(SET_LABEL_TOO_MANY_WORDS, 1),
+    ));
+}
+
+/// ADQ-FR-LGKM: any Unicode whitespace separates words, and a label of nothing
+/// but whitespace is a blank label.
+#[test]
+fn any_unicode_whitespace_separates_words() {
+    let over = "one\ntwo\u{00A0}three\u{3000}four five six seven eight";
+    assert_eq!(over.split_whitespace().count(), LABEL_WORD_LIMIT + 1);
+    assert!(matches!(
+        normalize(&[asked("q?", &["a", over])]).unwrap_err(),
+        ToolRefusal::InvalidQuestion(SET_LABEL_TOO_MANY_WORDS, 1),
+    ));
+    assert!(matches!(
+        normalize(&[asked("q?", &["a", "\u{00A0}\u{3000}\n"])]).unwrap_err(),
+        ToolRefusal::InvalidQuestion(SET_OPTION_BLANK, 1),
+    ));
+}
+
+/// ADQ-FR-PVXK, ADQ-FR-ZBQH, ADQ-FR-LGKM: an option refusal names the question
+/// it is in, wherever that question stands in the set.
+#[test]
+fn an_option_refusal_names_the_question_it_is_in() {
+    let over = "x".repeat(DESCRIPTION_CHAR_LIMIT + 1);
+    for bad in [
+        option(&words(LABEL_WORD_LIMIT + 1, 1), "d"),
+        option("a", ""),
+        option("a", &over),
+        option(&"x".repeat(LABEL_CHAR_LIMIT + 1), "d"),
+    ] {
+        let refusal = normalize(&[
+            asked("first?", &["a", "b"]),
+            asked("second?", &["a", "b"]),
+            asked_with(vec![option("fine", "d"), bad.clone()]),
+        ])
+        .unwrap_err();
+        assert!(matches!(refusal, ToolRefusal::InvalidQuestion(_, 3)), "{bad:?}");
+        assert!(refusal.to_string().contains("question 3 of the set"), "{refusal}");
+    }
+}
+
+/// ADQ-FR-PVXK: an option written as a bare string, or with a null
+/// description, decodes and is refused as a blank description naming its
+/// question, rather than as an undecodable call that names nothing.
+#[test]
+fn an_option_in_another_shape_is_refused_as_a_blank_description() {
+    for options in [
+        serde_json::json!(["a", "b"]),
+        serde_json::json!([
+            { "label": "a", "description": "Fine." },
+            { "label": "b", "description": null },
+        ]),
+    ] {
+        let args: AskDiscussionQuestionsArgs = serde_json::from_value(serde_json::json!({
+            "questions": [
+                { "question": "first?", "options": [
+                    { "label": "a", "description": "d" },
+                    { "label": "b", "description": "d" },
+                ] },
+                { "question": "second?", "options": options },
+            ],
+        }))
+        .expect("decodes");
+        let refusal = normalize(&args.questions).unwrap_err();
+        assert!(
+            matches!(refusal, ToolRefusal::InvalidQuestion(SET_OPTION_DESCRIPTION_BLANK, 2)),
+            "{refusal:?}",
+        );
+    }
+}
+
+/// ADQ-FR-WBQL, ADQ-FR-ZBQH, ADQ-FR-LGKM: the description and the parameter
+/// descriptions state the label and description limits the tool enforces.
+#[test]
+fn the_descriptions_state_the_option_limits() {
+    for text in [DESCRIPTION, LABEL_DESCRIPTION] {
+        assert!(text.contains("at most 7 words and 50 characters"), "{text}");
+    }
+    for text in [DESCRIPTION, OPTION_DESCRIPTION_DESCRIPTION] {
+        assert!(text.contains("at most 300 characters"), "{text}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +566,44 @@ fn a_refused_call_records_nothing() {
     assert!(!fixture.recorded.load(Ordering::SeqCst));
 }
 
+/// ADQ-FR-GMDK, ADQ-FR-PZWD: the recorded set carries each option's trimmed
+/// label and description.
+#[test]
+fn a_recorded_set_carries_each_options_description() {
+    let fixture = Fixture::new();
+    block_on(fixture.tool().call(args(vec![asked_with(vec![
+        option(" One spec ", "  Easy to find.  "),
+        option("Paired specs", "Each stays small."),
+    ])])))
+    .expect("recorded");
+
+    let set = fixture.set().expect("a set stands");
+    let options: Vec<(&str, Option<&str>)> = set.questions[0]
+        .options
+        .iter()
+        .map(|o| (o.value.as_str(), o.description.as_deref()))
+        .collect();
+    assert_eq!(
+        options,
+        vec![("One spec", Some("Easy to find.")), ("Paired specs", Some("Each stays small."))],
+    );
+}
+
+/// ADQ-FR-CJRM: one blank description in an otherwise valid set records
+/// nothing at all.
+#[test]
+fn a_blank_description_in_a_valid_set_records_nothing() {
+    let fixture = Fixture::new();
+    let refusal = block_on(fixture.tool().call(args(vec![
+        asked("first?", &["a", "b"]),
+        asked_with(vec![option("a", "d"), option("b", "  ")]),
+    ])))
+    .expect_err("refused");
+    assert!(matches!(refusal, ToolRefusal::InvalidQuestion(SET_OPTION_DESCRIPTION_BLANK, 2)));
+    assert!(fixture.set().is_none());
+    assert!(!fixture.recorded.load(Ordering::SeqCst));
+}
+
 /// ADQ-FR-KOWX: with no project open the tool gives the shared refusal.
 #[test]
 fn a_closed_project_is_the_shared_refusal() {
@@ -419,4 +671,13 @@ fn a_call_reports_the_tool_the_discussion_and_the_count_and_nothing_it_composed(
     {
         assert!(!rendered.contains(composed), "ADQ-FR-LZHV: a record carried {composed:?}",);
     }
+}
+
+/// ADQ-FR-ZBQH, ADQ-FR-LGKM: each refusal names the limit it enforces, so a
+/// model told it went over learns by how much it must shorten.
+#[test]
+fn each_option_refusal_names_its_limit() {
+    assert!(SET_LABEL_TOO_MANY_WORDS.contains("more than 7 words"));
+    assert!(SET_OPTION_TOO_LONG.contains("longer than 50 characters"));
+    assert!(SET_OPTION_DESCRIPTION_TOO_LONG.contains("longer than 300 characters"));
 }

@@ -62,6 +62,7 @@ pub mod skills;
 pub mod statistics;
 pub mod storage_floor;
 pub mod streams;
+pub mod text_hunks;
 pub mod tls;
 pub mod tools;
 pub mod watcher;
@@ -556,6 +557,7 @@ pub fn run() {
             agent_conversations::dispatch_agent_turn,
             agent_conversations::cancel_agent_turn,
             agent_conversations::list_agent_turns,
+            agent_conversations::estimate_discussion_context,
             agent_conversations::list_recoverable_agent_turn_failures,
             agent_conversations::list_agent_turn_image_notices,
             agent_conversations::retry_agent_turn,
@@ -568,6 +570,8 @@ pub fn run() {
             // Embeddings index (EMB-embeddings-index.md).
             embeddings::load_embeddings_settings,
             embeddings::save_embeddings_settings,
+            global_settings::load_document_limit_percent,
+            global_settings::save_document_limit_percent,
             embeddings::list_embedding_models,
             embeddings::retry_embeddings_model_download,
             embeddings::load_project_embeddings_mode,

@@ -624,6 +624,12 @@ export interface Comment {
   quotes: CommentQuote[];
   /** CMS-FR-42: empty when the comment attaches nothing. */
   attachments: Attachment[];
+  /**
+   * CMS-FR-QAHZ: a question comment's option descriptions, in option order.
+   * Empty or absent on every other comment, which carries no descriptions
+   * control (DQA-FR-MDMU).
+   */
+  optionDescriptions?: string[];
   createdAt: string;
 }
 
@@ -677,7 +683,13 @@ export interface PendingQuestion {
 /** One proposed answer, at the position it was recorded in. */
 export interface QuestionOption {
   position: number;
+  /** The option's label: what the author picks (DQA-FR-QWTB). */
   value: string;
+  /**
+   * CMS-FR-TVOF: what choosing the option means. Absent on a set recorded
+   * without descriptions, which renders in one column (DQA-FR-EWUG).
+   */
+  description?: string;
 }
 
 /**

@@ -123,9 +123,12 @@ mod builders;
 mod cancellation;
 mod citation_markers;
 mod compaction;
+mod context_figures;
 mod delivery;
 mod dispatch;
+mod estimate;
 mod failures;
+mod material;
 mod native_calls;
 mod openrouter_carrier;
 mod prose_tool_calls;
@@ -147,14 +150,17 @@ pub use builders::*;
 pub use cancellation::*;
 pub(crate) use citation_markers::strip_citation_markers;
 use citation_markers::strip_reply_citation_markers;
+pub use context_figures::*;
 use delivery::*;
 pub use dispatch::*;
+pub use estimate::*;
 pub use failures::*;
 use native_calls::*;
 use openrouter_carrier::*;
 use prose_tool_calls::*;
 // The memories are read and written in this module only, so the re-export is
 // private. The two seams a test clears them through are reached the same way.
+use material::*;
 use provider_memory::*;
 pub use registry::*;
 use reporting::*;
@@ -444,6 +450,7 @@ fn conversation_tools<R: tauri::Runtime>(
     origin: &ConversationOrigin,
     author: &Participant,
     flags: ContributionFlags<'_>,
+    budget: DocumentBudget,
 ) -> Vec<rig::tool::DynamicTool> {
     let ContributionFlags { asked, asked_questions, proposed } = flags;
     let mut tools = vec![
@@ -460,6 +467,12 @@ fn conversation_tools<R: tauri::Runtime>(
         erase_tool(crate::tools::skill_search::SkillSearchTool::new(app.clone())),
         erase_tool(crate::tools::skill_list::SkillListTool::new(app.clone())),
         erase_tool(crate::tools::skill_load::SkillLoadTool::new(app.clone())),
+        // CVL-FR-08, MDT-FR-EEFA: bound to this turn's window and percent.
+        erase_tool(crate::tools::measure_document::MeasureDocumentTool::new(
+            app.clone(),
+            session,
+            budget,
+        )),
         erase_tool(crate::tools::ask_user_comment::AskUserCommentTool::new(
             app.clone(),
             roots.owned(),

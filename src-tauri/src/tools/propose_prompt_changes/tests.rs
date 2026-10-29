@@ -131,7 +131,8 @@ impl Fixture {
     ) -> Result<ProposePromptChangesOutput, ToolRefusal> {
         block_on(self.tool().call(ProposePromptChangesArgs {
             path: path.into(),
-            content: content.into(),
+            content: Some(content.into()),
+            hunks: None,
             rationale: rationale.into(),
         }))
     }
@@ -222,7 +223,8 @@ fn it_is_a_portable_tool_with_no_command_or_event_of_its_own() {
 
 #[test]
 fn its_definition_is_byte_identical_wherever_it_appears() {
-    // PPC-FR-02.
+    // PPC-FR-02, PPC-FR-XHHT: four arguments, and neither `content` nor `hunks`
+    // is required, because the tool itself asks for exactly one of them.
     let one = Fixture::new();
     let two = Fixture::new();
     let a = rig::tool::tool_definition(&one.tool());
@@ -237,10 +239,11 @@ fn its_definition_is_byte_identical_wherever_it_appears() {
     assert_eq!(a.description, DESCRIPTION);
 
     let schema = parameters();
-    assert_eq!(schema["required"], serde_json::json!(["path", "content", "rationale"]),);
+    assert_eq!(schema["required"], serde_json::json!(["path", "rationale"]),);
     for (name, description) in [
         ("path", PATH_DESCRIPTION),
         ("content", CONTENT_DESCRIPTION),
+        ("hunks", HUNKS_DESCRIPTION),
         ("rationale", RATIONALE_DESCRIPTION),
     ] {
         assert_eq!(schema["properties"][name]["description"], description);
@@ -254,7 +257,7 @@ fn no_argument_names_a_conversation_an_agent_or_a_participant() {
     let properties = schema["properties"].as_object().expect("properties");
     let mut names: Vec<&String> = properties.keys().collect();
     names.sort();
-    assert_eq!(names, vec!["content", "path", "rationale"]);
+    assert_eq!(names, vec!["content", "hunks", "path", "rationale"]);
     for forbidden in ["thread", "conversation", "agent", "participant", "artifact_id"] {
         assert!(!properties.contains_key(forbidden), "no argument names {forbidden}",);
     }
@@ -295,8 +298,9 @@ fn a_successful_call_records_one_proposal_and_changes_no_file() {
 }
 
 #[test]
-fn a_fragment_is_proposed_as_a_whole_file() {
-    // PCP-FR-13 / PPC-FR-04: the tool applies no patch and merges nothing.
+fn a_fragment_passed_as_content_is_proposed_as_a_whole_file() {
+    // PPC-FR-04, PCP-FR-13: `content` is never read as a patch or a region, so a
+    // fragment passed as `content` proposes a file holding that fragment.
     let f = Fixture::new();
     let output =
         f.call_with(PROMPT, "Just the one paragraph I rewrote.\n", RATIONALE).expect("recorded");
@@ -364,7 +368,8 @@ fn a_turn_that_is_not_about_a_file_of_the_project_refuses_for_good() {
     ] {
         let refusal = block_on(f.tool_for(origin).call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            content: PROPOSED.into(),
+            content: Some(PROPOSED.into()),
+            hunks: None,
             rationale: RATIONALE.into(),
         }))
         .expect_err("refused");
@@ -464,7 +469,8 @@ fn a_pending_proposal_refuses_the_next_call_retryably() {
     assert_eq!(
         block_on(other.call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            content: "# Review\n\nMine.\n".into(),
+            content: Some("# Review\n\nMine.\n".into()),
+            hunks: None,
             rationale: RATIONALE.into(),
         }))
         .expect_err("refused"),
@@ -563,7 +569,8 @@ fn two_turns_racing_one_artifact_record_exactly_one_proposal() {
                     scope.spawn(move || {
                         block_on(tool.call(ProposePromptChangesArgs {
                             path: PROMPT.into(),
-                            content: format!("# Review\n\nFrom {nickname}.\n"),
+                            content: Some(format!("# Review\n\nFrom {nickname}.\n")),
+                            hunks: None,
                             rationale: RATIONALE.into(),
                         }))
                     })
@@ -640,7 +647,8 @@ fn no_project_open_is_the_shared_refusal() {
     );
     let refusal = block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        content: PROPOSED.into(),
+        content: Some(PROPOSED.into()),
+        hunks: None,
         rationale: RATIONALE.into(),
     }))
     .expect_err("refused");
@@ -659,14 +667,16 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        content: PROPOSED.into(),
+        content: Some(PROPOSED.into()),
+        hunks: None,
         rationale: RATIONALE.into(),
     }))
     .expect("recorded");
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        content: "# Review\n\nAnother.\n".into(),
+        content: Some("# Review\n\nAnother.\n".into()),
+        hunks: None,
         rationale: RATIONALE.into(),
     }))
     .expect_err("refused");
@@ -735,9 +745,11 @@ fn the_tool_names_its_targets_without_the_doc_type() {
     let missing = ToolRefusal::PromptProposalPathMissing.to_string();
     for text in [DESCRIPTION, PATH_DESCRIPTION, refusal.as_str(), missing.as_str()] {
         assert!(text.contains("project document"), "names project documents: {text}");
-        assert!(text.contains("Prompt"), "names prompts: {text}");
+        assert!(text.to_lowercase().contains("prompt"), "names prompts: {text}");
         let words: Vec<&str> =
             text.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();
         assert!(!words.iter().any(|w| w.eq_ignore_ascii_case("doc")), "no type name: {text}");
     }
 }
+
+mod hunks;

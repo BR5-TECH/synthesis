@@ -399,6 +399,7 @@ impl CompletionSeam for ScriptedCompletion {
             crate::tools::skill_search::NAME,
             crate::tools::skill_list::NAME,
             crate::tools::skill_load::NAME,
+            crate::tools::measure_document::NAME,
             crate::tools::ask_user_comment::NAME,
         ];
         // CVL-FR-08: a discussion origin gets `ask_discussion_questions` beside
@@ -422,7 +423,7 @@ impl CompletionSeam for ScriptedCompletion {
             .collect();
         assert!(
             is_compaction || permitted.contains(&offered),
-            "every request offers the eleven, then `ask_discussion_questions` on a discussion, then at most one proposal tool, and nothing else: {offered:?}",
+            "every request offers the twelve, then `ask_discussion_questions` on a discussion, then at most one proposal tool, and nothing else: {offered:?}",
         );
         // CVL-FR-30: asserted on every dispatch the suite makes rather than in
         // one test, so a request that lost the entries on some path, gained them

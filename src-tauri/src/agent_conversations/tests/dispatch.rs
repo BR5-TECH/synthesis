@@ -504,8 +504,10 @@ fn a_delivered_comment_carries_the_title_the_agent_answered_under() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn exactly_two_events_are_delivered_per_turn_and_the_listing_agrees_with_them() {
-    // AGC-FR-21, AGC-FR-22.
+fn a_turn_emits_its_registration_its_context_and_its_end_and_the_listing_agrees() {
+    // AGC-FR-21, AGC-FR-22, AGC-FR-NJXW: a turn that answered in one call emits
+    // its registration, the context figures of that call, and its terminal
+    // state.
     let h = Harness::new(vec![Ok("done".into())]);
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
@@ -532,9 +534,16 @@ fn exactly_two_events_are_delivered_per_turn_and_the_listing_agrees_with_them() 
     }
     let mine: Vec<&String> =
         payloads.iter().filter(|p| p.contains(&format!("\"{}\"", turn.id))).collect();
-    assert_eq!(mine.len(), 2, "one registration and one terminal event");
-    assert!(mine[0].contains("\"running\""));
-    assert!(mine[1].contains("\"delivered\""));
+    assert_eq!(mine.len(), 3, "one registration, one context report, one terminal event");
+    let turns: Vec<AgentTurn> =
+        mine.iter().map(|p| serde_json::from_str(p).expect("an AgentTurn")).collect();
+    assert_eq!(turns[0].state, AgentTurnState::Running);
+    assert!(turns[0].context.is_none(), "null until the first call answers");
+    assert_eq!(turns[1].state, AgentTurnState::Running);
+    assert!(turns[1].context.is_some(), "the answered call's figures");
+    assert_eq!(turns[2].state, AgentTurnState::Delivered);
+    // AGC-FR-NUKP: the terminal turn keeps the figures it held.
+    assert_eq!(turns[2].context, turns[1].context);
     assert!(h.turns().in_flight(None).is_empty());
 }
 

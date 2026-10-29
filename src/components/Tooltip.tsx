@@ -25,10 +25,24 @@ interface TooltipProps {
    * Which edge of the window the activity bar sits on (SNV-FR-06). The bubble
    * is placed on the strip's *inner* side — right of a left-hand strip, left of
    * a right-hand one — so it never overhangs the window edge (SNV-FR-49, SNV-FR-06).
+   *
+   * `below` opens the bubble under the control, aligned to its trailing edge,
+   * for a control at the trailing end of a header (DDS-FR-WRNB).
    */
-  side: "left" | "right";
+  side: "left" | "right" | "below";
+  /**
+   * What the bubble shows, where it says more than the accessible name. Absent,
+   * the bubble shows `label`.
+   */
+  content?: React.ReactNode;
   /** Overridable so tests need not wait out the real delay. */
   delayMs?: number;
+  /**
+   * Asked each time the bubble would open, with the anchor. While it answers
+   * true the bubble stays closed, so a bubble never covers a menu that is
+   * open beside its control (DDS-FR-WRNB). Absent, the bubble always opens.
+   */
+  blocked?: (anchor: HTMLElement) => boolean;
   /**
    * The control. Receives the props that bind it to the bubble: the accessible
    * name, and `aria-describedby` while the bubble is up.
@@ -42,12 +56,20 @@ interface TooltipProps {
 export function Tooltip({
   label,
   side,
+  content,
   delayMs = TOOLTIP_DELAY_MS,
+  blocked,
   children,
 }: TooltipProps) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchor = useRef<HTMLSpanElement | null>(null);
+
+  const show = () => {
+    if (blocked && anchor.current && blocked(anchor.current)) return;
+    setOpen(true);
+  };
 
   const cancel = () => {
     if (timer.current !== null) {
@@ -77,19 +99,20 @@ export function Tooltip({
 
   return (
     <span
+      ref={anchor}
       className="tooltip-anchor"
       // Hover shows after a delay so sweeping the pointer across the strip does
       // not flash six bubbles in a row.
       onPointerEnter={() => {
         cancel();
-        timer.current = setTimeout(() => setOpen(true), delayMs);
+        timer.current = setTimeout(show, delayMs);
       }}
       onPointerLeave={hide}
       // Keyboard focus shows immediately: there is no sweep to debounce, and a
       // delay would make the label feel unreachable from the keyboard.
       onFocus={() => {
         cancel();
-        setOpen(true);
+        show();
       }}
       onBlur={hide}
       // Activating the control dismisses the bubble — the panel it describes
@@ -108,7 +131,7 @@ export function Tooltip({
           data-side={side}
           data-testid={`tooltip-${label}`}
         >
-          {label}
+          {content ?? label}
         </span>
       )}
     </span>

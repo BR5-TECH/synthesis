@@ -25,6 +25,9 @@
   box-sizing: border-box;
   width: 100%;
   margin: var(--sp-2) 0;
+  /* DQA-FR-OGVU: the block measures its own width, so the rails stack wherever
+     it is narrow — a floating panel, a narrow column — whatever the window. */
+  container: discussion-questions / inline-size;
 }
 
 .discussion-questions__head {
@@ -93,11 +96,88 @@
    other one renders exactly as it did before the wrapper existed. */
 .discussion-questions__group { display: contents; }
 
+/* DQA-FR-MIBQ, DQA-FR-SRMF: the two rails inside the answer group — the option
+   rows on the left, one description on the right — and the own answer and the
+   note below both at the group's full width. The group itself is the grid, so
+   the narrow layout can move the description to its foot (DQA-FR-OGVU)
+   without a change to the order of the markup. The rails add no background of
+   their own, and they take equal shares: a label of a few words and a
+   description of several lines both need the room. */
+.discussion-questions__group--railed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: var(--sp-3);
+}
+.discussion-questions__rails { display: contents; }
+.discussion-questions__group--railed > :not(.discussion-questions__rails) {
+  grid-column: 1 / -1;
+}
+.discussion-questions__options {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* DQA-FR-SRMF: one thin vertical rule divides the rails. DQA-FR-LFIB: the top
+   inset and the type are the option row's own, so the first line of the
+   description stands level with the first label. */
+.discussion-questions__detail {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  border-left: 1px solid var(--border-1);
+  padding: 3px 0 3px var(--sp-3);
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+/* DQA-FR-LFIB: every description and the placeholder share one cell, and only
+   the one shown is visible, so the rail is as tall as the longest of them and
+   moving between options moves nothing else in the block. */
+.discussion-questions__detail-text {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+.discussion-questions__detail-text[data-shown="true"] { visibility: visible; }
+/* DQA-FR-TKUM, DQA-FR-USTA: the placeholder is meta text, in the quietest tone
+   the block uses. */
+.discussion-questions__detail-text[data-kind="placeholder"] { color: var(--fg-3); }
+/* DQA-FR-USTA: with the own answer chosen and no option row hovered, the rail
+   shows nothing, its rule included. It keeps its place, so the labels do not
+   move when it returns on a hover. */
+.discussion-questions__detail[data-hidden="true"],
+.discussion-questions__detail[data-hidden="true"] .discussion-questions__detail-text {
+  visibility: hidden;
+}
+
+/* DQA-FR-OGVU: under the threshold the rails stack, and the description moves
+   to the foot of the group, below the own answer and the note, after a thin
+   horizontal rule. A hidden rail (DQA-FR-USTA) takes no space there. */
+@container discussion-questions (max-width: 559.98px) {
+  .discussion-questions__group--railed { grid-template-columns: minmax(0, 1fr); }
+  .discussion-questions__options { grid-row: auto; }
+  .discussion-questions__detail {
+    grid-column: 1;
+    grid-row: auto;
+    order: 1;
+    border-left: 0;
+    border-top: 1px solid var(--border-1);
+    margin-top: var(--sp-2);
+    padding: var(--sp-2);
+  }
+  .discussion-questions__detail[data-hidden="true"] { display: none; }
+}
+
 /* DQA-FR-XQOR: the recorded question text. It is the thing being asked, so it
    is the largest text in the block. */
 .discussion-questions__ask {
   padding: 0;
-  font-size: var(--fs-ui-title);
+  /* DQA-FR-FJXQ: two steps above the default text. */
+  font-size: var(--fs-ui-lg);
   line-height: var(--lh-normal);
   color: var(--fg-1);
   margin-bottom: var(--sp-2);
@@ -316,4 +396,36 @@
 .comment[data-pair="answer"][data-own="true"] {
   align-self: stretch;
   text-align: start;
+}
+
+/* DQA-FR-MDMU, CMT-FR-KUPP: the control that shows a question comment's
+   descriptions. It sits beside the time rather than with the actions, because
+   it is how a reader learns there is more to read. */
+.comment__descriptions-toggle { color: var(--fg-3); }
+.comment__descriptions-toggle[aria-expanded="true"] { color: var(--fg-1); }
+
+/* DQA-FR-XRLK: the question's options with each description beneath its label.
+   The labels read as the body's own list did — its size and its tone — and the
+   descriptions are quieter, because they are context for a decision already
+   taken. */
+.comment__options {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1-5);
+}
+.comment__option { min-width: 0; }
+.comment__option-label {
+  display: block;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+}
+.comment__option-description {
+  display: block;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
 }

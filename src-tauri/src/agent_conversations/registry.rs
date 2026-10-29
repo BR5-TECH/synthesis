@@ -300,6 +300,7 @@ impl TurnRegistry {
             // answer for a turn that sent no picture, and the decision writes it
             // through before any payload but the registration itself.
             images_omitted: false,
+            context: None,
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         inner.live.insert(
@@ -681,6 +682,21 @@ impl TurnRegistry {
         if let Some(live) = self.lock().live.get_mut(turn_id) {
             live.turn.images_omitted = omitted;
         }
+    }
+
+    /// AGC-FR-NJXW: hold the context figures of the latest answered call on the
+    /// live turn, and publish the turn. A turn that is no longer live keeps the
+    /// figures it ended with (AGC-FR-NUKP), so nothing is published for it.
+    pub(super) fn hold_turn_context<R: tauri::Runtime>(
+        &self,
+        app: &tauri::AppHandle<R>,
+        turn_id: &str,
+        context: TurnContext,
+    ) {
+        let mut inner = self.lock();
+        let Some(live) = inner.live.get_mut(turn_id) else { return };
+        live.turn.context = Some(context);
+        publish(app, &live.turn.clone());
     }
 
     /// AGC-FR-RWPT: record the host and the cause of a refused certificate on

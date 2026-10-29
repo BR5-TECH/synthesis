@@ -507,6 +507,7 @@ fn a_retry_with_the_set_still_standing_appends_no_duplicate() {
                         body: question_body(question),
                         quotes: Vec::new(),
                         attachments: Vec::new(),
+                        option_descriptions: Vec::new(),
                     },
                 ),
                 (
@@ -518,6 +519,7 @@ fn a_retry_with_the_set_still_standing_appends_no_duplicate() {
                         body: answer_body(answer),
                         quotes: Vec::new(),
                         attachments: Vec::new(),
+                        option_descriptions: Vec::new(),
                     },
                 ),
             ]

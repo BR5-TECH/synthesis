@@ -253,6 +253,7 @@ describe("the AI integrations section", () => {
       new Set([
         "list_ai_api_integrations",
         "list_agentic_integrations",
+        "load_document_limit_percent",
         "set_ai_api_model",
         "set_agentic_integration_model",
       ]),
@@ -313,7 +314,12 @@ describe("the AI integrations section", () => {
     // a stored path, and every other tab is not implemented, so no tab detects
     // (AII-FR-OTQY).
     expect(new Set(commands())).toEqual(
-      new Set(["list_ai_api_integrations", "list_agentic_integrations"]),
+      new Set([
+        "list_ai_api_integrations",
+        "list_agentic_integrations",
+        // GLS-FR-DLMP: a stored-state read, not a verification.
+        "load_document_limit_percent",
+      ]),
     );
   });
 });

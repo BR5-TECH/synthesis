@@ -66,6 +66,20 @@ pub fn question_body(question: &PendingQuestion) -> String {
     body.trim_end().to_string()
 }
 
+/// ADQ-FR-QUKU: the structured descriptions a question comment carries — one
+/// per recorded option, in option order, where every option has a non-blank
+/// one. Otherwise empty, as on a set recorded without descriptions
+/// (ADQ-FR-RTDD), so a reader never pairs a description with the wrong option.
+pub fn option_descriptions(question: &PendingQuestion) -> Vec<String> {
+    question
+        .options
+        .iter()
+        .map(|option| option.description.as_deref().map(str::trim).filter(|d| !d.is_empty()))
+        .collect::<Option<Vec<_>>>()
+        .map(|descriptions| descriptions.into_iter().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 /// ADQ-FR-MRSK: the body of an answer comment — one line, and a second paragraph
 /// where the note is non-blank.
 pub fn answer_body(answer: &QuestionAnswer) -> String {
@@ -200,6 +214,7 @@ fn submission_events(
                 body: question_body(question),
                 quotes: Vec::new(),
                 attachments: Vec::new(),
+                option_descriptions: option_descriptions(question),
             },
         ));
         events.push((
@@ -211,6 +226,7 @@ fn submission_events(
                 body: answer_body(answer),
                 quotes: Vec::new(),
                 attachments: Vec::new(),
+                option_descriptions: Vec::new(),
             },
         ));
     }

@@ -25,6 +25,8 @@ fn record_one(
                 before: Some(before.into()),
                 after: Some(after.into()),
                 after_text: None,
+                lead: None,
+                trail: None,
                 note: None,
             }],
             rationale: "The opening buries the point.",

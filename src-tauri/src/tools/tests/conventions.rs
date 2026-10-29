@@ -124,6 +124,8 @@ fn every_tool_name_is_snake_case_unique_and_matches_its_definition() {
                 .to_string(),
                     <ask_discussion_questions::AskDiscussionQuestionsTool<tauri::test::MockRuntime> as PortableTool>::NAME
                 .to_string(),
+            <measure_document::MeasureDocumentTool<tauri::test::MockRuntime> as PortableTool>::NAME
+                .to_string(),
 ],
         "TLC-FR-02: NAME and ToolDefinition.name are identical",
     );
@@ -200,6 +202,8 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // and PDC's — nothing, and what happens instead — phrased for a run
             // that stops rather than a turn that ends.
             n if n == escalate_to_user::NAME => "The run pauses where it stands",
+            // MDT-FR-YFZQ: the answer is the size and the limit.
+            n if n == measure_document::NAME => "it tells you how many lines and characters",
             other => panic!("no result phrase declared for {other} (TLC-FR-03)"),
         };
         assert!(
@@ -256,6 +260,8 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // be refused, and one that reached for the other with three open
             // points would spend three turns.
             n if n == ask_discussion_questions::NAME => "use `ask_user_comment` instead",
+            // MDT-FR-PPCH: it returns no text of the document.
+            n if n == measure_document::NAME => "It returns no text of the document",
             other => panic!("no boundary phrase declared for {other} (TLC-FR-03)"),
         };
         assert!(
@@ -292,6 +298,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // subject is the asking rather than the noun, the questions
             // themselves being what the sentence after it is about.
             n if n == escalate_to_user::NAME => "ask",
+            n if n == measure_document::NAME => "size",
             other => panic!("no subject declared for {other} (TLC-FR-03)"),
         };
         let first = text.split(". ").next().unwrap_or_default();
@@ -603,10 +610,9 @@ fn the_one_data_with_document_output_is_a_json_object_carrying_its_document() {
     crate::drafts::save_draft_file_impl(&root_fs, &created.draft.id, "shaped.md", body)
         .expect("writes");
 
-    let result = block_on(
-        draft_read::DraftReadTool::new(fixture.handle(), session)
-            .call(draft_read::ReadDraftArgs { draft_id: created.draft.id.clone() }),
-    )
+    let result = block_on(draft_read::DraftReadTool::new(fixture.handle(), session).call(
+        draft_read::ReadDraftArgs { draft_id: created.draft.id.clone(), offset: None, limit: None },
+    ))
     .expect("reads");
 
     let output = rig::tool::IntoToolOutput::into_tool_output(result.clone()).unwrap();

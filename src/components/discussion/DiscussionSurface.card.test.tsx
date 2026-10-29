@@ -14,6 +14,9 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string) => {
     if (cmd === "append_log_records") return undefined;
+    if (cmd === "estimate_discussion_context") {
+      return (await import("../../test/invokeMocks")).CONTEXT_ESTIMATE;
+    }
     throw new Error(`unexpected command ${cmd}`);
   }),
 }));
@@ -29,6 +32,8 @@ import { clearQuestionSets, publishSet } from "../../state/questionSets";
 import { forgetEveryDraft } from "../../state/questionAnswerDrafts";
 import { columnElement, discussionSaying } from "../../test/draftDiscussionFixtures";
 import { artifactCommentOrigin } from "../../test/origins";
+import { invoke } from "@tauri-apps/api/core";
+import { resetLogBufferForTest } from "../../logging";
 import type {
   AgentTurn,
   Comment,
@@ -43,6 +48,8 @@ beforeEach(() => {
   clearQuestionSets();
   forgetEveryDraft();
   resetDiscussionFocus();
+  // The surface logs on mount, and that flush must not reach the next test.
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 
@@ -436,6 +443,184 @@ describe("a discussion holding a question set (DQA-discussion-question-answering
 
     // No set stands, so every comment offers Quote — the pair included.
     expect(screen.getAllByLabelText(/^Quote comment/)).toHaveLength(3);
+  });
+
+  /** A submitted question comment carrying its option descriptions. */
+  function describedQuestion(id = "s1:01-1q"): Comment {
+    return {
+      ...comment(id, "One spec or two?\n\n1. One spec\n2. Paired specs", arch),
+      optionDescriptions: ["Easy to find; it grows large.", "Each stays small."],
+    };
+  }
+
+  it("DQA-FR-MDMU, DQA-FR-XRLK, CMT-FR-KUPP, CMT-FR-35, DQA-FR-EWLB: a described question carries a collapsed, named descriptions control", () => {
+    draw([opening(), describedQuestion(), comment("s1:01-2a", "**Selected option:** Paired specs")]);
+
+    const toggle = screen.getByTestId("option-descriptions-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAccessibleName("Show option descriptions");
+    expect(toggle.closest('[data-pair="question"]')).not.toBeNull();
+    expect(screen.queryByText("Easy to find; it grows large.")).toBeNull();
+    expect(screen.queryByTestId("option-descriptions")).toBeNull();
+  });
+
+  it("DQA-FR-XRLK: expanded, each description stands beneath its label, and the control collapses them again", () => {
+    draw([opening(), describedQuestion(), comment("s1:01-2a", "**Selected option:** Paired specs")]);
+    const toggle = screen.getByTestId("option-descriptions-toggle");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAccessibleName("Hide option descriptions");
+    const items = within(screen.getByTestId("option-descriptions")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "One specEasy to find; it grows large.",
+      "Paired specsEach stays small.",
+    ]);
+    // The question text still reads once, and the labels are not listed twice.
+    expect(screen.getAllByText("One spec or two?")).toHaveLength(1);
+    expect(screen.getAllByText("One spec")).toHaveLength(1);
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("option-descriptions")).toBeNull();
+    expect(screen.getByText("One spec")).toBeInTheDocument();
+  });
+
+  it("DQA-FR-UHXW: each question comment keeps its own expanded state", () => {
+    draw([
+      opening(),
+      describedQuestion("s1:01-1q"),
+      comment("s1:01-2a", "**Selected option:** One spec"),
+      describedQuestion("s1:02-1q"),
+      comment("s1:02-2a", "**Selected option:** Paired specs"),
+    ]);
+    const [first, second] = screen.getAllByTestId("option-descriptions-toggle");
+    fireEvent.click(first);
+    expect(first).toHaveAttribute("aria-expanded", "true");
+    expect(second).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByTestId("option-descriptions")).toHaveLength(1);
+  });
+
+  it("DQA-FR-MDMU: an unpaired described question carries the control too", () => {
+    draw([opening(), describedQuestion(), comment("c9", "something else entirely")]);
+    const toggle = screen.getByTestId("option-descriptions-toggle");
+    expect(toggle.closest("[data-pair]")).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByText("Each stays small.")).toBeInTheDocument();
+  });
+
+  it("DQA-FR-MDMU, DQA-FR-EWUG: a question comment with no descriptions, or an empty list, carries no control", () => {
+    draw([
+      opening(),
+      comment("s1:01-1q", "One spec or two?\n\n1. one\n2. two", arch),
+      comment("s1:01-2a", "**Selected option:** two"),
+      { ...comment("s2:01-1q", "Where?\n\n1. ui\n2. core", arch), optionDescriptions: [] },
+      comment("s2:01-2a", "**Selected option:** ui"),
+    ]);
+    expect(screen.queryByTestId("option-descriptions-toggle")).toBeNull();
+  });
+
+  it("CMT-FR-KUPP: a resolved discussion keeps the descriptions control", () => {
+    render(
+      surface(
+        discussion({
+          fragmentTarget: null,
+          resolved: true,
+          comments: [opening(), describedQuestion(), comment("s1:01-2a", "**Selected option:** One spec")],
+        }),
+      ),
+    );
+    fireEvent.click(screen.getByTestId("option-descriptions-toggle"));
+    expect(screen.getByText("Easy to find; it grows large.")).toBeInTheDocument();
+  });
+
+  it("DQA-FR-XRLK: a body the reader cannot split keeps its own text and lists the descriptions below it", () => {
+    draw([
+      opening(),
+      { ...comment("q1", "A question with no list", arch), optionDescriptions: ["Only context."] },
+    ]);
+    fireEvent.click(screen.getByTestId("option-descriptions-toggle"));
+    expect(screen.getByText("A question with no list")).toBeInTheDocument();
+    const items = within(screen.getByTestId("option-descriptions")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Only context."]);
+  });
+
+  it("DQA-FR-XRLK, ADQ-FR-NUEB: expanded labels read unescaped, as the author saw them", () => {
+    draw([
+      opening(),
+      {
+        ...comment("s1:01-1q", "Which?\n\n1. a\\*b\n2. \\`code\\`", arch),
+        optionDescriptions: ["First.", "Second."],
+      },
+    ]);
+    fireEvent.click(screen.getByTestId("option-descriptions-toggle"));
+    const labels = [...document.querySelectorAll(".comment__option-label")].map(
+      (label) => label.textContent,
+    );
+    expect(labels).toEqual(["a*b", "`code`"]);
+  });
+
+  it("DQA-FR-XRLK: descriptions that do not match the options are listed below the whole body", () => {
+    draw([
+      opening(),
+      { ...describedQuestion(), optionDescriptions: ["One.", "Two.", "Three."] },
+    ]);
+    fireEvent.click(screen.getByTestId("option-descriptions-toggle"));
+    expect(document.querySelectorAll(".comment__option-label")).toHaveLength(0);
+    const items = within(screen.getByTestId("option-descriptions")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual(["One.", "Two.", "Three."]);
+    expect(screen.getByText("One spec")).toBeInTheDocument();
+  });
+
+  it("DQA-FR-UHXW: a fresh rendering starts collapsed, the state having been held in memory alone", () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    try {
+      const comments = [opening(), describedQuestion(), comment("s1:01-2a", "**Selected option:** One spec")];
+      const view = render(surface(discussion({ fragmentTarget: null, comments })));
+      // What the surface reads on mount is its own; the toggle adds nothing.
+      vi.mocked(invoke).mockClear();
+      fireEvent.click(screen.getByTestId("option-descriptions-toggle"));
+      const commands = vi.mocked(invoke).mock.calls.map(([command]) => command);
+      expect(commands.filter((command) => command !== "append_log_records")).toEqual([]);
+      expect(screen.getByTestId("option-descriptions")).toBeInTheDocument();
+      view.unmount();
+
+      draw(comments);
+      expect(screen.getByTestId("option-descriptions-toggle")).toHaveAttribute("aria-expanded", "false");
+      expect(setItem).not.toHaveBeenCalled();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("DQA-FR-EWLB: the expanded state is carried by the glyph as well as the colour", () => {
+    draw([opening(), describedQuestion()]);
+    const toggle = screen.getByTestId("option-descriptions-toggle");
+    const collapsed = toggle.innerHTML;
+    fireEvent.click(toggle);
+    expect(toggle.innerHTML).not.toBe(collapsed);
+  });
+
+  it("CMT-FR-35, DQA-FR-MDMU: the control is a glyph on the header line", () => {
+    draw([opening(), describedQuestion()]);
+    const toggle = screen.getByTestId("option-descriptions-toggle");
+    expect(toggle.textContent).toBe("");
+    expect(toggle.querySelector("svg")).not.toBeNull();
+    expect(toggle).toHaveAttribute("title", "Show option descriptions");
+    expect(toggle.closest(".comment__head")).not.toBeNull();
+  });
+
+  it("DQA-FR-JADB: an expanded description and label show with provider citation markers hidden", () => {
+    draw([
+      opening(),
+      {
+        ...comment("s1:01-1q", "One spec or two?\n\n1. One spec \uE200cite\uE201\n2. Paired specs", arch),
+        optionDescriptions: ["Easy to find \uE200cite\uE201 here.", "Each stays small."],
+      },
+    ]);
+    fireEvent.click(screen.getByTestId("option-descriptions-toggle"));
+    expect(screen.getByText("Easy to find here.")).toBeInTheDocument();
+    expect(document.querySelector(".comment__option-label")?.textContent).toBe("One spec");
   });
 });
 

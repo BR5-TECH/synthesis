@@ -63,14 +63,20 @@ fn every_published_property_is_read_under_its_own_name() {
     // And the same for each change's own properties: a property the schema
     // publishes and the argument ignores is a change silently dropped.
     let item = schema_keys(&schema["properties"]["hunks"]["items"]["properties"]);
-    assert_eq!(item, ["after", "after_text", "before", "kind", "note"]);
+    assert_eq!(item, ["after", "after_text", "before", "kind", "lead", "note", "trail"]);
     let sent_item = serde_json::json!({
         "kind": "replace",
         "before": ORIGINAL,
         "after": PROPOSED,
         "after_text": ORIGINAL,
+        "lead": "the words before",
+        "trail": "the words after",
         "note": "why",
     });
+    // PDC-FR-04: `lead` and `trail` are read under their own names.
+    let parsed_item: HunkArg = serde_json::from_value(sent_item.clone()).expect("decodes");
+    assert_eq!(parsed_item.lead.as_deref(), Some("the words before"));
+    assert_eq!(parsed_item.trail.as_deref(), Some("the words after"));
     for key in &item {
         assert!(sent_item.get(key).is_some(), "the schema publishes `{key}` on a change");
     }
@@ -160,6 +166,8 @@ fn a_refused_call_records_no_text_the_model_or_the_author_wrote() {
             before: Some(ORIGINAL.into()),
             after: Some(PROPOSED.into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     })
@@ -176,6 +184,8 @@ fn a_refused_call_records_no_text_the_model_or_the_author_wrote() {
             before: Some(secret_before.into()),
             after: Some(secret_after.into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: Some("A NOTE NOBODY SHOULD SEE IN A LOG".into()),
         }],
     }));

@@ -93,7 +93,13 @@ pub fn append_agent_comment_with(
         at,
         vec![(
             thread_id.to_string(),
-            EventBody::CommentAdded { comment_id, body, quotes: Vec::new(), attachments },
+            EventBody::CommentAdded {
+                comment_id,
+                body,
+                quotes: Vec::new(),
+                attachments,
+                option_descriptions: Vec::new(),
+            },
         )],
     )?;
     target.find(root, thread_id)

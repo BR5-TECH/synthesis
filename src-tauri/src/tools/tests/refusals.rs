@@ -85,6 +85,9 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         ToolRefusal::InvalidQuestion(crate::tools::SET_OPTION_BLANK, 3),
         ToolRefusal::InvalidQuestion(crate::tools::SET_QUESTION_TOO_LONG, 1),
         ToolRefusal::InvalidQuestion(crate::tools::SET_OPTION_TOO_LONG, 1),
+        ToolRefusal::InvalidQuestion(crate::tools::SET_OPTION_DESCRIPTION_BLANK, 2),
+        ToolRefusal::InvalidQuestion(crate::tools::SET_LABEL_TOO_MANY_WORDS, 1),
+        ToolRefusal::InvalidQuestion(crate::tools::SET_OPTION_DESCRIPTION_TOO_LONG, 1),
         // PDC-FR-TZKQ: the same rules hold of a refusal that names which of
         // several changes it is about — the two numbers are counts of what the
         // model sent, and the sentence around them is this application's.
@@ -93,6 +96,12 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
             at: 3,
             of: 8,
         },
+        // MDT-FR-OTUZ, MDT-FR-TWVZ, MDT-FR-TVWI, MDT-FR-VHHI: this tool's own
+        // refusals join the group and are held to exactly the same rules.
+        ToolRefusal::InvalidArguments(crate::tools::MEASURE_NOT_ONE_TARGET),
+        ToolRefusal::MeasureFileNotFound,
+        ToolRefusal::MeasureDraftInconsistent,
+        ToolRefusal::MeasureUnreadable,
     ]
     .into_iter()
     .inspect(|refusal| match refusal {
@@ -118,6 +127,9 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::DraftNotFound
         | ToolRefusal::DraftInconsistent
         | ToolRefusal::DraftPromptUnreadable
+        | ToolRefusal::MeasureFileNotFound
+        | ToolRefusal::MeasureDraftInconsistent
+        | ToolRefusal::MeasureUnreadable
         | ToolRefusal::GraduationPathOutside
         | ToolRefusal::GraduationFileNotFound
         | ToolRefusal::GraduationWorkingCopyUnavailable

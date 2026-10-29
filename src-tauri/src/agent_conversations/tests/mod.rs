@@ -51,6 +51,34 @@ struct Harness {
     /// "nothing about a retry reaches a surface" an observation rather than an
     /// inference from the terminal set.
     events: Arc<Mutex<Vec<AgentTurn>>>,
+    /// AGC-FR-NJXW: the events that only report new context figures, kept apart
+    /// so the counts above stay about state and tool activity.
+    context_events: Arc<Mutex<Vec<AgentTurn>>>,
+}
+
+/// AGC-FR-NJXW: whether `turn` only reports new context figures — a running
+/// turn whose state and active calls are those of the previous event for it.
+fn is_context_report(previous: Option<&AgentTurn>, turn: &AgentTurn) -> bool {
+    previous.is_some_and(|p| {
+        turn.ended_at.is_none()
+            && p.state == turn.state
+            && p.active_tool_calls == turn.active_tool_calls
+            && p.context != turn.context
+    })
+}
+
+/// The payloads of a listener with the context-only reports taken out.
+pub(super) fn without_context_reports(payloads: Vec<AgentTurn>) -> Vec<AgentTurn> {
+    let mut last: HashMap<String, AgentTurn> = HashMap::new();
+    let mut kept = Vec::new();
+    for turn in payloads {
+        let report = is_context_report(last.get(&turn.id), &turn);
+        last.insert(turn.id.clone(), turn.clone());
+        if !report {
+            kept.push(turn);
+        }
+    }
+    kept
 }
 
 /// CVL-FR-19: the shipped schedule with its waits collapsed.
@@ -282,10 +310,17 @@ impl Harness {
             .expect("mock app");
         let terminal: Arc<Mutex<Vec<AgentTurn>>> = Arc::new(Mutex::new(Vec::new()));
         let events: Arc<Mutex<Vec<AgentTurn>>> = Arc::new(Mutex::new(Vec::new()));
+        let context_events: Arc<Mutex<Vec<AgentTurn>>> = Arc::new(Mutex::new(Vec::new()));
         let all = events.clone();
+        let reports = context_events.clone();
+        let last: Mutex<HashMap<String, AgentTurn>> = Mutex::new(HashMap::new());
         app.listen(AGENT_TURN_STATE_CHANGED, move |event| {
             if let Ok(turn) = serde_json::from_str::<AgentTurn>(event.payload()) {
-                all.lock().unwrap_or_else(|e| e.into_inner()).push(turn);
+                let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
+                let report = is_context_report(last.get(&turn.id), &turn);
+                last.insert(turn.id.clone(), turn.clone());
+                let sink = if report { &reports } else { &all };
+                sink.lock().unwrap_or_else(|e| e.into_inner()).push(turn);
             }
         });
         // Subscribed here rather than in each test: `listen` does not replay, so
@@ -316,7 +351,7 @@ impl Harness {
         ] {
             app.listen(event, |_| {});
         }
-        let harness = Self { app, root, seam, terminal, events };
+        let harness = Self { app, root, seam, terminal, events, context_events };
         harness.seed_verified_provider();
         harness
     }
@@ -588,6 +623,8 @@ mod custom_adapter;
 mod deadlines;
 mod disclosure;
 mod dispatch;
+mod document_limit;
+mod document_limit_turns;
 mod durable_record;
 mod images;
 mod invalid_arguments;

@@ -289,6 +289,40 @@
   flex: none;
 }
 .dds-question__value { min-width: 0; text-wrap: pretty; }
+/* DQA-FR-XRLK: the description beneath an option's label. It never reads
+   louder than the label above it: it takes the tone of a row the author did
+   not choose, one step smaller, on the chosen row too, which keeps its primary
+   label. DDS-FR-GBWP: it is content, so never the quietest tone. */
+.dds-question__description {
+  display: block;
+  margin-top: var(--sp-0-5);
+  font-size: var(--fs-ui-sm);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+}
+/* DQA-FR-MDMU: the descriptions control stands just before the time, and the
+   two together take the trailing end of the head. */
+.dds-question__descriptions-toggle {
+  margin-left: auto;
+  align-self: center;
+  color: var(--fg-3);
+}
+.dds-question__descriptions-toggle + .dds-stream__time { margin-left: 0; }
+/* The descriptions of a card whose option count they do not match, listed
+   below the options rather than paired with the wrong ones. */
+.dds-question__descriptions {
+  margin: 0;
+  padding: 0 var(--sp-4) var(--sp-3) var(--sp-8);
+}
+/* DQA-FR-MDMU: a described question drawn as plain talk carries the control
+   at the trailing end of its own part, above its body. */
+.dds-message__descriptions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: calc(var(--sp-1) * -1);
+}
+.dds-message__descriptions-toggle { color: var(--fg-3); }
 
 /* DQA-FR-KYWR: the option the author chose, marked among the others rather than
    restated below them. DDS-FR-CVLM: this is one of the three places the accent
@@ -545,7 +579,9 @@
 /* DQA-FR-XQOR: the question stands above the group rather than inside it, at
    the measure a message body is read on. */
 .dds-discussion .discussion-questions__ask {
-  font-size: var(--fs-ui-md);
+  /* DQA-FR-FJXQ: one step above the default text, so the question stands out
+     from the options below it. */
+  font-size: var(--fs-ui-title);
   line-height: var(--lh-message);
   color: var(--fg-1);
   margin: 0 0 var(--sp-2-5);
@@ -639,6 +675,27 @@
   border: 1px solid var(--border-1);
   border-radius: var(--r-md);
   padding: var(--sp-1-5);
+}
+
+/* DQA-FR-MIBQ, DQA-FR-SRMF: in this column the group is the card, and the rails
+   stand inside it. The option rows keep the spacing they have without rails.
+   DQA-FR-LFIB: the description takes the row's own top inset and line height,
+   so its first line stands level with the first label. */
+.dds-discussion .discussion-questions__options { gap: var(--sp-0-5); }
+/* The card's own flex rule is the more specific one, so the railed group is
+   made a grid again here, with the rails' own column gap. */
+.dds-discussion .discussion-questions__group--railed {
+  display: grid;
+  column-gap: var(--sp-3);
+}
+.dds-discussion .discussion-questions__detail {
+  padding: var(--sp-2) var(--sp-2-5) var(--sp-2) var(--sp-3);
+  line-height: var(--lh-snug);
+}
+@container discussion-questions (max-width: 559.98px) {
+  .dds-discussion .discussion-questions__detail {
+    padding: var(--sp-2) var(--sp-2-5);
+  }
 }
 
 /* DQA-FR-PXNC: the line that stands where the composer would while a set is

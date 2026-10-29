@@ -8,10 +8,11 @@
  * would test the markup rather than the rule.
  */
 import type {
+  PendingQuestion,
   PendingQuestionSet,
   QuestionAnswerInput,
 } from "../../types";
-import { recallAnswer } from "../../state/questionAnswerDrafts";
+import { recallAnswer, type QuestionDraftAnswer } from "../../state/questionAnswerDrafts";
 
 /**
  * DQA-FR-SEBN: a question is answered when one of its recorded options is
@@ -102,4 +103,40 @@ export function progressLine(set: PendingQuestionSet, page: number): string {
   const head = `Question ${page + 1} of ${set.questions.length} · ${answered} answered`;
   if (outstanding === 0) return head;
   return `${head} · ${outstanding === 1 ? "1 still needs" : `${outstanding} still need`} an answer`;
+}
+
+/** DQA-FR-TKUM: what the right rail says while it has no description to show. */
+export const DESCRIPTION_PLACEHOLDER = "The description appears once you select an option.";
+
+/**
+ * DQA-FR-MIBQ, DQA-FR-EWUG: whether the set renders two rails. A set recorded
+ * without descriptions renders in one column, as it did before they existed.
+ */
+export function setHasDescriptions(set: PendingQuestionSet): boolean {
+  return set.questions.some((question) =>
+    question.options.some((option) => (option.description ?? "").trim() !== ""),
+  );
+}
+
+/**
+ * What the pointer or the keyboard is on (DQA-FR-TKUM, DQA-FR-KBJA): an option
+ * by its recorded position, the own-answer row, or nothing.
+ */
+export type HoveredRow = number | "own" | null;
+
+/**
+ * The recorded position of the option whose description the right rail shows,
+ * or `null` where it shows the placeholder (DQA-FR-TKUM, DQA-FR-USTA).
+ */
+export function shownOption(
+  question: PendingQuestion,
+  hovered: HoveredRow,
+  draft: QuestionDraftAnswer,
+): number | null {
+  if (hovered === "own") return null;
+  const position = hovered ?? (draft.ownWords ? null : draft.selected);
+  if (position === null) return null;
+  const description = question.options.find((option) => option.position === position)
+    ?.description;
+  return description && description.trim() !== "" ? position : null;
 }

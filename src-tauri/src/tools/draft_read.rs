@@ -1,9 +1,9 @@
 //! Read draft tool (`RDT-read-draft-tool.md`).
 //!
 //! The tool an agent reaches for once it knows which draft it wants and needs
-//! the whole of what that draft currently says. It takes a draft id and returns
-//! that draft's stable metadata together with the complete text of its current
-//! live prompt.
+//! what that draft currently says. It takes a draft id and returns that
+//! draft's stable metadata together with the text of its current live prompt:
+//! the whole of it, or the range of lines the agent asks for (RDT-FR-VQYO).
 //!
 //! ## Why an id and not a path
 //!
@@ -53,16 +53,19 @@ mod tests;
 pub const NAME: &str = "read_draft";
 
 /// RDT-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Read the complete current live prompt of a known draft. Use this after `search_drafts` gives you a draft ID, or when you already know that ID. It returns the draft's stable metadata together with its full current prompt; use the returned prompt path only as information, not as an argument to `read_file`. It never returns an accepted-history snapshot or another version, does not search for drafts, and changes nothing.";
+pub const DESCRIPTION: &str = "Read the current live prompt of a known draft. Use this after `search_drafts` gives you a draft ID, or when you already know that ID. It returns the draft's stable metadata together with its full current prompt by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a prompt too large to be worth reading whole. Use the returned prompt path only as information, not as an argument to `read_file`. It never returns an accepted-history snapshot or another version, does not search for drafts, and changes nothing.";
 
 const DRAFT_ID_DESCRIPTION: &str = "The draft ID returned by `search_drafts` or otherwise already known. This is not a file path, prompt path, history-entry ID, or version selector.";
 
+const OFFSET_DESCRIPTION: &str = "The first line of the prompt to return, counting from 0. Defaults to 0, the start of the prompt. Use it with `limit` to read part of a large prompt; an offset past the end of the prompt returns no text.";
+
+const LIMIT_DESCRIPTION: &str = "How many lines to return, starting at `offset`. Defaults to the rest of the prompt. A value below 1 is treated as 1, and a value reaching past the end returns the lines that exist.";
+
 /// The arguments, as the model composed them.
 ///
-/// Unknown fields are ignored rather than rejected (TLC-FR-07), which is what
-/// makes an `offset` or a `limit` a model brought over from `read_file` cost it
-/// nothing: the parameter does not exist here, and the complete prompt comes
-/// back regardless (RDT-FR-06).
+/// Unknown fields are ignored rather than rejected (TLC-FR-07). `offset` and
+/// `limit` decode leniently and are clamped exactly as `read_file` clamps them
+/// (RDT-FR-VQYO).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReadDraftArgs {
     /// The `alias` is TLC-FR-07's forgiveness applied to a name rather than to a
@@ -73,12 +76,16 @@ pub struct ReadDraftArgs {
     /// cannot even produce a clean `InvalidArgs`.
     #[serde(alias = "draftId")]
     pub draft_id: String,
+    #[serde(default, deserialize_with = "super::file_read::lenient_integer")]
+    pub offset: Option<i64>,
+    #[serde(default, deserialize_with = "super::file_read::lenient_integer")]
+    pub limit: Option<i64>,
 }
 
 /// TLC-FR-06: the JSON Schema for [`ReadDraftArgs`].
 ///
-/// One parameter and no other: RDT-FR-04 turns on there being nothing here a
-/// model could set to reach a version that is not the live one.
+/// Three parameters and no other: RDT-FR-04 turns on there being nothing here
+/// a model could set to reach a version that is not the live one.
 pub fn parameters() -> serde_json::Value {
     serde_json::json!({
         "type": "object",
@@ -86,6 +93,14 @@ pub fn parameters() -> serde_json::Value {
             "draft_id": {
                 "type": "string",
                 "description": DRAFT_ID_DESCRIPTION,
+            },
+            "offset": {
+                "type": "integer",
+                "description": OFFSET_DESCRIPTION,
+            },
+            "limit": {
+                "type": "integer",
+                "description": LIMIT_DESCRIPTION,
             },
         },
         "required": ["draft_id"],
@@ -108,8 +123,8 @@ pub struct ReadDraftOutput {
     /// `search_drafts` returns it. Not a path `read_file` resolves to this
     /// prompt.
     pub prompt_path: String,
-    /// RDT-FR-06: the complete live prompt. No ceiling, no truncation, no
-    /// elision, and no summary.
+    /// RDT-FR-06, RDT-FR-VQYO: the complete live prompt, or the requested
+    /// lines of it. No ceiling, no truncation, no elision, and no summary.
     pub content: String,
 }
 
@@ -136,12 +151,16 @@ pub fn read(
     // Trimmed, because a model that padded an id meant the id (TLC-FR-07).
     let resolved = crate::drafts::read_draft_prompt(root, args.draft_id.trim())
         .map_err(|error| refusal_for(&error))?;
+    // RDT-FR-VQYO: the range has the meaning `read_file` gives it. RDT-FR-ANEC:
+    // the metadata does not change with the range.
+    let (offset, limit) = super::file_read::normalize_range(args.offset, args.limit);
+    let content = super::file_read::slice_lines(&resolved.content, offset, limit).to_string();
     Ok(ReadDraftOutput {
         draft_id: resolved.draft.id,
         name: resolved.draft.name,
         status: resolved.draft.status,
         prompt_path: resolved.prompt_path,
-        content: resolved.content,
+        content,
     })
 }
 

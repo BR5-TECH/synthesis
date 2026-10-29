@@ -70,7 +70,22 @@ fn model_option(model: &Model) -> ModelOption {
     // catalog, and a model neither declares anything about takes no image.
     let images =
         crate::ai_shared::image_input_declared(model.architecture.input_modalities.as_deref());
-    ModelOption::new(&model.id, &label).with_reasoning(reasoning).with_declared_image_input(images)
+    // AAP-FR-LADB: the window the models list reports, at `context_length`,
+    // else at `top_provider.context_length`. Anything else is no window.
+    let context = positive_whole(model.context_length)
+        .or_else(|| positive_whole(model.top_provider.context_length));
+    ModelOption {
+        detected_context_size: context,
+        ..ModelOption::new(&model.id, &label)
+            .with_reasoning(reasoning)
+            .with_declared_image_input(images)
+    }
+}
+
+/// AAP-FR-LADB: a reported window is a positive whole number, and nothing else
+/// is one.
+fn positive_whole(value: Option<f64>) -> Option<u64> {
+    value.filter(|v| v.is_finite() && *v >= 1.0 && v.fract() == 0.0).map(|v| v as u64)
 }
 
 /// Map an SDK failure onto the shared probe vocabulary.
@@ -183,6 +198,30 @@ mod tests {
                  "pricing":{{"prompt":"0","completion":"0"}},
                  "supported_parameters":["reasoning"]{reasoning}}}"#
         )
+    }
+
+    fn sized_model(context: &str, top: &str) -> Model {
+        model_from(&format!(
+            r#"{{"id":"a/b","name":"A","created":0.0,"description":"",{context}
+                 "architecture":{{}},"top_provider":{{"is_moderated":false{top}}},
+                 "pricing":{{"prompt":"0","completion":"0"}}}}"#
+        ))
+    }
+
+    // AAP-FR-LADB: the window is `context_length`, else
+    // `top_provider.context_length`, else none.
+    #[test]
+    fn a_models_window_comes_from_its_context_length() {
+        let size = |m: Model| model_option(&m).detected_context_size;
+        assert_eq!(size(sized_model(r#""context_length":200000,"#, "")), Some(200_000));
+        assert_eq!(
+            size(sized_model(r#""context_length":200000,"#, r#","context_length":64000"#)),
+            Some(200_000)
+        );
+        assert_eq!(size(sized_model("", r#","context_length":64000"#)), Some(64_000));
+        assert_eq!(size(sized_model("", "")), None);
+        assert_eq!(size(sized_model(r#""context_length":0,"#, "")), None);
+        assert_eq!(size(sized_model(r#""context_length":12.5,"#, "")), None);
     }
 
     #[test]

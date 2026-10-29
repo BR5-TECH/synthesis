@@ -43,6 +43,17 @@ pub(super) fn section_of_parts(
     attributes: Vec<(String, String)>,
     parts: Vec<InputPart>,
 ) -> InputSection {
+    section_of_parts_within(tag, attributes, parts, SECTION_MAX_CHARS)
+}
+
+/// [`section_of_parts`] with its own bound, in characters of text. The
+/// `artifact` section is bound by AGC-FR-XHHT rather than by AGC-FR-11.
+pub(super) fn section_of_parts_within(
+    tag: &str,
+    attributes: Vec<(String, String)>,
+    parts: Vec<InputPart>,
+    max_chars: usize,
+) -> InputSection {
     let mut body = String::new();
     let mut kept: Vec<InputPart> = Vec::new();
     let mut truncated = false;
@@ -52,7 +63,7 @@ pub(super) fn section_of_parts(
         }
         match part {
             InputPart::Text(text) => {
-                let remaining = SECTION_MAX_CHARS.saturating_sub(body.chars().count());
+                let remaining = max_chars.saturating_sub(body.chars().count());
                 if text.chars().count() > remaining {
                     let cut: String = text.chars().take(remaining).collect();
                     body.push_str(&cut);

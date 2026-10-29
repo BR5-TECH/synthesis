@@ -45,8 +45,7 @@ fn tools() -> Vec<rig::completion::ToolDefinition> {
     ]
 }
 
-const QUESTIONS: &str =
-    r#"{"questions":[{"question":"One spec or two?","options":["one","two"]}]}"#;
+const QUESTIONS: &str = r#"{"questions":[{"question":"One spec or two?","options":[{"label":"One","description":"Easy to find."},{"label":"Two","description":"Each stays small."}]}]}"#;
 
 // CVL-FR-JPHT: a question set written out, bare or in one enclosing fence, is
 // the questions tool's call.
@@ -294,5 +293,33 @@ fn every_discussion_prompt_says_to_ask_through_the_tool_and_not_as_text() {
             lower.contains("never write the questions, or the arguments of any tool, into the text of your reply"),
             "{name} does not forbid writing a call as text",
         );
+    }
+}
+
+// CVL-FR-NQWE: each discussion prompt asks for a short label and a concise
+// description of pros, cons, and impact for each proposed answer, and states no
+// number, the limits being the tool's own.
+#[test]
+fn every_discussion_prompt_asks_for_short_labels_and_concise_descriptions() {
+    for (name, template) in [
+        ("discuss-draft", DISCUSS_DRAFT_PROMPT_TEMPLATE),
+        ("discuss-artifact", DISCUSS_ARTIFACT_PROMPT_TEMPLATE),
+        ("discuss-note", DISCUSS_NOTE_PROMPT_TEMPLATE),
+    ] {
+        let lower = template.to_lowercase();
+        assert!(lower.contains("a short label of a few words"), "{name}: no short label");
+        assert!(
+            lower.contains("a concise description of its pros, cons, and impact"),
+            "{name}: no concise description",
+        );
+        // The paragraph that asks for them states no number at all.
+        let paragraph = template
+            .split("\n\n")
+            .find(|p| p.contains("short label"))
+            .expect("the paragraph that asks for labels");
+        assert!(!paragraph.chars().any(|c| c.is_ascii_digit()), "{name}: {paragraph}");
+        for word in ["five", "seven", "forty", "fifty", "hundred"] {
+            assert!(!paragraph.to_lowercase().contains(word), "{name} states a number: {word}");
+        }
     }
 }

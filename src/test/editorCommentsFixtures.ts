@@ -3,6 +3,8 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import type { Mock } from "vitest";
 
+import { CONTEXT_ESTIMATE } from "./invokeMocks";
+
 import type {
   ArtifactContents,
   Attachment,
@@ -157,6 +159,8 @@ export function wireBackend(invokeMock: Mock, b: Backend) {
       }
       case "append_log_records":
         return undefined;
+      case "estimate_discussion_context":
+        return CONTEXT_ESTIMATE;
       default:
         throw new Error(`unexpected invoke ${cmd}`);
     }

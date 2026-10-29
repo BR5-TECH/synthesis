@@ -360,7 +360,8 @@ fn origin_kind_of(discussion: bool) -> &'static str {
 /// silently.
 pub struct NewPromptProposal<'a> {
     pub artifact_id: &'a str,
-    pub content: &'a str,
+    /// The complete new text, or the hunks it is built from (PCP-FR-CVNA).
+    pub change: ProposedChange<'a>,
     pub rationale: &'a str,
     pub agent: &'a Participant,
     /// The conversation the turn belongs to (PCP-FR-05's `origin`).
@@ -413,7 +414,11 @@ where
     // at a time. An empty candidate meets this on the one term every candidate
     // meets it on and on no term of its own.
     let current = root.read_text(&artifact_path).map_err(|_| RecordRefusal::ArtifactNotFound)?;
-    if current == normalise_for_write(root, new.content) {
+    // PCP-FR-CVNA: a `hunks` change becomes the whole candidate here, before
+    // the no-change check and before any write, so everything below sees one
+    // complete document whichever form it came in (PCP-FR-ENRL).
+    let candidate = build_candidate(root, &current, new.change)?;
+    if current == normalise_for_write(root, &candidate) {
         return Err(RecordRefusal::NoChange);
     }
 
@@ -438,10 +443,10 @@ where
     // reads in the comparison and what an acceptance puts into the file have to
     // be the same bytes, and the write path applies the project's convention at
     // the moment the change actually lands.
-    root.write_text_atomic(at(&dir, &id, CONTENT_EXT), new.content)
+    root.write_text_atomic(at(&dir, &id, CONTENT_EXT), &candidate)
         .map_err(|_| RecordRefusal::NotRecorded)?;
     // PCP-FR-22: stamped from the bytes that just landed rather than computed
-    // over `new.content` in memory, so it describes the file a candidate save
+    // over the candidate in memory, so it describes the file a candidate save
     // will later checksum rather than the string this call was handed.
     let origin_checksum =
         root.sha256_file(at(&dir, &id, CONTENT_EXT)).map_err(|_| RecordRefusal::NotRecorded)?;
@@ -805,10 +810,13 @@ where
     Ok(())
 }
 
+mod candidate;
 mod commands;
 mod model;
 mod reconcile;
 
+use candidate::build_candidate;
+pub use candidate::ProposedChange;
 pub use commands::*;
 pub use model::*;
 pub use reconcile::*;

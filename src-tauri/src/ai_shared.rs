@@ -99,10 +99,10 @@ impl ModelMode {
 pub struct ModelOption {
     pub id: String,
     pub label: String,
-    /// AAP-FR-JQIJ: the context length an Ollama host reported for this model
-    /// at the last verification. `None` where detection gave nothing. Only a
-    /// Custom model carries a value. A scalar, so it is declared before the
-    /// tables below.
+    /// AAP-FR-JQIJ, AAP-FR-LADB: the context window reported for this model at
+    /// the last verification — by an Ollama host's detection, or by the
+    /// provider's models list where it carries one. `None` where nothing was
+    /// reported. A scalar, so it is declared before the tables below.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detected_context_size: Option<u64>,
     /// AAP-FR-JQIJ: the capabilities an Ollama host reported for this model, in
@@ -689,12 +689,27 @@ pub fn parse_models_payload(body: &str) -> Option<Vec<ModelOption>> {
             .map(|list| {
                 list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>()
             });
-        models.push(
-            ModelOption::new(id, label)
-                .with_declared_image_input(image_input_declared(declared.as_deref())),
-        );
+        models.push(ModelOption {
+            // AAP-FR-LADB: the window where the payload carries one.
+            detected_context_size: reported_context_window(entry),
+            ..ModelOption::new(id, label)
+                .with_declared_image_input(image_input_declared(declared.as_deref()))
+        });
     }
     Some(models)
+}
+
+/// AAP-FR-LADB: the field names under which an Anthropic- or OpenAI-shaped
+/// `/models` entry reports a context window, in the order they are read.
+const CONTEXT_WINDOW_FIELDS: [&str; 3] = ["max_input_tokens", "context_window", "context_length"];
+
+/// AAP-FR-LADB: the positive whole number of the first context-window field the
+/// entry carries, else `None`. A field of another shape is no window.
+fn reported_context_window(entry: &serde_json::Value) -> Option<u64> {
+    CONTEXT_WINDOW_FIELDS
+        .iter()
+        .filter_map(|field| entry.get(*field))
+        .find_map(|value| value.as_u64().filter(|n| *n > 0))
 }
 
 /// AAP-FR-MDLQ / AAP-FR-RTMZ: read a Custom gateway's model list, strictly.

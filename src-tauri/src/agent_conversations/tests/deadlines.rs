@@ -305,7 +305,7 @@ fn an_openrouter_conversation_carries_the_search_entry_and_withholds_the_fetch()
                 // The portable set is still exactly what the origin kind
                 // decides: the entries neither add nor remove one of these.
                 let portable: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
-                assert_eq!(portable.len(), 12, "the eleven and one proposal tool");
+                assert_eq!(portable.len(), 13, "the twelve and one proposal tool");
                 assert!(
                     !portable
                         .iter()
@@ -372,7 +372,7 @@ fn a_conversation_on_another_provider_carries_neither_entry() {
         assert_eq!(require(&calling, "nativeTools"), "0");
         assert_eq!(require(&calling, "nativeToolTypes"), "");
         let portable: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(portable.len(), 12, "the same portable set as anywhere else");
+        assert_eq!(portable.len(), 13, "the same portable set as anywhere else");
         assert!(
             !portable.iter().any(|name| name.contains("web_search") || name.contains("web_fetch")),
             "and nothing local stands in for the absent capability",

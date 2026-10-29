@@ -212,7 +212,13 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                     continue;
                 };
                 match body {
-                    EventBody::CommentAdded { comment_id, body, quotes, attachments } => {
+                    EventBody::CommentAdded {
+                        comment_id,
+                        body,
+                        quotes,
+                        attachments,
+                        option_descriptions,
+                    } => {
                         if discussion.comments.iter().any(|c| c.id == comment_id) {
                             continue;
                         }
@@ -222,6 +228,7 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                             body,
                             quotes,
                             attachments,
+                            option_descriptions,
                             created_at: event.at.clone(),
                         });
                     }

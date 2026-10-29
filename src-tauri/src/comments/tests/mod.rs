@@ -280,6 +280,7 @@ mod errors_and_lifecycle;
 mod local_participant;
 mod log_and_fold;
 mod note_discussions;
+mod option_descriptions;
 mod project_wide_read;
 mod proposal_hunk_reference;
 mod proposal_reference;

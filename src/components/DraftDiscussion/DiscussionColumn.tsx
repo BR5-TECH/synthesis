@@ -26,6 +26,8 @@ import {
 } from "../discussion";
 import { OpenDiscussion, type HunkOpening } from "./OpenDiscussion";
 import { HunkSubject } from "./HunkSubject";
+import { ContextIndicator } from "./ContextIndicator";
+import { useDiscussionContext } from "../../hooks/useDiscussionContext";
 import { openingHunkOf } from "./hunkDiscussion";
 import { COMPOSER_KEY } from "../../hooks/useDiscussions";
 import {
@@ -175,6 +177,11 @@ export interface DiscussionColumnProps {
    */
   showResolved?: boolean;
   onShowResolved?: (shown: boolean) => void;
+  /**
+   * DDS-FR-HJMF: the document under discussion has changes not yet written.
+   * The moment it clears is a save, which refreshes the context indicator.
+   */
+  documentDirty?: boolean;
 }
 
 export function DiscussionColumn(props: DiscussionColumnProps) {
@@ -248,6 +255,13 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   // only says what it holds.
   const session = useDiscussionSession(thread?.id ?? "");
   const atTail = session.atTail;
+  // DDS-FR-KXWQ / DDS-FR-TSPL: the context use of the discussion on screen.
+  const context = useDiscussionContext({
+    target: props.target,
+    discussionId: thread?.id ?? null,
+    firstAgentId: props.agents[0]?.agent.id ?? null,
+    documentDirty: props.documentDirty ?? false,
+  });
 
   // ACT-FR-QWNP: put the caret where the author is about to write. The composer
   // is the column's last text field whichever of the two the column is showing —
@@ -326,6 +340,8 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             resolved
           </span>
         )}
+        {/* DDS-FR-CTXI: before the menu, after the column's state. */}
+        <ContextIndicator shown={context} />
         {transcript && (
           <span
             ref={setActionsHost}

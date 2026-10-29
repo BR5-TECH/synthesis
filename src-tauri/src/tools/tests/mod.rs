@@ -17,7 +17,8 @@ use crate::logging::{LogBuffer, LogFilter, LogLevel};
 use crate::tools::spec_search::SpecSearchTool;
 use crate::tools::{
     document_get, document_search, draft_read, draft_search, escalate_to_user, file_read,
-    note_search, read_graduation_file, skill_list, skill_load, skill_search, spec_search,
+    measure_document, note_search, read_graduation_file, skill_list, skill_load, skill_search,
+    spec_search,
 };
 
 /// Install an agent session over `root` and return its id (FSA-FR-29).
@@ -139,13 +140,20 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
             },
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         )),
+        // MDT-FR-YFZQ: constructed per turn with a window and a percent, neither
+        // of which reaches the definition.
+        rig::tool::tool_definition(&measure_document::MeasureDocumentTool::new(
+            app.handle().clone(),
+            "definitions",
+            crate::agent_conversations::DocumentBudget { window: Some(1_000), percent: 30 },
+        )),
     ]
 }
 
 /// Every source file of the group, for the tests that read the group itself
 /// rather than call it. Listed once so a tool added tomorrow is swept by all of
 /// them or by none, rather than by whichever list someone remembered.
-const GROUP_SOURCES: [(&str, &str); 16] = [
+const GROUP_SOURCES: [(&str, &str); 17] = [
     ("tools.rs", include_str!("../../tools.rs")),
     ("skill_search.rs", include_str!("../skill_search.rs")),
     ("skill_list.rs", include_str!("../skill_list.rs")),
@@ -163,6 +171,8 @@ const GROUP_SOURCES: [(&str, &str); 16] = [
     // registry are checked rather than asserted.
     ("ask_discussion_questions.rs", include_str!("../ask_discussion_questions.rs")),
     ("propose_draft_changes.rs", include_str!("../propose_draft_changes.rs")),
+    // MDT-FR-CGXO, MDT-FR-VTTV: swept with the rest of the group.
+    ("measure_document.rs", include_str!("../measure_document.rs")),
     ("web_search.rs", include_str!("../web_search.rs")),
     ("web_fetch.rs", include_str!("../web_fetch.rs")),
 ];

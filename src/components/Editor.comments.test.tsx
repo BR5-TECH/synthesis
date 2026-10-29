@@ -11,6 +11,7 @@ import {
 
 import { Editor } from "./Editor";
 import { resetLogBufferForTest } from "../logging";
+import { CONTEXT_ESTIMATE } from "../test/invokeMocks";
 import { resetProjectIdentity } from "../state/projectIdentity";
 import { EditSessionStore } from "../state/editSessions";
 import { restoreDiscussionColumns } from "../state/discussionColumn";
@@ -912,6 +913,7 @@ describe("CMT-FR-25: the token picker", () => {
       }
       if (cmd === "set_project_github_token_binding") return { tokenId: "tok-1", resolution: "bound" };
       if (cmd === "append_log_records") return undefined;
+      if (cmd === "estimate_discussion_context") return CONTEXT_ESTIMATE;
       throw new Error(`unexpected invoke ${cmd}`);
     });
     render(

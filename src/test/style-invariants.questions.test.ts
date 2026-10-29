@@ -54,12 +54,12 @@ describe("the two rails (DQA-FR-MIBQ, DQA-FR-OGVU)", () => {
     }
   });
 
-  it("DQA-FR-MIBQ, DQA-FR-SRMF: the rails stand side by side, the labels the wider share, a thin rule between them", () => {
+  it("DQA-FR-MIBQ, DQA-FR-SRMF: the rails stand side by side in equal shares, a thin rule between them", () => {
     const css = style();
     // The group is the grid, and the rails wrapper adds no box of its own.
     const group = blocksFor(css, ".discussion-questions__group--railed")[0];
     expect(decl(group, "display")).toBe("grid");
-    expect(decl(group, "grid-template-columns")).toBe("minmax(0, 5fr) minmax(0, 4fr)");
+    expect(decl(group, "grid-template-columns")).toBe("minmax(0, 1fr) minmax(0, 1fr)");
     expect(decl(blocksFor(css, ".discussion-questions__rails")[0], "display")).toBe("contents");
     // The draft column's card rule is the more specific one, so it sets the
     // grid again rather than leaving the group a flex column.

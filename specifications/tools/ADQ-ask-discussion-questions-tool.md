@@ -14,7 +14,7 @@ One tool, conforming to `TLC-tool-conventions.md` in full. It is attached to a *
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Put several questions to the author at once, when more than one thing about this discussion is unsettled and you can propose the likely answers to each. Ask up to ten, each with two or three options the author picks between. Give each option a short label of at most 5 words and 40 characters, and a description of at most 300 characters that says its pros, cons, and impact, so the author can decide. Reach for it instead of guessing and instead of answering every reading in turn. Your questions are recorded against this discussion and your turn ends there — this call brings you no answer back, and you will be asked again later with every question and the author's chosen answers in front of you. Ask everything you are stuck on here: anything else you asked for in the same message is not carried out. Use it only where you can propose options; for one open question with no options to offer, use `ask_user_comment` instead. It records against the discussion you were asked in and nowhere else, and it changes no file of the project.
+> Put several questions to the author at once, when more than one thing about this discussion is unsettled and you can propose the likely answers to each. Ask up to ten, each with two or three options the author picks between. Give each option a short label of at most 7 words and 50 characters, and a description of at most 300 characters that says its pros, cons, and impact, so the author can decide. Reach for it instead of guessing and instead of answering every reading in turn. Your questions are recorded against this discussion and your turn ends there — this call brings you no answer back, and you will be asked again later with every question and the author's chosen answers in front of you. Ask everything you are stuck on here: anything else you asked for in the same message is not carried out. Use it only where you can propose options; for one open question with no options to offer, use `ask_user_comment` instead. It records against the discussion you were asked in and nowhere else, and it changes no file of the project.
 
 ### Arguments
 ```
@@ -24,7 +24,7 @@ AskDiscussionQuestionsArgs {
       question: string,  // required; one thing asked
       options: [         // required; 2 to 3 proposed answers, in order
         {
-          label:       string, // required; at most 5 words and 40 characters
+          label:       string, // required; at most 7 words and 50 characters
           description: string  // required; at most 300 characters
         }
       ]
@@ -38,7 +38,7 @@ Their descriptions in the parameter schema (per TLC-FR-06):
 - `questions` — *"Everything about this discussion you are stuck on, between one and ten entries, in the order you want them answered. Ask them all here: your turn ends on this call, so a thing you leave out is a thing you cannot ask about later."*
 - `questions[].question` — *"One question, written as you would put it to a colleague. Ask one thing; a question with three parts comes back with one answer to whichever part they read last."*
 - `questions[].options` — *"Two or three answers the author picks between. Every question needs them. Where you have none to propose, do not use this tool: ask that one question with `ask_user_comment` instead."*
-- `questions[].options[].label` — *"The answer in a couple of words, at most 5 words and 40 characters. The author picks it, and the conversation records it. Put the detail in the description."*
+- `questions[].options[].label` — *"The answer in a few words, at most 7 words and 50 characters. The author picks it, and the conversation records it. Put the detail in the description."*
 - `questions[].options[].description` — *"What choosing this answer means, at most 300 characters: its pros, cons, trade-offs, and impact. It helps the author decide. Every option needs one."*
 
 ### Output
@@ -119,8 +119,8 @@ Nothing else is added to either body: no closing line, no routing tag, no identi
 - **wrong number of options** — kind `InvalidArgs`, retryable: names which question carried how many, and that two or three are accepted.
 - **blank option** — kind `InvalidArgs`, retryable: names which question's option label was blank.
 - **blank description** — kind `InvalidArgs`, retryable: names which question has an option whose description is blank or missing, and that every option needs one.
-- **label too many words** — kind `InvalidArgs`, retryable: names which question has an option label of more than 5 words, and that the detail goes in the description.
-- **too long** — kind `InvalidArgs`, retryable: names which value exceeded which limit — a question above 2 KiB, a label above 40 characters, or a description above 300 characters.
+- **label too many words** — kind `InvalidArgs`, retryable: names which question has an option label of more than 7 words, and that the detail goes in the description.
+- **too long** — kind `InvalidArgs`, retryable: names which value exceeded which limit — a question above 2 KiB, a label above 50 characters, or a description above 300 characters.
 - **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further contribution, so nothing was recorded and no answer is coming."*
 - **could not record** — kind `Other`, retryable: *"The questions could not be recorded against this discussion."*
 
@@ -135,9 +135,9 @@ Declared in full (per TLC-FR-17). One successful call creates **exactly one** `P
  5. **ADQ-FR-PVXK** `questions` is required and holds 1 to 10 entries. Each entry's `question` is non-blank once trimmed, and its `options` holds 2 or 3 entries, each with a `label` and a `description` non-blank once trimmed. Any other count, blank text, or a missing description is a retryable `InvalidArgs` refusal naming the question at fault.
  6. **ADQ-FR-CJRM** Nothing malformed is dropped and salvaged. One bad question, one blank label, or one blank description refuses the **whole** call and records nothing, so the author is never shown a set smaller than the agent meant to ask.
     - *Why:* A silently trimmed set costs a decision taken on less than was meant, where a refused call costs one round.
- 7. **ADQ-FR-ZBQH** Every value is bounded by a named limit: each `question` 2 KiB, each `label` 40 characters, and each `description` 300 characters. A value above its limit is the retryable `InvalidArgs` **too long** refusal naming which limit and which question. A character is one Unicode scalar value of the trimmed text.
+ 7. **ADQ-FR-ZBQH** Every value is bounded by a named limit: each `question` 2 KiB, each `label` 50 characters, and each `description` 300 characters. A value above its limit is the retryable `InvalidArgs` **too long** refusal naming which limit and which question. A character is one Unicode scalar value of the trimmed text.
     - *Why:* The set is persisted and rendered, and the comments it generates travel to a later turn inside an input already bounded (per `../core/AGC-agent-conversations.md` AGC-FR-11).
- 7. **ADQ-FR-LGKM** A `label` holds at most 5 words, a word being one run of non-whitespace characters in the trimmed text. A label of more than 5 words is the retryable `InvalidArgs` **label too many words** refusal naming the question.
+ 7. **ADQ-FR-LGKM** A `label` holds at most 7 words, a word being one run of non-whitespace characters in the trimmed text. A label of more than 7 words is the retryable `InvalidArgs` **label too many words** refusal naming the question.
     - *Why:* The label is what the author scans and what the conversation records, so the detail must go in the description.
 8. **ADQ-FR-TWNS** The application assigns each question and each option a **stable position** in the order the model wrote them, ascending from 1, and that position is what every later act names. The text is never an identifier, and the model neither supplies a position nor sees one.
     - *Why:* Two questions may read alike, so an answer matched by text would attach to whichever matched first.

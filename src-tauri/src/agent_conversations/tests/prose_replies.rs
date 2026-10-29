@@ -307,7 +307,7 @@ fn every_discussion_prompt_asks_for_short_labels_and_concise_descriptions() {
         ("discuss-note", DISCUSS_NOTE_PROMPT_TEMPLATE),
     ] {
         let lower = template.to_lowercase();
-        assert!(lower.contains("a short label of a couple of words"), "{name}: no short label");
+        assert!(lower.contains("a short label of a few words"), "{name}: no short label");
         assert!(
             lower.contains("a concise description of its pros, cons, and impact"),
             "{name}: no concise description",
@@ -318,7 +318,7 @@ fn every_discussion_prompt_asks_for_short_labels_and_concise_descriptions() {
             .find(|p| p.contains("short label"))
             .expect("the paragraph that asks for labels");
         assert!(!paragraph.chars().any(|c| c.is_ascii_digit()), "{name}: {paragraph}");
-        for word in ["five", "forty", "hundred"] {
+        for word in ["five", "seven", "forty", "fifty", "hundred"] {
             assert!(!paragraph.to_lowercase().contains(word), "{name} states a number: {word}");
         }
     }

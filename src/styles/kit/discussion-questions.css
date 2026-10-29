@@ -101,11 +101,11 @@
    note below both at the group's full width. The group itself is the grid, so
    the narrow layout can move the description to its foot (DQA-FR-OGVU)
    without a change to the order of the markup. The rails add no background of
-   their own, and the labels take the larger share, because a label is one
-   short line and the description wraps. */
+   their own, and they take equal shares: a label of a few words and a
+   description of several lines both need the room. */
 .discussion-questions__group--railed {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   column-gap: var(--sp-3);
 }
 .discussion-questions__rails { display: contents; }

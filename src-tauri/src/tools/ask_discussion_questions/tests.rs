@@ -19,6 +19,11 @@ fn option(label: &str, description: &str) -> AskedOption {
     AskedOption { label: label.into(), description: description.into() }
 }
 
+/// A label of `count` words, each `width` characters long, single-spaced.
+fn words(count: usize, width: usize) -> String {
+    vec!["w".repeat(width); count].join(" ")
+}
+
 fn asked_with(options: Vec<AskedOption>) -> AskedQuestion {
     AskedQuestion { question: "q?".into(), options }
 }
@@ -159,23 +164,26 @@ fn a_blank_or_missing_description_refuses_the_whole_call() {
     ));
 }
 
-/// ADQ-FR-LGKM: a label of more than five words is refused; five is accepted.
+/// ADQ-FR-LGKM: a label of more than seven words is refused; seven is
+/// accepted, however the words are spaced.
 #[test]
-fn a_label_of_more_than_five_words_is_refused() {
-    let five = asked_with(vec![option("one two three four five", "d"), option("b", "d")]);
-    assert!(normalize(&[five]).is_ok());
+fn a_label_of_more_than_seven_words_is_refused() {
+    assert_eq!(LABEL_WORD_LIMIT, 7);
+    let at_limit = asked_with(vec![option(&words(LABEL_WORD_LIMIT, 3), "d"), option("b", "d")]);
+    assert!(normalize(&[at_limit]).is_ok());
 
-    let six = asked_with(vec![option("a", "d"), option("one two  three\tfour five six", "d")]);
-    let refusal = normalize(&[six]).unwrap_err();
+    let over = words(LABEL_WORD_LIMIT + 1, 3).replacen(' ', "  ", 1).replacen(' ', "\t", 1);
+    let refusal = normalize(&[asked_with(vec![option("a", "d"), option(&over, "d")])]).unwrap_err();
     assert!(matches!(refusal, ToolRefusal::InvalidQuestion(SET_LABEL_TOO_MANY_WORDS, 1)));
     assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::InvalidArgs);
     assert!(refusal.retryable());
 }
 
-/// ADQ-FR-ZBQH: a label above 40 characters is refused and 40 is accepted. The
-/// limit counts characters, so 40 multibyte characters are accepted too.
+/// ADQ-FR-ZBQH: a label above 50 characters is refused and 50 is accepted. The
+/// limit counts characters, so 50 multibyte characters are accepted too.
 #[test]
 fn a_label_above_its_character_limit_is_refused() {
+    assert_eq!(LABEL_CHAR_LIMIT, 50);
     let at_limit = "x".repeat(LABEL_CHAR_LIMIT);
     assert!(normalize(&[asked("q?", &["a", &at_limit])]).is_ok());
     let multibyte = "é".repeat(LABEL_CHAR_LIMIT);
@@ -279,9 +287,9 @@ fn the_description_separates_it_from_the_single_question_tool() {
 fn the_limits_count_the_trimmed_text() {
     let label = format!("  {}\t", "x".repeat(LABEL_CHAR_LIMIT));
     let description = format!("\n {} ", "d".repeat(DESCRIPTION_CHAR_LIMIT));
-    let words = "  one two three four five  ";
+    let spaced = format!("  {}  ", words(LABEL_WORD_LIMIT, 3));
     assert!(
-        normalize(&[asked_with(vec![option(&label, &description), option(words, "d"),])]).is_ok()
+        normalize(&[asked_with(vec![option(&label, &description), option(&spaced, "d")])]).is_ok()
     );
 }
 
@@ -290,17 +298,16 @@ fn the_limits_count_the_trimmed_text() {
 /// many words is told to use fewer.
 #[test]
 fn the_word_limit_is_checked_before_the_character_limit() {
-    let long_five = "abcdefghij abcdefghij abcdefghij abcdefghij a";
-    assert_eq!(long_five.split_whitespace().count(), 5);
-    assert!(long_five.chars().count() > LABEL_CHAR_LIMIT);
+    let long_at_limit = words(LABEL_WORD_LIMIT, 10);
+    assert!(long_at_limit.chars().count() > LABEL_CHAR_LIMIT);
     assert!(matches!(
-        normalize(&[asked("q?", &["a", long_five])]).unwrap_err(),
+        normalize(&[asked("q?", &["a", &long_at_limit])]).unwrap_err(),
         ToolRefusal::InvalidQuestion(SET_OPTION_TOO_LONG, 1),
     ));
 
-    let long_six = "abcdefghij abcdefghij abcdefghij abcdefghij a b";
+    let long_over = words(LABEL_WORD_LIMIT + 1, 10);
     assert!(matches!(
-        normalize(&[asked("q?", &["a", long_six])]).unwrap_err(),
+        normalize(&[asked("q?", &["a", &long_over])]).unwrap_err(),
         ToolRefusal::InvalidQuestion(SET_LABEL_TOO_MANY_WORDS, 1),
     ));
 }
@@ -309,9 +316,10 @@ fn the_word_limit_is_checked_before_the_character_limit() {
 /// but whitespace is a blank label.
 #[test]
 fn any_unicode_whitespace_separates_words() {
-    let six = "one\ntwo\u{00A0}three\u{3000}four five six";
+    let over = "one\ntwo\u{00A0}three\u{3000}four five six seven eight";
+    assert_eq!(over.split_whitespace().count(), LABEL_WORD_LIMIT + 1);
     assert!(matches!(
-        normalize(&[asked("q?", &["a", six])]).unwrap_err(),
+        normalize(&[asked("q?", &["a", over])]).unwrap_err(),
         ToolRefusal::InvalidQuestion(SET_LABEL_TOO_MANY_WORDS, 1),
     ));
     assert!(matches!(
@@ -326,7 +334,7 @@ fn any_unicode_whitespace_separates_words() {
 fn an_option_refusal_names_the_question_it_is_in() {
     let over = "x".repeat(DESCRIPTION_CHAR_LIMIT + 1);
     for bad in [
-        option("one two three four five six", "d"),
+        option(&words(LABEL_WORD_LIMIT + 1, 1), "d"),
         option("a", ""),
         option("a", &over),
         option(&"x".repeat(LABEL_CHAR_LIMIT + 1), "d"),
@@ -377,10 +385,10 @@ fn an_option_in_another_shape_is_refused_as_a_blank_description() {
 #[test]
 fn the_descriptions_state_the_option_limits() {
     for text in [DESCRIPTION, LABEL_DESCRIPTION] {
-        assert!(text.contains("5 words") && text.contains("40 characters"), "{text}");
+        assert!(text.contains("at most 7 words and 50 characters"), "{text}");
     }
     for text in [DESCRIPTION, OPTION_DESCRIPTION_DESCRIPTION] {
-        assert!(text.contains("300 characters"), "{text}");
+        assert!(text.contains("at most 300 characters"), "{text}");
     }
 }
 
@@ -669,9 +677,7 @@ fn a_call_reports_the_tool_the_discussion_and_the_count_and_nothing_it_composed(
 /// model told it went over learns by how much it must shorten.
 #[test]
 fn each_option_refusal_names_its_limit() {
-    assert!(SET_OPTION_TOO_LONG.contains(&format!("{LABEL_CHAR_LIMIT} characters")));
-    assert!(
-        SET_OPTION_DESCRIPTION_TOO_LONG.contains(&format!("{DESCRIPTION_CHAR_LIMIT} characters"))
-    );
-    assert!(SET_LABEL_TOO_MANY_WORDS.contains(&format!("{LABEL_WORD_LIMIT} words")));
+    assert!(SET_LABEL_TOO_MANY_WORDS.contains("more than 7 words"));
+    assert!(SET_OPTION_TOO_LONG.contains("longer than 50 characters"));
+    assert!(SET_OPTION_DESCRIPTION_TOO_LONG.contains("longer than 300 characters"));
 }

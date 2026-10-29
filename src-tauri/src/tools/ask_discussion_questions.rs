@@ -56,7 +56,7 @@ pub const NAME: &str = "ask_discussion_questions";
 /// Written so a model reading every tool description in a discussion turn can
 /// tell this one from `ask_user_comment`'s on its first sentence: this one asks
 /// several things with options, that one asks one thing openly.
-pub const DESCRIPTION: &str = "Put several questions to the author at once, when more than one thing about this discussion is unsettled and you can propose the likely answers to each. Ask up to ten, each with two or three options the author picks between. Give each option a short label of at most 5 words and 40 characters, and a description of at most 300 characters that says its pros, cons, and impact, so the author can decide. Reach for it instead of guessing and instead of answering every reading in turn. Your questions are recorded against this discussion and your turn ends there — this call brings you no answer back, and you will be asked again later with every question and the author's chosen answers in front of you. Ask everything you are stuck on here: anything else you asked for in the same message is not carried out. Use it only where you can propose options; for one open question with no options to offer, use `ask_user_comment` instead. It records against the discussion you were asked in and nowhere else, and it changes no file of the project.";
+pub const DESCRIPTION: &str = "Put several questions to the author at once, when more than one thing about this discussion is unsettled and you can propose the likely answers to each. Ask up to ten, each with two or three options the author picks between. Give each option a short label of at most 7 words and 50 characters, and a description of at most 300 characters that says its pros, cons, and impact, so the author can decide. Reach for it instead of guessing and instead of answering every reading in turn. Your questions are recorded against this discussion and your turn ends there — this call brings you no answer back, and you will be asked again later with every question and the author's chosen answers in front of you. Ask everything you are stuck on here: anything else you asked for in the same message is not carried out. Use it only where you can propose options; for one open question with no options to offer, use `ask_user_comment` instead. It records against the discussion you were asked in and nowhere else, and it changes no file of the project.";
 
 const QUESTIONS_DESCRIPTION: &str = "Everything about this discussion you are stuck on, between one and ten entries, in the order you want them answered. Ask them all here: your turn ends on this call, so a thing you leave out is a thing you cannot ask about later.";
 
@@ -64,7 +64,7 @@ const QUESTION_DESCRIPTION: &str = "One question, written as you would put it to
 
 const OPTIONS_DESCRIPTION: &str = "Two or three answers the author picks between. Every question needs them. Where you have none to propose, do not use this tool: ask that one question with `ask_user_comment` instead.";
 
-const LABEL_DESCRIPTION: &str = "The answer in a couple of words, at most 5 words and 40 characters. The author picks it, and the conversation records it. Put the detail in the description.";
+const LABEL_DESCRIPTION: &str = "The answer in a few words, at most 7 words and 50 characters. The author picks it, and the conversation records it. Put the detail in the description.";
 
 const OPTION_DESCRIPTION_DESCRIPTION: &str = "What choosing this answer means, at most 300 characters: its pros, cons, trade-offs, and impact. It helps the author decide. Every option needs one.";
 
@@ -92,11 +92,11 @@ pub const MAX_OPTIONS: usize = 3;
 /// The question limit counts bytes; the label and description limits count
 /// characters (Unicode scalar values), because the author reads characters.
 pub const QUESTION_LIMIT: usize = 2 * 1024;
-pub const LABEL_CHAR_LIMIT: usize = 40;
+pub const LABEL_CHAR_LIMIT: usize = 50;
 pub const DESCRIPTION_CHAR_LIMIT: usize = 300;
 
 /// ADQ-FR-LGKM: the most words one label may carry.
-pub const LABEL_WORD_LIMIT: usize = 5;
+pub const LABEL_WORD_LIMIT: usize = 7;
 
 /// The arguments, as the model composed them.
 ///

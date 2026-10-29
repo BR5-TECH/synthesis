@@ -11,16 +11,20 @@
  * (DDS-FR-QJFE): the block takes the whole run and stacks the bodies, so a
  * paragraph that follows another does not repeat a name the reader just read.
  */
+import { useState } from "react";
+
 import { CommentMarkdown } from "../../CommentMarkdown";
+import {
+  DescriptionsToggle,
+  descriptionsOf,
+  QuestionWithDescriptions,
+} from "../../discussion/OptionDescriptions";
 import { CommentAttachmentList } from "../../CommentAttachments";
 import { formatRelative } from "../../ProjectPicker";
 import { Icon } from "../../icons";
 import type { AgentRoster } from "../../agentTags";
 import { stripCitationMarkers } from "../../../text/citationMarkers";
-import {
-  participantTitle,
-  type Comment,
-} from "../../../types";
+import { participantTitle, type Comment } from "../../../types";
 import { useParticipantLabel } from "../../../state/projectIdentity";
 
 export interface MessageBlockProps {
@@ -62,12 +66,15 @@ export interface MessageBlockProps {
  */
 function partOfSelection(block: Element | null): HTMLElement | null {
   if (block === null) return null;
-  const selection = typeof window === "undefined" ? null : window.getSelection();
+  const selection =
+    typeof window === "undefined" ? null : window.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
   if (selection.isCollapsed) return null;
   const node = selection.getRangeAt(0).commonAncestorContainer;
   const from = node instanceof Element ? node : node.parentElement;
-  const part = from?.closest<HTMLElement>(".dds-message__part[data-comment-id]");
+  const part = from?.closest<HTMLElement>(
+    ".dds-message__part[data-comment-id]",
+  );
   return part && block.contains(part) ? part : null;
 }
 
@@ -164,12 +171,10 @@ export function MessageBlock({
             </div>
           ))}
           {/* DDS-FR-GBWP: the body's tone is the stylesheet's; AGT-FR-29: a tag
-              that matches an enrolled agent is marked in it. */}
-          <CommentMarkdown
-            body={comment.body}
-            agentRoster={roster}
-            className="dds-message__body"
-          />
+              that matches an enrolled agent is marked in it. DQA-FR-MDMU: a
+              described question that is not drawn as a card — unpaired, or one
+              the card cannot read — keeps its descriptions control. */}
+          <MessageBody comment={comment} roster={roster} />
           {/* CMT-FR-48: attachments below the body they belong to. A change
               reference is not among them — DDS-FR-XHRB draws that as a row of
               the column instead. */}
@@ -183,5 +188,56 @@ export function MessageBlock({
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * One message's body, with the descriptions control where the message is a
+ * described question (DQA-FR-MDMU, DQA-FR-XRLK, DQA-FR-UHXW). A run can hold
+ * two such questions, so the control stands with each part rather than in the
+ * run's one author line.
+ */
+function MessageBody({
+  comment,
+  roster,
+}: {
+  comment: Comment;
+  roster: AgentRoster;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const descriptions = descriptionsOf(comment);
+  if (descriptions.length === 0) {
+    return (
+      <CommentMarkdown
+        body={comment.body}
+        agentRoster={roster}
+        className="dds-message__body"
+      />
+    );
+  }
+  return (
+    <>
+      <div className="dds-message__descriptions">
+        <DescriptionsToggle
+          className="dds-message__descriptions-toggle"
+          expanded={expanded}
+          onToggle={() => setExpanded((open) => !open)}
+        />
+      </div>
+      {expanded ? (
+        <QuestionWithDescriptions
+          body={comment.body}
+          descriptions={descriptions}
+          roster={roster}
+          bodyClassName="dds-message__body"
+        />
+      ) : (
+        <CommentMarkdown
+          body={comment.body}
+          agentRoster={roster}
+          className="dds-message__body"
+        />
+      )}
+    </>
   );
 }

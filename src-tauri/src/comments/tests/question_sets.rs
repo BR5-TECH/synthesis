@@ -12,11 +12,17 @@ pub(super) fn asking_agent() -> Participant {
     }
 }
 
+/// An option as a set recorded without descriptions holds it (ADQ-FR-RTDD).
 pub(super) fn option_at(position: usize, value: &str) -> QuestionOption {
-    QuestionOption { position, value: value.into() }
+    QuestionOption { position, value: value.into(), description: None }
 }
 
-/// A set of `texts.len()` questions, each carrying two options.
+/// An option with a description, as the tool records every option.
+pub(super) fn described_at(position: usize, value: &str, description: &str) -> QuestionOption {
+    QuestionOption { position, value: value.into(), description: Some(description.into()) }
+}
+
+/// A set of `texts.len()` questions, each carrying two described options.
 pub(super) fn set_for(thread_id: &str, set_id: &str, texts: &[&str]) -> PendingQuestionSet {
     PendingQuestionSet {
         set_id: set_id.into(),
@@ -29,7 +35,10 @@ pub(super) fn set_for(thread_id: &str, set_id: &str, texts: &[&str]) -> PendingQ
             .map(|(index, text)| PendingQuestion {
                 position: index + 1,
                 text: (*text).into(),
-                options: vec![option_at(1, "one"), option_at(2, "two")],
+                options: vec![
+                    described_at(1, "one", "The first way."),
+                    described_at(2, "two", "The second way."),
+                ],
             })
             .collect(),
     }

@@ -81,6 +81,8 @@ Comment {
   body,                      // Markdown source
   quotes: CommentQuote[],    // empty when the comment quotes nothing
   attachments: Attachment[], // empty when the comment attaches nothing
+  option_descriptions: string[], // a question comment's option descriptions, in
+                             //   option order; empty on every other comment (CMS-FR-QAHZ)
   created_at                 // RFC 3339 UTC
 }
 
@@ -100,7 +102,8 @@ PendingQuestionSet {                 // a discussion's one question set (CMS-FR-
   asked_by: Participant,             // the asking agent's participant, agent kind
   asked_at,                          // RFC 3339 UTC
   questions: [ { position, text,
-                 options: [ { position, value } ] } ]   // 2 to 3 options each
+                 options: [ { position, value,          // value: the option's label
+                              description? } ] } ]  // 2 to 3 options each
 }
 
 QuestionAnswer {                     // one entry of a submission (CMS-FR-TXRB)
@@ -123,7 +126,7 @@ Every line of a log is one event. All events carry `v`, `event_id`, `thread_id`,
 discussion_opened … target: DiscussionTarget, fragment_target?: FragmentTarget
 fragment_moved    … fragment_target: FragmentTarget
 comment_added     … comment_id, body, quotes: CommentQuote[],
-                     attachments: Attachment[]
+                     attachments: Attachment[], option_descriptions?: string[]
 thread_resolved   … (no further fields)
 thread_reopened   … (no further fields)
 thread_unlocked   … (no further fields)
@@ -245,6 +248,8 @@ Errors are typed: `no_project_open`, `store_unavailable`, `discussion_not_found`
 73. **CMS-FR-BQEN** Reserving a set and deleting one each emit `"discussion question set changed"` carrying that discussion's set as it now stands or null. A refused reservation and a submission that did not commit emit nothing, on the terms every silent write is silent (CMS-FR-52).
 74. **CMS-FR-JWVH** `read_discussion_question_set(discussion_id)` returns the record that discussion holds or null where it holds none, resolving which owner's folder to read from the discussion id exactly as `read_discussion` resolves a log (CMS-FR-61). It writes nothing and emits nothing.
 75. **CMS-FR-TXRB** `submit_discussion_question_answers(discussion_id, set_id, answers)` appends **two comments per recorded question, in the recorded question order** — the agent-authored question comment stamped with the set's own participant snapshot (CMS-FR-41), then the human-authored answer comment stamped with the acting identity (CMS-FR-11), each carrying the body `../tools/ADQ-ask-discussion-questions-tool.md` fixes (ADQ-FR-MRSK, ADQ-FR-RECR, ADQ-FR-NUEB) — and **then** deletes the set.
+75. **CMS-FR-QAHZ** A submission's question comment carries the recorded option descriptions in `option_descriptions` (per `../tools/ADQ-ask-discussion-questions-tool.md` ADQ-FR-QUKU). A `comment_added` event carries the field only where the list is non-empty, and the fold reads an event without the field as an empty list. Only the question comment of a submission (CMS-FR-TXRB) writes a non-empty list. No Tauri command accepts the field.
+75. **CMS-FR-TVOF** A `PendingQuestionSet` option carries `description` only where it was recorded with one. A record whose options carry none is read, served, and submitted on the same terms as any other (per `../tools/ADQ-ask-discussion-questions-tool.md` ADQ-FR-RTDD).
 76. **CMS-FR-PJBV** The submission is refused and appends nothing when `set_id` names no set the discussion holds or has already committed (`question_set_not_found`), when the answers do not cover every recorded question exactly once, when an `option_position` names no option of its question, and when an `option_value` differs from that option's recorded value (`question_answers_incomplete`).
 77. **CMS-FR-GNTB** An answer entry names **either** a chosen option or the author's own words, never both and never neither. The submission is refused with `question_answers_incomplete` and appends nothing when an entry names both, names neither, carries own words that are blank once trimmed, or carries a note beside own words.
 78. **CMS-FR-WNQD** A **resolved** discussion refuses a submission with the typed `discussion_resolved` and appends nothing. The refusal is **unconditional**: it holds whether the discussion still carries the pending set or the submission it names has already committed. A refused submission keeps the pending set exactly as it stood, so a discussion reopened later is answered without anything being entered again.

@@ -289,6 +289,40 @@
   flex: none;
 }
 .dds-question__value { min-width: 0; text-wrap: pretty; }
+/* DQA-FR-XRLK: the description beneath an option's label. It never reads
+   louder than the label above it: it takes the tone of a row the author did
+   not choose, one step smaller, on the chosen row too, which keeps its primary
+   label. DDS-FR-GBWP: it is content, so never the quietest tone. */
+.dds-question__description {
+  display: block;
+  margin-top: var(--sp-0-5);
+  font-size: var(--fs-ui-sm);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+}
+/* DQA-FR-MDMU: the descriptions control stands just before the time, and the
+   two together take the trailing end of the head. */
+.dds-question__descriptions-toggle {
+  margin-left: auto;
+  align-self: center;
+  color: var(--fg-3);
+}
+.dds-question__descriptions-toggle + .dds-stream__time { margin-left: 0; }
+/* The descriptions of a card whose option count they do not match, listed
+   below the options rather than paired with the wrong ones. */
+.dds-question__descriptions {
+  margin: 0;
+  padding: 0 var(--sp-4) var(--sp-3) var(--sp-8);
+}
+/* DQA-FR-MDMU: a described question drawn as plain talk carries the control
+   at the trailing end of its own part, above its body. */
+.dds-message__descriptions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: calc(var(--sp-1) * -1);
+}
+.dds-message__descriptions-toggle { color: var(--fg-3); }
 
 /* DQA-FR-KYWR: the option the author chose, marked among the others rather than
    restated below them. DDS-FR-CVLM: this is one of the three places the accent
@@ -639,6 +673,22 @@
   border: 1px solid var(--border-1);
   border-radius: var(--r-md);
   padding: var(--sp-1-5);
+}
+
+/* DQA-FR-MIBQ: in this column the group is the card, so the description beside
+   it needs no rule of its own — the card's edge already divides the two. Its
+   text starts level with the first option's words. */
+.dds-discussion .discussion-questions__detail {
+  border: 0;
+  padding: calc(var(--sp-1-5) + var(--sp-2)) 0 0;
+  line-height: var(--lh-message);
+}
+/* DQA-FR-OGVU: stacked under the card, the description is a panel of its own on
+   the column's ground, inset to the card's own padding. */
+@container discussion-questions (max-width: 559.98px) {
+  .dds-discussion .discussion-questions__detail {
+    padding: var(--sp-1) calc(var(--sp-1-5) + var(--sp-2-5)) 0;
+  }
 }
 
 /* DQA-FR-PXNC: the line that stands where the composer would while a set is

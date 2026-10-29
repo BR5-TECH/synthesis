@@ -10,7 +10,7 @@
  * column never draws twice.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 const invokeMock = vi.fn();
 import { resetLogBufferForTest } from "../logging";
@@ -302,6 +302,117 @@ describe("a submitted exchange is one card (DQA-FR-KYWR, DQA-FR-ZPGM, DQA-FR-BHX
     await screen.findAllByTestId("dds-message");
     expect(screen.queryByTestId("dds-question-card")).toBeNull();
     expect(screen.getByText("no option list here")).toBeInTheDocument();
+  });
+
+  /** The question half, carrying its recorded option descriptions. */
+  const described: Comment = {
+    ...question,
+    optionDescriptions: [
+      "Removes the files at once; a retry uploads them again.",
+      "Saves the upload on retry; the marker must be cleaned up later.",
+    ],
+  };
+  const chosenAnswer = message(
+    "c2",
+    ME,
+    "**Selected option:** Keep and reuse marker-scoped uploads on retry",
+  );
+
+  it("DQA-FR-MDMU, DQA-FR-XRLK: a described card carries a visible control, collapsed by default", async () => {
+    renderColumn([described, chosenAnswer]);
+    const card = await screen.findByTestId("dds-question-card");
+    const toggle = within(card).getByTestId("option-descriptions-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAccessibleName("Show option descriptions");
+    // In the head, not among the actions that show on hover.
+    expect(toggle.closest(".dds-message__actions")).toBeNull();
+    expect(toggle.closest(".dds-question__head")).not.toBeNull();
+    expect(within(card).queryAllByTestId("dds-question-description")).toHaveLength(0);
+  });
+
+  it("DQA-FR-XRLK: expanded, each description stands beneath its own option, and the chosen mark stays", async () => {
+    renderColumn([described, chosenAnswer]);
+    const card = await screen.findByTestId("dds-question-card");
+    fireEvent.click(within(card).getByTestId("option-descriptions-toggle"));
+
+    const options = card.querySelectorAll(".dds-question__option");
+    expect(options[0]).toHaveTextContent(
+      "Removes the files at once; a retry uploads them again.",
+    );
+    expect(options[1]).toHaveTextContent(
+      "Saves the upload on retry; the marker must be cleaned up later.",
+    );
+    expect(card.querySelectorAll("[data-chosen]")).toHaveLength(1);
+    expect(options[1]).toHaveAttribute("data-chosen");
+
+    fireEvent.click(within(card).getByTestId("option-descriptions-toggle"));
+    expect(within(card).queryAllByTestId("dds-question-description")).toHaveLength(0);
+  });
+
+  it("DQA-FR-MDMU, DQA-FR-XRLK: an unpaired described question drawn as a message keeps its control", async () => {
+    renderColumn([described, message("c2", ME, "something else entirely")]);
+    await screen.findAllByTestId("dds-message");
+    expect(screen.queryByTestId("dds-question-card")).toBeNull();
+    const toggle = screen.getByTestId("option-descriptions-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // Visible at all times, not among the actions that show on hover.
+    expect(toggle.closest(".dds-message__actions")).toBeNull();
+    fireEvent.click(toggle);
+    const items = within(screen.getByTestId("option-descriptions")).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Delete uploaded assets after failure");
+    expect(items[0]).toHaveTextContent("Removes the files at once; a retry uploads them again.");
+  });
+
+  it("DQA-FR-XRLK: a card whose descriptions do not match its options lists them below rather than pairing them", async () => {
+    renderColumn([
+      { ...question, optionDescriptions: ["Only one description."] },
+      chosenAnswer,
+    ]);
+    const card = await screen.findByTestId("dds-question-card");
+    fireEvent.click(within(card).getByTestId("option-descriptions-toggle"));
+    for (const option of card.querySelectorAll(".dds-question__option")) {
+      expect(option).not.toHaveTextContent("Only one description.");
+    }
+    expect(within(card).getByTestId("option-descriptions")).toHaveTextContent(
+      "Only one description.",
+    );
+  });
+
+  it("DQA-FR-JADB: a card's descriptions show with provider citation markers hidden, paired or listed", async () => {
+    renderColumn([
+      {
+        ...question,
+        optionDescriptions: ["Removes them \uE200cite\uE201 at once.", "Saves the upload."],
+      },
+      chosenAnswer,
+      { ...question, id: "c3", optionDescriptions: ["Only one \uE200cite\uE201 here."] },
+      message("c4", ME, "**Selected option:** Delete uploaded assets after failure"),
+    ]);
+    const cards = await screen.findAllByTestId("dds-question-card");
+    for (const card of cards) fireEvent.click(within(card).getByTestId("option-descriptions-toggle"));
+    expect(within(cards[0]).getAllByTestId("dds-question-description")[0].textContent).toBe(
+      "Removes them at once.",
+    );
+    expect(within(cards[1]).getByTestId("option-descriptions").textContent).toBe("Only one here.");
+  });
+
+  it("DQA-FR-UHXW: expanding one card leaves another collapsed", async () => {
+    renderColumn([
+      described,
+      chosenAnswer,
+      { ...described, id: "c3" },
+      message("c4", ME, "**Selected option:** Delete uploaded assets after failure"),
+    ]);
+    const cards = await screen.findAllByTestId("dds-question-card");
+    fireEvent.click(within(cards[0]).getByTestId("option-descriptions-toggle"));
+    expect(within(cards[0]).getAllByTestId("dds-question-description")).toHaveLength(2);
+    expect(within(cards[1]).queryAllByTestId("dds-question-description")).toHaveLength(0);
+  });
+
+  it("DQA-FR-MDMU: a card whose question carries no descriptions has no control", async () => {
+    renderColumn([question, chosenAnswer]);
+    const card = await screen.findByTestId("dds-question-card");
+    expect(within(card).queryByTestId("option-descriptions-toggle")).toBeNull();
   });
 });
 

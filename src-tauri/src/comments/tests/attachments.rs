@@ -675,6 +675,7 @@ fn a_crafted_stored_digest_cannot_climb_out_of_the_attachments_folder() {
                     filename: "innocent.png".into(),
                     bytes: 10,
                 }],
+                option_descriptions: Vec::new(),
             },
         )],
     )

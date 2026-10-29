@@ -82,7 +82,12 @@ pub struct PendingQuestion {
 #[serde(rename_all = "camelCase")]
 pub struct QuestionOption {
     pub position: usize,
+    /// The option's label: what the author picks and the conversation records.
     pub value: String,
+    /// CMS-FR-TVOF: what choosing the option means. Absent on a set recorded
+    /// without descriptions, which still loads and submits (ADQ-FR-RTDD).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// CMS-FR-TXRB: one entry of a submission.

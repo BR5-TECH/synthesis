@@ -205,17 +205,24 @@ pub const SET_QUESTION_BLANK: &str = "The question text must say what you want t
 /// ADQ-FR-PVXK: one question carried an option count outside two or three.
 pub const WRONG_OPTION_COUNT: &str = "This question must offer two or three answers for the author to pick between, and it offered a number outside that. Where you have none to propose, ask that one question with `ask_user_comment` instead.";
 
-/// ADQ-FR-PVXK: one option of one question carried no value.
-pub const SET_OPTION_BLANK: &str =
-    "An option must carry the answer it stands for. Write a short phrase the author can choose.";
+/// ADQ-FR-PVXK: one option of one question carried no label.
+pub const SET_OPTION_BLANK: &str = "An option must carry a label that names the answer it stands for. Write a couple of words the author can choose.";
+
+/// ADQ-FR-PVXK: one option of one question carried no description.
+pub const SET_OPTION_DESCRIPTION_BLANK: &str = "Every option must carry a description: what choosing it means, with its pros, cons, and impact. Write one for each option.";
+
+/// ADQ-FR-LGKM: one option's label is more than five words.
+pub const SET_LABEL_TOO_MANY_WORDS: &str = "An option label is more than 5 words, which is its limit. Name the answer in a couple of words and put the detail in the description.";
 
 /// ADQ-FR-ZBQH: one question's text is above its named limit.
 pub const SET_QUESTION_TOO_LONG: &str =
     "The question is longer than 2 KiB, which is its limit. Ask one thing, more briefly.";
 
-/// ADQ-FR-ZBQH: one option's value is above its named limit.
-pub const SET_OPTION_TOO_LONG: &str =
-    "An option is longer than 512 B, which is its limit. Write it as a short phrase.";
+/// ADQ-FR-ZBQH: one option's label is above its named limit.
+pub const SET_OPTION_TOO_LONG: &str = "An option label is longer than 40 characters, which is its limit. Name the answer in a couple of words and put the detail in the description.";
+
+/// ADQ-FR-ZBQH: one option's description is above its named limit.
+pub const SET_OPTION_DESCRIPTION_TOO_LONG: &str = "An option description is longer than 300 characters, which is its limit. Say its pros, cons, and impact more briefly.";
 
 /// PDC-FR-06: the conversation is about a file already in the project, or about
 /// nothing this tool can propose against.

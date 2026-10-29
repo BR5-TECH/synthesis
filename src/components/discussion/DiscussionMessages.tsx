@@ -9,7 +9,7 @@
  * Markdown body, the attachments, the Quote action, and the pending
  * contribution with its Cancel and its activity status.
  */
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 
 import { Icon } from "../icons";
 import { CommentAttachmentList } from "../CommentAttachments";
@@ -26,6 +26,11 @@ import {
   type Participant,
 } from "../../types";
 import type { PairedHalf } from "./questionPairs";
+import {
+  DescriptionsToggle,
+  descriptionsOf,
+  QuestionWithDescriptions,
+} from "./OptionDescriptions";
 import { useParticipantLabel } from "../../state/projectIdentity";
 
 /**
@@ -86,6 +91,15 @@ export function DiscussionMessages({
   footer,
 }: DiscussionMessagesProps) {
   const participantLabel = useParticipantLabel();
+  // DQA-FR-UHXW: which question comments show their descriptions, held for
+  // this rendering alone. DQA-FR-XRLK: none does until the reader asks.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (commentId: string) =>
+    setExpanded((standing) => {
+      const next = new Set(standing);
+      if (!next.delete(commentId)) next.add(commentId);
+      return next;
+    });
   return (
     <>
       {thread.comments.map((comment, index) => (
@@ -115,6 +129,15 @@ export function DiscussionMessages({
                 <span className="comment__time" title={comment.createdAt}>
                   {formatRelative(comment.createdAt)}
                 </span>
+                {/* DQA-FR-MDMU, CMT-FR-KUPP: a described question carries the
+                    control that shows its descriptions, resolved or not. */}
+                {descriptionsOf(comment).length > 0 && (
+                  <DescriptionsToggle
+                    className="comment__descriptions-toggle"
+                    expanded={expanded.has(comment.id)}
+                    onToggle={() => toggle(comment.id)}
+                  />
+                )}
                 {/* CMT-FR-12 / DQA-FR-VJHT: Quote goes wherever the composer
                     goes. */}
                 {onQuote && (
@@ -152,7 +175,15 @@ export function DiscussionMessages({
               ))}
               {/* AGT-FR-29: a tag that matches an enrolled agent is rendered
                   distinguishably. One that matches nobody stays ordinary text. */}
-              <CommentMarkdown body={comment.body} agentRoster={roster} />
+              {expanded.has(comment.id) && descriptionsOf(comment).length > 0 ? (
+                <QuestionWithDescriptions
+                  body={comment.body}
+                  descriptions={descriptionsOf(comment)}
+                  roster={roster}
+                />
+              ) : (
+                <CommentMarkdown body={comment.body} agentRoster={roster} />
+              )}
               {/* CMT-FR-48: below the body, an image as a thumbnail and anything
                   else as a named chip. */}
               <CommentAttachmentList

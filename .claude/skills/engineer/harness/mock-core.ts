@@ -2048,25 +2048,55 @@ const questionSetsByThread: Record<string, any> = {
         position: 1,
         text: "Should the ontology live in one spec or two?",
         options: [
-          { position: 1, value: "one — a single spec covering both layers" },
-          { position: 2, value: "two — paired ui/ and core/ specs" },
+          {
+            position: 1,
+            value: "One spec",
+            description:
+              "One spec covers both layers. It is easy to find, but it grows past the size limit and mixes UI and storage rules.",
+          },
+          {
+            position: 2,
+            value: "Paired specs",
+            description:
+              "Two specs, one in ui/ and one in core/. Each stays small; a change to the contract crosses two files.",
+          },
         ],
       },
       {
         position: 2,
         text: "Where should the flow diagram go?",
         options: [
-          { position: 1, value: "the ui spec" },
-          { position: 2, value: "the core spec" },
-          { position: 3, value: "both, kept in step" },
+          {
+            position: 1,
+            value: "The ui spec",
+            description: "Beside the screens it explains. Readers of the core spec do not see it.",
+          },
+          {
+            position: 2,
+            value: "The core spec",
+            description: "Beside the data it moves. UI readers must follow a link to find it.",
+          },
+          {
+            position: 3,
+            value: "Both, kept in step",
+            description: "Every reader finds it, but two copies must change together on each edit.",
+          },
         ],
       },
       {
         position: 3,
         text: "Do we rename the existing term?",
         options: [
-          { position: 1, value: "rename it now" },
-          { position: 2, value: "leave it and add an alias" },
+          {
+            position: 1,
+            value: "Rename it now",
+            description: "One clean term from today. Old notes and drafts keep the old word.",
+          },
+          {
+            position: 2,
+            value: "Keep it, add alias",
+            description: "Nothing breaks. Two words for one thing stay in the corpus.",
+          },
         ],
       },
     ],
@@ -9631,6 +9661,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           body: `${question.text}\n\n${options}`,
           quotes: [],
           attachments: [],
+          // ADQ-FR-QUKU: one description per option, or none where any option
+          // was recorded without one.
+          optionDescriptions: question.options.every(
+            (candidate: any) => typeof candidate.description === "string" && candidate.description.trim() !== "",
+          )
+            ? question.options.map((candidate: any) => candidate.description.trim())
+            : [],
           createdAt: new Date().toISOString(),
         });
         finalAnswerCommentId = `${set.setId}:${pad}-2a`;

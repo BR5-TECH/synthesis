@@ -20,8 +20,14 @@ fn asks_questions(questions: serde_json::Value) -> ScriptedReply {
 
 fn two_questions() -> serde_json::Value {
     serde_json::json!([
-        { "question": "One spec or two?", "options": ["one", "two"] },
-        { "question": "Where does the diagram go?", "options": ["ui", "core"] },
+        { "question": "One spec or two?", "options": [
+            { "label": "one", "description": "Easy to find; it grows large." },
+            { "label": "two", "description": "Each stays small." },
+        ] },
+        { "question": "Where does the diagram go?", "options": [
+            { "label": "ui", "description": "Beside the screens it explains." },
+            { "label": "core", "description": "Beside the data it moves." },
+        ] },
     ])
 }
 
@@ -72,7 +78,9 @@ fn a_refused_question_set_ends_nothing_and_the_turn_answers_with_what_it_has() {
     let h = Harness::scripted(vec![
         // Two options are required, so one refuses (ADQ-FR-PVXK).
         Ok(asks_questions(serde_json::json!([
-            { "question": "One spec or two?", "options": ["only one"] },
+            { "question": "One spec or two?", "options": [
+                { "label": "only one", "description": "The one way." },
+            ] },
         ]))),
         Ok(ScriptedReply::answer("Answered with what I had.")),
     ]);
@@ -195,4 +203,72 @@ fn retiring_one_discussions_turns_leaves_another_discussions_alone() {
     assert_eq!(h.turns().retire_awaiting_on_thread(&thread_a.id), 1);
     // The other discussion's turn is still owed its answer.
     assert_eq!(h.turns().retire_awaiting_on_thread(&thread_b.id), 1);
+}
+
+/// ADQ-FR-ZKXL, ADQ-FR-QUKU: the turn a submission dispatches reads each
+/// question comment by its labels. The descriptions the set recorded stay on
+/// the comment and out of every section of the input.
+#[test]
+fn the_turn_after_a_submission_reads_labels_and_no_description() {
+    let h = Harness::scripted(vec![
+        Ok(asks_questions(two_questions())),
+        Ok(ScriptedReply::answer("Then two specs, with the diagram in ui.")),
+    ]);
+    h.mount();
+    h.create_agent("arch", "");
+    let (_, draft_id, thread) = run_draft_turn(&h, "arch");
+
+    let answers = vec![
+        crate::comments::QuestionAnswer {
+            question_position: 1,
+            option_position: Some(2),
+            option_value: Some("two".into()),
+            own_answer: None,
+            note: None,
+        },
+        crate::comments::QuestionAnswer {
+            question_position: 2,
+            option_position: Some(1),
+            option_value: Some("ui".into()),
+            own_answer: None,
+            note: None,
+        },
+    ];
+    let set = crate::comments::read_question_set(&h.root(), &h.root(), &thread.id).unwrap();
+    let human = crate::comments::Participant::Human {
+        login: "raver119".into(),
+        display_name: None,
+        email: None,
+    };
+    let outcome = crate::comments::commit_question_answers(
+        &h.root(),
+        &h.root(),
+        &thread.id,
+        &set.set_id,
+        &answers,
+        &human,
+    )
+    .unwrap();
+    let folded = folded_discussion(&h, &draft_id, &thread.id);
+    assert!(
+        folded.comments.iter().any(|c| !c.option_descriptions.is_empty()),
+        "the question comments carry their descriptions",
+    );
+
+    h.dispatch("arch", ConversationOrigin::of(&folded), &outcome.submitted.final_answer_comment_id)
+        .expect("dispatch");
+    h.settle();
+
+    let (request, _) = &h.seam.requests()[1];
+    let rendered = render_input(request);
+    assert!(rendered.contains("1. one\n2. two"), "{rendered}");
+    assert!(rendered.contains("**Selected option:** two"), "{rendered}");
+    for description in [
+        "Easy to find; it grows large.",
+        "Each stays small.",
+        "Beside the screens it explains.",
+        "Beside the data it moves.",
+    ] {
+        assert!(!rendered.contains(description), "{description} reached the turn");
+    }
 }

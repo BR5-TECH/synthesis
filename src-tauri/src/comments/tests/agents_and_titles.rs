@@ -29,6 +29,7 @@ fn an_agent_posts_through_the_same_writer_and_folds_the_same_way() {
                 body: "Shortened to two lines.".into(),
                 quotes: vec![],
                 attachments: Vec::new(),
+                option_descriptions: Vec::new(),
             },
         )],
     )
@@ -73,6 +74,7 @@ fn add_as(root: &crate::fs::RootFs, thread: &str, by: &Participant, id: &str, at
                 body: "…".into(),
                 quotes: vec![],
                 attachments: Vec::new(),
+                option_descriptions: Vec::new(),
             },
         )],
     )

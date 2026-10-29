@@ -14,7 +14,13 @@
  * can read, the caller draws the two ordinary comments instead and loses the
  * grouping alone (DQA-FR-TSJD).
  */
+import { useState } from "react";
+
 import { CommentMarkdown } from "../../CommentMarkdown";
+import {
+  DescriptionsToggle,
+  descriptionsOf,
+} from "../../discussion/OptionDescriptions";
 import { Icon } from "../../icons";
 import { TypeChip } from "./TypeChip";
 import { formatRelative } from "../../ProjectPicker";
@@ -58,6 +64,14 @@ export function QuestionCard({
   index,
   actions,
 }: QuestionCardProps) {
+  // DQA-FR-MDMU, DQA-FR-XRLK, DQA-FR-UHXW: the card's descriptions, hidden
+  // until the reader asks, and held for this card alone.
+  const descriptions = descriptionsOf(question);
+  const [expanded, setExpanded] = useState(false);
+  // One description per option is what lets each stand beneath its own label.
+  // A count that does not match pairs nothing and lists them below instead,
+  // as the other surfaces do (`../../discussion/OptionDescriptions.tsx`).
+  const paired = descriptions.length === card.options.length;
   return (
     <article className="dds-question" data-testid="dds-question-card">
       <div className="dds-question__head">
@@ -74,6 +88,15 @@ export function QuestionCard({
           <span className="dds-message__role">
             {participantTitle(question.author)}
           </span>
+        )}
+        {/* DQA-FR-MDMU: visible at all times rather than with the actions that
+            show on hover, so a reader can see there is more to read. */}
+        {descriptions.length > 0 && (
+          <DescriptionsToggle
+            className="dds-question__descriptions-toggle"
+            expanded={expanded}
+            onToggle={() => setExpanded((open) => !open)}
+          />
         )}
         <span className="dds-stream__time" title={question.createdAt}>
           {formatRelative(question.createdAt)}
@@ -129,10 +152,28 @@ export function QuestionCard({
             {/* DQA-FR-JADB: a provider citation marker is hidden. */}
             <span className="dds-question__value">
               {stripCitationMarkers(option.value)}
+              {/* DQA-FR-XRLK: directly beneath its option's label. */}
+              {expanded && paired && descriptions[option.number - 1] && (
+                <span
+                  className="dds-question__description"
+                  data-testid="dds-question-description"
+                >
+                  {stripCitationMarkers(descriptions[option.number - 1])}
+                </span>
+              )}
             </span>
           </li>
         ))}
       </ol>
+      {expanded && !paired && (
+        <ol className="dds-question__descriptions" data-testid="option-descriptions">
+          {descriptions.map((description, index) => (
+            <li key={index} className="dds-question__description">
+              {stripCitationMarkers(description)}
+            </li>
+          ))}
+        </ol>
+      )}
 
       {/* DQA-FR-ZPGM: the note beside a chosen option, or the author's own
           words where they answered in them. Both stand in the same footer, in

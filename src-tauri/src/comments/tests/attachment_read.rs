@@ -311,6 +311,7 @@ fn a_whole_target_discussion_reaches_no_per_file_listing() {
                         body: "x".into(),
                         quotes: Vec::new(),
                         attachments: Vec::new(),
+                        option_descriptions: Vec::new(),
                     },
                 ),
             ],
@@ -496,6 +497,7 @@ fn an_opening_event_of_the_wrong_kind_for_its_log_folds_to_nothing() {
                     body: "x".into(),
                     quotes: Vec::new(),
                     attachments: Vec::new(),
+                    option_descriptions: Vec::new(),
                 },
             },
         ]
@@ -529,6 +531,7 @@ fn an_opening_event_of_the_wrong_kind_for_its_log_folds_to_nothing() {
                 body: "x".into(),
                 quotes: Vec::new(),
                 attachments: Vec::new(),
+                option_descriptions: Vec::new(),
             },
         },
     ];

@@ -59,6 +59,7 @@ pub fn add_comment_with_id(
                 body,
                 quotes: Vec::new(),
                 attachments: Vec::new(),
+                option_descriptions: Vec::new(),
             },
         )],
     )?;
@@ -111,6 +112,7 @@ pub fn append_decision_comment_event(
             body,
             quotes: Vec::new(),
             attachments: Vec::new(),
+            option_descriptions: Vec::new(),
         },
     };
     let line = serde_json::to_string(&event).map_err(|e| format!("could not encode event: {e}"))?;
@@ -159,6 +161,7 @@ pub fn add_comment_to(
                 body,
                 quotes,
                 attachments: stored,
+                option_descriptions: Vec::new(),
             },
         )],
     )?;

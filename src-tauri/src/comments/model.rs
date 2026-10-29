@@ -233,6 +233,12 @@ pub struct Comment {
     /// case. `default` so a line written before attachments existed still folds.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// CMS-FR-QAHZ: a question comment's option descriptions, in option order.
+    /// Empty on every other comment and on a line written without the field.
+    /// It is not part of the body, so a later agent turn never reads it
+    /// (ADQ-FR-ZKXL).
+    #[serde(default)]
+    pub option_descriptions: Vec<String>,
     pub created_at: String,
 }
 
@@ -438,6 +444,10 @@ pub enum EventBody {
         /// discussion never decodes a payload.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
+        /// CMS-FR-QAHZ: written only where non-empty, by the question comment of
+        /// a submission. A line without it folds to an empty list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_descriptions: Vec<String>,
     },
     /// Legacy. Read as a resolution (CMS-FR-WKZR). This build never writes it.
     ThreadLocked,

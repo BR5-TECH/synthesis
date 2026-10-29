@@ -94,7 +94,7 @@ export function unescapeMarkdown(value: string): string {
  * and reading backwards is what makes the recorded options the ones the composer
  * actually appended.
  */
-function splitQuestion(body: string): { text: string; values: string[] } | null {
+export function splitQuestion(body: string): { text: string; values: string[] } | null {
   const lines = body.split("\n");
 
   let end = lines.length;

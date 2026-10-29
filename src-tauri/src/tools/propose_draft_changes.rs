@@ -60,6 +60,7 @@ use crate::comments::{self, Participant, ThreadRef};
 use crate::draft_proposals::{self, NewProposal, RecordRefusal};
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
+use crate::text_hunks::hunks::ContextSide;
 
 #[cfg(test)]
 mod tests;
@@ -89,8 +90,57 @@ pub const PROPOSAL_TEXT_NOT_FOUND: &str =
 pub const PROPOSAL_TEXT_NOT_UNIQUE: &str =
     "The text you gave in `before` appears more than once in the prompt. Add `lead` or `trail` with the exact text around it so it names one place.";
 /// PDC-FR-DMTH.
-pub const PROPOSAL_CONTEXT_TOO_LONG: &str =
-    "The text you gave in `lead` or `trail` is longer than 200 characters. Give only the few words next to the text you change.";
+pub const PROPOSAL_LEAD_TOO_LONG: &str =
+    "The `lead` you gave is longer than 200 characters. Shorten `lead` to the few words just before the text you name.";
+/// PDC-FR-DMTH.
+pub const PROPOSAL_TRAIL_TOO_LONG: &str =
+    "The `trail` you gave is longer than 200 characters. Shorten `trail` to the few words just after the text you name.";
+/// PDC-FR-DMTH.
+pub const PROPOSAL_LEAD_AND_TRAIL_TOO_LONG: &str =
+    "The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name.";
+
+/// The side a revision's `hunk_context_too_long:<side>` error names, if the
+/// error is that one (PDC-FR-DMTH).
+fn revision_context_side(error: &str) -> Option<ContextSide> {
+    error
+        .strip_prefix(crate::draft_proposals::ERR_HUNK_CONTEXT_TOO_LONG)?
+        .strip_prefix(':')
+        .and_then(ContextSide::parse)
+}
+
+/// The refusal for an error of a revision (PDC-FR-TZKQ, PDC-FR-GMWR).
+///
+/// PDC-FR-DMTH: a revision carries one change, so a context over its bound is
+/// named by side and with no place.
+fn revision_refusal(error: &str) -> ToolRefusal {
+    if let Some(side) = revision_context_side(error) {
+        return ToolRefusal::InvalidArguments(context_too_long(side));
+    }
+    match error {
+        crate::draft_proposals::ERR_ANCHOR_LOST => {
+            ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_FOUND)
+        }
+        crate::draft_proposals::ERR_HUNK_AMBIGUOUS => {
+            ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_UNIQUE)
+        }
+        crate::draft_proposals::ERR_HUNK_NOT_FOUND
+        | crate::draft_proposals::ERR_HUNK_ALREADY_DECIDED
+        | crate::draft_proposals::ERR_PROPOSAL_NOT_FOUND => {
+            ToolRefusal::InvalidArguments(PROPOSAL_NO_SUCH_CHANGE)
+        }
+        _ => ToolRefusal::ProposalNotRecorded,
+    }
+}
+
+/// The refusal text for the context that is too long (PDC-FR-DMTH, PPC-FR-KWQB).
+fn context_too_long(side: ContextSide) -> &'static str {
+    match side {
+        ContextSide::Lead => PROPOSAL_LEAD_TOO_LONG,
+        ContextSide::Trail => PROPOSAL_TRAIL_TOO_LONG,
+        ContextSide::Both => PROPOSAL_LEAD_AND_TRAIL_TOO_LONG,
+    }
+}
+
 pub const PROPOSAL_REVISE_ONE: &str =
     "You named a change to replace, so send only the one change that replaces it. Wait for the author to decide the changes already standing before you propose the rest.";
 pub const PROPOSAL_NO_SUCH_CHANGE: &str =
@@ -118,7 +168,7 @@ const NOTE_DESCRIPTION: &str = "What this one change is for, in a few words. Opt
 /// as a stable code.
 ///
 /// `reason()` is one term for the whole family, deliberately, so a reader can
-/// filter a column on it. This tool has eight refusals in that family, and a
+/// filter a column on it. This tool has many refusals in that family, and a
 /// record saying only `invalid_arguments` cannot say which correction the model
 /// was asked to make — which is exactly what a reader looking at a call that
 /// keeps failing needs. A **code** rather than the sentence, for the reason
@@ -137,7 +187,9 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_NO_HUNKS => "no_changes",
         PROPOSAL_TEXT_NOT_FOUND => "text_not_found",
         PROPOSAL_TEXT_NOT_UNIQUE => "text_not_unique",
-        PROPOSAL_CONTEXT_TOO_LONG => "context_too_long",
+        PROPOSAL_LEAD_TOO_LONG => "lead_too_long",
+        PROPOSAL_TRAIL_TOO_LONG => "trail_too_long",
+        PROPOSAL_LEAD_AND_TRAIL_TOO_LONG => "lead_and_trail_too_long",
         PROPOSAL_HUNKS_OVERLAP => "changes_overlap",
         PROPOSAL_REVISE_ONE => "revise_one",
         PROPOSAL_NO_SUCH_CHANGE => "no_such_change",
@@ -411,8 +463,8 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         RecordRefusal::HunkOverlap { at, of } => {
             ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_HUNKS_OVERLAP, at, of }
         }
-        RecordRefusal::HunkContextTooLong { at, of } => {
-            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_CONTEXT_TOO_LONG, at, of }
+        RecordRefusal::HunkContextTooLong { at, of, side } => {
+            ToolRefusal::InvalidArgumentsAt { message: context_too_long(side), at, of }
         }
         RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
@@ -597,23 +649,7 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
                 // go and compose a whole new proposal instead of calling again.
                 // The recording path answers a failed write with the same
                 // refusal, this being the same failure.
-                Err(error) => Err(match error.as_str() {
-                    crate::draft_proposals::ERR_ANCHOR_LOST => {
-                        ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_FOUND)
-                    }
-                    crate::draft_proposals::ERR_HUNK_AMBIGUOUS => {
-                        ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_UNIQUE)
-                    }
-                    crate::draft_proposals::ERR_HUNK_CONTEXT_TOO_LONG => {
-                        ToolRefusal::InvalidArguments(PROPOSAL_CONTEXT_TOO_LONG)
-                    }
-                    crate::draft_proposals::ERR_HUNK_NOT_FOUND
-                    | crate::draft_proposals::ERR_HUNK_ALREADY_DECIDED
-                    | crate::draft_proposals::ERR_PROPOSAL_NOT_FOUND => {
-                        ToolRefusal::InvalidArguments(PROPOSAL_NO_SUCH_CHANGE)
-                    }
-                    _ => ToolRefusal::ProposalNotRecorded,
-                }),
+                Err(error) => Err(revision_refusal(&error)),
             };
         }
 

@@ -68,7 +68,9 @@ Beside it the comment carries exactly one attachment, of the `prompt_proposal` k
 - **text not found** — kind `InvalidArgs`, retryable: *"The text you gave in `before` is not in the file. Copy it character for character from the file as you read it."*
 - **text is not unique** — kind `InvalidArgs`, retryable: *"The text you gave in `before` appears more than once in the file. Add `lead` or `trail` with the exact text around it so it names one place."*
 - **changes overlap** — kind `InvalidArgs`, retryable: *"Two of your changes cover the same text. Combine them into one change."*
-- **context too long** — kind `InvalidArgs`, retryable: *"The text you gave in `lead` or `trail` is longer than 200 characters. Give only the few words next to the text you change."*
+- **lead too long** — kind `InvalidArgs`, retryable: *"The `lead` you gave is longer than 200 characters. Shorten `lead` to the few words just before the text you name."*
+- **trail too long** — kind `InvalidArgs`, retryable: *"The `trail` you gave is longer than 200 characters. Shorten `trail` to the few words just after the text you name."*
+- **lead and trail too long** — kind `InvalidArgs`, retryable: *"The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name."*
 - **blank rationale** — kind `InvalidArgs`, retryable: *"Say why the change is worth making. The author reads this beside the comparison."*
 - **no change proposed** — kind `InvalidArgs`, retryable: *"The text you passed is what the file already holds, so there is nothing to decide."*
 - **a proposal is already pending** — kind `PermissionDenied`, retryable: *"A proposed change to this file is still waiting on the author. Wait for their decision before proposing another."*
@@ -86,6 +88,7 @@ Declared in full (per TLC-FR-17). One successful call produces **exactly one pro
     - *Why:* The tool cannot detect a fragment passed as `content`, so the description and the parameter text each say plainly what `content` is.
  4. **PPC-FR-XHHT** A call carries exactly one of `content` and `hunks`. A call carrying both, or neither, is the retryable **not one form** refusal of the contract surface, and nothing is recorded.
  4. **PPC-FR-RJCA** The `hunks` resolve against the file on disk at the call, with line endings normalised. A hunk is found by `lead` + `before` + `trail`, or `lead` + `after_text` + `trail` for an insertion, which must occur exactly once; only `before` changes. `lead` and `trail` hold at most 200 characters each, and hunks must not overlap.
+ 4. **PPC-FR-KWQB** A `lead` over 200 characters alone is the **lead too long** refusal, a `trail` over it alone the **trail too long** refusal, and both over it the **lead and trail too long** refusal. Each names the hunk's place (per PPC-FR-DLHS), and nothing is recorded.
  4. **PPC-FR-DLHS** An empty `hunks` list, text not found, text found more than once, overlapping hunks, and a `lead` or `trail` over its bound are each the retryable `InvalidArgs` refusal named for them, and nothing is recorded. A hunk refusal names the hunk's place in the list — *Change 3 of 8* — the later one for an overlap.
  4. **PPC-FR-RXCS** The **text is not unique** refusal tells the model to add `lead` or `trail`. It is the same refusal for a hunk that carries neither and for one whose `lead` and `trail` still leave the text more than once in the file.
  4. **PPC-FR-JGSH** A call with `hunks` records the same kind of candidate, comment, `prompt_proposal` attachment, and comparison as a call with `content` (per `../core/PCP-prompt-change-proposals.md` PCP-FR-ENRL). The author accepts or declines the whole candidate, and no hunk is decided on its own.

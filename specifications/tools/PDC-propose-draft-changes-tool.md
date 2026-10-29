@@ -64,7 +64,9 @@ Beside it the comment carries exactly one attachment, of the `proposal` kind (pe
 - **no changes** — kind `InvalidArgs`, retryable: *"Pass at least one change. An empty proposal has nothing for the author to decide."*
 - **text not found** — kind `InvalidArgs`, retryable: *"The text you gave in `before` is not in the prompt. Copy it character for character from the prompt as you read it."*
 - **text is not unique** — kind `InvalidArgs`, retryable: *"The text you gave in `before` appears more than once in the prompt. Add `lead` or `trail` with the exact text around it so it names one place."*
-- **context too long** — kind `InvalidArgs`, retryable: *"The text you gave in `lead` or `trail` is longer than 200 characters. Give only the few words next to the text you change."*
+- **lead too long** — kind `InvalidArgs`, retryable: *"The `lead` you gave is longer than 200 characters. Shorten `lead` to the few words just before the text you name."*
+- **trail too long** — kind `InvalidArgs`, retryable: *"The `trail` you gave is longer than 200 characters. Shorten `trail` to the few words just after the text you name."*
+- **lead and trail too long** — kind `InvalidArgs`, retryable: *"The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name."*
 - **changes overlap** — kind `InvalidArgs`, retryable: *"Two of your changes cover the same text. Combine them into one change."*
 - **blank rationale** — kind `InvalidArgs`, retryable: *"Say why the change is worth making. The author reads this beside the diff."*
 - **no change proposed** — kind `InvalidArgs`, retryable: *"Every change you passed leaves the text as it is, so there is nothing to decide."*
@@ -102,7 +104,7 @@ Declared in full (per TLC-FR-17). One successful call that records a proposal pr
     - *Why:* This catches a model that invented the text it claims to be changing, while the model can still correct it.
 21. **PDC-FR-WCXD** A hunk is found by the text `lead` + `before` + `trail`, or `lead` + `after_text` + `trail` for an insertion, after line endings are normalised. An absent `lead` or `trail` is empty. That text must occur exactly once in the prompt, and only `before` changes; `lead` and `trail` stay as they are.
     - *Why:* A long document repeats short passages, and an agent that sees only a chunk of it cannot copy enough of `before` to make it unique.
-22. **PDC-FR-DMTH** `lead` and `trail` each hold at most 200 characters. A longer value is the retryable **context too long** refusal of the contract surface, and it names the hunk's place (per PDC-FR-TZKQ).
+22. **PDC-FR-DMTH** `lead` and `trail` each hold at most 200 characters. A longer `lead` alone is the **lead too long** refusal, a longer `trail` alone the **trail too long** refusal, and both longer the **lead and trail too long** refusal. Each names the hunk's place (per PDC-FR-TZKQ), except in a revision, whose refusals carry no place.
 23. **PDC-FR-YSKV** The **text is not unique** refusal tells the model to add `lead` or `trail`. It is the same refusal for a hunk that carries neither and for one whose `lead` and `trail` still leave the text more than once in the prompt.
 24. **PDC-FR-VKMR** A hunk's kind is read from the fields it carries. `before` with `after` is a replacement, `before` alone is a deletion, and `after` with `after_text` is an insertion. A `kind` the model names that its fields contradict does not override them.
     - *Why:* Acceptance applies the fields, so a record that kept the named kind would show the author a change the draft never takes.

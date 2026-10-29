@@ -3,7 +3,7 @@
 //! `PPC-propose-prompt-changes-tool.md`).
 
 use super::anchors::{self, find_once, HunkKind, Occurrence};
-use super::hunks::{apply_all, plan, PlanError, ProposedHunk, LEAD_TRAIL_BOUND};
+use super::hunks::{apply_all, plan, ContextSide, PlanError, ProposedHunk, LEAD_TRAIL_BOUND};
 
 fn ids() -> impl FnMut() -> String {
     let mut n = 0;
@@ -133,10 +133,26 @@ fn lead_and_trail_hold_at_most_two_hundred_characters() {
     let over = "é".repeat(LEAD_TRAIL_BOUND + 1);
     let text = format!("head {over}target{over}");
     let long_lead = replace("target", "done", Some(&over), None);
-    assert_eq!(build(&text, &[long_lead]), Err(PlanError::ContextTooLong(1)));
+    assert_eq!(build(&text, &[long_lead]), Err(PlanError::ContextTooLong(1, ContextSide::Lead)));
     let first = replace("head", "HEAD", None, None);
     let long_trail = replace("target", "done", None, Some(&over));
-    assert_eq!(build(&text, &[first, long_trail]), Err(PlanError::ContextTooLong(2)));
+    assert_eq!(
+        build(&text, &[first, long_trail]),
+        Err(PlanError::ContextTooLong(2, ContextSide::Trail)),
+    );
+    let both = replace("target", "done", Some(&over), Some(&over));
+    assert_eq!(build(&text, &[both]), Err(PlanError::ContextTooLong(1, ContextSide::Both)));
+}
+
+// PDC-FR-DMTH, PPC-FR-KWQB: the side survives the colon of the revision's
+// error code, and no other text reads as a side.
+#[test]
+fn a_context_side_reads_back_from_its_name() {
+    for side in [ContextSide::Lead, ContextSide::Trail, ContextSide::Both] {
+        assert_eq!(ContextSide::parse(side.as_str()), Some(side));
+    }
+    assert_eq!(ContextSide::parse("Lead"), None);
+    assert_eq!(ContextSide::parse(""), None);
 }
 
 // PDC-FR-WCXD: line endings are normalised on both sides, so a `lead` read from
@@ -196,4 +212,28 @@ fn a_lead_cut_away_by_its_neighbour_is_refused_at_its_place() {
         &[replace("X ", "LONGER TEXT ", None, None), replace("foo", "bar", Some("X "), None)],
     );
     assert_eq!(out, Err(PlanError::Overlap(2)));
+}
+
+// PDC-FR-DMTH, PPC-FR-KWQB: at the bound a context is accepted, and the side
+// named is the side that is over it, whatever the other side holds.
+#[test]
+fn the_side_named_is_the_side_over_the_bound() {
+    let at = "é".repeat(LEAD_TRAIL_BOUND);
+    let over = "é".repeat(LEAD_TRAIL_BOUND + 1);
+    let text = format!("target{at}");
+    let trail_at_bound = replace("target", "done", None, Some(&at));
+    assert_eq!(build(&text, &[trail_at_bound]).expect("at the bound"), format!("done{at}"));
+    let trail_over = replace("target", "done", Some(&at), Some(&over));
+    assert_eq!(build(&text, &[trail_over]), Err(PlanError::ContextTooLong(1, ContextSide::Trail)));
+    let lead_over = replace("target", "done", Some(&over), Some(&at));
+    assert_eq!(build(&text, &[lead_over]), Err(PlanError::ContextTooLong(1, ContextSide::Lead)));
+}
+
+// PDC-FR-DMTH: the bound is checked before the text is searched, so a long
+// context is named even where `before` is not in the text.
+#[test]
+fn a_long_context_is_named_before_the_text_is_searched() {
+    let over = "x".repeat(LEAD_TRAIL_BOUND + 1);
+    let absent = replace("not in the text", "x", Some(&over), None);
+    assert_eq!(build("some text", &[absent]), Err(PlanError::ContextTooLong(1, ContextSide::Lead)),);
 }

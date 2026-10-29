@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 use super::anchors::{self, HunkAnchor, HunkKind};
 
 pub use crate::text_hunks::hunks::{
-    apply_all, apply_hunk, plan, whole_document, HunkDocument, PlanError, ProposalHunk,
-    ProposedHunk,
+    apply_all, apply_hunk, plan, whole_document, ContextSide, HunkDocument, PlanError,
+    ProposalHunk, ProposedHunk,
 };
 
 /// What a proposal's own state is derived from (DCP-FR-PWSF).

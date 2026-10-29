@@ -193,9 +193,40 @@ pub enum PlanError {
     /// Two changes covering the same text, which would make them undecidable
     /// in any order, and the place of the later of the two.
     Overlap(usize),
-    /// A `lead` or a `trail` longer than `LEAD_TRAIL_BOUND` characters, and the
-    /// place of the change that carried it (PDC-FR-DMTH).
-    ContextTooLong(usize),
+    /// A `lead` or a `trail` longer than `LEAD_TRAIL_BOUND` characters, the
+    /// place of the change that carried it, and which of the two is too long
+    /// (PDC-FR-DMTH).
+    ContextTooLong(usize, ContextSide),
+}
+
+/// Which context of a change is longer than `LEAD_TRAIL_BOUND` (PDC-FR-DMTH,
+/// PPC-FR-KWQB). The refusal names it, so the model shortens the right one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextSide {
+    Lead,
+    Trail,
+    Both,
+}
+
+impl ContextSide {
+    /// The name of the side in an error code, after its colon.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Lead => "lead",
+            Self::Trail => "trail",
+            Self::Both => "both",
+        }
+    }
+
+    /// The side `as_str` gave, or `None` for any other text.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "lead" => Some(Self::Lead),
+            "trail" => Some(Self::Trail),
+            "both" => Some(Self::Both),
+            _ => None,
+        }
+    }
 }
 
 /// Place every proposed change against the prompt, or refuse the whole
@@ -223,8 +254,16 @@ pub fn plan(
         let trail = anchors::normalise_newlines(item.trail.as_deref().unwrap_or(""));
         // PDC-FR-DMTH: the context names a place in a few words. A longer one
         // is refused before anything is searched.
-        if lead.chars().count() > LEAD_TRAIL_BOUND || trail.chars().count() > LEAD_TRAIL_BOUND {
-            return Err(PlanError::ContextTooLong(at));
+        let long_lead = lead.chars().count() > LEAD_TRAIL_BOUND;
+        let long_trail = trail.chars().count() > LEAD_TRAIL_BOUND;
+        let side = match (long_lead, long_trail) {
+            (true, true) => Some(ContextSide::Both),
+            (true, false) => Some(ContextSide::Lead),
+            (false, true) => Some(ContextSide::Trail),
+            (false, false) => None,
+        };
+        if let Some(side) = side {
+            return Err(PlanError::ContextTooLong(at, side));
         }
         let (start, end) = match item.kind {
             HunkKind::Add => {

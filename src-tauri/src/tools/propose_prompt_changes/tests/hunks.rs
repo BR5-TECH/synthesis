@@ -21,6 +21,11 @@ fn with_lead(mut h: PromptHunkArg, lead: &str) -> PromptHunkArg {
     h
 }
 
+fn with_trail(mut h: PromptHunkArg, trail: &str) -> PromptHunkArg {
+    h.trail = Some(trail.into());
+    h
+}
+
 impl Fixture {
     fn call_hunks(
         &self,
@@ -167,7 +172,7 @@ fn each_hunk_refusal_names_its_place_and_records_nothing() {
         ),
         (
             vec![with_lead(hunk("The original", "An"), &long)],
-            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_CONTEXT_TOO_LONG, at: 1, of: 1 },
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_LEAD_TOO_LONG, at: 1, of: 1 },
         ),
     ];
     for (hunks, expected) in cases {
@@ -268,4 +273,76 @@ fn the_hunk_item_publishes_lead_and_trail() {
     assert_eq!(item["lead"]["description"], LEAD_DESCRIPTION);
     assert_eq!(item["trail"]["description"], TRAIL_DESCRIPTION);
     assert!(DESCRIPTION.contains("`hunks`") && DESCRIPTION.contains("`lead`"));
+}
+
+// PPC-FR-KWQB: a `trail` alone and both contexts over 200 characters are their
+// own refusals, each with its place, and nothing is recorded.
+#[test]
+fn a_long_trail_and_two_long_contexts_are_named_as_such() {
+    let f = Fixture::new();
+    let long = "x".repeat(201);
+    let cases = [
+        (with_trail(hunk("The original", "An"), &long), PROPOSAL_TRAIL_TOO_LONG, "Shorten `trail`"),
+        (
+            with_trail(with_lead(hunk("The original", "An"), &long), &long),
+            PROPOSAL_LEAD_AND_TRAIL_TOO_LONG,
+            "Shorten both",
+        ),
+    ];
+    for (hunk, message, correction) in cases {
+        let refusal =
+            f.call_hunks(vec![self::hunk("# Review", "# Read"), hunk]).expect_err("refused");
+        assert_eq!(refusal, ToolRefusal::InvalidArgumentsAt { message, at: 2, of: 2 });
+        assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
+        assert!(refusal.retryable());
+        let text = refusal.to_string();
+        assert!(text.starts_with("Change 2 of 2") && text.contains(correction), "{text}");
+        assert!(f.proposals().is_empty());
+        assert!(!f.proposed.load(Ordering::SeqCst));
+        assert_eq!(f.artifact_body(), ORIGINAL, "the artifact is untouched");
+    }
+}
+
+// PPC-FR-KWQB: the three refusal texts are the spec's own, word for word.
+#[test]
+fn the_three_context_refusals_are_the_spec_text() {
+    const SPEC: &str =
+        include_str!("../../../../../specifications/tools/PPC-propose-prompt-changes-tool.md");
+    for text in [PROPOSAL_LEAD_TOO_LONG, PROPOSAL_TRAIL_TOO_LONG, PROPOSAL_LEAD_AND_TRAIL_TOO_LONG]
+    {
+        assert!(SPEC.contains(&format!("*\"{text}\"*")), "not in the spec: {text}");
+    }
+}
+
+// PPC-FR-19, PPC-FR-KWQB: each side is logged under its own code, with the
+// place and no text of the context.
+#[test]
+fn each_context_refusal_is_logged_under_its_own_code() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let f = Fixture::new();
+    let long = "secret".repeat(40);
+    let cases = [
+        (with_lead(hunk("The original", "An"), &long), "lead_too_long"),
+        (with_trail(hunk("The original", "An"), &long), "trail_too_long"),
+        (
+            with_trail(with_lead(hunk("The original", "An"), &long), &long),
+            "lead_and_trail_too_long",
+        ),
+    ];
+    for (hunk, code) in cases {
+        BUFFER.clear();
+        block_on(f.tool().with_buffer(&BUFFER).call(ProposePromptChangesArgs {
+            path: PROMPT.into(),
+            content: None,
+            hunks: Some(vec![hunk]),
+            rationale: RATIONALE.into(),
+        }))
+        .expect_err("refused");
+        let records = records(&BUFFER, Domain::Ai);
+        let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
+        let fields = serde_json::to_value(&warn.fields).expect("fields");
+        assert_eq!(fields["refusal"], code);
+        assert_eq!(fields["refusalAt"], 1);
+        assert!(!format!("{} {}", warn.message, fields).contains("secret"));
+    }
 }

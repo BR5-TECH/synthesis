@@ -47,7 +47,7 @@ pub(super) fn build_candidate(
         PlanError::AnchorLost(at) => RecordRefusal::HunkAnchorLost { at, of },
         PlanError::Ambiguous(at) => RecordRefusal::HunkAmbiguous { at, of },
         PlanError::Overlap(at) => RecordRefusal::HunkOverlap { at, of },
-        PlanError::ContextTooLong(at) => RecordRefusal::HunkContextTooLong { at, of },
+        PlanError::ContextTooLong(at, side) => RecordRefusal::HunkContextTooLong { at, of, side },
     })?;
     // `plan` placed every hunk a moment ago against this same text, so an
     // application that fails here is a fault of this module and not a mistake

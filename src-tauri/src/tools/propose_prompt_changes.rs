@@ -54,7 +54,7 @@ use crate::comments::Participant;
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
 use crate::prompt_proposals::{self, NewPromptProposal, ProposedChange, RecordRefusal};
-use crate::text_hunks::hunks::ProposedHunk;
+use crate::text_hunks::hunks::{ContextSide, ProposedHunk};
 
 #[cfg(test)]
 mod tests;
@@ -104,9 +104,24 @@ pub const PROPOSAL_TEXT_NOT_UNIQUE: &str =
 /// PPC-FR-DLHS.
 pub const PROPOSAL_HUNKS_OVERLAP: &str =
     "Two of your changes cover the same text. Combine them into one change.";
-/// PPC-FR-DLHS.
-pub const PROPOSAL_CONTEXT_TOO_LONG: &str =
-    "The text you gave in `lead` or `trail` is longer than 200 characters. Give only the few words next to the text you change.";
+/// PPC-FR-KWQB.
+pub const PROPOSAL_LEAD_TOO_LONG: &str =
+    "The `lead` you gave is longer than 200 characters. Shorten `lead` to the few words just before the text you name.";
+/// PPC-FR-KWQB.
+pub const PROPOSAL_TRAIL_TOO_LONG: &str =
+    "The `trail` you gave is longer than 200 characters. Shorten `trail` to the few words just after the text you name.";
+/// PPC-FR-KWQB.
+pub const PROPOSAL_LEAD_AND_TRAIL_TOO_LONG: &str =
+    "The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name.";
+
+/// The refusal text for the context that is too long (PDC-FR-DMTH, PPC-FR-KWQB).
+fn context_too_long(side: ContextSide) -> &'static str {
+    match side {
+        ContextSide::Lead => PROPOSAL_LEAD_TOO_LONG,
+        ContextSide::Trail => PROPOSAL_TRAIL_TOO_LONG,
+        ContextSide::Both => PROPOSAL_LEAD_AND_TRAIL_TOO_LONG,
+    }
+}
 
 /// PPC-FR-19: which of this tool's invalid-argument refusals fired, as a
 /// stable code, so a record names the correction the model was asked to make
@@ -123,7 +138,9 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_TEXT_NOT_FOUND => "text_not_found",
         PROPOSAL_TEXT_NOT_UNIQUE => "text_not_unique",
         PROPOSAL_HUNKS_OVERLAP => "changes_overlap",
-        PROPOSAL_CONTEXT_TOO_LONG => "context_too_long",
+        PROPOSAL_LEAD_TOO_LONG => "lead_too_long",
+        PROPOSAL_TRAIL_TOO_LONG => "trail_too_long",
+        PROPOSAL_LEAD_AND_TRAIL_TOO_LONG => "lead_and_trail_too_long",
         PROMPT_PROPOSAL_RATIONALE_BLANK => "rationale_blank",
         PROPOSAL_NO_CHANGE => "no_change",
         _ => "other",
@@ -312,8 +329,8 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         RecordRefusal::HunkOverlap { at, of } => {
             ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_HUNKS_OVERLAP, at, of }
         }
-        RecordRefusal::HunkContextTooLong { at, of } => {
-            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_CONTEXT_TOO_LONG, at, of }
+        RecordRefusal::HunkContextTooLong { at, of, side } => {
+            ToolRefusal::InvalidArgumentsAt { message: context_too_long(side), at, of }
         }
         RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,

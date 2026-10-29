@@ -112,8 +112,9 @@ pub enum RecordRefusal {
     /// DCP-FR-JGCD: a `lead` + `before` + `trail` naming more than one place,
     /// and which change.
     HunkAmbiguous { at: usize, of: usize },
-    /// DCP-FR-JGCD: a `lead` or `trail` over its bound, and which change.
-    HunkContextTooLong { at: usize, of: usize },
+    /// DCP-FR-JGCD: a `lead` or `trail` over its bound, which change, and
+    /// which of the two (PDC-FR-DMTH).
+    HunkContextTooLong { at: usize, of: usize, side: hunks::ContextSide },
     /// DCP-FR-JGCD: two changes covering the same text, and the later of them.
     HunkOverlap { at: usize, of: usize },
     /// CMS-FR-17: the conversation takes no further comments.

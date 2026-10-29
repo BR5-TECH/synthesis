@@ -104,8 +104,32 @@ fn a_hunk_that_cannot_be_built_records_nothing_and_names_its_place() {
             vec![hunk("two", "2", None), hunk("o one", "x", None)],
             RecordRefusal::HunkOverlap { at: 2, of: 2 },
         ),
-        (vec![hunk("two", "2", Some(&long))], RecordRefusal::HunkContextTooLong { at: 1, of: 1 }),
+        (
+            vec![hunk("two", "2", Some(&long))],
+            RecordRefusal::HunkContextTooLong {
+                at: 1,
+                of: 1,
+                side: crate::text_hunks::hunks::ContextSide::Lead,
+            },
+        ),
     ];
+    // PPC-FR-KWQB: a long `trail` alone and both contexts carry their side.
+    let side = |lead: Option<&str>, trail: Option<&str>| {
+        vec![ProposedHunk::from_fields(
+            Some("two".into()),
+            Some("2".into()),
+            None,
+            lead.map(Into::into),
+            trail.map(Into::into),
+            None,
+        )]
+    };
+    let too_long = |side| RecordRefusal::HunkContextTooLong { at: 1, of: 1, side };
+    use crate::text_hunks::hunks::ContextSide;
+    let cases = cases.into_iter().chain([
+        (side(None, Some(&long)), too_long(ContextSide::Trail)),
+        (side(Some(&long), Some(&long)), too_long(ContextSide::Both)),
+    ]);
     for (hunks, refusal) in cases {
         assert_eq!(f.propose_hunks(&hunks).unwrap_err(), refusal);
         assert!(f.folder_files().is_empty(), "nothing written for {refusal:?}");

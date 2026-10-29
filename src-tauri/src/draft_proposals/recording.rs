@@ -78,7 +78,9 @@ where
         hunks::PlanError::AnchorLost(at) => RecordRefusal::HunkAnchorLost { at, of },
         hunks::PlanError::Ambiguous(at) => RecordRefusal::HunkAmbiguous { at, of },
         hunks::PlanError::Overlap(at) => RecordRefusal::HunkOverlap { at, of },
-        hunks::PlanError::ContextTooLong(at) => RecordRefusal::HunkContextTooLong { at, of },
+        hunks::PlanError::ContextTooLong(at, side) => {
+            RecordRefusal::HunkContextTooLong { at, of, side }
+        }
     })?;
     // DCP-FR-07: changes that together leave the text as it is are nothing to
     // decide, and would spend the draft's one slot on an empty review. The

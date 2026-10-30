@@ -1,0 +1,109 @@
+/* CTA-FR-GGYJ: the status line of a pending contribution, and the text of an
+   activity row, as a disclosure control. It keeps the text's own look, so a
+   row with a tool list reads as the row it was. */
+.tool-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-radius: var(--r-xs, 2px);
+}
+.tool-disclosure:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.tool-disclosure__chevron {
+  flex: none;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tool-disclosure[aria-expanded="true"] .tool-disclosure__chevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-disclosure__chevron { transition: none; }
+}
+
+/* CTA-FR-BJWN / CTA-FR-FPNP: one entry per call — the tool, the key input as
+   plain text that wraps, and the state as a word. */
+.tool-calls {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-style: normal;
+}
+.tool-calls__entry {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: var(--sp-2);
+  align-items: baseline;
+  font-size: var(--fs-ui-sm, 12px);
+  color: var(--fg-2);
+}
+.tool-calls__name {
+  font-family: var(--font-mono, monospace);
+  color: var(--fg-1);
+}
+.tool-calls__input {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: var(--fg-2);
+}
+.tool-calls__state {
+  grid-column: 3;
+  color: var(--fg-3);
+}
+.tool-calls__entry[data-state="failed"] .tool-calls__state {
+  color: var(--danger, var(--fg-2));
+}
+
+/* The draft column draws the status as a dot and one word in a row, so the
+   list takes a line of its own under them. */
+.dds-transient {
+  flex-wrap: wrap;
+}
+.dds-transient > div {
+  flex-basis: 100%;
+}
+
+/* CTA-FR-ZBIB / CTA-FR-QMWO: an activity row at the discussion foot. */
+.comment--activity,
+.dds-activity {
+  color: var(--fg-3);
+  font-size: var(--fs-ui-sm, 12px);
+}
+
+/* CVP-FR-JSHF / CVP-FR-UYHO: the timeout bar stands on the field's bottom edge,
+   inside the field, and takes no space of its own, so showing or hiding it
+   moves neither the field nor its controls. It takes no pointer input. */
+.comment-composer {
+  position: relative;
+}
+.timeout-bar {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+}
+/* CVP-FR-IJEY: the fill stands at the leading edge, so it empties from right
+   to left. */
+.timeout-bar__fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .timeout-bar__fill { transition: none; }
+}

@@ -512,7 +512,7 @@ fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
         .connect(rig_reqwest::ReqwestClient::from(reqwest013::Client::new()));
     let endpoint = AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: "https://example.invalid".into(),
@@ -696,14 +696,17 @@ fn turns_in_flight_at_once_hold_sessions_of_their_own() {
     let h = Harness::with_patient_seam(Box::new(ToolThenGated { gate: gate.clone() }));
     h.mount();
     h.create_agent("arch", "");
+    // Two agents: a second dispatch for one agent in one discussion steers the
+    // first turn rather than starting another (AGC-FR-ISKZ).
+    h.create_agent("sec", "");
 
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    let dispatch = |h: &Harness| {
-        h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
+    let dispatch = |h: &Harness, nickname: &str| {
+        h.dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
             .expect("dispatch")
     };
-    let first = dispatch(&h);
-    let second = dispatch(&h);
+    let first = dispatch(&h, "arch");
+    let second = dispatch(&h, "sec");
 
     // Both turns are past their first call, so both are genuinely in flight at
     // the same moment: the record lands before the second call is made, and the
@@ -758,14 +761,17 @@ fn neither_session_can_reach_the_other_s_temp_directory() {
     let h = Harness::with_patient_seam(Box::new(ToolThenGated { gate: gate.clone() }));
     h.mount();
     h.create_agent("arch", "");
+    // Two agents: a second dispatch for one agent in one discussion steers the
+    // first turn rather than starting another (AGC-FR-ISKZ).
+    h.create_agent("sec", "");
 
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    let dispatch = |h: &Harness| {
-        h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
+    let dispatch = |h: &Harness, nickname: &str| {
+        h.dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
             .expect("dispatch")
     };
-    let first = dispatch(&h);
-    let second = dispatch(&h);
+    let first = dispatch(&h, "arch");
+    let second = dispatch(&h, "sec");
 
     // Waited for on the session registry alone, and NOT on a log record.
     //

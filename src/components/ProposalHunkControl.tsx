@@ -1,6 +1,7 @@
 /**
  * CMT-FR-48: a `proposal_hunk` reference renders as a **control** naming one
- * change of a draft change proposal (CMS-FR-TQVB).
+ * change of a draft change proposal, or of a prompt or DOC proposal
+ * (CMS-FR-TQVB, PCR-FR-RFJC).
  *
  * The opening comment of a hunk discussion carries one (DCP-FR-FHWN,
  * DCR-FR-VBQN). Activating it scrolls the draft's document column to that
@@ -13,8 +14,12 @@
  * discussion stays readable around it.
  */
 import { Icon } from "./icons";
-import { hunkPosition, hunkStateOf, useProposalReference } from "../state/draftProposals";
-import { isShownInDocument, showHunkInDocument } from "./DraftDiscussion/hunkDiscussion";
+import { hunkPosition, hunkStateOf } from "../state/draftProposals";
+import {
+  isShownInDocument,
+  showHunkInDocument,
+  useHunkProposal,
+} from "./DraftDiscussion/hunkDiscussion";
 import { isUndecided, type HunkState, type ProposalHunkReference } from "../types";
 
 /** The one word the control says about where the change stands. */
@@ -30,7 +35,9 @@ export function ProposalHunkControl({
   attachment: ProposalHunkReference;
 }) {
   // CTA-FR-LOOE: asking for the reading it needs is part of rendering it.
-  const reference = useProposalReference(attachment.draftId, attachment.proposalId);
+  // PCR-FR-RFJC / CMS-FR-TQVB: a change of a draft proposal or of a prompt or
+  // DOC proposal, read from the store its target names.
+  const reference = useHunkProposal(attachment);
   const proposal = reference.kind === "known" ? reference.proposal : null;
   const state = proposal ? hunkStateOf(proposal, attachment.hunkId) : undefined;
   const position = proposal ? hunkPosition(proposal, attachment.hunkId) : 0;

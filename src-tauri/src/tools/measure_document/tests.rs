@@ -45,15 +45,13 @@ impl MeasureFixture {
         id
     }
 
+    /// A tool whose window is `window`, or the default context size where it
+    /// is `None` (AAP-FR-RANS).
     fn tool(&self, window: Option<u64>) -> MeasureDocumentTool<tauri::test::MockRuntime> {
-        self.tool_at(window, 30)
+        self.tool_at(window.unwrap_or(crate::ai_api::DEFAULT_CONTEXT_SIZE), 30)
     }
 
-    fn tool_at(
-        &self,
-        window: Option<u64>,
-        percent: u8,
-    ) -> MeasureDocumentTool<tauri::test::MockRuntime> {
+    fn tool_at(&self, window: u64, percent: u8) -> MeasureDocumentTool<tauri::test::MockRuntime> {
         MeasureDocumentTool::new(
             self.fixture.handle(),
             self.session.clone(),
@@ -108,7 +106,7 @@ fn the_window_is_bound_at_construction_and_never_an_argument() {
     let output = fixture
         .call(Some(1_000), serde_json::json!({ "path": "doc.md", "window": 1_000_000 }))
         .expect("measures");
-    assert_eq!(output.limit_tokens, Some(300));
+    assert_eq!(output.limit_tokens, 300);
 }
 
 // MDT-FR-OTUZ: exactly one target; both, neither, or only blanks are refused.
@@ -149,31 +147,32 @@ fn a_file_is_measured_in_lines_characters_and_estimated_tokens() {
     assert_eq!((empty.lines, empty.characters, empty.estimated_tokens), (0, 0, 0));
 }
 
-// MDT-FR-CTKN, MDT-FR-FHWP, MDT-FR-ADEI: the limit is the window times the
-// percent, rounded down; above it only when the estimate is greater.
+// MDT-FR-CTKN, MDT-FR-FHWP: the limit is the window times the percent, rounded
+// down; above it only when the estimate is greater.
 #[test]
 fn the_limit_and_whether_the_document_is_above_it() {
     let fixture = MeasureFixture::new();
     // 120 characters = 30 estimated tokens.
     fixture.file("doc.md", "x".repeat(120).as_bytes());
     let at = fixture.call(Some(100), serde_json::json!({ "path": "doc.md" })).expect("ok");
-    assert_eq!(at.limit_tokens, Some(30));
+    assert_eq!(at.limit_tokens, 30);
     assert!(!at.above_limit, "equal is not above");
     let over = fixture.call(Some(99), serde_json::json!({ "path": "doc.md" })).expect("ok");
-    assert_eq!(over.limit_tokens, Some(29), "99 × 30 / 100 rounded down");
+    assert_eq!(over.limit_tokens, 29, "99 × 30 / 100 rounded down");
     assert!(over.above_limit);
     // The percent is the turn's own, not a fixed 30.
     for (percent, limit) in [(1, 1), (7, 7), (100, 100)] {
         let args: MeasureDocumentArgs =
             serde_json::from_value(serde_json::json!({ "path": "doc.md" })).unwrap();
-        let output = block_on(fixture.tool_at(Some(100), percent).call(args)).expect("ok");
-        assert_eq!(output.limit_tokens, Some(limit), "{percent}%");
+        let output = block_on(fixture.tool_at(100, percent).call(args)).expect("ok");
+        assert_eq!(output.limit_tokens, limit, "{percent}%");
         assert_eq!(output.above_limit, 30 > limit, "{percent}%");
     }
-    let unknown = fixture.call(None, serde_json::json!({ "path": "doc.md" })).expect("ok");
-    assert_eq!(unknown.limit_tokens, None);
-    assert!(!unknown.above_limit, "no window, no limit");
-    assert_eq!(unknown.estimated_tokens, 30, "the size is still measured");
+    // MDT-FR-CTKN: the default window of AAP-FR-RANS gives a limit too.
+    let default = fixture.call(None, serde_json::json!({ "path": "doc.md" })).expect("ok");
+    assert_eq!(default.limit_tokens, 300_000);
+    assert!(!default.above_limit);
+    assert_eq!(default.estimated_tokens, 30);
 }
 
 // MDT-FR-TVWI: a draft is measured as its live prompt.
@@ -274,7 +273,8 @@ fn a_file_that_is_not_text_is_unreadable() {
 #[test]
 fn no_open_project_is_the_shared_refusal() {
     let app = crate::tools::tests::closed_project();
-    let tool = MeasureDocumentTool::new(app.handle().clone(), "x", DocumentBudget::unknown());
+    let tool =
+        MeasureDocumentTool::new(app.handle().clone(), "x", DocumentBudget::default_window());
     let args = MeasureDocumentArgs { path: Some("a.md".into()), draft_id: None };
     assert_eq!(block_on(tool.call(args)), Err(ToolRefusal::NoProjectOpen));
 }
@@ -302,7 +302,7 @@ fn each_call_is_logged_with_its_target_and_never_its_text() {
     let tool = MeasureDocumentTool::with_buffer(
         fixture.fixture.handle(),
         fixture.session.clone(),
-        DocumentBudget::unknown(),
+        DocumentBudget::default_window(),
         &MDT_BUFFER,
     );
     let ok = MeasureDocumentArgs { path: Some("secret.md".into()), draft_id: None };

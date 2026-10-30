@@ -398,8 +398,8 @@ describe("the queued-write guard (EDT-FR-81)", () => {
 });
 
 /**
- * PCR-FR-11 / PCR-FR-24 / EDT-FR-84: the external-change modal is held back
- * while a prompt change review is showing over the artifact.
+ * PCR-FR-AXPW / EDT-FR-84: the external-change modal is held back while an
+ * acceptance of a proposed change is in flight over the artifact.
  *
  * The divergence is still recorded — it is what the review's standing line is
  * said from, and what is raised once the review's reason for passing it over

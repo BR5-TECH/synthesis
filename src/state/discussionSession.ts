@@ -27,6 +27,7 @@ import { logDebug } from "../logging";
 import { forgetEveryDraft } from "./questionAnswerDrafts";
 import { mergeKnownTurn } from "./activeAgents";
 import { clearTurnContexts, noteTurnContext } from "./turnContexts";
+import { withEndedTurn, type ActivityRow } from "./turnActivity";
 import type { AgentTurn, CommentQuote } from "../types";
 
 export interface DiscussionSession {
@@ -52,6 +53,11 @@ export interface DiscussionSession {
   turns: readonly AgentTurn[];
   /** The list of turns was read from the backend once in this session. */
   turnsLoaded: boolean;
+  /**
+   * CTA-FR-ZBIB, CTA-FR-MNPS: the tool lists of the turns that ended since a
+   * turn last started in this discussion, drawn at its foot.
+   */
+  activityRows: readonly ActivityRow[];
   /** CMT-FR-34: the typed error of the last refused operation. */
   error: string | undefined;
   /** CTA-FR-QTNB: the typed failure of the last turn that failed. */
@@ -76,6 +82,7 @@ const EMPTY: DiscussionSession = Object.freeze({
   seenIds: null,
   turns: Object.freeze([]) as readonly AgentTurn[],
   turnsLoaded: false,
+  activityRows: Object.freeze([]) as readonly ActivityRow[],
   error: undefined,
   turnFailure: undefined,
   focusWasComposer: false,
@@ -215,6 +222,38 @@ export function setDiscussionSeen(key: string, ids: readonly string[]): void {
  */
 let endedTurnIds: ReadonlySet<string> = new Set();
 
+/**
+ * CTA-FR-GCKO: the ids of the turns this session has seen start. A running
+ * record for an id not among them is a turn that starts now.
+ */
+let startedTurnIds: ReadonlySet<string> = new Set();
+
+/**
+ * CTA-FR-ZBIB: the ids of the turns whose terminal record was folded into the
+ * activity rows, so a second terminal record adds no row. Kept apart from the
+ * ended ids, because an optimistic cancel notes a turn ended before its
+ * terminal record arrives.
+ */
+let rowedTurnIds: ReadonlySet<string> = new Set();
+
+/**
+ * CTA-FR-GCKO / CTA-FR-ZBIB: fold one turn record into the activity rows of its
+ * discussion. A turn that starts removes every row. A turn that ends adds its
+ * own row, once.
+ */
+function foldActivity(key: string, turn: AgentTurn): Partial<DiscussionSession> {
+  const held = getDiscussionSession(key).activityRows;
+  if (turn.state === "running") {
+    if (startedTurnIds.has(turn.id)) return {};
+    startedTurnIds = new Set(startedTurnIds).add(turn.id);
+    return held.length === 0 ? {} : { activityRows: [] };
+  }
+  if (rowedTurnIds.has(turn.id)) return {};
+  rowedTurnIds = new Set(rowedTurnIds).add(turn.id);
+  const next = withEndedTurn(held, turn);
+  return next === held ? {} : { activityRows: next };
+}
+
 function noteTurnEnded(turnId: string): void {
   if (endedTurnIds.has(turnId)) return;
   endedTurnIds = new Set(endedTurnIds).add(turnId);
@@ -249,6 +288,9 @@ export function setDiscussionTurns(
 ): void {
   // CVP-FR-HWTN: a read that was in flight while a turn ended reports it running.
   const live = turns.filter((t) => !isStale(t));
+  // CTA-FR-GCKO: a turn that a read finds running has already started, so it
+  // removes no activity row.
+  for (const t of live) startedTurnIds = new Set(startedTurnIds).add(t.id);
   patchDiscussionSession(key, { turns: live, turnsLoaded: loaded });
 }
 
@@ -265,6 +307,8 @@ export function mergeDiscussionTurn(key: string, turn: AgentTurn): void {
   }
   patchDiscussionSession(key, {
     turns: mergeKnownTurn(getDiscussionSession(key).turns, turn),
+    // CTA-FR-ZBIB / CTA-FR-GCKO.
+    ...foldActivity(key, turn),
   });
 }
 
@@ -295,6 +339,9 @@ export function upsertDiscussionTurn(key: string, turn: AgentTurn): void {
   const held = getDiscussionSession(key).turns;
   patchDiscussionSession(key, {
     turns: [...held.filter((t) => t.id !== turn.id), turn],
+    // CTA-FR-GCKO: a dispatch that started a turn removes the activity rows. A
+    // dispatch that steered a running turn returns a turn already started.
+    ...foldActivity(key, turn),
   });
 }
 
@@ -330,6 +377,8 @@ export function clearAllDiscussionSessions(): void {
   forgetEveryDraft();
   clearTurnContexts();
   endedTurnIds = new Set();
+  startedTurnIds = new Set();
+  rowedTurnIds = new Set();
   if (sessions.size === 0) return;
   sessions = new Map();
   emit();

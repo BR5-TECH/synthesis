@@ -43,7 +43,11 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
     let model_label = endpoint.model_id.as_deref().unwrap_or("<provider default>");
     for attempt in 1..=policy.max_attempts {
         check_cancelled(plan)?;
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        // CVL-FR-SZDM: a steering message the turn took restarts the deadline,
+        // so each attempt reads the deadline as it stands now.
+        let remaining = turns
+            .deadline_of(&plan.turn_id, deadline)
+            .saturating_duration_since(std::time::Instant::now());
         if remaining.is_zero() {
             log_turn_out_of_time(app, turns, plan, model_calls);
             return Err(TurnEnd::TimedOut);
@@ -314,7 +318,10 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         // *before* the delay is planned, so a record never promises a retry that
         // will not be made.
         let budget_left = attempt < policy.max_attempts;
-        let time_left = !deadline.saturating_duration_since(std::time::Instant::now()).is_zero();
+        let time_left = !turns
+            .deadline_of(&plan.turn_id, deadline)
+            .saturating_duration_since(std::time::Instant::now())
+            .is_zero();
         let cancelled = plan.cancelled.load(Ordering::SeqCst);
         // AGC-FR-19: a resolution is what stops a conversation taking further
         // contributions, so a turn whose thread was resolved while it was
@@ -462,6 +469,8 @@ fn wait_before_retry<R: tauri::Runtime>(
     loop {
         check_cancelled(plan)?;
         let now = std::time::Instant::now();
+        // CVL-FR-SZDM: the deadline as it stands now.
+        let deadline = turns.deadline_of(&plan.turn_id, deadline);
         if now >= deadline {
             log_turn_out_of_time(app, turns, plan, model_calls);
             return Err(TurnEnd::TimedOut);

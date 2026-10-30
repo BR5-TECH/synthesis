@@ -449,8 +449,7 @@ fn a_resumed_turn_carries_the_session_and_an_unsupported_one_says_so() {
     assert!(descriptor::CODEX.supports_resume());
 }
 
-/// EAC-FR-10, EAC-FR-38 — the descriptors match the manifest, and no invocation parameter
-/// lives outside one.
+/// EAC-FR-10, EAC-FR-38 — no invocation parameter lives outside a descriptor.
 #[test]
 fn every_parameter_is_a_descriptor_or_a_named_constant() {
     // The manifest is the only source of an image's identity (AVI-FR-07).
@@ -529,16 +528,8 @@ fn every_parameter_is_a_descriptor_or_a_named_constant() {
         );
     }
 
-    // Each descriptor names the specification it transcribes, and the version
-    // that specification was asserted against is the one the manifest installs
-    // (CCP-FR-01, CDX-FR-01).
+    // Each descriptor names the specification it transcribes (CCP-FR-01, CDX-FR-01).
     for descriptor in [&descriptor::CLAUDE_CODE, &descriptor::CODEX] {
-        let entry = descriptor::manifest_entry(descriptor.vendor).expect("a manifest entry");
-        assert_eq!(
-            entry.cli_version, descriptor.pinned_cli_version,
-            "{} pins a version the manifest does not install",
-            descriptor.vendor
-        );
         assert!(descriptor.protocol_spec.starts_with("specifications/infra/"));
     }
 }

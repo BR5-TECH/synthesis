@@ -2,29 +2,24 @@
 
 use super::*;
 
-/// AVI-FR-01, AVI-FR-05 — two images, one per executable vendor, each pinned to a base by
-/// digest rather than by a tag.
+/// AVI-FR-01, AVI-FR-05 — two images, one per executable vendor, each from one base.
 #[test]
-fn two_images_exist_and_pin_their_base_by_digest() {
+fn two_images_exist_each_from_one_base() {
     for (vendor, dockerfile) in dockerfiles() {
         let all = directives(dockerfile);
-        let from: Vec<&&str> = all.iter().filter(|line| line.starts_with("FROM ")).collect();
-        assert_eq!(from.len(), 1, "{vendor} must build from exactly one base");
-        assert!(
-            from[0].contains("@sha256:"),
-            "{vendor} pins its base by tag rather than digest: {}",
-            from[0]
-        );
+        let from = all.iter().filter(|line| line.starts_with("FROM ")).count();
+        assert_eq!(from, 1, "{vendor} must build from exactly one base");
     }
     // The two are distinct definitions, not one file referenced twice.
     assert_ne!(CLAUDE_DOCKERFILE, CODEX_DOCKERFILE);
 }
 
-/// AVI-FR-DHCF — both images build from one base, Debian 13 (trixie). Its
-/// glibc is new enough for the prebuilt ONNX Runtime that `ort-sys` links.
-/// The version itself is a fact of the built image, so `verify.sh` asks it.
+/// AVI-FR-DHCF — both images build from Debian 13 (trixie). Its glibc is new
+/// enough for the prebuilt ONNX Runtime that `ort-sys` links. The exact base is
+/// the choice of the Dockerfile's author (AVI-FR-QWVT), and the glibc version
+/// is a fact of the built image, so `verify.sh` asks it.
 #[test]
-fn both_images_build_from_one_trixie_base() {
+fn both_images_build_from_a_trixie_base() {
     let bases: Vec<String> = dockerfiles()
         .iter()
         .map(|(vendor, dockerfile)| {
@@ -37,11 +32,10 @@ fn both_images_build_from_one_trixie_base() {
         .collect();
     for base in &bases {
         assert!(
-            base.starts_with("FROM node:22-trixie-slim@sha256:"),
+            base.contains("trixie"),
             "a base other than the Debian 13 one AVI-FR-DHCF names: {base}"
         );
     }
-    assert!(bases.iter().all(|base| base == &bases[0]), "the images build from different bases");
 }
 
 /// EMB-FR-YGXX — no image sets `RUSTFLAGS` or `CARGO_ENCODED_RUSTFLAGS`. Either
@@ -62,36 +56,43 @@ fn no_image_overrides_the_cargo_target_flags() {
     }
 }
 
-/// AVI-FR-06, AVI-FR-13 — the vendor CLI is installed at an exact version, never from a
-/// floating tag, and that version is the one the manifest records.
-#[test]
-fn each_vendor_cli_is_pinned_to_the_version_the_manifest_records() {
-    for (vendor, dockerfile) in dockerfiles() {
-        for directive in directives(dockerfile) {
-            assert!(
-                !directive.contains(":latest") && !directive.ends_with("@latest"),
-                "{vendor} installs from a floating tag: {directive}"
-            );
+/// The package names of each `npm install` block, each without its `@version`.
+///
+/// A scoped name keeps its leading `@`. Only the name is read, so an install
+/// passes whatever form of version it names (AVI-FR-QWVT).
+fn npm_packages(dockerfile: &str) -> Vec<String> {
+    let mut packages = Vec::new();
+    let mut inside = false;
+    let mut previous = String::new();
+    for directive in directives(dockerfile) {
+        for word in directive.split_whitespace() {
+            let word = normalize(word);
+            // A bare line continuation, once its backslash is gone.
+            if word.is_empty() {
+                continue;
+            }
+            if word == "install" && previous == "npm" {
+                inside = true;
+            } else if word == "&&" {
+                inside = false;
+            } else if inside && !word.starts_with('-') {
+                let name = word.rsplit_once('@').filter(|(name, _)| !name.is_empty());
+                packages.push(name.map_or(word.as_str(), |(name, _)| name).to_string());
+            }
+            previous = word;
         }
     }
+    packages
+}
 
-    // The Dockerfile's pinned version and the manifest's `cli_version` agree,
-    // so the two cannot drift without a test noticing.
-    let claude = descriptor::manifest_entry("claude_code").expect("entry");
-    assert!(
-        CLAUDE_DOCKERFILE.contains(&format!("CLAUDE_CODE_VERSION={}", claude.cli_version)),
-        "the Dockerfile pins a different version than manifest.toml records"
-    );
-    let codex = descriptor::manifest_entry("codex").expect("entry");
-    assert!(
-        CODEX_DOCKERFILE.contains(&format!("CODEX_VERSION={}", codex.cli_version)),
-        "the Dockerfile pins a different version than manifest.toml records"
-    );
-
-    // Each image installs its own vendor's package and not the other's.
-    assert!(CLAUDE_DOCKERFILE.contains("@anthropic-ai/claude-code@"));
+/// AVI-FR-06, AVI-FR-QWVT — each image installs its own vendor's package and not the
+/// other's. The version is the choice of the Dockerfile's author, so this test
+/// does not read it.
+#[test]
+fn each_image_installs_its_own_vendor_cli() {
+    assert!(CLAUDE_DOCKERFILE.contains("@anthropic-ai/claude-code"));
     assert!(!CLAUDE_DOCKERFILE.contains("@openai/codex"));
-    assert!(CODEX_DOCKERFILE.contains("@openai/codex@"));
+    assert!(CODEX_DOCKERFILE.contains("@openai/codex"));
     assert!(!CODEX_DOCKERFILE.contains("@anthropic-ai/claude-code"));
 }
 
@@ -259,39 +260,21 @@ fn each_image_installs_exactly_the_packages_avi_names() {
     }
 }
 
-/// AVI-FR-13 — the browser of AVI-FR-16: one engine, pinned, at the same
-/// version in both images, installed where a foreign UID can reach it.
-///
-/// The version is pinned for the reason AVI-FR-06 pins a vendor CLI — the
-/// browser build belongs to the Playwright version that installed it, so a
-/// floating install would put a different browser in a rebuild of an unchanged
-/// definition. The two images share it because they share one package floor: a
-/// browser that differed between them would make a check of a view depend on
-/// which vendor a project happens to use.
+/// AVI-FR-13, AVI-FR-QWVT — the browser of AVI-FR-16: one engine, installed where a
+/// foreign UID can reach it. The version is the choice of the Dockerfile's
+/// author, so this test does not read it.
 ///
 /// What this cannot assert is that the browser *starts*. That needs a built
 /// image and a container runtime, under the launch conditions of EAC-FR-13 and
 /// EAC-FR-14 — every capability dropped, no new privileges, and a UID with no
 /// account in the image — and it is `verify.sh`'s.
 #[test]
-fn each_image_carries_one_pinned_browser_a_foreign_uid_can_reach() {
-    let mut pinned_versions: Vec<String> = Vec::new();
+fn each_image_carries_one_browser_a_foreign_uid_can_reach() {
     for (vendor, dockerfile) in dockerfiles() {
-        let version = directives(dockerfile)
-            .into_iter()
-            .find_map(|directive| {
-                directive.strip_prefix("ARG PLAYWRIGHT_VERSION=").map(str::to_string)
-            })
-            .unwrap_or_else(|| panic!("{vendor} pins no browser runtime version"));
         assert!(
-            version.chars().next().is_some_and(|c| c.is_ascii_digit()),
-            "{vendor} pins the browser runtime to something other than a version: {version}"
+            npm_packages(dockerfile).iter().any(|p| p == "playwright"),
+            "{vendor} does not install the browser runtime"
         );
-        assert!(
-            dockerfile.contains(r#""playwright@${PLAYWRIGHT_VERSION}""#),
-            "{vendor} installs the browser runtime from something other than its pinned version"
-        );
-        pinned_versions.push(version);
 
         // One engine. Each of the others is several hundred megabytes for a
         // capability no check of a view needs.
@@ -320,8 +303,7 @@ fn each_image_carries_one_pinned_browser_a_foreign_uid_can_reach() {
             dockerfile.contains("chmod -R a+rX /opt/ms-playwright"),
             "{vendor} does not make the browser readable to the UID a launch supplies"
         );
-        // And not writable by it: the browser is part of the image, at the
-        // version the image pins.
+        // And not writable by it: the browser is part of the image.
         //
         // Scoped to the directives that name the browser path rather than
         // searched for across the file, because other paths in this image are
@@ -342,19 +324,12 @@ fn each_image_carries_one_pinned_browser_a_foreign_uid_can_reach() {
             );
         }
     }
-    assert_eq!(
-        pinned_versions[0], pinned_versions[1],
-        "the two images pin different browser versions; they share one package floor"
-    );
 }
 
-/// AVI-FR-13 — the toolchains of AVI-FR-17: each pinned to an exact version,
-/// the same versions in both images, and the one installer that arrives over
-/// the network checked against a recorded digest before it runs.
-///
-/// The two images share these versions for the reason they share a browser
-/// version: a compiler that differed between them would make a build depend on
-/// which vendor a project happens to use.
+/// AVI-FR-13, AVI-FR-QWVT — the toolchains of AVI-FR-17: each installed, and the one
+/// installer that arrives over the network checked against a recorded digest
+/// before it runs. The versions are the choice of the Dockerfile's author, so
+/// this test does not read them.
 ///
 /// What this cannot assert is that any of them *builds*. A linker that is
 /// missing, and a cache directory the launching UID does not own, both leave a
@@ -362,56 +337,18 @@ fn each_image_carries_one_pinned_browser_a_foreign_uid_can_reach() {
 /// use — so the compile itself is `verify.sh`'s, under the launch conditions
 /// of EAC-FR-13 and EAC-FR-14.
 #[test]
-fn each_image_pins_the_same_toolchains() {
-    let mut pinned: Vec<Vec<String>> = Vec::new();
-    let mut rustup_blocks: Vec<String> = Vec::new();
+fn each_image_installs_the_toolchains() {
     for (vendor, dockerfile) in dockerfiles() {
-        let versions: Vec<String> =
-            ["RUST_VERSION", "RUSTUP_VERSION", "PNPM_VERSION", "TYPESCRIPT_VERSION"]
-                .into_iter()
-                .map(|name| {
-                    let value = directives(dockerfile)
-                        .into_iter()
-                        .find_map(|directive| {
-                            directive.strip_prefix(&format!("ARG {name}=")).map(str::to_string)
-                        })
-                        .unwrap_or_else(|| panic!("{vendor} pins no {name}"));
-                    assert!(
-                        value.chars().next().is_some_and(|c| c.is_ascii_digit()),
-                        "{vendor} pins {name} to something other than a version: {value}"
-                    );
-                    value
-                })
-                .collect();
-        pinned.push(versions);
-
-        // Each is declared once. Docker takes the last `ARG` of a name and
-        // the reader above takes the first, so a second declaration lower in
-        // the file would let this whole test read a pin the build does not
-        // use.
-        for name in ["RUST_VERSION", "RUSTUP_VERSION", "PNPM_VERSION", "TYPESCRIPT_VERSION"] {
-            let declarations = directives(dockerfile)
-                .into_iter()
-                .filter(|directive| directive.starts_with(&format!("ARG {name}=")))
-                .count();
-            assert_eq!(
-                declarations, 1,
-                "{vendor} declares ARG {name} {declarations} times; Docker would take the last and this test the first"
-            );
+        // Each is installed. The npm packages are read as names of an install
+        // block, because the bare word `pnpm` also stands in `PNPM_HOME`.
+        let packages = npm_packages(dockerfile);
+        for package in ["pnpm", "typescript"] {
+            assert!(packages.iter().any(|p| p == package), "{vendor} does not install {package}");
         }
-
-        // Each is installed from its own pinned argument rather than from
-        // whatever the registry currently calls newest.
-        for pinned_install in [
-            r#""pnpm@${PNPM_VERSION}""#,
-            r#""typescript@${TYPESCRIPT_VERSION}""#,
-            r#"--default-toolchain "${RUST_VERSION}""#,
-        ] {
-            assert!(
-                dockerfile.contains(pinned_install),
-                "{vendor} does not install from its pinned version: {pinned_install}"
-            );
-        }
+        assert!(
+            dockerfile.contains("--default-toolchain"),
+            "{vendor} does not install a Rust toolchain"
+        );
 
         // The Rust components the work uses, and no more than those: the
         // toolchain is installed at its minimal profile.
@@ -433,13 +370,11 @@ fn each_image_pins_the_same_toolchains() {
             "{vendor} runs the Rust installer in a shell that does not stop on a failed command, so a failed checksum would not stop the build"
         );
 
-        // From the release archive over TLS, at the version this file pins —
-        // not from a mirror, and not over a scheme a checksum cannot save.
+        // From the release archive over TLS — not from a mirror, and not over
+        // a scheme a checksum cannot save.
         assert!(
-            rustup.contains(
-                "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/${target}/rustup-init"
-            ),
-            "{vendor} fetches the Rust installer from somewhere other than the pinned release archive"
+            rustup.contains("https://static.rust-lang.org/rustup/archive/"),
+            "{vendor} fetches the Rust installer from somewhere other than the release archive"
         );
 
         // And checked *before* it runs. Every other assertion here is a
@@ -502,22 +437,7 @@ fn each_image_pins_the_same_toolchains() {
                 && rustup.contains("${CARGO_HOME}"),
             "{vendor} leaves the Rust directories unwritable by the UID a launch supplies"
         );
-
-        rustup_blocks.push(rustup);
     }
-
-    // The installer, its checksums, and its target triples are the same in
-    // both files. The version comparison above sees only the four `ARG`
-    // defaults, so a checksum edited in one file alone would leave the two
-    // images built from different installers with every other assertion green.
-    assert_eq!(
-        rustup_blocks[0], rustup_blocks[1],
-        "the two images install Rust differently; they share one package floor"
-    );
-    assert_eq!(
-        pinned[0], pinned[1],
-        "the two images pin different toolchain versions; they share one package floor"
-    );
 }
 
 /// AVI-FR-17, EAC-FR-14 — the home directory of AVI-FR-18, which the image names rather

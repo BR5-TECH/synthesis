@@ -90,6 +90,15 @@ export function setDraftDiscussionHidden(draftId: string, hidden: boolean): void
   setColumnHidden(draftColumn(draftId), hidden);
 }
 
+/**
+ * DCR-FR-GNRL / PCR-FR-QHZN: the key the review state of one file's Editor tab
+ * is kept under. The review state of a draft is kept under its draft id; the
+ * prefix keeps the two apart.
+ */
+export function artifactReviewKey(artifactId: string): string {
+  return `artifact:${artifactId}`;
+}
+
 /** DCR-FR-12: the hunk the review is on. */
 export function setFocusedHunk(draftId: string, hunkId: string | null): void {
   update(draftId, { focusedHunkId: hunkId });

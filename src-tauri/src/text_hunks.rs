@@ -6,6 +6,7 @@
 
 pub mod anchors;
 pub mod hunks;
+pub mod line_diff;
 
 #[cfg(test)]
 mod tests;

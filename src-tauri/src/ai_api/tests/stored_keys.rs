@@ -138,7 +138,7 @@ fn no_debug_output_of_the_call_shape_contains_the_key() {
     // accidental channel a key would escape through, so it is redacted.
     let call = AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: "openai".into(),
         base_url: "https://api.openai.com/v1".into(),

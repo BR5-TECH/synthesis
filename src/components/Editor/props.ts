@@ -5,9 +5,8 @@ import type { EditSessionStore } from "../../state/editSessions";
 import type { ArtifactType, NodeType } from "../../types";
 
 /**
- * EDT-FR-84: the review modal this tab hosts, whose candidate keeps its own undo
- * history (PCR-FR-20), and the proposed text of a draft change, which keeps
- * its own too (DCR-FR-24). An undo issued in either reverses an edit there and
+ * EDT-FR-84: the proposed text of a change under review keeps its own undo
+ * history (DCR-FR-24, PCR-FR-QHZN). An undo issued in either reverses an edit there and
  * never one to the artifact.
  *
  * A selector rather than a ref because the modal mounts and unmounts several

@@ -39,7 +39,7 @@ function entrySize(level: number): number {
   return px(size!);
 }
 
-/** The size of the surface heading of a level. The surface sizes h1 to h3. */
+/** The size of the surface heading of a level on the heading scale (EDT-FR-UXZH). */
 function headingSize(tag: string): number {
   const blocks = blocksFor(tokens, `.doc ${tag}`);
   expect(blocks, `no rule for .doc ${tag}`).toHaveLength(1);
@@ -60,14 +60,11 @@ describe("the text size of the table of contents entries (EDT-FR-EKCY)", () => {
     expect(sizes[5]).toBeLessThanOrEqual(sizes[3]);
   });
 
-  it("EDT-FR-EKCY: at the default role sizes, each entry of levels 1 to 4 is smaller than its heading on the surface", () => {
+  it("EDT-FR-EKCY, EDT-FR-UXZH: at the default role sizes, each entry of levels 1 to 4 is smaller than its heading on the surface", () => {
     expect(sizes[0]).toBeLessThan(headingSize("h1"));
     expect(sizes[1]).toBeLessThan(headingSize("h2"));
     expect(sizes[2]).toBeLessThan(headingSize("h3"));
-    // The surface does not size h4, so it has at least the size of the body
-    // text it is set in.
-    expect(blocksFor(tokens, ".doc h4")).toHaveLength(0);
-    expect(sizes[3]).toBeLessThan(px(token("--fs-doc-md")));
+    expect(sizes[3]).toBeLessThan(headingSize("h4"));
   });
 
   it("EDT-FR-EBNU: a panel with no heading hides the count row", () => {

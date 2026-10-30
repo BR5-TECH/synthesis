@@ -52,8 +52,8 @@ export interface AiApiIntegration {
    */
   maxOutputTokens?: number | null;
   /**
-   * AAP-FR-AYKU: the Custom provider's max context size, used where a model
-   * reports none. Always null for the other providers.
+   * AAP-FR-AYKU: the provider's max context size, for every provider. It wins
+   * over the size a model reports (AAP-FR-RANS). `null` means no override.
    */
   maxContextSize?: number | null;
   active: boolean;
@@ -158,7 +158,7 @@ export const AI_ERRORS = {
   unknownProvider: "unknown_provider",
   // The turn timeout, the AI API level (AAP-FR-FGNK).
   turnTimeoutOutOfRange: "turn_timeout_out_of_range",
-  // The Custom token fields, the AI API level (AAP-FR-ITBL).
+  // The token fields, the AI API level (AAP-FR-ITBL).
   tokenLimitInvalid: "token_limit_invalid",
   limitUnsupported: "limit_unsupported",
   /**

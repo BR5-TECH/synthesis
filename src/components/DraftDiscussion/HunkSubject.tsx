@@ -15,10 +15,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { hunkStateWord } from "../ProposalHunkControl";
 import { logWarn } from "../../logging";
-import { hunkPosition, hunkStateOf, useProposalReference } from "../../state/draftProposals";
+import { hunkPosition, hunkStateOf } from "../../state/draftProposals";
 import { useProposalHunks } from "../../state/proposalHunks";
 import type { ProposalHunkReference } from "../../types";
-import { isShownInDocument, showHunkInDocument } from "./hunkDiscussion";
+import {
+  hunkSourceOf,
+  isShownInDocument,
+  showHunkInDocument,
+  useHunkProposal,
+} from "./hunkDiscussion";
 
 /** DDS-FR-PBXN: the texts the strip cuts to a few lines. */
 const CUT_TEXTS = ".dds-subject__body, .dds-subject__note";
@@ -47,10 +52,11 @@ export function HunkSubject({
    */
   place?: { position: number; total: number } | null;
 }) {
-  const { draftId, proposalId, hunkId } = reference;
-  const known = useProposalReference(draftId, proposalId);
+  const { draftId, artifactId, proposalId, hunkId } = reference;
+  // DDS-FR-EHDK: a change of a draft proposal or of a prompt or DOC proposal.
+  const known = useHunkProposal(reference);
   const proposal = known.kind === "known" ? known.proposal : null;
-  const reading = useProposalHunks(proposalId);
+  const reading = useProposalHunks(proposalId, hunkSourceOf(reference));
   const hunk =
     reading?.status === "read" ? reading.hunks.hunks.find((h) => h.id === hunkId) : undefined;
   const [expanded, setExpanded] = useState(false);
@@ -67,11 +73,12 @@ export function HunkSubject({
     if (missing) {
       logWarn(["frontend"], "a discussed change is not in its proposal's reading", {
         draftId,
+        artifactId,
         proposalId,
         hunkId,
       });
     }
-  }, [missing, draftId, proposalId, hunkId]);
+  }, [missing, draftId, artifactId, proposalId, hunkId]);
 
   const state = proposal ? hunkStateOf(proposal, hunkId) : undefined;
   const position = proposal ? hunkPosition(proposal, hunkId) : (place?.position ?? 0);

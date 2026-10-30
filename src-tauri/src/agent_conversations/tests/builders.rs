@@ -331,8 +331,11 @@ fn the_discussion_builder_bounds_and_survives_what_it_cannot_read() {
 
     // Within the bound to begin with.
     assert!(
-        !section_of(&build_input(Roots::same(&h.root()), &origin, &trigger), TAG_ARTIFACT)
-            .truncated
+        !section_of(
+            &build_input_at_section_bound(Roots::same(&h.root()), &origin, &trigger),
+            TAG_ARTIFACT
+        )
+        .truncated
     );
 
     // A prompt exceeding the bound says so in its own text rather than being
@@ -344,8 +347,11 @@ fn the_discussion_builder_bounds_and_survives_what_it_cannot_read() {
         &"x".repeat(SECTION_MAX_CHARS + 1),
     )
     .expect("write");
-    let artifact =
-        section_of(&build_input(Roots::same(&h.root()), &origin, &trigger), TAG_ARTIFACT).clone();
+    let artifact = section_of(
+        &build_input_at_section_bound(Roots::same(&h.root()), &origin, &trigger),
+        TAG_ARTIFACT,
+    )
+    .clone();
     assert!(artifact.truncated);
     // AGC-FR-VAIY: a whole-target discussion of a document above the bound
     // holds its size and no text.

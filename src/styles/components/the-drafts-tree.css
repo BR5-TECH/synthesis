@@ -724,22 +724,6 @@
   z-index: 4;
 }
 
-/* DCR-FR-16: the two answers that are not refusals — an acceptance that landed
-   with its comment owed, and a draft whose history could not be reconciled.
-   Stated above the foot's controls, in the position a refusal is attached to,
-   because both answer the same question about what state the author is in. */
-.draft-review__owed {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-  padding: 6px 12px;
-  color: var(--fg-2);
-  text-align: center;
-}
-.draft-review__owed p { margin: 0; }
-.draft-review__owed-actions { display: flex; gap: 8px; }
-
 /* DRP-FR-33: a draft whose storage is not the one prompt a draft is. Marked
    distinctly on the row it still occupies — it is never hidden, because the
    author is the one who decides what becomes of it. */

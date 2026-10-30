@@ -16,8 +16,8 @@
  * different things. A draft's proposal is an ordered list of changes and each
  * one is edited on its own (DCP-FR-XDRV), so its buffers are keyed by proposal
  * **and change** through `hunkKey`. A prompt artifact's proposal is still one
- * whole candidate (PCP-FR-29), so its buffers are keyed by proposal alone. The
- * store never takes a key apart; the writer does.
+ * whole candidate in older builds; it is now edited one change at a time too
+ * (PCP-FR-EDTW). The store never takes a key apart; the writer does.
  *
  * ## Why this is not the editing-session store
  *
@@ -31,10 +31,7 @@
  * changed. Sharing the artifact store would have made "saved" mean "written into
  * the draft", which is exactly the confusion DCR-FR-27 exists to prevent.
  */
-import {
-  editDraftChangeHunk,
-  savePromptChangeProposalCandidate,
-} from "../api";
+import { editDraftChangeHunk, editPromptChangeHunk } from "../api";
 import {
   createHistory,
   recordEdit,
@@ -140,8 +137,8 @@ function newBuffer(
  * A parameter rather than a hardcoded call because the two proposal modules
  * share no command (`DCP-draft-change-proposals.md` DCP-FR-25,
  * `PCP-prompt-change-proposals.md` PCP-FR-29): one change of a draft's proposal
- * is written by `edit_draft_change_hunk` and a prompt artifact's whole
- * candidate by `save_prompt_change_proposal_candidate`, and a store that
+ * is written by `edit_draft_change_hunk` and one change of a prompt or DOC
+ * proposal by `edit_prompt_change_hunk`, and a store that
  * guessed would write one proposal's text into the other's store.
  */
 export interface CandidateWriter {
@@ -498,17 +495,17 @@ export const hunkCandidateBuffers = new CandidateBufferStore({
 });
 
 /**
- * The application's one candidate store for changes proposed to **prompt
- * artifacts** (`PCR-prompt-change-review.md` PCR-FR-21).
+ * PCR-FR-QHZN / PCP-FR-EDTW: the candidate store for **one change at a time**
+ * of a proposal to a prompt or DOC file.
  *
- * Separate from the draft store above rather than keyed alongside it: the two
- * modules share no command, no folder, and no event (PCP-FR-29), and a proposal
- * id from one store is not a proposal id in the other. Module-level for the same
- * reason the draft store is — the promise PCR-FR-21 makes is about outliving
- * surfaces: the modal, its Editor tab, and the tab's place in the strip all come
- * and go around it.
+ * The same store class and the same keys as the draft store, writing through
+ * `edit_prompt_change_hunk`. Separate from the draft store because a proposal
+ * id from one module is not a proposal id in the other.
  */
-export const promptCandidateBuffers = new CandidateBufferStore({
-  save: savePromptChangeProposalCandidate,
+export const promptHunkCandidateBuffers = new CandidateBufferStore({
+  save: (key, content, baseline) => {
+    const { proposalId, hunkId } = parseHunkKey(key);
+    return editPromptChangeHunk(proposalId, hunkId, content, baseline);
+  },
   staleError: PROMPT_PROPOSAL_ERRORS.candidateStale,
 });

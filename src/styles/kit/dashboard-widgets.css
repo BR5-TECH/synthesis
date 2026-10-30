@@ -95,11 +95,9 @@
    (OVW-FR-09, OVW-FR-10). */
 .editor-tab {
   background: var(--doc-field-bg);
-  /* PCR-FR-01 / EDT-FR-84: the positioning context the prompt change review is
-     anchored in, so its scrim covers this tab and stops at its edges rather than
-     the window's — leaving the activity rail, the panels and the tab strip lit
-     and reachable while the author reads. The same thing `.draft-workspace`
-     declares for the draft review it hosts (DCR-FR-01). */
+  /* EDT-FR-84: the positioning context of what the tab draws over its own
+     page — the external-change modal and the review chip — so each stops at
+     the tab's edges rather than the window's. */
   position: relative;
 }
 

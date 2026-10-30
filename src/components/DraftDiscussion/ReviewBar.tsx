@@ -6,7 +6,7 @@
  * scrolls, because the counter and the two actions are exactly what scrolling
  * to a change would otherwise take away.
  */
-import type { DraftChangeProposal } from "../../types";
+import type { HunkCounts } from "../../types";
 import { undecidedCount } from "../../types";
 
 export function ReviewBar({
@@ -24,7 +24,11 @@ export function ReviewBar({
   onAcceptAll,
   onRejectAll,
 }: {
-  proposal: DraftChangeProposal;
+  /**
+   * DCR-FR-GNRL: what the bar reads of the proposal. Structural, so a draft
+   * proposal and a prompt or DOC proposal render one bar.
+   */
+  proposal: { hunkCount: number; counts?: HunkCounts };
   /** The one-based place of the change under review, or 0 while none is. */
   position: number;
   busy: boolean;

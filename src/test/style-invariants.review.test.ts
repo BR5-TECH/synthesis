@@ -4,227 +4,18 @@ import { describe, expect, it } from "vitest";
 import { blocksFor, decl, layersOf, sheet } from "./cssRules";
 
 /**
- * Stylesheet invariants no rendering test can see — the prompt review overlay, the stage row and the graduation run region.
+ * Stylesheet invariants no rendering test can see — the kit's optional field, the stage row and the graduation run region.
  *
  * One part of the group `./cssRules.ts` heads, which carries the whole rule
  * these are written under.
  */
 
-describe("the prompt review overlay is anchored in its tab (PCR-FR-01)", () => {
-  // A proposed change is about the file one tab is showing, so that tab is what
-  // the review dims — the activity rail, the panels and the tab strip stay lit
-  // and usable around it. Both halves of that live in CSS and neither is visible
-  // to jsdom: revert either and every PromptChangeReview assertion still passes
-  // while the overlay covers the whole window again.
-  //
-  // These rules belong to the **prompt** review alone. A draft's proposal is no
-  // longer reviewed in a modal at all — it is decided in the document (DCR-FR-01),
-  // which is why nothing here cites DCR any more.
+describe("the kit's optional field is one quiet rule", () => {
+  // The field the graduation escalation and the discussion questions write
+  // their optional text in (`.draft-review__feedback`). jsdom loads no
+  // stylesheet, so only these rules can see it go back to a box.
 
-  it("covers the tab rather than the window", () => {
-    const scrim = blocksFor(sheet("kit.css"), ".draft-review-scrim");
-    expect(scrim, "no rule for .draft-review-scrim").toHaveLength(1);
-    // `fixed` — what the window's own `.scrim` uses — would ignore the tab
-    // entirely and lay itself over the viewport.
-    expect(decl(scrim[0], "position")).toBe("absolute");
-    expect(decl(scrim[0], "inset")).toBe("0");
-  });
-
-  it("is absolute against the tab, and against nothing else", () => {
-    // The load-bearing half. Without a positioned ancestor, `absolute` resolves
-    // against whatever else happens to be positioned — or the viewport — and the
-    // scrim silently goes back to covering the window with every other guard
-    // here still green.
-    const tab = blocksFor(sheet("components.css"), ".draft-workspace");
-    expect(tab, "no rule for .draft-workspace").toHaveLength(1);
-    expect(decl(tab[0], "position")).toBe("relative");
-  });
-
-  it("centres the modal without letting it grow past the tab", () => {
-    // A grid track under `place-items: center` is sized by its item's
-    // max-content, so the modal's own `width` would stretch the track past the
-    // tab and a percentage bound would then resolve against the *track* and
-    // clamp nothing — the modal hanging over the tab's trailing edge on a narrow
-    // window. Found in a browser at 1000px; invisible to every unit test.
-    const scrim = blocksFor(sheet("kit.css"), ".draft-review-scrim")[0];
-    expect(decl(scrim, "display")).toBe("flex");
-    expect(decl(scrim, "align-items")).toBe("center");
-    expect(decl(scrim, "justify-content")).toBe("center");
-    // The margin around the modal is the scrim's padding, so the modal's own
-    // bound is a plain 100% of a box that is already inset.
-    expect(decl(scrim, "padding")).not.toBeNull();
-
-    const modal = blocksFor(sheet("kit.css"), ".draft-review");
-    expect(modal, "no rule for .draft-review").toHaveLength(1);
-    expect(decl(modal[0], "max-width")).toBe("100%");
-    expect(decl(modal[0], "max-height")).toBe("100%");
-  });
-
-  it("sits below every floating surface of the shell it leaves usable", () => {
-    // The other half of "the shell around it stays lit and usable". Dimming the
-    // chrome is not what covering it does — it also paints over whatever the
-    // chrome opens: the agents roster, opened from a control this scrim never
-    // covered, rendered *underneath* it. `.draft-workspace` is a positioning
-    // context and not a stacking one, so this z-index competes with the shell's
-    // own rather than being confined to the tab the way the box is.
-    const scrim = blocksFor(sheet("kit.css"), ".draft-review-scrim")[0];
-    expect(decl(scrim, "z-index")).toBe("var(--z-tab-modal)");
-
-    const tokens = sheet("colors_and_type.css");
-    const layer = (name: string): number => {
-      const m = tokens.match(new RegExp(`--z-${name}:\\s*(\\d+)`));
-      expect(m, `no --z-${name} token`).not.toBeNull();
-      return Number(m![1]);
-    };
-    // A tab's modal outranks nothing the window floats above that tab.
-    expect(layer("tab-modal")).toBeLessThan(layer("overlay"));
-    expect(layer("overlay")).toBeLessThan(layer("modal"));
-
-    // Derived rather than fixed at both ends. Above: the roster's own layer,
-    // declared where the roster is, so raising the tab layer over it has to be
-    // answered here instead of putting the defect back.
-    const roster = readFileSync(
-      resolve(process.cwd(), "src/components/Agents.tsx"),
-      "utf8",
-    ).match(/data-testid="agents-roster"[\s\S]{0,400}?zIndex:\s*(\d+)/);
-    expect(roster, "no zIndex on the agents roster").not.toBeNull();
-    expect(layer("tab-modal")).toBeLessThan(Number(roster![1]));
-
-    // Below: everything the tab itself draws — the action control's dock, menu,
-    // notes and discussion panel, and the draft's own chrome — all of which the
-    // scrim does have to cover.
-    for (const z of [
-      ...layersOf(sheet("components.css"), /^\.draft-(?!review)/),
-      ...layersOf(sheet("components.css"), /^\.action-control/),
-    ]) {
-      expect(layer("tab-modal")).toBeGreaterThan(z);
-    }
-  });
-});
-
-describe("the prompt review modal's three bands (PCR-FR-02)", () => {
-  // Layout the component test cannot see: jsdom loads no stylesheet, so the
-  // rationale can go back to half the modal's width, the comparison can regain
-  // its frame, and the foot can go back to a leading field with the controls
-  // trailing, and every DraftChangeReview assertion still passes.
-
-  it("gives the rationale the modal's full measure, a step above the chrome", () => {
-    const block = blocksFor(sheet("kit.css"), ".draft-review__rationale");
-    expect(block, "no rule for .draft-review__rationale").toHaveLength(1);
-    // A `max-width` here is the bug: a measure narrower than the modal left the
-    // rationale wrapping across half of a 900px surface with the rest empty.
-    expect(decl(block[0], "max-width")).toBeNull();
-    // Set above the default UI size — this is the one thing in the head that is
-    // read rather than glanced at.
-    expect(decl(block[0], "font-size")).toBe("var(--fs-ui-title)");
-    // Still bounded, or a long rationale pushes the comparison out of the modal.
-    expect(decl(block[0], "max-height")).not.toBeNull();
-  });
-
-  it("puts one flat field under the comparison, whatever the mode", () => {
-    const css = sheet("kit.css");
-    // The base rule and the Rich one resolve to the same field. Asserted as a
-    // pair, because the defect was one of them keeping a recessed fill while
-    // the other went flat — a band of another colour ringing the diff in
-    // exactly one of the five modes.
-    for (const selector of [
-      ".draft-review__body",
-      '.draft-review__body[data-page="on"]',
-    ]) {
-      const block = blocksFor(css, selector);
-      expect(block, `no background rule for ${selector}`).toHaveLength(1);
-      expect(decl(block[0], "background"), selector).toBe("var(--bg-canvas)");
-    }
-  });
-
-  it("flattens every frame the comparison brings with it", () => {
-    // `.diff` and the Rich page each frame themselves for a padded tab body.
-    // There is no padding here, so each frame reads as a seam a pixel in from
-    // the modal's own edge. Listed one by one: an override that names only
-    // `.diff` leaves the Rich page framed, and one that names only the page
-    // leaves the source modes framed.
-    const css = sheet("kit.css");
-    for (const selector of [
-      ".draft-review__body .diff",
-      ".draft-review__body .diff-rich--page",
-      ".draft-review__body .diff-rich--split",
-      ".draft-review__body .diff-rich--split .diff-sbs__heading",
-      ".draft-review__body .diff-rich--split .diff-sbs__scroll::before",
-      ".draft-review__body .diff-rich--split .diff-sbs__scroll::after",
-    ]) {
-      const block = blocksFor(css, selector);
-      expect(block, `nothing flattens ${selector}`).toHaveLength(1);
-      expect(decl(block[0], "background"), selector).toBe("transparent");
-      expect(decl(block[0], "border"), selector).toBe("0");
-      expect(decl(block[0], "border-radius"), selector).toBe("0");
-      expect(decl(block[0], "box-shadow"), selector).toBe("none");
-    }
-  });
-
-  it("keeps the side-by-side cells opaque, or the grid bleeds through", () => {
-    // The one thing that must NOT go transparent. `.diff-sbs__row` and
-    // `.diff-sbs__heading` are `--border-1` showing through a 1px gap; the
-    // cells are what mask them. Transparent cells let the border colour fill
-    // every row and the whole comparison turns the colour of a rule.
-    const css = sheet("kit.css");
-    for (const selector of [
-      ".draft-review__body .diff-sbs__cell",
-      ".draft-review__body .diff-sbs__pane",
-    ]) {
-      const block = blocksFor(css, selector);
-      expect(block, `no rule for ${selector}`).toHaveLength(1);
-      expect(decl(block[0], "background"), selector).toBe("var(--bg-canvas)");
-    }
-  });
-
-  it("centres the decision and stacks a quiet feedback field beneath it", () => {
-    const controls = blocksFor(sheet("kit.css"), ".draft-review__controls");
-    expect(controls, "no rule for .draft-review__controls").toHaveLength(1);
-    // A row here puts the field beside the controls again, whatever order the
-    // JSX is in. `align-items` is what makes the centring hold: the default
-    // `stretch` gives the actions box the foot's width for its own
-    // `justify-content` to centre within, and `flex-end` would collapse it
-    // against the trailing edge with the centring silently a no-op.
-    expect(decl(controls[0], "flex-direction")).toBe("column");
-    expect(decl(controls[0], "align-items")).toBeNull();
-
-    const actions = blocksFor(sheet("kit.css"), ".draft-review__actions");
-    expect(actions, "no rule for .draft-review__actions").toHaveLength(1);
-    expect(decl(actions[0], "justify-content")).toBe("center");
-    // Accept and Reject are opposites, both irreversible, and side by side. The
-    // kit's default button gap puts them a slipped click apart, so this pair is
-    // held further open than the rest — a value at or below `--sp-2` is the
-    // regression to catch.
-    const gap = decl(actions[0], "gap");
-    expect(gap).toBe("var(--sp-4)");
-    // …and the name alone is not the distance. Retuning the scale under it
-    // would halve the dead zone with the assertion above still green, so the
-    // token is resolved and given a floor.
-    const scale = sheet("colors_and_type.css");
-    const token = scale.match(/(?:^|[;{])\s*--sp-4\s*:\s*([^;]+)/);
-    expect(token, "no --sp-4 is defined").not.toBeNull();
-    expect(Number.parseFloat(token![1])).toBeGreaterThanOrEqual(12);
-
-    const field = blocksFor(sheet("kit.css"), ".draft-review__feedback");
-    expect(field, "no rule for .draft-review__feedback").toHaveLength(1);
-    // Narrower than the foot and centred under the pair, rather than a well
-    // spanning the whole modal.
-    expect(decl(field[0], "width")).toBe("100%");
-    expect(decl(field[0], "max-width")).not.toBeNull();
-    expect(decl(field[0], "margin")).toBe("0 auto");
-    // Quiet: no fill of its own. The rule is the same one every other field in
-    // the kit rests on — a step lighter is invisible against the foot in dark,
-    // where this hairline is the only thing saying a field is there at all.
-    expect(decl(field[0], "background")).toBe("transparent");
-    expect(decl(field[0], "border-bottom")).toBe("1px solid var(--border-2)");
-    // …until it is focused, which is the whole of the "stylish" bargain: the
-    // field asserts itself when it is being used and not before.
-    const focused = blocksFor(sheet("kit.css"), ".draft-review__feedback:focus");
-    expect(focused, "the field never asserts itself on focus").toHaveLength(1);
-    expect(decl(focused[0], "border-bottom-color")).toBe("var(--accent)");
-  });
-
-  it("writes the feedback field on one rule, not in a box (PCR-FR-02)", () => {
+  it("writes the feedback field on one rule, not in a box", () => {
     const css = sheet("kit.css");
     const blocks = blocksFor(css, ".draft-review__feedback");
     expect(blocks, "no rule for .draft-review__feedback").toHaveLength(1);
@@ -278,11 +69,11 @@ describe("the prompt review modal's three bands (PCR-FR-02)", () => {
     expect(decl(hovered, "border-bottom-color")).toBe("var(--border-3)");
   });
 
-  it("counts the field's own padding and rule into its cap (PCR-FR-02)", () => {
+  it("counts the field's own padding and rule into its cap", () => {
     // The cap is `4em` of line-height plus a pixel term, and under border-box
     // that term IS the padding and the rule — it is not a fudge factor. Changing
     // the padding without it leaves the field capped at four lines plus a sliver
-    // of a fifth, which is PCR-FR-02 failing in the one form nobody eyeballs.
+    // of a fifth, which is the cap failing in the one form nobody eyeballs.
     const field = blocksFor(sheet("kit.css"), ".draft-review__feedback")[0];
     const sum = (value: string | null) =>
       (value?.match(/-?[\d.]+px/g) ?? []).reduce(
@@ -296,24 +87,8 @@ describe("the prompt review modal's three bands (PCR-FR-02)", () => {
     expect(sum(decl(field, "max-height"))).toBe(2 * vertical + rule);
   });
 
-  it("leaves the decided foot a row (PCR-FR-13)", () => {
-    // `.draft-review__decided` is a SIBLING of the controls, not a child, so it
-    // never inherited the column above. That is easy to lose: the natural next
-    // move, once the pending foot stacks, is to hoist `flex-direction: column`
-    // onto `.draft-review__foot` — which would silently break the statement and
-    // its dismissal apart into two rows.
-    const block = blocksFor(sheet("kit.css"), ".draft-review__decided");
-    expect(block, "no rule for .draft-review__decided").toHaveLength(1);
-    expect(decl(block[0], "flex-direction")).toBeNull();
-    expect(decl(block[0], "justify-content")).toBe("space-between");
-
-    const foot = blocksFor(sheet("kit.css"), ".draft-review__foot");
-    expect(foot, "no rule for .draft-review__foot").toHaveLength(1);
-    expect(decl(foot[0], "flex-direction")).toBeNull();
-  });
-
   it("caps the growing field at four lines and scrolls past them", () => {
-    // PCR-FR-02. The component writes the height from the content on every
+    // The component writes the height from the content on every
     // keystroke, so the bound has to live here — without it a pasted essay
     // grows the foot until it has eaten the comparison. `resize` is off for the
     // same reason: a dragged height is overwritten on the next keystroke.

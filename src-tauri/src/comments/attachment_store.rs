@@ -81,12 +81,24 @@ pub(super) fn stage_attachment(
         // CMS-FR-43 / CMS-FR-TQVB: recorded verbatim. It holds no content, so
         // nothing is stored, and the change it names is neither read nor checked.
         // Only the shape is checked: a reference with an empty part names nothing.
-        AttachmentInput::ProposalHunk { proposal_id, hunk_id, draft_id, path } => {
-            if [&proposal_id, &hunk_id, &draft_id, &path].iter().any(|v| v.trim().is_empty()) {
+        // CMS-FR-TQVB: exactly one of `draft_id` and `artifact_id` names the
+        // proposal's target. Neither, or both, names no one target.
+        AttachmentInput::ProposalHunk { proposal_id, hunk_id, draft_id, artifact_id, path } => {
+            if [&proposal_id, &hunk_id, &path].iter().any(|v| v.trim().is_empty()) {
+                return Err(ERR_MALFORMED_ATTACHMENT.to_string());
+            }
+            let named = |v: &Option<String>| v.as_deref().is_some_and(|v| !v.trim().is_empty());
+            if named(&draft_id) == named(&artifact_id) {
                 return Err(ERR_MALFORMED_ATTACHMENT.to_string());
             }
             Ok(StagedAttachment {
-                attachment: Attachment::ProposalHunk { proposal_id, hunk_id, draft_id, path },
+                attachment: Attachment::ProposalHunk {
+                    proposal_id,
+                    hunk_id,
+                    draft_id: draft_id.filter(|v| !v.trim().is_empty()),
+                    artifact_id: artifact_id.filter(|v| !v.trim().is_empty()),
+                    path,
+                },
                 bytes: None,
             })
         }

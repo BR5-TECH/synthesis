@@ -47,15 +47,20 @@ pub fn estimate_impl<R: tauri::Runtime>(
             fragment_target: None,
         },
     };
-    // AGC-FR-OBUA: no agent, or no provider, gives a null window.
+    // AGC-FR-OBUA: no agent, or no provider, gives the default window.
     let agent = agent_id.and_then(|id| agent_of(&store, project_key, roots.worktree, id));
     let provider = ai_api::resolve_agent_provider(&store, project_key).ok();
-    // An empty provider or model resolves no window.
-    let budget = DocumentBudget::resolve(
-        &store,
-        provider.as_deref().unwrap_or(""),
-        agent.as_ref().map(|a| a.model_id.as_str()).unwrap_or(""),
-    );
+    // With no agent or no provider there is no model, so no override of a
+    // provider applies: the window is the default, with the stored percent.
+    let budget = match (provider.as_deref(), agent.as_ref()) {
+        (Some(provider), Some(agent)) => DocumentBudget::resolve(&store, provider, &agent.model_id),
+        _ => DocumentBudget {
+            percent: store
+                .load_document_limit_percent()
+                .unwrap_or(crate::global_settings::DOCUMENT_LIMIT_PERCENT_DEFAULT),
+            ..DocumentBudget::default_window()
+        },
+    };
 
     let mut sections = Vec::new();
     let document = match &origin.target {
@@ -143,9 +148,9 @@ pub fn estimate_discussion_context<R: tauri::Runtime>(
         &[Domain::Ai],
         "discussion context estimated",
         log_fields! {
-            "window" => context.window.map(|w| w.to_string()).unwrap_or_default(),
+            "window" => context.window,
             "estimatedTokens" => context.estimated_tokens,
-            "limitTokens" => context.limit_tokens.map(|l| l.to_string()).unwrap_or_default(),
+            "limitTokens" => context.limit_tokens,
             "aboveLimit" => context.above_limit,
         },
     );

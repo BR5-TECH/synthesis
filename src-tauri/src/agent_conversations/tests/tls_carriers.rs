@@ -11,7 +11,7 @@ use crate::tls::tests::{private_ca_for_tests, serve_for_tests};
 fn endpoint(provider: &str, base_url: &str) -> AiApiCall {
     AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         provider: provider.into(),
         base_url: base_url.into(),
         api_key: Some("sk-secret-key-123".into()),

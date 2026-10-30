@@ -17,11 +17,6 @@ use crate::tools::agent_exec::protocol::{decode_envelope, EnvelopeInvalid, Resul
 /// The specification this module transcribes (EAC-FR-10's `protocol_spec`).
 pub const SPEC: &str = "specifications/infra/CCP-claude-code-cli-protocol.md";
 
-/// CCP-FR-01: the version every element here was asserted against. The manifest
-/// remains the runtime record (AVI-FR-07); this is what that record has to agree
-/// with, and `descriptor::tests` is where the two are compared.
-pub const PINNED_CLI_VERSION: &str = "2.1.233";
-
 /// CCP-FR-19: session state lives on a mount addressed by this variable. The
 /// CLI writes transcripts beneath `<config-dir>/projects/`, so without it every
 /// session dies with the container that created it (CCP-FR-18).

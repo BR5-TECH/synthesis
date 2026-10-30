@@ -11,7 +11,7 @@
 //! The image reference, its digest, the installed CLI version, and the
 //! container UID/GID are read from `docker/agent-images/manifest.toml`, which
 //! `../infra/AVI-agent-vendor-images.md` owns (AVI-FR-07). Nothing here hardcodes
-//! any of them, so upgrading a vendor CLI is a change to that manifest and a
+//! any of them, so upgrading a vendor CLI is an edit of its Dockerfile and a
 //! rebuild — not an edit to this file.
 //!
 //! The manifest is `include_str!`'d rather than read at run time: it is
@@ -399,9 +399,6 @@ pub struct VendorExecutionDescriptor {
     /// The specification this descriptor transcribes. Named so that a reader who
     /// finds a flag here knows which document justifies it.
     pub protocol_spec: &'static str,
-    /// The CLI version that specification was asserted against, compared with
-    /// the manifest's own `cli_version` by a test.
-    pub pinned_cli_version: &'static str,
     fresh_argv: FreshArgv,
     resume_argv: Option<ResumeArgv>,
     effort_supported: Option<EffortSupported>,
@@ -419,7 +416,6 @@ impl std::fmt::Debug for VendorExecutionDescriptor {
         f.debug_struct("VendorExecutionDescriptor")
             .field("vendor", &self.vendor)
             .field("protocol_spec", &self.protocol_spec)
-            .field("pinned_cli_version", &self.pinned_cli_version)
             .field("response_sources", &self.response_sources)
             .field("session_source", &self.session_source)
             .field("session_state", &self.session_state)
@@ -432,7 +428,6 @@ impl std::fmt::Debug for VendorExecutionDescriptor {
 pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     vendor: "claude_code",
     protocol_spec: claude_code::SPEC,
-    pinned_cli_version: claude_code::PINNED_CLI_VERSION,
     fresh_argv: claude_code::fresh_argv,
     resume_argv: Some(claude_code::resume_argv),
     effort_supported: Some(claude_code::effort_supported),
@@ -456,7 +451,6 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
 pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     vendor: "codex",
     protocol_spec: codex::SPEC,
-    pinned_cli_version: codex::PINNED_CLI_VERSION,
     // This vendor cannot be told which session id to use for a new session, so
     // the assigned identifier it is handed is ignored (CDX-FR-20).
     // CDX-FR-14: this vendor's CLI enforces no schema, so a named result

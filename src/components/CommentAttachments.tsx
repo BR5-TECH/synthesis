@@ -27,7 +27,7 @@ import {
 } from "../state/draftProposals";
 import { setFocusedHunk } from "../state/draftDiscussion";
 import {
-  openPromptReviewFor,
+  showPromptProposal,
   usePromptProposalReference,
 } from "../state/promptProposals";
 import {
@@ -624,13 +624,11 @@ function ProposalAttachmentView({
 }
 
 /**
- * CMT-FR-48: a `prompt_proposal` reference renders as a **control** on exactly
- * the terms its `proposal` sibling does — rendered alike, naming its file alike,
- * and activated alike. Which review it opens is decided by the attachment's own
- * kind and by nothing else: this one names a prompt artifact of the project and
- * opens the review of `PCR-prompt-change-review.md` (PCR-FR-03), which opens or
- * focuses that artifact's Editor tab first where it is not already open
- * (PCR-FR-18).
+ * CMT-FR-48 / PCR-FR-RFJC: a `prompt_proposal` reference renders as a
+ * **control** on exactly the terms its `proposal` sibling does — rendered alike,
+ * naming its file alike, with the same summary of how much it changes, and
+ * activated alike: it scrolls the document column of the file's Editor tab to
+ * the first undecided change, opening or focusing that tab first.
  *
  * CMT-FR-67: the state comes from `PCP-prompt-change-proposals.md` by way of the
  * store rather than from the attachment, which carries the identity alone.
@@ -651,6 +649,9 @@ function PromptProposalAttachmentView({
   );
   const state = reference.kind === "known" ? reference.proposal.state : null;
   const label = proposalControlLabel(state, reference.kind === "gone");
+  const proposal = reference.kind === "known" ? reference.proposal : null;
+  const changes = proposal?.hunkCount ?? 0;
+  const left = undecidedCount(proposal?.counts);
 
   return (
     <button
@@ -660,17 +661,24 @@ function PromptProposalAttachmentView({
       data-state={state ?? (reference.kind === "gone" ? "missing" : "unresolved")}
       disabled={state === null}
       title={label === null ? attachment.path : `${label} — ${attachment.path}`}
-      // PCR-FR-18: the tab is opened or focused first where it is not already
-      // open, so the review is never rendered anywhere but over the tab for its
-      // own file.
-      onClick={() =>
-        openPromptReviewFor(attachment.artifactId, attachment.proposalId)
-      }
+      // PCR-FR-RFJC / PCR-FR-18: the tab is opened or focused first where it is
+      // not already open, and its document scrolls to the first undecided
+      // change.
+      onClick={() => showPromptProposal(attachment.artifactId, attachment.proposalId)}
     >
       <Icon.Diff size={11} />
       <span className="comment-attach__chip-name">{attachment.path}</span>
+      {/* DCR-FR-HVXK: how much the proposal changes. */}
+      {changes > 0 && (
+        <span className="comment-attach__proposal-count">
+          {changes} {changes === 1 ? "change" : "changes"}
+        </span>
+      )}
       {label !== null && (
         <span className="comment-attach__chip-type">{label}</span>
+      )}
+      {left > 0 && (
+        <span className="comment-attach__proposal-route">Review in the file</span>
       )}
     </button>
   );

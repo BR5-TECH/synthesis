@@ -385,7 +385,15 @@ export function noteProposalChanged(payload: ProposalsChangedPayload): void {
  * reads as a proposal with nothing yet known about its changes rather than as a
  * shape this build refuses.
  */
-function ledgerOf(proposal: DraftChangeProposal): readonly HunkLedgerRow[] {
+/**
+ * DCR-FR-GNRL: what the ledger helpers read of a proposal. Structural, so a
+ * draft proposal and a prompt or DOC proposal (PCP-FR-HKLD) take one code path.
+ */
+export interface LedgerHolder {
+  ledger?: readonly HunkLedgerRow[] | null;
+}
+
+function ledgerOf(proposal: LedgerHolder): readonly HunkLedgerRow[] {
   return proposal.ledger ?? EMPTY_LEDGER;
 }
 
@@ -393,7 +401,7 @@ const EMPTY_LEDGER: readonly HunkLedgerRow[] = [];
 
 /** The ledger rows of one proposal that the author has not settled. */
 export function undecidedHunks(
-  proposal: DraftChangeProposal,
+  proposal: LedgerHolder,
 ): readonly HunkLedgerRow[] {
   return ledgerOf(proposal).filter((row) => isUndecided(row.state));
 }
@@ -404,7 +412,7 @@ export function undecidedHunks(
  * change is in the prompt already, so there is nothing left to visit.
  */
 export function visitedHunks(
-  proposal: DraftChangeProposal,
+  proposal: LedgerHolder,
 ): readonly HunkLedgerRow[] {
   return ledgerOf(proposal).filter(
     (row) => isUndecided(row.state) || row.state === "rejected",
@@ -420,7 +428,7 @@ export function visitedHunks(
  * from where that change stands rather than from the start.
  */
 export function nextUndecidedAfter(
-  proposal: DraftChangeProposal,
+  proposal: LedgerHolder,
   hunkId: string,
 ): string | null {
   const rows = ledgerOf(proposal);
@@ -435,14 +443,14 @@ export function nextUndecidedAfter(
  * order, which is the order the author reads the document in.
  */
 export function firstUndecidedHunk(
-  proposal: DraftChangeProposal,
+  proposal: LedgerHolder,
 ): HunkLedgerRow | undefined {
   return ledgerOf(proposal).find((row) => isUndecided(row.state));
 }
 
 /** Where one change of one proposal stands, or `undefined` if it has no row. */
 export function hunkStateOf(
-  proposal: DraftChangeProposal,
+  proposal: LedgerHolder,
   hunkId: string,
 ): HunkState | undefined {
   return ledgerOf(proposal).find((row) => row.id === hunkId)?.state;
@@ -457,7 +465,7 @@ export function hunkStateOf(
  * decided.
  */
 export function hunkPosition(
-  proposal: DraftChangeProposal,
+  proposal: LedgerHolder,
   hunkId: string,
 ): number {
   return ledgerOf(proposal).findIndex((row) => row.id === hunkId) + 1;

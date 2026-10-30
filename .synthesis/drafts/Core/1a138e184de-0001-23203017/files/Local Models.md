@@ -21,7 +21,7 @@ Scope: the **Custom** tab of the AI API level (Settings → AI API → Custom), 
 
 ### Provider-level settings
 
-- The Custom tab renders three optional fields: **Reasoning effort** (default), **Max output tokens**, **Max context size**. They belong to the Custom provider record, not to a model. Each is unset by default. Token fields accept positive integers only, with inline validation. Saving follows the existing reasoning-selector pattern (applies at once, no Verify needed).
+- The Custom tab renders three optional fields: **Reasoning effort** (default), **Max output tokens**, **Max context size**. They belong to the Custom provider record, not to a model. Every other AI API provider tab also renders **Max context size** (see the Context window draft); **Max output tokens** stays Custom-only. Each is unset by default. Token fields accept positive integers only, with inline validation. Saving follows the existing reasoning-selector pattern (applies at once, no Verify needed).
 - The reasoning selector offers the model-default entry (unset: no `reasoning` parameter is sent), then `none`, `low`, `medium`, `high`, for every Custom model. Detected capabilities do not hide or limit it.
 - The provider's reasoning effort is a default. An agent's own reasoning choice in the persona editor wins over it. The persona editor shows the same selector whenever the active provider is Custom. Max output tokens and max context size cannot be overridden by an agent.
 
@@ -35,7 +35,7 @@ Scope: the **Custom** tab of the AI API level (Settings → AI API → Custom), 
 
 ### Effective values
 
-- **Context size** for a model: the detected value; else the provider-level value; else the conversation loop's existing default token budget. The value is app-side only: the conversation loop uses it as its token budget (trim or compact history). Nothing is sent to the host.
+- **Context size** for a model: the provider-level value; else the detected value; else the default of 1,000,000 tokens. The value is app-side only: the conversation loop uses it as its token budget (trim or compact history). Nothing is sent to the host.
 - **Max output tokens**: the provider-level value when set, replacing the 128000 constant for every Custom call on both routes; 128000 when unset.
 - **Reasoning**: agent choice, else provider default, else unset. A set value is passed to the Rig adapter as the call's reasoning. This replaces the rule that a Custom call carries no reasoning parameter.
 - The graduation loop uses the provider-level reasoning default, as it uses the stored reasoning of other providers.

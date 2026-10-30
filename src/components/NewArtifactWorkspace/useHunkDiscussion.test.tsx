@@ -99,6 +99,10 @@ beforeEach(() => {
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === "append_log_records") return Promise.resolve();
     if (cmd === "set_draft_change_hunk_discussing") return Promise.resolve(proposal());
+    if (cmd === "set_prompt_change_hunk_discussing") return Promise.resolve(proposal());
+    if (cmd === "load_prompt_change_proposal_hunks") {
+      return Promise.resolve({ hunks: [], resolutions: [], checksum: "c", legacy: false });
+    }
     if (cmd === "load_draft_change_proposal_hunks") {
       return Promise.resolve({ hunks: [], resolutions: [], checksum: "c", legacy: false });
     }
@@ -230,5 +234,65 @@ describe("DCR-FR-JTXE: once the discussion exists", () => {
     act(() => hook.result.current.opened(discussion("d-plain", [])));
     await act(async () => {});
     expect(callsTo("set_draft_change_hunk_discussing")).toHaveLength(0);
+  });
+});
+
+describe("PCR-FR-HDMC, DDS-FR-EHDK: Discuss on a change in a file's Editor tab", () => {
+  const ARTIFACT = "docs/guide.md";
+  function mountArtifact(discussions: Discussion[] = []) {
+    const selectDiscussion = vi.fn();
+    const focusComposer = vi.fn();
+    const showColumn = vi.fn();
+    const p = { ...proposal(), path: ARTIFACT };
+    const hook = renderHook(() =>
+      useHunkDiscussion({
+        artifactId: ARTIFACT,
+        proposal: p,
+        discussions,
+        selectDiscussion,
+        focusComposer,
+        showColumn,
+      }),
+    );
+    return { hook, selectDiscussion, focusComposer, showColumn };
+  }
+
+  it("PCR-FR-HDMC, CMS-FR-TQVB: opens the composer of a discussion of the file, seeded with the agent tag, naming the change by artifact", () => {
+    const { hook, showColumn, focusComposer } = mountArtifact();
+    act(() => hook.result.current.discuss("h3"));
+    expect(showColumn).toHaveBeenCalled();
+    expect(focusComposer).toHaveBeenCalled();
+    expect(hook.result.current.opening?.reference).toEqual({
+      kind: "proposalHunk",
+      proposalId: "p1",
+      hunkId: "h3",
+      artifactId: ARTIFACT,
+      path: ARTIFACT,
+    });
+    expect(hook.result.current.opening?.reference.draftId).toBeUndefined();
+    expect(getDiscussionSession(`artifact:${ARTIFACT}`).body).toBe("@arch ");
+  });
+
+  it("PCR-FR-HDMC: posting holds the change through the prompt module's own command", async () => {
+    const { hook } = mountArtifact();
+    act(() => hook.result.current.discuss("h1"));
+    const opening = hook.result.current.opening!.reference;
+    act(() => hook.result.current.opened(discussion("d-new", [opening])));
+    await waitFor(() =>
+      expect(callsTo("set_prompt_change_hunk_discussing")).toEqual([
+        { proposalId: "p1", hunkId: "h1", discussing: true },
+      ]),
+    );
+    expect(callsTo("set_draft_change_hunk_discussing")).toHaveLength(0);
+  });
+
+  it("PCR-FR-HDMC: a change that has a discussion shows that one instead of opening a second", () => {
+    const existing = discussion("d-old", [
+      { kind: "proposalHunk", proposalId: "p1", hunkId: "h1", artifactId: ARTIFACT, path: ARTIFACT },
+    ]);
+    const { hook, selectDiscussion } = mountArtifact([existing]);
+    act(() => hook.result.current.discuss("h1"));
+    expect(selectDiscussion).toHaveBeenCalledWith("d-old");
+    expect(hook.result.current.opening).toBeNull();
   });
 });

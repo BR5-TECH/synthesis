@@ -140,23 +140,23 @@ pub fn validate_ai_api_selection(
 /// provider, read from the registry alone.
 ///
 /// No key is read and no network is reached, so the conversation module can
-/// call this at dispatch and for an estimate (AGC-FR-GMSF, AGC-FR-JFBZ). A
-/// provider that is not configured, a model the provider does not list, and a
-/// model with no effective size all answer `None`; nothing is refused.
-pub fn resolve_context_window(
-    store: &GlobalSettingsStore,
-    provider: &str,
-    model_id: &str,
-) -> Option<u64> {
-    let descriptor = provider_descriptor(provider)?;
-    let (records, _) = store.load_ai_api_registry().ok()?;
-    let record = records.iter().find(|r| r.provider == provider)?;
+/// call this at dispatch and for an estimate (AGC-FR-GMSF, AGC-FR-JFBZ). The
+/// answer is never absent and nothing is refused: a provider that is not
+/// configured and a model the provider does not list have no detected size, so
+/// they get the provider's max context size, else the default.
+pub fn resolve_context_window(store: &GlobalSettingsStore, provider: &str, model_id: &str) -> u64 {
+    let Some(descriptor) = provider_descriptor(provider) else {
+        return custom_limits::DEFAULT_CONTEXT_SIZE;
+    };
+    let records = store.load_ai_api_registry().map(|(records, _)| records).unwrap_or_default();
+    let Some(record) = records.iter().find(|r| r.provider == provider) else {
+        return custom_limits::DEFAULT_CONTEXT_SIZE;
+    };
     if state_assuming_key(record, descriptor.key_required) == IntegrationState::Unconfigured {
-        return None;
+        return custom_limits::effective_context_size(record, None);
     }
     let models = available_models(record, descriptor);
-    let model = models.iter().find(|m| m.id == model_id)?;
-    custom_limits::effective_context_size(record, Some(model))
+    custom_limits::effective_context_size(record, models.iter().find(|m| m.id == model_id))
 }
 
 /// AAP-FR-34: the endpoint and key of a provider the **caller** names, carrying

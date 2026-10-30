@@ -19,8 +19,9 @@ import { ChangeRow } from "./ChangeRow";
 import { questionCardOf } from "./questionParse";
 import { coveredBy, streamItems, type StreamItem } from "./streamItems";
 import { activityStatus } from "../../../state/agentActivity";
+import { ToolDisclosure } from "../../discussion/ToolActivity";
 import type { AgentRoster } from "../../agentTags";
-import type { AgentTurn, Comment } from "../../../types";
+import type { AgentTurn, Comment, TurnToolCall } from "../../../types";
 import type { PairedHalf } from "../../discussion/questionPairs";
 
 export interface StreamMessagesProps {
@@ -40,6 +41,8 @@ export interface StreamMessagesProps {
   threadActions?: React.ReactNode;
   /** CTA-FR-ZOLW: the turns still outstanding, in the position their answer takes. */
   pendingTurns: readonly AgentTurn[];
+  /** CTA-FR-BJWN: each pending row's tool list, keyed by the turn it reads. */
+  toolCallsByRow?: ReadonlyMap<string, readonly TurnToolCall[]>;
   onCancelTurn: (turnId: string) => void;
   /**
    * CTA-FR-MGVJ / CTA-FR-ARBB: what a turn left behind, at the foot of the
@@ -136,9 +139,20 @@ export function StreamMessages(props: StreamMessagesProps) {
             </div>
             <div className="dds-transient" data-testid="dds-transient-status">
               <span className="dds-transient__dot" aria-hidden="true" />
-              <span className="dds-transient__word">
-                {activityStatus(turn).toLowerCase().replace(/…$/, "")}
-              </span>
+              {/* CTA-FR-GGYJ: a disclosure of the tool list once a call was
+                  made. */}
+              {(props.toolCallsByRow?.get(turn.id)?.length ?? 0) > 0 ? (
+                <ToolDisclosure
+                  className="dds-transient__word"
+                  label={activityStatus(turn).toLowerCase().replace(/…$/, "")}
+                  calls={props.toolCallsByRow?.get(turn.id) ?? []}
+                  testId="dds-transient-toggle"
+                />
+              ) : (
+                <span className="dds-transient__word">
+                  {activityStatus(turn).toLowerCase().replace(/…$/, "")}
+                </span>
+              )}
             </div>
           </div>
         ))}

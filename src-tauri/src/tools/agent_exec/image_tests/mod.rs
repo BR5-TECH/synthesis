@@ -17,11 +17,11 @@
 //!   reintroduce without any directive changing — is `verify.sh`'s.
 //! - **AVI-FR-03, AVI-FR-04** — the entrypoint runs as the manifest's UID/GID, not root.
 //! - **AVI-FR-16, AVI-FR-13** — the browser starts and renders under the launch
-//!   conditions of EAC-FR-13 and EAC-FR-14. Its Dockerfile half — one engine,
-//!   pinned, at a path a foreign UID can reach — *is* asserted below.
+//!   conditions of EAC-FR-13 and EAC-FR-14. Its Dockerfile half — one engine, at
+//!   a path a foreign UID can reach — *is* asserted below.
 //! - **AVI-FR-17, AVI-FR-13** — a Rust program compiles and links, `tsc` emits
 //!   JavaScript, and `pnpm` runs, under those same launch conditions. Its
-//!   Dockerfile half — the pinned versions and the checksummed installer — *is*
+//!   Dockerfile half — the toolchains and the checksummed installer — *is*
 //!   asserted below.
 //! - **AVI-FR-17, EAC-FR-14, AVI-FR-18** — `$HOME` in a running container is the directory the image
 //!   names, and the running user may write it. Its Dockerfile half — the
@@ -29,8 +29,8 @@
 //! - **AVI-FR-10** — no credential in any layer, environment variable, or file.
 //!
 //! They are covered by `docker/agent-images/verify.sh` and a manual run against
-//! a published image. AVI-FR-06, AVI-FR-13's version check is likewise `verify.sh`'s; what
-//! is asserted below is the half that lives in the Dockerfile.
+//! a published image. AVI-FR-06, AVI-FR-13's version check is likewise `verify.sh`'s alone
+//! (AVI-FR-QWVT).
 //!
 //! `EAC-FR-14` (a file the agent creates is owned by the host user) is in the
 //! same category and is documented at its own test.

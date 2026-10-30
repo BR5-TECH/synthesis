@@ -10,7 +10,7 @@ use super::*;
 // The turn registry
 // ---------------------------------------------------------------------------
 
-struct Live {
+pub(super) struct Live {
     pub(super) turn: AgentTurn,
     /// AGC-FR-YQMD: whether one `complete` invocation has been made for this
     /// turn, which is what its lifecycle record reports as `reached_model`.
@@ -38,6 +38,14 @@ struct Live {
     /// after it however the two events reach a surface, and a sequence a
     /// finished call held is not given to a later one.
     pub(super) next_seq: u64,
+    /// AGC-FR-ISKZ: the steering messages the turn took and the loop did not
+    /// append yet, as comment ids, oldest first.
+    pub(super) steering: Vec<String>,
+    /// CVL-FR-YNOE: whether the turn still takes steering messages.
+    pub(super) steering_open: bool,
+    /// AGC-FR-URXV: the whole-turn timeout and the instant the current
+    /// deadline expires. `None` while the turn waits for its slot.
+    pub(super) deadline: Option<(Duration, std::time::Instant)>,
 }
 
 /// AGC-FR-23: turn ids, unique for the lifetime of the running application.
@@ -50,7 +58,7 @@ struct Live {
 pub(super) static NEXT_TURN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 #[derive(Default)]
-struct Inner {
+pub(super) struct Inner {
     pub(super) live: HashMap<String, Live>,
     /// The turns that have terminated, so a second cancellation can answer
     /// "that one is already `delivered`" rather than "no such turn"
@@ -101,7 +109,7 @@ struct Inner {
 }
 
 /// AGC-FR-31: what is left of a turn the author may ask again.
-struct Recoverable {
+pub(super) struct Recoverable {
     pub(super) turn: AgentTurn,
     /// The project it belongs to, so closing a project or withdrawing an agent
     /// from one discards only what belongs there (AGR-FR-15).
@@ -109,7 +117,7 @@ struct Recoverable {
 }
 
 /// AGC-FR-28: what is left of a turn that ended awaiting a reply.
-struct Awaiting {
+pub(super) struct Awaiting {
     pub(super) turn: AgentTurn,
     /// The project it belongs to, so withdrawing an agent from *this* project
     /// discards only what it is owed here (AGR-FR-15).
@@ -263,7 +271,7 @@ impl TurnRegistry {
         self.buffer
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
+    pub(super) fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
         match self.inner.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
@@ -301,6 +309,11 @@ impl TurnRegistry {
             // through before any payload but the registration itself.
             images_omitted: false,
             context: None,
+            // AGC-FR-HMUV: no call yet.
+            tool_calls: Vec::new(),
+            // AGC-FR-URXV: the deadline starts when the turn takes its slot.
+            deadline_started_at: None,
+            deadline_at: None,
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         inner.live.insert(
@@ -313,6 +326,9 @@ impl TurnRegistry {
                 operation: None,
                 delivering: false,
                 next_seq: 1,
+                steering: Vec::new(),
+                steering_open: true,
+                deadline: None,
             },
         );
         (turn, cancelled)
@@ -347,6 +363,7 @@ impl TurnRegistry {
         app: &tauri::AppHandle<R>,
         turn_id: &str,
         tool: &str,
+        key_input: Option<String>,
     ) -> Option<(String, AgentTurn)> {
         let mut inner = self.lock();
         let live = inner.live.get_mut(turn_id)?;
@@ -357,6 +374,14 @@ impl TurnRegistry {
             id: id.clone(),
             tool: tool.to_string(),
             activation_seq,
+        });
+        // AGC-FR-HMUV: the same call in the list that keeps finished calls.
+        live.turn.tool_calls.push(TurnToolCall {
+            id: id.clone(),
+            tool: tool.to_string(),
+            activation_seq,
+            state: ToolCallState::Running,
+            key_input,
         });
         let turn = live.turn.clone();
         publish(app, &turn);
@@ -376,6 +401,7 @@ impl TurnRegistry {
         app: &tauri::AppHandle<R>,
         turn_id: &str,
         call_id: &str,
+        state: ToolCallState,
     ) -> Option<AgentTurn> {
         let mut inner = self.lock();
         let live = inner.live.get_mut(turn_id)?;
@@ -383,6 +409,11 @@ impl TurnRegistry {
         live.turn.active_tool_calls.retain(|call| call.id != call_id);
         if live.turn.active_tool_calls.len() == before {
             return None;
+        }
+        // AGC-FR-HMUV / CVL-FR-SKSE: the call stays in `tool_calls` with how it
+        // ended.
+        if let Some(call) = live.turn.tool_calls.iter_mut().find(|call| call.id == call_id) {
+            call.state = state;
         }
         let turn = live.turn.clone();
         publish(app, &turn);
@@ -443,6 +474,11 @@ impl TurnRegistry {
         // when the turn ended, so a terminating turn leaves no call behind for
         // a surface to keep reading a status from (CVL-FR-33).
         turn.active_tool_calls.clear();
+        // CVL-FR-SKSE: a call that is still running when the turn ends from
+        // another thread (a cancellation) is abandoned, so it failed.
+        for call in turn.tool_calls.iter_mut().filter(|c| c.state == ToolCallState::Running) {
+            call.state = ToolCallState::Failed;
+        }
         if state == AgentTurnState::AwaitingReply {
             // AGC-FR-28: terminal, so it leaves `live` with the rest of the
             // turn's working state — but still outstanding, so it is parked
@@ -645,8 +681,12 @@ impl TurnRegistry {
         turn.retry_permitted = true;
         let mut inner = self.lock();
         let key = turn.origin.discussion_id().to_string();
+        // AGC-FR-SEZK: a registry entry holds no tool call and no key input. The
+        // turn returned for the terminal event keeps them.
+        let mut entry = turn.clone();
+        entry.tool_calls.clear();
         // The displaced entry keeps its terminal state; only the offer moves.
-        inner.recoverable.insert(key, Recoverable { turn: turn.clone(), project_key });
+        inner.recoverable.insert(key, Recoverable { turn: entry, project_key });
         turn
     }
 
@@ -720,10 +760,12 @@ impl TurnRegistry {
         let mut inner = self.lock();
         let key = turn.origin.discussion_id().to_string();
         if turn.images_omitted {
-            inner.image_notices.insert(
-                key,
-                Recoverable { turn: turn.clone(), project_key: project_key.to_string() },
-            );
+            // AGC-FR-SEZK: an entry holds no tool call and no key input.
+            let mut entry = turn.clone();
+            entry.tool_calls.clear();
+            inner
+                .image_notices
+                .insert(key, Recoverable { turn: entry, project_key: project_key.to_string() });
         } else {
             inner.image_notices.remove(&key);
         }
@@ -919,7 +961,7 @@ impl Inner {
     }
 }
 
-fn ordinal(turn_id: &str) -> u64 {
+pub(super) fn ordinal(turn_id: &str) -> u64 {
     turn_id.rsplit('-').next().and_then(|n| n.parse().ok()).unwrap_or(0)
 }
 

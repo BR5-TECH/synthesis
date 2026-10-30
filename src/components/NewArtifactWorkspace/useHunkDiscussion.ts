@@ -11,12 +11,20 @@
  *
  * A discussion decides nothing. After it opens, an undecided change is held for
  * discussion; a rejected change stays rejected (DCR-FR-JTXE).
+ *
+ * PCR-FR-HDMC / DDS-FR-EHDK: the Editor tab of a prompt or DOC file takes the
+ * same path. Its target is the artifact, its reference carries `artifactId`,
+ * and the hold is `set_prompt_change_hunk_discussing`.
  */
 import { useCallback, useState } from "react";
 
 import * as api from "../../api";
 import { logDebug, logInfo, logWarn } from "../../logging";
-import { setDraftDiscussionHidden, setFocusedHunk } from "../../state/draftDiscussion";
+import {
+  artifactReviewKey,
+  setDraftDiscussionHidden,
+  setFocusedHunk,
+} from "../../state/draftDiscussion";
 import {
   getDiscussionSession,
   setComposerBody,
@@ -29,9 +37,20 @@ import {
   discussionTargetKey,
   isUndecided,
   type Discussion,
-  type DraftChangeProposal,
+  type DiscussionTarget,
+  type HunkLedgerRow,
+  type Participant,
   type ProposalHunkReference,
 } from "../../types";
+
+/** DCR-FR-GNRL: what a hunk discussion reads of a proposal, of either kind. */
+export interface DiscussableProposal {
+  id: string;
+  path: string;
+  agent: Participant;
+  hunkCount: number;
+  ledger: HunkLedgerRow[];
+}
 
 /**
  * DCR-FR-MTFD: the opening text starts with the proposing agent's tag, so the
@@ -45,29 +64,43 @@ export function seededBody(handle: string, typed: string): string {
 }
 
 export function useHunkDiscussion(input: {
-  draftId: string;
-  proposal: DraftChangeProposal | undefined;
+  /** The draft whose tab this is; absent for a file's Editor tab. */
+  draftId?: string;
+  /** PCR-FR-HDMC: the prompt or DOC file whose Editor tab this is. */
+  artifactId?: string;
+  proposal: DiscussableProposal | undefined;
   discussions: readonly Discussion[];
   /** Select a discussion in the column. */
   selectDiscussion: (discussionId: string) => void;
   /** Put the caret in the column's composer. */
   focusComposer: () => void;
+  /** Show the discussion column where it is hidden. Defaults to the draft's. */
+  showColumn?: () => void;
 }) {
-  const { draftId, proposal, discussions, selectDiscussion, focusComposer } = input;
+  const { draftId, artifactId, proposal, discussions, selectDiscussion, focusComposer } = input;
+  const showColumnInput = input.showColumn;
   const [opening, setOpening] = useState<HunkOpening | null>(null);
+  /** The key of the review state, and the target a new discussion is of. */
+  const reviewKey = artifactId ? artifactReviewKey(artifactId) : (draftId ?? "");
+  const target: DiscussionTarget = artifactId
+    ? { kind: "artifact", artifactId }
+    : { kind: "draft", draftId: draftId ?? "" };
+  const targetKey = discussionTargetKey(target);
 
   /** DCR-FR-MTFD / DCR-FR-VBQN: Discuss on one change. */
   const discuss = useCallback(
     (hunkId: string) => {
       if (proposal === undefined) return;
-      setFocusedHunk(draftId, hunkId);
+      setFocusedHunk(reviewKey, hunkId);
       // DDS-FR-RHKW: the column comes back where it is hidden, by the route the
       // action row's own control takes (DDS-FR-XQMF).
-      setDraftDiscussionHidden(draftId, false);
+      if (showColumnInput) showColumnInput();
+      else if (draftId) setDraftDiscussionHidden(draftId, false);
       const existing = hunkDiscussionOf(discussions, proposal.id, hunkId);
       if (existing) {
         logInfo(["frontend"], "a change's discussion was shown", {
           draftId,
+          artifactId,
           proposalId: proposal.id,
           discussionId: existing.id,
         });
@@ -76,18 +109,14 @@ export function useHunkDiscussion(input: {
         focusComposer();
         return;
       }
-      const reference: ProposalHunkReference = {
-        kind: "proposalHunk",
-        proposalId: proposal.id,
-        hunkId,
-        draftId,
-        path: proposal.path,
-      };
-      // DCR-FR-MTFD: the opening composer is the draft's own, so the tag goes
+      // CMS-FR-TQVB: exactly one of `draftId` and `artifactId`.
+      const reference: ProposalHunkReference = artifactId
+        ? { kind: "proposalHunk", proposalId: proposal.id, hunkId, artifactId, path: proposal.path }
+        : { kind: "proposalHunk", proposalId: proposal.id, hunkId, draftId, path: proposal.path };
+      // DCR-FR-MTFD: the opening composer is the target's own, so the tag goes
       // into the text it already holds rather than into a second field.
-      const key = discussionTargetKey({ kind: "draft", draftId });
       const handle = proposal.agent.kind === "agent" ? proposal.agent.handle : "";
-      setComposerBody(key, seededBody(handle, getDiscussionSession(key).body));
+      setComposerBody(targetKey, seededBody(handle, getDiscussionSession(targetKey).body));
       setOpening({
         reference,
         position: hunkPosition(proposal, hunkId),
@@ -95,18 +124,32 @@ export function useHunkDiscussion(input: {
       });
       logInfo(["frontend"], "a discussion of a change is being opened", {
         draftId,
+        artifactId,
         proposalId: proposal.id,
       });
       focusComposer();
     },
-    [draftId, proposal, discussions, selectDiscussion, focusComposer],
+    [
+      draftId,
+      artifactId,
+      reviewKey,
+      targetKey,
+      proposal,
+      discussions,
+      selectDiscussion,
+      focusComposer,
+      showColumnInput,
+    ],
   );
 
   /** DDS-FR-RHKW / DDS-FR-YLRM: the author discarded or left the composer. */
   const cancel = useCallback(() => {
     setOpening(null);
-    logDebug(["frontend"], "the composer of a change's discussion was left", { draftId });
-  }, [draftId]);
+    logDebug(["frontend"], "the composer of a change's discussion was left", {
+      draftId,
+      artifactId,
+    });
+  }, [draftId, artifactId]);
 
   /**
    * DCR-FR-JTXE: the discussion exists, so an undecided change is held for it.
@@ -120,18 +163,23 @@ export function useHunkDiscussion(input: {
       if (reference.proposalId !== proposal.id) return;
       const state = hunkStateOf(proposal, reference.hunkId);
       if (state === undefined || !isUndecided(state) || state === "discussing") return;
-      void api
-        .setDraftChangeHunkDiscussing(proposal.id, reference.hunkId, true)
-        .then(() => rereadHunks(proposal.id))
+      // PCR-FR-HDMC: a change of a file's proposal is held by the prompt
+      // module's own command.
+      const hold = artifactId
+        ? api.setPromptChangeHunkDiscussing(proposal.id, reference.hunkId, true)
+        : api.setDraftChangeHunkDiscussing(proposal.id, reference.hunkId, true);
+      void hold
+        .then(() => rereadHunks(proposal.id, artifactId ? "prompt" : "draft"))
         .catch((e: unknown) => {
           logWarn(["frontend"], "a change could not be held for its discussion", {
             draftId,
+            artifactId,
             proposalId: proposal.id,
             error: String(e),
           });
         });
     },
-    [draftId, proposal],
+    [draftId, artifactId, proposal],
   );
 
   return { opening, discuss, cancel, opened };

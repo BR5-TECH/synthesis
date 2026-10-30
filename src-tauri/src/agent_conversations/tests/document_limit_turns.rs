@@ -148,15 +148,15 @@ fn the_estimate_reaches_no_model() {
         Some(&thread.id),
         Some(&agent),
     );
-    assert_eq!(context.window, Some(10_000));
+    assert_eq!(context.window, 10_000);
     assert_eq!(h.seam.call_count(), 0);
     assert!(h.seam.requests().is_empty());
 }
 
-// AGC-FR-OBUA: an agent the project resolves no provider for gives no window,
-// and so no limit and no warning.
+// AGC-FR-OBUA: an agent the project resolves no provider for gives the default
+// window and its limit (1% of 1,000,000), so the document is under it.
 #[test]
-fn the_estimate_of_an_agent_with_no_provider_has_no_window() {
+fn the_estimate_of_an_agent_with_no_provider_has_the_default_window() {
     let h = window_harness(Vec::new(), Some(10_000), 1);
     let thread = artifact_discussion(&h, "hld.md", &numbered_lines(200));
     let agent = agent_id_of(&h, "arch");
@@ -169,8 +169,8 @@ fn the_estimate_of_an_agent_with_no_provider_has_no_window() {
         Some(&thread.id),
         Some(&agent),
     );
-    assert_eq!(context.window, None);
-    assert_eq!(context.limit_tokens, None);
+    assert_eq!(context.window, crate::ai_api::DEFAULT_CONTEXT_SIZE);
+    assert_eq!(context.limit_tokens, 10_000);
     assert!(!context.above_limit);
     assert!(context.document.is_some(), "the document is still measured");
 }

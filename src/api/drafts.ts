@@ -12,8 +12,6 @@ import type {
   DraftStatistics,
   PromptChangeProposal,
   PromptDecisionOutcome,
-  PromptProposalContent,
-  PromptCandidateSaved,
   CandidateSaved,
   ProposalHunks,
   DraftContents,
@@ -374,55 +372,75 @@ export const listPromptChangeProposals = (artifactId: string) =>
   invoke<PromptChangeProposal[]>("list_prompt_change_proposals", { artifactId });
 
 /**
- * PCP-FR-11 / PCR-FR-09: the proposed text, read when a comparison is actually
- * rendered rather than when proposals are listed.
+ * PCP-FR-LDHK / PCR-FR-QHZN: the changes one prompt or DOC proposal holds, each
+ * with its placement against the file as it stands, and the baseline the next
+ * hunk edit is checked against. The same shape as the draft reading.
  */
-export const loadPromptChangeProposalContent = (proposalId: string) =>
-  invoke<PromptProposalContent>("load_prompt_change_proposal_content", {
+export const loadPromptChangeProposalHunks = (proposalId: string) =>
+  invoke<ProposalHunks>("load_prompt_change_proposal_hunks", { proposalId });
+
+/**
+ * PCP-FR-ZQAH / PCR-FR-AXPW: accept one change. The backend resolves it against
+ * the file as it stands and writes the file through the project's own write
+ * path.
+ */
+export const acceptPromptChangeHunk = (
+  proposalId: string,
+  hunkId: string,
+  feedback?: string | null,
+) =>
+  invoke<PromptDecisionOutcome>("accept_prompt_change_hunk", {
     proposalId,
+    hunkId,
+    feedback: feedback ?? null,
+  });
+
+/** PCP-FR-RJHN: reject one change. Writes nothing to the file. */
+export const rejectPromptChangeHunk = (
+  proposalId: string,
+  hunkId: string,
+  feedback?: string | null,
+) =>
+  invoke<PromptDecisionOutcome>("reject_prompt_change_hunk", {
+    proposalId,
+    hunkId,
+    feedback: feedback ?? null,
+  });
+
+/** PCP-FR-HLDQ / PCR-FR-HDMC: hold one change for its discussion. */
+export const setPromptChangeHunkDiscussing = (
+  proposalId: string,
+  hunkId: string,
+  discussing: boolean,
+) =>
+  invoke<PromptChangeProposal>("set_prompt_change_hunk_discussing", {
+    proposalId,
+    hunkId,
+    discussing,
   });
 
 /**
- * PCP-FR-22 / PCR-FR-22: write the author's rewrite of a candidate into proposal
- * storage.
- *
- * **Not a change to the artifact.** It touches only `<proposal-id>.content`: the
- * artifact's file is not created, modified, or deleted, no
- * `"artifact changed externally"` follows, nothing is recorded in the
- * recently-edited list, and neither decision operation is called. It is refused
- * `already_decided` for a proposal that has been decided and `candidate_stale`
- * when the stored candidate has moved on since `baselineChecksum` was read
- * (PCP-FR-23, PCP-FR-24).
+ * PCP-FR-EDTW: write the author's rewrite of one change's proposed text. Not a
+ * change to the file. Refused `candidate_stale` when the stored changes moved
+ * on since `baselineChecksum` was read.
  */
-export const savePromptChangeProposalCandidate = (
+export const editPromptChangeHunk = (
   proposalId: string,
-  content: string,
+  hunkId: string,
+  after: string,
   baselineChecksum: string,
 ) =>
-  invoke<PromptCandidateSaved>("save_prompt_change_proposal_candidate", {
+  invoke<CandidateSaved>("edit_prompt_change_hunk", {
     proposalId,
-    content,
+    hunkId,
+    after,
     baselineChecksum,
   });
 
 /**
- * PCR-FR-10 / PCP-FR-12: accept the change. Writes the candidate into the
- * artifact through the project's own write path, so no external-change dialog
- * appears for it (PST-FR-16).
- *
- * `feedback` is optional for both decisions and reaches the conversation as part
- * of the decision's own comment (PCR-FR-13).
+ * PCP-FR-RJHN: decline the proposal — reject every change of it that is still
+ * undecided. Writes nothing into the project.
  */
-export const applyPromptChangeProposal = (
-  proposalId: string,
-  feedback?: string | null,
-) =>
-  invoke<PromptDecisionOutcome>("apply_prompt_change_proposal", {
-    proposalId,
-    feedback: feedback ?? null,
-  });
-
-/** PCR-FR-12 / PCP-FR-15: decline it. Writes nothing into the project. */
 export const declinePromptChangeProposal = (
   proposalId: string,
   feedback?: string | null,
@@ -438,7 +456,7 @@ export const declinePromptChangeProposal = (
  *
  * It decides nothing itself — against a proposal that owes no comment it is a
  * no-op returning that proposal as it stands — which is why the review's retry
- * invokes this and never a second `apply_prompt_change_proposal`, that being a
+ * invokes this and never a second acceptance, that being a
  * second decision rather than the completion of one.
  */
 export const completePromptChangeDecision = (proposalId: string) =>

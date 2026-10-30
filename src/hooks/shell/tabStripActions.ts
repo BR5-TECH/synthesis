@@ -15,7 +15,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { forgetClosedConversationTab } from "./discussionActions";
 import {
   hunkCandidateBuffers,
-  promptCandidateBuffers,
+  promptHunkCandidateBuffers,
 } from "../../state/candidateBuffers";
 import type { EditSessionStore } from "../../state/editSessions";
 import type { FlowSessionStore } from "../../state/flowSessions";
@@ -144,12 +144,12 @@ export function createTabStripActions(
     const closing = tabs.find((t) => t.id === id);
     const artifactId = closing?.artifactId;
     if (artifactId) {
-      // PCR-FR-22 / PCR-FR-25: a candidate edit is written immediately when the
+      // PCR-FR-QHZN / PCP-FR-EDTW: a hunk edit is written immediately when the
       // Editor tab closes, so an edit is not lost to the tab going. That write
-      // reaches proposal storage and never the artifact (PCP-FR-22), so — unlike
-      // the artifact's own write below — it cannot refuse the close.
-      for (const proposalId of promptCandidateBuffers.pendingKeys()) {
-        void promptCandidateBuffers.flush(proposalId);
+      // reaches proposal storage and never the artifact, so — unlike the
+      // artifact's own write below — it cannot refuse the close.
+      for (const key of promptHunkCandidateBuffers.pendingKeys()) {
+        void promptHunkCandidateBuffers.flush(key);
       }
       const flow = closing?.kind === "flow";
       const res = flow

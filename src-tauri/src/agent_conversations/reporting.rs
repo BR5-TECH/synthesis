@@ -19,17 +19,20 @@ pub(super) fn publish<R: tauri::Runtime>(app: &tauri::AppHandle<R>, turn: &Agent
 /// CVL-FR-33 / AGC-FR-34: report that a tool call has **begun** in this turn,
 /// and answer with the id it was given so its finish can be reported against it.
 ///
-/// What a report carries is the tool's name and its order and nothing else: no
-/// argument, no result, and no part of the exchange leaves the loop by this
-/// route (CVL-FR-26, CVL-FR-27). `None` where the turn has already terminated
-/// — there is nothing to be active in, and nothing to publish.
+/// What a report carries is the tool's name, its order, and its key input
+/// (CVL-FR-DUUO), and nothing else: no other argument, no result, and no part
+/// of the exchange leaves the loop by this route (CVL-FR-26, CVL-FR-27). The key
+/// input goes into the turn record and never into the log record below
+/// (CVL-FR-IQZS). `None` where the turn has already terminated — there is
+/// nothing to be active in, and nothing to publish.
 pub(super) fn report_tool_begun<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     turns: &TurnRegistry,
     turn_id: &str,
     tool: &str,
+    key_input: Option<String>,
 ) -> Option<String> {
-    let (id, turn) = turns.begin_tool_call(app, turn_id, tool)?;
+    let (id, turn) = turns.begin_tool_call(app, turn_id, tool, key_input)?;
     // Emitted by the registry under its own lock (AGC-FR-21); the record is
     // written here, after it, so the lock is not held across a log emit.
     //
@@ -56,7 +59,8 @@ pub(super) fn report_tool_begun<R: tauri::Runtime>(
 
 /// CVL-FR-33 / AGC-FR-34: report that a tool call has **finished** — its result
 /// produced, its refusal returned, or the call abandoned by cancellation, by the
-/// whole-turn deadline, or by the turn ending on the call itself.
+/// whole-turn deadline, or by the turn ending on the call itself. `state` says
+/// how it ended (CVL-FR-SKSE).
 ///
 /// Silent where the call was not active: a turn that has already terminated
 /// carries no list to leave, and its terminal event already said so.
@@ -65,8 +69,9 @@ pub(super) fn report_tool_finished<R: tauri::Runtime>(
     turns: &TurnRegistry,
     turn_id: &str,
     call_id: &str,
+    state: ToolCallState,
 ) {
-    let _ = turns.finish_tool_call(app, turn_id, call_id);
+    let _ = turns.finish_tool_call(app, turn_id, call_id, state);
 }
 
 /// CVL-FR-33: the calls one model reply asked for, reported begun in the order
@@ -96,7 +101,11 @@ impl ToolActivity {
         Self {
             ids: calls
                 .iter()
-                .map(|call| report_tool_begun(app, turns, turn_id, &call.function.name))
+                .map(|call| {
+                    let name = &call.function.name;
+                    let key = key_input_of(name, &call.function.arguments_value());
+                    report_tool_begun(app, turns, turn_id, name, key)
+                })
                 .collect(),
         }
     }
@@ -107,9 +116,10 @@ impl ToolActivity {
         turns: &TurnRegistry,
         turn_id: &str,
         index: usize,
+        state: ToolCallState,
     ) {
         if let Some(id) = self.ids.get_mut(index).and_then(Option::take) {
-            report_tool_finished(app, turns, turn_id, &id);
+            report_tool_finished(app, turns, turn_id, &id, state);
         }
     }
 
@@ -119,8 +129,9 @@ impl ToolActivity {
         turns: &TurnRegistry,
         turn_id: &str,
     ) {
+        // CVL-FR-SKSE: a call still open here is abandoned, so it failed.
         for index in 0..self.ids.len() {
-            self.finish(app, turns, turn_id, index);
+            self.finish(app, turns, turn_id, index, ToolCallState::Failed);
         }
     }
 }

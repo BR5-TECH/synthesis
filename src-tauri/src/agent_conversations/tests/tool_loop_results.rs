@@ -240,17 +240,20 @@ fn the_call_slot_is_held_across_the_whole_loop_rather_than_per_round() {
     );
     h.mount();
     h.create_agent("arch", "");
+    // A second agent: a second dispatch for `arch` in this discussion would
+    // steer the first turn rather than wait for the slot (AGC-FR-ISKZ).
+    h.create_agent("sec", "");
 
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    let dispatch = |h: &Harness| {
-        h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
+    let dispatch = |h: &Harness, nickname: &str| {
+        h.dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
             .expect("dispatch")
     };
-    let first = dispatch(&h);
+    let first = dispatch(&h, "arch");
     // Dispatched once the first turn is known to hold the slot, so the second
     // really is the one waiting on it.
     wait_for_record(&first.id, "calling model");
-    let second = dispatch(&h);
+    let second = dispatch(&h, "sec");
     wait_for_terminal(&h, &first.id);
     wait_for_terminal(&h, &second.id);
 
@@ -356,6 +359,9 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "agentId",
                 // AGC-FR-NJXW: numbers about the context, and nothing of it.
                 "context",
+                // AGC-FR-URXV: when the whole-turn deadline began and ends.
+                "deadlineAt",
+                "deadlineStartedAt",
                 "endedAt",
                 "failure",
                 "id",
@@ -370,6 +376,8 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "state",
                 // AGC-FR-RWPT: null except on a refused certificate.
                 "tlsFailure",
+                // AGC-FR-HMUV: every call with its state and key input.
+                "toolCalls",
                 "triggerCommentId",
             ],
         );
@@ -464,9 +472,17 @@ fn every_call_of_one_reply_is_begun_before_any_of_their_results_is_appended() {
     // The origin names the discussion's own owner, which here is the very file
     // the model asked to read, so it is set aside: it is the conversation's
     // identity and not an argument the model composed.
+    // CVL-FR-DUUO / AGC-FR-HMUV: the key input of each call is the one
+    // argument that may reach a payload, so it is read and then set aside.
+    let keys: Vec<Option<String>> =
+        terminal.tool_calls.iter().map(|c| c.key_input.clone()).collect();
+    assert_eq!(keys, vec![Some("spec.md".to_string()), Some("a".to_string())]);
     for payload in &payloads {
         let mut value = serde_json::to_value(payload).expect("serialise");
         value.as_object_mut().expect("an object").remove("origin");
+        for call in value["toolCalls"].as_array_mut().expect("a list") {
+            call.as_object_mut().expect("an object").remove("keyInput");
+        }
         let text = value.to_string();
         for forbidden in ["spec.md", "query", "arguments", "result"] {
             assert!(!text.contains(forbidden), "{forbidden} reached a payload");
@@ -546,12 +562,12 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
     });
     let handle = h.app.handle().clone();
 
-    let first = report_tool_begun(&handle, &h.turns(), &turn.id, "read_file").expect("begun");
+    let first = report_tool_begun(&handle, &h.turns(), &turn.id, "read_file", None).expect("begun");
     let reading = h.turns().in_flight(Some(&origin));
     assert_eq!(reading[0].active_tool_calls.len(), 1, "one after the first");
 
-    let second =
-        report_tool_begun(&handle, &h.turns(), &turn.id, "openrouter:web_search").expect("begun");
+    let second = report_tool_begun(&handle, &h.turns(), &turn.id, "openrouter:web_search", None)
+        .expect("begun");
     let reading = h.turns().in_flight(Some(&origin));
     assert_eq!(reading[0].active_tool_calls.len(), 2, "two after the second");
     let seqs: Vec<u64> = reading[0].active_tool_calls.iter().map(|c| c.activation_seq).collect();
@@ -559,12 +575,12 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
 
     // The second finishes, and then the first: the list empties in that order
     // and the turn is still running.
-    report_tool_finished(&handle, &h.turns(), &turn.id, &second);
+    report_tool_finished(&handle, &h.turns(), &turn.id, &second, ToolCallState::Done);
     assert_eq!(
         h.turns().active_tool_calls(&turn.id).iter().map(|c| c.tool.clone()).collect::<Vec<_>>(),
         vec!["read_file".to_string()],
     );
-    report_tool_finished(&handle, &h.turns(), &turn.id, &first);
+    report_tool_finished(&handle, &h.turns(), &turn.id, &first, ToolCallState::Done);
     assert!(h.turns().active_tool_calls(&turn.id).is_empty());
     assert_eq!(
         h.turns().in_flight(Some(&origin))[0].state,
@@ -573,7 +589,8 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
     );
 
     // AGC-FR-34: a terminal event carries an empty list whatever was active.
-    let _third = report_tool_begun(&handle, &h.turns(), &turn.id, "load_skill").expect("begun");
+    let _third =
+        report_tool_begun(&handle, &h.turns(), &turn.id, "load_skill", None).expect("begun");
     let handed_out: Vec<u64> = payload_seqs(&h.turns(), &turn.id);
     assert_eq!(
         handed_out,
@@ -676,8 +693,8 @@ fn a_turn_cancelled_with_calls_active_leaves_none_behind() {
         }
     });
     let handle = h.app.handle().clone();
-    let first = report_tool_begun(&handle, &h.turns(), &turn.id, "read_file").expect("begun");
-    report_tool_begun(&handle, &h.turns(), &turn.id, "openrouter:web_search").expect("begun");
+    let first = report_tool_begun(&handle, &h.turns(), &turn.id, "read_file", None).expect("begun");
+    report_tool_begun(&handle, &h.turns(), &turn.id, "openrouter:web_search", None).expect("begun");
     assert_eq!(h.turns().active_tool_calls(&turn.id).len(), 2);
 
     let cancelled = cancel_impl(&handle, &h.turns(), &h.progress(), &turn.id).expect("cancel");
@@ -688,7 +705,7 @@ fn a_turn_cancelled_with_calls_active_leaves_none_behind() {
     );
     // A finish arriving after the turn has gone reports nothing: there is no
     // live turn to leave, and its terminal event already said so.
-    report_tool_finished(&handle, &h.turns(), &turn.id, &first);
+    report_tool_finished(&handle, &h.turns(), &turn.id, &first, ToolCallState::Done);
     assert!(h.turns().in_flight(Some(&origin)).is_empty());
 
     let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())

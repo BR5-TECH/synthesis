@@ -117,6 +117,7 @@
   --fs-ui-lg:   calc(var(--font-ui-size) * 15 / 13);   /* 15px — section headers in panels   */
   --fs-doc-sm:  calc(var(--font-rich-size) * 14 / 15); /* 14px — editor caption / muted text */
   --fs-doc-md:  var(--font-rich-size);                 /* 15px — editor body                 */
+  --fs-doc-h4:  calc(var(--font-rich-size) * 17 / 15); /* 17px — editor h4                   */
   --fs-doc-lg:  calc(var(--font-rich-size) * 18 / 15); /* 18px — editor h3                   */
   --fs-doc-xl:  calc(var(--font-rich-size) * 22 / 15); /* 22px — editor h2                   */
   --fs-doc-2xl: calc(var(--font-rich-size) * 28 / 15); /* 28px — editor h1                   */
@@ -479,6 +480,14 @@ html, body {
 .doc h1, .t-h1 { font-size: var(--fs-doc-2xl); line-height: var(--lh-tight); font-weight: var(--fw-bold);  letter-spacing: var(--ls-tight); margin: 0 0 var(--sp-4); }
 .doc h2, .t-h2 { font-size: var(--fs-doc-xl);  line-height: var(--lh-snug);  font-weight: var(--fw-semi);  margin: var(--sp-6) 0 var(--sp-3); }
 .doc h3, .t-h3 { font-size: var(--fs-doc-lg);  line-height: var(--lh-snug);  font-weight: var(--fw-semi);  margin: var(--sp-5) 0 var(--sp-2); }
+/* EDT-FR-UXZH / EDT-FR-VPDK: the heading scale is 28 > 22 > 18 > 17 > 15 px at
+   the default Rich Markdown size. H4 is 17/15 (1.13) of the body, at least
+   1.1, and H3 / H4 (18/17, 1.06) is not more than H2 / H3 (22/18, 1.22). Each
+   step is a ratio of the role size, so the order holds at each permitted
+   size. H4 to H6 keep their bold weight and their margins; only the size and
+   the line height are set here. */
+.doc h4 { font-size: var(--fs-doc-h4); line-height: var(--lh-snug); }
+.doc h5, .doc h6 { font-size: var(--fs-doc-md); line-height: var(--lh-snug); }
 .doc p,  .t-p  { font-size: var(--fs-doc-md);  line-height: var(--font-rich-line-height); margin: 0 0 var(--sp-3); color: var(--fg-2); }
 .doc ul, .doc ol { font-size: var(--fs-doc-md); line-height: var(--font-rich-line-height); margin: 0 0 var(--sp-3); padding-left: var(--sp-5); color: var(--fg-2); }
 .doc li + li { margin-top: var(--sp-1); }
@@ -600,7 +609,10 @@ html, body {
    dwarfing this modifier exists to prevent. */
 .doc--ui h1,
 .doc--ui h2,
-.doc--ui h3 {
+.doc--ui h3,
+.doc--ui h4,
+.doc--ui h5,
+.doc--ui h6 {
   font-size: inherit; line-height: var(--lh-snug);
   font-weight: var(--fw-semi); letter-spacing: 0;
   margin: 0 0 var(--sp-1); color: inherit;

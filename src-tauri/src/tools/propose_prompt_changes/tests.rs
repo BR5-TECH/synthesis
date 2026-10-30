@@ -131,6 +131,7 @@ impl Fixture {
     ) -> Result<ProposePromptChangesOutput, ToolRefusal> {
         block_on(self.tool().call(ProposePromptChangesArgs {
             path: path.into(),
+            revises: None,
             content: Some(content.into()),
             hunks: None,
             rationale: rationale.into(),
@@ -223,8 +224,9 @@ fn it_is_a_portable_tool_with_no_command_or_event_of_its_own() {
 
 #[test]
 fn its_definition_is_byte_identical_wherever_it_appears() {
-    // PPC-FR-02, PPC-FR-XHHT: four arguments, and neither `content` nor `hunks`
-    // is required, because the tool itself asks for exactly one of them.
+    // PPC-FR-02, PPC-FR-XHHT, PPC-FR-RVKS: five arguments, and neither
+    // `content` nor `hunks` is required, because the tool itself asks for
+    // exactly one of them.
     let one = Fixture::new();
     let two = Fixture::new();
     let a = rig::tool::tool_definition(&one.tool());
@@ -242,6 +244,7 @@ fn its_definition_is_byte_identical_wherever_it_appears() {
     assert_eq!(schema["required"], serde_json::json!(["path", "rationale"]),);
     for (name, description) in [
         ("path", PATH_DESCRIPTION),
+        ("revises", REVISES_DESCRIPTION),
         ("content", CONTENT_DESCRIPTION),
         ("hunks", HUNKS_DESCRIPTION),
         ("rationale", RATIONALE_DESCRIPTION),
@@ -257,7 +260,7 @@ fn no_argument_names_a_conversation_an_agent_or_a_participant() {
     let properties = schema["properties"].as_object().expect("properties");
     let mut names: Vec<&String> = properties.keys().collect();
     names.sort();
-    assert_eq!(names, vec!["content", "hunks", "path", "rationale"]);
+    assert_eq!(names, vec!["content", "hunks", "path", "rationale", "revises"]);
     for forbidden in ["thread", "conversation", "agent", "participant", "artifact_id"] {
         assert!(!properties.contains_key(forbidden), "no argument names {forbidden}",);
     }
@@ -279,9 +282,8 @@ fn a_successful_call_records_one_proposal_and_changes_no_file() {
     assert_eq!(proposals.len(), 1);
     assert_eq!(proposals[0].id, output.proposal_id);
     assert_eq!(
-        crate::prompt_proposals::load_content_impl(&f.root(), &output.proposal_id)
-            .expect("candidate")
-            .content,
+        crate::prompt_proposals::candidate_for_test(&f.root(), &output.proposal_id)
+            .expect("candidate"),
         PROPOSED,
         "the candidate is the content byte-for-byte",
     );
@@ -299,15 +301,14 @@ fn a_successful_call_records_one_proposal_and_changes_no_file() {
 
 #[test]
 fn a_fragment_passed_as_content_is_proposed_as_a_whole_file() {
-    // PPC-FR-04, PCP-FR-13: `content` is never read as a patch or a region, so a
+    // PPC-FR-04, PCP-FR-CNVT: `content` is never read as a patch or a region, so a
     // fragment passed as `content` proposes a file holding that fragment.
     let f = Fixture::new();
     let output =
         f.call_with(PROMPT, "Just the one paragraph I rewrote.\n", RATIONALE).expect("recorded");
     assert_eq!(
-        crate::prompt_proposals::load_content_impl(&f.root(), &output.proposal_id)
-            .expect("candidate")
-            .content,
+        crate::prompt_proposals::candidate_for_test(&f.root(), &output.proposal_id)
+            .expect("candidate"),
         "Just the one paragraph I rewrote.\n",
     );
 }
@@ -368,6 +369,7 @@ fn a_turn_that_is_not_about_a_file_of_the_project_refuses_for_good() {
     ] {
         let refusal = block_on(f.tool_for(origin).call(ProposePromptChangesArgs {
             path: PROMPT.into(),
+            revises: None,
             content: Some(PROPOSED.into()),
             hunks: None,
             rationale: RATIONALE.into(),
@@ -424,13 +426,12 @@ fn a_blank_rationale_and_a_no_change_candidate_are_told_apart() {
 
 #[test]
 fn an_empty_candidate_is_recorded_like_any_other() {
-    // PCR-FR-02, PCP-FR-09, PCP-FR-13 / PPC-FR-08.
+    // PCP-FR-CNVT / PPC-FR-08.
     let f = Fixture::new();
     let output = f.call_with(PROMPT, "", RATIONALE).expect("recorded");
     assert_eq!(
-        crate::prompt_proposals::load_content_impl(&f.root(), &output.proposal_id)
-            .expect("candidate")
-            .content,
+        crate::prompt_proposals::candidate_for_test(&f.root(), &output.proposal_id)
+            .expect("candidate"),
         "",
     );
     assert_eq!(f.discussion().comments.len(), 2, "one comment was posted");
@@ -469,6 +470,7 @@ fn a_pending_proposal_refuses_the_next_call_retryably() {
     assert_eq!(
         block_on(other.call(ProposePromptChangesArgs {
             path: PROMPT.into(),
+            revises: None,
             content: Some("# Review\n\nMine.\n".into()),
             hunks: None,
             rationale: RATIONALE.into(),
@@ -569,6 +571,7 @@ fn two_turns_racing_one_artifact_record_exactly_one_proposal() {
                     scope.spawn(move || {
                         block_on(tool.call(ProposePromptChangesArgs {
                             path: PROMPT.into(),
+                            revises: None,
                             content: Some(format!("# Review\n\nFrom {nickname}.\n")),
                             hunks: None,
                             rationale: RATIONALE.into(),
@@ -647,6 +650,7 @@ fn no_project_open_is_the_shared_refusal() {
     );
     let refusal = block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
+        revises: None,
         content: Some(PROPOSED.into()),
         hunks: None,
         rationale: RATIONALE.into(),
@@ -667,6 +671,7 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
+        revises: None,
         content: Some(PROPOSED.into()),
         hunks: None,
         rationale: RATIONALE.into(),
@@ -675,6 +680,7 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
+        revises: None,
         content: Some("# Review\n\nAnother.\n".into()),
         hunks: None,
         rationale: RATIONALE.into(),
@@ -753,3 +759,4 @@ fn the_tool_names_its_targets_without_the_doc_type() {
 }
 
 mod hunks;
+mod revises;

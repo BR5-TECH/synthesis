@@ -1,10 +1,9 @@
-//! Tests for a candidate built from hunks (PCP-FR-CVNA, PCP-FR-CUTC,
-//! PCP-FR-ENRL).
+//! Tests for a change recorded as hunks (PCP-FR-CNVT, PCP-FR-CUTC).
 
 use super::*;
 use crate::text_hunks::hunks::ProposedHunk;
 
-fn hunk(before: &str, after: &str, lead: Option<&str>) -> ProposedHunk {
+pub(super) fn hunk(before: &str, after: &str, lead: Option<&str>) -> ProposedHunk {
     ProposedHunk::from_fields(
         Some(before.into()),
         Some(after.into()),
@@ -16,7 +15,10 @@ fn hunk(before: &str, after: &str, lead: Option<&str>) -> ProposedHunk {
 }
 
 impl Fixture {
-    fn propose_hunks(&self, hunks: &[ProposedHunk]) -> Result<PromptChangeProposal, RecordRefusal> {
+    pub(super) fn propose_hunks(
+        &self,
+        hunks: &[ProposedHunk],
+    ) -> Result<PromptChangeProposal, RecordRefusal> {
         record_prompt_proposal(
             &self.handle(),
             &self.root,
@@ -41,28 +43,34 @@ fn to_proposed() -> Vec<ProposedHunk> {
     )]
 }
 
-// PCP-FR-CVNA, PCP-FR-ENRL: hunks build the whole candidate, and it is recorded
-// exactly as the same text passed whole would be.
+// PCP-FR-CNVT, PCP-FR-HKLD: a `hunks` change is recorded as those hunks, each
+// with its own ledger row, and the comment carries the one prompt proposal
+// reference.
 #[test]
-fn hunks_record_the_same_candidate_as_the_whole_text() {
-    let by_hunks = Fixture::new();
-    let recorded = by_hunks.propose_hunks(&to_proposed()).expect("recorded");
-    let by_content = Fixture::new();
-    let whole = by_content.propose(PROPOSED).expect("recorded");
+fn hunks_are_recorded_as_hunks_with_one_ledger_row_each() {
+    let f = Fixture::new();
+    let two =
+        [hunk("# Review", "# Careful review", None), hunk("file a note", "file two notes", None)];
+    let recorded = f.propose_hunks(&two).expect("recorded");
+    assert_eq!(recorded.hunk_count, 2);
+    assert_eq!(recorded.ledger.len(), 2);
+    assert!(recorded.ledger.iter().all(|row| row.state == HunkState::Pending));
+    assert_eq!(recorded.counts, HunkCounts { pending: 2, ..HunkCounts::default() });
+    assert_eq!(
+        recorded.base_sha256.as_deref(),
+        Some(fs::sha256_bytes(ORIGINAL.as_bytes()).as_str())
+    );
+    assert!(!recorded.legacy);
+    assert_eq!(f.artifact_body(), ORIGINAL, "the artifact is not touched");
 
-    let built = load_content_impl(&by_hunks.root, &recorded.id).expect("candidate").content;
-    let passed = load_content_impl(&by_content.root, &whole.id).expect("candidate").content;
-    assert_eq!(built, PROPOSED);
-    assert_eq!(built, passed);
-    assert_eq!(recorded.state, PromptProposalState::Pending);
-    assert_eq!(recorded.path, whole.path);
-    assert_eq!(by_hunks.artifact_body(), ORIGINAL, "the artifact is not touched");
+    let loaded = load_hunks_impl(&f.root, &recorded.id).expect("hunks");
+    let ids: Vec<&str> = loaded.hunks.iter().map(|h| h.id.as_str()).collect();
+    let rows: Vec<&str> = recorded.ledger.iter().map(|r| r.id.as_str()).collect();
+    assert_eq!(ids, rows, "the ledger names the hunks in proposal order");
+    assert_eq!(loaded.hunks[0].before.as_deref(), Some("# Review"));
+    assert_eq!(loaded.hunks[1].after.as_deref(), Some("file two notes"));
 
-    // PCP-FR-ENRL: the record and the comment carry no trace of the hunks.
-    let record_text = std::fs::read_to_string(by_hunks.dir().join(format!("{}.toml", recorded.id)))
-        .expect("record");
-    assert!(!record_text.contains("hunk"), "{record_text}");
-    let discussion = by_hunks.discussion();
+    let discussion = f.discussion();
     let comment = discussion.comments.last().expect("the proposal's comment");
     assert_eq!(comment.body, "The steps run together.");
     assert!(matches!(
@@ -71,7 +79,26 @@ fn hunks_record_the_same_candidate_as_the_whole_text() {
     ));
 }
 
-// PCP-FR-CVNA: the hunks resolve against the file as it is on disk, with a lead
+// PCP-FR-CNVT: a `content` change is converted into hunks at record time, and
+// gives the same text a `hunks` change does.
+#[test]
+fn a_content_change_is_converted_into_hunks_that_give_the_same_text() {
+    let by_hunks = Fixture::new();
+    let recorded = by_hunks.propose_hunks(&to_proposed()).expect("recorded");
+    let by_content = Fixture::new();
+    let whole = by_content.propose(PROPOSED).expect("recorded");
+
+    assert!(whole.hunk_count >= 1, "the full text became changes");
+    assert!(!whole.legacy);
+    assert!(!by_content.dir().join(format!("{}.content", whole.id)).exists(), "no candidate file");
+    assert!(by_content.dir().join(format!("{}.hunks", whole.id)).is_file());
+    let built = candidate_for_test(&by_hunks.root, &recorded.id).expect("candidate");
+    let converted = candidate_for_test(&by_content.root, &whole.id).expect("candidate");
+    assert_eq!(built, PROPOSED);
+    assert_eq!(converted, PROPOSED);
+}
+
+// PCP-FR-CNVT: the hunks resolve against the file as it is on disk, with a lead
 // that names one copy of a repeated text.
 #[test]
 fn hunks_resolve_against_the_file_on_disk_with_their_lead() {
@@ -80,7 +107,7 @@ fn hunks_resolve_against_the_file_on_disk_with_their_lead() {
     let recorded =
         f.propose_hunks(&[hunk("Same line.", "Other line.", Some("# B\n"))]).expect("recorded");
     assert_eq!(
-        load_content_impl(&f.root, &recorded.id).expect("candidate").content,
+        candidate_for_test(&f.root, &recorded.id).expect("candidate"),
         "# A\nSame line.\n# B\nOther line.\n",
     );
 }
@@ -137,7 +164,7 @@ fn a_hunk_that_cannot_be_built_records_nothing_and_names_its_place() {
     }
 }
 
-// PCP-FR-ENRL, PCP-FR-07: `no_change` applies to the built candidate.
+// PCP-FR-07: `no_change` applies to the text the hunks give.
 #[test]
 fn hunks_that_change_nothing_are_the_no_change_refusal() {
     let f = Fixture::new();
@@ -146,38 +173,16 @@ fn hunks_that_change_nothing_are_the_no_change_refusal() {
     assert!(f.folder_files().is_empty());
 }
 
-// PCP-FR-CVNA: a CRLF file resolves, and the built candidate takes the line
-// endings the write path would give it, so the comparison is not every line.
+// PCP-FR-CNVT: a CRLF file resolves, and the text the hunks give takes the line
+// endings the write path would give it.
 #[test]
-fn a_crlf_file_builds_a_candidate_in_the_projects_line_endings() {
+fn a_crlf_file_resolves_its_hunks() {
     let f = Fixture::new();
     let crlf = ORIGINAL.replace('\n', "\r\n");
     write_file(&f.root, PROMPT, &crlf);
     let recorded = f.propose_hunks(&to_proposed()).expect("recorded");
-    let built = load_content_impl(&f.root, &recorded.id).expect("candidate").content;
+    let built = candidate_for_test(&f.root, &recorded.id).expect("candidate");
     assert_eq!(built, normalise_for_write(&f.root, PROPOSED));
-}
-
-// PCP-FR-ENRL, PCP-FR-13: a candidate built from hunks is decided as a whole
-// file. Accepting it after the file changed on disk replaces the file with the
-// candidate; the hunks are not applied again to the new text.
-#[test]
-fn an_accepted_hunk_candidate_replaces_the_file_whole() {
-    let f = Fixture::new();
-    let recorded = f.propose_hunks(&to_proposed()).expect("recorded");
-    write_file(&f.root, PROMPT, &format!("{ORIGINAL}\nA line added on disk.\n"));
-    f.accept(&recorded.id).expect("accepted");
-    assert_eq!(f.artifact_body(), PROPOSED, "the candidate, not the hunks on the new text");
-}
-
-// PCP-FR-ENRL, PCP-FR-15: declining a candidate built from hunks writes
-// nothing into the project.
-#[test]
-fn a_declined_hunk_candidate_leaves_the_file_as_it_is() {
-    let f = Fixture::new();
-    let recorded = f.propose_hunks(&to_proposed()).expect("recorded");
-    f.decline(&recorded.id).expect("declined");
-    assert_eq!(f.artifact_body(), ORIGINAL);
 }
 
 fn set_crlf(root: &crate::fs::RootFs) {
@@ -192,20 +197,20 @@ fn set_crlf(root: &crate::fs::RootFs) {
     .expect("config");
 }
 
-// PCP-FR-CVNA: in a CRLF project the built candidate is CRLF, whatever line
-// endings the hunks were written with.
+// PCP-FR-ZQAH: in a CRLF project an accepted hunk lands in CRLF, whatever line
+// endings the hunk was written with.
 #[test]
-fn a_crlf_project_builds_a_crlf_candidate() {
+fn a_crlf_project_lands_an_accepted_hunk_in_crlf() {
     let f = Fixture::new();
     set_crlf(&f.root);
     write_file(&f.root, PROMPT, &ORIGINAL.replace('\n', "\r\n"));
     let recorded = f.propose_hunks(&to_proposed()).expect("recorded");
-    let built = load_content_impl(&f.root, &recorded.id).expect("candidate").content;
-    assert_eq!(built, PROPOSED.replace('\n', "\r\n"));
+    f.accept(&recorded.id).expect("accepted");
+    assert_eq!(f.artifact_body(), PROPOSED.replace('\n', "\r\n"));
 }
 
-// PCP-FR-ENRL, PPC-FR-08: hunks that change nothing on a CRLF file in a CRLF
-// project are the no-change refusal, not a comparison with every line in it.
+// PCP-FR-07, PPC-FR-08: hunks that change nothing on a CRLF file in a CRLF
+// project are the no-change refusal.
 #[test]
 fn identity_hunks_on_a_crlf_file_change_nothing() {
     let f = Fixture::new();

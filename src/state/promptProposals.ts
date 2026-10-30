@@ -1,11 +1,10 @@
 /**
- * The changes agents have proposed to **prompt artifacts the project holds**,
- * and which one the author is reviewing (`PCP-prompt-change-proposals.md`,
- * `PCR-prompt-change-review.md`).
+ * The changes agents have proposed to **prompt and DOC files the project
+ * holds** (`PCP-prompt-change-proposals.md`, `PCR-prompt-change-review.md`).
  *
  * PCR-FR-27: everything this surface says about a proposal it says from **one
- * reading per artifact** — the Editor tab's pending indication, the arrival that
- * opens the review, and the control on the agent's comment in the rail all
+ * reading per artifact** — the Editor tab's pending indication, the in-place
+ * review, and the control on the agent's comment in the rail all
  * render from the same held reading, so several surfaces showing one file cost
  * one call and never disagree with one another.
  *
@@ -16,20 +15,19 @@
  *   listener mounted in the Editor tab would hear nothing for a file whose tab
  *   is closed, which is exactly the case the author most needs telling about. So
  *   the shell subscribes and this store is what it writes into; the tab reads.
- * - **The control that opens the modal is in the comment rail** (CMT-FR-48),
- *   several layers below the tab that renders the modal.
+ * - **The control that shows the review is in the comment rail** (CMT-FR-48),
+ *   several layers below the tab that renders it.
  *
- * What is *not* here is the proposal's text: that is read when a comparison is
- * actually rendered (PCR-FR-09), so an artifact carrying a pending proposal
- * costs its tab an indication and no document.
- *
- * It shares nothing with `draftProposals.ts` (PCP-FR-29): a different command, a
- * different event, a different attachment kind, and a different candidate store.
+ * What is *not* here is the proposal's text: its changes are read by
+ * `./proposalHunks.ts` (PCP-FR-LDHK), so listing proposals reads no document.
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { listPromptChangeProposals } from "../api";
-import { logDebug, logWarn } from "../logging";
-import { promptCandidateBuffers } from "./candidateBuffers";
+import { logDebug, logInfo, logWarn } from "../logging";
+import { promptHunkCandidateBuffers } from "./candidateBuffers";
+import { artifactReviewKey, revealHunk } from "./draftDiscussion";
+import { firstUndecidedHunk } from "./draftProposals";
+import { hunksOf, rereadHunks } from "./proposalHunks";
 import type {
   PromptChangeProposal,
   PromptProposalsChangedPayload,
@@ -37,8 +35,6 @@ import type {
 
 /** Every proposal of every artifact the session has loaded, keyed by artifact. */
 let byArtifact: ReadonlyMap<string, readonly PromptChangeProposal[]> = new Map();
-/** PCR-FR-03: the proposal the review modal is open on, if any. */
-let reviewing: string | null = null;
 
 /**
  * PCR-FR-27: how far an artifact's one reading has got.
@@ -89,17 +85,6 @@ function referenceKey(artifactId: string, proposalId: string): string {
   return `${artifactId} ${proposalId}`;
 }
 
-/**
- * PCR-FR-16: artifacts with a consumer mounted right now, ref-counted.
- *
- * What makes an arriving proposal *arrive somewhere*. The subscriber that hears
- * the event is the shell's (PCR-FR-17), so it hears one for every artifact in
- * the worktree including files whose tab is closed — and a modal cannot open in
- * a tab that is not there. Such a proposal is left to the tab's indication and
- * to the notification of PCR-FR-18.
- */
-const watching = new Map<string, number>();
-
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -117,25 +102,18 @@ function subscribe(listener: () => void): () => void {
  * PCR-FR-28: reset every scrap of this store.
  *
  * Called when the project closes and when the active worktree changes: a reading
- * belongs to the content root it was taken from, and a modal left open over one
- * would be reviewing a change to a file the application is no longer reading
- * (PCR-FR-25).
+ * belongs to the content root it was taken from.
  */
 export function resetPromptProposals(): void {
   byArtifact = new Map();
-  reviewing = null;
-  // PCR-FR-21: a candidate buffer outlives every surface, but not the content
-  // root it belongs to — it is dropped when the proposal is decided, when the
-  // project closes, and when the active worktree changes. One carried across
-  // would hold a baseline checksum naming a file the application has left.
-  promptCandidateBuffers.clear();
+  // PCP-FR-EDTW: a hunk edit outlives every surface, but not the content root
+  // it belongs to. One carried across would hold a baseline checksum naming a
+  // file the application has left.
+  promptHunkCandidateBuffers.clear();
   status.clear();
   failures.clear();
   healed.clear();
   readingGeneration += 1;
-  // Not `watching`: it is ref-counted against components that are still
-  // mounted, and clearing it here would leave those counts unbalanced when they
-  // unmount.
   emit();
 }
 
@@ -183,7 +161,7 @@ function readingSignal(artifactId: string | undefined): string {
  * Asks when nothing has been read for the artifact and again when a previous ask
  * failed — a reading that failed is not the session's answer, or an artifact
  * whose first read landed while the project was still opening would show no
- * indication, open no review from any of PCR-FR-03's four routes, and hold a
+ * indication, show no review in place (PCR-FR-QHZN), and hold a
  * standing proposal nothing in the window could decide. One ask is in flight per
  * artifact however many surfaces want it, and an artifact whose every ask fails
  * stops at `MAX_FAILED_ASKS` rather than being re-asked by every render that
@@ -273,8 +251,8 @@ function ask(artifactId: string): void {
  * rather than re-reading the artifact — which is what lets every indication
  * follow a decision made in another window without a round-trip (PCR-FR-26).
  *
- * Returns whether the arrival opened the review, so the shell can tell an
- * arrival apart from a decision without re-deriving it.
+ * PCR-FR-16: a proposal that arrives while the Editor tab is open enters review
+ * in place with nothing to activate, because the tab renders from this store.
  */
 export function notePromptProposalChanged(
   payload: PromptProposalsChangedPayload,
@@ -291,66 +269,23 @@ export function notePromptProposalChanged(
   // backend is answering, so an artifact whose earlier reads failed is given its
   // asks back.
   failures.delete(artifactId);
-  // PCR-FR-16: a proposal that *arrives somewhere* shows itself. Four
-  // conditions, each closing a way this could interrupt someone who did not ask
-  // to be interrupted:
-  //
-  // - it must be **newly seen** — a decision, or a second event about a proposal
-  //   already read, is not an arrival, and reopening on one would make the modal
-  //   impossible to get rid of;
-  // - it must be **pending** — there is nothing to decide about a decided one;
-  // - nothing may already be **showing** (PCR-FR-03) — what is open is the
-  //   proposal being decided, and swapping it out would decide it by accident;
-  // - the artifact must have an **Editor tab open** to arrive in. The listener
-  //   is the shell's (PCR-FR-17) and hears about every artifact in the worktree,
-  //   so without this a proposal for a closed tab would take the slot and
-  //   surface nowhere — then ambush the author the next time they opened that
-  //   file for a reason of their own.
-  if (
-    !known &&
-    proposal.state === "pending" &&
-    reviewing === null &&
-    watching.has(artifactId)
-  ) {
-    reviewing = proposal.id;
-  }
-  // PCR-FR-24: a proposal decided — here or from another window — has nothing
-  // left to edit, so any candidate edit still unwritten is dropped with the
-  // decision controls rather than left to be written into a proposal that would
-  // refuse it (PCP-FR-23).
-  if (proposal.state !== "pending") promptCandidateBuffers.drop(proposal.id);
+  // PCP-FR-EDTW: a proposal decided — here or from another window — has nothing
+  // left to edit, so any hunk edit still unwritten is dropped with the decision
+  // controls rather than written into a proposal that would refuse it.
+  if (proposal.state !== "pending") promptHunkCandidateBuffers.dropProposal(proposal.id);
+  // PCP-FR-RVSN / DDS-FR-EHDK: a revision replaces a change in place, so the
+  // changes a surface already holds are read again.
+  if (hunksOf(proposal.id) !== undefined) rereadHunks(proposal.id, "prompt");
   emit();
 }
 
 /**
- * PCR-FR-03: open the review modal on this proposal, or focus the instance
- * already showing it.
- *
- * **At most one review is open at a time, and every route to one proposal opens
- * or focuses the same instance**: a route activated while that proposal's review
- * is already showing creates nothing, so no proposal is ever open twice and no
- * two instances can disagree about a candidate. A request naming a *different*
- * proposal while one is open leaves the open one standing rather than replacing
- * it — what is showing is the proposal the author is deciding, and swapping it
- * out under their pointer would decide it by accident.
- */
-export function openPromptReview(proposalId: string): void {
-  if (reviewing !== null && reviewing !== proposalId) return;
-  if (reviewing === proposalId) return;
-  reviewing = proposalId;
-  emit();
-}
-
-/**
- * PCR-FR-18: how a route that names a proposal reaches the review — opening or
- * focusing the artifact's Editor tab first, so the review is never rendered
- * anywhere but over the tab for its own file.
+ * PCR-FR-18 / PCR-FR-RFJC: how a route that names a proposal reaches the review
+ * — opening or focusing the artifact's Editor tab first.
  *
  * Registered by the shell rather than threaded as a prop, on exactly the terms
- * the notification facility is configured: the control that opens the review
- * sits in the comment rail, several layers below the tab strip that knows how to
- * open a tab, and threading a callback through the rail, the card, and the
- * attachment list would make four components know about a fifth's routing.
+ * the notification facility is configured: the control sits in the comment
+ * rail, several layers below the tab strip that knows how to open a tab.
  */
 let openTab: ((artifactId: string) => void) | null = null;
 
@@ -362,46 +297,38 @@ export function configurePromptReviewRoute(
 }
 
 /**
- * PCR-FR-03 / PCR-FR-18: open the review on `proposalId`, bringing its Editor
- * tab forward first.
- *
- * The tab is opened even where the review will not be — a route naming a
- * different proposal than the one already showing leaves that one standing
- * (PCR-FR-03), and the author still asked to be taken to the file.
+ * PCR-FR-RFJC / PCR-FR-18 / CMT-FR-48: open or focus the artifact's Editor tab,
+ * and scroll its document column to the first undecided change of the
+ * proposal.
  */
-export function openPromptReviewFor(
-  artifactId: string,
-  proposalId: string,
-): void {
+export function showPromptProposal(artifactId: string, proposalId: string): void {
   openTab?.(artifactId);
-  openPromptReview(proposalId);
-}
-
-/** PCR-FR-02: dismiss it, deciding nothing. */
-export function closePromptReview(): void {
-  if (reviewing === null) return;
-  reviewing = null;
-  emit();
+  const proposal = proposalsOf(artifactId).find((p) => p.id === proposalId);
+  const first = proposal ? firstUndecidedHunk(proposal) : undefined;
+  logInfo(["frontend"], "a prompt proposal was asked to be shown", {
+    artifactId,
+    proposalId,
+    found: first !== undefined,
+  });
+  if (first) revealHunk(artifactReviewKey(artifactId), first.id);
 }
 
 /**
- * PCR-FR-03: the proposal the review is open on, read outside React.
- *
- * Exported beside the hook because the shell decides whether an arriving
- * proposal opens itself (PCR-FR-16), and that decision is made in an event
- * listener rather than in a render.
+ * PCR-FR-RFJC / CMT-FR-48: open or focus the artifact's Editor tab, and scroll
+ * its document column to one change.
  */
-export function reviewingPromptProposal(): string | null {
-  return reviewing;
-}
-
-/** The proposal the review modal is open on (PCR-FR-03). */
-export function useReviewingPrompt(): string | null {
-  return useSyncExternalStore(
-    subscribe,
-    reviewingPromptProposal,
-    reviewingPromptProposal,
-  );
+export function showPromptHunk(
+  artifactId: string,
+  proposalId: string,
+  hunkId: string,
+): void {
+  openTab?.(artifactId);
+  logInfo(["frontend"], "a change of a prompt proposal was asked to be shown", {
+    artifactId,
+    proposalId,
+    hunkId,
+  });
+  revealHunk(artifactReviewKey(artifactId), hunkId);
 }
 
 /**
@@ -419,19 +346,7 @@ export function usePromptProposals(
       const unsubscribe = subscribe(listener);
       if (artifactId === null) return unsubscribe;
       ensureLoaded(artifactId);
-      // PCR-FR-16: this artifact now has somewhere for an arriving proposal to
-      // arrive. Ref-counted rather than a flag, because a tab has more than one
-      // consumer of this store — the Editor, the review itself, and every
-      // proposal reference in the comment rail — and any one of them unmounting
-      // must not take the artifact out from under the others.
-      const count = watching.get(artifactId) ?? 0;
-      watching.set(artifactId, count + 1);
-      return () => {
-        const left = (watching.get(artifactId) ?? 1) - 1;
-        if (left > 0) watching.set(artifactId, left);
-        else watching.delete(artifactId);
-        unsubscribe();
-      };
+      return unsubscribe;
     },
     [artifactId],
   );

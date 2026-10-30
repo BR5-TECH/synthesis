@@ -28,7 +28,7 @@ fn stage_legacy(f: &Fixture, candidate: &str) -> String {
 #[test]
 fn a_legacy_record_is_served_with_one_ledger_row() {
     let f = Fixture::new();
-    let id = stage_legacy(&f, PROPOSED);
+    stage_legacy(&f, PROPOSED);
     let listed = f.list();
     assert_eq!(listed.len(), 1, "the legacy proposal is not lost");
     let record = &listed[0];
@@ -79,10 +79,7 @@ fn a_legacy_acceptance_replaces_the_whole_file() {
     assert!(outcome.resolved);
     assert_eq!(outcome.proposal.state, PromptProposalState::Accepted);
     assert_eq!(f.artifact_body(), PROPOSED);
-    assert_eq!(
-        std::fs::read_to_string(f.dir().join(format!("{id}.content"))).unwrap(),
-        PROPOSED,
-    );
+    assert_eq!(std::fs::read_to_string(f.dir().join(format!("{id}.content"))).unwrap(), PROPOSED);
     let read = read_proposal(&f.root, &id).expect("record");
     assert!(read.legacy);
     assert_eq!(read.ledger[0].state, HunkState::Accepted);

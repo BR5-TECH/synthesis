@@ -15,6 +15,7 @@ import { DRAFT_KEY } from "../../hooks/useComments";
 import { requestPendingFocus } from "../../state/discussionFocus";
 import { logDebug } from "../../logging";
 import type { Discussion, FragmentTarget } from "../../types";
+import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
 import type { CommentSelection } from "./selection";
 import type { useEditorDiscussions } from "./useEditorDiscussions";
 
@@ -36,6 +37,9 @@ export function EditorDiscussionColumn({
   onShowResolved,
   focusSignal,
   documentDirty,
+  hunkOpening = null,
+  onCancelHunk,
+  onHunkDiscussionOpened,
 }: {
   group: ReturnType<typeof useEditorDiscussions>;
   /** The grid the splitter's drag is measured against. */
@@ -60,6 +64,11 @@ export function EditorDiscussionColumn({
   focusSignal: number;
   /** DDS-FR-HJMF: the file has unsaved changes; clearing is a save. */
   documentDirty?: boolean;
+  /** PCR-FR-HDMC / DDS-FR-EHDK: the change a new hunk discussion is about. */
+  hunkOpening?: HunkOpening | null;
+  onCancelHunk?: () => void;
+  /** PCR-FR-HDMC: the discussion of a change exists, so the change is held. */
+  onHunkDiscussionOpened?: (created: Discussion) => void;
 }) {
   const { comments, control, split } = group;
   // The discussion target names the file, and so do the statements: a
@@ -160,7 +169,10 @@ export function EditorDiscussionColumn({
           setDraft(null);
           requestPendingFocus(created.id, "composer");
           setFocusedThread(created.id);
+          onHunkDiscussionOpened?.(created);
         }}
+        openingHunk={hunkOpening}
+        onCancelHunk={onCancelHunk}
         openingFragment={openingFragment}
         onCancelFragment={() => setDraft(null)}
         availabilityOf={group.availabilityOf}

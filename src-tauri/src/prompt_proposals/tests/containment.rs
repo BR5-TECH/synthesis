@@ -6,10 +6,15 @@ use super::*;
 fn module_source() -> String {
     [
         include_str!("../../prompt_proposals.rs"),
+        include_str!("../accepting.rs"),
         include_str!("../candidate.rs"),
+        include_str!("../commands.rs"),
+        include_str!("../deciding.rs"),
+        include_str!("../hunks.rs"),
+        include_str!("../ledger.rs"),
         include_str!("../model.rs"),
         include_str!("../reconcile.rs"),
-        include_str!("../commands.rs"),
+        include_str!("../recording.rs"),
     ]
     .join("\n")
 }
@@ -25,9 +30,13 @@ fn a_crafted_proposal_id_reaches_nothing_outside_the_folder() {
     for crafted in ["../library", "a/b", "..", "with space", ""] {
         assert!(!is_valid_proposal_id(crafted), "{crafted:?} is not a proposal id",);
         assert_eq!(read_proposal(&f.root, crafted).unwrap_err(), ERR_PROPOSAL_NOT_FOUND,);
-        assert_eq!(load_content_impl(&f.root, crafted).unwrap_err(), ERR_PROPOSAL_NOT_FOUND,);
+        assert_eq!(load_hunks_impl(&f.root, crafted).unwrap_err(), ERR_PROPOSAL_NOT_FOUND,);
         assert_eq!(
-            save_candidate_impl(&f.root, crafted, "x", "y").unwrap_err(),
+            edit_hunk_impl(&f.root, crafted, "h", "x", "y").unwrap_err(),
+            ERR_PROPOSAL_NOT_FOUND,
+        );
+        assert_eq!(
+            hold_hunk_impl(&f.root, crafted, "h", true).unwrap_err(),
             ERR_PROPOSAL_NOT_FOUND,
         );
     }

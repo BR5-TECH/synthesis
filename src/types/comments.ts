@@ -184,8 +184,17 @@ export interface ProposalHunkReference {
   kind: "proposalHunk";
   proposalId: string;
   hunkId: string;
-  draftId: string;
-  /** Draft-relative path the change applies to. */
+  /**
+   * CMS-FR-TQVB: the draft whose proposal holds the change. Exactly one of
+   * `draftId` and `artifactId` is present.
+   */
+  draftId?: string;
+  /**
+   * CMS-FR-TQVB / CMS-FR-AHDQ: the prompt or DOC file whose proposal holds the
+   * change (`PCP-prompt-change-proposals.md`).
+   */
+  artifactId?: string;
+  /** Draft-relative path, or project-relative path for an artifact. */
   path: string;
 }
 
@@ -523,24 +532,38 @@ export type PromptProposalState = "pending" | "accepted" | "rejected";
  * project already holds.
  *
  * `rationale` is what the agent wrote, and is also the body of the comment that
- * announced it — the modal shows the same text the rail does rather than a
- * second explanation (PCR-FR-02).
+ * announced it — the review shows no rationale of its own (PCR-FR-QHZN).
  */
 export interface PromptChangeProposal {
   id: string;
   /** The stable, path-derived node key of the target (ASC-FR-13). */
   artifactId: string;
-  /** Project-relative path of the prompt artifact. */
+  /** Project-relative path of the prompt or DOC file. */
   path: string;
   agent: Participant;
   rationale: string;
   threadId: string;
   /** The comment carrying the reference to this proposal (CMS-FR-66). */
   commentId: string;
+  /** PCP-FR-HKLD: derived from the ledger exactly as DCP-FR-PWSF. */
   state: PromptProposalState;
-  /** PCP-FR-22: sha256 of the candidate as the recording wrote it. */
+  /**
+   * PCP-FR-LGXQ: a proposal recorded as one whole candidate, before proposals
+   * held changes. It is served as one change over the whole file, and its text
+   * is not editable.
+   */
+  legacy: boolean;
+  /** PCP-FR-HKLD: sha256 of the file as the agent read it, at record time. */
+  baseSha256?: string | null;
+  /** PCP-FR-HKLD: how many changes the proposal carries. */
+  hunkCount: number;
+  /** PCP-FR-HKLD: how the proposal's changes stand. */
+  counts: HunkCounts;
+  /** PCP-FR-HKLD: the per-change decision ledger, in proposal order. */
+  ledger: HunkLedgerRow[];
+  /** Kept for legacy records: sha256 of the candidate as recorded. */
   originChecksum?: string | null;
-  /** PCP-FR-22: true while the candidate differs from the agent's own text. */
+  /** PCP-FR-EDTW: true while any change's text differs from the agent's own. */
   candidateEdited: boolean;
   /**
    * PCP-FR-14: true between an acceptance landing and its decision comment
@@ -561,26 +584,16 @@ export interface PromptChangeProposal {
 export interface PromptDecisionOutcome {
   proposal: PromptChangeProposal;
   /**
+   * PCP-FR-RSLV: true when this decision left no change undecided. Only that
+   * decision appends the decision comment.
+   */
+  resolved: boolean;
+  /**
    * Absent when the comment could not be appended — no turn then has anything
    * to answer.
    */
   commentId?: string;
   originKind: "artifact_discussion" | "artifact_comment";
-}
-
-/**
- * PCP-FR-11: the candidate's text, for the surface about to render a comparison
- * of it, with the checksum that is the baseline its next save is checked against
- * (PCP-FR-24).
- */
-export interface PromptProposalContent {
-  content: string;
-  checksum: string;
-}
-
-/** PCP-FR-22: what a candidate save reports — the caller's next baseline. */
-export interface PromptCandidateSaved {
-  checksum: string;
 }
 
 /** PCP-FR-17: what `prompt-change-proposals-changed` carries. */
@@ -598,7 +611,7 @@ export const PROMPT_PROPOSAL_ERRORS = {
   /** PCP-FR-19: the target's resolved artifact type is no longer `prompt`. */
   notAPrompt: "not_a_prompt_artifact",
   alreadyDecided: "already_decided",
-  /** PCP-FR-24: the stored candidate moved on since this surface read it. */
+  /** PCP-FR-EDTW: the stored changes moved on since this surface read them. */
   candidateStale: "candidate_stale",
   discussionResolved: "discussion_resolved",
   /**
@@ -614,6 +627,12 @@ export const PROMPT_PROPOSAL_ERRORS = {
   acceptanceIncomplete: "acceptance_incomplete",
   /** PCP-FR-14: another acceptance of this proposal is in flight. */
   acceptanceInProgress: "acceptance_in_progress",
+  /** PCP-FR-ZQAH: `hunkId` names no change of this proposal. */
+  hunkNotFound: "hunk_not_found",
+  /** PCP-FR-ZQAH: the change has already been accepted or rejected. */
+  hunkAlreadyDecided: "hunk_already_decided",
+  /** PCP-FR-ZQAH: the text this change names is no longer in the file. */
+  anchorLost: "anchor_lost",
 } as const;
 
 export interface Comment {

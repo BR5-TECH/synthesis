@@ -1,65 +1,65 @@
 //! Prompt change proposals (`PCP-prompt-change-proposals.md`).
 //!
-//! A **proposal** is a complete alternative text for one file the project
-//! already holds and whose resolved artifact type is `prompt`, offered by an
-//! agent in a conversation about that file (`crate::tools::propose_prompt_changes`)
-//! and held beside the project until the author accepts it or declines it. It
-//! exists because a collaborator that can see how a prompt would be better should
-//! be able to show the author the whole of what it would write rather than
-//! describe it — and because an agent that rewrites a published file without
-//! being asked is not a collaborator.
+//! A **proposal** is a set of anchored changes ("hunks") to one file the
+//! project already holds and whose resolved artifact type is `prompt` or `doc`,
+//! offered by an agent in a conversation about that file
+//! (`crate::tools::propose_prompt_changes`) and held beside the project until the
+//! author decides each hunk. It exists because a collaborator that can see how
+//! a prompt would be better should be able to show the author what it would
+//! write rather than describe it — and because an agent that rewrites a
+//! published file without being asked is not a collaborator.
 //!
 //! On-disk layout, in the active worktree (PCP-FR-01):
 //!
 //! ```text
 //! .synthesis/proposals/
-//!   <proposal-id>.toml      — the record
-//!   <proposal-id>.content   — the proposed text, verbatim
+//!   <proposal-id>.toml      — the record, with the per-hunk ledger (PCP-FR-HKLD)
+//!   <proposal-id>.hunks     — the hunk documents and their anchors (PCP-FR-CNVT)
+//!   <proposal-id>.content   — a legacy whole candidate (PCP-FR-LGXQ), never written now
 //!   <proposal-id>.prior     — the artifact's bytes before an acceptance
 //!   <proposal-id>.journal   — the standing acceptance, when one stands
 //! ```
 //!
-//! The record and the text are separate files because the text is a document
-//! and a record is not: a record carrying a document in a field would be read
-//! whole on every list, and listing is what a tab does on open.
+//! The record and the hunks are separate files because the hunks are a
+//! document and a record is not: listing is what a tab does on open, and it
+//! reads records alone.
 //!
 //! ## The acceptance transaction
 //!
-//! An acceptance has **one commit point**, and it is the artifact write landing.
-//! The order is the whole of the guarantee (PCP-FR-14):
+//! Each hunk is accepted on its own (PCP-FR-ZQAH). An acceptance has **one
+//! commit point**, and it is the artifact write landing. The order is the whole
+//! of the guarantee (PCP-FR-14):
 //!
 //! ```text
 //!   pre-checks             → nothing written
 //!   comment id + event id  → minted in advance
 //!   <id>.prior             → the artifact's bytes as they stood
-//!   <id>.journal           → what a reconciliation needs, with both checksums
-//!   record = accepted      → comment_owed = true
+//!   <id>.journal           → the hunk, its prior row, and both checksums
+//!   record: row = accepted → comment_owed = true when the decision resolves
 //!   artifact write         ← THE COMMIT POINT (atomic, and the last fallible step)
 //!   event                  → emitted after the commit point and never before
-//!   decision comment       → idempotent by the pre-minted event id
+//!   decision comment       → only when the decision resolves (PCP-FR-RSLV)
 //!   comment_owed = false; remove .prior; remove journal LAST
 //! ```
 //!
 //! Because the artifact write is the last fallible step and is atomic
 //! (FSA-FR-04), **the artifact is never restored on any path through this
 //! module**: a failure before it means the file was never written, and a failure
-//! of it means the write did not land. `write_failed` therefore always means
-//! exactly what the author is told it means.
+//! of it means the write did not land.
 //!
 //! ## What this module does not do
 //!
-//! It does not write an artifact itself. An acceptance hands the candidate to
+//! It does not write an artifact itself. An acceptance hands the new text to
 //! `crate::artifacts`' own save path (PST-FR-09), which stays the only write
-//! path for an artifact's file — so an accepted rewrite normalises line endings,
-//! records the artifact as recently edited, and suppresses its own
-//! external-change event exactly as the author's own typing does.
+//! path for an artifact's file.
 //!
 //! It also decides nothing on its own (PCP-FR-20). There is no timer, no queue,
 //! and no threshold anywhere in it.
 //!
 //! It shares nothing with `crate::draft_proposals` (PCP-FR-29): different
 //! folder, different commands, different event, different attachment kind, and a
-//! different acceptance.
+//! different acceptance. It copies that module's ledger patterns and calls only
+//! the neutral text module, `crate::text_hunks`.
 
 use std::path::{Path, PathBuf};
 
@@ -74,14 +74,21 @@ use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink, BUFFER};
 use crate::notes::{new_note_id, now_rfc3339};
 use crate::project::ProjectState;
+use crate::text_hunks::anchors;
 
 /// PCP-FR-01: where a proposal lives, relative to the active worktree.
 pub const PROPOSALS_REL: &str = ".synthesis/proposals";
 
 const RECORD_EXT: &str = "toml";
+/// PCP-FR-LGXQ: a legacy whole candidate. Read, never written.
 const CONTENT_EXT: &str = "content";
+/// PCP-FR-CNVT: the hunk documents.
+const HUNKS_EXT: &str = "hunks";
 const PRIOR_EXT: &str = "prior";
 const JOURNAL_EXT: &str = "journal";
+
+/// PCP-FR-LGXQ: the fixed id of a legacy proposal's one hunk.
+pub const LEGACY_HUNK_ID: &str = "legacy";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -148,7 +155,9 @@ fn read_all(root: &fs::RootFs) -> Vec<PromptChangeProposal> {
         // A record that will not read is skipped rather than fatal, on the same
         // principle a damaged comment log line is skipped: one unreadable
         // proposal never costs the author the rest of them.
-        if let Ok(record) = root.read_toml::<PromptChangeProposal>(at(&dir, id, RECORD_EXT)) {
+        if let Ok(mut record) = root.read_toml::<PromptChangeProposal>(at(&dir, id, RECORD_EXT)) {
+            // PCP-FR-LGXQ: a legacy record is served with its one ledger row.
+            ledger::backfill_legacy_ledger(&mut record);
             out.push(record);
         }
     }
@@ -161,7 +170,7 @@ fn read_all(root: &fs::RootFs) -> Vec<PromptChangeProposal> {
 /// PCP-FR-10: every proposal the artifact holds — pending, accepted, and
 /// rejected alike — most recently created first.
 ///
-/// Reads records and never a `.content` file, so an artifact carrying a long
+/// Reads records and never a hunk document, so an artifact carrying a long
 /// history of proposals costs a list no more than one carrying a single
 /// proposal.
 pub fn list_proposals_impl(root: &fs::RootFs, artifact_id: &str) -> Vec<PromptChangeProposal> {
@@ -174,8 +183,12 @@ pub fn read_proposal(root: &fs::RootFs, proposal_id: &str) -> Result<PromptChang
         return Err(ERR_PROPOSAL_NOT_FOUND.to_string());
     }
     let dir = proposals_dir(root)?;
-    root.read_toml::<PromptChangeProposal>(at(&dir, proposal_id, RECORD_EXT))
-        .map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())
+    let mut record = root
+        .read_toml::<PromptChangeProposal>(at(&dir, proposal_id, RECORD_EXT))
+        .map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
+    // PCP-FR-LGXQ: a legacy record is served with its one ledger row.
+    ledger::backfill_legacy_ledger(&mut record);
+    Ok(record)
 }
 
 /// PCP-FR-04: the artifact's undecided proposal, if it has one.
@@ -183,23 +196,6 @@ pub fn pending_for(root: &fs::RootFs, artifact_id: &str) -> Option<PromptChangeP
     list_proposals_impl(root, artifact_id)
         .into_iter()
         .find(|p| p.state == PromptProposalState::Pending)
-}
-
-/// PCP-FR-11: the candidate of any proposal, decided or not, with the checksum
-/// of the bytes served.
-pub fn load_content_impl(
-    root: &fs::RootFs,
-    proposal_id: &str,
-) -> Result<PromptProposalContent, String> {
-    read_proposal(root, proposal_id)?;
-    let dir = proposals_dir(root)?;
-    let path = at(&dir, proposal_id, CONTENT_EXT);
-    let content = root.read_text(&path).map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
-    // The checksum is taken over the same file the text came from, so what the
-    // caller holds and what it will name as its baseline describe one set of
-    // bytes (PCP-FR-24, on PST-FR-15's terms).
-    let checksum = root.sha256_file(&path).map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
-    Ok(PromptProposalContent { content, checksum })
 }
 
 // ---------------------------------------------------------------------------
@@ -230,9 +226,9 @@ pub fn require_prompt_artifact(root: &fs::RootFs, artifact_id: &str) -> Result<P
     Ok(path)
 }
 
-/// PCP-FR-07 / PCP-FR-13: the candidate as the project's write path would
-/// persist it, which is what a `no_change` comparison and the journal's
-/// candidate checksum are both taken over (PST-FR-22).
+/// PCP-FR-07 / PCP-FR-ZQAH: the text as the project's write path would persist
+/// it, which is what a `no_change` comparison and the journal's candidate
+/// checksum are both taken over (PST-FR-22).
 fn normalise_for_write(root: &fs::RootFs, body: &str) -> String {
     crate::project_settings::line_endings_for(root).normalize(body)
 }
@@ -351,475 +347,40 @@ fn origin_kind_of(discussion: bool) -> &'static str {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Recording (PCP-FR-05)
-// ---------------------------------------------------------------------------
-
-/// What a caller hands [`record_prompt_proposal`]. A struct rather than five
-/// positional arguments, three of which are strings that would transpose
-/// silently.
-pub struct NewPromptProposal<'a> {
-    pub artifact_id: &'a str,
-    /// The complete new text, or the hunks it is built from (PCP-FR-CVNA).
-    pub change: ProposedChange<'a>,
-    pub rationale: &'a str,
-    pub agent: &'a Participant,
-    /// The conversation the turn belongs to (PCP-FR-05's `origin`).
-    pub thread_id: &'a str,
-}
-
-/// PCP-FR-05: the **only** path by which a proposal comes into existence.
-///
-/// Internal by construction — no Tauri command creates one, so no frontend call
-/// can record a proposal, forge one against an artifact, or attribute one to an
-/// agent, exactly as none can attribute a comment to one (CMS-FR-41). The one
-/// caller is `crate::tools::propose_prompt_changes`.
-///
-/// PCP-FR-06: the two writes and the append succeed together or leave nothing
-/// behind. The content and the record reach disk before the comment is appended,
-/// so no folded comment ever names a proposal that is not there; and a failure to
-/// append removes both files before returning, so no candidate sits in the folder
-/// that no conversation refers to.
-pub fn record_prompt_proposal<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    root: &fs::RootFs,
-    // CMS-FR-01: the candidate is a file of the project and lives in the
-    // worktree; the comment announcing it is a conversation and lives in the
-    // repository machine store.
-    store: &fs::RootFs,
-    new: NewPromptProposal<'_>,
-) -> Result<PromptChangeProposal, RecordRefusal>
-where
-    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
-{
-    // PCP-FR-04: the one-pending check below is a read followed by a write, and
-    // AGC-FR-03 puts several turns in flight at once — two agents asked about
-    // one file can otherwise both pass it.
-    let _guard = artifact_lock(new.artifact_id);
-
-    // PCP-FR-07, checked in the order a caller can act on.
-    let artifact_path =
-        require_prompt_artifact(root, new.artifact_id).map_err(|e| match e.as_str() {
-            ERR_NOT_A_PROMPT_ARTIFACT => RecordRefusal::NotAPromptArtifact,
-            _ => RecordRefusal::ArtifactNotFound,
-        })?;
-    if pending_for(root, new.artifact_id).is_some() {
-        return Err(RecordRefusal::ProposalPending);
-    }
-    // PCP-FR-07: a proposal that changes nothing is nothing to decide. The
-    // comparison is against the **normalised** candidate — what the write path
-    // would actually put on disk (PST-FR-22) — because a candidate differing
-    // only in its line endings would change no byte, and offering the author a
-    // comparison with nothing in it wastes the one decision an artifact may hold
-    // at a time. An empty candidate meets this on the one term every candidate
-    // meets it on and on no term of its own.
-    let current = root.read_text(&artifact_path).map_err(|_| RecordRefusal::ArtifactNotFound)?;
-    // PCP-FR-CVNA: a `hunks` change becomes the whole candidate here, before
-    // the no-change check and before any write, so everything below sees one
-    // complete document whichever form it came in (PCP-FR-ENRL).
-    let candidate = build_candidate(root, &current, new.change)?;
-    if current == normalise_for_write(root, &candidate) {
-        return Err(RecordRefusal::NoChange);
-    }
-
-    let (thread_artifact, discussion) =
-        locate_thread(root, store, new.thread_id).map_err(|_| RecordRefusal::NotRecorded)?;
-    let target = thread_ref(&thread_artifact, discussion);
-    // CMS-FR-17: a resolved conversation takes no comment, and a proposal
-    // nobody can be told about is a proposal nobody will decide (PCP-FR-07).
-    if comments::thread_at(store, target, new.thread_id)
-        .map_err(|_| RecordRefusal::NotRecorded)?
-        .resolved
-    {
-        return Err(RecordRefusal::ThreadResolved);
-    }
-
-    let dir = ensure_folder(root).map_err(|_| RecordRefusal::NotRecorded)?;
-    let id = new_note_id();
-    let now = now_rfc3339();
-
-    // PCP-FR-09: the proposed text exactly as the agent composed it. Not
-    // normalised the way the artifact *save* is (PST-FR-22): what the author
-    // reads in the comparison and what an acceptance puts into the file have to
-    // be the same bytes, and the write path applies the project's convention at
-    // the moment the change actually lands.
-    root.write_text_atomic(at(&dir, &id, CONTENT_EXT), &candidate)
-        .map_err(|_| RecordRefusal::NotRecorded)?;
-    // PCP-FR-22: stamped from the bytes that just landed rather than computed
-    // over the candidate in memory, so it describes the file a candidate save
-    // will later checksum rather than the string this call was handed.
-    let origin_checksum =
-        root.sha256_file(at(&dir, &id, CONTENT_EXT)).map_err(|_| RecordRefusal::NotRecorded)?;
-
-    // PCP-FR-06: the comment id is minted **here**, before either write, so the
-    // record can name the comment it will be announced by without the comment
-    // having to exist first. That is what lets both files reach disk ahead of an
-    // append that is append-only and cannot be taken back (CMS-FR-04).
-    let comment_id = new_note_id();
-    let record = PromptChangeProposal {
-        id: id.clone(),
-        artifact_id: new.artifact_id.to_string(),
-        path: new.artifact_id.to_string(),
-        rationale: new.rationale.to_string(),
-        thread_id: new.thread_id.to_string(),
-        comment_id: comment_id.clone(),
-        state: PromptProposalState::Pending,
-        origin_checksum: Some(origin_checksum),
-        candidate_edited: false,
-        comment_owed: false,
-        created_at: now.clone(),
-        decided_at: None,
-        agent: new.agent.clone(),
-    };
-
-    let cleanup = || {
-        let _ = root.delete_under(&dir, format!("{id}.{CONTENT_EXT}"), false);
-        let _ = root.delete_under(&dir, format!("{id}.{RECORD_EXT}"), false);
-    };
-
-    if root.write_toml_atomic(at(&dir, &id, RECORD_EXT), &record).is_err() {
-        cleanup();
-        return Err(RecordRefusal::NotRecorded);
-    }
-
-    let attachment = Attachment::PromptProposal {
-        proposal_id: id.clone(),
-        artifact_id: new.artifact_id.to_string(),
-        path: new.artifact_id.to_string(),
-    };
-    let appended = match comments::append_agent_comment_with(
-        store,
-        target,
-        new.thread_id,
-        comment_id,
-        new.rationale.to_string(),
-        vec![attachment],
-        comments::Stamp { by: new.agent, at: &now },
-    ) {
-        Ok(thread) => thread,
-        Err(error) => {
-            // PCP-FR-06: a failure to append removes **both** files, so no
-            // candidate sits in the folder that no conversation refers to — and
-            // the artifact's one pending slot is free again rather than held by
-            // a proposal the author was never told about.
-            cleanup();
-            return Err(if error == comments::ERR_DISCUSSION_RESOLVED {
-                RecordRefusal::ThreadResolved
-            } else {
-                RecordRefusal::NotRecorded
-            });
-        }
-    };
-
-    // CMS-FR-51 / PCP-FR-06: the conversation announces itself the moment the
-    // offer is in it rather than at the moment it is answered.
-    comments::emit_discussion_changed(app, &appended);
-
-    // PCP-FR-17: emitted when a proposal is **recorded**, not only when one is
-    // decided. This is what the tab's pending indication, the rail's control,
-    // and the shell's notification all redraw from (PCR-FR-16, CMT-FR-67,
-    // PCR-FR-17); without it a proposal made during a session reaches no surface
-    // until the project is reopened.
-    announce(app, &BUFFER, &record);
-    Ok(record)
-}
-
-// ---------------------------------------------------------------------------
-// Deciding (PCP-FR-12 … PCP-FR-16)
-// ---------------------------------------------------------------------------
-
-/// Which way a decision went, and the body its comment carries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Decision {
-    Accept,
-    Decline,
-}
-
-impl Decision {
-    /// PCP-FR-16: what the conversation records. Prose rather than a marker,
-    /// because a reader scrolling the thread months later reads the offer and
-    /// the answer in sequence and should not have to open anything. It says
-    /// which candidate was decided, because an agent is owed the difference
-    /// between "your text landed" and "your text was rewritten and that landed".
-    fn sentence(self, path: &str, edited: bool) -> String {
-        match (self, edited) {
-            (Decision::Accept, false) => format!("Accepted the proposed change to `{path}`."),
-            (Decision::Accept, true) => {
-                format!("Accepted an edited version of the proposed change to `{path}`.")
-            }
-            (Decision::Decline, false) => format!("Declined the proposed change to `{path}`."),
-            (Decision::Decline, true) => {
-                format!("Declined the proposed change to `{path}`, having edited it first.")
-            }
-        }
-    }
-}
-
-/// PCP-FR-16: the decision comment's body — the sentence, then the author's
-/// feedback where they wrote any.
-fn decision_body(decision: Decision, path: &str, edited: bool, feedback: Option<&str>) -> String {
-    let sentence = decision.sentence(path, edited);
-    match feedback.map(str::trim).filter(|f| !f.is_empty()) {
-        Some(feedback) => format!("{sentence}\n\n{feedback}"),
-        None => sentence,
-    }
-}
-
-/// The thread that receives the decision comment, and the author's own part of
-/// the decision (PCP-FR-12, PCP-FR-16).
-struct Acceptance<'a> {
-    thread_artifact: &'a str,
-    discussion: bool,
-    feedback: Option<&'a str>,
-    by: &'a Participant,
-}
-
-/// PCP-FR-12 / PCP-FR-14: accept a pending proposal, as one transaction with one
-/// commit point.
-fn accept_locked<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    root: &fs::RootFs,
-    store: &fs::RootFs,
-    record: &PromptChangeProposal,
-    acceptance: Acceptance<'_>,
-    tracker: &ContentTracker,
-) -> Result<PromptDecisionOutcome, String>
-where
-    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
-{
-    let Acceptance { thread_artifact, discussion, feedback, by } = acceptance;
-    // PCP-FR-14: one acceptance of a proposal at a time. A second is refused
-    // rather than interleaved.
-    let Some(_slot) = try_acceptance_slot(&record.id) else {
-        return Err(ERR_ACCEPTANCE_IN_PROGRESS.to_string());
-    };
-
-    let dir = ensure_folder(root)?;
-    let artifact_path = require_prompt_artifact(root, &record.artifact_id)?;
-    let candidate = root
-        .read_text(at(&dir, &record.id, CONTENT_EXT))
-        .map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
-
-    // PCP-FR-14: the comment's identity and its `event_id` are minted in
-    // advance, so a re-append after a crash contributes nothing a second time
-    // (CMS-FR-06).
-    let journal = Journal {
-        operation_id: new_note_id(),
-        proposal_id: record.id.clone(),
-        artifact_id: record.artifact_id.clone(),
-        path: record.path.clone(),
-        prior_sha256: String::new(),
-        candidate_sha256: fs::sha256_bytes(normalise_for_write(root, &candidate).as_bytes()),
-        comment_id: new_note_id(),
-        event_id: new_note_id(),
-        thread_id: record.thread_id.clone(),
-        comment_body: decision_body(
-            Decision::Accept,
-            &record.path,
-            record.candidate_edited,
-            feedback,
-        ),
-        created_at: now_rfc3339(),
-        comment_by: by.clone(),
-    };
-
-    // Everything from here to the commit point either lands or is undone whole,
-    // and the artifact is never written by any of it.
-    let prepared = || -> Result<Journal, String> {
-        // PCP-FR-14: the artifact's whole current bytes, byte-for-byte and
-        // unnormalised, written and then read back and checksummed.
-        let prior = root.read_bytes(&artifact_path).map_err(|e| e.to_string())?;
-        root.write_bytes_atomic(at(&dir, &record.id, PRIOR_EXT), &prior)
-            .map_err(|e| e.to_string())?;
-        let prior_sha256 =
-            root.sha256_file(at(&dir, &record.id, PRIOR_EXT)).map_err(|e| e.to_string())?;
-        let journal = Journal { prior_sha256, ..journal.clone() };
-        root.write_toml_atomic(at(&dir, &record.id, JOURNAL_EXT), &journal)
-            .map_err(|e| e.to_string())?;
-        // The record moves before the artifact does, so a journal on disk beside
-        // a record reading `accepted` and an artifact still holding its own
-        // bytes is exactly the "did not commit" reading of PCP-FR-14.
-        let decided = PromptChangeProposal {
-            state: PromptProposalState::Accepted,
-            decided_at: Some(now_rfc3339()),
-            comment_owed: true,
-            ..record.clone()
-        };
-        root.write_toml_atomic(at(&dir, &record.id, RECORD_EXT), &decided)
-            .map_err(|e| e.to_string())?;
-        Ok(journal)
-    };
-
-    let journal = match prepared() {
-        Ok(journal) => journal,
-        Err(reason) => {
-            // PCP-FR-14: the artifact was never written, so there is nothing to
-            // restore — only this module's own record to put back. A rollback
-            // that could not be completed leaves the journal in place, so the
-            // next reconciliation finishes it before any command answers; either
-            // way the answer is `write_failed`, which is true of the artifact on
-            // both paths without qualification.
-            let _ = roll_back(root, &dir, record);
-            log_recovery(app, "rollback", record, &reason);
-            return Err(ERR_WRITE_FAILED.to_string());
-        }
-    };
-
-    // ---- THE COMMIT POINT: the artifact write, atomic and last ---------------
-    // PCP-FR-12 / PCP-FR-13: through `crate::artifacts`' own write path, which
-    // stays the only write path for an artifact's file — so the acceptance
-    // normalises line endings and suppresses its own external-change event
-    // exactly as the author's own typing does. It reaches the Dashboard's
-    // Recently edited widget the same way too, by the modification time the
-    // write gives the file (PST-FR-31).
-    if let Err(reason) =
-        crate::artifacts::save_validated_artifact(root, &record.artifact_id, &candidate, tracker)
-    {
-        // The one case with anything to undo, and what it undoes is this
-        // module's own record rather than the author's file: the write is atomic
-        // (FSA-FR-04), so a failure means it did not land.
-        let _ = roll_back(root, &dir, record);
-        log_recovery(app, "rollback", record, &reason);
-        return Err(ERR_WRITE_FAILED.to_string());
-    }
-
-    let accepted = read_proposal(root, &record.id)?;
-    // PCP-FR-17: emitted **after** the commit point and never before, so no
-    // surface is ever told a proposal is accepted while the acceptance could
-    // still be rolled back.
-    announce(app, &BUFFER, &accepted);
-    logging::log_info(
-        app,
-        &BUFFER,
-        &[Domain::Backend],
-        "prompt change acceptance committed",
-        log_fields! {
-            "artifactId" => &record.artifact_id,
-            "proposalId" => &record.id,
-            "path" => &record.path,
-            "operationId" => &journal.operation_id,
-        },
-    );
-
-    // PCP-FR-14 / PCP-FR-16: the append is the tail of a successful acceptance.
-    match append_decision(app, store, &journal, thread_artifact, discussion) {
-        Ok(()) => {
-            let settled = clear_owed(root, &dir, &record.id).unwrap_or(accepted);
-            finish(root, &dir, &record.id);
-            Ok(PromptDecisionOutcome {
-                proposal: settled,
-                comment_id: Some(journal.comment_id),
-                origin_kind: origin_kind_of(discussion),
-            })
-        }
-        Err(reason) => {
-            // PCP-FR-14: the acceptance landed and the comment is owed. The
-            // journal and `.prior` stay on disk, the journal carrying the minted
-            // identity the recovery needs.
-            log_recovery(app, "comment_owed", record, &reason);
-            Err(ERR_ACCEPTANCE_INCOMPLETE.to_string())
-        }
-    }
-}
-
-/// PCP-FR-14: undo a transaction that never reached its commit point.
-///
-/// What it undoes is **this module's own record**; the artifact never needs
-/// restoring, the write being the last fallible step and atomic. The rollback is
-/// read back and verified before the call returns, and the journal and `.prior`
-/// are removed only once it has been.
-fn roll_back(root: &fs::RootFs, dir: &Path, record: &PromptChangeProposal) -> Result<(), String> {
-    let pending = PromptChangeProposal {
-        state: PromptProposalState::Pending,
-        decided_at: None,
-        comment_owed: false,
-        ..record.clone()
-    };
-    root.write_toml_atomic(at(dir, &record.id, RECORD_EXT), &pending).map_err(|e| e.to_string())?;
-    // Read back and verified: a rollback that cannot be shown to have happened
-    // leaves the journal in place so the next reconciliation completes it.
-    let verified = root
-        .read_toml::<PromptChangeProposal>(at(dir, &record.id, RECORD_EXT))
-        .map_err(|e| e.to_string())?;
-    if verified.state != PromptProposalState::Pending {
-        return Err("rollback not verified".to_string());
-    }
-    finish(root, dir, &record.id);
-    Ok(())
-}
-
-/// PCP-FR-14: the journal and `.prior` go, the journal **last of all**, so a
-/// folder holding a journal is always a folder with something still to finish.
-fn finish(root: &fs::RootFs, dir: &Path, proposal_id: &str) {
-    let _ = root.delete_under(dir, format!("{proposal_id}.{PRIOR_EXT}"), false);
-    let _ = root.delete_under(dir, format!("{proposal_id}.{JOURNAL_EXT}"), false);
-}
-
-/// PCP-FR-14: `comment_owed` is cleared only once the append has succeeded.
-fn clear_owed(
-    root: &fs::RootFs,
-    dir: &Path,
-    proposal_id: &str,
-) -> Result<PromptChangeProposal, String> {
-    let mut record = read_proposal(root, proposal_id)?;
-    if !record.comment_owed {
-        return Ok(record);
-    }
-    record.comment_owed = false;
-    root.write_toml_atomic(at(dir, proposal_id, RECORD_EXT), &record).map_err(|e| e.to_string())?;
-    Ok(record)
-}
-
-/// PCP-FR-14 / PCP-FR-16: append the decision comment under the ids the journal
-/// minted, so a repeat contributes nothing a second time (CMS-FR-06).
-///
-/// The resolution the conversation may since have taken is deliberately not
-/// consulted:
-/// PCP-FR-16 checked it before the transaction began, and the transaction has
-/// committed. A resolution applied in the window between is a fact about what the
-/// conversation will take **next**, not licence to leave a decision the author
-/// already made unrecorded.
-fn append_decision<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    // CMS-FR-01: the decision comment goes into the repository machine store
-    // alone; the artifact, the record, and the journal are the worktree's.
-    store: &fs::RootFs,
-    journal: &Journal,
-    thread_artifact: &str,
-    discussion: bool,
-) -> Result<(), String>
-where
-    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
-{
-    let thread = comments::append_decision_comment_event(
-        store,
-        thread_ref(thread_artifact, discussion),
-        &journal.thread_id,
-        journal.event_id.clone(),
-        journal.comment_id.clone(),
-        journal.comment_body.clone(),
-        comments::Stamp { by: &journal.comment_by, at: &now_rfc3339() },
-    )?;
-    // AGC-FR-31 / CTA-FR-RUVS: the author's decision is a human-authored comment,
-    // so it retires this conversation's offer to retry a failed turn exactly as
-    // any other human comment does.
-    crate::agent_conversations::retire_recoverable_for_human_comment(app, &journal.thread_id);
-    // CMS-FR-51: the decision's own comment reaches the conversation's surface on
-    // exactly the terms the proposal's did.
-    comments::emit_discussion_changed(app, &thread);
-    Ok(())
-}
-
+/// The one-hunk acceptance transaction and the decision comment.
+mod accepting;
+/// The hunks a change is recorded as.
 mod candidate;
+/// The `#[tauri::command]` surface.
 mod commands;
+/// Deciding hunks: accept, reject, decline, hold.
+mod deciding;
+/// Reading hunk documents, and the author's hunk edits.
+mod hunks;
+/// The per-hunk ledger, its derived state, and revisions.
+mod ledger;
+/// The typed errors and the record shapes.
 mod model;
+/// Settling an interrupted acceptance, and the sweep.
 mod reconcile;
+/// The one path that records a proposal.
+mod recording;
 
-use candidate::build_candidate;
+use accepting::*;
 pub use candidate::ProposedChange;
+use candidate::{composed, plan_change};
 pub use commands::*;
+pub use deciding::hold_hunk_impl;
+use deciding::*;
+pub use hunks::*;
+use ledger::legacy_document;
+pub use ledger::{
+    derive_state, revise_prompt_change_hunk, revision_target, HunkCounts, HunkLedgerRow, HunkState,
+    RevisionTarget,
+};
 pub use model::*;
 pub use reconcile::*;
+pub use recording::*;
 
 #[cfg(test)]
 mod tests;

@@ -614,6 +614,7 @@ mod support;
 use support::*;
 
 mod anthropic_carrier;
+mod artifact_hunk_input;
 mod asking_author;
 mod builders;
 mod cancellation;

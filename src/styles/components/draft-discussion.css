@@ -910,3 +910,46 @@
   outline-offset: 2px;
   opacity: 1;
 }
+
+/* PCR-FR-SKRV / ESH-FR-SRVW: the review on the source surface of a file with
+   no rich surface. The file text is drawn read-only in the Source role, with
+   the same decorations the rich surface draws. */
+.editor__source-review {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  background: var(--doc-page-bg);
+  color: var(--fg-1);
+}
+.editor__source-review-note {
+  margin: 0;
+  padding: var(--sp-2) 48px;
+  color: var(--fg-3);
+}
+.editor__source-review-text {
+  padding: 8px 48px 64px;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.editor__source-review-text .hunk--source-block { display: grid; }
+.editor__source-review-text .hunk--del-foot.hunk--source-block { display: block; }
+.editor__source-review-text .hunk--add.hunk--source-block {
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+}
+.hunk__source-edit {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  resize: vertical;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre-wrap;
+}

@@ -23,6 +23,11 @@ interface ActionClusterProps {
   mode?: EditMode;
   onToggleMode?: () => void;
   /**
+   * PCR-FR-WLTE / EDT-FR-RWTG: the toggle is disabled while a proposal is
+   * pending, and this is the reason it states.
+   */
+  modeLocked?: string;
+  /**
    * CMT-FR-29 / DDS-FR-XQMF: the discussion column's presets, accelerator hint,
    * and hide control. Omitted on surfaces with no column (a draft's embedded
    * Editor, the mock). Present in **both** editing modes, so switching to raw
@@ -65,6 +70,7 @@ export function ActionCluster({
   dirty,
   mode,
   onToggleMode,
+  modeLocked,
   split,
   proposal,
   report,
@@ -91,7 +97,7 @@ export function ActionCluster({
         <button
           className="btn btn--ghost btn--icon editor__proposal-indication"
           aria-label="Review the proposed change to this prompt"
-          title="A change has been proposed to this prompt"
+          title="A change has been proposed to this file. Go to the first change to decide."
           data-testid="editor-prompt-proposal-indication"
           data-active
           onClick={proposal.onOpen}
@@ -109,9 +115,13 @@ export function ActionCluster({
             mode === "wysiwyg" ? "Edit as Markdown source" : "Edit as rich text"
           }
           title={
-            mode === "wysiwyg" ? "Edit as Markdown source" : "Edit as rich text"
+            modeLocked ??
+            (mode === "wysiwyg" ? "Edit as Markdown source" : "Edit as rich text")
           }
+          aria-description={modeLocked}
+          disabled={modeLocked !== undefined}
           data-active={mode === "text"}
+          data-testid="editor-mode-toggle"
           onClick={onToggleMode}
         >
           {mode === "wysiwyg" ? <Icon.Code size={15} /> : <Icon.Doc size={15} />}

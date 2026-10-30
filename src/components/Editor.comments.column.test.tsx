@@ -846,7 +846,7 @@ describe("CMT-FR-RPLC: a file that cannot be read", () => {
   });
 });
 
-describe("DDS-FR-MXHD: the Editor's column carries no draft review", () => {
+describe("DDS-FR-MXHD: with no proposal pending, the Editor carries no review", () => {
   it("DDS-FR-MXHD: renders no subject strip, anchor bar, review bar, chip or gutter map", async () => {
     await mount({ threads: [wholeThread("w1"), threadOn("the first session", "t1")] });
     const shown = column();

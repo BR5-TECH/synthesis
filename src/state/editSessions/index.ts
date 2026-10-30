@@ -132,13 +132,12 @@ export class EditSessionStore {
   private applyExternalChange(p: ArtifactChangedPayload): void {
     const s = this.sessions.get(p.artifactId);
     if (!s || p.checksum === s.baseline) return;
-    // EDT-FR-84 / PCR-FR-24: an artifact with a prompt-change review showing
-    // over it takes no external-change modal for as long as the review stands.
-    // The divergence is still recorded — it is what the review's standing line
-    // is said from, and what is raised once the review's reason for passing it
-    // over turns out not to have come true (PCR-FR-11) — but no modal is put up
-    // and no tab is made inert, because the author is about to replace the whole
-    // file on purpose and a dialog answering something else must not hold that
+    // EDT-FR-84 / PCR-FR-AXPW: an artifact with an acceptance of a proposed
+    // change in flight takes no external-change modal while it stands. The
+    // divergence is still recorded — it is what is raised once the reason for
+    // passing it over turns out not to have come true — but no modal is put up
+    // and no tab is made inert, because the author is about to change the file
+    // on purpose and a dialog answering something else must not hold that
     // decision behind it.
     if (this.externalHold.has(p.artifactId)) {
       this.update(p.artifactId, { pending: p.checksum });
@@ -148,23 +147,23 @@ export class EditSessionStore {
   }
 
   /**
-   * PCR-FR-24: artifacts whose external-change modal is held back while a
-   * prompt-change review is showing over them.
+   * PCR-FR-AXPW: artifacts whose external-change modal is held back while an
+   * acceptance of a proposed change is in flight over them.
    *
    * A set rather than a flag on the session, because the hold belongs to the
-   * review rather than to the file: it is put on when the modal opens and taken
-   * off when it goes, and a session created after the hold was placed inherits
+   * acceptance rather than to the file: it is put on when the acceptance starts
+   * and taken off when it ends, and a session created after the hold was placed inherits
    * it without anything having to remember to copy it.
    */
   private externalHold = new Map<string, number>();
 
   /**
-   * PCR-FR-11 / PCR-FR-24: hold back the external-change modal for `artifactId`.
+   * PCR-FR-AXPW: hold back the external-change modal for `artifactId`.
    *
-   * Called by the review as it opens. Returns the release, which raises the
+   * Called by an acceptance as it starts. Returns the release, which raises the
    * modal for a divergence that arrived while the hold stood — because the
-   * reason for passing it over was that the file was about to be replaced whole,
-   * and a review dismissed or an acceptance refused means that did not happen.
+   * reason for passing it over was that the file was about to be changed, and
+   * an acceptance refused means that did not happen.
    */
   holdExternalChanges(artifactId: string): () => void {
     this.externalHold.set(artifactId, (this.externalHold.get(artifactId) ?? 0) + 1);
@@ -188,7 +187,7 @@ export class EditSessionStore {
   }
 
   /**
-   * PCR-FR-11 / EDT-FR-84: raise the external-change modal for a divergence
+   * PCR-FR-AXPW / EDT-FR-84: raise the external-change modal for a divergence
    * that arrived **while the hold stood**, because the replacement it was
    * passed over for did not happen.
    *
@@ -196,7 +195,7 @@ export class EditSessionStore {
    * passing the event over — that the whole file was about to be replaced on
    * the author's instruction — turns out not to have come true. The hold itself
    * stays in place, so an event arriving *after* this is still passed over for
-   * as long as the review is showing (PCR-FR-24).
+   * as long as the hold stands.
    */
   raiseHeldExternalChange(artifactId: string): void {
     const s = this.sessions.get(artifactId);

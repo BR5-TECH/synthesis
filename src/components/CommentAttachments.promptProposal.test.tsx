@@ -5,7 +5,8 @@
  * A reference to a change an agent proposed to a prompt artifact the project
  * already holds, rendered as a control on exactly the terms its `proposal`
  * sibling is: rendered alike, naming its file alike, activated alike — and
- * opening its own review over its own tab (PCR-FR-03, PCR-FR-18).
+ * scrolling its file's Editor tab to the first undecided change (PCR-FR-RFJC,
+ * PCR-FR-18).
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -22,9 +23,14 @@ import {
   configurePromptReviewRoute,
   notePromptProposalChanged,
   resetPromptProposals,
-  reviewingPromptProposal,
-  closePromptReview,
 } from "../state/promptProposals";
+import {
+  artifactReviewKey,
+  draftDiscussionState,
+  resetDraftDiscussions,
+} from "../state/draftDiscussion";
+import { resetLogBufferForTest } from "../logging";
+import { proposal as fixture } from "../test/promptProposalFixtures";
 import type { Attachment, PromptChangeProposal } from "../types";
 
 const ARTIFACT = "prompts/review.md";
@@ -42,20 +48,17 @@ const reference: Attachment = {
 };
 
 function proposal(over: Partial<PromptChangeProposal> = {}): PromptChangeProposal {
-  return {
+  return fixture({
     id: "p1",
-    artifactId: ARTIFACT,
-    path: ARTIFACT,
-    agent: { kind: "agent", agentId: "a1", handle: "arch", model: "m" },
-    rationale: "why",
-    threadId: "t1",
-    commentId: "c1",
-    state: "pending",
-    candidateEdited: false,
-    commentOwed: false,
-    createdAt: "2026-01-01T00:00:00Z",
+    hunkCount: 3,
+    counts: { pending: 2, accepted: 1, rejected: 0, discussing: 0 },
+    ledger: [
+      { id: "h1", kind: "replace", state: "accepted", edited: false, revision: 0 },
+      { id: "h2", kind: "add", state: "pending", edited: false, revision: 0 },
+      { id: "h3", kind: "del", state: "pending", edited: false, revision: 0 },
+    ],
     ...over,
-  };
+  });
 }
 
 function renderList(attachments: Attachment[] = [reference]) {
@@ -67,19 +70,20 @@ function renderList(attachments: Attachment[] = [reference]) {
 beforeEach(() => {
   invokeMock.mockReset();
   invokeMock.mockResolvedValue([]);
+  resetLogBufferForTest();
   resetPromptProposals();
   resetDraftProposals();
+  resetDraftDiscussions();
   configurePromptReviewRoute(null);
 });
 
 afterEach(() => {
   cleanup();
-  closePromptReview();
   configurePromptReviewRoute(null);
 });
 
 // ---------------------------------------------------------------------------
-// PCR-FR-03, PCR-FR-18 — the control (CMT-FR-48, CMT-FR-49, CMT-FR-67)
+// PCR-FR-RFJC, PCR-FR-18 — the control (CMT-FR-48, CMT-FR-49, CMT-FR-67)
 // ---------------------------------------------------------------------------
 
 describe("the control (CMT-FR-48, CMT-FR-49)", () => {
@@ -99,7 +103,15 @@ describe("the control (CMT-FR-48, CMT-FR-49)", () => {
     ).toHaveLength(0);
   });
 
-  it("opens the review over the artifact's own tab, posting nothing", async () => {
+  it("CMT-FR-48, PCR-FR-RFJC: shows how much the proposal changes", async () => {
+    invokeMock.mockResolvedValue([proposal()]);
+    renderList();
+    const control = await screen.findByTestId("comment-attachment-prompt-proposal");
+    await waitFor(() => expect(control).toHaveTextContent("3 changes"));
+    expect(control).toHaveTextContent("Review in the file");
+  });
+
+  it("CMT-FR-48, PCR-FR-RFJC: opens or focuses the tab and scrolls to the first undecided change, opening no modal", async () => {
     invokeMock.mockResolvedValue([proposal()]);
     const opened: string[] = [];
     configurePromptReviewRoute((id) => opened.push(id));
@@ -112,9 +124,12 @@ describe("the control (CMT-FR-48, CMT-FR-49)", () => {
     });
 
     // PCR-FR-18: the tab is opened or focused first where it is not already
-    // open, and the review opens over it.
+    // open, and its document scrolls to the first undecided change.
     expect(opened).toEqual([ARTIFACT]);
-    expect(reviewingPromptProposal()).toBe("p1");
+    const state = draftDiscussionState(artifactReviewKey(ARTIFACT));
+    expect(state.focusedHunkId).toBe("h2");
+    expect(state.hunkReveal).toBe(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(
       invokeMock.mock.calls.filter((c) => c[0] === "add_comment"),
     ).toHaveLength(0);
@@ -206,5 +221,29 @@ describe("the two reference kinds (CTA-FR-UKIG, CTA-FR-XVNC)", () => {
     const draftControl = screen.getByTestId("comment-attachment-proposal");
     expect(draftControl.className).toBe(controls[0].className);
     expect(draftControl.tagName).toBe(controls[0].tagName);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PCR-FR-RFJC — a reference to one change of a file's proposal
+// ---------------------------------------------------------------------------
+
+describe("a hunk reference of a file's proposal (PCR-FR-RFJC, CMS-FR-TQVB)", () => {
+  it("PCR-FR-RFJC: names the change and scrolls the Editor tab to it", async () => {
+    invokeMock.mockResolvedValue([proposal()]);
+    const opened: string[] = [];
+    configurePromptReviewRoute((id) => opened.push(id));
+    renderList([
+      { kind: "proposalHunk", proposalId: "p1", hunkId: "h3", artifactId: ARTIFACT, path: ARTIFACT },
+    ]);
+    const control = await screen.findByTestId("comment-attachment-proposal-hunk");
+    await waitFor(() => expect(control).toHaveTextContent("Change 3 of 3"));
+    // No draft store is asked about a reference whose target is an artifact.
+    expect(draftReads()).toHaveLength(0);
+    await act(async () => {
+      await userEvent.click(control);
+    });
+    expect(opened).toEqual([ARTIFACT]);
+    expect(draftDiscussionState(artifactReviewKey(ARTIFACT)).focusedHunkId).toBe("h3");
   });
 });

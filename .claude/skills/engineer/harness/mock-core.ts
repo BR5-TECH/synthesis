@@ -1812,8 +1812,8 @@ function candidateChecksum(proposalId: string): string {
  * `prompts/review.md` is the seeded target, exactly the file
  * `PCR-prompt-change-review.md` names in its own wireframe. It carries one
  * **pending** proposal, so the Editor tab's action-cluster indication
- * (PCR-FR-16), the comment rail's control (CMT-FR-48) and the review modal
- * itself (PCR-FR-01) are all reachable without an agent turn — and one already
+ * (PCR-FR-16), the comment rail's control (CMT-FR-48) and the in-place review
+ * itself (PCR-FR-QHZN) are all reachable without an agent turn — and one already
  * **accepted**, so the decided-for-reading foot (DCR-FR-17) is too.
  */
 const PROMPT_ARTIFACT = "prompts/review.md";
@@ -1826,7 +1826,8 @@ const PROMPT_RATIONALE =
  * The candidate, derived from the artifact's own body rather than written out
  * beside it: a proposal is a whole document (PPC-FR-04), and building it from
  * `MD_BODY` keeps the two in step while scattering the hunks through a
- * comparison long enough to prove the foot stays pinned (PCR-FR-02).
+ * file long enough to prove the review bar stays pinned (PCR-FR-QHZN). It is
+ * converted into changes at first read (PCP-FR-CNVT).
  */
 const PROMPT_CANDIDATE = MD_BODY.replace(
   "The Library is the project's artifact browser. It renders the scanned tree and\nlets the author open, classify, and act on every artifact in the project.",
@@ -1879,12 +1880,12 @@ const promptProposalsByArtifact: Record<string, any[]> = {
 };
 
 /**
- * PCP-FR-11: the candidate's text, keyed by proposal.
+ * PCP-FR-CNVT: the candidate's text, keyed by proposal, converted into changes
+ * at first read.
  *
  * `pp-2` is here without a matching row, deliberately — the same shape the draft
- * fixture uses. PCR-FR-16 opens the review on a proposal that **arrives** and
- * never on one already standing when the tab opened, so the arrival path is
- * reachable only by firing the event for a proposal the store has never seen:
+ * fixture uses. The arrival path of PCR-FR-16 is reachable by firing the event
+ * for a proposal the store has never seen (its ledger is built on first read):
  *
  * ```js
  * window.__fireBusEvent("prompt-change-proposals-changed", {
@@ -1913,7 +1914,103 @@ function promptCandidateChecksum(proposalId: string): string {
 }
 
 /**
- * PCR-FR-11 / PST-FR-16: an artifact whose bytes have moved since the fixture.
+ * PCP-FR-CNVT: a whole candidate converted into changes, by a line diff of the
+ * file as it stands against the candidate. The changes carry the anchors the
+ * real backend records (lead, trail, and hint offsets).
+ */
+function hunksBetween(current: string, next: string, idPrefix: string): any[] {
+  const a = current.split(/(?<=\n)/);
+  const b = next.split(/(?<=\n)/);
+  const n = a.length;
+  const m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out: any[] = [];
+  let i = 0;
+  let j = 0;
+  let offset = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      offset += a[i].length;
+      i += 1;
+      j += 1;
+      continue;
+    }
+    const start = offset;
+    let before = "";
+    let after = "";
+    while ((i < n || j < m) && !(i < n && j < m && a[i] === b[j])) {
+      if (j < m && (i >= n || lcs[i][j + 1] >= lcs[i + 1][j])) {
+        after += b[j];
+        j += 1;
+      } else {
+        before += a[i];
+        offset += a[i].length;
+        i += 1;
+      }
+    }
+    const kind = before === "" ? "add" : after === "" ? "del" : "replace";
+    out.push({
+      id: `${idPrefix}-h${out.length + 1}`,
+      kind,
+      revision: 0,
+      note: null,
+      before: before === "" ? null : before,
+      after: after === "" ? null : after,
+      anchor: {
+        lead: current.slice(Math.max(0, start - 40), start),
+        trail: current.slice(offset, offset + 40),
+        hint_start: start,
+        hint_end: offset,
+      },
+    });
+  }
+  return out;
+}
+
+/** PCP-FR-LDHK: the changes each prompt proposal holds, built on first use. */
+const promptHunks: Record<string, any[]> = {};
+function promptBody(artifactId: string): string {
+  return artifactBodies[artifactId]?.body ?? MD_BODY;
+}
+function promptHunksOf(id: string): any[] | undefined {
+  if (promptHunks[id] !== undefined) return promptHunks[id];
+  const content = promptProposalContent[id];
+  if (content === undefined) return undefined;
+  promptHunks[id] = hunksBetween(MD_BODY, content, id);
+  return promptHunks[id];
+}
+/**
+ * PCP-FR-HKLD: a record carries its ledger, counts, and hunk count. A decided
+ * fixture row is given a ledger whose rows match its state.
+ */
+function withLedger(row: any): any {
+  if (row.ledger === undefined) {
+    const hunks = promptHunksOf(row.id) ?? [];
+    const decided = row.state !== "pending";
+    row.ledger = hunks.map((h: any) => ({
+      id: h.id,
+      kind: h.kind,
+      state: decided ? row.state : "pending",
+      edited: false,
+      revision: 0,
+      decidedAt: decided ? row.decidedAt ?? null : null,
+    }));
+    row.legacy = false;
+    row.baseSha256 = "sha-1";
+    const decidedAt = row.decidedAt;
+    recountProposal(row);
+    if (decided) row.decidedAt = decidedAt;
+  }
+  return row;
+}
+
+/**
+ * PCR-FR-AXPW / PST-FR-16: an artifact whose bytes have moved since the fixture.
  *
  * An acceptance writes here, so the Editor's own surface renders the accepted
  * text with no external-change dialog — and a checksum that moves with it, so
@@ -1935,7 +2032,7 @@ let nextArtifactChecksum = 1;
 function promptRow(id: string) {
   const list = (promptProposalsByArtifact[PROMPT_ARTIFACT] ??= []);
   const found = list.find((p) => p.id === id);
-  if (found) return found;
+  if (found) return withLedger(found);
   if (promptProposalContent[id] === undefined) return undefined;
   const row = {
     id,
@@ -1951,7 +2048,7 @@ function promptRow(id: string) {
     createdAt: new Date().toISOString(),
   };
   list.unshift(row);
-  return row;
+  return withLedger(row);
 }
 
 /**
@@ -1959,7 +2056,7 @@ function promptRow(id: string) {
  *
  * Anchored on `prompts/review.md` so the Editor tab's own rail renders it, with
  * one comment per proposal carrying a `promptProposal` attachment — which is the
- * rail's route into the review (PCR-FR-03) and the only place the **control
+ * rail's route into the review (PCR-FR-RFJC) and the only place the **control
  * naming the file** can be looked at.
  */
 function promptProposalThread() {
@@ -7742,7 +7839,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- artifacts -------------------------------------------------------
     case "load_artifact_contents_by_id": {
-      // PCR-FR-11: an artifact an acceptance rewrote reads as what it now holds,
+      // PCR-FR-AXPW: an artifact an acceptance rewrote reads as what it now holds,
       // with the checksum that write produced — so the session's reset adopts a
       // new baseline rather than the fixture's.
       const written = artifactBodies[String(a.id)];
@@ -9138,85 +9235,162 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      */
     case "list_prompt_change_proposals":
       if (harnessFlag("promptProposalsUnreadable")) throw "proposals_unreadable";
-      return promptProposalsByArtifact[String(a.artifactId ?? "")] ?? [];
-    // PCP-FR-11: the candidate's text plus the baseline its next save is checked
-    // against (PCP-FR-24).
-    case "load_prompt_change_proposal_content": {
+      return (promptProposalsByArtifact[String(a.artifactId ?? "")] ?? []).map((row) =>
+        withLedger(row),
+      );
+    /**
+     * PCP-FR-LDHK / PCR-FR-QHZN: the proposal's changes, each with where it lands
+     * in the file **as it stands**, so a change whose text the author has since
+     * rewritten comes back `lost`.
+     */
+    case "load_prompt_change_proposal_hunks": {
       const id = String(a.proposalId ?? "");
-      const content = promptProposalContent[id];
-      if (content === undefined) throw "proposal_not_found";
-      return { content, checksum: promptCandidateChecksum(id) };
+      const row = promptRow(id);
+      const hunks = promptHunksOf(id);
+      if (!row || hunks === undefined) throw "proposal_not_found";
+      const body = promptBody(row.artifactId);
+      const resolutions = hunks.map((h) => {
+        const before = String(h.before ?? "");
+        if (before === "") {
+          const lead = String(h.anchor?.lead ?? "");
+          const at = lead === "" ? 0 : body.indexOf(lead);
+          return at === -1
+            ? { kind: "lost" }
+            : { kind: "resolved", start: at + lead.length, end: at + lead.length };
+        }
+        const at = body.indexOf(before);
+        return at === -1 ? { kind: "lost" } : { kind: "resolved", start: at, end: at + before.length };
+      });
+      return {
+        hunks: hunks.map((h) => ({ ...h })),
+        resolutions,
+        checksum: promptCandidateChecksum(id),
+        legacy: row.legacy === true,
+      };
     }
     /**
-     * PCP-FR-22 / PCR-FR-22: the author's rewrite of a candidate, written into
-     * **proposal storage alone**. It touches no file of the project — no
-     * `artifactBodies` entry, no `artifact-changed-externally`, no recently-edited
-     * row — so a verification can prove the file did not move; and it enforces the
-     * `candidate_stale` baseline check (PCP-FR-24) so the checksum handoff is
-     * actually exercised.
+     * PCP-FR-EDTW: the author's rewrite of ONE change, written into proposal
+     * storage alone. It touches no file of the project, and it enforces the
+     * `candidate_stale` baseline check.
      */
-    case "save_prompt_change_proposal_candidate": {
+    case "edit_prompt_change_hunk": {
       const id = String(a.proposalId ?? "");
-      if (promptProposalContent[id] === undefined) throw "proposal_not_found";
       const row = promptRow(id);
-      if (row && row.state !== "pending") throw "already_decided";
+      const hunks = promptHunksOf(id);
+      if (!row || hunks === undefined) throw "proposal_not_found";
+      if (row.state !== "pending") throw "already_decided";
+      if (row.legacy) throw "legacy_not_editable";
       if (harnessFlag("promptCandidateWriteFails")) throw "write_failed";
-      const baseline = String(a.baselineChecksum ?? "");
-      if (baseline !== promptCandidateChecksum(id)) throw "candidate_stale";
-      promptProposalContent[id] = String(a.content ?? "");
+      const target = hunks.find((h) => h.id === String(a.hunkId ?? ""));
+      if (!target) throw "hunk_not_found";
+      const ledgerRow = row.ledger.find((r: any) => r.id === target.id);
+      if (ledgerRow && ledgerRow.state !== "pending" && ledgerRow.state !== "discussing") {
+        throw "hunk_already_decided";
+      }
+      if (String(a.baselineChecksum ?? "") !== promptCandidateChecksum(id)) throw "candidate_stale";
+      target.after = String(a.after ?? "");
+      if (ledgerRow) ledgerRow.edited = true;
+      row.candidateEdited = true;
       promptCandidateRevision[id] = (promptCandidateRevision[id] ?? 0) + 1;
-      if (row) row.candidateEdited = true;
       return { checksum: promptCandidateChecksum(id) };
     }
+    /** PCP-FR-HLDQ: hold one change for discussion, or release it. */
+    case "set_prompt_change_hunk_discussing": {
+      const id = String(a.proposalId ?? "");
+      const row = promptRow(id);
+      if (!row) throw "proposal_not_found";
+      const ledgerRow = row.ledger.find((r: any) => r.id === String(a.hunkId ?? ""));
+      if (!ledgerRow) throw "hunk_not_found";
+      if (ledgerRow.state === "accepted" || ledgerRow.state === "rejected") {
+        throw "hunk_already_decided";
+      }
+      ledgerRow.state = a.discussing ? "discussing" : "pending";
+      recountProposal(row);
+      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+      return { ...row };
+    }
     /**
-     * PCP-FR-12 through PCP-FR-16: the two decisions, one transaction with one
-     * commit point. An acceptance is a whole-file replacement written through the
-     * project's own artifact path, so the seeded body follows it — which is what
-     * makes the tab's editing surface render the accepted text with no
-     * external-change dialog (PCR-FR-11).
+     * PCP-FR-ZQAH / PCP-FR-RJHN: one decision about ONE change. An acceptance
+     * splices only that change into the file through the project's own artifact
+     * path, so the Editor's reset reads what the file now holds.
      *
      * Three flags reach the answers no acting in the UI can produce:
-     * `?promptAcceptFails` (the typed `write_failed` of PCR-FR-15),
-     * `?promptAcceptOwed` (the `acceptance_incomplete` past the commit point),
+     * `?promptAcceptFails` (`write_failed`), `?promptAcceptOwed`
+     * (`acceptance_incomplete` on the resolving acceptance), and
      * `?promptNotAPrompt` (the target no longer resolving as a prompt).
      */
-    case "apply_prompt_change_proposal":
-    case "decline_prompt_change_proposal": {
+    case "accept_prompt_change_hunk":
+    case "reject_prompt_change_hunk": {
       const id = String(a.proposalId ?? "");
-      const accepted = cmd === "apply_prompt_change_proposal";
-      const found = promptRow(id);
-      if (!found) throw "proposal_not_found";
-      if (found.state !== "pending") throw "already_decided";
+      const accepted = cmd === "accept_prompt_change_hunk";
+      const row = promptRow(id);
+      if (!row) throw "proposal_not_found";
+      if (row.state !== "pending") throw "already_decided";
+      const hunkId = String(a.hunkId ?? "");
+      const ledgerRow = row.ledger.find((r: any) => r.id === hunkId);
+      const hunk = (promptHunksOf(id) ?? []).find((h) => h.id === hunkId);
+      if (!ledgerRow || !hunk) throw "hunk_not_found";
+      if (ledgerRow.state === "accepted" || (ledgerRow.state === "rejected" && !accepted)) {
+        throw "hunk_already_decided";
+      }
       if (accepted && harnessFlag("promptNotAPrompt")) throw "not_a_prompt_artifact";
       if (accepted && harnessFlag("promptAcceptFails")) throw "write_failed";
-      found.state = accepted ? "accepted" : "rejected";
-      found.decidedAt = new Date().toISOString();
       if (accepted) {
-        // PCP-FR-13: a complete replacement of the artifact's contents as they
-        // stand, with no baseline checksum consulted anywhere.
-        artifactBodies[found.artifactId] = {
-          body: promptProposalContent[id] ?? "",
+        const prior = promptBody(row.artifactId);
+        const before = String(hunk.before ?? "");
+        let next: string;
+        if (before === "") {
+          const lead = String(hunk.anchor?.lead ?? "");
+          const at = lead === "" ? 0 : prior.indexOf(lead);
+          if (at === -1) throw "anchor_lost";
+          const cut = at + lead.length;
+          next = prior.slice(0, cut) + String(hunk.after ?? "") + prior.slice(cut);
+        } else {
+          const at = prior.indexOf(before);
+          if (at === -1) throw "anchor_lost";
+          next = prior.slice(0, at) + String(hunk.after ?? "") + prior.slice(at + before.length);
+        }
+        artifactBodies[row.artifactId] = {
+          body: next,
           checksum: `sha-applied-${nextArtifactChecksum++}`,
         };
       }
-      if (accepted && harnessFlag("promptAcceptOwed")) {
-        // PCP-FR-14: past the commit point with the decision comment still owed.
-        // The event is emitted at the commit point rather than at the append.
-        found.commentOwed = true;
-        fireBus("prompt-change-proposals-changed", {
-          artifactId: found.artifactId,
-          proposal: { ...found },
-        });
+      ledgerRow.state = accepted ? "accepted" : "rejected";
+      ledgerRow.decidedAt = new Date().toISOString();
+      recountProposal(row);
+      const resolved = row.state !== "pending";
+      if (accepted && resolved && harnessFlag("promptAcceptOwed")) {
+        row.commentOwed = true;
+        fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
         throw "acceptance_incomplete";
       }
-      fireBus("prompt-change-proposals-changed", {
-        artifactId: found.artifactId,
-        proposal: { ...found },
-      });
-      // PCR-FR-14: the surface dispatches one fresh turn from these two values.
+      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+      // PCP-FR-RSLV: only the resolving decision appends the decision comment.
       return {
-        proposal: { ...found },
-        commentId: `${found.threadId}-decision-${id}`,
+        proposal: { ...row },
+        resolved,
+        commentId: resolved ? `${row.threadId}-decision-${id}` : undefined,
+        originKind: "artifact_comment",
+      };
+    }
+    /** PCP-FR-RJHN: reject every change still undecided. Writes no file. */
+    case "decline_prompt_change_proposal": {
+      const id = String(a.proposalId ?? "");
+      const row = promptRow(id);
+      if (!row) throw "proposal_not_found";
+      if (row.state !== "pending") throw "already_decided";
+      for (const r of row.ledger) {
+        if (r.state === "pending" || r.state === "discussing") {
+          r.state = "rejected";
+          r.decidedAt = new Date().toISOString();
+        }
+      }
+      recountProposal(row);
+      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+      return {
+        proposal: { ...row },
+        resolved: true,
+        commentId: `${row.threadId}-decision-${id}`,
         originKind: "artifact_comment",
       };
     }
@@ -9230,7 +9404,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const found = promptRow(id);
       if (!found) throw "proposal_not_found";
       if (harnessFlag("promptCompleteFails")) {
-        return { proposal: { ...found }, originKind: "artifact_comment" };
+        return { proposal: { ...found }, resolved: true, originKind: "artifact_comment" };
       }
       found.commentOwed = false;
       fireBus("prompt-change-proposals-changed", {
@@ -9239,6 +9413,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       });
       return {
         proposal: { ...found },
+        resolved: true,
         commentId: `${found.threadId}-decision-${id}`,
         originKind: "artifact_comment",
       };
@@ -9570,7 +9745,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         }
         return anchored;
       }
-      // CMT-FR-48 / PCR-FR-03: the prompt the proposals are against carries the
+      // CMT-FR-48 / PCR-FR-RFJC: the prompt the proposals are against carries the
       // conversation they were announced in, so the rail's control is the route
       // into the review it is meant to be.
       if (String(a.artifactId ?? "") === PROMPT_ARTIFACT) {

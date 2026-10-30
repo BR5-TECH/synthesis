@@ -22,14 +22,15 @@ import { gridTemplate } from "../DraftDiscussion";
 import { EditorDiscussionColumn } from "./EditorDiscussionColumn";
 import { GithubTokenPicker } from "../GithubTokenPicker";
 import { ReviewOverlay } from "./ReviewOverlay";
-import { PromptChangeReview } from "../PromptChangeReview";
+import { SourceReview } from "./SourceReview";
+import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
 import { ActionControl } from "../ActionControl";
 import { EditSessionStore } from "../../state/editSessions";
 import type { EditSession } from "../../state/editSessions/types";
 import { sealBurst, type EditMode, type EditSurface } from "../../state/editHistory";
 import type { UseArtifactDocument } from "../../hooks/useArtifactDocument";
 import type { EditorImageHost } from "../hostImages";
-import type { LiteralSearchMode } from "../../types";
+import type { Discussion, LiteralSearchMode } from "../../types";
 import { indentUnit } from "../../state/indentation";
 import { FRONTMATTER_TOP_THRESHOLD, joinFrontmatter } from "./frontmatter";
 import { matchesInWindow, renderSegments } from "./highlight";
@@ -84,13 +85,24 @@ export interface EditorViewProps {
   imageHost: EditorImageHost | undefined;
   report: EditorProps["report"];
   review: EditorProps["review"];
+  /** PCR-FR-15: what stands at the foot of the column once no review does. */
+  reviewFooter: React.ReactNode;
   showComments: boolean;
   showActions: boolean;
   /** EDT-FR-LGQA: the outline the table of contents control lists. */
   outline: DocumentOutline | undefined;
   showResolved: boolean;
   pendingProposal: { id: string } | undefined;
-  openPromptReview: (proposalId: string) => void;
+  /** PCR-FR-16 / DCR-FR-03: scroll the document to the first undecided change. */
+  onShowProposal: () => void;
+  /** PCR-FR-WLTE / EDT-FR-RWTG: why the raw toggle is disabled, while it is. */
+  modeLocked: string | undefined;
+  /** PCR-FR-HDMC: the change a new hunk discussion is about. */
+  hunkOpening: HunkOpening | null;
+  onCancelHunk: () => void;
+  onHunkDiscussionOpened: (created: Discussion) => void;
+  /** PCR-FR-HDMC: raised by Discuss on a change, to focus the composer. */
+  hunkFocus: number;
   rootRef: RefObject<HTMLDivElement | null>;
   draft: CommentSelection | null;
   setDraft: Dispatch<SetStateAction<CommentSelection | null>>;
@@ -166,7 +178,8 @@ export function EditorView(props: EditorViewProps) {
     outline,
     showResolved,
     pendingProposal,
-    openPromptReview,
+    onShowProposal,
+    modeLocked,
     rootRef,
     draft,
     setDraft,
@@ -424,7 +437,13 @@ export function EditorView(props: EditorViewProps) {
         />
       </div>
       )}
-      {mode === "text" && (
+      {/* PCR-FR-SKRV / ESH-FR-SRVW: a file with no rich surface shows the
+          review on its source surface, with the file text read-only while the
+          proposal is pending. */}
+      {mode === "text" && !isMarkdown && review && (
+        <SourceReview text={sourceText} review={review} />
+      )}
+      {mode === "text" && !(!isMarkdown && review) && (
         <div
           className="editor__source-wrap"
           ref={sourceWrapRef}
@@ -498,7 +517,7 @@ export function EditorView(props: EditorViewProps) {
           scrolls, so the counter and every control stay reachable — and it
           sits where the hand already is rather than standing between the
           formatting toolbar and the first line of the prompt. */}
-      {review?.bar}
+      {review?.bar ?? props.reviewFooter}
     </>
   );
 
@@ -586,17 +605,14 @@ export function EditorView(props: EditorViewProps) {
           /* PCR-FR-16 / EDT-FR-84: an artifact carrying a proposal in state
              `pending` renders an indication in this cluster saying so, whichever
              editing mode the tab is in. */
-          proposal={
-            pendingProposal
-              ? { onOpen: () => openPromptReview(pendingProposal.id) }
-              : undefined
-          }
+          proposal={pendingProposal ? { onOpen: onShowProposal } : undefined}
           /* EDT-FR-16 / ESH-FR-LKNM: the toggle is a Markdown file's. Over a
              source file the cluster holds the column's controls alone — that
              file has one editing surface, so there is nothing for a toggle to
              move between. */
           mode={isMarkdown ? mode : undefined}
           onToggleMode={isMarkdown ? toggleMode : undefined}
+          modeLocked={modeLocked}
           // EDT-FR-LGQA: a Markdown file's, directly before the mode toggle.
           outline={outline}
           // CMT-FR-29 / DDS-FR-XQMF: the column's split and its hide control,
@@ -654,8 +670,11 @@ export function EditorView(props: EditorViewProps) {
             onShowResolved={(shown) =>
               sessions.update(artifactId, { resolvedOpen: shown })
             }
-            focusSignal={discussFocus}
+            focusSignal={discussFocus + props.hunkFocus}
             documentDirty={doc.dirty}
+            hunkOpening={props.hunkOpening}
+            onCancelHunk={props.onCancelHunk}
+            onHunkDiscussionOpened={props.onHunkDiscussionOpened}
           />
         </div>
       ) : (
@@ -695,12 +714,6 @@ export function EditorView(props: EditorViewProps) {
           onKeep={doc.keepMine}
         />
       )}
-      {/* EDT-FR-84 / PCR-FR-01: the tab lends its own bounds to the review
-          modal. It is anchored here rather than in the window, so opening it
-          closes no floating overlay and no overlay closes it — and every
-          operation behind it belongs to `PCR-prompt-change-review.md` and
-          `PCP-prompt-change-proposals.md` rather than to this spec. */}
-      <PromptChangeReview artifactId={artifactId} sessions={sessions} />
       {/* EDT-FR-64 / EDT-FR-65: the one control every tab carries, standing apart
           from the action cluster in the chrome — the cluster carries what the
           Editor does to the file, and this carries what is done with the file as

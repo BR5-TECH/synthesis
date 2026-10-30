@@ -19,10 +19,29 @@ import { decisionTargets } from "../../state/activeAgents";
 import type {
   ConversationOrigin,
   Discussion,
-  DecisionOutcome,
-  DraftChangeProposal,
+  DiscussionTarget,
   ProjectAgent,
 } from "../../types";
+
+/**
+ * DCR-FR-GNRL / PCR-FR-14: what a dispatch reads of a proposal. Structural, so
+ * a draft proposal and a prompt or DOC proposal dispatch on one path.
+ */
+export type DispatchableProposal = { id: string; threadId: string } & (
+  | { draftId: string }
+  | { artifactId: string }
+);
+
+/** What a dispatch reads of a decision's outcome. */
+export interface DispatchableOutcome {
+  commentId?: string;
+}
+
+function targetOf(proposal: DispatchableProposal): DiscussionTarget {
+  return "draftId" in proposal
+    ? { kind: "draft", draftId: proposal.draftId }
+    : { kind: "artifact", artifactId: proposal.artifactId };
+}
 
 /**
  * DCR-FR-15: tell the conversation what was decided, on **exactly the terms any
@@ -59,8 +78,8 @@ import type {
  * there is then no comment for a turn to answer.
  */
 export async function dispatchDecision(
-  proposal: DraftChangeProposal,
-  outcome: DecisionOutcome,
+  proposal: DispatchableProposal,
+  outcome: DispatchableOutcome,
   held: Discussion | undefined,
   agents: readonly ProjectAgent[],
   feedback: string,
@@ -92,7 +111,7 @@ export async function dispatchDecision(
     ? originFor(thread)
     : {
         discussionId: proposal.threadId,
-        target: { kind: "draft", draftId: proposal.draftId },
+        target: targetOf(proposal),
         fragmentTarget: null,
       };
   for (const nickname of targets) {

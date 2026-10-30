@@ -6,7 +6,7 @@ use super::*;
 // Tauri commands, the event, and logging
 // ---------------------------------------------------------------------------
 
-/// PCP-FR-17: a proposal was recorded or decided.
+/// PCP-FR-17: a proposal was recorded, a hunk of it decided, held, or revised.
 ///
 /// Kebab-case for the reason every event in this application is: Tauri rejects
 /// the rest of the character set at `emit`, leaving a channel that is silently
@@ -27,7 +27,7 @@ pub struct PromptProposalsChanged {
 ///
 /// Best-effort on the emit: a proposal that was written must not be reported as
 /// failed because the notification of it could not be delivered.
-pub(super) fn announce<R: tauri::Runtime>(
+pub fn announce<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
     proposal: &PromptChangeProposal,
@@ -54,6 +54,10 @@ pub(super) fn announce<R: tauri::Runtime>(
             "proposalId" => &proposal.id,
             "path" => &proposal.path,
             "state" => proposal.state.as_str(),
+            "pending" => proposal.counts.pending,
+            "accepted" => proposal.counts.accepted,
+            "rejected" => proposal.counts.rejected,
+            "discussing" => proposal.counts.discussing,
         },
     );
 }
@@ -141,107 +145,66 @@ where
     Ok(list_proposals_impl(&root, &artifact_id))
 }
 
+/// PCP-FR-LDHK: the proposal's hunks and their placements against the file as
+/// it stands, for a review about to render them.
 #[tauri::command]
-pub fn load_prompt_change_proposal_content(
+pub fn load_prompt_change_proposal_hunks(
     proposal_id: String,
     project: State<'_, ProjectState>,
-) -> Result<PromptProposalContent, String> {
+) -> Result<PromptProposalHunks, String> {
     let root = require_root(&project)?;
-    load_content_impl(&root, &proposal_id)
+    load_hunks_impl(&root, &proposal_id)
 }
 
-/// PCP-FR-22 / PCP-FR-23 / PCP-FR-24: the author's own text over a pending
-/// proposal's candidate, and nothing else anywhere.
-///
-/// Emits no `"prompt change proposals changed"` on success — the proposal's
-/// state is exactly what it was, and the surfaces that care read
-/// `candidate_edited` from the record they already hold or from their next list.
-#[tauri::command]
-pub fn save_prompt_change_proposal_candidate<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    proposal_id: String,
-    content: String,
-    baseline_checksum: String,
-    project: State<'_, ProjectState>,
-) -> Result<PromptCandidateSaved, String>
+/// The shared body of the hunk decisions and the decline.
+#[allow(clippy::too_many_arguments)] // Each is a Tauri state or an argument of the command.
+fn decide_command<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    operation: &'static str,
+    proposal_id: &str,
+    hunk: Option<&str>,
+    decision: Decision,
+    feedback: Option<&str>,
+    store: &GlobalSettingsStore,
+    project: &ProjectState,
+    tracker: &ContentTracker,
+) -> Result<PromptDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let root = require_root(&project)?;
-    let saved = save_candidate_impl(&root, &proposal_id, &content, &baseline_checksum)
-        .inspect_err(|e| log_refusal(&app, "save_candidate", e))?;
-    // PCP-FR-28: a DEBUG record naming the artifact and the proposal — and never
-    // the author's rewrite, which is material they composed. The byte count is
-    // the shape of the write rather than any of its content.
+    let root = require_root(project)?;
+    let repo_store = require_store(project)?;
+    // CMS-FR-12 / PCP-FR-16: resolved before anything is written, so a decision
+    // that cannot be attributed changes neither the file nor the record.
+    let by = comments::acting_participant(store, project)?;
+    let request = DecisionRequest { proposal_id, decision, hunk, feedback, by: &by };
+    let outcome = decide(app, &root, &repo_store, request, tracker)
+        .inspect_err(|e| log_refusal(app, operation, e))?;
+    // PCP-FR-28: the decision and its shape, never the feedback. DEBUG, because
+    // `announce` has already recorded the proposal's new state at INFO.
     logging::log_debug(
-        &app,
+        app,
         &BUFFER,
         &[Domain::Backend],
-        "prompt change proposal candidate saved",
+        "prompt change hunk decided",
         log_fields! {
-            "proposalId" => &proposal_id,
-            "bytes" => content.len(),
+            "operation" => operation,
+            "proposalId" => proposal_id,
+            "hunkId" => hunk.unwrap_or(""),
+            "resolved" => outcome.resolved,
+            "state" => outcome.proposal.state.as_str(),
         },
     );
-    Ok(saved)
+    Ok(outcome)
 }
 
-/// PCP-FR-22: write the author's own text over a **pending** proposal's
-/// candidate, and nothing else anywhere.
-///
-/// The whole reason the review surface can promise that a candidate under
-/// revision has cost the project nothing (PCR-FR-22): no file of the project is
-/// created, modified, or deleted, no `"artifact changed externally"` follows,
-/// nothing is recorded in the recently-edited list, and neither decision
-/// operation is called. It writes exactly one file.
-pub fn save_candidate_impl(
-    root: &fs::RootFs,
-    proposal_id: &str,
-    content: &str,
-    baseline_checksum: &str,
-) -> Result<PromptCandidateSaved, String> {
-    let mut record = read_proposal(root, proposal_id)?;
-    // PCP-FR-23: a candidate is the author's to shape only while the decision it
-    // is for is still owed.
-    if record.state != PromptProposalState::Pending {
-        return Err(ERR_ALREADY_DECIDED.to_string());
-    }
-    let dir = proposals_dir(root)?;
-    let path = at(&dir, proposal_id, CONTENT_EXT);
-
-    // PCP-FR-24: checked before anything is written, so a stale save leaves the
-    // candidate byte-for-byte as it was and the caller resolves the divergence
-    // explicitly rather than discovering it after an overwrite.
-    let current = root.sha256_file(&path).map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
-    if current != baseline_checksum {
-        return Err(ERR_CANDIDATE_STALE.to_string());
-    }
-
-    // PCP-FR-09: written atomically and verbatim. A candidate is never
-    // re-indented, normalised, re-encoded, or trimmed.
-    root.write_text_atomic(&path, content).map_err(|_| ERR_WRITE_FAILED.to_string())?;
-    let checksum = root.sha256_file(&path).map_err(|_| ERR_WRITE_FAILED.to_string())?;
-
-    // PCP-FR-22: the flag describes the *text*, so an edit that restores the
-    // agent's own bytes exactly clears it again.
-    if let Some(origin) = record.origin_checksum.as_deref() {
-        let edited = checksum != origin;
-        if edited != record.candidate_edited {
-            record.candidate_edited = edited;
-            // A record that will not write leaves the candidate written and the
-            // flag stale. That is the harmless way round — the flag drives a line
-            // of prose, while the candidate is the author's work.
-            let _ = root.write_toml_atomic(at(&dir, proposal_id, RECORD_EXT), &record);
-        }
-    }
-
-    Ok(PromptCandidateSaved { checksum })
-}
-
+/// PCP-FR-ZQAH: accept one hunk, writing the file through the artifact's own
+/// save path inside the one-commit-point transaction.
 #[tauri::command]
-pub fn apply_prompt_change_proposal<R: tauri::Runtime>(
+pub fn accept_prompt_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
+    hunk_id: String,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
     project: State<'_, ProjectState>,
@@ -250,21 +213,101 @@ pub fn apply_prompt_change_proposal<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let root = require_root(&project)?;
-    let repo_store = require_store(&project)?;
-    // CMS-FR-12 / PCP-FR-16: resolved before anything is written, so a decision
-    // that cannot be attributed changes neither the file nor the record.
-    let by = comments::acting_participant(&store, &project)?;
-    let request = DecisionRequest {
-        proposal_id: &proposal_id,
-        decision: Decision::Accept,
-        feedback: feedback.as_deref(),
-        by: &by,
-    };
-    decide(&app, &root, &repo_store, request, &tracker)
-        .inspect_err(|e| log_refusal(&app, "apply", e))
+    decide_command(
+        &app,
+        "accept_hunk",
+        &proposal_id,
+        Some(&hunk_id),
+        Decision::Accept,
+        feedback.as_deref(),
+        &store,
+        &project,
+        &tracker,
+    )
 }
 
+/// PCP-FR-RJHN: reject one hunk, writing nothing into the file.
+#[tauri::command]
+pub fn reject_prompt_change_hunk<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    proposal_id: String,
+    hunk_id: String,
+    feedback: Option<String>,
+    store: State<'_, GlobalSettingsStore>,
+    project: State<'_, ProjectState>,
+    tracker: State<'_, ContentTracker>,
+) -> Result<PromptDecisionOutcome, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    decide_command(
+        &app,
+        "reject_hunk",
+        &proposal_id,
+        Some(&hunk_id),
+        Decision::Decline,
+        feedback.as_deref(),
+        &store,
+        &project,
+        &tracker,
+    )
+}
+
+/// PCP-FR-HLDQ: hold one hunk for discussion, or release it. It decides
+/// nothing.
+#[tauri::command]
+pub fn set_prompt_change_hunk_discussing<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    proposal_id: String,
+    hunk_id: String,
+    discussing: bool,
+    project: State<'_, ProjectState>,
+) -> Result<PromptChangeProposal, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let root = require_root(&project)?;
+    let proposal = hold_hunk_impl(&root, &proposal_id, &hunk_id, discussing)
+        .inspect_err(|e| log_refusal(&app, "hold_hunk", e))?;
+    announce(&app, &BUFFER, &proposal);
+    Ok(proposal)
+}
+
+/// PCP-FR-EDTW: the author's own text over one undecided hunk. It is not a
+/// change to the file and emits no event.
+#[tauri::command]
+pub fn edit_prompt_change_hunk<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    proposal_id: String,
+    hunk_id: String,
+    after: String,
+    baseline_checksum: String,
+    project: State<'_, ProjectState>,
+) -> Result<PromptCandidateSaved, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let root = require_root(&project)?;
+    let saved = edit_hunk_impl(&root, &proposal_id, &hunk_id, &after, &baseline_checksum)
+        .inspect_err(|e| log_refusal(&app, "edit_hunk", e))?;
+    // PCP-FR-28: the proposal, the hunk, and the shape of the write — never
+    // the author's text.
+    logging::log_debug(
+        &app,
+        &BUFFER,
+        &[Domain::Backend],
+        "prompt change hunk edited",
+        log_fields! {
+            "proposalId" => &proposal_id,
+            "hunkId" => &hunk_id,
+            "bytes" => after.len(),
+        },
+    );
+    Ok(saved)
+}
+
+/// PCP-FR-RJHN: decline the proposal — reject every undecided hunk at once,
+/// writing nothing into the file.
 #[tauri::command]
 pub fn decline_prompt_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -277,17 +320,17 @@ pub fn decline_prompt_change_proposal<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let root = require_root(&project)?;
-    let repo_store = require_store(&project)?;
-    let by = comments::acting_participant(&store, &project)?;
-    let request = DecisionRequest {
-        proposal_id: &proposal_id,
-        decision: Decision::Decline,
-        feedback: feedback.as_deref(),
-        by: &by,
-    };
-    decide(&app, &root, &repo_store, request, &tracker)
-        .inspect_err(|e| log_refusal(&app, "decline", e))
+    decide_command(
+        &app,
+        "decline",
+        &proposal_id,
+        None,
+        Decision::Decline,
+        feedback.as_deref(),
+        &store,
+        &project,
+        &tracker,
+    )
 }
 
 /// PCP-FR-14: finish an acceptance whose decision comment is still owed.
@@ -322,8 +365,10 @@ where
         }
         _ => None,
     };
+    let resolved = record.state != PromptProposalState::Pending;
     Ok(PromptDecisionOutcome {
         proposal: record,
+        resolved,
         comment_id,
         origin_kind: origin_kind_of(discussion),
     })

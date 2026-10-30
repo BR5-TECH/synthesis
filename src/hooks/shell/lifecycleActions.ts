@@ -253,7 +253,7 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
     resetDraftDiscussions();
     // PCR-FR-28: the readings of PCR-FR-27 belong to the content root they were
     // taken from, so they go with the project and with the worktree — together
-    // with the review standing over one (PCR-FR-25).
+    // with the hunk edits held for them (PCR-FR-28).
     resetPromptProposals();
     // TAB-FR-14: a result set names paths in the outgoing content root, so it
     // does not survive into the new one either.

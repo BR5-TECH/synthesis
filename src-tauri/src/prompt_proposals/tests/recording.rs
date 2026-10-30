@@ -8,19 +8,19 @@ use super::*;
 
 #[test]
 fn a_recording_writes_two_files_beside_the_project_and_touches_no_artifact() {
-    // PCP-FR-01, PCP-FR-02, PCP-FR-09.
+    // PCP-FR-01, PCP-FR-02, PCP-FR-CNVT.
     let f = Fixture::new();
     let proposal = f.pending();
 
     assert_eq!(
         f.folder_files(),
-        vec![format!("{}.content", proposal.id), format!("{}.toml", proposal.id),],
-        "a proposal at rest is a record and a document, and nothing else",
+        vec![format!("{}.hunks", proposal.id), format!("{}.toml", proposal.id),],
+        "a proposal at rest is a record and a hunk document, and nothing else",
     );
     assert_eq!(
-        std::fs::read_to_string(f.dir().join(format!("{}.content", proposal.id))).unwrap(),
+        candidate_for_test(&f.root, &proposal.id).unwrap(),
         PROPOSED,
-        "the content file holds the proposed text byte-for-byte",
+        "the hunks give the proposed text",
     );
     assert_eq!(f.artifact_body(), ORIGINAL, "the artifact is untouched");
     // PCP-FR-02: registered through `ensure_gitignored` when the folder is
@@ -57,7 +57,7 @@ fn an_artifact_carries_one_pending_proposal_at_a_time() {
         f.propose("# Review\n\nAnother version entirely.\n"),
         Err(RecordRefusal::ProposalPending),
     );
-    assert_eq!(f.folder_files().len(), 2, "no second candidate was written",);
+    assert_eq!(f.folder_files().len(), 2, "no second proposal was written",);
     assert_eq!(f.discussion().comments.len(), before, "the conversation gained no line",);
 
     f.decline(&first.id).expect("declined");
@@ -92,13 +92,15 @@ fn no_tauri_command_records_a_proposal() {
         commands,
         vec![
             "list_prompt_change_proposals",
-            "load_prompt_change_proposal_content",
-            "save_prompt_change_proposal_candidate",
-            "apply_prompt_change_proposal",
+            "load_prompt_change_proposal_hunks",
+            "accept_prompt_change_hunk",
+            "reject_prompt_change_hunk",
+            "set_prompt_change_hunk_discussing",
+            "edit_prompt_change_hunk",
             "decline_prompt_change_proposal",
             "complete_prompt_change_decision",
         ],
-        "these six and no route that records or accepts an agent participant",
+        "these eight and no route that records or accepts an agent participant",
     );
 }
 
@@ -255,18 +257,13 @@ fn a_recording_refuses_a_target_that_is_missing_or_not_a_prompt() {
 
 #[test]
 fn an_empty_candidate_is_a_change_like_any_other() {
-    // PCP-FR-14 / PCP-FR-07, PCP-FR-09, PCP-FR-13.
+    // PCP-FR-14 / PCP-FR-07, PCP-FR-CNVT.
     let f = Fixture::new();
     let proposal = f.propose("").expect("an empty candidate is recorded");
-    let content = f.dir().join(format!("{}.content", proposal.id));
-    assert!(content.is_file());
-    assert_eq!(std::fs::metadata(&content).unwrap().len(), 0);
     assert_eq!(proposal.state, PromptProposalState::Pending);
+    assert_eq!(proposal.hunk_count, 1, "one hunk removes the whole text");
     assert_eq!(f.artifact_body(), ORIGINAL);
-
-    let loaded = load_content_impl(&f.root, &proposal.id).expect("loaded");
-    assert_eq!(loaded.content, "");
-    assert_eq!(loaded.checksum, fs::sha256_bytes(b""));
+    assert_eq!(candidate_for_test(&f.root, &proposal.id).unwrap(), "");
 
     f.accept(&proposal.id).expect("accepted");
     assert_eq!(f.artifact_body(), "", "the file is emptied");
@@ -278,12 +275,12 @@ fn an_empty_candidate_is_a_change_like_any_other() {
 }
 
 #[test]
-fn a_candidate_is_kept_verbatim_and_the_write_settles_the_line_endings() {
-    // PCP-FR-09, PCP-FR-13.
+fn a_converted_candidate_keeps_its_text_and_the_write_settles_the_line_endings() {
+    // PCP-FR-CNVT, PCP-FR-ZQAH.
     let f = Fixture::new();
     let odd = "# Review   \n\n\t  indented\n\nno final newline";
     let proposal = f.propose(odd).expect("recorded");
-    assert_eq!(load_content_impl(&f.root, &proposal.id).unwrap().content, odd);
+    assert_eq!(candidate_for_test(&f.root, &proposal.id).unwrap(), odd);
 
     // The project's convention is what the write applies, and it applies it to
     // the artifact rather than to the candidate.
@@ -296,16 +293,19 @@ fn a_candidate_is_kept_verbatim_and_the_write_settles_the_line_endings() {
         },
     )
     .expect("convention");
-    f.accept(&proposal.id).expect("accepted");
+    // PCP-FR-CNVT: the text converts into one hunk for each run of changed
+    // lines, and accepting every hunk lands the whole text.
+    let rows = read_proposal(&f.root, &proposal.id).expect("record").ledger;
+    assert!(rows.len() > 1, "the changed lines are separate hunks");
+    for row in rows {
+        f.decide_hunk(&proposal.id, Decision::Accept, Some(&row.id), None).expect("accepted");
+    }
     let landed = f.artifact_body();
     assert!(landed.contains("# Review   \r\n"), "trailing space survives");
     assert!(landed.contains("\t  indented"), "indentation survives");
     assert!(!landed.ends_with('\n'), "a missing final newline survives");
-    assert_eq!(
-        load_content_impl(&f.root, &proposal.id).unwrap().content,
-        odd,
-        "the candidate file is still byte-for-byte what it was",
-    );
+    let hunks = load_hunks_impl(&f.root, &proposal.id).unwrap();
+    assert_eq!(hunks.hunks[0].after.as_deref(), Some("# Review   \n"), "the hunk is what it was");
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn a_list_returns_every_proposal_most_recently_created_first() {
     let listed: Vec<String> = f.list().into_iter().map(|p| p.id).collect();
     ids.reverse();
     assert_eq!(listed, ids, "most recently created first, all four states");
-    // PCP-FR-10: reads records and never a `.content` file, so a long history
+    // PCP-FR-10: reads records and never a hunk document, so a long history
     // costs a list no more than a single proposal does.
     const MODULE: &str = include_str!("../../prompt_proposals.rs");
     let list_body = MODULE
@@ -342,6 +342,7 @@ fn a_list_returns_every_proposal_most_recently_created_first() {
         .next()
         .expect("its body");
     assert!(!list_body.contains("CONTENT_EXT"), "a list reads no candidate: {list_body}",);
+    assert!(!list_body.contains("HUNKS_EXT"), "a list reads no hunks: {list_body}",);
 }
 
 #[test]

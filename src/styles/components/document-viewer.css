@@ -92,12 +92,12 @@
 .document-viewer__rich li > ol {
   margin: var(--sp-1) 0 0;
 }
+/* DTV-FR-SSQI: the size of h4 to h6 is the shared heading scale of `.doc`
+   (EDT-FR-UXZH). This rule sets only their weight and margins. */
 .document-viewer__rich h4,
 .document-viewer__rich h5,
 .document-viewer__rich h6 {
-  font-size: var(--fs-doc-md);
   font-weight: var(--fw-semi);
-  line-height: var(--lh-snug);
   margin: var(--sp-4) 0 var(--sp-2);
 }
 

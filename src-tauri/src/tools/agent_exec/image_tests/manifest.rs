@@ -31,6 +31,8 @@ fn no_image_identity_is_named_outside_the_manifest() {
         for (name, source) in [
             ("agent_exec.rs", include_str!("../../agent_exec.rs")),
             ("descriptor.rs", include_str!("../descriptor.rs")),
+            ("descriptor/claude_code.rs", include_str!("../descriptor/claude_code.rs")),
+            ("descriptor/codex.rs", include_str!("../descriptor/codex.rs")),
             ("runtime.rs", include_str!("../runtime.rs")),
         ] {
             assert!(!source.contains(version.as_str()), "{name} hardcodes {vendor}'s CLI version");
@@ -42,8 +44,8 @@ fn no_image_identity_is_named_outside_the_manifest() {
     assert!(MANIFEST.contains("image_digest"));
     assert!(MANIFEST.contains("cli_version"));
 
-    // AVI-FR-07 / EAC-FR-10, EAC-FR-38: the vendor execution descriptors carry neither an
-    // image reference nor a digest. The image a container is created from is
+    // AVI-FR-07 / EAC-FR-10, EAC-FR-38, AVI-FR-QWVT: the vendor execution descriptors carry no
+    // image reference, no digest, and no CLI version. The image a container is created from is
     // the one the open project commits (EAC-FR-38), so a launch reads the
     // shipped manifest not at all — and the machinery that reads it is
     // compiled under `cfg(test)` alone, which is what makes that a property of
@@ -56,7 +58,7 @@ fn no_image_identity_is_named_outside_the_manifest() {
         .split_once("\n}")
         .expect("the descriptor struct ends")
         .0;
-    for field in ["image_ref", "image_digest"] {
+    for field in ["image_ref", "image_digest", "version"] {
         assert!(!struct_body.contains(field), "a vendor execution descriptor carries no {field}");
     }
     for gated in [
@@ -346,7 +348,7 @@ fn the_readme_documents_everything_avi_requires() {
     for (what, needle) in [
         ("the two definitions", "claude-code/Dockerfile"),
         ("the codex definition", "codex/Dockerfile"),
-        ("the pinned base", "node:22-trixie-slim"),
+        ("the base", "trixie-slim"),
         ("the C library floor", "AVI-FR-DHCF"),
         ("the C library version", "glibc 2.38"),
         ("the build command", "docker build"),

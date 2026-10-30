@@ -9,19 +9,19 @@ The wire contract for driving the Claude Code CLI non-interactively: the exact a
 
 This spec exposes no operation and registers nothing. Its product is the pinned grammar below, which `../tools/EAC-execute-agent-cli.md`'s Claude Code vendor execution descriptor (EAC-FR-10) is built from and which its tests assert against.
 
-### The pinned version and environment
+### The observed version and environment
 
 | Fact | Value |
 |---|---|
 | CLI | Claude Code |
-| Pinned version | `2.1.233` |
+| Observed version | `2.1.233` |
 | Package | `@anthropic-ai/claude-code` |
 | Invoked as | the image entrypoint, per `AVI-agent-vendor-images.md` AVI-FR-04 |
 | Working directory | the execution directory's own path, or `/workspace` in the fallback shape (`../tools/EAC-execute-agent-cli.md` EAC-FR-ZKMR) |
 | Runs as | the image's non-root user (AVI-FR-03) |
 | Network | required — the CLI reaches Anthropic's own service |
 
-The version this protocol was established against is `2.1.233`. `AVI-agent-vendor-images.md`'s manifest (AVI-FR-07) remains the single runtime record of which version is installed, and its `cli_version` for `claude_code` and this pinned version are the same string; a manifest bump that does not match this spec is a protocol change and is resolved here before the image is adopted.
+The version this protocol was established against is `2.1.233`. The version an image installs is the choice of its Dockerfile's author (`AVI-agent-vendor-images.md` AVI-FR-QWVT), and `AVI-agent-vendor-images.md`'s manifest (AVI-FR-07) remains the single record of the version a shipped image holds. Neither has to equal the version above.
 
 ### Sources
 
@@ -132,7 +132,7 @@ Nothing else is required. This CLI needs no configuration file mount and no logi
 
 ## Functional requirements
 
-1. **CCP-FR-01** The pinned version is `2.1.233`, and every element of this protocol is asserted against that version alone. A different installed version is an unverified protocol rather than a compatible one, and adopting it is a change to this spec made before the image that carries it is adopted.
+1. **CCP-FR-01** Observation of version `2.1.233` establishes the elements of this protocol. That version names the source of the grammar. It is not a pin, and it restricts no image. An installed version that behaves differently is a change to this spec, and one that behaves the same needs no change here.
 2. **CCP-FR-02** The generated argument vector is exactly the ordered sequence the contract surface defines, with the conditional elements present only under their stated conditions. Order is contractual rather than incidental.
 3. **CCP-FR-03** `-p` is always present, and so is `--output-format stream-json`, which makes the answer machine-readable and makes it arrive while the turn is happening rather than only at its end (CCP-FR-25).
 4. **CCP-FR-04** `--permission-mode bypassPermissions` is always present. No weaker mode is generated: `acceptEdits` auto-approves file edits and a short list of filesystem commands but leaves arbitrary shell commands needing an allow rule, which a code-modifying turn cannot complete under.

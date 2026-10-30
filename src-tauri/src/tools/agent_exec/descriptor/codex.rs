@@ -15,9 +15,6 @@ use crate::tools::agent_exec::protocol::{decode_envelope, EnvelopeInvalid};
 /// The specification this module transcribes (EAC-FR-10's `protocol_spec`).
 pub const SPEC: &str = "specifications/infra/CDX-codex-cli-protocol.md";
 
-/// CDX-FR-01: the version every element here was asserted against.
-pub const PINNED_CLI_VERSION: &str = "0.147.0";
-
 /// CDX-FR-24: the variable addressing the mount this CLI reads its login from
 /// and writes its session state beneath. One directory serves both, which is why
 /// CDX-FR-23 makes that mount read/write.

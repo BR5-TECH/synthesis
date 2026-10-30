@@ -212,7 +212,11 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     // CVL-FR-PDXK: the bounds are read before the turn and bound it whole, so a
     // provider or a project that raised its turn timeout raises this turn's.
     let bounds = turns.bounds_for_turn(app, endpoint.turn_timeout_ms);
-    let deadline = std::time::Instant::now() + bounds.timeout;
+    // AGC-FR-URXV: the deadline starts here, once the turn holds its slot, and
+    // the turn record carries it. CVL-FR-SZDM: a steering message restarts it,
+    // so every read below takes it as it stands now.
+    let started_deadline = turns.start_deadline(app, &plan.turn_id, bounds.timeout);
+    let deadline_now = || turns.deadline_of(&plan.turn_id, started_deadline);
     // CVL-FR-12: the exchange opens with the input as its single first message
     // and grows by one entry per reply and one per tool result. CVL-FR-20: a
     // retry presents this exchange byte-for-byte as it stands — nothing
@@ -228,6 +232,11 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
 
     let answer = loop {
         check_cancelled(plan)?;
+        // CVL-FR-EZKC / CVL-FR-YNOE: the steering messages the turn took go into
+        // the exchange before the next call. Before the last call under the
+        // logical bound, the turn first stops taking more.
+        append_steering(app, turns, plan, &mut conversation, model_calls + 1 >= MAX_MODEL_CALLS);
+        let deadline = deadline_now();
         if deadline.saturating_duration_since(std::time::Instant::now()).is_zero() {
             log_turn_out_of_time(app, turns, plan, model_calls);
             return Err(TurnEnd::TimedOut);
@@ -279,6 +288,28 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // is the answer, whether or not the provider searched or fetched on its
         // way to composing it.
         if reply.tool_calls.is_empty() {
+            // CVL-FR-XXKL: a steering message waits, so the reply answers a
+            // question the author has since changed. The loop keeps the reply
+            // in the exchange and calls again with the message.
+            if model_calls < MAX_MODEL_CALLS && turns.has_steering(&plan.turn_id) {
+                logging::log_debug(
+                    app,
+                    turns.buffer(),
+                    &[Domain::Ai, Domain::Backend],
+                    "agent reply set aside for a steering message",
+                    log_fields! {
+                        "turnId" => &plan.turn_id,
+                        "agent" => &plan.agent.nickname,
+                        "agentId" => &plan.agent.id,
+                        "provider" => &plan.provider,
+                        "model" => &plan.agent.model_id,
+                        "modelCalls" => model_calls,
+                        "replyChars" => reply.text.chars().count(),
+                    },
+                );
+                conversation.exchange.push(assistant_message(&reply));
+                continue;
+            }
             break reply.text;
         }
 
@@ -349,9 +380,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 return Err(end);
             }
             let call = &reply.tool_calls[index];
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let result = dispatch_tool(app, turns, plan, call, remaining);
-            activity.finish(app, turns, &plan.turn_id, index);
+            let remaining = deadline_now().saturating_duration_since(std::time::Instant::now());
+            let (result, outcome) = dispatch_tool(app, turns, plan, call, remaining);
+            activity.finish(app, turns, &plan.turn_id, index, outcome);
             // Read after the dispatch rather than inferred from the call's name:
             // the name says what the model asked for, and only the flag says
             // whether it actually went out (CVL-FR-15).
@@ -439,7 +470,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 ));
                 // CVL-FR-33: a refusal is a result produced, so the call leaves
                 // the active list exactly as a successful one does.
-                activity.finish(app, turns, &plan.turn_id, index);
+                activity.finish(app, turns, &plan.turn_id, index, ToolCallState::Failed);
                 continue;
             }
             // CVL-FR-25: cancellation reaches the loop wherever it stands, and a
@@ -448,9 +479,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 activity.finish_all(app, turns, &plan.turn_id);
                 return Err(end);
             }
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let result = dispatch_tool(app, turns, plan, call, remaining);
-            activity.finish(app, turns, &plan.turn_id, index);
+            let remaining = deadline_now().saturating_duration_since(std::time::Instant::now());
+            let (result, outcome) = dispatch_tool(app, turns, plan, call, remaining);
+            activity.finish(app, turns, &plan.turn_id, index, outcome);
             conversation.exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
                 call.function.name.clone(),

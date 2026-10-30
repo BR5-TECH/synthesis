@@ -3809,6 +3809,12 @@ Object.defineProperty(globalThis, "__mockRetryDelayMs", {
   turn.endedAt = state === "running" ? null : new Date().toISOString();
   // AGC-FR-34: a terminating turn leaves no active call behind.
   if (state !== "running") turn.activeToolCalls = [];
+  // CVL-FR-SKSE: a call still running when the turn ends is abandoned.
+  if (state !== "running") {
+    turn.toolCalls = (turn.toolCalls ?? []).map((c: any) =>
+      c.state === "running" ? { ...c, state: "failed" } : c,
+    );
+  }
   // AGC-FR-NJXW: a turn that reached the model ends with its figures.
   if (state !== "running" && !turn.context) turn.context = mockTurnContext();
   if (state !== "running" && state !== "awaiting_reply") {
@@ -3872,9 +3878,16 @@ let documentLimitPercent = 30;
  *   window.__mockToolCallBegins("turn-1", "openrouter:web_search")
  */
 const nextActivationSeq = new Map<string, number>();
+
+/** AGC-FR-URXV: the whole-turn timeout the mock stamps on each deadline. */
+function mockTurnTimeoutMs(): number {
+  const set = (globalThis as Record<string, unknown>).__mockTurnTimeoutMs;
+  return typeof set === "number" && set > 0 ? set : 300_000;
+}
 (globalThis as Record<string, unknown>).__mockToolCallBegins = (
   turnId: string,
   tool: string,
+  keyInput: string | null = null,
 ): any => {
   const turn = agentTurns.find((t) => t.id === turnId);
   if (!turn) throw new Error(`no such turn: ${turnId}`);
@@ -3884,6 +3897,9 @@ const nextActivationSeq = new Map<string, number>();
   nextActivationSeq.set(turnId, seq);
   const call = { id: `call-${seq}`, tool, activationSeq: seq };
   turn.activeToolCalls = [...(turn.activeToolCalls ?? []), call];
+  // AGC-FR-HMUV: the same call in the list that keeps finished calls, with
+  // its key input (CVL-FR-DUUO).
+  turn.toolCalls = [...(turn.toolCalls ?? []), { ...call, state: "running", keyInput }];
   // AGC-FR-34: the whole turn, still `running`, rather than a difference.
   fireBus("agent-turn-state-changed", { ...turn });
   return call.id;
@@ -3899,6 +3915,7 @@ const nextActivationSeq = new Map<string, number>();
 (globalThis as Record<string, unknown>).__mockToolCallFinishes = (
   turnId: string,
   callId?: string,
+  state: "done" | "failed" = "done",
 ): any => {
   const turn = agentTurns.find((t) => t.id === turnId);
   if (!turn) throw new Error(`no such turn: ${turnId}`);
@@ -3913,6 +3930,10 @@ const nextActivationSeq = new Map<string, number>();
       undefined as { id: string; activationSeq: number } | undefined,
     )?.id;
   turn.activeToolCalls = active.filter((c) => c.id !== target);
+  // AGC-FR-HMUV / CVL-FR-SKSE: the call stays in the list with how it ended.
+  turn.toolCalls = (turn.toolCalls ?? []).map((c: any) =>
+    c.id === target ? { ...c, state } : c,
+  );
   fireBus("agent-turn-state-changed", { ...turn });
   return { ...turn };
 };
@@ -10539,6 +10560,24 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         throw "agent_not_found";
       }
       if (availabilityOf(agent) !== "ready") throw "agent_unavailable";
+      // AGC-FR-ISKZ: a running turn of this agent in this origin takes the
+      // comment as a steering message, and its deadline restarts in full
+      // (CVL-FR-SZDM, AGC-FR-URXV). `window.__mockTurnTimeoutMs` sets the
+      // timeout; it is five minutes otherwise.
+      const steered = agentTurns.find(
+        (t) =>
+          t.state === "running" &&
+          t.agentId === agent.id &&
+          JSON.stringify(t.origin) === JSON.stringify(a.origin),
+      );
+      if (steered) {
+        const now = Date.now();
+        steered.deadlineStartedAt = new Date(now).toISOString();
+        steered.deadlineAt = new Date(now + mockTurnTimeoutMs()).toISOString();
+        fireBus("agent-turn-state-changed", { ...steered });
+        return { ...steered };
+      }
+      const startedNow = Date.now();
       const turn = {
         id: `turn-${Math.random().toString(36).slice(2, 8)}`,
         agentId: agent.id,
@@ -10551,8 +10590,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         // AGC-FR-33: a turn that has made no tool call carries an empty list,
         // so a fresh pending contribution reads **Thinking…** (CMT-FR-80).
         activeToolCalls: [],
+        // AGC-FR-HMUV: no call yet.
+        toolCalls: [],
         startedAt: new Date().toISOString(),
         endedAt: null,
+        // AGC-FR-URXV: the mock has no slot bound, so the deadline starts at
+        // once.
+        deadlineStartedAt: new Date(startedNow).toISOString(),
+        deadlineAt: new Date(startedNow + mockTurnTimeoutMs()).toISOString(),
       };
       // CMT-FR-65: the question has now been answered, so the `awaiting_reply`
       // turn that obliged this dispatch stops being outstanding — otherwise the

@@ -41,7 +41,10 @@ pub(super) fn report_native_calls<R: tauri::Runtime>(
     // The counts of CVL-FR-34 are recorded whether or not any call came with
     // them: a provider that counted a call and executed none reports no call at
     // all, which is the one case the counts exist to make visible.
-    let reportable: Vec<&str> = if reply.native_calls.is_empty() {
+    // CVL-FR-DUUO / CVL-FR-SKSE: each entry carries its key input and how it
+    // ended. A search the provider counted but did not name has neither an
+    // argument nor a result, so it carries no key input and is `done`.
+    let reportable: Vec<(&str, Option<String>, ToolCallState)> = if reply.native_calls.is_empty() {
         let counted = reply
             .native_usage
             .and_then(|usage| usage.web_searches)
@@ -50,15 +53,32 @@ pub(super) fn report_native_calls<R: tauri::Runtime>(
             // a number this application did not choose becoming a number of
             // events it emits.
             .min(MAX_COUNTED_NATIVE_REPORTS) as usize;
-        vec![crate::tools::web_search::ENTRY_TYPE; counted]
+        vec![(crate::tools::web_search::ENTRY_TYPE, None, ToolCallState::Done); counted]
     } else {
-        reply.native_calls.iter().map(|call| call.name.as_str()).collect()
+        reply
+            .native_calls
+            .iter()
+            .map(|call| {
+                let key = native_key_input_of(&call.name, &call.arguments);
+                // CVL-FR-32: a call the provider produced no result for failed.
+                let state = if call.result.trim().is_empty() {
+                    ToolCallState::Failed
+                } else {
+                    ToolCallState::Done
+                };
+                (call.name.as_str(), key, state)
+            })
+            .collect()
     };
-    let ids: Vec<Option<String>> =
-        reportable.iter().map(|name| report_tool_begun(app, turns, &plan.turn_id, name)).collect();
+    let ids: Vec<(Option<String>, ToolCallState)> = reportable
+        .into_iter()
+        .map(|(name, key, state)| (report_tool_begun(app, turns, &plan.turn_id, name, key), state))
+        .collect();
     log_native_calls(app, turns, plan, endpoint, model_calls, reply);
-    for id in ids.into_iter().flatten() {
-        report_tool_finished(app, turns, &plan.turn_id, &id);
+    for (id, state) in ids {
+        if let Some(id) = id {
+            report_tool_finished(app, turns, &plan.turn_id, &id, state);
+        }
     }
 }
 

@@ -499,6 +499,9 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
         active_tool_calls: Vec::new(),
         images_omitted: omitted,
         context: None,
+        tool_calls: Vec::new(),
+        deadline_started_at: None,
+        deadline_at: None,
     };
 
     turns.record_image_notice(&entry("turn-1", &origin, true), PROJECT_KEY);

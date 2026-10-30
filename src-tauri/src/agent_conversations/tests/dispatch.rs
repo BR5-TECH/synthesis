@@ -54,12 +54,15 @@ fn any_number_of_turns_may_be_in_flight_and_none_is_refused() {
     );
     h.create_agent("arch", "");
     h.create_agent("sec", "");
+    h.create_agent("ops", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
     let trigger = thread.comments[0].id.clone();
 
+    // Three agents: a second dispatch for one agent in this discussion steers
+    // its running turn instead (AGC-FR-ISKZ).
     let a = h.dispatch("arch", origin.clone(), &trigger).expect("first");
-    let b = h.dispatch("arch", origin.clone(), &trigger).expect("second");
+    let b = h.dispatch("ops", origin.clone(), &trigger).expect("second");
     let c = h.dispatch("sec", origin.clone(), &trigger).expect("third");
 
     let live = h.turns().in_flight(Some(&origin));
@@ -534,16 +537,25 @@ fn a_turn_emits_its_registration_its_context_and_its_end_and_the_listing_agrees(
     }
     let mine: Vec<&String> =
         payloads.iter().filter(|p| p.contains(&format!("\"{}\"", turn.id))).collect();
-    assert_eq!(mine.len(), 3, "one registration, one context report, one terminal event");
+    assert_eq!(
+        mine.len(),
+        4,
+        "one registration, one slot taken, one context report, one terminal event"
+    );
     let turns: Vec<AgentTurn> =
         mine.iter().map(|p| serde_json::from_str(p).expect("an AgentTurn")).collect();
     assert_eq!(turns[0].state, AgentTurnState::Running);
     assert!(turns[0].context.is_none(), "null until the first call answers");
+    // AGC-FR-URXV: null while the turn waits for its slot, then set once.
+    assert!(turns[0].deadline_at.is_none());
     assert_eq!(turns[1].state, AgentTurnState::Running);
-    assert!(turns[1].context.is_some(), "the answered call's figures");
-    assert_eq!(turns[2].state, AgentTurnState::Delivered);
+    assert!(turns[1].deadline_at.is_some(), "the slot taken starts the deadline");
+    assert!(turns[1].context.is_none());
+    assert_eq!(turns[2].state, AgentTurnState::Running);
+    assert!(turns[2].context.is_some(), "the answered call's figures");
+    assert_eq!(turns[3].state, AgentTurnState::Delivered);
     // AGC-FR-NUKP: the terminal turn keeps the figures it held.
-    assert_eq!(turns[2].context, turns[1].context);
+    assert_eq!(turns[3].context, turns[2].context);
     assert!(h.turns().in_flight(None).is_empty());
 }
 
@@ -772,13 +784,17 @@ fn more_turns_than_the_bound_are_all_registered_and_none_is_refused() {
         Duration::from_millis(120),
         1,
     );
-    h.create_agent("arch", "");
+    // Four agents: a second dispatch for one agent in this discussion steers
+    // its running turn instead (AGC-FR-ISKZ).
+    for nickname in ["arch", "sec", "ops", "qa"] {
+        h.create_agent(nickname, "");
+    }
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
     let trigger = thread.comments[0].id.clone();
 
-    for _ in 0..4 {
-        let turn = h.dispatch("arch", origin.clone(), &trigger).expect("never refused for load");
+    for nickname in ["arch", "sec", "ops", "qa"] {
+        let turn = h.dispatch(nickname, origin.clone(), &trigger).expect("never refused for load");
         assert_eq!(turn.state, AgentTurnState::Running);
     }
     assert_eq!(h.turns().in_flight(None).len(), 4, "all registered at once");

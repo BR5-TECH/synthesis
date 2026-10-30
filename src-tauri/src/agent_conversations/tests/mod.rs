@@ -54,6 +54,21 @@ struct Harness {
     /// AGC-FR-NJXW: the events that only report new context figures, kept apart
     /// so the counts above stay about state and tool activity.
     context_events: Arc<Mutex<Vec<AgentTurn>>>,
+    /// AGC-FR-URXV: the events that only report a new deadline — the slot taken
+    /// or a steering message taken — kept apart for the same reason.
+    deadline_events: Arc<Mutex<Vec<AgentTurn>>>,
+}
+
+/// AGC-FR-URXV: whether `turn` only reports a new deadline — a running turn
+/// whose state, calls, and context figures are those of the previous event.
+fn is_deadline_report(previous: Option<&AgentTurn>, turn: &AgentTurn) -> bool {
+    previous.is_some_and(|p| {
+        turn.ended_at.is_none()
+            && p.state == turn.state
+            && p.active_tool_calls == turn.active_tool_calls
+            && p.context == turn.context
+            && p.deadline_at != turn.deadline_at
+    })
 }
 
 /// AGC-FR-NJXW: whether `turn` only reports new context figures — a running
@@ -72,7 +87,8 @@ pub(super) fn without_context_reports(payloads: Vec<AgentTurn>) -> Vec<AgentTurn
     let mut last: HashMap<String, AgentTurn> = HashMap::new();
     let mut kept = Vec::new();
     for turn in payloads {
-        let report = is_context_report(last.get(&turn.id), &turn);
+        let report = is_context_report(last.get(&turn.id), &turn)
+            || is_deadline_report(last.get(&turn.id), &turn);
         last.insert(turn.id.clone(), turn.clone());
         if !report {
             kept.push(turn);
@@ -313,13 +329,22 @@ impl Harness {
         let context_events: Arc<Mutex<Vec<AgentTurn>>> = Arc::new(Mutex::new(Vec::new()));
         let all = events.clone();
         let reports = context_events.clone();
+        let deadline_events: Arc<Mutex<Vec<AgentTurn>>> = Arc::new(Mutex::new(Vec::new()));
+        let deadlines = deadline_events.clone();
         let last: Mutex<HashMap<String, AgentTurn>> = Mutex::new(HashMap::new());
         app.listen(AGENT_TURN_STATE_CHANGED, move |event| {
             if let Ok(turn) = serde_json::from_str::<AgentTurn>(event.payload()) {
                 let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
                 let report = is_context_report(last.get(&turn.id), &turn);
+                let deadline = is_deadline_report(last.get(&turn.id), &turn);
                 last.insert(turn.id.clone(), turn.clone());
-                let sink = if report { &reports } else { &all };
+                let sink = if report {
+                    &reports
+                } else if deadline {
+                    &deadlines
+                } else {
+                    &all
+                };
                 sink.lock().unwrap_or_else(|e| e.into_inner()).push(turn);
             }
         });
@@ -351,7 +376,7 @@ impl Harness {
         ] {
             app.listen(event, |_| {});
         }
-        let harness = Self { app, root, seam, terminal, events, context_events };
+        let harness = Self { app, root, seam, terminal, events, context_events, deadline_events };
         harness.seed_verified_provider();
         harness
     }
@@ -646,6 +671,7 @@ mod responses_repair;
 mod retries;
 mod rig_replies;
 mod session_log;
+mod steering;
 mod tls_carriers;
 mod tool_loop_bounds;
 mod tool_loop_dispatch;

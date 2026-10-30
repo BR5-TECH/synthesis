@@ -9,6 +9,9 @@ use super::*;
 /// thread borrows nothing.
 pub(super) struct TurnPlan {
     pub(super) turn_id: String,
+    /// The project the turn belongs to, so a steering message the turn could
+    /// not read goes to a new turn of the same project (AGC-FR-CEKN).
+    pub(super) project_key: String,
     pub(super) roots: OwnedRoots,
     pub(super) origin: ConversationOrigin,
     /// AGC-FR-16: the agent participant this turn contributes as, for whichever
@@ -214,6 +217,26 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         );
     }
 
+    // AGC-FR-ISKZ: a running turn of this agent in this conversation takes the
+    // comment as a steering message, and no new turn is registered for it.
+    if let Some(steered) = turns.offer_steering(app, &agent.id, &origin, trigger_comment_id) {
+        logging::log_info(
+            app,
+            turns.buffer(),
+            &[Domain::Ai],
+            "agent turn took a steering message",
+            log_fields! {
+                "turnId" => &steered.id,
+                "agent" => &agent.nickname,
+                "agentId" => &agent.id,
+                "commentId" => trigger_comment_id,
+                "originKind" => origin.kind().as_str(),
+                "discussionId" => origin.discussion_id(),
+            },
+        );
+        return Ok(steered);
+    }
+
     let (turn, cancelled) = turns.register(&agent, origin.clone(), trigger_comment_id, project_key);
     publish(app, &turn);
     logging::log_info(
@@ -313,6 +336,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     );
     let plan = TurnPlan {
         turn_id: turn.id.clone(),
+        project_key: project_key.to_string(),
         roots: roots.owned(),
         origin,
         author,
@@ -449,6 +473,11 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
         fs_state.close_agent_session(&plan.turn_id);
     }
 
+    // CVL-FR-YNOE: the turn has stopped working, so it takes no further
+    // steering message. What it took and did not read goes to a new turn after
+    // the terminal event (AGC-FR-CEKN).
+    let unread = turns.close_steering(&plan.turn_id);
+
     let outcome = match outcome {
         Ok(outcome) => outcome,
         Err(_) => {
@@ -525,4 +554,5 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
             }),
         },
     );
+    redispatch_unread_steering(app, &plan, state, unread);
 }

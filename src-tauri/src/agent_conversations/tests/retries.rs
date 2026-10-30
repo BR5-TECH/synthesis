@@ -485,6 +485,11 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
         "tlsFailure",
         // AGC-FR-NJXW: carried, and null until a call answered.
         "context",
+        // AGC-FR-SEZK: carried, and empty — an entry holds no tool call.
+        "toolCalls",
+        // AGC-FR-URXV: carried, and the deadline the turn last held.
+        "deadlineStartedAt",
+        "deadlineAt",
     ];
     expected.sort_unstable();
     assert_eq!(keys, expected, "the entry is the turn and nothing beside it");

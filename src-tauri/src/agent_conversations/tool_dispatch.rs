@@ -14,7 +14,7 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
     plan: &TurnPlan,
     call: &rig::completion::message::ToolCall,
     remaining: Duration,
-) -> String {
+) -> (String, ToolCallState) {
     let name = call.function.name.to_string();
     let Some(tool) = plan.tools.iter().find(|tool| tool.name().as_str() == name).cloned() else {
         // Not a defect in the project — the model named something that is not on
@@ -26,7 +26,10 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
             "agent asked for a tool that is not attached",
             log_fields! { "turnId" => &plan.turn_id, "tool" => &name },
         );
-        return "No tool by that name is available to you. Use one of the tools you were given, or answer without it.".to_string();
+        return (
+            "No tool by that name is available to you. Use one of the tools you were given, or answer without it.".to_string(),
+            ToolCallState::Failed,
+        );
     };
 
     let started = std::time::Instant::now();
@@ -64,7 +67,7 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
                     "durationMs" => started.elapsed().as_millis() as u64,
                 },
             );
-            output.render()
+            (output.render(), ToolCallState::Done)
         }
         Ok(Err(error)) => {
             // TLC-FR-14: a call whose arguments never decoded is refused
@@ -126,14 +129,16 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
             // (TLC-FR-09), plus whether a further call could succeed — the
             // `retryable` flag is otherwise invisible to a model reading a
             // result as text (TLC-FR-11).
-            if error.retryable() == Some(false) {
+            // CVL-FR-SKSE: a refusal is a failed call.
+            let text = if error.retryable() == Some(false) {
                 format!(
                     "{} This will not succeed on a further call; do not retry it.",
                     error.message()
                 )
             } else {
                 error.message().to_string()
-            }
+            };
+            (text, ToolCallState::Failed)
         }
         // Told apart, because they call for different reactions from whoever
         // reads the log: one is a slow tool, the other is a broken one. Reported
@@ -151,7 +156,10 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
                     "durationMs" => started.elapsed().as_millis() as u64,
                 },
             );
-            "That tool did not finish in time. Answer with what you already have.".to_string()
+            (
+                "That tool did not finish in time. Answer with what you already have.".to_string(),
+                ToolCallState::Failed,
+            )
         }
         Err(_) => {
             // A tool that panicked, or a runtime that would not start. `ERROR`
@@ -169,8 +177,11 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
                     "durationMs" => started.elapsed().as_millis() as u64,
                 },
             );
-            "That tool could not be run. Answer with what you already have, or continue without it."
-                .to_string()
+            (
+                "That tool could not be run. Answer with what you already have, or continue without it."
+                    .to_string(),
+                ToolCallState::Failed,
+            )
         }
     }
 }

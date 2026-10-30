@@ -137,6 +137,36 @@ export interface AgentTurn {
    * What the discussion column's context indicator reads (DDS-FR-KXWQ).
    */
   context?: TurnContext | null;
+  /**
+   * AGC-FR-HMUV: every tool call of the turn, in activation order, finished
+   * calls among them. The terminal event carries the whole list. It is what the
+   * tool list of a pending contribution and of an activity row reads
+   * (CTA-FR-BJWN, CTA-FR-ZBIB). Absent from an older payload.
+   */
+  toolCalls?: TurnToolCall[];
+  /**
+   * AGC-FR-URXV: when the current whole-turn deadline began and when it
+   * expires, RFC 3339 UTC. `null` while the turn waits for its slot. What the
+   * timeout bar draws from (CVP-FR-JSHF).
+   */
+  deadlineStartedAt?: string | null;
+  deadlineAt?: string | null;
+}
+
+/** AGC-FR-HMUV / CVL-FR-SKSE: how far one tool call has come. */
+export type ToolCallState = "running" | "done" | "failed";
+
+/**
+ * AGC-FR-HMUV: one tool call of a turn. `keyInput` is the one argument that
+ * identifies the call, at most 200 characters (CVL-FR-DUUO, CVL-FR-IQZS). The
+ * surface renders it as plain text alone (CTA-FR-FPNP) and never logs it.
+ */
+export interface TurnToolCall {
+  id: string;
+  tool: string;
+  activationSeq: number;
+  state: ToolCallState;
+  keyInput: string | null;
 }
 
 /**

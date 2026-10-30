@@ -1,4 +1,5 @@
-//! Tests for declining, deciding twice, and the decision comment (PCP-FR-15 … PCP-FR-19).
+//! Tests for declining, deciding twice, and the decision comment
+//! (PCP-FR-RJHN, PCP-FR-RSLV, PCP-FR-16 … PCP-FR-19).
 
 use super::*;
 
@@ -7,8 +8,8 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_decline_writes_nothing_into_the_project_and_keeps_the_candidate() {
-    // PCP-FR-15, PCP-FR-16, PCP-FR-11.
+fn a_decline_writes_nothing_into_the_project_and_keeps_the_hunks() {
+    // PCP-FR-RJHN, PCP-FR-16, PCP-FR-LDHK.
     let f = Fixture::new();
     let proposal = f.pending();
     let outcome = f
@@ -17,10 +18,13 @@ fn a_decline_writes_nothing_into_the_project_and_keeps_the_candidate() {
 
     assert_eq!(outcome.proposal.state, PromptProposalState::Rejected);
     assert_eq!(f.artifact_body(), ORIGINAL);
+    assert!(outcome.resolved);
+    let hunks = load_hunks_impl(&f.root, &proposal.id).expect("hunks");
+    assert_eq!(hunks.hunks.len(), 1, "the hunks are still readable afterwards");
     assert_eq!(
-        load_content_impl(&f.root, &proposal.id).unwrap().content,
-        PROPOSED,
-        "the candidate is still readable afterwards",
+        hunks.hunks[0].after.as_deref(),
+        Some("Read the file.\n\nSummarise it, then file a note.\n"),
+        "PCP-FR-CNVT: the hunk holds the changed lines alone",
     );
     let decision = f.discussion().comments.last().cloned().expect("decision");
     assert_eq!(Some(decision.id), outcome.comment_id);
@@ -31,20 +35,29 @@ fn a_decline_writes_nothing_into_the_project_and_keeps_the_candidate() {
 }
 
 #[test]
-fn the_decision_comment_says_whose_candidate_was_decided() {
-    // PCP-FR-16, PCP-FR-22.
+fn the_decision_comment_says_whose_text_was_decided() {
+    // PCP-FR-16, PCP-FR-RSLV, PCP-FR-EDTW.
     let f = Fixture::new();
     let proposal = f.pending();
     f.accept(&proposal.id).expect("accepted");
     let decision = f.discussion().comments.last().cloned().expect("decision");
-    assert_eq!(decision.body, format!("Accepted the proposed change to `{PROMPT}`."),);
+    assert_eq!(
+        decision.body,
+        format!("Accepted the proposed change to `{PROMPT}`. 1 accepted, 0 rejected."),
+    );
 
-    // …and a candidate the author rewrote says so instead.
+    // …and a hunk the author rewrote says so instead.
     let g = Fixture::new();
     let other = g.pending();
-    let loaded = load_content_impl(&g.root, &other.id).unwrap();
-    save_candidate_impl(&g.root, &other.id, "# Review\n\nMine.\n", &loaded.checksum)
-        .expect("saved");
+    let loaded = load_hunks_impl(&g.root, &other.id).unwrap();
+    edit_hunk_impl(
+        &g.root,
+        &other.id,
+        &other.ledger[0].id,
+        "# Review\n\nMine.\n",
+        &loaded.checksum,
+    )
+    .expect("saved");
     g.accept(&other.id).expect("accepted");
     let decision = g.discussion().comments.last().cloned().expect("decision");
     assert!(decision.body.starts_with("Accepted an edited version"), "{}", decision.body,);
@@ -57,7 +70,7 @@ fn the_decision_comment_says_whose_candidate_was_decided() {
 
 #[test]
 fn a_resolved_conversation_refuses_both_decisions_before_anything_is_written() {
-    // PCP-FR-16.
+    // PCP-FR-16, PCP-FR-RJHN.
     let f = Fixture::new();
     let proposal = f.pending();
     f.resolve_conversation();
@@ -99,7 +112,7 @@ fn a_decided_proposal_is_decided_once() {
 
 #[test]
 fn an_acceptance_refuses_a_target_that_has_gone_or_stopped_being_a_prompt() {
-    // PCP-FR-19, PCP-FR-15, PCP-FR-08.
+    // PCP-FR-19, PCP-FR-RJHN, PCP-FR-08.
     let f = Fixture::new();
     let proposal = f.pending();
     std::fs::remove_file(f.root.path().join(PROMPT)).expect("delete");

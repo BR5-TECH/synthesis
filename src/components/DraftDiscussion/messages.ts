@@ -6,7 +6,7 @@
  * draft, which is the thing they most need to know. Nothing here is a colour or
  * a tone: a refusal is legible without colour discrimination (DCR-FR-28).
  */
-import { PROPOSAL_ERRORS } from "../../types";
+import { PROMPT_PROPOSAL_ERRORS, PROPOSAL_ERRORS } from "../../types";
 import type { DraftChangeProposal } from "../../types";
 
 /** The proposing agent, as the surface names it. */
@@ -50,6 +50,45 @@ export function decisionMessage(error: string): string {
     return "This draft's History could not be reconciled, so nothing about it can be decided until it is.";
   }
   if (error.includes(PROPOSAL_ERRORS.notFound)) {
+    return "This proposed change is no longer available.";
+  }
+  return error;
+}
+
+/**
+ * PCR-FR-QHZN / PCR-FR-15: a typed refusal of a decision about a prompt or DOC
+ * file, in the words of the draft review, with "file" for "draft".
+ */
+export function fileDecisionMessage(error: string): string {
+  const E = PROMPT_PROPOSAL_ERRORS;
+  if (error.includes(E.anchorLost)) {
+    return "The text this change alters is no longer in the file. Reject it to clear it, or undo your edit to bring it back.";
+  }
+  if (error.includes(E.hunkAlreadyDecided) || error.includes(E.alreadyDecided)) {
+    return "This change has already been decided.";
+  }
+  if (error.includes(E.hunkNotFound)) {
+    return "This change is no longer part of the proposal.";
+  }
+  if (error.includes(E.artifactNotFound)) {
+    return "That file is no longer in the project, so this change cannot be applied.";
+  }
+  if (error.includes(E.notAPrompt)) {
+    return "That file is no longer a prompt or a document, so this change cannot be applied.";
+  }
+  if (error.includes(E.discussionResolved)) {
+    return "The discussion this proposal was posted in is resolved. Reopen it to decide this change. Nothing was changed.";
+  }
+  if (error.includes(E.writeFailed)) {
+    return "The file could not be written. Nothing was changed.";
+  }
+  if (error.includes(E.acceptanceInProgress)) {
+    return "Another change to this file is still being applied. Try again in a moment.";
+  }
+  if (error.includes(E.candidateStale)) {
+    return "This change has been rewritten elsewhere since you edited it.";
+  }
+  if (error.includes(E.notFound)) {
     return "This proposed change is no longer available.";
   }
   return error;

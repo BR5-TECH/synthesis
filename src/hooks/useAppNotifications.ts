@@ -80,8 +80,8 @@ import {
 import {
   configurePromptReviewRoute,
   notePromptProposalChanged,
-  openPromptReview,
   pendingOf as pendingPromptOf,
+  showPromptProposal,
 } from "../state/promptProposals";
 import { isDiagramEditorOpen } from "../components/DiagramEditor/store";
 import {
@@ -848,13 +848,11 @@ export function useAppNotifications(deps: AppNotificationDeps) {
             : { id: path, name: path },
         );
         // PCR-FR-18: a project-file address is raised to call the author back to
-        // a change an agent has proposed, so the review is what they land on —
-        // that being what they were called back for. Opened here rather than by
-        // the arrival itself (PCR-FR-16), because a proposal for a file with no
-        // tab open has nowhere to arrive and must not sit in the open slot
-        // waiting to ambush whoever next opens that file for their own reasons.
-        const pendingPrompt = pendingPromptOf(found ? found.id : path);
-        if (pendingPrompt !== undefined) openPromptReview(pendingPrompt.id);
+        // a change an agent has proposed, so the document lands on the first
+        // change still to decide — that being what they were called back for.
+        const artifactId = found ? found.id : path;
+        const pendingPrompt = pendingPromptOf(artifactId);
+        if (pendingPrompt !== undefined) showPromptProposal(artifactId, pendingPrompt.id);
       },
       openDraft: (draftId) => {
         const draft = knownDrafts.find((d) => d.id === draftId);

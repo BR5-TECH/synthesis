@@ -200,7 +200,7 @@ pub(super) fn all_records() -> Vec<LogRecord> {
 pub(super) fn any_endpoint() -> AiApiCall {
     AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: "https://example/v1".into(),
@@ -681,3 +681,18 @@ pub(super) const EXPECTED_TOOLS: [&str; 12] = [
 /// CVL-FR-08: the tool a **discussion** origin is attached beside the nine, and
 /// an anchored comment origin is attached not at all (ADQ-FR-LFDX).
 pub(super) const DISCUSSION_ONLY_TOOL: &str = crate::tools::ask_discussion_questions::NAME;
+
+/// AGC-FR-XHHT: a budget whose `artifact` bound is the section bound of
+/// AGC-FR-11, 40,000 characters (10% of 100,000 tokens, four characters each).
+pub(super) const SECTION_BOUND_BUDGET: DocumentBudget =
+    DocumentBudget { window: 100_000, percent: 10 };
+
+/// [`build_input_within`] under [`SECTION_BOUND_BUDGET`], for a test of the
+/// bound itself.
+pub(super) fn build_input_at_section_bound(
+    roots: Roots<'_>,
+    origin: &ConversationOrigin,
+    trigger_comment_id: &str,
+) -> Vec<InputSection> {
+    build_input_within(roots, origin, trigger_comment_id, &SECTION_BOUND_BUDGET).sections
+}

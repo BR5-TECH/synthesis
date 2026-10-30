@@ -21,7 +21,7 @@ import {
   useProposalReference,
 } from "../../../state/draftProposals";
 import {
-  openPromptReviewFor,
+  showPromptProposal,
   usePromptProposalReference,
 } from "../../../state/promptProposals";
 import { setFocusedHunk } from "../../../state/draftDiscussion";
@@ -108,13 +108,13 @@ function PromptChangeRow({
   return (
     <Row
       path={reference.path}
-      // PCP records no change count on a prompt proposal, so the row states
-      // none rather than a zero that would read as "changes nothing".
-      changes={0}
+      // PCP-FR-HKLD: a prompt or DOC proposal carries its count of changes.
+      changes={proposal?.hunkCount ?? 0}
       state={proposal?.state ?? null}
       gone={read.kind === "gone"}
       createdAt={createdAt}
-      onOpen={() => openPromptReviewFor(reference.artifactId, reference.proposalId)}
+      // PCR-FR-RFJC: the file's Editor tab, at the first undecided change.
+      onOpen={() => showPromptProposal(reference.artifactId, reference.proposalId)}
     />
   );
 }

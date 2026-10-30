@@ -302,8 +302,9 @@ export const saveDocumentLimitPercent = (percent: number) =>
   invoke<number>("save_document_limit_percent", { percent });
 
 /**
- * AAP-FR-ITBL: store the Custom provider's max context size. `null` clears it.
- * Rejects as `setAiApiMaxOutputTokens` does.
+ * AAP-FR-ITBL: store the max context size of any provider. `null` clears it.
+ * Rejects `token_limit_invalid` for a value that is not a whole number from 1
+ * to 4294967295.
  */
 export const setAiApiMaxContextSize = (
   provider: AiApiProviderId,

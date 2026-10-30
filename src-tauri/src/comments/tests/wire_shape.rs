@@ -158,7 +158,8 @@ fn a_proposal_hunk_attachment_has_the_declared_wire_shape() {
     let stored = Attachment::ProposalHunk {
         proposal_id: "p1".into(),
         hunk_id: "h2".into(),
-        draft_id: "d3".into(),
+        draft_id: Some("d3".into()),
+        artifact_id: None,
         path: "prompt.md".into(),
     };
     let json = serde_json::to_value(&stored).unwrap();
@@ -178,7 +179,47 @@ fn a_proposal_hunk_attachment_has_the_declared_wire_shape() {
         AttachmentInput::ProposalHunk {
             proposal_id: "p1".into(),
             hunk_id: "h2".into(),
-            draft_id: "d3".into(),
+            draft_id: Some("d3".into()),
+            artifact_id: None,
+            path: "prompt.md".into(),
+        }
+    );
+}
+
+// CMS-FR-TQVB: a `proposal_hunk` naming an artifact carries `artifactId` and no
+// `draftId`, and a reference stored before artifact hunks existed — a draft one
+// with no `artifactId` — still parses unchanged.
+#[test]
+fn an_artifact_proposal_hunk_and_a_stored_draft_one_both_parse() {
+    let stored = Attachment::ProposalHunk {
+        proposal_id: "p1".into(),
+        hunk_id: "h2".into(),
+        draft_id: None,
+        artifact_id: Some("prompts/review.md".into()),
+        path: "prompts/review.md".into(),
+    };
+    let json = serde_json::to_value(&stored).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "kind": "proposalHunk",
+            "proposalId": "p1",
+            "hunkId": "h2",
+            "artifactId": "prompts/review.md",
+            "path": "prompts/review.md",
+        })
+    );
+    assert_eq!(serde_json::from_value::<Attachment>(json).unwrap(), stored);
+
+    let older = r#"{"kind":"proposalHunk","proposalId":"p1","hunkId":"h2","draftId":"d3","path":"prompt.md"}"#;
+    let parsed: Attachment = serde_json::from_str(older).unwrap();
+    assert_eq!(
+        parsed,
+        Attachment::ProposalHunk {
+            proposal_id: "p1".into(),
+            hunk_id: "h2".into(),
+            draft_id: Some("d3".into()),
+            artifact_id: None,
             path: "prompt.md".into(),
         }
     );

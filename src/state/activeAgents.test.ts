@@ -413,7 +413,7 @@ describe("DCR-FR-15 / PCR-FR-14: who a decision reaches", () => {
   });
 
   it("reaches the agents the feedback names, and nobody else", () => {
-    // DCR-FR-15, CTA-FR-LCFU, CTA-FR-QUXJ / PCR-FR-14, PCR-FR-13: feedback that names agents is a tagged comment.
+    // DCR-FR-15, CTA-FR-LCFU, CTA-FR-QUXJ / PCR-FR-14: feedback that names agents is a tagged comment.
     expect(
       decisionTargets(proposalThread, "c9", "@scribe please re-read this", {
         nicknames: ["arch", "sec", "scribe"],
@@ -433,7 +433,7 @@ describe("DCR-FR-15 / PCR-FR-14: who a decision reaches", () => {
   });
 
   it("reaches nobody where the conversation is addressed to nobody", () => {
-    // DCR-FR-15, CTA-FR-LCFU, CTA-FR-QUXJ / PCR-FR-14, PCR-FR-13: the decision still stands and is not refused.
+    // DCR-FR-15, CTA-FR-LCFU, CTA-FR-QUXJ / PCR-FR-14: the decision still stands and is not refused.
     const unaddressed = discussion([
       comment("c1", human, "leaving this here"),
       comment("c2", arch, "Here is a change I would make."),

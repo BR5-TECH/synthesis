@@ -1,6 +1,8 @@
 //! The typed errors and the records of a prompt change proposal.
 
 use super::*;
+use crate::text_hunks::anchors;
+use crate::text_hunks::hunks as text;
 
 // ---------------------------------------------------------------------------
 // Typed errors (PCP contract surface)
@@ -16,8 +18,19 @@ pub const ERR_NOT_A_PROMPT_ARTIFACT: &str = "not_a_prompt_artifact";
 pub const ERR_PROPOSAL_NOT_FOUND: &str = "proposal_not_found";
 /// PCP-FR-18: decided once, and a second decision finds it settled.
 pub const ERR_ALREADY_DECIDED: &str = "already_decided";
-/// PCP-FR-24: the stored candidate has moved on since the caller read it.
+/// PCP-FR-EDTW: the hunk document has moved on since the caller read it.
 pub const ERR_CANDIDATE_STALE: &str = "candidate_stale";
+/// PCP-FR-ZQAH: the text a hunk names is no longer in the file.
+pub const ERR_ANCHOR_LOST: &str = "anchor_lost";
+/// PCP-FR-RVSN: a revision names text the file holds more than once.
+pub const ERR_HUNK_AMBIGUOUS: &str = "hunk_ambiguous";
+/// PCP-FR-RVSN: a revision's `lead` or `trail` is longer than its bound. The
+/// side follows after a colon.
+pub const ERR_HUNK_CONTEXT_TOO_LONG: &str = "hunk_context_too_long";
+/// PCP-FR-ZQAH: `hunk_id` names no hunk of this proposal.
+pub const ERR_HUNK_NOT_FOUND: &str = "hunk_not_found";
+/// PCP-FR-ZQAH / PCP-FR-RJHN: that hunk is already decided.
+pub const ERR_HUNK_ALREADY_DECIDED: &str = "hunk_already_decided";
 /// PCP-FR-14: a failure at or before the commit point. The artifact was never
 /// written and the proposal is still `pending`.
 pub const ERR_WRITE_FAILED: &str = "write_failed";
@@ -117,7 +130,8 @@ where
 /// The persisted record, serialised as TOML into `<proposal-id>.toml`.
 ///
 /// `agent` stands last: `serde`'s TOML serialiser emits fields in declaration
-/// order and refuses a scalar written after a table.
+/// order, and the tables (`counts`, `ledger`, `originChecksums`, `agent`) come
+/// after every scalar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptChangeProposal {
@@ -131,14 +145,14 @@ pub struct PromptChangeProposal {
     pub thread_id: String,
     /// The comment carrying the `prompt_proposal` attachment (CMS-FR-66).
     pub comment_id: String,
+    /// PCP-FR-HKLD: derived from the ledger on every write (as DCP-FR-PWSF).
     #[serde(default, deserialize_with = "state_or_rejected")]
     pub state: PromptProposalState,
-    /// PCP-FR-22: the checksum of the candidate **as the recording wrote it**,
-    /// so `candidate_edited` describes the text rather than the history of
-    /// getting to it.
+    /// PCP-FR-LGXQ: the checksum of a legacy candidate as its recording wrote
+    /// it. A proposal recorded as hunks carries none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_checksum: Option<String>,
-    /// PCP-FR-22: true while the candidate differs from the agent's own.
+    /// PCP-FR-EDTW: true while any hunk's text differs from the agent's own.
     #[serde(default)]
     pub candidate_edited: bool,
     /// PCP-FR-14: true between an acceptance landing and its decision comment
@@ -146,10 +160,33 @@ pub struct PromptChangeProposal {
     /// conversation is owed one.
     #[serde(default)]
     pub comment_owed: bool,
+    /// PCP-FR-LGXQ: a proposal held as a whole candidate (`.content`) with no
+    /// `.hunks` file beside it. It is read, never migrated.
+    #[serde(default)]
+    pub legacy: bool,
+    /// PCP-FR-HKLD: the file as the agent read it, at record time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_sha256: Option<String>,
+    /// PCP-FR-HKLD: how many hunks the proposal holds.
+    #[serde(default)]
+    pub hunk_count: u32,
     pub created_at: String,
     /// RFC 3339 UTC; absent while pending.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_at: Option<String>,
+    /// PCP-FR-HKLD: how many hunks stand in each state, derived from the
+    /// ledger on every write.
+    #[serde(default)]
+    pub counts: HunkCounts,
+    /// PCP-FR-HKLD: the per-hunk decision ledger, in proposal order. It lives
+    /// in the record because a decision must be one atomic write.
+    #[serde(default)]
+    pub ledger: Vec<HunkLedgerRow>,
+    /// PCP-FR-EDTW: the checksum of each hunk's `after` as the agent wrote it,
+    /// by hunk id. An edit that restores the agent's own text clears the
+    /// row's `edited` flag again.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub origin_checksums: std::collections::BTreeMap<String, String>,
     /// PCP-FR-05: the agent participant that proposed it — the same shape a
     /// comment's author carries, so a surface renders the two alike.
     pub agent: Participant,
@@ -157,37 +194,60 @@ pub struct PromptChangeProposal {
 
 /// PCP contract surface: what a decision hands back.
 ///
-/// The proposal as it now stands, plus the identity of the comment the decision
-/// was recorded as and the origin kind of the conversation it landed in — which
-/// together are exactly what the surface needs to dispatch the decision's own
-/// turns (PCR-FR-14), and nothing more. Who those reach is the surface's own
-/// rule, read from the conversation's comments (per
-/// `../../specifications/ui/CMT-comments.md` CTA-FR-LCFU, CTA-FR-SSUZ): this module
-/// names no recipient and knows of none.
+/// The proposal as it now stands, whether this decision resolved it, plus the
+/// identity of the comment the decision was recorded as and the origin kind of
+/// the conversation it landed in — which together are exactly what the surface
+/// needs to dispatch the decision's own turns (PCR-FR-14), and nothing more.
+/// Who those reach is the surface's own rule, read from the conversation's
+/// comments (per `../../specifications/ui/CMT-comments.md` CTA-FR-LCFU,
+/// CTA-FR-SSUZ): this module names no recipient and knows of none.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptDecisionOutcome {
     pub proposal: PromptChangeProposal,
-    /// Absent when the comment could not be appended — no turn then has
-    /// anything to answer.
+    /// PCP-FR-RSLV: true when this decision left no hunk undecided.
+    pub resolved: bool,
+    /// Absent when no comment was appended — a decision that did not resolve
+    /// the proposal, or a comment that could not be appended.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment_id: Option<String>,
     /// `artifact_discussion` or `artifact_comment`, as AGC-FR-05 spells them.
     pub origin_kind: &'static str,
 }
 
-/// PCP-FR-11: the candidate's text, for the surface about to render a
-/// comparison of it — together with the checksum that is the baseline its next
-/// save is checked against (PCP-FR-24).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptProposalContent {
-    pub content: String,
-    pub checksum: String,
+/// PCP-FR-LDHK: one hunk's placement in the file as it stands, for the surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum HunkPlacement {
+    Resolved { start: usize, end: usize },
+    Lost,
 }
 
-/// PCP-FR-22: what a candidate save reports — the checksum of the bytes it
-/// wrote, which becomes the caller's next baseline.
+impl From<anchors::Resolution> for HunkPlacement {
+    fn from(r: anchors::Resolution) -> Self {
+        match r {
+            anchors::Resolution::Resolved { start, end } => HunkPlacement::Resolved { start, end },
+            anchors::Resolution::Lost => HunkPlacement::Lost,
+        }
+    }
+}
+
+/// PCP-FR-LDHK: the proposal's hunks in proposal order, each with its
+/// placement against the file as it stands, and the baseline the next hunk
+/// edit is checked against (PCP-FR-EDTW).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptProposalHunks {
+    pub hunks: Vec<text::ProposalHunk>,
+    pub resolutions: Vec<HunkPlacement>,
+    pub checksum: String,
+    /// PCP-FR-LGXQ: a legacy proposal's one hunk is not editable, so the
+    /// surface has to be told which kind it holds.
+    pub legacy: bool,
+}
+
+/// PCP-FR-EDTW: what a hunk edit reports — the checksum of the hunk document
+/// it wrote, which becomes the caller's next baseline.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptCandidateSaved {
@@ -224,6 +284,36 @@ pub(super) struct Journal {
     pub(super) thread_id: String,
     pub(super) comment_body: String,
     pub(super) created_at: String,
+    /// PCP-FR-ZQAH: the hunk this acceptance settles. Absent in a journal an
+    /// older build wrote, which accepted a legacy proposal's one hunk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) hunk_id: Option<String>,
+    /// PCP-FR-ZQAH: the hunk's ledger row before the acceptance, which a
+    /// rollback restores. `pending` for an older journal.
+    #[serde(default = "pending_state")]
+    pub(super) prior_state: HunkState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) prior_decided_at: Option<String>,
+    /// PCP-FR-RSLV: whether this acceptance resolves the proposal, and so owes
+    /// the decision comment. An older journal always did.
+    #[serde(default = "resolves_by_default")]
+    pub(super) resolves: bool,
     /// The acting human the decision comment is stamped with.
     pub(super) comment_by: Participant,
+}
+
+fn pending_state() -> HunkState {
+    HunkState::Pending
+}
+
+fn resolves_by_default() -> bool {
+    true
+}
+
+impl Journal {
+    /// The hunk this journal settles. An older journal names none and settled
+    /// the one hunk of a legacy proposal (PCP-FR-LGXQ).
+    pub(super) fn hunk(&self) -> &str {
+        self.hunk_id.as_deref().unwrap_or(LEGACY_HUNK_ID)
+    }
 }

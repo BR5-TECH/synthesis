@@ -14,10 +14,12 @@ import { diffEdit, findNearest, shiftAnchor } from "../../state/commentAnchors";
 import { useHunkPlacement } from "./useHunkPlacement";
 import { useArtifactDocument } from "../../hooks/useArtifactDocument";
 import { useExternalChanges } from "../../hooks/useExternalChanges";
-import {
-  openPromptReview,
-  usePromptProposals,
-} from "../../state/promptProposals";
+import { usePromptProposals } from "../../state/promptProposals";
+import { artifactReviewKey, revealHunk } from "../../state/draftDiscussion";
+import { firstUndecidedHunk } from "../../state/draftProposals";
+import { useHunkDiscussion } from "../NewArtifactWorkspace/useHunkDiscussion";
+import { useArtifactReview } from "./useArtifactReview";
+import { logInfo } from "../../logging";
 import { recordEdit, redoStep, undoStep } from "../../state/editHistory";
 import type {
   EditMode,
@@ -330,7 +332,7 @@ function LiveEditor({
     enterMode(session.mode === "wysiwyg" ? "text" : "wysiwyg");
 
   /**
-   * PCR-FR-01 / EDT-FR-25: the tab's own root. Declared before the find surface,
+   * EDT-FR-25: the tab's own root. Declared before the find surface,
    * which scrolls the current match into view through it.
    */
   const rootRef = useRef<HTMLDivElement>(null);
@@ -433,14 +435,14 @@ function LiveEditor({
    * The default is always prevented — including while blocked (EXC-FR-QDMC) — so a
    * surface-local stack can never diverge from the tab history.
    *
-   * EDT-FR-84 / PCR-FR-20: the one thing inside this tab the claim does **not**
-   * reach is the prompt change review's candidate. That candidate is not this
+   * EDT-FR-84 / DCR-FR-24: the one thing inside this tab the claim does **not**
+   * reach is the proposed text of a change under review. That text is not this
    * artifact's editing session — it holds its own buffer and its own undo
-   * history — so one undo issued in the tab and one issued in the review have to
-   * reverse two different edits. The claim is in the capture phase on the tab's
-   * own root, which is an ancestor of the modal (PCR-FR-01 anchors it here), so
-   * without this it would run first, prevent the default, and undo the
-   * **artifact** while the author was looking at the candidate.
+   * history — so one undo issued in the tab and one issued in the proposed text
+   * have to reverse two different edits. The claim is in the capture phase on
+   * the tab's own root, which is an ancestor of the proposed text, so without
+   * this it would run first, prevent the default, and undo the **artifact**
+   * while the author was editing the proposed text.
    */
   useEffect(() => {
     const el = rootRef.current;
@@ -623,6 +625,58 @@ function LiveEditor({
   // re-resolves the identity, which is what enables commenting.
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  /**
+   * PCR-FR-HDMC / DDS-FR-EHDK: Discuss on a change of the file's proposal opens
+   * a discussion of its own in the column. A host that passes a review of its
+   * own (the draft column) has its own discussions too.
+   */
+  const [hunkFocus, setHunkFocus] = useState(0);
+  const hunkDiscussion = useHunkDiscussion({
+    artifactId,
+    proposal: review === undefined ? pendingProposal : undefined,
+    discussions: railGroup.columnDiscussions,
+    selectDiscussion: setFocusedThread,
+    focusComposer: () => setHunkFocus((n) => n + 1),
+    showColumn,
+  });
+  /**
+   * PCR-FR-QHZN: the file's pending proposal, reviewed in place in the document
+   * column. The draft column passes its own review, which wins.
+   */
+  const { review: artifactReview, footer: reviewFooter } = useArtifactReview({
+    artifactId,
+    sessions,
+    proposal: pendingProposal,
+    proposals: promptProposals,
+    enabled: review === undefined,
+    locked: readOnly === true,
+    onDiscussHunk: hunkDiscussion.discuss,
+    agents: comments.agents,
+  });
+  const activeReview = review ?? artifactReview;
+  /**
+   * PCR-FR-WLTE / EDT-FR-RCHS: the review shows on the rich surface only, so a
+   * Markdown file showing its raw surface switches to rich while a proposal is
+   * pending.
+   */
+  const reviewing = artifactReview !== undefined;
+  useEffect(() => {
+    if (!reviewing || !isMarkdown || session.mode !== "text") return;
+    logInfo(["frontend"], "a proposed change switched the tab to rich text", {
+      artifactId,
+    });
+    enterMode("wysiwyg");
+  }, [reviewing, isMarkdown, session.mode, enterMode, artifactId]);
+  /**
+   * PCR-FR-16 / DCR-FR-03: the action row's indication scrolls the document to
+   * the first undecided change.
+   */
+  const showProposal = useCallback(() => {
+    if (pendingProposal === undefined) return;
+    const first = firstUndecidedHunk(pendingProposal);
+    if (first) revealHunk(artifactReviewKey(artifactId), first.id);
+  }, [pendingProposal, artifactId]);
+
   // CMT-FR-28 / CMT-FR-36: where each thread's passage sits on the surface,
   // and which discussion has the focus.
   const hosted = useFragmentHost(fragmentHost, setFocusedThread, rootRef);
@@ -667,7 +721,7 @@ function LiveEditor({
   // do with the rest of this surface.
   const hunkGroup = useHunkPlacement(
     editor,
-    review,
+    activeReview,
     docVersion,
     mode,
   );
@@ -852,13 +906,23 @@ function LiveEditor({
       sourceAnchors={sourceAnchors}
       imageHost={imageHost}
       report={report}
-      review={review}
+      review={activeReview}
+      reviewFooter={reviewFooter}
       showComments={showComments}
       showActions={showActions}
       outline={toc && isMarkdown ? outline : undefined}
       showResolved={showResolved}
       pendingProposal={pendingProposal}
-      openPromptReview={openPromptReview}
+      onShowProposal={showProposal}
+      modeLocked={
+        reviewing && isMarkdown
+          ? "A proposed change is under review. Decide it before you switch to raw text."
+          : undefined
+      }
+      hunkOpening={hunkDiscussion.opening}
+      onCancelHunk={hunkDiscussion.cancel}
+      onHunkDiscussionOpened={hunkDiscussion.opened}
+      hunkFocus={hunkFocus}
       rootRef={rootRef}
       draft={draft}
       setDraft={setDraft}

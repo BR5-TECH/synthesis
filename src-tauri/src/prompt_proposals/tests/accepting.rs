@@ -1,4 +1,5 @@
-//! Tests for the acceptance of a prompt change proposal (PCP-FR-12 … PCP-FR-14).
+//! Tests for the one-hunk acceptance transaction of a prompt change proposal
+//! (PCP-FR-12, PCP-FR-14, PCP-FR-ZQAH).
 
 use super::*;
 
@@ -8,7 +9,7 @@ use super::*;
 
 #[test]
 fn an_acceptance_writes_through_the_projects_own_save_path() {
-    // PST-FR-09, PST-FR-16, PST-FR-17 / PCP-FR-12, PCP-FR-17.
+    // PST-FR-09, PST-FR-16, PST-FR-17 / PCP-FR-12, PCP-FR-17, PCP-FR-ZQAH.
     let f = Fixture::new();
     let events = f.watch();
     let proposal = f.pending();
@@ -19,6 +20,7 @@ fn an_acceptance_writes_through_the_projects_own_save_path() {
     assert!(outcome.proposal.decided_at.is_some());
     assert!(!outcome.proposal.comment_owed);
     assert_eq!(outcome.origin_kind, ORIGIN_ARTIFACT_DISCUSSION);
+    assert!(outcome.resolved, "the one hunk was the last undecided one");
     // PST-FR-17 / PST-FR-31: the acceptance leaves no record of the save. What
     // moves the artifact to the head of Recently edited is the modification time
     // this write gave its file, exactly as the author's own typing does.
@@ -36,15 +38,21 @@ fn an_acceptance_writes_through_the_projects_own_save_path() {
 }
 
 #[test]
-fn an_acceptance_replaces_the_file_as_it_stands_without_comparing_a_baseline() {
-    // PCP-FR-13.
+fn an_acceptance_of_a_hunk_whose_text_has_gone_is_anchor_lost_and_writes_nothing() {
+    // PCP-FR-ZQAH: the hunk is resolved against the file as it stands on disk
+    // now. A file that no longer holds the hunk's text refuses, and nothing is
+    // written.
     let f = Fixture::new();
     let proposal = f.pending();
-    let author_edit = "# Review\n\nOne.\n\nTwo.\n\nThree.\n\nFour.\n\nFive.\n";
+    let author_edit = "# Review\n\nOne.\n\nTwo.\n";
     write_file(&f.root, PROMPT, author_edit);
 
-    f.accept(&proposal.id).expect("accepted");
-    assert_eq!(f.artifact_body(), PROPOSED, "the candidate replaces whatever the file held",);
+    assert_eq!(f.accept(&proposal.id).unwrap_err(), ERR_ANCHOR_LOST);
+    assert_eq!(f.artifact_body(), author_edit, "the file is not touched");
+    let record = read_proposal(&f.root, &proposal.id).expect("record");
+    assert_eq!(record.state, PromptProposalState::Pending);
+    assert_eq!(record.ledger[0].state, HunkState::Pending);
+    assert!(!f.dir().join(format!("{}.journal", proposal.id)).exists(), "no journal");
 }
 
 #[test]
@@ -76,7 +84,7 @@ fn an_acceptance_that_cannot_write_leaves_the_file_and_the_proposal_alone() {
 
     assert_eq!(refused, ERR_WRITE_FAILED);
     assert_eq!(f.artifact_body(), ORIGINAL, "never written rather than restored");
-    // PCR-FR-11: the session's baseline is untouched, so the watcher's next pass
+    // PCR-FR-AXPW: the session's baseline is untouched, so the watcher's next pass
     // reads the file's own unchanged bytes as its own rather than raising a
     // divergence over an edit the author never lost (PST-FR-16).
     assert_eq!(
@@ -89,9 +97,10 @@ fn an_acceptance_that_cannot_write_leaves_the_file_and_the_proposal_alone() {
     assert!(record.decided_at.is_none());
     assert!(!record.comment_owed);
     assert_eq!(f.discussion().comments.len(), before, "no comment appended");
+    assert_eq!(record.ledger[0].state, HunkState::Pending, "the hunk is undecided again");
     assert_eq!(
         f.folder_files(),
-        vec![format!("{}.content", proposal.id), format!("{}.toml", proposal.id),],
+        vec![format!("{}.hunks", proposal.id), format!("{}.toml", proposal.id),],
         "neither the journal nor the prior remains",
     );
     assert_eq!(events.lock().unwrap().len(), 1, "only the recording announced anything",);
@@ -136,7 +145,7 @@ fn a_journal_left_by_an_interrupted_acceptance_is_rolled_forward_or_back() {
 
 #[test]
 fn a_file_matching_neither_checksum_is_left_exactly_as_it_stands() {
-    // PCP-FR-13 / PCP-FR-14, PCP-FR-28.
+    // PCP-FR-ZQAH / PCP-FR-14, PCP-FR-28.
     let f = Fixture::new();
     let proposal = f.pending();
     stage_for_test(&f, &proposal, /* committed */ true);
@@ -151,10 +160,10 @@ fn a_file_matching_neither_checksum_is_left_exactly_as_it_stands() {
         "settled the safe way, so it is offered again",
     );
 
-    // …and accepting it afterwards replaces that text whole, on the ordinary
-    // terms.
-    f.accept(&proposal.id).expect("accepted");
-    assert_eq!(f.artifact_body(), PROPOSED);
+    // …and accepting it afterwards resolves the hunk against that text, on the
+    // ordinary terms: the hunk's text is gone, so it is lost.
+    assert_eq!(f.accept(&proposal.id).unwrap_err(), ERR_ANCHOR_LOST);
+    assert_eq!(f.artifact_body(), third_party);
 }
 
 #[test]
@@ -269,7 +278,7 @@ fn an_acceptance_whose_comment_cannot_be_appended_is_landed_and_incomplete() {
     assert_eq!(f.discussion().comments.len(), before + 1);
     assert_eq!(
         f.folder_files(),
-        vec![format!("{}.content", proposal.id), format!("{}.toml", proposal.id),],
+        vec![format!("{}.hunks", proposal.id), format!("{}.toml", proposal.id),],
     );
     assert_eq!(f.artifact_body(), PROPOSED, "and nothing was written twice");
 

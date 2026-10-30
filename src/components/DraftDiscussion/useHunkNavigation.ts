@@ -58,12 +58,16 @@ function isTextField(target: EventTarget | null): boolean {
 }
 
 export function useHunkNavigation({
-  draftId,
+  reviewKey,
   hunks,
   focused,
   active,
 }: {
-  draftId: string;
+  /**
+   * DCR-FR-GNRL: the key of the review state — a draft id, or
+   * `artifactReviewKey` of a file.
+   */
+  reviewKey: string;
   /** The changes a move visits, in proposal order (DCR-FR-QPRV). */
   hunks: readonly MovableHunk[];
   /** The change the review is on, which a move starts from. */
@@ -81,9 +85,9 @@ export function useHunkNavigation({
       if (isTextField(event.target)) return;
       event.preventDefault();
       const next = stepTo(hunks, focused, event.key === "ArrowDown" ? 1 : -1);
-      if (next !== null) setFocusedHunk(draftId, next);
+      if (next !== null) setFocusedHunk(reviewKey, next);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [draftId, hunks, focused, active]);
+  }, [reviewKey, hunks, focused, active]);
 }

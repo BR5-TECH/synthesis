@@ -283,6 +283,46 @@ pub struct AgentTurn {
     /// until the first one. Session state only (AGC-FR-NUKP).
     #[serde(default)]
     pub context: Option<TurnContext>,
+    /// AGC-FR-HMUV: every tool call the loop reported for this turn, in
+    /// activation order. A finished call stays in the list, so the terminal
+    /// event carries all of them. Session state only (AGC-FR-23).
+    #[serde(default)]
+    pub tool_calls: Vec<TurnToolCall>,
+    /// AGC-FR-URXV: the instant the current whole-turn deadline began, RFC 3339
+    /// UTC. `None` while the turn waits for its slot.
+    #[serde(default)]
+    pub deadline_started_at: Option<String>,
+    /// AGC-FR-URXV: the instant the current whole-turn deadline expires, RFC
+    /// 3339 UTC. `None` while the turn waits for its slot.
+    #[serde(default)]
+    pub deadline_at: Option<String>,
+}
+
+/// AGC-FR-HMUV / CVL-FR-SKSE: how far a tool call has come.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallState {
+    Running,
+    Done,
+    Failed,
+}
+
+/// AGC-FR-HMUV: one tool call of a turn, running or finished.
+///
+/// It carries the call's key input (CVL-FR-DUUO) for the surface alone. No log
+/// record, no registry entry, and no durable record carries it (AGC-FR-SEZK).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnToolCall {
+    /// The same id the call has in `active_tool_calls`.
+    pub id: String,
+    pub tool: String,
+    /// The same sequence the call has in `active_tool_calls`.
+    pub activation_seq: u64,
+    pub state: ToolCallState,
+    /// The one argument that identifies the call, at most 200 characters
+    /// (CVL-FR-IQZS). `None` where the tool has none.
+    pub key_input: Option<String>,
 }
 
 /// AGC-FR-33: one tool call the loop has begun and has not yet finished.

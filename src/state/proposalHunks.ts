@@ -13,7 +13,7 @@
  */
 import { useSyncExternalStore } from "react";
 
-import { loadDraftChangeProposalHunks } from "../api";
+import { loadDraftChangeProposalHunks, loadPromptChangeProposalHunks } from "../api";
 import { logDebug, logWarn } from "../logging";
 import type { ProposalHunks } from "../types";
 
@@ -23,7 +23,21 @@ export type HunkReading =
   | { status: "read"; hunks: ProposalHunks }
   | { status: "failed"; reason: string };
 
+/**
+ * DCR-FR-GNRL / PCR-FR-QHZN: which kind of proposal an id names, and so which
+ * command reads its changes. A draft proposal and a prompt or DOC proposal hold
+ * their changes in one shape (PCP-FR-LDHK), so one store holds both.
+ */
+export type HunkSource = "draft" | "prompt";
+
+const LOADERS: Record<HunkSource, (proposalId: string) => Promise<ProposalHunks>> = {
+  draft: loadDraftChangeProposalHunks,
+  prompt: loadPromptChangeProposalHunks,
+};
+
 let readings: ReadonlyMap<string, HunkReading> = new Map();
+/** The source each proposal id was first read from. */
+const sources = new Map<string, HunkSource>();
 const listeners = new Set<() => void>();
 /**
  * DCR-FR-33: which content root the readings belong to.
@@ -62,13 +76,15 @@ export function hunksOf(proposalId: string): HunkReading | undefined {
  * A reading already taken is not repeated — the way a proposal's changes move
  * on is the backend reporting it, which calls `rereadHunks`.
  */
-export function ensureHunks(proposalId: string): void {
+export function ensureHunks(proposalId: string, source: HunkSource = "draft"): void {
   if (readings.has(proposalId)) return;
+  sources.set(proposalId, source);
   void read(proposalId);
 }
 
 /** DCR-FR-08 / DCR-FR-21: the proposal changed, so what it holds is read again. */
-export function rereadHunks(proposalId: string): void {
+export function rereadHunks(proposalId: string, source?: HunkSource): void {
+  if (source !== undefined) sources.set(proposalId, source);
   void read(proposalId);
 }
 
@@ -76,11 +92,13 @@ async function read(proposalId: string): Promise<void> {
   const issued = generation;
   put(proposalId, { status: "reading" });
   try {
-    const hunks = await loadDraftChangeProposalHunks(proposalId);
+    const source = sources.get(proposalId) ?? "draft";
+    const hunks = await LOADERS[source](proposalId);
     if (issued !== generation) return;
     put(proposalId, { status: "read", hunks });
     logDebug(["frontend"], "read the changes a proposal holds", {
       proposalId,
+      source,
       changes: hunks.hunks.length,
       // DCP-FR-BMLX: how many name text the prompt no longer holds, which is
       // what decides whether Accept stands for them.
@@ -110,6 +128,7 @@ export function dropHunks(proposalId: string): void {
 export function resetProposalHunks(): void {
   generation += 1;
   readings = new Map();
+  sources.clear();
   emit();
 }
 
@@ -122,11 +141,12 @@ export function resetProposalHunks(): void {
  */
 export function useProposalHunks(
   proposalId: string | null,
+  source: HunkSource = "draft",
 ): HunkReading | undefined {
   return useSyncExternalStore(
     (listener) => {
       const unsubscribe = subscribe(listener);
-      if (proposalId !== null) ensureHunks(proposalId);
+      if (proposalId !== null) ensureHunks(proposalId, source);
       return unsubscribe;
     },
     () => (proposalId === null ? undefined : readings.get(proposalId)),

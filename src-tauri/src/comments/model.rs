@@ -168,8 +168,13 @@ pub enum Attachment {
         /// Project-relative path the proposal would replace.
         path: String,
     },
-    /// CMS-FR-42 / CMS-FR-TQVB: one change of a draft change proposal, which
-    /// the comment is about (`DCP-draft-change-proposals.md` DCP-FR-FHWN).
+    /// CMS-FR-42 / CMS-FR-TQVB: one change of a draft change proposal
+    /// (`DCP-draft-change-proposals.md` DCP-FR-FHWN) or of a prompt change
+    /// proposal (`PCP-prompt-change-proposals.md`), which the comment is about.
+    ///
+    /// Exactly one of `draft_id` and `artifact_id` is present. Both are optional
+    /// in the stored shape, so every reference stored before artifact hunks
+    /// existed still parses unchanged.
     ///
     /// Like the two proposal kinds it carries identity and no content, and this
     /// module validates nothing about what it names. Unlike them it reaches a
@@ -180,8 +185,12 @@ pub enum Attachment {
     ProposalHunk {
         proposal_id: String,
         hunk_id: String,
-        draft_id: String,
-        /// Draft-relative path that change applies to.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        draft_id: Option<String>,
+        /// CMS-FR-TQVB: the artifact of a prompt change proposal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        artifact_id: Option<String>,
+        /// Draft-relative path for a draft, project-relative for an artifact.
         path: String,
     },
 }
@@ -215,9 +224,19 @@ pub enum AttachmentInput {
         data: String,
     },
     /// CMS-FR-43 / CMS-FR-TQVB: a reference to one change of a draft change
-    /// proposal, stored verbatim as an [`Attachment::ProposalHunk`].
+    /// proposal or of a prompt change proposal, stored verbatim as an
+    /// [`Attachment::ProposalHunk`]. Exactly one of `draft_id` and
+    /// `artifact_id` is present, or the append refuses it.
     #[serde(rename_all = "camelCase")]
-    ProposalHunk { proposal_id: String, hunk_id: String, draft_id: String, path: String },
+    ProposalHunk {
+        proposal_id: String,
+        hunk_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        draft_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        artifact_id: Option<String>,
+        path: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -11,7 +11,11 @@ use crate::ai_shared::ModelReasoning;
 /// The id of the Custom provider.
 pub const CUSTOM: &str = "custom";
 
-/// AAP-FR-ITBL: the largest token value a Custom field accepts.
+/// AAP-FR-RANS: the context size of a model with no override and no detected
+/// size.
+pub const DEFAULT_CONTEXT_SIZE: u64 = 1_000_000;
+
+/// AAP-FR-ITBL: the largest token value a token field accepts.
 pub const TOKEN_LIMIT_MAX: u64 = u32::MAX as u64;
 
 /// AAP-FR-WSIC: the reasoning levels every Custom model offers, in order.
@@ -42,15 +46,13 @@ pub fn custom_reasoning_error(choice: &ReasoningChoice) -> Option<&'static str> 
     }
 }
 
-/// AAP-FR-RANS: the effective context size of one model — the detected value
-/// for every provider, else, for a Custom model alone, the provider's max
-/// context size, else `None`.
-pub fn effective_context_size(record: &AiApiRecord, model: Option<&ModelOption>) -> Option<u64> {
-    let detected = model.and_then(|m| m.detected_context_size);
-    if record.provider != CUSTOM {
-        return detected;
-    }
-    detected.or(record.max_context_size)
+/// AAP-FR-RANS: the effective context size of one model — the provider's max
+/// context size, else the detected value, else the default. Never absent.
+pub fn effective_context_size(record: &AiApiRecord, model: Option<&ModelOption>) -> u64 {
+    record
+        .max_context_size
+        .or_else(|| model.and_then(|m| m.detected_context_size))
+        .unwrap_or(DEFAULT_CONTEXT_SIZE)
 }
 
 /// AAP-FR-HFQZ: the effective output limit — the Custom provider's max output
@@ -82,9 +84,9 @@ pub enum TokenLimit {
     MaxContextSize,
 }
 
-/// AAP-FR-ITBL: store one token value of the Custom provider, or clear it on
-/// `None`. A value out of range and a provider other than Custom are refused,
-/// and nothing changes.
+/// AAP-FR-ITBL: store one token value of a provider, or clear it on `None`. A
+/// value out of range is refused, and so is a max output tokens for a provider
+/// other than Custom. A refusal changes nothing.
 pub fn set_token_limit_impl(
     store: &GlobalSettingsStore,
     ai: &AiApiIntegrations,
@@ -93,7 +95,7 @@ pub fn set_token_limit_impl(
     tokens: Option<u64>,
 ) -> Result<AiApiIntegration, String> {
     provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    if provider != CUSTOM {
+    if limit == TokenLimit::MaxOutputTokens && provider != CUSTOM {
         return Err(ERR_LIMIT_UNSUPPORTED.into());
     }
     if let Some(value) = tokens {

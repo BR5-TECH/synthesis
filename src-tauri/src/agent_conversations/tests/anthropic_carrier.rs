@@ -18,7 +18,7 @@ fn anthropic_endpoint(
 ) -> AiApiCall {
     AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: base_url.into(),

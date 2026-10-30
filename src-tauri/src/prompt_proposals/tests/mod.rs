@@ -114,6 +114,7 @@ impl Fixture {
         self.propose(PROPOSED).expect("recorded")
     }
 
+    /// Accept the proposal's first hunk — the one hunk of a `content` change.
     fn accept(&self, id: &str) -> Result<PromptDecisionOutcome, String> {
         self.accept_with(id, None)
     }
@@ -123,12 +124,32 @@ impl Fixture {
         id: &str,
         feedback: Option<&str>,
     ) -> Result<PromptDecisionOutcome, String> {
+        let first = read_proposal(&self.root, id)?.ledger.first().map(|row| row.id.clone());
+        let hunk = first.unwrap_or_default();
+        self.decide_hunk(id, Decision::Accept, Some(&hunk), feedback)
+    }
+
+    fn accept_hunk(&self, id: &str, hunk: &str) -> Result<PromptDecisionOutcome, String> {
+        self.decide_hunk(id, Decision::Accept, Some(hunk), None)
+    }
+
+    fn reject_hunk(&self, id: &str, hunk: &str) -> Result<PromptDecisionOutcome, String> {
+        self.decide_hunk(id, Decision::Decline, Some(hunk), None)
+    }
+
+    fn decide_hunk(
+        &self,
+        id: &str,
+        decision: Decision,
+        hunk: Option<&str>,
+        feedback: Option<&str>,
+    ) -> Result<PromptDecisionOutcome, String> {
         let by = human();
-        let request =
-            DecisionRequest { proposal_id: id, decision: Decision::Accept, feedback, by: &by };
+        let request = DecisionRequest { proposal_id: id, decision, hunk, feedback, by: &by };
         decide(&self.handle(), &self.root, &self.root, request, &self.tracker)
     }
 
+    /// Decline the proposal: reject every undecided hunk.
     fn decline(&self, id: &str) -> Result<PromptDecisionOutcome, String> {
         self.decline_with(id, None)
     }
@@ -138,10 +159,7 @@ impl Fixture {
         id: &str,
         feedback: Option<&str>,
     ) -> Result<PromptDecisionOutcome, String> {
-        let by = human();
-        let request =
-            DecisionRequest { proposal_id: id, decision: Decision::Decline, feedback, by: &by };
-        decide(&self.handle(), &self.root, &self.root, request, &self.tracker)
+        self.decide_hunk(id, Decision::Decline, None, feedback)
     }
 
     fn dir(&self) -> std::path::PathBuf {
@@ -202,8 +220,10 @@ impl Fixture {
             }
             _ => None,
         };
+        let resolved = record.state != PromptProposalState::Pending;
         Ok(PromptDecisionOutcome {
             proposal: record,
+            resolved,
             comment_id,
             origin_kind: origin_kind_of(discussion),
         })
@@ -255,8 +275,9 @@ fn assign(root: &fs::RootFs, entries: &[(&str, ArtifactType)]) {
 fn stage_for_test(f: &Fixture, proposal: &PromptChangeProposal, committed: bool) -> Journal {
     let dir = f.dir();
     let prior = std::fs::read(f.root.path().join(PROMPT)).expect("prior");
-    let candidate = load_content_impl(&f.root, &proposal.id).expect("candidate");
-    let normalised = normalise_for_write(&f.root, &candidate.content);
+    let candidate = candidate_for_test(&f.root, &proposal.id).expect("candidate");
+    let normalised = normalise_for_write(&f.root, &candidate);
+    let hunk = proposal.ledger[0].id.clone();
     let journal = Journal {
         operation_id: new_note_id(),
         proposal_id: proposal.id.clone(),
@@ -267,20 +288,24 @@ fn stage_for_test(f: &Fixture, proposal: &PromptChangeProposal, committed: bool)
         comment_id: new_note_id(),
         event_id: new_note_id(),
         thread_id: proposal.thread_id.clone(),
-        comment_body: format!("Accepted the proposed change to `{}`.", proposal.path),
+        comment_body: format!(
+            "Accepted the proposed change to `{}`. 1 accepted, 0 rejected.",
+            proposal.path
+        ),
         created_at: now_rfc3339(),
+        hunk_id: Some(hunk.clone()),
+        prior_state: HunkState::Pending,
+        prior_decided_at: None,
+        resolves: true,
         comment_by: human(),
     };
     std::fs::write(dir.join(format!("{}.prior", proposal.id)), &prior).expect("prior");
     f.root
         .write_toml_atomic(dir.join(format!("{}.journal", proposal.id)), &journal)
         .expect("journal");
-    let decided = PromptChangeProposal {
-        state: PromptProposalState::Accepted,
-        decided_at: Some(now_rfc3339()),
-        comment_owed: true,
-        ..proposal.clone()
-    };
+    let mut decided = PromptChangeProposal { comment_owed: true, ..proposal.clone() };
+    decided.ledger[0].state = HunkState::Accepted;
+    ledger::resettle(&mut decided);
     f.root.write_toml_atomic(dir.join(format!("{}.toml", proposal.id)), &decided).expect("record");
     if committed {
         write_file(&f.root, PROMPT, &normalised);
@@ -289,8 +314,11 @@ fn stage_for_test(f: &Fixture, proposal: &PromptChangeProposal, committed: bool)
 }
 
 mod accepting;
-mod candidate;
 mod containment;
 mod deciding;
+mod edits;
 mod hunks;
+mod legacy;
+mod per_hunk;
 mod recording;
+mod revisions;

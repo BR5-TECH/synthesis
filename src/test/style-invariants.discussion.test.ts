@@ -436,13 +436,29 @@ describe("the context indicator and the warning (DDS-FR-CTXI, DDS-FR-ZQVE)", () 
     const actions = blocksFor(css, ".dds-discussion__actions")[0];
     expect(decl(actions, "flex")).toBe("none");
     expect(decl(blocksFor(css, ".dds-context")[0], "flex")).toBe("none");
-    // In a narrow column a value with a ring shows the ring alone.
-    const query = css.match(/@container \(max-width: (\d+)px\) \{([^{}]*\{[^{}]*\})/);
-    expect(query, "no container query for the indicator").not.toBeNull();
-    expect(query![2]).toContain(".dds-context__ring + .dds-context__text");
-    expect(decl(blocksFor(css, ".dds-context__ring + .dds-context__text")[0], "display")).toBe(
-      "none",
-    );
+    // DDS-FR-WRNB: the percent text stays visible at every width, so no rule
+    // hides it beside the ring.
+    expect(css).not.toContain(".dds-context__ring + .dds-context__text");
+    for (const block of blocksFor(css, ".dds-context__text")) {
+      expect(decl(block, "display")).not.toBe("none");
+    }
+  });
+
+  it("DDS-FR-WUCD, DDS-FR-WCET: the ring takes the accent, warning, and danger tokens by level, with one geometry", () => {
+    expect(decl(blocksFor(css, ".dds-context__fill")[0], "stroke")).toBe("var(--accent)");
+    expect(
+      decl(blocksFor(css, '.dds-context__ring[data-level="high"] .dds-context__fill')[0], "stroke"),
+    ).toBe("var(--warn)");
+    expect(
+      decl(
+        blocksFor(css, '.dds-context__ring[data-level="critical"] .dds-context__fill')[0],
+        "stroke",
+      ),
+    ).toBe("var(--danger)");
+    // The ring is no taller than the text it stands beside.
+    const ring = blocksFor(css, ".dds-context__ring")[0];
+    expect(decl(ring, "height")).toBe("var(--sp-3)");
+    expect(css).not.toMatch(/\.dds-context__(ring|fill|track)[^{]*\{[^}]*(animation|transition)/);
   });
 
   it("DDS-FR-ZQVE: draws the warning in the warning token", () => {

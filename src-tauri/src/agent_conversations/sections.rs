@@ -275,6 +275,7 @@ fn attachment_reads(
     // proposal to its counts.
     let mut referenced: Vec<(&str, &str)> = Vec::new();
     let mut hunk_refs: Vec<(&str, &str, &str)> = Vec::new();
+    let mut artifact_hunk_refs: Vec<(&str, &str)> = Vec::new();
     for comment in &thread.comments {
         for attachment in &comment.attachments {
             match attachment {
@@ -284,8 +285,24 @@ fn attachment_reads(
                 {
                     referenced.push((draft_id, proposal_id));
                 }
-                comments::Attachment::ProposalHunk { draft_id, proposal_id, hunk_id, .. } => {
+                // CMS-FR-TQVB: a reference to a draft's hunk is read below with
+                // the draft's proposals; one to an artifact's hunk is read from
+                // the prompt proposal store.
+                comments::Attachment::ProposalHunk {
+                    draft_id: Some(draft_id),
+                    proposal_id,
+                    hunk_id,
+                    ..
+                } => {
                     hunk_refs.push((draft_id, proposal_id, hunk_id));
+                }
+                comments::Attachment::ProposalHunk {
+                    artifact_id: Some(_),
+                    proposal_id,
+                    hunk_id,
+                    ..
+                } => {
+                    artifact_hunk_refs.push((proposal_id, hunk_id));
                 }
                 _ => {}
             }
@@ -325,6 +342,21 @@ fn attachment_reads(
         }
     }
 
+    // AGC-FR-DKHT: a hunk of a prompt change proposal, read on the terms a
+    // draft's is — no reconciliation, no write. A read that fails leaves the
+    // reference out of the map, so it renders as the bare line naming it.
+    for (proposal_id, hunk_id) in artifact_hunk_refs {
+        let key = (proposal_id.to_string(), hunk_id.to_string());
+        if hunks.contains_key(&key) {
+            continue;
+        }
+        if let Some(change) =
+            crate::prompt_proposals::read_proposal_change(roots.worktree, proposal_id, hunk_id)
+        {
+            hunks.insert(key, prompt_change_view(change));
+        }
+    }
+
     // The last references the thread made are the ones that render in full.
     let full_from = referenced.len().saturating_sub(PROPOSALS_RENDERED_IN_FULL);
     let mut digests = ProposalDigests::new();
@@ -341,6 +373,27 @@ fn attachment_reads(
         );
     }
     AttachmentReads { digests, hunks }
+}
+
+/// AGC-FR-DKHT: a prompt proposal's hunk in the shape a draft's renders from,
+/// so the two read identically in a turn's input.
+fn prompt_change_view(
+    change: crate::prompt_proposals::PromptProposalChange,
+) -> crate::draft_proposals::ProposalChange {
+    use crate::draft_proposals::hunks::HunkState as Draft;
+    use crate::prompt_proposals::HunkState as Prompt;
+    crate::draft_proposals::ProposalChange {
+        id: change.id,
+        kind: change.kind,
+        state: match change.state {
+            Prompt::Pending => Draft::Pending,
+            Prompt::Accepted => Draft::Accepted,
+            Prompt::Rejected => Draft::Rejected,
+            Prompt::Discussing => Draft::Discussing,
+        },
+        before: change.before,
+        after: change.after,
+    }
 }
 
 /// AGC-FR-RVQP: one proposal's changes and how each was decided.

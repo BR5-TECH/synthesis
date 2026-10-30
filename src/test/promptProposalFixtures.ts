@@ -3,7 +3,7 @@
  * builds from (`../../specifications/ui/PCR-prompt-change-review.md`).
  *
  * Shared rather than copied, on the model of `streamFixtures.ts`: more than one
- * test file renders the same modal, and a proposal that drifted between them
+ * test file renders the same review, and a proposal that drifted between them
  * would let one of them pass against a shape the backend never sends.
  */
 
@@ -29,6 +29,10 @@ export function proposal(over: Partial<PromptChangeProposal> = {}): PromptChange
     threadId: "t1",
     commentId: "c1",
     state: "pending",
+    legacy: false,
+    hunkCount: 1,
+    counts: { pending: 1, accepted: 0, rejected: 0, discussing: 0 },
+    ledger: [{ id: "h1", kind: "replace", state: "pending", edited: false, revision: 0 }],
     candidateEdited: false,
     commentOwed: false,
     createdAt: "2026-01-01T00:00:00Z",

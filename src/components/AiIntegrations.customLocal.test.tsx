@@ -182,13 +182,47 @@ describe("the Custom token fields (AII-FR-UQLF, AII-FR-TWIR, AII-FR-FBVE)", () =
     ]);
   });
 
-  it("AII-FR-UQLF: no other tab renders the token fields", async () => {
+  it("AII-FR-05, AII-FR-UQLF: every other tab renders Max context size above the turn timeout, and no Max output tokens", async () => {
     backend({ api: API_ALL.map((p) => apiVerified(p, "https://example.com")) });
     render(<BothLevels />);
+    const user = userEvent.setup();
     await apiLevel().findByTestId("ai-api-turn-timeout");
 
-    expect(apiLevel().queryByTestId("ai-api-max-output-tokens")).not.toBeInTheDocument();
-    expect(apiLevel().queryByTestId("ai-api-max-context-size")).not.toBeInTheDocument();
+    for (const [tab, provider] of [
+      [/OpenRouter/, "openrouter"],
+      [/Anthropic/, "anthropic"],
+      [/OpenAI/, "openai"],
+    ] as const) {
+      await openApiTab(user, apiLevel(), tab);
+      const panel = await apiLevel().findByTestId(`ai-api-panel-${provider}`);
+      const order = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          "[data-testid='ai-api-max-output-tokens'], [data-testid='ai-api-max-context-size'], [data-testid='ai-api-turn-timeout']",
+        ),
+      ).map((el) => el.dataset.testid);
+      expect(order, provider).toEqual(["ai-api-max-context-size", "ai-api-turn-timeout"]);
+    }
+  });
+
+  it("AII-FR-UQLF, AAP-FR-ITBL: a non-Custom tab commits its own max context size", async () => {
+    backend(
+      { api: API_ALL.map((p) => apiVerified(p, "https://example.com")) },
+      {
+        [CONTEXT]: (args) =>
+          apiVerified("openai", "https://example.com", {
+            maxContextSize: args!.tokens as number | null,
+          }),
+      },
+    );
+    render(<BothLevels />);
+    const user = userEvent.setup();
+    await apiLevel().findByTestId("ai-api-turn-timeout");
+    await openApiTab(user, apiLevel(), /OpenAI/);
+    const panel = await apiLevel().findByTestId("ai-api-panel-openai");
+    const context = panel.querySelector<HTMLInputElement>("[data-testid='ai-api-max-context-size']")!;
+    await user.type(context, "200000{Enter}");
+    await waitFor(() => expect(argsOf(CONTEXT)).toEqual({ provider: "openai", tokens: 200000 }));
+    await waitFor(() => expect(context.value).toBe("200000"));
   });
 
   it("AII-FR-FBVE: the fields show their placeholder and their explanation lines", async () => {
@@ -203,11 +237,15 @@ describe("the Custom token fields (AII-FR-UQLF, AII-FR-TWIR, AII-FR-FBVE)", () =
     expect(apiLevel().getByTestId("ai-api-max-output-tokens-note")).toHaveTextContent(
       /empty uses 128000/i,
     );
-    expect(apiLevel().getByTestId("ai-api-max-context-size-note")).toHaveTextContent(
-      /when the model reports no context size.*never sent to the host/i,
+    expect(apiLevel().getByTestId("ai-api-max-context-size")).toHaveAttribute(
+      "placeholder",
+      "1000000",
     );
     expect(apiLevel().getByTestId("ai-api-max-context-size-note")).toHaveTextContent(
-      /the window the document size limit uses/i,
+      /wins over the context size the model reports.*never sent to the host/i,
+    );
+    expect(apiLevel().getByTestId("ai-api-max-context-size-note")).toHaveTextContent(
+      /window for the document size limit and the history budget/i,
     );
   });
 

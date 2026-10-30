@@ -84,7 +84,7 @@ fn a_turn_whose_request_could_not_be_built_is_offered_again_and_not_repeated() {
 fn the_production_seam_reports_a_refused_responses_request_as_invalid_request() {
     let endpoint = AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: "custom".into(),
         base_url: "http://127.0.0.1:9".into(),

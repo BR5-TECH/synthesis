@@ -56,6 +56,8 @@ import {
 } from "../../types";
 import { isPostAccelerator, postAcceleratorHint } from "./composerKeys";
 import { useParticipantLabel } from "../../state/projectIdentity";
+import type { TurnDeadline } from "../../state/turnDeadline";
+import { TimeoutBar } from "./TimeoutBar";
 
 /** What an opening composer asks for when the author posts. */
 export interface OpenDiscussionRequest {
@@ -102,6 +104,11 @@ interface ComposerCommon {
   alwaysShowCancel?: boolean;
   /** Called when the author discards. The text and the attachments are cleared first. */
   onCancel?: () => void;
+  /**
+   * CVP-FR-JSHF: the whole-turn deadline of the discussion's running turn
+   * with the most time left. A reply composer draws the timeout bar from it.
+   */
+  turnDeadline?: TurnDeadline | null;
 }
 
 export type DiscussionComposerProps = ComposerCommon &
@@ -371,6 +378,11 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
           pending={attachments.pending}
           onRemove={attachments.removeAt}
         />
+        {/* CVP-FR-JSHF: under the field of a reply composer while a turn of
+            the discussion runs with a deadline. */}
+        {props.mode === "reply" && props.turnDeadline && (
+          <TimeoutBar deadline={props.turnDeadline} />
+        )}
       </div>
       {/* CMT-FR-34: a failed operation attaches to the composer that triggered
           it and leaves the content intact. */}

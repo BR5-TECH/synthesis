@@ -33,6 +33,8 @@ import { commentErrorMessage, turnFailureMessage } from "./messages";
 import { pairedHalves } from "./questionPairs";
 import { useDiscussionRuntime } from "../../hooks/useDiscussionRuntime";
 import { usePendingContributions } from "../../hooks/usePendingContributions";
+import { ActivityRows } from "./ToolActivity";
+import { barDeadlineOf } from "../../state/turnDeadline";
 import { logDebug } from "../../logging";
 import {
   consumePendingFocus,
@@ -165,10 +167,13 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   // CTA-FR-ZOLW, CTA-FR-XMCQ: one pending contribution for each agent.
-  const { pendingTurns, onCancelTurn } = usePendingContributions(
+  const { pendingTurns, onCancelTurn, toolCallsByRow } = usePendingContributions(
     props.pendingTurns ?? runtime.pendingTurns,
     props.onCancelTurn ?? runtime.cancelTurn,
   );
+  // CVP-FR-JSHF / CVP-FR-ZRWW: every running turn, not one row per agent.
+  const runningTurns = props.pendingTurns ?? runtime.pendingTurns;
+  const turnDeadline = useMemo(() => barDeadlineOf(runningTurns), [runningTurns]);
   const failedTurn = props.failedTurn ?? runtime.failedTurn;
   const imageNotice = props.imageNotice ?? runtime.imageNotice;
   const retryingTurnIds = props.retryingTurnIds ?? runtime.retryingTurnIds;
@@ -452,11 +457,14 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             authorOf={authorOf}
             threadActions={messageActions}
             pendingTurns={pendingTurns}
+            toolCallsByRow={toolCallsByRow}
             onCancelTurn={onCancelTurn}
             footer={
               <>
                 {dividerAtEnd}
                 {turnOutcomes}
+                {/* CTA-FR-ZBIB: the tool lists of the turns that ended. */}
+                <ActivityRows rows={session.activityRows} variant="stream" />
               </>
             }
           />
@@ -468,6 +476,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             embedded={embedded}
             pairing={pairing}
             pendingTurns={pendingTurns}
+            toolCallsByRow={toolCallsByRow}
             onCancelTurn={onCancelTurn}
             onQuote={quoteOffered ? quoteFrom : undefined}
             authorOf={authorOf}
@@ -475,7 +484,13 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             beforeComment={beforeComment}
             visibleFrom={props.visibleFrom ?? 0}
             afterComments={dividerAtEnd}
-            footer={turnOutcomes}
+            footer={
+              <>
+                {turnOutcomes}
+                {/* CTA-FR-ZBIB: the tool lists of the turns that ended. */}
+                <ActivityRows rows={session.activityRows} />
+              </>
+            }
           />
         )}
       </div>
@@ -531,6 +546,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
           dismissSignal={menu.open ? 1 : 0}
           focusSignal={props.composerFocusSignal}
           showAcceleratorHint={props.showAcceleratorHint ?? stream}
+          turnDeadline={turnDeadline}
         />
       )}
 

@@ -73,7 +73,8 @@ fn reference_to(
     crate::comments::AttachmentInput::ProposalHunk {
         proposal_id: proposal.id.clone(),
         hunk_id: hunk_id.into(),
-        draft_id: proposal.draft_id.clone(),
+        draft_id: Some(proposal.draft_id.clone()),
+        artifact_id: None,
         path: proposal.path.clone(),
     }
 }
@@ -167,7 +168,8 @@ fn a_proposal_hunk_that_cannot_be_read_keeps_a_bare_line_with_its_id() {
         crate::comments::AttachmentInput::ProposalHunk {
             proposal_id: "p-nonesuch".into(),
             hunk_id: "h-nonesuch".into(),
-            draft_id: draft_id.clone(),
+            draft_id: Some(draft_id.clone()),
+            artifact_id: None,
             path: "prompt.md".into(),
         },
         "@arch what about this?",

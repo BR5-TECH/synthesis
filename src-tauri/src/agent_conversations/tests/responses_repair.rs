@@ -183,7 +183,7 @@ fn the_route_check_names_the_responses_path_alone() {
 fn only_the_custom_gateway_is_configured_to_repair() {
     let endpoint = |provider: &str| AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: provider.into(),
         base_url: "https://gw.example.com".into(),
@@ -340,7 +340,7 @@ pub(super) fn call(
     let server = answer_once("200 OK", body);
     let endpoint = AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: provider.into(),
         base_url: base_url.replace("{addr}", &server.addr.to_string()),

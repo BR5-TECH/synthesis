@@ -136,7 +136,7 @@ fn multimodal_user_message(request: &AgentRequest) -> Option<rig::completion::Me
 
 /// The same, over the sections themselves, for the reason [`render_sections`]
 /// stands apart from [`render_input`].
-fn multimodal_message_of(sections: &[InputSection]) -> Option<rig::completion::Message> {
+pub(super) fn multimodal_message_of(sections: &[InputSection]) -> Option<rig::completion::Message> {
     use rig::completion::message::UserContent;
 
     if !input_has_images(sections) {

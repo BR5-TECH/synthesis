@@ -71,19 +71,19 @@ fn attribute(section: &InputSection, name: &str) -> Option<String> {
 }
 
 // AGC-FR-GMSF, AGC-FR-XHHT: the limit is the whole part of window × percent /
-// 100, and the bound is four characters per token, or 40,000 characters where
-// no window is known.
+// 100, and the bound is four characters per token. The default window gives
+// the default limit.
 #[test]
 fn the_limit_and_the_bound_follow_the_window_and_the_percent() {
-    let budget = DocumentBudget { window: Some(200_000), percent: 30 };
-    assert_eq!(budget.limit_tokens(), Some(60_000));
+    let budget = DocumentBudget { window: 200_000, percent: 30 };
+    assert_eq!(budget.limit_tokens(), 60_000);
     assert_eq!(budget.bound_chars(), 240_000);
-    let odd = DocumentBudget { window: Some(999), percent: 30 };
-    assert_eq!(odd.limit_tokens(), Some(299), "rounded down");
-    let unknown = DocumentBudget { window: None, percent: 30 };
-    assert_eq!(unknown.limit_tokens(), None);
-    assert_eq!(unknown.bound_chars(), SECTION_MAX_CHARS);
-    assert_eq!(DocumentBudget::unknown().bound_chars(), SECTION_MAX_CHARS);
+    let odd = DocumentBudget { window: 999, percent: 30 };
+    assert_eq!(odd.limit_tokens(), 299, "rounded down");
+    let default = DocumentBudget::default_window();
+    assert_eq!(default.window, crate::ai_api::DEFAULT_CONTEXT_SIZE);
+    assert_eq!(default.limit_tokens(), 300_000);
+    assert_eq!(default.bound_chars(), 1_200_000);
 }
 
 // AGC-FR-GMSF: dispatch resolves the window of the agent's model on the
@@ -92,8 +92,12 @@ fn the_limit_and_the_bound_follow_the_window_and_the_percent() {
 fn the_budget_is_resolved_from_the_registry_and_the_setting() {
     let h = window_harness(Vec::new(), Some(10_000), 7);
     let budget = DocumentBudget::resolve(&h.store(), "custom", "m");
-    assert_eq!(budget, DocumentBudget { window: Some(10_000), percent: 7 });
-    assert_eq!(DocumentBudget::resolve(&h.store(), "custom", "no-such").window, None);
+    assert_eq!(budget, DocumentBudget { window: 10_000, percent: 7 });
+    // AAP-FR-BKBF: an unlisted model gets the default window.
+    assert_eq!(
+        DocumentBudget::resolve(&h.store(), "custom", "no-such").window,
+        crate::ai_api::DEFAULT_CONTEXT_SIZE
+    );
 }
 
 // AGC-FR-OYVH: the size is counted on the whole text, and the estimate is
@@ -265,7 +269,7 @@ fn a_whole_target_discussion_above_the_bound_carries_metadata_only() {
         Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,
-        &DocumentBudget { window: Some(10_000_000), percent: 30 },
+        &DocumentBudget { window: 10_000_000, percent: 30 },
     );
     let artifact = section_of(&whole.sections, TAG_ARTIFACT);
     assert!(!artifact.truncated);
@@ -416,9 +420,9 @@ fn a_turn_holds_the_context_figures_of_its_latest_call() {
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
     let context = terminal.context.expect("AGC-FR-NUKP: the terminal turn keeps its figures");
-    assert_eq!(context.window, Some(100_000));
+    assert_eq!(context.window, 100_000);
     assert_eq!(context.input_tokens, Some(222), "the latest call's reported input");
-    assert_eq!(context.limit_tokens, Some(1_000));
+    assert_eq!(context.limit_tokens, 1_000);
     assert_eq!(context.document, Some(DocumentSize::of(&text)));
     assert!(context.above_limit, "1500 estimated tokens against a limit of 1000");
     let split = context.split;
@@ -451,10 +455,11 @@ fn a_failed_attempt_reports_no_context() {
     assert!(!context.above_limit);
 }
 
-// AGC-FR-BCHZ, AGC-FR-NJXW: a note turn carries a null document and is never
-// above the limit; with no window there is no limit.
+// AGC-FR-BCHZ, AGC-FR-NJXW, AGC-FR-GMSF: a note turn carries a null document
+// and is never above the limit; with no detected window it has the default
+// window and its limit.
 #[test]
-fn a_note_turn_has_no_document_and_no_limit_without_a_window() {
+fn a_note_turn_has_no_document_and_the_default_window() {
     let h = window_harness(vec![Ok(ScriptedReply::answer("Noted."))], None, 30);
     let (_, origin) =
         seed_note_discussion(&h, crate::notes::NoteScope::Project, "A gap.", "@arch thoughts?");
@@ -463,8 +468,8 @@ fn a_note_turn_has_no_document_and_no_limit_without_a_window() {
     let terminal = wait_for_terminal(&h, &turn.id);
     let context = terminal.context.expect("figures for a note turn too");
     assert_eq!(context.document, None);
-    assert_eq!(context.window, None);
-    assert_eq!(context.limit_tokens, None);
+    assert_eq!(context.window, crate::ai_api::DEFAULT_CONTEXT_SIZE);
+    assert_eq!(context.limit_tokens, 300_000);
     assert!(!context.above_limit);
     assert!(context.split.document > 0, "the note_context section");
 }
@@ -519,8 +524,8 @@ fn the_estimate_assembles_the_input_dry() {
         Some(&thread.id),
         Some(&agent_id),
     );
-    assert_eq!(with.window, Some(10_000));
-    assert_eq!(with.limit_tokens, Some(100));
+    assert_eq!(with.window, 10_000);
+    assert_eq!(with.limit_tokens, 100);
     assert!(with.above_limit);
     assert_eq!(with.document, Some(DocumentSize::of(&text)));
     assert_eq!(with.split.current_comment, 0);
@@ -528,14 +533,15 @@ fn the_estimate_assembles_the_input_dry() {
     assert!(with.split.history > 0 && with.split.instructions > 0 && with.split.document > 0);
     assert_eq!(with.estimated_tokens, with.split.total());
 
-    // AGC-FR-OBUA: no discussion gives an empty history; no agent gives no
-    // window and so no limit.
+    // AGC-FR-OBUA: no discussion gives an empty history; no agent gives the
+    // default window and its limit (1% of 1,000,000).
     let bare =
         estimate_impl(&handle, Roots::same(&h.root()), PROJECT_KEY, target.clone(), None, None);
     assert_eq!(bare.split.history, 0);
-    assert_eq!(bare.window, None);
-    assert_eq!(bare.limit_tokens, None);
+    assert_eq!(bare.window, crate::ai_api::DEFAULT_CONTEXT_SIZE);
+    assert_eq!(bare.limit_tokens, 10_000);
     assert!(!bare.above_limit);
+    let target_again = target.clone();
     let unknown = estimate_impl(
         &handle,
         Roots::same(&h.root()),
@@ -544,7 +550,31 @@ fn the_estimate_assembles_the_input_dry() {
         Some("no-such"),
         Some("no-such-agent"),
     );
-    assert_eq!((unknown.window, unknown.split.history), (None, 0));
+    assert_eq!((unknown.window, unknown.split.history), (crate::ai_api::DEFAULT_CONTEXT_SIZE, 0));
+
+    // AGC-FR-OBUA: a provider's max context size is not the window of an
+    // estimate with no agent; the default is.
+    let mut records = h.store().load_ai_api_registry().unwrap();
+    records.0.iter_mut().for_each(|r| r.max_context_size = Some(64_000));
+    h.store().save_ai_api_registry(records.0, records.1).unwrap();
+    let no_agent = estimate_impl(
+        &handle,
+        Roots::same(&h.root()),
+        PROJECT_KEY,
+        target_again.clone(),
+        None,
+        None,
+    );
+    assert_eq!(no_agent.window, crate::ai_api::DEFAULT_CONTEXT_SIZE);
+    let with_agent = estimate_impl(
+        &handle,
+        Roots::same(&h.root()),
+        PROJECT_KEY,
+        target_again,
+        None,
+        Some(&agent_id),
+    );
+    assert_eq!(with_agent.window, 64_000, "AAP-FR-RANS: the override wins for the agent's model");
 
     // AGC-FR-JFBZ: nothing registered, nothing emitted.
     assert!(h.turns().in_flight(None).is_empty());

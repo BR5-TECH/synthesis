@@ -16,6 +16,7 @@ import { CommentAttachmentList } from "../CommentAttachments";
 import { CommentMarkdown } from "../CommentMarkdown";
 import { formatRelative } from "../ProjectPicker";
 import { activityStatus } from "../../state/agentActivity";
+import { ToolDisclosure } from "./ToolActivity";
 import type { AgentRoster } from "../agentTags";
 import {
   discussionDraftId,
@@ -24,6 +25,7 @@ import {
   type AgentTurn,
   type Discussion,
   type Participant,
+  type TurnToolCall,
 } from "../../types";
 import type { PairedHalf } from "./questionPairs";
 import {
@@ -61,6 +63,8 @@ export interface DiscussionMessagesProps {
   embedded: boolean;
   pairing: ReadonlyMap<string, PairedHalf>;
   pendingTurns: readonly AgentTurn[];
+  /** CTA-FR-BJWN: each pending row's tool list, keyed by the turn it reads. */
+  toolCallsByRow?: ReadonlyMap<string, readonly TurnToolCall[]>;
   onCancelTurn: (turnId: string) => void;
   /** Absent where the composer is absent, so no control does visibly nothing. */
   onQuote?: (commentId: string, host: HTMLElement | null) => void;
@@ -81,6 +85,7 @@ export function DiscussionMessages({
   embedded,
   pairing,
   pendingTurns,
+  toolCallsByRow,
   onCancelTurn,
   onQuote,
   authorOf,
@@ -224,13 +229,22 @@ export function DiscussionMessages({
             </button>
           </div>
           {/* CTA-FR-XMCQ / CTA-FR-FBJR: the activity status, worded as a
-              participant who has been asked something and has not answered yet. */}
-          <p
+              participant who has been asked something and has not answered yet.
+              CTA-FR-GGYJ: a disclosure of the tool list once a call was made. */}
+          <div
             className="comment__body comment__body--pending"
             data-testid="comment-pending-status"
           >
-            {activityStatus(turn)}
-          </p>
+            {(toolCallsByRow?.get(turn.id)?.length ?? 0) > 0 ? (
+              <ToolDisclosure
+                label={activityStatus(turn)}
+                calls={toolCallsByRow?.get(turn.id) ?? []}
+                testId="comment-pending-toggle"
+              />
+            ) : (
+              activityStatus(turn)
+            )}
+          </div>
         </div>
       ))}
       {footer}

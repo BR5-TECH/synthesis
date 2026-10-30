@@ -15,14 +15,15 @@ pub struct BuiltInput {
     pub document: Option<DocumentSize>,
 }
 
-/// [`build_input_within`] with no known window, which bounds the `artifact`
-/// section by the fallback of AGC-FR-XHHT.
+/// [`build_input_within`] with the default context size of AAP-FR-RANS, which
+/// bounds the `artifact` section by AGC-FR-XHHT.
 pub fn build_input(
     roots: Roots<'_>,
     origin: &ConversationOrigin,
     trigger_comment_id: &str,
 ) -> Vec<InputSection> {
-    build_input_within(roots, origin, trigger_comment_id, &DocumentBudget::unknown()).sections
+    build_input_within(roots, origin, trigger_comment_id, &DocumentBudget::default_window())
+        .sections
 }
 
 /// AGC-FR-05: the whole of the per-kind dispatch. Adding a conversational

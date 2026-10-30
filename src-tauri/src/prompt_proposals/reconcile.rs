@@ -1,4 +1,5 @@
-//! Reconciling a decision that did not finish, and deciding a proposal.
+//! Reconciling an acceptance that did not finish, and the sweep (PCP-FR-14,
+//! PCP-FR-20).
 
 use super::*;
 
@@ -68,17 +69,25 @@ where
         // The commit point was passed.
         //
         // Read first, and deliberately so, for the one case where the two
-        // checksums coincide — an author who edited the candidate to what the
-        // artifact already held. The file then reads the same whichever side of
-        // the commit point the operation stopped on, so there is nothing to tell
-        // apart: settling `accepted` is truthful either way, the author having
-        // activated Accept (a journal exists for no other reason) and the file
-        // holding exactly the bytes they accepted.
+        // checksums coincide — a hunk whose acceptance leaves the file as it
+        // was. The file then reads the same whichever side of the commit point
+        // the operation stopped on, so settling `accepted` is truthful either
+        // way: the author activated Accept (a journal exists for no other
+        // reason) and the file holds exactly the bytes they accepted.
+        let hunk_id = journal.hunk();
         let mut settled = record.clone();
-        if settled.state != PromptProposalState::Accepted {
-            settled.state = PromptProposalState::Accepted;
-            settled.decided_at = Some(settled.decided_at.clone().unwrap_or_else(now_rfc3339));
-            settled.comment_owed = true;
+        let row_accepted = settled
+            .ledger
+            .iter()
+            .find(|row| row.id == hunk_id)
+            .is_some_and(|row| row.state == HunkState::Accepted);
+        if !row_accepted {
+            if let Some(row) = settled.ledger.iter_mut().find(|row| row.id == hunk_id) {
+                row.state = HunkState::Accepted;
+                row.decided_at = Some(now_rfc3339());
+            }
+            ledger::resettle(&mut settled);
+            settled.comment_owed = journal.resolves;
             root.write_toml_atomic(at(&dir, proposal_id, RECORD_EXT), &settled)
                 .map_err(|_| ERR_WRITE_FAILED.to_string())?;
         }
@@ -104,7 +113,7 @@ where
                 }
             }
         } else {
-            comment_id = Some(journal.comment_id.clone());
+            comment_id = journal.resolves.then(|| journal.comment_id.clone());
         }
         finish(root, &dir, proposal_id);
         log_recovery(app, "roll_forward", &settled, "commit point passed");
@@ -132,7 +141,7 @@ where
     // The artifact write never landed — or the file has moved on and the safe
     // settlement is the same. Back to `pending`, so it is offered again rather
     // than claimed as accepted on evidence that no longer exists.
-    roll_back(root, &dir, &record).map_err(|_| ERR_WRITE_FAILED.to_string())?;
+    roll_back(root, &dir, &journal).map_err(|_| ERR_WRITE_FAILED.to_string())?;
     log_recovery(app, "rollback", &record, "interrupted before commit");
     Ok(Reconciliation::RolledBack)
 }
@@ -166,7 +175,7 @@ pub fn on_content_root_mounted<R: tauri::Runtime>(
     sweep_on_content_root_mounted(app, root);
 }
 
-/// PCP-FR-20's sweep alone: the record and candidate of a **decided** proposal
+/// PCP-FR-20's sweep alone: the record and hunks of a **decided** proposal
 /// whose artifact the project no longer holds.
 ///
 /// Separated from the reconciliation because it reads the **worktree** and
@@ -196,6 +205,7 @@ pub fn sweep_on_content_root_mounted<R: tauri::Runtime>(
         {
             let _ = root.delete_under(&dir, format!("{}.{RECORD_EXT}", record.id), false);
             let _ = root.delete_under(&dir, format!("{}.{CONTENT_EXT}", record.id), false);
+            let _ = root.delete_under(&dir, format!("{}.{HUNKS_EXT}", record.id), false);
             logging::log_info(
                 app,
                 &BUFFER,
@@ -209,143 +219,4 @@ pub fn sweep_on_content_root_mounted<R: tauri::Runtime>(
             );
         }
     }
-}
-
-/// What the author decided about one proposal (PCP-FR-12, PCP-FR-16): the
-/// proposal, the direction, the feedback the author wrote, and who decided.
-pub(super) struct DecisionRequest<'a> {
-    pub(super) proposal_id: &'a str,
-    pub(super) decision: Decision,
-    pub(super) feedback: Option<&'a str>,
-    pub(super) by: &'a Participant,
-}
-
-/// One decision, whichever way it went (PCP-FR-12, PCP-FR-15, PCP-FR-16).
-pub(super) fn decide<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    root: &fs::RootFs,
-    store: &fs::RootFs,
-    request: DecisionRequest<'_>,
-    tracker: &ContentTracker,
-) -> Result<PromptDecisionOutcome, String>
-where
-    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
-{
-    let DecisionRequest { proposal_id, decision, feedback, by } = request;
-    let held = read_proposal(root, proposal_id)?;
-    // PCP-FR-14: checked before the artifact lock is taken, so a decision made
-    // while another acceptance of this proposal is in flight is refused rather
-    // than queued behind it and then answered `already_decided`.
-    if is_accepting(proposal_id) {
-        return Err(ERR_ACCEPTANCE_IN_PROGRESS.to_string());
-    }
-    // PCP-FR-18 / PCP-FR-14: held for the whole decision — the already-decided
-    // check and the writes that follow it are one act, and the reconciliation
-    // between them must not race an acceptance running in another window.
-    let _guard = artifact_lock(&held.artifact_id);
-    // PCP-FR-14: reconciled before the proposal is reported in any state, so
-    // neither decision ever answers from one a journal has not yet settled. What
-    // the reconciliation *did* is deliberately not read here: an acceptance it
-    // settled is a decision already made, and this call is a second one.
-    reconcile_locked(app, root, store, proposal_id)?;
-    let record = read_proposal(root, proposal_id)?;
-
-    // PCP-FR-18: decided once, and a second decision — of **either** kind —
-    // finds it settled rather than overwriting what the first decided.
-    //
-    // There is deliberately no exception here for an acceptance whose comment
-    // was owed and which the reconciliation above has just completed. Answering
-    // such a call with that acceptance's own outcome would let a **decline**
-    // report success carrying the *accept* comment: the author would believe
-    // they had declined, the agent would be told the change was accepted, and
-    // the artifact would keep the accepted text, with nothing anywhere reporting
-    // an error. Completing an owed comment is `complete_prompt_change_decision`'s
-    // and is reached from the one control that offers it (PCR-FR-15).
-    if record.state != PromptProposalState::Pending {
-        return Err(ERR_ALREADY_DECIDED.to_string());
-    }
-
-    // PCP-FR-12 / PCP-FR-19: checked for both decisions where it is a fact about
-    // the target rather than about the write — an acceptance refuses a target
-    // that is gone or no longer a prompt, and a decline clears such a proposal.
-    if decision == Decision::Accept {
-        require_prompt_artifact(root, &record.artifact_id)?;
-    }
-
-    let (thread_artifact, discussion) = locate_thread(root, store, &record.thread_id)?;
-    // PCP-FR-16: the two conditions that would make the append impossible are
-    // checked **before anything is written**. The identity has already been
-    // resolved by the command; the resolution is this.
-    if comments::thread_at(store, thread_ref(&thread_artifact, discussion), &record.thread_id)?
-        .resolved
-    {
-        return Err(comments::ERR_DISCUSSION_RESOLVED.to_string());
-    }
-
-    if decision == Decision::Accept {
-        return accept_locked(
-            app,
-            root,
-            store,
-            &record,
-            Acceptance { thread_artifact: &thread_artifact, discussion, feedback, by },
-            tracker,
-        );
-    }
-
-    // PCP-FR-15: a decline moves the record to `rejected` and **writes nothing
-    // into the project** — no artifact write, no journal begun — and keeps the
-    // `.content` file, so a declined proposal can still be read back afterwards
-    // as the candidate the author declined.
-    //
-    // The record moves before the comment is appended. Each can fail, and this
-    // ordering makes both failures recoverable: a record that will not write
-    // leaves a proposal still pending with nothing said, which the author's next
-    // click repairs; a comment that will not append leaves the decision made and
-    // the conversation one line short. The reverse order has a state neither
-    // recovers from — a conversation saying the proposal was declined while the
-    // record still reads pending.
-    let dir = ensure_folder(root)?;
-    let rejected = PromptChangeProposal {
-        state: PromptProposalState::Rejected,
-        decided_at: Some(now_rfc3339()),
-        comment_owed: false,
-        ..record.clone()
-    };
-    root.write_toml_atomic(at(&dir, proposal_id, RECORD_EXT), &rejected)
-        .map_err(|e| e.to_string())?;
-
-    // Minted here so the caller can name it as the fresh turn's trigger
-    // (PCR-FR-14) without re-folding the thread to find what was just appended.
-    let comment_id = new_note_id();
-    let appended = comments::add_comment_with_id(
-        store,
-        thread_ref(&thread_artifact, discussion),
-        &record.thread_id,
-        comment_id.clone(),
-        decision_body(decision, &record.path, record.candidate_edited, feedback),
-        by,
-        &now_rfc3339(),
-    );
-    let comment_id = match appended {
-        Ok(thread) => {
-            crate::agent_conversations::retire_recoverable_for_human_comment(
-                app,
-                &record.thread_id,
-            );
-            comments::emit_discussion_changed(app, &thread);
-            Some(comment_id)
-        }
-        Err(reason) => {
-            log_refusal(app, "decline_comment", &reason);
-            None
-        }
-    };
-
-    announce(app, &BUFFER, &rejected);
-    Ok(PromptDecisionOutcome {
-        proposal: rejected,
-        comment_id,
-        origin_kind: origin_kind_of(discussion),
-    })
 }

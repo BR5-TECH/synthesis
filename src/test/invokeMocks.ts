@@ -30,10 +30,10 @@ export function otherCommand(cmd: string): Promise<unknown> {
  * starts no log flush that can reach the next test.
  */
 export const CONTEXT_ESTIMATE: DiscussionContext = {
-  window: null,
+  window: 1_000_000,
   estimatedTokens: 0,
   split: { instructions: 0, document: 0, history: 0, currentComment: 0, toolResults: 0 },
   document: null,
-  limitTokens: null,
+  limitTokens: 300_000,
   aboveLimit: false,
 };

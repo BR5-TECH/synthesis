@@ -69,8 +69,8 @@ pub struct MeasureDocumentOutput {
     pub characters: u64,
     /// MDT-FR-QYLP: an estimate, never a provider-reported value.
     pub estimated_tokens: u64,
-    /// MDT-FR-CTKN, MDT-FR-ADEI: null where no window is known.
-    pub limit_tokens: Option<u64>,
+    /// MDT-FR-CTKN: never absent, as the window is always known.
+    pub limit_tokens: u64,
     /// MDT-FR-FHWP.
     pub above_limit: bool,
 }
@@ -128,7 +128,7 @@ fn draft_text(root: &crate::fs::RootFs, draft_id: &str) -> Result<String, ToolRe
     })
 }
 
-/// MDT-FR-LWAK … MDT-FR-ADEI: measure the one target against `budget`.
+/// MDT-FR-LWAK … MDT-FR-FHWP: measure the one target against `budget`.
 pub fn measure(
     root: &crate::fs::RootFs,
     args: &MeasureDocumentArgs,

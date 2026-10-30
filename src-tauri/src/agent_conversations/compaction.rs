@@ -1,11 +1,10 @@
 //! The token budget of a turn and the compaction of its older history
 //! (CVL-FR-LCXM .. CVL-FR-CSLX).
 //!
-//! A turn whose endpoint has a context size has a budget. Before each
+//! Every turn has a budget: its endpoint's effective context size. Before each
 //! invocation the loop estimates the input of the call, and when the estimate
 //! is above three quarters of the budget, one extra model call summarises the
-//! older history. The summary then stands where that history stood. A turn
-//! with no budget compacts nothing.
+//! older history. The summary then stands where that history stood.
 
 use super::*;
 use rig::completion::message::{AssistantContent, ToolResultContent, UserContent};
@@ -282,7 +281,7 @@ impl Conversation {
 }
 
 /// CVL-FR-LCXM .. CVL-FR-HFRL: compact the older history before invocation
-/// `model_calls` where the turn has a budget and the estimate is over it.
+/// `model_calls` where the estimate is over the turn's budget.
 ///
 /// A compaction call that fails or answers with no text leaves the exchange as
 /// it was. Cancellation, the whole-turn deadline, and a resolved conversation
@@ -298,9 +297,8 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
     conversation: &mut Conversation,
     call: ModelCall,
 ) -> Result<(), TurnEnd> {
-    let Some(budget) = endpoint.context_size else {
-        return Ok(());
-    };
+    // CVL-FR-LCXM: every turn has a budget.
+    let budget = endpoint.context_size;
     let request = conversation.request(plan);
     let estimate = estimate_input_tokens(request, &conversation.exchange);
     if !over_budget(estimate, budget) {

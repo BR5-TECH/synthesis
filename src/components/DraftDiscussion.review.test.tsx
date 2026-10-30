@@ -469,7 +469,7 @@ describe("moving between changes (DCR-FR-30)", () => {
     // own focus, and the first change until the author has moved.
     const focused = useDraftReviewState(DRAFT).focusedHunkId ?? "h1";
     useHunkNavigation({
-      draftId: DRAFT,
+      reviewKey: DRAFT,
       hunks: [hunk({ id: "h1" }), hunk({ id: "h2" }), hunk({ id: "h3" })],
       focused,
       active,

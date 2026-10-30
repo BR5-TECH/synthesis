@@ -271,6 +271,9 @@ describe("a Markdown body takes its host's type treatment (NTS-FR-25 / CMP-FR-12
     ".doc--ui h1",
     ".doc--ui h2",
     ".doc--ui h3",
+    ".doc--ui h4",
+    ".doc--ui h5",
+    ".doc--ui h6",
     ".doc--ui blockquote",
     ".doc--ui pre",
   ];

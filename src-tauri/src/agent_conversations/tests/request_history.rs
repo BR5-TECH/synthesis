@@ -710,7 +710,7 @@ fn a_section_past_its_bound_says_that_it_is_partial() {
     let h = Harness::new(vec![]);
     let big = "日".repeat(SECTION_MAX_CHARS + 100);
     let thread = h.seed_artifact_thread("big.md", &big);
-    let sections = build_input(
+    let sections = build_input_at_section_bound(
         Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,

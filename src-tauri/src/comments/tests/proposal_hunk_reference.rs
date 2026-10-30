@@ -6,7 +6,8 @@ fn hunk_input(hunk_id: &str) -> AttachmentInput {
     AttachmentInput::ProposalHunk {
         proposal_id: "p1".into(),
         hunk_id: hunk_id.into(),
-        draft_id: "d1".into(),
+        draft_id: Some("d1".into()),
+        artifact_id: None,
         path: "prompt.md".into(),
     }
 }
@@ -15,7 +16,8 @@ fn hunk_stored(hunk_id: &str) -> Attachment {
     Attachment::ProposalHunk {
         proposal_id: "p1".into(),
         hunk_id: hunk_id.into(),
-        draft_id: "d1".into(),
+        draft_id: Some("d1".into()),
+        artifact_id: None,
         path: "prompt.md".into(),
     }
 }
@@ -155,4 +157,80 @@ fn a_resolved_discussion_refuses_a_proposal_hunk_comment_from_anyone() {
     );
     assert_eq!(agent_write.unwrap_err(), ERR_DISCUSSION_RESOLVED);
     assert_eq!(discussion_log_lines(root, &draft_id).len(), before, "no line was appended");
+}
+
+fn artifact_hunk(
+    hunk_id: &str,
+    draft_id: Option<&str>,
+    artifact_id: Option<&str>,
+) -> AttachmentInput {
+    AttachmentInput::ProposalHunk {
+        proposal_id: "pp1".into(),
+        hunk_id: hunk_id.into(),
+        draft_id: draft_id.map(Into::into),
+        artifact_id: artifact_id.map(Into::into),
+        path: "prompts/review.md".into(),
+    }
+}
+
+// CMS-FR-TQVB / CMS-FR-AHDQ: a hunk discussion of an artifact is a discussion
+// record of that artifact whose opening comment carries one `proposal_hunk`
+// naming the artifact, stored verbatim.
+#[test]
+fn an_artifact_hunk_discussion_carries_an_artifact_proposal_hunk() {
+    let dir = temp_root();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    std::fs::create_dir_all(dir.path().join("prompts")).expect("dirs");
+    std::fs::write(dir.path().join("prompts/review.md"), "# Review\n").expect("artifact");
+    let target = DiscussionTarget::Artifact { artifact_id: "prompts/review.md".into() };
+    let opened = open_discussion_in(
+        root,
+        root,
+        &target,
+        None,
+        "@arch why this change?".into(),
+        vec![artifact_hunk("h1", None, Some("prompts/review.md"))],
+        Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
+    )
+    .expect("opened");
+    let stored = Attachment::ProposalHunk {
+        proposal_id: "pp1".into(),
+        hunk_id: "h1".into(),
+        draft_id: None,
+        artifact_id: Some("prompts/review.md".into()),
+        path: "prompts/review.md".into(),
+    };
+    assert_eq!(opened.comments[0].attachments, vec![stored.clone()]);
+    assert!(!opened.is_fragment_targeted(), "a whole-target discussion");
+    let folded = locate_discussion_of(root, &target, &opened.id).expect("found");
+    assert_eq!(folded.comments[0].attachments, vec![stored]);
+}
+
+// CMS-FR-TQVB: a `proposal_hunk` naming neither a draft nor an artifact, or
+// both, names no one target, so it is a `malformed_attachment` and nothing is
+// appended.
+#[test]
+fn a_proposal_hunk_naming_neither_or_both_targets_is_malformed() {
+    let dir = temp_root();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let draft_id = make_draft(root, "Hunk talk");
+    let opened = open_discussion(root, &draft_id, "first", "2026-01-01T00:00:00Z");
+    let before = discussion_log_lines(root, &draft_id).len();
+    for input in [
+        artifact_hunk("h1", None, None),
+        artifact_hunk("h1", Some(&draft_id), Some("prompts/review.md")),
+        artifact_hunk("h1", None, Some("  ")),
+    ] {
+        let refused = add_comment_to(
+            root,
+            ThreadRef::discussion(&draft_id),
+            &opened.id,
+            "About this one.".into(),
+            Vec::new(),
+            vec![input.clone()],
+            Stamp { by: &human("ada"), at: "2026-01-01T00:01:00Z" },
+        );
+        assert_eq!(refused.unwrap_err(), ERR_MALFORMED_ATTACHMENT, "{input:?}");
+    }
+    assert_eq!(discussion_log_lines(root, &draft_id).len(), before);
 }

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 
 import * as api from "../api";
 import { logWarn } from "../logging";
-import type { AiApiIntegration, ReasoningChoice } from "../types";
+import type { AiApiIntegration, AiApiProviderId, ReasoningChoice } from "../types";
 import { FilterableSelect } from "./FilterableSelect";
 import { customReasoningOptions, tokenLimitToCommit } from "./aiApiCustom";
 
@@ -52,7 +52,7 @@ export function AiApiCustomReasoningRow({
   );
 }
 
-/** Which of the two Custom token fields a row edits. */
+/** Which of the two token fields a row edits. */
 export type TokenLimitKind = "maxOutputTokens" | "maxContextSize";
 
 const TOKEN_FIELDS: Record<
@@ -62,7 +62,7 @@ const TOKEN_FIELDS: Record<
     testId: string;
     placeholder: string;
     note: string;
-    save: (tokens: number | null) => Promise<AiApiIntegration>;
+    save: (provider: AiApiProviderId, tokens: number | null) => Promise<AiApiIntegration>;
   }
 > = {
   // AII-FR-FBVE: the placeholder is the limit an empty field uses.
@@ -71,17 +71,17 @@ const TOKEN_FIELDS: Record<
     testId: "ai-api-max-output-tokens",
     placeholder: "128000",
     note: "The output limit of every Custom call. Empty uses 128000.",
-    save: (tokens) => api.setAiApiMaxOutputTokens("custom", tokens),
+    save: (provider, tokens) => api.setAiApiMaxOutputTokens(provider, tokens),
   },
+  // AII-FR-FBVE: the placeholder is the default window an empty field uses.
   maxContextSize: {
     label: "Max context size",
     testId: "ai-api-max-context-size",
-    placeholder: "",
+    placeholder: "1000000",
     note:
-      "Used as the conversation budget when the model reports no context " +
-      "size. It is then also the window the document size limit uses. " +
-      "Never sent to the host.",
-    save: (tokens) => api.setAiApiMaxContextSize("custom", tokens),
+      "Wins over the context size the model reports. It is the window for " +
+      "the document size limit and the history budget. Never sent to the host.",
+    save: (provider, tokens) => api.setAiApiMaxContextSize(provider, tokens),
   },
 };
 
@@ -92,6 +92,8 @@ function shown(tokens: number | null): string {
 
 interface TokenLimitRowProps {
   kind: TokenLimitKind;
+  /** The provider of the tab the field stands in. */
+  provider: AiApiProviderId;
   tokens: number | null;
   /** The record the backend returned after a committed change. */
   onSaved: (integration: AiApiIntegration) => void;
@@ -100,7 +102,7 @@ interface TokenLimitRowProps {
 }
 
 /**
- * AII-FR-UQLF / AII-FR-TWIR / AII-FR-FBVE: one Custom token field.
+ * AII-FR-UQLF / AII-FR-TWIR / AII-FR-FBVE: one token field of a provider tab.
  *
  * The typed text is held locally and committed on Enter or on blur, so a value
  * on its way somewhere does not reach the backend. It applies at once, with no
@@ -109,6 +111,7 @@ interface TokenLimitRowProps {
  */
 export function AiApiTokenLimitRow({
   kind,
+  provider,
   tokens,
   onSaved,
   describeError,
@@ -141,13 +144,14 @@ export function AiApiTokenLimitRow({
     setError("");
     inFlight.current = true;
     try {
-      onSaved(await field.save(toCommit));
+      onSaved(await field.save(provider, toCommit));
     } catch (e) {
       // AII-FR-28: the field keeps the value it held before, and the typed
       // error is rendered beside it.
       setText(shown(tokens));
       setError(describeError(e));
       logWarn(["frontend", "ai"], "ai api token limit refused", {
+        provider,
         field: kind,
         error: String(e),
       });

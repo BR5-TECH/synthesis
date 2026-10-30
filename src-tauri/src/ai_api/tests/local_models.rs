@@ -357,9 +357,9 @@ fn the_custom_reasoning_default_needs_no_model_and_takes_only_the_fixed_levels()
 }
 
 // AAP-FR-ITBL, AAP-FR-AYKU: the two token values are stored and cleared at
-// once, in range only, for Custom only.
+// once, in range only. Max output tokens is for Custom only.
 #[test]
-fn the_token_values_are_stored_in_range_for_custom_only() {
+fn the_token_values_are_stored_in_range() {
     let h = local_harness(FakeDetector::answering(&[]));
     let set = |limit, tokens| set_token_limit_impl(&h.store, &h.ai, "custom", limit, tokens);
 
@@ -393,11 +393,43 @@ fn the_token_values_are_stored_in_range_for_custom_only() {
     assert_eq!(rec.max_context_size, Some(TOKEN_LIMIT_MAX));
 
     assert_eq!(
-        set_token_limit_impl(&h.store, &h.ai, "openai", TokenLimit::MaxContextSize, Some(10))
+        set_token_limit_impl(&h.store, &h.ai, "openai", TokenLimit::MaxOutputTokens, Some(10))
             .unwrap_err(),
         ERR_LIMIT_UNSUPPORTED
     );
     let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
+    assert_eq!(find(&listed, "openai").max_output_tokens, None);
+}
+
+// AAP-FR-ITBL, AAP-FR-AYKU: every provider stores, validates, and clears a max
+// context size, also before it is configured.
+#[test]
+fn every_provider_stores_a_max_context_size() {
+    let h = local_harness(FakeDetector::answering(&[]));
+    for provider in ["openrouter", "anthropic", "openai", "custom"] {
+        let set = |tokens| {
+            set_token_limit_impl(&h.store, &h.ai, provider, TokenLimit::MaxContextSize, tokens)
+        };
+        assert_eq!(set(Some(200_000)).unwrap().max_context_size, Some(200_000), "{provider}");
+        for bad in [0, TOKEN_LIMIT_MAX + 1] {
+            assert_eq!(set(Some(bad)).unwrap_err(), ERR_TOKEN_LIMIT_INVALID, "{provider}");
+        }
+        let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
+        assert_eq!(find(&listed, provider).max_context_size, Some(200_000), "{provider}");
+        assert_eq!(set(None).unwrap().max_context_size, None, "{provider}");
+    }
+}
+
+// AAP-FR-ITBL: Clear returns the max context size of a non-Custom provider to
+// null.
+#[test]
+fn clear_returns_the_max_context_size_of_any_provider_to_null() {
+    let h = ok_harness();
+    verify_integration_impl(&h.store, &h.ai, "openai", "https://api.openai.com/v1", Some("k"))
+        .unwrap();
+    set_token_limit_impl(&h.store, &h.ai, "openai", TokenLimit::MaxContextSize, Some(64_000))
+        .unwrap();
+    let listed = clear_integration_impl(&h.store, &h.ai, "openai").unwrap();
     assert_eq!(find(&listed, "openai").max_context_size, None);
 }
 
@@ -430,13 +462,14 @@ fn an_agent_endpoint_carries_the_effective_values() {
     active_local(&h);
     let effort = |e: &str| ReasoningChoice::Effort { effort: e.to_string() };
 
-    // Nothing provider-level set: the detected size alone, no limit, no reasoning.
+    // Nothing provider-level set: the detected size, else the default; no
+    // limit, no reasoning.
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "qwen3:32b", None).unwrap();
-    assert_eq!(call.context_size, Some(40960));
+    assert_eq!(call.context_size, 40960);
     assert_eq!(call.max_output_tokens, None);
     assert_eq!(call.reasoning, None);
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "plain", None).unwrap();
-    assert_eq!(call.context_size, None);
+    assert_eq!(call.context_size, DEFAULT_CONTEXT_SIZE);
 
     set_token_limit_impl(&h.store, &h.ai, "custom", TokenLimit::MaxContextSize, Some(16384))
         .unwrap();
@@ -444,14 +477,14 @@ fn an_agent_endpoint_carries_the_effective_values() {
         .unwrap();
     set_reasoning_impl(&h.store, &h.ai, "custom", Some(effort("low"))).unwrap();
 
-    // The detected size wins over the provider value; the provider value
-    // stands where nothing was detected.
+    // The provider value wins over the detected size, and it stands where
+    // nothing was detected.
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "qwen3:32b", None).unwrap();
-    assert_eq!(call.context_size, Some(40960));
+    assert_eq!(call.context_size, 16384);
     assert_eq!(call.max_output_tokens, Some(4096));
     assert_eq!(call.reasoning, Some(effort("low")));
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "plain", None).unwrap();
-    assert_eq!(call.context_size, Some(16384));
+    assert_eq!(call.context_size, 16384);
 
     // The agent's own choice wins over the provider default.
     let call =
@@ -474,7 +507,8 @@ fn an_agent_on_custom_takes_only_a_level_of_the_fixed_set() {
 }
 
 // AAP-FR-19, AAP-FR-34, AAP-FR-RANS: another provider's stored reasoning never
-// reaches an agent, and it has no effective context size or output limit.
+// reaches an agent, it has no output limit, and its context size is the
+// default where nothing is set or detected.
 #[test]
 fn another_providers_endpoint_carries_no_custom_values() {
     let h = ok_harness();
@@ -507,7 +541,7 @@ fn another_providers_endpoint_carries_no_custom_values() {
         Some(ReasoningChoice::On)
     );
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", "gpt-5", None).unwrap();
-    assert_eq!(call.context_size, None);
+    assert_eq!(call.context_size, DEFAULT_CONTEXT_SIZE);
     assert_eq!(call.max_output_tokens, None);
     assert_eq!(call.reasoning, None);
 }
@@ -527,7 +561,7 @@ fn a_graduation_endpoint_carries_the_provider_default_and_the_effective_values()
     let call = resolve_ai_api_call(&h.store, &h.ai, "project").unwrap();
     assert_eq!(call.reasoning, Some(effort));
     assert_eq!(call.max_output_tokens, Some(2048));
-    assert_eq!(call.context_size, Some(40960));
+    assert_eq!(call.context_size, 40960);
 }
 
 // GSS-FR-27, AAP-FR-AYKU: the new values round-trip through the TOML store.

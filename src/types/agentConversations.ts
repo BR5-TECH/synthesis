@@ -161,25 +161,26 @@ export interface DocumentSize {
 
 /** AGC-FR-NJXW: what a turn reports of its context after a model call. */
 export interface TurnContext {
-  /** The model's context window in tokens, or `null` where none is known. */
-  window: number | null;
+  /** The model's effective context window in tokens. Never null (AAP-FR-RANS). */
+  window: number;
   /** The input tokens the provider reported for the latest call, if it did. */
   inputTokens: number | null;
   split: ContextSplit;
   /** `null` on a note target. */
   document: DocumentSize | null;
-  limitTokens: number | null;
+  /** The document size limit (AGC-FR-GMSF). Never null. */
+  limitTokens: number;
   aboveLimit: boolean;
 }
 
 /** AGC-FR-JFBZ: the same figures before any turn, all of them estimates. */
 export interface DiscussionContext {
-  window: number | null;
+  window: number;
   /** The sum of `split` (AGC-FR-OBUA). */
   estimatedTokens: number;
   split: ContextSplit;
   document: DocumentSize | null;
-  limitTokens: number | null;
+  limitTokens: number;
   aboveLimit: boolean;
 }
 

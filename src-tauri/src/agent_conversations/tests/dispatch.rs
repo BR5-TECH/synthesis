@@ -167,7 +167,7 @@ fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
                     &opening_exchange(&request, false),
                     &AiApiCall {
                         max_output_tokens: None,
-                        context_size: None,
+                        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
                         turn_timeout_ms: None,
                         provider: (*provider).into(),
                         base_url: "https://example/v1".into(),

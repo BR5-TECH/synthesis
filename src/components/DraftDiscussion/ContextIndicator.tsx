@@ -2,7 +2,8 @@
  * DDS-FR-CTXI … DDS-FR-HJMF: the context indicator at the trailing end of the
  * discussion column's header, and the warning beside it.
  *
- * The indicator says how much of the model's context window a turn uses. The
+ * The indicator says how much of the model's context window a turn uses, as a
+ * percent with a small ring whose tone shows the level (DDS-FR-WUCD). The
  * warning stands only while the document under discussion is above the size
  * limit, because only the author can split or shorten it. Neither is a control:
  * they block nothing, and they open their tooltips on hover and on keyboard
@@ -14,6 +15,9 @@ import {
   fullTokens,
   indicatorName,
   indicatorText,
+  levelLabel,
+  ringFill,
+  type ContextLevel,
   type ShownContext,
 } from "./contextFigures";
 
@@ -30,11 +34,21 @@ const SPLIT_ROWS = [
 const RING_R = 6;
 const RING_C = 2 * Math.PI * RING_R;
 
-/** A small ring that fills with the share of the window. Decoration only. */
-function Ring({ percent }: { percent: number }) {
-  const filled = Math.min(Math.max(percent, 0), 100) / 100;
+/**
+ * DDS-FR-WCET / DDS-FR-WUCD: a small ring that fills with the share of the
+ * window, full at 100% and above, in the tone of its level. Decoration only:
+ * the percent text and the accessible name carry the value and the level.
+ */
+function Ring({ percent, level }: { percent: number; level: ContextLevel }) {
+  const filled = ringFill(percent);
   return (
-    <svg className="dds-context__ring" viewBox="0 0 16 16" aria-hidden="true">
+    <svg
+      className="dds-context__ring"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      data-level={level}
+      data-testid="context-indicator-ring"
+    >
       <circle className="dds-context__track" cx="8" cy="8" r={RING_R} />
       <circle
         className="dds-context__fill"
@@ -54,9 +68,7 @@ function SplitTip({ shown }: { shown: ShownContext }) {
       <span className="dds-context-tip__head">
         <span>Context</span>
         <span className="dds-context-tip__num">
-          {shown.window === null
-            ? `${shown.estimate ? "~" : ""}${fullTokens(shown.tokens)} tokens`
-            : `${shown.estimate ? "~" : ""}${fullTokens(shown.tokens)} of ${fullTokens(shown.window)}`}
+          {`${shown.estimate ? "~" : ""}${fullTokens(shown.tokens)} of ${fullTokens(shown.window)}`}
         </span>
       </span>
       {SPLIT_ROWS.map(([label, key]) => (
@@ -66,18 +78,15 @@ function SplitTip({ shown }: { shown: ShownContext }) {
         </span>
       ))}
       <span className="dds-context-tip__foot">
-        {shown.window === null
-          ? "The model's context window is not known."
-          : `Window ${fullTokens(shown.window)} tokens.`}
+        {`Window ${fullTokens(shown.window)} tokens. ${levelLabel(shown.level)}.`}
       </span>
     </span>
   );
 }
 
 function WarningTip({ shown }: { shown: ShownContext }) {
-  const limit = shown.limitTokens ?? 0;
-  const share =
-    shown.window && shown.window > 0 ? Math.round((limit * 100) / shown.window) : null;
+  const limit = shown.limitTokens;
+  const share = shown.window > 0 ? Math.round((limit * 100) / shown.window) : null;
   return (
     <span className="dds-context-tip" data-testid="context-warning-tip">
       <span className="dds-context-tip__row">
@@ -120,20 +129,20 @@ export function ContextIndicator({ shown }: { shown: ShownContext | null }) {
         {(bind) => (
           <span
             {...bind}
-            // A meter where a share is known; where it is not, the name alone
-            // states the value.
-            role={shown.percent === null ? "img" : "meter"}
-            aria-valuemin={shown.percent === null ? undefined : 0}
-            aria-valuemax={shown.percent === null ? undefined : 100}
-            aria-valuenow={shown.percent === null ? undefined : shown.percent}
+            role="meter"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.min(shown.percent, 100)}
+            aria-valuetext={`${shown.percent}%, level ${shown.level}`}
             tabIndex={0}
             className="dds-context__value"
             data-estimate={shown.estimate || undefined}
+            data-level={shown.level}
             data-testid="context-indicator"
           >
-            {shown.percent !== null && <Ring percent={shown.percent} />}
-            {/* In a narrow column the ring stands alone; the accessible name
-                still states the value (DDS-FR-CTXI). */}
+            <Ring percent={shown.percent} level={shown.level} />
+            {/* DDS-FR-WRNB: the percent stays visible at every width, so the
+                colour of the ring is never the only carrier of the level. */}
             <span className="dds-context__text">{indicatorText(shown)}</span>
           </span>
         )}

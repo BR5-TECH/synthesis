@@ -70,15 +70,16 @@ impl ContextSplit {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnContext {
-    /// The effective context size of the turn's model (AAP-FR-RANS).
-    pub window: Option<u64>,
+    /// The effective context size of the turn's model (AAP-FR-RANS). Never
+    /// absent.
+    pub window: u64,
     /// The input total the provider reported for the latest call.
     pub input_tokens: Option<u64>,
     pub split: ContextSplit,
     /// Null on a note target.
     pub document: Option<DocumentSize>,
-    /// The document size limit; null where `window` is null (AGC-FR-GMSF).
-    pub limit_tokens: Option<u64>,
+    /// The document size limit (AGC-FR-GMSF). Never absent.
+    pub limit_tokens: u64,
     /// AGC-FR-BCHZ.
     pub above_limit: bool,
 }
@@ -87,12 +88,12 @@ pub struct TurnContext {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscussionContext {
-    pub window: Option<u64>,
+    pub window: u64,
     /// The sum of the split (AGC-FR-OBUA).
     pub estimated_tokens: u64,
     pub split: ContextSplit,
     pub document: Option<DocumentSize>,
-    pub limit_tokens: Option<u64>,
+    pub limit_tokens: u64,
     pub above_limit: bool,
 }
 
@@ -100,16 +101,16 @@ pub struct DiscussionContext {
 /// percent, resolved at dispatch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DocumentBudget {
-    pub window: Option<u64>,
+    pub window: u64,
     pub percent: u8,
 }
 
 impl DocumentBudget {
-    /// A budget with no known window, which bounds the `artifact` section by
-    /// the fallback of AGC-FR-XHHT.
-    pub fn unknown() -> Self {
+    /// AGC-FR-OBUA: the budget of the default context size, for an estimate
+    /// with no agent or no provider (AAP-FR-RANS).
+    pub fn default_window() -> Self {
         DocumentBudget {
-            window: None,
+            window: ai_api::DEFAULT_CONTEXT_SIZE,
             percent: crate::global_settings::DOCUMENT_LIMIT_PERCENT_DEFAULT,
         }
     }
@@ -124,30 +125,20 @@ impl DocumentBudget {
         }
     }
 
-    /// AGC-FR-GMSF: the whole part of `window × percent / 100`, null where the
-    /// window is null.
-    pub fn limit_tokens(&self) -> Option<u64> {
-        self.window.map(|window| window.saturating_mul(u64::from(self.percent)) / 100)
+    /// AGC-FR-GMSF: the whole part of `window × percent / 100`.
+    pub fn limit_tokens(&self) -> u64 {
+        self.window.saturating_mul(u64::from(self.percent)) / 100
     }
 
     /// AGC-FR-XHHT: the bound of the `artifact` section in characters.
     pub fn bound_chars(&self) -> usize {
-        match self.limit_tokens() {
-            Some(limit) => {
-                usize::try_from(limit.saturating_mul(CHARS_PER_TOKEN)).unwrap_or(usize::MAX)
-            }
-            None => SECTION_MAX_CHARS,
-        }
+        usize::try_from(self.limit_tokens().saturating_mul(CHARS_PER_TOKEN)).unwrap_or(usize::MAX)
     }
 }
 
-/// AGC-FR-BCHZ: true only where a limit is known and the document's estimate
-/// is above it.
-pub fn above_limit(document: Option<&DocumentSize>, limit_tokens: Option<u64>) -> bool {
-    match (document, limit_tokens) {
-        (Some(document), Some(limit)) => document.estimated_tokens > limit,
-        _ => false,
-    }
+/// AGC-FR-BCHZ: true only where the document's estimate is above the limit.
+pub fn above_limit(document: Option<&DocumentSize>, limit_tokens: u64) -> bool {
+    document.is_some_and(|document| document.estimated_tokens > limit_tokens)
 }
 
 /// The estimated tokens of one section as sent: its text, and each image it
@@ -222,7 +213,7 @@ pub(super) fn split_of_call(request: &AgentRequest, exchange: &[Message]) -> Con
 pub(super) fn report_context<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     plan: &TurnPlan,
-    window: Option<u64>,
+    window: u64,
     input_tokens: Option<u64>,
     split: ContextSplit,
 ) {

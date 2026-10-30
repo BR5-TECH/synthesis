@@ -243,14 +243,61 @@ describe("the context indicator in the column header", () => {
     expect(await screen.findByTestId("context-indicator")).toHaveTextContent("25%");
   });
 
-  it("DDS-FR-TSPL: with no known window shows the token count, no percent, and no warning", async () => {
-    answer = estimate({ window: null, limitTokens: null, aboveLimit: true });
+  it("DDS-FR-TSPL: the default window of a model that reports none still gives a percent", async () => {
+    answer = estimate({ window: 1_000_000, estimatedTokens: 50_000, limitTokens: 300_000 });
     renderColumn();
     const indicator = await screen.findByTestId("context-indicator");
-    expect(indicator).toHaveTextContent("~50k tokens");
-    expect(indicator).not.toHaveTextContent("%");
-    expect(indicator).toHaveAttribute("role", "img");
-    expect(screen.queryByTestId("context-warning")).toBeNull();
+    expect(indicator).toHaveTextContent("~5%");
+    expect(indicator).toHaveAttribute("role", "meter");
+  });
+
+  it("DDS-FR-WCET: a ring stands before the percent, inside the indicator, with its arc the used share", async () => {
+    renderColumn();
+    const indicator = await screen.findByTestId("context-indicator");
+    const ring = within(indicator).getByTestId("context-indicator-ring");
+    expect(ring.nextElementSibling).toHaveTextContent("~25%");
+    expect(ring).toHaveAttribute("aria-hidden", "true");
+    const fill = ring.querySelector(".dds-context__fill")!;
+    const circumference = 2 * Math.PI * 6;
+    const [arc] = fill.getAttribute("stroke-dasharray")!.split(" ").map(Number);
+    expect(arc).toBeCloseTo(circumference * 0.25);
+  });
+
+  it("DDS-FR-WCET: the ring is full at 100% and above", async () => {
+    answer = estimate({ estimatedTokens: 300_000 });
+    renderColumn();
+    const indicator = await screen.findByTestId("context-indicator");
+    expect(indicator).toHaveTextContent("~150%");
+    const fill = within(indicator).getByTestId("context-indicator-ring").querySelector(".dds-context__fill")!;
+    const [arc, gap] = fill.getAttribute("stroke-dasharray")!.split(" ").map(Number);
+    expect(arc).toBeCloseTo(gap);
+  });
+
+  it("DDS-FR-WUCD, DDS-FR-WRNB: the level follows the percent, and the name and the tooltip state it", async () => {
+    for (const [tokens, level, label] of [
+      [98_000, "normal", "Normal"],
+      [100_000, "high", "High"],
+      [168_000, "high", "High"],
+      [170_000, "critical", "Critical"],
+    ] as const) {
+      answer = estimate({ estimatedTokens: tokens });
+      const view = renderColumn();
+      const indicator = await screen.findByTestId("context-indicator");
+      expect(indicator).toHaveAttribute("data-level", level);
+      expect(within(indicator).getByTestId("context-indicator-ring")).toHaveAttribute("data-level", level);
+      expect(indicator).toHaveAccessibleName(new RegExp(`, level ${level}, estimated$`));
+      act(() => indicator.focus());
+      expect(screen.getByTestId("context-indicator-tip")).toHaveTextContent(`${label}.`);
+      view.unmount();
+    }
+  });
+
+  it("DDS-FR-WUCD: the level does not depend on the size warning", async () => {
+    answer = estimate({ estimatedTokens: 10_000, aboveLimit: true });
+    renderColumn();
+    const indicator = await screen.findByTestId("context-indicator");
+    expect(indicator).toHaveAttribute("data-level", "normal");
+    expect(screen.getByTestId("context-warning")).toBeInTheDocument();
   });
 
   it("DDS-FR-WRNB: shows the split on keyboard focus, each part an estimate, with the window", async () => {
@@ -269,7 +316,7 @@ describe("the context indicator in the column header", () => {
     }
     expect(tip).toHaveTextContent("~60,000 est.");
     expect(tip).toHaveTextContent("~12,500 est.");
-    expect(tip).toHaveTextContent("Window 200,000 tokens.");
+    expect(tip).toHaveTextContent("Window 200,000 tokens. Normal.");
     expect(indicator).toHaveAttribute("aria-describedby");
   });
 
@@ -315,11 +362,11 @@ describe("the context indicator in the column header", () => {
     expect(screen.getByTestId("context-indicator-tip")).toBeInTheDocument();
   });
 
-  it("DDS-FR-WRNB: carries an accessible name that states its value", async () => {
+  it("DDS-FR-WRNB: carries an accessible name that states its percent and its level", async () => {
     renderColumn();
     const meter = await screen.findByRole("meter");
     expect(meter).toHaveAccessibleName(
-      "Context use: 25% of the model's context window, estimated",
+      "Context use: 25% of the model's context window, level normal, estimated",
     );
     expect(meter).toHaveAttribute("aria-valuenow", "25");
   });

@@ -212,8 +212,9 @@
 }
 /* DDS-FR-CTXI / DDS-FR-ZQVE: the context indicator and the warning, before the
    menu. Quiet by default: a number in the meta tone with a ring that fills with
-   the share of the window. Only the warning takes a colour of its own, and its
-   meaning is in its tooltip too, not in the colour alone. */
+   the share of the window. The ring takes the tone of its level
+   (DDS-FR-WUCD); the warning takes its own. Both meanings are in the text and
+   the tooltips too, not in the colour alone. */
 .dds-context {
   display: inline-flex;
   align-items: center;
@@ -232,12 +233,10 @@
   cursor: default;
 }
 .dds-context__value[data-estimate] { color: var(--fg-3); }
-/* DDS-FR-CTXI: in a narrow column a value with a ring shows the ring alone, so
-   the header keeps room for the title and the menu. A value with no ring (no
-   known window) keeps its text, which is then the only thing that states it. */
-@container (max-width: 320px) {
-  .dds-context__ring + .dds-context__text { display: none; }
-}
+/* DDS-FR-WRNB: the percent stays visible at every column width. */
+.dds-context__text { flex: none; }
+/* DDS-FR-WCET: the ring is no taller than the text, so the header row keeps
+   its height. The same geometry in both themes; no animation. */
 .dds-context__ring {
   width: var(--sp-3);
   height: var(--sp-3);
@@ -254,6 +253,9 @@
   stroke-width: 2.5;
   stroke-linecap: round;
 }
+/* DDS-FR-WUCD: the tone of each level is a theme token. */
+.dds-context__ring[data-level="high"] .dds-context__fill { stroke: var(--warn); }
+.dds-context__ring[data-level="critical"] .dds-context__fill { stroke: var(--danger); }
 .dds-context__warning {
   display: inline-flex;
   align-items: center;

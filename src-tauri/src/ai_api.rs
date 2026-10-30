@@ -127,7 +127,7 @@ pub const ERR_PROVIDER_UNCONFIGURED: &str = "provider_unconfigured";
 pub const ERR_KEY_UNAVAILABLE: &str = "key_unavailable";
 /// AAP-FR-ITBL: the value is not a whole number from 1 to `custom_limits::TOKEN_LIMIT_MAX`.
 pub const ERR_TOKEN_LIMIT_INVALID: &str = "token_limit_invalid";
-/// AAP-FR-ITBL: the provider is not Custom, so it holds no token limits.
+/// AAP-FR-ITBL: the provider is not Custom, so it holds no max output tokens.
 pub const ERR_LIMIT_UNSUPPORTED: &str = "limit_unsupported";
 
 /// AAP-FR-36: the service name of the **earlier** one-entry-per-provider
@@ -460,8 +460,8 @@ pub struct AiApiRecord {
     /// loop's default (`CVL-conversation-loop.md` CVL-FR-FHFM).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u64>,
-    /// AAP-FR-AYKU: the Custom provider's max context size, used where a model
-    /// has no detected context size (AAP-FR-RANS).
+    /// AAP-FR-AYKU: the provider's max context size, for every provider. It
+    /// wins over a detected context size (AAP-FR-RANS).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_context_size: Option<u64>,
     /// `None` means the selected model's own default (AAP-FR-27). Serialises as
@@ -502,7 +502,7 @@ pub struct AiApiIntegration {
     pub turn_timeout_ms: Option<u64>,
     /// AAP-FR-AYKU: Custom only. `None` means the loop's default limit.
     pub max_output_tokens: Option<u64>,
-    /// AAP-FR-AYKU: Custom only. `None` means no provider-level value.
+    /// AAP-FR-AYKU: every provider. `None` means no override.
     pub max_context_size: Option<u64>,
     pub active: bool,
 }
@@ -575,7 +575,7 @@ pub struct ProjectAiApiIntegration {
 ///
 /// `Debug` is hand-rolled below rather than derived, because this shape carries
 /// a cleartext key (AAP-FR-07).
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AiApiCall {
     pub provider: String,
     pub base_url: String,
@@ -605,8 +605,9 @@ pub struct AiApiCall {
     /// default (`CVL-conversation-loop.md` CVL-FR-FHFM).
     pub max_output_tokens: Option<u64>,
     /// AAP-FR-RANS: the effective context size, which is the conversation
-    /// loop's token budget (CVL-FR-LCXM). Never sent to the host.
-    pub context_size: Option<u64>,
+    /// loop's token budget (CVL-FR-LCXM). Never absent, and never sent to the
+    /// host.
+    pub context_size: u64,
 }
 
 impl std::fmt::Debug for AiApiCall {

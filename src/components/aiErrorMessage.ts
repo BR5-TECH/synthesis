@@ -94,7 +94,7 @@ export function aiErrorMessage(e: unknown): string {
     case AI_ERRORS.tokenLimitInvalid:
       return "Enter a whole number of tokens from 1 to 4294967295.";
     case AI_ERRORS.limitUnsupported:
-      return "Only the Custom provider holds token limits.";
+      return "Only the Custom provider holds a max output tokens value.";
     case AI_ERRORS.unknownVendor:
     case AI_ERRORS.unknownProvider:
       return "That integration is not one Synthesis supports.";

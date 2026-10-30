@@ -266,11 +266,8 @@ pub fn dispatch_impl<R: tauri::Runtime>(
             "truncated" => input.iter().any(|s| s.truncated),
             // AGC-FR-GMSF, AGC-FR-OYVH: the limit and the size of the document,
             // numbers only.
-            "window" => document_budget.window.map(|w| w.to_string()).unwrap_or_default(),
-            "limitTokens" => document_budget
-                .limit_tokens()
-                .map(|l| l.to_string())
-                .unwrap_or_default(),
+            "window" => document_budget.window,
+            "limitTokens" => document_budget.limit_tokens(),
             "documentTokens" => document.map(|d| d.estimated_tokens.to_string()).unwrap_or_default(),
             "aboveLimit" => above_limit(document.as_ref(), document_budget.limit_tokens()),
         },

@@ -512,7 +512,7 @@ fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
         .connect(rig_reqwest::ReqwestClient::from(reqwest013::Client::new()));
     let endpoint = AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: "https://example.invalid".into(),

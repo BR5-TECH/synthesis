@@ -233,7 +233,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             return Err(TurnEnd::TimedOut);
         }
 
-        // CVL-FR-LCXM .. CVL-FR-HFRL: a budgeted turn whose next call is over
+        // CVL-FR-LCXM .. CVL-FR-HFRL: a turn whose next call is over its
         // budget compacts its older history first. Never between two attempts
         // of one invocation, so a retry still presents its exchange unchanged.
         compaction::compact_if_over_budget(

@@ -33,23 +33,24 @@ fn a_models_payload_gives_the_reported_window() {
     }
 }
 
-// AAP-FR-RANS, AAP-FR-BKBF: the window of a model of a non-Custom provider is
-// its detected size, read from the registry alone.
+// AAP-FR-RANS, AAP-FR-BKBF: the window of a model with no override is its
+// detected size, read from the registry alone.
 #[test]
 fn the_window_of_a_listed_model_is_its_detected_size() {
     let prober = Arc::new(FakeProber::default());
-    prober.set_rich_models(vec![sized("big/model", Some(1_000_000)), sized("plain/model", None)]);
+    prober.set_rich_models(vec![sized("big/model", Some(2_000_000)), sized("plain/model", None)]);
     let h = harness(prober, FakeKeychain::new());
     verify_openrouter(&h);
     let reads_before = h.keys.reads();
 
-    assert_eq!(resolve_context_window(&h.store, "openrouter", "big/model"), Some(1_000_000));
-    // AAP-FR-BKBF: no effective size, an unlisted model, and an unconfigured
-    // provider all answer null and refuse nothing.
-    assert_eq!(resolve_context_window(&h.store, "openrouter", "plain/model"), None);
-    assert_eq!(resolve_context_window(&h.store, "openrouter", "no/such"), None);
-    assert_eq!(resolve_context_window(&h.store, "anthropic", "claude"), None);
-    assert_eq!(resolve_context_window(&h.store, "nonsense", "x"), None);
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "big/model"), 2_000_000);
+    // AAP-FR-BKBF: no detected size, an unlisted model, an unconfigured
+    // provider, and an unknown provider all answer the default and refuse
+    // nothing.
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "plain/model"), DEFAULT_CONTEXT_SIZE);
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "no/such"), DEFAULT_CONTEXT_SIZE);
+    assert_eq!(resolve_context_window(&h.store, "anthropic", "claude"), DEFAULT_CONTEXT_SIZE);
+    assert_eq!(resolve_context_window(&h.store, "nonsense", "x"), DEFAULT_CONTEXT_SIZE);
     // No key is read on any of these paths.
     assert_eq!(h.keys.reads(), reads_before);
 }
@@ -63,7 +64,7 @@ fn an_agent_endpoint_carries_the_detected_window_of_any_provider() {
     let h = harness(prober, FakeKeychain::new());
     verify_openrouter(&h);
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", "big/model", None).unwrap();
-    assert_eq!(call.context_size, Some(400_000));
+    assert_eq!(call.context_size, 400_000);
 }
 
 // AAP-FR-RICY: each verification replaces the detected size of every model.
@@ -73,13 +74,13 @@ fn each_verification_replaces_the_detected_window() {
     prober.set_rich_models(vec![sized("m", Some(8_192))]);
     let h = harness(prober.clone(), FakeKeychain::new());
     verify_openrouter(&h);
-    assert_eq!(resolve_context_window(&h.store, "openrouter", "m"), Some(8_192));
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "m"), 8_192);
 
     // A probe that reports no window is not an error, and the model list is
     // otherwise as the probe gave it.
     prober.set_rich_models(vec![sized("m", None), sized("n", None)]);
     verify_openrouter(&h);
-    assert_eq!(resolve_context_window(&h.store, "openrouter", "m"), None);
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "m"), DEFAULT_CONTEXT_SIZE);
     let (records, _) = h.store.load_ai_api_registry().unwrap();
     let record = records.iter().find(|r| r.provider == "openrouter").unwrap();
     let listed: Vec<(&str, &str)> =
@@ -87,12 +88,13 @@ fn each_verification_replaces_the_detected_window() {
     assert_eq!(listed, [("m", "m"), ("n", "n")]);
 }
 
-// AAP-FR-BKBF: a provider that is not configured answers null, also for a
-// model it lists with a detected size.
+// AAP-FR-BKBF: a provider that is not configured answers the default, also
+// for a model it lists with a detected size, and its max context size where it
+// is set.
 #[test]
-fn an_unconfigured_provider_has_no_window_for_a_listed_model() {
+fn an_unconfigured_provider_has_the_default_window_for_a_listed_model() {
     let prober = Arc::new(FakeProber::default());
-    prober.set_rich_models(vec![sized("big/model", Some(1_000_000))]);
+    prober.set_rich_models(vec![sized("big/model", Some(2_000_000))]);
     let h = harness(prober, FakeKeychain::new());
     verify_openrouter(&h);
     let (mut records, active) = h.store.load_ai_api_registry().unwrap();
@@ -101,9 +103,14 @@ fn an_unconfigured_provider_has_no_window_for_a_listed_model() {
     record.base_url = None;
     record.verified_at = None;
     assert_eq!(state_assuming_key(record, true), IntegrationState::Unconfigured);
-    assert_eq!(record.models[0].detected_context_size, Some(1_000_000), "still listed");
+    assert_eq!(record.models[0].detected_context_size, Some(2_000_000), "still listed");
+    h.store.save_ai_api_registry(records.clone(), active.clone()).unwrap();
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "big/model"), DEFAULT_CONTEXT_SIZE);
+
+    records.iter_mut().find(|r| r.provider == "openrouter").unwrap().max_context_size =
+        Some(64_000);
     h.store.save_ai_api_registry(records, active).unwrap();
-    assert_eq!(resolve_context_window(&h.store, "openrouter", "big/model"), None);
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "big/model"), 64_000);
 }
 
 // AAP-FR-RICY: a model from the bundled catalog carries no window.
@@ -120,18 +127,44 @@ fn a_catalog_model_carries_no_window() {
     assert!(checked > 0, "the bundled catalog holds models to check");
 }
 
-// AAP-FR-RANS: a Custom model falls back to the provider's max context size,
-// and no other provider does.
+// AAP-FR-RANS: for every provider the max context size wins over the detected
+// size, the detected size wins over the default, and the default is
+// 1,000,000 tokens.
 #[test]
-fn only_custom_falls_back_to_the_max_context_size() {
-    let mut record = AiApiRecord::empty("openai");
-    record.max_context_size = Some(9_999);
-    assert_eq!(effective_context_size(&record, Some(&sized("m", None))), None);
-    assert_eq!(effective_context_size(&record, Some(&sized("m", Some(5)))), Some(5));
+fn the_override_wins_over_the_detected_size_and_the_default() {
+    assert_eq!(DEFAULT_CONTEXT_SIZE, 1_000_000);
+    for provider in ["openrouter", "anthropic", "openai", CUSTOM] {
+        let mut record = AiApiRecord::empty(provider);
+        assert_eq!(effective_context_size(&record, None), DEFAULT_CONTEXT_SIZE, "{provider}");
+        assert_eq!(
+            effective_context_size(&record, Some(&sized("m", None))),
+            DEFAULT_CONTEXT_SIZE,
+            "{provider}"
+        );
+        assert_eq!(effective_context_size(&record, Some(&sized("m", Some(5)))), 5, "{provider}");
 
-    let mut custom = AiApiRecord::empty(CUSTOM);
-    custom.max_context_size = Some(9_999);
-    assert_eq!(effective_context_size(&custom, Some(&sized("m", None))), Some(9_999));
-    assert_eq!(effective_context_size(&custom, Some(&sized("m", Some(5)))), Some(5));
-    assert_eq!(effective_context_size(&custom, None), Some(9_999));
+        record.max_context_size = Some(9_999);
+        assert_eq!(effective_context_size(&record, Some(&sized("m", None))), 9_999, "{provider}");
+        assert_eq!(
+            effective_context_size(&record, Some(&sized("m", Some(5)))),
+            9_999,
+            "{provider}"
+        );
+        assert_eq!(effective_context_size(&record, None), 9_999, "{provider}");
+    }
+}
+
+// AAP-FR-RANS: an agent endpoint of a non-Custom provider carries the
+// provider's max context size over the detected window.
+#[test]
+fn an_agent_endpoint_carries_the_override_of_any_provider() {
+    let prober = Arc::new(FakeProber::default());
+    prober.set_rich_models(vec![sized("big/model", Some(400_000))]);
+    let h = harness(prober, FakeKeychain::new());
+    verify_openrouter(&h);
+    set_token_limit_impl(&h.store, &h.ai, "openrouter", TokenLimit::MaxContextSize, Some(128_000))
+        .expect("every provider accepts a max context size");
+    let call = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", "big/model", None).unwrap();
+    assert_eq!(call.context_size, 128_000);
+    assert_eq!(resolve_context_window(&h.store, "openrouter", "big/model"), 128_000);
 }

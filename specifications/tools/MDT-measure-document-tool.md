@@ -18,7 +18,6 @@ The tool an agent reaches for before it decides to read a whole document. It tak
  9. **MDT-FR-QYLP** `estimated_tokens` is `characters` divided by 4, rounded up: the fixed characters-per-token estimate of `../ai/CVL-conversation-loop.md` CVL-FR-PGII. The description and the parameter text call it an estimate. It is never a provider-reported usage value.
 10. **MDT-FR-CTKN** `limit_tokens` is the turn's context window multiplied by the size-limit percent and divided by 100, rounded down. The window is the effective context size of the turn's model (per `../core/AAP-ai-api-integrations.md` AAP-FR-RANS), and the percent is the Global setting of `../core/GSS-global-settings-storage.md` GSS-FR-PCTL.
 11. **MDT-FR-FHWP** `above_limit` is true when `estimated_tokens` is greater than `limit_tokens`, and false otherwise.
-12. **MDT-FR-ADEI** When the turn's model has no known context window, `limit_tokens` is null and `above_limit` is false. The call is still a success, and `lines`, `characters`, and `estimated_tokens` are returned as for any other call.
 13. **MDT-FR-PPCH** The output carries the five fields of the contract surface and no text of the document, no path, and no metadata of the draft.
 14. **MDT-FR-VHHI** A file or a prompt that does not decode as UTF-8, or whose read fails, is the retryable unreadable refusal of the contract surface, normalised to kind `Other`. No byte of it reaches the message or a log record.
 15. **MDT-FR-OPKM** With no project open the tool produces the shared no-open-project refusal (per TLC-FR-13).
@@ -58,7 +57,7 @@ MeasureDocumentOutput {
   lines:            integer,          // MDT-FR-LWAK
   characters:       integer,          // MDT-FR-MYNF
   estimated_tokens: integer,          // an estimate: characters / 4, rounded up (MDT-FR-QYLP)
-  limit_tokens:     integer | null,   // null when no context window is known (MDT-FR-ADEI)
+  limit_tokens:     integer,          // never null; the window is always known (MDT-FR-CTKN)
   above_limit:      bool              // MDT-FR-FHWP
 }
 ```

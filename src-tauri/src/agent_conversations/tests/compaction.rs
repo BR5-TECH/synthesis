@@ -183,13 +183,24 @@ fn custom_budget_harness(
     replies: Vec<Result<ScriptedReply, &'static str>>,
     budget: Option<u64>,
 ) -> Harness {
+    sized_harness(replies, budget, None)
+}
+
+/// A Custom provider whose model `m` has the given detected context size and
+/// whose record has the given max context size, and an agent on it.
+fn sized_harness(
+    replies: Vec<Result<ScriptedReply, &'static str>>,
+    detected: Option<u64>,
+    max_context_size: Option<u64>,
+) -> Harness {
     let h = Harness::scripted(replies);
     h.mount();
     h.seed_second_provider("custom");
     let mut records = h.store().load_ai_api_registry().unwrap().0;
     let custom = records.iter_mut().find(|r| r.provider == "custom").unwrap();
     custom.models =
-        vec![ModelOption { detected_context_size: budget, ..ModelOption::new("m", "m") }];
+        vec![ModelOption { detected_context_size: detected, ..ModelOption::new("m", "m") }];
+    custom.max_context_size = max_context_size;
     h.store().save_ai_api_registry(records, Some("custom".into())).unwrap();
     h.create_plain_agent("arch");
     h
@@ -275,9 +286,11 @@ fn a_call_over_the_budget_is_preceded_by_a_compaction_call() {
     }
 }
 
-// CVL-FR-LCXM: a turn whose endpoint has no context size compacts nothing.
+// CVL-FR-LCXM, AAP-FR-RANS: a model with no detected size and no override
+// has the default budget of 1,000,000 tokens. Below three quarters of it the
+// turn compacts nothing.
 #[test]
-fn a_turn_with_no_budget_compacts_nothing() {
+fn a_turn_below_the_default_budget_compacts_nothing() {
     let h = custom_budget_harness(
         vec![
             Ok(big_tool_reply(400_000)),
@@ -290,6 +303,48 @@ fn a_turn_with_no_budget_compacts_nothing() {
     assert_eq!(terminal.state, AgentTurnState::Delivered);
     assert_eq!(h.seam.call_count(), 3);
     assert_eq!(h.seam.exchanges()[2].len(), 5, "the exchange only grew");
+}
+
+// CVL-FR-LCXM, AAP-FR-RANS: with no detected size and no override, a call
+// over three quarters of the default budget is compacted all the same.
+#[test]
+fn a_turn_over_the_default_budget_is_compacted() {
+    let h = custom_budget_harness(
+        vec![
+            Ok(big_tool_reply(1_600_000)),
+            Ok(big_tool_reply(1_600_001)),
+            Ok(ScriptedReply::answer("SUMMARY")),
+            Ok(ScriptedReply::answer("Final.")),
+        ],
+        None,
+    );
+    let (terminal, _) = run_one(&h, "arch");
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    assert_eq!(h.seam.call_count(), 4, "two rounds, one compaction call, one final round");
+    let record = wait_for_record(&terminal.id, "conversation history compaction");
+    assert_eq!(field(&record, "outcome"), "compacted");
+    assert_eq!(field(&record, "budgetTokens"), "1000000");
+}
+
+// CVL-FR-LCXM, AAP-FR-RANS: the provider's max context size wins over the
+// detected size, so it is the budget.
+#[test]
+fn the_max_context_size_is_the_budget_over_a_detected_size() {
+    let h = sized_harness(
+        vec![
+            Ok(big_tool_reply(400_000)),
+            Ok(big_tool_reply(400_001)),
+            Ok(ScriptedReply::answer("SUMMARY")),
+            Ok(ScriptedReply::answer("Final.")),
+        ],
+        Some(10_000_000),
+        Some(200_000),
+    );
+    let (terminal, _) = run_one(&h, "arch");
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    assert_eq!(h.seam.call_count(), 4);
+    let record = wait_for_record(&terminal.id, "conversation history compaction");
+    assert_eq!(field(&record, "budgetTokens"), "200000");
 }
 
 // CVL-FR-HFRL: a compaction call that fails leaves the exchange as it was, and

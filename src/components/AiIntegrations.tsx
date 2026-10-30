@@ -709,25 +709,6 @@ export function AiApiIntegrations() {
             />
           )}
 
-          {/* AII-FR-05 / AII-FR-UQLF: the Custom token fields sit above the
-              turn timeout. No other tab renders them. */}
-          {current.provider === "custom" && (
-            <>
-              <AiApiTokenLimitRow
-                kind="maxOutputTokens"
-                tokens={current.maxOutputTokens ?? null}
-                onSaved={replace}
-                describeError={aiErrorMessage}
-              />
-              <AiApiTokenLimitRow
-                kind="maxContextSize"
-                tokens={current.maxContextSize ?? null}
-                onSaved={replace}
-                describeError={aiErrorMessage}
-              />
-            </>
-          )}
-
           {/* AII-FR-41: only in the OpenRouter tab, and only while a model is
               selected whose record declares reasoning. A model that declares
               none renders no row at all, and the activation control below
@@ -765,7 +746,30 @@ export function AiApiIntegrations() {
             </>
           )}
 
-          {/* AII-FR-05: the turn timeout sits beneath the reasoning row and
+          {/* AII-FR-05 / AII-FR-UQLF: the token fields sit beneath the
+              reasoning row and above the turn timeout. Every tab renders Max
+              context size; only Custom renders Max output tokens. Keyed by
+              provider, so a typed entry stays with its tab. */}
+          {current.provider === "custom" && (
+            <AiApiTokenLimitRow
+              key={`${current.provider}-output`}
+              kind="maxOutputTokens"
+              provider={current.provider}
+              tokens={current.maxOutputTokens ?? null}
+              onSaved={replace}
+              describeError={aiErrorMessage}
+            />
+          )}
+          <AiApiTokenLimitRow
+            key={`${current.provider}-context`}
+            kind="maxContextSize"
+            provider={current.provider}
+            tokens={current.maxContextSize ?? null}
+            onSaved={replace}
+            describeError={aiErrorMessage}
+          />
+
+          {/* AII-FR-05: the turn timeout sits beneath the token fields and
               before the activation control, on every tab. */}
           {/* Keyed by provider, so a typed entry and an error stay with the
               tab they belong to (AII-FR-28). */}

@@ -19,7 +19,7 @@ const SECRET: &str = "gw-secret-ZXCV5678";
 fn custom_endpoint(base_url: &str, mode: Option<ModelMode>) -> AiApiCall {
     AiApiCall {
         max_output_tokens: None,
-        context_size: None,
+        context_size: crate::ai_api::DEFAULT_CONTEXT_SIZE,
         provider: "custom".into(),
         base_url: base_url.into(),
         api_key: Some(SECRET.into()),

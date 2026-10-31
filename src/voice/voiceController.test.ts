@@ -15,8 +15,10 @@ const mic = vi.hoisted(() => ({
 }));
 const audio = vi.hoisted(() => ({
   isPlaybackIdle: vi.fn(() => false),
+  pausePlayback: vi.fn(),
   playFrame: vi.fn(),
   prepareAudio: vi.fn(),
+  resumePlayback: vi.fn(),
   setDrainedListener: vi.fn(),
   stopPlayback: vi.fn(),
 }));

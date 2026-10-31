@@ -8207,6 +8207,7 @@ dependencies = [
  "objc2-user-notifications",
  "openrouter-rs",
  "openssl-sys",
+ "ort",
  "pdf-extract",
  "pulldown-cmark",
  "rcgen",

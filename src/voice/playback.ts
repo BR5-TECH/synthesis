@@ -17,6 +17,8 @@ let decoding: Promise<void> = Promise.resolve();
 let pendingDecodes = 0;
 const sources = new Set<AudioBufferSourceNode>();
 let onDrained: (() => void) | null = null;
+/** VOM-FR-FVRS: the clock of the context stands, so queued audio waits. */
+let paused = false;
 
 /** VOM non-functional: created by the activation of the Voice button. */
 export function prepareAudio(): void {
@@ -57,7 +59,7 @@ export function playFrame(frame: ArrayBuffer): void {
   prepareAudio();
   const context_ = context;
   if (!context_ || frame.byteLength < HEADER) return;
-  void context_.resume();
+  if (!paused) void context_.resume();
   const view = new DataView(frame);
   const kind = view.getUint8(0);
   const rate = view.getUint32(1, true);
@@ -78,13 +80,29 @@ export function playFrame(frame: ArrayBuffer): void {
     });
 }
 
-/** VOM-FR-QDWW: silence at once, and frames in flight are dropped. */
 /** Nothing plays, and nothing waits to play. */
 export function isPlaybackIdle(): boolean {
   return sources.size === 0 && pendingDecodes === 0;
 }
 
+/** VOM-FR-FVRS: silence at once. Nothing is lost, and frames still queue. */
+export function pausePlayback(): void {
+  if (!context || paused) return;
+  paused = true;
+  void context.suspend().catch(() => undefined);
+}
+
+/** VOM-FR-KVHG: the audio goes on from where it paused. */
+export function resumePlayback(): void {
+  if (!paused) return;
+  paused = false;
+  void context?.resume().catch(() => undefined);
+}
+
+/** VOM-FR-QDWW: silence at once, and frames in flight are dropped. */
 export function stopPlayback(): void {
+  // A context that stays suspended would keep each later reply silent.
+  resumePlayback();
   generation += 1;
   nextStart = 0;
   for (const source of sources) {
@@ -101,6 +119,7 @@ export function stopPlayback(): void {
 export function resetPlaybackForTest(): void {
   stopPlayback();
   context = null;
+  paused = false;
   decoding = Promise.resolve();
   pendingDecodes = 0;
   onDrained = null;

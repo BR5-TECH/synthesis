@@ -38,6 +38,29 @@ function harnessValue(name: string): string | null {
 const voiceVerified = new Set<string>(harnessFlag("voice") ? ["custom"] : []);
 let voiceActive: string | null = harnessFlag("voice") ? "custom" : null;
 
+/**
+ * A browser check holds a voice call open, so the states that last only while
+ * it runs (Transcribing, Paused) can be measured. Release sends each held call on.
+ *
+ *   window.__mockVoiceHold("speech")       // or "transcript"
+ *   window.__mockVoiceRelease("speech")
+ */
+const voiceHolds: Record<string, (() => void)[] | undefined> = {};
+
+function voiceHeld(call: string): Promise<void> {
+  const waiting = voiceHolds[call];
+  return waiting ? new Promise((resolve) => waiting.push(resolve)) : Promise.resolve();
+}
+
+(globalThis as Record<string, unknown>).__mockVoiceHold = (call: string) => {
+  voiceHolds[call] ??= [];
+};
+(globalThis as Record<string, unknown>).__mockVoiceRelease = (call: string) => {
+  const waiting = voiceHolds[call] ?? [];
+  delete voiceHolds[call];
+  for (const resolve of waiting) resolve();
+};
+
 function mockVoiceRecord(provider: string) {
   const verified = voiceVerified.has(provider);
   return {
@@ -7651,13 +7674,22 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return a.provider === "custom" ? null : ["marin", "cedar"];
     case "start_voice_capture":
       return { sessionId: "voice-1", route: "realtime", live: true };
+    case "open_voice_activity_session":
+      return { activityId: "activity-1" };
+    case "close_voice_activity_session":
+      return { captureId: null };
+    case "feed_voice_activity":
+    case "set_voice_activity_gate":
     case "append_voice_capture":
     case "cancel_voice_capture":
-    case "speak_voice_segment":
     case "cancel_voice_speech":
+      return null;
+    case "speak_voice_segment":
+      await voiceHeld("speech");
       return null;
     case "finish_voice_capture":
     case "retry_voice_capture":
+      await voiceHeld("transcript");
       return "A transcript from the harness.";
 
     // ---- project ---------------------------------------------------------

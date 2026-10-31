@@ -432,6 +432,27 @@ fn macos_target_compiles_native_libraries_from_source() {
     }
 }
 
+// NLL-FR-LTEO, NLL-FR-AVJK, VOP-FR-JXQG: `ort-sys` has no `vendored` feature. What
+// keeps it static is that neither crate that names it asks for a dynamic form.
+#[test]
+fn onnx_runtime_stays_a_static_archive() {
+    let manifest: toml::Value =
+        toml::from_str(&std::fs::read_to_string(manifest_dir().join("Cargo.toml")).unwrap())
+            .unwrap();
+    let dependencies = &manifest["dependencies"];
+    let ort = &dependencies["ort"];
+    assert_eq!(ort.get("default-features").and_then(|v| v.as_bool()), Some(false));
+    let features = [&ort["features"], &dependencies["fastembed"]["features"]]
+        .into_iter()
+        .flat_map(|list| list.as_array().unwrap())
+        .filter_map(|feature| feature.as_str())
+        .collect::<Vec<_>>();
+    assert!(features.contains(&"ort-download-binaries-rustls-tls"), "{features:?}");
+    for dynamic in ["copy-dylibs", "load-dynamic"] {
+        assert!(!features.iter().any(|f| f.contains(dynamic)), "{dynamic}");
+    }
+}
+
 // NLL-FR-AVJK: every `-sys` crate in `Cargo.lock` is classified. A new native
 // dependency fails here, on every host, until it is compiled in for macOS
 // (and added to COMPILED_BY_FEATURE) or classified in CLASSIFIED.

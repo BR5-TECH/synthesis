@@ -12,7 +12,11 @@ vi.mock("@tauri-apps/api/core", () => core);
 
 import {
   appendVoiceCapture,
+  closeVoiceActivitySession,
+  feedVoiceActivity,
   listVoiceAiVoices,
+  openVoiceActivitySession,
+  setVoiceActivityGate,
   setVoiceAiDefaultVoice,
   setVoiceAiRoutes,
   speakVoiceSegment,
@@ -21,6 +25,41 @@ import {
 } from "./voice";
 
 beforeEach(() => core.invoke.mockClear());
+
+describe("the voice activity commands", () => {
+  it("VOP-FR-WYKO: open takes the rate and the keyterms", async () => {
+    await openVoiceActivitySession(48_000, ["arch"]);
+    expect(core.invoke).toHaveBeenCalledWith("open_voice_activity_session", {
+      captureRate: 48_000,
+      keyterms: ["arch"],
+    });
+  });
+
+  it("VOP-FR-TADX: audio goes as a raw body, with its session in a header", async () => {
+    const bytes = new Uint8Array([1, 2]);
+    await feedVoiceActivity("va1", bytes);
+    expect(core.invoke).toHaveBeenCalledWith("feed_voice_activity", bytes, {
+      headers: { "x-voice-session": "va1" },
+    });
+  });
+
+  it("VOP-FR-QZCE: the gate goes as one whole record", async () => {
+    const gate = { seq: 2, blocked: true, playing: false, settled: "c1", keyterms: ["arch"] };
+    await setVoiceActivityGate("va1", gate);
+    expect(core.invoke).toHaveBeenCalledWith("set_voice_activity_gate", {
+      activityId: "va1",
+      ...gate,
+    });
+  });
+
+  it("VOP-FR-FAAB: close takes the session and `discard`", async () => {
+    await closeVoiceActivitySession("va1", true);
+    expect(core.invoke).toHaveBeenCalledWith("close_voice_activity_session", {
+      activityId: "va1",
+      discard: true,
+    });
+  });
+});
 
 describe("the voice commands", () => {
   it("VOP-FR-DXPK: audio goes as a raw body, with its session in a header", async () => {

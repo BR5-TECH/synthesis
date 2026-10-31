@@ -21,8 +21,8 @@ use crate::logging::{self, Domain};
 
 const SPEECH_DOMAINS: &[Domain] = &[Domain::Ai, Domain::Remote];
 
-/// The header of "append voice capture".
-const SESSION_HEADER: &str = "x-voice-session";
+/// The header of "append voice capture" and "feed voice activity".
+pub(crate) const SESSION_HEADER: &str = "x-voice-session";
 
 fn announce(app: &tauri::AppHandle, store: &GlobalSettingsStore) {
     if let Ok(integrations) = list_integrations(store) {

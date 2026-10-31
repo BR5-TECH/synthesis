@@ -71,6 +71,8 @@ impl VoiceSink for RecordingSink {
         self.transcripts.lock().unwrap().push(text.to_string());
     }
 
+    fn activity_changed(&self, _: &crate::voice_ai::activity::ActivityChange) {}
+
     fn diagnostic(&self, stage: &str, detail: &str) {
         self.diagnostics.lock().unwrap().push(format!("{stage}: {detail}"));
     }

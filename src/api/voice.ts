@@ -89,3 +89,27 @@ export const speakVoiceSegment = (
 
 export const cancelVoiceSpeech = (speechId: string) =>
   invoke<void>("cancel_voice_speech", { speechId });
+
+/** VOP-FR-WYKO. */
+export const openVoiceActivitySession = (captureRate: number, keyterms: readonly string[]) =>
+  invoke<{ activityId: string }>("open_voice_activity_session", { captureRate, keyterms });
+
+/** VOP-FR-TADX: the request form of "append voice capture". */
+export const feedVoiceActivity = (activityId: string, bytes: Uint8Array) =>
+  invoke<void>("feed_voice_activity", bytes, { headers: { "x-voice-session": activityId } });
+
+/** VOP-FR-QZCE: one whole record, so that no push depends on an earlier one. */
+export const setVoiceActivityGate = (
+  activityId: string,
+  gate: {
+    seq: number;
+    blocked: boolean;
+    playing: boolean;
+    settled: string | null;
+    keyterms: readonly string[];
+  },
+) => invoke<void>("set_voice_activity_gate", { activityId, ...gate });
+
+/** VOP-FR-FAAB: gives the id of a capture that has not settled. */
+export const closeVoiceActivitySession = (activityId: string, discard: boolean) =>
+  invoke<{ captureId: string | null }>("close_voice_activity_session", { activityId, discard });

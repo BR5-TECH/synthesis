@@ -10,6 +10,8 @@ import { useSyncExternalStore } from "react";
 export type VoicePhase = "idle" | "opening" | "recording" | "transcribing" | "posting";
 export type VoiceResponseMode = "text" | "voice";
 export type VoiceNote = "no_speech" | "no_agent" | "kept_in_body";
+/** VOM-FR-IKIK. */
+export type VoiceInputMode = "ptt" | "vad";
 
 export interface VoiceState {
   /** The session key of the composer in voice mode. */
@@ -31,6 +33,14 @@ export interface VoiceState {
   providerReady: boolean;
   /** VOM-FR-IAVZ: that provider has a speech route. */
   providerSpeaks: boolean;
+  /** VOM-FR-MQHD: Push-to-Talk each time voice mode starts. */
+  inputMode: VoiceInputMode;
+  /** VOM-FR-PDZR: a VAD session is open, so the microphone is open. */
+  vadOpen: boolean;
+  /** VOM-FR-VOUG: from `speech_start` to the end of the utterance. */
+  hearing: boolean;
+  /** VOM-FR-FVRS: the author's speech paused the reply. `playing` stays. */
+  playbackPaused: boolean;
 }
 
 export const INITIAL_VOICE_STATE: VoiceState = Object.freeze({
@@ -47,6 +57,10 @@ export const INITIAL_VOICE_STATE: VoiceState = Object.freeze({
   recordingSince: null,
   providerReady: false,
   providerSpeaks: false,
+  inputMode: "ptt",
+  vadOpen: false,
+  hearing: false,
+  playbackPaused: false,
 });
 
 let state: VoiceState = INITIAL_VOICE_STATE;
@@ -61,7 +75,7 @@ export function patchVoiceState(change: Partial<VoiceState>): void {
   listeners.forEach((listener) => listener());
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribeVoiceState(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -69,7 +83,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useVoiceState(): VoiceState {
-  return useSyncExternalStore(subscribe, getVoiceState);
+  return useSyncExternalStore(subscribeVoiceState, getVoiceState);
 }
 
 export function resetVoiceStateForTest(): void {

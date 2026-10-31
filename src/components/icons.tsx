@@ -391,7 +391,7 @@ export const Icon = {
    * the two bars every transport control pauses with.
    */
   Pause: (p: IconProps) => (
-    <I {...p}>
+    <I data-icon="pause" {...p}>
       <rect x="6" y="5" width="4" height="14" rx="1" />
       <rect x="14" y="5" width="4" height="14" rx="1" />
     </I>
@@ -569,6 +569,49 @@ export const Icon = {
       <rect x="9" y="3" width="6" height="11" rx="3" />
       <path d="M5 11a7 7 0 0 0 14 0" />
       <path d="M12 18v3" />
+    </I>
+  ),
+  /* VOM-FR-VOUG: a VAD session that listens. */
+  MicListening: (p: IconProps) => (
+    <I data-icon="mic-listening" {...p}>
+      <rect x="10" y="5" width="4" height="9" rx="2" />
+      <path d="M7.5 11a4.5 4.5 0 0 0 9 0" />
+      <path d="M12 15.5V19" />
+      <path d="M4 7a10 10 0 0 0 0 8" />
+      <path d="M20 7a10 10 0 0 1 0 8" />
+    </I>
+  ),
+  /* VOM-FR-IKIK: Push-to-Talk, a key that goes down. */
+  KeyPress: (p: IconProps) => (
+    <I data-icon="key-press" {...p}>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="m8 11 4 4 4-4" />
+    </I>
+  ),
+  /* VOM-FR-IKIK, VOM-FR-VOUG: VAD, and speech that the detector hears. */
+  Waveform: (p: IconProps) => (
+    <I data-icon="waveform" {...p}>
+      <path d="M4 10v4" />
+      <path d="M8 7v10" />
+      <path d="M12 4v16" />
+      <path d="M16 7v10" />
+      <path d="M20 10v4" />
+    </I>
+  ),
+  /* VOM-FR-IAVZ, VOM-FR-VOUG: text replies, and a transcript on its way. */
+  TextLines: (p: IconProps) => (
+    <I data-icon="text-lines" {...p}>
+      <path d="M5 7h14" />
+      <path d="M5 12h14" />
+      <path d="M5 17h9" />
+    </I>
+  ),
+  /* VOM-FR-IAVZ: spoken replies. */
+  Speaker: (p: IconProps) => (
+    <I data-icon="speaker" {...p}>
+      <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" />
+      <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
+      <path d="M18 7a7 7 0 0 1 0 10" />
     </I>
   ),
   /* Posting a composed message. */

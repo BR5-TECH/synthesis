@@ -659,6 +659,9 @@ describe("the values of voice mode", () => {
     expect(errorCode("tls_untrusted:unknown_issuer:host")).toBe("tls_untrusted:unknown_issuer:host");
     expect(errorCode("Bearer sk-secret was refused")).toBe("unknown");
     expect(errorCode(new Error("the words of a transcript"))).toBe("unknown");
+    // A shape that makes a nested pattern backtrack without end.
+    expect(errorCode(`_:${"!:".repeat(5000)} `)).toBe("unknown");
+    expect(errorCode(`_:${"!:".repeat(5000)}`)).toBe(`_:${"!:".repeat(5000)}`);
   });
 });
 

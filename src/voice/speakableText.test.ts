@@ -28,6 +28,12 @@ describe("what is spoken of a comment", () => {
     );
   });
 
+  it("VOM-FR-TRWN: no tag stays in spoken text, also a nested one", () => {
+    expect(speakableText("Before <b>bold</b> after.")).toBe("Before bold after.");
+    const text = speakableText("<<script>script>alert(1)<</script>/script>");
+    expect(text).not.toMatch(/[<>]/);
+  });
+
   it("VOM-FR-TRWN: a comment with no text has nothing to speak", () => {
     expect(speakableText("   \n\n")).toBe("");
   });

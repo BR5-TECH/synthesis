@@ -177,6 +177,22 @@ pub fn read_queue_index(fs: &fsa::FsAccess, base: &StoreBase, project_key: &str)
         .unwrap_or_else(|_| QueueIndex { project_key: project_key.to_string(), runs: Vec::new() })
 }
 
+/// WKS-FR-AUSI: the project's run order, or the reason it cannot be read. An
+/// index that does not exist is an empty order. Any other failure is reported
+/// rather than read as one, for a caller that acts on the absence of a run.
+pub fn try_read_queue_index(
+    fs: &fsa::FsAccess,
+    base: &StoreBase,
+    project_key: &str,
+) -> fsa::FsResult<QueueIndex> {
+    match fs.read_toml(base.queue_path(project_key)) {
+        Err(fsa::FsError::NotFound { .. }) => {
+            Ok(QueueIndex { project_key: project_key.to_string(), runs: Vec::new() })
+        }
+        read => read,
+    }
+}
+
 /// Write the project's run order durably.
 pub fn write_queue_index(
     fs: &fsa::FsAccess,

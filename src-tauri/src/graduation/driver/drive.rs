@@ -334,7 +334,7 @@ async fn drive<R: tauri::Runtime>(
             (
                 "stream_missing",
                 "The work stream's working copy is not there.",
-                "Re-create the stream, then continue the run.",
+                "Discard this run. The stream is then removed.",
             )
         };
         let _ = transitions::block(app, &mut run, code, message, clears_by, &resume_part);

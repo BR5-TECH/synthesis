@@ -942,11 +942,13 @@ pub fn create_worktree(
 
 mod creation;
 mod naming;
+mod recovery;
 mod removal;
 mod resume;
 mod switch_guard;
 pub use creation::*;
 pub use naming::*;
+pub use recovery::*;
 pub use removal::*;
 pub use resume::*;
 pub use switch_guard::*;

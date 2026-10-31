@@ -28,7 +28,8 @@ import { resetPromptProposals } from "../../state/promptProposals";
 import { resetSharedCommentIdentity } from "../useSharedCommentIdentity";
 import { resetProjectIdentity } from "../../state/projectIdentity";
 import { showWorktreeFallback } from "../../state/shellToasts";
-import { logInfo } from "../../logging";
+import { clearActiveRootState, rootIsGoneNow } from "../../state/activeRootHealth";
+import { logInfo, logWarn } from "../../logging";
 import type { EditSessionStore } from "../../state/editSessions";
 import type { FlowSessionStore } from "../../state/flowSessions";
 import type { DraftSessionStore } from "../../state/draftSessions";
@@ -128,6 +129,13 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
    * confirmation, or error. Returns whether the caller may proceed.
    */
   const flushBeforeTeardown = async (): Promise<boolean> => {
+    // WTS-FR-OSKY: a root that is gone takes no write, and a flush that failed
+    // would cancel every way out of it. This drops unsaved work, so the state is
+    // read again first: the worktree may have come back since the last read.
+    if (await rootIsGoneNow()) {
+      logWarn(["frontend"], "teardown wrote nothing: the active worktree is gone");
+      return true;
+    }
     const artifacts = await sessions.flushAll();
     if (!artifacts.ok) {
       if (artifacts.artifactId) focusBlocker(artifacts.artifactId);
@@ -268,6 +276,9 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
   // transient surfaces cleared. Shared by initial open and project switch so
   // neither carries over the previous project's tabs or panel state.
   const resetShellState = () => {
+    // WTS-FR-BTMD: the shell that reads this unmounts with the project, and the
+    // menu above it reads the state too (WTS-FR-ZHLG).
+    clearActiveRootState();
     setProjectName("");
     setProjectPath("");
     setActiveWorktree(null);

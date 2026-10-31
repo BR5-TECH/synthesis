@@ -519,6 +519,21 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   };
 
   /**
+   * SNV-FR-56: close everything a new overlay stands in place of. The chrome
+   * dropdowns and the context menus keep their open state to themselves and
+   * close on a pointer press outside them. An opening that comes with no such
+   * press announces one here.
+   */
+  const closeAllOverlays = () => {
+    closeSiblingOverlays();
+    dismissCommitWindow();
+    dismissRollbackWindow();
+    if (streamMergeRef.current) settleStreamMergeWindow(null);
+    closeChromeDropdowns();
+    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  };
+
+  /**
    * CPR-FR-FDVO: the Create a PR window. Opening it closes every other overlay
    * of the shell, and the token picker it asks for takes its place for a moment
    * (CPR-FR-VZUZ).
@@ -568,15 +583,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    * second activation while it is open changes nothing (ABT-FR-NVQT).
    */
   const openAbout = () => {
-    closeSiblingOverlays();
-    dismissCommitWindow();
-    dismissRollbackWindow();
-    if (streamMergeRef.current) settleStreamMergeWindow(null);
-    closeChromeDropdowns();
-    // The chrome dropdowns and the context menus keep their open state to
-    // themselves and close on a pointer press outside them. A native menu
-    // activation raises no such press, so one is announced here.
-    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    closeAllOverlays();
     setAboutOpen(true);
   };
 
@@ -588,14 +595,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    * close before it opens. It closes every other overlay, as `openAbout` does.
    */
   const openingDiagramEditor = useRef<() => void>(() => {});
-  openingDiagramEditor.current = () => {
-    closeSiblingOverlays();
-    dismissCommitWindow();
-    dismissRollbackWindow();
-    if (streamMergeRef.current) settleStreamMergeWindow(null);
-    closeChromeDropdowns();
-    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-  };
+  openingDiagramEditor.current = closeAllOverlays;
   useEffect(() => {
     setDiagramEditorOpening(() => openingDiagramEditor.current());
     return () => setDiagramEditorOpening(null);
@@ -653,6 +653,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     dismissRollbackWindow,
     requestRollback,
     closeSiblingOverlays,
+    closeAllOverlays,
     openCommitWindow,
     graduationStart,
     openGraduationStart,

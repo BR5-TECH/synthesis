@@ -174,3 +174,29 @@ button.git__file {
 .pull-reconcile code {
   white-space: nowrap;
 }
+
+/* WTS-FR-ZHLG: it stands above every surface, the toasts included. WTS-FR-WIFO:
+   a name of any length stays inside the dialog, and both actions stay reachable
+   at any window size. The body takes what is left, so a long error scrolls. */
+.scrim.worktree-gone-scrim {
+  z-index: var(--z-worktree-gone);
+}
+.worktree-gone {
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 32px);
+}
+.worktree-gone .modal__body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-wrap: anywhere;
+}
+.worktree-gone .modal__body p {
+  margin: 0;
+  line-height: 1.5;
+}
+.worktree-gone .modal__actions {
+  flex: none; flex-wrap: wrap;
+}
+.worktree-gone .modal__actions .btn {
+  display: block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis;
+}

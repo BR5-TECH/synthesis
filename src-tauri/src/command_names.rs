@@ -139,6 +139,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Work streams (WKS-work-streams.md / WSS-work-stream-selector.md).
     "create_work_stream",
     "list_work_streams",
+    "list_removed_work_streams",
+    "dismiss_removed_work_stream",
     "get_work_stream",
     "merge_work_stream",
     "update_work_stream",
@@ -290,6 +292,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "list_worktrees_and_branches",
     "get_active_worktree",
     "activate_worktree",
+    "active_root_state",
+    "leave_gone_worktree",
     "check_out_branch_in_active_worktree",
     "propose_worktree_path",
     "create_worktree",

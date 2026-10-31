@@ -13,6 +13,13 @@ import {
   onMenuEvent,
   type MenuEvent,
 } from "../events";
+import { isActiveRootGone } from "../state/activeRootHealth";
+
+/** WTS-FR-ZHLG: the menu items that act while the worktree gone dialog is open. */
+const WHILE_ROOT_GONE: ReadonlySet<MenuEvent> = new Set<MenuEvent>([
+  MENU_CLOSE_PROJECT,
+  MENU_EXIT_REQUESTED,
+]);
 
 export interface MenuHandlers {
   /** SNV-FR-24: open the New File modal (NFI-new-file.md). */
@@ -53,7 +60,10 @@ export function useMenuEvents(handlers: MenuHandlers): void {
     let cancelled = false;
     const unlisten: Array<() => void> = [];
     const reg = (event: MenuEvent, run: () => void) => {
-      void onMenuEvent(event, run).then((fn) => {
+      const gated = () => {
+        if (!isActiveRootGone() || WHILE_ROOT_GONE.has(event)) run();
+      };
+      void onMenuEvent(event, gated).then((fn) => {
         if (cancelled) fn();
         else unlisten.push(fn);
       });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
+import { useGoneActiveRoot } from "../state/activeRootHealth";
 import { Icon } from "./icons";
 import { AppIcon } from "./AppIcon";
 import { SearchOverlay } from "./SearchOverlay";
@@ -154,6 +155,9 @@ export function TopChrome({
   themeMenuOpen,
   setThemeMenuOpen,
 }: TopChromeProps) {
+  // WTS-FR-BYBD: each selector keeps its own overlays to itself, so a remount is
+  // what closes them when the worktree gone dialog opens.
+  const rootGone = useGoneActiveRoot() !== null;
   // SCH-FR-12 / SCH-FR-13: the active query mode, user-global and persisted.
   const { mode, selectMode } = useSearchQueryMode();
   const [query, setQuery] = useState("");
@@ -231,6 +235,7 @@ export function TopChrome({
             WTS-FR-29), in which case the search bar follows the switcher
             directly. */}
         <WorktreeSelector
+          key={`worktrees-${rootGone}`}
           active={activeWorktree}
           onSwitch={onSwitchWorktree}
           // WTS-FR-05 / NAW-FR-01: opening this dropdown closes the search
@@ -259,6 +264,7 @@ export function TopChrome({
             inside a Git repository — a stream is a checkout of the same
             repository, and the author moves between the two the same way. */}
         <WorkStreamSelector
+          key={`streams-${rootGone}`}
           inRepository={activeWorktree !== null}
           activeBranch={activeWorktree?.branch ?? null}
           // WSS-FR-XZRD / SNV-FR-56: opening this dropdown closes the search

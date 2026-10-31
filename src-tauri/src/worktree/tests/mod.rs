@@ -198,6 +198,7 @@ mod diagnostics;
 mod enumeration;
 mod identity;
 mod naming;
+mod recovery;
 mod refresh;
 mod removal;
 mod rerooting;

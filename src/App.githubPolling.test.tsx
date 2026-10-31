@@ -42,6 +42,7 @@ const stream = (id: string, busy = false): WorkStreamSummary => ({
   behindBase: 0,
   baseTipRevision: "a91bc04",
   missingCommits: [],
+  branchMissing: false,
 });
 
 const invokeMock = vi.fn();

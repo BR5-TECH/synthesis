@@ -147,6 +147,15 @@ pub(super) fn remove_worktree(
     crate::worktree::prune_worktree_registration(main, path, registration)
 }
 
+/// WKS-FR-AIWE: a positive answer that the repository holds no such branch. A
+/// read that fails in any other way says nothing about the branch.
+pub(super) fn branch_not_found(main: &git2::Repository, branch: &str) -> bool {
+    matches!(
+        main.find_branch(branch, git2::BranchType::Local),
+        Err(e) if e.code() == git2::ErrorCode::NotFound
+    )
+}
+
 /// Delete a local branch. Already gone is the state the caller wanted.
 pub(super) fn delete_branch(main: &git2::Repository, branch: &str) -> Result<(), String> {
     match main.find_branch(branch, git2::BranchType::Local) {

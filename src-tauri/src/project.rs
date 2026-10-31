@@ -66,6 +66,9 @@ pub struct ProjectState {
     /// of active worktree, which is what makes it the key of the recents entry
     /// and of the user-global per-project slot (GSS-FR-18).
     anchor: Mutex<Option<String>>,
+    /// WTC-FR-ZXRF: where the content root sits inside its worktree. Recorded at
+    /// each mount, because a root that is gone cannot be asked.
+    root_offset: Mutex<PathBuf>,
     /// The instance governing this root (FSA-FR-21). Set with the root, so the
     /// pair `require_root` hands out is always internally consistent.
     access: Mutex<Option<Arc<crate::fs::FsAccess>>>,
@@ -142,6 +145,18 @@ impl ProjectState {
         if let Ok(mut guard) = self.anchor.lock() {
             *guard = Some(anchor);
         }
+    }
+
+    /// WTC-FR-ZXRF: record where the content root sits inside its worktree.
+    pub fn set_root_offset(&self, offset: PathBuf) {
+        if let Ok(mut guard) = self.root_offset.lock() {
+            *guard = offset;
+        }
+    }
+
+    /// WTC-FR-ZXRF: where the content root sits inside its worktree.
+    pub fn root_offset(&self) -> PathBuf {
+        self.root_offset.lock().map(|guard| guard.clone()).unwrap_or_default()
     }
 
     /// The open project's identity anchor, or `None` when no project is open.
@@ -383,6 +398,7 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // far from the cause. `None` makes `require_root` say what actually
     // happened.
     project.set_root_with_access(root.clone(), installed_access);
+    project.set_root_offset(crate::worktree::offset_of(&root));
     // PST-FR-14: switching projects unmounts the previous project's in-memory
     // artifact checksum baselines so a stale id cannot collide across projects.
     // The same applies across worktrees: an id is a project-relative path, so

@@ -3,7 +3,7 @@
 **Spec code:** `WKS`
 
 ## Intent
-A work stream is a named branch and working copy that the application owns and that lives longer than one graduation run. Runs execute in the stream's working copy and commit onto its branch, so each run starts from the commit the run before it made. This is what removes reconciliation from between runs: the runs of one stream share a base and cannot diverge from each other. The author reads a stream through the ordinary change surfaces, updates it from its base branch while the work continues, merges it into that branch when the work is complete, and removes it. A base branch moves outside the application, so a stream is brought up to it on the author's request, in the direction opposite to a merge. A merge is an operation the author starts: Git merges first, and a clean merge completes with no run and no record. A merge Git cannot resolve becomes a **merge run**, a Graduation Run named `Merge <stream name>` that is the one durable record of that merge. An update runs for minutes and may stop to ask the author a question, so each stream holds a durable record of what its last update did, and the author drives it to rest. A direct run that targets a stream's working copy (per `GRD-graduation.md` GRD-FR-ZVNO) is a run of that stream for its queue, its busy state and its deletion. A stream may be **temporary**: the record says so, and the author's surface merges it and deletes it when its work is done. Out of scope: what a run does, which is `GRD-graduation.md`'s; the reconciliation a merge and an update perform, which is `GRB-graduation-rebase.md`'s; and the author's own worktrees, which are `WTC-worktree-context.md`'s.
+A work stream is a named branch and working copy that the application owns and that lives longer than one graduation run. Runs execute in the stream's working copy and commit onto its branch, so each run starts from the commit the run before it made. This is what removes reconciliation from between runs: the runs of one stream share a base and cannot diverge from each other. The author reads a stream through the ordinary change surfaces, updates it from its base branch while the work continues, merges it into that branch when the work is complete, and removes it. A base branch moves outside the application, so a stream is brought up to it on the author's request, in the direction opposite to a merge. A merge is an operation the author starts: Git merges first, and a clean merge completes with no run and no record. A merge Git cannot resolve becomes a **merge run**, a Graduation Run named `Merge <stream name>` that is the one durable record of that merge. An update runs for minutes and may stop to ask the author a question, so each stream holds a durable record of what its last update did, and the author drives it to rest. A direct run that targets a stream's working copy (per `GRD-graduation.md` GRD-FR-ZVNO) is a run of that stream for its queue, its busy state and its deletion. A stream may be **temporary**: the record says so, and the author's surface merges it and deletes it when its work is done. The author can remove a working copy outside the application, so a stream that lost its working copy leaves the project's streams by itself, and the author's surface says so once. Out of scope: what a run does, which is `GRD-graduation.md`'s; the reconciliation a merge and an update perform, which is `GRB-graduation-rebase.md`'s; and the author's own worktrees, which are `WTC-worktree-context.md`'s.
 
 ## Functional requirements
 1. **WKS-FR-QMTV** A work stream holds a stable id, an author-given name, the branch it owns, the absolute path of its working copy, the branch it was created from, and the revision of that branch at creation.
@@ -13,8 +13,8 @@ A work stream is a named branch and working copy that the application owns and t
 5. **WKS-FR-JGCA** The working copy stands at `short_data_dir()/w/<stream-id>/`, under `FSA-filesystem-access.md`'s short root and nowhere else. An execution turn stands in that path and the container names the same path the host names (per `../tools/EAC-execute-agent-cli.md` EAC-FR-ZKMR).
 6. **WKS-FR-VTEY** Creation is one all-or-nothing operation. A failure removes the branch and the working copy it had made and returns the typed `stream_creation_failed`; a cleanup that itself fails returns `stream_cleanup_failed` naming the branch and the path it could not reclaim.
 7. **WKS-FR-BSLO** A stream records the store it shares as a path relative to its own Git directory, on exactly the terms `WTC-worktree-context.md` WTC-FR-QVNL sets, because an agent turn reads the repository through a container that mounts that store at a path of the executor's choosing.
-8. **WKS-FR-HRUZ** A name whose **slug** no other live stream of the project holds is accepted. Two names that reduce to one slug would own one branch, so the second returns the typed `stream_name_taken`; a name that reduces to an empty slug returns `stream_name_invalid`.
-9. **WKS-FR-SGCM** `list_work_streams()` returns every live stream of the project with its record, how far ahead of its base it stands, how far behind it stands, its queue depth, its merge run link (`mergeRun`), and its update record. `get_work_stream(stream_id)` returns one, or the typed `unknown_stream`.
+8. **WKS-FR-HRUZ** A name whose **slug** no other live stream of the project holds, and whose branch the repository does not hold, is accepted. Two names that reduce to one slug would own one branch, so the second returns the typed `stream_name_taken`. A branch that exists returns `stream_branch_exists` naming it. A name that reduces to an empty slug returns `stream_name_invalid`.
+9. **WKS-FR-SGCM** `list_work_streams()` returns every live stream of the project with its record, how far ahead of its base it stands, how far behind it stands, its queue depth, its merge run link (`mergeRun`), its update record, and whether its branch is gone (`branch_missing`). `get_work_stream(stream_id)` returns one, or the typed `unknown_stream`.
 10. **WKS-FR-YBST** A stream's **queue depth** counts its stream runs and the direct runs that target its working copy. It is read from the project's run order index, which names each run's stream and state, and never by opening run records. A depth the index cannot answer is reported as zero rather than by reading them.
 11. **WKS-FR-MFDW** A stream is **visible** to the author: it appears in the worktree enumeration of `WTC-worktree-context.md` WTC-FR-04 and its branch appears in the branch enumerations of `GTC-git.md` GTC-FR-07, each flagged as a stream.
     - *Why:* A checkout the author can open, read and diff is the whole way they judge a stream before they merge it.
@@ -66,8 +66,22 @@ A work stream is a named branch and working copy that the application owns and t
 51. **WKS-FR-EIBC** `delete_work_stream(stream_id, force, discard_uncommitted)` removes the working copy, the branch, the stream record and the update record. Without `force`, a stream holding commits its base branch does not hold is refused with the typed `stream_unmerged` naming the count.
 52. **WKS-FR-OVLQ** Deletion is refused with `stream_busy` while a run holds the stream, a run at rest and a `failed` run included, with `stream_has_runs` where the project holds a non-terminal run assigned to it, a merge run and a direct run that targets its working copy included, and with `stream_active` while its working copy is the project's active worktree. **Neither `force` nor `discard_uncommitted` reaches any of these.**
     - *Why:* These refusals protect a working copy an agent is writing, a run still answerable for its work, and the tree the author stands in; a flag that removed them would delete all three from under their owner.
-53. **WKS-FR-FJYN** Deleting a stream keeps every run record the stream carried. A run's record names the stream it ran in for as long as the record exists, whether or not the stream still does (per `GRD-graduation.md` GRD-FR-PZAK).
-54. **WKS-FR-AXRD** A stream whose working copy directory is gone is reported rather than removed, flagged missing like any other worktree (per `WTC-worktree-context.md` WTC-FR-05), rather than failing every read of the project's streams. This module offers no re-creation of its own: the surface composes one from `delete_work_stream` with `force` and `create_work_stream` (per `../ui/WSS-work-stream-selector.md` WSS-FR-OQYG).
+53. **WKS-FR-FJYN** Deleting a stream, or removing it by WKS-FR-APUE, keeps every run record the stream carried. A run's record names the stream it ran in for as long as the record exists, whether or not the stream still does (per `GRD-graduation.md` GRD-FR-PZAK).
+54. **WKS-FR-AXRD** A stream whose working copy directory is gone is flagged missing like any other worktree (per `WTC-worktree-context.md` WTC-FR-05) rather than failing a read of the project's streams. The listing removes it (WKS-FR-APUE), so only a stream WKS-FR-RVSU keeps is listed as missing. This module and its surface offer no re-creation of a stream.
+54. **WKS-FR-APUE** `list_work_streams()` removes each stream whose working copy directory is not found, before it reads the listing. It removes the stream record and the update record, prunes the registration on the terms of WKS-FR-STSZ, and stops the stream's sandbox VM (per `../tools/EAC-execute-agent-cli.md` EAC-FR-ABHG).
+    - *Why:* The author can remove a working copy outside the application, and nothing can then restore the stream.
+54. **WKS-FR-RVSU** The removal of WKS-FR-APUE skips a stream while a run holds it, while the project holds a non-terminal run assigned to it, while a merge or an update of it runs, and while it is the project's active worktree. A skipped stream stays listed with `is_missing` true, and the first listing after the hold ends removes it.
+54. **WKS-FR-AUSI** The removal of WKS-FR-APUE acts only on a positive not-found answer. A read of the directory that fails in any other way keeps the stream. A run order index that exists and cannot be read keeps every stream of the project.
+    - *Why:* An error read as an absence would remove the record of a stream that is still on disk.
+54. **WKS-FR-VYIW** The removal of WKS-FR-APUE deletes no branch and no directory. A branch that survives stays in the repository, and the Git panel lists it as a local branch.
+    - *Why:* A surviving branch may hold the only copy of unmerged commits.
+54. **WKS-FR-STSZ** The removal of WKS-FR-APUE prunes a Git worktree registration only when the path that registration records is not found, and it never removes a working tree. A registration whose recorded path exists is left as it is.
+    - *Why:* After `git worktree move` the registration names a live directory that the stream record does not name.
+54. **WKS-FR-AIWE** A stream whose branch is not found while its working copy directory exists stays listed, with `branch_missing` true, and WKS-FR-APUE does not remove it. `delete_work_stream` removes it on the terms of WKS-FR-EIBC. A read of the branch that fails in any other way leaves `branch_missing` false.
+    - *Why:* The directory can hold uncommitted work, and no read can prove that it holds none.
+54. **WKS-FR-YLBX** Each removal of WKS-FR-APUE records a **removed stream notice** holding the stream's id, name and branch, and whether that branch survives. `list_removed_work_streams()` returns the notices of the open project in removal order and consumes none of them. `dismiss_removed_work_stream(stream_id)` drops one, and an id with no notice is no error.
+54. **WKS-FR-DBWC** A listing that removes a stream emits one `"work streams changed"` (WKS-FR-WULF) and one `"branches changed"`. A listing that removes nothing emits neither.
+54. **WKS-FR-FQAE** A run blocked with `stream_missing` (per `GRD-graduation.md` GRD-FR-QJHM) names the discard of that run as what clears the blocker. The discard ends the run, so the next listing removes the stream (WKS-FR-APUE).
 55. **WKS-FR-SMKU** Nothing of a stream is written into a project's `.synthesis/`, none of it is committed, and none of it is reset by a change of project or of active worktree.
 56. **WKS-FR-DHOP** Every operation emits through `LGC-logging.md`'s internal API under the `backend` domain: an `INFO` record when it begins and when it ends, and a `WARN` or `ERROR` record on every failure path. No record carries a file's content.
 57. **WKS-FR-IPCE** Every filesystem read and write goes through `FSA-filesystem-access.md` rather than a bare path call, on that module's own terms: an instance method takes an absolute path (FSA-FR-19), and a project-relative path is resolved against the stream's working copy through `resolve_under`, which refuses one that escapes it.
@@ -88,7 +102,9 @@ A work stream is a named branch and working copy that the application owns and t
 Names match `../ui/WSS-work-stream-selector.md` byte-for-byte:
 
 - `"create work stream (name, base branch, temporary)"` → `create_work_stream(name, base_branch?, temporary?)` → `WorkStream`. Side effects: a branch, a working copy, and a stream record, and one `"branches changed"` (WKS-FR-SPVK).
-- `"list work streams"` → `list_work_streams()` → `[WorkStreamSummary]`. No side effect.
+- `"list work streams"` → `list_work_streams()` → `[WorkStreamSummary]`. Side effects: each stream WKS-FR-APUE names is removed, with one notice each, and the events of WKS-FR-DBWC.
+- `"list removed work streams"` → `list_removed_work_streams()` → `[RemovedStreamNotice]`. No side effect.
+- `"dismiss removed work stream (id)"` → `dismiss_removed_work_stream(stream_id)` → `()`. Side effect: the notice is dropped.
 - `"get work stream (id)"` → `get_work_stream(stream_id)` → `WorkStream`. No side effect.
 - `"merge work stream (id, publication)"` → `merge_work_stream(stream_id, publication)` → `StreamMergeResult`. Async. Side effects: the base branch advances where a clean merge lands; where Git cannot resolve a path, a merge snapshot ref, a merge worktree and a merge run in the state `queued` are created, and no branch moves.
 - `"update work stream (id, strategy, base revision)"` → `update_work_stream(stream_id, strategy, base_revision)` → `StreamUpdateRecord`. Side effects: the update record is written `running`, and the update runs on its own. The stream branch and its working copy advance where the update lands; the base branch does not move.
@@ -132,7 +148,16 @@ WorkStreamSummary {
                             //   counted by behind_base (WKS-FR-UBGX)
   mergeRun,                 // { runId, name, state } of the newest live merge run,
                             //   or null (WKS-FR-KHJS)
-  update                    // the StreamUpdateRecord, or null (WKS-FR-SGCM)
+  update,                   // the StreamUpdateRecord, or null (WKS-FR-SGCM)
+  branch_missing            // its branch is gone and its directory is not
+                            //   (WKS-FR-AIWE)
+}
+
+RemovedStreamNotice {      // WKS-FR-YLBX
+  stream_id,
+  name,
+  branch,
+  branch_survives          // the branch is still in the repository
 }
 
 StreamUpdateCommit {
@@ -198,14 +223,15 @@ StreamUpdateRecord {                    // WKS-FR-ZKUP, one per stream
 }
 ```
 
-Typed errors: `unsupported_conflict`, `not_a_git_repository`, `base_branch_required`, `stream_name_taken`, `stream_name_invalid`, `stream_creation_failed`, `stream_cleanup_failed`, `unknown_stream`, `stream_busy`, `stream_dirty`, `base_dirty`, `stream_missing`, `base_not_checked_out`, `merge_in_progress`, `merge_branch_moved`, `vendor_image_unconfigured`, `vendor_image_invalid`, `vendor_execution_unsupported`, `docker_backend_unverified`, `stale_base_revision`, `update_attempts_exhausted`, `update_in_progress`, `update_cancelled`, `update_interrupted`, `update_state_not_permitted`, `stream_unmerged`, `stream_has_runs`, `stream_active`.
+Typed errors: `unsupported_conflict`, `not_a_git_repository`, `base_branch_required`, `stream_name_taken`, `stream_name_invalid`, `stream_branch_exists`, `stream_creation_failed`, `stream_cleanup_failed`, `unknown_stream`, `stream_busy`, `stream_dirty`, `base_dirty`, `stream_missing`, `base_not_checked_out`, `merge_in_progress`, `merge_branch_moved`, `vendor_image_unconfigured`, `vendor_image_invalid`, `vendor_execution_unsupported`, `docker_backend_unverified`, `stale_base_revision`, `update_attempts_exhausted`, `update_in_progress`, `update_cancelled`, `update_interrupted`, `update_state_not_permitted`, `stream_unmerged`, `stream_has_runs`, `stream_active`.
 
 ### Internal (Rust API, not registered as Tauri commands)
 - Claiming and releasing a stream for a run, which is what the busy state and the per-stream queue are read through.
 - Resolution of a stream from the working copy an execution turn stands in.
 
 ## Non-functional requirements
-- Enumerating the project's streams reads the stream records and the project's run order index. It opens no individual run record (WKS-FR-YBST).
+- Enumerating the project's streams reads the stream records and the project's run order index. It opens no individual run record (WKS-FR-YBST), and the removal of WKS-FR-APUE reads the same two sources.
+- The removed stream notices are held in memory for the life of the application process. A notice that no dropdown showed before the application quit is lost, and the stream stays gone.
 - A stream's working copy is a linked worktree and holds its own index, so two streams work at the same time without sharing an index lock.
 - The pre-conflict check of a merge holds the repository update guard for one in-memory merge and one application of its result, which is seconds rather than minutes. The turns of a merge run hold no guard. An update runs for as long as its semantic turns take. No other operation of this module waits on one, and a cancellation is answered without waiting for the turn's container to exit.
 - The update record and a merge run each survive a window reload and a relaunch of the application, so work that stopped to ask the author is answerable at the next launch.

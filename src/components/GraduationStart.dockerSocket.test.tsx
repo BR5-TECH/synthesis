@@ -32,6 +32,7 @@ const stream: WorkStreamSummary = {
   behindBase: 0,
   baseTipRevision: "a91bc04",
   missingCommits: [],
+  branchMissing: false,
 };
 
 let refusal: string | null;

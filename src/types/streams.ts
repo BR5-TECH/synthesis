@@ -64,6 +64,8 @@ export interface WorkStreamSummary {
   mergeRun?: StreamMergeRunLink | null;
   /** WKS-FR-SGCM: what this stream's last update did, or nothing. */
   update?: StreamUpdateRecord | null;
+  /** WKS-FR-AIWE: the branch is gone and the working copy directory is not. */
+  branchMissing: boolean;
 }
 
 /** WKS-FR-KHJS: where a stream's merge run stands, as a listing carries it. */
@@ -283,12 +285,23 @@ export interface WorkStreamUpdateProgress {
   reconcilingPaths: string[];
 }
 
+/** WKS-FR-YLBX: what the author reads once about a stream the sweep removed. */
+export interface RemovedStreamNotice {
+  streamId: string;
+  name: string;
+  branch: string;
+  /** WKS-FR-VYIW: the branch is still in the repository. */
+  branchSurvives: boolean;
+}
+
 /** The typed refusals the stream operations answer with. */
 export const STREAM_ERRORS = {
   notAGitRepository: "not_a_git_repository",
   baseBranchRequired: "base_branch_required",
   nameTaken: "stream_name_taken",
   nameInvalid: "stream_name_invalid",
+  /** WKS-FR-HRUZ: the branch exists, and it names no live stream. */
+  branchExists: "stream_branch_exists",
   creationFailed: "stream_creation_failed",
   cleanupFailed: "stream_cleanup_failed",
   unknownStream: "unknown_stream",

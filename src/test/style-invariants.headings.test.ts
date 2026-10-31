@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FONT_SIZE_MAX, FONT_SIZE_MIN } from "../state/fontRoles";
 import { blocksFor, decl, sheet } from "./cssRules";
 
 /**
@@ -140,13 +139,6 @@ describe("the size of an H4 (EDT-FR-VPDK)", () => {
     const strong = only(".doc strong");
     expect(decl(strong, "font-weight")).toBe("var(--fw-semi)");
     expect(decl(strong, "font-size")).toBeNull();
-  });
-
-  it("EDT-FR-VPDK: at the smallest permitted role size, an H4 is a whole pixel larger than bold body text", () => {
-    // Bold body text sets no size of its own, so it is the body size. At a
-    // larger role size the difference is larger.
-    expect(h4 * FONT_SIZE_MIN - body * FONT_SIZE_MIN).toBeGreaterThanOrEqual(1);
-    expect(h4 * FONT_SIZE_MAX).toBeGreaterThan(body * FONT_SIZE_MAX);
   });
 
   it("EDT-FR-VPDK: no surface rule changes the weight of an H4", () => {

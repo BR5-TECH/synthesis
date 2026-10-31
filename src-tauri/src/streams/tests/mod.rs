@@ -379,5 +379,6 @@ mod pull_apply_tests;
 mod pull_reconcile;
 mod pull_support;
 mod push_checkout;
+mod removal;
 mod update_flow;
 mod update_guards;

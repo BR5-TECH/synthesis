@@ -96,8 +96,10 @@ impl FsAccessState {
             super::short_data_dir().map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
         // FSA-FR-ZUCF: the two application roots are owned; the worktree is
         // the user's project and is never reclaimable by this application.
+        // FSA-FR-YYSR: the worktree alone is required. The two application roots
+        // are made on first use.
         let built = FsAccess::builder()
-            .allow_root(worktree)
+            .required_root(worktree)
             .owned_root(app_data)
             .owned_root(short_data)
             .session_temp(true)
@@ -134,7 +136,7 @@ impl FsAccessState {
             .and_then(|guard| guard.clone())
             .ok_or(FsAccessBuildError::NoRoots)?;
         let built = std::sync::Arc::new(
-            FsAccess::builder().allow_root(worktree).session_temp(true).build()?,
+            FsAccess::builder().required_root(worktree).session_temp(true).build()?,
         );
         let mut guard = self.agents.write().map_err(|_| FsAccessBuildError::NoRoots)?;
         // The roots moved while this was building, so `built` is rooted at a
@@ -201,8 +203,11 @@ impl FsAccessState {
         worktree: &Path,
         also: &Path,
     ) -> Result<(), FsAccessBuildError> {
-        let built =
-            FsAccess::builder().allow_root(worktree).owned_root(also).session_temp(true).build()?;
+        let built = FsAccess::builder()
+            .required_root(worktree)
+            .owned_root(also)
+            .session_temp(true)
+            .build()?;
         self.set_worktree(Some(worktree.to_path_buf()));
         self.discard_agent_sessions();
         self.replace(built);

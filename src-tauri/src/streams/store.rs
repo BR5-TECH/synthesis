@@ -110,6 +110,16 @@ pub(super) fn remove_stream_home(
         // refuse the removal. The record below is one file and stays strict.
         fs.delete_owned_tree(&dir).map_err(|e| e.to_string())?;
     }
+    remove_stream_record(fs, store, stream_id)
+}
+
+/// WKS-FR-VYIW: remove one stream's record alone. A sweep comes here, so nothing
+/// it does can reach a directory.
+pub(super) fn remove_stream_record(
+    fs: &fsa::FsAccess,
+    store: &StreamStore,
+    stream_id: &str,
+) -> Result<(), String> {
     let record = store.record(stream_id);
     if record.exists() {
         fs.delete_path(&record, false).map_err(|e| e.to_string())?;

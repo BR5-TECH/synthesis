@@ -8409,13 +8409,33 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // the restart confirmation to default to one (GRT-FR-IMRI). The counts are
     // derived from the queue rather than written down, so a run enqueued in
     // this session moves them.
+    // WKS-FR-YLBX: a harness project has no removed stream until a test seeds one.
+    case "list_removed_work_streams":
+      return (window as unknown as { __removedStreams?: unknown[] }).__removedStreams ?? [];
+    case "dismiss_removed_work_stream": {
+      const held = window as unknown as { __removedStreams?: { streamId: string }[] };
+      held.__removedStreams = (held.__removedStreams ?? []).filter(
+        (notice) => notice.streamId !== a.streamId,
+      );
+      return undefined;
+    }
     case "list_work_streams":
       return workStreams.map((stream) => ({
-        stream: { ...stream },
+        // A test sets `__streamListPatch[id]` to override the fields of a row.
+        stream: {
+          ...stream,
+          ...(window as unknown as { __streamListPatch?: Record<string, object> })
+            .__streamListPatch?.[stream.id],
+        },
         queuedRunCount: graduationRuns.filter(
           (r) => r.streamId === stream.id && r.state === "queued",
         ).length,
         aheadOfBase: stream.isMissing ? 0 : 2,
+        // WSS-FR-NIRW: a test lists stream ids in `__branchMissingStreams`.
+        branchMissing:
+          (window as unknown as { __branchMissingStreams?: string[] }).__branchMissingStreams?.includes(
+            stream.id,
+          ) ?? false,
         // WKS-FR-RJPD / WKS-FR-KFVJ: the harness streams stand level with
         // their base, so Update is disabled on each row.
         behindBase: 0,
@@ -9614,8 +9634,38 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "check_out_branch_in_active_worktree":
     case "create_worktree":
       return worktreeContext;
-    case "get_active_worktree":
-      return worktrees[0];
+    // WTS-FR-BIOJ: the health read runs only for a linked worktree. A test sets
+    // `__linkedWorktree` to `true`, or to fields that override the entry.
+    case "get_active_worktree": {
+      const linked = (window as unknown as { __linkedWorktree?: unknown }).__linkedWorktree;
+      if (!linked) return worktrees[0];
+      return {
+        ...worktrees[1],
+        isActive: true,
+        ...(typeof linked === "object" ? linked : {}),
+      };
+    }
+    // WTC-FR-CPRM: a test sets `__activeRootState` to raise the dialog.
+    case "active_root_state":
+      return (
+        (window as unknown as { __activeRootState?: unknown }).__activeRootState ?? {
+          state: "healthy",
+          primaryPath: worktrees[0].path,
+          primaryBranch: worktrees[0].branch,
+        }
+      );
+    case "leave_gone_worktree": {
+      const left = window as unknown as {
+        __activeRootState?: unknown;
+        __linkedWorktree?: unknown;
+        __leaveGoneError?: string;
+      };
+      // WTS-FR-YKSZ: a test sets `__leaveGoneError` to refuse the switch.
+      if (left.__leaveGoneError) throw left.__leaveGoneError;
+      left.__activeRootState = undefined;
+      left.__linkedWorktree = undefined;
+      return worktreeContext;
+    }
     case "propose_worktree_path":
       return `/Users/demo/dev/acme-${String(a.branch).replace(/\//g, "-")}`;
     case "refresh_worktrees_and_branches":

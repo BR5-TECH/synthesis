@@ -74,6 +74,9 @@ pub struct FsAccess {
     pub(super) author_roots: Vec<PathBuf>,
     pub(super) follow_symlinks: bool,
     pub(super) session_temp: Option<SessionTemp>,
+    /// FSA-FR-RBGJ: the subset of `roots` a write needs to find on disk, in both
+    /// spellings. Empty on an instance that holds none.
+    pub(super) required_roots: Vec<PathBuf>,
     /// FSA-FR-UKAE: whether this instance was built from read-only grants. Such
     /// an instance refuses every operation that writes.
     pub(super) read_only: bool,
@@ -441,7 +444,7 @@ impl FsAccess {
     /// filesystem level (`O_EXCL`) rather than a test followed by a write, so
     /// two callers racing to create the same path cannot both succeed.
     pub fn create_file(&self, path: impl AsRef<Path>, mode: CreateMode) -> FsResult<()> {
-        self.deny_write("create_file")?;
+        self.deny_write_at("create_file", path.as_ref())?;
         let target = self.validate(path.as_ref())?;
         // A directory at the destination is "exists" under both modes:
         // truncating a directory means nothing.
@@ -476,7 +479,7 @@ impl FsAccess {
     /// yields a handle.
     pub fn open_file(&self, path: impl AsRef<Path>, mode: OpenMode) -> FsResult<FileHandle<'_>> {
         if mode != OpenMode::ReadOnly {
-            self.deny_write("open_file")?;
+            self.deny_write_at("open_file", path.as_ref())?;
         }
         let target = self.validate(path.as_ref())?;
         let mut opts = fs::OpenOptions::new();
@@ -536,7 +539,7 @@ impl FsAccess {
 
     /// FSA-FR-04 / FSA-FR-05: atomic whole-file write, parents created on demand.
     pub fn write_bytes_atomic(&self, path: impl AsRef<Path>, bytes: &[u8]) -> FsResult<()> {
-        self.deny_write("write_bytes_atomic")?;
+        self.deny_write_at("write_bytes_atomic", path.as_ref())?;
         let target = self.validate(path.as_ref())?;
         super::write_bytes_at(&target, bytes)
     }
@@ -552,14 +555,14 @@ impl FsAccess {
         path: impl AsRef<Path>,
         value: &T,
     ) -> FsResult<()> {
-        self.deny_write("write_toml_atomic")?;
+        self.deny_write_at("write_toml_atomic", path.as_ref())?;
         let target = self.validate(path.as_ref())?;
         super::write_toml_at(&target, value)
     }
 
     /// FSA-FR-15: append newline-terminated lines in a single write.
     pub fn append_lines(&self, path: impl AsRef<Path>, lines: &[String]) -> FsResult<()> {
-        self.deny_write("append_lines")?;
+        self.deny_write_at("append_lines", path.as_ref())?;
         if lines.is_empty() {
             return Ok(());
         }
@@ -583,7 +586,7 @@ impl FsAccess {
     /// `<synthesis_dir>/.gitignore` is read or written, so not one draft file is
     /// deleted, moved, rewritten, staged, or committed by it.
     pub fn ensure_gitignored(&self, synthesis_dir: impl AsRef<Path>) -> FsResult<()> {
-        self.deny_write("ensure_gitignored")?;
+        self.deny_write_at("ensure_gitignored", synthesis_dir.as_ref())?;
         let dir = self.validate(synthesis_dir.as_ref())?;
         let target = dir.join(".gitignore");
         // The join stays inside the validated directory, so it needs no second
@@ -684,7 +687,7 @@ impl FsAccess {
     /// the typed "invalid destination", a missing `source` is "missing", and a
     /// link anywhere in the subtree is refused under the instance's policy.
     pub fn move_path(&self, source: impl AsRef<Path>, dest: impl AsRef<Path>) -> FsResult<()> {
-        self.deny_write("move_path")?;
+        self.deny_write_at("move_path", dest.as_ref())?;
         let src = self.validate(source.as_ref())?;
         let dst = self.validate(dest.as_ref())?;
         let meta = match fs::symlink_metadata(&src) {
@@ -733,7 +736,7 @@ impl FsAccess {
     /// FSA-FR-13: copy a file or directory tree to a destination that must not
     /// already exist. Both paths go through the gate.
     pub fn copy_path(&self, source: impl AsRef<Path>, dest: impl AsRef<Path>) -> FsResult<()> {
-        self.deny_write("copy_path")?;
+        self.deny_write_at("copy_path", dest.as_ref())?;
         let src = self.validate(source.as_ref())?;
         let dst = self.validate(dest.as_ref())?;
         let meta = match fs::symlink_metadata(&src) {
@@ -817,7 +820,7 @@ impl FsAccess {
     /// already at the path — directory or file alike — is an "exists" error, so
     /// this never adopts, clears, or merges into an existing directory.
     pub fn create_dir(&self, path: impl AsRef<Path>) -> FsResult<()> {
-        self.deny_write("create_dir")?;
+        self.deny_write_at("create_dir", path.as_ref())?;
         let target = self.validate(path.as_ref())?;
         if fs::symlink_metadata(&target).is_ok() {
             return Err(FsError::AlreadyExists { path: target });
@@ -841,7 +844,7 @@ impl FsAccess {
         chosen: &UserChosenPath,
         bytes: &[u8],
     ) -> FsResult<()> {
-        self.deny_write("write_bytes_at_user_choice")?;
+        self.deny_write_at("write_bytes_at_user_choice", chosen.as_path())?;
         let target = chosen.as_path();
         if !self.follow_symlinks {
             // No root to measure a component walk against here, so the leaf is

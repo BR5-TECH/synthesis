@@ -99,6 +99,10 @@ pub enum FsError {
     /// for writing. It is refused before any filesystem access, so nothing was
     /// touched.
     ReadOnly { operation: &'static str },
+    /// FSA-FR-RBGJ: a write aimed under a required root that does not exist.
+    /// Nothing was created, so a deleted worktree does not come back as a
+    /// directory with no Git files.
+    RootGone { root: PathBuf },
     /// FSA-FR-NRQE: `read_regular_bytes` met an entry that is not a regular
     /// file — a FIFO, a socket, a device, or a directory.
     NotRegular { path: PathBuf },
@@ -158,6 +162,9 @@ impl fmt::Display for FsError {
             ),
             FsError::ReadOnly { operation } => {
                 write!(f, "read only: {operation} is not allowed on this instance")
+            }
+            FsError::RootGone { root } => {
+                write!(f, "root_gone: {} does not exist", root.display())
             }
             FsError::NotRegular { path } => {
                 write!(f, "not a regular file: {}", path.display())

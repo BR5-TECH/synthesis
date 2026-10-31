@@ -24,6 +24,7 @@ FsAccess::builder()
     .allow_root(path)          // repeatable; at least one required
     .follow_symlinks(bool)     // default false
     .session_temp(bool)        // default false
+    .required_root(path)       // writes refused while it is gone (FSA-FR-RBGJ)
     .read_only_file(path)      // repeatable; the documents profile only (FSA-FR-DMKC)
     .read_only_folder(path)    // repeatable; the documents profile only (FSA-FR-DMKC)
     .build() -> Result<FsAccess, FsAccessBuildError>
@@ -66,7 +67,7 @@ Every method takes an absolute path and refuses one that resolves outside the al
 - **`ensure_gitignored(synthesis_dir)`** — guarantees `<synthesis_dir>/.gitignore` exists, ignores at least `cache/` and `local.toml`, and holds no `drafts/` entry (Notion: Project storage → Folder structure).
 - **`session_temp_dir()`** → `Option<Path>` — the scratch directory this instance created and allowlisted, or `None` when it was built without one.
 - **`write_bytes_at_user_choice(chosen, bytes)`** / **`write_text_at_user_choice(chosen, text)`** — the only writes that reach outside the allowlist, and they accept a `UserChosenPath` alone. Backs the log export of `LGC-logging.md` (LGC-FR-18).
-- Errors surface as typed failures distinguishing missing, unreadable, and (for the typed variants) malformed.
+- Errors surface as typed failures distinguishing missing, unreadable, and (for the typed variants) malformed. A write under a required root that does not exist fails with the typed `root_gone` (FSA-FR-RBGJ).
 
 ### Payload shapes
 ```
@@ -98,7 +99,10 @@ FileHandle       // a mode-bound, instance-bound open file (FSA-FR-26)
 2. **FSA-FR-02** `discover_project_root(start_path)` walks upward from `start_path` and returns the first ancestor (including `start_path` itself) that contains a `.synthesis/project.toml` file.
 3. **FSA-FR-03** When `discover_project_root` reaches the filesystem root without finding `.synthesis/project.toml`, it returns a typed "not a project" result; it does not return an arbitrary fallback path.
 4. **FSA-FR-04** `write_bytes_atomic` performs the write via a sibling temp file in the same directory followed by `rename`, so that an interrupted process never leaves the target file half-written. `write_text_atomic` and `write_toml_atomic` are layered on top of it and inherit the same guarantee.
-5. **FSA-FR-05** Every write primitive creates parent directories as needed before writing.
+5. **FSA-FR-05** Every write primitive creates parent directories as needed before writing, unless FSA-FR-RBGJ refuses the write.
+5. **FSA-FR-RBGJ** An instance holds a set of **required roots**. While a required root does not exist, a write primitive whose target lies under it refuses with the typed `root_gone`, creates nothing, and leaves the disk unchanged. A missing directory under a required root that exists is created as FSA-FR-05 states.
+    - *Why:* A write that recreated a deleted worktree would leave a directory with no Git files, which every Git read would then misreport.
+5. **FSA-FR-YYSR** The IDE instance (FSA-FR-21) and each agent instance (FSA-FR-29) hold the active worktree as a required root. `app_data_dir()`, `short_data_dir()` and a session temp directory are never required roots, so a write creates them on first use.
 6. **FSA-FR-06** `read_bytes`, `read_text`, and `read_toml` read the file's entire content into memory and distinguish three error cases: file does not exist, file exists but cannot be read (permissions, I/O), and — for `read_text` only — content is not valid UTF-8, or — for `read_toml` only — content cannot be deserialised into the requested type.
 7. **FSA-FR-07** `sha256_file` returns the SHA-256 of the file's exact byte content as a lowercase hex string and reads the file in a streaming manner that does not require holding the full content in memory.
 8. **FSA-FR-08** `ensure_gitignored(synthesis_dir)` creates `<synthesis_dir>/.gitignore` if missing and ensures it contains entries that exclude at minimum `cache/` and `local.toml`. It also **removes any entry that ignores `drafts/`**, draft storage being committed (per `DRS-draft-storage.md` DRS-FR-04). Existing user entries are otherwise preserved, missing required entries are appended, and no file outside `<synthesis_dir>/.gitignore` is read or written.

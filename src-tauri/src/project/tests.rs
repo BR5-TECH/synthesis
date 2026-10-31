@@ -370,6 +370,11 @@ fn opening_the_anchor_resumes_the_worktree_the_project_was_last_in() {
     let fallback = open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
     assert_eq!(fallback.active_worktree_path, primary.to_string_lossy());
     assert!(fallback.remembered_worktree_unavailable);
+
+    // WTC-FR-17, GSS-FR-16: the slot now names the primary worktree, so the next
+    // open has nothing to report.
+    let next = open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
+    assert!(!next.remembered_worktree_unavailable);
 }
 
 #[test]

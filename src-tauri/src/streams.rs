@@ -25,6 +25,7 @@ mod merge_progress;
 mod merge_snapshot;
 mod pull_apply;
 mod pull_reconcile;
+mod removal;
 mod semantic;
 mod semantic_turn;
 mod state;
@@ -45,6 +46,7 @@ pub use merge_handoff::*;
 pub(crate) use merge_snapshot::{has_ref as has_snapshot_ref, release_ref as release_snapshot_ref};
 pub use pull_apply::apply_pull_run;
 pub use pull_reconcile::{begin_pull, reconcile_pull_blocking};
+pub use removal::*;
 #[cfg(test)]
 pub(crate) use semantic_turn::merge_input_field_names;
 pub use state::{Reconciliation, StreamState};
@@ -65,6 +67,8 @@ pub const ERR_NOT_A_GIT_REPOSITORY: &str = "not_a_git_repository";
 pub const ERR_BASE_BRANCH_REQUIRED: &str = "base_branch_required";
 pub const ERR_STREAM_NAME_TAKEN: &str = "stream_name_taken";
 pub const ERR_STREAM_NAME_INVALID: &str = "stream_name_invalid";
+/// WKS-FR-HRUZ: the branch a name reduces to exists, and it names no live stream.
+pub const ERR_STREAM_BRANCH_EXISTS: &str = "stream_branch_exists";
 pub const ERR_STREAM_CREATION_FAILED: &str = "stream_creation_failed";
 pub const ERR_STREAM_CLEANUP_FAILED: &str = "stream_cleanup_failed";
 pub const ERR_UNKNOWN_STREAM: &str = "unknown_stream";
@@ -195,6 +199,8 @@ pub struct WorkStreamSummary {
     /// WKS-FR-SGCM: what this stream's last update did, or nothing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update: Option<StreamUpdateRecord>,
+    /// WKS-FR-AIWE: the branch is gone and the working copy directory is not.
+    pub branch_missing: bool,
 }
 
 /// WKS-FR-KHJS: what a stream's row knows of its merge run.

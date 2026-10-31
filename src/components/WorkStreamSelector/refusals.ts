@@ -28,6 +28,10 @@ export function refusalText(text: string): string {
     const where = detail ? `at ${detail}` : "at the configured path";
     return `The Docker socket is not available ${where}, so a conflicting merge cannot be handed off. Start Docker or restore the socket at that path, or correct the Docker-in-Docker socket path in Project settings, in the Docker section. Nothing was written.`;
   }
+  // WKS-FR-HRUZ, WSS-FR-KPER: the branch is the refusal's detail.
+  if (code === STREAM_ERRORS.branchExists) {
+    return `The branch ${detail ?? "of that name"} already exists. Choose another name, or delete that branch in the Git panel.`;
+  }
   const said: Record<string, string> = {
     [STREAM_ERRORS.notAGitRepository]: "This project is not inside a Git repository.",
     [STREAM_ERRORS.baseBranchRequired]:

@@ -34,6 +34,7 @@ const stream = (
   behindBase: 0,
   baseTipRevision: "a91bc04",
   missingCommits: [],
+  branchMissing: false,
 });
 
 /** GSD-FR-WQPD: a stream a run holds, which the new run waits behind. */
@@ -44,6 +45,7 @@ const busy = (id: string): WorkStreamSummary => ({
   behindBase: 0,
   baseTipRevision: "a91bc04",
   missingCommits: [],
+  branchMissing: false,
 });
 
 /** GSD-FR-WQPD: a stream with runs already queued on it. */
@@ -54,6 +56,7 @@ const queued = (id: string, count = 2): WorkStreamSummary => ({
   behindBase: 0,
   baseTipRevision: "a91bc04",
   missingCommits: [],
+  branchMissing: false,
 });
 
 let streams: WorkStreamSummary[];

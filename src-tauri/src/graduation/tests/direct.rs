@@ -624,6 +624,53 @@ fn a_dispatched_direct_run_blocks_a_switch_until_it_ends() {
     assert!(crate::graduation::require_no_dispatched_direct_run(&fx.app).is_ok());
 }
 
+/// WTC-FR-ZGYJ, WTC-FR-FBJQ: a dispatched direct run does not hold the project on
+/// a root that is gone, and it stays non-terminal, so the next switch is refused.
+#[test]
+fn leaving_a_gone_worktree_is_not_refused_by_a_direct_run() {
+    let fx = Fixture::new();
+    let run = fx.direct("work", "d1");
+    let interrupted = fx.drive(
+        &run,
+        ScriptedDispatch::new(vec![Turn::answering(Answer::Process(ProcessOutcome::Timeout))]),
+    );
+    assert_eq!(interrupted.state, GraduationRunState::Interrupted);
+    // What a re-root tears down, which no other test of this file reaches.
+    fx.app.manage(crate::watcher::ProjectWatcher::default());
+    fx.app.manage(crate::artifacts::ContentTracker::default());
+    fx.app.manage(crate::draft_watcher::DraftsWatcher::default());
+    fx.app.manage(crate::scanning::CandidateStore::default());
+    fx.app.manage(crate::scanning::AttributionBaseline::default());
+    fx.app.manage(crate::search::SearchRegistry::default());
+    let linked = fx.root().with_extension("linked");
+    crate::worktree::create_worktree_at(&fx.root(), "linked", &linked.to_string_lossy())
+        .expect("a linked worktree");
+    let project = fx.app.state::<crate::project::ProjectState>();
+    project.set_root(crate::changes::canonicalize_lenient(&linked));
+    std::fs::remove_dir_all(&linked).expect("removed");
+    let refused = crate::graduation::require_no_dispatched_direct_run(&fx.app).unwrap_err();
+    assert!(refused.starts_with(crate::worktree::ERR_DIRECT_GRADUATION_ACTIVE), "{refused}");
+
+    let context = crate::worktree::leave_gone_worktree_at(
+        &fx.app,
+        &project,
+        &fx.app.state::<crate::watcher::ProjectWatcher>(),
+        &fx.app.state::<crate::global_settings::GlobalSettingsStore>(),
+    )
+    .expect("the way out is open");
+
+    assert_eq!(context.active_worktree_path, fx.root().to_string_lossy());
+    // The re-root installed the application's own instance, which does not reach
+    // this test's store, so the test's own instance goes back in first.
+    let base = crate::graduation::store_base(&fx.app).expect("base");
+    fx.app
+        .state::<crate::fs::FsAccessState>()
+        .install_for_worktree_and(&fx.root(), &base.root)
+        .expect("two real directories");
+    let refused = crate::graduation::require_no_dispatched_direct_run(&fx.app).unwrap_err();
+    assert!(refused.starts_with(crate::worktree::ERR_DIRECT_GRADUATION_ACTIVE), "{refused}");
+}
+
 /// WTC-FR-FBJQ, WTC-FR-TXKY: a paused run still blocks, and so does an
 /// interrupted one; each route refuses with the same typed error and changes
 /// nothing.

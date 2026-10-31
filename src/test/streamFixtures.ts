@@ -45,6 +45,7 @@ export function summary(
     queuedRunCount?: number;
     mergeRun?: StreamMergeRunLink | null;
     update?: StreamUpdateRecord | null;
+    branchMissing?: boolean;
   } = {},
 ): WorkStreamSummary {
   const behindBase = counts.behindBase ?? 0;
@@ -65,6 +66,7 @@ export function summary(
     // none; a fixture omits the key, which a reader treats the same way.
     ...(counts.mergeRun ? { mergeRun: counts.mergeRun } : {}),
     ...(counts.update ? { update: counts.update } : {}),
+    branchMissing: counts.branchMissing ?? false,
   };
 }
 

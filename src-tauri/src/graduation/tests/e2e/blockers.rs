@@ -119,7 +119,7 @@ fn an_unreadable_verdict_repeated_after_continue_rests_the_run_for_the_author() 
         .expect_committed_paths(&["src/panel.ts"]);
 }
 
-// GTE-FR-TPLD / GRD-FR-QJHM, GXD-FR-TJRV, GXD-FR-GMDI: a stream whose working
+// GTE-FR-TPLD / GRD-FR-QJHM, GXD-FR-TJRV, GXD-FR-GMDI, WKS-FR-FQAE: a stream whose working
 // copy went while its run rested blocks on `stream_missing` with no dispatch.
 // The change set the run held is kept, and so is the phase it resumes at.
 #[test]
@@ -134,6 +134,7 @@ fn a_stream_whose_working_copy_went_while_resting_blocks_on_stream_missing() {
         .continued(Vec::new())
         .expect_state(GraduationRunState::Blocked)
         .expect_blocker("stream_missing")
+        .expect_blocker_clears_by("Discard this run. The stream is then removed.")
         .expect_blocker_attempt(1)
         .expect_dispatch_count(0)
         .expect_checkpoint_paths(&["src/panel.ts"])

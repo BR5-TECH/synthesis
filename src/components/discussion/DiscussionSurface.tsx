@@ -29,6 +29,7 @@ import { agentRoster } from "../agentTags";
 import { DiscussionQuestions } from "../DiscussionQuestions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import { StreamMessages } from "../DraftDiscussion/stream";
+import { VoiceSessionBar } from "./VoiceSessionBar";
 import { commentErrorMessage, turnFailureMessage } from "./messages";
 import { pairedHalves } from "./questionPairs";
 import { useDiscussionRuntime } from "../../hooks/useDiscussionRuntime";
@@ -47,6 +48,7 @@ import {
   useDiscussionSession,
 } from "../../state/discussionSession";
 import { useQuestionSet } from "../../state/questionSets";
+import { useVoiceState } from "../../state/voiceSession";
 import {
   AGENT_TURN_FAILURES,
   discussionDraftId,
@@ -151,8 +153,6 @@ export interface DiscussionSurfaceProps {
   beforeComment?: (commentId: string, index: number) => React.ReactNode;
   /** ACT-FR-QWNP: raised to put the caret in the composer. */
   composerFocusSignal?: number;
-  /** Show the post accelerator hint beside the composer (DDS-FR-HQTX). */
-  showAcceleratorHint?: boolean;
 }
 
 export function DiscussionSurface(props: DiscussionSurfaceProps) {
@@ -184,6 +184,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
   const pairing = useMemo(() => pairedHalves(thread.comments), [thread.comments]);
   // DQA-FR-NRZB: the set a discussion holds, whatever it is about.
   const questionSet = useQuestionSet(thread.id);
+  const voice = useVoiceState();
   const quoted = discussionFragment(thread);
 
   /**
@@ -532,6 +533,14 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         </p>
       )}
 
+      {/* VOM-FR-VGLT: the composer is gone, and the microphone stays open. */}
+      {questionSet && composerOpen && voice.vadOpen && voice.activeKey === thread.id && (
+        <VoiceSessionBar
+          sessionKey={thread.id}
+          voiceOf={(agentId) => agents.find((a) => a.agent.id === agentId)?.agent.voice || null}
+        />
+      )}
+
       {/* CMT-FR-16: a resolved discussion renders no composer, and its
           messages stay fully readable. */}
       {composerShown && (
@@ -547,7 +556,6 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
           attachDismissSignal={menuOpenings}
           dismissSignal={menu.open ? 1 : 0}
           focusSignal={props.composerFocusSignal}
-          showAcceleratorHint={props.showAcceleratorHint ?? stream}
           turnDeadline={turnDeadline}
         />
       )}

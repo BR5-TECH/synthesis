@@ -75,17 +75,54 @@ export const retryVoiceCapture = (sessionId: string) =>
 export const cancelVoiceCapture = (sessionId: string) =>
   invoke<void>("cancel_voice_capture", { sessionId });
 
-/** VOP-FR-MOSY, VOP-FR-XZET: resolves when the segment ends. */
+/** VOP-FR-XZET. */
+const FRAME_END = 2;
+
+/**
+ * VOP-FR-MOSY, VOP-FR-XZET: resolves at the end frame, and not when the command
+ * resolves. A large frame comes through a fetch of its own, so it can arrive
+ * after the command. A failed command rejects, and it sends no end frame.
+ */
 export const speakVoiceSegment = (
   speechId: string,
   text: string,
   voiceName: string | null,
   onFrame: (frame: ArrayBuffer) => void,
-) => {
-  const channel = new Channel<ArrayBuffer>();
-  channel.onmessage = onFrame;
-  return invoke<void>("speak_voice_segment", { speechId, text, voiceName, onFrame: channel });
-};
+) =>
+  new Promise<void>((resolve, reject) => {
+    const channel = new Channel<ArrayBuffer>();
+    channel.onmessage = (frame) => {
+      if (new Uint8Array(frame)[0] === FRAME_END) resolve();
+      else onFrame(frame);
+    };
+    invoke<void>("speak_voice_segment", { speechId, text, voiceName, onFrame: channel }).catch(
+      reject,
+    );
+  });
 
 export const cancelVoiceSpeech = (speechId: string) =>
   invoke<void>("cancel_voice_speech", { speechId });
+
+/** VOP-FR-WYKO. */
+export const openVoiceActivitySession = (captureRate: number, keyterms: readonly string[]) =>
+  invoke<{ activityId: string }>("open_voice_activity_session", { captureRate, keyterms });
+
+/** VOP-FR-TADX: the request form of "append voice capture". */
+export const feedVoiceActivity = (activityId: string, bytes: Uint8Array) =>
+  invoke<void>("feed_voice_activity", bytes, { headers: { "x-voice-session": activityId } });
+
+/** VOP-FR-QZCE: one whole record, so that no push depends on an earlier one. */
+export const setVoiceActivityGate = (
+  activityId: string,
+  gate: {
+    seq: number;
+    blocked: boolean;
+    playing: boolean;
+    settled: string | null;
+    keyterms: readonly string[];
+  },
+) => invoke<void>("set_voice_activity_gate", { activityId, ...gate });
+
+/** VOP-FR-FAAB: gives the id of a capture that has not settled. */
+export const closeVoiceActivitySession = (activityId: string, discard: boolean) =>
+  invoke<{ captureId: string | null }>("close_voice_activity_session", { activityId, discard });

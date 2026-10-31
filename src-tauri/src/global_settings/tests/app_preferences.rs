@@ -173,6 +173,8 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
         .save_app_preferences(AppPreferences {
             voice_hotkey: String::new(),
             voice_hotkey_behaviour: Default::default(),
+            voice_vad_silence_ms: 700,
+            voice_vad_sensitivity: VoiceVadSensitivity::High,
             theme: Theme::System,
             main_window_fullscreen: true,
             search_query_mode: SearchQueryMode::Regex,
@@ -401,4 +403,61 @@ fn voice_preferences_survive_a_write_of_another_field() {
     let held = store.load_app_preferences().unwrap();
     assert_eq!(held.voice_hotkey, "Ctrl+Alt+B");
     assert_eq!(held.voice_hotkey_behaviour, VoiceHotkeyBehaviour::Toggle);
+}
+
+// ---- VAD settings (GSS-FR-KOAB) -------------------------------
+
+#[test]
+fn vad_settings_default_for_a_record_from_an_earlier_build() {
+    // GSS-FR-KOAB: a record with no such fields reads back with the defaults.
+    let read: AppPreferences = toml::from_str("theme = \"dark\"\n").unwrap();
+    assert_eq!(read.voice_vad_silence_ms, 1500);
+    assert_eq!(read.voice_vad_sensitivity, VoiceVadSensitivity::Medium);
+    assert_eq!(AppPreferences::default().voice_vad_silence_ms, 1500);
+}
+
+#[test]
+fn a_vad_setting_of_the_wrong_type_reads_as_unset_and_the_rest_of_the_file_stays() {
+    // GSS-FR-KOAB: a bad value does not reset the other fields of the file.
+    let read: AppPreferences = toml::from_str(
+        "theme = \"dark\"\nvoiceVadSilenceMs = \"soon\"\nvoiceVadSensitivity = \"loud\"\n",
+    )
+    .unwrap();
+    assert_eq!(read.theme, Theme::Dark);
+    assert_eq!(read.voice_vad_silence_ms, 1500);
+    assert_eq!(read.voice_vad_sensitivity, VoiceVadSensitivity::Medium);
+
+    let negative: AppPreferences = toml::from_str("voiceVadSilenceMs = -4\n").unwrap();
+    assert_eq!(negative.voice_vad_silence_ms, 1500);
+}
+
+#[test]
+fn vad_settings_survive_a_write_of_another_field() {
+    // GSS-FR-KOAB, GSS-FR-04, GSS-FR-20: a caller that edits another field carries
+    // both fields through, and they reach the file.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("synthesis.toml");
+    let store = GlobalSettingsStore::with_path(path.clone());
+    let prefs = AppPreferences {
+        voice_vad_silence_ms: 2300,
+        voice_vad_sensitivity: VoiceVadSensitivity::Low,
+        ..Default::default()
+    };
+    store.save_app_preferences(prefs).unwrap();
+    let mut editing = store.load_app_preferences().unwrap();
+    editing.theme = Theme::Dark;
+    store.save_app_preferences(editing).unwrap();
+
+    let held = GlobalSettingsStore::with_path(path).load_app_preferences().unwrap();
+    assert_eq!(held.theme, Theme::Dark);
+    assert_eq!(held.voice_vad_silence_ms, 2300);
+    assert_eq!(held.voice_vad_sensitivity, VoiceVadSensitivity::Low);
+}
+
+#[test]
+fn a_stored_value_out_of_range_is_returned_as_stored() {
+    // GSS-FR-KOAB: the store does not clamp. The reader does
+    // (`VOP-voice-ai-providers.md` VOP-FR-DSNZ).
+    let read: AppPreferences = toml::from_str("voiceVadSilenceMs = 90000\n").unwrap();
+    assert_eq!(read.voice_vad_silence_ms, 90000);
 }

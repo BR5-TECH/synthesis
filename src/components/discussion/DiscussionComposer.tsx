@@ -42,6 +42,7 @@ import {
   bindVoiceToDiscussion,
   enterVoiceMode,
   leaveVoiceMode,
+  noteComposerChanged,
   registerVoiceComposer,
   type PostOutcome,
 } from "../../voice/voiceController";
@@ -66,7 +67,7 @@ import {
   type FragmentTarget,
   type ProjectAgent,
 } from "../../types";
-import { isPostAccelerator, postAcceleratorHint } from "./composerKeys";
+import { isPostAccelerator } from "./composerKeys";
 import { useParticipantLabel } from "../../state/projectIdentity";
 import type { TurnDeadline } from "../../state/turnDeadline";
 import { TimeoutBar } from "./TimeoutBar";
@@ -95,8 +96,6 @@ interface ComposerCommon {
   ariaLabel?: string;
   /** Overrides the placeholder. A reply names who an untagged message reaches. */
   placeholder?: string;
-  /** Show the hint of the post accelerator beside the field (DDS-FR-HQTX). */
-  showAcceleratorHint?: boolean;
   /**
    * Raised by an owner to put the caret in the field. A counter, because two
    * requests must both move focus (ACT-FR-QWNP).
@@ -296,6 +295,11 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
     [sessionKey],
   );
 
+  // VOP-FR-QZCE, VOM-FR-LNUH: an open VAD session follows the composer.
+  useEffect(() => {
+    noteComposerChanged();
+  }, [disabled, blocked, resolved, roster]);
+
   // VOM-FR-LAQO: the field is hidden, so focus goes to the record control.
   useEffect(() => {
     if (voiceOn && !expanded) {
@@ -441,11 +445,6 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
             }}
             dismissSignal={props.dismissSignal}
           />
-          {props.showAcceleratorHint && (
-            <span className="kbd dds-reply__kbd" aria-hidden="true">
-              {postAcceleratorHint()}
-            </span>
-          )}
           {/* CMT-FR-11: rendered only while there is something to discard. */}
           {showDiscard && (
             <button

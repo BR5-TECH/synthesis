@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 const controller = vi.hoisted(() => ({
+  noteActivity: vi.fn(),
   noteDiscussionChanged: vi.fn(),
   noteProvider: vi.fn(),
   noteTranscript: vi.fn(),
@@ -21,6 +22,7 @@ const handlers = vi.hoisted(() => ({
   voice: null as null | ((list: unknown) => void),
   discussion: null as null | ((d: unknown) => void),
   transcript: null as null | ((change: { sessionId: string; text: string }) => void),
+  activity: null as null | ((change: unknown) => void),
 }));
 
 vi.mock("../voice/voiceController", () => controller);
@@ -38,6 +40,10 @@ vi.mock("../events", () => ({
   }),
   onVoiceAiChanged: vi.fn(async (handler: (list: unknown) => void) => {
     handlers.voice = handler;
+    return () => undefined;
+  }),
+  onVoiceActivityChanged: vi.fn(async (handler: (change: unknown) => void) => {
+    handlers.activity = handler;
     return () => undefined;
   }),
   onVoiceTranscriptChanged: vi.fn(
@@ -74,6 +80,13 @@ async function mount() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Object.assign(handlers, {
+    preferences: null,
+    voice: null,
+    discussion: null,
+    transcript: null,
+    activity: null,
+  });
   resetAppPreferencesCache();
   resetVoiceStateForTest();
   controller.voiceComposerMounted.mockReturnValue(true);
@@ -200,6 +213,41 @@ describe("the events of the shell", () => {
     fireEvent.keyDown(record, { ...CHORD, key: " " });
     expect(controller.pressRecord).toHaveBeenCalledTimes(1);
     expect(buttonKey).not.toHaveBeenCalled();
+  });
+});
+
+describe("VAD mode", () => {
+  it("VOM-FR-WPRW: the hotkey does nothing, and it does not reach the record control", async () => {
+    const view = await mount();
+    patchVoiceState({ inputMode: "vad" });
+    view.getByTestId("record").focus();
+    const stopped = !fireEvent.keyDown(view.getByTestId("record"), CHORD);
+    expect(stopped).toBe(true);
+    expect(controller.pressRecord).not.toHaveBeenCalled();
+    expect(buttonKey).not.toHaveBeenCalled();
+    fireEvent.keyUp(window, CHORD);
+    expect(controller.releaseRecord).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-WPRW, VOM-FR-SAMO: a repeated key does nothing", async () => {
+    await mount();
+    patchVoiceState({ inputMode: "vad" });
+    fireEvent.keyDown(window, { ...CHORD, repeat: true });
+    expect(controller.pressRecord).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-HXLV: in a text field, the event is not stopped", async () => {
+    const view = await mount();
+    patchVoiceState({ inputMode: "vad" });
+    expect(fireEvent.keyDown(view.getByTestId("field"), CHORD)).toBe(true);
+  });
+
+  it("VOM-FR-NZXN: an activity event reaches the controller", async () => {
+    await mount();
+    await waitFor(() => expect(handlers.activity).not.toBeNull());
+    const change = { activityId: "va1", state: "misfire" };
+    handlers.activity?.(change);
+    expect(controller.noteActivity).toHaveBeenCalledWith(change);
   });
 });
 

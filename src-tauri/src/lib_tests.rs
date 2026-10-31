@@ -40,6 +40,7 @@ const EVENT_NAMES: &[&str] = &[
     logging::LOG_RECORDS_APPENDED,
     voice_ai::VOICE_AI_CHANGED,
     voice_ai::VOICE_TRANSCRIPT_CHANGED,
+    voice_ai::VOICE_ACTIVITY_CHANGED,
     notifications::NOTIFICATION_ACTIVATED,
     graduation::GRADUATION_QUEUE_CHANGED,
     streams::WORK_STREAMS_CHANGED,

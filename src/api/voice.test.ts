@@ -12,7 +12,11 @@ vi.mock("@tauri-apps/api/core", () => core);
 
 import {
   appendVoiceCapture,
+  closeVoiceActivitySession,
+  feedVoiceActivity,
   listVoiceAiVoices,
+  openVoiceActivitySession,
+  setVoiceActivityGate,
   setVoiceAiDefaultVoice,
   setVoiceAiRoutes,
   speakVoiceSegment,
@@ -21,6 +25,41 @@ import {
 } from "./voice";
 
 beforeEach(() => core.invoke.mockClear());
+
+describe("the voice activity commands", () => {
+  it("VOP-FR-WYKO: open takes the rate and the keyterms", async () => {
+    await openVoiceActivitySession(48_000, ["arch"]);
+    expect(core.invoke).toHaveBeenCalledWith("open_voice_activity_session", {
+      captureRate: 48_000,
+      keyterms: ["arch"],
+    });
+  });
+
+  it("VOP-FR-TADX: audio goes as a raw body, with its session in a header", async () => {
+    const bytes = new Uint8Array([1, 2]);
+    await feedVoiceActivity("va1", bytes);
+    expect(core.invoke).toHaveBeenCalledWith("feed_voice_activity", bytes, {
+      headers: { "x-voice-session": "va1" },
+    });
+  });
+
+  it("VOP-FR-QZCE: the gate goes as one whole record", async () => {
+    const gate = { seq: 2, blocked: true, playing: false, settled: "c1", keyterms: ["arch"] };
+    await setVoiceActivityGate("va1", gate);
+    expect(core.invoke).toHaveBeenCalledWith("set_voice_activity_gate", {
+      activityId: "va1",
+      ...gate,
+    });
+  });
+
+  it("VOP-FR-FAAB: close takes the session and `discard`", async () => {
+    await closeVoiceActivitySession("va1", true);
+    expect(core.invoke).toHaveBeenCalledWith("close_voice_activity_session", {
+      activityId: "va1",
+      discard: true,
+    });
+  });
+});
 
 describe("the voice commands", () => {
   it("VOP-FR-DXPK: audio goes as a raw body, with its session in a header", async () => {
@@ -31,17 +70,52 @@ describe("the voice commands", () => {
     });
   });
 
+  type SpeakArgs = {
+    speechId: string;
+    text: string;
+    voiceName: string;
+    onFrame: InstanceType<typeof core.Channel>;
+  };
+  const speakCall = () => core.invoke.mock.calls[0] as unknown as [string, SpeakArgs];
+  const END = new Uint8Array([2, 0, 0, 0, 0]).buffer;
+
+  async function ticks() {
+    await new Promise((done) => setTimeout(done, 0));
+  }
+
   it("VOP-FR-MOSY, VOP-FR-XZET: a segment gets a channel that delivers each frame", async () => {
     const frames: ArrayBuffer[] = [];
-    await speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
-    const [command, args] = core.invoke.mock.calls[0] as unknown as [
-      string,
-      { speechId: string; text: string; voiceName: string; onFrame: InstanceType<typeof core.Channel> },
-    ];
+    const segment = speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
+    const [command, args] = speakCall();
     expect(command).toBe("speak_voice_segment");
     expect(args).toMatchObject({ speechId: "id", text: "text", voiceName: "cedar" });
     args.onFrame.onmessage?.(new ArrayBuffer(4));
     expect(frames).toHaveLength(1);
+    args.onFrame.onmessage?.(END);
+    await segment;
+    expect(frames).toHaveLength(1);
+  });
+
+  it("VOP-FR-MOSY, VOM-FR-SJYH: a frame that comes after the command is not lost", async () => {
+    const frames: ArrayBuffer[] = [];
+    let ended = false;
+    const segment = speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
+    void segment.then(() => (ended = true));
+    await ticks();
+    expect(core.invoke).toHaveBeenCalledTimes(1);
+    expect(ended).toBe(false);
+    const [, args] = speakCall();
+    args.onFrame.onmessage?.(new ArrayBuffer(4096));
+    args.onFrame.onmessage?.(END);
+    await segment;
+    expect(frames).toHaveLength(1);
+  });
+
+  it("VOP-FR-MOSY: a failed segment rejects with no end frame", async () => {
+    core.invoke.mockRejectedValueOnce("speech_failed");
+    await expect(speakVoiceSegment("id", "text", null, () => undefined)).rejects.toBe(
+      "speech_failed",
+    );
   });
 
   it("VOP-FR-GVTD: argument names match the commands", async () => {

@@ -46,6 +46,7 @@ pub mod logging;
 pub mod menu;
 pub mod notes;
 pub mod notifications;
+mod onnx_runtime;
 pub mod progress;
 pub mod project;
 pub mod project_settings;
@@ -306,6 +307,10 @@ pub fn run() {
             voice_ai::cancel_voice_capture,
             voice_ai::speak_voice_segment,
             voice_ai::cancel_voice_speech,
+            voice_ai::open_voice_activity_session,
+            voice_ai::feed_voice_activity,
+            voice_ai::set_voice_activity_gate,
+            voice_ai::close_voice_activity_session,
             settings::list_recent_projects,
             project::open_project_at_path,
             project::open_project_from_git_url,
@@ -632,6 +637,8 @@ pub fn run() {
                 // and withdrawing there would clear notifications the author is
                 // still able to act on.
                 notifications::withdraw_all_on_exit(app);
+                // VOP non-functional: application exit ends a VAD session.
+                let _ = app.state::<voice_ai::VoiceAi>().end_activity();
             }
         });
 }

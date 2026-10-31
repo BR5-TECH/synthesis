@@ -395,6 +395,12 @@ describe("Push-to-Talk", () => {
     );
   });
 
+  it("VAI-FR-HVNJ, VAI-FR-RASA: the controls state that they apply to Push-to-Talk only", async () => {
+    await open();
+    expect(screen.getByTestId("voice-ptt-scope")).toHaveTextContent(/Push-to-Talk only/);
+    expect(screen.getByTestId("voice-vad-settings")).toBeInTheDocument();
+  });
+
   it("VAI-FR-AVBR: a save tells the other window", async () => {
     await open();
     fireEvent.click(screen.getByRole("radio", { name: "Toggle" }));

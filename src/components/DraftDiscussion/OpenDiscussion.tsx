@@ -182,7 +182,6 @@ export function OpenDiscussion({
         error={error}
         ariaLabel={`Discuss this ${noun}`}
         placeholder={`Ask an agent about this ${noun}…`}
-        showAcceleratorHint
         alwaysShowCancel={fragment !== null || hunk !== null}
         extraAttachments={hunk !== null ? [hunk.reference] : undefined}
         onOpen={onOpen}

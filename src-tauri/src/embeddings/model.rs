@@ -209,7 +209,10 @@ impl EmbedderFactory for FastEmbedFactory {
         let cache_dir = self.cache_dir()?;
         match &spec.source {
             ModelSource::Onnx { model, .. } => {
+                // `ort` allows one environment per process, and the voice
+                // detector needs it too.
                 let options = fastembed::TextInitOptions::new(model.clone())
+                    .with_environment(crate::onnx_runtime::shared_environment()?)
                     .with_cache_dir(cache_dir)
                     .with_max_length(MAX_TOKENS)
                     .with_show_download_progress(false);

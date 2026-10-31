@@ -53,3 +53,16 @@ export interface VoiceModels {
 
 /** VAI-FR-HVNJ. */
 export type VoiceHotkeyBehaviour = "hold" | "toggle";
+
+/** GSS-FR-KOAB. */
+export type VoiceVadSensitivity = "low" | "medium" | "high";
+
+/** VOP "Records": what `voice-activity-changed` carries. */
+export interface VoiceActivityChange {
+  activityId: string;
+  state: "speech_start" | "speech_confirmed" | "speech_end" | "misfire" | "failed";
+  captureId: string | null;
+  live: boolean | null;
+  code: string | null;
+  fatal: boolean | null;
+}

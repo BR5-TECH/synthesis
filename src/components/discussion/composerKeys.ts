@@ -45,9 +45,3 @@ export function isPostAccelerator(event: PostKeyEvent): boolean {
   return !isImeComposing(event);
 }
 
-/** The hint the composer shows for the accelerator, in the platform's own words. */
-export function postAcceleratorHint(
-  platform: string = typeof navigator === "undefined" ? "" : navigator.platform,
-): string {
-  return /mac|iphone|ipad/i.test(platform) ? "⌘↵" : "Ctrl↵";
-}

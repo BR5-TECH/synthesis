@@ -3,7 +3,7 @@
 **Spec code:** `VAI`
 
 ## Intent
-Voice AI is the section of the Settings window where the author chooses the speech provider and the Push-to-Talk key. A person who wants to talk with an agent must tell Synthesis which service turns speech into text and text into speech. That service is separate from the AI that answers. So the section has its own keys, and it is not a third level of `AII-ai-integrations.md`. Verification tells the author what a server can do, because two servers with the same address format can offer very different routes. Out of scope: voice activity detection, an OS-wide hotkey, and the voice of an agent, which the persona editor holds (`AGT-agents.md` AGT-FR-DIVM).
+Voice AI is the section of the Settings window where the author chooses the speech provider, the Push-to-Talk key, and how VAD hears them. A person who wants to talk with an agent must tell Synthesis which service turns speech into text and text into speech. That service is separate from the AI that answers. So the section has its own keys, and it is not a third level of `AII-ai-integrations.md`. Verification tells the author what a server can do, because two servers with the same address format can offer very different routes. Out of scope: voice activity detection on a server or a provider, an OS-wide hotkey, and the voice of an agent, which the persona editor holds (`AGT-agents.md` AGT-FR-DIVM).
 
 ## Functional requirements
 
@@ -43,13 +43,21 @@ Voice AI is the section of the Settings window where the author chooses the spee
 
 ### Push-to-Talk
 
-26. **VAI-FR-HVNJ** The section holds a Push-to-Talk behaviour control with two values: **Hold** and **Toggle**. The default is Hold. It saves through `patchAppPreferences`.
-27. **VAI-FR-RASA** The section holds a hotkey capture control. The default hotkey is `Ctrl+Shift+Space`. A control to restore the default is present.
+26. **VAI-FR-HVNJ** The section holds a Push-to-Talk behaviour control, labelled as applying to Push-to-Talk only, with two values: **Hold** and **Toggle**. The default is Hold. It saves through `patchAppPreferences`.
+27. **VAI-FR-RASA** The section holds a hotkey capture control, labelled as applying to Push-to-Talk only. The default hotkey is `Ctrl+Shift+Space`. A control to restore the default is present.
 28. **VAI-FR-FRJY** A captured hotkey holds at least one modifier, or it is a function key. The control refuses each other chord with an inline message.
 29. **VAI-FR-BGBL** The control refuses a chord the application already binds, on Ctrl or Cmd: Z, Shift+Z, X, C, V, A, S, F, R, Q, J, K, Backslash, Enter; and Alt+Up, Alt+Down. It names the reason inline.
 30. **VAI-FR-WOCD** With Hold behaviour, the control refuses a chord that holds Cmd. Choosing Hold while the stored chord holds Cmd restores the default hotkey and states this inline.
     - *Why:* macOS does not report `keyup` of a key released while Cmd is held, so a held recording never ends.
-31. **VAI-FR-AVBR** A change of behaviour or hotkey reaches the main window through the app-preferences change event, with no restart.
+31. **VAI-FR-AVBR** A change of behaviour or hotkey reaches the main window through the app-preferences change event, with no restart. A change of a VAD setting reaches an open session from its next utterance, with no restart.
+
+### VAD
+
+32. **VAI-FR-MHHE** The section holds a **Silence timeout** control. Its range is 0.5 s to 5 s, in steps of 0.1 s. The default is 1.5 s.
+33. **VAI-FR-ACFG** The section holds a **Sensitivity** control with three levels: Low, Medium, and High. The default is Medium.
+34. **VAI-FR-NWOW** Both controls save through `patchAppPreferences`, and they apply at once.
+35. **VAI-FR-MZZU** Both controls state that they apply to VAD only.
+36. **VAI-FR-WVEV** A stored Silence timeout out of range shows clamped to the range.
 
 ## Wireframes
 
@@ -70,6 +78,10 @@ Transcription [ Realtime v ]   Speech [ Realtime v ]
 Push-to-Talk
 Behaviour  ( ) Hold  ( ) Toggle
 Hotkey     [ Ctrl+Shift+Space ]  [ Restore default ]
+
+VAD
+Silence timeout  ---o-------  1.5 s
+Sensitivity      ( ) Low  ( ) Medium  ( ) High
 ```
 
 ## UI contract boundary

@@ -245,7 +245,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     expect(rows[1]).toHaveTextContent("no-such-model");
   });
 
-  it("AGT-FR-12: opens a modal editor with the five controls in order, empty or seeded", async () => {
+  it("AGT-FR-12: opens a modal editor with the six controls in order, empty or seeded", async () => {
     // AGT-FR-12 / AGT-FR-11, FR-12, and AGT-FR-42, AGT-FR-19, AGR-FR-23's ordering clause.
     backend({
       agents: [
@@ -346,6 +346,57 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     expect(draft.title).toBe("Architect");
     // And nothing else about the persona moved with it.
     expect(draft.nickname).toBe("arch");
+  });
+
+  it("AGT-FR-DIVM, AGT-FR-12: the voice selector offers the voices and saves the choice", async () => {
+    const b = backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
+    const inner = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "list_voice_ai_voices") return Promise.resolve(["marin", "cedar"]);
+      if (cmd === "list_voice_ai_integrations") {
+        return Promise.resolve({ active: "openai", records: [] });
+      }
+      return inner(cmd, args);
+    });
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    const editor = await screen.findByTestId("agent-editor");
+    await within(editor).findByRole("option", { name: "cedar" });
+    const voice = within(editor).getByTestId("agent-voice");
+    await waitFor(() => expect(voice).toBeEnabled());
+    await userEvent.selectOptions(voice, "cedar");
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "update_agent")).toHaveLength(1));
+    const { draft } = calls(b, "update_agent")[0].args as { draft: Agent };
+    expect(draft.voice).toBe("cedar");
+  });
+
+  it("AGT-FR-DIVM: a free-text server gets a field, and no provider disables it", async () => {
+    backend({ agents: [agent({ id: "a1", nickname: "arch", voice: "female" })] });
+    const inner = invokeMock.getMockImplementation()!;
+    let active: string | null = "custom";
+    invokeMock.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "list_voice_ai_voices") return Promise.resolve(null);
+      if (cmd === "list_voice_ai_integrations") {
+        return Promise.resolve({ active, records: [] });
+      }
+      return inner(cmd, args);
+    });
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    let editor = await screen.findByTestId("agent-editor");
+    await waitFor(() => expect(within(editor).getByTestId("agent-voice")).toBeEnabled());
+    expect(within(editor).getByTestId("agent-voice").tagName).toBe("INPUT");
+    expect(within(editor).getByTestId("agent-voice")).toHaveValue("female");
+
+    cleanup();
+    active = null;
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    editor = await screen.findByTestId("agent-editor");
+    const voice = within(editor).getByTestId("agent-voice");
+    expect(voice).toBeDisabled();
+    expect(voice).toHaveValue("female");
   });
 
   it("saves an untitled agent with an empty title rather than omitting the field", async () => {

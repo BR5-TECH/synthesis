@@ -1,3 +1,4 @@
+import { VoiceAiSettings } from "./VoiceAiSettings";
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import {
@@ -80,6 +81,9 @@ export const GLOBAL_SECTIONS: [GlobalSectionKey, string][] = [
   // (GLS-FR-16, GLS-FR-24, `AII-ai-integrations.md` AII-FR-54).
   ["ai-api", "AI API"],
   ["ai-agentic", "Agentic AI"],
+  // GLS-FR-03, GLS-FR-GMTK: the speech providers. A section of its own, and no
+  // level of `AII-ai-integrations.md`.
+  ["voice-ai", "Voice AI"],
   // GLS-FR-03 / GLS-FR-JDUM: the Indexing section, after the two AI sections
   // because the model it picks runs on this machine for search — the third
   // kind of AI the application uses. Every change in it applies immediately
@@ -755,6 +759,8 @@ export function GlobalSettings({
           wholly its own (AII-FR-02). */}
       {section === "ai-api" && <AiApiIntegrations />}
       {section === "ai-agentic" && <AgenticAiIntegrations />}
+      {/* GLS-FR-GMTK, VAI-FR-QARI: each action applies at once. */}
+      {section === "voice-ai" && <VoiceAiSettings />}
       {/* GLS-FR-UWFA: every change applies immediately through its own
           operation, so the section never contributes to the window's
           save-before-close sweep (GLS-FR-13, SWN-FR-08). */}

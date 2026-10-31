@@ -14,6 +14,7 @@ export * from "./statistics";
 export * from "./graduation";
 export * from "./graduationLogs";
 export * from "./streams";
+export * from "./voice";
 export * from "./agentActivity";
 export * from "./seeds";
 export * from "./progress";

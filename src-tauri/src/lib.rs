@@ -65,6 +65,7 @@ pub mod streams;
 pub mod text_hunks;
 pub mod tls;
 pub mod tools;
+pub mod voice_ai;
 pub mod watcher;
 pub mod window;
 pub mod worktree;
@@ -104,6 +105,9 @@ pub fn run() {
         // binary what it is. The registry is NOT here — it lives in the
         // user-global store above (GSS-FR-14).
         .manage(agentic::AgenticIntegrations::default())
+        // VOP-FR-ZSXI, VOP-FR-KBPZ: the vault namespace of provider keys, and
+        // the one capture session. The registry lives in the store above.
+        .manage(voice_ai::VoiceAi::default())
         // GSS-FR-37 / GSS-FR-38: the filesystem probe, the child-process
         // runner, and the Docker Engine connection the Docker backend commands
         // reach the outside world through, held in state so a test swaps any of
@@ -206,6 +210,11 @@ pub fn run() {
             // NTD-FR-DMYR: first, so a click that launched the application
             // reaches the notification delegate.
             notifications::install(app.handle());
+            // VOP-FR-BSNY.
+            voice_ai::start_watchdog(app.handle().clone());
+            // VOP-FR-MNTN: WebKitGTK denies capture without a handler.
+            #[cfg(target_os = "linux")]
+            voice_ai::linux_media::install(app.handle());
             // FSA-FR-21: the pre-project instance — `app_data_dir()` and a
             // session temp directory, symlinks refused. It is what serves the
             // recent-projects list and the log buffer before any project root
@@ -282,6 +291,21 @@ pub fn run() {
         // it fires only once the last window is already gone.
         .on_window_event(menu::handle_window_event)
         .invoke_handler(tauri::generate_handler![
+            voice_ai::list_voice_ai_integrations,
+            voice_ai::verify_voice_ai_integration,
+            voice_ai::set_voice_ai_routes,
+            voice_ai::set_voice_ai_default_voice,
+            voice_ai::set_active_voice_ai_integration,
+            voice_ai::clear_voice_ai_integration,
+            voice_ai::list_voice_ai_models,
+            voice_ai::list_voice_ai_voices,
+            voice_ai::start_voice_capture,
+            voice_ai::append_voice_capture,
+            voice_ai::finish_voice_capture,
+            voice_ai::retry_voice_capture,
+            voice_ai::cancel_voice_capture,
+            voice_ai::speak_voice_segment,
+            voice_ai::cancel_voice_speech,
             settings::list_recent_projects,
             project::open_project_at_path,
             project::open_project_from_git_url,

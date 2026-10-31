@@ -13,6 +13,7 @@
  */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as api from "../../api";
+import { endVoiceForTeardown } from "../../voice/voiceController";
 import { flushDraftTemplate } from "../../state/draftTemplate";
 import { resetPanelReveals } from "../../state/panelReveal";
 import { clearAllComposers } from "../../state/discussionComposers";
@@ -234,6 +235,8 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
      * unavailable-owner record, and no conversation is written to: both calls
      * are in-memory clears that invoke no operation of the storage module.
      */
+    // VOM-FR-KQAI: voice mode goes with the session state it belongs to.
+    endVoiceForTeardown();
     clearAllDiscussionSessions();
     resetDiscussionFocus();
     resetOwnerAvailability();

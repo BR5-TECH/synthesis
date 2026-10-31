@@ -226,6 +226,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "GitHub",
       "AI API",
       "Agentic AI",
+      "Voice AI",
       "Indexing",
       "Personal Agents",
       "Docker",

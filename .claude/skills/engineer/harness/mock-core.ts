@@ -31,6 +31,46 @@ function harnessValue(name: string): string | null {
   return new URLSearchParams(location.search).get(name);
 }
 
+/* --- Voice AI (VOP-voice-ai-providers.md) --------------------------------- */
+
+// Which providers are verified, and which one is active. Verify, Activate, and
+// Clear change these, so the Voice AI section can be walked with no `?voice`.
+const voiceVerified = new Set<string>(harnessFlag("voice") ? ["custom"] : []);
+let voiceActive: string | null = harnessFlag("voice") ? "custom" : null;
+
+function mockVoiceRecord(provider: string) {
+  const verified = voiceVerified.has(provider);
+  return {
+    provider,
+    baseUrl: provider === "custom" ? "http://localhost:8080" : "https://api.example/v1",
+    sttModel: "voxtral-mini-4b-realtime",
+    ttsModel: "lfm3-audio",
+    transcriptionRoute: verified ? "realtime" : "http",
+    speechRoute: verified ? "realtime" : undefined,
+    defaultVoice: "",
+    routesChosen: false,
+    verifiedAt: verified ? now : undefined,
+    capabilities: verified
+      ? {
+          dialect: "llamacpp",
+          realtimeTranscription: "live",
+          realtimeInputRate: 16000,
+          httpTranscription: true,
+          realtimeSpeech: true,
+          openaiSpeech: false,
+          llamaTts: true,
+        }
+      : undefined,
+  };
+}
+
+function mockVoiceIntegrations() {
+  return {
+    active: voiceActive,
+    records: ["openai", "openrouter", "custom"].map(mockVoiceRecord),
+  };
+}
+
 /* --- Session logging (LGC-logging.md / LOG-logs.md) --------------------- */
 
 type MockLogRecord = {
@@ -7586,6 +7626,40 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
   switch (cmd) {
+    // VOP-voice-ai-providers.md. `?voice` starts with a verified Custom provider
+    // on llama.cpp, so that the composer shows the Voice button as enabled.
+    case "list_voice_ai_integrations":
+      return mockVoiceIntegrations();
+    case "set_active_voice_ai_integration":
+      voiceActive = a.provider;
+      return mockVoiceIntegrations();
+    case "clear_voice_ai_integration":
+      voiceVerified.delete(a.provider);
+      if (voiceActive === a.provider) voiceActive = null;
+      return mockVoiceIntegrations();
+    case "verify_voice_ai_integration":
+      voiceVerified.add(a.provider);
+      return mockVoiceRecord(a.provider);
+    case "set_voice_ai_routes":
+    case "set_voice_ai_default_voice":
+      return mockVoiceRecord(a.provider);
+    case "list_voice_ai_models":
+      return { sttModels: ["voxtral-mini-4b-realtime"], ttsModels: ["lfm3-audio"] };
+    // Custom has no voice list, as in the backend. With no provider, the harness
+    // keeps a list, so that the persona editor shows its selector on `?voice`.
+    case "list_voice_ai_voices":
+      return a.provider === "custom" ? null : ["marin", "cedar"];
+    case "start_voice_capture":
+      return { sessionId: "voice-1", route: "realtime", live: true };
+    case "append_voice_capture":
+    case "cancel_voice_capture":
+    case "speak_voice_segment":
+    case "cancel_voice_speech":
+      return null;
+    case "finish_voice_capture":
+    case "retry_voice_capture":
+      return "A transcript from the harness.";
+
     // ---- project ---------------------------------------------------------
     case "open_project_at_path":
     case "open_project_from_git_url":

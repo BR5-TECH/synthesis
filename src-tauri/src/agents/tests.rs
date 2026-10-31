@@ -60,6 +60,7 @@ fn with_openrouter(store: &GlobalSettingsStore) {
 
 fn draft(nickname: &str) -> AgentDraft {
     AgentDraft {
+        voice: String::new(),
         nickname: nickname.into(),
         title: String::new(),
         model_id: "m".into(),
@@ -147,6 +148,7 @@ fn a_created_agent_carries_an_id_two_timestamps_and_every_supplied_field() {
         &store,
         "",
         &AgentDraft {
+            voice: String::new(),
             nickname: "arch".into(),
             title: "Architect".into(),
             model_id: "m".into(),
@@ -547,6 +549,7 @@ fn update_replaces_every_field_keeps_created_at_and_the_id_and_refuses_a_missing
         "",
         &arch.id,
         &AgentDraft {
+            voice: String::new(),
             nickname: "architect".into(),
             title: String::new(),
             model_id: "m2".into(),
@@ -748,4 +751,22 @@ fn the_registry_commands_are_in_scope() {
     let _ = create_agent::<tauri::test::MockRuntime>;
     let _ = update_agent::<tauri::test::MockRuntime>;
     let _ = delete_agent::<tauri::test::MockRuntime>;
+}
+
+// AGR-FR-ABCF: a Personal agent keeps its voice as a plain name, on a create and
+// on an update, and a record from an earlier build reads with none.
+#[test]
+fn a_personal_agent_keeps_its_voice() {
+    let store = store();
+    with_openrouter(&store);
+    let mut d = draft("arch");
+    d.voice = " marin ".into();
+    let created = create_agent_impl(&store, "", &d).unwrap();
+    assert_eq!(created.voice, "marin");
+    d.voice = "cedar".into();
+    let updated = update_agent_impl(&store, "", &created.id, &d).unwrap();
+    assert_eq!(updated.voice, "cedar");
+    assert_eq!(store.load_agent_registry().unwrap()[0].voice, "cedar");
+    let old: Agent = toml::from_str("nickname = \"arch\"\n").unwrap();
+    assert_eq!(old.voice, "");
 }

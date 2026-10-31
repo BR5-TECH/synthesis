@@ -16,6 +16,22 @@
 /// fns in scope via `*_are_in_scope` tests, so a rename fails to compile there.)
 #[allow(dead_code)]
 pub(crate) const COMMAND_NAMES: &[&str] = &[
+    // VOP-voice-ai-providers.md.
+    "list_voice_ai_integrations",
+    "verify_voice_ai_integration",
+    "set_voice_ai_routes",
+    "set_voice_ai_default_voice",
+    "set_active_voice_ai_integration",
+    "clear_voice_ai_integration",
+    "list_voice_ai_models",
+    "list_voice_ai_voices",
+    "start_voice_capture",
+    "append_voice_capture",
+    "finish_voice_capture",
+    "retry_voice_capture",
+    "cancel_voice_capture",
+    "speak_voice_segment",
+    "cancel_voice_speech",
     "list_recent_projects",
     "open_project_at_path",
     "open_project_from_git_url",

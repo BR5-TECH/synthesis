@@ -171,6 +171,8 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     let store = GlobalSettingsStore::in_memory();
     store
         .save_app_preferences(AppPreferences {
+            voice_hotkey: String::new(),
+            voice_hotkey_behaviour: Default::default(),
             theme: Theme::System,
             main_window_fullscreen: true,
             search_query_mode: SearchQueryMode::Regex,
@@ -373,4 +375,30 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
         AppPreferences { git_files_width_fraction: 0.61, ..after_paths.clone() },
         "a files-width write must disturb none of the record's other editors"
     );
+}
+
+// ---- Push-to-Talk (GSS-FR-RHYJ) ------------------------------
+
+#[test]
+fn voice_preferences_default_for_a_record_from_an_earlier_build() {
+    // GSS-FR-RHYJ: a record with no such fields reads back with the defaults.
+    let read: AppPreferences = toml::from_str("theme = \"dark\"\n").unwrap();
+    assert_eq!(read.voice_hotkey, "Ctrl+Shift+Space");
+    assert_eq!(read.voice_hotkey_behaviour, VoiceHotkeyBehaviour::Hold);
+    assert_eq!(AppPreferences::default().voice_hotkey, "Ctrl+Shift+Space");
+}
+
+#[test]
+fn voice_preferences_survive_a_write_of_another_field() {
+    // GSS-FR-RHYJ, GSS-FR-20: both fields go through the whole-record write.
+    let store = GlobalSettingsStore::in_memory();
+    let prefs = AppPreferences {
+        voice_hotkey: "Ctrl+Alt+B".into(),
+        voice_hotkey_behaviour: VoiceHotkeyBehaviour::Toggle,
+        ..Default::default()
+    };
+    store.save_app_preferences(prefs).unwrap();
+    let held = store.load_app_preferences().unwrap();
+    assert_eq!(held.voice_hotkey, "Ctrl+Alt+B");
+    assert_eq!(held.voice_hotkey_behaviour, VoiceHotkeyBehaviour::Toggle);
 }

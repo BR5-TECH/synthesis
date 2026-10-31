@@ -154,6 +154,22 @@ export function clearComposer(key: string): void {
   });
 }
 
+/**
+ * A post landed. What it sent goes, and what the author added while it was in
+ * flight stays (VOM-FR-WYIE).
+ */
+export function clearSentComposer(
+  key: string,
+  sent: Pick<DiscussionSession, "body" | "quotes" | "attachments">,
+): void {
+  const held = getDiscussionSession(key);
+  patchDiscussionSession(key, {
+    body: held.body.startsWith(sent.body) ? held.body.slice(sent.body.length).trimStart() : held.body,
+    quotes: held.quotes.filter((q) => !sent.quotes.includes(q)),
+    attachments: held.attachments.filter((a) => !sent.attachments.includes(a)),
+  });
+}
+
 export function setDiscussionError(key: string, error: string | undefined): void {
   patchDiscussionSession(key, { error });
 }

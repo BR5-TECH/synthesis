@@ -197,7 +197,9 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
       const wantComposer =
         target === "composer" ||
         (target === "discussion" && getDiscussionSession(thread.id).focusWasComposer);
-      const field = wantComposer ? root.querySelector("textarea") : null;
+      const field = wantComposer
+        ? root.querySelector<HTMLElement>("textarea, [data-voice-record]")
+        : null;
       if (field) field.focus();
       else root.focus();
     },

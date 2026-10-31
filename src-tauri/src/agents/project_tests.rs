@@ -47,6 +47,7 @@ fn worktree() -> (TempDir, RootFs) {
 
 fn draft(nickname: &str) -> AgentDraft {
     AgentDraft {
+        voice: String::new(),
         nickname: nickname.into(),
         title: String::new(),
         model_id: "m".into(),
@@ -136,12 +137,15 @@ fn a_project_agent_file_holds_persona_fields_only() {
     let mut d = draft("arch");
     d.title = "Architect".into();
     d.instructions = "Argue about structure.".into();
+    d.voice = " cedar ".into();
     d.reasoning = Some(ReasoningChoice::Effort { effort: "high".into() });
     let arch = create_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &d).unwrap();
+    // AGR-FR-ABCF: a Project agent's voice travels with the project.
+    assert_eq!(arch.voice, "cedar");
 
     let path = dir.path().join(".synthesis/agents").join(format!("{}.toml", arch.id));
     let text = read(&root, &path);
-    for wanted in ["nickname", "title", "modelId", "instructions", "reasoning"] {
+    for wanted in ["nickname", "title", "modelId", "instructions", "voice", "reasoning"] {
         assert!(text.contains(wanted), "the file lacks {wanted}: {text}");
     }
     for forbidden in ["provider", "url", "key", "secret", "createdAt", "updatedAt", "openrouter"] {

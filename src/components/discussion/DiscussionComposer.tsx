@@ -35,9 +35,21 @@ import { MentionComposer } from "../Agents";
 import { agentRoster } from "../agentTags";
 import { commentErrorMessage } from "./messages";
 import { logDebug, logWarn } from "../../logging";
-import { activeAgents, composerPlaceholder } from "../../state/activeAgents";
+import { activeAgents, composerPlaceholder, dispatchTargets } from "../../state/activeAgents";
+import { useVoiceState } from "../../state/voiceSession";
+import { withSpokenTags } from "../../voice/spokenTags";
+import {
+  bindVoiceToDiscussion,
+  enterVoiceMode,
+  leaveVoiceMode,
+  registerVoiceComposer,
+  type PostOutcome,
+} from "../../voice/voiceController";
+import { VoiceArea, VoiceFeedback } from "./VoiceArea";
 import {
   clearComposer,
+  clearSentComposer,
+  getDiscussionSession,
   setComposerAttachments,
   setComposerBody,
   setComposerQuotes,
@@ -149,6 +161,8 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   const sessionKey =
     props.mode === "reply" ? props.discussion.id : discussionTargetKey(props.target);
   const session = useDiscussionSession(sessionKey);
+  const latestProps = useRef(props);
+  latestProps.current = props;
   const body = session.body;
   const quotes = session.quotes;
   const disabled = props.disabled ?? false;
@@ -166,6 +180,8 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   // AGT-FR-29 / AGT-FR-38: both lists, so a live `@all` is bold while one in a
   // project where nobody can answer is left as prose.
   const roster = useMemo(() => agentRoster([...agents]), [agents]);
+  const rosterRef = useRef(roster);
+  rosterRef.current = roster;
   const thread = props.mode === "reply" ? props.discussion : null;
   /**
    * CTA-FR-IGBO: who a reply carrying no tag of its own reaches. Derived from the
@@ -183,7 +199,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   const signal = props.focusSignal ?? 0;
   useEffect(() => {
     if (signal === 0) return;
-    rootRef.current?.querySelector("textarea")?.focus();
+    rootRef.current?.querySelector<HTMLElement>("textarea, [data-voice-record]")?.focus();
   }, [signal]);
 
   const error = props.error ?? session.error;
@@ -197,24 +213,29 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
    * pending attachment exactly as they were, and the typed error renders inline.
    * The rejection is swallowed here because it is rendered here.
    */
-  const post = async () => {
-    if (!canPost || postingRef.current) return;
+  const send = async (text: string): Promise<PostOutcome> => {
+    if (postingRef.current) return "busy";
     postingRef.current = true;
     setPosting(true);
+    // What is sent is read now and not from the render, so a recording that
+    // ended after this render finds the session as it stands (VOM-FR-WYIE).
+    const sent = getDiscussionSession(sessionKey);
+    const inputs = sent.attachments.map((p) => p.input);
+    const current = latestProps.current;
     let created: Discussion | undefined;
     try {
       logDebug(["frontend"], "a discussion composer posts", {
-        mode: props.mode,
+        mode: current.mode,
         key: sessionKey,
       });
-      if (props.mode === "reply") {
-        await props.onReply(props.discussion.id, body, [...quotes], attachments.inputs);
+      if (current.mode === "reply") {
+        await current.onReply(current.discussion.id, text, [...sent.quotes], inputs);
       } else {
-        created = await props.onOpen({
-          target: props.target,
-          fragmentTarget: props.fragmentTarget ?? null,
-          body,
-          attachments: [...(props.extraAttachments ?? []), ...attachments.inputs],
+        created = await current.onOpen({
+          target: current.target,
+          fragmentTarget: current.fragmentTarget ?? null,
+          body: text,
+          attachments: [...(current.extraAttachments ?? []), ...inputs],
         });
       }
     } catch (e) {
@@ -222,19 +243,65 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
       // removed and the comment posted without retyping.
       setDiscussionError(sessionKey, errorText(e));
       logWarn(["frontend"], "a discussion composer post was refused", {
-        mode: props.mode,
+        mode: current.mode,
         key: sessionKey,
       });
-      return;
+      return "failed";
     } finally {
       postingRef.current = false;
       setPosting(false);
     }
-    // Only a post that landed clears the composer.
-    clearComposer(sessionKey);
+    // Only a post that landed clears the composer, and only of what it sent.
+    clearSentComposer(sessionKey, sent);
     setDiscussionError(sessionKey, undefined);
-    if (props.mode === "opening" && created) props.onOpened?.(created);
+    if (created) bindVoiceToDiscussion(sessionKey, created);
+    if (current.mode === "opening" && created) current.onOpened?.(created);
+    // VOM-FR-BVNX.
+    const heard = created ?? (current.mode === "reply" ? current.discussion : null);
+    const reached = dispatchTargets({ comments: heard?.comments ?? [] }, text, rosterRef.current);
+    return reached.length > 0 ? "posted" : "reached_nobody";
   };
+
+  const post = async () => {
+    if (canPost) await send(body);
+  };
+
+  /** VOM-FR-TISN: voice mode is on in this composer. */
+  const voiceState = useVoiceState();
+  const voiceOn = voiceState.activeKey === sessionKey;
+  const [expanded, setExpanded] = useState(false);
+  const fieldShown = !voiceOn || expanded;
+
+  // VOM-FR-WYIE: the controller reaches this composer through a handle, because
+  // a recording can end after any number of renders.
+  const blockedRef = useRef(false);
+  blockedRef.current = disabled || blocked || resolved;
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const agentsRef = useRef(agents);
+  agentsRef.current = agents;
+  useEffect(
+    () =>
+      registerVoiceComposer(sessionKey, {
+        post: (spoken) => {
+          const held = getDiscussionSession(sessionKey).body.trimEnd();
+          return sendRef.current(held === "" ? spoken : `${held}\n${spoken}`);
+        },
+        tagged: (transcript) => withSpokenTags(transcript, rosterRef.current),
+        blocked: () => blockedRef.current,
+        nicknames: () => [...rosterRef.current.nicknames],
+        voiceOf: (agentId) =>
+          agentsRef.current.find((a) => a.agent.id === agentId)?.agent.voice || null,
+      }),
+    [sessionKey],
+  );
+
+  // VOM-FR-LAQO: the field is hidden, so focus goes to the record control.
+  useEffect(() => {
+    if (voiceOn && !expanded) {
+      rootRef.current?.querySelector<HTMLElement>("[data-voice-record]")?.focus();
+    }
+  }, [voiceOn, expanded]);
 
   /**
    * CVP-FR-40 / CMT-FR-70: Ctrl+Enter or Cmd+Enter posts and prevents the newline.
@@ -248,6 +315,11 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
     if (!canPost || postingRef.current) return;
     e.preventDefault();
     void post();
+  };
+
+  const leaveVoice = () => {
+    setExpanded(false);
+    leaveVoiceMode();
   };
 
   const discard = () => {
@@ -276,9 +348,13 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
       data-testid="discussion-composer"
       data-mode={props.mode}
       data-composer-key={sessionKey}
-      onFocusCapture={(e) =>
-        setFocusWasComposer(sessionKey, (e.target as Element).tagName === "TEXTAREA")
-      }
+      onFocusCapture={(e) => {
+        const target = e.target as HTMLElement;
+        setFocusWasComposer(
+          sessionKey,
+          target.tagName === "TEXTAREA" || target.dataset.voiceRecord !== undefined,
+        );
+      }}
     >
       {quotes.map((q, i) => (
         <div key={i} className="comment__quoted comment__quoted--pending">
@@ -311,6 +387,24 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
       >
         {/* CVP-FR-55: one field. Attach leads, the message is between, Post
             trails, all on one line. */}
+        {voiceOn && (
+          <div className="comment-composer__row">
+            {/* VOM-FR-NPLU, VOM-FR-HCMT. */}
+            <button
+              className="btn btn--ghost btn--icon-sm comment-composer__control comment-composer__voice-expand"
+              aria-label={expanded ? "Hide text field" : "Show text field"}
+              title={expanded ? "Hide text field" : "Show text field"}
+              aria-expanded={expanded}
+              data-testid="voice-expand"
+              onClick={() => setExpanded((open) => !open)}
+            >
+              <Icon.CaretRight size={13} />
+            </button>
+            <VoiceArea disabled={disabled || blocked} />
+            <VoiceButton on onToggle={leaveVoice} ready />
+          </div>
+        )}
+        {fieldShown && (
         <div className="comment-composer__row">
           <AttachControl
             disabled={disabled || blocked}
@@ -363,6 +457,16 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
               <Icon.X size={13} />
             </button>
           )}
+          {/* VOM-FR-LAHW, VOM-FR-UXKL. */}
+          {!voiceOn && (
+            <VoiceButton
+              on={false}
+              ready={voiceState.providerReady}
+              onToggle={() =>
+                enterVoiceMode(sessionKey, props.mode === "reply" ? props.discussion : null)
+              }
+            />
+          )}
           <button
             className="btn btn--ghost btn--icon-sm comment-composer__control comment-card__post"
             aria-label="Post"
@@ -373,6 +477,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
             <Icon.Send size={13} />
           </button>
         </div>
+        )}
         {/* CMT-FR-46: the pending strip sits inside the field. */}
         <PendingAttachmentStrip
           pending={attachments.pending}
@@ -395,6 +500,28 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
           {commentErrorMessage(error)}
         </div>
       )}
+      {voiceOn && <VoiceFeedback />}
     </div>
+  );
+}
+
+const NO_PROVIDER = "Voice needs a verified Voice AI provider. Set one in Settings.";
+
+/** VOM-FR-LAHW, VOM-FR-UXKL: the switch of voice mode. */
+function VoiceButton(props: { on: boolean; ready: boolean; onToggle: () => void }) {
+  const name = props.on ? "Leave voice mode" : "Voice mode";
+  return (
+    <button
+      className="btn btn--ghost btn--icon-sm comment-composer__control comment-composer__voice-toggle"
+      aria-label={name}
+      aria-pressed={props.on}
+      aria-description={props.ready ? undefined : NO_PROVIDER}
+      title={props.ready ? name : NO_PROVIDER}
+      data-testid="voice-button"
+      disabled={!props.ready}
+      onClick={props.onToggle}
+    >
+      <Icon.Mic size={13} />
+    </button>
   );
 }

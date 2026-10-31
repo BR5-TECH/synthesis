@@ -477,6 +477,15 @@ pub fn rig_http_client() -> Result<(reqwest013::Client, TlsRecord), String> {
     Ok((client, record))
 }
 
+/// AAP-FR-WMCX, VOP-FR-YPEY: the `rustls` configuration of a `wss` connection.
+/// It offers `http/1.1` only, because a WebSocket upgrade does not work over
+/// `h2`.
+pub fn websocket_client_config() -> Result<Arc<rustls::ClientConfig>, String> {
+    let config =
+        roots().rustls_config(&[b"http/1.1"], &TlsRecord::new()).map_err(|e| e.to_string())?;
+    Ok(Arc::new(config))
+}
+
 /// AAP-FR-WMCX: the `reqwest` client `openrouter-rs` is given, with the record
 /// of the refusals its verifier notes.
 pub fn openrouter_http_client() -> Result<(reqwest012::Client, TlsRecord), String> {

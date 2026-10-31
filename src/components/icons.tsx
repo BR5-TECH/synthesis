@@ -563,6 +563,14 @@ export const Icon = {
       <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
     </I>
   ),
+  /* Voice mode (VOM-voice-mode.md). */
+  Mic: (p: IconProps) => (
+    <I data-icon="mic" {...p}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3" />
+    </I>
+  ),
   /* Posting a composed message. */
   Send:(p: IconProps) => (
     <I {...p}>

@@ -522,6 +522,7 @@ impl Harness {
             None,
             agents::AgentScope::Personal,
             &AgentDraft {
+                voice: String::new(),
                 nickname: nickname.into(),
                 title: String::new(),
                 model_id: "m".into(),
@@ -550,6 +551,7 @@ impl Harness {
             None,
             agents::AgentScope::Personal,
             &AgentDraft {
+                voice: String::new(),
                 nickname: nickname.into(),
                 title: title.into(),
                 model_id: "m".into(),

@@ -98,11 +98,35 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
   const setModelId = (id: string) => setChosenModel(id);
   const [reasoning, setReasoning] = useState(reasoningValue(agent?.reasoning ?? null));
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
+  // AGT-FR-DIVM: `undefined` until the list is read, and `null` is free text.
+  const [voice, setVoice] = useState(agent?.voice ?? "");
+  const [voices, setVoices] = useState<string[] | null | undefined>(undefined);
+  const [voiceReady, setVoiceReady] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   // AGT-FR-11 / AGT non-functional: every control here is reachable from the
   // keyboard alone, which starts with focus being inside the modal at all —
   // otherwise Tab walks the tab behind it.
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .listVoiceAiIntegrations()
+      .then((list) => {
+        if (!cancelled) setVoiceReady(list.active !== null);
+      })
+      .catch(() => undefined);
+    void api
+      .listVoiceAiVoices()
+      .then((list) => {
+        if (!cancelled) setVoices(list);
+      })
+      .catch(() => {
+        if (!cancelled) setVoices(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const nicknameRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     nicknameRef.current?.focus();
@@ -148,6 +172,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
       title,
       modelId,
       instructions,
+      voice,
       reasoning: reasoningChoiceFor(reasoning),
     };
     setBusy(true);
@@ -221,7 +246,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
         {agent ? `Edit @${agent.nickname}` : `New ${SCOPE_LABEL[scope]} agent`}
       </h3>
 
-      {/* AGT-FR-12: exactly five controls, in this order. The model and the
+      {/* AGT-FR-12: exactly six controls, in this order. The model and the
           reasoning among them are this agent's own — nothing here reads the AI
           API section's stored selections, and nothing chosen here reaches a
           graduation run (AGT-FR-01, AAP-FR-19). */}
@@ -317,6 +342,42 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
         />
+        <span className="t-ui-sm t-muted">Optional.</span>
+      </label>
+
+      {/* AGT-FR-DIVM. */}
+      <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span className="t-ui-sm">Voice</span>
+        {voices ? (
+          <select
+            className="input"
+            // The sticky footer covers the end of the card, so a focused control
+            // scrolls clear of it.
+            style={{ scrollMarginBottom: 72 }}
+            data-testid="agent-voice"
+            disabled={!voiceReady}
+            value={voice}
+            onChange={(e) => setVoice(e.target.value)}
+          >
+            <option value="">Provider default</option>
+            {voice !== "" && !voices.includes(voice) && <option value={voice}>{voice}</option>}
+            {voices.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="input"
+            style={{ scrollMarginBottom: 72 }}
+            data-testid="agent-voice"
+            disabled={!voiceReady}
+            placeholder="Provider default"
+            value={voice}
+            onChange={(e) => setVoice(e.target.value)}
+          />
+        )}
         <span className="t-ui-sm t-muted">Optional.</span>
       </label>
 

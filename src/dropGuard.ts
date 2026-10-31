@@ -35,7 +35,7 @@ const carriesLink = (e: DragEvent) => hasType(e, "text/uri-list");
 const carriesText = (e: DragEvent) => hasType(e, "text/plain");
 
 /** Whether the drop lands in a field that takes dropped text. */
-function isTextField(target: EventTarget | null): boolean {
+export function isTextField(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   // The nearest `contenteditable` decides, so an island marked `false` inside
   // an editable region is not a text field.

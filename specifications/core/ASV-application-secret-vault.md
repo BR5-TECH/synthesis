@@ -3,7 +3,7 @@
 **Spec code:** `ASV`
 
 ## Intent
-The one place in the application that reads and writes a secret in the operating system keyring. It keeps every application-managed secret — each GitHub token, each AI API provider key, each agent credential, and every secret type added later — inside a single keyring entry that holds one extensible object. One entry is what keeps an operation to one keyring access however many secrets are stored, so the author answers one authentication prompt for an operation instead of one prompt for each secret. One process cache of the decoded object, filled when the first secret-dependent operation runs, goes further: after that operation the process reads the entry for no secret and no presence check. That single entry is also the whole of what this module writes: it recovers from a value it cannot decode, and it takes over the secrets of the earlier one-entry-per-secret layout, without ever putting application data anywhere but there. The modules that own secrets — `GTS-github-token-storage.md`, `AAP-ai-api-integrations.md`, and `AIC-agentic-integrations.md` — address their secrets here by path and hold no keyring entry of their own. Out of scope: what a secret means, which one applies, and when to read one, all of which belong to the owning module; the descriptive facts about a secret, which live in the user-global settings store (`GSS-global-settings-storage.md`); and credential storage a vendor owns, such as the login directory the Codex CLI writes for itself, which this module neither reads nor moves.
+The one place in the application that reads and writes a secret in the operating system keyring. It keeps every application-managed secret — each GitHub token, each AI API provider key, each Voice AI provider key, each agent credential, and every secret type added later — inside a single keyring entry that holds one extensible object. One entry is what keeps an operation to one keyring access however many secrets are stored, so the author answers one authentication prompt for an operation instead of one prompt for each secret. One process cache of the decoded object, filled when the first secret-dependent operation runs, goes further: after that operation the process reads the entry for no secret and no presence check. That single entry is also the whole of what this module writes: it recovers from a value it cannot decode, and it takes over the secrets of the earlier one-entry-per-secret layout, without ever putting application data anywhere but there. The modules that own secrets — `GTS-github-token-storage.md`, `AAP-ai-api-integrations.md`, and `AIC-agentic-integrations.md` — address their secrets here by path and hold no keyring entry of their own. Out of scope: what a secret means, which one applies, and when to read one, all of which belong to the owning module; the descriptive facts about a secret, which live in the user-global settings store (`GSS-global-settings-storage.md`); and credential storage a vendor owns, such as the login directory the Codex CLI writes for itself, which this module neither reads nor moves.
 
 ## Contract surface
 The module owns one keyring entry, the object inside it, the process cache of that object, the process-wide lock that guards both, and the migration of earlier per-secret entries into it. It registers no Tauri command and is unreachable from the frontend; every operation below is internal and is called only by a module that owns secrets.
@@ -16,6 +16,7 @@ AppSecrets {
   version:    1,
   github:     { tokens:    { <token_id>:    <secret> } },
   ai_api:     { providers: { <provider_id>: <secret> } },
+  voice_ai:   { providers: { <provider_id>: <secret> } },
   agentic:    { vendors:   { <vendor_id>:   <secret> } },
   projects:   { <project_key>: { <namespace>: { <key>: <secret> } } },
   quarantine: string | null,   // a prior value of this entry that would not decode (ASV-FR-17)
@@ -30,6 +31,7 @@ SecretPath = string[]
 
 github token id T    ->  ["github",  "tokens",    T]
 ai api provider P    ->  ["ai_api",  "providers", P]
+voice ai provider P  ->  ["voice_ai", "providers", P]
 agentic vendor V     ->  ["agentic", "vendors",   V]
 project-scoped value ->  ["projects", <project_key>, <namespace>, <key>]
 ```
@@ -74,7 +76,7 @@ VaultError = vault_unavailable
 ## Functional requirements
 1. **ASV-FR-01** Every application-managed secret is held in one operating-system keyring entry, reached through the `keyring` crate. The entry has the service name `com.synthesis.secrets` and the account name `application-secrets`. Both names are stable, and the application writes to no other keyring entry — not for a secret, not for a copy, and not for a value it could not read.
 2. **ASV-FR-02** The value of the entry is one `AppSecrets` object, serialized as one UTF-8 JSON string. The object carries a `version` field whose value is `1`.
-3. **ASV-FR-03** A leaf of `AppSecrets` is a secret string. Each level between the root and a leaf is an object keyed by an identifier the owning module chooses: a token id under `github.tokens`, a provider id under `ai_api.providers`, a vendor id under `agentic.vendors`, and a project key under `projects`.
+3. **ASV-FR-03** A leaf of `AppSecrets` is a secret string. Each level between the root and a leaf is an object keyed by an identifier the owning module chooses: a token id under `github.tokens`, a provider id under `ai_api.providers`, a provider id under `voice_ai.providers`, a vendor id under `agentic.vendors`, and a project key under `projects`.
 4. **ASV-FR-04** A secret is addressed by its `SecretPath` and by nothing else. This module gives a path no meaning: it does not know what a token id is, and it never reads a path to decide what to do.
 5. **ASV-FR-05** A new secret type needs a new path, not a new schema. This module accepts a path of any depth, creates each absent object between the root and the leaf when it writes, and refuses no path because the schema of this version does not name it.
 6. **ASV-FR-06** A read-modify-write keeps every field it does not know. A namespace, an object, or a leaf that this version does not name is written back unchanged, so a build that adds a secret type does not destroy the secrets of a build that adds a different one.

@@ -45,6 +45,6 @@ export function canRetry(code: string): boolean {
  * hold text that must not reach a log.
  */
 export function errorCode(error: unknown): string {
-  if (typeof error === "string" && /^[a-z_]+(:[^\s]+)*$/.test(error)) return error;
+  if (typeof error === "string" && /^[a-z_]+(:\S+)?$/.test(error)) return error;
   return "unknown";
 }

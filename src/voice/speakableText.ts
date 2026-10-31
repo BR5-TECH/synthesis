@@ -19,6 +19,8 @@ function inlineText(line: string): string {
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/<[^>\n]+>/g, "")
+    // A nested tag leaves a tag behind, so no bracket stays in spoken text.
+    .replace(/[<>]/g, "")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
     .replace(/(\*|_)(\S(?:.*?\S)?)\1/g, "$2")

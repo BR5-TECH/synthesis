@@ -12,10 +12,14 @@ pub(crate) const FRAME_SAMPLES: usize = 512;
 const FRAME_MS: u32 = 32;
 /// VOP-FR-GZPY: 320 ms, the first whole frame at or over 300 ms.
 const CONFIRM_FRAMES: u32 = 10;
+/// VOP-FR-GZPY: a paused reply leaves the model reporting speech for a time, so
+/// only speech that outlasts this is the author's.
+const CONFIRM_FRAMES_DURING_PLAYBACK: u32 = 20;
 /// VOP-FR-QFRF.
 const MISFIRE_FRAMES: u32 = 3;
 /// VOP-FR-NDEH.
 const COOLDOWN_FRAMES: u32 = 16;
+const COOLDOWN_MAX_FRAMES: u32 = 256;
 /// VOP-FR-OFDY: the tail of `VOM-voice-mode.md` VOM-FR-FTFU.
 const TAIL_MS: u32 = 200;
 /// VOP-FR-GWZP.
@@ -105,14 +109,23 @@ enum State {
     Rearm,
 }
 
+/// VOP-FR-NDEH: 16 frames, doubling at each misfire in a row.
+fn cooldown_after(misfires: u32) -> u32 {
+    COOLDOWN_FRAMES.saturating_mul(1 << misfires.min(4)).min(COOLDOWN_MAX_FRAMES)
+}
+
 pub(crate) struct Detector {
     state: State,
     cooldown: u32,
+    /// VOP-FR-NDEH: misfires in a row during playback.
+    misfires: u32,
+    /// Frames with no reply playing, which reset `misfires`.
+    quiet: u32,
 }
 
 impl Detector {
     pub(crate) fn new() -> Self {
-        Self { state: State::Idle, cooldown: 0 }
+        Self { state: State::Idle, cooldown: 0, misfires: 0, quiet: 0 }
     }
 
     /// Whether no utterance is in progress, so that the settings can be read.
@@ -151,6 +164,12 @@ impl Detector {
         settings: Settings,
         conditions: Conditions,
     ) -> Option<Action> {
+        // A pause also clears `playing`, and the gate that follows a misfire comes
+        // late. So one frame with no reply does not reset the count.
+        self.quiet = if conditions.playing { 0 } else { self.quiet + 1 };
+        if self.quiet >= COOLDOWN_FRAMES {
+            self.misfires = 0;
+        }
         if self.cooldown > 0 {
             self.cooldown -= 1;
             return None;
@@ -180,12 +199,19 @@ impl Detector {
         let low = if probability < utterance.end { low + 1 } else { 0 };
         if low >= MISFIRE_FRAMES {
             self.state = State::Idle;
-            self.cooldown = if utterance.during_playback { COOLDOWN_FRAMES } else { 0 };
+            self.cooldown = 0;
+            if utterance.during_playback {
+                self.cooldown = cooldown_after(self.misfires);
+                self.misfires += 1;
+            }
             return Some(Action::Misfire);
         }
         // A frame that is low can be the end of speech under 300 ms, so the
         // confirmation waits to see it (`VOM-voice-mode.md` VOM-FR-DGOG).
-        if frames >= CONFIRM_FRAMES && low == 0 {
+        let confirm =
+            if utterance.during_playback { CONFIRM_FRAMES_DURING_PLAYBACK } else { CONFIRM_FRAMES };
+        if frames >= confirm && low == 0 {
+            self.misfires = 0;
             self.state = State::Active { utterance, frames, silent: None };
             return Some(Action::Confirm);
         }

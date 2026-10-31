@@ -93,7 +93,8 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 49. **VOP-FR-DICU** A frame at or above the start threshold emits `speech_start` at once, when the session is not blocked and no utterance is in progress.
     - *Why:* playback pauses at this event, so it cannot wait for the 300 ms rule.
 49. **VOP-FR-QFRF** Before a capture opens, 3 frames in a row under the end threshold emit `misfire`. No capture opens, and no provider call is made.
-49. **VOP-FR-GZPY** At 10 frames after `speech_start`, or at the first later frame at or over the end threshold, the session opens a capture as VOP-FR-KBPZ states, with the active provider's configuration at that time. It emits `speech_confirmed` with the capture id and `live`.
+49. **VOP-FR-GZPY** At 10 frames after `speech_start`, and at 20 frames for speech that starts while a reply plays, or at the first later frame at or over the end threshold, the session opens a capture as VOP-FR-KBPZ states, with the active provider's configuration at that time. It emits `speech_confirmed` with the capture id and `live`.
+    - *Why:* a paused reply leaves the detector reporting speech for a time, and an echo must not post as a comment.
 49. **VOP-FR-FYQX** A `voice_session_active` refusal of that capture emits `misfire`. Another refusal emits `failed` with its code, and the session keeps listening.
 49. **VOP-FR-FAQA** The capture receives the audio from 320 ms before `speech_start`, then the live audio, in order and at the capture rate, as "append voice capture" does.
 49. **VOP-FR-OFDY** In a capture, a frame under the end threshold starts the silence count. Only a frame at or above the start threshold clears it. At the silence timeout plus 200 ms, the session emits `speech_end`.
@@ -102,8 +103,8 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 49. **VOP-FR-FMRV** After `speech_end`, no utterance starts until the gate names that capture as settled.
 49. **VOP-FR-DAZW** After a failed capture open, no `speech_start` comes until a frame under the end threshold.
     - *Why:* the author still speaks, and a new start every 320 ms would pause and resume a reply again and again.
-49. **VOP-FR-NDEH** After a `misfire` while a reply plays, no `speech_start` comes for 16 frames.
-    - *Why:* a reply that reaches the microphone would otherwise pause and resume itself.
+49. **VOP-FR-NDEH** After a `misfire` while a reply plays, no `speech_start` comes for 16 frames. Each further `misfire` in a row doubles this, to at most 256 frames. A confirmation resets the count, and so do 16 frames with no reply playing.
+    - *Why:* WebKitGTK reports echo cancellation and cancels nothing, so a reply through speakers would pause and resume itself.
 49. **VOP-FR-QZCE** "set voice activity gate" carries `seq`, `blocked`, `playing`, `settled`, and `keyterms`. A `seq` under the last applied `seq` is ignored.
     - *Why:* Tauri runs async commands in parallel, so a whole record with an order cannot leave a wrong value.
 49. **VOP-FR-KYFC** While `blocked` is true, no utterance starts. An utterance in progress continues.
@@ -228,9 +229,9 @@ VoiceActivityChanged {
 |---|---|
 | Frame | 512 samples at 16 kHz, 32 ms |
 | Pre-roll | 320 ms, at the capture rate |
-| Frames to confirm | at least 10, 320 ms |
+| Frames to confirm | at least 10, 320 ms; at least 20, 640 ms, for speech that starts while a reply plays |
 | Frames to a misfire | 3 in a row, 96 ms |
-| Frames with no start after a misfire during playback | 16, about 500 ms |
+| Frames with no start after a misfire during playback | 16, about 500 ms, doubling to 256, about 8 s |
 | Tail after the silence timeout | 200 ms |
 | Longest utterance | 10 minutes |
 | No feed limit | 30 s |

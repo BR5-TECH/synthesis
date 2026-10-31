@@ -66,7 +66,7 @@ fn a_reply_that_plays_raises_the_start_threshold() {
 fn the_end_threshold_stays_when_a_reply_plays() {
     let mut detector = Detector::new();
     assert_eq!(detector.step(0.8, settings(), PLAYING), Some(Action::SpeechStart));
-    let actions = run(&mut detector, &[0.4; 10], PLAYING);
+    let actions = run(&mut detector, &[0.4; 20], PLAYING);
     assert_eq!(actions, vec![Action::Confirm]);
 }
 
@@ -192,7 +192,7 @@ fn a_neutral_frame_starts_no_silence_count() {
 fn the_base_start_threshold_clears_silence_for_an_utterance_that_began_during_playback() {
     let mut detector = Detector::new();
     assert_eq!(detector.step(0.8, settings(), PLAYING), Some(Action::SpeechStart));
-    assert_eq!(run(&mut detector, &[0.6; 10], IDLE), vec![Action::Confirm]);
+    assert_eq!(run(&mut detector, &[0.6; 20], IDLE), vec![Action::Confirm]);
     assert_eq!(run(&mut detector, &[QUIET; SHORTEST_END - 1], IDLE), vec![]);
     assert_eq!(detector.step(0.6, settings(), IDLE), None);
     assert_eq!(run(&mut detector, &[QUIET; SHORTEST_END - 1], IDLE), vec![]);
@@ -235,6 +235,65 @@ fn a_misfire_during_playback_refuses_a_start_for_sixteen_frames() {
     assert_eq!(run(&mut detector, &[QUIET; 3], PLAYING), vec![Action::Misfire]);
     assert_eq!(run(&mut detector, &[SPEECH; 16], PLAYING), vec![]);
     assert_eq!(detector.step(SPEECH, settings(), PLAYING), Some(Action::SpeechStart));
+}
+
+// VOP-FR-GZPY: speech that starts during a reply confirms at 20 frames. An echo
+// that ends after the pause is a misfire, and no capture opens for it.
+#[test]
+fn an_echo_that_outlasts_ten_frames_opens_no_capture() {
+    let mut detector = Detector::new();
+    assert_eq!(detector.step(0.8, settings(), PLAYING), Some(Action::SpeechStart));
+    assert_eq!(run(&mut detector, &[SPEECH; 15], IDLE), vec![]);
+    assert_eq!(run(&mut detector, &[QUIET; 3], IDLE), vec![Action::Misfire]);
+}
+
+// VOP-FR-GZPY: real speech over a reply still confirms.
+#[test]
+fn speech_over_a_reply_confirms_at_twenty_frames() {
+    let mut detector = Detector::new();
+    assert_eq!(detector.step(0.8, settings(), PLAYING), Some(Action::SpeechStart));
+    assert_eq!(run(&mut detector, &[SPEECH; 19], IDLE), vec![]);
+    assert_eq!(detector.step(SPEECH, settings(), IDLE), Some(Action::Confirm));
+}
+
+/// One misfire of a reply that triggers itself. Gives the frames until the next
+/// start, and the detector stands at that start.
+fn frames_refused_after_a_misfire(detector: &mut Detector) -> usize {
+    if detector.waiting() {
+        assert_eq!(detector.step(0.8, settings(), PLAYING), Some(Action::SpeechStart));
+    }
+    assert_eq!(run(detector, &[QUIET; 3], PLAYING), vec![Action::Misfire]);
+    (0..).find(|_| detector.step(0.8, settings(), PLAYING).is_some()).unwrap()
+}
+
+// VOP-FR-NDEH: each misfire in a row doubles the refusal, to at most 256 frames.
+#[test]
+fn misfires_in_a_row_back_off_to_a_limit() {
+    let mut detector = Detector::new();
+    let refused: Vec<usize> =
+        (0..6).map(|_| frames_refused_after_a_misfire(&mut detector)).collect();
+    assert_eq!(refused, vec![16, 32, 64, 128, 256, 256]);
+}
+
+// VOP-FR-NDEH: the count of misfires resets with no reply playing.
+#[test]
+fn time_with_no_reply_resets_the_back_off() {
+    let mut detector = Detector::new();
+    assert_eq!(frames_refused_after_a_misfire(&mut detector), 16);
+    run(&mut detector, &[QUIET; 3], PLAYING);
+    run(&mut detector, &[QUIET; 300], IDLE);
+    assert_eq!(frames_refused_after_a_misfire(&mut detector), 16);
+}
+
+// VOP-FR-NDEH: real speech resets the count.
+#[test]
+fn a_confirmation_resets_the_back_off() {
+    let mut detector = Detector::new();
+    assert_eq!(frames_refused_after_a_misfire(&mut detector), 16);
+    assert_eq!(run(&mut detector, &[SPEECH; 20], IDLE), vec![Action::Confirm]);
+    run(&mut detector, &[QUIET; 22], IDLE);
+    detector.settled();
+    assert_eq!(frames_refused_after_a_misfire(&mut detector), 16);
 }
 
 // VOP-FR-NDEH: with no reply, a misfire refuses nothing.

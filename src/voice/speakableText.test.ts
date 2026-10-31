@@ -32,6 +32,7 @@ describe("what is spoken of a comment", () => {
     expect(speakableText("Before <b>bold</b> after.")).toBe("Before bold after.");
     const text = speakableText("<<script>script>alert(1)<</script>/script>");
     expect(text).not.toMatch(/[<>]/);
+    expect(speakableText("Use a < b here.")).toBe("Use a  b here.");
   });
 
   it("VOM-FR-TRWN: a comment with no text has nothing to speak", () => {

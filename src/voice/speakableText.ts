@@ -14,13 +14,31 @@ const FIRST_SEGMENT_TARGET = 240;
 const FENCE = /^\s*(```|~~~)/;
 const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 
+/**
+ * The text outside tags. A nested tag leaves a tag behind after one pass, so no
+ * bracket stays in the result. A `<` with no `>` after it is no tag.
+ */
+function withoutTags(line: string): string {
+  let kept = "";
+  let at = 0;
+  while (at < line.length) {
+    const open = line.indexOf("<", at);
+    const close = open < 0 ? -1 : line.indexOf(">", open);
+    if (close < 0) {
+      kept += line.slice(at);
+      break;
+    }
+    kept += line.slice(at, open);
+    at = close + 1;
+  }
+  return kept.split(/[<>]/).join("");
+}
+
 function inlineText(line: string): string {
-  return line
+  const linkless = line
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>\n]+>/g, "")
-    // A nested tag leaves a tag behind, so no bracket stays in spoken text.
-    .replace(/[<>]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+  return withoutTags(linkless)
     .replace(/`([^`]*)`/g, "$1")
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
     .replace(/(\*|_)(\S(?:.*?\S)?)\1/g, "$2")

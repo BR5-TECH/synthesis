@@ -116,8 +116,9 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 
 ### Speech
 
-50. **VOP-FR-MOSY** "speak voice segment" takes one text segment, a voice, and a `Channel`. It sends audio frames on the channel, and it resolves when the segment ends. A segment over 4096 characters returns `voice_segment_too_long`.
-51. **VOP-FR-XZET** A frame is raw bytes. Byte 0 is the kind: `0` for PCM16 mono, `1` for one encoded audio file. Bytes 1 to 4 are the sample rate as little-endian `u32`, and `0` for a file. The rest is the payload.
+50. **VOP-FR-MOSY** "speak voice segment" takes one text segment, a voice, and a `Channel`. It sends audio frames on the channel, then one end frame, and it resolves when the segment ends. A segment over 4096 characters returns `voice_segment_too_long`. A failed segment sends no end frame.
+    - *Why:* a large frame reaches the WebView after the command resolves, so only the end frame shows that all audio arrived.
+51. **VOP-FR-XZET** A frame is raw bytes. Byte 0 is the kind: `0` for PCM16 mono, `1` for one encoded audio file, `2` for the end of a segment. Bytes 1 to 4 are the sample rate as little-endian `u32`, and `0` for a file or an end frame. The rest is the payload, which an end frame does not have.
 52. **VOP-FR-TZDV** On a Realtime speech route, each `response.output_audio.delta` becomes one PCM frame at once, so audio starts to play before the segment ends.
 53. **VOP-FR-UPRG** In the `openai` dialect, each segment opens a new session with its voice. The segment is a `response.create` with `conversation: "none"`, `input: []`, `output_modalities: ["audio"]`, and instructions that say to speak the text exactly.
     - *Why:* the voice of a session cannot change after its first audio, and no socket stays open while voice mode is idle.

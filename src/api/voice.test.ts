@@ -70,17 +70,52 @@ describe("the voice commands", () => {
     });
   });
 
+  type SpeakArgs = {
+    speechId: string;
+    text: string;
+    voiceName: string;
+    onFrame: InstanceType<typeof core.Channel>;
+  };
+  const speakCall = () => core.invoke.mock.calls[0] as unknown as [string, SpeakArgs];
+  const END = new Uint8Array([2, 0, 0, 0, 0]).buffer;
+
+  async function ticks() {
+    await new Promise((done) => setTimeout(done, 0));
+  }
+
   it("VOP-FR-MOSY, VOP-FR-XZET: a segment gets a channel that delivers each frame", async () => {
     const frames: ArrayBuffer[] = [];
-    await speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
-    const [command, args] = core.invoke.mock.calls[0] as unknown as [
-      string,
-      { speechId: string; text: string; voiceName: string; onFrame: InstanceType<typeof core.Channel> },
-    ];
+    const segment = speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
+    const [command, args] = speakCall();
     expect(command).toBe("speak_voice_segment");
     expect(args).toMatchObject({ speechId: "id", text: "text", voiceName: "cedar" });
     args.onFrame.onmessage?.(new ArrayBuffer(4));
     expect(frames).toHaveLength(1);
+    args.onFrame.onmessage?.(END);
+    await segment;
+    expect(frames).toHaveLength(1);
+  });
+
+  it("VOP-FR-MOSY, VOM-FR-SJYH: a frame that comes after the command is not lost", async () => {
+    const frames: ArrayBuffer[] = [];
+    let ended = false;
+    const segment = speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
+    void segment.then(() => (ended = true));
+    await ticks();
+    expect(core.invoke).toHaveBeenCalledTimes(1);
+    expect(ended).toBe(false);
+    const [, args] = speakCall();
+    args.onFrame.onmessage?.(new ArrayBuffer(4096));
+    args.onFrame.onmessage?.(END);
+    await segment;
+    expect(frames).toHaveLength(1);
+  });
+
+  it("VOP-FR-MOSY: a failed segment rejects with no end frame", async () => {
+    core.invoke.mockRejectedValueOnce("speech_failed");
+    await expect(speakVoiceSegment("id", "text", null, () => undefined)).rejects.toBe(
+      "speech_failed",
+    );
   });
 
   it("VOP-FR-GVTD: argument names match the commands", async () => {

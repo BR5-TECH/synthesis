@@ -8,7 +8,7 @@ use tauri::State;
 
 use super::capture::WATCHDOG_TICK;
 use super::models::{fallback_models, list_models, list_voices, listing_target};
-use super::pcm::samples_of;
+use super::pcm::{frame, samples_of, FRAME_END};
 use super::registry::{
     clear_integration, list_integrations, set_active, set_default_voice, set_routes,
 };
@@ -309,6 +309,14 @@ pub fn cancel_voice_capture(session_id: String, voice: State<'_, VoiceAi>) -> Re
     voice.cancel_capture(&session_id)
 }
 
+/// VOP-FR-MOSY: a failed segment sends no end frame, and the command returns its
+/// failure.
+pub(crate) fn end_segment(result: &Result<(), String>, emit: &mut impl FnMut(Vec<u8>)) {
+    if result.is_ok() {
+        emit(frame(FRAME_END, 0, &[]));
+    }
+}
+
 #[tauri::command]
 pub async fn speak_voice_segment(
     speech_id: String,
@@ -342,6 +350,7 @@ pub async fn speak_voice_segment(
         Err(code) => Err(code),
     };
     voice.release_speech(&speech_id);
+    end_segment(&result, &mut emit);
     match &result {
         Ok(()) => logging::log_debug(
             &app,

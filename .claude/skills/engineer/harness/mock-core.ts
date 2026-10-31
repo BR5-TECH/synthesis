@@ -7686,6 +7686,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return null;
     case "speak_voice_segment":
       await voiceHeld("speech");
+      // VOP-FR-XZET: the end frame, which ends the segment in the WebView.
+      a.onFrame?.onmessage?.(new Uint8Array([2, 0, 0, 0, 0]).buffer);
       return null;
     case "finish_voice_capture":
     case "retry_voice_capture":

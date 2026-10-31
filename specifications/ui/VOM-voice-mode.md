@@ -118,7 +118,7 @@ Voice mode lets a person talk in a discussion instead of typing. A person who re
 47. **VOM-FR-UALP** Each segment uses the voice of the agent that wrote the comment (`AGR-agent-registry.md` AGR-FR-ABCF), or else the provider's default voice.
 48. **VOM-FR-RKOG** A new agent comment stops the current playback at once, and its speech replaces it. No reply queues behind another, except as VOM-FR-ZPOD states.
 49. **VOM-FR-QDWW** A Stop control is visible while audio plays or a reply is paused. It stops playback at once, drops a paused or waiting reply, and calls "cancel voice speech".
-50. **VOM-FR-SJYH** Frames of one reply play in order and with no gap between them.
+50. **VOM-FR-SJYH** Frames of one reply play in order and with no gap between them. A segment ends at its end frame (`../core/VOP-voice-ai-providers.md` VOP-FR-XZET), so no audio frame is lost.
 51. **VOM-FR-EGNX** When the composer in voice mode unmounts, playback stops. A new comment is not spoken while no composer and no session control of voice mode is mounted.
     - *Why:* speech belongs to the visible composer, so a Stop control is always there while audio plays.
 52. **VOM-FR-QPFQ** A failed segment stops playback and shows an inline error. The text of the comment is not affected.

@@ -148,6 +148,13 @@ impl Outcome {
         self
     }
 
+    /// WKS-FR-FQAE: what the blocker says clears it.
+    pub(crate) fn expect_blocker_clears_by(self, clears_by: &str) -> Self {
+        let held = self.run.blocker.as_ref().map(|b| b.clears_by.clone());
+        assert_eq!(held.as_deref(), Some(clears_by), "[{}] what clears the blocker", self.name);
+        self
+    }
+
     /// GRL-FR-QZFB: how many times in a row the run met that blocker.
     pub(crate) fn expect_blocker_attempt(self, attempt: u32) -> Self {
         assert_eq!(

@@ -28,3 +28,4 @@ export * from "./library";
 export * from "./panels";
 export * from "./project";
 export * from "./streams";
+export * from "./voice";

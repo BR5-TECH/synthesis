@@ -31,6 +31,7 @@ export const GLOBAL_SECTION_KEYS = [
   "github",
   "ai-api",
   "ai-agentic",
+  "voice-ai",
   "indexing",
   "agents",
   "docker",

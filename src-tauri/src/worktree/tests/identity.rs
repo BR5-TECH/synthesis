@@ -90,6 +90,15 @@ fn a_remembered_worktree_that_is_gone_falls_back_to_the_primary_and_says_so() {
     let (resumed, fell_back) = resume_active_worktree(&store, &f.root(), &f.root());
     assert_eq!(resumed, f.root());
     assert!(fell_back, "the UI is told the remembered worktree was unavailable");
+
+    // WTC-FR-17, GSS-FR-16, NTF-FR-WTFB: the primary worktree replaces the
+    // remembered one, so the next open reports no loss.
+    assert_eq!(
+        store.load_active_worktree(&to_string_path(&f.root())).unwrap().as_deref(),
+        Some(&*to_string_path(&f.root())),
+    );
+    let (_, fell_back_again) = resume_active_worktree(&store, &f.root(), &f.root());
+    assert!(!fell_back_again, "one loss is reported once");
 }
 
 #[test]

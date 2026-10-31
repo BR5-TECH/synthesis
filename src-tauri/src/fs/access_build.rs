@@ -23,6 +23,8 @@ pub struct FsAccessBuilder {
     pub(super) owned: Vec<PathBuf>,
     /// FSA-FR-OWVT: the subset of `roots` an author's tree may be removed from.
     pub(super) author: Vec<PathBuf>,
+    /// FSA-FR-RBGJ: the subset of `roots` a write needs to find on disk.
+    pub(super) required: Vec<PathBuf>,
     /// FSA-FR-KAQV: files granted read-only (the documents profile).
     pub(super) read_only_files: Vec<PathBuf>,
     /// FSA-FR-KAQV: folders granted read-only, with everything below them.
@@ -37,6 +39,15 @@ impl FsAccessBuilder {
     /// whole set (FSA-FR-10).
     pub fn allow_root(mut self, path: impl Into<PathBuf>) -> Self {
         self.roots.push(path.into());
+        self
+    }
+
+    /// FSA-FR-RBGJ: add a directory this instance may reach and that a write
+    /// needs to find on disk. It must exist at build, as every root must.
+    pub fn required_root(mut self, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        self.required.push(path.clone());
+        self.roots.push(path);
         self
     }
 
@@ -94,6 +105,16 @@ impl FsAccessBuilder {
 
         let owned_roots = super::owned_tree::canonicalize_owned(&self.owned)?;
         let author_roots = super::owned_tree::canonicalize_owned(&self.author)?;
+        // Both spellings, for the reason the allowlist above holds both: a caller
+        // composes its paths from the spelling it was given.
+        let mut required_roots = Vec::with_capacity(self.required.len());
+        for raw in &self.required {
+            let canonical = canonicalize_root(raw)?;
+            if raw.is_absolute() && *raw != canonical {
+                required_roots.push(raw.clone());
+            }
+            required_roots.push(canonical);
+        }
 
         let session_temp = if self.session_temp { Some(SessionTemp::create()?) } else { None };
         if let Some(t) = &session_temp {
@@ -104,6 +125,7 @@ impl FsAccessBuilder {
             roots,
             owned_roots,
             author_roots,
+            required_roots,
             follow_symlinks: self.follow_symlinks,
             session_temp,
             read_only: false,

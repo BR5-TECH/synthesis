@@ -1,0 +1,114 @@
+/* Voice mode: the voice area of the shared composer (VOM-voice-mode.md). Its
+   parts stand on one line, which holds the height of one line of the text field,
+   so entering voice mode does not move the composer. They wrap only where the
+   column is too narrow, as a growing text field does. */
+.voice-area {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  min-width: 0;
+  /* The height of one line of the text field, so that the composer does not
+     move and the row's other controls stand on the same centre. */
+  min-height: 24px;
+}
+.comment-composer__row > .voice-area { flex: 1 1 0; }
+
+.voice-area__record {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-1);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+  touch-action: none;
+}
+.voice-area__record:hover:not(:disabled) { color: var(--fg-1); }
+.voice-area__record[data-recording="true"],
+.voice-area__record[data-recording="true"]:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--accent-fg);
+}
+.voice-area__record[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.voice-area__record:disabled { opacity: 0.5; cursor: default; }
+
+.voice-area__transcript {
+  /* The basis decides when the toggles wrap: the text keeps a width to read. */
+  flex: 1 1 120px;
+  min-width: 0;
+  max-height: 5.5em;
+  overflow-y: auto;
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.voice-area__toggles {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-1);
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.voice-toggle {
+  display: inline-flex;
+  /* A group wraps as a whole. Its options never break or clip. */
+  flex: none;
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.voice-toggle__option {
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.voice-toggle__option[aria-pressed="true"] {
+  background: var(--bg-sunken);
+  color: var(--fg-1);
+}
+.voice-toggle__option:disabled { opacity: 0.5; cursor: default; }
+.voice-toggle__option:focus-visible,
+.voice-area__record:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.comment-composer__voice-toggle[aria-pressed="true"] { color: var(--accent); }
+.comment-composer__voice-expand[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+.voice-feedback__note {
+  padding: var(--sp-1) 0 0;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-sm);
+}
+.voice-feedback__retry { margin-left: var(--sp-2); }
+
+.voice-settings__capabilities { margin: 6px 0 12px; }
+.voice-settings__routes {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.voice-settings__hotkey {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}

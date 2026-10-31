@@ -42,4 +42,5 @@ mod moving;
 mod operations;
 mod profiles;
 mod readonly;
+mod required_roots;
 mod structural;

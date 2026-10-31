@@ -35,6 +35,7 @@ const streams = (ids: string[]): WorkStreamSummary[] =>
     behindBase: 0,
     baseTipRevision: "a91bc04",
     missingCommits: [],
+    branchMissing: false,
   }));
 
 /** GSD-FR-WQPD: which of those streams a run holds. */

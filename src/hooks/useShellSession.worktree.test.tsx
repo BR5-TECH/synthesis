@@ -8,6 +8,11 @@ import type {
 } from "../types";
 import type { SwitchOutcome } from "../components/WorktreeSelector";
 import { resetPanelReveals } from "../state/panelReveal";
+import {
+  applyActiveRootState,
+  isActiveRootGone,
+  resetActiveRootHealth,
+} from "../state/activeRootHealth";
 import { releaseToastsForRoot, resetToasts, visibleToasts } from "../state/toasts";
 import {
   closeReview,
@@ -85,6 +90,7 @@ const fireEvent = (name: string, payload: unknown) =>
 let failWrites = new Set<string>();
 beforeEach(() => {
   resetToasts();
+  resetActiveRootHealth();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -324,6 +330,168 @@ describe("useShellSession.switchWorktree (OVW-FR-12 / TAB-FR-14)", () => {
     expect(result.current.activeWorktree).toEqual(WORKTREE_A);
     expect(result.current.contentRootEpoch).toBe(0);
     expect(result.current.sessions.get("a.md")?.conflict).toBe(true);
+  });
+
+  // WTS-FR-OSKY: while the root is gone there is nowhere to write, so a write
+  // that would block does not cancel any way out of it.
+  describe("while the active root is gone", () => {
+    const rootGone = () =>
+      applyActiveRootState({ state: "gone", primaryPath: "~/dev/acme" });
+
+    it("WTS-FR-OSKY, FLO-FR-29, NAW-FR-24: no store of pending changes is flushed", async () => {
+      const result = await openWithTabs();
+      const flushed = [
+        vi.spyOn(result.current.sessions, "flushAll"),
+        vi.spyOn(result.current.flows, "flushAll"),
+        vi.spyOn(result.current.drafts, "flushAll"),
+      ];
+      rootGone();
+
+      await act(async () => {
+        await result.current.switchWorktree(async () => contextOn("~/dev/acme", "main"));
+      });
+
+      for (const flush of flushed) expect(flush).not.toHaveBeenCalled();
+    });
+
+    it("WTS-FR-OSKY: Open another writes nothing and leaves for the picker", async () => {
+      const result = await openWithTabs();
+      act(() => result.current.sessions.update("a.md", { conflict: true }));
+      rootGone();
+      invokeMock.mockClear();
+
+      await act(async () => {
+        await result.current.openAnother();
+      });
+
+      expect(savedIds()).toEqual([]);
+      expect(result.current.screen).toBe("picker");
+    });
+
+    it("WTS-FR-BTMD, WTS-FR-ZHLG: leaving the project clears the state the menu reads", async () => {
+      const result = await openWithTabs();
+      rootGone();
+
+      await act(async () => {
+        await result.current.requestCloseProject();
+      });
+
+      expect(isActiveRootGone()).toBe(false);
+    });
+
+    it("WTS-FR-OSKY: an unknown answer at the teardown leaves the last answer standing", async () => {
+      const result = await openWithTabs();
+      act(() => result.current.sessions.update("a.md", { conflict: true }));
+      rootGone();
+      const reply = invokeMock.getMockImplementation();
+      invokeMock.mockImplementation(async (cmd: string, ...rest: unknown[]) => {
+        if (cmd === "active_root_state") {
+          return { state: "unknown", primaryPath: "~/dev/acme" };
+        }
+        return reply?.(cmd, ...rest);
+      });
+
+      let outcome: SwitchOutcome | undefined;
+      await act(async () => {
+        outcome = await result.current.switchWorktree(async () =>
+          contextOn("~/dev/acme", "main"),
+        );
+      });
+
+      expect(outcome).toEqual({ ok: true });
+    });
+
+    it("WTS-FR-OSKY, WTS-FR-23, OVW-FR-12, TAB-FR-14, EDT-FR-33: a switch writes nothing, and no blocked write cancels it", async () => {
+      const result = await openWithTabs();
+      act(() => result.current.sessions.update("a.md", { conflict: true }));
+      seedDirty(result.current.sessions, "b.md", "unsaved");
+      rootGone();
+      invokeMock.mockClear();
+      const operation = vi.fn();
+
+      let outcome: SwitchOutcome | undefined;
+      await act(async () => {
+        outcome = await result.current.switchWorktree(async () => {
+          operation();
+          return contextOn("~/dev/acme", "main");
+        });
+      });
+
+      expect(outcome).toEqual({ ok: true });
+      expect(operation).toHaveBeenCalledTimes(1);
+      expect(savedIds()).toEqual([]);
+      expect(result.current.tabs).toHaveLength(1);
+      expect(result.current.sessions.get("b.md")).toBeUndefined();
+    });
+
+    it("WTS-FR-OSKY: a worktree that came back is written, because the state is read again first", async () => {
+      const result = await openWithTabs();
+      seedDirty(result.current.sessions, "b.md", "unsaved");
+      rootGone();
+      const reply = invokeMock.getMockImplementation();
+      invokeMock.mockImplementation(async (cmd: string, ...rest: unknown[]) => {
+        if (cmd === "active_root_state") {
+          return { state: "healthy", primaryPath: "~/dev/acme" };
+        }
+        return reply?.(cmd, ...rest);
+      });
+
+      await act(async () => {
+        await result.current.switchWorktree(async () => contextOn("~/dev/acme", "main"));
+      });
+
+      expect(savedIds()).toContain("b.md");
+    });
+
+    it("WTS-FR-OSKY: a read that fails at the teardown leaves the last answer standing", async () => {
+      const result = await openWithTabs();
+      act(() => result.current.sessions.update("a.md", { conflict: true }));
+      rootGone();
+      const reply = invokeMock.getMockImplementation();
+      invokeMock.mockImplementation(async (cmd: string, ...rest: unknown[]) => {
+        if (cmd === "active_root_state") throw new Error("no answer");
+        return reply?.(cmd, ...rest);
+      });
+
+      let outcome: SwitchOutcome | undefined;
+      await act(async () => {
+        outcome = await result.current.switchWorktree(async () =>
+          contextOn("~/dev/acme", "main"),
+        );
+      });
+
+      expect(outcome).toEqual({ ok: true });
+    });
+
+    it("WTS-FR-OSKY, SNV-FR-25: Close Project writes nothing and is not cancelled", async () => {
+      const result = await openWithTabs();
+      act(() => result.current.sessions.update("a.md", { conflict: true }));
+      rootGone();
+      invokeMock.mockClear();
+
+      await act(async () => {
+        await result.current.requestCloseProject();
+      });
+
+      expect(savedIds()).toEqual([]);
+      expect(invokeMock.mock.calls.some((c) => c[0] === "close_project")).toBe(true);
+      expect(result.current.screen).toBe("picker");
+    });
+
+    it("WTS-FR-OSKY, SNV-FR-26: Exit writes nothing and is not cancelled", async () => {
+      const result = await openWithTabs();
+      act(() => result.current.sessions.update("a.md", { conflict: true }));
+      rootGone();
+      invokeMock.mockClear();
+
+      await act(async () => {
+        await result.current.requestExit();
+      });
+
+      expect(savedIds()).toEqual([]);
+      const finish = invokeMock.mock.calls.find((c) => c[0] === "finish_exit");
+      expect(finish?.[1]).toEqual({ proceed: true });
+    });
   });
 
   // OVW-FR-12, WTS-FR-24: a refused operation leaves the window in the fresh
@@ -567,6 +735,54 @@ describe("useShellSession worktree label (WTS-FR-25)", () => {
       });
     });
     expect(result.current.activeWorktree).toBeNull();
+  });
+
+  // WTS-FR-BANB: a read that fails on a gone root leaves the label as it was, so
+  // the dialog can still name the worktree that went.
+  it("WTS-FR-BANB: a failed read of the active worktree keeps the last label", async () => {
+    let reachable = true;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_active_worktree") {
+        if (reachable) return ON_MAIN;
+        throw "not a git repository";
+      }
+      return undefined;
+    });
+    const { result } = renderHook(() => useShellSession());
+    act(() => result.current.loadProject(handle("acme", "~/dev/acme")));
+    await waitFor(() => expect(result.current.activeWorktree).toEqual(ON_MAIN));
+
+    reachable = false;
+    await act(async () => {
+      fireEvent("branches-changed", { repositoryRoot: "~/dev/acme" });
+    });
+
+    expect(result.current.activeWorktree).toEqual(ON_MAIN);
+  });
+
+  it("WTS-FR-BANB: a failed read after a context event keeps the payload's label", async () => {
+    let reachable = true;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_active_worktree") {
+        if (reachable) return ON_MAIN;
+        throw "not a git repository";
+      }
+      return undefined;
+    });
+    const { result } = renderHook(() => useShellSession());
+    act(() => result.current.loadProject(handle("acme", "~/dev/acme")));
+    await waitFor(() => expect(result.current.activeWorktree).toEqual(ON_MAIN));
+
+    reachable = false;
+    await act(async () => {
+      fireEvent("worktree-context-changed", {
+        activeWorktreePath: ON_MAIN.path,
+        branch: ON_MAIN.branch,
+        isDetached: false,
+      });
+    });
+
+    expect(result.current.activeWorktree).toEqual(ON_MAIN);
   });
 
   /**

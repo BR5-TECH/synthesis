@@ -1,3 +1,4 @@
+import { useVoiceShell } from "./hooks/useVoiceShell";
 import "./styles/colors_and_type.css";
 import "./styles/components.css";
 import "./styles/kit.css";
@@ -265,6 +266,9 @@ function App() {
       unlisten?.();
     };
   }, []);
+
+  // VOM-voice-mode.md: the hotkey, spoken replies, and the provider state.
+  useVoiceShell();
 
   useEffect(() => {
     let cancelled = false;

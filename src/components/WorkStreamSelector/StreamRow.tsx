@@ -214,7 +214,17 @@ export function StreamRow({
       )}
       {missing && (
         <p className="badge badge--warn" role="status">
-          Missing — its working copy is gone. Delete it and make it again.
+          Missing — its working copy is gone.
+          {(held || queuedRunCount > 0) &&
+            " Discard its run in Runs, and the stream is removed."}
+        </p>
+      )}
+      {/* WSS-FR-NIRW: the row keeps Delete stream, so this is no dead end. */}
+      {summary.branchMissing && (
+        <p className="badge badge--warn" role="status">
+          {idleActions
+            ? "Branch gone — Delete stream removes this stream."
+            : "Branch gone."}
         </p>
       )}
       {blocked && !updating && (

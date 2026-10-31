@@ -122,6 +122,30 @@ pub(crate) fn prune_worktree_registration(
     Ok(())
 }
 
+/// WKS-FR-STSZ: prune the registration of a working copy that is gone, and only
+/// where the path the registration itself records is not found.
+///
+/// This differs from [`prune_worktree_registration`] on purpose. That one acts
+/// on a removal the author confirmed, and it takes the working tree with it.
+/// After `git worktree move`, a registration of this name names a live directory
+/// elsewhere, and this leaves that registration and that directory alone.
+pub(crate) fn prune_dead_registration(
+    fs: &crate::fs::FsAccess,
+    main: &Repository,
+    path: &Path,
+    registration: Option<&str>,
+) -> Result<(), String> {
+    for worktree in registrations_at(main, path, registration) {
+        if !matches!(fs.file_info(worktree.path()), Err(crate::fs::FsError::NotFound { .. })) {
+            continue;
+        }
+        let mut opts = git2::WorktreePruneOptions::new();
+        opts.valid(true).working_tree(false);
+        worktree.prune(Some(&mut opts)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// WTC-FR-RDVK: remove the directory of one linked worktree and prune its
 /// registration, through the filesystem access layer.
 ///

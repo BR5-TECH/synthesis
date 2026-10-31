@@ -16,6 +16,22 @@
 /// fns in scope via `*_are_in_scope` tests, so a rename fails to compile there.)
 #[allow(dead_code)]
 pub(crate) const COMMAND_NAMES: &[&str] = &[
+    // VOP-voice-ai-providers.md.
+    "list_voice_ai_integrations",
+    "verify_voice_ai_integration",
+    "set_voice_ai_routes",
+    "set_voice_ai_default_voice",
+    "set_active_voice_ai_integration",
+    "clear_voice_ai_integration",
+    "list_voice_ai_models",
+    "list_voice_ai_voices",
+    "start_voice_capture",
+    "append_voice_capture",
+    "finish_voice_capture",
+    "retry_voice_capture",
+    "cancel_voice_capture",
+    "speak_voice_segment",
+    "cancel_voice_speech",
     "list_recent_projects",
     "open_project_at_path",
     "open_project_from_git_url",
@@ -139,6 +155,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Work streams (WKS-work-streams.md / WSS-work-stream-selector.md).
     "create_work_stream",
     "list_work_streams",
+    "list_removed_work_streams",
+    "dismiss_removed_work_stream",
     "get_work_stream",
     "merge_work_stream",
     "update_work_stream",
@@ -290,6 +308,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "list_worktrees_and_branches",
     "get_active_worktree",
     "activate_worktree",
+    "active_root_state",
+    "leave_gone_worktree",
     "check_out_branch_in_active_worktree",
     "propose_worktree_path",
     "create_worktree",

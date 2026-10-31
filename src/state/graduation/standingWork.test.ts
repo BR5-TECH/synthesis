@@ -77,6 +77,7 @@ describe("whether the run will wait for its stream", () => {
     behindBase: 0,
     baseTipRevision: "a91bc04",
     missingCommits: [],
+    branchMissing: false,
   });
 
   it("GSD-FR-WQPD: a stream a run holds, and one with runs queued on it, both make the run wait", () => {

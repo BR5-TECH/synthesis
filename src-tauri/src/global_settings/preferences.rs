@@ -68,6 +68,15 @@ pub enum DiffRenderingMode {
     Rich,
 }
 
+/// GSS-FR-RHYJ: how Push-to-Talk acts.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceHotkeyBehaviour {
+    #[default]
+    Hold,
+    Toggle,
+}
+
 /// Which of the Changes panel's three footer actions is selected (GSS-FR-25).
 ///
 /// Stored whatever the repository can do at this moment: the selection
@@ -206,6 +215,13 @@ pub struct AppPreferences {
     /// silently off.
     #[serde(default = "notifications_enabled_default")]
     pub notifications_enabled: bool,
+    /// GSS-FR-RHYJ: the Push-to-Talk hotkey. It defaults through a named
+    /// function, because a record from an earlier build has no such field.
+    #[serde(default = "voice_hotkey_default")]
+    pub voice_hotkey: String,
+    /// GSS-FR-RHYJ: how the Push-to-Talk hotkey and button act.
+    #[serde(default)]
+    pub voice_hotkey_behaviour: VoiceHotkeyBehaviour,
     /// GSS-FR-33: whether a change of the main viewport's active tab moves the
     /// vertical panel's selection to the item that tab is a view onto, `true`
     /// when unset. User-global rather than project-scoped because it describes
@@ -285,6 +301,10 @@ fn notifications_enabled_default() -> bool {
     true
 }
 
+fn voice_hotkey_default() -> String {
+    "Ctrl+Shift+Space".to_string()
+}
+
 /// GSS-FR-33: the panel follows the active tab until the author turns it off.
 fn selection_follows_tab_default() -> bool {
     true
@@ -317,6 +337,8 @@ impl Default for AppPreferences {
             diff_rendering_mode: DiffRenderingMode::default(),
             changes_commit_action: ChangesCommitAction::default(),
             notifications_enabled: notifications_enabled_default(),
+            voice_hotkey: voice_hotkey_default(),
+            voice_hotkey_behaviour: VoiceHotkeyBehaviour::default(),
             selection_follows_tab: selection_follows_tab_default(),
             graduation_rail_width_fraction: graduation_rail_width_default(),
             graduation_paths_width_fraction: graduation_paths_width_default(),

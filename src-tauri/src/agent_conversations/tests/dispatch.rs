@@ -465,6 +465,7 @@ fn a_delivered_comment_carries_the_title_the_agent_answered_under() {
 
     // Retitled between the two turns: the earlier comment does not move with it.
     let mut retitled = AgentDraft {
+        voice: String::new(),
         nickname: "arch".into(),
         title: "Architect".into(),
         model_id: "m".into(),
@@ -823,6 +824,7 @@ fn a_turn_resolves_the_project_agent_before_a_personal_agent_of_the_same_nicknam
         Some(&h.root()),
         agents::AgentScope::Project,
         &AgentDraft {
+            voice: String::new(),
             nickname: "arch".into(),
             title: String::new(),
             model_id: "m".into(),

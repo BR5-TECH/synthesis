@@ -6,6 +6,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  RemovedStreamNotice,
   AgentActivityPage,
   WorkStream,
   WorkStreamSummary,
@@ -44,6 +45,14 @@ export const createWorkStream = (
 /** WKS-FR-SGCM: every live stream of the project, with what each holds. */
 export const listWorkStreams = () =>
   invoke<WorkStreamSummary[]>("list_work_streams");
+
+/** WKS-FR-YLBX: the notices of the open project. A read consumes none. */
+export const listRemovedWorkStreams = () =>
+  invoke<RemovedStreamNotice[]>("list_removed_work_streams");
+
+/** WKS-FR-YLBX: drop one notice. */
+export const dismissRemovedWorkStream = (streamId: string) =>
+  invoke<void>("dismiss_removed_work_stream", { streamId });
 
 /** WKS-FR-SGCM: one stream, or the typed `unknown_stream`. */
 export const getWorkStream = (streamId: string) =>

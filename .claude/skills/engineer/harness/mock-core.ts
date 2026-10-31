@@ -31,6 +31,46 @@ function harnessValue(name: string): string | null {
   return new URLSearchParams(location.search).get(name);
 }
 
+/* --- Voice AI (VOP-voice-ai-providers.md) --------------------------------- */
+
+// Which providers are verified, and which one is active. Verify, Activate, and
+// Clear change these, so the Voice AI section can be walked with no `?voice`.
+const voiceVerified = new Set<string>(harnessFlag("voice") ? ["custom"] : []);
+let voiceActive: string | null = harnessFlag("voice") ? "custom" : null;
+
+function mockVoiceRecord(provider: string) {
+  const verified = voiceVerified.has(provider);
+  return {
+    provider,
+    baseUrl: provider === "custom" ? "http://localhost:8080" : "https://api.example/v1",
+    sttModel: "voxtral-mini-4b-realtime",
+    ttsModel: "lfm3-audio",
+    transcriptionRoute: verified ? "realtime" : "http",
+    speechRoute: verified ? "realtime" : undefined,
+    defaultVoice: "",
+    routesChosen: false,
+    verifiedAt: verified ? now : undefined,
+    capabilities: verified
+      ? {
+          dialect: "llamacpp",
+          realtimeTranscription: "live",
+          realtimeInputRate: 16000,
+          httpTranscription: true,
+          realtimeSpeech: true,
+          openaiSpeech: false,
+          llamaTts: true,
+        }
+      : undefined,
+  };
+}
+
+function mockVoiceIntegrations() {
+  return {
+    active: voiceActive,
+    records: ["openai", "openrouter", "custom"].map(mockVoiceRecord),
+  };
+}
+
 /* --- Session logging (LGC-logging.md / LOG-logs.md) --------------------- */
 
 type MockLogRecord = {
@@ -7586,6 +7626,40 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
   switch (cmd) {
+    // VOP-voice-ai-providers.md. `?voice` starts with a verified Custom provider
+    // on llama.cpp, so that the composer shows the Voice button as enabled.
+    case "list_voice_ai_integrations":
+      return mockVoiceIntegrations();
+    case "set_active_voice_ai_integration":
+      voiceActive = a.provider;
+      return mockVoiceIntegrations();
+    case "clear_voice_ai_integration":
+      voiceVerified.delete(a.provider);
+      if (voiceActive === a.provider) voiceActive = null;
+      return mockVoiceIntegrations();
+    case "verify_voice_ai_integration":
+      voiceVerified.add(a.provider);
+      return mockVoiceRecord(a.provider);
+    case "set_voice_ai_routes":
+    case "set_voice_ai_default_voice":
+      return mockVoiceRecord(a.provider);
+    case "list_voice_ai_models":
+      return { sttModels: ["voxtral-mini-4b-realtime"], ttsModels: ["lfm3-audio"] };
+    // Custom has no voice list, as in the backend. With no provider, the harness
+    // keeps a list, so that the persona editor shows its selector on `?voice`.
+    case "list_voice_ai_voices":
+      return a.provider === "custom" ? null : ["marin", "cedar"];
+    case "start_voice_capture":
+      return { sessionId: "voice-1", route: "realtime", live: true };
+    case "append_voice_capture":
+    case "cancel_voice_capture":
+    case "speak_voice_segment":
+    case "cancel_voice_speech":
+      return null;
+    case "finish_voice_capture":
+    case "retry_voice_capture":
+      return "A transcript from the harness.";
+
     // ---- project ---------------------------------------------------------
     case "open_project_at_path":
     case "open_project_from_git_url":
@@ -8409,13 +8483,33 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // the restart confirmation to default to one (GRT-FR-IMRI). The counts are
     // derived from the queue rather than written down, so a run enqueued in
     // this session moves them.
+    // WKS-FR-YLBX: a harness project has no removed stream until a test seeds one.
+    case "list_removed_work_streams":
+      return (window as unknown as { __removedStreams?: unknown[] }).__removedStreams ?? [];
+    case "dismiss_removed_work_stream": {
+      const held = window as unknown as { __removedStreams?: { streamId: string }[] };
+      held.__removedStreams = (held.__removedStreams ?? []).filter(
+        (notice) => notice.streamId !== a.streamId,
+      );
+      return undefined;
+    }
     case "list_work_streams":
       return workStreams.map((stream) => ({
-        stream: { ...stream },
+        // A test sets `__streamListPatch[id]` to override the fields of a row.
+        stream: {
+          ...stream,
+          ...(window as unknown as { __streamListPatch?: Record<string, object> })
+            .__streamListPatch?.[stream.id],
+        },
         queuedRunCount: graduationRuns.filter(
           (r) => r.streamId === stream.id && r.state === "queued",
         ).length,
         aheadOfBase: stream.isMissing ? 0 : 2,
+        // WSS-FR-NIRW: a test lists stream ids in `__branchMissingStreams`.
+        branchMissing:
+          (window as unknown as { __branchMissingStreams?: string[] }).__branchMissingStreams?.includes(
+            stream.id,
+          ) ?? false,
         // WKS-FR-RJPD / WKS-FR-KFVJ: the harness streams stand level with
         // their base, so Update is disabled on each row.
         behindBase: 0,
@@ -9614,8 +9708,38 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "check_out_branch_in_active_worktree":
     case "create_worktree":
       return worktreeContext;
-    case "get_active_worktree":
-      return worktrees[0];
+    // WTS-FR-BIOJ: the health read runs only for a linked worktree. A test sets
+    // `__linkedWorktree` to `true`, or to fields that override the entry.
+    case "get_active_worktree": {
+      const linked = (window as unknown as { __linkedWorktree?: unknown }).__linkedWorktree;
+      if (!linked) return worktrees[0];
+      return {
+        ...worktrees[1],
+        isActive: true,
+        ...(typeof linked === "object" ? linked : {}),
+      };
+    }
+    // WTC-FR-CPRM: a test sets `__activeRootState` to raise the dialog.
+    case "active_root_state":
+      return (
+        (window as unknown as { __activeRootState?: unknown }).__activeRootState ?? {
+          state: "healthy",
+          primaryPath: worktrees[0].path,
+          primaryBranch: worktrees[0].branch,
+        }
+      );
+    case "leave_gone_worktree": {
+      const left = window as unknown as {
+        __activeRootState?: unknown;
+        __linkedWorktree?: unknown;
+        __leaveGoneError?: string;
+      };
+      // WTS-FR-YKSZ: a test sets `__leaveGoneError` to refuse the switch.
+      if (left.__leaveGoneError) throw left.__leaveGoneError;
+      left.__activeRootState = undefined;
+      left.__linkedWorktree = undefined;
+      return worktreeContext;
+    }
     case "propose_worktree_path":
       return `/Users/demo/dev/acme-${String(a.branch).replace(/\//g, "-")}`;
     case "refresh_worktrees_and_branches":

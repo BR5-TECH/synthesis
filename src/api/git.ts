@@ -7,6 +7,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ActiveRootState,
   CommitOutcome,
   RollbackOutcome,
   BranchOption,
@@ -319,6 +320,14 @@ export const getActiveWorktree = () =>
 /** WTC-FR-08: make an existing worktree the project's content root. */
 export const activateWorktree = (path: string) =>
   invoke<WorktreeContext>("activate_worktree", { path });
+
+/** WTC-FR-CPRM: whether the content root is gone. Changes nothing. */
+export const activeRootState = () =>
+  invoke<ActiveRootState>("active_root_state");
+
+/** WTC-FR-NQLS: move a content root that is gone to the primary worktree. */
+export const leaveGoneWorktree = () =>
+  invoke<WorktreeContext>("leave_gone_worktree");
 
 /** WTC-FR-10: check a branch out in the active worktree, then re-root on it. */
 export const checkOutBranchInActiveWorktree = (branch: string) =>

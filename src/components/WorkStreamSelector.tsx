@@ -89,6 +89,9 @@ import { reportDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { NewStreamDialog } from "./WorkStreamSelector/NewStreamDialog";
 import { StreamRow } from "./WorkStreamSelector/StreamRow";
 import { MergePrompt } from "./WorkStreamSelector/MergePrompt";
+import { RemovedNotice } from "./WorkStreamSelector/RemovedNotice";
+import { useRemovedNotices } from "./WorkStreamSelector/removedNotices";
+import { useMenuInWindow } from "./WorkStreamSelector/menuInWindow";
 import { useTemporaryStreams } from "./WorkStreamSelector/temporary";
 import type { PullRequestSource } from "./CreatePullRequest/types";
 import type {
@@ -164,6 +167,7 @@ export function WorkStreamSelector({
 
   /** Which listing request is the newest, so a late older answer is dropped. */
   const listingSeq = useRef(0);
+  const removed = useRemovedNotices(open, streams);
 
   const reload = useCallback(() => {
     if (!inRepository) {
@@ -356,6 +360,9 @@ export function WorkStreamSelector({
     const count = `${live.length} stream${live.length === 1 ? "" : "s"}`;
     return busyCount > 0 ? `${count} · ${busyCount} busy` : count;
   }, [live.length, busyCount]);
+
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useMenuInWindow(menuRef, open, live.length + removed.notices.length);
 
   if (!inRepository) return null;
 
@@ -724,10 +731,22 @@ export function WorkStreamSelector({
       </button>
 
       {open && (
-        <div className="stream-select__menu menu" role="menu" data-testid="stream-menu">
+        <div
+          className="stream-select__menu menu"
+          ref={menuRef}
+          role="menu"
+          data-testid="stream-menu"
+        >
           {/* WSS-FR-SOAS: the listing scrolls inside its own region. */}
           <div className="stream-select__list" data-testid="stream-list">
-            {live.length === 0 && (
+            {removed.notices.map((notice) => (
+              <RemovedNotice
+                key={notice.streamId}
+                notice={notice}
+                onDismiss={(streamId) => void removed.dismiss(streamId)}
+              />
+            ))}
+            {live.length === 0 && removed.notices.length === 0 && (
               <p className="stream-select__empty t-muted">
                 This project holds no work stream yet.
               </p>

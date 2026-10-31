@@ -36,6 +36,8 @@ export interface Agent {
    */
   title: string;
   modelId: string;
+  /** AGR-FR-ABCF: a plain voice name. `""` means the provider's default. */
+  voice?: string;
   /** Free text. Empty is an ordinary state, not an unconfigured one. */
   instructions: string;
   createdAt: string;
@@ -53,6 +55,8 @@ export interface AgentDraft {
   title: string;
   modelId: string;
   instructions: string;
+  /** AGR-FR-ABCF. */
+  voice?: string;
   reasoning: ReasoningChoice | null;
 }
 

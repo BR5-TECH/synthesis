@@ -19,10 +19,10 @@ import {
  */
 
 describe("the section vocabulary", () => {
-  it("SWN-FR-QXTV: the Global group lists 14 sections, the Project group 11, in the keys a route names", () => {
+  it("SWN-FR-QXTV: the Global group lists 15 sections, the Project group 11, in the keys a route names", () => {
     expect(GLOBAL_SECTIONS.map(([key]) => key)).toEqual([...GLOBAL_SECTION_KEYS]);
     expect(PROJECT_SECTIONS.map(([key]) => key)).toEqual([...PROJECT_SECTION_KEYS]);
-    expect(GLOBAL_SECTIONS).toHaveLength(14);
+    expect(GLOBAL_SECTIONS).toHaveLength(15);
     expect(PROJECT_SECTIONS).toHaveLength(11);
   });
 
@@ -34,9 +34,9 @@ describe("the section vocabulary", () => {
     expect(GLOBAL_SECTIONS[docker + 1]).toEqual(["isolation", "Isolation"]);
   });
 
-  it("GLS-FR-03, SET-FR-03: Indexing follows Agentic AI in the Global group and ends the Project group", () => {
+  it("GLS-FR-03, SET-FR-03: Indexing follows Voice AI in the Global group and ends the Project group", () => {
     const global = GLOBAL_SECTIONS.map(([key]) => key);
-    expect(global[global.indexOf("ai-agentic") + 1]).toBe("indexing");
+    expect(global[global.indexOf("voice-ai") + 1]).toBe("indexing");
     expect(GLOBAL_SECTIONS[global.indexOf("indexing")]).toEqual(["indexing", "Indexing"]);
     expect(PROJECT_SECTIONS[PROJECT_SECTIONS.length - 1][0]).toBe("indexing");
   });

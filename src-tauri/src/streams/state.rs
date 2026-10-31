@@ -41,6 +41,9 @@ pub struct StreamState {
     /// WKS-FR-QFTH: the streams this process has an update **job** behind, on
     /// the same terms as `jobs` (WKS-FR-DAKP).
     update_jobs: Mutex<BTreeSet<String>>,
+    /// WKS-FR-YLBX: the notices of removed streams, with the project each
+    /// belongs to, in removal order. In memory: a notice lasts for this process.
+    removed: Mutex<Vec<(String, super::RemovedStreamNotice)>>,
     /// The store root, where it is not the application's own.
     ///
     /// Production leaves it unset and the store stands under
@@ -54,6 +57,28 @@ impl StreamState {
     /// A state whose store stands under a root the caller names.
     pub fn rooted_at(root: PathBuf) -> Self {
         Self { root: Mutex::new(Some(root)), ..Default::default() }
+    }
+
+    /// WKS-FR-YLBX: hold a notice until the author dismisses it.
+    pub fn record_removed(&self, project_key: &str, notice: super::RemovedStreamNotice) {
+        let mut removed = self.removed.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        removed.push((project_key.to_string(), notice));
+    }
+
+    /// WKS-FR-YLBX: the notices of one project, in removal order.
+    pub fn removed_notices(&self, project_key: &str) -> Vec<super::RemovedStreamNotice> {
+        let removed = self.removed.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        removed
+            .iter()
+            .filter(|(key, _)| key == project_key)
+            .map(|(_, notice)| notice.clone())
+            .collect()
+    }
+
+    /// WKS-FR-YLBX: drop one project's notice of one stream, where it holds one.
+    pub fn dismiss_removed(&self, project_key: &str, stream_id: &str) {
+        let mut removed = self.removed.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        removed.retain(|(key, notice)| key != project_key || notice.stream_id != stream_id);
     }
 
     /// The store root this state reads and writes under.

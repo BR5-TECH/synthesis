@@ -119,6 +119,7 @@ pub(super) fn build_read_only(builder: FsAccessBuilder) -> Result<FsAccess, FsAc
         roots,
         owned_roots: Vec::new(),
         author_roots: Vec::new(),
+        required_roots: Vec::new(),
         follow_symlinks: builder.follow_symlinks,
         session_temp: None,
         read_only: true,
@@ -145,5 +146,17 @@ impl FsAccess {
             return Err(FsError::ReadOnly { operation });
         }
         Ok(())
+    }
+
+    /// FSA-FR-UKAE, FSA-FR-RBGJ: refuse a write aimed at `path`, before any
+    /// filesystem change. A write under a required root that is gone would
+    /// create the root again through its parents (FSA-FR-05), so it stops here.
+    pub(super) fn deny_write_at(&self, operation: &'static str, path: &Path) -> FsResult<()> {
+        self.deny_write(operation)?;
+        let target = Self::normalize(path);
+        match self.required_roots.iter().find(|root| target.starts_with(root) && !root.is_dir()) {
+            Some(root) => Err(FsError::RootGone { root: root.clone() }),
+            None => Ok(()),
+        }
     }
 }

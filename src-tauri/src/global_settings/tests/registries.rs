@@ -234,6 +234,7 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
         store
             .save_agent_registry(vec![
                 Agent {
+                    voice: String::new(),
                     id: "a1".into(),
                     nickname: "arch".into(),
                     title: "Architect".into(),
@@ -244,6 +245,7 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
                     reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
                 },
                 Agent {
+                    voice: String::new(),
                     id: "a2".into(),
                     nickname: "scribe".into(),
                     title: String::new(),
@@ -422,4 +424,28 @@ fn gss_ts25_a_fresh_machine_has_no_integration_no_active_and_no_override() {
     assert_eq!(active_api, None);
     assert_eq!(store.load_agentic_override("/dev/acme").unwrap(), None);
     assert_eq!(store.load_ai_api_override("/dev/acme").unwrap(), None);
+}
+
+// GSS-FR-CKQG: the Voice AI records and the active provider survive a
+// reload, the file holds no key, and a store with no registry reads as empty.
+#[test]
+fn voice_ai_registry_survives_a_reload_of_the_file() {
+    use crate::voice_ai::{descriptor, VoiceAiRecord, VoiceCapabilities};
+
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("synthesis.toml");
+    let mut record = VoiceAiRecord::seeded(descriptor("custom").unwrap());
+    record.base_url = "http://localhost:8080".into();
+    record.masked_hint = Some("3f9a".into());
+    record.capabilities =
+        Some(VoiceCapabilities { http_transcription: true, ..Default::default() });
+    {
+        let store = GlobalSettingsStore::with_path(path.clone());
+        assert_eq!(store.load_voice_ai_registry().unwrap(), (vec![], None));
+        store.save_voice_ai_registry(vec![record.clone()], Some("custom".into())).unwrap();
+    }
+    let reopened = GlobalSettingsStore::with_path(path);
+    let (records, active) = reopened.load_voice_ai_registry().unwrap();
+    assert_eq!(records, vec![record]);
+    assert_eq!(active.as_deref(), Some("custom"));
 }

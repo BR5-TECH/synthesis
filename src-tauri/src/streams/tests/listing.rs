@@ -2,7 +2,7 @@
 
 use super::*;
 
-// WKS-FR-SGCM / WKS-FR-AXRD — listing
+// WKS-FR-SGCM — listing
 // ---------------------------------------------------------------------------
 
 // WKS-FR-SGCM: the listing answers for every live stream, with what each holds.
@@ -30,10 +30,10 @@ fn an_unknown_stream_is_refused() {
     );
 }
 
-// WKS-FR-AXRD: a stream whose directory has gone is reported rather than
-// removed, and it is reported as missing.
+// WKS-FR-AXRD: a read of one stream reports a gone directory as missing, and the
+// branch is still named. A listing is what removes the stream (WKS-FR-APUE).
 #[test]
-fn a_stream_whose_directory_is_gone_is_reported_as_missing() {
+fn a_stream_whose_directory_is_gone_is_read_as_missing() {
     let fx = Fixture::new();
     let stream = fx.create("vanishing", None).expect("created");
     std::fs::remove_dir_all(&stream.worktree_path).expect("removed");
@@ -41,10 +41,6 @@ fn a_stream_whose_directory_is_gone_is_reported_as_missing() {
     let read = get_work_stream(fx.app.clone(), stream.id.clone()).expect("still reported");
     assert!(read.is_missing);
     assert_eq!(read.branch, stream.branch);
-
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
-    assert_eq!(listed.len(), 1);
-    assert!(listed[0].stream.is_missing);
 }
 
 // WKS-FR-AXRD: the missing flag is recomputed on every read rather than stored.

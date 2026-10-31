@@ -11,6 +11,14 @@ import { BottomSurface } from "./logging";
 // ---------------------------------------------------------------------------
 
 /** One of the repository's worktrees (WTC-FR-04 / WTC-FR-05). */
+/** WTC-FR-CPRM: what can be said of the content root, and the way back. */
+export interface ActiveRootState {
+  state: "healthy" | "gone" | "unknown";
+  primaryPath: string;
+  /** The primary worktree's branch. Absent where it holds none. */
+  primaryBranch?: string;
+}
+
 export interface WorktreeEntry {
   /** Absolute path of the worktree directory. */
   path: string;

@@ -55,6 +55,9 @@ import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
 import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
 import { PullReconcileDialog } from "./components/PullReconcileDialog";
+import { WorktreeGoneGate } from "./components/WorktreeGoneDialog";
+import { leaveGoneWorktree } from "./api";
+import { rootIsGoneNow } from "./state/activeRootHealth";
 import { TabScrollScope } from "./hooks/useRememberedScroll";
 
 /**
@@ -855,6 +858,24 @@ export function AppShell(props: AppShellProps) {
           onConfirm={() => settlePicker(true)}
         />
       )}
+
+      {/* WTS-FR-WIFO: mounted last, so it stands above every overlay. */}
+      <WorktreeGoneGate
+        activeWorktree={s.activeWorktree}
+        contentRootEpoch={s.contentRootEpoch}
+        onSwitch={async () => {
+          // A worktree that came back closes the dialog, and no tab closes.
+          if (!(await rootIsGoneNow())) return null;
+          const outcome = await s.switchWorktree(leaveGoneWorktree);
+          if (outcome.ok) return null;
+          return outcome.cancelled ? "The switch was cancelled." : outcome.error;
+        }}
+        onCloseProject={() => void s.requestCloseProject()}
+        onOpened={() => {
+          overlays.closeAllOverlays();
+          overlays.closeAbout();
+        }}
+      />
 
       {/* CVP-FR-43: every reveal is announced, so a conversation is followed
           without being watched. Keyed on the sequence so a repeated message

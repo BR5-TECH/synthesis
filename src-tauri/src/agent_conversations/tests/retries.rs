@@ -832,13 +832,16 @@ fn nothing_an_author_can_reach_varies_the_retry_policy() {
     // one pending claim's local steps, and `retry_embeddings_model_download`
     // (per `../specifications/core/EMB-embeddings-index.md` EMB-FR-KEGS) starts
     // one failed model download again. None carries a delay, a count or a
-    // deadline.
-    const ASKS_AGAIN: [&str; 5] = [
+    // deadline. `retry_voice_capture` (per
+    // `../specifications/core/VOP-voice-ai-providers.md` VOP-FR-IAFL) sends
+    // one held recording again, and it carries none of these either.
+    const ASKS_AGAIN: [&str; 6] = [
         "retry_agent_turn",
         "retry_work_stream_update",
         "retry_draft_publication",
         "retry_github_claim",
         "retry_embeddings_model_download",
+        "retry_voice_capture",
     ];
     // One command spells a forbidden word while meaning something else:
     // `cancel_draft_publication_attempt` abandons the persisted publication

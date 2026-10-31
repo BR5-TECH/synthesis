@@ -360,6 +360,8 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
       };
     case "list_personal_agents":
       return [];
+    case "list_voice_ai_integrations":
+      return { active: null, records: [] };
     case "list_agent_turns":
     case "list_recoverable_agent_turn_failures":
     case "list_agent_turn_image_notices":

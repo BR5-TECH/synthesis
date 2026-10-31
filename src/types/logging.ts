@@ -1,3 +1,4 @@
+import type { VoiceHotkeyBehaviour } from "./voice";
 // Session logging (LGC-logging.md / LOG-logs.md)
 //
 // Split out of one `types.ts` that had grown past four thousand lines.
@@ -176,6 +177,10 @@ export type ThemePreference = "light" | "dark" | "system";
  */
 export interface AppPreferences {
   theme: ThemePreference;
+  /** GSS-FR-RHYJ: the Push-to-Talk hotkey. */
+  voiceHotkey?: string;
+  /** GSS-FR-RHYJ: how the Push-to-Talk hotkey and button act. */
+  voiceHotkeyBehaviour?: VoiceHotkeyBehaviour;
   /**
    * GSS-FR-21 / SCH-FR-13: the universal search bar's active query mode. Read
    * when the search input mounts and written whenever the user changes the

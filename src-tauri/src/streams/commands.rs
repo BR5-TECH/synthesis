@@ -113,6 +113,15 @@ pub fn create_work_stream<R: tauri::Runtime>(
             ERR_STREAM_NAME_TAKEN.to_string(),
         ));
     }
+    // WKS-FR-HRUZ: a branch that outlived its stream, or any other of that name.
+    if !git::branch_not_found(&main, &branch) {
+        return Err(refuse(
+            &app,
+            "work stream name refused",
+            "",
+            format!("{ERR_STREAM_BRANCH_EXISTS}: {branch}"),
+        ));
+    }
 
     // WKS-FR-PWNR: the active worktree's branch where the request names none.
     let base_branch = match base_branch.filter(|b| !b.trim().is_empty()) {
@@ -227,6 +236,19 @@ fn fail_and_reclaim<R: tauri::Runtime>(
     reason
 }
 
+/// WKS-FR-RVSU: the repository a listing reads. A root that is gone opens
+/// nothing, and the stream that roots the project stays listed, so the listing
+/// falls back on the primary worktree.
+fn listing_repo<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &std::path::Path,
+) -> Result<git2::Repository, String> {
+    git::primary_repo(root).or_else(|refusal| {
+        let anchor = app.try_state::<crate::project::ProjectState>().and_then(|p| p.anchor());
+        anchor.map_or(Err(refusal), |anchor| git::primary_repo(std::path::Path::new(&anchor)))
+    })
+}
+
 /// WKS-FR-SGCM: every live stream, with what each holds.
 #[tauri::command]
 pub fn list_work_streams<R: tauri::Runtime>(
@@ -235,7 +257,7 @@ pub fn list_work_streams<R: tauri::Runtime>(
     let root = project_root(&app)?;
     let fs = store_fs(&app)?;
     let store = store(&app)?;
-    let main = git::primary_repo(&root)?;
+    let main = listing_repo(&app, &root)?;
     let key = project_key(&app);
     // GRB-FR-UHFE: reclaim what a merge the application never finished left
     // behind. A listing is where it belongs: it is the first thing every reader
@@ -244,6 +266,8 @@ pub fn list_work_streams<R: tauri::Runtime>(
     attempts::sweep_stranded_attempts(&app);
     // WKS-FR-QFTH: and record the updates a stopped application left running.
     attempts::sweep_interrupted_updates(&app);
+    // WKS-FR-APUE: a stream that lost its working copy leaves before the read.
+    removal::sweep_gone_streams(&app, &main, &root);
     // WKS-FR-YBST: the depth of each stream's queue, read from the project's
     // run order index. No run record is opened by a listing.
     let counts = crate::graduation::store_base(&app)
@@ -269,6 +293,8 @@ pub fn list_work_streams<R: tauri::Runtime>(
             });
             let update = update_record::read_update(&fs, &store, &stream.id)
                 .filter(|record| record.project_key == key);
+            // WKS-FR-AIWE: a stream with no directory is flagged missing instead.
+            let branch_missing = !stream.is_missing && git::branch_not_found(&main, &stream.branch);
             WorkStreamSummary {
                 stream,
                 queued_run_count,
@@ -278,6 +304,7 @@ pub fn list_work_streams<R: tauri::Runtime>(
                 missing_commits,
                 merge_run,
                 update,
+                branch_missing,
             }
         })
         .collect())
@@ -343,17 +370,18 @@ pub fn delete_work_stream<R: tauri::Runtime>(
     let store = store(&app)?;
     let main = git::primary_repo(&root)?;
     let key = project_key(&app);
-    let stream = store::read_stream(&fs, &store, &stream_id)
-        .filter(|stream| stream.project_key == key)
-        .ok_or_else(|| {
-            refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string())
-        })?;
 
     // The exclusive hold every write of this module takes, held across the
     // read, the check and the write together: without it two callers each
     // pass their own precondition before either mutates.
     let held = app.try_state::<StreamState>();
     let _write = held.as_ref().map(|state| state.write_guard());
+
+    let stream = store::read_stream(&fs, &store, &stream_id)
+        .filter(|stream| stream.project_key == key)
+        .ok_or_else(|| {
+            refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string())
+        })?;
 
     // WKS-FR-OVLQ: refused while a run holds it.
     if stream.is_busy() {
@@ -429,15 +457,9 @@ pub fn delete_work_stream<R: tauri::Runtime>(
         stranded.push(reason);
     }
     // WKS-FR-EIBC: the update record goes with the stream it belongs to.
-    if let Err(reason) = update_record::remove_update(&fs, &store, &stream_id) {
+    if let Err(reason) = removal::end_stream(&app, &fs, &store, &key, &stream_id) {
         stranded.push(reason);
     }
-    // EAC-FR-ABHG: the stream has ended, so its sandbox VM stops.
-    crate::tools::agent_exec::sandbox::stop_scope_in_background(
-        &app,
-        key.clone(),
-        stream_id.clone(),
-    );
     // WKS-FR-SPVK: the branch set changed, whether or not every part went.
     crate::worktree::announce_branches_changed(&app, &root, "work stream deletion");
     if !stranded.is_empty() {

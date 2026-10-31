@@ -97,8 +97,8 @@ pub use runs::{
 pub use scheduler::*;
 pub use state::GraduationState;
 pub use store::{
-    new_run_id, read_queue_index, store_base, store_fs, write_queue_index, QueueIndex,
-    QueueIndexEntry, StoreBase,
+    new_run_id, read_queue_index, store_base, store_fs, try_read_queue_index, write_queue_index,
+    QueueIndex, QueueIndexEntry, StoreBase,
 };
 /// The sync of a run's progress operation, for a test that holds a stale copy.
 #[cfg(test)]

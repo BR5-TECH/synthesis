@@ -7,7 +7,13 @@
 import type { DiscussionContext } from "../types";
 
 /** The commands that the app sends in the background, which no test is about. */
-const BACKGROUND_COMMANDS = new Set(["append_log_records"]);
+const BACKGROUND_COMMANDS = new Set([
+  "append_log_records",
+  // WTS-FR-BIOJ: the read of a linked worktree's health.
+  "active_root_state",
+  // WSS-FR-RPYH: the read of an open dropdown's notices.
+  "list_removed_work_streams",
+]);
 
 /**
  * The answer to a command that the mock does not route.

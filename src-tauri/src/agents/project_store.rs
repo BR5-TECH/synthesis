@@ -35,6 +35,7 @@ struct AgentFile {
     title: String,
     model_id: String,
     instructions: String,
+    voice: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<ReasoningChoice>,
 }
@@ -69,6 +70,7 @@ fn agent_of(id: &str, file: AgentFile) -> Agent {
         title: file.title,
         model_id: file.model_id,
         instructions: file.instructions,
+        voice: file.voice,
         // A Project agent carries no timestamp (PSS-FR-AGKY).
         created_at: String::new(),
         updated_at: String::new(),
@@ -122,6 +124,7 @@ pub fn write(root: &RootFs, id: &str, draft: &AgentDraft, title: &str) -> Result
         title: title.to_string(),
         model_id: draft.model_id.clone(),
         instructions: draft.instructions.clone(),
+        voice: draft.voice.trim().to_string(),
         reasoning: draft.reasoning.clone(),
     };
     root.write_toml_atomic(agent_path(root, id), &file)

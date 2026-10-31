@@ -207,6 +207,10 @@ pub struct PersistedState {
         deserialize_with = "document_limit::lenient_percent"
     )]
     pub document_limit_percent: Option<u8>,
+    /// GSS-FR-CKQG: the active Voice AI provider, or `None`. A scalar, so
+    /// it is declared before the tables.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_voice_ai: Option<String>,
     pub app_preferences: AppPreferences,
     pub recent_projects: Vec<RecentProjectEntry>,
     pub installed_plugins: Vec<InstalledPlugin>,
@@ -255,6 +259,10 @@ pub struct PersistedState {
     /// agent. Another array of tables, so it stays beside the registries above
     /// and before the two project tables below.
     pub agents: Vec<crate::agents::Agent>,
+    /// GSS-FR-CKQG: the Voice AI provider registry, one descriptive
+    /// record per provider. No key is present here: each key lives in the
+    /// application secret vault (`crate::voice_ai`).
+    pub voice_ai_integrations: Vec<crate::voice_ai::VoiceAiRecord>,
     /// GSS-FR-35: the **Docker backend** this machine reaches a container
     /// runtime through — the selected mode, the Docker Engine endpoint, the
     /// Docker CLI executable path, and the verification those three values
@@ -300,6 +308,7 @@ pub struct PersistedState {
 mod document_limit;
 mod embeddings;
 mod recents;
+mod voice_ai;
 pub use document_limit::*;
 pub use recents::*;
 

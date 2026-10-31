@@ -234,11 +234,15 @@ describe("a stream a run holds (WSS-FR-PSXK, WSS-FR-YCAL)", () => {
     ).toMatch(/A run holds this stream or waits in its queue/);
   });
 
-  it("WSS-FR-OQYG: a missing stream says so and offers no action but removal", async () => {
+  it("WSS-FR-OQYG: a missing stream says so, and its other actions are gone or disabled", async () => {
     backend([summary({ isMissing: true })]);
     const { onActivate } = renderSelector();
     const menu = await openMenu();
     expect(within(menu).getByText(/Missing/)).toBeInTheDocument();
+    for (const name of [/Delete stream/, /Merge stream/, /Update stream/]) {
+      expect(within(menu).queryByRole("button", { name })).toBeNull();
+    }
+    expect(within(menu).getByRole("button", { name: "Create a PR" })).toBeDisabled();
     await userEvent.click(
       within(menu).getByRole("menuitem", { name: /Open the work stream/ }),
     );

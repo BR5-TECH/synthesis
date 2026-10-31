@@ -218,6 +218,7 @@ fn a_catalogue_agrees_with_what_an_agents_availability_is_computed_from() {
         h.keys.lock_it();
 
         let agent = Agent {
+            voice: String::new(),
             id: "a1".into(),
             nickname: "arch".into(),
             title: String::new(),

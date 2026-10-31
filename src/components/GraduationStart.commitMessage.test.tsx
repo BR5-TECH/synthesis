@@ -37,6 +37,7 @@ const occupied = (id: string): WorkStreamSummary => ({
   behindBase: 0,
   baseTipRevision: "a91bc04",
   missingCommits: [],
+  branchMissing: false,
 });
 
 /** One run of a stream, named by the draft it captured. */

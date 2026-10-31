@@ -38,6 +38,8 @@ const EVENT_NAMES: &[&str] = &[
     github_publication::metadata_refresh::PUBLICATION_METADATA_CHANGED,
     github_publication::metadata_refresh::PUBLICATION_METADATA_STARTUP_FAILED,
     logging::LOG_RECORDS_APPENDED,
+    voice_ai::VOICE_AI_CHANGED,
+    voice_ai::VOICE_TRANSCRIPT_CHANGED,
     notifications::NOTIFICATION_ACTIVATED,
     graduation::GRADUATION_QUEUE_CHANGED,
     streams::WORK_STREAMS_CHANGED,
@@ -174,6 +176,21 @@ fn no_secret_reading_function_is_reachable_from_the_frontend() {
          reach of any frontend invoke",
     );
     assert!(!COMMAND_NAMES.contains(&"resolve_github_token_secret"));
+}
+
+#[test]
+fn no_voice_key_path_is_reachable_from_the_frontend() {
+    // VOP-FR-EBQI: `resolve_active_voice` gives a provider key. The claim that
+    // no frontend `invoke` reaches it rests on its absence here.
+    let handler = SOURCE
+        .split_once("generate_handler![")
+        .expect("generate_handler! invocation")
+        .1
+        .split_once("])")
+        .expect("end of generate_handler!")
+        .0;
+    assert!(!handler.contains("resolve_active_voice"));
+    assert!(!COMMAND_NAMES.contains(&"resolve_active_voice"));
 }
 
 #[test]

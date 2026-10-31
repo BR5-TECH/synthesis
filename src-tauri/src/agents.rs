@@ -111,6 +111,9 @@ pub struct Agent {
     /// Free text, stored verbatim and never parsed here (AGR-FR-08). An empty
     /// value is an ordinary state rather than an unconfigured one.
     pub instructions: String,
+    /// AGR-FR-ABCF: a plain voice name that names no provider. `""` means the
+    /// provider's default voice.
+    pub voice: String,
     /// RFC 3339 UTC. Empty for a Project agent, whose file carries no timestamp.
     pub created_at: String,
     /// RFC 3339 UTC. Empty for a Project agent.
@@ -134,6 +137,8 @@ pub struct AgentDraft {
     pub title: String,
     pub model_id: String,
     pub instructions: String,
+    /// AGR-FR-ABCF.
+    pub voice: String,
     pub reasoning: Option<ReasoningChoice>,
 }
 
@@ -485,6 +490,7 @@ pub fn create_agent_impl(
                 title,
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
+                voice: draft.voice.trim().to_string(),
                 created_at: now.clone(),
                 updated_at: now,
                 reasoning: draft.reasoning.clone(),
@@ -505,6 +511,7 @@ pub fn create_agent_impl(
                 title,
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
+                voice: draft.voice.trim().to_string(),
                 created_at: String::new(),
                 updated_at: String::new(),
                 reasoning: draft.reasoning.clone(),
@@ -536,6 +543,7 @@ pub fn update_agent_impl(
                 title,
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
+                voice: draft.voice.trim().to_string(),
                 created_at: agents[index].created_at.clone(),
                 updated_at: now_rfc3339(),
                 reasoning: draft.reasoning.clone(),
@@ -558,6 +566,7 @@ pub fn update_agent_impl(
                 title,
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
+                voice: draft.voice.trim().to_string(),
                 created_at: String::new(),
                 updated_at: String::new(),
                 reasoning: draft.reasoning.clone(),

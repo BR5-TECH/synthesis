@@ -1,15 +1,16 @@
 //! What a scripted turn of a merge run may do at a moment a turn cannot reach on
-//! its own (GTE-FR-HWQM, GTE-FR-CZPM).
+//! its own (GTE-FR-HWQM, GTE-FR-KVYE, GTE-FR-CZPM).
 //!
 //! The loop writes its `review verdict` record, and then applies the merge. No
-//! turn runs between the two. A listener on the event that announces the record
-//! runs on the loop's own thread, right after the record is durable, so what it
-//! does lands exactly between the verdict and the apply.
+//! turn runs between the two. The loop tells the dispatch seam on its own thread,
+//! right after the record is durable, so what a script does there lands exactly
+//! between the verdict and the apply.
+//!
+//! This must stay a direct call and not a listener on a Tauri event. `emit` only
+//! queues an event while another thread holds the listener table, so a listener
+//! can run after the apply, or not at all.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
-use tauri::{Listener, Manager};
+use tauri::Manager;
 
 use super::hooks::{log_path, TurnContext};
 use super::script::TurnScript;
@@ -53,45 +54,33 @@ impl TurnContext {
         (state.is_looping(&self.run_id), state.is_driving(&self.run_id))
     }
 
-    /// Run `act` once, at the first moment the run's `review verdict` record is
-    /// durable. The listener stands for the rest of the scenario and fires once.
-    fn once_the_verdict_is_recorded(&self, act: Arc<dyn Fn(&TurnContext) + Send + Sync>) {
-        let fired = Arc::new(AtomicBool::new(false));
-        let ctx = self.clone();
-        self.app.listen(crate::graduation::GRADUATION_LOG_RECORDS_APPENDED, move |event| {
-            let payload: serde_json::Value =
-                serde_json::from_str(event.payload()).unwrap_or_default();
-            let is_ours =
-                payload["runId"] == ctx.run_id.as_str() && payload["stream"] == "structured";
-            if !is_ours || fired.load(Ordering::SeqCst) {
-                return;
-            }
-            let path = log_path(&ctx.app, &ctx.run_id, GraduationLogStream::Structured);
-            let root = path.parent().expect("the stream's directory").to_path_buf();
-            let last = guard(&root)
-                .read_text(&path)
-                .unwrap_or_default()
-                .lines()
-                .last()
-                .and_then(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-                .unwrap_or_default();
-            if last["event"] == "review verdict" {
-                fired.store(true, Ordering::SeqCst);
-                act(&ctx);
-            }
-        });
+    /// The name of the last record the run's structured stream holds.
+    fn last_structured_event(&self) -> serde_json::Value {
+        let path = log_path(&self.app, &self.run_id, GraduationLogStream::Structured);
+        let root = path.parent().expect("the stream's directory").to_path_buf();
+        let last = guard(&root)
+            .read_text(&path)
+            .unwrap_or_default()
+            .lines()
+            .last()
+            .and_then(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .unwrap_or_default();
+        last["event"].clone()
     }
 }
 
 impl TurnScript {
-    /// GTE-FR-HWQM: `act` runs between the `ready` verdict of this review and the
-    /// apply that follows it, on the loop's own thread.
+    /// GTE-FR-KVYE: `act` runs on the loop's own thread, once the `review verdict`
+    /// record of this review is durable and before the verdict has any effect.
     pub(crate) fn then_once_the_verdict_is_recorded(
-        self,
+        mut self,
         act: impl Fn(&TurnContext) + Send + Sync + 'static,
     ) -> Self {
-        let act: Arc<dyn Fn(&TurnContext) + Send + Sync> = Arc::new(act);
-        self.then(move |ctx| ctx.once_the_verdict_is_recorded(act.clone()))
+        self.after_verdict = Some(Box::new(move |ctx| {
+            assert_eq!(ctx.last_structured_event(), "review verdict", "the act ran out of place");
+            act(ctx);
+        }));
+        self
     }
 
     /// GRD-FR-EWTN: the author discards the run between the verdict and the apply.

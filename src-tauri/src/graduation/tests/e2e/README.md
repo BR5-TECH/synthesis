@@ -259,6 +259,13 @@ The hooks a merge turn may carry: `checking_the_live_trees_stand()`,
 content)`, `dirtying_the_stream_meanwhile(path, content)`,
 `holding_the_update_guard()` and `holding_the_base_index()`.
 
+A review turn may also name one act after its verdict (GTE-FR-KVYE):
+`pausing_the_run_after_the_verdict()`, `discarding_the_run_after_the_verdict()`
+or `losing_the_log_after_the_verdict()`. The loop runs the act through the
+dispatch seam, so it lands between the record and the apply. An act or a hook
+never waits for a Tauri event, because `emit` only queues an event while another
+thread holds the listener table.
+
 The assertions on a merge: `expect_merged`, `expect_nothing_to_merge`,
 `expect_conflicted` and `expect_merge_refused` read the answer.
 `expect_no_merge_run` and `expect_no_merge_leftovers` read the run store, the

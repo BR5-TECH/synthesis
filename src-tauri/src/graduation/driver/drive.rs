@@ -766,6 +766,8 @@ async fn review_turn<R: tauri::Runtime>(
     ) {
         return Step::Stop;
     }
+    // GXD-FR-TBOW: the record is durable, and the verdict has had no effect yet.
+    dispatch.review_verdict_recorded();
 
     // GRL-FR-UQNV: two findings or fewer, all minor, end the loop as `ready`
     // does. They are recorded as advisory remarks and no further turn is

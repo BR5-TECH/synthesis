@@ -366,13 +366,16 @@ impl Harness {
         // progress event nobody here listens to, the other the terminal turn
         // event — could therefore queue the terminal event and never deliver it.
         // A listener for every event a turn thread emits makes every emit
-        // flush the queue.
+        // flush the queue. `FLUSH_QUEUED_EMITS` is for `wait_for_terminal`, which
+        // covers what this list cannot: a thread that is not a turn thread, and
+        // an emit queued just after the flush of the thread that held the table.
         for event in [
+            FLUSH_QUEUED_EMITS,
             crate::progress::OPERATION_PROGRESS,
-            crate::logging::LOG_RECORDS_APPENDED,
             crate::agent_activity::AGENT_ACTIVITY_APPENDED,
             crate::comments::DISCUSSION_CHANGED,
             crate::comments::DISCUSSION_QUESTION_SET_CHANGED,
+            crate::statistics::DRAFT_STATISTICS_CHANGED,
         ] {
             app.listen(event, |_| {});
         }

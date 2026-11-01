@@ -138,3 +138,22 @@ fn a_clear_is_never_coalesced_away() {
         "the clear settled the pending debt; a stale flush must not follow it"
     );
 }
+
+// LGC-FR-RJSM: a test app stays silent, so the trailing flush cannot make a test
+// listener miss its event.
+#[test]
+fn a_test_app_hears_no_log_event() {
+    use tauri::Listener;
+
+    let app = tauri::test::mock_app();
+    let heard = Arc::new(StdMutex::new(0));
+    let count = heard.clone();
+    app.listen(LOG_RECORDS_APPENDED, move |_| *count.lock().unwrap() += 1);
+
+    let buffer = LogBuffer::new();
+    let first = buffer.append_at(vec![input(LogLevel::Info, &[Domain::Backend], "1")], t0());
+    assert!(first.emit_now, "this append is one that publishes");
+    app.handle().publish(&first.state);
+
+    assert_eq!(*heard.lock().unwrap(), 0, "the test app heard a log event");
+}

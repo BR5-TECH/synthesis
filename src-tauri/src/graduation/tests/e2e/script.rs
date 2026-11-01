@@ -25,11 +25,18 @@ pub(crate) struct TurnScript {
     /// GTE-FR-HWQM: what the turn does to the application before it answers,
     /// in the order the scenario named them.
     pub(super) hooks: Vec<Hook>,
+    /// GTE-FR-HWQM: what happens once the verdict of this review is durable.
+    pub(super) after_verdict: Option<Hook>,
 }
 
 impl TurnScript {
     fn of(answer: Answer) -> Self {
-        Self { inner: Turn::answering(answer), changes_setting: None, hooks: Vec::new() }
+        Self {
+            inner: Turn::answering(answer),
+            changes_setting: None,
+            hooks: Vec::new(),
+            after_verdict: None,
+        }
     }
 
     // -- answers -------------------------------------------------------------

@@ -20,9 +20,9 @@ fn count_events(fx: &Fixture, channel: &'static str) -> Arc<AtomicUsize> {
     count
 }
 
-/// Wait until the count arrives. Tauri defers an emit that meets a held lock, and
-/// a sandbox stop logs from another thread, so the count is a state and not a
-/// result of the call. The bound applies only to a test that is failing.
+/// Wait until the count arrives. Tauri defers an emit that meets a held lock, so
+/// the count is a state and not a result of the call. The bound applies only to a
+/// test that is failing.
 fn wait_for_count(count: &AtomicUsize, expected: usize) {
     let end = Instant::now() + Duration::from_secs(60);
     while count.load(Ordering::SeqCst) < expected && Instant::now() < end {

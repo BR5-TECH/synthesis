@@ -431,6 +431,7 @@ fn a_turn_holds_the_context_figures_of_its_latest_call() {
     assert!(split.tool_results > 0, "the read_file result of the first round");
 
     // CVL-FR-OPTI: one report per answered call.
+    deliver_queued_events(&h);
     let reports: Vec<AgentTurn> =
         h.context_events.lock().unwrap().iter().filter(|t| t.id == turn.id).cloned().collect();
     assert_eq!(reports.len(), 2);

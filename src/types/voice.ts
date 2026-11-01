@@ -58,6 +58,16 @@ export type VoiceHotkeyBehaviour = "hold" | "toggle";
 export type VoiceVadSensitivity = "low" | "medium" | "high";
 
 /** VOP "Records": what `voice-activity-changed` carries. */
+/** VOP-FR-DSSU: one step of a chunk of a chunked capture. */
+export interface VoiceChunkChange {
+  captureId: string;
+  /** 0 for the first chunk of the capture. */
+  index: number;
+  state: "chunk_end" | "chunk_transcript" | "chunk_failed";
+  text: string | null;
+  code: string | null;
+}
+
 export interface VoiceActivityChange {
   activityId: string;
   state: "speech_start" | "speech_confirmed" | "speech_end" | "misfire" | "failed";

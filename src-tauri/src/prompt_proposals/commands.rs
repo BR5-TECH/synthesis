@@ -207,7 +207,25 @@ where
     // that cannot be attributed changes neither the file nor the record.
     let by = comments::acting_participant(store, project)?;
     let request = DecisionRequest { proposal_id, decision, hunk, feedback, by: &by };
-    let outcome = decide(app, &root, &repo_store, request, tracker)
+    decide_in_process(app, operation, &root, &repo_store, request, tracker)
+}
+
+/// PCP-FR-MXSB: the decision a command and `decide_prompt_changes` share, once
+/// the root, the store, and the author are resolved.
+pub(super) fn decide_in_process<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    operation: &'static str,
+    root: &fs::RootFs,
+    repo_store: &fs::RootFs,
+    request: DecisionRequest<'_>,
+    tracker: &ContentTracker,
+) -> Result<PromptDecisionOutcome, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let proposal_id = request.proposal_id;
+    let hunk = request.hunk;
+    let outcome = decide(app, root, repo_store, request, tracker)
         .inspect_err(|e| log_refusal(app, operation, e))?;
     // PCP-FR-28: the decision and its shape, never the feedback. DEBUG, because
     // `announce` has already recorded the proposal's new state at INFO.
@@ -296,9 +314,24 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let root = require_root(&project)?;
-    let proposal = hold_hunk_impl(&root, &proposal_id, &hunk_id, discussing)
-        .inspect_err(|e| log_refusal(&app, "hold_hunk", e))?;
-    announce(&app, &BUFFER, &proposal, PromptProposalChangeCause::Held);
+    hold_in_process(&app, &root, &proposal_id, &hunk_id, discussing)
+}
+
+/// PCP-FR-HLDQ / PCP-FR-MXSB: the hold a command and `decide_prompt_changes`
+/// share.
+pub(crate) fn hold_in_process<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &fs::RootFs,
+    proposal_id: &str,
+    hunk_id: &str,
+    discussing: bool,
+) -> Result<PromptChangeProposal, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let proposal = hold_hunk_impl(root, proposal_id, hunk_id, discussing)
+        .inspect_err(|e| log_refusal(app, "hold_hunk", e))?;
+    announce(app, &BUFFER, &proposal, PromptProposalChangeCause::Held);
     Ok(proposal)
 }
 
@@ -380,15 +413,29 @@ where
 {
     let root = require_root(&project)?;
     let repo_store = require_store(&project)?;
-    let held = read_proposal(&root, &proposal_id)?;
+    complete_in_process(&app, &root, &repo_store, &proposal_id)
+}
+
+/// PCP-FR-14 / PCP-FR-MXSB: the completion a command and
+/// `decide_prompt_changes` share.
+pub(crate) fn complete_in_process<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &fs::RootFs,
+    repo_store: &fs::RootFs,
+    proposal_id: &str,
+) -> Result<PromptDecisionOutcome, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let held = read_proposal(root, proposal_id)?;
     let _guard = artifact_lock(&held.artifact_id);
-    let reconciled = reconcile_locked(&app, &root, &repo_store, &proposal_id)
-        .inspect_err(|e| log_refusal(&app, "complete", e))?;
-    let record = read_proposal(&root, &proposal_id)?;
-    let (_, discussion) = locate_thread(&root, &repo_store, &record.thread_id)?;
+    let reconciled = reconcile_locked(app, root, repo_store, proposal_id)
+        .inspect_err(|e| log_refusal(app, "complete", e))?;
+    let record = read_proposal(root, proposal_id)?;
+    let (_, discussion) = locate_thread(root, repo_store, &record.thread_id)?;
     let comment_id = match &reconciled {
         Reconciliation::Settled { proposal_id: completed, comment_id }
-            if completed == &proposal_id =>
+            if completed == proposal_id =>
         {
             comment_id.clone()
         }

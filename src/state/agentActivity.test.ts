@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   activityStatus,
   THINKING,
+  WAITING_FOR_SPEECH,
   toolActivityStatus,
   TOOL_ACTIVITY_STATUS,
   WORKING,
@@ -34,6 +35,8 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
       ["ask_discussion_questions", "Preparing questions for you…"],
       ["propose_draft_changes", "Preparing draft changes…"],
       ["propose_prompt_changes", "Preparing prompt changes…"],
+      ["decide_draft_changes", "Deciding draft changes…"],
+      ["decide_prompt_changes", "Deciding prompt changes…"],
       ["openrouter:web_search", "Searching the web…"],
       ["openrouter:web_fetch", "Fetching from the web…"],
     ];
@@ -46,7 +49,16 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
     expect(Object.keys(TOOL_ACTIVITY_STATUS).sort()).toEqual(
       vocabulary.map(([tool]) => tool).sort(),
     );
-    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(14);
+    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(16);
+  });
+
+  it("CTA-FR-HPXE, CVP-FR-RNYK: a turn bound to an open speech waits for the author", () => {
+    expect(activityStatus({ activeToolCalls: [], speechId: "c1" })).toBe(WAITING_FOR_SPEECH);
+    expect(WAITING_FOR_SPEECH).toBe("Waiting for you to finish speaking…");
+    expect(activityStatus({ activeToolCalls: [call("read_file", 1)], speechId: "c1" })).toBe(
+      "Reading a project file…",
+    );
+    expect(activityStatus({ activeToolCalls: [], speechId: null })).toBe("Thinking…");
   });
 
   it("reads Working… for a tool the vocabulary does not name", () => {

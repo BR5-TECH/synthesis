@@ -87,6 +87,43 @@ pub enum VoiceVadSensitivity {
     High,
 }
 
+/// GSS-FR-WYHC: how the author gives speech in voice mode.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceInputMode {
+    #[default]
+    Ptt,
+    Vad,
+}
+
+/// GSS-FR-WYHC: how an agent reply comes back in voice mode.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceResponseMode {
+    #[default]
+    Text,
+    Voice,
+}
+
+/// GSS-FR-WYHC: a missing or unknown value reads as the default, and the other
+/// fields of the file stay.
+fn lenient_or_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored<T> {
+        Known(T),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::<T>::deserialize(deserializer)? {
+        Stored::Known(value) => value,
+        Stored::Other(_) => T::default(),
+    })
+}
+
 /// GSS-FR-KOAB: the silence that ends an utterance, where nothing is stored.
 pub const VOICE_VAD_SILENCE_MS_DEFAULT: u32 = 1500;
 
@@ -336,6 +373,12 @@ pub struct AppPreferences {
     /// GSS-FR-KOAB: how readily a VAD session hears speech.
     #[serde(default, deserialize_with = "lenient_vad_sensitivity")]
     pub voice_vad_sensitivity: VoiceVadSensitivity,
+    /// GSS-FR-WYHC: Push-to-Talk or VAD, `ptt` when unset.
+    #[serde(default, deserialize_with = "lenient_or_default")]
+    pub voice_input_mode: VoiceInputMode,
+    /// GSS-FR-WYHC: Text or Voice, `text` when unset.
+    #[serde(default, deserialize_with = "lenient_or_default")]
+    pub voice_response_mode: VoiceResponseMode,
     /// GSS-FR-29: the three typographic roles' font settings, every field
     /// independently unset until chosen. The Appearance section reads them on
     /// mount and writes them whenever the user changes a control
@@ -401,6 +444,8 @@ impl Default for AppPreferences {
             git_files_width_fraction: git_files_width_default(),
             voice_vad_silence_ms: voice_vad_silence_default(),
             voice_vad_sensitivity: VoiceVadSensitivity::default(),
+            voice_input_mode: VoiceInputMode::default(),
+            voice_response_mode: VoiceResponseMode::default(),
             fonts: FontSettings::default(),
         }
     }

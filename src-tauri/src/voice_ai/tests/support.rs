@@ -62,6 +62,7 @@ impl Bench {
 pub(super) struct RecordingSink {
     pub(super) transcripts: Mutex<Vec<String>>,
     pub(super) diagnostics: Mutex<Vec<String>>,
+    pub(super) chunks: Mutex<Vec<crate::voice_ai::chunks::ChunkChange>>,
 }
 
 impl VoiceSink for RecordingSink {
@@ -72,6 +73,10 @@ impl VoiceSink for RecordingSink {
     }
 
     fn activity_changed(&self, _: &crate::voice_ai::activity::ActivityChange) {}
+
+    fn chunk_changed(&self, change: &crate::voice_ai::chunks::ChunkChange) {
+        self.chunks.lock().unwrap().push(change.clone());
+    }
 
     fn diagnostic(&self, stage: &str, detail: &str) {
         self.diagnostics.lock().unwrap().push(format!("{stage}: {detail}"));

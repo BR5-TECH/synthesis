@@ -30,6 +30,7 @@ import { DiscussionQuestions } from "../DiscussionQuestions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import { StreamMessages } from "../DraftDiscussion/stream";
 import { VoiceSessionBar } from "./VoiceSessionBar";
+import { useLiveBubbleNode } from "./LiveBubble";
 import { visibleBody } from "../../text/spokenPart";
 import { commentErrorMessage, turnFailureMessage } from "./messages";
 import { pairedHalves } from "./questionPairs";
@@ -186,6 +187,8 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
   // DQA-FR-NRZB: the set a discussion holds, whatever it is about.
   const questionSet = useQuestionSet(thread.id);
   const voice = useVoiceState();
+  // CVP-FR-TGPV: the live bubble shows in the voice discussion alone.
+  const liveBubble = useLiveBubbleNode(thread.id);
   const quoted = discussionFragment(thread);
 
   /**
@@ -463,6 +466,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             pendingTurns={pendingTurns}
             toolCallsByRow={toolCallsByRow}
             onCancelTurn={onCancelTurn}
+            liveBubble={liveBubble}
             footer={
               <>
                 {dividerAtEnd}
@@ -488,6 +492,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             beforeComment={beforeComment}
             visibleFrom={props.visibleFrom ?? 0}
             afterComments={dividerAtEnd}
+            liveBubble={liveBubble}
             footer={
               <>
                 {turnOutcomes}

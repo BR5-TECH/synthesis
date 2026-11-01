@@ -207,13 +207,13 @@ fn an_utterance_ends_at_ten_minutes_with_no_silence() {
     assert_eq!(detector.step(SPEECH, settings(), IDLE), Some(Action::SpeechEnd));
 }
 
-// VOP-FR-FMRV: no utterance starts until the capture settled.
+// VOP-FR-FMRV: after `speech_end`, the next utterance can start at once.
 #[test]
-fn no_utterance_starts_before_the_capture_settled() {
+fn the_next_utterance_starts_at_once_after_speech_end() {
     let mut detector = confirmed();
-    run(&mut detector, &[QUIET; SHORTEST_END], IDLE);
-    assert_eq!(run(&mut detector, &[SPEECH; 40], IDLE), vec![]);
-    detector.settled();
+    let actions = run(&mut detector, &[QUIET; SHORTEST_END], IDLE);
+    assert_eq!(actions, vec![Action::SpeechEnd]);
+    assert!(detector.waiting());
     assert_eq!(detector.step(SPEECH, settings(), IDLE), Some(Action::SpeechStart));
 }
 
@@ -292,7 +292,6 @@ fn a_confirmation_resets_the_back_off() {
     assert_eq!(frames_refused_after_a_misfire(&mut detector), 16);
     assert_eq!(run(&mut detector, &[SPEECH; 20], IDLE), vec![Action::Confirm]);
     run(&mut detector, &[QUIET; 22], IDLE);
-    detector.settled();
     assert_eq!(frames_refused_after_a_misfire(&mut detector), 16);
 }
 

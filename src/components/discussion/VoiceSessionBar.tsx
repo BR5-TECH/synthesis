@@ -51,6 +51,7 @@ export function VoiceSessionBar(props: {
       registerVoiceComposer(props.sessionKey, {
         // VOM-FR-ABPU: only a recording from before the set reaches this.
         post: async () => "busy",
+        posts: false,
         tagged: (transcript) => transcript,
         blocked: () => false,
         nicknames: () => nicknamesRef.current(),

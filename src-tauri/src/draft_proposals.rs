@@ -984,6 +984,9 @@ pub use record::*;
 /// engine above is read without the argument-shuffling around it.
 mod commands;
 pub use commands::*;
+/// DCP-FR-LAWR: the decision functions that the commands and the tool share.
+mod in_process;
+pub(crate) use in_process::*;
 
 pub use crate::text_hunks::anchors;
 pub mod hunks;

@@ -6,6 +6,10 @@
 
 use super::*;
 
+/// AGC-FR-EPNB / AGC-FR-TCCV: the open proposal that ends `discussion_history`.
+mod open_proposal;
+pub(super) use open_proposal::*;
+
 // ---------------------------------------------------------------------------
 // Input builders (AGC-FR-05)
 // ---------------------------------------------------------------------------
@@ -780,7 +784,15 @@ pub(super) fn discussion_history_section(
         parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
         parts.push(InputPart::Text("\n".to_string()));
     }
-    section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts)
+    // AGC-FR-EPNB / AGC-FR-TCCV: the open proposal ends the section, and the
+    // bound of AGC-FR-11 cuts the comments before it rather than the proposal.
+    let Some(open) = open_proposal_text(roots, &thread.target) else {
+        return section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts);
+    };
+    let room = SECTION_MAX_CHARS.saturating_sub(open.chars().count());
+    let mut section = section_of_parts_within(TAG_DISCUSSION_HISTORY, Vec::new(), parts, room);
+    append_open_proposal(&mut section, open);
+    section
 }
 
 /// AGC-FR-06: the body of the comment that addressed the agent.

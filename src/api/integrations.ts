@@ -390,6 +390,26 @@ export const dispatchAgentTurn = (args: {
   triggerCommentId: string;
 }) => invoke<AgentTurn>("dispatch_agent_turn", args);
 
+/**
+ * AGC-FR-SJQP: give the first chunk of a speech to a running turn of the
+ * agent, or register a new turn bound to the speech. AGC-FR-BMLY: refused with
+ * `speech_ended` for a speech that already ended.
+ */
+export const dispatchSpeechTurn = (args: {
+  nickname: string;
+  origin: ConversationOrigin;
+  speechId: string;
+  text: string;
+}) => invoke<AgentTurn>("dispatch_speech_turn", args);
+
+/** AGC-FR-KXOJ: a later chunk of the speech, as a steering message. */
+export const steerSpeechTurn = (speechId: string, text: string) =>
+  invoke<AgentTurn[]>("steer_speech_turn", { speechId, text });
+
+/** AGC-FR-TCDQ, AGC-FR-NFYK: end the speech, with the posted comment or with none. */
+export const endSpeechTurn = (speechId: string, commentId: string | null) =>
+  invoke<AgentTurn[]>("end_speech_turn", { speechId, commentId });
+
 /** AGC-FR-20: abandon the model call and terminate the turn `cancelled`,
  * appending nothing. */
 export const cancelAgentTurn = (turnId: string) =>

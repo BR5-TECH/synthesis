@@ -476,7 +476,7 @@ describe("following the backend's own event (DCR-FR-08, DCR-FR-21, DCR-FR-WRJP)"
     );
   });
 
-  it("DCR-FR-17, DCR-FR-21: a proposal resolved elsewhere ends the review", async () => {
+  it("DCR-FR-17, DCR-FR-21, DCR-FR-SRPZ: a proposal resolved elsewhere, as by a tool, ends the review", async () => {
     backend();
     renderWorkspace();
     await reviewing();

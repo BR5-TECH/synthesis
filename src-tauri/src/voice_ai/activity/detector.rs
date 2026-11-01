@@ -24,6 +24,8 @@ const COOLDOWN_MAX_FRAMES: u32 = 256;
 const TAIL_MS: u32 = 200;
 /// VOP-FR-GWZP.
 const LONGEST_FRAMES: u32 = 10 * 60 * 1000 / FRAME_MS;
+/// VOP-FR-JRVF.
+const SHORT_PAUSE_MS: u32 = 400;
 /// VOP-FR-DSNZ.
 pub(crate) const SILENCE_MIN_MS: u32 = 500;
 pub(crate) const SILENCE_MAX_MS: u32 = 5000;
@@ -47,7 +49,7 @@ impl Settings {
     }
 
     /// VOP-FR-OORS.
-    fn start(self) -> f32 {
+    pub(crate) fn start(self) -> f32 {
         match self.sensitivity {
             VoiceVadSensitivity::Low => 0.70,
             VoiceVadSensitivity::Medium => 0.50,
@@ -56,13 +58,19 @@ impl Settings {
     }
 
     /// VOP-FR-OORS.
-    fn end(self) -> f32 {
+    pub(crate) fn end(self) -> f32 {
         self.start() - END_BELOW_START
     }
 
     /// VOP-FR-DBEE.
     fn start_while_playing(self) -> f32 {
         (self.start() + PLAYBACK_MARGIN).min(PLAYBACK_START_CAP)
+    }
+
+    /// VOP-FR-JRVF: the frames of the short pause that ends a chunk: 400 ms, or
+    /// half of the silence timeout when that is less.
+    pub(crate) fn short_pause_frames(self) -> u32 {
+        SHORT_PAUSE_MS.min(self.silence_ms / 2).div_ceil(FRAME_MS)
     }
 
     /// VOP-FR-OFDY: the frames of the silence timeout and the tail.
@@ -105,7 +113,6 @@ enum State {
     Idle,
     Pending { utterance: Utterance, frames: u32, low: u32 },
     Active { utterance: Utterance, frames: u32, silent: Option<u32> },
-    Settling,
     Rearm,
 }
 
@@ -148,7 +155,6 @@ impl Detector {
             State::Active { utterance, frames, silent } => {
                 self.active(probability, utterance, frames + 1, silent)
             }
-            State::Settling => None,
             State::Rearm => {
                 if probability < settings.end() {
                     self.state = State::Idle;
@@ -236,22 +242,69 @@ impl Detector {
             None
         };
         if frames >= LONGEST_FRAMES || silent.is_some_and(|count| count >= utterance.end_frames) {
-            self.state = State::Settling;
+            // VOP-FR-FMRV: the next utterance can start at once.
+            self.state = State::Idle;
             return Some(Action::SpeechEnd);
         }
         self.state = State::Active { utterance, frames, silent };
         None
     }
 
-    /// VOP-FR-FMRV: the gate named the capture as settled.
-    pub(crate) fn settled(&mut self) {
-        if matches!(self.state, State::Settling) {
-            self.state = State::Idle;
-        }
-    }
-
     /// VOP-FR-DAZW: the capture of this utterance did not open or went away.
     pub(crate) fn rearm(&mut self) {
         self.state = State::Rearm;
+    }
+}
+
+/// VOP-FR-JRVF, VOP-FR-YDVH: finds the short pauses of a chunked capture.
+///
+/// The silence count works as VOP-FR-OFDY states: a frame under the end
+/// threshold starts it, and only a frame at or above the start threshold clears
+/// it. A pause counts only after speech since the last chunk end, so silence
+/// alone does not make a chunk.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PauseTracker {
+    start: f32,
+    end: f32,
+    short_frames: u32,
+    silent: Option<u32>,
+    heard: bool,
+}
+
+impl PauseTracker {
+    pub(crate) fn new(settings: Settings) -> Self {
+        Self {
+            start: settings.start(),
+            end: settings.end(),
+            short_frames: settings.short_pause_frames(),
+            silent: None,
+            heard: false,
+        }
+    }
+
+    /// A tracker for a capture that opens from confirmed speech (VOP-FR-GZPY).
+    pub(crate) fn after_speech(settings: Settings) -> Self {
+        Self { heard: true, ..Self::new(settings) }
+    }
+
+    pub(crate) fn step(&mut self, probability: f32) {
+        if probability >= self.start {
+            self.heard = true;
+            self.silent = None;
+        } else if let Some(count) = self.silent {
+            self.silent = Some(count + 1);
+        } else if probability < self.end {
+            self.silent = Some(1);
+        }
+    }
+
+    /// Whether the capture is in a short pause that follows speech.
+    pub(crate) fn paused(&self) -> bool {
+        self.heard && self.silent.is_some_and(|count| count >= self.short_frames)
+    }
+
+    /// A chunk ended: the next pause needs new speech.
+    pub(crate) fn chunk_ended(&mut self) {
+        self.heard = false;
     }
 }

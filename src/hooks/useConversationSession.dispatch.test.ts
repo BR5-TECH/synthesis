@@ -13,6 +13,7 @@ vi.mock("../logging", () => ({
 }));
 
 import { dispatchTurnsFor } from "./useConversationSession";
+import { beginSpeechPost, finishSpeechPost, resetSpeechPostsForTest } from "../state/speechPosts";
 import {
   clearAllDiscussionSessions,
   getDiscussionSession,
@@ -77,6 +78,51 @@ beforeEach(() => {
   invokeMock.mockReset();
   logWarn.mockReset();
   clearAllDiscussionSessions();
+  resetSpeechPostsForTest();
+});
+
+describe("the comment that ends a speech", () => {
+  it("CTA-FR-SZOC, CTA-FR-QWLB, VOM-FR-MVLA: skips the agents the speech reached and gives the comment id", async () => {
+    serve(new Set());
+    beginSpeechPost("d1", ["arch"], "@arch @sec look");
+    dispatchTurnsFor(discussion("@arch @sec look"), "@arch @sec look", AGENTS);
+    expect(finishSpeechPost()).toBe("c1");
+    await settle();
+    const asked = invokeMock.mock.calls
+      .filter(([cmd]) => cmd === "dispatch_agent_turn")
+      .map(([, args]) => (args as { nickname: string }).nickname);
+    expect(asked).toEqual(["sec"]);
+  });
+
+  it("CTA-FR-SZOC: a typed comment is dispatched as before", async () => {
+    serve(new Set());
+    dispatchTurnsFor(discussion("@arch look"), "@arch look", AGENTS);
+    await settle();
+    expect(invokeMock.mock.calls.filter(([cmd]) => cmd === "dispatch_agent_turn")).toHaveLength(1);
+  });
+
+  it("CTA-FR-SZOC: a typed comment during a speech post is dispatched to every agent it names", async () => {
+    serve(new Set());
+    beginSpeechPost("d1", ["arch"], "@arch the spoken words");
+    dispatchTurnsFor(discussion("@arch a typed comment"), "@arch a typed comment", AGENTS);
+    await settle();
+    const asked = invokeMock.mock.calls
+      .filter(([cmd]) => cmd === "dispatch_agent_turn")
+      .map(([, args]) => (args as { nickname: string }).nickname);
+    expect(asked).toEqual(["arch"]);
+    // The speech comment itself still claims its post afterwards.
+    dispatchTurnsFor(discussion("@arch the spoken words"), "@arch the spoken words", AGENTS);
+    expect(finishSpeechPost()).toBe("c1");
+  });
+
+  it("CTA-FR-SZOC: a speech post of another discussion skips nobody here", async () => {
+    serve(new Set());
+    beginSpeechPost("d9", ["arch"], "@arch look");
+    dispatchTurnsFor(discussion("@arch look"), "@arch look", AGENTS);
+    await settle();
+    expect(invokeMock.mock.calls.filter(([cmd]) => cmd === "dispatch_agent_turn")).toHaveLength(1);
+    expect(finishSpeechPost()).toBeNull();
+  });
 });
 
 describe("dispatching from the shared surface (CTA-FR-QUXJ, CTA-FR-UUXA)", () => {

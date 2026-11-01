@@ -85,8 +85,15 @@ export interface AgentTurn {
   agentId: string;
   nickname: string;
   origin: ConversationOrigin;
-  /** The comment that addressed the agent. */
-  triggerCommentId: string;
+  /**
+   * The comment that addressed the agent. AGC-FR-ANBX: null for a turn that a
+   * speech registered, until that speech ends with a comment.
+   */
+  triggerCommentId: string | null;
+  /** AGC-FR-QYNZ: the open speech that the turn is bound to. */
+  speechId?: string | null;
+  /** AGC-FR-QYNZ: the loop holds a reply until the speech ends. */
+  replyHeld?: boolean;
   state: AgentTurnState;
   failure: AgentTurnFailure | null;
   /**

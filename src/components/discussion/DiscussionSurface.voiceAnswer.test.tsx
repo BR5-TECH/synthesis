@@ -64,7 +64,7 @@ import { clearQuestionSets, publishSet } from "../../state/questionSets";
 import { getVoiceState, resetVoiceStateForTest } from "../../state/voiceSession";
 import type { Discussion, PendingQuestionSet, ProjectAgent } from "../../types";
 import {
-  SURFACE_GRACE_MS,
+  SHORT_PRESS_MS,
   TAIL_MS,
   endVoiceForTeardown,
   noteActivity,
@@ -207,7 +207,7 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup();
   endVoiceForTeardown();
-  await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS);
+  await vi.advanceTimersByTimeAsync(TAIL_MS * 10);
   vi.useRealTimers();
 });
 
@@ -550,7 +550,7 @@ describe("a spoken answer", () => {
     expect(submit.submitQuestionAnswers).toHaveBeenCalledTimes(1);
     expect(recallAnswer("s1", 3).typed).toBe("three");
     expect(screen.getByRole("alert")).toBeInTheDocument();
-    await pass(SURFACE_GRACE_MS);
+    await pass(TAIL_MS * 10);
     expect(submit.submitQuestionAnswers).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByTestId("discussion-questions-submit"));
     await pass();
@@ -690,6 +690,9 @@ describe("a spoken answer", () => {
     fireEvent.pointerDown(screen.getByTestId("voice-record"));
     await pass();
     act(() => publishSet("d1", SET));
+    // VOM-FR-BCRD: the recording goes on until the author releases it.
+    await pass(SHORT_PRESS_MS);
+    fireEvent.pointerDown(screen.getByTestId("voice-record"));
     await pass(TAIL_MS);
     await pass();
     expect(recallAnswer("s1", 1).ownWords).toBe(false);
@@ -724,7 +727,7 @@ describe("a VAD session while a set stands", () => {
     expect(getVoiceState().vadOpen).toBe(true);
   });
 
-  it("VOM-FR-LKKN, VOM-FR-UNXR, VOM-FR-KHGC: the answer drops the paused question and the next one speaks", async () => {
+  it("VOM-FR-LKKN, VOM-FR-UNXR: the answer drops the paused question and the next one speaks", async () => {
     await openVadWithSet();
     activity("speech_start");
     expect(getVoiceState().playbackPaused).toBe(true);
@@ -794,7 +797,7 @@ describe("a VAD session while a set stands", () => {
     expect(getDiscussionSession("d1").body).toBe("from before");
   });
 
-  it("VOM-FR-LKKN, VOM-FR-EGNX: a waiting question whose set went says nothing", async () => {
+  it("VOM-FR-LKKN, VOM-FR-ZPOD: a waiting question whose set went says nothing", async () => {
     render(surface());
     await pass();
     fireEvent.click(screen.getByTestId("voice-button"));

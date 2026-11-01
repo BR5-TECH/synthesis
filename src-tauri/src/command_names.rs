@@ -408,6 +408,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // material under discussion, the other reaches a model with a key
     // (CVL-FR-11).
     "dispatch_agent_turn",
+    "dispatch_speech_turn",
+    "steer_speech_turn",
+    "end_speech_turn",
     "cancel_agent_turn",
     "list_agent_turns",
     "estimate_discussion_context",

@@ -12,8 +12,55 @@ use super::*;
 pub(super) const STEERING_PREFACE: &str = "The author posted this comment while you were \
 working on your reply. Read it and take it into account before you continue.";
 
+/// CVL-FR-VCYR: the fixed line that opens a chunk message.
+pub const PARTIAL_SPEECH_LINE: &str = "Partial speech: the author is still speaking. This is \
+a part of what the author says. More text follows. Do not reply to this part alone.";
+
+/// CVL-FR-WLTP: the fixed line that opens the final steering message of a
+/// speech, in place of [`STEERING_PREFACE`].
+pub const FULL_SPEECH_LINE: &str = "Full speech: the author stopped speaking. This comment is \
+all that the author said. It replaces the partial speech before it.";
+
+/// AGC-FR-ISKZ, AGC-FR-KXOJ, AGC-FR-TCDQ: one steering message that a turn
+/// took. The registry holds it in memory only, and nothing writes it to disk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum SteeringItem {
+    /// A comment that the author posted while the turn ran (AGC-FR-ISKZ).
+    Comment(String),
+    /// A chunk of the author's speech. It is not a comment (AGC-FR-KXOJ).
+    Chunk(String),
+    /// The comment that ends a speech (AGC-FR-TCDQ, CVL-FR-WLTP).
+    SpeechEnd(String),
+}
+
+impl SteeringItem {
+    /// AGC-FR-JPPB: the comment id of a comment item. A chunk has none.
+    pub(super) fn comment_id(&self) -> Option<&str> {
+        match self {
+            SteeringItem::Comment(id) | SteeringItem::SpeechEnd(id) => Some(id),
+            SteeringItem::Chunk(_) => None,
+        }
+    }
+}
+
+/// AGC-FR-ISKZ, AGC-FR-KXOJ: put one steering message on a live turn.
+///
+/// CVL-FR-SZDM: the whole-turn deadline restarts where the turn holds one.
+/// AGC-FR-ISCZ: a turn that holds its reply has no deadline, and the end of the
+/// hold restarts it.
+pub(super) fn give_steering(live: &mut Live, item: SteeringItem) {
+    live.steering.push(item);
+    if live.turn.reply_held {
+        return;
+    }
+    if let Some((timeout, _)) = live.deadline {
+        live.deadline = Some((timeout, std::time::Instant::now() + timeout));
+        stamp_deadline(&mut live.turn, timeout);
+    }
+}
+
 /// AGC-FR-URXV: write the deadline of a turn record from the instant it began.
-fn stamp_deadline(turn: &mut AgentTurn, timeout: Duration) {
+pub(super) fn stamp_deadline(turn: &mut AgentTurn, timeout: Duration) {
     let started = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -67,12 +114,16 @@ impl TurnRegistry {
     /// turn's deadline where the turn holds one (CVL-FR-SZDM) and publishes the
     /// turn (AGC-FR-URXV). `None` where no turn takes it, and the caller then
     /// registers a new turn (AGC-FR-CEKN).
+    ///
+    /// AGC-FR-SJQP: a chunk of a speech is given on the same terms, and
+    /// `speech_id` then binds the turn to that speech (AGC-FR-QYNZ).
     pub(super) fn offer_steering<R: tauri::Runtime>(
         &self,
         app: &tauri::AppHandle<R>,
         agent_id: &str,
         origin: &ConversationOrigin,
-        comment_id: &str,
+        item: SteeringItem,
+        speech_id: Option<&str>,
     ) -> Option<AgentTurn> {
         let mut inner = self.lock();
         let live = inner
@@ -86,19 +137,20 @@ impl TurnRegistry {
                     && !live.cancelled.load(Ordering::SeqCst)
             })
             .max_by_key(|live| ordinal(&live.turn.id))?;
-        live.steering.push(comment_id.to_string());
-        if let Some((timeout, _)) = live.deadline {
-            live.deadline = Some((timeout, std::time::Instant::now() + timeout));
-            stamp_deadline(&mut live.turn, timeout);
+        give_steering(live, item);
+        if let Some(speech_id) = speech_id {
+            live.turn.speech_id = Some(speech_id.to_string());
         }
         let turn = live.turn.clone();
         publish(app, &turn);
+        drop(inner);
+        self.speech_changed.notify_all();
         Some(turn)
     }
 
     /// CVL-FR-EZKC: the steering messages the turn took and the loop did not
     /// append yet, oldest first. The turn holds none of them afterwards.
-    pub(super) fn take_steering(&self, turn_id: &str) -> Vec<String> {
+    pub(super) fn take_steering(&self, turn_id: &str) -> Vec<SteeringItem> {
         self.lock()
             .live
             .get_mut(turn_id)
@@ -108,7 +160,7 @@ impl TurnRegistry {
 
     /// CVL-FR-YNOE: the turn takes no further steering message. Answers with
     /// the messages it took and the loop did not append yet, oldest first.
-    pub(super) fn close_steering(&self, turn_id: &str) -> Vec<String> {
+    pub(super) fn close_steering(&self, turn_id: &str) -> Vec<SteeringItem> {
         let mut inner = self.lock();
         let Some(live) = inner.live.get_mut(turn_id) else { return Vec::new() };
         live.steering_open = false;
@@ -124,11 +176,15 @@ impl TurnRegistry {
 /// CVL-FR-EZKC / CVL-FR-QPEL: one user message for one steering comment. It
 /// opens with the fixed preface, and carries the comment on the terms the
 /// `current_comment` section carries the comment that addressed the turn.
+///
+/// CVL-FR-WLTP: the final steering message of a speech has `preface` in place
+/// of the line of CVL-FR-QPEL.
 fn steering_message(
     roots: Roots<'_>,
     thread: &Discussion,
     comment_id: &str,
     with_images: bool,
+    preface: &str,
 ) -> rig::completion::Message {
     let section = current_comment_section(roots, thread, comment_id);
     if with_images {
@@ -136,15 +192,21 @@ fn steering_message(
             multimodal_message_of(std::slice::from_ref(&section))
         {
             let mut contents =
-                vec![rig::completion::message::UserContent::text(STEERING_PREFACE.to_string())];
+                vec![rig::completion::message::UserContent::text(preface.to_string())];
             contents.extend(content);
             return rig::completion::Message::User { content: contents };
         }
     }
     rig::completion::Message::user(format!(
-        "{STEERING_PREFACE}\n\n{}",
+        "{preface}\n\n{}",
         render_sections(std::slice::from_ref(&section))
     ))
+}
+
+/// CVL-FR-VCYR: one user message for one chunk of speech, under the fixed
+/// partial-speech line.
+pub(super) fn chunk_message(text: &str) -> rig::completion::Message {
+    rig::completion::Message::user(format!("{PARTIAL_SPEECH_LINE}\n\n{text}"))
 }
 
 /// CVL-FR-EZKC / CVL-FR-YNOE / CVL-FR-ASBR: append the steering messages the
@@ -159,16 +221,19 @@ pub(super) fn append_steering<R: tauri::Runtime>(
     conversation: &mut compaction::Conversation,
     last_call: bool,
 ) -> usize {
-    let ids = if last_call {
+    let items = if last_call {
         turns.close_steering(&plan.turn_id)
     } else {
         turns.take_steering(&plan.turn_id)
     };
-    if ids.is_empty() {
+    if items.is_empty() {
         return 0;
     }
+    let ids: Vec<&str> = items.iter().filter_map(SteeringItem::comment_id).collect();
+    let chunks = items.len() - ids.len();
     let roots = plan.roots.borrowed();
-    let Some(thread) = resolve_origin(roots, &plan.origin) else {
+    let thread = if ids.is_empty() { None } else { resolve_origin(roots, &plan.origin) };
+    if !ids.is_empty() && thread.is_none() {
         logging::log_warn(
             app,
             turns.buffer(),
@@ -183,12 +248,28 @@ pub(super) fn append_steering<R: tauri::Runtime>(
                 "commentIds" => ids.join(","),
             },
         );
-        return 0;
-    };
-    for id in &ids {
-        conversation.exchange.push(steering_message(roots, &thread, id, conversation.with_images));
     }
-    // CVL-FR-ASBR: the ids and the count, never a body.
+    let mut appended = 0;
+    for item in &items {
+        let message = match (item, thread.as_ref()) {
+            // CVL-FR-VCYR: a chunk needs no read of the conversation.
+            (SteeringItem::Chunk(text), _) => chunk_message(text),
+            (SteeringItem::Comment(id), Some(thread)) => {
+                steering_message(roots, thread, id, conversation.with_images, STEERING_PREFACE)
+            }
+            (SteeringItem::SpeechEnd(id), Some(thread)) => {
+                steering_message(roots, thread, id, conversation.with_images, FULL_SPEECH_LINE)
+            }
+            _ => continue,
+        };
+        conversation.exchange.push(message);
+        appended += 1;
+    }
+    if appended == 0 {
+        return 0;
+    }
+    // CVL-FR-ASBR: the ids and the count, never a body. A chunk has no id, so
+    // the record counts chunks and never carries their text.
     logging::log_debug(
         app,
         turns.buffer(),
@@ -201,10 +282,11 @@ pub(super) fn append_steering<R: tauri::Runtime>(
             "provider" => &plan.provider,
             "model" => &plan.agent.model_id,
             "commentIds" => ids.join(","),
-            "appended" => ids.len(),
+            "chunks" => chunks,
+            "appended" => appended,
         },
     );
-    ids.len()
+    appended
 }
 
 /// AGC-FR-CEKN / AGC-FR-YBVM: what happens to the steering messages a turn
@@ -215,11 +297,13 @@ pub(super) fn redispatch_unread_steering<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     plan: &TurnPlan,
     state: AgentTurnState,
-    unread: Vec<String>,
+    unread: Vec<SteeringItem>,
 ) {
     use tauri::Manager;
     let turns = app.state::<TurnRegistry>();
-    let Some(newest) = unread.last() else { return };
+    // AGC-FR-JPPB: only the comments count. A chunk registers no new turn.
+    let unread: Vec<&str> = unread.iter().filter_map(SteeringItem::comment_id).collect();
+    let Some(newest) = unread.last().copied() else { return };
     if state == AgentTurnState::Cancelled {
         logging::log_info(
             app,

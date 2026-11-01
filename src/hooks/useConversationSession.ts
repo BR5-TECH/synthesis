@@ -16,6 +16,7 @@
  * The discussion comes from `../state/conversationThreads`, which keeps
  * `"read comment thread"` to a conversation no surface has listed.
  */
+import { claimSpeechPost } from "../state/speechPosts";
 import { useCallback, useMemo, useRef } from "react";
 
 import {
@@ -73,7 +74,12 @@ export function dispatchTurnsFor(
   agents: readonly ProjectAgent[],
 ): void {
   const roster = agentRoster([...agents]);
-  const targets = dispatchTargets(discussion, body, roster);
+  // CTA-FR-SZOC: the agents that a speech reached get the comment through
+  // "end speech turn", so it is not dispatched to them again.
+  const spoken = claimSpeechPost(discussion, body);
+  const targets = dispatchTargets(discussion, body, roster).filter(
+    (nickname) => !spoken.has(nickname),
+  );
   if (targets.length === 0) {
     logDebug(["ai", "frontend"], "a comment reached no agent", {
       threadId: discussion.id,
@@ -127,6 +133,42 @@ export function dispatchTurnsFor(
   }
 }
 
+/**
+ * CTA-FR-QUXJ: post a reply into a discussion and dispatch its turns, by the
+ * same rules wherever it was typed. The conversation tab posts through it, and
+ * so does the retained voice handle of an opening composer after its first
+ * post created the discussion (`VOM-voice-mode.md` VOM-FR-NERG, VOM-FR-BCRD).
+ * A refusal records the typed error inline and rejects.
+ */
+export async function postReply(
+  locator: ReturnType<typeof locatorOf>,
+  discussionId: string,
+  body: string,
+  quotes: CommentQuote[],
+  attachments: AttachmentInput[],
+  agents: readonly ProjectAgent[],
+): Promise<Discussion> {
+  try {
+    const updated = await addCommentApi({
+      ...locator,
+      discussionId,
+      body,
+      quotes,
+      attachments,
+    });
+    setDiscussionError(discussionId, undefined);
+    publishThread(updated);
+    dispatchTurnsFor(updated, body, agents);
+    return updated;
+  } catch (e) {
+    // CMT-FR-34 / CMT-FR-51: the typed error renders inline and the body and
+    // every pending attachment stay, so the message is corrected and sent
+    // without being retyped. The rejection tells the composer not to clear.
+    setDiscussionError(discussionId, errorText(e));
+    throw e;
+  }
+}
+
 export interface ConversationSession {
   thread: Discussion | undefined;
   identity: Participant | null;
@@ -161,24 +203,7 @@ export function useConversationSession(
       quotes: CommentQuote[],
       attachments: AttachmentInput[],
     ) => {
-      try {
-        const updated = await addCommentApi({
-          ...locator,
-          discussionId,
-          body,
-          quotes,
-          attachments,
-        });
-        setDiscussionError(discussionId, undefined);
-        publishThread(updated);
-        dispatchTurnsFor(updated, body, agentsRef.current);
-      } catch (e) {
-        // CMT-FR-34 / CMT-FR-51: the typed error renders inline and the body and
-        // every pending attachment stay, so the message is corrected and sent
-        // without being retyped. The rejection tells the composer not to clear.
-        setDiscussionError(discussionId, errorText(e));
-        throw e;
-      }
+      await postReply(locator, discussionId, body, quotes, attachments, agentsRef.current);
     },
     [locator],
   );

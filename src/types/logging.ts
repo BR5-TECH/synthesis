@@ -185,6 +185,10 @@ export interface AppPreferences {
   voiceVadSilenceMs?: number;
   /** GSS-FR-KOAB: how readily a VAD session hears speech. */
   voiceVadSensitivity?: VoiceVadSensitivity;
+  /** GSS-FR-WYHC, VOM-FR-KEMU: the saved input mode of voice mode. */
+  voiceInputMode?: "ptt" | "vad";
+  /** GSS-FR-WYHC, VOM-FR-KEMU: the saved response mode of voice mode. */
+  voiceResponseMode?: "text" | "voice";
   /**
    * GSS-FR-21 / SCH-FR-13: the universal search bar's active query mode. Read
    * when the search input mounts and written whenever the user changes the

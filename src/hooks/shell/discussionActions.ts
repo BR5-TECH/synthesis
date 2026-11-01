@@ -14,6 +14,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 
 import { logDebug } from "../../logging";
+import { noteOwnerDeleted } from "../../voice/voiceController";
 import {
   clearDiscussionSession,
   getDiscussionSession,
@@ -208,6 +209,8 @@ export function createDiscussionActions(
    * caller runs this on success alone.
    */
   const dropNoteConversationTab = (noteId: string) => {
+    // CVP-FR-61, VOM-FR-LSBQ: voice mode ends with its owner.
+    noteOwnerDeleted({ kind: "note", noteId });
     const doomed = tabsRef.current.filter(
       (t) => t.kind === "conversation" && t.noteId === noteId,
     );

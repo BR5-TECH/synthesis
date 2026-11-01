@@ -12,6 +12,7 @@ use super::{ActivityChange, ActivityHost, Gate, ERR_DETECTOR_UNAVAILABLE};
 use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
 use crate::logging::{self, Domain};
+use crate::voice_ai::chunks::Chunking;
 use crate::voice_ai::commands::{body_samples, SESSION_HEADER};
 use crate::voice_ai::{
     resolve_active_voice, SharedSink, VoiceAi, VoiceCaptureStart, VoiceSink, ERR_SESSION_LOST,
@@ -34,16 +35,31 @@ impl ActivityHost for AppHost {
         &self,
         capture_rate: u32,
         keyterms: Vec<String>,
+        chunked: bool,
     ) -> Result<VoiceCaptureStart, String> {
         let store = self.app.state::<GlobalSettingsStore>();
         let voice = self.app.state::<VoiceAi>();
         let config = resolve_active_voice(&store, &voice)?;
         let sink: SharedSink = Arc::new(self.app.clone());
-        voice.start_capture(config, capture_rate, keyterms, sink)
+        // VOP-FR-YDVH: the session's detector finds the pauses of its capture.
+        let chunking = if chunked { Chunking::Session } else { Chunking::Off };
+        voice.start_chunked_capture(config, capture_rate, keyterms, chunking, sink)
     }
 
     fn append_capture(&self, capture_id: &str, samples: Vec<i16>) -> Result<(), String> {
         self.app.state::<VoiceAi>().append_capture(capture_id, samples)
+    }
+
+    fn chunk_pause(&self, capture_id: &str) -> bool {
+        self.app.state::<VoiceAi>().chunk_pause(capture_id).unwrap_or(false)
+    }
+
+    fn end_capture(&self, capture_id: &str) {
+        let _ = self.app.state::<VoiceAi>().end_capture_input(capture_id);
+    }
+
+    fn capture_alive(&self, capture_id: &str) -> bool {
+        self.app.state::<VoiceAi>().capture_exists(capture_id)
     }
 
     fn cancel_capture(&self, capture_id: &str) {
@@ -152,11 +168,11 @@ pub fn set_voice_activity_gate(
     seq: u64,
     blocked: bool,
     playing: bool,
-    settled: Option<String>,
+    chunked: bool,
     keyterms: Vec<String>,
     voice: State<'_, VoiceAi>,
 ) -> Result<(), String> {
-    voice.set_activity_gate(&activity_id, Gate { seq, blocked, playing, settled, keyterms })
+    voice.set_activity_gate(&activity_id, Gate { seq, blocked, playing, chunked, keyterms })
 }
 
 #[tauri::command]

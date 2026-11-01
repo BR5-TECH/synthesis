@@ -234,8 +234,10 @@ pub struct AgentTurn {
     pub agent_id: String,
     pub nickname: String,
     pub origin: ConversationOrigin,
-    /// The comment that addressed the agent.
-    pub trigger_comment_id: String,
+    /// The comment that addressed the agent. `None` for a turn that a speech
+    /// registered, until that speech ends with a comment (AGC-FR-ANBX,
+    /// AGC-FR-TCDQ).
+    pub trigger_comment_id: Option<String>,
     pub state: AgentTurnState,
     pub failure: Option<String>,
     /// AGC-FR-RWPT: the host and the cause of a refused certificate. Present
@@ -296,6 +298,14 @@ pub struct AgentTurn {
     /// 3339 UTC. `None` while the turn waits for its slot.
     #[serde(default)]
     pub deadline_at: Option<String>,
+    /// AGC-FR-QYNZ: the open speech the turn is bound to. `None` when it is
+    /// bound to no speech, and after its speech ends.
+    #[serde(default)]
+    pub speech_id: Option<String>,
+    /// AGC-FR-QYNZ: true while the loop holds a reply until the speech ends
+    /// (CVL-FR-SZKK).
+    #[serde(default)]
+    pub reply_held: bool,
 }
 
 /// AGC-FR-HMUV / CVL-FR-SKSE: how far a tool call has come.

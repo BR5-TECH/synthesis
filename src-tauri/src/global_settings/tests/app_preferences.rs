@@ -175,6 +175,9 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
             voice_hotkey_behaviour: Default::default(),
             voice_vad_silence_ms: 700,
             voice_vad_sensitivity: VoiceVadSensitivity::High,
+            // Non-default for the same reason (GSS-FR-WYHC).
+            voice_input_mode: VoiceInputMode::Vad,
+            voice_response_mode: VoiceResponseMode::Voice,
             theme: Theme::System,
             main_window_fullscreen: true,
             search_query_mode: SearchQueryMode::Regex,
@@ -225,6 +228,8 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     store.save_app_preferences(editing).unwrap();
     let after_fullscreen = store.load_app_preferences().unwrap();
     assert!(!after_fullscreen.main_window_fullscreen);
+    assert_eq!(after_fullscreen.voice_input_mode, VoiceInputMode::Vad);
+    assert_eq!(after_fullscreen.voice_response_mode, VoiceResponseMode::Voice);
     assert_eq!(after_fullscreen.theme, Theme::Dark, "a full-screen write must not reset the theme");
     // GSS-FR-20 / GSS-FR-21: neither write may disturb the query mode.
     assert_eq!(
@@ -460,4 +465,68 @@ fn a_stored_value_out_of_range_is_returned_as_stored() {
     // (`VOP-voice-ai-providers.md` VOP-FR-DSNZ).
     let read: AppPreferences = toml::from_str("voiceVadSilenceMs = 90000\n").unwrap();
     assert_eq!(read.voice_vad_silence_ms, 90000);
+}
+
+// ---- Voice modes (GSS-FR-WYHC) -------------------------------
+
+// GSS-FR-WYHC: a record with no such fields reads back with `ptt` and `text`.
+#[test]
+fn voice_modes_default_to_push_to_talk_and_text() {
+    let read: AppPreferences = toml::from_str("theme = \"dark\"\n").unwrap();
+    assert_eq!(read.voice_input_mode, VoiceInputMode::Ptt);
+    assert_eq!(read.voice_response_mode, VoiceResponseMode::Text);
+    assert_eq!(AppPreferences::default().voice_input_mode, VoiceInputMode::Ptt);
+    assert_eq!(AppPreferences::default().voice_response_mode, VoiceResponseMode::Text);
+}
+
+// GSS-FR-WYHC: an unknown value reads as the default, and the other fields of the
+// file stay.
+#[test]
+fn an_unknown_voice_mode_reads_as_the_default_and_the_rest_stays() {
+    let read: AppPreferences = toml::from_str(
+        "theme = \"dark\"\nvoiceInputMode = \"shout\"\nvoiceResponseMode = 7\nvoiceVadSilenceMs = 900\n",
+    )
+    .unwrap();
+    assert_eq!(read.theme, Theme::Dark);
+    assert_eq!(read.voice_vad_silence_ms, 900);
+    assert_eq!(read.voice_input_mode, VoiceInputMode::Ptt);
+    assert_eq!(read.voice_response_mode, VoiceResponseMode::Text);
+}
+
+// GSS-FR-WYHC: the wire names of the two fields and of their values.
+#[test]
+fn voice_modes_have_their_wire_names() {
+    let prefs = AppPreferences {
+        voice_input_mode: VoiceInputMode::Vad,
+        voice_response_mode: VoiceResponseMode::Voice,
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&prefs).unwrap();
+    assert_eq!(json["voiceInputMode"], "vad");
+    assert_eq!(json["voiceResponseMode"], "voice");
+    let back: AppPreferences = toml::from_str(&toml::to_string(&prefs).unwrap()).unwrap();
+    assert_eq!(back, prefs);
+}
+
+// GSS-FR-WYHC, GSS-FR-04, GSS-FR-20: a write of another field carries both modes
+// through the whole-record write.
+#[test]
+fn voice_modes_survive_a_write_of_another_field() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("synthesis.toml");
+    let store = GlobalSettingsStore::with_path(path.clone());
+    let prefs = AppPreferences {
+        voice_input_mode: VoiceInputMode::Vad,
+        voice_response_mode: VoiceResponseMode::Voice,
+        ..Default::default()
+    };
+    store.save_app_preferences(prefs).unwrap();
+    let mut editing = store.load_app_preferences().unwrap();
+    editing.theme = Theme::Dark;
+    store.save_app_preferences(editing).unwrap();
+
+    let held = GlobalSettingsStore::with_path(path).load_app_preferences().unwrap();
+    assert_eq!(held.theme, Theme::Dark);
+    assert_eq!(held.voice_input_mode, VoiceInputMode::Vad);
+    assert_eq!(held.voice_response_mode, VoiceResponseMode::Voice);
 }

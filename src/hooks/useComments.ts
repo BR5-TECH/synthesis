@@ -9,6 +9,7 @@
  * The anchoring arithmetic lives in `../state/commentAnchors`, kept pure. This
  * hook is the part that has to talk to the backend and to React.
  */
+import { claimSpeechPost } from "../state/speechPosts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addComment as addCommentApi,
@@ -385,7 +386,12 @@ export function useComments(
       // enrolment is handed over whole rather than flattened to names — the ready
       // subset is what the handle reads and only this shape carries it.
       const roster = agentRoster(agents);
-      const nicknames = dispatchTargets(thread, body, roster);
+      // CTA-FR-SZOC: the agents that a speech reached get the comment through
+      // "end speech turn", so it is not dispatched to them again.
+      const spoken = claimSpeechPost(thread, body);
+      const nicknames = dispatchTargets(thread, body, roster).filter(
+        (nickname) => !spoken.has(nickname),
+      );
       if (nicknames.length === 0) {
         // CTA-FR-QUXJ: an ordinary outcome — a comment in a conversation with no
         // active agent reaches nobody, and the author's message stands. Recorded

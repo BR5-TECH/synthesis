@@ -11,6 +11,9 @@ vi.mock("../../api", () => ({
   readDiscussion: (...args: unknown[]) => readDiscussion(...args),
 }));
 
+const voice = vi.hoisted(() => ({ reveal: vi.fn() }));
+vi.mock("../../voice/voiceController", () => ({ voiceReveal: () => voice.reveal() }));
+
 const deps = {
   openGraduationRun: vi.fn(),
   revealDiscussion: vi.fn(),
@@ -119,5 +122,38 @@ describe("an operation with no destination (STB-FR-DNLC)", () => {
       ),
     ).toBe(false);
     expect(deps.openGraduationRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("the voice indicator (STB-FR-OSOL)", () => {
+  const thread: Discussion = {
+    id: "d1",
+    target: { kind: "artifact", artifactId: "specs/a.md" },
+    fragmentTarget: null,
+    comments: [],
+    resolved: false,
+    createdAt: "2026-02-01T00:00:00Z",
+    updatedAt: "2026-02-01T00:00:00Z",
+  };
+
+  it("STB-FR-OSOL, CVP-FR-54: it reveals the voice discussion by the one route", () => {
+    voice.reveal.mockReturnValue({ discussion: thread, discussionId: "d1", target: thread.target });
+    createOperationActions(deps).revealVoiceDiscussion();
+    expect(deps.revealDiscussion).toHaveBeenCalledWith(
+      expect.objectContaining({ discussionId: "d1", target: thread.target }),
+    );
+  });
+
+  it("STB-FR-OSOL: with voice mode off it reveals nothing", () => {
+    voice.reveal.mockReturnValue(null);
+    createOperationActions(deps).revealVoiceDiscussion();
+    expect(deps.revealDiscussion).not.toHaveBeenCalled();
+  });
+
+  it("STB-FR-OSOL: an opening composer reveals its owner", () => {
+    const target = { kind: "draft", draftId: "x" } as const;
+    voice.reveal.mockReturnValue({ discussion: null, discussionId: null, target });
+    createOperationActions(deps).revealVoiceDiscussion();
+    expect(deps.revealDiscussion).toHaveBeenCalledWith(expect.objectContaining({ target }));
   });
 });

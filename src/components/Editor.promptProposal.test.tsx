@@ -260,6 +260,67 @@ describe("PCR-FR-QHZN: the review renders in place", () => {
   });
 });
 
+describe("PCR-FR-LAGZ: a change accepted elsewhere", () => {
+  it("PCR-FR-LAGZ, DPC-FR-TVKX, PCR-FR-PFOW: a session with no unsaved edit takes the file's new text", async () => {
+    withMd();
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    const reads = callsTo("load_artifact_contents_by_id").length;
+    backend.bodies[MD] = "# Review\n\nThe accepted line.\n\nA second line.\n";
+    version += 1;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["accepted", "pending"]) });
+    });
+    await waitFor(() =>
+      expect(callsTo("load_artifact_contents_by_id").length).toBeGreaterThan(reads),
+    );
+    expect(callsTo("accept_prompt_change_hunk")).toHaveLength(0);
+    await waitFor(() => expect(sessions.get(MD)?.buffer).toContain("The accepted line."));
+  });
+
+  it("PCR-FR-LAGZ, DPC-FR-TVKX: a session with an unsaved edit keeps it, writes nothing over the file, and raises the external-change modal", async () => {
+    withMd();
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    act(() => {
+      sessions.update(MD, { buffer: `${MD_BODY}Typed by the author.\n`, dirty: true });
+    });
+    // The tool wrote the file through the self-write path.
+    backend.bodies[MD] = "# Review\n\nThe accepted line.\n\nA second line.\n";
+    version += 1;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["accepted", "pending"]) });
+    });
+    await waitFor(() => expect(sessions.get(MD)?.conflict).toBe(true));
+    expect(sessions.get(MD)?.buffer).toContain("Typed by the author.");
+    expect(sessions.get(MD)?.dirty).toBe(true);
+    // EDT-FR-70: the write of the buffer waits for the author's choice.
+    expect(await sessions.flush(MD)).toEqual({ ok: false, blocked: "conflict", artifactId: MD });
+    expect(callsTo("save_artifact_contents")).toHaveLength(0);
+    expect(backend.bodies[MD]).toContain("The accepted line.");
+  });
+
+  it("PCR-FR-LAGZ: the first reading of a proposal with an accepted change reads nothing again", async () => {
+    withMd(["accepted", "pending"]);
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    await act(async () => {});
+    expect(callsTo("load_artifact_contents_by_id")).toHaveLength(1);
+    expect(sessions.get(MD)?.conflict).toBe(false);
+  });
+
+  it("PCR-FR-LAGZ: a rejection elsewhere reads nothing again", async () => {
+    withMd();
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    const reads = callsTo("load_artifact_contents_by_id").length;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["rejected", "pending"]) });
+    });
+    expect(callsTo("load_artifact_contents_by_id").length).toBe(reads);
+  });
+});
+
 describe("PCR-FR-AXPW: deciding one change", () => {
   it("PCR-FR-AXPW: Accept all accepts each change through accept_prompt_change_hunk, then resets the session to the file", async () => {
     withMd();

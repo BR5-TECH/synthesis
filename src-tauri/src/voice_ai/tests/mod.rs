@@ -6,6 +6,7 @@ mod activity_model;
 mod activity_worker;
 mod audio;
 mod capture;
+mod chunks;
 mod protocol;
 mod speech;
 mod support;

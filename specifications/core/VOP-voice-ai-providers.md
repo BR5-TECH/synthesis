@@ -3,7 +3,7 @@
 **Spec code:** `VOP`
 
 ## Intent
-The backend home for the speech endpoints that Synthesis calls. It holds one record per Voice AI provider, finds which routes each provider offers, and does the speech-to-text and text-to-speech work of `../ui/VOM-voice-mode.md`. Realtime is the first-class transport: a provider that offers a Realtime route uses it by default, and the application finds that route by testing the server, not from a list of server names. HTTP routes serve the servers that have no Realtime route. Voice AI keys are separate from AI API keys, because a speech endpoint and a conversational endpoint are different services. The module also runs the local detector of a VAD session, which finds each utterance with no provider call and works offline. Out of scope: conversational calls, which belong to `AAP-ai-api-integrations.md`; voice activity detection on a server or a provider; native microphone capture; an OS-wide hotkey; and any storage of audio or of a transcript outside the discussion the transcript posts to.
+The backend home for the speech endpoints that Synthesis calls. It holds one record per Voice AI provider, finds which routes each provider offers, and does the speech-to-text and text-to-speech work of `../ui/VOM-voice-mode.md`. Realtime is the first-class transport: a provider that offers a Realtime route uses it by default, and the application finds that route by testing the server, not from a list of server names. HTTP routes serve the servers that have no Realtime route. Voice AI keys are separate from AI API keys, because a speech endpoint and a conversational endpoint are different services. The module also runs the local detector of a VAD session, which finds each utterance with no provider call and works offline. A capture can split its audio into chunks of one or two sentences and transcribe each chunk in the background, so the agent gets the author's speech while the author still speaks. Out of scope: conversational calls, which belong to `AAP-ai-api-integrations.md`; voice activity detection on a server or a provider; native microphone capture; an OS-wide hotkey; and any storage of audio or of a transcript outside the discussion the transcript posts to.
 
 ## Functional requirements
 
@@ -64,7 +64,7 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 
 ### Capture
 
-38. **VOP-FR-KBPZ** "start voice capture" copies the active provider's configuration and opens one capture session. A second session while one is open and has not failed returns `voice_session_active`. A start replaces a failed session. Later changes to the record do not affect an open session.
+38. **VOP-FR-KBPZ** "start voice capture" copies the active provider's configuration and opens one capture session. A second session while one is open, is not finishing (VOP-FR-WCSB), and has not failed returns `voice_session_active`. A start replaces a failed session. Later changes to the record do not affect an open session.
 39. **VOP-FR-DXPK** "append voice capture" takes mono PCM16 at the capture rate as a raw request body. It also accepts a JSON array of bytes.
     - *Why:* one failed IPC fetch moves Tauri to JSON bodies for the life of the webview.
 40. **VOP-FR-GZOC** Audio is resampled from the capture rate to the rate of the selected route. Detector audio is resampled to 16 kHz.
@@ -78,6 +78,20 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 48. **VOP-FR-UOYP** A failed capture returns one of `provider_unreachable`, `provider_rejected`, `transcription_failed`, or `voice_session_lost`. The session stays open for "retry voice capture".
 49. **VOP-FR-BSNY** An unfinished capture session that receives no audio for 30 s is cancelled, and its socket closes. A VAD session opens a capture only from confirmed speech, so a session that only listens meets no such limit.
     - *Why:* a reloaded webview cannot end its own session, and an open socket can cost money.
+49. **VOP-FR-WCSB** A capture session is **finishing** from the call of "finish voice capture", or from `speech_end`, until its result returns. A finishing session does not count as open for VOP-FR-KBPZ, so the next utterance opens a capture while earlier ones transcribe.
+
+### Chunks
+
+49. **VOP-FR-ERDS** "start voice capture" takes `chunked: bool`. "set voice activity gate" carries `chunked`, and a VAD capture opens chunked when the last applied gate says so. A chunked capture splits its audio into chunks (VOP-FR-JRVF). A capture that is not chunked gives one transcript, as VOP-FR-VZDI states.
+49. **VOP-FR-JRVF** A chunk ends at a **short pause** that follows a sentence end (VOP-FR-WNQW). The short pause is 400 ms of frames under the end threshold, or half of the VAD silence timeout when that is less. The silence timeout still ends the utterance (VOP-FR-OFDY).
+    - *Why:* the short pause is always shorter than the silence timeout, so a chunk ends before the utterance does.
+49. **VOP-FR-WNQW** On a live route, a sentence end is live text of the chunk that ends with `.`, `?`, `!`, or `…`, with closing quotes and brackets ignored. On a route with no live text, a short pause after at least 2 s of chunk audio counts as a sentence end.
+49. **VOP-FR-YDVH** In a Push-to-Talk capture, the capture runs the local detector of VOP-FR-SMSX over its own audio to find the short pauses. In a VAD session, the session's detector finds them. Neither makes a provider call for the detection.
+49. **VOP-FR-VOZD** Each chunk is transcribed on its own, on the route of the capture, when it ends, in the background. The capture keeps receiving audio for the next chunk while earlier chunks transcribe.
+49. **VOP-FR-GLRN** On a Realtime route, a chunk end commits the input buffer, and the chunk transcript is the text of the item that the commit names. A dialect whose session ends at a commit opens a new session for the next chunk. On the HTTP route, each chunk is one request with the audio of that chunk.
+49. **VOP-FR-DSSU** A chunked capture emits `voice-chunk-changed`: `chunk_end` at the end of each chunk, `chunk_transcript` with the trimmed text of the chunk, which can be empty, and `chunk_failed` with a failure code of VOP-FR-UOYP. The events of one capture come in index order.
+49. **VOP-FR-GLDR** "finish voice capture" on a chunked capture ends the last chunk and emits its events, waits until every chunk has a transcript or failed, and returns the chunk texts that succeeded, in order, joined by one space. When no chunk succeeded, it fails with the code of the last failure.
+49. **VOP-FR-SIKM** "retry voice capture" on a chunked capture sends all held PCM of the capture again as one request, as VOP-FR-IAFL states, and emits no chunk event.
 
 ### Voice activity
 
@@ -90,7 +104,7 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 49. **VOP-FR-OORS** `voice_vad_sensitivity` sets the start threshold, and the end threshold is 0.15 under it, as the detector table of the contract surface states.
 49. **VOP-FR-DBEE** While the gate reports that a reply plays, the start threshold rises by 0.20, to at most 0.90. The end threshold does not rise.
     - *Why:* the speakers can reach the microphone, and a raised end threshold would cut the author's speech.
-49. **VOP-FR-DICU** A frame at or above the start threshold emits `speech_start` at once, when the session is not blocked and no utterance is in progress.
+49. **VOP-FR-DICU** A frame at or above the start threshold emits `speech_start` at once, when the session is not blocked and no utterance is in progress. In a chunked capture, the chunk events of VOP-FR-DSSU come between `speech_confirmed` and the return of "finish voice capture".
     - *Why:* playback pauses at this event, so it cannot wait for the 300 ms rule.
 49. **VOP-FR-QFRF** Before a capture opens, 3 frames in a row under the end threshold emit `misfire`. No capture opens, and no provider call is made.
 49. **VOP-FR-GZPY** At 10 frames after `speech_start`, and at 20 frames for speech that starts while a reply plays, or at the first later frame at or over the end threshold, the session opens a capture as VOP-FR-KBPZ states, with the active provider's configuration at that time. It emits `speech_confirmed` with the capture id and `live`.
@@ -100,12 +114,12 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 49. **VOP-FR-OFDY** In a capture, a frame under the end threshold starts the silence count. Only a frame at or above the start threshold clears it. At the silence timeout plus 200 ms, the session emits `speech_end`.
     - *Why:* a noise floor between the two thresholds must not hold an utterance open.
 49. **VOP-FR-GWZP** An utterance emits `speech_end` at 10 minutes, and the session stays open.
-49. **VOP-FR-FMRV** After `speech_end`, no utterance starts until the gate names that capture as settled.
+49. **VOP-FR-FMRV** After `speech_end`, the next utterance can start at once. It does not wait for the capture of the last utterance to return (VOP-FR-WCSB).
 49. **VOP-FR-DAZW** After a failed capture open, no `speech_start` comes until a frame under the end threshold.
     - *Why:* the author still speaks, and a new start every 320 ms would pause and resume a reply again and again.
 49. **VOP-FR-NDEH** After a `misfire` while a reply plays, no `speech_start` comes for 16 frames. Each further `misfire` in a row doubles this, to at most 256 frames. A confirmation resets the count, and so do 16 frames with no reply playing.
     - *Why:* WebKitGTK reports echo cancellation and cancels nothing, so a reply through speakers would pause and resume itself.
-49. **VOP-FR-QZCE** "set voice activity gate" carries `seq`, `blocked`, `playing`, `settled`, and `keyterms`. A `seq` under the last applied `seq` is ignored.
+49. **VOP-FR-QZCE** "set voice activity gate" carries `seq`, `blocked`, `playing`, `chunked`, and `keyterms`. A `seq` under the last applied `seq` is ignored.
     - *Why:* Tauri runs async commands in parallel, so a whole record with an order cannot leave a wrong value.
 49. **VOP-FR-KYFC** While `blocked` is true, no utterance starts. An utterance in progress continues.
 49. **VOP-FR-DSNZ** The session reads `voice_vad_silence_ms` and `voice_vad_sensitivity` from app preferences while it waits for speech, so a change applies from the next utterance. It clamps the silence to 500 through 5000 ms.
@@ -215,6 +229,14 @@ VoiceActivityChanged {
   code:                  string | null,                  // failed
   fatal:                 bool | null,                    // failed
 }
+
+VoiceChunkChanged {
+  capture_id:            string,
+  index:                 number,                         // 0 for the first chunk of the capture
+  state:                 "chunk_end" | "chunk_transcript" | "chunk_failed",
+  text:                  string | null,                  // chunk_transcript
+  code:                  string | null,                  // chunk_failed
+}
 ```
 
 ### The detector
@@ -234,6 +256,8 @@ VoiceActivityChanged {
 | Frames with no start after a misfire during playback | 16, about 500 ms, doubling to 256, about 8 s |
 | Tail after the silence timeout | 200 ms |
 | Longest utterance | 10 minutes |
+| Short pause that ends a chunk | 400 ms, or half of the silence timeout when that is less |
+| Chunk audio that stands for a sentence end with no live text | 2 s |
 | No feed limit | 30 s |
 
 ### Operations
@@ -246,7 +270,7 @@ VoiceActivityChanged {
 - `"clear voice ai integration"` → `clear_voice_ai_integration(provider)` → `VoiceAiIntegrations`
 - `"list voice ai models"` → `list_voice_ai_models(provider, base_url, api_key)` → `{ stt_models: string[], tts_models: string[] }`
 - `"list voice ai voices"` → `list_voice_ai_voices(provider)` → `string[] | null`. `provider` is optional
-- `"start voice capture"` → `start_voice_capture(capture_rate, keyterms)` → `VoiceCaptureStart`, or `no_active_provider`, `voice_session_active`
+- `"start voice capture"` → `start_voice_capture(capture_rate, keyterms, chunked)` → `VoiceCaptureStart`, or `no_active_provider`, `voice_session_active`
 - `"append voice capture"` → `append_voice_capture` with a raw body and the header `x-voice-session`
 - `"finish voice capture"` → `finish_voice_capture(session_id)` → `string`, or a typed failure (VOP-FR-UOYP)
 - `"retry voice capture"` → `retry_voice_capture(session_id)` → `string`, or a typed failure (VOP-FR-UOYP)
@@ -255,7 +279,7 @@ VoiceActivityChanged {
 - `"cancel voice speech"` → `cancel_voice_speech(speech_id)` → nothing
 - `"open voice activity session"` → `open_voice_activity_session(capture_rate, keyterms)` → `{ activity_id }`, or `voice_detector_unavailable`, `no_active_provider`
 - `"feed voice activity"` → `feed_voice_activity` with a raw body and the header `x-voice-session`
-- `"set voice activity gate"` → `set_voice_activity_gate(activity_id, seq, blocked, playing, settled, keyterms)` → nothing
+- `"set voice activity gate"` → `set_voice_activity_gate(activity_id, seq, blocked, playing, chunked, keyterms)` → nothing
 - `"close voice activity session"` → `close_voice_activity_session(activity_id, discard)` → `{ capture_id: string | null }`
 
 ### Events
@@ -263,10 +287,11 @@ VoiceActivityChanged {
 - `voice-ai-changed`: carries `VoiceAiIntegrations`.
 - `voice-transcript-changed`: carries `{ session_id, text }`.
 - `voice-activity-changed`: carries `VoiceActivityChanged`. The events of one session come in order.
+- `voice-chunk-changed`: carries `VoiceChunkChanged`. The events of one capture come in index order (VOP-FR-DSSU).
 
 ## Non-functional requirements
 - No command that waits on the network runs on the main thread.
 - A log line names the provider, the route, and a loggable base URL. It holds no key, no audio, and no transcript.
 - This module opens no socket and sends no request while voice mode is on but idle, or while a VAD session only listens.
-- The detector does not run on the main thread or on an async worker. Application exit ends a VAD session.
+- The detector does not run on the main thread or on an async worker. The transcription of a chunk does not delay the receipt of later audio. Application exit ends a VAD session.
 - A speech provider receives the transcript audio and the reply text. It receives nothing else from the project.

@@ -11,6 +11,7 @@ import {
   onDiscussionChanged,
   onVoiceActivityChanged,
   onVoiceAiChanged,
+  onVoiceChunkChanged,
   onVoiceTranscriptChanged,
 } from "../events";
 import { isTextField } from "../dropGuard";
@@ -22,6 +23,7 @@ import { DEFAULT_VOICE_HOTKEY, chordOf, mainKeyOf, matchesHotkey } from "../voic
 import { errorCode } from "../voice/voiceMessages";
 import {
   noteActivity,
+  noteChunk,
   noteDiscussionChanged,
   noteProvider,
   noteTranscript,
@@ -80,6 +82,8 @@ export function useVoiceShell(): void {
     void onVoiceAiChanged(applyIntegrations).then(keep);
     void onVoiceTranscriptChanged(({ sessionId, text }) => noteTranscript(sessionId, text)).then(keep);
     void onVoiceActivityChanged(noteActivity).then(keep);
+    // VOM-FR-NZXN, VOP-FR-DSSU.
+    void onVoiceChunkChanged(noteChunk).then(keep);
     void onDiscussionChanged(noteDiscussionChanged).then(keep);
 
     const onKeyDown = (event: KeyboardEvent) => {

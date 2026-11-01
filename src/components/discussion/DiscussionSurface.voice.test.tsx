@@ -45,7 +45,6 @@ import { clearQuestionSets, publishSet } from "../../state/questionSets";
 import { getVoiceState, resetVoiceStateForTest } from "../../state/voiceSession";
 import type { Discussion, PendingQuestionSet, ProjectAgent } from "../../types";
 import {
-  SURFACE_GRACE_MS,
   endVoiceForTeardown,
   noteProvider,
   resetVoiceControllerForTest,
@@ -124,10 +123,13 @@ beforeEach(() => {
   noteProvider(true, true);
 });
 
+/** Longer than any timer of voice mode, so a wait shows that nothing closes. */
+const LONG_WAIT_MS = 4000;
+
 afterEach(async () => {
   cleanup();
   endVoiceForTeardown();
-  await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS);
+  await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
   vi.useRealTimers();
 });
 
@@ -140,7 +142,7 @@ describe("a question set with a session open", () => {
     const note = screen.getByTestId("discussion-questions-composer-note");
     const bar = screen.getByTestId("voice-session-bar");
     expect(note.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await pass(SURFACE_GRACE_MS * 2);
+    await pass(LONG_WAIT_MS * 2);
     expect(getVoiceState().vadOpen).toBe(true);
     expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
     expect(lastGate()).toMatchObject({ blocked: false });
@@ -189,11 +191,11 @@ describe("a question set with a session open", () => {
     render(surface());
     await openSession();
     act(() => publishSet("d1", QUESTION_SET));
-    await pass(SURFACE_GRACE_MS * 2);
+    await pass(LONG_WAIT_MS * 2);
     act(() => clearQuestionSets());
     expect(screen.getByTestId("discussion-composer")).toBeInTheDocument();
     expect(screen.queryByTestId("voice-session-bar")).toBeNull();
-    await pass(SURFACE_GRACE_MS * 2);
+    await pass(LONG_WAIT_MS * 2);
     expect(getVoiceState().vadOpen).toBe(true);
     expect(lastGate()).toMatchObject({ blocked: false, keyterms: ["arch"] });
     expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
@@ -212,13 +214,14 @@ describe("a question set with a session open", () => {
     expect(screen.getByTestId("voice-record")).toHaveAttribute("data-vad", "idle");
   });
 
-  it("VOM-FR-GZPA: a discussion that resolves shows no bar, and the session closes", async () => {
+  it("VOM-FR-LSBQ, VOM-FR-BCRD: a discussion that resolves shows no bar, and the session stays", async () => {
     const view = render(surface());
     await openSession();
     act(() => publishSet("d1", QUESTION_SET));
     view.rerender(surface({ resolved: true }));
     expect(screen.queryByTestId("voice-session-bar")).toBeNull();
-    await pass(SURFACE_GRACE_MS);
-    expect(getVoiceState().vadOpen).toBe(false);
+    await pass(LONG_WAIT_MS);
+    expect(getVoiceState().vadOpen).toBe(true);
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
   });
 });

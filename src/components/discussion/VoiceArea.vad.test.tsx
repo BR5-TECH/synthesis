@@ -68,6 +68,7 @@ import {
 import { voiceMessage } from "../../voice/voiceMessages";
 import { DiscussionComposer } from "./DiscussionComposer";
 import { VoiceSessionBar } from "./VoiceSessionBar";
+import { registerQuestionBlock } from "../../voice/voiceQuestions";
 
 function agent(nickname: string): ProjectAgent {
   return {
@@ -215,10 +216,12 @@ describe("the record control", () => {
     expect(record().querySelector(`[data-icon="${icon}"]`)).not.toBeNull();
   });
 
-  it("VOM-FR-OTRF, VOM-FR-VOUG: Transcribing shows while a reply stands paused", () => {
+  it("VOM-FR-VOUG, VOM-FR-XDUY: Paused comes before Transcribing", () => {
     render(reply());
     enterVad();
-    act(() => patchVoiceState({ vadOpen: true, playbackPaused: true, phase: "transcribing" }));
+    act(() => patchVoiceState({ vadOpen: true, playbackPaused: true, transcribing: 1 }));
+    expect(record()).toHaveAttribute("data-vad", "paused");
+    act(() => patchVoiceState({ playbackPaused: false }));
     expect(record()).toHaveAttribute("data-vad", "transcribing");
   });
 
@@ -424,6 +427,15 @@ describe("what a session shows", () => {
 });
 
 describe("the session bar", () => {
+  /** VOM-FR-VGLT: the bar shows while a question set stands. */
+  function setStands() {
+    return registerQuestionBlock("d1", {
+      setId: "q1",
+      showing: () => ({ position: 1, text: "Which one?", options: [] }),
+      answer: vi.fn(),
+    });
+  }
+
   async function barWithSession() {
     const view = render(reply());
     await openSession();
@@ -460,6 +472,7 @@ describe("the session bar", () => {
 
   it("VOM-FR-HUXY: a recording at the bar shows its words in place of the line", async () => {
     await barWithSession();
+    setStands();
     activity("speech_start");
     activity("speech_confirmed", { captureId: "c1", live: true });
     await flush();
@@ -531,6 +544,7 @@ describe("the session bar", () => {
     activity("speech_start");
     activity("speech_confirmed", { captureId: "c1", live: true });
     view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} nicknames={() => ["arch"]} />);
+    setStands();
     activity("speech_end", { captureId: "c1" });
     await flush();
     expect(getDiscussionSession("d1").body).toBe("hello there");

@@ -355,6 +355,9 @@ mod candidate;
 mod commands;
 /// Deciding hunks: accept, reject, decline, hold.
 mod deciding;
+/// PCP-FR-MXSB: the decision functions that the tool calls in-process.
+mod in_process;
+pub(crate) use in_process::*;
 /// Reading hunk documents, and the author's hunk edits.
 mod hunks;
 /// The per-hunk ledger, its derived state, and revisions.

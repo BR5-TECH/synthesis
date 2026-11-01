@@ -30,6 +30,7 @@ import { DiscussionQuestions } from "../DiscussionQuestions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import { StreamMessages } from "../DraftDiscussion/stream";
 import { VoiceSessionBar } from "./VoiceSessionBar";
+import { visibleBody } from "../../text/spokenPart";
 import { commentErrorMessage, turnFailureMessage } from "./messages";
 import { pairedHalves } from "./questionPairs";
 import { useDiscussionRuntime } from "../../hooks/useDiscussionRuntime";
@@ -280,7 +281,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
     const excerpt =
       selected !== ""
         ? selected
-        : (thread.comments.find((c) => c.id === commentId)?.body ?? "").trim();
+        : visibleBody(thread.comments.find((c) => c.id === commentId)?.body ?? "").trim();
     if (excerpt === "") return;
     const held = getDiscussionSession(thread.id).quotes;
     if (held.some((q) => q.commentId === commentId && q.excerpt === excerpt)) return;
@@ -533,11 +534,12 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         </p>
       )}
 
-      {/* VOM-FR-VGLT: the composer is gone, and the microphone stays open. */}
-      {questionSet && composerOpen && voice.vadOpen && voice.activeKey === thread.id && (
+      {/* VOM-FR-VGLT: the composer is gone, and voice mode stays usable. */}
+      {questionSet && composerOpen && voice.activeKey === thread.id && (
         <VoiceSessionBar
           sessionKey={thread.id}
           voiceOf={(agentId) => agents.find((a) => a.agent.id === agentId)?.agent.voice || null}
+          nicknames={() => [...roster.nicknames]}
         />
       )}
 

@@ -472,7 +472,7 @@ fn agc_ts55_a_text_only_model_answers_and_the_turn_records_that_it_omitted_image
     )
     .expect("thread");
     let answer = thread.comments.last().expect("the answer");
-    assert_eq!(answer.body, "Answered.");
+    assert_eq!(answer.body, said("Answered."));
     assert!(!answer.body.to_lowercase().contains("image"));
 }
 

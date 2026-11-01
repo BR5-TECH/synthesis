@@ -29,7 +29,7 @@ use crate::tools::ToolRefusal;
 const FILE: &str = "spec.md";
 const ORIGINAL: &str = "# Spec\n\nThe original.\n";
 const PROPOSED: &str = "# Spec\n\nA better opening.\n";
-const RATIONALE: &str = "The opening buries the point.";
+const RATIONALE: &str = "The opening buries the point. <spoken>Short.</spoken>";
 
 fn human() -> Participant {
     Participant::Human { login: "raver119".into(), display_name: None, email: None }

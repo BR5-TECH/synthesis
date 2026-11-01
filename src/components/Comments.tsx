@@ -49,6 +49,7 @@ import {
 import { UnresolvedMarker } from "./UnresolvedMarker";
 import { formatRelative } from "./ProjectPicker";
 import { useParticipantLabel } from "../state/projectIdentity";
+import { visibleBody } from "../text/spokenPart";
 
 interface CommentsProps {
   /** CMP-FR-15: the session-memory filter text, held above this component. */
@@ -65,7 +66,9 @@ interface CommentsProps {
 export function discussionSubject(discussion: Discussion): string {
   const quote = discussionFragment(discussion)?.quote;
   if (quote) return quote;
-  const first = (discussion.comments[0]?.body ?? "").trim().split("\n")[0] ?? "";
+  // CMT-FR-RZGT.
+  const first =
+    visibleBody(discussion.comments[0]?.body ?? "").trim().split("\n")[0] ?? "";
   if (first === "") return "Discussion";
   return first.length > 60 ? `${first.slice(0, 59)}…` : first;
 }
@@ -343,7 +346,7 @@ export function Comments({ panel, onReveal }: CommentsProps) {
             {/* CMP-FR-06: the opening comment's Markdown, rendered as the rail
                 renders it (CMT-FR-09). */}
             <div className="comment-row__body">
-              <CommentMarkdown body={opener.body} agentRoster={roster} />
+              <CommentMarkdown body={visibleBody(opener.body)} agentRoster={roster} />
             </div>
           </>
         )}

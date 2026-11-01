@@ -53,7 +53,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal,
-    PROMPT_PROPOSAL_RATIONALE_BLANK, PROPOSAL_NO_CHANGE,
+    PROMPT_PROPOSAL_RATIONALE_BLANK, PROPOSAL_NO_CHANGE, RATIONALE_NO_SPOKEN_PART,
 };
 
 use crate::agent_conversations::ConversationOrigin;
@@ -76,7 +76,7 @@ mod tests;
 pub const NAME: &str = "propose_prompt_changes";
 
 /// PPC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to a prompt or a project document the project holds, when you can see how its text would be better and want the author to decide. It reaches a prompt or a project document and no other kind of file, and the file has to exist already — this offers changes and never a new file. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Give the change in one of two forms, never both. Pass `hunks`, a list of changes: each one names, in `before`, the exact text it changes, copied character for character from the file, and gives in `after` the text that should stand in its place; to insert, give `after` alone and put the exact text it follows in `after_text`; to delete, give `before` alone. Or pass `content` with the complete new text of the file, and it is converted into changes for you. Use `hunks` for a large document: you do not need the whole file in front of you, only the parts you change, which you can read with `offset` and `limit` on `read_file`. The text you name must appear once in the file. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each. A change whose text is not found, or not found once, is refused and you are told which change to correct. The author decides each change separately, so send the changes you believe in together rather than holding some back. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it in `hunks`. It changes nothing — the file is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose changes to a prompt or a project document the project holds, when you can see how its text would be better and want the author to decide. It reaches a prompt or a project document and no other kind of file, and the file has to exist already — this offers changes and never a new file. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Give the change in one of two forms, never both. Pass `hunks`, a list of changes: each one names, in `before`, the exact text it changes, copied character for character from the file, and gives in `after` the text that should stand in its place; to insert, give `after` alone and put the exact text it follows in `after_text`; to delete, give `before` alone. Or pass `content` with the complete new text of the file, and it is converted into changes for you. Use `hunks` for a large document: you do not need the whole file in front of you, only the parts you change, which you can read with `offset` and `limit` on `read_file`. The text you name must appear once in the file. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each. A change whose text is not found, or not found once, is refused and you are told which change to correct. The author decides each change separately, so send the changes you believe in together rather than holding some back. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it in `hunks`. It changes nothing — the file is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The project-relative path of the prompt or project document you are proposing changes to. The file has to exist and has to be a prompt or a project document; anything else is refused and nothing is created.";
 
@@ -190,12 +190,13 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_NO_SUCH_CHANGE => "no_such_change",
         PROPOSAL_REVISE_ONE => "revise_one",
         PROMPT_PROPOSAL_RATIONALE_BLANK => "rationale_blank",
+        RATIONALE_NO_SPOKEN_PART => "no_spoken_part",
         PROPOSAL_NO_CHANGE => "no_change",
         _ => "other",
     })
 }
 
-const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment.";
+const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 
 /// CVL-FR-15: what a second proposal in one reply is told.
 ///
@@ -534,6 +535,12 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
             prompt_proposals::announce(&self.app, self.buffer, &revised);
             self.proposed.store(true, Ordering::SeqCst);
             return Ok(ProposePromptChangesOutput { proposed: true, proposal_id: revised.id });
+        }
+
+        // PPC-FR-HMEH: a revision appends no comment, so only a call that gets
+        // this far needs a spoken part.
+        if crate::comments::spoken_part(&args.rationale).is_none() {
+            return Err(ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
         }
 
         // PPC-FR-RJCA / PCP-FR-CNVT: hunks are resolved against the file on

@@ -220,7 +220,7 @@ pub(super) const ARTIFACT_ONLY_TOOL: &str = "propose_prompt_changes";
 pub(super) fn asks(question: &str) -> ScriptedReply {
     ScriptedReply::calls(
         crate::tools::ask_user_comment::NAME,
-        serde_json::json!({ "question": question }),
+        serde_json::json!({ "question": said(question) }),
     )
 }
 
@@ -648,7 +648,7 @@ impl CompletionSeam for ToolThenGated {
             released = cvar.wait(released).unwrap_or_else(|e| e.into_inner());
         }
         Ok(ModelReply {
-            text: "Should never be delivered.".into(),
+            text: said("Should never be delivered."),
             tool_calls: Vec::new(),
             native_calls: Vec::new(),
             native_usage: None,

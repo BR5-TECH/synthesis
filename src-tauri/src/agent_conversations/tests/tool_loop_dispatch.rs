@@ -211,7 +211,7 @@ fn a_turn_loops_until_the_model_answers_and_each_call_carries_the_whole_exchange
     // AGC-FR-16 / CVL-FR-26: one comment, carrying the final answer alone.
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2);
-    assert_eq!(threads[0].comments[1].body, "The editor spec settles this.");
+    assert_eq!(threads[0].comments[1].body, said("The editor spec settles this."));
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn at_the_bound_the_turn_delivers_the_prose_the_last_reply_carried() {
         .map(|i| {
             let reply = ScriptedReply::calls("list_skills", serde_json::json!({}));
             Ok(if i == MAX_MODEL_CALLS - 1 {
-                reply.with_text("The editor spec settles this.")
+                reply.with_text(said("The editor spec settles this."))
             } else {
                 reply
             })
@@ -281,7 +281,7 @@ fn at_the_bound_the_turn_delivers_the_prose_the_last_reply_carried() {
     );
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2);
-    assert_eq!(threads[0].comments[1].body, "The editor spec settles this.");
+    assert_eq!(threads[0].comments[1].body, said("The editor spec settles this."));
 
     // CVL-FR-13: the tool the final reply asked for was never dispatched.
     //
@@ -387,7 +387,7 @@ fn a_tool_refusal_is_fed_back_and_the_turn_still_delivers() {
     };
     assert_eq!(text, crate::tools::FILE_NOT_FOUND, "the model reads the tool's own sentence",);
 
-    assert_eq!(h.threads("spec.md")[0].comments[1].body, "Found it on the second try.");
+    assert_eq!(h.threads("spec.md")[0].comments[1].body, said("Found it on the second try."));
 }
 
 #[test]

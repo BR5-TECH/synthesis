@@ -138,7 +138,20 @@ impl Fixture {
     }
 }
 
+/// A call with `question` as a model that follows the rule writes it. A blank
+/// question stays blank, so AUC-FR-06 stays reachable.
 fn args(question: &str, options: Option<Vec<&str>>) -> AskUserCommentArgs {
+    raw_args(
+        &if question.trim().is_empty() { question.to_string() } else { tagged(question) },
+        options,
+    )
+}
+
+fn tagged(question: &str) -> String {
+    format!("{question} <spoken>Short.</spoken>")
+}
+
+fn raw_args(question: &str, options: Option<Vec<&str>>) -> AskUserCommentArgs {
     AskUserCommentArgs {
         question: question.into(),
         options: options.map(|o| o.into_iter().map(String::from).collect()),
@@ -292,7 +305,7 @@ fn appends_one_comment_as_the_agent_participant() {
     }
     assert_eq!(
         question.body,
-        "Should graduation write one spec or two?\n\n\
+        "Should graduation write one spec or two? <spoken>Short.</spoken>\n\n\
          - one — a single spec covering both layers\n\
          - two — paired ui/ and core/ specs\n\n\
          Or say what you'd rather do.",
@@ -362,7 +375,7 @@ fn absent_or_blank_options_leave_the_question_alone() {
         fixture.call(args("which way?", options)).expect("posted");
         assert_eq!(
             fixture.thread().comments.last().unwrap().body,
-            "which way?",
+            tagged("which way?"),
             "AUC-FR-07: no list and no closing line under an open question",
         );
     }
@@ -374,7 +387,7 @@ fn blank_entries_are_dropped_and_the_rest_kept_in_order() {
     fixture.call(args("which?", Some(vec!["a", "", "b"]))).expect("posted");
     assert_eq!(
         fixture.thread().comments.last().unwrap().body,
-        format!("which?\n\n- a\n- b\n\n{CLOSING_LINE}"),
+        format!("{}\n\n- a\n- b\n\n{CLOSING_LINE}", tagged("which?")),
     );
 }
 
@@ -391,27 +404,29 @@ fn a_long_option_list_is_neither_refused_nor_truncated() {
 
 #[test]
 fn a_bare_string_of_options_is_one_option() {
-    let decoded: AskUserCommentArgs =
-        serde_json::from_value(serde_json::json!({ "question": "q", "options": "only" }))
-            .expect("decoded");
+    let decoded: AskUserCommentArgs = serde_json::from_value(
+        serde_json::json!({ "question": "q <spoken>Short.</spoken>", "options": "only" }),
+    )
+    .expect("decoded");
     assert_eq!(decoded.options, Some(vec!["only".to_string()]));
 
     // TLC-FR-07: an unusable shape falls back to the default rather than losing
     // a perfectly good question.
     for shape in [
-        serde_json::json!({ "question": "q", "options": 7 }),
-        serde_json::json!({ "question": "q", "options": null }),
-        serde_json::json!({ "question": "q" }),
+        serde_json::json!({ "question": "q <spoken>Short.</spoken>", "options": 7 }),
+        serde_json::json!({ "question": "q <spoken>Short.</spoken>", "options": null }),
+        serde_json::json!({ "question": "q <spoken>Short.</spoken>" }),
     ] {
         let decoded: AskUserCommentArgs = serde_json::from_value(shape).expect("decoded");
         assert_eq!(decoded.options, None);
     }
 
     // An unrecognised field is ignored (TLC-FR-07).
-    let decoded: AskUserCommentArgs =
-        serde_json::from_value(serde_json::json!({ "question": "q", "urgency": "high" }))
-            .expect("decoded");
-    assert_eq!(decoded.question, "q");
+    let decoded: AskUserCommentArgs = serde_json::from_value(
+        serde_json::json!({ "question": "q <spoken>Short.</spoken>", "urgency": "high" }),
+    )
+    .expect("decoded");
+    assert_eq!(decoded.question, "q <spoken>Short.</spoken>");
 }
 
 // ---------------------------------------------------------------------------
@@ -717,4 +732,84 @@ fn nothing_changes_but_the_conversations_own_log() {
         std::fs::read_to_string(fixture.path.as_path().join(ARTIFACT)).unwrap(),
         "one two three four five",
     );
+}
+
+// ---------------------------------------------------------------------------
+// AUC-FR-IEVY — the spoken part
+// ---------------------------------------------------------------------------
+
+// AUC-FR-IEVY, CVL-FR-UCTB
+#[test]
+fn a_question_with_no_spoken_part_is_refused_and_appends_nothing() {
+    let fixture = Fixture::new();
+    let before = fixture.thread().comments.len();
+
+    let refusal = fixture.call(raw_args("which way?", None)).expect_err("refused");
+
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(crate::tools::QUESTION_NO_SPOKEN_PART));
+    assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::InvalidArgs);
+    assert!(refusal.retryable(), "the model can add the tag");
+    assert_eq!(fixture.thread().comments.len(), before);
+}
+
+// AUC-FR-IEVY, AUC-FR-17: the refusal is found by its code, with no text in it.
+#[test]
+fn a_refusal_for_no_spoken_part_logs_its_code_and_no_text() {
+    // Its own buffer: tests run at once, and another test clears `AUC_LOG`.
+    static SPOKEN_LOG: LogBuffer = LogBuffer::new();
+    let fixture = Fixture::new();
+    fixture
+        .reporting_into(&SPOKEN_LOG)
+        .run(raw_args("Zanzibarquestion?", None))
+        .expect_err("refused");
+
+    let record = records_of(&SPOKEN_LOG, Domain::Ai)
+        .into_iter()
+        .find(|r| r.message == "tool call refused")
+        .expect("a record");
+    assert_eq!(record.fields.get("refusal"), Some(&serde_json::json!("no_spoken_part")));
+    let fields = serde_json::to_string(&record.fields).expect("fields serialize");
+    assert!(!fields.contains("Zanzibarquestion"), "{fields}");
+}
+
+// AUC-FR-IEVY: the rule reads `question`, so a tag in an option does not count.
+#[test]
+fn a_spoken_part_in_the_options_does_not_count() {
+    let fixture = Fixture::new();
+    let refusal = fixture
+        .call(raw_args("which way?", Some(vec!["<spoken>Short.</spoken>", "b"])))
+        .expect_err("refused");
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(crate::tools::QUESTION_NO_SPOKEN_PART));
+}
+
+// AUC-FR-IEVY, CVL-FR-AGNN: a tag quoted as code is no spoken part.
+#[test]
+fn a_tag_in_code_is_no_spoken_part() {
+    let fixture = Fixture::new();
+    let refusal =
+        fixture.call(raw_args("Is `<spoken>x</spoken>` right?", None)).expect_err("refused");
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(crate::tools::QUESTION_NO_SPOKEN_PART));
+}
+
+// AUC-FR-06, AUC-FR-IEVY: a blank question stays the refusal that says so.
+#[test]
+fn a_blank_question_is_not_told_about_the_spoken_part() {
+    let fixture = Fixture::new();
+    let refusal = fixture.call(raw_args("   ", None)).expect_err("refused");
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(QUESTION_BLANK));
+}
+
+// AUC-FR-05, CVL-FR-HREC: the body keeps the tag where the model put it, and the
+// model is told the rule.
+#[test]
+fn the_body_keeps_the_tag_and_the_description_states_the_rule() {
+    let fixture = Fixture::new();
+    fixture.call(raw_args("<spoken>Which?</spoken> Which way?", None)).expect("posted");
+    assert_eq!(
+        fixture.thread().comments.last().unwrap().body,
+        "<spoken>Which?</spoken> Which way?",
+    );
+    assert!(DESCRIPTION.contains("one `<spoken>…</spoken>` tag in `question`"));
+    assert!(DESCRIPTION.contains("A question with no tag is refused."));
+    assert!(QUESTION_DESCRIPTION.contains("`<spoken>…</spoken>`"));
 }

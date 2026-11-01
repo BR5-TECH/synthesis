@@ -544,7 +544,8 @@ fn a_title_fills_its_placeholder_in_every_prompt_and_an_empty_one_is_not_defined
 }
 
 /// Every `<tag>` a prompt mentions, scanned out of the prompt itself rather than
-/// listed here — a list would drift with the very thing it checks.
+/// listed here — a list would drift with the very thing it checks. `spoken` is a
+/// tag of the reply (CVL-FR-HREC) and no section of the input, so it stands apart.
 fn tags_described_by(template: &str) -> std::collections::BTreeSet<String> {
     let mut described = std::collections::BTreeSet::new();
     let mut rest = template;
@@ -554,7 +555,10 @@ fn tags_described_by(template: &str) -> std::collections::BTreeSet<String> {
         let name = &rest[..close];
         if !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '/')
         {
-            described.insert(name.trim_start_matches('/').to_string());
+            let tag = name.trim_start_matches('/');
+            if tag != "spoken" {
+                described.insert(tag.to_string());
+            }
         }
     }
     described

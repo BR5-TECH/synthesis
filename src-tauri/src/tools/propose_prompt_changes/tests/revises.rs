@@ -142,3 +142,36 @@ fn the_author_decides_each_change_and_full_text_is_converted() {
         .iter()
         .all(|row| row.state == crate::prompt_proposals::HunkState::Pending));
 }
+
+// PPC-FR-HMEH, PPC-FR-RVKS: a revision appends no comment, so it needs no tag.
+#[test]
+fn a_revision_needs_no_spoken_part() {
+    let f = Fixture::new();
+    let (_, _, second) = f.two_changes();
+    let comments = f.discussion().comments.len();
+    block_on(f.tool().call(ProposePromptChangesArgs {
+        path: PROMPT.into(),
+        revises: Some(second),
+        content: None,
+        hunks: Some(vec![change("three", "four")]),
+        rationale: "A better change.".into(),
+    }))
+    .expect("revised");
+    assert_eq!(f.discussion().comments.len(), comments, "no comment to carry a tag");
+}
+
+// PPC-FR-HMEH, PPC-FR-RVKS: with no standing proposal `revises` is ignored, so the
+// call appends a comment and needs the tag.
+#[test]
+fn a_revises_that_is_ignored_still_needs_a_spoken_part() {
+    let f = Fixture::new();
+    let refusal = block_on(f.tool().call(ProposePromptChangesArgs {
+        path: PROMPT.into(),
+        revises: Some("a-change-that-was-never-there".into()),
+        content: None,
+        hunks: Some(vec![change("three", "two")]),
+        rationale: "No tag here.".into(),
+    }))
+    .expect_err("refused");
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(crate::tools::RATIONALE_NO_SPOKEN_PART));
+}

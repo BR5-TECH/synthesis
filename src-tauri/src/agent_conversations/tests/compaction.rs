@@ -233,7 +233,8 @@ fn a_call_over_the_budget_is_preceded_by_a_compaction_call() {
         vec![
             Ok(big_tool_reply(400_000)),
             Ok(big_tool_reply(400_001)),
-            Ok(ScriptedReply::answer("SUMMARY-OF-OLDER-ROUNDS")),
+            // CVL-FR-NOHO: a summary is no comment, so it needs no spoken part.
+            Ok(ScriptedReply::unspoken("SUMMARY-OF-OLDER-ROUNDS")),
             Ok(ScriptedReply::answer("Final.")),
         ],
         Some(200_000),

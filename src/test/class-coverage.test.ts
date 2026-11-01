@@ -64,7 +64,6 @@ const UNSTYLED = new Set([
   "changes-state__error",
   "comment-card__detach",
   "comment-card__maximize",
-  "comment-composer__control",
   "conversation-overlay__attach",
   "conversation-overlay__state",
   "diff-line__gutter--new",

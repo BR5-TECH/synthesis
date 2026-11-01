@@ -174,6 +174,9 @@ pub const MEASURE_UNREADABLE: &str = "That document could not be read. It may no
 pub const QUESTION_BLANK: &str =
     "The question must say what you want to know. Write it as you would write it to a colleague.";
 
+/// AUC-FR-IEVY: the comment would carry no spoken part (CVL-FR-AGNN).
+pub const QUESTION_NO_SPOKEN_PART: &str = "The question has no spoken part. Put one or two short sentences in one `<spoken>…</spoken>` tag in `question`.";
+
 /// AUC-FR-10: the conversation takes no further comments (CMS-FR-17).
 ///
 /// Says outright that a further call will not succeed, for the reason
@@ -262,6 +265,10 @@ pub const PROPOSAL_CONTENT_BLANK: &str =
 /// something.
 pub const PROPOSAL_RATIONALE_BLANK: &str =
     "Say why the change is worth making. The author reads this beside the diff.";
+
+/// PDC-FR-ZQOH, PPC-FR-HMEH: the comment would carry no spoken part
+/// (CVL-FR-AGNN).
+pub const RATIONALE_NO_SPOKEN_PART: &str = "The rationale has no spoken part. Put one or two short sentences in one `<spoken>…</spoken>` tag in `rationale`.";
 
 /// PDC-FR-07: the text passed is what the file already holds.
 ///

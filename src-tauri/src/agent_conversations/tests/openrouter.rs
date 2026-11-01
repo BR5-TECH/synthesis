@@ -684,7 +684,7 @@ fn nothing_a_tool_returned_is_written_anywhere_or_carried_in_an_event() {
     }
 
     // The comment is the final answer alone.
-    assert_eq!(h.threads("spec.md")[0].comments[1].body, "The answer alone.");
+    assert_eq!(h.threads("spec.md")[0].comments[1].body, said("The answer alone."));
 }
 
 #[test]

@@ -54,6 +54,7 @@ import {
 } from "../../types";
 import {
   composeAnswers,
+  nextUnanswered,
   DESCRIPTION_PLACEHOLDER,
   isAnswered,
   progressLine,
@@ -62,6 +63,8 @@ import {
   type HoveredRow,
 } from "./answers";
 import { stripCitationMarkers } from "../../text/citationMarkers";
+import { noteQuestionShown } from "../../voice/voiceController";
+import { registerQuestionBlock, type VoiceQuestionBlock } from "../../voice/voiceQuestions";
 
 export interface DiscussionQuestionsProps {
   set: PendingQuestionSet;
@@ -105,6 +108,14 @@ export function DiscussionQuestions({
   // block appearing must not take the keyboard away from whatever the author is
   // doing (DQA-FR-CKYP).
   const paged = useRef(false);
+  /** What the handle of voice mode reads, from the newest render. */
+  const voiceBlock = useRef<Pick<VoiceQuestionBlock, "showing" | "answer"> | null>(null);
+  /**
+   * DQA-FR-GGKI: the next page turn came from a spoken answer, with the button
+   * that held focus then. The move can disable that button, and a browser then
+   * puts focus on the document before an effect can read it.
+   */
+  const spokenMove = useRef<{ button: HTMLButtonElement | null } | null>(null);
 
   // DQA-FR-GVSA: a set the author has not paged shows its first question, and a
   // set that replaces another does the same — a page belongs to the set it was
@@ -138,12 +149,41 @@ export function DiscussionQuestions({
   }, [current, set.setId]);
 
   useEffect(() => {
+    // DQA-FR-GGKI: the record control keeps the keyboard for the next answer. A
+    // Previous or Next that the move disabled loses focus, so it goes to the
+    // question and not to the document.
+    if (spokenMove.current) {
+      if (spokenMove.current.button?.disabled) questionRef.current?.focus();
+      spokenMove.current = null;
+      return;
+    }
     if (!paged.current) return;
     // DQA-FR-TFCE: the keyboard lands in the question that arrived rather than
     // staying on the control that moved it, because Previous and Next disable
     // themselves at the two ends of the set.
     questionRef.current?.focus();
   }, [current]);
+
+  // VOM-FR-UALK: a set that voice mode spoke is silent on a remount. A ref per
+  // set, because a new set in this mount is an arrival too.
+  const shownSet = useRef<string | null>(null);
+  useEffect(() => {
+    if (!question) return;
+    const arrived = shownSet.current !== set.setId;
+    shownSet.current = set.setId;
+    noteQuestionShown(set.discussionId, set.setId, question, set.askedBy, arrived);
+  }, [set.discussionId, set.setId, set.askedBy, question]);
+
+  // VOM-FR-PINR: voice mode reaches the block through this, while it stands.
+  useEffect(
+    () =>
+      registerQuestionBlock(set.discussionId, {
+        setId: set.setId,
+        showing: () => voiceBlock.current?.showing() ?? null,
+        answer: (position, transcript) => voiceBlock.current?.answer(position, transcript),
+      }),
+    [set.discussionId, set.setId],
+  );
 
   // Read before the early return below, because the effect after it is a hook:
   // a re-read that records no questions at all takes that return (DQA-FR-DYFR),
@@ -176,6 +216,77 @@ export function DiscussionQuestions({
       field.style.height = `${field.scrollHeight + border}px`;
     }
   }, [draft.typed, draft.note, draft.ownWords, draft.selected, current]);
+
+  /**
+   * DQA-FR-KDVU, DQA-FR-WKTP: the one submission, from Submit and from the last
+   * spoken answer (DQA-FR-YMGD). It reads the draft, so a spoken answer that was
+   * written a moment ago is in it.
+   */
+  const submit = () => {
+    const answers = composeAnswers(set);
+    // DQA-FR-AYNP: the guard rather than the disabled attribute is what makes
+    // this single-flight. A disabled button dispatches no click in a browser, but
+    // a keyboard activation and a re-entrant render can both arrive before React
+    // has painted the disabled state.
+    if (!answers || sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    setRefusal(null);
+    void onSubmit(answers)
+      .then(() => {
+        // DQA-FR-IPFD: the block and its draft go together, which the caller does
+        // by publishing the set the backend now reports.
+        onSubmitted();
+      })
+      .catch((reason: unknown) => {
+        // DQA-FR-WKTP: nothing the author entered is touched.
+        // ADQ-FR-LZHV: the record names no question, option, or note.
+        logError(["frontend"], "the question answers were refused", {
+          discussionId: set.discussionId,
+          questions: total,
+        });
+        // The typed slug rather than whatever shape the rejection took: the
+        // backend refuses with a bare string, and a transport failure arrives as
+        // an `Error`. `String(error)` on the latter yields "Error: <slug>", which
+        // no message table matches and the author reads as a raw code.
+        const raw =
+          typeof reason === "string"
+            ? reason
+            : reason instanceof Error
+              ? reason.message
+              : String(reason);
+        setRefusal(describeError(raw));
+      })
+      .finally(() => {
+        // And it recovers: a refused submission is retried without a reload
+        // (DQA-FR-WKTP).
+        sendingRef.current = false;
+        setSending(false);
+      });
+  };
+
+  /**
+   * DQA-FR-SUUU, DQA-FR-DYSP: a spoken answer is the own answer, whatever the
+   * words are. DQA-FR-ITCZ, DQA-FR-YMGD: the block then moves on, and the last
+   * answer submits. DQA-FR-VICX: a refusal does not come back here.
+   */
+  const answerAloud = (position: number, transcript: string) => {
+    rememberAnswer(set.setId, position, {
+      ...recallAnswer(set.setId, position),
+      ownWords: true,
+      typed: transcript,
+    });
+    redraw();
+    const next = nextUnanswered(set, position);
+    if (next === null) {
+      submit();
+    } else if (next !== current) {
+      const held = document.activeElement;
+      spokenMove.current = { button: held instanceof HTMLButtonElement ? held : null };
+      setPage(next);
+    }
+  };
+  voiceBlock.current = { showing: () => question ?? null, answer: answerAloud };
 
   if (!question) return null;
 
@@ -511,48 +622,7 @@ export function DiscussionQuestions({
           // activated, so every further activation is ignored until the request
           // settles.
           disabled={locked || composed === null}
-          onClick={() => {
-            // DQA-FR-AYNP: the guard rather than the disabled attribute is what
-            // makes this single-flight. A disabled button dispatches no click in
-            // a browser, but a keyboard activation and a re-entrant render can
-            // both arrive before React has painted the disabled state.
-            if (!composed || sendingRef.current) return;
-            sendingRef.current = true;
-            setSending(true);
-            setRefusal(null);
-            void onSubmit(composed)
-              .then(() => {
-                // DQA-FR-IPFD: the block and its draft go together, which the
-                // caller does by publishing the set the backend now reports.
-                onSubmitted();
-              })
-              .catch((reason: unknown) => {
-                // DQA-FR-WKTP: nothing the author entered is touched.
-                // ADQ-FR-LZHV: the record names no question, option, or note.
-                logError(["frontend"], "the question answers were refused", {
-                  discussionId: set.discussionId,
-                  questions: total,
-                });
-                // The typed slug rather than whatever shape the rejection took:
-                // the backend refuses with a bare string, and a transport
-                // failure arrives as an `Error`. `String(error)` on the latter
-                // yields "Error: <slug>", which no message table matches and the
-                // author reads as a raw code.
-                const raw =
-                  typeof reason === "string"
-                    ? reason
-                    : reason instanceof Error
-                      ? reason.message
-                      : String(reason);
-                setRefusal(describeError(raw));
-              })
-              .finally(() => {
-                // And it recovers: a refused submission is retried without a
-                // reload (DQA-FR-WKTP).
-                sendingRef.current = false;
-                setSending(false);
-              });
-          }}
+          onClick={submit}
         >
           Submit
         </button>

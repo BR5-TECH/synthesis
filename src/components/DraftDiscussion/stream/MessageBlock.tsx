@@ -24,6 +24,7 @@ import { formatRelative } from "../../ProjectPicker";
 import { Icon } from "../../icons";
 import type { AgentRoster } from "../../agentTags";
 import { stripCitationMarkers } from "../../../text/citationMarkers";
+import { visibleBody } from "../../../text/spokenPart";
 import { participantTitle, type Comment } from "../../../types";
 import { useParticipantLabel } from "../../../state/projectIdentity";
 
@@ -209,7 +210,7 @@ function MessageBody({
   if (descriptions.length === 0) {
     return (
       <CommentMarkdown
-        body={comment.body}
+        body={visibleBody(comment.body)}
         agentRoster={roster}
         className="dds-message__body"
       />
@@ -233,7 +234,7 @@ function MessageBody({
         />
       ) : (
         <CommentMarkdown
-          body={comment.body}
+          body={visibleBody(comment.body)}
           agentRoster={roster}
           className="dds-message__body"
         />

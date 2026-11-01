@@ -133,6 +133,13 @@ fn anything_but_exactly_one_object_is_not_recognised() {
     assert_eq!(tool_written_as_prose(QUESTIONS, &[]), None, "no tool is attached");
 }
 
+/// The reply failed for what it is, and not for a tag that it also lacks.
+fn assert_no_spoken_part_record(turn_id: &str) {
+    assert!(records_where("turnId", turn_id)
+        .iter()
+        .all(|r| r.message != "agent reply has no spoken part"));
+}
+
 fn asks_questions() -> ScriptedReply {
     ScriptedReply::calls(
         crate::tools::ask_discussion_questions::NAME,
@@ -166,7 +173,7 @@ fn comments_now(h: &Harness, draft_id: &str, thread_id: &str) -> usize {
 #[test]
 fn a_question_set_written_as_prose_is_retried_and_the_real_call_records_it() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::answer(format!("```json\n{QUESTIONS}\n```"))),
+        Ok(ScriptedReply::unspoken(format!("```json\n{QUESTIONS}\n```"))),
         Ok(asks_questions()),
     ]);
     let (turn, draft_id, thread) = run_discussion(&h);
@@ -191,7 +198,7 @@ fn a_question_set_written_as_prose_is_retried_and_the_real_call_records_it() {
 fn a_tool_call_written_as_prose_on_every_attempt_ends_as_an_empty_reply() {
     let sentinel = "Zanzibarquestion";
     let prose = QUESTIONS.replace("One spec or two?", sentinel);
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer(prose)); MAX_ATTEMPTS]);
+    let h = Harness::scripted(vec![Ok(ScriptedReply::unspoken(prose)); MAX_ATTEMPTS]);
     let (turn, draft_id, thread) = run_discussion(&h);
 
     assert_eq!(turn.state, AgentTurnState::Failed);
@@ -200,6 +207,7 @@ fn a_tool_call_written_as_prose_on_every_attempt_ends_as_an_empty_reply() {
     assert_eq!(h.seam.call_count(), MAX_ATTEMPTS);
     assert_eq!(comments_now(&h, &draft_id, &thread.id), 1);
     assert!(crate::comments::read_question_set(&h.root(), &h.root(), &thread.id).is_none());
+    assert_no_spoken_part_record(&turn.id);
 
     let warnings: Vec<_> = records_where("turnId", &turn.id)
         .into_iter()
@@ -220,9 +228,34 @@ fn a_tool_call_written_as_prose_on_every_attempt_ends_as_an_empty_reply() {
 #[test]
 fn a_tool_call_followed_by_a_citation_marker_is_still_recognised() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::answer(format!("{QUESTIONS}\u{E200}cite\u{E202}turn0search1\u{E201}"))),
+        Ok(ScriptedReply::unspoken(format!("{QUESTIONS}\u{E200}cite\u{E202}turn0search1\u{E201}"))),
         Ok(asks_questions()),
     ]);
+    let (turn, _, _) = run_discussion(&h);
+    assert_eq!(turn.state, AgentTurnState::AwaitingReply);
+    assert_eq!(h.seam.call_count(), 2);
+    assert_no_spoken_part_record(&turn.id);
+}
+
+// CVL-FR-JPHT, CVL-FR-UJXD: a spoken tag beside the object changes nothing. The
+// object is still a tool call written as prose, so the author never reads it.
+#[test]
+fn a_tool_call_written_as_prose_beside_a_spoken_tag_is_retried() {
+    let h = Harness::scripted(vec![
+        Ok(ScriptedReply::unspoken(format!("<spoken>Two questions.</spoken>\n\n{QUESTIONS}"))),
+        Ok(asks_questions()),
+    ]);
+    let (turn, draft_id, thread) = run_discussion(&h);
+    assert_eq!(turn.state, AgentTurnState::AwaitingReply);
+    assert_eq!(h.seam.call_count(), 2);
+    assert_eq!(comments_now(&h, &draft_id, &thread.id), 1);
+}
+
+// CVL-FR-JPHT, CVL-FR-UJXD: a spoken tag inside the object leaves one object.
+#[test]
+fn a_tool_call_written_as_prose_with_a_tag_inside_it_is_retried() {
+    let text = QUESTIONS.replace("One spec or two?", "<spoken>One spec or two?</spoken>");
+    let h = Harness::scripted(vec![Ok(ScriptedReply::unspoken(text)), Ok(asks_questions())]);
     let (turn, _, _) = run_discussion(&h);
     assert_eq!(turn.state, AgentTurnState::AwaitingReply);
     assert_eq!(h.seam.call_count(), 2);
@@ -232,7 +265,10 @@ fn a_tool_call_followed_by_a_citation_marker_is_still_recognised() {
 // (CVL-FR-08), so the same text is an ordinary answer and is delivered.
 #[test]
 fn the_same_text_is_an_answer_where_the_questions_tool_is_not_attached() {
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer(QUESTIONS))]);
+    // CVL-FR-NOHO: an answer holds a spoken part, and here it stands inside the
+    // JSON, so the whole text is still one object.
+    let text = QUESTIONS.replace("One spec or two?", "<spoken>One spec or two?</spoken>");
+    let h = Harness::scripted(vec![Ok(ScriptedReply::unspoken(text.clone()))]);
     h.create_agent("arch", "");
 
     let (turn, thread) = run_one(&h, "arch");
@@ -240,7 +276,7 @@ fn the_same_text_is_an_answer_where_the_questions_tool_is_not_attached() {
     assert_eq!(turn.state, AgentTurnState::Delivered);
     assert_eq!(h.seam.call_count(), 1);
     let folded = folded(&h, "spec.md", &thread.id);
-    assert_eq!(folded.comments.last().expect("answer").body, QUESTIONS);
+    assert_eq!(folded.comments.last().expect("answer").body, text);
     assert!(records_where("turnId", &turn.id)
         .iter()
         .all(|r| r.message != "agent wrote a tool call as prose"),);
@@ -250,8 +286,11 @@ fn the_same_text_is_an_answer_where_the_questions_tool_is_not_attached() {
 // answer.
 #[test]
 fn prose_that_merely_holds_json_is_delivered() {
-    for text in [r#"Use this: {"query":"x"}"#, r#"{"timeout":30}"#] {
-        let h = Harness::scripted(vec![Ok(ScriptedReply::answer(text))]);
+    for text in [
+        r#"<spoken>Short.</spoken> Use this: {"query":"x"}"#,
+        r#"{"timeout":"<spoken>Short.</spoken>"}"#,
+    ] {
+        let h = Harness::scripted(vec![Ok(ScriptedReply::unspoken(text))]);
         h.create_agent("arch", "");
         let (turn, thread) = run_one(&h, "arch");
         assert_eq!(turn.state, AgentTurnState::Delivered, "{text}");

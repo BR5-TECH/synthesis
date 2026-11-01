@@ -33,7 +33,7 @@ fn a_transient_failure_is_repeated_until_it_answers() {
         );
         let threads = h.threads("spec.md");
         assert_eq!(threads[0].comments.len(), 2, "exactly one comment was appended");
-        assert_eq!(threads[0].comments[1].body, "the answer");
+        assert_eq!(threads[0].comments[1].body, said("the answer"));
         // AGC-FR-21 / CVL-FR-20: nothing about a retry reaches a surface. Two
         // events for the turn — the registration and the terminal state — and
         // none for the attempts in between.
@@ -109,7 +109,7 @@ fn an_empty_reply_that_answers_on_a_later_attempt_delivers() {
     assert_eq!(h.seam.call_count(), MAX_ATTEMPTS);
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2);
-    assert_eq!(threads[0].comments[1].body, "said at last");
+    assert_eq!(threads[0].comments[1].body, said("said at last"));
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn each_invocation_of_the_loop_gets_its_own_attempt_budget() {
     assert_eq!(h.seam.call_count(), 6, "the seam was reached once per physical attempt");
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2, "exactly one comment was appended");
-    assert_eq!(threads[0].comments[1].body, "the answer");
+    assert_eq!(threads[0].comments[1].body, said("the answer"));
 
     let records = records_where("turnId", &terminal.id);
     assert_eq!(
@@ -542,7 +542,7 @@ fn a_manual_retry_starts_a_fresh_turn_and_consumes_the_offer() {
         "the human comment was not reposted; one answer was appended",
     );
     assert_eq!(threads[0].comments[0].id, thread.comments[0].id);
-    assert_eq!(threads[0].comments[1].body, "the retried answer");
+    assert_eq!(threads[0].comments[1].body, said("the retried answer"));
 
     // A second retry of the same turn finds nothing to take.
     assert_eq!(

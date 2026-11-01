@@ -30,6 +30,20 @@ export function isAnswered(setId: string, position: number): boolean {
 }
 
 /** DQA-FR-MJPV: how many of the recorded set are answered. */
+/**
+ * DQA-FR-ITCZ: the index of the next unanswered question, in recorded order after
+ * `position` and then from the start of the set, or null when none is left.
+ */
+export function nextUnanswered(set: PendingQuestionSet, position: number): number | null {
+  const count = set.questions.length;
+  const from = set.questions.findIndex((q) => q.position === position);
+  for (let step = 1; step <= count; step += 1) {
+    const index = (from + step + count) % count;
+    if (!isAnswered(set.setId, set.questions[index].position)) return index;
+  }
+  return null;
+}
+
 export function answeredCount(set: PendingQuestionSet): number {
   return set.questions.filter((question) => isAnswered(set.setId, question.position))
     .length;

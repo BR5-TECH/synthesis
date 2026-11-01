@@ -3,7 +3,7 @@
 **Spec code:** `VOM`
 
 ## Intent
-Voice mode lets a person talk in a discussion instead of typing. A person who reviews a Draft or any other artifact often thinks faster aloud, and wants to hear an answer while they look at the work. It lives in the one shared composer, so it exists in every discussion. Speech becomes an ordinary user comment and starts agent turns as a typed comment does, so nothing about a discussion is special to voice. The agent's text is always there, and speech is an option on top of it. A VAD session makes this hands-free: the author opens one session, a local detector in the backend finds each utterance, and each utterance posts with no press. Out of scope: voice activity detection on a server or a provider; native microphone capture in the backend; a level meter; a session control separate from the record control; an OS-wide hotkey; review or edit of a transcript before it posts; answering a question set by voice; and speaking a question set.
+Voice mode lets a person talk in a discussion instead of typing. A person who reviews a Draft or any other artifact often thinks faster aloud, and wants to hear an answer while they look at the work. It lives in the one shared composer, so it exists in every discussion. Speech becomes an ordinary user comment and starts agent turns as a typed comment does, so nothing about a discussion is special to voice. The agent's text is always there, and speech is an option on top of it. Speech is short, so an answer stays fast to hear: each agent comment carries a spoken part of one or two sentences, and where the written text holds more, that part offers to read it. The author answers the offer as any comment is answered, or ignores it. A question set is spoken one question at a time and is answered aloud. A VAD session makes this hands-free: the author opens one session, a local detector in the backend finds each utterance, and each utterance posts with no press. Out of scope: voice activity detection on a server or a provider; native microphone capture in the backend; a level meter; a start or end control for a session apart from the record control; an OS-wide hotkey; review or edit of a transcript before it posts; a hard limit on the length of the spoken part; a response mode other than Text and Voice; and Accept or Reject controls for the offer to read more.
 
 ## Functional requirements
 
@@ -60,18 +60,18 @@ Voice mode lets a person talk in a discussion instead of typing. A person who re
 21. **VOM-FR-OTRF** At `speech_end`, the WebView calls "finish voice capture" with the capture id, and the control shows Transcribing. The transcript then follows VOM-FR-WYIE, VOM-FR-RENV, VOM-FR-ABPU, VOM-FR-TAQJ, and VOM-FR-BVNX. The session stays open.
 21. **VOM-FR-XWPZ** A `misfire` event records nothing, posts nothing, and shows no note. A held recording stays.
 21. **VOM-FR-WWZX** A failed utterance shows the inline error, and VOM-FR-WICV applies when a recording is held. The session stays open.
-21. **VOM-FR-KHGC** No utterance starts until the last utterance settles: its transcript posted, joined the session body, came back empty, or failed. Speech in that time is not recorded.
-21. **VOM-FR-GTAQ** While the composer is disabled or a question set stands, an open session stays open and starts no utterance. When the block ends, listening continues with no press.
-21. **VOM-FR-VGLT** While a question set stands in the discussion of an open session, the surface shows a session control near the line of `DQA-discussion-question-answering.md` DQA-FR-PXNC. It holds the record control with its state, a line that says that the microphone is open and speech is not recorded, the Stop control, and the inline feedback.
-    - *Why:* the reply composer unmounts while a set stands, and an open microphone must stay visible and closable.
-21. **VOM-FR-GPNK** Activating the record control of the session control closes the session.
+21. **VOM-FR-KHGC** No utterance starts until the last utterance settles: its transcript posted, answered a question, joined the session body, came back empty, or failed. Speech in that time is not recorded.
+21. **VOM-FR-GTAQ** While the composer is disabled and no question set stands, an open session stays open and starts no utterance. While a question set stands, an utterance is a spoken answer (VOM-FR-PINR). When the block ends, listening continues with no press.
+21. **VOM-FR-VGLT** While a question set stands in the discussion of voice mode, in either input mode, the surface shows a session control near the line of `DQA-discussion-question-answering.md` DQA-FR-PXNC. It holds the record control with its state, a line that says how to answer aloud and whether the microphone is open, the Stop control, and the inline feedback.
+    - *Why:* the reply composer unmounts while a set stands, and the record control and an open microphone must stay visible and usable.
+21. **VOM-FR-GPNK** The record control of the session control acts as VOM-FR-PDZR, VOM-FR-HHWL, and VOM-FR-LIFL state.
 21. **VOM-FR-VOUG** In VAD mode, the record control shows one state: Idle (no session), Listening, Hearing speech, Transcribing, or Paused (playback paused by the author's speech). Each state shows by icon and colour, and in the accessible name.
 
 ### Barge-in
 
 21. **VOM-FR-FVRS** When `speech_start` arrives while a reply plays, playback pauses at once. The segment is not stopped and not cancelled.
 21. **VOM-FR-KVHG** A `misfire` resumes a paused reply from where it paused.
-21. **VOM-FR-UNXR** When an utterance settles, a comment that posted drops the paused reply. If it posted nothing, the paused reply resumes from where it paused.
+21. **VOM-FR-UNXR** When an utterance settles, a comment that posted or a spoken answer drops the paused reply. If neither happened, the paused reply resumes from where it paused.
 21. **VOM-FR-ZPOD** An agent reply that arrives from `speech_start` until the utterance settles waits. When the utterance settles, the newest such reply speaks, and it replaces a paused reply.
 
 ### Hotkey
@@ -79,7 +79,7 @@ Voice mode lets a person talk in a discussion instead of typing. A person who re
 22. **VOM-FR-WPRW** In Push-to-Talk, the hotkey of `VAI-voice-ai-settings.md` VAI-FR-RASA acts on the composer in voice mode, while the main window has focus. In VAD mode, it does nothing. It is not an OS-wide hotkey.
 23. **VOM-FR-HXLV** The hotkey does nothing while focus is in a text field, including the expanded text field, and during an IME composition.
 24. **VOM-FR-DXJT** The hotkey does nothing while a floating overlay other than the composer's own surface is mounted (`SNV-shell-navigation.md` SNV-FR-56).
-25. **VOM-FR-FHYY** The hotkey does nothing while the composer in voice mode is not mounted.
+25. **VOM-FR-FHYY** The hotkey does nothing while no composer and no session control of voice mode is mounted.
 26. **VOM-FR-SAMO** A repeated `keydown` of a held hotkey is ignored.
 
 ### Transcript
@@ -91,37 +91,50 @@ Voice mode lets a person talk in a discussion instead of typing. A person who re
 
 ### Posting
 
-30. **VOM-FR-WYIE** When recording ends, the composer posts the transcript as a normal user comment, through the same path as a typed comment. It dispatches agent turns on the same terms (`CTA-comment-agent-turns.md` CTA-FR-HCMJ). No review step exists.
+30. **VOM-FR-WYIE** When recording ends, the composer posts the transcript as a normal user comment, through the same path as a typed comment. It dispatches agent turns on the same terms (`CTA-comment-agent-turns.md` CTA-FR-HCMJ). No review step exists. A spoken answer does not post (VOM-FR-PINR).
 31. **VOM-FR-RFWC** The comment body is the unsent session body, then the transcript. Pending attachments go with it.
 32. **VOM-FR-RENV** An empty transcript posts nothing, and the voice area states that it heard no speech.
-33. **VOM-FR-ABPU** A transcript that cannot post now joins the session body and is not posted. The voice area states this. This applies when no composer is mounted, when a post is in flight, when voice mode ended, and when a question set arrived.
+33. **VOM-FR-ABPU** A transcript that cannot post now joins the session body and is not posted. The voice area states this. This applies when no composer is mounted, when a post is in flight, when voice mode ended, and when a question set arrived after the recording started.
     - *Why:* the speech is kept, and the author does not post into a discussion state they did not see.
 34. **VOM-FR-TAQJ** At the start of a transcript, `at <nickname>`, `hey <nickname>`, and `at all` become a tag. Matching ignores case and uses the discussion's roster only. Other text stays as spoken.
 35. **VOM-FR-BVNX** When a posted transcript reaches no agent, the voice area states this.
 36. **VOM-FR-LNUH** A recording sends the roster's nicknames as hints (`../core/VOP-voice-ai-providers.md` VOP-FR-INCC). A VAD session sends them when it opens and when the roster changes.
-37. **VOM-FR-ZUWW** While the composer is disabled, or a question set stands, the record control and the hotkey start nothing (`DQA-discussion-question-answering.md` DQA-FR-PXNC). The record control can still close an open VAD session.
+37. **VOM-FR-ZUWW** While the composer is disabled and no question set stands, the record control and the hotkey start nothing. While a question set stands, they start a spoken answer (`DQA-discussion-question-answering.md` DQA-FR-PXNC). The record control can still close an open VAD session.
 
 ### Failure
 
 38. **VOM-FR-ZFSA** A denied or missing microphone, an unreachable provider, or a failed transcription shows an inline error in the composer and posts nothing.
-39. **VOM-FR-WICV** After a failure of a provider, the error shows a Retry action. Retry calls "retry voice capture", and a success posts as VOM-FR-WYIE states.
+39. **VOM-FR-WICV** After a failure of a provider, the error shows a Retry action. Retry calls "retry voice capture", and a success posts as VOM-FR-WYIE states, or answers as VOM-FR-PINR states.
 40. **VOM-FR-FASJ** The next press, the next VAD utterance, Retry's success, or leaving voice mode discards the held recording.
 41. **VOM-FR-JJMY** A denied microphone message tells the author where to allow it in the operating system settings.
 
 ### Spoken replies
 
 42. **VOM-FR-ZLAY** With response mode Voice, a new agent comment in the discussion of the composer in voice mode is spoken.
+42. **VOM-FR-EWOK** With response mode Text, no comment and no question is spoken.
 43. **VOM-FR-ILJW** The set of comment ids at voice mode entry is the baseline. A comment in that set is never spoken. An opening composer takes its baseline from the discussion that its first post creates.
-44. **VOM-FR-VSCQ** Only comments with an Agent author are spoken. Comments that a question submission creates are not spoken.
-45. **VOM-FR-TRWN** Speech is the text of the comment's Markdown, with citation markers removed. A code block or a table is replaced by a short spoken phrase. A comment with no speakable text is not spoken.
+44. **VOM-FR-VSCQ** Only comments with an Agent author and a spoken part are spoken. Comments that a question submission creates carry no spoken part, so they are not spoken.
+45. **VOM-FR-TRWN** Speech is the comment's spoken part alone (`../ai/CVL-conversation-loop.md` CVL-FR-AGNN), as the text of its Markdown, with citation markers removed. A code block or a table in it is replaced by a short spoken phrase. A comment with no speakable spoken part is not spoken.
 46. **VOM-FR-QOXX** Text is split at sentence ends into segments under 4096 characters, and the first segment is short.
-47. **VOM-FR-UALP** Each segment uses the voice of the agent that wrote the comment (`AGR-agent-registry.md` AGR-FR-ABCF), or else the provider's default voice.
-48. **VOM-FR-RKOG** A new agent comment stops the current playback at once, and its speech replaces it. No reply queues behind another, except as VOM-FR-ZPOD states.
+47. **VOM-FR-UALP** Each segment uses the voice of the agent that wrote the comment or recorded the question set (`AGR-agent-registry.md` AGR-FR-ABCF), or else the provider's default voice.
+48. **VOM-FR-RKOG** A new agent comment or a new question stops the current playback at once, and its speech replaces it. No reply queues behind another, except as VOM-FR-ZPOD states.
 49. **VOM-FR-QDWW** A Stop control is visible while audio plays or a reply is paused. It stops playback at once, drops a paused or waiting reply, and calls "cancel voice speech".
 50. **VOM-FR-SJYH** Frames of one reply play in order and with no gap between them. A segment ends at its end frame (`../core/VOP-voice-ai-providers.md` VOP-FR-XZET), so no audio frame is lost.
 51. **VOM-FR-EGNX** When the composer in voice mode unmounts, playback stops. A new comment is not spoken while no composer and no session control of voice mode is mounted.
     - *Why:* speech belongs to the visible composer, so a Stop control is always there while audio plays.
 52. **VOM-FR-QPFQ** A failed segment stops playback and shows an inline error. The text of the comment is not affected.
+
+### Question sets
+
+52. **VOM-FR-HBLE** With response mode Voice, the surface speaks the pending question set of the discussion in voice mode from the recorded set, one question at a time. Question speech is the question text, then each option label in recorded order. It then waits for an answer.
+52. **VOM-FR-NWGL** Question speech holds no option description and does not name the own-answer row. Citation markers are removed from it (`DQA-discussion-question-answering.md` DQA-FR-JADB).
+52. **VOM-FR-UALK** A question speaks when its set arrives and when the block shows another question by any route (`DQA-discussion-question-answering.md` DQA-FR-BXHU). It speaks one time for each arrival and each move. A re-read of the set and a remount of the surface speak nothing.
+52. **VOM-FR-LKKN** Question speech is a reply for playback: VOM-FR-QDWW, VOM-FR-SJYH, VOM-FR-QPFQ, VOM-FR-EGNX, VOM-FR-FVRS, VOM-FR-KVHG, VOM-FR-UNXR, and VOM-FR-ZPOD apply to it.
+52. **VOM-FR-OSAQ** The Stop control leaves the set, its answers, and the question that shows as they are. The question does not speak again until the block moves.
+52. **VOM-FR-PINR** A recording or a VAD utterance that starts while a question set stands is a **spoken answer**, in both response modes. It posts no comment. Its transcript answers the question that showed when it started (`DQA-discussion-question-answering.md` DQA-FR-SUUU).
+52. **VOM-FR-FUFE** A spoken answer keeps its transcript as spoken. VOM-FR-TAQJ and VOM-FR-RFWC do not apply to it, and the session body stays as it is.
+52. **VOM-FR-MAVW** An empty or a failed spoken answer changes no answer, the question stays, and it does not speak again. VOM-FR-RENV applies to an empty transcript, and VOM-FR-ZFSA and VOM-FR-WICV apply to a failure.
+52. **VOM-FR-UXYH** The transcript of a spoken answer whose set no longer stands joins the session body, as VOM-FR-ABPU states.
 
 ### Lifecycle
 
@@ -154,8 +167,14 @@ Voice mode, VAD session listening
 Question set stands, VAD session open
 Answer the questions above to continue the discussion.
 +----------------------------------------------------------+
-| [ ((o)) ] The microphone is open. Speech is not recorded  |
-|           until you answer the questions.                 |
+| [ ((o)) ] The microphone is open. Speak to answer the     |
+|           question above.                         [Stop]  |
++----------------------------------------------------------+
+
+Question set stands, Push-to-Talk
+Answer the questions above to continue the discussion.
++----------------------------------------------------------+
+| [ (o) ] Press to answer the question above.       [Stop]  |
 +----------------------------------------------------------+
 ```
 
@@ -164,7 +183,7 @@ Answer the questions above to continue the discussion.
 - Layout notes: the voice area has the geometry of the text field, in all owner surfaces. Its parts stand on one line, and they wrap only where the column is too narrow for that line, as a growing text field does. Its trailing end holds the clearance of `DDS-draft-discussion.md` DDS-FR-QPHL.
 
 ## UI contract boundary
-- **Owned by the UI**: the voice area, the toggles, the single composer rule, capture through the WebView, the press and hotkey logic, the VAD session lifecycle, the reaction to `voice-activity-changed` events, the spoken tag conversion, the conversion of Markdown to speech text, the split into segments, playback, reply detection, and all messages.
+- **Owned by the UI**: the voice area, the toggles, the single composer rule, capture through the WebView, the press and hotkey logic, the VAD session lifecycle, the reaction to `voice-activity-changed` events, the spoken tag conversion, the reading of the spoken part, the conversion of Markdown to speech text, the split into segments, playback, reply detection, the speech of question sets, the spoken answer, and all messages.
 - **Delegated to backend (abstract)**: "start voice capture", "append voice capture", "finish voice capture", "retry voice capture", "cancel voice capture", "speak voice segment", "cancel voice speech", "open voice activity session", "feed voice activity", "set voice activity gate", "close voice activity session", "list voice ai integrations", each owned by `../core/VOP-voice-ai-providers.md`.
 
 ## Non-functional requirements

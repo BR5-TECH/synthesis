@@ -18,12 +18,12 @@ use super::*;
 ///
 /// The change names the text it replaces, which is what the tool now takes
 /// (PDC-FR-04); the seeded prompt holds `Loose notes.`.
-fn proposes(path: &str, content: &str, rationale: &str) -> ScriptedReply {
+pub(super) fn proposes(path: &str, content: &str, rationale: &str) -> ScriptedReply {
     ScriptedReply::calls(
         crate::tools::propose_draft_changes::NAME,
         serde_json::json!({
             "path": path,
-            "rationale": rationale,
+            "rationale": said(rationale),
             "hunks": [{
                 "kind": "replace",
                 "before": "Loose notes.",
@@ -80,7 +80,7 @@ fn a_turn_that_proposes_a_change_ends_on_that_call() {
     let thread = folded_discussion(&h, &draft_id, &thread.id);
     assert_eq!(thread.comments.len(), 2);
     let posted = &thread.comments[1];
-    assert_eq!(posted.body, "The half buries its point.");
+    assert_eq!(posted.body, said("The half buries its point."));
     assert!(matches!(posted.author, Participant::Agent { .. }));
     // AGC-FR-17: the one comment an agent carries an attachment on, and it is a
     // proposal reference rather than a file.
@@ -107,13 +107,13 @@ fn a_turn_that_proposes_a_change_ends_on_that_call() {
 // ---------------------------------------------------------------------------
 
 /// A reply that proposes a new version of a prompt the project holds.
-fn proposes_prompt(path: &str, content: &str, rationale: &str) -> ScriptedReply {
+pub(super) fn proposes_prompt(path: &str, content: &str, rationale: &str) -> ScriptedReply {
     ScriptedReply::calls(
         crate::tools::propose_prompt_changes::NAME,
         serde_json::json!({
             "path": path,
             "content": content,
-            "rationale": rationale,
+            "rationale": said(rationale),
         }),
     )
 }
@@ -145,7 +145,7 @@ fn seed_prompt_discussion(h: &Harness, nickname: &str) -> Discussion {
     .expect("discussion")
 }
 
-fn run_prompt_turn(h: &Harness, nickname: &str) -> (AgentTurn, Discussion) {
+pub(super) fn run_prompt_turn(h: &Harness, nickname: &str) -> (AgentTurn, Discussion) {
     let thread = seed_prompt_discussion(h, nickname);
     let turn = h
         .dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
@@ -192,7 +192,7 @@ fn a_turn_that_proposes_a_prompt_change_ends_on_that_call() {
     let thread = folded_prompt_discussion(&h, &thread.id);
     assert_eq!(thread.comments.len(), 2);
     let posted = &thread.comments[1];
-    assert_eq!(posted.body, "The instructions bury the important step.");
+    assert_eq!(posted.body, said("The instructions bury the important step."));
     assert!(matches!(posted.author, Participant::Agent { .. }));
     // AGC-FR-17: one reference attachment and nothing beside it, and it is the
     // `prompt_proposal` kind rather than the draft's.
@@ -237,7 +237,7 @@ fn a_refused_prompt_proposal_ends_nothing_and_the_turn_answers_with_what_it_has(
     );
     let thread = folded_prompt_discussion(&h, &thread.id);
     assert_eq!(thread.comments.len(), 2);
-    assert_eq!(thread.comments[1].body, "I would split the Steps section.");
+    assert_eq!(thread.comments[1].body, said("I would split the Steps section."));
 }
 
 #[test]
@@ -247,7 +247,7 @@ fn a_reply_asking_for_both_ending_tools_on_an_artifact_makes_one_contribution() 
         proposes_prompt(PROMPT_PATH, "# Review\n\nRead the file.\n", "Leads with the point.")
             .and_calls(
                 crate::tools::ask_user_comment::NAME,
-                serde_json::json!({ "question": "Or shall I?" }),
+                serde_json::json!({ "question": "Or shall I? <spoken>Short.</spoken>" }),
             )
             .and_calls("read_file", serde_json::json!({ "path": PROMPT_PATH }))
             .with_text("I would also split the Steps");
@@ -262,7 +262,7 @@ fn a_reply_asking_for_both_ending_tools_on_an_artifact_makes_one_contribution() 
 
     let thread = folded_prompt_discussion(&h, &thread.id);
     assert_eq!(thread.comments.len(), 2, "one contribution and not two (AGC-FR-01)",);
-    assert_eq!(thread.comments[1].body, "Leads with the point.");
+    assert_eq!(thread.comments[1].body, said("Leads with the point."));
     assert!(
         !thread.comments.iter().any(|c| c.body.contains("I would also split the Steps")),
         "CVL-FR-15: prose alongside an ending call is appended nowhere",
@@ -276,7 +276,7 @@ fn a_reply_asking_for_both_ending_tools_makes_one_contribution() {
     let reply = proposes("artifact-window.md", "A better UI half.", "Leads with the point.")
         .and_calls(
             crate::tools::ask_user_comment::NAME,
-            serde_json::json!({ "question": "Or shall I?" }),
+            serde_json::json!({ "question": "Or shall I? <spoken>Short.</spoken>" }),
         )
         .and_calls("search_specifications", serde_json::json!({ "query": "drafts" }))
         .with_text("I would also split the Intent");
@@ -291,7 +291,11 @@ fn a_reply_asking_for_both_ending_tools_makes_one_contribution() {
 
     let thread = folded_discussion(&h, &draft_id, &thread.id);
     assert_eq!(thread.comments.len(), 2, "one contribution and not two (AGC-FR-01)",);
-    assert_eq!(thread.comments[1].body, "Leads with the point.", "the proposal, not the question",);
+    assert_eq!(
+        thread.comments[1].body,
+        said("Leads with the point."),
+        "the proposal, not the question",
+    );
     assert!(
         !thread.comments.iter().any(|c| c.body.contains("I would also split the Intent")),
         "CVL-FR-15: prose alongside an ending call is appended nowhere",
@@ -333,7 +337,7 @@ fn a_refused_proposal_ends_nothing_and_the_turn_answers_with_what_it_has() {
     let thread = folded_discussion(&h, &draft_id, &thread.id);
     assert_eq!(
         thread.comments.last().expect("last").body,
-        "I will leave the second for later.",
+        said("I will leave the second for later."),
         "the turn answered with what it had",
     );
 }
@@ -441,7 +445,7 @@ fn a_turn_that_asks_the_author_ends_on_that_call() {
     // AGC-FR-01: exactly one contribution, and it is the question.
     let thread = folded(&h, "spec.md", &thread.id);
     assert_eq!(thread.comments.len(), 2);
-    assert_eq!(thread.comments[1].body, "One spec or two?");
+    assert_eq!(thread.comments[1].body, said("One spec or two?"));
     assert!(matches!(thread.comments[1].author, Participant::Agent { .. }));
 
     // AGC-FR-21: one terminal event for this turn and no other.
@@ -468,7 +472,7 @@ fn asking_leaves_the_rest_of_the_reply_undispatched_and_its_prose_unappended() {
     let h = Harness::scripted(vec![Ok(asks("One spec or two?")
         .and_calls(
             crate::tools::ask_user_comment::NAME,
-            serde_json::json!({ "question": "Or three?" }),
+            serde_json::json!({ "question": "Or three? <spoken>Short.</spoken>" }),
         )
         .and_calls("read_file", serde_json::json!({ "path": "spec.md" }))
         .and_calls("search_specifications", serde_json::json!({ "query": "a" }))
@@ -486,7 +490,7 @@ fn asking_leaves_the_rest_of_the_reply_undispatched_and_its_prose_unappended() {
         2,
         "CVL-FR-15: the question alone — the reply's prose is appended nowhere",
     );
-    assert_eq!(thread.comments[1].body, "One spec or two?");
+    assert_eq!(thread.comments[1].body, said("One spec or two?"));
 
     assert!(
         !thread.comments.iter().any(|c| c.body == "Or three?"),
@@ -504,7 +508,7 @@ fn a_turn_ending_on_a_question_reports_every_call_of_that_reply_finished() {
     let h = Harness::scripted(vec![Ok(asks("One spec or two?")
         .and_calls(
             crate::tools::ask_user_comment::NAME,
-            serde_json::json!({ "question": "Or three?" }),
+            serde_json::json!({ "question": "Or three? <spoken>Short.</spoken>" }),
         )
         .and_calls("read_file", serde_json::json!({ "path": "spec.md" }))
         .and_calls("search_specifications", serde_json::json!({ "query": "a" })))]);
@@ -577,7 +581,7 @@ fn a_refused_question_leaves_the_loop_running_and_the_turn_delivers() {
 
     let thread = folded(&h, "spec.md", &thread.id);
     assert_eq!(thread.comments.len(), 2);
-    assert_eq!(thread.comments[1].body, "Two specs, then.", "the answer, and no question",);
+    assert_eq!(thread.comments[1].body, said("Two specs, then."), "the answer, and no question",);
 }
 
 // ---------------------------------------------------------------------------

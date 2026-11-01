@@ -612,7 +612,7 @@ impl CompletionSeam for RepairedReply {
             });
         }
         Ok(ModelReply {
-            text: "A private answer.".into(),
+            text: said("A private answer."),
             reply_repairs: self.repairs,
             ..Default::default()
         })

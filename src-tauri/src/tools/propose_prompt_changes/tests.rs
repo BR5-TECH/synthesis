@@ -29,7 +29,7 @@ use crate::tools::ToolRefusal;
 const PROMPT: &str = "prompts/review.md";
 const ORIGINAL: &str = "# Review\n\nThe original three paragraphs.\n";
 const PROPOSED: &str = "# Review\n\nA better opening.\n\nAnd a second paragraph.\n";
-const RATIONALE: &str = "The instructions bury the important step.";
+const RATIONALE: &str = "The instructions bury the important step. <spoken>Short.</spoken>";
 
 fn human() -> Participant {
     Participant::Human { login: "raver119".into(), display_name: None, email: None }
@@ -381,6 +381,49 @@ fn a_turn_that_is_not_about_a_file_of_the_project_refuses_for_good() {
         assert!(refusal.to_string().contains("will not succeed"));
     }
     assert!(f.proposals().is_empty());
+}
+
+// PPC-FR-HMEH, CVL-FR-UCTB
+#[test]
+fn a_rationale_with_no_spoken_part_is_refused_and_records_nothing() {
+    let f = Fixture::new();
+    let before = f.discussion().comments.len();
+
+    let refusal = f.call_with(PROMPT, PROPOSED, "No tag here.").expect_err("refused");
+
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(crate::tools::RATIONALE_NO_SPOKEN_PART));
+    assert!(refusal.retryable(), "the model can add the tag");
+    assert!(f.proposals().is_empty());
+    assert_eq!(f.discussion().comments.len(), before);
+}
+
+// PPC-FR-HMEH, PPC-FR-19: the refusal is found by its code, with no text in it.
+#[test]
+fn a_refusal_for_no_spoken_part_logs_its_code_and_no_text() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    BUFFER.clear();
+    let f = Fixture::new();
+    block_on(f.tool().with_buffer(&BUFFER).call(ProposePromptChangesArgs {
+        path: PROMPT.into(),
+        revises: None,
+        content: Some(PROPOSED.into()),
+        hunks: None,
+        rationale: "Zanzibarreason.".into(),
+    }))
+    .expect_err("refused");
+    let records = records(&BUFFER, Domain::Ai);
+    let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
+    let fields = serde_json::to_value(&warn.fields).expect("fields");
+    assert_eq!(fields["refusal"], "no_spoken_part");
+    assert!(!fields.to_string().contains("Zanzibarreason"), "{fields}");
+}
+
+// CVL-FR-HREC: the model is told the rule in the text it reads.
+#[test]
+fn the_description_states_the_rule_of_the_spoken_part() {
+    assert!(DESCRIPTION.contains("one `<spoken>…</spoken>` tag in `rationale`"));
+    assert!(DESCRIPTION.contains("A rationale with no tag is refused."));
+    assert!(RATIONALE_DESCRIPTION.contains("`<spoken>…</spoken>`"));
 }
 
 #[test]

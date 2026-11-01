@@ -135,7 +135,7 @@ fn a_delivered_answer_carries_no_marker_and_the_record_holds_only_a_count() {
     assert_eq!(terminal.state, AgentTurnState::Delivered);
     let folded = folded(&h, "spec.md", &thread.id);
     let body = &folded.comments.last().expect("an answer").body;
-    assert_eq!(body, &format!("The {sentinel} answer."));
+    assert_eq!(body, &said(format!("The {sentinel} answer.")));
 
     let record = wait_for_record(&terminal.id, "removed citation markers from model reply");
     assert_eq!(require(&record, "markerCharsRemoved"), (SPAN.chars().count() + 1).to_string(),);
@@ -160,7 +160,7 @@ fn a_clean_answer_emits_no_removal_record() {
 #[test]
 fn a_reply_of_markers_alone_is_empty_and_retried() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::answer(format!("  {SPAN}"))),
+        Ok(ScriptedReply::unspoken(format!("  {SPAN}"))),
         Ok(ScriptedReply::answer("A real answer.")),
     ]);
     h.create_agent("arch", "");
@@ -170,14 +170,14 @@ fn a_reply_of_markers_alone_is_empty_and_retried() {
     assert_eq!(terminal.state, AgentTurnState::Delivered);
     assert_eq!(h.seam.call_count(), 2);
     let folded = folded(&h, "spec.md", &thread.id);
-    assert_eq!(folded.comments.last().expect("an answer").body, "A real answer.");
+    assert_eq!(folded.comments.last().expect("an answer").body, said("A real answer."));
 }
 
 // CVL-FR-POAR, CVL-FR-18: markers alone on every attempt end the turn as
 // `empty_reply`, appending nothing.
 #[test]
 fn markers_alone_on_every_attempt_end_as_an_empty_reply() {
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer(SPAN)); MAX_ATTEMPTS]);
+    let h = Harness::scripted(vec![Ok(ScriptedReply::unspoken(SPAN)); MAX_ATTEMPTS]);
     h.create_agent("arch", "");
 
     let (terminal, thread) = run_one(&h, "arch");
@@ -186,6 +186,64 @@ fn markers_alone_on_every_attempt_end_as_an_empty_reply() {
     assert_eq!(terminal.failure.as_deref(), Some(FAIL_EMPTY_REPLY));
     assert!(terminal.retry_permitted);
     assert_eq!(folded(&h, "spec.md", &thread.id).comments.len(), thread.comments.len());
+    // CVL-FR-POAR: the markers went first, so the reply was empty and not
+    // merely without a tag.
+    let records = records_where("turnId", &terminal.id);
+    find(&records, "model reply held nothing to deliver");
+    assert!(records.iter().all(|r| r.message != "agent reply has no spoken part"));
+}
+
+// CVL-FR-VSSU, CVL-FR-AGNN: a tag that held a marker alone is blank, so the reply
+// has no spoken part.
+#[test]
+fn a_tag_of_markers_alone_is_no_spoken_part() {
+    let h = Harness::scripted(vec![
+        Ok(ScriptedReply::unspoken(format!("<spoken>{SPAN}</spoken> Written."))),
+        Ok(ScriptedReply::answer("A real answer.")),
+    ]);
+    h.create_agent("arch", "");
+
+    let (terminal, _) = run_one(&h, "arch");
+
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    assert_eq!(h.seam.call_count(), 2);
+}
+
+// CVL-FR-VSSU, CVL-FR-26: a marker inside a real tag goes, and the tag stays.
+#[test]
+fn a_marker_inside_a_tag_goes_and_the_tag_stays() {
+    let h = Harness::scripted(vec![Ok(ScriptedReply::unspoken(format!(
+        "<spoken>Short {SPAN}.</spoken> Written."
+    )))]);
+    h.create_agent("arch", "");
+
+    let (terminal, thread) = run_one(&h, "arch");
+
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    let body = folded(&h, "spec.md", &thread.id).comments.last().expect("answer").body.clone();
+    assert_eq!(body, "<spoken>Short.</spoken> Written.");
+}
+
+// CVL-FR-VSSU, AUC-FR-IEVY: the tool reads arguments that are already clean, so a
+// tag of a marker alone is refused.
+#[test]
+fn a_question_with_a_tag_of_markers_alone_is_refused() {
+    let h = Harness::scripted(vec![
+        Ok(ScriptedReply::calls(
+            crate::tools::ask_user_comment::NAME,
+            serde_json::json!({ "question": format!("<spoken>{SPAN}</spoken> Which route?") }),
+        )),
+        Ok(ScriptedReply::answer("A real answer.")),
+    ]);
+    h.mount();
+    h.create_agent("arch", "");
+
+    let (terminal, _) = run_one(&h, "arch");
+
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    let exchanges = h.seam.exchanges();
+    let results = tool_results(&exchanges[1]);
+    assert!(results[0].contains(crate::tools::QUESTION_NO_SPOKEN_PART), "{results:?}");
 }
 
 // AUC-FR-05, CVL-FR-VSSU: a posted question carries no marker, because the
@@ -195,7 +253,7 @@ fn a_posted_question_carries_no_marker() {
     let h = Harness::scripted(vec![Ok(ScriptedReply::calls(
         crate::tools::ask_user_comment::NAME,
         serde_json::json!({
-            "question": format!("Which route? {SPAN}"),
+            "question": format!("Which route? {SPAN}\n\n<spoken>Which route?</spoken>"),
             "options": [format!("Converse {SPAN}"), "Mantle"],
         }),
     ))]);
@@ -222,7 +280,7 @@ fn a_draft_proposal_rationale_carries_no_marker() {
         crate::tools::propose_draft_changes::NAME,
         serde_json::json!({
             "path": "artifact-window.md",
-            "rationale": format!("The half buries its point {SPAN}."),
+            "rationale": said(format!("The half buries its point {SPAN}.")),
             "hunks": [{ "kind": "replace", "before": "Loose notes.", "after": "Better." }],
         }),
     ))]);
@@ -238,7 +296,7 @@ fn a_draft_proposal_rationale_carries_no_marker() {
         .into_iter()
         .find(|t| t.id == thread.id)
         .expect("thread");
-    assert_eq!(stored.comments[1].body, "The half buries its point.");
+    assert_eq!(stored.comments[1].body, said("The half buries its point."));
 }
 
 // PPC-FR-13, CVL-FR-VSSU: a prompt proposal's comment is its rationale less its
@@ -251,7 +309,7 @@ fn a_prompt_proposal_rationale_carries_no_marker() {
         serde_json::json!({
             "path": PATH,
             "content": "# Review\n\nRead it.\n",
-            "rationale": format!("The step is buried {SPAN}."),
+            "rationale": said(format!("The step is buried {SPAN}.")),
         }),
     ))]);
     h.mount();
@@ -284,7 +342,7 @@ fn a_prompt_proposal_rationale_carries_no_marker() {
         .into_iter()
         .find(|t| t.id == thread.id)
         .expect("thread");
-    assert_eq!(stored.comments[1].body, "The step is buried.");
+    assert_eq!(stored.comments[1].body, said("The step is buried."));
 }
 
 // CVL-FR-VSSU: the reply that goes back into the exchange for the next round is

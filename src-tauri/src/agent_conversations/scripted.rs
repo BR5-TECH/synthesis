@@ -71,10 +71,26 @@ pub struct ScriptedNativeCall {
     pub id: Option<String>,
 }
 
+/// `text` as a comment holds it, with its spoken part (CVL-FR-AGNN). A blank
+/// text stays blank, so a script can still answer with nothing.
+#[cfg(test)]
+pub fn said(text: impl Into<String>) -> String {
+    let text = text.into();
+    if text.trim().is_empty() {
+        return text;
+    }
+    format!("{text}\n\n<spoken>Short.</spoken>")
+}
+
 #[cfg(test)]
 impl ScriptedReply {
     /// A reply that answers and asks for nothing.
     pub fn answer(text: impl Into<String>) -> Self {
+        Self::unspoken(said(text))
+    }
+
+    /// A reply that holds `text` as it stands, with no spoken part added.
+    pub fn unspoken(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
             tools: Vec::new(),

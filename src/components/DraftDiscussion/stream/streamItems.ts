@@ -15,6 +15,7 @@
  */
 import { isProposalAttachment, type Attachment, type Comment } from "../../../types";
 import type { PairedHalf } from "../../discussion/questionPairs";
+import { visibleBody } from "../../../text/spokenPart";
 
 /** A change reference a comment carries, with the comment it came from. */
 export type ChangeReference = Extract<
@@ -169,7 +170,7 @@ export function streamItems(input: StreamInput): StreamItem[] {
       continue;
     }
 
-    const body = comment.body.trim();
+    const body = visibleBody(comment.body).trim();
     const references = referencesOf(comment);
     /**
      * Everything the block draws besides the change rows: the body, the quotes

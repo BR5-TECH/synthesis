@@ -309,7 +309,7 @@ impl CompletionSeam for IdentifiedReply {
         _timeout: Duration,
     ) -> Result<ModelReply, CallFailure> {
         Ok(ModelReply {
-            text: "A private answer.".into(),
+            text: said("A private answer."),
             prompt_tokens: Some(5_000),
             output_tokens: Some(70),
             cache_write_tokens: Some(300),

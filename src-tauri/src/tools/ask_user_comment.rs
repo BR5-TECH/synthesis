@@ -30,9 +30,9 @@
 //! The hidden requirement is that this read as a person asking a question. So
 //! the tool contributes as little of the text as it can: the model's own
 //! question, the options as a list, and one fixed closing line (AUC-FR-05).
-//! There is no identifier to quote back, no marker, and nothing machine-shaped —
-//! a reader cannot tell a tool composed it, and answering it is answering a
-//! comment.
+//! There is no identifier to quote back, no marker but the spoken part, which
+//! every surface hides (CMT-FR-BMCI), and nothing machine-shaped — a reader cannot
+//! tell a tool composed it, and answering it is answering a comment.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -41,6 +41,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, QUESTION_BLANK,
+    QUESTION_NO_SPOKEN_PART,
 };
 
 use crate::agent_conversations::ConversationOrigin;
@@ -59,9 +60,9 @@ mod tests;
 pub const NAME: &str = "ask_user_comment";
 
 /// AUC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Ask the author one clarifying question, when you cannot answer well without knowing something only they can tell you — which of two readings they meant, or which of several directions they want. Reach for it instead of guessing, and instead of answering every possibility in turn. Write the question as you would write it to a colleague, and pass a couple of candidate answers if you have them; the author may agree with one or say something else entirely. Your question is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's reply in front of you. Ask one thing at a time: because your turn ends here, anything else you asked for in the same message is not carried out. It posts into the conversation you were asked in and nowhere else, and it changes nothing in the project.";
+pub const DESCRIPTION: &str = "Ask the author one clarifying question, when you cannot answer well without knowing something only they can tell you — which of two readings they meant, or which of several directions they want. Reach for it instead of guessing, and instead of answering every possibility in turn. Write the question as you would write it to a colleague, and pass a couple of candidate answers if you have them; the author may agree with one or say something else entirely. Put one `<spoken>…</spoken>` tag in `question`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A question with no tag is refused. Your question is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's reply in front of you. Ask one thing at a time: because your turn ends here, anything else you asked for in the same message is not carried out. It posts into the conversation you were asked in and nowhere else, and it changes nothing in the project.";
 
-const QUESTION_DESCRIPTION: &str = "What you want to know, written as you would write it to a colleague in a comment. Ask one thing; if several are unclear, ask the one whose answer changes the most.";
+const QUESTION_DESCRIPTION: &str = "What you want to know, written as you would write it to a colleague in a comment. Ask one thing; if several are unclear, ask the one whose answer changes the most. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 
 const OPTIONS_DESCRIPTION: &str = "A few candidate answers, if you have them — two or three is usual. Each is a short phrase the author can agree with. Optional: omit it to ask an open question. The author is free to answer something else whichever you pass.";
 
@@ -281,10 +282,15 @@ impl<R: tauri::Runtime> AskUserCommentTool<R> {
         // construction rather than composed by the model. The question, the
         // options, and the body are all material the model composed out of the
         // conversation it is having, so none of them is loggable (TLC-FR-14).
-        let conversation = log_fields! {
+        let mut conversation = log_fields! {
             "originKind" => self.origin.kind().as_str(),
             "discussionId" => self.origin.discussion_id(),
         };
+        // A model that keeps leaving out the tag is found by this code. It names
+        // the correction, and it holds none of the text.
+        if matches!(&outcome, Err(ToolRefusal::InvalidArguments(QUESTION_NO_SPOKEN_PART))) {
+            conversation.extend(log_fields! { "refusal" => "no_spoken_part" });
+        }
         match &outcome {
             Ok(_) => log_tool_success(&self.app, self.buffer, NAME, conversation),
             Err(refusal) => {
@@ -305,6 +311,11 @@ impl<R: tauri::Runtime> AskUserCommentTool<R> {
         // AUC-FR-06: a question that says nothing is nothing to post.
         if args.question.trim().is_empty() {
             return Err(ToolRefusal::InvalidArguments(QUESTION_BLANK));
+        }
+        // AUC-FR-IEVY: a tag in `options` does not count, so the rule reads the
+        // argument and not the composed body.
+        if comments::spoken_part(&args.question).is_none() {
+            return Err(ToolRefusal::InvalidArguments(QUESTION_NO_SPOKEN_PART));
         }
         let body = compose_body(&args.question, args.options.as_ref());
         let at = crate::notes::now_rfc3339();

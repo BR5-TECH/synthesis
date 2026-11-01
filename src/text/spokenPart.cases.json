@@ -1,0 +1,187 @@
+[
+  {
+    "body": "<spoken>Short.</spoken> Written.",
+    "spoken": "Short.",
+    "written": " Written."
+  },
+  {
+    "body": "Written.\n\n<spoken> Short. </spoken>\n",
+    "spoken": "Short.",
+    "written": "Written.\n\n\n"
+  },
+  {
+    "body": "Before <spoken>Short.</spoken> after.",
+    "spoken": "Short.",
+    "written": "Before  after."
+  },
+  {
+    "body": "<spoken>Two\nlines.</spoken>",
+    "spoken": "Two\nlines.",
+    "written": ""
+  },
+  {
+    "body": "<spoken>One.</spoken> <spoken>Two.</spoken>",
+    "spoken": "One.",
+    "written": " "
+  },
+  {
+    "body": "<spoken>a<spoken>b</spoken> c",
+    "spoken": "a<spoken>b",
+    "written": " c"
+  },
+  {
+    "body": "",
+    "spoken": null,
+    "written": ""
+  },
+  {
+    "body": "Written alone.",
+    "spoken": null,
+    "written": "Written alone."
+  },
+  {
+    "body": "<spoken>   </spoken> Written.",
+    "spoken": null,
+    "written": " Written."
+  },
+  {
+    "body": "<spoken></spoken>",
+    "spoken": null,
+    "written": ""
+  },
+  {
+    "body": "<spoken>\u00a0\ufeff\u0085\u2003</spoken>",
+    "spoken": null,
+    "written": ""
+  },
+  {
+    "body": "<spoken>\ufeffShort.\u0085</spoken>",
+    "spoken": "Short.",
+    "written": ""
+  },
+  {
+    "body": "<spoken>It never closes.",
+    "spoken": null,
+    "written": "<spoken>It never closes."
+  },
+  {
+    "body": "</spoken>It never opens.<spoken>",
+    "spoken": null,
+    "written": "</spoken>It never opens.<spoken>"
+  },
+  {
+    "body": "<Spoken>Another case.</Spoken>",
+    "spoken": null,
+    "written": "<Spoken>Another case.</Spoken>"
+  },
+  {
+    "body": "Write `<spoken>x</spoken>` here.",
+    "spoken": null,
+    "written": "Write `<spoken>x</spoken>` here."
+  },
+  {
+    "body": "Write ``<spoken>x</spoken>`` here.",
+    "spoken": null,
+    "written": "Write ``<spoken>x</spoken>`` here."
+  },
+  {
+    "body": "A `run ``with`` runs` <spoken>Short.</spoken>",
+    "spoken": "Short.",
+    "written": "A `run ``with`` runs` "
+  },
+  {
+    "body": "`a\n<spoken>x</spoken>\nb`",
+    "spoken": null,
+    "written": "`a\n<spoken>x</spoken>\nb`"
+  },
+  {
+    "body": "`a\n\n<spoken>Short.</spoken> b`",
+    "spoken": "Short.",
+    "written": "`a\n\n b`"
+  },
+  {
+    "body": "```\n<spoken>x</spoken>\n```\nDone.",
+    "spoken": null,
+    "written": "```\n<spoken>x</spoken>\n```\nDone."
+  },
+  {
+    "body": "```\r\n<spoken>x</spoken>\r\n```\r\n<spoken>Real.</spoken>",
+    "spoken": "Real.",
+    "written": "```\r\n<spoken>x</spoken>\r\n```\r\n"
+  },
+  {
+    "body": "~~~md\n<spoken>x</spoken>\n~~~\n",
+    "spoken": null,
+    "written": "~~~md\n<spoken>x</spoken>\n~~~\n"
+  },
+  {
+    "body": "    ```\n<spoken>x</spoken>\n    ```\n",
+    "spoken": null,
+    "written": "    ```\n<spoken>x</spoken>\n    ```\n"
+  },
+  {
+    "body": "```\n<spoken>a fence that does not close</spoken>\n",
+    "spoken": null,
+    "written": "```\n<spoken>a fence that does not close</spoken>\n"
+  },
+  {
+    "body": "````\n```\n<spoken>x</spoken>\n````\n",
+    "spoken": null,
+    "written": "````\n```\n<spoken>x</spoken>\n````\n"
+  },
+  {
+    "body": "```\n~~~\n<spoken>x</spoken>\n```\n",
+    "spoken": null,
+    "written": "```\n~~~\n<spoken>x</spoken>\n```\n"
+  },
+  {
+    "body": "```\n```js\n<spoken>Real.</spoken>",
+    "spoken": "Real.",
+    "written": "```\n```js\n"
+  },
+  {
+    "body": "Use `<spoken>x</spoken>`.\n\n<spoken>Real.</spoken>",
+    "spoken": "Real.",
+    "written": "Use `<spoken>x</spoken>`.\n\n"
+  },
+  {
+    "body": "```\n<spoken>x</spoken>\n```\n<spoken>Real.</spoken>",
+    "spoken": "Real.",
+    "written": "```\n<spoken>x</spoken>\n```\n"
+  },
+  {
+    "body": "<spoken>The `</spoken>` tag.</spoken> Written.",
+    "spoken": "The `</spoken>` tag.",
+    "written": " Written."
+  },
+  {
+    "body": "It costs 5` <spoken>Short.</spoken>",
+    "spoken": "Short.",
+    "written": "It costs 5` "
+  },
+  {
+    "body": "```inline``` then <spoken>Short.</spoken>",
+    "spoken": "Short.",
+    "written": "```inline``` then "
+  },
+  {
+    "body": "```a b\n<spoken>Short.</spoken>",
+    "spoken": "Short.",
+    "written": "```a b\n"
+  },
+  {
+    "body": "> ```\n> <spoken>x</spoken>\n> ```\nDone.",
+    "spoken": null,
+    "written": "> ```\n> <spoken>x</spoken>\n> ```\nDone."
+  },
+  {
+    "body": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 `\u043a\u043e\u0434`, \u043f\u043e\u0442\u043e\u043c <spoken>\u041a\u043e\u0440\u043e\u0442\u043a\u043e.</spoken>",
+    "spoken": "\u041a\u043e\u0440\u043e\u0442\u043a\u043e.",
+    "written": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 `\u043a\u043e\u0434`, \u043f\u043e\u0442\u043e\u043c "
+  },
+  {
+    "body": "<spoken>Short.</spoken>\n{\"query\":\"x\"}",
+    "spoken": "Short.",
+    "written": "\n{\"query\":\"x\"}"
+  }
+]

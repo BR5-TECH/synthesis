@@ -1,27 +1,47 @@
 /**
  * VOM-FR-VGLT: the session control while a question set stands. The reply
- * composer unmounts then, and an open microphone must stay visible and closable.
+ * composer unmounts then, and the record control and an open microphone must stay
+ * visible and usable.
  *
- * It lends the controller a standby handle, so the session sees a mounted surface
- * and a blocked gate. When the set is answered the composer mounts, and listening
- * goes on with no press (VOM-FR-GTAQ).
+ * It lends the controller a handle, so voice mode sees a mounted surface. A
+ * recording that starts now is a spoken answer (VOM-FR-PINR). One that started
+ * before the set came finds a handle that cannot post (VOM-FR-ABPU). When the set
+ * is answered the composer mounts, and listening goes on with no press
+ * (VOM-FR-GTAQ).
  */
 import { useEffect, useRef } from "react";
 
 import { registerVoiceComposer } from "../../voice/voiceController";
-import { VoiceFeedback, VoiceRecordControl, VoiceStopControl } from "./VoiceArea";
+import { useVoiceState } from "../../state/voiceSession";
+import {
+  VoiceFeedback,
+  VoiceRecordControl,
+  VoiceStopControl,
+  statusOf,
+  useClock,
+} from "./VoiceArea";
 
 export function VoiceSessionBar(props: {
   sessionKey: string;
   voiceOf: (agentId: string) => string | null;
+  /** VOM-FR-LNUH. */
+  nicknames: () => string[];
 }) {
+  const voice = useVoiceState();
+  const recording = voice.phase === "recording" && voice.recordingSince !== null;
+  const now = useClock(recording);
   const voiceOfRef = useRef(props.voiceOf);
   voiceOfRef.current = props.voiceOf;
+  const nicknamesRef = useRef(props.nicknames);
+  nicknamesRef.current = props.nicknames;
   const rootRef = useRef<HTMLDivElement>(null);
 
   // VOM-FR-LAQO: the record control that held focus went with the composer.
+  // WebKit puts focus on the surface after a click on a button, so an ancestor
+  // that holds focus counts as no focus too.
   useEffect(() => {
-    if (document.activeElement === document.body) {
+    const active = document.activeElement;
+    if (active === document.body || active?.contains(rootRef.current)) {
       rootRef.current?.querySelector<HTMLElement>("[data-voice-record]")?.focus();
     }
   }, []);
@@ -29,13 +49,11 @@ export function VoiceSessionBar(props: {
   useEffect(
     () =>
       registerVoiceComposer(props.sessionKey, {
-        // An utterance that ends now joins the session body (VOM-FR-ABPU).
+        // VOM-FR-ABPU: only a recording from before the set reaches this.
         post: async () => "busy",
         tagged: (transcript) => transcript,
-        blocked: () => true,
-        // The gate starts no utterance, so nothing reads hints until the
-        // composer is back with the roster.
-        nicknames: () => [],
+        blocked: () => false,
+        nicknames: () => nicknamesRef.current(),
         voiceOf: (agentId) => voiceOfRef.current(agentId),
       }),
     [props.sessionKey],
@@ -48,7 +66,13 @@ export function VoiceSessionBar(props: {
       <div className="voice-session-bar__row">
         <VoiceRecordControl disabled={false} />
         <div className="voice-session-bar__text">
-          The microphone is open. Speech is not recorded until you answer the questions.
+          {/* VOM-FR-HUXY, VOM-FR-SRGN: a recording shows as it does in the voice
+              area, so a Push-to-Talk answer does not read as a closed microphone. */}
+          {voice.phase !== "idle"
+            ? statusOf(voice, now)
+            : voice.vadOpen
+              ? "The microphone is open. Speak to answer the question above."
+              : "Press to answer the question above."}
         </div>
         <VoiceStopControl />
       </div>

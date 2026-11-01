@@ -99,7 +99,7 @@ fn one_agents_failure_never_suppresses_anothers_answer() {
     let threads = h.threads("spec.md");
     let comments = &threads[0].comments;
     assert_eq!(comments.len(), 2, "exactly one agent appended");
-    assert_eq!(comments[1].body, "sec's answer");
+    assert_eq!(comments[1].body, said("sec's answer"));
     match &comments[1].author {
         Participant::Agent { handle, .. } => assert_eq!(handle, "sec"),
         other => panic!("expected an agent author, got {other:?}"),
@@ -420,7 +420,7 @@ fn a_delivered_turn_appends_an_ordinary_comment_authored_by_the_agent() {
     let threads = h.threads("spec.md");
     let comments = &threads[0].comments;
     assert_eq!(comments.len(), 2);
-    assert_eq!(comments[1].body, "Two specs, I think.");
+    assert_eq!(comments[1].body, said("Two specs, I think."));
     match &comments[1].author {
         Participant::Agent { agent_id, handle, model, .. } => {
             assert_eq!(agent_id, &agent.id);

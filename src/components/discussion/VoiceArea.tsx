@@ -83,7 +83,7 @@ function recordName(state: VoiceState): string {
   }
 }
 
-function useClock(active: boolean): number {
+export function useClock(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
@@ -93,7 +93,7 @@ function useClock(active: boolean): number {
   return now;
 }
 
-function statusOf(state: VoiceState, now: number): string {
+export function statusOf(state: VoiceState, now: number): string {
   // VOM-FR-HUXY.
   if (state.transcript !== "") return state.transcript;
   // VOM-FR-SRGN.
@@ -181,7 +181,15 @@ export function VoiceStopControl() {
       aria-label="Stop speech"
       title="Stop speech"
       data-testid="voice-stop"
-      onClick={stopSpeech}
+      onClick={(event) => {
+        // VOM-FR-LAQO: this control goes with the speech, so focus does not fall
+        // to the document.
+        const record = event.currentTarget.parentElement?.querySelector<HTMLElement>(
+          "[data-voice-record]",
+        );
+        stopSpeech();
+        record?.focus();
+      }}
     >
       <Icon.Stop size={13} />
     </button>

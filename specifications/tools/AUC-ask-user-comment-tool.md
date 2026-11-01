@@ -14,7 +14,7 @@ One tool, conforming to `TLC-tool-conventions.md` in full. It is attached to eve
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Ask the author one clarifying question, when you cannot answer well without knowing something only they can tell you — which of two readings they meant, or which of several directions they want. Reach for it instead of guessing, and instead of answering every possibility in turn. Write the question as you would write it to a colleague, and pass a couple of candidate answers if you have them; the author may agree with one or say something else entirely. Your question is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's reply in front of you. Ask one thing at a time: because your turn ends here, anything else you asked for in the same message is not carried out. It posts into the conversation you were asked in and nowhere else, and it changes nothing in the project.
+> Ask the author one clarifying question, when you cannot answer well without knowing something only they can tell you — which of two readings they meant, or which of several directions they want. Reach for it instead of guessing, and instead of answering every possibility in turn. Write the question as you would write it to a colleague, and pass a couple of candidate answers if you have them; the author may agree with one or say something else entirely. Put one `<spoken>…</spoken>` tag in `question`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A question with no tag is refused. Your question is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's reply in front of you. Ask one thing at a time: because your turn ends here, anything else you asked for in the same message is not carried out. It posts into the conversation you were asked in and nowhere else, and it changes nothing in the project.
 
 ### Arguments
 ```
@@ -26,17 +26,17 @@ AskUserCommentArgs {
 
 Their descriptions in the parameter schema (per TLC-FR-06):
 
-- `question` — *"What you want to know, written as you would write it to a colleague in a comment. Ask one thing; if several are unclear, ask the one whose answer changes the most."*
+- `question` — *"What you want to know, written as you would write it to a colleague in a comment. Ask one thing; if several are unclear, ask the one whose answer changes the most. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud."*
 - `options` — *"A few candidate answers, if you have them — two or three is usual. Each is a short phrase the author can agree with. Optional: omit it to ask an open question. The author is free to answer something else whichever you pass."*
 
 ### Output
 Data (per TLC-FR-08): `{ posted: true }`. The turn ends on the call that posted (per `../ai/CVL-conversation-loop.md` CVL-FR-15), so no further model call reads this value — it is what the exchange records rather than anything the model acts on.
 
 ### The comment
-What the author reads. The question as the model wrote it; then, where options were passed, a Markdown list of them, one to a line; then a single fixed closing line. Nothing else:
+What the author reads. The question as the model wrote it, its spoken part hidden (per `../ui/CMT-comments.md` CMT-FR-BMCI); then, where options were passed, a Markdown list of them, one to a line; then a single fixed closing line. Nothing else. The stored body:
 
 ```
-Should graduation write one spec or two?
+<spoken>One spec or two?</spoken> Should graduation write one spec or two?
 
 - one — a single spec covering both layers
 - two — paired ui/ and core/ specs
@@ -49,6 +49,7 @@ A question carrying no options is the question alone and carries no closing line
 ### Refusals
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
 - **blank question** — kind `InvalidArgs`, retryable: *"The question must say what you want to know. Write it as you would write it to a colleague."*
+- **no spoken part** — kind `InvalidArgs`, retryable: *"The question has no spoken part. Put one or two short sentences in one `<spoken>…</spoken>` tag in `question`."*
 - **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further comments, so nothing was posted and no answer is coming. Answer with what you already have; asking again will not succeed."*
 - **question set pending** — kind `PermissionDenied`, not retryable: *"This discussion already has a question set waiting on the author, so nothing was posted. Answer with what you already have; asking again will not succeed."*
 - **could not post** — kind `Other`, retryable: *"The question could not be posted to this conversation."*
@@ -61,8 +62,9 @@ Declared in full (per TLC-FR-17). One successful call appends **exactly one comm
  2. **AUC-FR-02** Its `description()` returns the fixed text of the contract surface above, compiled into the binary, and its `parameters()` returns the JSON Schema for the two documented arguments with the documented parameter descriptions (per TLC-FR-05). Neither varies by conversation, by agent, or by project, so two agents holding this tool were offered byte-identical definitions of it however different the conversations they are in.
  3. **AUC-FR-03** The tool posts into the conversation of the turn that holds it and accepts no argument naming a conversation, a thread, a file, or a participant. Its constructor binds it to that turn's origin and agent participant (per TLC-FR-15), so no argument a model composes can reach a conversation it was not asked in, and an instance outlives no turn.
  4. **AUC-FR-04** The comment is appended through `../core/CMS-comments-storage.md`'s agent write path (CMS-FR-41) with the turn's agent participant — its agent id, its nickname as the handle, the model it runs as, and its title as the registry holds it at the moment of the append (per `../core/CMS-comments-storage.md` CMS-FR-65) — which is the same path and the same participant shape a delivered answer is appended through (per `../core/AGC-agent-conversations.md` AGC-FR-16). The fold, the discussion column, and the Comments panel therefore read a question exactly as they read any other comment.
- 5. **AUC-FR-05** The comment's body is prose throughout: the `question` as the model wrote it less its citation markers (per `../ai/CVL-conversation-loop.md` CVL-FR-VSSU), then the `options` as a Markdown list one to a line where any were passed, then the single fixed closing line of the contract surface. It carries no identifier, no marker, no machine-readable field, no control, and no instruction to the author about the form a reply must take. A reader cannot tell from the comment that a tool composed it, and answering it is answering a comment.
+ 5. **AUC-FR-05** The comment's body is prose throughout: the `question` as the model wrote it less its citation markers (per `../ai/CVL-conversation-loop.md` CVL-FR-VSSU) and with its spoken part in place, then the `options` as a Markdown list one to a line where any were passed, then the single fixed closing line of the contract surface. It carries no identifier, no other marker, no machine-readable field, no control, and no instruction to the author about the form a reply must take. A reader cannot tell from the comment that a tool composed it, and answering it is answering a comment.
  6. **AUC-FR-06** A `question` that is empty, or blank once trimmed, is the retryable `InvalidArgs` refusal of the contract surface and nothing is appended.
+ 6. **AUC-FR-IEVY** A `question` with no spoken part (per `../ai/CVL-conversation-loop.md` CVL-FR-AGNN) is the retryable **no spoken part** refusal of the contract surface, and nothing is appended. A spoken part in `options` does not count.
  7. **AUC-FR-07** `options` is optional and forgiving (per TLC-FR-07): absent, empty, or holding nothing but blank entries, it is no options at all and the body is the question alone. Blank entries are dropped and the rest carried in the order given. A long list is not refused and not truncated — a model that offers six candidates is offering six, and the author reads them.
  8. **AUC-FR-08** The tool posts and returns. It waits for no reply, holds no timer, opens no watcher, and leaves no request outstanding, so TLC-FR-16 holds for it unchanged: the answer reaches the agent as a later turn rather than as this call's result.
  9. **AUC-FR-09** A successful call returns the data object of the contract surface. It composes no sentence about what it did (per TLC-FR-08), the fact of the posting being the whole of the result.

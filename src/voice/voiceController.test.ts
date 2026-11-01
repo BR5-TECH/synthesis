@@ -53,6 +53,7 @@ import {
   enterVoiceMode,
   leaveVoiceMode,
   noteDiscussionChanged,
+  noteQuestionShown,
   noteProvider,
   noteTranscript,
   pressRecord,
@@ -77,7 +78,8 @@ function comment(id: string, kind: "agent" | "human", body = "A reply."): Commen
       kind === "agent"
         ? { kind: "agent", agentId: "a1", handle: "arch" }
         : { kind: "human", login: "me" },
-    body,
+    // VOM-FR-TRWN: an agent comment speaks its spoken part.
+    body: kind === "agent" ? `<spoken>${body}</spoken>` : body,
     quotes: [],
     attachments: [],
     createdAt: "2026-02-01T00:00:00Z",
@@ -477,6 +479,17 @@ describe("failure", () => {
   });
 });
 
+describe("question speech with no surface", () => {
+  it("VOM-FR-LKKN, VOM-FR-EGNX: a question speaks nothing with no surface of voice mode", async () => {
+    enterVoiceMode(KEY, discussion([]));
+    setResponseMode("voice");
+    const question = { position: 1, text: "First?", options: [] };
+    noteQuestionShown(KEY, "s1", question, { kind: "human", login: "me" } as never, true);
+    await settle();
+    expect(api.speakVoiceSegment).not.toHaveBeenCalled();
+  });
+});
+
 describe("spoken replies", () => {
   const old = comment("c1", "agent", "Old reply.");
 
@@ -496,6 +509,37 @@ describe("spoken replies", () => {
       expect.any(Function),
     );
     expect(getVoiceState().playing).toBe(true);
+  });
+
+  it("VOM-FR-TRWN: speech is the spoken part alone, and the written text is not read", async () => {
+    const reply = comment("r1", "human", "<spoken>The **short** part.</spoken>\n\nThe long written text.");
+    noteDiscussionChanged(
+      discussion([old, { ...reply, author: { kind: "agent", agentId: "a1", handle: "arch" } }]),
+    );
+    await settle();
+    expect(api.speakVoiceSegment).toHaveBeenCalledTimes(1);
+    expect(api.speakVoiceSegment).toHaveBeenCalledWith(
+      expect.any(String),
+      "The short part.",
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it("VOM-FR-VSCQ, VOM-FR-TRWN: an agent comment with no spoken part is not spoken", async () => {
+    const reply = comment("r1", "human", "Written alone, with `<spoken>x</spoken>` in code.");
+    noteDiscussionChanged(
+      discussion([old, { ...reply, author: { kind: "agent", agentId: "a1", handle: "arch" } }]),
+    );
+    await settle();
+    expect(api.speakVoiceSegment).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-ZLAY, VOM-FR-EWOK: with response mode Text a spoken part stays silent", async () => {
+    setResponseMode("text");
+    noteDiscussionChanged(discussion([old, comment("r1", "agent")]));
+    await settle();
+    expect(api.speakVoiceSegment).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-UALP: an agent with no voice uses the provider default", async () => {

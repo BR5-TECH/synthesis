@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PROPOSAL_NO_CHANGE,
-    PROPOSAL_RATIONALE_BLANK,
+    PROPOSAL_RATIONALE_BLANK, RATIONALE_NO_SPOKEN_PART,
 };
 
 use crate::agent_conversations::ConversationOrigin;
@@ -73,7 +73,7 @@ mod tests;
 pub const NAME: &str = "propose_draft_changes";
 
 /// PDC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it; the rest of what you would change waits until the author has decided the changes already standing. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it; the rest of what you would change waits until the author has decided the changes already standing. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The draft-relative path of the draft's prompt, which is the one file a draft holds and the only thing you can propose changes to.";
 
@@ -194,6 +194,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_REVISE_ONE => "revise_one",
         PROPOSAL_NO_SUCH_CHANGE => "no_such_change",
         PROPOSAL_RATIONALE_BLANK => "rationale_blank",
+        RATIONALE_NO_SPOKEN_PART => "no_spoken_part",
         PROPOSAL_NO_CHANGE => "no_change",
         // A refusal added without a code of its own is still followable as
         // itself rather than silently reading as one of the eight above.
@@ -203,7 +204,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
 
 const REVISES_DESCRIPTION: &str = "The id of a change you were asked about, when you are replacing it with a better one. A call that names a change carries exactly one change — the one that replaces it. Leave it out when you are proposing something new.";
 
-const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment.";
+const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 
 /// CVL-FR-15: what a second proposal in one reply is told.
 ///
@@ -651,6 +652,12 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
                 // refusal, this being the same failure.
                 Err(error) => Err(revision_refusal(&error)),
             };
+        }
+
+        // PDC-FR-ZQOH: a revision appends no comment, so only a call that gets
+        // this far needs a spoken part.
+        if crate::comments::spoken_part(&args.rationale).is_none() {
+            return Err(ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
         }
 
         let mut file_rel = String::new();

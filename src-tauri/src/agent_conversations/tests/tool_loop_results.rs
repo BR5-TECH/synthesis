@@ -767,7 +767,7 @@ fn prose_carried_alongside_a_tool_call_below_the_bound_is_not_delivered() {
     assert_eq!(h.seam.call_count(), 2, "the mid-loop prose did not end the turn");
     let comments = h.threads("spec.md")[0].comments.clone();
     assert_eq!(comments.len(), 2);
-    assert_eq!(comments[1].body, "The answer.");
+    assert_eq!(comments[1].body, said("The answer."));
     assert!(
         !comments[1].body.contains("Let me check"),
         "the narration was delivered as the answer",

@@ -370,7 +370,7 @@ fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
     assert_eq!(folded.id, thread_id);
     assert_eq!(folded.comments.len(), 2, "the opening and the answer");
     let answer = folded.comments.last().unwrap();
-    assert_eq!(answer.body, "Split it in two.");
+    assert_eq!(answer.body, said("Split it in two."));
     assert!(
         matches!(&answer.author, Participant::Agent { handle, .. } if handle == "arch"),
         "{:?}",

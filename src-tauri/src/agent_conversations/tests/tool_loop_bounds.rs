@@ -120,7 +120,7 @@ fn tool_use_is_invisible_to_every_surface() {
 
     // …and the delivered comment names no tool and quotes no result.
     let body = busy.threads("spec.md")[0].comments[1].body.clone();
-    assert_eq!(body, "Done.");
+    assert_eq!(body, said("Done."));
     for tool in EXPECTED_TOOLS {
         assert!(!body.contains(tool), "the comment names {tool}");
     }

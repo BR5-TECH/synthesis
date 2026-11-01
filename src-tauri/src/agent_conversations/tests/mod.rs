@@ -673,6 +673,7 @@ mod responses_repair;
 mod retries;
 mod rig_replies;
 mod session_log;
+mod spoken_part;
 mod steering;
 mod tls_carriers;
 mod tool_loop_bounds;

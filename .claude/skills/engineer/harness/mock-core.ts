@@ -1337,6 +1337,31 @@ const ANCHORED_OVERRIDES: Record<string, Record<string, unknown>> = {
   "t-3": { locked: true, anchor: { start: 300, end: 330, quote: "lens" } },
 };
 
+/**
+ * CMT-FR-BMCI, CMT-FR-XWVW: `?spoken` adds one agent comment of each shape to
+ * every seeded discussion, so a browser check sees the rule in each surface.
+ * Off by default, because the comments change what other checks measure.
+ */
+function spokenComments(id: string): any[] {
+  if (!harnessFlag("spoken")) return [];
+  const row = (n: number, body: string) => ({
+    id: `${id}-sp${n}`,
+    author: agent,
+    body,
+    quotes: [],
+    attachments: [],
+    createdAt: `2026-07-28T11:0${n}:00Z`,
+  });
+  return [
+    row(1, "<spoken>HIDDEN-SPOKEN-PART shall not show.</spoken>\n\nWRITTEN-PART with **bold** text stays."),
+    row(2, "Lead text.\n\n<spoken>HIDDEN-MIDDLE shall not show.</spoken>\n\nTrail text."),
+    row(3, "<spoken>ONLY-SPOKEN text shows because nothing else is here.</spoken>"),
+    row(4, "The tag `<spoken>INLINE-CODE-TAG</spoken>` shows as code."),
+    row(5, "A fence:\n\n```\n<spoken>FENCE-TAG</spoken>\n```"),
+    row(6, "<spoken>OPEN-TAG-NO-CLOSE stays as written."),
+  ];
+}
+
 function thread(id: string, over: Record<string, unknown> = {}) {
   return {
     id,
@@ -1407,6 +1432,7 @@ function thread(id: string, over: Record<string, unknown> = {}) {
             createdAt: `2026-07-26T09:${String(21 + i).padStart(2, "0")}:00Z`,
           }))
         : []),
+      ...spokenComments(id),
     ],
     locked: false,
     resolved: false,
@@ -1497,6 +1523,7 @@ function discussion(id: string, draftId: string, over: Record<string, unknown> =
       // to reach the control's **missing** rendering, since nothing the author
       // can do in the window removes a proposal record while leaving the comment
       // that announced it behind.
+      ...spokenComments(id),
       ...(harnessFlag("goneProposal")
         ? [
             {
@@ -1586,6 +1613,7 @@ function noteDiscussion(id: string, noteId: string, over: Record<string, unknown
         attachments: [],
         createdAt: "2026-08-02T10:06:00Z",
       },
+      ...spokenComments(id),
     ],
     createdAt: "2026-08-02T10:02:00Z",
     updatedAt: "2026-08-02T10:06:00Z",
@@ -2191,76 +2219,105 @@ const discussionsByTarget: Record<string, any[]> = {
  * record one. The other discussions hold none, so the ordinary composer is
  * reachable too.
  */
-const questionSetsByThread: Record<string, any> = {
-  "disc-1": {
-    setId: "qs-1",
-    threadId: "disc-1",
-    askedBy: {
-      kind: "agent",
-      agentId: "ag-arch",
-      handle: "arch",
-      model: "claude-opus-5",
-      title: "Architect",
-    },
-    askedAt: "2026-09-10T12:00:00Z",
-    questions: [
-      {
-        position: 1,
-        text: "Should the ontology live in one spec or two?",
-        options: [
-          {
-            position: 1,
-            value: "One spec",
-            description:
-              "One spec covers both layers. It is easy to find, but it grows past the size limit and mixes UI and storage rules.",
-          },
-          {
-            position: 2,
-            value: "Paired specs",
-            description:
-              "Two specs, one in ui/ and one in core/. Each stays small; a change to the contract crosses two files.",
-          },
-        ],
-      },
-      {
-        position: 2,
-        text: "Where should the flow diagram go?",
-        options: [
-          {
-            position: 1,
-            value: "The ui spec",
-            description: "Beside the screens it explains. Readers of the core spec do not see it.",
-          },
-          {
-            position: 2,
-            value: "The core spec",
-            description: "Beside the data it moves. UI readers must follow a link to find it.",
-          },
-          {
-            position: 3,
-            value: "Both, kept in step",
-            description: "Every reader finds it, but two copies must change together on each edit.",
-          },
-        ],
-      },
-      {
-        position: 3,
-        text: "Do we rename the existing term?",
-        options: [
-          {
-            position: 1,
-            value: "Rename it now",
-            description: "One clean term from today. Old notes and drafts keep the old word.",
-          },
-          {
-            position: 2,
-            value: "Keep it, add alias",
-            description: "Nothing breaks. Two words for one thing stay in the corpus.",
-          },
-        ],
-      },
-    ],
+const SEEDED_QUESTION_SET: any = {
+  setId: "qs-1",
+  threadId: "disc-1",
+  askedBy: {
+    kind: "agent",
+    agentId: "ag-arch",
+    handle: "arch",
+    model: "claude-opus-5",
+    title: "Architect",
   },
+  askedAt: "2026-09-10T12:00:00Z",
+  questions: [
+    {
+      position: 1,
+      text: "Should the ontology live in one spec or two?",
+      options: [
+        {
+          position: 1,
+          value: "One spec",
+          description:
+            "One spec covers both layers. It is easy to find, but it grows past the size limit and mixes UI and storage rules.",
+        },
+        {
+          position: 2,
+          value: "Paired specs",
+          description:
+            "Two specs, one in ui/ and one in core/. Each stays small; a change to the contract crosses two files.",
+        },
+      ],
+    },
+    {
+      position: 2,
+      text: "Where should the flow diagram go?",
+      options: [
+        {
+          position: 1,
+          value: "The ui spec",
+          description: "Beside the screens it explains. Readers of the core spec do not see it.",
+        },
+        {
+          position: 2,
+          value: "The core spec",
+          description: "Beside the data it moves. UI readers must follow a link to find it.",
+        },
+        {
+          position: 3,
+          value: "Both, kept in step",
+          description: "Every reader finds it, but two copies must change together on each edit.",
+        },
+      ],
+    },
+    {
+      position: 3,
+      text: "Do we rename the existing term?",
+      options: [
+        {
+          position: 1,
+          value: "Rename it now",
+          description: "One clean term from today. Old notes and drafts keep the old word.",
+        },
+        {
+          position: 2,
+          value: "Keep it, add alias",
+          description: "Nothing breaks. Two words for one thing stay in the corpus.",
+        },
+      ],
+    },
+  ],
+};
+
+/**
+ * `?noSeededSet` starts `disc-1` with no set, so its reply composer shows and voice
+ * mode can start there. A set then arrives as it does from a turn. The hooks fire
+ * the same event as the backend:
+ *
+ *   window.__mockRaiseQuestionSet("disc-1")
+ *   window.__mockClearQuestionSet("disc-1")
+ */
+const questionSetsByThread: Record<string, any> = harnessFlag("noSeededSet")
+  ? {}
+  : { "disc-1": SEEDED_QUESTION_SET };
+
+let raisedSets = 0;
+
+(globalThis as Record<string, unknown>).__mockRaiseQuestionSet = (threadId: string) => {
+  raisedSets += 1;
+  const set = {
+    ...SEEDED_QUESTION_SET,
+    setId: `qs-raised-${raisedSets}`,
+    threadId,
+    discussionId: threadId,
+  };
+  questionSetsByThread[threadId] = set;
+  fireBus("discussion-question-set-changed", { threadId, set });
+};
+
+(globalThis as Record<string, unknown>).__mockClearQuestionSet = (threadId: string) => {
+  delete questionSetsByThread[threadId];
+  fireBus("discussion-question-set-changed", { threadId, set: null });
 };
 
 function discussionTargetKey(target: any): string {
@@ -9950,7 +10007,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
             thread: {
               ...t,
               comments: [
-                { ...t.comments[0], author: agentLongTitle },
+                {
+                  ...t.comments[0],
+                  author: agentLongTitle,
+                  // CMT-FR-RZGT: the row reads the opener as it renders.
+                  ...(harnessFlag("spoken")
+                    ? { body: "<spoken>HIDDEN-OPENER shall not show.</spoken>\n\nWRITTEN-OPENER stays." }
+                    : {}),
+                },
                 ...t.comments.slice(1),
               ],
             },

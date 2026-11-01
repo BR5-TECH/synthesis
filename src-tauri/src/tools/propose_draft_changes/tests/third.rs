@@ -820,3 +820,100 @@ fn a_change_carrying_no_text_at_all_is_refused_rather_than_recorded() {
 fn the_kind_description_says_the_fields_decide() {
     assert!(KIND_DESCRIPTION.contains("The fields you send are what decide"));
 }
+
+// PDC-FR-ZQOH, CVL-FR-UCTB
+#[test]
+fn a_rationale_with_no_spoken_part_is_refused_and_records_nothing() {
+    let f = Fixture::new();
+    let before = f.discussion().comments.len();
+
+    let refusal = f
+        .call(ProposeDraftChangesArgs {
+            path: FILE.into(),
+            rationale: "The opening buries the point.".into(),
+            revises: None,
+            hunks: one_change(),
+        })
+        .expect_err("refused");
+
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
+    assert!(refusal.retryable(), "the model can add the tag");
+    assert!(f.proposals().is_empty());
+    assert_eq!(f.discussion().comments.len(), before);
+}
+
+// PDC-FR-ZQOH, PDC-FR-GMWR: a revision appends no comment, so it needs no tag.
+#[test]
+fn a_revision_needs_no_spoken_part() {
+    let f = Fixture::new();
+    f.call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: RATIONALE.into(),
+        revises: None,
+        hunks: one_change(),
+    })
+    .expect("a proposal stands");
+    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
+    let comments = f.discussion().comments.len();
+
+    f.call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: "A better change.".into(),
+        revises: Some(standing),
+        hunks: vec![HunkArg {
+            kind: Some("replace".into()),
+            before: Some("The".into()),
+            after: Some("That".into()),
+            after_text: None,
+            lead: None,
+            trail: None,
+            note: None,
+        }],
+    })
+    .expect("revised");
+    assert_eq!(f.discussion().comments.len(), comments, "no comment to carry a tag");
+}
+
+// PDC-FR-ZQOH, PDC-FR-GMWR: with no standing proposal `revises` is ignored, so the
+// call appends a comment and needs the tag.
+#[test]
+fn a_revises_that_is_ignored_still_needs_a_spoken_part() {
+    let f = Fixture::new();
+    let refusal = f
+        .call(ProposeDraftChangesArgs {
+            path: FILE.into(),
+            rationale: "The opening buries the point.".into(),
+            revises: Some("a-change-that-was-never-there".into()),
+            hunks: one_change(),
+        })
+        .expect_err("refused");
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
+}
+
+// CVL-FR-HREC: the model is told the rule in the text it reads.
+#[test]
+fn the_description_states_the_rule_of_the_spoken_part() {
+    assert!(DESCRIPTION.contains("one `<spoken>…</spoken>` tag in `rationale`"));
+    assert!(DESCRIPTION.contains("A rationale with no tag is refused."));
+    assert!(RATIONALE_DESCRIPTION.contains("`<spoken>…</spoken>`"));
+}
+
+// PDC-FR-ZQOH, PDC-FR-18: the refusal is found by its code, with no text in it.
+#[test]
+fn a_refusal_for_no_spoken_part_logs_its_code_and_no_text() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    BUFFER.clear();
+    let f = Fixture::new();
+    block_on(f.tool().with_buffer(&BUFFER).call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: "Zanzibarreason.".into(),
+        revises: None,
+        hunks: one_change(),
+    }))
+    .expect_err("refused");
+    let records = records(&BUFFER, Domain::Ai);
+    let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
+    let fields = serde_json::to_value(&warn.fields).expect("fields");
+    assert_eq!(fields["refusal"], "no_spoken_part");
+    assert!(!fields.to_string().contains("Zanzibarreason"), "{fields}");
+}

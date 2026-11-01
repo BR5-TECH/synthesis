@@ -32,7 +32,7 @@ fn reply_reaching_every_result() -> ScriptedReply {
     asks("   ")
         .and_calls(
             crate::tools::ask_user_comment::NAME,
-            serde_json::json!({ "question": "And this one?" }),
+            serde_json::json!({ "question": said("And this one?") }),
         )
         .and_calls(crate::tools::skill_list::NAME, serde_json::json!({}))
 }

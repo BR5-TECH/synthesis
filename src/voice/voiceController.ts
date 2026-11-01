@@ -9,10 +9,8 @@
 import {
   appendVoiceCapture,
   cancelVoiceCapture,
-  cancelVoiceSpeech,
   finishVoiceCapture,
   retryVoiceCapture,
-  speakVoiceSegment,
   startVoiceCapture,
 } from "../api";
 import { logDebug, logInfo, logWarn } from "../logging";
@@ -27,24 +25,30 @@ import {
   type VoiceState,
 } from "../state/voiceSession";
 import type {
-  Comment,
   Discussion,
+  PendingQuestion,
+  Participant,
   VoiceActivityChange,
   VoiceHotkeyBehaviour,
 } from "../types";
 import { ChunkPump, MicrophoneError, openMicrophone, type Microphone } from "./capture";
-import {
-  isPlaybackIdle,
-  pausePlayback,
-  playFrame,
-  prepareAudio,
-  resumePlayback,
-  setDrainedListener,
-  stopPlayback,
-} from "./playback";
-import { speakableText, speechSegments } from "./speakableText";
+import { pausePlayback, prepareAudio, resumePlayback } from "./playback";
 import { VadSession, type VadGate } from "./vadSession";
+import {
+  commentSpeech,
+  dropReply,
+  resetVoiceSpeechForTest,
+  speak,
+  type Speech,
+} from "./voiceSpeech";
 import { canRetry, errorCode } from "./voiceMessages";
+import {
+  answerTargetOf,
+  questionBlockOf,
+  questionSpeech,
+  resetVoiceQuestionsForTest,
+  type AnswerTarget,
+} from "./voiceQuestions";
 
 /** VOM-FR-DGOG. */
 export const SHORT_PRESS_MS = 300;
@@ -54,8 +58,6 @@ export const TAIL_MS = 200;
 export const RECORDING_LIMIT_MS = 10 * 60 * 1000;
 /** VOM-FR-GZPA. */
 export const SURFACE_GRACE_MS = 2000;
-/** `ADQ-FR-YQTB`: the identity of a question comment ends so. */
-const QUESTION_COMMENT = /:\d{2}-1q$/;
 
 export type PostOutcome = "posted" | "reached_nobody" | "busy" | "failed";
 
@@ -79,6 +81,8 @@ interface Job {
   sessionId: string;
   keepInBody: boolean;
   discard: boolean;
+  /** VOM-FR-PINR: the question this recording answers. */
+  answers: AnswerTarget | null;
 }
 
 /** VOM-FR-WRVR: an utterance from `speech_confirmed` until it settles. */
@@ -97,6 +101,8 @@ interface Capture {
   discard: boolean;
   /** VOM-FR-ABPU. */
   keepInBody: boolean;
+  /** VOM-FR-PINR. */
+  answers: AnswerTarget | null;
   limit: ReturnType<typeof setTimeout> | null;
 }
 
@@ -110,11 +116,8 @@ let awaited: Job | null = null;
 /** VOM-FR-HUXY: the session whose text shows. It outlives the release. */
 let liveSession: string | null = null;
 /** VOM-FR-WICV: the session that holds a failed recording. */
-let heldSession: { id: string; key: string } | null = null;
+let heldSession: { id: string; key: string; answers: AnswerTarget | null } | null = null;
 let baseline = new Set<string>();
-let currentSpeech: string | null = null;
-let segmentsSent = false;
-let speechCounter = 0;
 const composers = new Map<string, VoiceComposerHandle[]>();
 /** VOM-FR-PDZR: the open session. */
 let vad: VadSession | null = null;
@@ -129,7 +132,9 @@ let stopGateWatch: (() => void) | null = null;
 let surfaceTimer: ReturnType<typeof setTimeout> | null = null;
 let utterance: Utterance | null = null;
 /** VOM-FR-ZPOD: the newest reply that waits for the author. */
-let pendingReply: { comment: Comment; key: string | null } | null = null;
+let pendingReply: { speech: Speech; key: string | null } | null = null;
+/** VOM-FR-UALK: the question spoken last, so a re-read speaks nothing. */
+let spokenQuestion: AnswerTarget | null = null;
 
 export function setVoiceBehaviour(next: VoiceHotkeyBehaviour): void {
   behaviour = next;
@@ -158,65 +163,25 @@ function dropHeldRecording(): void {
 
 // --- Spoken replies -------------------------------------------------------
 
-/** The reply that sounds or stands paused goes. A reply that waits stays. */
-function dropReply(): void {
-  if (currentSpeech) {
-    void cancelVoiceSpeech(currentSpeech).catch(() => undefined);
-    currentSpeech = null;
-  }
-  stopPlayback();
-  segmentsSent = false;
-  const { playing, playbackPaused } = getVoiceState();
-  if (playing || playbackPaused) patchVoiceState({ playing: false, playbackPaused: false });
-}
-
 /** VOM-FR-QDWW: silence at once, and no reply is left to speak. */
 export function stopSpeech(): void {
   pendingReply = null;
   dropReply();
 }
 
-function drained(): void {
-  if (segmentsSent) {
-    currentSpeech = null;
-    segmentsSent = false;
-    patchVoiceState({ playing: false, playbackPaused: false });
+/** VOM-FR-ZPOD: speech that comes while the author speaks waits for them. */
+function speakOrWait(speech: Speech, key: string | null): void {
+  if (getVoiceState().hearing || utterance !== null) {
+    pendingReply = { speech, key };
+    return;
   }
+  void speakAs(speech, key);
 }
 
-async function speak(comment: Comment, key: string | null): Promise<void> {
-  dropReply();
-  const text = speakableText(comment.body);
-  if (text === "") return;
-  speechCounter += 1;
-  const id = `speech-${speechCounter}`;
-  currentSpeech = id;
-  patchVoiceState({ playing: true });
-  setDrainedListener(drained);
-  const author = comment.author;
-  const voiceName = author.kind === "agent" ? (handleOf(key)?.voiceOf(author.agentId) ?? null) : null;
-  try {
-    for (const segment of speechSegments(text)) {
-      if (currentSpeech !== id) return;
-      // A frame can still be in the channel after Stop.
-      await speakVoiceSegment(id, segment, voiceName, (frame) => {
-        if (currentSpeech === id) playFrame(frame);
-      });
-    }
-    if (currentSpeech === id) {
-      segmentsSent = true;
-      logDebug(["frontend", "ai"], "a voice reply was sent to playback", {});
-      // A reply with no frames, or one that already played, gets no later event.
-      if (isPlaybackIdle()) drained();
-    }
-  } catch (error) {
-    if (currentSpeech !== id) return;
-    // VOM-FR-QPFQ: the text of the comment stays as it is.
-    const code = errorCode(error);
-    logWarn(["frontend", "ai"], "a voice reply failed", { code });
-    dropReply();
-    patchVoiceState({ error: code, canRetry: false });
-  }
+/** Speak with the voice that the mounted surface knows for the agent. */
+function speakAs(speech: Speech, key: string | null): Promise<void> {
+  const { agentId } = speech;
+  return speak(speech, agentId === null ? null : (handleOf(key)?.voiceOf(agentId) ?? null));
 }
 
 /**
@@ -230,17 +195,47 @@ export function noteDiscussionChanged(discussion: Discussion): void {
   const fresh = discussion.comments.filter((c) => !baseline.has(c.id));
   fresh.forEach((c) => baseline.add(c.id));
   if (state.responseMode !== "voice" || handleOf(state.activeKey) === null) return;
-  const spoken = fresh.filter(
-    (c) => c.author.kind === "agent" && !QUESTION_COMMENT.test(c.id),
-  );
-  const newest = spoken[spoken.length - 1];
+  const newest = fresh.map(commentSpeech).filter((s) => s !== null).pop();
   if (!newest) return;
-  // VOM-FR-ZPOD.
-  if (state.hearing || utterance !== null) {
-    pendingReply = { comment: newest, key: state.activeKey };
-    return;
-  }
-  void speak(newest, state.activeKey);
+  if (newest.text === "") logDebug(["frontend", "ai"], "an agent comment has nothing to speak", {});
+  speakOrWait(newest, state.activeKey);
+}
+
+/**
+ * VOM-FR-HBLE, VOM-FR-UALK: the block shows a question. `arrived` is the first
+ * show of a mount: a set that voice mode already spoke speaks nothing then, so a
+ * remount is silent. The check waits a tick, because the block mounts in the
+ * commit that also mounts the session control.
+ */
+export function noteQuestionShown(
+  discussionId: string,
+  setId: string,
+  question: PendingQuestion,
+  askedBy: Participant,
+  arrived: boolean,
+): void {
+  const { activeKey, discussionId: voiceDiscussion } = getVoiceState();
+  if (activeKey === null || discussionId !== voiceDiscussion) return;
+  const known = spokenQuestion?.setId === setId;
+  const same = known && spokenQuestion?.position === question.position;
+  spokenQuestion = { setId, position: question.position };
+  if (same || (known && arrived)) return;
+  queueMicrotask(() => {
+    const state = getVoiceState();
+    if (spokenQuestion?.setId !== setId || spokenQuestion.position !== question.position) return;
+    if (state.responseMode !== "voice") return;
+    if (handleOf(state.activeKey) === null) {
+      logDebug(["frontend", "ai"], "a question found no voice surface", {});
+      return;
+    }
+    const text = questionSpeech(question);
+    if (text === "") return;
+    logDebug(["frontend", "ai"], "a question speaks", { position: question.position });
+    speakOrWait(
+      { text, agentId: askedBy.kind === "agent" ? askedBy.agentId : null },
+      state.activeKey,
+    );
+  });
 }
 
 // --- Entering and leaving -------------------------------------------------
@@ -250,6 +245,7 @@ export function enterVoiceMode(key: string, discussion: Discussion | null): void
   if (getVoiceState().activeKey !== null) leaveVoiceMode();
   prepareAudio();
   baseline = new Set(discussion?.comments.map((c) => c.id) ?? []);
+  spokenQuestion = null;
   patchVoiceState({
     activeKey: key,
     discussionId: discussion?.id ?? null,
@@ -267,6 +263,7 @@ export function leaveVoiceMode(): void {
   stopSpeech();
   dropHeldRecording();
   keepWhatIsComing();
+  spokenQuestion = null;
   patchVoiceState({
     activeKey: null,
     discussionId: null,
@@ -345,14 +342,37 @@ function joinToBody(key: string, text: string): void {
 }
 
 /**
- * VOM-FR-WYIE, VOM-FR-RENV, VOM-FR-ABPU, VOM-FR-BVNX. Gives whether a comment
- * posted, which a comment that reached no agent also did.
+ * VOM-FR-WYIE, VOM-FR-RENV, VOM-FR-ABPU, VOM-FR-BVNX, VOM-FR-PINR. Gives whether a
+ * comment posted or a question took the answer. A comment that reached no agent
+ * also posted.
  */
-async function deliver(key: string, text: string, keepInBody: boolean): Promise<boolean> {
+async function deliver(
+  key: string,
+  text: string,
+  keepInBody: boolean,
+  answers: AnswerTarget | null,
+): Promise<boolean> {
   const spoken = text.trim();
   const finished = { phase: "idle" as const, recordingSince: null };
   if (spoken === "") {
     patchVoiceState({ ...finished, transcript: "", note: "no_speech" });
+    return false;
+  }
+  // VOM-FR-FUFE: the words as spoken, with the session body left as it is.
+  // VOM-FR-UXYH: an answer whose set went falls through and joins the body.
+  if (answers !== null) {
+    const block = questionBlockOf(key);
+    if (!keepInBody && block?.setId === answers.setId) {
+      patchVoiceState({ ...finished, transcript: "", note: null });
+      logInfo(["frontend", "ai"], "a spoken answer filled a question", {
+        position: answers.position,
+      });
+      block.answer(answers.position, spoken);
+      return true;
+    }
+    logInfo(["frontend", "ai"], "a spoken answer found no question", {});
+    joinToBody(key, spoken);
+    patchVoiceState({ ...finished, transcript: "", note: "kept_in_body" });
     return false;
   }
   const handle = handleOf(key);
@@ -393,7 +413,7 @@ function failed(error: unknown, job: Job): void {
     return;
   }
   const retryable = canRetry(code);
-  heldSession = retryable ? { id: job.sessionId, key: job.key } : null;
+  heldSession = retryable ? { id: job.sessionId, key: job.key, answers: job.answers } : null;
   patchVoiceState({
     phase: "idle",
     recordingSince: null,
@@ -419,7 +439,7 @@ async function receive(job: Job, text: Promise<string>): Promise<boolean> {
   if (liveSession === job.sessionId) liveSession = null;
   // The session stores went with the teardown.
   if (job.discard) return false;
-  return deliver(job.key, transcript, job.keepInBody);
+  return deliver(job.key, transcript, job.keepInBody, job.answers);
 }
 
 async function completeRecording(active: Capture): Promise<void> {
@@ -440,7 +460,13 @@ async function completeRecording(active: Capture): Promise<void> {
   await active.pump.flush();
   patchVoiceState({ phase: "transcribing" });
   await receive(
-    { key: active.key, sessionId, keepInBody: active.keepInBody, discard: false },
+    {
+      key: active.key,
+      sessionId,
+      keepInBody: active.keepInBody,
+      discard: false,
+      answers: active.answers,
+    },
     finishVoiceCapture(sessionId),
   );
 }
@@ -469,6 +495,7 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
     released: false,
     discard: false,
     keepInBody: false,
+    answers: answerTargetOf(key),
     limit: null,
   };
   capture = active;
@@ -643,7 +670,7 @@ function settleUtterance(job: Utterance | null, posted: boolean): void {
   const waiting = pendingReply;
   pendingReply = null;
   if (waiting) {
-    void speak(waiting.comment, waiting.key);
+    void speakAs(waiting.speech, waiting.key);
   } else if (getVoiceState().playbackPaused) {
     if (posted) {
       dropReply();
@@ -680,6 +707,7 @@ function utteranceConfirmed(change: VoiceActivityChange): void {
     keepInBody: false,
     discard: false,
     finishing: false,
+    answers: answerTargetOf(key),
   };
   liveSession = change.captureId;
   patchVoiceState({
@@ -809,10 +837,13 @@ export function releaseRecord(): void {
 export async function retryRecording(): Promise<void> {
   // VOP-FR-KBPZ: an utterance replaces the held recording, so the two cannot run.
   if (!heldSession || getVoiceState().hearing || utterance !== null) return;
-  const { id, key } = heldSession;
+  const { id, key, answers } = heldSession;
   heldSession = null;
   patchVoiceState({ phase: "transcribing", error: null, canRetry: false });
-  await receive({ key, sessionId: id, keepInBody: false, discard: false }, retryVoiceCapture(id));
+  await receive(
+    { key, sessionId: id, keepInBody: false, discard: false, answers },
+    retryVoiceCapture(id),
+  );
 }
 
 /** VOM-FR-HUXY. */
@@ -856,9 +887,6 @@ export function resetVoiceControllerForTest(): void {
   liveSession = null;
   heldSession = null;
   baseline = new Set();
-  currentSpeech = null;
-  segmentsSent = false;
-  speechCounter = 0;
   composers.clear();
   vad = null;
   closingVad = null;
@@ -870,4 +898,7 @@ export function resetVoiceControllerForTest(): void {
   clearSurfaceCheck();
   utterance = null;
   pendingReply = null;
+  spokenQuestion = null;
+  resetVoiceQuestionsForTest();
+  resetVoiceSpeechForTest();
 }

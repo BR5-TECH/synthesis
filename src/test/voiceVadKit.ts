@@ -29,7 +29,8 @@ export function comment(id: string, kind: "agent" | "human" = "agent", body = "A
       kind === "agent"
         ? { kind: "agent", agentId: "a1", handle: "arch" }
         : { kind: "human", login: "me" },
-    body,
+    // VOM-FR-TRWN: an agent comment speaks its spoken part.
+    body: kind === "agent" ? `<spoken>${body}</spoken>` : body,
     quotes: [],
     attachments: [],
     createdAt: "2026-02-01T00:00:00Z",

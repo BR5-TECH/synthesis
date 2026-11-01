@@ -143,13 +143,25 @@ describe("a question set with a session open", () => {
     await pass(SURFACE_GRACE_MS * 2);
     expect(getVoiceState().vadOpen).toBe(true);
     expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
-    expect(lastGate()).toMatchObject({ blocked: true });
-    expect(bar).toHaveTextContent(/not recorded/);
+    expect(lastGate()).toMatchObject({ blocked: false });
+    expect(bar).toHaveTextContent(/microphone is open/);
+    expect(bar).toHaveTextContent(/Speak to answer/);
   });
 
-  it("VOM-FR-VGLT: with no session, only the line shows", async () => {
+  it("VOM-FR-VGLT: in Push-to-Talk the bar shows too, with no word of a microphone", async () => {
     render(surface());
+    await pass();
     fireEvent.click(screen.getByTestId("voice-button"));
+    act(() => publishSet("d1", QUESTION_SET));
+    expect(screen.getByTestId("discussion-questions-composer-note")).toBeInTheDocument();
+    const bar = screen.getByTestId("voice-session-bar");
+    expect(bar).toHaveTextContent(/Press to answer/);
+    expect(bar).not.toHaveTextContent(/microphone/);
+  });
+
+  it("VOM-FR-VGLT: out of voice mode, only the line shows", async () => {
+    render(surface());
+    await pass();
     act(() => publishSet("d1", QUESTION_SET));
     expect(screen.getByTestId("discussion-questions-composer-note")).toBeInTheDocument();
     expect(screen.queryByTestId("voice-session-bar")).toBeNull();
@@ -194,7 +206,7 @@ describe("a question set with a session open", () => {
     fireEvent.pointerDown(screen.getByTestId("voice-record"));
     await pass();
     expect(getVoiceState().vadOpen).toBe(false);
-    expect(screen.queryByTestId("voice-session-bar")).toBeNull();
+    expect(screen.getByTestId("voice-session-bar")).toHaveTextContent(/Press to answer/);
     expect(screen.getByTestId("discussion-questions-composer-note")).toBeInTheDocument();
     act(() => clearQuestionSets());
     expect(screen.getByTestId("voice-record")).toHaveAttribute("data-vad", "idle");

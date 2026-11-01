@@ -63,6 +63,7 @@ import {
   noteProvider,
   resetVoiceControllerForTest,
   setResponseMode,
+  noteTranscript,
 } from "../../voice/voiceController";
 import { voiceMessage } from "../../voice/voiceMessages";
 import { DiscussionComposer } from "./DiscussionComposer";
@@ -426,7 +427,7 @@ describe("the session bar", () => {
   async function barWithSession() {
     const view = render(reply());
     await openSession();
-    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} />);
+    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} nicknames={() => ["arch"]} />);
     return view;
   }
 
@@ -440,21 +441,62 @@ describe("the session bar", () => {
     expect(screen.getByTestId("voice-error")).toBeInTheDocument();
   });
 
-  it("VOM-FR-GPNK: the record control closes the session, and it does not open one", async () => {
+  it("VOM-FR-GPNK: the record control closes the session, and the next press opens one", async () => {
     await barWithSession();
     fireEvent.pointerDown(record());
     await flush();
     expect(getVoiceState().vadOpen).toBe(false);
     fireEvent.pointerDown(record());
     await flush();
-    expect(getVoiceState().vadOpen).toBe(false);
-    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
+    expect(getVoiceState().vadOpen).toBe(true);
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(2);
   });
 
-  it("VOM-FR-VGLT, VOM-FR-GTAQ: a mounted bar blocks the gate", async () => {
+  it("VOM-FR-GTAQ, VOM-FR-LNUH: a mounted bar leaves the gate open and sends the roster", async () => {
     await barWithSession();
-    expect(lastGate()).toMatchObject({ blocked: true, keyterms: [] });
+    expect(lastGate()).toMatchObject({ blocked: false, keyterms: ["arch"] });
     expect(getVoiceState().vadOpen).toBe(true);
+  });
+
+  it("VOM-FR-HUXY: a recording at the bar shows its words in place of the line", async () => {
+    await barWithSession();
+    activity("speech_start");
+    activity("speech_confirmed", { captureId: "c1", live: true });
+    await flush();
+    noteTranscript("c1", "two specs");
+    await flush();
+    expect(screen.getByTestId("voice-session-bar")).toHaveTextContent("two specs");
+    expect(screen.getByTestId("voice-session-bar")).not.toHaveTextContent("Speak to answer");
+  });
+
+  it("VOM-FR-LAQO: the bar takes focus from the surface that holds it", async () => {
+    render(
+      <div data-testid="surface" tabIndex={-1}>
+        <input data-testid="elsewhere" />
+      </div>,
+    );
+    screen.getByTestId("surface").focus();
+    cleanup();
+    const host = document.createElement("div");
+    host.tabIndex = -1;
+    document.body.append(host);
+    host.focus();
+    render(<VoiceSessionBar sessionKey="d1" voiceOf={() => null} nicknames={() => []} />, {
+      container: host,
+    });
+    expect(record()).toHaveFocus();
+    host.remove();
+  });
+
+  it("VOM-FR-LAQO: Stop gives focus to the record control as it goes", async () => {
+    render(<VoiceSessionBar sessionKey="d1" voiceOf={() => null} nicknames={() => []} />);
+    act(() => patchVoiceState({ playing: true }));
+    const stop = screen.getByTestId("voice-stop");
+    stop.focus();
+    fireEvent.click(stop);
+    await flush();
+    expect(screen.queryByTestId("voice-stop")).toBeNull();
+    expect(record()).toHaveFocus();
   });
 
   it("VOM-FR-LAQO: the bar takes the focus that went with the composer", async () => {
@@ -466,7 +508,7 @@ describe("the session bar", () => {
     render(
       <>
         <input data-testid="elsewhere" />
-        <VoiceSessionBar sessionKey="d1" voiceOf={() => null} />
+        <VoiceSessionBar sessionKey="d1" voiceOf={() => null} nicknames={() => ["arch"]} />
       </>,
     );
     expect(document.activeElement).toBe(record());
@@ -474,7 +516,7 @@ describe("the session bar", () => {
     render(<input data-testid="elsewhere" />);
     const elsewhere = screen.getByTestId("elsewhere");
     elsewhere.focus();
-    render(<VoiceSessionBar sessionKey="d1" voiceOf={() => null} />);
+    render(<VoiceSessionBar sessionKey="d1" voiceOf={() => null} nicknames={() => ["arch"]} />);
     expect(elsewhere).toHaveFocus();
   });
 
@@ -488,7 +530,7 @@ describe("the session bar", () => {
     await openSession();
     activity("speech_start");
     activity("speech_confirmed", { captureId: "c1", live: true });
-    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} />);
+    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} nicknames={() => ["arch"]} />);
     activity("speech_end", { captureId: "c1" });
     await flush();
     expect(getDiscussionSession("d1").body).toBe("hello there");
@@ -499,8 +541,8 @@ describe("the session bar", () => {
   it("VOM-FR-UALP: a reply at the bar takes the newest voice", async () => {
     const view = render(reply());
     await openSession();
-    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} />);
-    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "marin"} />);
+    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "cedar"} nicknames={() => ["arch"]} />);
+    view.rerender(<VoiceSessionBar sessionKey="d1" voiceOf={() => "marin"} nicknames={() => ["arch"]} />);
     setResponseMode("voice");
     noteDiscussionChanged(
       discussion({
@@ -508,7 +550,7 @@ describe("the session bar", () => {
           {
             id: "r1",
             author: { kind: "agent", agentId: "a1", handle: "arch" },
-            body: "A reply.",
+            body: "<spoken>A reply.</spoken>",
             quotes: [],
             attachments: [],
             createdAt: "2026-02-01T00:00:00Z",

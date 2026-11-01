@@ -160,25 +160,15 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 },
             );
         }
+        // CVL-FR-NOHO: an answer the provider wrote and billed, with no spoken part.
+        let no_spoken_part = outcome.as_ref().is_ok_and(|reply| {
+            reply_is_usable(reply, at_bound, &request.tools)
+                && reply_is_final(reply, at_bound, compaction, turns.has_steering(&plan.turn_id))
+                && crate::comments::spoken_part(&reply.text).is_none()
+        });
         let failure = match outcome {
-            Ok(reply) if reply_is_usable(&reply, at_bound, &request.tools) => {
-                // CVL-FR-28: accumulated on the usable reply alone. A failed
-                // attempt was never answered and so was never billed, and one
-                // whose reply the loop rejected is retried as the same logical
-                // call — counting either would report a turn as having paid for
-                // input it was not charged for.
-                if let Some(tokens) = reply.input_tokens {
-                    plan.cached_input_tokens.fetch_add(tokens.cached, Ordering::SeqCst);
-                    plan.uncached_input_tokens.fetch_add(tokens.uncached, Ordering::SeqCst);
-                    plan.tokens_reported.store(true, Ordering::SeqCst);
-                }
-                // CVL-FR-WQZD / AGC-FR-BVNT: the reliable usage record this
-                // answered round reported leaves the loop here — once per
-                // distinct record, on the usable reply alone. A failed attempt
-                // was never answered and reports none; a successful retry
-                // reports its own record, which is a distinct reliable record
-                // of the same logical invocation rather than a second turn.
-                record_refinement_usage(app, plan, model_calls, attempt as u32, compaction, &reply);
+            Ok(reply) if !no_spoken_part && reply_is_usable(&reply, at_bound, &request.tools) => {
+                count_answered_call(app, plan, model_calls, attempt as u32, compaction, &reply);
                 // CVL-FR-OPTI: the context figures of this answered call, for
                 // every target kind. A compaction call reports none.
                 if !compaction {
@@ -266,27 +256,58 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 // happened at all, which is the one case these records exist
                 // for.
                 log_native_calls(app, turns, plan, endpoint, model_calls, &rejected);
+                if no_spoken_part {
+                    count_answered_call(
+                        app,
+                        plan,
+                        model_calls,
+                        attempt as u32,
+                        compaction,
+                        &rejected,
+                    );
+                    // CVL-FR-NOHO: the size of the reply, and never its text.
+                    logging::log_warn(
+                        app,
+                        turns.buffer(),
+                        &[Domain::Ai, Domain::Backend],
+                        "agent reply has no spoken part",
+                        log_fields! {
+                            "turnId" => &plan.turn_id,
+                            "agent" => &plan.agent.nickname,
+                            "agentId" => &plan.agent.id,
+                            "provider" => &endpoint.provider,
+                            "model" => model_label,
+                            "modelCall" => model_calls,
+                            "attempt" => attempt,
+                            "replyChars" => rejected.text.chars().count(),
+                        },
+                    );
+                }
                 // CVL-FR-28 / CVL-FR-UALC: why the reply held nothing to
                 // deliver, as far as the provider said — a refusal or filtered
                 // content ends with its own reason — and the provider's own
                 // identifiers for it. Identifiers and a reason, never content.
-                logging::log_warn(
-                    app,
-                    turns.buffer(),
-                    &[Domain::Ai, Domain::Backend],
-                    "model reply held nothing to deliver",
-                    log_fields! {
-                        "turnId" => &plan.turn_id,
-                        "agent" => &plan.agent.nickname,
-                        "provider" => &endpoint.provider,
-                        "model" => model_label,
-                        "modelCall" => model_calls,
-                        "attempt" => attempt,
-                        "finishReason" => bounded_identifier(rejected.finish_reason.as_deref()),
-                        "responseId" => bounded_identifier(rejected.response_id.as_deref()),
-                        "providerRequestId" => bounded_identifier(rejected.provider_request_id.as_deref()),
-                    },
-                );
+                // A reply with no spoken part did hold text, and has its own
+                // record above.
+                if !no_spoken_part {
+                    logging::log_warn(
+                        app,
+                        turns.buffer(),
+                        &[Domain::Ai, Domain::Backend],
+                        "model reply held nothing to deliver",
+                        log_fields! {
+                            "turnId" => &plan.turn_id,
+                            "agent" => &plan.agent.nickname,
+                            "provider" => &endpoint.provider,
+                            "model" => model_label,
+                            "modelCall" => model_calls,
+                            "attempt" => attempt,
+                            "finishReason" => bounded_identifier(rejected.finish_reason.as_deref()),
+                            "responseId" => bounded_identifier(rejected.response_id.as_deref()),
+                            "providerRequestId" => bounded_identifier(rejected.provider_request_id.as_deref()),
+                        },
+                    );
+                }
                 if rejected.tool_calls.is_empty() {
                     if let Some(tool) = tool_written_as_prose(&rejected.text, &request.tools) {
                         // CVL-FR-UJXD: the tool it meant, and never the text.
@@ -480,6 +501,33 @@ fn wait_before_retry<R: tauri::Runtime>(
         }
         std::thread::sleep(SLICE.min(until - now).min(deadline - now));
     }
+}
+
+/// CVL-FR-28, CVL-FR-WQZD: what one answered call cost, counted on the reply that
+/// the loop kept and on a reply with no spoken part, which the provider also
+/// billed (CVL-FR-NOHO). A failed attempt was never answered and an empty reply
+/// was billed for nothing, so neither passes here: counting them would report a
+/// turn as having paid for input it was not charged for.
+fn count_answered_call<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    plan: &TurnPlan,
+    model_calls: usize,
+    attempt: u32,
+    compaction: bool,
+    reply: &ModelReply,
+) where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    if let Some(tokens) = reply.input_tokens {
+        plan.cached_input_tokens.fetch_add(tokens.cached, Ordering::SeqCst);
+        plan.uncached_input_tokens.fetch_add(tokens.uncached, Ordering::SeqCst);
+        plan.tokens_reported.store(true, Ordering::SeqCst);
+    }
+    // CVL-FR-WQZD / AGC-FR-BVNT: the record this answered round reported leaves
+    // the loop here, once per distinct record. A successful retry reports its
+    // own record, which is a distinct reliable record of the same logical
+    // invocation rather than a second turn.
+    record_refinement_usage(app, plan, model_calls, attempt, compaction, reply);
 }
 
 /// The model's own reply, back in the exchange so the next call sees what it

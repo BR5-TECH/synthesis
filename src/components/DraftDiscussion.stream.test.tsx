@@ -554,6 +554,19 @@ describe("the message actions (DDS-FR-FKZL)", () => {
   });
 });
 
+describe("the spoken part (CMT-FR-BMCI, CMT-FR-XWVW)", () => {
+  it("CMT-FR-BMCI: a message of the column hides the tag and its text", async () => {
+    renderColumn([message("c1", HELGA, "<spoken>Hidden words.</spoken>\n\nThe written text.")]);
+    expect(await screen.findByText("The written text.")).toBeInTheDocument();
+    expect(screen.queryByText(/Hidden words/)).toBeNull();
+  });
+
+  it("CMT-FR-XWVW: a message of the tag alone shows its text", async () => {
+    renderColumn([message("c1", HELGA, "<spoken>Yes, two specs.</spoken>")]);
+    expect(await screen.findByText("Yes, two specs.")).toBeInTheDocument();
+  });
+});
+
 describe("provider citation markers (DQA-FR-JADB, CMT-FR-AWIE)", () => {
   const span = "\uE200cite\uE202turn0search1\uE201";
 

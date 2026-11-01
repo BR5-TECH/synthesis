@@ -633,6 +633,21 @@ pub(super) fn reply_is_usable(
     // only ask the same question twice.
 }
 
+/// CVL-FR-NOHO: whether this reply becomes a comment, so it needs a spoken part.
+///
+/// A compaction reply is a summary. A reply that asks for tools below the bound
+/// goes into the exchange, and so does one that a steering message sets aside
+/// (CVL-FR-XXKL). At the bound the turn delivers what the reply says, whatever
+/// it asks for (CVL-FR-13).
+pub(super) fn reply_is_final(
+    reply: &ModelReply,
+    at_bound: bool,
+    compaction: bool,
+    steering_waits: bool,
+) -> bool {
+    !compaction && (at_bound || (reply.tool_calls.is_empty() && !steering_waits))
+}
+
 /// AGC-FR-24: register the progress operation of a turn that holds a slot.
 ///
 /// A cancellation that terminated the turn between the slot being taken and

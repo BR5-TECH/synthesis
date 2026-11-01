@@ -34,6 +34,7 @@ import {
   QuestionWithDescriptions,
 } from "./OptionDescriptions";
 import { useParticipantLabel } from "../../state/projectIdentity";
+import { visibleBody } from "../../text/spokenPart";
 
 /**
  * CVP-FR-32: whether this message is one the author wrote.
@@ -187,7 +188,7 @@ export function DiscussionMessages({
                   roster={roster}
                 />
               ) : (
-                <CommentMarkdown body={comment.body} agentRoster={roster} />
+                <CommentMarkdown body={visibleBody(comment.body)} agentRoster={roster} />
               )}
               {/* CMT-FR-48: below the body, an image as a thumbnail and anything
                   else as a named chip. */}

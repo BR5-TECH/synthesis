@@ -402,6 +402,13 @@ pub enum ToolRefusal {
         at: usize,
         of: usize,
     },
+    /// PDC-FR-SNUK / PPC-FR-RVKS: the same, about one entry of `updates`.
+    InvalidUpdateAt {
+        message: &'static str,
+        /// One-based, as the model would count its own list.
+        at: usize,
+        of: usize,
+    },
     /// LSK-FR-09: the model named a skill this project does not offer.
     SkillNotFound,
     /// LSK-FR-10: the name is held by more than one ecosystem and none was
@@ -540,6 +547,7 @@ impl ToolRefusal {
             | ToolRefusal::GraduationWorkingCopyUnavailable => ToolErrorKind::NotFound,
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillAmbiguous(_)
             // PPC-FR-06: the path was well-formed and names a file of the wrong
@@ -657,6 +665,7 @@ impl ToolRefusal {
             // a text file instead of a binary one.
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillNotFound
             | ToolRefusal::SkillAmbiguous(_)
@@ -712,9 +721,9 @@ impl ToolRefusal {
     pub fn reason(&self) -> &'static str {
         match self {
             ToolRefusal::NoProjectOpen => "no_project_open",
-            ToolRefusal::InvalidArguments(_) | ToolRefusal::InvalidArgumentsAt { .. } => {
-                "invalid_arguments"
-            }
+            ToolRefusal::InvalidArguments(_)
+            | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidUpdateAt { .. } => "invalid_arguments",
             ToolRefusal::InvalidQuestion(..) => "invalid_arguments",
             ToolRefusal::SkillNotFound => "skill_not_found",
             ToolRefusal::SkillAmbiguous(_) => "skill_ambiguous",
@@ -770,6 +779,9 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::InvalidArguments(message) => f.write_str(message),
             ToolRefusal::InvalidArgumentsAt { message, at, of } => {
                 write!(f, "Change {at} of {of}: {message}")
+            }
+            ToolRefusal::InvalidUpdateAt { message, at, of } => {
+                write!(f, "Update {at} of {of}: {message}")
             }
             // The number is the position this application assigned, in the order
             // the model wrote its questions — not a value it supplied.

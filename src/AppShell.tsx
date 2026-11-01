@@ -44,6 +44,7 @@ import { useBottomPanel } from "./hooks/useBottomPanel";
 import { useProjectFolders } from "./hooks/useProjectFolders";
 import { useInFlightOperations } from "./hooks/useInFlightOperations";
 import { createOperationActions } from "./hooks/shell/operationActions";
+import { noteOwnerDeleted } from "./voice/voiceController";
 import { useDiffTotals } from "./hooks/useDiffTotals";
 import { useLineEndings } from "./hooks/useLineEndings";
 import { nextPanelToggleState } from "./state/panelToggle";
@@ -165,7 +166,7 @@ export function AppShell(props: AppShellProps) {
 
   // STB-FR-RWPD: a status bar row with a destination opens the surface that owns
   // its target, by that surface's own route.
-  const { activateOperation } = createOperationActions({
+  const { activateOperation, revealVoiceDiscussion } = createOperationActions({
     openGraduationRun: (runId) => openGraduationRun(runId),
     revealDiscussion: s.revealDiscussion,
     openGitBranch,
@@ -473,7 +474,11 @@ export function AppShell(props: AppShellProps) {
             // beneath at graduation. A draft created in the panel's `UI` folder
             // still graduates to the project root.
             onCreateDraft={(folder) => s.createDraft({ folder })}
-            onDraftDeleted={s.dropDraftTab}
+            onDraftDeleted={(draftId) => {
+              // CVP-FR-51, VOM-FR-LSBQ: voice mode ends with its owner.
+              noteOwnerDeleted({ kind: "draft", draftId });
+              s.dropDraftTab(draftId);
+            }}
             // DRP-FR-11 / NAW-FR-04: renaming a draft from the panel renames
             // its open tab, exactly as renaming it from the tab does.
             onDraftRenamed={s.renameDraftTab}
@@ -711,6 +716,7 @@ export function AppShell(props: AppShellProps) {
           if (indentTarget) s.sessions.setIndentation(indentTarget, next);
         }}
         diffTotals={diffTotals}
+        onRevealVoice={revealVoiceDiscussion}
       />
 
       {/* ABT-about-panel.md: the About panel, mounted only while open. One of

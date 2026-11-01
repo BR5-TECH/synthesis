@@ -131,7 +131,7 @@ impl Fixture {
     ) -> Result<ProposePromptChangesOutput, ToolRefusal> {
         block_on(self.tool().call(ProposePromptChangesArgs {
             path: path.into(),
-            revises: None,
+            updates: None,
             content: Some(content.into()),
             hunks: None,
             rationale: rationale.into(),
@@ -244,7 +244,7 @@ fn its_definition_is_byte_identical_wherever_it_appears() {
     assert_eq!(schema["required"], serde_json::json!(["path", "rationale"]),);
     for (name, description) in [
         ("path", PATH_DESCRIPTION),
-        ("revises", REVISES_DESCRIPTION),
+        ("updates", UPDATES_DESCRIPTION),
         ("content", CONTENT_DESCRIPTION),
         ("hunks", HUNKS_DESCRIPTION),
         ("rationale", RATIONALE_DESCRIPTION),
@@ -260,7 +260,7 @@ fn no_argument_names_a_conversation_an_agent_or_a_participant() {
     let properties = schema["properties"].as_object().expect("properties");
     let mut names: Vec<&String> = properties.keys().collect();
     names.sort();
-    assert_eq!(names, vec!["content", "hunks", "path", "rationale", "revises"]);
+    assert_eq!(names, vec!["content", "hunks", "path", "rationale", "updates"]);
     for forbidden in ["thread", "conversation", "agent", "participant", "artifact_id"] {
         assert!(!properties.contains_key(forbidden), "no argument names {forbidden}",);
     }
@@ -369,7 +369,7 @@ fn a_turn_that_is_not_about_a_file_of_the_project_refuses_for_good() {
     ] {
         let refusal = block_on(f.tool_for(origin).call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            revises: None,
+            updates: None,
             content: Some(PROPOSED.into()),
             hunks: None,
             rationale: RATIONALE.into(),
@@ -405,7 +405,7 @@ fn a_refusal_for_no_spoken_part_logs_its_code_and_no_text() {
     let f = Fixture::new();
     block_on(f.tool().with_buffer(&BUFFER).call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        revises: None,
+        updates: None,
         content: Some(PROPOSED.into()),
         hunks: None,
         rationale: "Zanzibarreason.".into(),
@@ -513,7 +513,7 @@ fn a_pending_proposal_refuses_the_next_call_retryably() {
     assert_eq!(
         block_on(other.call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            revises: None,
+            updates: None,
             content: Some("# Review\n\nMine.\n".into()),
             hunks: None,
             rationale: RATIONALE.into(),
@@ -614,7 +614,7 @@ fn two_turns_racing_one_artifact_record_exactly_one_proposal() {
                     scope.spawn(move || {
                         block_on(tool.call(ProposePromptChangesArgs {
                             path: PROMPT.into(),
-                            revises: None,
+                            updates: None,
                             content: Some(format!("# Review\n\nFrom {nickname}.\n")),
                             hunks: None,
                             rationale: RATIONALE.into(),
@@ -653,7 +653,7 @@ fn the_comment_is_the_rationale_and_one_reference_and_nothing_else() {
     }
     assert_eq!(posted.attachments.len(), 1);
     match &posted.attachments[0] {
-        crate::comments::Attachment::PromptProposal { proposal_id, artifact_id, path } => {
+        crate::comments::Attachment::PromptProposal { proposal_id, artifact_id, path, .. } => {
             assert_eq!(proposal_id, &output.proposal_id);
             assert_eq!(artifact_id, PROMPT);
             assert_eq!(path, PROMPT);
@@ -693,7 +693,7 @@ fn no_project_open_is_the_shared_refusal() {
     );
     let refusal = block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        revises: None,
+        updates: None,
         content: Some(PROPOSED.into()),
         hunks: None,
         rationale: RATIONALE.into(),
@@ -714,7 +714,7 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        revises: None,
+        updates: None,
         content: Some(PROPOSED.into()),
         hunks: None,
         rationale: RATIONALE.into(),
@@ -723,7 +723,7 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        revises: None,
+        updates: None,
         content: Some("# Review\n\nAnother.\n".into()),
         hunks: None,
         rationale: RATIONALE.into(),
@@ -802,4 +802,4 @@ fn the_tool_names_its_targets_without_the_doc_type() {
 }
 
 mod hunks;
-mod revises;
+mod updates;

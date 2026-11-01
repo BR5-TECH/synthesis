@@ -80,6 +80,9 @@ where
 }
 
 /// The shared body of the two hunk decisions.
+///
+/// DCP-FR-LAWR: the command resolves the root, the store, and the author, and
+/// then calls the same in-process function that `decide_draft_changes` calls.
 fn decide_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -92,20 +95,10 @@ fn decide_hunk<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    // DRS-FR-19: a draft a graduation run holds takes no write by any route.
-    if let Some((draft_id, _)) = find_proposal(&project.require_root()?, &proposal_id) {
-        // DRS-FR-QPSC: an accepted change is a write of a GitHub-shadow
-        // draft's prompt, refused with its own reason before the lock.
-        if decision == Decision::Accept {
-            drafts::require_not_github_shadow(&project.require_root()?, &draft_id)?;
-        }
-        crate::graduation::require_unlocked_draft(&app, &draft_id)?;
-    }
     let root = project.require_root()?;
     let repo_store = project.require_store()?;
     let by = comments::acting_participant(&store, &project)?;
-    let operation = if decision == Decision::Accept { "accept_hunk" } else { "reject_hunk" };
-    let Decided { proposal, comment_id, origin_kind, comment_failed } = decide(
+    decide_hunk_in_process(
         &app,
         &root,
         &repo_store,
@@ -113,14 +106,6 @@ where
         Verdict { decision, hunk: hunk_id.as_deref(), feedback: feedback.as_deref() },
         &by,
     )
-    .inspect_err(|e| log_refusal(&app, operation, e))?;
-    if let Some(reason) = comment_failed {
-        log_refusal(&app, "hunk_comment", &reason);
-    }
-    // DCP-FR-16: emitted when a change is decided, after any transaction it
-    // delegated has committed.
-    announce(&app, &BUFFER, &proposal);
-    Ok(DecisionOutcome { proposal, comment_id, origin_kind })
 }
 
 /// DCP-FR-PWSF: hold one change for discussion, or release it.
@@ -139,31 +124,7 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let root = project.require_root()?;
-    // The draft is found before the lock, because the lock is per draft and
-    // there is no way to name it otherwise. Everything the decision is *checked*
-    // against is read again below, inside the lock.
-    let (draft_id, _) = find_proposal(&root, &proposal_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
-    let _guard = draft_lock(&draft_id);
-    // DCP-FR-NKTB: read again inside the lock. A decision that landed on
-    // another change between the read above and this line has already settled
-    // this proposal, and holding a settled change for discussion would put the
-    // whole proposal back to `pending` after its acceptance had written the
-    // prompt and recorded a version.
-    let mut record =
-        find_proposal(&root, &proposal_id).map(|(_, r)| r).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
-    // DCP-FR-QLMH: as in `decide`, a legacy record is given the row its one
-    // change is named by.
-    let dir = drafts::draft_proposals_dir(&root, &draft_id)?;
-    backfill_legacy_ledger(&root, &dir, &mut record, &prompt_of(&root, &draft_id));
-    let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
-    if !row.state.is_undecided() {
-        return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
-    }
-    let next = if discussing { hunks::HunkState::Discussing } else { hunks::HunkState::Pending };
-    let proposal = set_hunk_state(&root, &draft_id, &proposal_id, &hunk_id, next)
-        .inspect_err(|e| log_refusal(&app, "hold_hunk", e))?;
-    announce(&app, &BUFFER, &proposal);
-    Ok(proposal)
+    hold_hunk_in_process(&app, &root, &proposal_id, &hunk_id, discussing)
 }
 
 /// DCP-FR-25: the author's own text over one undecided change.
@@ -204,6 +165,10 @@ pub fn edit_hunk_impl(
         return Err(ERR_WRITE_FAILED.to_string());
     }
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // DCP-FR-MKIM: a withdrawn change is not the author's to shape.
+    if row.state == hunks::HunkState::Withdrawn {
+        return Err(ERR_HUNK_WITHDRAWN.to_string());
+    }
     // DCP-FR-26: a change is the author's to shape only while the decision it is
     // for is still owed.
     if !row.state.is_undecided() {
@@ -278,6 +243,6 @@ where
         log_refusal(&app, "decline_comment", &reason);
     }
     // DCP-FR-14: nothing was written into the draft, so no `drafts-changed`.
-    announce(&app, &BUFFER, &proposal);
+    announce(&app, &BUFFER, &proposal, ProposalChangeCause::Decided);
     Ok(DecisionOutcome { proposal, comment_id, origin_kind })
 }

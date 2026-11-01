@@ -104,7 +104,7 @@ fn recording_appends_one_agent_comment_carrying_the_proposal_reference() {
     }
     assert_eq!(posted.attachments.len(), 1, "exactly one (CMS-FR-60)");
     match &posted.attachments[0] {
-        comments::Attachment::Proposal { proposal_id, draft_id, path } => {
+        comments::Attachment::Proposal { proposal_id, draft_id, path, .. } => {
             assert_eq!(proposal_id, &proposal.id);
             assert_eq!(draft_id, &f.draft_id);
             assert_eq!(path, FILE);

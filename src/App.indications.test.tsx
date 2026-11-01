@@ -17,7 +17,9 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { mintAddress } from "./state/notificationAddress";
-import { resetNotifications } from "./state/notifications";
+import { raiseNotification, resetNotifications } from "./state/notifications";
+import { proposalsOf as draftProposalsOf } from "./state/draftProposals";
+import { proposalsOf as promptProposalsOf } from "./state/promptProposals";
 import { resetTabIndications } from "./state/tabIndications";
 import { resetPromptProposals } from "./state/promptProposals";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
@@ -62,6 +64,15 @@ vi.mock("@tauri-apps/api/event", () => ({
   ),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: async () => null }));
+/**
+ * The facility's raise, wrapped so a case can see that the shell asked for no
+ * raise at the moment an event was handled. It still calls through, so every
+ * other case sees the real facility.
+ */
+vi.mock("./state/notifications", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./state/notifications")>();
+  return { ...real, raiseNotification: vi.fn(real.raiseNotification) };
+});
 vi.mock("@tauri-apps/api/window", () => {
   class LogicalSize {
     constructor(
@@ -173,9 +184,15 @@ describe("prompt change proposals reach the shell (PCR-FR-17 / PCR-FR-26)", () =
     resetTabIndications();
     resetNotifications();
     resetPromptProposals();
+    vi.mocked(raiseNotification).mockClear();
     // NTF-FR-08: an unfocused window posts everything, which is the situation
     // a proposal recorded while the author is elsewhere is actually in.
-    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    promptFocusSpy = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  });
+  let promptFocusSpy: { mockRestore: () => void } | null = null;
+  afterEach(() => {
+    promptFocusSpy?.mockRestore();
+    promptFocusSpy = null;
   });
 
   it("raises with the proposal's own key and the project-file address", async () => {
@@ -247,6 +264,66 @@ describe("prompt change proposals reach the shell (PCR-FR-17 / PCR-FR-26)", () =
     deliver({ state: "accepted", commentOwed: true });
 
     await waitFor(() => expect(withdrawals()).toHaveLength(1));
+  });
+
+  it("PCR-FR-17, NTF-FR-24: an update that leaves the proposal pending raises again under the same key", async () => {
+    render(<App />);
+    await enterIde();
+    deliver({}, ARTIFACT);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+
+    fireBusEvent("prompt-change-proposals-changed", {
+      artifactId: ARTIFACT,
+      cause: "updated",
+      proposal: promptProposal(),
+    });
+
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(posts()[1].key).toBe("prompt-proposal:pp1");
+  });
+
+  it("PCR-FR-17: a decision or a hold that leaves the proposal pending raises nothing", async () => {
+    render(<App />);
+    await enterIde();
+    for (const [n, cause] of ["decided", "held", "reconciled"].entries()) {
+      const id = `pp-${cause}`;
+      fireBusEvent("prompt-change-proposals-changed", {
+        artifactId: ARTIFACT,
+        cause,
+        proposal: promptProposal({ id }),
+      });
+      // The store holds the proposal, so the shell handled this event — and
+      // it asked the facility for nothing while it did.
+      await waitFor(() =>
+        expect(promptProposalsOf(ARTIFACT).some((p) => p.id === id)).toBe(true),
+      );
+      expect(vi.mocked(raiseNotification), `after ${cause} (${n})`).not.toHaveBeenCalled();
+    }
+    // A recording after them is the first thing posted.
+    fireBusEvent("prompt-change-proposals-changed", {
+      artifactId: ARTIFACT,
+      cause: "recorded",
+      proposal: promptProposal({ id: "pp9" }),
+    });
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0].key).toBe("prompt-proposal:pp9");
+    expect(vi.mocked(raiseNotification)).toHaveBeenCalledTimes(1);
+  });
+
+  it("PCR-FR-26: an update that closes the proposal retracts its raise and raises nothing", async () => {
+    render(<App />);
+    await enterIde();
+    deliver();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+
+    fireBusEvent("prompt-change-proposals-changed", {
+      artifactId: ARTIFACT,
+      cause: "updated",
+      proposal: promptProposal({ state: "accepted" }),
+    });
+
+    await waitFor(() => expect(withdrawals()).toHaveLength(1));
+    expect(posts()).toHaveLength(1);
   });
 
   it("retracts to a no-op where the raise was suppressed", async () => {
@@ -643,5 +720,87 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
     );
     expect(within(strip()).queryByText("Untitled")).toBeNull();
     expect(marked()).toEqual([]);
+  });
+});
+
+/**
+ * DCR-FR-18 / DCR-FR-QXFU end to end through the shell: the draft subscriber
+ * reads the event's cause.
+ */
+describe("draft proposal events by cause (DCR-FR-18 / DCR-FR-QXFU)", () => {
+  const draftEvent = (cause: string, state = "pending", draftId = "d1") =>
+    fireBusEvent("draft-change-proposals-changed", {
+      draftId,
+      cause,
+      proposal: {
+        id: `p-${draftId}`,
+        draftId,
+        path: "prompt.md",
+        agent: { kind: "agent", agentId: "a1", handle: "arch" },
+        rationale: "Tightened the second paragraph.",
+        threadId: "t1",
+        commentId: "c1",
+        state,
+        candidateEdited: false,
+        legacy: false,
+        hunkCount: 1,
+        counts: { pending: 1, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
+        ledger: [],
+        createdAt: "2026-08-01T10:00:00Z",
+      },
+    });
+  const posts = () =>
+    invokeMock.mock.calls
+      .filter((c) => c[0] === "post_notification")
+      .map((c) => (c[1] as { request: Record<string, unknown> }).request);
+
+  let focusSpy: { mockRestore: () => void } | null = null;
+  beforeEach(() => {
+    resetTabIndications();
+    resetNotifications();
+    vi.mocked(raiseNotification).mockClear();
+    // NTF-FR-08: an unfocused window posts everything it is asked to raise.
+    focusSpy = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  });
+  afterEach(() => {
+    focusSpy?.mockRestore();
+    focusSpy = null;
+  });
+
+  it("DCR-FR-QXFU, DCR-FR-18: an update that leaves the proposal open raises with the recording's key", async () => {
+    render(<App />);
+    await enterIde();
+    draftEvent("recorded");
+    await waitFor(() => expect(posts()).toHaveLength(1));
+
+    draftEvent("updated");
+
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(posts().map((p) => p.key)).toEqual(["draft-proposal:d1", "draft-proposal:d1"]);
+  });
+
+  it("DCR-FR-18, DCR-FR-QXFU: a decision, a hold, and an update that closes the proposal raise nothing", async () => {
+    render(<App />);
+    await enterIde();
+    const cases = [
+      ["decided", "pending", "d3"],
+      ["held", "pending", "d4"],
+      ["updated", "accepted", "d5"],
+      ["updated", "rejected", "d6"],
+    ] as const;
+    for (const [cause, state, draftId] of cases) {
+      draftEvent(cause, state, draftId);
+      // The store holds the proposal in that state, so the shell handled this
+      // event — and it asked the facility for nothing while it did.
+      await waitFor(() =>
+        expect(draftProposalsOf(draftId).map((p) => p.state)).toEqual([state]),
+      );
+      expect(vi.mocked(raiseNotification), `after ${cause} (${state})`).not.toHaveBeenCalled();
+    }
+    // A recording after them is the first thing posted.
+    draftEvent("recorded", "pending", "d2");
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0].key).toBe("draft-proposal:d2");
+    expect(vi.mocked(raiseNotification)).toHaveBeenCalledTimes(1);
   });
 });

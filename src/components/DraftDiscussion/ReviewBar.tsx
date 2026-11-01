@@ -6,8 +6,9 @@
  * scrolls, because the counter and the two actions are exactly what scrolling
  * to a change would otherwise take away.
  */
-import type { HunkCounts } from "../../types";
+import type { HunkCounts, HunkLedgerRow } from "../../types";
 import { undecidedCount } from "../../types";
+import { reviewedHunkTotal } from "../../state/draftProposals";
 
 export function ReviewBar({
   proposal,
@@ -28,7 +29,11 @@ export function ReviewBar({
    * DCR-FR-GNRL: what the bar reads of the proposal. Structural, so a draft
    * proposal and a prompt or DOC proposal render one bar.
    */
-  proposal: { hunkCount: number; counts?: HunkCounts };
+  proposal: {
+    hunkCount: number;
+    counts?: HunkCounts;
+    ledger?: readonly HunkLedgerRow[] | null;
+  };
   /** The one-based place of the change under review, or 0 while none is. */
   position: number;
   busy: boolean;
@@ -73,7 +78,8 @@ export function ReviewBar({
   onAcceptAll: () => void;
   onRejectAll: () => void;
 }) {
-  const total = proposal.hunkCount;
+  // DCR-FR-11 / DCR-FR-OZVU: the bar does not count a withdrawn change.
+  const total = reviewedHunkTotal(proposal);
   const left = undecidedCount(proposal.counts);
   return (
     <div className="dds-review" role="region" aria-label="Proposed changes">

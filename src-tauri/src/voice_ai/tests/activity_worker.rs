@@ -31,6 +31,16 @@ const PRE_ROLL: usize = 5120;
 #[derive(Default)]
 struct Calls {
     started: Vec<Vec<String>>,
+    /// The `chunked` of each start (VOP-FR-ERDS).
+    chunked: Vec<bool>,
+    /// The short pauses that the session reported, by capture.
+    pauses: Vec<String>,
+    /// Whether a reported pause ends a chunk.
+    pause_ends_chunk: bool,
+    /// The captures whose utterance ended (VOP-FR-WCSB).
+    ended: Vec<String>,
+    /// The captures that settled.
+    gone: Vec<String>,
     appended: Vec<(String, Vec<i16>)>,
     cancelled: Vec<String>,
     changes: Vec<ActivityChange>,
@@ -49,12 +59,18 @@ impl ActivityHost for Host {
         self.0.lock().unwrap().settings.unwrap_or(Settings::new(500, VoiceVadSensitivity::Medium))
     }
 
-    fn start_capture(&self, _: u32, keyterms: Vec<String>) -> Result<VoiceCaptureStart, String> {
+    fn start_capture(
+        &self,
+        _: u32,
+        keyterms: Vec<String>,
+        chunked: bool,
+    ) -> Result<VoiceCaptureStart, String> {
         let mut calls = self.0.lock().unwrap();
         if let Some(code) = calls.refusal.clone() {
             return Err(code);
         }
         calls.started.push(keyterms);
+        calls.chunked.push(chunked);
         Ok(VoiceCaptureStart {
             session_id: format!("capture-{}", calls.started.len()),
             route: TranscriptionRoute::Realtime,
@@ -70,6 +86,21 @@ impl ActivityHost for Host {
         calls.order.push("append".to_string());
         calls.appended.push((capture_id.to_string(), samples));
         Ok(())
+    }
+
+    fn chunk_pause(&self, capture_id: &str) -> bool {
+        let mut calls = self.0.lock().unwrap();
+        calls.order.push("pause".to_string());
+        calls.pauses.push(capture_id.to_string());
+        calls.pause_ends_chunk
+    }
+
+    fn end_capture(&self, capture_id: &str) {
+        self.0.lock().unwrap().ended.push(capture_id.to_string());
+    }
+
+    fn capture_alive(&self, capture_id: &str) -> bool {
+        !self.0.lock().unwrap().gone.iter().any(|id| id == capture_id)
     }
 
     fn cancel_capture(&self, capture_id: &str) {
@@ -349,20 +380,19 @@ fn speech_end_comes_after_the_last_append() {
     assert_eq!(session.host.last().capture_id.as_deref(), Some("capture-1"));
 }
 
-// VOP-FR-FMRV, VOP-FR-QZCE: only the gate that names this capture settles it.
+// VOP-FR-FMRV, VOP-FR-WCSB: after `speech_end`, the next utterance starts at
+// once, and the capture of the last one finishes on its own.
 #[test]
-fn only_the_gate_that_names_the_capture_settles_it() {
+fn the_next_utterance_starts_at_once_after_speech_end() {
     let mut session = Session::new();
     session.confirm();
     session.end();
-
-    session.gate(|g| g.settled = Some("capture-0".to_string()));
-    session.feed(&[SPEECH; 20]);
-    assert_eq!(session.host.states().len(), 3);
-
-    session.gate(|g| g.settled = Some("capture-1".to_string()));
+    assert_eq!(session.host.0.lock().unwrap().ended, vec!["capture-1".to_string()]);
     session.feed(&[SPEECH]);
     assert_eq!(session.host.last().state, ActivityState::SpeechStart);
+    session.feed(&[SPEECH; 10]);
+    assert_eq!(session.host.last().capture_id.as_deref(), Some("capture-2"));
+    assert!(session.host.0.lock().unwrap().cancelled.is_empty());
 }
 
 // VOP-FR-QZCE: a gate that arrives late has no effect.
@@ -407,10 +437,7 @@ fn a_capture_takes_the_keyterms_of_the_newest_gate() {
     session.confirm();
     assert_eq!(session.host.0.lock().unwrap().started[0], vec!["arch".to_string()]);
     session.end();
-    session.gate(|g| {
-        g.settled = Some("capture-1".to_string());
-        g.keyterms = vec!["helga".to_string()];
-    });
+    session.gate(|g| g.keyterms = vec!["helga".to_string()]);
     session.confirm();
     assert_eq!(session.host.0.lock().unwrap().started[1], vec!["helga".to_string()]);
 }
@@ -548,7 +575,7 @@ fn a_close_after_the_settle_returns_nothing() {
     let mut session = Session::new();
     session.confirm();
     session.end();
-    session.gate(|g| g.settled = Some("capture-1".to_string()));
+    session.host.set(|c| c.gone.push("capture-1".to_string()));
     assert_eq!(session.close(false), None);
 }
 
@@ -658,4 +685,60 @@ async fn a_command_for_a_session_that_went_has_no_effect() {
     assert_eq!(bench.voice.close_activity(&id, true).await, Ok(None));
     let fed = bench.voice.feed_activity(&id, vec![0; FRAME]).await;
     assert_eq!(fed, Err(ERR_SESSION_LOST.to_string()));
+}
+
+// VOP-FR-ERDS, VOP-FR-QZCE: a capture opens chunked when the last applied gate
+// says so, and a gate that comes late does not change it.
+#[test]
+fn a_capture_opens_chunked_when_the_last_gate_says_so() {
+    let mut session = Session::new();
+    session.confirm();
+    session.end();
+    session.gate(|g| g.chunked = true);
+    session.worker.handle(Message::Gate(Gate { seq: 0, ..Gate::default() }));
+    session.confirm();
+    assert_eq!(session.host.0.lock().unwrap().chunked, vec![false, true]);
+}
+
+// VOP-FR-YDVH, VOP-FR-JRVF, VOP-FR-DICU: in a chunked capture, the session's
+// detector reports a short pause after the audio of the pause reached the
+// capture, and after `speech_confirmed`. A capture that is not chunked gets no
+// pause.
+#[test]
+fn the_session_detector_reports_short_pauses_of_a_chunked_capture() {
+    let mut session = Session::new();
+    session.confirm();
+    session.feed(&[QUIET; 8]);
+    assert!(session.host.0.lock().unwrap().pauses.is_empty(), "not chunked");
+    session.end();
+
+    session.gate(|g| g.chunked = true);
+    session.confirm();
+    session.feed(&[QUIET; 7]);
+    assert!(session.host.0.lock().unwrap().pauses.is_empty(), "under 250 ms");
+    session.feed(&[QUIET]);
+    let calls = session.host.0.lock().unwrap();
+    assert_eq!(calls.pauses, vec!["capture-2".to_string()]);
+    let confirmed = calls.order.iter().rposition(|o| o == "SpeechConfirmed").unwrap();
+    let paused = calls.order.iter().position(|o| o == "pause").unwrap();
+    assert!(confirmed < paused);
+    assert_eq!(calls.order[paused - 1], "append");
+}
+
+// VOP-FR-JRVF: after a chunk ends, the next pause needs new speech. The silence
+// timeout still ends the utterance.
+#[test]
+fn a_chunk_end_waits_for_new_speech_and_the_utterance_still_ends() {
+    let mut session = Session::new();
+    session.gate(|g| g.chunked = true);
+    session.host.set(|c| c.pause_ends_chunk = true);
+    session.confirm();
+    session.feed(&[QUIET; 8]);
+    session.feed(&[QUIET; 4]);
+    assert_eq!(session.host.0.lock().unwrap().pauses.len(), 1);
+    session.feed(&[SPEECH; 3]);
+    session.feed(&[QUIET; 8]);
+    assert_eq!(session.host.0.lock().unwrap().pauses.len(), 2);
+    session.end();
+    assert_eq!(session.host.last().state, ActivityState::SpeechEnd);
 }

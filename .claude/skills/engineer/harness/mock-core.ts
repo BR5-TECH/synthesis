@@ -1655,7 +1655,7 @@ const proposalsByDraft: Record<string, any[]> = {
       candidateEdited: false,
       legacy: false,
       hunkCount: 4,
-      counts: { pending: 4, accepted: 0, rejected: 0, discussing: 0 },
+      counts: { pending: 4, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
       ledger: [
         { id: "h-1", kind: "replace", state: "pending", edited: false, revision: 0 },
         { id: "h-2", kind: "add", state: "pending", edited: false, revision: 0 },
@@ -1676,7 +1676,7 @@ const proposalsByDraft: Record<string, any[]> = {
       candidateEdited: false,
       legacy: false,
       hunkCount: 1,
-      counts: { pending: 0, accepted: 1, rejected: 0, discussing: 0 },
+      counts: { pending: 0, accepted: 1, rejected: 0, discussing: 0, withdrawn: 0 },
       ledger: [
         { id: "h-0", kind: "replace", state: "accepted", edited: false, revision: 0 },
       ],
@@ -1700,7 +1700,7 @@ const proposalsByDraft: Record<string, any[]> = {
       candidateEdited: false,
       legacy: false,
       hunkCount: 3,
-      counts: { pending: 3, accepted: 0, rejected: 0, discussing: 0 },
+      counts: { pending: 3, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
       ledger: [
         { id: "h-31", kind: "add", state: "pending", edited: false, revision: 0 },
         { id: "h-32", kind: "add", state: "pending", edited: false, revision: 0 },
@@ -1880,7 +1880,7 @@ const proposalHunks: Record<string, any[]> = {
  */
 function recountProposal(row: any): void {
   const ledger = row.ledger ?? [];
-  const counts = { pending: 0, accepted: 0, rejected: 0, discussing: 0 };
+  const counts = { pending: 0, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 };
   for (const r of ledger) counts[r.state as keyof typeof counts] += 1;
   row.counts = counts;
   row.hunkCount = ledger.length;
@@ -9307,6 +9307,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const target = hunks.find((h) => h.id === String(a.hunkId ?? ""));
       if (!target) throw "hunk_not_found";
       const ledgerRow = row?.ledger?.find((r: any) => r.id === target.id);
+      // DCP-FR-MKIM / PCP-FR-18: a withdrawn change takes no edit.
+      if (ledgerRow?.state === "withdrawn") throw "hunk_withdrawn";
       if (ledgerRow && ledgerRow.state !== "pending" && ledgerRow.state !== "discussing") {
         throw "hunk_already_decided";
       }
@@ -9328,6 +9330,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (!row) throw "proposal_not_found";
       const ledgerRow = row.ledger?.find((r: any) => r.id === String(a.hunkId ?? ""));
       if (!ledgerRow) throw "hunk_not_found";
+      // DCP-FR-MKIM / PCP-FR-18: a withdrawn change takes no hold.
+      if (ledgerRow.state === "withdrawn") throw "hunk_withdrawn";
       if (ledgerRow.state === "accepted" || ledgerRow.state === "rejected") {
         throw "hunk_already_decided";
       }
@@ -9336,6 +9340,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       fireBus("draft-change-proposals-changed", {
         draftId: row.draftId,
         proposal: { ...row },
+        cause: "held",
       });
       return { ...row };
     }
@@ -9358,6 +9363,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const hunk = (proposalHunks[id] ?? []).find((h) => h.id === hunkId);
       if (!ledgerRow || !hunk) throw "hunk_not_found";
       if (row.state !== "pending") throw "already_decided";
+      // DCP-FR-MKIM: a withdrawn change takes no decision.
+      if (ledgerRow.state === "withdrawn") throw "hunk_withdrawn";
       // DCP-FR-11 / DCP-FR-17: a rejected change can still be accepted while
       // the proposal is open; nothing else is decided twice.
       if (
@@ -9393,6 +9400,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       fireBus("draft-change-proposals-changed", {
         draftId: row.draftId,
         proposal: { ...row },
+        cause: "decided",
       });
       if (accepted) fireBus("drafts-changed", null);
       // DCP-FR-15: the comment that answers the agent is appended by the
@@ -9425,6 +9433,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       fireBus("draft-change-proposals-changed", {
         draftId: row.draftId,
         proposal: { ...row },
+        cause: "decided",
       });
       return {
         proposal: { ...row },
@@ -9490,6 +9499,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const target = hunks.find((h) => h.id === String(a.hunkId ?? ""));
       if (!target) throw "hunk_not_found";
       const ledgerRow = row.ledger.find((r: any) => r.id === target.id);
+      // DCP-FR-MKIM / PCP-FR-18: a withdrawn change takes no edit.
+      if (ledgerRow?.state === "withdrawn") throw "hunk_withdrawn";
       if (ledgerRow && ledgerRow.state !== "pending" && ledgerRow.state !== "discussing") {
         throw "hunk_already_decided";
       }
@@ -9507,12 +9518,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (!row) throw "proposal_not_found";
       const ledgerRow = row.ledger.find((r: any) => r.id === String(a.hunkId ?? ""));
       if (!ledgerRow) throw "hunk_not_found";
+      // DCP-FR-MKIM / PCP-FR-18: a withdrawn change takes no hold.
+      if (ledgerRow.state === "withdrawn") throw "hunk_withdrawn";
       if (ledgerRow.state === "accepted" || ledgerRow.state === "rejected") {
         throw "hunk_already_decided";
       }
       ledgerRow.state = a.discussing ? "discussing" : "pending";
       recountProposal(row);
-      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row }, cause: "held" });
       return { ...row };
     }
     /**
@@ -9536,6 +9549,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const ledgerRow = row.ledger.find((r: any) => r.id === hunkId);
       const hunk = (promptHunksOf(id) ?? []).find((h) => h.id === hunkId);
       if (!ledgerRow || !hunk) throw "hunk_not_found";
+      // PCP-FR-18: a withdrawn change takes no decision.
+      if (ledgerRow.state === "withdrawn") throw "hunk_withdrawn";
       if (ledgerRow.state === "accepted" || (ledgerRow.state === "rejected" && !accepted)) {
         throw "hunk_already_decided";
       }
@@ -9567,10 +9582,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const resolved = row.state !== "pending";
       if (accepted && resolved && harnessFlag("promptAcceptOwed")) {
         row.commentOwed = true;
-        fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+        fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row }, cause: "decided" });
         throw "acceptance_incomplete";
       }
-      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row }, cause: "decided" });
       // PCP-FR-RSLV: only the resolving decision appends the decision comment.
       return {
         proposal: { ...row },
@@ -9592,7 +9607,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         }
       }
       recountProposal(row);
-      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row } });
+      fireBus("prompt-change-proposals-changed", { artifactId: row.artifactId, proposal: { ...row }, cause: "decided" });
       return {
         proposal: { ...row },
         resolved: true,
@@ -9616,6 +9631,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       fireBus("prompt-change-proposals-changed", {
         artifactId: found.artifactId,
         proposal: { ...found },
+        cause: "decided",
       });
       return {
         proposal: { ...found },

@@ -17,6 +17,7 @@ vi.mock("./capture", async (original) => ({
 }));
 
 import { getDiscussionSession } from "../state/discussionSession";
+import { getLiveBubble } from "../state/liveBubble";
 import { getVoiceState, patchVoiceState } from "../state/voiceSession";
 import { MicrophoneError } from "./capture";
 import {
@@ -38,7 +39,6 @@ import {
 } from "../test/voiceVadKit";
 import {
   RECORDING_LIMIT_MS,
-  SURFACE_GRACE_MS,
   TAIL_MS,
   endVoiceForTeardown,
   enterVoiceMode,
@@ -390,22 +390,47 @@ describe("utterances", () => {
         live: live ?? false,
         recordingSince: Date.now(),
       });
+      // VOM-FR-HUXY: a chunked utterance shows its live text in the live bubble.
       noteTranscript("c1", "words");
-      expect(getVoiceState().transcript).toBe("words");
+      expect(getLiveBubble().parts[0]).toMatchObject({ captureId: "c1", liveText: "words" });
     },
   );
 
-  it("VOM-FR-OTRF, VOM-FR-KHGC: the detector waits until the utterance settled", async () => {
+  it("VOM-FR-OTRF, VOM-FR-GBCN, VOM-FR-VOUG: the detector does not wait for the transcript", async () => {
     await confirmed();
     const finish = deferred<string>();
     api.finishVoiceCapture.mockReturnValueOnce(finish.promise);
     noteActivity(change("speech_end", { captureId: "c1" }));
-    expect(getVoiceState()).toMatchObject({ phase: "transcribing", hearing: false, vadOpen: true });
-    expect(lastGate()).toMatchObject({ blocked: true, settled: null });
+    await settle();
+    expect(getVoiceState()).toMatchObject({
+      phase: "idle",
+      hearing: false,
+      vadOpen: true,
+      transcribing: 1,
+    });
+    expect(lastGate()).toMatchObject({ blocked: false, chunked: true });
+    expect(lastGate()).not.toHaveProperty("settled");
     finish.resolve("hello");
     await settle();
-    expect(lastGate()).toMatchObject({ blocked: false, settled: "c1" });
+    expect(getVoiceState().transcribing).toBe(0);
     expect(bench.composer.post).toHaveBeenCalledWith("hello");
+  });
+
+  it("VOM-FR-QCZQ, VOM-FR-GBCN: a second utterance records while the first transcribes, and posts after it", async () => {
+    await confirmed();
+    const first = deferred<string>();
+    api.finishVoiceCapture.mockReturnValueOnce(first.promise);
+    noteActivity(change("speech_end", { captureId: "c1" }));
+    noteActivity(change("speech_start"));
+    noteActivity(change("speech_confirmed", { captureId: "c2", live: true }));
+    expect(getVoiceState().phase).toBe("recording");
+    api.finishVoiceCapture.mockResolvedValueOnce("second");
+    noteActivity(change("speech_end", { captureId: "c2" }));
+    await settle();
+    expect(bench.composer.post).not.toHaveBeenCalled();
+    first.resolve("first");
+    await settle();
+    expect(vi.mocked(bench.composer.post).mock.calls.map((c) => c[0])).toEqual(["first", "second"]);
   });
 
   it("VOM-FR-OTRF: one session takes many utterances", async () => {
@@ -417,7 +442,7 @@ describe("utterances", () => {
     noteActivity(change("speech_end", { captureId: "c2" }));
     await settle();
     expect(bench.composer.post).toHaveBeenCalledTimes(2);
-    expect(lastGate()).toMatchObject({ settled: "c2" });
+    expect(lastGate()).toMatchObject({ blocked: false });
     expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
   });
 
@@ -447,11 +472,11 @@ describe("utterances", () => {
     expect(api.cancelVoiceSpeech).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-OTRF: a capture that nobody here knows does not hold the detector", async () => {
+  it("VOM-FR-OTRF: a capture that nobody here knows is cancelled", async () => {
     await openSession();
     noteActivity(change("speech_end", { captureId: "c9" }));
     expect(api.cancelVoiceCapture).toHaveBeenCalledWith("c9");
-    expect(lastGate()).toMatchObject({ settled: "c9" });
+    expect(bench.composer.post).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-KVHG: a capture that nobody here knows still resumes a paused reply", async () => {
@@ -461,13 +486,13 @@ describe("utterances", () => {
     expectSettledWith(true);
   });
 
-  it("VOM-FR-ABPU, VOM-FR-KHGC: a throw in the post keeps the text and frees the detector", async () => {
+  it("VOM-FR-ABPU: a throw in the post keeps the text, and the detector listens on", async () => {
     await confirmed(handle({ post: vi.fn(async () => Promise.reject(new Error("broken"))) }));
     noteActivity(change("speech_end", { captureId: "c1" }));
     await settle();
     expect(getDiscussionSession(KEY).body).toBe("hello");
     expect(getVoiceState()).toMatchObject({ phase: "idle", note: "kept_in_body", transcript: "" });
-    expect(lastGate()).toMatchObject({ settled: "c1", blocked: false });
+    expect(lastGate()).toMatchObject({ blocked: false });
   });
 });
 
@@ -496,74 +521,67 @@ describe("the gate and the surfaces", () => {
     expect(lastGate()).toMatchObject({ keyterms: ["helga"] });
   });
 
-  it("VOM-FR-GZPA, VOM-FR-EGNX: with no surface, speech stops and the session closes at 2 s", async () => {
-    expect(SURFACE_GRACE_MS).toBe(2000);
+  it("VOM-FR-BCRD: with no surface, speech goes on and the session stays open", async () => {
     await openSession();
     await replyPlays();
     bench.unregister();
-    expect(getVoiceState().playing).toBe(false);
-    expect(lastGate()).toMatchObject({ blocked: true });
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS - 1);
+    expect(getVoiceState().playing).toBe(true);
+    expect(lastGate()).toMatchObject({ blocked: false });
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getVoiceState().vadOpen).toBe(true);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(getVoiceState().vadOpen).toBe(false);
   });
 
-  it("VOM-FR-GZPA: a composer that comes back keeps the session", async () => {
+  it("VOM-FR-BCRD: a remount and an unmount do not close the session", async () => {
     await openSession();
     bench.unregister();
-    await vi.advanceTimersByTimeAsync(1000);
     const back = registerVoiceComposer(KEY, handle());
-    expect(lastGate()).toMatchObject({ blocked: false });
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS * 2);
-    expect(getVoiceState().vadOpen).toBe(true);
     back();
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS);
-    expect(getVoiceState().vadOpen).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getVoiceState().vadOpen).toBe(true);
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-GZPA, VOM-FR-VGLT, VOM-FR-GTAQ: a standby handle keeps the session, blocked", async () => {
+  it("VOM-FR-VGLT, VOM-FR-GTAQ: a standby handle blocks the session, and the composer frees it", async () => {
     await openSession();
     bench.unregister();
     const standby = registerVoiceComposer(KEY, handle({ blocked: () => true, nicknames: () => [] }));
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS * 2);
     expect(getVoiceState().vadOpen).toBe(true);
     expect(lastGate()).toMatchObject({ blocked: true, keyterms: [] });
     standby();
     const back = registerVoiceComposer(KEY, handle());
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS * 2);
     expect(getVoiceState().vadOpen).toBe(true);
     expect(lastGate()).toMatchObject({ blocked: false, keyterms: ["arch"] });
     back();
   });
 
-  it("VOM-FR-GZPA, VOM-FR-ABPU: an utterance with no surface keeps its text in the body", async () => {
+  it("VOM-FR-BCRD, VOM-FR-WYIE: an utterance with no surface posts through the retained handle", async () => {
     await confirmed();
-    api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
     bench.unregister();
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS + TAIL_MS);
-    expect(bench.composer.post).not.toHaveBeenCalled();
-    expect(getDiscussionSession(KEY).body).toBe("hello");
-    expect(getVoiceState().note).toBe("kept_in_body");
+    noteActivity(change("speech_end", { captureId: "c1" }));
+    await settle();
+    expect(bench.composer.post).toHaveBeenCalledWith("hello");
+    expect(getDiscussionSession(KEY).body).toBe("");
   });
 
   it.each([
     ["leaving", () => leaveVoiceMode()],
     ["a teardown", () => endVoiceForTeardown()],
-  ])("VOM-FR-GZPA: %s during the grace closes once", async (_, act) => {
+  ])("VOM-FR-LSBQ: %s with no surface closes once", async (_, act) => {
     await openSession();
     bench.unregister();
     act();
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS * 2);
+    await vi.advanceTimersByTimeAsync(TAIL_MS * 4);
     expect(api.closeVoiceActivitySession).toHaveBeenCalledTimes(1);
   });
 
-  it("VOM-FR-MQHD: voice mode starts in Push-to-Talk each time", async () => {
+  it("VOM-FR-KEMU, VOM-FR-PDZR: a new entry opens no session until a press", async () => {
     await openSession();
     leaveVoiceMode();
     await settle();
     enterVoiceMode(KEY, discussion([]));
-    expect(getVoiceState()).toMatchObject({ inputMode: "ptt", vadOpen: false });
+    await settle();
+    expect(getVoiceState().vadOpen).toBe(false);
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
   });
 
   it("VOM-FR-VGCE: VAD waits for an idle phase, and Push-to-Talk does not", () => {

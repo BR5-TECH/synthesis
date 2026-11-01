@@ -142,6 +142,7 @@ mod rig_bridge;
 mod rig_messages;
 mod seam;
 mod sections;
+mod speech;
 mod steering;
 mod tool_dispatch;
 mod tool_wiring;
@@ -172,6 +173,7 @@ pub use rig_bridge::*;
 pub use rig_messages::*;
 pub use seam::*;
 use sections::*;
+pub use speech::*;
 use steering::*;
 use tool_dispatch::*;
 use tool_wiring::*;
@@ -532,6 +534,23 @@ fn conversation_tools<R: tauri::Runtime>(
             ),
         ));
     }
+    // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool, by the same
+    // rule. Never both, none on a note, and neither ends the turn (CVL-FR-15).
+    if origin.is_draft() {
+        tools.push(erase_tool(crate::tools::decide_draft_changes::DecideDraftChangesTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+        )));
+    } else if origin.is_artifact() {
+        tools.push(erase_tool(crate::tools::decide_prompt_changes::DecidePromptChangesTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+        )));
+    }
     tools
 }
 
@@ -710,13 +729,18 @@ pub fn retry_impl<R: tauri::Runtime>(
     // `dispatch_impl` reads the registry off the app handle itself. The `State`
     // here is only a shared reference and holds no lock, so the two do not
     // contend.
+    // AGC-FR-ANBX: an entry always names its trigger comment, because a turn
+    // with none is never entered.
+    let Some(trigger_comment_id) = failed.trigger_comment_id.clone() else {
+        return Err(ERR_TURN_NOT_FOUND.to_string());
+    };
     dispatch_impl(
         app,
         roots,
         project_key,
         &failed.nickname,
         failed.origin.clone(),
-        &failed.trigger_comment_id,
+        &trigger_comment_id,
     )
     .inspect_err(|reason| {
         // AGC-FR-32 / CTA-FR-UUXA: a dispatch refused synchronously leaves the

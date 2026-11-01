@@ -17,6 +17,8 @@ import { errorCode } from "./voiceMessages";
 export interface VadGate {
   blocked: boolean;
   playing: boolean;
+  /** VOP-FR-ERDS: the next VAD capture opens chunked. */
+  chunked: boolean;
   keyterms: string[];
 }
 
@@ -29,7 +31,6 @@ export interface VadSource {
 export class VadSession {
   private seq = 0;
   private sent = "";
-  private settled: string | null = null;
   private closed = false;
   private micStopped = false;
   private loss: string | null = null;
@@ -84,7 +85,7 @@ export class VadSession {
   /** VOP-FR-QZCE: a push goes only when the record changed. */
   pushGate(): void {
     if (this.closed) return;
-    const gate = { ...this.source.gate(), settled: this.settled };
+    const gate = this.source.gate();
     const record = JSON.stringify(gate);
     if (record === this.sent) return;
     this.sent = record;
@@ -94,12 +95,6 @@ export class VadSession {
         code: errorCode(error),
       });
     });
-  }
-
-  /** VOP-FR-FMRV. */
-  settle(captureId: string): void {
-    this.settled = captureId;
-    this.pushGate();
   }
 
   /** The audio of the session stops here. The rest waits in the batcher. */

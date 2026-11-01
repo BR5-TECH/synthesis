@@ -30,6 +30,9 @@ pub enum HunkState {
     Rejected,
     /// Held for discussion. Undecided, so it still holds the draft's one slot.
     Discussing,
+    /// DCP-FR-IAFV: taken back by its agent's update. Neither undecided nor
+    /// decided, and it counts for neither final state (DCP-FR-PWSF).
+    Withdrawn,
 }
 
 impl HunkState {
@@ -38,9 +41,10 @@ impl HunkState {
         matches!(self, HunkState::Pending | HunkState::Discussing)
     }
 
-    /// DCP-FR-XDRV: a hunk its agent may still replace — an undecided one, or
-    /// one the author rejected while the proposal stands.
-    pub fn is_revisable(self) -> bool {
+    /// DCP-FR-TQBO / DCP-FR-IAFV: a hunk its agent's update may still change
+    /// or withdraw — an undecided one, or one the author rejected while the
+    /// proposal stands.
+    pub fn is_updatable(self) -> bool {
         self.is_undecided() || self == HunkState::Rejected
     }
 }
@@ -119,6 +123,10 @@ pub struct HunkCounts {
     pub rejected: u32,
     #[serde(default)]
     pub discussing: u32,
+    /// DCP-FR-PWSF: absent from a record written before hunks could be
+    /// withdrawn, and then zero.
+    #[serde(default)]
+    pub withdrawn: u32,
 }
 
 impl HunkCounts {
@@ -130,6 +138,7 @@ impl HunkCounts {
                 HunkState::Accepted => c.accepted += 1,
                 HunkState::Rejected => c.rejected += 1,
                 HunkState::Discussing => c.discussing += 1,
+                HunkState::Withdrawn => c.withdrawn += 1,
             }
         }
         c
@@ -142,7 +151,8 @@ impl HunkCounts {
 
 /// The three spellings every surface keys off. A proposal is `pending` while any
 /// hunk is undecided, `accepted` once all are decided and at least one was
-/// accepted, and `rejected` otherwise (DCP-FR-PWSF).
+/// accepted, and `rejected` otherwise (DCP-FR-PWSF). A withdrawn hunk counts for
+/// neither final state.
 pub fn derive_state(counts: &HunkCounts) -> &'static str {
     if counts.undecided() > 0 {
         "pending"

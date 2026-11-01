@@ -50,6 +50,10 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use super::proposal_updates::{
+    self, updates_or_none, UpdateArg, UPDATE_CHANGE_SETTLED, UPDATE_MALFORMED, UPDATE_NAMED_TWICE,
+    UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
+};
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PROPOSAL_NO_CHANGE,
     PROPOSAL_RATIONALE_BLANK, RATIONALE_NO_SPOKEN_PART,
@@ -57,7 +61,7 @@ use super::{
 
 use crate::agent_conversations::ConversationOrigin;
 use crate::comments::{self, Participant, ThreadRef};
-use crate::draft_proposals::{self, NewProposal, RecordRefusal};
+use crate::draft_proposals::{self, NewProposal, ProposalUpdate, RecordRefusal, UpdateRefusal};
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
 use crate::text_hunks::hunks::ContextSide;
@@ -73,11 +77,21 @@ mod tests;
 pub const NAME: &str = "propose_draft_changes";
 
 /// PDC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it; the rest of what you would change waits until the author has decided the changes already standing. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When your proposal is still open and the discussion asks for a different change, send `updates` in place of `hunks`. Each update gives `action`: `change` with the `id` of a change and its new fields, `add` with the fields of a new change, or `withdraw` with the `id` of a change you no longer offer. One call can hold several updates, and it also takes a `rationale`. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The draft-relative path of the draft's prompt, which is the one file a draft holds and the only thing you can propose changes to.";
 
-const HUNKS_DESCRIPTION: &str = "The changes, in the order they should be read. In each, `before` is the exact existing text you are changing, copied character for character from the prompt, and `after` is what should stand in its place. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone. The text you name must appear only once in the prompt. When it does not, give `lead`, the exact text immediately before it, or `trail`, the exact text immediately after it, or both, up to 200 characters each: the text `lead` + `before` + `trail` must then appear once, and only `before` changes. For an insertion, `lead` and `trail` stand around `after_text`.";
+const HUNKS_DESCRIPTION: &str = "The changes, in the order they should be read. In each, `before` is the exact existing text you are changing, copied character for character from the prompt, and `after` is what should stand in its place. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone. The text you name must appear only once in the prompt. When it does not, give `lead`, the exact text immediately before it, or `trail`, the exact text immediately after it, or both, up to 200 characters each: the text `lead` + `before` + `trail` must then appear once, and only `before` changes. For an insertion, `lead` and `trail` stand around `after_text`. Leave it out when you pass `updates`.";
+
+/// PDC-FR-GMWR: the parameter text of `updates`.
+const UPDATES_DESCRIPTION: &str = "Changes to your proposal that is still open, in place of `hunks`. Each update gives `action`. `change` gives the `id` of a change and its new `before`, `after`, `after_text`, `lead`, and `trail`, with the rules of `hunks`; the change keeps its id and the author decides it again. `add` gives the fields of a new change and no `id`. `withdraw` gives the `id` of a change you no longer offer. A change that is accepted or withdrawn can not be updated. Updates must not cover the same text as each other or as another change still standing.";
+
+/// PDC-FR-GPLQ: `hunks` and `updates` together.
+pub const PROPOSAL_NOT_ONE_FORM: &str =
+    "Pass `hunks` for a new proposal or `updates` for your open proposal, not both.";
+/// PDC-FR-LGWJ: `updates` where no proposal is open.
+pub const PROPOSAL_NO_OPEN: &str =
+    "No proposal is open on this draft, so there is nothing to update. Send your changes as a new proposal in `hunks`.";
 
 /// PDC-FR-TZKQ: the refusals record-time placement produces, each naming the
 /// correction the model has to make.
@@ -99,39 +113,6 @@ pub const PROPOSAL_TRAIL_TOO_LONG: &str =
 pub const PROPOSAL_LEAD_AND_TRAIL_TOO_LONG: &str =
     "The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name.";
 
-/// The side a revision's `hunk_context_too_long:<side>` error names, if the
-/// error is that one (PDC-FR-DMTH).
-fn revision_context_side(error: &str) -> Option<ContextSide> {
-    error
-        .strip_prefix(crate::draft_proposals::ERR_HUNK_CONTEXT_TOO_LONG)?
-        .strip_prefix(':')
-        .and_then(ContextSide::parse)
-}
-
-/// The refusal for an error of a revision (PDC-FR-TZKQ, PDC-FR-GMWR).
-///
-/// PDC-FR-DMTH: a revision carries one change, so a context over its bound is
-/// named by side and with no place.
-fn revision_refusal(error: &str) -> ToolRefusal {
-    if let Some(side) = revision_context_side(error) {
-        return ToolRefusal::InvalidArguments(context_too_long(side));
-    }
-    match error {
-        crate::draft_proposals::ERR_ANCHOR_LOST => {
-            ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_FOUND)
-        }
-        crate::draft_proposals::ERR_HUNK_AMBIGUOUS => {
-            ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_UNIQUE)
-        }
-        crate::draft_proposals::ERR_HUNK_NOT_FOUND
-        | crate::draft_proposals::ERR_HUNK_ALREADY_DECIDED
-        | crate::draft_proposals::ERR_PROPOSAL_NOT_FOUND => {
-            ToolRefusal::InvalidArguments(PROPOSAL_NO_SUCH_CHANGE)
-        }
-        _ => ToolRefusal::ProposalNotRecorded,
-    }
-}
-
 /// The refusal text for the context that is too long (PDC-FR-DMTH, PPC-FR-KWQB).
 fn context_too_long(side: ContextSide) -> &'static str {
     match side {
@@ -141,10 +122,6 @@ fn context_too_long(side: ContextSide) -> &'static str {
     }
 }
 
-pub const PROPOSAL_REVISE_ONE: &str =
-    "You named a change to replace, so send only the one change that replaces it. Wait for the author to decide the changes already standing before you propose the rest.";
-pub const PROPOSAL_NO_SUCH_CHANGE: &str =
-    "The change you named is not one of the changes you can still revise. Propose a new change instead.";
 pub const PROPOSAL_HUNKS_OVERLAP: &str =
     "Two of your changes cover the same text. Combine them into one change.";
 
@@ -180,7 +157,8 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         ToolRefusal::InvalidArguments(message) => message,
         // A refusal about one change of several carries the same code: which
         // mistake it was does not change because the call held more than one.
-        ToolRefusal::InvalidArgumentsAt { message, .. } => message,
+        ToolRefusal::InvalidArgumentsAt { message, .. }
+        | ToolRefusal::InvalidUpdateAt { message, .. } => message,
         _ => return None,
     };
     Some(match *message {
@@ -191,8 +169,13 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_TRAIL_TOO_LONG => "trail_too_long",
         PROPOSAL_LEAD_AND_TRAIL_TOO_LONG => "lead_and_trail_too_long",
         PROPOSAL_HUNKS_OVERLAP => "changes_overlap",
-        PROPOSAL_REVISE_ONE => "revise_one",
-        PROPOSAL_NO_SUCH_CHANGE => "no_such_change",
+        PROPOSAL_NOT_ONE_FORM => "not_one_form",
+        PROPOSAL_NO_OPEN => "no_open_proposal",
+        UPDATE_NONE => "no_updates",
+        UPDATE_MALFORMED => "update_malformed",
+        UPDATE_NO_SUCH_CHANGE => "no_such_change",
+        UPDATE_CHANGE_SETTLED => "change_already_settled",
+        UPDATE_NAMED_TWICE => "change_named_twice",
         PROPOSAL_RATIONALE_BLANK => "rationale_blank",
         RATIONALE_NO_SPOKEN_PART => "no_spoken_part",
         PROPOSAL_NO_CHANGE => "no_change",
@@ -201,8 +184,6 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         _ => "other",
     })
 }
-
-const REVISES_DESCRIPTION: &str = "The id of a change you were asked about, when you are replacing it with a better one. A call that names a change carries exactly one change — the one that replaces it. Leave it out when you are proposing something new.";
 
 const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 
@@ -245,10 +226,9 @@ pub struct ProposeDraftChangesArgs {
     /// decoder's could only say the call was malformed.
     #[serde(default, deserialize_with = "text_or_none")]
     pub rationale: String,
-    /// PDC-FR-GMWR: the id of a change being replaced, when the agent is
-    /// answering about one it was asked to reconsider.
-    #[serde(default)]
-    pub revises: Option<String>,
+    /// PDC-FR-GMWR: the updates of the open proposal, in place of `hunks`.
+    #[serde(default, deserialize_with = "updates_or_none")]
+    pub updates: Option<Vec<UpdateArg>>,
     /// PDC-FR-04: the changes. A model that sent `null` for the list sent no
     /// changes, which is the **no changes** refusal and not a malformed call —
     /// `#[serde(default)]` covers a field that is absent and not one that is
@@ -355,7 +335,7 @@ pub fn parameters() -> serde_json::Value {
         "properties": {
             "path": { "type": "string", "description": PATH_DESCRIPTION },
             "rationale": { "type": "string", "description": RATIONALE_DESCRIPTION },
-            "revises": { "type": "string", "description": REVISES_DESCRIPTION },
+            "updates": proposal_updates::schema(UPDATES_DESCRIPTION, true),
             "hunks": {
                 "type": "array",
                 "description": HUNKS_DESCRIPTION,
@@ -371,32 +351,31 @@ pub fn parameters() -> serde_json::Value {
                     // their spelling alone, and an object it cannot fill it
                     // leaves empty.
                     "description": HUNK_DESCRIPTION,
-                    "properties": {
-                        "kind": {
-                            "type": "string",
-                            "enum": ["replace", "del", "add"],
-                            "description": KIND_DESCRIPTION,
-                        },
-                        "before": { "type": "string", "description": BEFORE_DESCRIPTION },
-                        "after": { "type": "string", "description": AFTER_DESCRIPTION },
-                        "after_text": {
-                            "type": "string",
-                            "description": AFTER_TEXT_DESCRIPTION,
-                        },
-                        "lead": {
-                            "type": "string",
-                            "description": LEAD_DESCRIPTION,
-                        },
-                        "trail": {
-                            "type": "string",
-                            "description": TRAIL_DESCRIPTION,
-                        },
-                        "note": { "type": "string", "description": NOTE_DESCRIPTION },
-                    },
+                    "properties": hunk_properties(),
                 },
             },
         },
-        "required": ["path", "rationale", "hunks"],
+        // PDC-FR-GPLQ: a call carries `hunks` or `updates`, so neither is
+        // required on its own.
+        "required": ["path", "rationale"],
+    })
+}
+
+/// The properties of one hunk, which `hunks` and the `change` and `add`
+/// entries of `updates` share (PDC-FR-GMWR).
+fn hunk_properties() -> serde_json::Value {
+    serde_json::json!({
+        "kind": {
+            "type": "string",
+            "enum": ["replace", "del", "add"],
+            "description": KIND_DESCRIPTION,
+        },
+        "before": { "type": "string", "description": BEFORE_DESCRIPTION },
+        "after": { "type": "string", "description": AFTER_DESCRIPTION },
+        "after_text": { "type": "string", "description": AFTER_TEXT_DESCRIPTION },
+        "lead": { "type": "string", "description": LEAD_DESCRIPTION },
+        "trail": { "type": "string", "description": TRAIL_DESCRIPTION },
+        "note": { "type": "string", "description": NOTE_DESCRIPTION },
     })
 }
 
@@ -532,11 +511,18 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
             // author's and the model's words and reach no record.
             "hunks" => args.hunks.len(),
             "hunksNamingText" => args.hunks.iter().filter(|h| h.names_text()).count(),
-            "revising" => args.revises.is_some(),
+            "updates" => args.updates.as_ref().map_or(0, Vec::len),
             "rationaleChars" => args.rationale.trim().chars().count(),
         };
         if let Ok((draft_id, _)) = draft_of(&self.origin) {
             fields.insert("draftId".to_string(), serde_json::json!(draft_id));
+        }
+        // PDC-FR-18: for an update, the number of updates of each action.
+        if let Some(updates) = &args.updates {
+            let (changes, adds, withdraws) = proposal_updates::action_counts(updates);
+            fields.insert("updateChanges".to_string(), serde_json::json!(changes));
+            fields.insert("updateAdds".to_string(), serde_json::json!(adds));
+            fields.insert("updateWithdraws".to_string(), serde_json::json!(withdraws));
         }
         let outcome = self.propose(args);
         match &outcome {
@@ -555,7 +541,9 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
                 // tell a model that is one change out from one that invented
                 // the whole set. A count of what the model sent, and no part of
                 // what it wrote.
-                if let ToolRefusal::InvalidArgumentsAt { at, .. } = refusal {
+                if let ToolRefusal::InvalidArgumentsAt { at, .. }
+                | ToolRefusal::InvalidUpdateAt { at, .. } = refusal
+                {
                     fields.insert("refusalAt".to_string(), serde_json::json!(at));
                 }
                 log_tool_refusal_with(&self.app, self.buffer, NAME, refusal, fields)
@@ -575,6 +563,14 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
         // open.
         require_open_project(&self.app)?;
         let (draft_id, thread_id) = draft_of(&self.origin)?;
+
+        // PDC-FR-GPLQ: one form per call.
+        if let Some(updates) = &args.updates {
+            if !args.hunks.is_empty() {
+                return Err(ToolRefusal::InvalidArguments(PROPOSAL_NOT_ONE_FORM));
+            }
+            return self.update(draft_id, thread_id, &args, updates);
+        }
 
         // PDC-FR-07, before anything is resolved on disk. Three distinct
         // refusals rather than one, because each calls for a different
@@ -596,66 +592,8 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
         let proposed: Vec<crate::draft_proposals::hunks::ProposedHunk> =
             args.hunks.iter().map(HunkArg::to_proposed).collect();
 
-        // PDC-FR-GMWR: `revises` is read for what it can mean on the draft as it
-        // stands. A call naming a change the author has still to decide replaces
-        // that one in place, which is how an agent answers about a change held
-        // for discussion.
-        //
-        // A field naming nothing the draft holds is a field the model filled by
-        // mistake, and where the draft carries no standing proposal there is no
-        // change it could have meant. Ignored there rather than refused
-        // (TLC-FR-07): a call that names a change takes this path and never
-        // reaches the recording below, so refusing would leave such a model
-        // unable to propose anything at all — every call it made answered by a
-        // refusal about a change that is not there.
-        use crate::draft_proposals::RevisionTarget;
-        let named = args.revises.as_deref().map(str::trim).filter(|id| !id.is_empty());
-        let target = named.map(|id| {
-            (id, crate::draft_proposals::revision_target(&self.roots.worktree, draft_id, id))
-        });
-        if let Some((_, RevisionTarget::NoSuchChange)) = target {
-            return Err(ToolRefusal::InvalidArguments(PROPOSAL_NO_SUCH_CHANGE));
-        }
-        if let Some((revises, RevisionTarget::Revisable)) = target {
-            // The one-change rule is checked here rather than before the name is
-            // resolved, so a model that named a change wrongly is told **that**
-            // — the correction it has to make — instead of being asked to send
-            // one change against a name that would refuse whatever it sent.
-            if proposed.len() != 1 {
-                return Err(ToolRefusal::InvalidArguments(PROPOSAL_REVISE_ONE));
-            }
-            let outcome = crate::draft_proposals::revise_hunk_impl(
-                &self.roots.worktree,
-                draft_id,
-                revises,
-                &proposed[0],
-            );
-            return match outcome {
-                Ok(proposal) => {
-                    crate::draft_proposals::announce(&self.app, self.buffer, &proposal);
-                    self.proposed.store(true, Ordering::SeqCst);
-                    Ok(ProposeDraftChangesOutput { proposed: true })
-                }
-                // PDC-FR-TZKQ: a revision is placed against the prompt exactly
-                // as a recording is, so it fails in the same ways and must say
-                // so in the same words. A replacement naming text the prompt
-                // does not hold is that mistake and not a name that resolved to
-                // nothing — told apart because the corrections are opposites:
-                // copy the text again, against name a change that is still
-                // there.
-                //
-                // Matched on the arguments this call can get wrong, and never as
-                // a catch-all: a write that failed is nothing the model composed
-                // (TLC-FR-10), and told it had named a change wrongly it would
-                // go and compose a whole new proposal instead of calling again.
-                // The recording path answers a failed write with the same
-                // refusal, this being the same failure.
-                Err(error) => Err(revision_refusal(&error)),
-            };
-        }
-
-        // PDC-FR-ZQOH: a revision appends no comment, so only a call that gets
-        // this far needs a spoken part.
+        // PDC-FR-ZQOH: the rationale is the comment's body, so it carries a
+        // spoken part.
         if crate::comments::spoken_part(&args.rationale).is_none() {
             return Err(ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
         }
@@ -688,6 +626,90 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
         // landed, so a turn is never ended awaiting a decision on nothing.
         self.proposed.store(true, Ordering::SeqCst);
         Ok(ProposeDraftChangesOutput { proposed: true })
+    }
+
+    /// PDC-FR-GMWR: update the open proposal, in one call that appends one
+    /// comment and ends the turn (PDC-FR-VUTJ).
+    fn update(
+        &self,
+        draft_id: &str,
+        thread_id: &str,
+        args: &ProposeDraftChangesArgs,
+        updates: &[UpdateArg],
+    ) -> Result<ProposeDraftChangesOutput, ToolRefusal> {
+        // PDC-FR-GPLQ: an empty list is refused before anything else.
+        if updates.is_empty() {
+            return Err(ToolRefusal::InvalidArguments(UPDATE_NONE));
+        }
+        if args.rationale.trim().is_empty() {
+            return Err(ToolRefusal::InvalidArguments(PROPOSAL_RATIONALE_BLANK));
+        }
+        if !crate::drafts::is_valid_draft_path(&args.path) {
+            return Err(ToolRefusal::ProposalPathMissing);
+        }
+        // PDC-FR-LGWJ: a call about the whole list, so it names no place.
+        let Some(open) = draft_proposals::pending_for(&self.roots.worktree, draft_id) else {
+            return Err(ToolRefusal::InvalidArguments(PROPOSAL_NO_OPEN));
+        };
+        // PDC-FR-05: the path names the draft's prompt, which the open
+        // proposal changes.
+        if args.path.trim() != open.path {
+            return Err(ToolRefusal::ProposalPathMissing);
+        }
+        // PDC-FR-ZQOH: an update appends a comment too.
+        if crate::comments::spoken_part(&args.rationale).is_none() {
+            return Err(ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
+        }
+        // PDC-FR-UOBH: a malformed entry is refused with its place.
+        let entries = proposal_updates::to_entries(updates)?;
+
+        let mut file_rel = String::new();
+        let target =
+            target_for(&self.roots.store, &self.origin, draft_id, thread_id, &mut file_rel)?;
+        // PDC-FR-VUTJ: all or nothing, through the one update path.
+        draft_proposals::update_proposal(
+            &self.app,
+            &self.roots.worktree,
+            &self.roots.store,
+            ProposalUpdate {
+                draft_id,
+                updates: &entries,
+                rationale: &args.rationale,
+                agent: &self.author,
+                target,
+                thread_id,
+            },
+        )
+        .map_err(update_refusal_for)?;
+        // CVL-FR-15: an update ends the turn as a recording does.
+        self.proposed.store(true, Ordering::SeqCst);
+        Ok(ProposeDraftChangesOutput { proposed: true })
+    }
+}
+
+/// `crate::draft_proposals`' update refusals in this tool's terms
+/// (PDC-FR-LGWJ, PDC-FR-UOBH, PDC-FR-DBFT, PDC-FR-DGUC, PDC-FR-VSMM,
+/// PDC-FR-SNUK). A refusal about one update names its place.
+fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
+    let at = |message: &'static str, at: usize, of: usize| ToolRefusal::InvalidUpdateAt {
+        message,
+        at,
+        of,
+    };
+    match refusal {
+        UpdateRefusal::NoOpenProposal => ToolRefusal::InvalidArguments(PROPOSAL_NO_OPEN),
+        UpdateRefusal::NoUpdates => ToolRefusal::InvalidArguments(UPDATE_NONE),
+        UpdateRefusal::PathMissing => ToolRefusal::ProposalPathMissing,
+        UpdateRefusal::HunkNotFound { at: n, of } => at(UPDATE_NO_SUCH_CHANGE, n, of),
+        UpdateRefusal::HunkNotUpdatable { at: n, of } => at(UPDATE_CHANGE_SETTLED, n, of),
+        UpdateRefusal::HunkNamedTwice { at: n, of } => at(UPDATE_NAMED_TWICE, n, of),
+        UpdateRefusal::NoChange { at: n, of } => at(PROPOSAL_NO_CHANGE, n, of),
+        UpdateRefusal::HunkAnchorLost { at: n, of } => at(PROPOSAL_TEXT_NOT_FOUND, n, of),
+        UpdateRefusal::HunkAmbiguous { at: n, of } => at(PROPOSAL_TEXT_NOT_UNIQUE, n, of),
+        UpdateRefusal::HunkOverlap { at: n, of } => at(PROPOSAL_HUNKS_OVERLAP, n, of),
+        UpdateRefusal::HunkContextTooLong { at: n, of, side } => at(context_too_long(side), n, of),
+        UpdateRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
+        UpdateRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
     }
 }
 

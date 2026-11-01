@@ -137,7 +137,7 @@ export function proposalOf(
     candidateEdited: false,
     legacy: false,
     hunkCount: states.length,
-    counts: { pending: 0, accepted: 0, rejected: 0, discussing: 0 },
+    counts: { pending: 0, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
     ledger: states.map((s, at) => ({
       id: `h${at + 1}`,
       kind: "replace",

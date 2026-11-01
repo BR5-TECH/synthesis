@@ -76,7 +76,7 @@ function proposalFor(
   states: HunkState[],
   over: Partial<PromptChangeProposal> = {},
 ): PromptChangeProposal {
-  const counts = { pending: 0, accepted: 0, rejected: 0, discussing: 0 };
+  const counts = { pending: 0, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 };
   for (const s of states) counts[s] += 1;
   const undecided = counts.pending + counts.discussing > 0;
   return fixture({
@@ -257,6 +257,67 @@ describe("PCR-FR-QHZN: the review renders in place", () => {
       expect(screen.queryByRole("region", { name: "Proposed changes" })).toBeNull(),
     );
     expect(screen.queryByTestId("editor-prompt-proposal-indication")).toBeNull();
+  });
+});
+
+describe("PCR-FR-LAGZ: a change accepted elsewhere", () => {
+  it("PCR-FR-LAGZ, DPC-FR-TVKX, PCR-FR-PFOW: a session with no unsaved edit takes the file's new text", async () => {
+    withMd();
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    const reads = callsTo("load_artifact_contents_by_id").length;
+    backend.bodies[MD] = "# Review\n\nThe accepted line.\n\nA second line.\n";
+    version += 1;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["accepted", "pending"]) });
+    });
+    await waitFor(() =>
+      expect(callsTo("load_artifact_contents_by_id").length).toBeGreaterThan(reads),
+    );
+    expect(callsTo("accept_prompt_change_hunk")).toHaveLength(0);
+    await waitFor(() => expect(sessions.get(MD)?.buffer).toContain("The accepted line."));
+  });
+
+  it("PCR-FR-LAGZ, DPC-FR-TVKX: a session with an unsaved edit keeps it, writes nothing over the file, and raises the external-change modal", async () => {
+    withMd();
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    act(() => {
+      sessions.update(MD, { buffer: `${MD_BODY}Typed by the author.\n`, dirty: true });
+    });
+    // The tool wrote the file through the self-write path.
+    backend.bodies[MD] = "# Review\n\nThe accepted line.\n\nA second line.\n";
+    version += 1;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["accepted", "pending"]) });
+    });
+    await waitFor(() => expect(sessions.get(MD)?.conflict).toBe(true));
+    expect(sessions.get(MD)?.buffer).toContain("Typed by the author.");
+    expect(sessions.get(MD)?.dirty).toBe(true);
+    // EDT-FR-70: the write of the buffer waits for the author's choice.
+    expect(await sessions.flush(MD)).toEqual({ ok: false, blocked: "conflict", artifactId: MD });
+    expect(callsTo("save_artifact_contents")).toHaveLength(0);
+    expect(backend.bodies[MD]).toContain("The accepted line.");
+  });
+
+  it("PCR-FR-LAGZ: the first reading of a proposal with an accepted change reads nothing again", async () => {
+    withMd(["accepted", "pending"]);
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    await act(async () => {});
+    expect(callsTo("load_artifact_contents_by_id")).toHaveLength(1);
+    expect(sessions.get(MD)?.conflict).toBe(false);
+  });
+
+  it("PCR-FR-LAGZ: a rejection elsewhere reads nothing again", async () => {
+    withMd();
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    const reads = callsTo("load_artifact_contents_by_id").length;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["rejected", "pending"]) });
+    });
+    expect(callsTo("load_artifact_contents_by_id").length).toBe(reads);
   });
 });
 
@@ -501,5 +562,131 @@ describe("PCR-FR-SKRV: the source surface", () => {
     await waitFor(() => expect(surface.querySelector(".hunk--add")).not.toBeNull());
     expect(within(surface).queryByRole("textbox")).toBeNull();
     expect(surface.querySelector(".hunk--add")).toHaveTextContent("BETA");
+  });
+});
+
+/** Three changes to the source file, one per line. */
+const TXT_THREE: ProposalHunk[] = [
+  hunk({
+    id: "h1",
+    before: "alpha",
+    after: "ALPHA",
+    anchor: { lead: "", trail: "\nbeta", hint_start: 0, hint_end: 5 },
+  }),
+  hunk({
+    id: "h2",
+    before: "beta",
+    after: "BETA",
+    anchor: { lead: "alpha\n", trail: "", hint_start: 6, hint_end: 10 },
+  }),
+  hunk({
+    id: "h3",
+    before: "gamma",
+    after: "GAMMA",
+    anchor: { lead: "beta\n", trail: "", hint_start: 11, hint_end: 16 },
+  }),
+];
+
+function withTxtWithdrawn(states: HunkState[] = ["pending", "withdrawn", "pending"]) {
+  backend.proposals = [proposalFor(TXT, states)];
+  backend.hunks = { hunks: TXT_THREE, resolutions: [], checksum: "hk-1", legacy: false };
+}
+
+describe("PCR-FR-QHZN / DCR-FR-OZVU: a withdrawn change is hidden in review", () => {
+  it("PCR-FR-QHZN, DCR-FR-OZVU, DCR-FR-11, DCR-FR-BQNL: no decoration, no gutter mark, and the counter does not count it", async () => {
+    withTxtWithdrawn();
+    renderTab(TXT, sessions);
+    const surface = await screen.findByTestId("source-review");
+    const map = await screen.findByTestId("hunk-gutter-map");
+    await waitFor(() => expect(within(map).getAllByRole("button")).toHaveLength(2));
+    // DCR-FR-11: counted over the changes that are not withdrawn.
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+    // No decoration of any kind carries the withdrawn change's text.
+    const struck = [...surface.querySelectorAll(".hunk--del")].map((el) => el.textContent);
+    expect(struck).toEqual(["alpha", "gamma"]);
+    expect(surface).not.toHaveTextContent("BETA");
+    expect(within(map).queryByRole("button", { name: /Change 3 of/ })).toBeNull();
+  });
+
+  it("PCR-FR-QHZN, DCR-FR-OZVU, DCR-FR-QPRV: no move visits a withdrawn change", async () => {
+    withTxtWithdrawn();
+    renderTab(TXT, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+    await waitFor(() =>
+      expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2"),
+    );
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
+    });
+    // From the first change the next move skips the withdrawn second one.
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 2 of 2");
+    expect(within(screen.getByTestId("hunk-chip")).getByRole("button", { name: "Accept" })).toBeEnabled();
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
+    });
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+  });
+
+  it("PCR-FR-QHZN, DCR-FR-NYDA, DCR-FR-16: hunk_withdrawn from a stale reading renders as a refused decision", async () => {
+    withTxtWithdrawn(["pending", "pending", "pending"]);
+    backend.accept = () => "hunk_withdrawn";
+    renderTab(TXT, sessions);
+    const chip = await screen.findByTestId("hunk-chip");
+    await act(async () => {
+      fireEvent.click(within(chip).getByRole("button", { name: "Accept" }));
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The agent withdrew this change, so it cannot be decided. Nothing was changed.",
+    );
+    expect(callsTo("save_artifact_contents")).toHaveLength(0);
+    // The decision can be retried, which is what DCR-FR-16 asks of a refusal.
+    expect(within(screen.getByTestId("hunk-chip")).getByRole("button", { name: "Accept" })).toBeEnabled();
+  });
+
+  it("PCR-FR-QHZN, DCR-FR-WRJP: an update drops an unwritten edit of a changed hunk and draws an added one", async () => {
+    withTxtWithdrawn(["pending", "pending"]);
+    backend.hunks = { hunks: TXT_THREE.slice(0, 2), resolutions: [], checksum: "hk-1", legacy: false };
+    renderTab(TXT, sessions);
+    const field = await screen.findByRole("textbox", { name: /^Proposed text of Change 1 of 2/ });
+    // An edit that is still resting, so nothing has written it yet.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () => {
+        fireEvent.change(field, { target: { value: "Alpha, edited" } });
+      });
+      expect(promptHunkCandidateBuffers.get("prop-1\u0000h1")?.dirty).toBe(true);
+
+      // The agent changes h1 (its revision goes up) and adds h3.
+      const updated = proposalFor(TXT, ["pending", "pending", "pending"]);
+      updated.ledger[0].revision = 1;
+      backend.proposals = [updated];
+      backend.hunks = {
+        hunks: [{ ...TXT_THREE[0], revision: 1, after: "ALPHA, revised" }, TXT_THREE[1], TXT_THREE[2]],
+        resolutions: [],
+        checksum: "hk-2",
+        legacy: false,
+      };
+      await act(async () => {
+        notePromptProposalChanged({ artifactId: TXT, proposal: updated, cause: "updated" });
+      });
+      // DCR-FR-WRJP: the unwritten edit is dropped, and no write of it is made.
+      expect(promptHunkCandidateBuffers.get("prop-1\u0000h1")).toBeUndefined();
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+      expect(callsTo("edit_prompt_change_hunk")).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    // The added change is drawn and counted in proposal order.
+    await waitFor(() =>
+      expect(screen.getByTestId("review-counter")).toHaveTextContent("of 3"),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /^Proposed text of Change 1 of 3/ })).toHaveValue(
+        "ALPHA, revised",
+      ),
+    );
+    expect(within(screen.getByTestId("hunk-gutter-map")).getAllByRole("button")).toHaveLength(3);
   });
 });

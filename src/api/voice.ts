@@ -59,8 +59,12 @@ export const listVoiceAiModels = (
 export const listVoiceAiVoices = (provider?: VoiceProviderId) =>
   invoke<string[] | null>("list_voice_ai_voices", { provider: provider ?? null });
 
-export const startVoiceCapture = (captureRate: number, keyterms: readonly string[]) =>
-  invoke<VoiceCaptureStart>("start_voice_capture", { captureRate, keyterms });
+/** VOP-FR-ERDS: a chunked capture splits its audio into chunks. */
+export const startVoiceCapture = (
+  captureRate: number,
+  keyterms: readonly string[],
+  chunked = false,
+) => invoke<VoiceCaptureStart>("start_voice_capture", { captureRate, keyterms, chunked });
 
 /** VOP-FR-DXPK: PCM16 bytes as a raw body, so no JSON array is built. */
 export const appendVoiceCapture = (sessionId: string, bytes: Uint8Array) =>
@@ -118,7 +122,7 @@ export const setVoiceActivityGate = (
     seq: number;
     blocked: boolean;
     playing: boolean;
-    settled: string | null;
+    chunked: boolean;
     keyterms: readonly string[];
   },
 ) => invoke<void>("set_voice_activity_gate", { activityId, ...gate });

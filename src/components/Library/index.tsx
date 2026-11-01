@@ -20,6 +20,7 @@ import {
 import { Icon } from "../icons";
 import { SelectorRow } from "../SelectorRow";
 import { TreeRow } from "./TreeRow";
+import { noteOwnerDeleted } from "../../voice/voiceController";
 import {
   ContextMenu,
   RecursiveDeleteConfirm,
@@ -290,6 +291,8 @@ export function Library({
     try {
       await api.deletePath(node.path, false);
       setError(null);
+      // CVP-FR-51, VOM-FR-LSBQ: voice mode ends with the file that owns it.
+      noteOwnerDeleted({ kind: "artifact", artifactId: node.path });
     } catch (e) {
       if (String(e).includes(api.ERR_NOT_EMPTY)) {
         setConfirmRecursive(node);
@@ -307,6 +310,8 @@ export function Library({
     try {
       await api.deletePath(node.path, true);
       setError(null);
+      // LCM-FR-11, VOM-FR-LSBQ: and with a folder that holds that file.
+      noteOwnerDeleted({ kind: "artifact", artifactId: node.path });
     } catch (e) {
       setError(String(e));
     }

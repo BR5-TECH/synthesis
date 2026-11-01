@@ -36,7 +36,10 @@ import { agentRoster } from "../agentTags";
 import { commentErrorMessage } from "./messages";
 import { logDebug, logWarn } from "../../logging";
 import { activeAgents, composerPlaceholder, dispatchTargets } from "../../state/activeAgents";
-import { useVoiceState } from "../../state/voiceSession";
+import { getVoiceState, useVoiceState } from "../../state/voiceSession";
+import { threadById } from "../../state/conversationThreads";
+import { locatorOf } from "../../state/discussionOrigin";
+import { postReply } from "../../hooks/useConversationSession";
 import { withSpokenTags } from "../../voice/spokenTags";
 import {
   bindVoiceToDiscussion,
@@ -45,7 +48,9 @@ import {
   noteComposerChanged,
   registerVoiceComposer,
   type PostOutcome,
+  type VoiceComposerHandle,
 } from "../../voice/voiceController";
+import { boundDiscussionOf } from "../../voice/voiceHandles";
 import { VoiceArea, VoiceFeedback } from "./VoiceArea";
 import {
   clearComposer,
@@ -212,23 +217,38 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
    * pending attachment exactly as they were, and the typed error renders inline.
    * The rejection is swallowed here because it is rendered here.
    */
-  const send = async (text: string): Promise<PostOutcome> => {
+  const send = async (text: string, voice?: VoiceComposerHandle): Promise<PostOutcome> => {
     if (postingRef.current) return "busy";
     postingRef.current = true;
     setPosting(true);
+    const current = latestProps.current;
+    // VOM-FR-NERG: after the first post of an opening composer created the
+    // voice discussion, a transcript posts into that discussion. The handle and
+    // not this composer holds it, so it is the same for every moved handle.
+    const bound = voice && current.mode === "opening" ? boundDiscussionOf(voice) : null;
+    const key = bound?.id ?? sessionKey;
     // What is sent is read now and not from the render, so a recording that
     // ended after this render finds the session as it stands (VOM-FR-WYIE).
-    const sent = getDiscussionSession(sessionKey);
+    const sent = getDiscussionSession(key);
     const inputs = sent.attachments.map((p) => p.input);
-    const current = latestProps.current;
     let created: Discussion | undefined;
+    let replied: Discussion | undefined;
     try {
       logDebug(["frontend"], "a discussion composer posts", {
-        mode: current.mode,
-        key: sessionKey,
+        mode: bound ? "reply" : current.mode,
+        key,
       });
       if (current.mode === "reply") {
         await current.onReply(current.discussion.id, text, [...sent.quotes], inputs);
+      } else if (bound) {
+        replied = await postReply(
+          locatorOf(current.target),
+          bound.id,
+          text,
+          [...sent.quotes],
+          inputs,
+          current.agents,
+        );
       } else {
         created = await current.onOpen({
           target: current.target,
@@ -240,10 +260,10 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
     } catch (e) {
       // CMT-FR-51: the pending strip is intact, so the offending entry is
       // removed and the comment posted without retyping.
-      setDiscussionError(sessionKey, errorText(e));
+      setDiscussionError(key, errorText(e));
       logWarn(["frontend"], "a discussion composer post was refused", {
-        mode: current.mode,
-        key: sessionKey,
+        mode: bound ? "reply" : current.mode,
+        key,
       });
       return "failed";
     } finally {
@@ -251,12 +271,15 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
       setPosting(false);
     }
     // Only a post that landed clears the composer, and only of what it sent.
-    clearSentComposer(sessionKey, sent);
-    setDiscussionError(sessionKey, undefined);
-    if (created) bindVoiceToDiscussion(sessionKey, created);
+    clearSentComposer(key, sent);
+    setDiscussionError(key, undefined);
+    if (created && getVoiceState().activeKey === sessionKey) {
+      bindVoiceToDiscussion(sessionKey, created);
+    }
     if (current.mode === "opening" && created) current.onOpened?.(created);
     // VOM-FR-BVNX.
-    const heard = created ?? (current.mode === "reply" ? current.discussion : null);
+    const heard =
+      created ?? replied ?? (current.mode === "reply" ? current.discussion : null);
     const reached = dispatchTargets({ comments: heard?.comments ?? [] }, text, rosterRef.current);
     return reached.length > 0 ? "posted" : "reached_nobody";
   };
@@ -279,21 +302,34 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   sendRef.current = send;
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
-  useEffect(
-    () =>
-      registerVoiceComposer(sessionKey, {
-        post: (spoken) => {
-          const held = getDiscussionSession(sessionKey).body.trimEnd();
-          return sendRef.current(held === "" ? spoken : `${held}\n${spoken}`);
-        },
-        tagged: (transcript) => withSpokenTags(transcript, rosterRef.current),
-        blocked: () => blockedRef.current,
-        nicknames: () => [...rosterRef.current.nicknames],
-        voiceOf: (agentId) =>
-          agentsRef.current.find((a) => a.agent.id === agentId)?.agent.voice || null,
-      }),
-    [sessionKey],
-  );
+  useEffect(() => {
+    const handle: VoiceComposerHandle = {
+      post: (spoken) => {
+        // The session key that a transcript joins, after VOM-FR-NERG moved it.
+        const key = boundDiscussionOf(handle)?.id ?? sessionKey;
+        const held = getDiscussionSession(key).body.trimEnd();
+        return sendRef.current(held === "" ? spoken : `${held}\n${spoken}`, handle);
+      },
+      tagged: (transcript) => withSpokenTags(transcript, rosterRef.current),
+      // VOM-FR-RNBS, CTA-FR-QWLB: who a typed comment of this text reaches.
+      targets: (text) => {
+        const current = latestProps.current;
+        const bound = boundDiscussionOf(handle);
+        const comments =
+          current.mode === "reply"
+            ? current.discussion.comments
+            : bound
+              ? (threadById(bound.id) ?? bound).comments
+              : [];
+        return dispatchTargets({ comments }, text, rosterRef.current);
+      },
+      blocked: () => blockedRef.current,
+      nicknames: () => [...rosterRef.current.nicknames],
+      voiceOf: (agentId) =>
+        agentsRef.current.find((a) => a.agent.id === agentId)?.agent.voice || null,
+    };
+    return registerVoiceComposer(sessionKey, handle);
+  }, [sessionKey]);
 
   // VOP-FR-QZCE, VOM-FR-LNUH: an open VAD session follows the composer.
   useEffect(() => {
@@ -462,7 +498,9 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
               on={false}
               ready={voiceState.providerReady}
               onToggle={() =>
-                enterVoiceMode(sessionKey, props.mode === "reply" ? props.discussion : null)
+                props.mode === "reply"
+                  ? enterVoiceMode(sessionKey, props.discussion)
+                  : enterVoiceMode(sessionKey, null, props.target)
               }
             />
           )}

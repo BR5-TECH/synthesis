@@ -6,6 +6,10 @@
 
 use super::*;
 
+/// AGC-FR-EPNB / AGC-FR-TCCV: the open proposal that ends `discussion_history`.
+mod open_proposal;
+pub(super) use open_proposal::*;
+
 // ---------------------------------------------------------------------------
 // Input builders (AGC-FR-05)
 // ---------------------------------------------------------------------------
@@ -139,19 +143,26 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         // `current_comment` attachment, a draft that no longer resolves — keeps
         // the bare line, the file as it now stands being in the `artifact`
         // section (AGC-FR-07).
+        // AGC-FR-RENU: an update comment names what the update did. The
+        // proposal's changes render at the attachment of its recording.
+        comments::Attachment::Proposal { path, update: Some(update), .. }
+        | comments::Attachment::PromptProposal { path, update: Some(update), .. } => {
+            update_line(path, update)
+        }
         comments::Attachment::Proposal { path, proposal_id, .. } => {
             match digests.get(proposal_id.as_str()) {
                 Some(digest) => proposal_digest_line(path, digest),
                 None => format!("[proposed a new version of {path}]"),
             }
         }
-        // CMS-FR-66: the same line for a rewrite offered against a prompt the
-        // project holds. The two references name different stores and read
-        // identically here, for the reason above: what an agent needs is that a
-        // change was offered for that file, and the file as it now stands is in
-        // the `artifact` section rather than in this line.
-        comments::Attachment::PromptProposal { path, .. } => {
-            format!("[proposed a new version of {path}]")
+        // AGC-FR-CGCI: a rewrite offered against a prompt the project holds
+        // reads as a draft's does, from the prompt proposal store. A reference
+        // the read did not answer for keeps the bare line.
+        comments::Attachment::PromptProposal { path, proposal_id, .. } => {
+            match digests.get(proposal_id.as_str()) {
+                Some(digest) => proposal_digest_line(path, digest),
+                None => format!("[proposed a new version of {path}]"),
+            }
         }
         // AGC-FR-DKHT: the one change the comment is about, named by the id an
         // agent passes as `revises`. A change the read did not answer for keeps
@@ -163,6 +174,14 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
             }
         }
     }
+}
+
+/// AGC-FR-RENU: what one update of a proposal did, in counts.
+fn update_line(path: &str, update: &comments::ProposalUpdateCounts) -> String {
+    format!(
+        "[updated the proposed changes to {path}: {} changed, {} added, {} withdrawn]",
+        update.changed, update.added, update.withdrawn
+    )
 }
 
 /// AGC-FR-DKHT: one change of a proposal, as a `proposal_hunk` attachment
@@ -205,6 +224,7 @@ fn state_label(state: crate::draft_proposals::hunks::HunkState) -> &'static str 
         crate::draft_proposals::hunks::HunkState::Rejected => "rejected",
         crate::draft_proposals::hunks::HunkState::Pending
         | crate::draft_proposals::hunks::HunkState::Discussing => "undecided",
+        crate::draft_proposals::hunks::HunkState::Withdrawn => "withdrawn",
     }
 }
 
@@ -273,17 +293,26 @@ fn attachment_reads(
     // a draft discussed in two threads has proposals this one never mentioned,
     // and letting those decide the rank would collapse this thread's own latest
     // proposal to its counts.
-    let mut referenced: Vec<(&str, &str)> = Vec::new();
+    // `None` in place of a draft names a prompt change proposal (AGC-FR-CGCI).
+    let mut referenced: Vec<(Option<&str>, &str)> = Vec::new();
     let mut hunk_refs: Vec<(&str, &str, &str)> = Vec::new();
     let mut artifact_hunk_refs: Vec<(&str, &str)> = Vec::new();
     for comment in &thread.comments {
         for attachment in &comment.attachments {
             match attachment {
-                comments::Attachment::Proposal { draft_id, proposal_id, .. }
+                // AGC-FR-RENU: an update's reference renders its counts alone,
+                // so it asks for no read.
+                comments::Attachment::Proposal { draft_id, proposal_id, update: None, .. }
                     if with_proposals
                         && !referenced.iter().any(|(_, id)| *id == proposal_id.as_str()) =>
                 {
-                    referenced.push((draft_id, proposal_id));
+                    referenced.push((Some(draft_id), proposal_id));
+                }
+                comments::Attachment::PromptProposal { proposal_id, update: None, .. }
+                    if with_proposals
+                        && !referenced.iter().any(|(_, id)| *id == proposal_id.as_str()) =>
+                {
+                    referenced.push((None, proposal_id));
                 }
                 // CMS-FR-TQVB: a reference to a draft's hunk is read below with
                 // the draft's proposals; one to an artifact's hunk is read from
@@ -312,7 +341,8 @@ fn attachment_reads(
     // One read per draft rather than one per reference.
     let mut read: HashMap<String, crate::draft_proposals::ProposalChanges> = HashMap::new();
     let mut drafts: Vec<&str> = Vec::new();
-    let named = referenced.iter().map(|(d, _)| *d).chain(hunk_refs.iter().map(|(d, _, _)| *d));
+    let named =
+        referenced.iter().filter_map(|(d, _)| *d).chain(hunk_refs.iter().map(|(d, _, _)| *d));
     for draft_id in named {
         if !drafts.contains(&draft_id) {
             drafts.push(draft_id);
@@ -360,16 +390,39 @@ fn attachment_reads(
     // The last references the thread made are the ones that render in full.
     let full_from = referenced.len().saturating_sub(PROPOSALS_RENDERED_IN_FULL);
     let mut digests = ProposalDigests::new();
-    for (position, (_, proposal_id)) in referenced.iter().enumerate() {
+    for (position, (draft, proposal_id)) in referenced.iter().enumerate() {
+        let full = position >= full_from;
+        if draft.is_none() {
+            // AGC-FR-CGCI: read from the prompt proposal store, on the same
+            // terms — no reconciliation, no write.
+            let Some(proposal) =
+                crate::prompt_proposals::read_prompt_proposal_changes(roots.worktree, proposal_id)
+            else {
+                continue;
+            };
+            let counts = proposal.counts;
+            digests.insert(
+                proposal_id.to_string(),
+                ProposalDigest {
+                    counts: crate::draft_proposals::hunks::HunkCounts {
+                        pending: counts.pending,
+                        accepted: counts.accepted,
+                        rejected: counts.rejected,
+                        discussing: counts.discussing,
+                        withdrawn: counts.withdrawn,
+                    },
+                    changes: full
+                        .then(|| proposal.changes.into_iter().map(prompt_change_view).collect()),
+                },
+            );
+            continue;
+        }
         let Some(proposal) = read.remove(*proposal_id) else {
             continue;
         };
         digests.insert(
             proposal.id,
-            ProposalDigest {
-                counts: proposal.counts,
-                changes: (position >= full_from).then_some(proposal.changes),
-            },
+            ProposalDigest { counts: proposal.counts, changes: full.then_some(proposal.changes) },
         );
     }
     AttachmentReads { digests, hunks }
@@ -390,6 +443,7 @@ fn prompt_change_view(
             Prompt::Accepted => Draft::Accepted,
             Prompt::Rejected => Draft::Rejected,
             Prompt::Discussing => Draft::Discussing,
+            Prompt::Withdrawn => Draft::Withdrawn,
         },
         before: change.before,
         after: change.after,
@@ -399,7 +453,7 @@ fn prompt_change_view(
 /// AGC-FR-RVQP: one proposal's changes and how each was decided.
 pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> String {
     let counts = &digest.counts;
-    let total = counts.accepted + counts.rejected + counts.undecided();
+    let total = counts.accepted + counts.rejected + counts.undecided() + counts.withdrawn;
     let mut line = format!(
         "[proposed {total} {} to {path}: {} accepted, {} rejected, {} undecided]",
         if total == 1 { "change" } else { "changes" },
@@ -407,6 +461,10 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
         counts.rejected,
         counts.undecided(),
     );
+    // AGC-FR-RVQP: a withdrawn change is counted as itself.
+    if counts.withdrawn > 0 {
+        line.insert_str(line.len() - 1, &format!(", {} withdrawn", counts.withdrawn));
+    }
     let Some(changes) = digest.changes.as_deref() else {
         return line;
     };
@@ -423,10 +481,16 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
         // no existing text, so withholding what it offered would leave the change
         // carrying no text at all — and a change an agent cannot recognise is one
         // it cannot tell apart from a passage still open.
-        let accepted = change.state == crate::draft_proposals::hunks::HunkState::Accepted;
-        if !change.after.is_empty() && (!accepted || change.before.is_empty()) {
+        use crate::draft_proposals::hunks::HunkState;
+        let open = matches!(
+            change.state,
+            HunkState::Pending | HunkState::Discussing | HunkState::Rejected
+        );
+        if !change.after.is_empty() && (open || change.before.is_empty()) {
             line.push_str(&format!(" — offered: {}", excerpt(&change.after)));
         }
+        // AGC-FR-RVQP: the id is the value the agent names in an update.
+        line.push_str(&format!(" — id {}", change.id));
     }
     // AGC-FR-RVQP / AGC-FR-11: the changes of one proposal are bounded as well as
     // the proposals themselves. A proposal holding hundreds of changes would
@@ -720,7 +784,15 @@ pub(super) fn discussion_history_section(
         parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
         parts.push(InputPart::Text("\n".to_string()));
     }
-    section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts)
+    // AGC-FR-EPNB / AGC-FR-TCCV: the open proposal ends the section, and the
+    // bound of AGC-FR-11 cuts the comments before it rather than the proposal.
+    let Some(open) = open_proposal_text(roots, &thread.target) else {
+        return section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts);
+    };
+    let room = SECTION_MAX_CHARS.saturating_sub(open.chars().count());
+    let mut section = section_of_parts_within(TAG_DISCUSSION_HISTORY, Vec::new(), parts, room);
+    append_open_proposal(&mut section, open);
+    section
 }
 
 /// AGC-FR-06: the body of the comment that addressed the agent.

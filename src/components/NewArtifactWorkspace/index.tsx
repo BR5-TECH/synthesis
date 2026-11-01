@@ -48,6 +48,7 @@ import { useDiscussionControl } from "../../hooks/useDiscussionControl";
 import { identityBlockFor } from "../../hooks/useComments";
 import {
   hunkPosition,
+  reviewedHunkTotal,
   undecidedHunks,
   useDraftProposals,
   useReviewing,
@@ -223,7 +224,8 @@ export function NewArtifactWorkspace({
     const at = focusedHunkId
       ? hunkPosition(pendingProposal, focusedHunkId)
       : hunkPosition(pendingProposal, undecided[0]?.id ?? "");
-    const changes = pendingProposal.hunkCount;
+    // DCR-FR-OZVU: a withdrawn change is not counted.
+    const changes = reviewedHunkTotal(pendingProposal);
     return {
       label: `${participantName(pendingProposal.agent)} · proposal of ${changes} ${
         changes === 1 ? "change" : "changes"

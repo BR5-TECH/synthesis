@@ -15,7 +15,7 @@ export const pendingProposal: DraftChangeProposal = {
   candidateEdited: false,
   legacy: false,
   hunkCount: 1,
-  counts: { pending: 1, accepted: 0, rejected: 0, discussing: 0 },
+  counts: { pending: 1, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
   ledger: [
     { id: "h1", kind: "replace", state: "pending", edited: false, revision: 0 },
   ],

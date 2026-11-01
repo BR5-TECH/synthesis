@@ -432,8 +432,11 @@ impl CompletionSeam for ScriptedCompletion {
             .flat_map(|base| {
                 let mut with_draft = base.clone();
                 with_draft.push(crate::tools::propose_draft_changes::NAME);
+                // CVL-FR-08: the decision tool of the same store follows.
+                with_draft.push(crate::tools::decide_draft_changes::NAME);
                 let mut with_prompt = base.clone();
                 with_prompt.push(crate::tools::propose_prompt_changes::NAME);
+                with_prompt.push(crate::tools::decide_prompt_changes::NAME);
                 [base, with_draft, with_prompt]
             })
             .collect();
@@ -582,5 +585,32 @@ impl CompletionSeam for ScriptedCompletion {
             )),
             Err(failure) => Err(CallFailure::from(failure)),
         }
+    }
+}
+
+/// The test-only builders of [`TurnRegistry`]. The application builds one
+/// registry with `new`, and these replace one collaborator each.
+impl TurnRegistry {
+    /// A registry whose backoff jitter is scripted. Test-only: the application
+    /// wants a decorrelated delay and `new` already gives it one.
+    pub fn with_jitter(mut self, jitter: Box<dyn JitterSource>) -> Self {
+        self.jitter = jitter;
+        self
+    }
+
+    /// A registry whose retry schedule is not the module's own. Test-only, for
+    /// the same reason `with_jitter` is: what most of the suite wants is the
+    /// retry *behaviour* without paying for the waits, and one test asserts the
+    /// default schedule is exactly what CVL-FR-19 says.
+    pub fn with_retry_policy(mut self, retry: RetryPolicy) -> Self {
+        self.retry = retry;
+        self
+    }
+
+    /// A registry reporting into a buffer other than the session's. Test-only:
+    /// the application has one buffer and `new` already names it.
+    pub fn reporting_into(mut self, buffer: &'static LogBuffer) -> Self {
+        self.buffer = buffer;
+        self
     }
 }

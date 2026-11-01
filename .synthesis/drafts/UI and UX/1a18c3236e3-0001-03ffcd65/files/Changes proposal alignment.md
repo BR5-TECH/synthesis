@@ -6,7 +6,7 @@ We’ve got misalignment between how we visualized the changes proposed by the a
 
 - The author discusses a prompt artifact or a DOC file in its Editor tab. An agent proposes changes. The proposal enters review in place in the document column, with no modal. A notification, or the reference in the agent's comment, lands the author on the first undecided hunk.
 - The author reads each hunk in the text it changes, edits its proposed text if needed, and accepts, rejects, or discusses it. The author can also use **Accept all** or **Reject all** in the review bar.
-- The author starts a discussion on one hunk. The agent answers in that discussion. The agent may revise the hunk, and the author decides it.
+- The author starts a discussion on one hunk. The agent answers in that discussion. The agent may change the hunk with `updates`, and the author decides it.
 - The proposal closes when no hunk is undecided. The decoration and the review bar go. The hunk discussions stay readable.
 - The author has the same journey for a plain text (`.txt`) DOC file, on its source surface.
 
@@ -28,7 +28,7 @@ We’ve got misalignment between how we visualized the changes proposed by the a
 - One undecided proposal per artifact stays. The agent's `rationale` is the body of its comment in the discussion, as for drafts. The decision comment counts the final state of each hunk.
 
 **Hunk discussion**
-- **Discuss** on a hunk in the Editor tab follows the Partial rejections model: it creates a new discussion record with its own thread, linked to that hunk through a `proposal_hunk`-type attachment. A hunk discussion works in the Editor column as in the draft's column. This covers the chooser, the subject strip, the composer, resolve and reopen, and the agent revising a hunk in place.
+- **Discuss** on a hunk in the Editor tab follows the Partial rejections model: it creates a new discussion record with its own thread, linked to that hunk through a `proposal_hunk`-type attachment. A hunk discussion works in the Editor column as in the draft's column. This covers the chooser, the subject strip, the composer, resolve and reopen, and the agent changing a hunk in place with `updates`.
 - Discussion capability is the same in the Editor tab and in the draft tab. A hunk discussion is not a fragment discussion and not a whole-target discussion.
 - The comment reference of a prompt proposal scrolls the document column to the first undecided hunk. It no longer opens a modal. The reference of a hunk scrolls to that hunk. It opens or focuses the Editor tab first when the tab is not open.
 

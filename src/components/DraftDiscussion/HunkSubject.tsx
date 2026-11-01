@@ -15,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../icons";
 import { hunkStateWord } from "../ProposalHunkControl";
 import { logWarn } from "../../logging";
-import { hunkPosition, hunkStateOf } from "../../state/draftProposals";
+import { hunkPosition, hunkStateOf, reviewedHunkTotal } from "../../state/draftProposals";
 import { useProposalHunks } from "../../state/proposalHunks";
 import type { ProposalHunkReference } from "../../types";
 import {
@@ -82,7 +82,8 @@ export function HunkSubject({
 
   const state = proposal ? hunkStateOf(proposal, hunkId) : undefined;
   const position = proposal ? hunkPosition(proposal, hunkId) : (place?.position ?? 0);
-  const total = proposal ? proposal.hunkCount : (place?.total ?? 0);
+  // DCR-FR-OZVU: a withdrawn change is not counted, and has no position.
+  const total = proposal ? reviewedHunkTotal(proposal) : (place?.total ?? 0);
   const name = position > 0 ? `Change ${position} of ${total}` : "Change";
   const word =
     state !== undefined

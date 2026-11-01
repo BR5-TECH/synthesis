@@ -45,7 +45,7 @@ function proposal(
     candidateEdited: false,
     legacy: false,
     hunkCount: states.length,
-    counts: { pending: 0, accepted: 0, rejected: 0, discussing: 0 },
+    counts: { pending: 0, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
     ledger: states.map((s, at) => ({
       id: `h${at + 1}`,
       kind: "replace",
@@ -113,5 +113,24 @@ describe("CMT-FR-48: the control a change reference renders", () => {
     const control = mount();
     expect(control).toHaveTextContent("accepted");
     expect(control).toBeDisabled();
+  });
+
+  it("DCR-FR-OZVU, DCR-FR-NYDA: a withdrawn change says so, is not counted, and has no route to the document", () => {
+    act(() =>
+      noteProposalChanged({ draftId: "d1", proposal: proposal(["pending", "withdrawn", "pending"]) }),
+    );
+    const control = mount();
+    // Its discussion stays readable: the control names it by its path and its state.
+    expect(control).toHaveTextContent("withdrawn");
+    expect(control).toHaveTextContent("Spec.md");
+    expect(control).not.toHaveTextContent(/Change \d of/);
+    expect(control).toBeDisabled();
+  });
+
+  it("DCR-FR-OZVU, DCR-FR-11: the changes after a withdrawn one are counted among the rest", () => {
+    act(() =>
+      noteProposalChanged({ draftId: "d1", proposal: proposal(["withdrawn", "pending", "pending"]) }),
+    );
+    expect(mount()).toHaveTextContent("Change 1 of 2");
   });
 });

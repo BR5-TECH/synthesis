@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Icon } from "./icons";
+import { StatusBarVoice } from "./StatusBarVoice";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
 import { useSteadyProgress } from "../hooks/useSteadyProgress";
 import {
@@ -70,6 +71,8 @@ export interface StatusBarProps {
 
   /** STB-FR-25 / STB-FR-29: the totals, or null to render nothing in their place. */
   diffTotals: DiffTotals | null;
+  /** STB-FR-OSOL: opens the voice discussion (CVP-FR-54). */
+  onRevealVoice?: () => void;
 }
 
 export function StatusBar({
@@ -84,6 +87,7 @@ export function StatusBar({
   indentation,
   onSelectIndentation,
   diffTotals,
+  onRevealVoice,
 }: StatusBarProps) {
   return (
     <div className="status-bar" data-testid="status-bar">
@@ -112,6 +116,8 @@ export function StatusBar({
       />
 
       <div className="status-bar__trailing">
+        {/* STB-FR-OSOL: the voice indicator leads the trailing region. */}
+        {onRevealVoice && <StatusBarVoice onReveal={onRevealVoice} />}
         <LineEndingControl value={lineEndings} onSelect={onSelectLineEndings} />
         <IndentationControl
           value={indentation}

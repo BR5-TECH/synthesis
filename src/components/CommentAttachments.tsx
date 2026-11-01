@@ -22,9 +22,11 @@ import { Icon } from "./icons";
 import { ProposalHunkControl } from "./ProposalHunkControl";
 import {
   openReview,
+  reviewedHunkTotal,
   undecidedHunks,
   useProposalReference,
 } from "../state/draftProposals";
+import { changeCountSummary, updateSummary } from "./proposalSummary";
 import { setFocusedHunk } from "../state/draftDiscussion";
 import {
   showPromptProposal,
@@ -37,6 +39,7 @@ import {
   undecidedCount,
   type Attachment,
   type AttachmentInput,
+  type ProposalUpdateCounts,
 } from "../types";
 
 /**
@@ -576,7 +579,8 @@ function ProposalAttachmentView({
 
   const proposal = reference.kind === "known" ? reference.proposal : null;
   const counts = proposal?.counts;
-  const changes = proposal?.hunkCount ?? 0;
+  // DCR-FR-OZVU: a withdrawn change is not counted.
+  const changes = proposal ? reviewedHunkTotal(proposal) : 0;
   const left = undecidedCount(counts);
 
   return (
@@ -601,12 +605,9 @@ function ProposalAttachmentView({
       <Icon.Diff size={11} />
       <span className="comment-attach__chip-name">{attachment.path}</span>
       {/* DCR-FR-HVXK: how much the proposal changes, so the author knows what
-          they are being asked to read before they go and read it. */}
-      {changes > 0 && (
-        <span className="comment-attach__proposal-count">
-          {changes} {changes === 1 ? "change" : "changes"}
-        </span>
-      )}
+          they are being asked to read before they go and read it.
+          DCR-FR-OYRR: an update comment says what the update did instead. */}
+      <ProposalCount update={attachment.update} changes={changes} />
       {/* CTA-FR-UKIG: an unresolved control carries no word about the proposal —
           the type span is absent rather than empty, so nothing on it can be
           read as a claim about what the proposal has become. */}
@@ -650,7 +651,7 @@ function PromptProposalAttachmentView({
   const state = reference.kind === "known" ? reference.proposal.state : null;
   const label = proposalControlLabel(state, reference.kind === "gone");
   const proposal = reference.kind === "known" ? reference.proposal : null;
-  const changes = proposal?.hunkCount ?? 0;
+  const changes = proposal ? reviewedHunkTotal(proposal) : 0;
   const left = undecidedCount(proposal?.counts);
 
   return (
@@ -668,12 +669,9 @@ function PromptProposalAttachmentView({
     >
       <Icon.Diff size={11} />
       <span className="comment-attach__chip-name">{attachment.path}</span>
-      {/* DCR-FR-HVXK: how much the proposal changes. */}
-      {changes > 0 && (
-        <span className="comment-attach__proposal-count">
-          {changes} {changes === 1 ? "change" : "changes"}
-        </span>
-      )}
+      {/* DCR-FR-HVXK / PCR-FR-RFJC: how much the proposal changes, or what
+          the update did. */}
+      <ProposalCount update={attachment.update} changes={changes} />
       {label !== null && (
         <span className="comment-attach__chip-type">{label}</span>
       )}
@@ -682,6 +680,35 @@ function PromptProposalAttachmentView({
       )}
     </button>
   );
+}
+
+/**
+ * DCR-FR-HVXK / DCR-FR-OYRR / CMT-FR-48: the summary a proposal control
+ * carries, for both reference kinds.
+ *
+ * The update counts are the comment's own (CMS-FR-BSQB), so they show before
+ * a reading of the proposal answers. The count of changes is the proposal's,
+ * so it shows only after one does.
+ */
+function ProposalCount({
+  update,
+  changes,
+}: {
+  update: ProposalUpdateCounts | undefined;
+  changes: number;
+}) {
+  if (update !== undefined) {
+    return (
+      <span
+        className="comment-attach__proposal-count"
+        data-testid="comment-attachment-proposal-update"
+      >
+        {updateSummary(update)}
+      </span>
+    );
+  }
+  if (changes <= 0) return null;
+  return <span className="comment-attach__proposal-count">{changeCountSummary(changes)}</span>;
 }
 
 /**

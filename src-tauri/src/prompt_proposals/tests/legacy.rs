@@ -5,7 +5,7 @@ use super::*;
 /// The record an older build wrote: no ledger, no counts, and a `.content`
 /// file holding the whole candidate. Each call mints its own id, because the
 /// acceptance slot is shared by every test in the process.
-fn stage_legacy(f: &Fixture, candidate: &str) -> String {
+pub(super) fn stage_legacy(f: &Fixture, candidate: &str) -> String {
     let id = new_note_id();
     let dir = f.dir();
     std::fs::create_dir_all(&dir).expect("dir");

@@ -21,7 +21,7 @@ pub(crate) mod detector;
 pub(crate) mod ring;
 pub(crate) mod silero;
 
-use detector::{Action, Conditions, Detector, Settings, FRAME_SAMPLES};
+use detector::{Action, Conditions, Detector, PauseTracker, Settings, FRAME_SAMPLES};
 use ring::AudioRing;
 use silero::SpeechModel;
 
@@ -93,7 +93,8 @@ pub(crate) struct Gate {
     pub(crate) seq: u64,
     pub(crate) blocked: bool,
     pub(crate) playing: bool,
-    pub(crate) settled: Option<String>,
+    /// VOP-FR-ERDS: the next capture opens chunked.
+    pub(crate) chunked: bool,
     pub(crate) keyterms: Vec<String>,
 }
 
@@ -116,8 +117,16 @@ pub(crate) trait ActivityHost: Send {
         &self,
         capture_rate: u32,
         keyterms: Vec<String>,
+        chunked: bool,
     ) -> Result<VoiceCaptureStart, String>;
     fn append_capture(&self, capture_id: &str, samples: Vec<i16>) -> Result<(), String>;
+    /// VOP-FR-JRVF: a short pause in a chunked capture. Gives whether a chunk
+    /// ended.
+    fn chunk_pause(&self, capture_id: &str) -> bool;
+    /// VOP-FR-WCSB: the utterance of the capture ended.
+    fn end_capture(&self, capture_id: &str);
+    /// Whether the capture still exists, so that it has not settled.
+    fn capture_alive(&self, capture_id: &str) -> bool;
     fn cancel_capture(&self, capture_id: &str);
     fn emit(&self, change: &ActivityChange);
     /// `detail` comes from the runtime or the resampler. It holds no audio.
@@ -134,6 +143,8 @@ pub(crate) struct Worker<H: ActivityHost> {
     settings: Settings,
     conditions: Conditions,
     keyterms: Vec<String>,
+    /// VOP-FR-ERDS: what the last applied gate says.
+    chunked: bool,
     last_seq: u64,
     resampler: StreamResampler,
     ring: AudioRing,
@@ -146,8 +157,11 @@ pub(crate) struct Worker<H: ActivityHost> {
     cursor: u64,
     /// The capture of the utterance in progress.
     capture: Option<String>,
-    /// The capture that has `speech_end` and has not settled (VOP-FR-FMRV).
-    settling: Option<String>,
+    /// VOP-FR-YDVH: the pause finder of a chunked capture in progress.
+    pauses: Option<PauseTracker>,
+    /// The captures that have `speech_end` and have not settled, oldest first
+    /// (VOP-FR-WCSB, VOP-FR-FAAB).
+    settling: Vec<String>,
     ended: bool,
 }
 
@@ -170,6 +184,7 @@ impl<H: ActivityHost> Worker<H> {
             settings,
             conditions: Conditions::default(),
             keyterms,
+            chunked: false,
             last_seq: 0,
             resampler,
             ring: AudioRing::new(capture_rate as usize * RING_SECONDS),
@@ -178,7 +193,8 @@ impl<H: ActivityHost> Worker<H> {
             start_position: 0,
             cursor: 0,
             capture: None,
-            settling: None,
+            pauses: None,
+            settling: Vec::new(),
             ended: false,
         })
     }
@@ -280,6 +296,19 @@ impl<H: ActivityHost> Worker<H> {
         }
         self.pending.drain(..at);
         self.send_audio();
+        self.check_pause();
+    }
+
+    /// VOP-FR-JRVF, VOP-FR-YDVH: the session's detector finds the short pauses
+    /// of a chunked capture, after the audio of the slice reached it.
+    fn check_pause(&mut self) {
+        let (Some(capture_id), Some(pauses)) = (self.capture.as_deref(), self.pauses.as_mut())
+        else {
+            return;
+        };
+        if pauses.paused() && self.host.chunk_pause(capture_id) {
+            pauses.chunk_ended();
+        }
     }
 
     fn fatal_detector_failure(&mut self, detail: &str) {
@@ -295,6 +324,9 @@ impl<H: ActivityHost> Worker<H> {
             Ok(probability) => probability,
             Err(detail) => return self.fatal_detector_failure(&detail),
         };
+        if let Some(pauses) = self.pauses.as_mut() {
+            pauses.step(probability);
+        }
         match self.detector.step(probability, self.settings, self.conditions) {
             Some(Action::SpeechStart) => {
                 self.start_position = position;
@@ -313,8 +345,9 @@ impl<H: ActivityHost> Worker<H> {
 
     /// VOP-FR-GZPY, VOP-FR-FYQX, VOP-FR-FAQA.
     fn open_capture(&mut self) {
-        match self.host.start_capture(self.capture_rate, self.keyterms.clone()) {
+        match self.host.start_capture(self.capture_rate, self.keyterms.clone(), self.chunked) {
             Ok(start) => {
+                self.pauses = self.chunked.then(|| PauseTracker::after_speech(self.settings));
                 self.cursor = self.start_position.saturating_sub(self.pre_roll_samples());
                 let change = ActivityChange {
                     capture_id: Some(start.session_id.clone()),
@@ -347,6 +380,7 @@ impl<H: ActivityHost> Worker<H> {
         if let Err(detail) = self.host.append_capture(&capture_id, samples) {
             // VOP-FR-BTBM.
             self.capture = None;
+            self.pauses = None;
             self.detector.rearm();
             self.fail(ERR_SESSION_LOST, &detail, false);
         }
@@ -357,7 +391,12 @@ impl<H: ActivityHost> Worker<H> {
         self.send_audio();
         // The last audio can fail, and that failure ended the utterance.
         let Some(capture_id) = self.capture.take() else { return };
-        self.settling = Some(capture_id.clone());
+        self.pauses = None;
+        // VOP-FR-WCSB: the capture finishes, and the next utterance can open one.
+        self.host.end_capture(&capture_id);
+        let host = &self.host;
+        self.settling.retain(|id| host.capture_alive(id));
+        self.settling.push(capture_id.clone());
         let change = ActivityChange {
             capture_id: Some(capture_id),
             ..self.change(ActivityState::SpeechEnd)
@@ -365,7 +404,7 @@ impl<H: ActivityHost> Worker<H> {
         self.host.emit(&change);
     }
 
-    /// VOP-FR-QZCE, VOP-FR-KYFC, VOP-FR-FMRV.
+    /// VOP-FR-QZCE, VOP-FR-KYFC, VOP-FR-ERDS.
     fn apply_gate(&mut self, gate: Gate) {
         if gate.seq < self.last_seq {
             return;
@@ -373,14 +412,14 @@ impl<H: ActivityHost> Worker<H> {
         self.last_seq = gate.seq;
         self.conditions = Conditions { blocked: gate.blocked, playing: gate.playing };
         self.keyterms = gate.keyterms;
-        if gate.settled.is_some() && gate.settled == self.settling {
-            self.settling = None;
-            self.detector.settled();
-        }
+        self.chunked = gate.chunked;
     }
 
     fn cancel_all(&mut self) {
-        for capture_id in [self.capture.take(), self.settling.take()].into_iter().flatten() {
+        self.pauses = None;
+        let open: Vec<String> =
+            self.capture.take().into_iter().chain(self.settling.drain(..)).collect();
+        for capture_id in open {
             self.host.cancel_capture(&capture_id);
         }
     }
@@ -395,7 +434,9 @@ impl<H: ActivityHost> Worker<H> {
         self.send_audio();
         // A capture that has `speech_end` counts too: the reply can reach the
         // WebView before that event does.
-        self.capture.take().or_else(|| self.settling.take())
+        let host = &self.host;
+        self.settling.retain(|id| host.capture_alive(id));
+        self.capture.take().or_else(|| self.settling.pop())
     }
 }
 

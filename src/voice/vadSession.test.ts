@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mic.onChunk = null;
   mic.onLost = null;
-  gate = { blocked: false, playing: false, keyterms: ["arch"] };
+  gate = { blocked: false, playing: false, chunked: true, keyterms: ["arch"] };
   mic.open.mockImplementation(
     async (onChunk: (pcm: ArrayBuffer) => void, onLost: () => void) => {
       mic.onChunk = onChunk;
@@ -146,7 +146,7 @@ describe("the gate", () => {
       seq: 1,
       blocked: false,
       playing: false,
-      settled: null,
+      chunked: true,
       keyterms: ["arch"],
     });
     gate = { ...gate, blocked: true };
@@ -157,17 +157,17 @@ describe("the gate", () => {
     );
   });
 
-  it("VOP-FR-FMRV: a settle goes once, and later records keep it", async () => {
+  it("VOP-FR-ERDS, VOP-FR-FMRV: the gate carries chunked, and no settle", async () => {
     const session = await open();
-    session.settle("c1");
-    session.settle("c1");
-    expect(api.setVoiceActivityGate).toHaveBeenCalledTimes(1);
-    gate = { ...gate, playing: true };
     session.pushGate();
+    gate = { ...gate, chunked: false };
+    session.pushGate();
+    expect(api.setVoiceActivityGate).toHaveBeenCalledTimes(2);
     expect(api.setVoiceActivityGate).toHaveBeenLastCalledWith(
       "va1",
-      expect.objectContaining({ settled: "c1", playing: true }),
+      expect.objectContaining({ seq: 2, chunked: false }),
     );
+    expect((api.setVoiceActivityGate.mock.calls as unknown as [string, object][])[1][1]).not.toHaveProperty("settled");
   });
 
   it("VOP-FR-QZCE: a refused gate logs a code, and a later change pushes", async () => {

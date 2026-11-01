@@ -89,8 +89,9 @@ fn a_cancel_that_arrives_after_the_delivery_claim_cannot_take_the_turn() {
     let (turn, cancelled) = h.turns().register(
         &agent,
         ConversationOrigin::stub_artifact("t1", "a.md", true),
-        "c1",
+        Some("c1"),
         PROJECT_KEY,
+        None,
     );
 
     // Before the claim, a cancellation takes the turn.
@@ -123,8 +124,9 @@ fn a_cancel_before_the_claim_stops_the_delivery() {
     let (turn, cancelled) = h.turns().register(
         &agent,
         ConversationOrigin::stub_artifact("t1", "a.md", true),
-        "c1",
+        Some("c1"),
         PROJECT_KEY,
+        None,
     );
     cancelled.store(true, Ordering::SeqCst);
     assert!(!h.turns().begin_delivery(&turn.id));

@@ -165,7 +165,7 @@ fn args(path: &str, content: &str, rationale: &str) -> ProposeDraftChangesArgs {
     ProposeDraftChangesArgs {
         path: path.into(),
         rationale: rationale.into(),
-        revises: None,
+        updates: None,
         // The tool now takes changes, so a test that names a whole document
         // expresses it as the one change it is.
         hunks: vec![HunkArg {
@@ -213,7 +213,7 @@ fn records(buffer: &LogBuffer, domain: Domain) -> Vec<crate::logging::LogRecord>
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_definition_is_fixed_text_and_names_the_three_required_arguments() {
+fn the_definition_is_fixed_text_and_names_the_two_required_arguments() {
     let f = Fixture::new();
     let tool = f.tool();
 
@@ -225,17 +225,17 @@ fn the_definition_is_fixed_text_and_names_the_three_required_arguments() {
 
     let schema = tool.parameters();
     assert_eq!(schema["type"], "object");
-    assert_eq!(schema_keys(&schema["properties"]), vec!["hunks", "path", "rationale", "revises"],);
+    assert_eq!(schema_keys(&schema["properties"]), vec!["hunks", "path", "rationale", "updates"],);
     let required: Vec<&str> = schema["required"]
         .as_array()
         .expect("required")
         .iter()
         .map(|v| v.as_str().expect("string"))
         .collect();
-    // PDC-FR-GMWR: `revises` is the one optional argument — a proposal that
-    // revises nothing simply leaves it out.
-    assert_eq!(required.len(), 3, "only `revises` has a default");
-    for key in ["path", "hunks", "rationale"] {
+    // PDC-FR-GPLQ: a call carries `hunks` or `updates`, so neither is
+    // required on its own.
+    assert_eq!(required, vec!["path", "rationale"]);
+    for key in ["path", "hunks", "rationale", "updates"] {
         assert!(
             schema["properties"][key]["description"].as_str().is_some_and(|d| !d.is_empty()),
             "{key} carries its own description (TLC-FR-06)",
@@ -712,3 +712,4 @@ fn tree_of(root: &std::path::Path) -> Vec<String> {
 mod lead_trail;
 mod second;
 mod third;
+mod updates;

@@ -152,3 +152,23 @@ describe("CVP-FR-HWTN: the store follows turn events with no surface mounted", (
     expect(getDiscussionSession("").turns).toEqual([]);
   });
 });
+
+describe("a speech that ends with no comment", () => {
+  it("CTA-FR-DZTA, CTA-FR-IGNT: removes the turn it registered and renders no inline failure", () => {
+    clearAllDiscussionSessions();
+    const spoken = { ...turn("t9"), triggerCommentId: "", speechId: "c1" } as AgentTurn;
+    upsertDiscussionTurn("d1", spoken);
+    expect(pendingTurnsOf(getDiscussionSession("d1").turns).map((t) => t.id)).toEqual(["t9"]);
+    followAgentTurn({ ...spoken, state: "cancelled", speechId: null } as AgentTurn);
+    expect(pendingTurnsOf(getDiscussionSession("d1").turns)).toEqual([]);
+    expect(getDiscussionSession("d1").turnFailure).toBeUndefined();
+  });
+
+  it("CTA-FR-NUVD, CTA-FR-DZTA: a turn that ran before the speech keeps its row", () => {
+    clearAllDiscussionSessions();
+    const earlier = { ...turn("t8"), speechId: "c1" } as AgentTurn;
+    upsertDiscussionTurn("d1", earlier);
+    followAgentTurn({ ...earlier, speechId: null } as AgentTurn);
+    expect(pendingTurnsOf(getDiscussionSession("d1").turns).map((t) => t.id)).toEqual(["t8"]);
+  });
+});

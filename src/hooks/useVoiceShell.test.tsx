@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 const controller = vi.hoisted(() => ({
   noteActivity: vi.fn(),
+  noteChunk: vi.fn(),
   noteDiscussionChanged: vi.fn(),
   noteProvider: vi.fn(),
   noteTranscript: vi.fn(),
@@ -23,6 +24,7 @@ const handlers = vi.hoisted(() => ({
   discussion: null as null | ((d: unknown) => void),
   transcript: null as null | ((change: { sessionId: string; text: string }) => void),
   activity: null as null | ((change: unknown) => void),
+  chunk: null as null | ((change: unknown) => void),
 }));
 
 vi.mock("../voice/voiceController", () => controller);
@@ -44,6 +46,10 @@ vi.mock("../events", () => ({
   }),
   onVoiceActivityChanged: vi.fn(async (handler: (change: unknown) => void) => {
     handlers.activity = handler;
+    return () => undefined;
+  }),
+  onVoiceChunkChanged: vi.fn(async (handler: (change: unknown) => void) => {
+    handlers.chunk = handler;
     return () => undefined;
   }),
   onVoiceTranscriptChanged: vi.fn(
@@ -132,7 +138,7 @@ describe("the hotkey", () => {
     expect(controller.pressRecord).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-FHYY: does nothing with no composer mounted", async () => {
+  it("VOM-FR-FHYY: does nothing while voice mode holds no handle", async () => {
     controller.voiceComposerMounted.mockReturnValue(false);
     await mount();
     fireEvent.keyDown(window, CHORD);
@@ -248,6 +254,14 @@ describe("VAD mode", () => {
     const change = { activityId: "va1", state: "misfire" };
     handlers.activity?.(change);
     expect(controller.noteActivity).toHaveBeenCalledWith(change);
+  });
+
+  it("VOM-FR-NZXN, VOP-FR-DSSU: a chunk event reaches the controller", async () => {
+    await mount();
+    await waitFor(() => expect(handlers.chunk).not.toBeNull());
+    const change = { captureId: "c1", index: 0, state: "chunk_end", text: null, code: null };
+    handlers.chunk?.(change);
+    expect(controller.noteChunk).toHaveBeenCalledWith(change);
   });
 });
 

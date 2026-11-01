@@ -18,6 +18,23 @@ export const api = {
   setVoiceActivityGate: vi.fn(async () => undefined),
   speakVoiceSegment: vi.fn(async () => undefined),
   startVoiceCapture: vi.fn(async () => ({ sessionId: "s1", route: "realtime", live: true })),
+  dispatchSpeechTurn: vi.fn(async (args: { nickname: string; speechId: string }) => ({
+    id: `t-${args.nickname}`,
+    agentId: args.nickname,
+    nickname: args.nickname,
+    origin: { kind: "artifact", artifactId: "a.md", discussionId: "d1" },
+    triggerCommentId: null,
+    speechId: args.speechId,
+    replyHeld: false,
+    state: "running",
+    failure: null,
+    retryPermitted: false,
+    startedAt: "2026-02-01T00:00:00Z",
+    endedAt: null,
+    activeToolCalls: [],
+  })),
+  steerSpeechTurn: vi.fn(async () => []),
+  endSpeechTurn: vi.fn(async () => []),
 };
 
 export const mic = {

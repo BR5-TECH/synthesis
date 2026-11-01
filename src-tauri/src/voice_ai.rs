@@ -18,9 +18,11 @@ use crate::global_settings::GlobalSettingsStore;
 
 pub(crate) mod activity;
 pub(crate) mod capture;
+pub(crate) mod chunks;
 pub(crate) mod commands;
 pub(crate) mod detect;
 pub(crate) mod http;
+pub(crate) mod live;
 pub(crate) mod models;
 pub(crate) mod pcm;
 pub(crate) mod realtime;
@@ -46,6 +48,8 @@ pub const VOICE_AI_CHANGED: &str = "voice-ai-changed";
 pub const VOICE_TRANSCRIPT_CHANGED: &str = "voice-transcript-changed";
 /// VOP-FR-DICU: a VAD session reports each step of an utterance.
 pub const VOICE_ACTIVITY_CHANGED: &str = "voice-activity-changed";
+/// VOP-FR-DSSU: a chunk of a chunked capture ended, or has its result.
+pub const VOICE_CHUNK_CHANGED: &str = "voice-chunk-changed";
 
 pub const ERR_BASE_URL_EMPTY: &str = "base_url_empty";
 pub const ERR_BASE_URL_INVALID: &str = "base_url_invalid";
@@ -258,6 +262,7 @@ pub trait VoiceSink: Send + Sync {
     fn integrations_changed(&self, integrations: &VoiceAiIntegrations);
     fn transcript_changed(&self, session_id: &str, text: &str);
     fn activity_changed(&self, change: &activity::ActivityChange);
+    fn chunk_changed(&self, change: &chunks::ChunkChange);
     /// A failure that the typed code does not explain. `detail` is a kind, a
     /// status, or a server code, and never a URL, a key, or text.
     fn diagnostic(&self, stage: &str, detail: &str);
@@ -277,6 +282,10 @@ impl VoiceSink for tauri::AppHandle {
 
     fn activity_changed(&self, change: &activity::ActivityChange) {
         let _ = self.emit(VOICE_ACTIVITY_CHANGED, change.payload());
+    }
+
+    fn chunk_changed(&self, change: &chunks::ChunkChange) {
+        let _ = self.emit(VOICE_CHUNK_CHANGED, change.payload());
     }
 
     fn diagnostic(&self, stage: &str, detail: &str) {
@@ -302,7 +311,7 @@ pub struct ActiveVoice {
 pub struct VoiceAi {
     pub(crate) secrets: Box<dyn SecretStore>,
     pub(crate) write_lock: Mutex<()>,
-    pub(crate) capture: Mutex<Option<capture::CaptureSession>>,
+    pub(crate) capture: Mutex<Vec<capture::CaptureSession>>,
     pub(crate) activity: Mutex<Option<activity::ActivityHandle>>,
     pub(crate) speeches: Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>,
     /// VOP-FR-DWSB: the last cancelled speech. A cancel can arrive between two
@@ -329,7 +338,7 @@ impl VoiceAi {
         Self {
             secrets,
             write_lock: Mutex::new(()),
-            capture: Mutex::new(None),
+            capture: Mutex::new(Vec::new()),
             activity: Mutex::new(None),
             speeches: Mutex::new(HashMap::new()),
             cancelled_speech: Mutex::new(None),

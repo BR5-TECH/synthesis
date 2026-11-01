@@ -1,5 +1,5 @@
 //! Settling a proposal's record and the rows of its ledger
-//! (`DCP-draft-change-proposals.md` DCP-FR-01, DCP-FR-PWSF, DCP-FR-XDRV).
+//! (`DCP-draft-change-proposals.md` DCP-FR-01, DCP-FR-PWSF).
 //!
 //! Every write here is about **where a proposal and its changes stand**, and
 //! none of them touches a file of the draft — that is the transaction
@@ -43,92 +43,6 @@ pub(crate) fn set_decided(
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
     drafts::git_storage::ensure_private_ignored(root);
-    Ok(record)
-}
-
-/// DCP-FR-XDRV: replace one undecided or rejected change in place, keeping its
-/// id and its position in the order. The change is `pending` after it.
-///
-/// The id is what every reply addressed to that change names, so a revision that
-/// minted a new one would orphan the discussion about it.
-pub fn revise_hunk_impl(
-    root: &fs::RootFs,
-    draft_id: &str,
-    hunk_id: &str,
-    proposed: &hunks::ProposedHunk,
-) -> Result<DraftChangeProposal, String> {
-    let draft_id = draft_id.to_string();
-    // DCP-FR-NKTB: every write against one draft's proposals is serialised, so a
-    // revision never races a decision reading the same ledger.
-    let _guard = draft_lock(&draft_id);
-    // Read inside the lock. The change belongs to whichever proposal of this
-    // draft is still standing (a draft holds at most one, DCP-FR-04) — and
-    // which that is, and where its changes stand, can both have moved since the
-    // caller decided to revise.
-    let mut record = pending_for(root, &draft_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
-    let proposal_id = &record.id.clone();
-    let dir = drafts::draft_proposals_dir(root, &draft_id)?;
-    // DCP-FR-QLMH: a proposal an older build recorded carries no ledger, and its
-    // one change is the row this gives it — the same backfill every other lookup
-    // by change id performs before it reads one.
-    {
-        let prompt = drafts::require_prompt(root, &draft_id)
-            .and_then(|path| drafts::load_draft_file_impl(root, &draft_id, &path))
-            .map(|contents| contents.body)
-            .unwrap_or_default();
-        backfill_legacy_ledger(root, &dir, &mut record, &prompt);
-    }
-    let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
-    // DCP-FR-XDRV: an accepted change is written into the prompt and is final.
-    if !row.state.is_revisable() {
-        return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
-    }
-
-    let prompt = drafts::require_prompt(root, &draft_id)
-        .and_then(|path| drafts::load_draft_file_impl(root, &draft_id, &path))
-        .map(|contents| contents.body)
-        .unwrap_or_default();
-    let (mut doc, _legacy) = read_hunk_document(root, &dir, proposal_id, &prompt)?;
-    // DCP-FR-JGCD: the replacement is placed against the prompt exactly as a
-    // recording is, so it is refused for the same mistakes **and named by the
-    // same errors**. A replacement whose text the prompt holds twice is not a
-    // replacement whose text the prompt has lost, and a caller told the one for
-    // the other is sent to copy the text again when what it has to do is copy
-    // more of the words around it.
-    let planned = hunks::plan(&prompt, std::slice::from_ref(proposed), || hunk_id.to_string())
-        .map_err(|e| match e {
-            hunks::PlanError::Ambiguous(_) => ERR_HUNK_AMBIGUOUS.to_string(),
-            // PDC-FR-DMTH: the side goes after the colon, so the refusal can
-            // name the context to shorten.
-            hunks::PlanError::ContextTooLong(_, side) => {
-                format!("{ERR_HUNK_CONTEXT_TOO_LONG}:{}", side.as_str())
-            }
-            // A one-change revision can neither overlap another change nor be
-            // empty, so the two remaining errors are one lost anchor.
-            _ => ERR_ANCHOR_LOST.to_string(),
-        })?;
-    let next = planned.hunks.into_iter().next().ok_or(ERR_ANCHOR_LOST)?;
-    if !doc.replace_in_place(hunk_id, next) {
-        return Err(ERR_HUNK_NOT_FOUND.to_string());
-    }
-    root.write_text_atomic(hunks_path(&dir, proposal_id), &doc.to_toml())
-        .map_err(|_| ERR_WRITE_FAILED.to_string())?;
-    // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
-    // ignore file keeps it out of Git, and no commit names it.
-    drafts::git_storage::ensure_private_ignored(root);
-
-    if let Some(row) = record.ledger.iter_mut().find(|row| row.id == hunk_id) {
-        // The agent's text is the new origin, so the change reads as unedited
-        // again and is undecided: a rejected change is open to the author's
-        // decision again (DCP-FR-XDRV, PDC-FR-GMWR).
-        row.edited = false;
-        row.revision += 1;
-        row.state = hunks::HunkState::Pending;
-        row.decided_at = None;
-    }
-    record.candidate_edited = record.ledger.iter().any(|row| row.edited);
-    resettle(&mut record);
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     Ok(record)
 }
 

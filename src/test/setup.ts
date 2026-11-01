@@ -1,4 +1,4 @@
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 import "@testing-library/jest-dom/vitest";
 
@@ -156,6 +156,25 @@ function requireJsdomStorage(): void {
 }
 
 requireJsdomStorage();
+
+/**
+ * VOM-FR-NCHC, CTA-FR-SZOC, VOM-FR-KEMU: the live bubble, the speech post, and
+ * the app preferences cache are module stores. Each test starts with them
+ * empty, so a value of one test does not show in the next test.
+ *
+ * Imported here and not at the top, for the reason the block below gives.
+ */
+beforeEach(async () => {
+  const [{ resetLiveBubbleForTest }, { resetSpeechPostsForTest }, { resetAppPreferencesCache }] =
+    await Promise.all([
+      import("../state/liveBubble"),
+      import("../state/speechPosts"),
+      import("../state/appPreferences"),
+    ]);
+  resetLiveBubbleForTest();
+  resetSpeechPostsForTest();
+  resetAppPreferencesCache();
+});
 
 /**
  * EDT-FR-70 / FLO-FR-27: put down whatever the finished test left scheduled.

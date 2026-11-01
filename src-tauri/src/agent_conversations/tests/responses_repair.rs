@@ -581,7 +581,7 @@ fn a_turn_whose_reply_could_not_be_read_is_offered_again_and_not_repeated() {
     let entries = h.turns().recoverable_failures(None);
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].id, terminal.id);
-    assert_eq!(entries[0].trigger_comment_id, thread.comments[0].id);
+    assert_eq!(entries[0].trigger_comment_id.as_deref(), Some(thread.comments[0].id.as_str()));
 
     let failed = wait_for_record(&terminal.id, "model call failed");
     assert_eq!(failed.level, crate::logging::LogLevel::Error);

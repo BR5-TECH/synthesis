@@ -254,7 +254,9 @@ pub(super) fn finish<R: tauri::Runtime>(
     if matches!(state, AgentTurnState::Delivered | AgentTurnState::AwaitingReply) {
         turns.record_image_notice(&turn, &project_key);
     }
-    if state == AgentTurnState::Failed && recoverable {
+    // AGC-FR-ANBX: a turn that a speech registered has no trigger comment until
+    // its speech ends with one, so it has nothing to retry and no entry.
+    if state == AgentTurnState::Failed && recoverable && turn.trigger_comment_id.is_some() {
         turn = turns.remember_recoverable(turn, project_key);
         logging::log_info(
             app,

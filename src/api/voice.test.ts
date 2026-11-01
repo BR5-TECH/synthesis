@@ -44,7 +44,7 @@ describe("the voice activity commands", () => {
   });
 
   it("VOP-FR-QZCE: the gate goes as one whole record", async () => {
-    const gate = { seq: 2, blocked: true, playing: false, settled: "c1", keyterms: ["arch"] };
+    const gate = { seq: 2, blocked: true, playing: false, chunked: true, keyterms: ["arch"] };
     await setVoiceActivityGate("va1", gate);
     expect(core.invoke).toHaveBeenCalledWith("set_voice_activity_gate", {
       activityId: "va1",
@@ -62,6 +62,15 @@ describe("the voice activity commands", () => {
 });
 
 describe("the voice commands", () => {
+  it("VOP-FR-ERDS: a capture starts chunked or not", async () => {
+    await startVoiceCapture(48_000, ["arch"], true);
+    expect(core.invoke).toHaveBeenCalledWith("start_voice_capture", {
+      captureRate: 48_000,
+      keyterms: ["arch"],
+      chunked: true,
+    });
+  });
+
   it("VOP-FR-DXPK: audio goes as a raw body, with its session in a header", async () => {
     const bytes = new Uint8Array([1, 2]);
     await appendVoiceCapture("s1", bytes);
@@ -142,6 +151,7 @@ describe("the voice commands", () => {
     expect(core.invoke).toHaveBeenLastCalledWith("start_voice_capture", {
       captureRate: 48_000,
       keyterms: ["arch"],
+      chunked: false,
     });
   });
 

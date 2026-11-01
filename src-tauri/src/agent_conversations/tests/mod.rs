@@ -676,6 +676,7 @@ mod responses_repair;
 mod retries;
 mod rig_replies;
 mod session_log;
+mod speech_turns;
 mod spoken_part;
 mod steering;
 mod tls_carriers;

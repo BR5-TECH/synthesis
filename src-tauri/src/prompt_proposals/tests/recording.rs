@@ -121,7 +121,7 @@ fn a_recording_posts_one_comment_carrying_one_prompt_proposal_attachment() {
     );
     assert_eq!(posted.attachments.len(), 1);
     match &posted.attachments[0] {
-        comments::Attachment::PromptProposal { proposal_id, artifact_id, path } => {
+        comments::Attachment::PromptProposal { proposal_id, artifact_id, path, .. } => {
             assert_eq!(proposal_id, &proposal.id);
             assert_eq!(artifact_id, PROMPT);
             assert_eq!(path, PROMPT);

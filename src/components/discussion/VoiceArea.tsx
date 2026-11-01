@@ -40,11 +40,16 @@ function elapsed(since: number, now: number): string {
 export type VadIndicator = "idle" | "listening" | "hearing" | "transcribing" | "paused";
 
 export function vadIndicator(state: VoiceState): VadIndicator {
-  // VOM-FR-OTRF: a reply can still stand paused while the transcript comes.
-  if (state.phase === "transcribing" || state.phase === "posting") return "transcribing";
+  // VOM-FR-VOUG: the precedence of VOM-FR-XDUY, with no Speaking state.
   if (state.playbackPaused) return "paused";
-  if (!state.vadOpen) return "idle";
-  return state.hearing ? "hearing" : "listening";
+  if (state.hearing || state.phase === "recording") return "hearing";
+  if (transcribing(state)) return "transcribing";
+  return state.vadOpen ? "listening" : "idle";
+}
+
+/** VOM-FR-GBCN: a chunk or an utterance transcribes, while the microphone can stay open. */
+function transcribing(state: VoiceState): boolean {
+  return state.transcribing > 0 || state.phase === "transcribing" || state.phase === "posting";
 }
 
 const VAD_NAMES: Record<VadIndicator, string> = {
@@ -70,17 +75,11 @@ function recordName(state: VoiceState): string {
     if (state.vadOpen) return `${name}. Close the voice session`;
     return state.phase === "idle" ? `${name}. Open a voice session` : name;
   }
-  switch (state.phase) {
-    case "opening":
-    case "recording":
-      return "Recording. Release or press to stop";
-    case "transcribing":
-      return "Transcribing";
-    case "posting":
-      return "Posting";
-    default:
-      return "Record";
+  // VOM-FR-QTAQ: Recording, then Transcribing, then Idle.
+  if (state.phase === "opening" || state.phase === "recording") {
+    return "Recording. Release or press to stop";
   }
+  return transcribing(state) ? "Transcribing. Press to record again" : "Record";
 }
 
 export function useClock(active: boolean): number {
@@ -102,8 +101,7 @@ export function statusOf(state: VoiceState, now: number): string {
   }
   if (state.inputMode === "vad") return VAD_STATUS[vadIndicator(state)];
   if (state.phase === "recording" || state.phase === "opening") return "Listening…";
-  if (state.phase === "transcribing") return "Transcribing…";
-  if (state.phase === "posting") return "Posting…";
+  if (transcribing(state)) return "Transcribing…";
   return "Press to talk";
 }
 
@@ -125,7 +123,8 @@ function RecordIcon({ state }: { state: VoiceState }) {
 export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
   const state = useVoiceState();
   const vad = state.inputMode === "vad";
-  const busy = state.phase === "transcribing" || state.phase === "posting";
+  // VOM-FR-QTAQ: a new press can start a recording while Transcribing shows.
+  const busy = state.phase === "opening";
   return (
     <button
       type="button"
@@ -243,7 +242,7 @@ export function VoiceArea({ disabled }: { disabled: boolean }) {
   const recording = state.phase === "recording";
   const now = useClock(recording && !state.live);
   const status = statusOf(state, now);
-  const vadBusy = state.inputMode === "ptt" && state.phase !== "idle";
+  const vadBusy = state.inputMode === "ptt" && (state.phase !== "idle" || transcribing(state));
 
   // The newest words are what the author checks while speaking.
   const transcriptRef = useRef<HTMLDivElement>(null);

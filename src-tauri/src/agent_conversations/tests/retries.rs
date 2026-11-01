@@ -73,7 +73,7 @@ fn an_exhausted_budget_fails_the_turn_for_each_recoverable_class() {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].id, terminal.id);
         assert_eq!(entries[0].nickname, "arch");
-        assert_eq!(entries[0].trigger_comment_id, thread.comments[0].id);
+        assert_eq!(entries[0].trigger_comment_id.as_deref(), Some(thread.comments[0].id.as_str()));
     }
 }
 
@@ -449,7 +449,7 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
     assert_eq!(entry.agent_id, terminal.agent_id);
     assert_eq!(entry.nickname, "arch");
     assert_eq!(entry.origin, origin);
-    assert_eq!(entry.trigger_comment_id, thread.comments[0].id);
+    assert_eq!(entry.trigger_comment_id.as_deref(), Some(thread.comments[0].id.as_str()));
     assert_eq!(entry.failure.as_deref(), Some(FAIL_UNREACHABLE));
     assert!(entry.retry_permitted);
 
@@ -490,6 +490,9 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
         // AGC-FR-URXV: carried, and the deadline the turn last held.
         "deadlineStartedAt",
         "deadlineAt",
+        // AGC-FR-QYNZ: carried, and false and null on an ended turn.
+        "speechId",
+        "replyHeld",
     ];
     expected.sort_unstable();
     assert_eq!(keys, expected, "the entry is the turn and nothing beside it");
@@ -902,7 +905,7 @@ fn a_refused_certificate_fails_the_turn_with_host_and_cause_and_is_not_repeated(
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].id, terminal.id);
     assert_eq!(entries[0].tls_failure, terminal.tls_failure);
-    assert_eq!(entries[0].trigger_comment_id, thread.comments[0].id);
+    assert_eq!(entries[0].trigger_comment_id.as_deref(), Some(thread.comments[0].id.as_str()));
 }
 
 #[test]

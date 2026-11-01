@@ -306,6 +306,11 @@ pub(crate) async fn end_input(socket: &mut Socket, dialect: Dialect) -> Result<(
     send(socket, event).await
 }
 
+/// VOP-FR-GLRN: the end of one chunk, in a session that continues.
+pub(crate) async fn commit_input(socket: &mut Socket) -> Result<(), String> {
+    send(socket, json!({ "type": "input_audio_buffer.commit" })).await
+}
+
 /// VOP-FR-XXAB: the transcript of a session, joined from its items.
 #[derive(Default)]
 pub(crate) struct Transcript {
@@ -384,8 +389,14 @@ impl Transcript {
     }
 
     pub(crate) fn text(&self) -> String {
+        self.text_except(&HashSet::new())
+    }
+
+    /// The text of the items that `skip` does not hold, in commit order. A
+    /// chunked capture skips the items of the chunks that ended.
+    pub(crate) fn text_except(&self, skip: &HashSet<String>) -> String {
         let mut parts: Vec<&str> = Vec::new();
-        for id in self.ordered() {
+        for id in self.ordered().into_iter().filter(|id| !skip.contains(*id)) {
             let part = self.done.get(id).or_else(|| self.deltas.get(id));
             if let Some(part) = part.map(|p| p.trim()).filter(|p| !p.is_empty()) {
                 parts.push(part);

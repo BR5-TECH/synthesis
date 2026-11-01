@@ -1,101 +1,96 @@
 /**
- * Voice mode as a process (`VOM-voice-mode.md`): the press, the recording, the
- * VAD session, the post, and the spoken reply.
+ * Voice mode as a process (`VOM-voice-mode.md`): entry and exit, the saved
+ * modes, the press, and the Push-to-Talk recording.
  *
- * This holds no React. A composer registers a handle while it is mounted, and
- * the recording goes on through a change of owner surface, so the end of a
- * recording asks who is mounted at that moment (VOM-FR-ABPU).
+ * This holds no React. Voice mode is bound to one discussion and not to a
+ * mounted composer (VOM-FR-BCRD): a composer lends a handle while it is
+ * mounted, and the handle stays retained when it unmounts
+ * (`./voiceHandles.ts`). The utterances, the VAD session, and the spoken replies
+ * live in `./voiceUtterances.ts`, `./voiceVad.ts`, and `./voiceReplies.ts`.
  */
-import {
-  appendVoiceCapture,
-  cancelVoiceCapture,
-  finishVoiceCapture,
-  retryVoiceCapture,
-  startVoiceCapture,
-} from "../api";
+import { appendVoiceCapture, finishVoiceCapture, retryVoiceCapture, startVoiceCapture } from "../api";
 import { logDebug, logInfo, logWarn } from "../logging";
-import { getDiscussionSession, setComposerBody } from "../state/discussionSession";
+import { loadAppPreferences, patchAppPreferences, peekAppPreferences } from "../state/appPreferences";
+import { clearLiveBubble } from "../state/liveBubble";
+import { ownerLabelOf } from "../state/ownerAvailability";
 import {
   INITIAL_VOICE_STATE,
   getVoiceState,
   patchVoiceState,
-  subscribeVoiceState,
   type VoiceInputMode,
   type VoiceResponseMode,
-  type VoiceState,
 } from "../state/voiceSession";
-import type {
-  Discussion,
-  PendingQuestion,
-  Participant,
-  VoiceActivityChange,
-  VoiceHotkeyBehaviour,
-} from "../types";
+import type { AppPreferences, Discussion, DiscussionTarget, VoiceHotkeyBehaviour } from "../types";
 import { ChunkPump, MicrophoneError, openMicrophone, type Microphone } from "./capture";
-import { pausePlayback, prepareAudio, resumePlayback } from "./playback";
-import { VadSession, type VadGate } from "./vadSession";
+import { prepareAudio } from "./playback";
 import {
-  commentSpeech,
-  dropReply,
-  resetVoiceSpeechForTest,
-  speak,
-  type Speech,
-} from "./voiceSpeech";
-import { canRetry, errorCode } from "./voiceMessages";
+  addHandle,
+  forgetRetained,
+  handleOf,
+  moveHandles,
+  postingHandleOf,
+  removeHandle,
+  resetVoiceHandlesForTest,
+  type VoiceComposerHandle,
+} from "./voiceHandles";
+import { errorCode } from "./voiceMessages";
 import {
   answerTargetOf,
-  questionBlockOf,
-  questionSpeech,
+  forgetRetainedQuestions,
   resetVoiceQuestionsForTest,
   type AnswerTarget,
 } from "./voiceQuestions";
+import {
+  forgetSpokenQuestion,
+  latestVoiceDiscussion,
+  resetVoiceRepliesForTest,
+  setBaseline,
+  stopSpeech,
+} from "./voiceReplies";
+import {
+  answerTaken,
+  beginUtterance,
+  chunkedFor,
+  detachUtterance,
+  discardUtterance,
+  dropHeldRecording,
+  finishUtterance,
+  heldRecording,
+  moveUtterances,
+  noteUtteranceText,
+  openUtterances,
+  resetVoiceUtterancesForTest,
+  retryHeld,
+  utteranceOf,
+  type Utterance,
+} from "./voiceUtterances";
+import {
+  TAIL_MS,
+  discardSpoken,
+  endVadSession,
+  keepSpoken,
+  pressVad,
+  pushVadGate,
+  resetVoiceVadForTest,
+  vadIsBusy,
+} from "./voiceVad";
+
+export { noteChunk } from "./voiceUtterances";
+export { noteActivity } from "./voiceVad";
+export { noteDiscussionChanged, noteQuestionShown, stopSpeech } from "./voiceReplies";
+export type { PostOutcome, VoiceComposerHandle } from "./voiceHandles";
+export { TAIL_MS };
 
 /** VOM-FR-DGOG. */
 export const SHORT_PRESS_MS = 300;
-/** VOM-FR-FTFU. */
-export const TAIL_MS = 200;
 /** VOM-FR-WSXW. */
 export const RECORDING_LIMIT_MS = 10 * 60 * 1000;
-/** VOM-FR-GZPA. */
-export const SURFACE_GRACE_MS = 2000;
-
-export type PostOutcome = "posted" | "reached_nobody" | "busy" | "failed";
-
-/** What a mounted composer lends to voice mode. */
-export interface VoiceComposerHandle {
-  /** VOM-FR-RFWC: post the session body, then this text. */
-  post(spoken: string): Promise<PostOutcome>;
-  /** VOM-FR-TAQJ. Gives the text with its spoken address as a tag. */
-  tagged(transcript: string): string;
-  /** VOM-FR-ZUWW. */
-  blocked(): boolean;
-  /** VOM-FR-LNUH. */
-  nicknames(): string[];
-  /** VOM-FR-UALP. */
-  voiceOf(agentId: string): string | null;
-}
-
-/** One transcript on its way. Flags read after the wait, so they can still change. */
-interface Job {
-  key: string;
-  sessionId: string;
-  keepInBody: boolean;
-  discard: boolean;
-  /** VOM-FR-PINR: the question this recording answers. */
-  answers: AnswerTarget | null;
-}
-
-/** VOM-FR-WRVR: an utterance from `speech_confirmed` until it settles. */
-interface Utterance extends Job {
-  /** "finish voice capture" runs. A capture never finishes twice. */
-  finishing: boolean;
-}
 
 interface Capture {
   key: string;
   mic: Microphone | null;
   pump: ChunkPump;
-  sessionId: string | null;
+  utterance: Utterance | null;
   pressedAt: number;
   released: boolean;
   discard: boolean;
@@ -108,167 +103,132 @@ interface Capture {
 
 let behaviour: VoiceHotkeyBehaviour = "hold";
 let capture: Capture | null = null;
-/**
- * A transcript on its way from the backend. It outlives `capture`, because the
- * author can leave voice mode while it comes.
- */
-let awaited: Job | null = null;
-/** VOM-FR-HUXY: the session whose text shows. It outlives the release. */
+/** VOM-FR-HUXY: the capture whose live text shows in the voice area. */
 let liveSession: string | null = null;
-/** VOM-FR-WICV: the session that holds a failed recording. */
-let heldSession: { id: string; key: string; answers: AnswerTarget | null } | null = null;
-let baseline = new Set<string>();
-const composers = new Map<string, VoiceComposerHandle[]>();
-/** VOM-FR-PDZR: the open session. */
-let vad: VadSession | null = null;
-/** A session that closes. Its events still count until the close comes back. */
-let closingVad: VadSession | null = null;
-let vadClosed: Promise<void> | null = null;
-/** A session that opens. The author can close it before it is open. */
-let vadOpening: { cancelled: boolean } | null = null;
-/** The key of the session, which outlives `activeKey` when voice mode ends. */
-let vadKey: string | null = null;
-let stopGateWatch: (() => void) | null = null;
-let surfaceTimer: ReturnType<typeof setTimeout> | null = null;
-let utterance: Utterance | null = null;
-/** VOM-FR-ZPOD: the newest reply that waits for the author. */
-let pendingReply: { speech: Speech; key: string | null } | null = null;
-/** VOM-FR-UALK: the question spoken last, so a re-read speaks nothing. */
-let spokenQuestion: AnswerTarget | null = null;
+/** VOM-FR-KEMU: the saved response mode. The effective one can be Text. */
+let savedResponse: VoiceResponseMode = "text";
+/** Counts entries, so a late read of the preferences applies to its own entry. */
+let entry = 0;
+/** A toggle changed since the entry. */
+let toggled = false;
 
 export function setVoiceBehaviour(next: VoiceHotkeyBehaviour): void {
   behaviour = next;
 }
 
-function handleOf(key: string | null): VoiceComposerHandle | null {
-  const mounted = key === null ? undefined : composers.get(key);
-  return mounted?.[mounted.length - 1] ?? null;
-}
-
-/** VOM-FR-FHYY: a composer of the voice mode is on screen. */
+/** VOM-FR-WPRW, VOM-FR-FHYY: voice mode is on and can record. */
 export function voiceComposerMounted(): boolean {
   return handleOf(getVoiceState().activeKey) !== null;
 }
 
-function clearFeedback() {
+function clearFeedback(): void {
   patchVoiceState({ error: null, canRetry: false, note: null });
 }
 
-function dropHeldRecording(): void {
-  if (heldSession) {
-    void cancelVoiceCapture(heldSession.id).catch(() => undefined);
-    heldSession = null;
-  }
+// --- Saved modes ----------------------------------------------------------
+
+/** VOM-FR-KEMU: saved Voice with no speech route is Text, and the saved value stays. */
+function effectiveResponse(saved: VoiceResponseMode): VoiceResponseMode {
+  return saved === "voice" && getVoiceState().providerSpeaks ? "voice" : "text";
 }
 
-// --- Spoken replies -------------------------------------------------------
-
-/** VOM-FR-QDWW: silence at once, and no reply is left to speak. */
-export function stopSpeech(): void {
-  pendingReply = null;
-  dropReply();
+function applySaved(prefs: AppPreferences): void {
+  savedResponse = prefs.voiceResponseMode === "voice" ? "voice" : "text";
+  const inputMode: VoiceInputMode = prefs.voiceInputMode === "vad" ? "vad" : "ptt";
+  patchVoiceState({ inputMode, responseMode: effectiveResponse(savedResponse) });
 }
 
-/** VOM-FR-ZPOD: speech that comes while the author speaks waits for them. */
-function speakOrWait(speech: Speech, key: string | null): void {
-  if (getVoiceState().hearing || utterance !== null) {
-    pendingReply = { speech, key };
-    return;
-  }
-  void speakAs(speech, key);
-}
-
-/** Speak with the voice that the mounted surface knows for the agent. */
-function speakAs(speech: Speech, key: string | null): Promise<void> {
-  const { agentId } = speech;
-  return speak(speech, agentId === null ? null : (handleOf(key)?.voiceOf(agentId) ?? null));
-}
-
-/**
- * VOM-FR-ZLAY, VOM-FR-ILJW, VOM-FR-VSCQ, VOM-FR-RKOG,
- * VOM-FR-EGNX: a discussion changed. Each new comment joins the baseline, so
- * a switch to response mode Voice never speaks an old comment.
- */
-export function noteDiscussionChanged(discussion: Discussion): void {
-  const state = getVoiceState();
-  if (state.activeKey === null || discussion.id !== state.discussionId) return;
-  const fresh = discussion.comments.filter((c) => !baseline.has(c.id));
-  fresh.forEach((c) => baseline.add(c.id));
-  if (state.responseMode !== "voice" || handleOf(state.activeKey) === null) return;
-  const newest = fresh.map(commentSpeech).filter((s) => s !== null).pop();
-  if (!newest) return;
-  if (newest.text === "") logDebug(["frontend", "ai"], "an agent comment has nothing to speak", {});
-  speakOrWait(newest, state.activeKey);
-}
-
-/**
- * VOM-FR-HBLE, VOM-FR-UALK: the block shows a question. `arrived` is the first
- * show of a mount: a set that voice mode already spoke speaks nothing then, so a
- * remount is silent. The check waits a tick, because the block mounts in the
- * commit that also mounts the session control.
- */
-export function noteQuestionShown(
-  discussionId: string,
-  setId: string,
-  question: PendingQuestion,
-  askedBy: Participant,
-  arrived: boolean,
-): void {
-  const { activeKey, discussionId: voiceDiscussion } = getVoiceState();
-  if (activeKey === null || discussionId !== voiceDiscussion) return;
-  const known = spokenQuestion?.setId === setId;
-  const same = known && spokenQuestion?.position === question.position;
-  spokenQuestion = { setId, position: question.position };
-  if (same || (known && arrived)) return;
-  queueMicrotask(() => {
-    const state = getVoiceState();
-    if (spokenQuestion?.setId !== setId || spokenQuestion.position !== question.position) return;
-    if (state.responseMode !== "voice") return;
-    if (handleOf(state.activeKey) === null) {
-      logDebug(["frontend", "ai"], "a question found no voice surface", {});
-      return;
-    }
-    const text = questionSpeech(question);
-    if (text === "") return;
-    logDebug(["frontend", "ai"], "a question speaks", { position: question.position });
-    speakOrWait(
-      { text, agentId: askedBy.kind === "agent" ? askedBy.agentId : null },
-      state.activeKey,
-    );
+/** VOM-FR-KEMU: a toggle change saves at once. */
+function save(change: Partial<AppPreferences>): void {
+  toggled = true;
+  patchAppPreferences(change).catch((error: unknown) => {
+    logWarn(["frontend"], "a voice mode preference was not saved", { code: errorCode(error) });
   });
 }
 
 // --- Entering and leaving -------------------------------------------------
 
-/** VOM-FR-OSTM, VOM-FR-ILJW. */
-export function enterVoiceMode(key: string, discussion: Discussion | null): void {
+/** STB-FR-PYRC: the owner name of a conversation tab, without `Chat:`. */
+function ownerNameOf(target: DiscussionTarget): string {
+  const label = ownerLabelOf(target);
+  if (target.kind !== "artifact") return label;
+  const cut = label.lastIndexOf("/");
+  return cut === -1 ? label : label.slice(cut + 1);
+}
+
+let voiceTarget: DiscussionTarget | null = null;
+
+/** VOM-FR-OSTM, VOM-FR-ILJW, VOM-FR-KEMU, VOM-FR-XDUY. */
+export function enterVoiceMode(
+  key: string,
+  discussion: Discussion | null,
+  target: DiscussionTarget | null = discussion?.target ?? null,
+): void {
   if (getVoiceState().activeKey !== null) leaveVoiceMode();
   prepareAudio();
-  baseline = new Set(discussion?.comments.map((c) => c.id) ?? []);
-  spokenQuestion = null;
+  setBaseline(discussion);
+  forgetSpokenQuestion();
+  voiceTarget = target;
+  entry += 1;
+  toggled = false;
+  const mine = entry;
   patchVoiceState({
     activeKey: key,
     discussionId: discussion?.id ?? null,
-    inputMode: "ptt",
+    ownerName: target ? ownerNameOf(target) : null,
     transcript: "",
     error: null,
     canRetry: false,
     note: null,
   });
+  const cached = peekAppPreferences();
+  if (cached) {
+    applySaved(cached);
+  } else {
+    patchVoiceState({ inputMode: "ptt", responseMode: "text" });
+    void loadAppPreferences()
+      .then((prefs) => {
+        // A toggle that the author used before the read came wins.
+        if (entry === mine && !toggled && getVoiceState().activeKey !== null) applySaved(prefs);
+      })
+      .catch((error: unknown) => {
+        logWarn(["frontend"], "the voice mode preferences could not be read", {
+          code: errorCode(error),
+        });
+      });
+  }
   logInfo(["frontend"], "voice mode entered", { key });
 }
 
-/** VOM-FR-JBJI. */
-export function leaveVoiceMode(): void {
-  stopSpeech();
-  dropHeldRecording();
-  keepWhatIsComing();
-  spokenQuestion = null;
+/** The reveal of the voice discussion, for the status bar (STB-FR-OSOL). */
+export function voiceReveal(): {
+  discussion: Discussion | null;
+  discussionId: string | null;
+  target: DiscussionTarget;
+} | null {
+  const { activeKey, discussionId } = getVoiceState();
+  if (activeKey === null || voiceTarget === null) return null;
+  return { discussion: latestVoiceDiscussion(), discussionId, target: voiceTarget };
+}
+
+/** What a recording in progress does when voice mode ends. */
+function endCapture(kind: "keep" | "discard"): void {
+  if (!capture) return;
+  if (kind === "discard") capture.discard = true;
+  else capture.keepInBody = true;
+  endRecording();
+}
+
+function closeVoiceState(): void {
+  forgetRetained();
+  forgetRetainedQuestions();
+  forgetSpokenQuestion();
+  voiceTarget = null;
+  liveSession = null;
   patchVoiceState({
     activeKey: null,
     discussionId: null,
-    responseMode: "text",
-    inputMode: "ptt",
+    ownerName: null,
     transcript: "",
     error: null,
     canRetry: false,
@@ -276,199 +236,99 @@ export function leaveVoiceMode(): void {
   });
 }
 
-/** VOM-FR-ILJW: the first post of an opening composer created a discussion. */
+/** VOM-FR-JBJI, VOM-FR-ABPU: what is on its way joins the session body. */
+export function leaveVoiceMode(): void {
+  stopSpeech();
+  dropHeldRecording();
+  endCapture("keep");
+  keepSpoken();
+  openUtterances().forEach(detachUtterance);
+  void endVadSession("release");
+  closeVoiceState();
+}
+
+/**
+ * VOM-FR-UXZT, VOM-FR-LSBQ: the Stop control of the status bar. It discards a
+ * recording and its chunks, drops the live bubble, and stops playback.
+ */
+export function stopVoiceMode(): void {
+  if (getVoiceState().activeKey === null) return;
+  logInfo(["frontend"], "voice mode stopped from the status bar", {});
+  discardAll();
+  closeVoiceState();
+}
+
+function discardAll(): void {
+  stopSpeech();
+  endCapture("discard");
+  discardSpoken();
+  [...openUtterances()].forEach(discardUtterance);
+  void endVadSession("discard");
+  dropHeldRecording();
+  clearLiveBubble();
+}
+
+/** VOM-FR-NERG, VOM-FR-ILJW: the first post of an opening composer created a discussion. */
 export function bindVoiceToDiscussion(key: string, discussion: Discussion): void {
   if (getVoiceState().activeKey !== key) return;
-  baseline = new Set(discussion.comments.map((c) => c.id));
+  setBaseline(discussion);
   // What is on its way follows the composer, or it posts through the opening
   // composer a second time.
   if (capture?.key === key) capture.key = discussion.id;
-  if (awaited?.key === key) awaited.key = discussion.id;
-  if (heldSession?.key === key) heldSession.key = discussion.id;
-  if (utterance?.key === key) utterance.key = discussion.id;
-  if (pendingReply?.key === key) pendingReply.key = discussion.id;
-  if (vadKey === key) vadKey = discussion.id;
+  moveUtterances(key, discussion.id);
+  moveHandles(key, discussion);
+  voiceTarget = discussion.target;
   patchVoiceState({ activeKey: discussion.id, discussionId: discussion.id });
-  checkSurfaceSoon();
+  pushVadGate();
 }
 
+/** VOM-FR-IAVZ, VOM-FR-KEMU. */
 export function setResponseMode(mode: VoiceResponseMode): void {
   if (mode === "text") stopSpeech();
+  savedResponse = mode;
   patchVoiceState({ responseMode: mode });
-}
-
-/** VOM-FR-EGNX, VOM-FR-ABPU: the last surface of the composer went. */
-function surfaceGone(): void {
-  stopSpeech();
-  // VOM-FR-GZPA: a session waits to see whether another surface mounts.
-  if (vad) checkSurfaceSoon();
-  else keepWhatIsComing();
-}
-
-/** A recording or a transcript on its way stays as unsent text. */
-function keepWhatIsComing(): void {
-  if (capture) {
-    capture.keepInBody = true;
-    endRecording();
-  }
-  if (awaited) awaited.keepInBody = true;
-  if (utterance) utterance.keepInBody = true;
-  void endVadSession("release");
+  save({ voiceResponseMode: mode });
 }
 
 export function registerVoiceComposer(key: string, handle: VoiceComposerHandle): () => void {
-  composers.set(key, [...(composers.get(key) ?? []), handle]);
+  addHandle(key, handle);
   noteComposerChanged();
   return () => {
-    const left = (composers.get(key) ?? []).filter((h) => h !== handle);
-    if (left.length > 0) composers.set(key, left);
-    else composers.delete(key);
-    if (left.length === 0 && getVoiceState().activeKey === key) surfaceGone();
+    removeHandle(key, handle);
     noteComposerChanged();
   };
 }
 
 /** VOP-FR-QZCE: the composer changed what a session may do. */
 export function noteComposerChanged(): void {
-  if (surfaceTimer !== null && handleOf(getVoiceState().activeKey) !== null) clearSurfaceCheck();
-  vad?.pushGate();
+  pushVadGate();
 }
 
-// --- Recording ------------------------------------------------------------
-
-function joinToBody(key: string, text: string): void {
-  const body = getDiscussionSession(key).body;
-  setComposerBody(key, body.trim() === "" ? text : `${body.trimEnd()}\n${text}`);
-}
-
-/**
- * VOM-FR-WYIE, VOM-FR-RENV, VOM-FR-ABPU, VOM-FR-BVNX, VOM-FR-PINR. Gives whether a
- * comment posted or a question took the answer. A comment that reached no agent
- * also posted.
- */
-async function deliver(
-  key: string,
-  text: string,
-  keepInBody: boolean,
-  answers: AnswerTarget | null,
-): Promise<boolean> {
-  const spoken = text.trim();
-  const finished = { phase: "idle" as const, recordingSince: null };
-  if (spoken === "") {
-    patchVoiceState({ ...finished, transcript: "", note: "no_speech" });
-    return false;
-  }
-  // VOM-FR-FUFE: the words as spoken, with the session body left as it is.
-  // VOM-FR-UXYH: an answer whose set went falls through and joins the body.
-  if (answers !== null) {
-    const block = questionBlockOf(key);
-    if (!keepInBody && block?.setId === answers.setId) {
-      patchVoiceState({ ...finished, transcript: "", note: null });
-      logInfo(["frontend", "ai"], "a spoken answer filled a question", {
-        position: answers.position,
-      });
-      block.answer(answers.position, spoken);
-      return true;
-    }
-    logInfo(["frontend", "ai"], "a spoken answer found no question", {});
-    joinToBody(key, spoken);
-    patchVoiceState({ ...finished, transcript: "", note: "kept_in_body" });
-    return false;
-  }
-  const handle = handleOf(key);
-  if (keepInBody || !handle || handle.blocked()) {
-    joinToBody(key, spoken);
-    patchVoiceState({ ...finished, transcript: "", note: "kept_in_body" });
-    return false;
-  }
-  patchVoiceState({ phase: "posting", transcript: spoken });
-  let outcome: PostOutcome = "failed";
-  try {
-    outcome = await handle.post(handle.tagged(spoken));
-  } catch (error) {
-    logWarn(["frontend", "ai"], "a voice transcript did not post", { code: errorCode(error) });
-  }
-  if (outcome === "busy" || outcome === "failed") {
-    joinToBody(key, spoken);
-    patchVoiceState({ ...finished, transcript: "", note: "kept_in_body" });
-    return false;
-  }
-  patchVoiceState({
-    ...finished,
-    transcript: "",
-    note: outcome === "reached_nobody" ? "no_agent" : null,
-  });
-  return true;
-}
-
-/** A transcript failed. With the composer gone, no Retry can come. */
-function failed(error: unknown, job: Job): void {
-  const code = errorCode(error);
-  logWarn(["frontend", "ai"], "a voice recording failed", { code });
-  // A Retry lost its held audio to a new utterance, and that utterance stands.
-  if (utterance !== null && utterance !== job) return;
-  if (job.discard || getVoiceState().activeKey !== job.key) {
-    void cancelVoiceCapture(job.sessionId).catch(() => undefined);
-    if (!job.discard) patchVoiceState({ phase: "idle", recordingSince: null, transcript: "" });
-    return;
-  }
-  const retryable = canRetry(code);
-  heldSession = retryable ? { id: job.sessionId, key: job.key, answers: job.answers } : null;
-  patchVoiceState({
-    phase: "idle",
-    recordingSince: null,
-    transcript: "",
-    error: code,
-    canRetry: retryable,
-  });
-}
-
-/** Wait for the text of one session, then hand it on. Gives whether it posted. */
-async function receive(job: Job, text: Promise<string>): Promise<boolean> {
-  awaited = job;
-  let transcript: string;
-  try {
-    transcript = await text;
-  } catch (error) {
-    awaited = null;
-    if (liveSession === job.sessionId) liveSession = null;
-    failed(error, job);
-    return false;
-  }
-  awaited = null;
-  if (liveSession === job.sessionId) liveSession = null;
-  // The session stores went with the teardown.
-  if (job.discard) return false;
-  return deliver(job.key, transcript, job.keepInBody, job.answers);
-}
+// --- Push-to-Talk recording -------------------------------------------------
 
 async function completeRecording(active: Capture): Promise<void> {
-  capture = null;
-  const sessionId = active.sessionId;
+  if (capture === active) capture = null;
   active.mic?.stop();
   if (active.limit) clearTimeout(active.limit);
-  if (sessionId === null) {
-    patchVoiceState({ phase: "idle", recordingSince: null });
-    return;
-  }
+  const u = active.utterance;
+  // The next press can start a recording at once (VOM-FR-QTAQ).
+  patchVoiceState({ phase: "idle", recordingSince: null });
+  if (u === null) return;
   if (active.discard) {
-    liveSession = null;
-    void cancelVoiceCapture(sessionId).catch(() => undefined);
-    patchVoiceState({ phase: "idle", recordingSince: null, transcript: "" });
+    if (liveSession === u.captureId) liveSession = null;
+    patchVoiceState({ transcript: "" });
+    discardUtterance(u);
     return;
   }
+  u.keepInBody = u.keepInBody || active.keepInBody;
   await active.pump.flush();
-  patchVoiceState({ phase: "transcribing" });
-  await receive(
-    {
-      key: active.key,
-      sessionId,
-      keepInBody: active.keepInBody,
-      discard: false,
-      answers: active.answers,
-    },
-    finishVoiceCapture(sessionId),
-  );
+  // A Stop or a teardown during the flush discarded the capture already.
+  if (u.discard || u.settled) {
+    if (liveSession === u.captureId) liveSession = null;
+    return;
+  }
+  await finishUtterance(u, finishVoiceCapture(u.captureId));
+  if (liveSession === u.captureId) liveSession = null;
 }
 
 /** VOM-FR-FTFU: the release, a short tail, and then the end of input. */
@@ -476,7 +336,7 @@ function endRecording(): void {
   const active = capture;
   if (!active || active.released) return;
   active.released = true;
-  if (active.sessionId === null) return; // The start path sees `released`.
+  if (active.utterance === null) return; // The start path sees `released`.
   if (active.discard) {
     void completeRecording(active);
     return;
@@ -486,16 +346,17 @@ function endRecording(): void {
 
 async function beginRecording(key: string, handle: VoiceComposerHandle): Promise<void> {
   const pump = new ChunkPump(appendVoiceCapture);
+  const answers = answerTargetOf(key, answerTaken);
   const active: Capture = {
     key,
     mic: null,
     pump,
-    sessionId: null,
+    utterance: null,
     pressedAt: Date.now(),
     released: false,
     discard: false,
     keepInBody: false,
-    answers: answerTargetOf(key),
+    answers,
     limit: null,
   };
   capture = active;
@@ -505,20 +366,21 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
     // Nobody waits for this recording now: a short press, or a teardown.
     if (active.discard) {
       active.mic.stop();
-      capture = null;
+      if (capture === active) capture = null;
       patchVoiceState({ phase: "idle", recordingSince: null });
       return;
     }
-    const start = await startVoiceCapture(active.mic.rate, handle.nicknames());
-    active.sessionId = start.sessionId;
+    const chunked = chunkedFor(active.key, answers);
+    const start = await startVoiceCapture(active.mic.rate, handle.nicknames(), chunked);
+    active.utterance = beginUtterance(active.key, start.sessionId, chunked, answers);
     liveSession = start.sessionId;
     pump.attach(start.sessionId);
     patchVoiceState({ phase: "recording", live: start.live, recordingSince: Date.now() });
     active.limit = setTimeout(endRecording, RECORDING_LIMIT_MS);
-    logDebug(["frontend", "ai"], "a voice recording started", { live: start.live });
+    logDebug(["frontend", "ai"], "a voice recording started", { live: start.live, chunked });
   } catch (error) {
     active.mic?.stop();
-    capture = null;
+    if (capture === active) capture = null;
     const code = error instanceof MicrophoneError ? error.message : errorCode(error);
     logWarn(["frontend", "ai"], "a voice recording did not start", { code });
     patchVoiceState({ phase: "idle", error: code, canRetry: false });
@@ -531,277 +393,13 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
   }
 }
 
-// --- VAD sessions ---------------------------------------------------------
-
-/** VOM-FR-GTAQ, VOP-FR-QZCE: what the detector may do now. */
-function vadGate(): VadGate {
-  const state = getVoiceState();
-  const handle = handleOf(state.activeKey);
-  return {
-    blocked:
-      handle === null || handle.blocked() || state.phase !== "idle" || !state.providerReady,
-    playing: state.playing && !state.playbackPaused,
-    keyterms: handle?.nicknames() ?? [],
-  };
-}
-
-/** VOM-FR-CSXI. */
-function vadLost(code: string): void {
-  logWarn(["frontend", "ai"], "a voice session lost its audio", { code });
-  patchVoiceState({ error: code, canRetry: false });
-  void endVadSession("release");
-}
-
-function clearSurfaceCheck(): void {
-  if (surfaceTimer !== null) clearTimeout(surfaceTimer);
-  surfaceTimer = null;
-}
-
-/** VOM-FR-GZPA: an owner mounts its composer after the old one unmounted. */
-function checkSurfaceSoon(): void {
-  clearSurfaceCheck();
-  if (!vad) return;
-  surfaceTimer = setTimeout(() => {
-    surfaceTimer = null;
-    if (handleOf(getVoiceState().activeKey) === null) void endVadSession("release");
-  }, SURFACE_GRACE_MS);
-}
-
-async function openVad(key: string, handle: VoiceComposerHandle): Promise<void> {
-  const opening = { cancelled: false };
-  vadOpening = opening;
-  patchVoiceState({ phase: "opening" });
-  await vadClosed;
-  if (opening.cancelled) {
-    vadOpening = null;
-    patchVoiceState({ phase: "idle" });
-    return;
-  }
-  try {
-    const session = await VadSession.open(handle.nicknames(), { gate: vadGate, lost: vadLost });
-    vadOpening = null;
-    if (opening.cancelled) {
-      session.stopMicrophone();
-      void session.close(true).catch(() => undefined);
-      patchVoiceState({ phase: "idle" });
-      return;
-    }
-    vad = session;
-    vadKey = key;
-    stopGateWatch = subscribeVoiceState(() => vad?.pushGate());
-    patchVoiceState({ phase: "idle", vadOpen: true });
-    session.pushGate();
-    logInfo(["frontend", "ai"], "a voice session opened", {});
-    const loss = session.takeLoss();
-    if (loss !== null) vadLost(loss);
-  } catch (error) {
-    vadOpening = null;
-    const code = error instanceof MicrophoneError ? error.message : errorCode(error);
-    logWarn(["frontend", "ai"], "a voice session did not open", { code });
-    patchVoiceState({ phase: "idle", error: code, canRetry: false });
-  }
-}
-
-/** VOM-FR-XEIA: the tail, the last audio, then the close. */
-async function closeVad(session: VadSession, kind: "release" | "discard"): Promise<void> {
-  const job = utterance;
-  if (kind === "release" && job !== null && !job.finishing) {
-    await new Promise((done) => setTimeout(done, TAIL_MS));
-  }
-  session.stopMicrophone();
-  // A capture that finishes stays, because a failure leaves it for Retry. A
-  // teardown during the tail discards too (VOM-FR-KQAI).
-  const discard = kind === "discard" || job === null || job.discard;
-  let open: string | null = null;
-  try {
-    open = await session.close(discard);
-  } catch (error) {
-    logWarn(["frontend", "ai"], "a voice session did not close", { code: errorCode(error) });
-    // The capture is still open, and it holds the speech.
-    if (!discard) open = job?.sessionId ?? null;
-  }
-  // The utterance can end by itself during the tail.
-  if (job?.finishing) return;
-  if (job !== null && open === job.sessionId) {
-    await finishUtterance(job);
-    return;
-  }
-  if (job !== null) {
-    liveSession = null;
-    patchVoiceState({ transcript: "" });
-  }
-  settleUtterance(job, false);
-}
-
-async function endVadSession(kind: "release" | "discard"): Promise<void> {
-  // Each exit passes here, and a session that still opens has none of its own.
-  if (vadOpening) vadOpening.cancelled = true;
-  if (kind === "discard") closingVad?.stopMicrophone();
-  const session = vad;
-  if (!session) return;
-  vad = null;
-  closingVad = session;
-  clearSurfaceCheck();
-  stopGateWatch?.();
-  stopGateWatch = null;
-  patchVoiceState({ vadOpen: false });
-  const closed = closeVad(session, kind).finally(() => {
-    closingVad = null;
-    vadClosed = null;
-    logInfo(["frontend", "ai"], "a voice session closed", { kind });
-  });
-  vadClosed = closed;
-  await closed;
-}
-
-/**
- * VOM-FR-UNXR, VOM-FR-ZPOD: the one exit of each utterance, on every path. The
- * detector waits for it (VOM-FR-KHGC), and so does a paused reply.
- */
-function settleUtterance(job: Utterance | null, posted: boolean): void {
-  // With no utterance, the phase belongs to something else, such as a Retry.
-  if (job) {
-    utterance = null;
-    patchVoiceState({ phase: "idle", hearing: false, recordingSince: null });
-    vad?.settle(job.sessionId);
-  } else {
-    patchVoiceState({ hearing: false });
-  }
-  const waiting = pendingReply;
-  pendingReply = null;
-  if (waiting) {
-    void speakAs(waiting.speech, waiting.key);
-  } else if (getVoiceState().playbackPaused) {
-    if (posted) {
-      dropReply();
-    } else {
-      resumePlayback();
-      patchVoiceState({ playbackPaused: false });
-    }
-  }
-}
-
-/** VOM-FR-OTRF. */
-async function finishUtterance(job: Utterance): Promise<void> {
-  if (job.finishing) return;
-  job.finishing = true;
-  patchVoiceState({ phase: "transcribing", hearing: false });
-  let posted = false;
-  try {
-    posted = await receive(job, finishVoiceCapture(job.sessionId));
-  } catch (error) {
-    logWarn(["frontend", "ai"], "a voice utterance did not post", { code: errorCode(error) });
-  }
-  settleUtterance(job, posted);
-}
-
-/** VOM-FR-WRVR, VOM-FR-FASJ. */
-function utteranceConfirmed(change: VoiceActivityChange): void {
-  const key = getVoiceState().activeKey ?? vadKey;
-  if (change.captureId === null || key === null) return;
-  dropHeldRecording();
-  clearFeedback();
-  utterance = {
-    key,
-    sessionId: change.captureId,
-    keepInBody: false,
-    discard: false,
-    finishing: false,
-    answers: answerTargetOf(key),
-  };
-  liveSession = change.captureId;
-  patchVoiceState({
-    phase: "recording",
-    live: change.live ?? false,
-    transcript: "",
-    recordingSince: Date.now(),
-  });
-}
-
-/** VOM-FR-OTRF: a capture that nobody here knows would hold the detector. */
-function utteranceEnded(change: VoiceActivityChange): void {
-  if (utterance !== null && utterance.sessionId === change.captureId) {
-    void finishUtterance(utterance);
-  } else if (change.captureId !== null) {
-    void cancelVoiceCapture(change.captureId).catch(() => undefined);
-    vad?.settle(change.captureId);
-    settleUtterance(null, false);
-  }
-}
-
-/** VOM-FR-WWZX, VOM-FR-CSXI. */
-function activityFailed(change: VoiceActivityChange): void {
-  const code = change.code ?? "unknown";
-  logWarn(["frontend", "ai"], "a voice utterance failed", { code });
-  if (change.fatal) {
-    vadLost(code);
-    return;
-  }
-  if (utterance !== null) {
-    liveSession = null;
-    patchVoiceState({ transcript: "" });
-  }
-  patchVoiceState({ error: code, canRetry: false });
-  settleUtterance(utterance, false);
-}
-
-/** VOM-FR-NZXN: each step of an utterance, as the backend finds it. */
-export function noteActivity(change: VoiceActivityChange): void {
-  // A close travels apart from the events, so an event can come after it.
-  if ((vad ?? closingVad)?.activityId !== change.activityId) return;
-  if (vad === null) {
-    if (change.state === "speech_end" && utterance) void finishUtterance(utterance);
-    return;
-  }
-  switch (change.state) {
-    case "speech_start":
-      patchVoiceState({ hearing: true });
-      // VOM-FR-FVRS.
-      if (getVoiceState().playing && !getVoiceState().playbackPaused) {
-        pausePlayback();
-        patchVoiceState({ playbackPaused: true });
-      }
-      break;
-    case "speech_confirmed":
-      utteranceConfirmed(change);
-      break;
-    case "speech_end":
-      utteranceEnded(change);
-      break;
-    case "misfire":
-      // VOM-FR-XWPZ, VOM-FR-KVHG.
-      settleUtterance(null, false);
-      break;
-    case "failed":
-      activityFailed(change);
-      break;
-  }
-}
-
-function pressVad(state: VoiceState): void {
-  if (vad) {
-    void endVadSession("release");
-    return;
-  }
-  if (vadOpening) {
-    vadOpening.cancelled = true;
-    return;
-  }
-  const handle = handleOf(state.activeKey);
-  if (!handle || state.activeKey === null || handle.blocked() || state.phase !== "idle") return;
-  stopSpeech();
-  dropHeldRecording();
-  clearFeedback();
-  patchVoiceState({ transcript: "" });
-  void openVad(state.activeKey, handle);
-}
-
-/** VOM-FR-IKIK, VOM-FR-VGCE, VOM-FR-BQBI. */
+/** VOM-FR-IKIK, VOM-FR-VGCE, VOM-FR-BQBI, VOM-FR-KEMU. */
 export function setInputMode(mode: VoiceInputMode): void {
   const state = getVoiceState();
   if (mode === state.inputMode) return;
-  if (mode === "vad" && state.phase !== "idle") return;
+  if (mode === "vad" && (state.phase !== "idle" || capture !== null)) return;
   patchVoiceState({ inputMode: mode });
+  save({ voiceInputMode: mode });
   if (mode === "ptt") void endVadSession("release");
 }
 
@@ -809,7 +407,7 @@ export function setInputMode(mode: VoiceInputMode): void {
 export function pressRecord(): void {
   const state = getVoiceState();
   if (state.inputMode === "vad") {
-    pressVad(state);
+    pressVad();
     return;
   }
   const handle = handleOf(state.activeKey);
@@ -818,12 +416,13 @@ export function pressRecord(): void {
     if (behaviour === "toggle") endRecording();
     return;
   }
-  if (state.phase !== "idle") return;
+  if (state.phase !== "idle" || vadIsBusy()) return;
+  // VOM-FR-VVTY: barge-in in Push-to-Talk.
   stopSpeech();
   dropHeldRecording();
   clearFeedback();
   patchVoiceState({ transcript: "" });
-  void beginRecording(state.activeKey, handle);
+  void beginRecording(state.activeKey, postingHandleOf(state.activeKey) ?? handle);
 }
 
 /** VOM-FR-HHWL, VOM-FR-DGOG, VOM-FR-XQUY: the end of a hold. */
@@ -836,69 +435,70 @@ export function releaseRecord(): void {
 /** VOM-FR-WICV. */
 export async function retryRecording(): Promise<void> {
   // VOP-FR-KBPZ: an utterance replaces the held recording, so the two cannot run.
-  if (!heldSession || getVoiceState().hearing || utterance !== null) return;
-  const { id, key, answers } = heldSession;
-  heldSession = null;
-  patchVoiceState({ phase: "transcribing", error: null, canRetry: false });
-  await receive(
-    { key, sessionId: id, keepInBody: false, discard: false, answers },
-    retryVoiceCapture(id),
-  );
+  if (!heldRecording() || getVoiceState().hearing || capture !== null) return;
+  patchVoiceState({ error: null, canRetry: false });
+  await retryHeld((id) => retryVoiceCapture(id));
 }
 
-/** VOM-FR-HUXY. */
+/** VOM-FR-HUXY: a chunked utterance shows its live text in the live bubble. */
 export function noteTranscript(sessionId: string, text: string): void {
-  if (liveSession === sessionId) patchVoiceState({ transcript: text });
+  if (noteUtteranceText(sessionId, text)) return;
+  const u = utteranceOf(sessionId);
+  if (liveSession === sessionId || (u !== null && !u.chunked)) patchVoiceState({ transcript: text });
 }
 
-/** VOM-FR-WMAP. */
+/** VOM-FR-WMAP, VOM-FR-KEMU. */
 export function noteProvider(ready: boolean, speaks: boolean): void {
-  const change: Partial<ReturnType<typeof getVoiceState>> = {
-    providerReady: ready,
-    providerSpeaks: speaks,
-  };
-  if (!speaks && getVoiceState().responseMode === "voice") {
-    stopSpeech();
-    change.responseMode = "text";
+  patchVoiceState({ providerReady: ready, providerSpeaks: speaks });
+  if (getVoiceState().activeKey !== null) {
+    const effective = effectiveResponse(savedResponse);
+    if (effective === "text") stopSpeech();
+    patchVoiceState({ responseMode: effective });
+  } else if (!speaks && getVoiceState().responseMode === "voice") {
+    patchVoiceState({ responseMode: "text" });
   }
-  patchVoiceState(change);
   if (!ready) void endVadSession("release");
 }
 
-/** VOM-FR-KQAI: the session stores go, so nothing is kept. */
+/** CVP-FR-51, VOM-FR-LSBQ: the owner of the voice discussion was deleted. */
+export function noteOwnerDeleted(target: DiscussionTarget): void {
+  if (voiceTarget === null || getVoiceState().activeKey === null) return;
+  const same =
+    (voiceTarget.kind === "draft" && target.kind === "draft" && voiceTarget.draftId === target.draftId) ||
+    (voiceTarget.kind === "artifact" &&
+      target.kind === "artifact" &&
+      // LCM-FR-11: a folder that holds the file goes with it.
+      (voiceTarget.artifactId === target.artifactId ||
+        voiceTarget.artifactId.startsWith(`${target.artifactId.replace(/\/+$/, "")}/`))) ||
+    (voiceTarget.kind === "note" && target.kind === "note" && voiceTarget.noteId === target.noteId);
+  if (!same) return;
+  logInfo(["frontend"], "voice mode ended with its owner", { kind: target.kind });
+  discardAll();
+  closeVoiceState();
+}
+
+/** VOM-FR-KQAI: the session stores go, so nothing is kept. The saved modes stay. */
 export function endVoiceForTeardown(): void {
-  stopSpeech();
-  if (capture) {
-    capture.discard = true;
-    endRecording();
-  }
-  if (awaited) awaited.discard = true;
-  if (utterance) utterance.discard = true;
-  void endVadSession("discard");
-  dropHeldRecording();
-  const { providerReady, providerSpeaks } = getVoiceState();
-  patchVoiceState({ ...INITIAL_VOICE_STATE, providerReady, providerSpeaks });
+  discardAll();
+  forgetRetained();
+  forgetRetainedQuestions();
+  voiceTarget = null;
+  liveSession = null;
+  const { providerReady, providerSpeaks, inputMode, responseMode } = getVoiceState();
+  patchVoiceState({ ...INITIAL_VOICE_STATE, providerReady, providerSpeaks, inputMode, responseMode });
 }
 
 export function resetVoiceControllerForTest(): void {
   behaviour = "hold";
   capture = null;
-  awaited = null;
   liveSession = null;
-  heldSession = null;
-  baseline = new Set();
-  composers.clear();
-  vad = null;
-  closingVad = null;
-  vadClosed = null;
-  vadOpening = null;
-  vadKey = null;
-  stopGateWatch?.();
-  stopGateWatch = null;
-  clearSurfaceCheck();
-  utterance = null;
-  pendingReply = null;
-  spokenQuestion = null;
+  savedResponse = "text";
+  voiceTarget = null;
+  entry = 0;
+  toggled = false;
+  resetVoiceHandlesForTest();
+  resetVoiceVadForTest();
+  resetVoiceUtterancesForTest();
+  resetVoiceRepliesForTest();
   resetVoiceQuestionsForTest();
-  resetVoiceSpeechForTest();
 }

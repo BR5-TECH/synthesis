@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import type { EditorImageHost } from "../hostImages";
 import type { EditSessionStore } from "../../state/editSessions";
-import type { ArtifactType, NodeType } from "../../types";
+import type { ArtifactType, HunkState, NodeType } from "../../types";
 
 /**
  * EDT-FR-84: the proposed text of a change under review keeps its own undo
@@ -26,7 +26,11 @@ export const REVIEW_SELECTOR = ".draft-review, .hunk__doc";
 export interface ReviewHunk {
   id: string;
   kind: "add" | "del" | "replace";
-  state: "pending" | "accepted" | "rejected" | "discussing";
+  /**
+   * DCR-FR-OZVU: the review drops a `withdrawn` change before it gets here, so
+   * a surface never draws one. The type is the ledger's, for one shape.
+   */
+  state: HunkState;
   /** The exact prompt text the change removes or replaces. Empty for an insertion. */
   before: string;
   /** What the change proposes. Empty for a deletion. */

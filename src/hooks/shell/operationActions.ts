@@ -13,6 +13,7 @@ import { ownerLabelOf } from "../../state/ownerAvailability";
 import { destinationOf } from "../../state/operationActivation";
 import type { DiscussionReveal } from "../../state/revealDiscussion";
 import type { Operation } from "../../types";
+import { voiceReveal } from "../../voice/voiceController";
 
 export interface OperationActionDeps {
   /** GRU-FR-VQJB: open the Runs panel's graduation section on this run. */
@@ -80,6 +81,32 @@ export function createOperationActions(deps: OperationActionDeps) {
           break;
       }
       return true;
+    },
+    /**
+     * STB-FR-OSOL: the voice indicator opens the voice discussion by the one
+     * route (CVP-FR-54). It stops nothing.
+     */
+    revealVoiceDiscussion(): void {
+      const voice = voiceReveal();
+      if (voice === null) return;
+      logDebug(["frontend"], "the voice indicator was activated", {});
+      const { discussion, target } = voice;
+      if (discussion !== null) {
+        deps.revealDiscussion({
+          discussionId: discussion.id,
+          target: discussion.target,
+          fragmentTarget: discussion.fragmentTarget,
+          resolved: discussion.resolved,
+          ownerLabel: ownerLabelOf(discussion.target),
+          subject: discussionSubject(discussion),
+        });
+        return;
+      }
+      if (voice.discussionId !== null) {
+        void revealDiscussionById(voice.discussionId, deps.revealDiscussion);
+        return;
+      }
+      deps.revealDiscussion({ target, ownerLabel: ownerLabelOf(target), subject: "Discussion" });
     },
   };
 }

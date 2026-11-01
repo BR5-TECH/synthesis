@@ -81,6 +81,10 @@ pub fn edit_hunk_impl(
         return Err(ERR_WRITE_FAILED.to_string());
     }
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // PCP-FR-18: a withdrawn hunk is not the author's to shape.
+    if row.state == HunkState::Withdrawn {
+        return Err(ERR_HUNK_WITHDRAWN.to_string());
+    }
     if !row.state.is_undecided() {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
@@ -121,8 +125,8 @@ pub fn edit_hunk_impl(
 /// it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptProposalChange {
-    /// AGC-FR-DKHT: the hunk's id, which is the value an agent passes as
-    /// `revises` (PPC-FR-RVKS).
+    /// AGC-FR-DKHT: the hunk's id, which is the value an agent passes as the
+    /// `id` of an update (PPC-FR-RVKS).
     pub id: String,
     pub kind: HunkKind,
     pub state: HunkState,
@@ -160,6 +164,47 @@ pub fn read_proposal_change(
         before: hunk.before_text().to_string(),
         after: hunk.after_text().to_string(),
     })
+}
+
+/// PCP-FR-LQLT: one proposal's path, counts, and changes, as a turn
+/// assembling its input reads them (AGC-FR-CGCI).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptProposalChanges {
+    pub path: String,
+    pub counts: HunkCounts,
+    pub changes: Vec<PromptProposalChange>,
+}
+
+/// PCP-FR-LQLT: read one proposal's changes in proposal order, each with its
+/// state. It runs no reconciliation, takes no resolution, and writes nothing.
+pub fn read_prompt_proposal_changes(
+    root: &fs::RootFs,
+    proposal_id: &str,
+) -> Option<PromptProposalChanges> {
+    let record = read_proposal(root, proposal_id).ok()?;
+    let dir = proposals_dir(root).ok()?;
+    let current = current_text(root, &record.artifact_id);
+    let (doc, _legacy) = read_hunk_document(root, &dir, proposal_id, &current).ok()?;
+    let state_of = |id: &str| {
+        record
+            .ledger
+            .iter()
+            .find(|row| row.id == id)
+            .map(|row| row.state)
+            .unwrap_or(HunkState::Pending)
+    };
+    let changes = doc
+        .hunks
+        .iter()
+        .map(|hunk| PromptProposalChange {
+            id: hunk.id.clone(),
+            kind: hunk.kind,
+            state: state_of(&hunk.id),
+            before: hunk.before_text().to_string(),
+            after: hunk.after_text().to_string(),
+        })
+        .collect();
+    Some(PromptProposalChanges { path: record.path.clone(), counts: record.counts, changes })
 }
 
 /// The text every hunk of the proposal would produce against the file as it

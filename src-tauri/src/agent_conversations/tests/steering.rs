@@ -299,7 +299,7 @@ fn a_steering_message_the_turn_could_not_read_goes_to_a_new_turn() {
         .into_iter()
         .find(|t| t.id != turn.id && t.state == AgentTurnState::Running)
         .expect("a new turn for the message");
-    assert_eq!(fallback.trigger_comment_id, steer_id);
+    assert_eq!(fallback.trigger_comment_id.as_deref(), Some(steer_id.as_str()));
     gate.release();
     assert_eq!(wait_for_terminal(&h, &fallback.id).state, AgentTurnState::Delivered);
     h.settle();

@@ -10,6 +10,7 @@ use super::*;
 // The tool loop (CVL-FR-08 … CVL-FR-28)
 // ---------------------------------------------------------------------------
 
+// DDC-FR-UOLP, DPC-FR-RFEF
 #[test]
 fn each_origin_kind_is_offered_the_nine_and_at_most_one_proposal_tool() {
     // CVL-FR-30 / CVL-FR-08. Two agents across the four origin kinds: the set is
@@ -72,6 +73,15 @@ fn expected_tools(is_discussion: bool, proposal: Option<&'static str>) -> Vec<&'
         names.push(DISCUSSION_ONLY_TOOL);
     }
     names.extend(proposal);
+    // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool of the same
+    // store follows the proposal tool, and the other one is never offered.
+    names.extend(proposal.map(|tool| {
+        if tool == DRAFT_ONLY_TOOL {
+            crate::tools::decide_draft_changes::NAME
+        } else {
+            crate::tools::decide_prompt_changes::NAME
+        }
+    }));
     names
 }
 

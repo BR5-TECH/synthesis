@@ -5,7 +5,6 @@ import { clearAllDiscussionSessions } from "../state/discussionSession";
 import { getVoiceState, patchVoiceState, resetVoiceStateForTest } from "../state/voiceSession";
 import type { Comment, Discussion, VoiceActivityChange } from "../types";
 import {
-  SURFACE_GRACE_MS,
   TAIL_MS,
   enterVoiceMode,
   noteActivity,
@@ -165,7 +164,7 @@ export function useVadBench(): void {
   afterEach(async () => {
     endSegment?.();
     endSegment = null;
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS + TAIL_MS);
+    await vi.advanceTimersByTimeAsync(TAIL_MS * 2);
     vi.useRealTimers();
   });
 }

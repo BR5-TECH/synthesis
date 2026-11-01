@@ -231,6 +231,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     let mut model_calls = 0usize;
 
     let answer = loop {
+        // AGC-FR-YLJW: an idle speech ends here too, so a turn that it
+        // registered stops at its next round.
+        expire_idle_speeches(app);
         check_cancelled(plan)?;
         // CVL-FR-EZKC / CVL-FR-YNOE: the steering messages the turn took go into
         // the exchange before the next call. Before the last call under the
@@ -288,9 +291,22 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // is the answer, whether or not the provider searched or fetched on its
         // way to composing it.
         if reply.tool_calls.is_empty() {
+            // CVL-FR-SZKK: a turn bound to an open speech holds the reply until
+            // it takes a steering message or the speech ends. CVL-FR-WHEY: the
+            // reply of the last call under the bound is not held.
+            let held = model_calls < MAX_MODEL_CALLS
+                && !turns.has_steering(&plan.turn_id)
+                && turns.wait_for_speech(app, &plan.turn_id);
+            // AGC-FR-NFYK: a speech with no comment cancels the turn it
+            // registered, and its output goes with it.
+            if held {
+                check_cancelled(plan)?;
+            }
             // CVL-FR-XXKL: a steering message waits, so the reply answers a
             // question the author has since changed. The loop keeps the reply
             // in the exchange and calls again with the message.
+            // CVL-FR-AEJO: a held reply whose wait ended with no steering
+            // message to append is delivered as it stands.
             if model_calls < MAX_MODEL_CALLS && turns.has_steering(&plan.turn_id) {
                 logging::log_debug(
                     app,
@@ -305,6 +321,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                         "model" => &plan.agent.model_id,
                         "modelCalls" => model_calls,
                         "replyChars" => reply.text.chars().count(),
+                        "held" => held,
                     },
                 );
                 conversation.exchange.push(assistant_message(&reply));

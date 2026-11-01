@@ -141,9 +141,28 @@ export function reconcile(setId: string, positions: Iterable<number>): void {
  */
 export function forgetSet(setId: string): void {
   bySet.delete(setId);
+  refusals.delete(setId);
+}
+
+/** set id -> the text of the refusal that the last submission met. */
+const refusals = new Map<string, string>();
+
+/**
+ * DQA-FR-WKTP, DQA-FR-VICX: the refusal that a submission met. It is held with
+ * the draft, so a block that was not mounted when a spoken answer submitted the
+ * set shows the refusal when it mounts again. `null` clears it.
+ */
+export function rememberRefusal(setId: string, text: string | null): void {
+  if (text === null) refusals.delete(setId);
+  else refusals.set(setId, text);
+}
+
+export function recallRefusal(setId: string): string | null {
+  return refusals.get(setId) ?? null;
 }
 
 /** Test seam: the whole of what is held, dropped. */
 export function forgetEveryDraft(): void {
   bySet.clear();
+  refusals.clear();
 }

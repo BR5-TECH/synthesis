@@ -43,7 +43,9 @@ import {
 import { logError } from "../../logging";
 import {
   recallAnswer,
+  recallRefusal,
   rememberAnswer,
+  rememberRefusal,
   type QuestionDraftAnswer,
 } from "../../state/questionAnswerDrafts";
 import {
@@ -64,7 +66,13 @@ import {
 } from "./answers";
 import { stripCitationMarkers } from "../../text/citationMarkers";
 import { noteQuestionShown } from "../../voice/voiceController";
-import { registerQuestionBlock, type VoiceQuestionBlock } from "../../voice/voiceQuestions";
+import {
+  forgetSpokenPage,
+  noteSpokenPage,
+  registerQuestionBlock,
+  spokenPageOf,
+  type VoiceQuestionBlock,
+} from "../../voice/voiceQuestions";
 
 export interface DiscussionQuestionsProps {
   set: PendingQuestionSet;
@@ -85,9 +93,17 @@ export function DiscussionQuestions({
   // The draft lives outside this component, so a write to it is what the render
   // has to be told about.
   const [, redraw] = useReducer((count: number) => count + 1, 0);
-  const [page, setPage] = useState(0);
+  // DQA-FR-ITCZ, VOM-FR-BCRD: a block that mounts again shows the page that a
+  // spoken answer moved it to while it was not mounted.
+  const [page, setPage] = useState(() => spokenPageOf(set.setId) ?? 0);
   const [sending, setSending] = useState(false);
-  const [refusal, setRefusal] = useState<string | null>(null);
+  // DQA-FR-WKTP, DQA-FR-VICX: the refusal is held with the draft, so a refusal
+  // that a spoken answer met while the block was not mounted shows when it mounts.
+  const [refusal, setRefusalShown] = useState<string | null>(() => recallRefusal(set.setId));
+  const setRefusal = (text: string | null) => {
+    rememberRefusal(set.setId, text);
+    setRefusalShown(text);
+  };
   /**
    * DQA-FR-TKUM, DQA-FR-KBJA: the row under the pointer and the row the
    * keyboard is on, held apart so that one leaving does not clear the other.
@@ -110,6 +126,11 @@ export function DiscussionQuestions({
   const paged = useRef(false);
   /** What the handle of voice mode reads, from the newest render. */
   const voiceBlock = useRef<Pick<VoiceQuestionBlock, "showing" | "answer"> | null>(null);
+  /** VOM-FR-BCRD: the block can be retained after it unmounts, until the set is sent. */
+  const submittedRef = useRef(false);
+  const mountedRef = useRef(true);
+  /** The page that voice mode reads. A spoken answer moves it while unmounted too. */
+  const voicePage = useRef(0);
   /**
    * DQA-FR-GGKI: the next page turn came from a spoken answer, with the button
    * that held focus then. The move can disable that button, and a browser then
@@ -121,8 +142,8 @@ export function DiscussionQuestions({
   // set that replaces another does the same — a page belongs to the set it was
   // turned in.
   useEffect(() => {
-    setPage(0);
-    setRefusal(null);
+    setPage(spokenPageOf(set.setId) ?? 0);
+    setRefusalShown(recallRefusal(set.setId));
     paged.current = false;
   }, [set.setId]);
 
@@ -174,11 +195,19 @@ export function DiscussionQuestions({
     noteQuestionShown(set.discussionId, set.setId, question, set.askedBy, arrived);
   }, [set.discussionId, set.setId, set.askedBy, question]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // VOM-FR-PINR: voice mode reaches the block through this, while it stands.
   useEffect(
     () =>
       registerQuestionBlock(set.discussionId, {
         setId: set.setId,
+        isOpen: () => !submittedRef.current,
         showing: () => voiceBlock.current?.showing() ?? null,
         answer: (position, transcript) => voiceBlock.current?.answer(position, transcript),
       }),
@@ -234,6 +263,7 @@ export function DiscussionQuestions({
     setRefusal(null);
     void onSubmit(answers)
       .then(() => {
+        submittedRef.current = true;
         // DQA-FR-IPFD: the block and its draft go together, which the caller does
         // by publishing the set the backend now reports.
         onSubmitted();
@@ -244,6 +274,8 @@ export function DiscussionQuestions({
         logError(["frontend"], "the question answers were refused", {
           discussionId: set.discussionId,
           questions: total,
+          // A spoken answer can submit while the block is not mounted.
+          mounted: mountedRef.current,
         });
         // The typed slug rather than whatever shape the rejection took: the
         // backend refuses with a bare string, and a transport failure arrives as
@@ -280,13 +312,26 @@ export function DiscussionQuestions({
     const next = nextUnanswered(set, position);
     if (next === null) {
       submit();
-    } else if (next !== current) {
+    } else if (next !== voicePage.current) {
+      voicePage.current = next;
+      noteSpokenPage(set.setId, next);
+      if (!mountedRef.current) {
+        // VOM-FR-BCRD, VOM-FR-UALK: no effect runs while unmounted, so the
+        // next question speaks from here.
+        const moved = set.questions[next];
+        if (moved) noteQuestionShown(set.discussionId, set.setId, moved, set.askedBy, false);
+        return;
+      }
       const held = document.activeElement;
       spokenMove.current = { button: held instanceof HTMLButtonElement ? held : null };
       setPage(next);
     }
   };
-  voiceBlock.current = { showing: () => question ?? null, answer: answerAloud };
+  voicePage.current = current;
+  voiceBlock.current = {
+    showing: () => set.questions[voicePage.current] ?? question ?? null,
+    answer: answerAloud,
+  };
 
   if (!question) return null;
 
@@ -316,6 +361,7 @@ export function DiscussionQuestions({
 
   const turnTo = (next: number) => {
     paged.current = true;
+    forgetSpokenPage(set.setId);
     setPage(next);
   };
 

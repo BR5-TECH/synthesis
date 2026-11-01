@@ -26,6 +26,11 @@ export function decisionMessage(error: string): string {
   if (error.includes(PROPOSAL_ERRORS.hunkAlreadyDecided)) {
     return "This change has already been decided.";
   }
+  // DCR-FR-NYDA: a decision made from a stale reading, on a change the agent
+  // has since withdrawn.
+  if (error.includes(PROPOSAL_ERRORS.hunkWithdrawn)) {
+    return "The agent withdrew this change, so it cannot be decided. Nothing was changed.";
+  }
   if (error.includes(PROPOSAL_ERRORS.hunkNotFound)) {
     return "This change is no longer part of the proposal.";
   }
@@ -66,6 +71,10 @@ export function fileDecisionMessage(error: string): string {
   }
   if (error.includes(E.hunkAlreadyDecided) || error.includes(E.alreadyDecided)) {
     return "This change has already been decided.";
+  }
+  // PCR-FR-QHZN / DCR-FR-NYDA: the change was withdrawn after it was read.
+  if (error.includes(E.hunkWithdrawn)) {
+    return "The agent withdrew this change, so it cannot be decided. Nothing was changed.";
   }
   if (error.includes(E.hunkNotFound)) {
     return "This change is no longer part of the proposal.";

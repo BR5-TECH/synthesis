@@ -247,3 +247,104 @@ describe("a hunk reference of a file's proposal (PCR-FR-RFJC, CMS-FR-TQVB)", () 
     expect(draftDiscussionState(artifactReviewKey(ARTIFACT)).focusedHunkId).toBe("h3");
   });
 });
+
+describe("an update comment's reference (PCR-FR-RFJC, DCR-FR-OYRR, CMT-FR-48)", () => {
+  /** What the reading answers in this block. */
+  let listed: PromptChangeProposal[] = [];
+
+  beforeEach(() => {
+    listed = [];
+    resetLogBufferForTest();
+    // Routed by command: the background log flush is answered, and a command
+    // this block does not expect is a rejected promise rather than a throw.
+    invokeMock.mockReset();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (cmd === "list_prompt_change_proposals") return Promise.resolve(listed);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
+    });
+  });
+
+  const updated: Attachment = {
+    ...reference,
+    kind: "promptProposal",
+    proposalId: "p1",
+    artifactId: ARTIFACT,
+    path: ARTIFACT,
+    update: { changed: 1, added: 2, withdrawn: 1 },
+  };
+
+  /** h1 changed, h4 and h5 added, h3 withdrawn. */
+  const afterUpdate = () =>
+    proposal({
+      hunkCount: 5,
+      counts: { pending: 3, accepted: 1, rejected: 0, discussing: 0, withdrawn: 1 },
+      ledger: [
+        { id: "h1", kind: "replace", state: "accepted", edited: false, revision: 0 },
+        { id: "h2", kind: "add", state: "pending", edited: false, revision: 1 },
+        { id: "h3", kind: "del", state: "withdrawn", edited: false, revision: 0 },
+        { id: "h4", kind: "add", state: "pending", edited: false, revision: 0 },
+        { id: "h5", kind: "add", state: "pending", edited: false, revision: 0 },
+      ],
+    });
+
+  it("PCR-FR-RFJC, DCR-FR-OYRR, CMT-FR-48: carries the update's counts in place of the count of changes", async () => {
+    listed = [afterUpdate()];
+    renderList([updated]);
+    const control = await screen.findByTestId("comment-attachment-prompt-proposal");
+    await waitFor(() => expect(control).toBeEnabled());
+    expect(screen.getByTestId("comment-attachment-proposal-update")).toHaveTextContent(
+      "1 changed, 2 added, 1 withdrawn",
+    );
+    expect(control).not.toHaveTextContent(/\d changes?\b/);
+    expect(control).toHaveTextContent("Review in the file");
+  });
+
+  it("PCR-FR-RFJC, DCR-FR-OYRR: names all three counts, a zero included", async () => {
+    listed = [afterUpdate()];
+    renderList([{ ...updated, update: { changed: 0, added: 0, withdrawn: 2 } } as Attachment]);
+    expect(await screen.findByTestId("comment-attachment-proposal-update")).toHaveTextContent(
+      /^0 changed, 0 added, 2 withdrawn$/,
+    );
+  });
+
+  it("PCR-FR-RFJC, DCR-FR-OYRR: scrolls to the first undecided change, and states no route where none is undecided", async () => {
+    listed = [afterUpdate()];
+    const opened: string[] = [];
+    configurePromptReviewRoute((id) => opened.push(id));
+    renderList([updated]);
+    const control = await screen.findByTestId("comment-attachment-prompt-proposal");
+    await waitFor(() => expect(control).toBeEnabled());
+    await act(async () => {
+      await userEvent.click(control);
+    });
+    expect(opened).toEqual([ARTIFACT]);
+    expect(draftDiscussionState(artifactReviewKey(ARTIFACT)).focusedHunkId).toBe("h2");
+
+    // An update that leaves nothing undecided closed the proposal.
+    await act(async () => {
+      notePromptProposalChanged({
+        artifactId: ARTIFACT,
+        cause: "updated",
+        proposal: proposal({
+          state: "accepted",
+          counts: { pending: 0, accepted: 1, rejected: 0, discussing: 0, withdrawn: 2 },
+          ledger: [
+            { id: "h1", kind: "replace", state: "accepted", edited: false, revision: 0 },
+            { id: "h2", kind: "add", state: "withdrawn", edited: false, revision: 0 },
+            { id: "h3", kind: "del", state: "withdrawn", edited: false, revision: 0 },
+          ],
+        }),
+      });
+    });
+    expect(control).toHaveTextContent("1 changed, 2 added, 1 withdrawn");
+    expect(control).not.toHaveTextContent("Review in the file");
+  });
+
+  it("DCR-FR-OZVU, DCR-FR-11: a recording's count of changes leaves out a withdrawn change", async () => {
+    listed = [afterUpdate()];
+    renderList();
+    const control = await screen.findByTestId("comment-attachment-prompt-proposal");
+    await waitFor(() => expect(control).toHaveTextContent("4 changes"));
+  });
+});

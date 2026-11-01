@@ -289,3 +289,25 @@ fn an_excerpt_is_bounded_and_folded_to_one_line() {
     let folded = super::sections::excerpt("first line\n  2. replace — accepted");
     assert_eq!(folded, "\"first line 2. replace — accepted\"");
 }
+
+/// AGC-FR-RVQP: every change carries the id an agent names in an update, and a
+/// withdrawn change is named as such and carries no offered text.
+#[test]
+fn each_change_names_its_id_and_a_withdrawn_one_offers_nothing() {
+    use crate::draft_proposals::anchors::HunkKind;
+    use crate::draft_proposals::hunks::HunkState;
+    let line = super::sections::proposal_digest_line(
+        "spec.md",
+        &digest_of(vec![
+            change(HunkKind::Replace, HunkState::Pending, "old", "new"),
+            change(HunkKind::Replace, HunkState::Withdrawn, "gone", "taken back"),
+        ]),
+    );
+    assert!(
+        line.contains("1. replace — undecided — changed: \"old\" — offered: \"new\" — id h-test"),
+        "{line}"
+    );
+    assert!(line.contains("2. replace — withdrawn — changed: \"gone\" — id h-test"), "{line}");
+    assert!(!line.contains("taken back"), "{line}");
+    assert!(line.contains("1 withdrawn]"), "{line}");
+}

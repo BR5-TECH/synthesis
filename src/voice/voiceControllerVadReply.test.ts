@@ -17,6 +17,7 @@ vi.mock("./capture", async (original) => ({
 }));
 
 import { getDiscussionSession } from "../state/discussionSession";
+import { getLiveBubble } from "../state/liveBubble";
 import { getVoiceState } from "../state/voiceSession";
 import {
   KEY,
@@ -36,7 +37,6 @@ import {
   useVadBench,
 } from "../test/voiceVadKit";
 import {
-  SURFACE_GRACE_MS,
   TAIL_MS,
   bindVoiceToDiscussion,
   endVoiceForTeardown,
@@ -189,15 +189,23 @@ describe("a paused reply on each exit", () => {
     expectSettledWith(false);
   });
 
+  it("VOM-FR-BCRD: an unmount keeps it paused", async () => {
+    await paused();
+    audio.stopPlayback.mockClear();
+    bench.unregister();
+    await vi.advanceTimersByTimeAsync(TAIL_MS * 2);
+    expect(getVoiceState().playbackPaused).toBe(true);
+    expect(audio.stopPlayback).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["leaving", () => leaveVoiceMode()],
-    ["an unmount", () => bench.unregister()],
     ["a teardown", () => endVoiceForTeardown()],
-  ])("VOM-FR-EGNX, VOM-FR-KQAI: %s drops it", async (_, act) => {
+  ])("VOM-FR-JBJI, VOM-FR-KQAI: %s drops it", async (_, act) => {
     await paused();
     audio.stopPlayback.mockClear();
     act();
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS + TAIL_MS);
+    await vi.advanceTimersByTimeAsync(TAIL_MS * 2);
     expect(getVoiceState().playbackPaused).toBe(false);
     expect(audio.resumePlayback).not.toHaveBeenCalled();
     expect(audio.stopPlayback).toHaveBeenCalled();
@@ -411,7 +419,7 @@ describe("Retry", () => {
     void retryRecording();
     noteActivity(change("speech_start"));
     noteActivity(change("misfire"));
-    expect(getVoiceState().phase).toBe("transcribing");
+    expect(getVoiceState().transcribing).toBe(1);
     retry.resolve("again");
     await settle();
   });
@@ -427,7 +435,7 @@ describe("Retry", () => {
     await settle();
     expect(getVoiceState()).toMatchObject({ phase: "recording", canRetry: false, error: null });
     noteTranscript("c2", "words");
-    expect(getVoiceState().transcript).toBe("words");
+    expect(getLiveBubble().parts[0]).toMatchObject({ captureId: "c2", liveText: "words" });
     noteActivity(change("speech_end", { captureId: "c2" }));
     await settle();
     expect(bench.composer.post).toHaveBeenCalledTimes(1);
@@ -499,19 +507,10 @@ describe("the first post of an opening composer", () => {
     expect(bench.composer.post).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-GZPA: a session closes when the new composer never mounts", async () => {
+  it("VOM-FR-BCRD, VOM-FR-NERG: a session stays when the new composer is not mounted", async () => {
     await openSession();
     bindVoiceToDiscussion(KEY, discussion([], "d2"));
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS);
-    expect(getVoiceState().vadOpen).toBe(false);
-  });
-
-  it("VOM-FR-GZPA: a session stays when the new composer mounts in time", async () => {
-    await openSession();
-    bindVoiceToDiscussion(KEY, discussion([], "d2"));
-    await vi.advanceTimersByTimeAsync(1000);
-    registerVoiceComposer("d2", handle());
-    await vi.advanceTimersByTimeAsync(SURFACE_GRACE_MS);
-    expect(getVoiceState().vadOpen).toBe(true);
-  });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, activeKey: "d2" });
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();  });
 });

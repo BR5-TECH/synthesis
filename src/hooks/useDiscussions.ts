@@ -20,6 +20,7 @@
  * in `../state/activeAgents`; this hook is the part that has to talk to the
  * backend and to React.
  */
+import { claimSpeechPost } from "../state/speechPosts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addComment as addCommentApi,
@@ -443,7 +444,12 @@ export function useDiscussions(
    */
   const dispatchFor = useCallback(
     (thread: Discussion, body: string) => {
-      const targets = dispatchTargets(thread, body, rosterRef.current);
+      // CTA-FR-SZOC: the agents that a speech reached get the comment through
+      // "end speech turn", so it is not dispatched to them again.
+      const spoken = claimSpeechPost(thread, body);
+      const targets = dispatchTargets(thread, body, rosterRef.current).filter(
+        (nickname) => !spoken.has(nickname),
+      );
       if (targets.length === 0) {
         // CTA-FR-QUXJ: see `useComments` — an ordinary outcome, recorded so a
         // conversation that answered nothing is not mistaken for a lost

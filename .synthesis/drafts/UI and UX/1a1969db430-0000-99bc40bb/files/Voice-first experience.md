@@ -6,6 +6,8 @@ This is a valid framework and it clearly works. However given the support we’v
 
 Voice mode (`VOM-voice-mode.md`: Push-to-Talk, VAD, spoken part, spoken replies, spoken questions) already exists. This work lets the author use voice end to end on drafts, published prompts, and project documents: talk, hear the answer, and decide the agent's proposed changes by voice. The discussion stays the log of the work, so voice adds no new conversation surface.
 
+The experience must feel like a human collaboration in real time. Anything that can delay the answer to the author (transcription, context gathering, tool calls) runs in the background, off the interaction path. The agent gets the author's speech in sentence chunks while the author still speaks, so its reply is ready soon after the author stops.
+
 ## User journey
 
 ### Creating a new draft
@@ -54,6 +56,19 @@ Voice mode (`VOM-voice-mode.md`: Push-to-Talk, VAD, spoken part, spoken replies,
 - Matching ignores case and uses the discussion's roster only. The first word is matched exactly, then by a fuzzy match (for example edit distance or phonetic match) on the same roster. A fuzzy match counts only when one nickname is clearly the closest. A tie or a weak match gives no tag, and the text stays as spoken. Nicknames of 3 characters or less match exactly only.
 - The tag replaces the spoken name. The posted comment shows the tag, so the user sees which agent was reached. A spoken answer to a question set is not tagged (VOM-FR-FUFE).
 
+**Real-time speech to the agent**
+- In Push-to-Talk and VAD, an utterance splits into **chunks** of one or two sentences. A chunk ends at a short pause that follows a sentence end. The short pause is shorter than the VAD silence timeout, which still ends the whole utterance. Each chunk is transcribed when it ends, in the background.
+- Listening does not wait for transcription. The next chunk and the next utterance record while earlier chunks transcribe. Order is kept. VOM-FR-KHGC no longer applies.
+- A spoken answer to a pending question set is not chunked. It records as one utterance and posts at its end (VOM-FR-PINR). It shows no live bubble and starts no agent turn.
+- **Live bubble:** while chunks arrive, the discussion shows one local bubble at the end of the log. It joins the chunk transcripts as they come. It is not a comment, is not saved, and is shown in the discussion that owns voice mode. At the end of the utterance the bubble is replaced by one ordinary comment with the full transcript (VOM-FR-WYIE, agent name rule above). Comments stay immutable (CMT-FR-08).
+- **Early turn:** the first transcribed chunk starts the agent turn. The agent is chosen as for a typed comment of that text, with the agent name rule applied to the first chunk. If that agent has a running turn in the discussion, the chunk steers it (AGC-FR-ISKZ) and starts no new turn. The author's speech during a running turn never cancels it.
+- **Ephemeral chunk input:** each later chunk reaches the turn as a steering message that is not a comment. A fixed line marks it as partial speech of an author who still speaks. It is held in memory only and is never saved. At the end of the utterance, the posted comment reaches the turn as the final steering message. It states that it replaces the chunks.
+- **Held reply:** while the author speaks, or chunks wait for transcription, the turn does not deliver a reply. The loop runs again with the final speech (CVL-FR-XXKL). The reply posts after speech ends, and the spoken part plays after it posts. Speech output is not streamed (VOM stays as it is). When no comment posts, a held reply posts as it stands.
+- **Barge-in:** when the author starts to speak, in either input mode, playback of a spoken reply stops at once. The resume and drop rules of VOM stay.
+- **Failed chunk:** a chunk that fails to transcribe is skipped. The bubble shows an inline error at its place and later chunks continue. The comment holds the chunks that succeeded. When no chunk succeeds, VOM-FR-WWZX applies.
+- **No comment posts** (misfire, Stop, discarded recording, no transcript): a turn that the chunks started is cancelled and its output is dropped. A turn that already ran before the first chunk is not cancelled, and the steering messages of the chunks are dropped.
+- The status bar indicator and the record control show the state during chunking (Hearing speech, Transcribing). A chunk in transcription shows Transcribing while the microphone stays open.
+
 **Decisions by tool**
 - Two new agent tools let an agent **accept**, **reject**, or **discuss** a hunk of the open proposal: one for a draft's prompt (bound to that draft, like `PDC-propose-draft-changes-tool.md`) and one for a published prompt or a project document (bound like `PPC-propose-prompt-changes-tool.md`). Each has its own tool specification. They are available in every discussion, typed or spoken.
 - A call carries a list of entries: a hunk id and an action. Each entry runs on its own, in order, with the same operation as the matching chip of `DCR-draft-change-review.md`: accept writes the hunk's text as it stands, including the author's edit, and records one version; reject writes nothing; discuss does what the Discuss chip does. The result says what happened to each entry.
@@ -74,6 +89,9 @@ Voice mode (`VOM-voice-mode.md`: Push-to-Talk, VAD, spoken part, spoken replies,
 - Saving voice mode on, or an open VAD session, across restarts or a project switch.
 - A floating voice control, a button for the read-through, and new UI command phrases for decisions.
 - A change to the hunk review, to hunk states, or to how proposals are created or updated.
+- Streaming of spoken replies (text to speech starts only after the full comment posts).
+- Chunking of spoken answers to a question set.
+- Posting of partial comments, or editing of a posted comment.
 
 ## Specification impact
 
@@ -86,3 +104,4 @@ This work changes, and must update in the same change:
 - Two new tool specifications in `specifications/tools/`, and the tool lists of `specifications/ai/CVL-conversation-loop.md` (CVL-FR-08) and `specifications/tools/TLC-tool-conventions.md`.
 - `specifications/core/AGC-agent-conversations.md`: the agent input holds each hunk's id and state, if it does not now.
 - Align with the drafts `Update open proposal` (hunk states, `updates`) and `Partial rejections` (the Discuss model).
+- For real-time speech: `specifications/ui/VOM-voice-mode.md` also changes VOM-FR-KHGC, VOM-FR-NZXN, VOM-FR-WRVR, VOM-FR-OTRF, VOM-FR-WYIE, VOM-FR-PINR, and the playback pause rules. Add the live bubble and the held reply. `specifications/core/VOP-voice-ai-providers.md` changes the utterance events (VOP-FR-DICU) to add chunk end and chunk transcript. `specifications/core/AGC-agent-conversations.md` adds the ephemeral chunk input and the early turn start to the dispatch rules (AGC-FR-ISKZ, AGC-FR-CEKN). `specifications/ai/CVL-conversation-loop.md` adds the ephemeral steering message to CVL-FR-EZKC, CVL-FR-QPEL, and CVL-FR-XXKL. `specifications/ui/CTA-comment-agent-turns.md` and `specifications/ui/CVP-conversation-presentation.md` add the live bubble and the held reply to the discussion surface. The immutability rule CMT-FR-08 does not change.

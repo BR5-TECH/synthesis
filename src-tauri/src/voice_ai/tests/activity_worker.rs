@@ -37,6 +37,8 @@ struct Calls {
     pauses: Vec<String>,
     /// Whether a reported pause ends a chunk.
     pause_ends_chunk: bool,
+    /// VOP-FR-KIMU: the captures that got a word gap, in order.
+    gaps: Vec<String>,
     /// The captures whose utterance ended (VOP-FR-WCSB).
     ended: Vec<String>,
     /// The captures that settled.
@@ -93,6 +95,12 @@ impl ActivityHost for Host {
         calls.order.push("pause".to_string());
         calls.pauses.push(capture_id.to_string());
         calls.pause_ends_chunk
+    }
+
+    fn word_gap(&self, capture_id: &str) {
+        let mut calls = self.0.lock().unwrap();
+        calls.order.push("gap".to_string());
+        calls.gaps.push(capture_id.to_string());
     }
 
     fn end_capture(&self, capture_id: &str) {
@@ -741,4 +749,26 @@ fn a_chunk_end_waits_for_new_speech_and_the_utterance_still_ends() {
     assert_eq!(session.host.0.lock().unwrap().pauses.len(), 2);
     session.end();
     assert_eq!(session.host.last().state, ActivityState::SpeechEnd);
+}
+
+// VOP-FR-KIMU: the session's detector reports one word gap after 3 quiet
+// frames that follow speech, in a capture that is chunked or not, after the
+// audio of the gap reached the capture. The next gap needs new speech.
+#[test]
+fn the_session_detector_reports_each_word_gap_after_the_audio() {
+    let mut session = Session::new();
+    session.confirm();
+    session.feed(&[QUIET; 2]);
+    assert!(session.host.0.lock().unwrap().gaps.is_empty(), "two frames are no gap");
+    session.feed(&[QUIET]);
+    session.feed(&[QUIET; 3]);
+    {
+        let calls = session.host.0.lock().unwrap();
+        assert_eq!(calls.gaps, vec!["capture-1".to_string()], "one report for one gap");
+        let gap = calls.order.iter().position(|o| o == "gap").unwrap();
+        assert_eq!(calls.order[gap - 1], "append");
+    }
+    session.feed(&[SPEECH; 2]);
+    session.feed(&[QUIET; 3]);
+    assert_eq!(session.host.0.lock().unwrap().gaps.len(), 2);
 }

@@ -2,8 +2,9 @@
  * The voice area of the shared composer (`VOM-voice-mode.md` VOM-FR-TISN).
  *
  * It takes the place of the text field. It shows the transcript, the record
- * control, the Stop control, and the two toggles. The process behind these
- * controls is `../../voice/voiceController.ts`.
+ * control in Push-to-Talk or the controls of VAD mode (`./VadControls.tsx`), the
+ * Stop control, and the two toggles. The process behind these controls is
+ * `../../voice/voiceController.ts`.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -24,6 +25,9 @@ import {
   stopSpeech,
 } from "../../voice/voiceController";
 import { Icon } from "../icons";
+import { VadControls, transcribing, vadIndicator, type VadIndicator } from "./VadControls";
+
+export { transcribing, vadIndicator } from "./VadControls";
 
 const NOTES: Record<VoiceNote, string> = {
   no_speech: "No speech was heard, so nothing was posted.",
@@ -36,32 +40,8 @@ function elapsed(since: number, now: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-/** VOM-FR-VOUG: what the record control shows in VAD mode. */
-export type VadIndicator = "idle" | "listening" | "hearing" | "transcribing" | "paused";
-
-export function vadIndicator(state: VoiceState): VadIndicator {
-  // VOM-FR-VOUG: the precedence of VOM-FR-XDUY, with no Speaking state.
-  if (state.playbackPaused) return "paused";
-  if (state.hearing || state.phase === "recording") return "hearing";
-  if (transcribing(state)) return "transcribing";
-  return state.vadOpen ? "listening" : "idle";
-}
-
-/** VOM-FR-GBCN: a chunk or an utterance transcribes, while the microphone can stay open. */
-function transcribing(state: VoiceState): boolean {
-  return state.transcribing > 0 || state.phase === "transcribing" || state.phase === "posting";
-}
-
-const VAD_NAMES: Record<VadIndicator, string> = {
-  idle: "Idle",
-  listening: "Listening",
-  hearing: "Hearing speech",
-  transcribing: "Transcribing",
-  paused: "Paused",
-};
-
 const VAD_STATUS: Record<VadIndicator, string> = {
-  idle: "Press to start listening",
+  idle: "The voice session is not open.",
   listening: "Listening…",
   hearing: "Hearing speech…",
   transcribing: "Transcribing…",
@@ -70,11 +50,6 @@ const VAD_STATUS: Record<VadIndicator, string> = {
 
 /** VOM-FR-HSKZ: the phase of the record control, in its name. */
 function recordName(state: VoiceState): string {
-  if (state.inputMode === "vad") {
-    const name = VAD_NAMES[vadIndicator(state)];
-    if (state.vadOpen) return `${name}. Close the voice session`;
-    return state.phase === "idle" ? `${name}. Open a voice session` : name;
-  }
   // VOM-FR-QTAQ: Recording, then Transcribing, then Idle.
   if (state.phase === "opening" || state.phase === "recording") {
     return "Recording. Release or press to stop";
@@ -99,57 +74,44 @@ export function statusOf(state: VoiceState, now: number): string {
   if (state.phase === "recording" && !state.live && state.recordingSince !== null) {
     return `Recording ${elapsed(state.recordingSince, now)}`;
   }
-  if (state.inputMode === "vad") return VAD_STATUS[vadIndicator(state)];
+  if (state.inputMode === "vad") {
+    if (state.phase === "opening") return "Opening the voice session…";
+    const indicator = vadIndicator(state);
+    // VOM-FR-MUZB: muted shows by text too, and not by colour alone.
+    if (state.vadOpen && state.muted && indicator === "listening") {
+      return "Muted. Unmute to speak.";
+    }
+    return VAD_STATUS[indicator];
+  }
   if (state.phase === "recording" || state.phase === "opening") return "Listening…";
   if (transcribing(state)) return "Transcribing…";
   return "Press to talk";
 }
 
-function RecordIcon({ state }: { state: VoiceState }) {
-  if (state.inputMode === "vad") {
-    const indicator = vadIndicator(state);
-    if (indicator === "listening") return <Icon.MicListening size={14} />;
-    if (indicator === "hearing") return <Icon.Waveform size={14} />;
-    if (indicator === "transcribing") return <Icon.TextLines size={14} />;
-    if (indicator === "paused") return <Icon.Pause size={14} />;
-  }
-  return <Icon.Mic size={14} />;
-}
-
-/**
- * The record control. In VAD mode it also closes a session while the composer is
- * blocked (VOM-FR-ZUWW), so a session never stays open with no way to close it.
- */
+/** The record control of Push-to-Talk. VAD mode has none (VOM-FR-PDZR). */
 export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
   const state = useVoiceState();
-  const vad = state.inputMode === "vad";
   // VOM-FR-QTAQ: a new press can start a recording while Transcribing shows.
   const busy = state.phase === "opening";
   return (
     <button
       type="button"
       className="voice-area__record"
-      data-voice-record="true"
-      data-recording={!vad && (state.phase === "opening" || state.phase === "recording")}
-      data-vad={vad ? vadIndicator(state) : undefined}
+      data-voice-focus="true"
+      data-recording={state.phase === "opening" || state.phase === "recording"}
       data-testid="voice-record"
       aria-label={recordName(state)}
       title={recordName(state)}
       // Not `disabled` while busy: that would take the focus away after each
       // recording. A press in a busy phase does nothing.
-      aria-disabled={busy && !state.vadOpen}
-      disabled={disabled && !state.vadOpen}
+      aria-disabled={busy}
+      disabled={disabled}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture?.(event.pointerId);
         pressRecord();
       }}
       onPointerUp={releaseRecord}
       onPointerCancel={releaseRecord}
-      // VOM-FR-PDZR: assistive technology can click with no pointer and no key. A
-      // click from a pointer has `detail` 1, and `onPointerDown` already acted.
-      onClick={(event) => {
-        if (vad && event.detail === 0) pressRecord();
-      }}
       onKeyDown={(event) => {
         // VOM-FR-PECJ.
         if ((event.key === " " || event.key === "Enter") && !event.repeat) {
@@ -164,9 +126,15 @@ export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
         }
       }}
     >
-      <RecordIcon state={state} />
+      <Icon.Mic size={14} />
     </button>
   );
+}
+
+/** VOM-FR-TISN, VOM-FR-VGLT: the record control, or the controls of VAD mode. */
+export function VoiceInputControls({ disabled }: { disabled: boolean }) {
+  const state = useVoiceState();
+  return state.inputMode === "vad" ? <VadControls /> : <VoiceRecordControl disabled={disabled} />;
 }
 
 /** VOM-FR-QDWW. */
@@ -184,7 +152,7 @@ export function VoiceStopControl() {
         // VOM-FR-LAQO: this control goes with the speech, so focus does not fall
         // to the document.
         const record = event.currentTarget.parentElement?.querySelector<HTMLElement>(
-          "[data-voice-record]",
+          "[data-voice-focus]",
         );
         stopSpeech();
         record?.focus();
@@ -253,7 +221,7 @@ export function VoiceArea({ disabled }: { disabled: boolean }) {
 
   return (
     <div className="voice-area" data-testid="voice-area">
-      <VoiceRecordControl disabled={disabled} />
+      <VoiceInputControls disabled={disabled} />
       <div ref={transcriptRef} className="voice-area__transcript" data-testid="voice-transcript">
         {status}
       </div>

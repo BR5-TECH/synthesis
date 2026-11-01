@@ -3,6 +3,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 
 import {
   noteLiveChunk,
+  noteLiveChunkEnd,
   noteLiveChunkFailed,
   noteLiveText,
   openLivePart,
@@ -77,6 +78,24 @@ describe("the live bubble", () => {
       "One. One part was not heard. Three.",
     );
     expect(screen.getByTestId("live-bubble-error")).toBeInTheDocument();
+  });
+
+  it("VOM-FR-HUXY, VOM-FR-SCAM: live text shows at once, and an ended chunk keeps it at its place", () => {
+    render(<Host id="d1" />);
+    act(() => {
+      openLivePart("d1", "c1");
+      noteLiveText("c1", "Check the");
+    });
+    expect(screen.getByTestId("live-bubble")).toHaveTextContent("Check the");
+    act(() => {
+      noteLiveText("c1", "Check the second paragraph.");
+      noteLiveChunkEnd("c1", 0);
+      noteLiveText("c1", "The scope");
+    });
+    expect(screen.getByTestId("live-bubble")).toHaveTextContent(
+      "Check the second paragraph. The scope",
+    );
+    expect(screen.getByTestId("live-bubble")).not.toHaveAttribute("aria-live");
   });
 
   it("CVP-FR-GHWN, VOM-FR-REJN: the bubble goes when its utterance settles", () => {

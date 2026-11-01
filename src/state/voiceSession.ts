@@ -46,6 +46,8 @@ export interface VoiceState {
   inputMode: VoiceInputMode;
   /** VOM-FR-PDZR: a VAD session is open, so the microphone is open. */
   vadOpen: boolean;
+  /** VOM-FR-MUZB, VOM-FR-RBWX: the open VAD session is muted. */
+  muted: boolean;
   /** VOM-FR-VOUG: from `speech_start` to the end of the utterance. */
   hearing: boolean;
   /** VOM-FR-FVRS: the author's speech paused the reply. `playing` stays. */
@@ -70,6 +72,7 @@ export const INITIAL_VOICE_STATE: VoiceState = Object.freeze({
   providerSpeaks: false,
   inputMode: "ptt",
   vadOpen: false,
+  muted: false,
   hearing: false,
   playbackPaused: false,
 });

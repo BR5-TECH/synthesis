@@ -2,8 +2,8 @@
  * VAD sessions in the shared composer (`VOM-voice-mode.md`). The controller is
  * real, so a press here runs the true path to the mocked commands.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const api = vi.hoisted(() => ({
   cancelVoiceCapture: vi.fn(async () => undefined),
@@ -49,6 +49,7 @@ vi.mock("../../voice/playback", () => ({
 
 import { resetLogBufferForTest } from "../../logging";
 import { clearAllDiscussionSessions, getDiscussionSession } from "../../state/discussionSession";
+import { noteMicLevel, resetMicLevelForTest } from "../../state/voiceLevel";
 import {
   getVoiceState,
   patchVoiceState,
@@ -110,6 +111,14 @@ function record() {
   return screen.getByTestId("voice-record");
 }
 
+function indicator() {
+  return screen.getByTestId("voice-vad-indicator");
+}
+
+function mute() {
+  return screen.getByTestId("voice-mute");
+}
+
 function enterVad() {
   fireEvent.click(screen.getByTestId("voice-button"));
   fireEvent.click(screen.getByRole("button", { name: "VAD" }));
@@ -123,12 +132,10 @@ async function flush() {
   });
 }
 
+/** VOM-FR-PDZR: selecting VAD opens the session, with no press. */
 async function openSession() {
   enterVad();
-  fireEvent.pointerDown(record());
-  fireEvent.pointerUp(record());
-  await flush();
-  expect(getVoiceState().vadOpen).toBe(true);
+  await waitFor(() => expect(getVoiceState().vadOpen).toBe(true));
 }
 
 function activity(state: VoiceActivityChange["state"], over: Partial<VoiceActivityChange> = {}) {
@@ -156,6 +163,7 @@ beforeEach(() => {
   resetVoiceControllerForTest();
   clearAllDiscussionSessions();
   resetLogBufferForTest();
+  resetMicLevelForTest();
   noteProvider(true, true);
 });
 
@@ -167,84 +175,89 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("the record control", () => {
+describe("the VAD controls", () => {
   const table: [string, Partial<VoiceState>, string, string, string][] = [
-    ["Idle", {}, "idle", "Idle. Open a voice session", "mic"],
-    [
-      "Listening",
-      { vadOpen: true },
-      "listening",
-      "Listening. Close the voice session",
-      "mic-listening",
-    ],
+    ["Idle", {}, "idle", "Voice session: Idle", "mic"],
+    ["Listening", { vadOpen: true }, "listening", "Voice session: Listening", "mic-listening"],
     [
       "Hearing speech",
       { vadOpen: true, hearing: true },
       "hearing",
-      "Hearing speech. Close the voice session",
+      "Voice session: Hearing speech",
       "waveform",
     ],
     [
       "Transcribing",
       { vadOpen: true, phase: "transcribing" },
       "transcribing",
-      "Transcribing. Close the voice session",
+      "Voice session: Transcribing",
       "text-lines",
     ],
     [
       "Posting",
       { vadOpen: true, phase: "posting" },
       "transcribing",
-      "Transcribing. Close the voice session",
+      "Voice session: Transcribing",
       "text-lines",
     ],
     [
       "Paused",
       { vadOpen: true, hearing: true, playing: true, playbackPaused: true },
       "paused",
-      "Paused. Close the voice session",
+      "Voice session: Paused",
       "pause",
     ],
   ];
 
-  it.each(table)("VOM-FR-VOUG: %s shows by icon, state, and name", (_, change, state, name, icon) => {
+  it.each(table)("VOM-FR-VOUG, VOM-FR-HSKZ: %s shows by icon, state, and name", async (_, change, state, name, icon) => {
     render(reply());
-    enterVad();
-    act(() => patchVoiceState(change));
-    expect(record()).toHaveAttribute("data-vad", state);
-    expect(record()).toHaveAttribute("aria-label", name);
-    expect(record().querySelector(`[data-icon="${icon}"]`)).not.toBeNull();
+    await openSession();
+    act(() => patchVoiceState({ vadOpen: false, ...change }));
+    expect(indicator()).toHaveAttribute("data-vad", state);
+    expect(indicator()).toHaveAttribute("aria-label", name);
+    expect(indicator().querySelector(`[data-icon="${icon}"]`)).not.toBeNull();
   });
 
-  it("VOM-FR-VOUG, VOM-FR-XDUY: Paused comes before Transcribing", () => {
+  it("VOM-FR-VOUG: the indicator is not a button", async () => {
     render(reply());
-    enterVad();
-    act(() => patchVoiceState({ vadOpen: true, playbackPaused: true, transcribing: 1 }));
-    expect(record()).toHaveAttribute("data-vad", "paused");
+    await openSession();
+    expect(indicator().tagName).toBe("SPAN");
+    expect(indicator()).toHaveAttribute("role", "img");
+  });
+
+  it("VOM-FR-VOUG, VOM-FR-XDUY: Paused comes before Transcribing", async () => {
+    render(reply());
+    await openSession();
+    act(() => patchVoiceState({ playbackPaused: true, transcribing: 1 }));
+    expect(indicator()).toHaveAttribute("data-vad", "paused");
     act(() => patchVoiceState({ playbackPaused: false }));
-    expect(record()).toHaveAttribute("data-vad", "transcribing");
+    expect(indicator()).toHaveAttribute("data-vad", "transcribing");
   });
 
-  it("VOM-FR-VOUG: after a close, the name offers no close", () => {
+  it("VOM-FR-PDZR, VOM-FR-TISN: VAD mode has no record control, and shows the indicator, Mute, and the waveform", async () => {
     render(reply());
-    enterVad();
-    act(() => patchVoiceState({ vadOpen: false, phase: "transcribing" }));
-    expect(record()).toHaveAttribute("aria-label", "Transcribing");
+    await openSession();
+    expect(screen.queryByTestId("voice-record")).toBeNull();
+    expect(screen.queryByText(/Press to start listening/)).toBeNull();
+    expect(indicator()).toBeInTheDocument();
+    expect(mute()).toBeInTheDocument();
+    expect(screen.getByTestId("voice-waveform")).toBeInTheDocument();
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
   });
 
-  it("VOM-FR-HSKZ: Push-to-Talk has no VAD state", () => {
+  it("VOM-FR-HSKZ: Push-to-Talk has a record control with no VAD state", () => {
     render(reply());
     fireEvent.click(screen.getByTestId("voice-button"));
     expect(record()).not.toHaveAttribute("data-vad");
     expect(record()).toHaveAttribute("aria-label", "Record");
+    expect(screen.queryByTestId("voice-mute")).toBeNull();
   });
 
-  it("VOM-FR-SRGN, VOM-FR-HUXY: a route that is not live shows the timer, and text comes first", () => {
+  it("VOM-FR-SRGN, VOM-FR-HUXY: a route that is not live shows the timer, and text comes first", async () => {
     render(reply());
-    enterVad();
+    await openSession();
     act(() =>
       patchVoiceState({
-        vadOpen: true,
         hearing: true,
         phase: "recording",
         live: false,
@@ -256,68 +269,143 @@ describe("the record control", () => {
     expect(screen.getByTestId("voice-transcript")).toHaveTextContent("the words");
   });
 
-  it("VOM-FR-ZUWW: a disabled composer opens nothing", () => {
+  it("VOM-FR-GTAQ: a disabled composer still opens the session, and the gate blocks utterances", async () => {
     render(reply({ disabled: true }));
-    enterVad();
-    expect(record()).toBeDisabled();
-  });
-
-  it("VOM-FR-ZUWW: a disabled composer can still close an open session", async () => {
-    const view = render(reply());
     await openSession();
-    view.rerender(reply({ disabled: true }));
-    expect(record()).toBeEnabled();
-    fireEvent.pointerDown(record());
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(false);
+    expect(lastGate()).toMatchObject({ blocked: true });
   });
 
-  it("VOM-FR-PDZR: a click with no pointer, as assistive technology sends, opens a session", async () => {
-    render(reply());
-    enterVad();
-    fireEvent.click(record(), { detail: 0 });
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(true);
-  });
-
-  it("VOM-FR-PDZR: the click after a pointer press does not press twice", async () => {
-    render(reply());
-    enterVad();
-    fireEvent.pointerDown(record());
-    fireEvent.pointerUp(record());
-    fireEvent.click(record(), { detail: 1 });
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(true);
-  });
-
-  it("VOM-FR-XEIA: an open session stays closable while it transcribes", () => {
-    render(reply());
-    enterVad();
-    act(() => patchVoiceState({ vadOpen: true, phase: "transcribing" }));
-    expect(record()).toHaveAttribute("aria-disabled", "false");
-  });
-
-  it("VOM-FR-PDZR, VOM-FR-PECJ: a press opens, a release does not close, and a press closes", async () => {
+  it("VOM-FR-LAQO: in VAD mode the Mute toggle takes the focus of the hidden field", async () => {
     render(reply());
     await openSession();
-    fireEvent.pointerDown(record());
-    fireEvent.pointerUp(record());
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(false);
-    expect(mic.stop).toHaveBeenCalledTimes(1);
+    expect(mute()).toHaveFocus();
   });
 
-  it.each([" ", "Enter"])("VOM-FR-PDZR, VOM-FR-PECJ: key %j opens and closes once", async (key) => {
+  it("VOM-FR-LAQO: a switch back to Push-to-Talk gives focus to the record control", async () => {
+    render(reply());
+    await openSession();
+    fireEvent.click(screen.getByRole("button", { name: "Push-to-Talk" }));
+    await flush();
+    expect(record()).toHaveFocus();
+  });
+
+  it("VOM-FR-LAQO: a switch leaves focus that the author moved elsewhere", async () => {
+    render(
+      <>
+        <input data-testid="elsewhere" />
+        {reply()}
+      </>,
+    );
+    await openSession();
+    const elsewhere = screen.getByTestId("elsewhere");
+    elsewhere.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Push-to-Talk" }));
+    await flush();
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it("VOM-FR-QKTE, VOM-FR-MUZB: Mute keeps the session open, and shows by icon, state, and name", async () => {
+    render(reply());
+    await openSession();
+    expect(mute().tagName).toBe("BUTTON");
+    expect(mute()).toHaveAttribute("aria-pressed", "false");
+    expect(mute()).toHaveAccessibleName("Mute microphone");
+    expect(mute()).toHaveAttribute("title", "Mute microphone");
+    fireEvent.click(mute());
+    expect(mute()).toHaveAttribute("aria-pressed", "true");
+    expect(mute()).toHaveAccessibleName("Unmute microphone");
+    expect(mute().querySelector('[data-icon="mic-off"]')).not.toBeNull();
+    expect(indicator()).toHaveAccessibleName("Voice session: Listening, muted");
+    expect(screen.getByTestId("voice-transcript")).toHaveTextContent(/Muted/);
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, muted: true });
+    expect(lastGate()).toMatchObject({ blocked: true });
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-RBWX: Unmute frees the gate again", async () => {
+    render(reply());
+    await openSession();
+    fireEvent.click(mute());
+    fireEvent.click(mute());
+    expect(mute()).toHaveAttribute("aria-pressed", "false");
+    expect(lastGate()).toMatchObject({ blocked: false });
+  });
+
+  it("VOM-FR-CUCN: a failed open shows Open again, and it opens one time", async () => {
+    api.openVoiceActivitySession.mockRejectedValueOnce("voice_detector_unavailable");
     render(reply());
     enterVad();
-    fireEvent.keyDown(record(), { key });
-    fireEvent.keyDown(record(), { key, repeat: true });
-    fireEvent.keyUp(record(), { key });
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(true);
-    fireEvent.keyDown(record(), { key });
     await flush();
     expect(getVoiceState().vadOpen).toBe(false);
+    expect(screen.getByTestId("voice-error")).toBeInTheDocument();
+    expect(mute()).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(screen.getByTestId("voice-vad-reopen"));
+    await flush();
+    expect(getVoiceState().vadOpen).toBe(true);
+    expect(screen.queryByTestId("voice-vad-reopen")).toBeNull();
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the waveform", () => {
+  function bars() {
+    return [...screen.getByTestId("voice-waveform").querySelectorAll<HTMLElement>(".voice-waveform__bar")];
+  }
+
+  function lastBar() {
+    const all = bars();
+    return all[all.length - 1];
+  }
+
+  it("VOM-FR-WFHN, VOM-FR-PJOC: it shows the live level and is decorative", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    render(reply());
+    await openSession();
+    const wave = screen.getByTestId("voice-waveform");
+    expect(wave).toHaveAttribute("aria-hidden", "true");
+    expect(wave).not.toHaveAttribute("aria-live");
+    expect(wave).toHaveAttribute("data-flat", "false");
+    now.mockReturnValue(2_000);
+    act(() => noteMicLevel(0.8));
+    expect(lastBar().style.transform).toBe("scaleY(0.8)");
+  });
+
+  it("VOM-FR-ZDLY: it is flat while muted and while no session is open", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    render(reply());
+    enterVad();
+    expect(screen.getByTestId("voice-waveform")).toHaveAttribute("data-flat", "true");
+    await waitFor(() => expect(getVoiceState().vadOpen).toBe(true));
+    now.mockReturnValue(2_000);
+    act(() => noteMicLevel(0.8));
+    expect(lastBar().style.transform).toBe("scaleY(0.8)");
+    fireEvent.click(mute());
+    now.mockReturnValue(3_000);
+    act(() => noteMicLevel(0.8));
+    expect(screen.getByTestId("voice-waveform")).toHaveAttribute("data-flat", "true");
+    expect(bars().every((b) => b.style.transform === "scaleY(0.12)")).toBe(true);
+  });
+
+  it("VOM-FR-PJOC: with reduced motion it changes at most two times each second", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: (query: string) => ({ matches: query.includes("reduce"), media: query }),
+    });
+    onTestFinished(() => {
+      Reflect.deleteProperty(window, "matchMedia");
+    });
+    const now = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    render(reply());
+    await openSession();
+    expect(screen.getByTestId("voice-waveform")).toHaveAttribute("data-reduced-motion", "true");
+    now.mockReturnValue(10_600);
+    act(() => noteMicLevel(0.5));
+    now.mockReturnValue(10_700);
+    act(() => noteMicLevel(0.9));
+    expect(lastBar().style.transform).toBe("scaleY(0.5)");
+    now.mockReturnValue(11_200);
+    act(() => noteMicLevel(0.9));
+    expect(lastBar().style.transform).toBe("scaleY(0.9)");
   });
 });
 
@@ -445,7 +533,9 @@ describe("the session bar", () => {
 
   it("VOM-FR-VGLT: shows the state and the open microphone", async () => {
     await barWithSession();
-    expect(record()).toHaveAttribute("data-vad", "listening");
+    expect(indicator()).toHaveAttribute("data-vad", "listening");
+    expect(screen.getByTestId("voice-waveform")).toBeInTheDocument();
+    expect(screen.queryByTestId("voice-record")).toBeNull();
     expect(screen.getByTestId("voice-session-bar")).toHaveTextContent(/microphone is open/);
     expect(screen.queryByTestId("voice-stop")).toBeNull();
     act(() => patchVoiceState({ playing: true, error: "voice_no_audio" }));
@@ -453,15 +543,14 @@ describe("the session bar", () => {
     expect(screen.getByTestId("voice-error")).toBeInTheDocument();
   });
 
-  it("VOM-FR-GPNK: the record control closes the session, and the next press opens one", async () => {
+  it("VOM-FR-GPNK, VOM-FR-VGLT: the Mute toggle of the bar mutes, and the line says so", async () => {
     await barWithSession();
-    fireEvent.pointerDown(record());
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(false);
-    fireEvent.pointerDown(record());
-    await flush();
-    expect(getVoiceState().vadOpen).toBe(true);
-    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(2);
+    fireEvent.click(mute());
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, muted: true });
+    expect(screen.getByTestId("voice-session-bar")).toHaveTextContent(/microphone is muted/);
+    expect(screen.getByTestId("voice-waveform")).toHaveAttribute("data-flat", "true");
+    fireEvent.click(mute());
+    expect(screen.getByTestId("voice-session-bar")).toHaveTextContent(/microphone is open/);
   });
 
   it("VOM-FR-GTAQ, VOM-FR-LNUH: a mounted bar leaves the gate open and sends the roster", async () => {
@@ -514,7 +603,7 @@ describe("the session bar", () => {
 
   it("VOM-FR-LAQO: the bar takes the focus that went with the composer", async () => {
     await barWithSession();
-    expect(record()).toHaveFocus();
+    expect(mute()).toHaveFocus();
   });
 
   it("VOM-FR-LAQO: the bar takes no focus that the author holds elsewhere", async () => {

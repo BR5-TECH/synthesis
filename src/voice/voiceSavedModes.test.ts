@@ -2,7 +2,7 @@
  * The saved input mode and response mode (`VOM-voice-mode.md` VOM-FR-KEMU,
  * VOM-FR-MQHD, VOM-FR-KQAI; `GSS-global-settings-storage.md` GSS-FR-WYHC).
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const prefs = vi.hoisted(() => ({
   cached: null as Record<string, unknown> | null,
@@ -10,10 +10,22 @@ const prefs = vi.hoisted(() => ({
   patch: vi.fn(async (change: Record<string, unknown>) => change),
 }));
 
+const vad = vi.hoisted(() => ({
+  open: vi.fn(async () => ({ activityId: "va1" })),
+  mic: vi.fn(async () => ({ rate: 48_000, stop: () => undefined })),
+}));
+
 vi.mock("../api", () => ({
   cancelVoiceCapture: vi.fn(async () => undefined),
   cancelVoiceSpeech: vi.fn(async () => undefined),
   closeVoiceActivitySession: vi.fn(async () => ({ captureId: null })),
+  feedVoiceActivity: vi.fn(async () => undefined),
+  openVoiceActivitySession: vad.open,
+  setVoiceActivityGate: vi.fn(async () => undefined),
+}));
+vi.mock("./capture", async (original) => ({
+  ...(await original<typeof import("./capture")>()),
+  openMicrophone: vad.mic,
 }));
 vi.mock("../logging", () => ({ logDebug: vi.fn(), logInfo: vi.fn(), logWarn: vi.fn() }));
 vi.mock("./playback", () => ({
@@ -53,19 +65,52 @@ beforeEach(() => {
   noteProvider(true, true);
 });
 
+afterEach(async () => {
+  // A session that a test opened closes, so nothing goes to the next test. The
+  // close and an open on its way end in microtasks of the mocked commands.
+  endVoiceForTeardown();
+  await vi.waitFor(() => expect(getVoiceState().phase).toBe("idle"));
+  for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+});
+
 describe("the saved modes", () => {
-  it("VOM-FR-KEMU, GSS-FR-WYHC: entry applies the saved input and response modes", () => {
+  it("VOM-FR-KEMU, VOM-FR-PDZR, GSS-FR-WYHC: entry applies the saved modes, and saved VAD opens a session with no press", async () => {
     prefs.cached = { voiceInputMode: "vad", voiceResponseMode: "voice" };
     enterVoiceMode("d1", null, { kind: "draft", draftId: "x" });
-    expect(getVoiceState()).toMatchObject({ inputMode: "vad", responseMode: "voice", vadOpen: false });
+    expect(getVoiceState()).toMatchObject({ inputMode: "vad", responseMode: "voice" });
+    await vi.waitFor(() => expect(getVoiceState().vadOpen).toBe(true));
+    expect(vad.open).toHaveBeenCalledTimes(1);
   });
 
-  it("VOM-FR-KEMU: a record that is not read yet applies when it comes", async () => {
+  it("VOM-FR-PDZR: entry with saved Push-to-Talk opens no session", () => {
+    prefs.cached = { voiceInputMode: "ptt" };
+    enterVoiceMode("d1", null, { kind: "draft", draftId: "x" });
+    // An open starts in the same call as the entry, so nothing that comes later can start one.
+    expect(getVoiceState().phase).toBe("idle");
+    expect(vad.mic).not.toHaveBeenCalled();
+    expect(getVoiceState().vadOpen).toBe(false);
+  });
+
+  it("VOM-FR-PDZR: leaving before saved VAD is read opens nothing", async () => {
+    let answer: (value: Record<string, unknown>) => void = () => undefined;
+    prefs.load.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    enterVoiceMode("d1", null, { kind: "draft", draftId: "x" });
+    leaveVoiceMode();
+    answer({ voiceInputMode: "vad" });
+    await vi.waitFor(() => expect(prefs.load).toHaveBeenCalled());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getVoiceState().phase).toBe("idle");
+    expect(vad.mic).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-KEMU, VOM-FR-PDZR: a record that is not read yet applies when it comes, and opens the session", async () => {
     prefs.load.mockImplementation(async () => ({ voiceInputMode: "vad", voiceResponseMode: "voice" }));
     enterVoiceMode("d1", null, { kind: "draft", draftId: "x" });
     expect(getVoiceState().inputMode).toBe("ptt");
     await vi.waitFor(() => expect(getVoiceState().inputMode).toBe("vad"));
     expect(getVoiceState().responseMode).toBe("voice");
+    await vi.waitFor(() => expect(getVoiceState().vadOpen).toBe(true));
   });
 
   it("VOM-FR-KEMU: a toggle before the read comes wins over the read", async () => {

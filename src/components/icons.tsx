@@ -571,6 +571,15 @@ export const Icon = {
       <path d="M12 18v3" />
     </I>
   ),
+  /* VOM-FR-QKTE: a muted microphone. */
+  MicOff: (p: IconProps) => (
+    <I data-icon="mic-off" {...p}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3" />
+      <path d="M4 4l16 16" />
+    </I>
+  ),
   /* VOM-FR-VOUG: a VAD session that listens. */
   MicListening: (p: IconProps) => (
     <I data-icon="mic-listening" {...p}>

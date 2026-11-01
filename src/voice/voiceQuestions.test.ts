@@ -49,7 +49,7 @@ describe("the blocks that voice mode can reach", () => {
 });
 
 describe("questionSpeech", () => {
-  it("VOM-FR-HBLE, VOM-FR-NWGL: the text, then the labels in order, and no description", () => {
+  it("VOM-FR-HBLE, VOM-FR-NWGL: the question text alone, with no label and no description", () => {
     expect(
       questionSpeech({
         position: 1,
@@ -59,6 +59,6 @@ describe("questionSpeech", () => {
           { position: 2, value: "Second" },
         ],
       }),
-    ).toBe("Which one?\nFirst\nSecond");
+    ).toBe("Which one?");
   });
 });

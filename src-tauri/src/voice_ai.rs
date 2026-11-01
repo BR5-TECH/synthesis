@@ -266,6 +266,10 @@ pub trait VoiceSink: Send + Sync {
     /// A failure that the typed code does not explain. `detail` is a kind, a
     /// status, or a server code, and never a URL, a key, or text.
     fn diagnostic(&self, stage: &str, detail: &str);
+    /// A step of a live session (VOP-FR-KIMU). `counts` hold counts and group
+    /// indexes alone, and never text. `warn` gives the `WARN` level, and
+    /// otherwise the level is `DEBUG`.
+    fn live_step(&self, _message: &str, _counts: &[(&str, usize)], _warn: bool) {}
 }
 
 impl VoiceSink for tauri::AppHandle {
@@ -296,6 +300,19 @@ impl VoiceSink for tauri::AppHandle {
             "voice provider call failed",
             crate::log_fields! { "stage" => stage, "detail" => detail },
         );
+    }
+
+    fn live_step(&self, message: &str, counts: &[(&str, usize)], warn: bool) {
+        let mut fields = crate::logging::Fields::new();
+        for (key, value) in counts {
+            fields.insert((*key).to_string(), serde_json::json!(value));
+        }
+        let domains = [crate::logging::Domain::Ai, crate::logging::Domain::Remote];
+        if warn {
+            crate::logging::log_warn(self, &crate::logging::BUFFER, &domains, message, fields);
+        } else {
+            crate::logging::log_debug(self, &crate::logging::BUFFER, &domains, message, fields);
+        }
     }
 }
 

@@ -20,6 +20,7 @@ import { originFor } from "../state/discussionOrigin";
 import {
   dropLivePart,
   noteLiveChunk,
+  noteLiveChunkEnd,
   noteLiveChunkFailed,
   noteLiveText,
   openLivePart,
@@ -209,12 +210,14 @@ export function noteChunk(change: VoiceChunkChange): void {
   switch (change.state) {
     case "chunk_end":
       u.pendingChunks += 1;
+      noteLiveChunkEnd(u.captureId, change.index);
       break;
     case "chunk_transcript": {
       u.pendingChunks = Math.max(0, u.pendingChunks - 1);
       const text = (change.text ?? "").trim();
+      // An empty transcript also takes the place of the live text of its chunk.
+      noteLiveChunk(u.captureId, change.index, text);
       if (text !== "") {
-        noteLiveChunk(u.captureId, change.index, text);
         if (u.speechStarted) steerSpeech(u, text);
         else startSpeech(u, text);
       }
@@ -247,6 +250,32 @@ function joinToBody(key: string, text: string): void {
 type Delivery = { commentId: string | null; answered: boolean };
 
 /**
+ * VOM-FR-YTKV, VOM-FR-HNEB: the comment of a spoken answer, after the answer took
+ * effect in the block. A failed post keeps the answer and is not sent again.
+ */
+async function postAnswerComment(u: Utterance, spoken: string): Promise<void> {
+  const handle = postingHandleOf(u.key);
+  let outcome: PostOutcome = "failed";
+  if (handle?.postAnswer) {
+    try {
+      outcome = await handle.postAnswer(handle.tagged(spoken));
+    } catch (error) {
+      logWarn(["frontend", "ai"], "the comment of a spoken answer did not post", {
+        code: errorCode(error),
+      });
+    }
+  }
+  if (outcome === "busy" || outcome === "failed") {
+    logWarn(["frontend", "ai"], "a spoken answer posted no comment", { outcome });
+    patchVoiceState({ error: "answer_not_posted", canRetry: false });
+    return;
+  }
+  logInfo(["frontend", "ai"], "a spoken answer posted its comment", { outcome });
+  // VOM-FR-BVNX.
+  if (outcome === "reached_nobody") patchVoiceState({ note: "no_agent" });
+}
+
+/**
  * VOM-FR-WYIE, VOM-FR-RENV, VOM-FR-ABPU, VOM-FR-BVNX, VOM-FR-PINR. A comment that
  * reached no agent also posted.
  */
@@ -257,8 +286,9 @@ async function deliver(u: Utterance, text: string): Promise<Delivery> {
     patchVoiceState({ note: "no_speech" });
     return none;
   }
-  // VOM-FR-FUFE: the words as spoken, with the session body left as it is.
-  // VOM-FR-UXYH: an answer whose set went falls through and joins the body.
+  // VOM-FR-FUFE: the answer holds the words as spoken, and the session body
+  // stays as it is. VOM-FR-UXYH: an answer whose set went falls through and
+  // joins the body, and it posts no comment.
   if (u.answers !== null) {
     const block = questionBlockOf(u.key);
     if (!u.keepInBody && block?.setId === u.answers.setId) {
@@ -267,6 +297,7 @@ async function deliver(u: Utterance, text: string): Promise<Delivery> {
         position: u.answers.position,
       });
       block.answer(u.answers.position, spoken);
+      await postAnswerComment(u, spoken);
       return { commentId: null, answered: true };
     }
     logInfo(["frontend", "ai"], "a spoken answer found no question", {});

@@ -17,6 +17,12 @@ export type PostOutcome = "posted" | "reached_nobody" | "busy" | "failed";
 export interface VoiceComposerHandle {
   /** VOM-FR-RFWC: post the session body, then this text. */
   post(spoken: string): Promise<PostOutcome>;
+  /**
+   * VOM-FR-YTKV, VOM-FR-FUFE: post this text alone as the comment of a spoken
+   * answer. No session body, no quote, and no attachment go with it, and the
+   * session stays as it is. Absent on a surface that cannot post.
+   */
+  postAnswer?(text: string): Promise<PostOutcome>;
   /** VOM-FR-TAQJ, VOM-FR-SBSS. Gives the text with its spoken address as a tag. */
   tagged(transcript: string): string;
   /** VOM-FR-ZUWW. */

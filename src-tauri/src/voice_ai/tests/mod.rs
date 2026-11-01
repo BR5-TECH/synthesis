@@ -7,6 +7,7 @@ mod activity_worker;
 mod audio;
 mod capture;
 mod chunks;
+mod interim;
 mod protocol;
 mod speech;
 mod support;

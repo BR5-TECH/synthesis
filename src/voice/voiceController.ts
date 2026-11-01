@@ -69,14 +69,14 @@ import {
   discardSpoken,
   endVadSession,
   keepSpoken,
-  pressVad,
+  openVadSession,
   pushVadGate,
   resetVoiceVadForTest,
   vadIsBusy,
 } from "./voiceVad";
 
 export { noteChunk } from "./voiceUtterances";
-export { noteActivity } from "./voiceVad";
+export { noteActivity, openVadSession, setVadMuted } from "./voiceVad";
 export { noteDiscussionChanged, noteQuestionShown, stopSpeech } from "./voiceReplies";
 export type { PostOutcome, VoiceComposerHandle } from "./voiceHandles";
 export { TAIL_MS };
@@ -136,6 +136,8 @@ function applySaved(prefs: AppPreferences): void {
   savedResponse = prefs.voiceResponseMode === "voice" ? "voice" : "text";
   const inputMode: VoiceInputMode = prefs.voiceInputMode === "vad" ? "vad" : "ptt";
   patchVoiceState({ inputMode, responseMode: effectiveResponse(savedResponse) });
+  // VOM-FR-KEMU, VOM-FR-PDZR: saved VAD opens a session at entry, with no press.
+  if (inputMode === "vad") openVadSession("entry");
 }
 
 /** VOM-FR-KEMU: a toggle change saves at once. */
@@ -397,19 +399,23 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
 export function setInputMode(mode: VoiceInputMode): void {
   const state = getVoiceState();
   if (mode === state.inputMode) return;
-  if (mode === "vad" && (state.phase !== "idle" || capture !== null)) return;
+  // A VAD open that is still on its way holds the phase, and it can serve again.
+  const vadOpenPhase = state.phase === "opening" && vadIsBusy();
+  if (mode === "vad" && ((state.phase !== "idle" && !vadOpenPhase) || capture !== null)) return;
   patchVoiceState({ inputMode: mode });
   save({ voiceInputMode: mode });
   if (mode === "ptt") void endVadSession("release");
+  // VOM-FR-PDZR, VOM-FR-VGCE: selecting VAD opens a session at once.
+  else openVadSession("switch");
 }
 
-/** VOM-FR-HHWL, VOM-FR-LIFL, VOM-FR-VVTY, VOM-FR-FASJ, VOM-FR-PDZR. */
+/**
+ * VOM-FR-HHWL, VOM-FR-LIFL, VOM-FR-VVTY, VOM-FR-FASJ. VAD mode has no record
+ * control, and the hotkey does nothing there (VOM-FR-PDZR, VOM-FR-WPRW).
+ */
 export function pressRecord(): void {
   const state = getVoiceState();
-  if (state.inputMode === "vad") {
-    pressVad();
-    return;
-  }
+  if (state.inputMode === "vad") return;
   const handle = handleOf(state.activeKey);
   if (!handle || state.activeKey === null || handle.blocked()) return;
   if (capture) {

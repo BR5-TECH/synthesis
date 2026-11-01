@@ -46,6 +46,11 @@ function PartText({ part }: { part: LivePart }) {
           </span>
         ) : chunk.text ? (
           <span key={chunk.index}>{chunk.text} </span>
+        ) : chunk.pending ? (
+          // VOM-FR-SCAM: the live text of a chunk that ended and transcribes.
+          <span key={chunk.index} className="live-bubble__live">
+            {chunk.pending}{" "}
+          </span>
         ) : null,
       )}
       {part.liveText !== "" && <span className="live-bubble__live">{part.liveText}</span>}

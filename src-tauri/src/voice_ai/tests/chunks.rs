@@ -619,3 +619,16 @@ fn a_pause_follows_speech_and_noise_does_not_clear_it() {
     pauses.step(0.9);
     assert!(!pauses.paused());
 }
+
+// VOP-FR-KIMU: a word gap needs speech before it, and it reports one time.
+#[test]
+fn a_word_gap_follows_speech_and_reports_one_time() {
+    use crate::voice_ai::activity::detector::{GapTracker, WORD_GAP_FRAMES};
+    assert_eq!(WORD_GAP_FRAMES, 3, "VOP-FR-KIMU: 3 detector frames");
+    let mut gaps = GapTracker::new(Settings::new(500, VoiceVadSensitivity::Medium));
+    assert!((0..10).all(|_| !gaps.step(0.05)), "silence alone is no gap");
+    assert!(!gaps.step(0.9));
+    let found: Vec<bool> = (0..WORD_GAP_FRAMES + 3).map(|_| gaps.step(0.05)).collect();
+    assert_eq!(found.iter().filter(|g| **g).count(), 1);
+    assert!(found[WORD_GAP_FRAMES as usize - 1]);
+}

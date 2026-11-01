@@ -46,10 +46,12 @@ import {
   noteDiscussionChanged,
   noteProvider,
   noteTranscript,
+  openVadSession,
   pressRecord,
   registerVoiceComposer,
   releaseRecord,
   retryRecording,
+  setInputMode,
   setResponseMode,
   stopSpeech,
   type PostOutcome,
@@ -175,7 +177,7 @@ describe("a paused reply on each exit", () => {
   it("VOM-FR-KVHG: a close during unconfirmed speech resumes it", async () => {
     await openSession();
     await replyPaused();
-    pressRecord();
+    setInputMode("ptt");
     await settle();
     expect(api.closeVoiceActivitySession).toHaveBeenCalledWith("va1", true);
     expectSettledWith(true);
@@ -184,7 +186,7 @@ describe("a paused reply on each exit", () => {
   it("VOM-FR-UNXR: a close in an utterance that posts drops it", async () => {
     await paused();
     api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
-    pressRecord();
+    setInputMode("ptt");
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     expectSettledWith(false);
   });
@@ -366,7 +368,8 @@ describe("a lost feed", () => {
     await settle();
     expect(getVoiceState()).toMatchObject({ error: code, canRetry: false, vadOpen: false });
     expect(api.closeVoiceActivitySession).toHaveBeenCalledTimes(1);
-    pressRecord();
+    // VOM-FR-CUCN: nothing retries by itself, and Open again opens one.
+    openVadSession("again");
     await settle();
     expect(getVoiceState()).toMatchObject({ error: null, vadOpen: true });
   });
@@ -445,7 +448,7 @@ describe("Retry", () => {
     await confirmed();
     api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
     api.finishVoiceCapture.mockRejectedValueOnce("provider_unreachable");
-    pressRecord();
+    setInputMode("ptt");
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     expect(getVoiceState()).toMatchObject({ vadOpen: false, canRetry: true });
     await retryRecording();

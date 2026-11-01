@@ -326,12 +326,23 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     // AGC-FR-13: input is assembled at dispatch, so a turn answers the
     // conversation as it stood when the agent was addressed.
     // AGC-FR-SJQP: a speech turn's `current_comment` holds the first chunk.
-    let BuiltInput { sections: input, document } = match trigger {
+    let BuiltInput { sections: input, document, question_set_unreadable } = match trigger {
         Trigger::Comment(id) => build_input_within(roots, &origin, id, &document_budget),
         Trigger::Speech { text, speaker, .. } => {
             speech_input(roots, &origin, text, speaker, &document_budget)
         }
     };
+    // AGC-FR-QSWD: a record that cannot be read adds no question set. The kind
+    // is the whole of the record: no path and no content.
+    if let Some(kind) = question_set_unreadable {
+        logging::log_warn(
+            app,
+            turns.buffer(),
+            &[Domain::Ai, Domain::Backend],
+            "a pending question set could not be read for a turn",
+            log_fields! { "discussionId" => origin.discussion_id(), "kind" => kind },
+        );
+    }
     // The shape of the material and nothing of the material itself: which
     // sections a builder could produce, how much they came to, and whether the
     // bound of AGC-FR-11 bit — which is what explains a reply about half a

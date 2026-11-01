@@ -98,10 +98,10 @@ async function pass(ms = 0) {
   });
 }
 
+/** VOM-FR-PDZR: selecting VAD opens the session, with no press. */
 async function openSession() {
   fireEvent.click(screen.getByTestId("voice-button"));
   fireEvent.click(screen.getByRole("button", { name: "VAD" }));
-  fireEvent.pointerDown(screen.getByTestId("voice-record"));
   await pass();
   expect(getVoiceState().vadOpen).toBe(true);
 }
@@ -179,7 +179,6 @@ describe("a question set with a session open", () => {
     const second = screen.getAllByTestId("discussion-composer")[1];
     fireEvent.click(within(second).getByTestId("voice-button"));
     fireEvent.click(screen.getByRole("button", { name: "VAD" }));
-    fireEvent.pointerDown(screen.getByTestId("voice-record"));
     await pass();
     expect(getVoiceState()).toMatchObject({ vadOpen: true, activeKey: "d2" });
     act(() => publishSet("d1", QUESTION_SET));
@@ -201,17 +200,19 @@ describe("a question set with a session open", () => {
     expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
   });
 
-  it("VOM-FR-GPNK, DQA-FR-PXNC: the bar closes the session, and the line stays", async () => {
+  it("VOM-FR-GPNK, VOM-FR-BQBI, DQA-FR-PXNC: Mute at the bar keeps the session, and the line stays", async () => {
     render(surface());
     await openSession();
     act(() => publishSet("d1", QUESTION_SET));
-    fireEvent.pointerDown(screen.getByTestId("voice-record"));
-    await pass();
-    expect(getVoiceState().vadOpen).toBe(false);
-    expect(screen.getByTestId("voice-session-bar")).toHaveTextContent(/Press to answer/);
+    fireEvent.click(screen.getByTestId("voice-mute"));
+    await pass(LONG_WAIT_MS);
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, muted: true });
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
+    expect(screen.getByTestId("voice-session-bar")).toHaveTextContent(/microphone is muted/);
     expect(screen.getByTestId("discussion-questions-composer-note")).toBeInTheDocument();
     act(() => clearQuestionSets());
-    expect(screen.getByTestId("voice-record")).toHaveAttribute("data-vad", "idle");
+    expect(screen.getByTestId("voice-mute")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("voice-record")).toBeNull();
   });
 
   it("VOM-FR-LSBQ, VOM-FR-BCRD: a discussion that resolves shows no bar, and the session stays", async () => {

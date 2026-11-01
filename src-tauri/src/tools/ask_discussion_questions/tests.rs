@@ -221,6 +221,17 @@ fn the_already_pending_refusal_is_not_retryable() {
     assert!(refusal.to_string().contains("will not succeed"));
 }
 
+/// ADQ-FR-NOVR: the description and the already-pending refusal tell the agent
+/// to reply with a comment while a set waits, and not to record a second set.
+#[test]
+fn a_waiting_set_asks_for_a_comment_and_no_second_set() {
+    assert!(DESCRIPTION.contains(
+        "While a set already waits for the author's answers, do not call it: reply to the author's comment with a comment, and the set that waits stays."
+    ));
+    let refusal = refusal_for(crate::comments::ERR_QUESTION_SET_ALREADY_PENDING);
+    assert!(refusal.to_string().contains("Reply to the author's comment with a comment"));
+}
+
 /// ADQ-FR-VDGT: a resolved discussion is the not-retryable `PermissionDenied`.
 #[test]
 fn the_resolved_refusal_is_not_retryable() {

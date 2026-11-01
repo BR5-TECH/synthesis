@@ -4,7 +4,7 @@
  * `VadSession`, the batcher, and the pump stay real, so a failed feed runs the
  * true path.
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { api, audio, mic } = await vi.hoisted(() => import("../test/voiceVadMocks"));
 
@@ -47,17 +47,24 @@ import {
   noteComposerChanged,
   noteProvider,
   noteTranscript,
+  openVadSession,
   pressRecord,
   registerVoiceComposer,
   releaseRecord,
   retryRecording,
   setInputMode,
+  setVadMuted,
 } from "./voiceController";
+import { getMicLevel, resetMicLevelForTest } from "../state/voiceLevel";
 
 useVadBench();
 
+beforeEach(() => {
+  resetMicLevelForTest();
+});
+
 describe("opening a session", () => {
-  it("VOM-FR-PDZR, VOM-FR-MMAG, VOM-FR-SIEO, VOM-FR-LNUH: a press opens one session and calls no provider", async () => {
+  it("VOM-FR-PDZR, VOM-FR-MMAG, VOM-FR-SIEO, VOM-FR-LNUH: selecting VAD opens one session with no press and calls no provider", async () => {
     await openSession();
     expect(mic.open).toHaveBeenCalledTimes(1);
     expect(api.openVoiceActivitySession).toHaveBeenCalledWith(48_000, ["arch"]);
@@ -70,34 +77,51 @@ describe("opening a session", () => {
     expect(api.speakVoiceSegment).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-PDZR: selecting VAD opens nothing", async () => {
-    ready();
+  it("VOM-FR-PDZR, VOM-FR-WPRW: in VAD mode a press and the hotkey open and close nothing", async () => {
+    await openSession();
+    pressRecord();
+    releaseRecord();
     await settle();
-    expect(mic.open).not.toHaveBeenCalled();
-    expect(getVoiceState().inputMode).toBe("vad");
+    expect(getVoiceState().vadOpen).toBe(true);
+    expect(mic.open).toHaveBeenCalledTimes(1);
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-VVTY: opening stops playback", async () => {
-    ready();
+  it("VOM-FR-PDZR: Push-to-Talk opens no session", async () => {
+    enterVoiceMode(KEY, discussion([]));
+    patchVoiceState({ providerReady: true });
+    registerVoiceComposer(KEY, handle());
+    await settle();
+    expect(getVoiceState().inputMode).toBe("ptt");
+    expect(mic.open).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-VVTY, VOM-FR-VGCE: a switch to VAD stops playback and opens at once", async () => {
+    enterVoiceMode(KEY, discussion([]));
+    patchVoiceState({ providerReady: true, providerSpeaks: true });
+    registerVoiceComposer(KEY, handle());
     await replyPlays();
     audio.stopPlayback.mockClear();
-    pressRecord();
+    setInputMode("vad");
     expect(audio.stopPlayback).toHaveBeenCalledTimes(1);
     expect(api.cancelVoiceSpeech).toHaveBeenCalledTimes(1);
     expect(getVoiceState().playing).toBe(false);
     await settle();
+    expect(getVoiceState().vadOpen).toBe(true);
   });
 
-  it("VOM-FR-FASJ: opening drops a held recording", async () => {
+  it("VOM-FR-FASJ, VOM-FR-CUCN: Open again drops a held recording", async () => {
     await confirmed();
     api.finishVoiceCapture.mockRejectedValueOnce("provider_unreachable");
     noteActivity(change("speech_end", { captureId: "c1" }));
     await settle();
-    pressRecord();
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, canRetry: true });
+    // VOM-FR-CSXI: a fatal failure closes the session, and the held recording stays.
+    noteActivity(change("failed", { code: "voice_detector_failed", fatal: true }));
     await settle();
-    expect(getVoiceState()).toMatchObject({ vadOpen: false, canRetry: true });
+    expect(getVoiceState().vadOpen).toBe(false);
     expect(api.cancelVoiceCapture).not.toHaveBeenCalled();
-    pressRecord();
+    openVadSession("again");
     await settle();
     expect(api.cancelVoiceCapture).toHaveBeenCalledWith("c1");
     expect(getVoiceState()).toMatchObject({ vadOpen: true, canRetry: false, error: null });
@@ -106,9 +130,8 @@ describe("opening a session", () => {
   it.each(["microphone_denied", "microphone_missing"])(
     "VOM-FR-CUCN, VOM-FR-ZFSA: %s opens no session",
     async (code) => {
-      ready();
       mic.open.mockRejectedValueOnce(new MicrophoneError(code));
-      pressRecord();
+      ready();
       await settle();
       expect(getVoiceState()).toMatchObject({
         error: code,
@@ -120,10 +143,9 @@ describe("opening a session", () => {
     },
   );
 
-  it("VOM-FR-CUCN: a refused open releases the microphone, and the next press works", async () => {
-    ready();
+  it("VOM-FR-CUCN: a refused open releases the microphone, retries nothing, and Open again works", async () => {
     api.openVoiceActivitySession.mockRejectedValueOnce("voice_detector_unavailable");
-    pressRecord();
+    ready();
     await settle();
     expect(mic.stop).toHaveBeenCalledTimes(1);
     expect(getVoiceState()).toMatchObject({
@@ -131,21 +153,20 @@ describe("opening a session", () => {
       vadOpen: false,
       phase: "idle",
     });
-    pressRecord();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
+    openVadSession("again");
     await settle();
     expect(getVoiceState().vadOpen).toBe(true);
     expect(getVoiceState().error).toBeNull();
   });
 
-  it("VOM-FR-ZUWW: a blocked composer opens nothing", async () => {
-    ready(handle({ blocked: () => true }));
-    pressRecord();
-    await settle();
-    expect(mic.open).not.toHaveBeenCalled();
+  it("VOM-FR-GTAQ: a blocked composer still opens, and the gate blocks utterances", async () => {
+    await openSession(handle({ blocked: () => true }));
+    expect(lastGate()).toMatchObject({ blocked: true });
   });
 
   it.each([
-    ["a press", () => pressRecord()],
     ["Push-to-Talk", () => setInputMode("ptt")],
     ["a teardown", () => endVoiceForTeardown()],
     ["leaving", () => leaveVoiceMode()],
@@ -153,10 +174,9 @@ describe("opening a session", () => {
   ])(
     "VOM-FR-PDZR, VOM-FR-BQBI, VOM-FR-KQAI: %s during the open leaves no session",
     async (_, act) => {
-      ready();
       const microphone = deferred<{ rate: number; stop: () => void }>();
       mic.open.mockReturnValueOnce(microphone.promise);
-      pressRecord();
+      ready();
       await settle();
       act();
       microphone.resolve({ rate: 48_000, stop: mic.stop });
@@ -169,11 +189,50 @@ describe("opening a session", () => {
     },
   );
 
-  it("VOM-FR-CSXI: a track that ends during the open closes the session", async () => {
+  it("VOM-FR-PDZR, VOM-FR-KEMU: a new entry during a cancelled open keeps that open, and one session stays", async () => {
+    const microphone = deferred<{ rate: number; stop: () => void }>();
+    mic.open.mockReturnValueOnce(microphone.promise);
     ready();
+    await settle();
+    leaveVoiceMode();
+    ready();
+    microphone.resolve({ rate: 48_000, stop: mic.stop });
+    await settle();
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, phase: "idle", activeKey: KEY });
+    expect(mic.open).toHaveBeenCalledTimes(1);
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-PDZR, VOM-FR-VGCE: VAD, Push-to-Talk, and VAD again during the open leave one session", async () => {
+    const microphone = deferred<{ rate: number; stop: () => void }>();
+    mic.open.mockReturnValueOnce(microphone.promise);
+    ready();
+    await settle();
+    setInputMode("ptt");
+    setInputMode("vad");
+    expect(getVoiceState().inputMode).toBe("vad");
+    microphone.resolve({ rate: 48_000, stop: mic.stop });
+    await settle();
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, phase: "idle" });
+    expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
+  });
+
+  it("VOM-FR-RBWX, VOM-FR-CUCN: Open again after a fatal failure while muted opens unmuted", async () => {
+    await openSession();
+    setVadMuted(true);
+    noteActivity(change("failed", { code: "voice_detector_failed", fatal: true }));
+    await settle();
+    expect(getVoiceState()).toMatchObject({ vadOpen: false, muted: false });
+    openVadSession("again");
+    await settle();
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, muted: false });
+  });
+
+  it("VOM-FR-CSXI: a track that ends during the open closes the session", async () => {
     const open = deferred<{ activityId: string }>();
     api.openVoiceActivitySession.mockReturnValueOnce(open.promise);
-    pressRecord();
+    ready();
     await settle();
     mic.onLost?.();
     open.resolve({ activityId: "va1" });
@@ -184,11 +243,108 @@ describe("opening a session", () => {
   });
 });
 
+describe("Mute and the level", () => {
+  /** 48 kHz PCM16 of more than one 30 ms frame, at a constant level. */
+  function loud(value = 8000): ArrayBuffer {
+    return new Int16Array(2048).fill(value).buffer;
+  }
+
+  /** Whether each fed block was silence, in feed order. */
+  function fedSilence(): boolean[] {
+    const calls = api.feedVoiceActivity.mock.calls as unknown as [string, Uint8Array][];
+    return calls.map(([, bytes]) => new Uint8Array(bytes).every((b) => b === 0));
+  }
+
+  it("VOM-FR-MUZB: while muted silence goes to the session, the gate blocks, and the session stays open", async () => {
+    await openSession();
+    mic.onChunk?.(loud());
+    await settle();
+    setVadMuted(true);
+    expect(lastGate()).toMatchObject({ blocked: true });
+    // VOP-FR-KUGV: the feed goes on for longer than the 30 s limit of the backend.
+    for (let second = 0; second < 40; second += 1) {
+      mic.onChunk?.(loud());
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    const fed = fedSilence();
+    expect(fed[0]).toBe(false);
+    expect(fed.length).toBeGreaterThan(30);
+    expect(fed.slice(1).every(Boolean)).toBe(true);
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, muted: true });
+    expect(mic.stop).not.toHaveBeenCalled();
+    expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-MUZB: a Mute during an utterance takes effect when that utterance ends", async () => {
+    await confirmed();
+    setVadMuted(true);
+    expect(lastGate()).toMatchObject({ blocked: true });
+    mic.onChunk?.(loud());
+    await settle();
+    expect(fedSilence()).toEqual([false]);
+    noteActivity(change("speech_end", { captureId: "c1" }));
+    await settle();
+    mic.onChunk?.(loud());
+    await settle();
+    expect(fedSilence()).toEqual([false, true]);
+    expect(lastGate()).toMatchObject({ blocked: true });
+    expect(bench.composer.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("VOM-FR-MUZB: a Mute while speech is heard and not confirmed yet keeps its audio", async () => {
+    await openSession();
+    noteActivity(change("speech_start"));
+    setVadMuted(true);
+    mic.onChunk?.(loud());
+    await settle();
+    expect(fedSilence()).toEqual([false]);
+    noteActivity(change("misfire"));
+    mic.onChunk?.(loud());
+    await settle();
+    expect(fedSilence()).toEqual([false, true]);
+  });
+
+  it("VOM-FR-RBWX: Unmute feeds again, and a session opens unmuted", async () => {
+    await openSession();
+    setVadMuted(true);
+    setVadMuted(false);
+    expect(lastGate()).toMatchObject({ blocked: false });
+    mic.onChunk?.(loud());
+    await settle();
+    expect(fedSilence()).toEqual([false]);
+    setVadMuted(true);
+    setInputMode("ptt");
+    await settle();
+    expect(getVoiceState().muted).toBe(false);
+    setInputMode("vad");
+    await settle();
+    expect(getVoiceState()).toMatchObject({ vadOpen: true, muted: false });
+  });
+
+  it("VOM-FR-WFHN, VOM-FR-ZDLY: the level comes from the microphone, and is flat while muted or closed", async () => {
+    await openSession();
+    mic.onChunk?.(loud(8000));
+    expect(getMicLevel()).toBeGreaterThan(0.3);
+    mic.onChunk?.(loud(0));
+    expect(getMicLevel()).toBe(0);
+    mic.onChunk?.(loud(8000));
+    setVadMuted(true);
+    expect(getMicLevel()).toBe(0);
+    mic.onChunk?.(loud(8000));
+    expect(getMicLevel()).toBe(0);
+    setVadMuted(false);
+    mic.onChunk?.(loud(8000));
+    setInputMode("ptt");
+    expect(getMicLevel()).toBe(0);
+    expect(api.startVoiceCapture).not.toHaveBeenCalled();
+  });
+});
+
 describe("closing a session", () => {
   it("VOM-FR-XEIA, VOM-FR-FTFU: the tail, the microphone, the last audio, then the close", async () => {
     await confirmed();
     api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
-    pressRecord();
+    setInputMode("ptt");
     expect(getVoiceState().vadOpen).toBe(false);
     await vi.advanceTimersByTimeAsync(TAIL_MS - 1);
     expect(mic.stop).not.toHaveBeenCalled();
@@ -210,7 +366,7 @@ describe("closing a session", () => {
 
   it("VOM-FR-XEIA: `speech_end` during the tail finishes the capture once", async () => {
     await confirmed();
-    pressRecord();
+    setInputMode("ptt");
     noteActivity(change("speech_end", { captureId: "c1" }));
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1);
@@ -222,7 +378,7 @@ describe("closing a session", () => {
     const finish = deferred<string>();
     api.finishVoiceCapture.mockReturnValueOnce(finish.promise);
     api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
-    pressRecord();
+    setInputMode("ptt");
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     noteActivity(change("speech_end", { captureId: "c1" }));
     finish.resolve("hello");
@@ -237,7 +393,7 @@ describe("closing a session", () => {
     api.finishVoiceCapture.mockReturnValueOnce(finish.promise);
     api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
     noteActivity(change("speech_end", { captureId: "c1" }));
-    pressRecord();
+    setInputMode("ptt");
     await settle();
     expect(mic.stop).toHaveBeenCalledTimes(1);
     expect(api.closeVoiceActivitySession).toHaveBeenCalledWith("va1", false);
@@ -269,7 +425,6 @@ describe("closing a session", () => {
   it("VOM-FR-BQBI: Push-to-Talk and leaving in the tail close once", async () => {
     await confirmed();
     api.closeVoiceActivitySession.mockResolvedValueOnce({ captureId: "c1" });
-    pressRecord();
     setInputMode("ptt");
     leaveVoiceMode();
     await vi.advanceTimersByTimeAsync(TAIL_MS);
@@ -293,7 +448,7 @@ describe("closing a session", () => {
 
   it("VOM-FR-KQAI: a teardown during the tail calls no provider", async () => {
     await confirmed();
-    pressRecord();
+    setInputMode("ptt");
     endVoiceForTeardown();
     expect(mic.stop).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(TAIL_MS);
@@ -305,23 +460,23 @@ describe("closing a session", () => {
   it("VOM-FR-XEIA: a refused close keeps the speech and leaves nothing behind", async () => {
     await confirmed();
     api.closeVoiceActivitySession.mockRejectedValueOnce("broken");
-    pressRecord();
+    setInputMode("ptt");
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     expect(api.finishVoiceCapture).toHaveBeenCalledWith("c1");
     expect(bench.composer.post).toHaveBeenCalledTimes(1);
     expect(getVoiceState()).toMatchObject({ phase: "idle", transcript: "", vadOpen: false });
-    pressRecord();
+    setInputMode("vad");
     await settle();
     expect(getVoiceState().vadOpen).toBe(true);
   });
 
-  it("VOM-FR-PDZR: a press during a slow close opens after it, and keeps its phase", async () => {
+  it("VOM-FR-PDZR: a switch back to VAD during a slow close opens after it, and keeps its phase", async () => {
     await openSession();
     const close = deferred<{ captureId: string | null }>();
     api.closeVoiceActivitySession.mockReturnValueOnce(close.promise);
-    pressRecord();
+    setInputMode("ptt");
     await settle();
-    pressRecord();
+    setInputMode("vad");
     await settle();
     expect(mic.open).toHaveBeenCalledTimes(1);
     expect(getVoiceState().phase).toBe("opening");
@@ -354,7 +509,7 @@ describe("closing a session", () => {
       await openSession();
       const close = deferred<{ captureId: string | null }>();
       api.closeVoiceActivitySession.mockReturnValueOnce(close.promise);
-      pressRecord();
+      setInputMode("ptt");
       await settle();
       const during = getVoiceState();
       noteActivity(change(state, { captureId: "c9", code: "provider_rejected" }));
@@ -574,8 +729,9 @@ describe("the gate and the surfaces", () => {
     expect(api.closeVoiceActivitySession).toHaveBeenCalledTimes(1);
   });
 
-  it("VOM-FR-KEMU, VOM-FR-PDZR: a new entry opens no session until a press", async () => {
+  it("VOM-FR-PDZR: a new entry in Push-to-Talk opens no session", async () => {
     await openSession();
+    setInputMode("ptt");
     leaveVoiceMode();
     await settle();
     enterVoiceMode(KEY, discussion([]));

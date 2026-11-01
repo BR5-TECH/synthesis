@@ -24,6 +24,10 @@ export interface VadGate {
 
 export interface VadSource {
   gate(): VadGate;
+  /** VOM-FR-MUZB: false while muted, so silence goes to the session in place of the audio. */
+  feeds?(): boolean;
+  /** VOM-FR-WFHN: each block of microphone audio, for the waveform. */
+  heard?(pcm: ArrayBuffer): void;
   /** VOM-FR-CSXI: the microphone went, or the backend refused the feed. */
   lost(code: string): void;
 }
@@ -56,7 +60,11 @@ export class VadSession {
     );
     const batcher = new FrameBatcher((pcm) => pump.push(pcm));
     const mic = await openMicrophone(
-      (pcm) => batcher.push(pcm),
+      (pcm) => {
+        source.heard?.(pcm);
+        // VOP-FR-KUGV: a session with no feed ends, so a Mute feeds silence.
+        batcher.push((source.feeds?.() ?? true) ? pcm : new ArrayBuffer(pcm.byteLength));
+      },
       () => lost("microphone_unavailable"),
     );
     batcher.setRate(mic.rate);

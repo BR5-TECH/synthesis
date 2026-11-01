@@ -308,3 +308,61 @@ impl PauseTracker {
         self.heard = false;
     }
 }
+
+/// VOP-FR-KIMU: the detector frames under the end threshold that make a word
+/// gap.
+pub(crate) const WORD_GAP_FRAMES: u32 = 3;
+
+/// VOP-FR-KIMU: finds the word gaps of a capture, where an interim commit can
+/// cut the audio between two words.
+///
+/// The silence count works as in [`PauseTracker`]. A gap counts only after
+/// speech, and it reports one time: the next gap needs new speech.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GapTracker {
+    start: f32,
+    end: f32,
+    silent: Option<u32>,
+    heard: bool,
+    reported: bool,
+}
+
+impl GapTracker {
+    /// A tracker for a capture that opens from confirmed speech.
+    pub(crate) fn after_speech(settings: Settings) -> Self {
+        Self {
+            start: settings.start(),
+            end: settings.end(),
+            silent: None,
+            heard: true,
+            reported: false,
+        }
+    }
+
+    /// A tracker for a capture that has heard no speech yet.
+    pub(crate) fn new(settings: Settings) -> Self {
+        Self { heard: false, ..Self::after_speech(settings) }
+    }
+
+    /// Takes one frame. Gives `true` at the frame that completes a word gap.
+    pub(crate) fn step(&mut self, probability: f32) -> bool {
+        if probability >= self.start {
+            self.heard = true;
+            self.reported = false;
+            self.silent = None;
+            return false;
+        }
+        if let Some(count) = self.silent {
+            self.silent = Some(count + 1);
+        } else if probability < self.end {
+            self.silent = Some(1);
+        }
+        let gap = self.heard
+            && !self.reported
+            && self.silent.is_some_and(|count| count >= WORD_GAP_FRAMES);
+        if gap {
+            self.reported = true;
+        }
+        gap
+    }
+}

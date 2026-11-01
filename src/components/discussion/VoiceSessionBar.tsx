@@ -1,7 +1,8 @@
 /**
  * VOM-FR-VGLT: the session control while a question set stands. The reply
- * composer unmounts then, and the record control and an open microphone must stay
- * visible and usable.
+ * composer unmounts then, and the voice controls and an open microphone must stay
+ * visible and usable. In VAD mode it holds the VAD indicator, the Mute toggle,
+ * and the waveform (VOM-FR-GPNK).
  *
  * It lends the controller a handle, so voice mode sees a mounted surface. A
  * recording that starts now is a spoken answer (VOM-FR-PINR). One that started
@@ -15,11 +16,24 @@ import { registerVoiceComposer } from "../../voice/voiceController";
 import { useVoiceState } from "../../state/voiceSession";
 import {
   VoiceFeedback,
-  VoiceRecordControl,
+  VoiceInputControls,
   VoiceStopControl,
   statusOf,
   useClock,
 } from "./VoiceArea";
+import type { VoiceState } from "../../state/voiceSession";
+
+/** VOM-FR-VGLT: how to answer aloud, and whether the microphone is open or muted. */
+function answerLine(voice: VoiceState, now: number): string {
+  // VOM-FR-HUXY, VOM-FR-SRGN: a recording shows as it does in the voice area, so
+  // a Push-to-Talk answer does not read as a closed microphone.
+  if (voice.phase !== "idle") return statusOf(voice, now);
+  if (voice.inputMode === "ptt") return "Press to answer the question above.";
+  if (!voice.vadOpen) return "The microphone is closed.";
+  if (voice.muted) return "The microphone is muted. Unmute to answer the question above.";
+  if (voice.transcript !== "" || voice.hearing) return statusOf(voice, now);
+  return "The microphone is open. Speak to answer the question above.";
+}
 
 export function VoiceSessionBar(props: {
   sessionKey: string;
@@ -42,7 +56,7 @@ export function VoiceSessionBar(props: {
   useEffect(() => {
     const active = document.activeElement;
     if (active === document.body || active?.contains(rootRef.current)) {
-      rootRef.current?.querySelector<HTMLElement>("[data-voice-record]")?.focus();
+      rootRef.current?.querySelector<HTMLElement>("[data-voice-focus]")?.focus();
     }
   }, []);
 
@@ -65,16 +79,8 @@ export function VoiceSessionBar(props: {
     // clearance of the action control (`DDS-draft-discussion.md` DDS-FR-QPHL).
     <div ref={rootRef} className="comment-card__reply voice-session-bar" data-testid="voice-session-bar">
       <div className="voice-session-bar__row">
-        <VoiceRecordControl disabled={false} />
-        <div className="voice-session-bar__text">
-          {/* VOM-FR-HUXY, VOM-FR-SRGN: a recording shows as it does in the voice
-              area, so a Push-to-Talk answer does not read as a closed microphone. */}
-          {voice.phase !== "idle"
-            ? statusOf(voice, now)
-            : voice.vadOpen
-              ? "The microphone is open. Speak to answer the question above."
-              : "Press to answer the question above."}
-        </div>
+        <VoiceInputControls disabled={false} />
+        <div className="voice-session-bar__text">{answerLine(voice, now)}</div>
         <VoiceStopControl />
       </div>
       <VoiceFeedback />

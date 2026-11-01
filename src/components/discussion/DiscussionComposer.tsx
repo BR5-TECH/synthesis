@@ -41,6 +41,7 @@ import { threadById } from "../../state/conversationThreads";
 import { locatorOf } from "../../state/discussionOrigin";
 import { postReply } from "../../hooks/useConversationSession";
 import { withSpokenTags } from "../../voice/spokenTags";
+import { errorCode } from "../../voice/voiceMessages";
 import {
   bindVoiceToDiscussion,
   enterVoiceMode,
@@ -203,7 +204,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   const signal = props.focusSignal ?? 0;
   useEffect(() => {
     if (signal === 0) return;
-    rootRef.current?.querySelector<HTMLElement>("textarea, [data-voice-record]")?.focus();
+    rootRef.current?.querySelector<HTMLElement>("textarea, [data-voice-focus]")?.focus();
   }, [signal]);
 
   const error = props.error ?? session.error;
@@ -310,6 +311,23 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
         const held = getDiscussionSession(key).body.trimEnd();
         return sendRef.current(held === "" ? spoken : `${held}\n${spoken}`, handle);
       },
+      // VOM-FR-YTKV, VOM-FR-FUFE: the comment of a spoken answer. It goes while
+      // a question set stands, so the disabled composer does not block it.
+      postAnswer: async (text) => {
+        const current = latestProps.current;
+        if (current.mode !== "reply") return "failed";
+        try {
+          await current.onReply(current.discussion.id, text, [], []);
+        } catch (e) {
+          logWarn(["frontend", "ai"], "the comment of a spoken answer was refused", {
+            code: errorCode(e),
+          });
+          return "failed";
+        }
+        const comments = (threadById(current.discussion.id) ?? current.discussion).comments;
+        const reached = dispatchTargets({ comments }, text, rosterRef.current);
+        return reached.length > 0 ? "posted" : "reached_nobody";
+      },
       tagged: (transcript) => withSpokenTags(transcript, rosterRef.current),
       // VOM-FR-RNBS, CTA-FR-QWLB: who a typed comment of this text reaches.
       targets: (text) => {
@@ -339,9 +357,21 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   // VOM-FR-LAQO: the field is hidden, so focus goes to the record control.
   useEffect(() => {
     if (voiceOn && !expanded) {
-      rootRef.current?.querySelector<HTMLElement>("[data-voice-record]")?.focus();
+      rootRef.current?.querySelector<HTMLElement>("[data-voice-focus]")?.focus();
     }
   }, [voiceOn, expanded]);
+
+  // VOM-FR-LAQO: a switch of the input mode replaces the control that held focus,
+  // so the control of the new mode takes it. Focus that the author moved stays.
+  // WebKit puts focus on the surface after a click on a button, so an ancestor
+  // that holds focus counts as no focus too.
+  const inputMode = voiceState.inputMode;
+  useEffect(() => {
+    if (!voiceOn || expanded) return;
+    const active = document.activeElement;
+    const lost = active === null || active === document.body || active.contains(rootRef.current);
+    if (lost) rootRef.current?.querySelector<HTMLElement>("[data-voice-focus]")?.focus();
+  }, [inputMode, voiceOn, expanded]);
 
   /**
    * CVP-FR-40 / CMT-FR-70: Ctrl+Enter or Cmd+Enter posts and prevents the newline.

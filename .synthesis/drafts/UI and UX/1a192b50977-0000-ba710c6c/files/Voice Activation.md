@@ -37,7 +37,7 @@ Out of scope: server-side or provider Realtime VAD, native microphone capture in
 - Speech shorter than 300 ms records and posts nothing (VOM-FR-DGOG). An utterance ends at 10 minutes (VOM-FR-WSXW), and the session stays open.
 - Each utterance is one capture session. At `speech_start` the backend runs "start voice capture". It then sends the pre-roll and the live audio to that session, in order, as "append voice capture" does, so the live transcript works as in VOM-FR-HUXY. At `speech_end` the WebView calls "finish voice capture" with the id. Captures never overlap: the backend starts no utterance while a capture awaits its finish, and speech in that time is not recorded. A capture is open only from speech start, so the 30 s no-audio timeout of VOP-FR-BSNY does not meet a listening session. Posting, empty transcript, tag conversion, and failure follow VOM-FR-WYIE, VOM-FR-RENV, VOM-FR-TAQJ, VOM-FR-BVNX, and VOM-FR-ZFSA through VOM-FR-FASJ.
 - A failed utterance shows the inline error and Retry. The session stays open. The next utterance discards the held recording (VOM-FR-FASJ).
-- While the composer is disabled or a question set stands, the session stays open but starts no utterance (VOM-FR-ZUWW).
+- While the composer is disabled and no question set stands, the session stays open but starts no utterance (VOM-FR-ZUWW). While a question set stands, an utterance answers the current question and posts no comment (VOM-FR-PINR).
 
 ### Barge-in
 

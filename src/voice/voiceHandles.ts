@@ -9,6 +9,7 @@
  * same path as a typed comment (VOM-FR-WYIE).
  */
 import { getVoiceState } from "../state/voiceSession";
+import type { Discussion } from "../types";
 
 export type PostOutcome = "posted" | "reached_nobody" | "busy" | "failed";
 
@@ -39,8 +40,13 @@ export interface VoiceComposerHandle {
 const mounted = new Map<string, VoiceComposerHandle[]>();
 /** VOM-FR-BCRD: the handle of the voice discussion while none is mounted. */
 const retained = new Map<string, VoiceComposerHandle>();
-/** VOM-FR-NERG: the target key of an opening composer, to the discussion its post created. */
-const moved = new Map<string, string>();
+/**
+ * VOM-FR-NERG: a handle that a first post moved, to the discussion that the post
+ * created. It is kept per handle and not per composer, so each moved handle
+ * posts into that discussion, also the handle of a composer that did not post.
+ * A composer that mounts later for the same target key is not moved.
+ */
+let bound = new WeakMap<VoiceComposerHandle, Discussion>();
 
 /** The newest mounted handle of a key, or else its retained handle. */
 export function handleOf(key: string | null): VoiceComposerHandle | null {
@@ -66,11 +72,15 @@ export function addHandle(key: string, handle: VoiceComposerHandle): void {
   if (handle.posts !== false) retained.delete(key);
 }
 
+/** VOM-FR-NERG: the discussion that the first post created, for a handle that it moved. */
+export function boundDiscussionOf(handle: VoiceComposerHandle): Discussion | null {
+  return bound.get(handle) ?? null;
+}
+
 export function removeHandle(registeredAs: string, handle: VoiceComposerHandle): void {
   // A handle whose key moved (VOM-FR-NERG) is held under the discussion id.
-  const key = mounted.get(registeredAs)?.includes(handle)
-    ? registeredAs
-    : (moved.get(registeredAs) ?? registeredAs);
+  const key =
+    [...mounted.keys()].find((k) => mounted.get(k)?.includes(handle)) ?? registeredAs;
   const left = (mounted.get(key) ?? []).filter((h) => h !== handle);
   if (left.length > 0) mounted.set(key, left);
   else mounted.delete(key);
@@ -86,15 +96,17 @@ export function removeHandle(registeredAs: string, handle: VoiceComposerHandle):
  * discussion that mounts later, and a handle that unmounts stays as the
  * retained handle of that discussion.
  */
-export function moveHandles(from: string, to: string): void {
-  moved.set(from, to);
+export function moveHandles(from: string, created: Discussion): void {
+  const to = created.id;
   const list = mounted.get(from);
   if (list) {
+    list.forEach((h) => bound.set(h, created));
     mounted.delete(from);
     mounted.set(to, [...list, ...(mounted.get(to) ?? [])]);
   }
   const handle = retained.get(from);
   if (!handle) return;
+  bound.set(handle, created);
   retained.delete(from);
   if (!surfaceMounted(to)) retained.set(to, handle);
 }
@@ -107,5 +119,5 @@ export function forgetRetained(): void {
 export function resetVoiceHandlesForTest(): void {
   mounted.clear();
   retained.clear();
-  moved.clear();
+  bound = new WeakMap();
 }

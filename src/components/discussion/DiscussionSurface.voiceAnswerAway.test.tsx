@@ -24,6 +24,7 @@ const submit = vi.hoisted(() => ({
   submitQuestionAnswers: vi.fn(async (): Promise<unknown> => undefined),
 }));
 const mic = vi.hoisted(() => ({ stop: vi.fn() }));
+const logged = vi.hoisted(() => ({ logError: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined) }));
 vi.mock("@tauri-apps/api/event", () => ({
@@ -33,6 +34,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../api", async (original) => ({
   ...(await original<typeof import("../../api")>()),
   ...api,
+}));
+vi.mock("../../logging", async (original) => ({
+  ...(await original<typeof import("../../logging")>()),
+  logError: logged.logError,
 }));
 vi.mock("../DiscussionQuestions/submit", async (original) => ({
   ...(await original<typeof import("../DiscussionQuestions/submit")>()),
@@ -295,5 +300,23 @@ describe("spoken answers with no surface mounted", () => {
     await pass();
     expect(submit.submitQuestionAnswers).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("VOM-FR-BCRD, DQA-FR-WKTP: a refused spoken submission with the block unmounted is logged with its discussion and shows on remount", async () => {
+    submit.submitQuestionAnswers.mockRejectedValueOnce("set_gone");
+    const view = await withSet("text");
+    view.unmount();
+    await sayAway("one");
+    await sayAway("two");
+    await sayAway("three");
+    expect(submit.submitQuestionAnswers).toHaveBeenCalledTimes(1);
+    expect(logged.logError).toHaveBeenCalledWith(
+      ["frontend"],
+      "the question answers were refused",
+      expect.objectContaining({ discussionId: "d1", mounted: false }),
+    );
+    render(surface());
+    await pass();
+    expect(screen.getByRole("alert")).toHaveTextContent(/\S/);
   });
 });

@@ -276,7 +276,7 @@ export function bindVoiceToDiscussion(key: string, discussion: Discussion): void
   // composer a second time.
   if (capture?.key === key) capture.key = discussion.id;
   moveUtterances(key, discussion.id);
-  moveHandles(key, discussion.id);
+  moveHandles(key, discussion);
   voiceTarget = discussion.target;
   patchVoiceState({ activeKey: discussion.id, discussionId: discussion.id });
   pushVadGate();

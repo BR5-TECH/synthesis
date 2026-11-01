@@ -647,7 +647,7 @@ fn reject_all_is_one_reject_per_hunk_and_no_hunk_is_rewritten() {
     }
 }
 
-// DDC-FR-KQZN, DDC-FR-PWTE, DDC-FR-NLDN
+// DDC-FR-KQZN, DDC-FR-PWTE, DDC-FR-NLDN, DCP-FR-20
 #[test]
 fn the_tool_dispatches_no_turn_and_does_not_end_the_turn() {
     let tool = include_str!("../decide_draft_changes.rs");

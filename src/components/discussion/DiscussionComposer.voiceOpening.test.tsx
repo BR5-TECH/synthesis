@@ -161,4 +161,57 @@ describe("an opening composer in voice mode", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(getDiscussionSession("created").error).toBe("discussion_resolved");
   });
+
+  it("VOM-FR-NERG, VOM-FR-BCRD: an older opening composer of the same target posts into the discussion that a newer one created", async () => {
+    const onOpen = vi.fn(async () => discussion([comment("c1", "first")]));
+    const older = render(
+      <DiscussionComposer mode="opening" target={TARGET} agents={[]} onOpen={onOpen} />,
+    );
+    const olderHandle = postingHandleOf(TARGET_KEY)!;
+    const newer = render(
+      <DiscussionComposer mode="opening" target={TARGET} agents={[]} onOpen={onOpen} />,
+    );
+    const newerHandle = postingHandleOf(TARGET_KEY)!;
+    expect(newerHandle).not.toBe(olderHandle);
+    enterVoiceMode(TARGET_KEY, null, TARGET);
+
+    await act(async () => {
+      await newerHandle.post("first");
+    });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(getVoiceState().activeKey).toBe("created");
+
+    newer.unmount();
+    expect(postingHandleOf("created")).toBe(olderHandle);
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await postingHandleOf("created")!.post("second");
+    });
+    expect(outcome).toBe("reached_nobody");
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith(
+      "add_comment",
+      expect.objectContaining({ discussionId: "created", noteId: "n1", body: "second" }),
+    );
+    older.unmount();
+  });
+
+  it("VOM-FR-NERG: an opening composer that mounts after the first post opens a new discussion", async () => {
+    const onOpen = vi.fn(async () => discussion([comment("c1", "first")]));
+    const first = render(
+      <DiscussionComposer mode="opening" target={TARGET} agents={[]} onOpen={onOpen} />,
+    );
+    enterVoiceMode(TARGET_KEY, null, TARGET);
+    await act(async () => {
+      await postingHandleOf(TARGET_KEY)!.post("first");
+    });
+    first.unmount();
+
+    render(<DiscussionComposer mode="opening" target={TARGET} agents={[]} onOpen={onOpen} />);
+    enterVoiceMode(TARGET_KEY, null, TARGET);
+    await act(async () => {
+      await postingHandleOf(TARGET_KEY)!.post("again");
+    });
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
 });

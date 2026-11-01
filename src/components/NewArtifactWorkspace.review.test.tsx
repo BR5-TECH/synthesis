@@ -822,3 +822,59 @@ describe("the change a discussion is about, while it is decided (DDS-FR-YLRM, DD
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
   });
 });
+
+describe("a withdrawn change in the draft's review (DCR-FR-OZVU, DCR-FR-NYDA)", () => {
+  const withdrawn = () =>
+    proposal({
+      counts: { pending: 2, accepted: 0, rejected: 0, discussing: 0, withdrawn: 1 },
+      ledger: [row("h1"), row("h2", "withdrawn"), row("h3")],
+    });
+
+  it("DCR-FR-OZVU, DCR-FR-11, DCR-FR-QPRV: the bar does not count it and no move visits it", async () => {
+    backend({ proposal: withdrawn() });
+    renderWorkspace();
+    const bar = await reviewing();
+    await waitFor(() => expect(bar).toHaveTextContent(/change 1 of 2/));
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
+    });
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h3");
+    expect(bar).toHaveTextContent(/change 2 of 2/);
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
+    });
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h1");
+  });
+
+  it("DCR-FR-NYDA: a focus set on it from elsewhere puts no decision on it", async () => {
+    backend({ proposal: withdrawn() });
+    renderWorkspace();
+    await reviewing();
+    act(() => setFocusedHunk("d1", "h2"));
+    await onChip("Accept");
+    await waitFor(() => expect(callsTo("accept_draft_change_hunk")).toHaveLength(1));
+    // The review stays on a change it shows, so the decision is about that one.
+    expect(callsTo("accept_draft_change_hunk")[0]).toMatchObject({ hunkId: "h1" });
+  });
+
+  it("DCR-FR-NYDA, DCR-FR-16: hunk_withdrawn from a stale reading renders as a refused decision", async () => {
+    backend({
+      onDecide: (cmd) => {
+        if (cmd === "accept_draft_change_hunk") throw "hunk_withdrawn";
+      },
+    });
+    const { drafts } = renderWorkspace();
+    await reviewing();
+    const key = drafts.key("d1", PROMPT);
+    const before = drafts.docs.get(key)?.buffer;
+    act(() => setFocusedHunk("d1", "h2"));
+    await onChip("Accept");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The agent withdrew this change, so it cannot be decided. Nothing was changed.",
+    );
+    expect(drafts.docs.get(key)?.buffer).toBe(before);
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
+  });
+});

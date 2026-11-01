@@ -136,3 +136,24 @@ describe("a proposed text in the prompt's own surface", () => {
     expect(surfaceIn(editor).textContent).toBe("Author's own.");
   });
 });
+
+describe("a change that draws nothing (DCR-FR-07, DCR-FR-OZVU)", () => {
+  it("DCR-FR-07, DCR-FR-OZVU: a withdrawn change and an accepted change render no decoration", () => {
+    const editor = prompt("Alpha beta gamma.");
+    const replacement = (id: string, state: DecoratedHunk["state"], from: number, to: number) =>
+      insertion({ id, kind: "replace", state, from, to, after: `${id} text` });
+    push(editor, {
+      hunks: [
+        replacement("h1", "pending", 1, 6),
+        replacement("h2", "withdrawn", 7, 11),
+        replacement("h3", "accepted", 12, 17),
+      ],
+      focused: "h1",
+    });
+    const dom = editor.view.dom;
+    expect(dom.querySelector('[data-hunk="h1"]')).not.toBeNull();
+    expect(dom.querySelector('[data-hunk="h2"]')).toBeNull();
+    expect(dom.querySelector('[data-hunk="h3"]')).toBeNull();
+    expect(dom.textContent).not.toContain("h2 text");
+  });
+});

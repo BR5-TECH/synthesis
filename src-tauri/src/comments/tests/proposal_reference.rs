@@ -73,6 +73,7 @@ fn a_proposal_reference_folds_holds_no_content_and_is_served_by_nothing() {
             proposal_id: "p1".into(),
             draft_id: "d1".into(),
             path: "ui/spec.md".into(),
+            update: None,
         }],
         Stamp { by: &agent("a1", "arch"), at: "2026-01-01T00:01:00Z" },
     )
@@ -85,7 +86,7 @@ fn a_proposal_reference_folds_holds_no_content_and_is_served_by_nothing() {
     let posted = folded.comments.last().expect("the agent's comment");
     assert_eq!(posted.id, "c-proposal", "the caller's id is what was written");
     match &posted.attachments[0] {
-        Attachment::Proposal { proposal_id, draft_id, path } => {
+        Attachment::Proposal { proposal_id, draft_id, path, .. } => {
             assert_eq!(proposal_id, "p1");
             assert_eq!(draft_id, "d1");
             assert_eq!(path, "ui/spec.md");
@@ -147,6 +148,7 @@ fn a_prompt_proposal_reference_folds_holds_no_content_and_is_never_validated() {
             proposal_id: "pp1".into(),
             artifact_id: "prompts/review.md".into(),
             path: "prompts/review.md".into(),
+            update: None,
         }],
         Stamp { by: &agent("a1", "arch"), at: "2026-01-01T00:01:00Z" },
     )
@@ -160,7 +162,7 @@ fn a_prompt_proposal_reference_folds_holds_no_content_and_is_never_validated() {
     assert_eq!(posted.id, "c-prompt-proposal");
     assert_eq!(posted.attachments.len(), 1, "and it is the only attachment");
     match &posted.attachments[0] {
-        Attachment::PromptProposal { proposal_id, artifact_id, path } => {
+        Attachment::PromptProposal { proposal_id, artifact_id, path, .. } => {
             assert_eq!(proposal_id, "pp1");
             assert_eq!(artifact_id, "prompts/review.md");
             assert_eq!(path, "prompts/review.md");
@@ -474,4 +476,27 @@ fn a_thread_is_read_by_its_id_alone_in_either_scope() {
         1,
         "and its per-file log still holds exactly the one thread",
     );
+}
+
+// CMS-FR-BSQB: a recording's reference carries no `update`, and an update's
+// reference round-trips its counts.
+#[test]
+fn an_update_reference_round_trips_its_counts_and_a_recording_carries_none() {
+    let recorded = Attachment::Proposal {
+        proposal_id: "p1".into(),
+        draft_id: "d1".into(),
+        path: "ui/spec.md".into(),
+        update: None,
+    };
+    let json = serde_json::to_value(&recorded).expect("json");
+    assert!(json.get("update").is_none(), "absent on a recording: {json}");
+    let updated = Attachment::PromptProposal {
+        proposal_id: "pp1".into(),
+        artifact_id: "prompts/review.md".into(),
+        path: "prompts/review.md".into(),
+        update: Some(crate::comments::ProposalUpdateCounts { changed: 1, added: 2, withdrawn: 3 }),
+    };
+    let json = serde_json::to_value(&updated).expect("json");
+    assert_eq!(json["update"], serde_json::json!({ "changed": 1, "added": 2, "withdrawn": 3 }));
+    assert_eq!(serde_json::from_value::<Attachment>(json).expect("parse"), updated);
 }

@@ -326,15 +326,15 @@ fn dcp_ts_yevn_a_decided_proposal_contributes_one_line_and_a_pending_one_none() 
 
     let accepted = f.pending();
     let decided = f.accept(&accepted.id).expect("accepted");
-    announce(&f.handle(), &BUFFER, &decided.proposal);
+    announce(&f.handle(), &BUFFER, &decided.proposal, ProposalChangeCause::Decided);
 
     let declined = f.propose(FILE, "# Spec\n\nAnother opening.\n").expect("recorded");
     let refused = f.decline_with(&declined.id, None).expect("declined");
-    announce(&f.handle(), &BUFFER, &refused.proposal);
+    announce(&f.handle(), &BUFFER, &refused.proposal, ProposalChangeCause::Decided);
 
     // A third, recorded and left pending, and a candidate saved against it.
     let pending = f.propose(FILE, "# Spec\n\nA third opening.\n").expect("recorded");
-    announce(&f.handle(), &BUFFER, &pending);
+    announce(&f.handle(), &BUFFER, &pending, ProposalChangeCause::Decided);
 
     let stats = decision_statistics(&f);
     assert_eq!(stats.totals.accepted_proposals.value, Some(1));
@@ -350,8 +350,8 @@ fn dcp_ts_lwda_a_duplicated_decision_contributes_once_and_carries_no_content() {
     let decided = f.accept(&proposal.id).expect("accepted");
 
     // The line a resumed operation appended twice.
-    announce(&f.handle(), &BUFFER, &decided.proposal);
-    announce(&f.handle(), &BUFFER, &decided.proposal);
+    announce(&f.handle(), &BUFFER, &decided.proposal, ProposalChangeCause::Decided);
+    announce(&f.handle(), &BUFFER, &decided.proposal, ProposalChangeCause::Decided);
 
     assert_eq!(decision_statistics(&f).totals.accepted_proposals.value, Some(1));
 

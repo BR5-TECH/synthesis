@@ -365,6 +365,8 @@ mod model;
 mod reconcile;
 /// The one path that records a proposal.
 mod recording;
+/// The one path that updates the open proposal.
+mod updating;
 
 use accepting::*;
 pub use candidate::ProposedChange;
@@ -374,13 +376,11 @@ pub use deciding::hold_hunk_impl;
 use deciding::*;
 pub use hunks::*;
 use ledger::legacy_document;
-pub use ledger::{
-    derive_state, revise_prompt_change_hunk, revision_target, HunkCounts, HunkLedgerRow, HunkState,
-    RevisionTarget,
-};
+pub use ledger::{derive_state, HunkCounts, HunkLedgerRow, HunkState};
 pub use model::*;
 pub use reconcile::*;
 pub use recording::*;
+pub use updating::*;
 
 #[cfg(test)]
 mod tests;

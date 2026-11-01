@@ -56,6 +56,7 @@ pub mod escalate_to_user;
 pub mod file_read;
 pub mod measure_document;
 pub mod note_search;
+pub mod proposal_updates;
 pub mod propose_draft_changes;
 pub mod propose_prompt_changes;
 pub mod read_graduation_file;

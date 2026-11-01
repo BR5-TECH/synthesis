@@ -105,7 +105,7 @@ where
                     // reconciliation finds the same debt and the same means of
                     // paying it.
                     log_recovery(app, "comment_owed", &record, &reason);
-                    announce(app, &BUFFER, &settled);
+                    announce(app, &BUFFER, &settled, PromptProposalChangeCause::Reconciled);
                     return Ok(Reconciliation::Settled {
                         proposal_id: proposal_id.to_string(),
                         comment_id: None,
@@ -117,7 +117,7 @@ where
         }
         finish(root, &dir, proposal_id);
         log_recovery(app, "roll_forward", &settled, "commit point passed");
-        announce(app, &BUFFER, &settled);
+        announce(app, &BUFFER, &settled, PromptProposalChangeCause::Reconciled);
         return Ok(Reconciliation::Settled { proposal_id: proposal_id.to_string(), comment_id });
     }
 

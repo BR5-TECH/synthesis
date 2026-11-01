@@ -18,7 +18,7 @@ fn change(before: &str, after: &str, lead: Option<&str>, trail: Option<&str>) ->
 }
 
 fn with(hunks: Vec<HunkArg>) -> ProposeDraftChangesArgs {
-    ProposeDraftChangesArgs { path: FILE.into(), rationale: RATIONALE.into(), revises: None, hunks }
+    ProposeDraftChangesArgs { path: FILE.into(), rationale: RATIONALE.into(), updates: None, hunks }
 }
 
 impl Fixture {
@@ -99,11 +99,11 @@ fn a_context_over_its_bound_names_its_place_and_which_context() {
     }
 }
 
-// PDC-FR-DMTH, PDC-FR-GMWR: a revision is placed by the same rule, so it names
-// the context to shorten in the same words. It carries one change, so it names
-// no place.
+// PDC-FR-DMTH, PDC-FR-DGUC, PDC-FR-SNUK: an update is placed by the same rule,
+// so it names the context to shorten in the same words, with the place of the
+// update.
 #[test]
-fn a_revision_with_a_context_over_its_bound_names_which_context_and_no_place() {
+fn an_update_with_a_context_over_its_bound_names_which_context_and_its_place() {
     let f = Fixture::new();
     f.call(good()).expect("recorded");
     let id = f.hunks_of_the_one_proposal()[0].id.clone();
@@ -115,15 +115,31 @@ fn a_revision_with_a_context_over_its_bound_names_which_context_and_no_place() {
     ];
     let standing = f.hunks_of_the_one_proposal();
     for (lead, trail, message) in cases {
-        let mut args = with(vec![change(ORIGINAL, PROPOSED, lead, trail)]);
-        args.revises = Some(id.clone());
-        let refusal = f.call(args).expect_err("refused");
-        assert_eq!(refusal, ToolRefusal::InvalidArguments(message));
+        let refusal = f.call(change_update(&id, lead, trail)).expect_err("refused");
+        assert_eq!(refusal, ToolRefusal::InvalidUpdateAt { message, at: 1, of: 1 });
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable());
-        assert!(!refusal.to_string().starts_with("Change"), "no place: {refusal}");
-        // A refused call produces neither a revision nor a second proposal.
+        assert!(refusal.to_string().starts_with("Update 1 of 1: "), "{refusal}");
+        // PDC-FR-VUTJ: a refused update leaves the proposal as it was.
         assert_eq!(f.hunks_of_the_one_proposal(), standing, "the change stands as it was");
+    }
+}
+
+/// One `change` update of `id`, with the context given.
+fn change_update(id: &str, lead: Option<&str>, trail: Option<&str>) -> ProposeDraftChangesArgs {
+    ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: RATIONALE.into(),
+        updates: Some(vec![UpdateArg {
+            action: Some("change".into()),
+            id: Some(id.into()),
+            before: Some(ORIGINAL.into()),
+            after: Some(PROPOSED.into()),
+            lead: lead.map(str::to_string),
+            trail: trail.map(str::to_string),
+            ..UpdateArg::default()
+        }]),
+        hunks: Vec::new(),
     }
 }
 
@@ -285,12 +301,11 @@ fn each_context_refusal_is_logged_under_its_own_code() {
     f.call(good()).expect("recorded");
     let id = f.hunks_of_the_one_proposal()[0].id.clone();
     BUFFER.clear();
-    let mut args = with(vec![change(ORIGINAL, PROPOSED, None, Some(&long))]);
-    args.revises = Some(id);
-    block_on(f.tool().with_buffer(&BUFFER).call(args)).expect_err("refused");
+    block_on(f.tool().with_buffer(&BUFFER).call(change_update(&id, None, Some(&long))))
+        .expect_err("refused");
     let records = records(&BUFFER, Domain::Ai);
     let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
     let fields = serde_json::to_value(&warn.fields).expect("fields");
     assert_eq!(fields["refusal"], "trail_too_long");
-    assert!(fields.get("refusalAt").is_none(), "a revision names no place: {fields}");
+    assert_eq!(fields["refusalAt"], 1, "an update names its place: {fields}");
 }

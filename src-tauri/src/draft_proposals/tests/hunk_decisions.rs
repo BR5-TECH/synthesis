@@ -171,50 +171,6 @@ fn each_accepted_change_records_one_version() {
     );
 }
 
-// DCP-FR-XDRV / PDC-FR-GMWR: a revision replaces one change in place, keeping
-// the id every reply addressed to it names, and leaves it undecided.
-#[test]
-fn revising_a_change_keeps_its_identity_and_leaves_it_undecided() {
-    let f = Fixture::new();
-    let p = two_changes(&f);
-    let held = p.ledger[1].id.clone();
-
-    let after = crate::draft_proposals::revise_hunk_impl(
-        &f.root,
-        &f.draft_id,
-        &held,
-        &replace("paragraphs", "chapters"),
-    )
-    .expect("revised");
-
-    assert_eq!(after.ledger[1].id, held, "the id a reply names is kept");
-    assert_eq!(after.ledger[1].state, HunkState::Pending, "it stays undecided");
-    assert_eq!(after.ledger[1].revision, 1);
-    assert_eq!(after.hunk_count, 2, "the number of changes does not change");
-
-    let read = crate::draft_proposals::load_hunks_impl(&f.root, &p.id).expect("hunks");
-    assert_eq!(read.hunks[1].after_text(), "chapters");
-}
-
-// DCP-FR-XDRV: a change already decided is not revised.
-#[test]
-fn a_decided_change_is_not_revised() {
-    let f = Fixture::new();
-    let p = two_changes(&f);
-    let first = p.ledger[0].id.clone();
-    f.accept_hunk(&p.id, &first).expect("accepted");
-    assert_eq!(
-        crate::draft_proposals::revise_hunk_impl(
-            &f.root,
-            &f.draft_id,
-            &first,
-            &replace("revised", "again"),
-        )
-        .expect_err("refused"),
-        ERR_HUNK_ALREADY_DECIDED,
-    );
-}
-
 // DCP-FR-NKTB: every write against one draft's proposals is serialised, so two
 // windows accepting two changes at once both land and neither is lost.
 #[test]

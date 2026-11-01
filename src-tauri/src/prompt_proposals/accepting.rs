@@ -176,7 +176,7 @@ where
     // the record written a moment ago is what the acceptance settled.
     let accepted = read_proposal(root, &record.id).unwrap_or_else(|_| decided.clone());
     // PCP-FR-17: emitted **after** the commit point and never before.
-    announce(app, &BUFFER, &accepted);
+    announce(app, &BUFFER, &accepted, PromptProposalChangeCause::Decided);
     logging::log_info(
         app,
         &BUFFER,

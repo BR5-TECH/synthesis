@@ -156,7 +156,7 @@ fn a_proposal_hunk_names_the_state_its_change_holds_now() {
 }
 
 // AGC-FR-DKHT: a reference that cannot be read still names the change by its
-// id, so the agent can still name it as `revises`.
+// id, so the agent can still name it in an update.
 #[test]
 fn a_proposal_hunk_that_cannot_be_read_keeps_a_bare_line_with_its_id() {
     let h = Harness::new(vec![]);

@@ -119,7 +119,7 @@ where
     }
     // DCP-FR-16: emitted when a change is decided, after any transaction it
     // delegated has committed.
-    announce(&app, &BUFFER, &proposal);
+    announce(&app, &BUFFER, &proposal, ProposalChangeCause::Decided);
     Ok(DecisionOutcome { proposal, comment_id, origin_kind })
 }
 
@@ -156,13 +156,17 @@ where
     let dir = drafts::draft_proposals_dir(&root, &draft_id)?;
     backfill_legacy_ledger(&root, &dir, &mut record, &prompt_of(&root, &draft_id));
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // DCP-FR-MKIM: a withdrawn change is not held either.
+    if row.state == hunks::HunkState::Withdrawn {
+        return Err(ERR_HUNK_WITHDRAWN.to_string());
+    }
     if !row.state.is_undecided() {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
     let next = if discussing { hunks::HunkState::Discussing } else { hunks::HunkState::Pending };
     let proposal = set_hunk_state(&root, &draft_id, &proposal_id, &hunk_id, next)
         .inspect_err(|e| log_refusal(&app, "hold_hunk", e))?;
-    announce(&app, &BUFFER, &proposal);
+    announce(&app, &BUFFER, &proposal, ProposalChangeCause::Held);
     Ok(proposal)
 }
 
@@ -204,6 +208,10 @@ pub fn edit_hunk_impl(
         return Err(ERR_WRITE_FAILED.to_string());
     }
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // DCP-FR-MKIM: a withdrawn change is not the author's to shape.
+    if row.state == hunks::HunkState::Withdrawn {
+        return Err(ERR_HUNK_WITHDRAWN.to_string());
+    }
     // DCP-FR-26: a change is the author's to shape only while the decision it is
     // for is still owed.
     if !row.state.is_undecided() {
@@ -278,6 +286,6 @@ where
         log_refusal(&app, "decline_comment", &reason);
     }
     // DCP-FR-14: nothing was written into the draft, so no `drafts-changed`.
-    announce(&app, &BUFFER, &proposal);
+    announce(&app, &BUFFER, &proposal, ProposalChangeCause::Decided);
     Ok(DecisionOutcome { proposal, comment_id, origin_kind })
 }

@@ -14,7 +14,7 @@
  * discussion stays readable around it.
  */
 import { Icon } from "./icons";
-import { hunkPosition, hunkStateOf } from "../state/draftProposals";
+import { hunkPosition, hunkStateOf, reviewedHunkTotal } from "../state/draftProposals";
 import {
   isShownInDocument,
   showHunkInDocument,
@@ -26,6 +26,9 @@ import { isUndecided, type HunkState, type ProposalHunkReference } from "../type
 export function hunkStateWord(state: HunkState): string {
   if (state === "accepted") return "accepted";
   if (state === "rejected") return "rejected";
+  // DCR-FR-OZVU: the discussion of a withdrawn change stays readable, and says
+  // so in one word.
+  if (state === "withdrawn") return "withdrawn";
   return isUndecided(state) ? "undecided" : state;
 }
 
@@ -41,7 +44,8 @@ export function ProposalHunkControl({
   const proposal = reference.kind === "known" ? reference.proposal : null;
   const state = proposal ? hunkStateOf(proposal, attachment.hunkId) : undefined;
   const position = proposal ? hunkPosition(proposal, attachment.hunkId) : 0;
-  const total = proposal?.hunkCount ?? 0;
+  // DCR-FR-11 / DCR-FR-OZVU: a withdrawn change is not counted.
+  const total = proposal ? reviewedHunkTotal(proposal) : 0;
   // DCR-FR-17: only an open proposal is decorated, so only then is there
   // something in the document to go to.
   const reachable = isShownInDocument(proposal, state);

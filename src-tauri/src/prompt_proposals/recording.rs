@@ -127,6 +127,7 @@ where
         proposal_id: id.clone(),
         artifact_id: new.artifact_id.to_string(),
         path: new.artifact_id.to_string(),
+        update: None,
     };
     let appended = match comments::append_agent_comment_with(
         store,
@@ -155,6 +156,6 @@ where
     comments::emit_discussion_changed(app, &appended);
     // PCP-FR-17: emitted when a proposal is **recorded**, not only when one is
     // decided.
-    announce(app, &BUFFER, &record);
+    announce(app, &BUFFER, &record, PromptProposalChangeCause::Recorded);
     Ok(record)
 }

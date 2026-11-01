@@ -13,14 +13,39 @@ use super::*;
 /// dead in production.
 pub const PROMPT_PROPOSALS_CHANGED: &str = "prompt-change-proposals-changed";
 
-/// What the event carries (PCP-FR-17): the artifact, and the whole proposal as
-/// it then stood, so a consumer redraws from the payload without a read of its
-/// own.
+/// PCP-FR-17: which of the things the event is about. A subscriber reads it to
+/// tell an update from a decision, a hold, or a reconciliation (PCR-FR-17).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptProposalChangeCause {
+    Recorded,
+    Updated,
+    Decided,
+    Held,
+    Reconciled,
+}
+
+impl PromptProposalChangeCause {
+    fn as_str(self) -> &'static str {
+        match self {
+            PromptProposalChangeCause::Recorded => "recorded",
+            PromptProposalChangeCause::Updated => "updated",
+            PromptProposalChangeCause::Decided => "decided",
+            PromptProposalChangeCause::Held => "held",
+            PromptProposalChangeCause::Reconciled => "reconciled",
+        }
+    }
+}
+
+/// What the event carries (PCP-FR-17): the artifact, the whole proposal as it
+/// then stood, so a consumer redraws from the payload without a read of its
+/// own, and the cause.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptProposalsChanged {
     pub artifact_id: String,
     pub proposal: PromptChangeProposal,
+    pub cause: PromptProposalChangeCause,
 }
 
 /// PCP-FR-17 / PCP-FR-28: announce the change and record it.
@@ -31,6 +56,7 @@ pub fn announce<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
     proposal: &PromptChangeProposal,
+    cause: PromptProposalChangeCause,
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
@@ -39,6 +65,7 @@ pub fn announce<R: tauri::Runtime>(
         PromptProposalsChanged {
             artifact_id: proposal.artifact_id.clone(),
             proposal: proposal.clone(),
+            cause,
         },
     );
     // PCP-FR-28: the artifact, the proposal, the path, and the outcome — and
@@ -58,6 +85,8 @@ pub fn announce<R: tauri::Runtime>(
             "accepted" => proposal.counts.accepted,
             "rejected" => proposal.counts.rejected,
             "discussing" => proposal.counts.discussing,
+            "withdrawn" => proposal.counts.withdrawn,
+            "cause" => cause.as_str(),
         },
     );
 }
@@ -269,7 +298,7 @@ where
     let root = require_root(&project)?;
     let proposal = hold_hunk_impl(&root, &proposal_id, &hunk_id, discussing)
         .inspect_err(|e| log_refusal(&app, "hold_hunk", e))?;
-    announce(&app, &BUFFER, &proposal);
+    announce(&app, &BUFFER, &proposal, PromptProposalChangeCause::Held);
     Ok(proposal)
 }
 

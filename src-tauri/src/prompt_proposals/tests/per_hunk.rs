@@ -36,7 +36,7 @@ fn the_record_carries_its_ledger_and_counts_on_the_wire() {
     assert_eq!(wire["hunkCount"], 2);
     assert_eq!(
         wire["counts"],
-        serde_json::json!({ "pending": 2, "accepted": 0, "rejected": 0, "discussing": 0 })
+        serde_json::json!({ "pending": 2, "accepted": 0, "rejected": 0, "discussing": 0, "withdrawn": 0 })
     );
     assert_eq!(wire["ledger"][0]["id"], first.as_str());
     assert_eq!(wire["ledger"][0]["kind"], "replace");

@@ -29,7 +29,8 @@ export function placeOnSource(text: string, hunks: readonly ReviewHunk[]): Decor
   const placed: DecoratedHunk[] = [];
   for (const hunk of hunks) {
     // DCR-FR-07: an accepted change is in the file already.
-    if (hunk.state === "accepted") continue;
+    // DCR-FR-OZVU: a withdrawn change is not drawn.
+    if (hunk.state === "accepted" || hunk.state === "withdrawn") continue;
     let from: number;
     let to: number;
     if (hunk.kind === "add") {

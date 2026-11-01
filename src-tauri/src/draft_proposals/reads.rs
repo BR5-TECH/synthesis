@@ -197,8 +197,8 @@ pub fn load_hunks_impl(root: &fs::RootFs, proposal_id: &str) -> Result<ProposalH
 /// to take (DCP-FR-HNWD).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposalChange {
-    /// AGC-FR-DKHT: the hunk's id, which is the value an agent passes as
-    /// `revises` (PDC-FR-GMWR).
+    /// AGC-FR-DKHT: the hunk's id, which is the value an agent passes as the
+    /// `id` of an update (PDC-FR-GMWR).
     pub id: String,
     pub kind: anchors::HunkKind,
     pub state: hunks::HunkState,

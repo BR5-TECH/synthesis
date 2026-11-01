@@ -688,8 +688,8 @@ fn each_call_logs_one_info_record_and_one_warn_record_per_refused_entry() {
     // No hunk text, no comment text, no input.
     let all = serde_json::to_string(&records.iter().map(|r| &r.fields).collect::<Vec<_>>())
         .expect("json");
-    for secret in ["Alpha", "Beta", "better", decide_changes::DISCUSSION_BODY, "nope"] {
-        assert!(!all.contains(secret), "a record carries {secret}");
+    for forbidden in ["Alpha", "Beta", "better", decide_changes::DISCUSSION_BODY, "nope"] {
+        assert!(!all.contains(forbidden), "a record carries {forbidden}");
     }
 
     // A whole-call refusal is one WARN.

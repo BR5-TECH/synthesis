@@ -721,12 +721,12 @@ fn a_refused_document_keeps_its_reason_and_its_session() {
 
     let harness = harness_for("claude_code");
     let runtime = RecordingRuntime::replying(&claude_stdout(&blank_summary));
-    let outcome = run(&harness, runtime, task("go")).expect("ran");
+    let outcome = run(&harness, runtime.clone(), task("go")).expect("ran");
     assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
     assert_eq!(outcome.refusal, Some(EnvelopeInvalid::EscalationShape));
     assert!(outcome.response.is_none());
     let session = outcome.session.and_then(|s| s.session_id).expect("the session is kept");
-    assert!(!session.is_empty());
+    assert_eq!(Some(session), assigned_session_id(&runtime.only_run().argv));
 
     let harness = harness_for("codex");
     let runtime = RecordingRuntime::replying(&codex_stdout(&blank_summary));
@@ -743,6 +743,18 @@ fn a_refused_document_keeps_its_reason_and_its_session() {
     let runtime = RecordingRuntime::replying(&other_session);
     let outcome = run(&harness, runtime, task("go")).expect("ran");
     assert_eq!(outcome.refusal, Some(EnvelopeInvalid::SessionMismatch));
+    assert!(outcome.session.is_none(), "a session that is not the assigned one is not kept");
+
+    // A refusal decided before the identity is asserted keeps no other session.
+    let failed_elsewhere = json!({
+        "type": "result", "subtype": "error_max_turns", "is_error": true,
+        "result": envelope_json("success"), "session_id": "another-session"
+    })
+    .to_string();
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&failed_elsewhere);
+    let outcome = run(&harness, runtime, task("go")).expect("ran");
+    assert_eq!(outcome.refusal, Some(EnvelopeInvalid::VendorRunFailed));
     assert!(outcome.session.is_none(), "a session that is not the assigned one is not kept");
 
     // A completed turn carries no refusal.

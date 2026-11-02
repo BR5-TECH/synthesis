@@ -146,7 +146,6 @@ impl TurnScript {
         Self::of(Answer::Process(ProcessOutcome::Terminated))
     }
 
-    /// GXD-FR-XEUX: nothing was launched at all.
     /// GRL-FR-QKDC: the turn ended in its session, and its answer was refused
     /// for `reason`.
     pub(crate) fn answers_refused(reason: EnvelopeInvalid) -> Self {
@@ -163,6 +162,13 @@ impl TurnScript {
         Self::of(Answer::ResumeUnavailable)
     }
 
+    /// GRL-FR-PTCE: the vendor started a new session in place of the one it was
+    /// asked to resume, and reported success there.
+    pub(crate) fn answers_from_a_fresh_session() -> Self {
+        Self::of(Answer::FromAFreshSession)
+    }
+
+    /// GXD-FR-XEUX: nothing was launched at all.
     pub(crate) fn cannot_launch(error: AgentExecutionError) -> Self {
         Self::of(Answer::Unlaunchable(error))
     }

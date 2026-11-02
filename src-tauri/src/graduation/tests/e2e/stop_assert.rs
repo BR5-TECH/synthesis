@@ -50,6 +50,64 @@ impl Outcome {
         self
     }
 
+    /// GLG-FR-ZJTP: the structured records named `event`, with the fields each
+    /// holds, in the order the log holds them.
+    pub(crate) fn expect_records(
+        self,
+        event: &str,
+        producer: &str,
+        expected: &[&[(&str, serde_json::Value)]],
+    ) -> Self {
+        let records =
+            super::super::lines_of(&self.fx, &self.run.id, GraduationLogStream::Structured);
+        let named: Vec<&serde_json::Value> = records
+            .iter()
+            .filter(|record| record.get("event").and_then(|v| v.as_str()) == Some(event))
+            .collect();
+        assert_eq!(named.len(), expected.len(), "[{}] the {event:?} records", self.name);
+        for (record, fields) in named.iter().zip(expected) {
+            assert_eq!(
+                record.get("producer").and_then(|v| v.as_str()),
+                Some(producer),
+                "[{}] the producer of {event:?}",
+                self.name
+            );
+            let held = record.get("fields").cloned().unwrap_or_default();
+            for (key, value) in *fields {
+                assert_eq!(held.get(*key), Some(value), "[{}] {event:?} {key:?}", self.name);
+            }
+        }
+        self
+    }
+
+    /// GRL-FR-HWLD: the correction the run holds for Continue.
+    pub(crate) fn expect_pending_correction(self, part: &str, reason: &str) -> Self {
+        let pending = self.run.checkpoint.answer_correction.as_ref();
+        assert_eq!(
+            pending.map(|p| (p.part.as_str(), p.reason.as_str())),
+            Some((part, reason)),
+            "[{}] the pending correction",
+            self.name
+        );
+        assert_eq!(
+            pending.and_then(|p| p.resume.session_id.as_deref()),
+            Some("s1"),
+            "[{}] the session the correction resumes",
+            self.name
+        );
+        self
+    }
+
+    /// GRL-FR-HWLD: the run holds no correction.
+    pub(crate) fn expect_no_pending_correction(self) -> Self {
+        assert_eq!(
+            self.run.checkpoint.answer_correction, None,
+            "[{}] no correction is pending",
+            self.name
+        );
+        self
+    }
+
     /// GLG-FR-RLQZ: a field the stop record must not carry.
     pub(crate) fn expect_interrupted_record_lacks(self, key: &str) -> Self {
         let records =

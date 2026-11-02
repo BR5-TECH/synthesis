@@ -10,7 +10,7 @@
 use super::dispatch::{execute, TurnRequest};
 use super::drive::settings_for_dispatch;
 use super::settings::TurnBound;
-use super::turns::discarded_meanwhile;
+use super::turns::{cancellation_reason_of, discarded_meanwhile};
 use super::*;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
 use crate::graduation::{GraduationAnswerCorrection, GraduationResumeRef};
@@ -84,6 +84,17 @@ pub(super) async fn execute_with_correction<R: tauri::Runtime>(
         return Corrected::Settle(Box::new(outcome), bound);
     }
     run.checkpoint.answer_correction = Some(pending.clone());
+    // GRD-FR-MDQZ / GRD-FR-TWMA: a stop the author or the application recorded
+    // while the turn ran stands, so the loop's own record is not saved over it.
+    // GRL-FR-HWLD: the correction goes into the stored record alone, so Continue
+    // sends it.
+    if cancellation.is_cancelled() || cancellation_reason_of(app, &run.id).is_some() {
+        if let Ok(mut stored) = crate::graduation::load_run(app, &run.id) {
+            stored.checkpoint.answer_correction = Some(pending.clone());
+            let _ = crate::graduation::save_run(app, &mut stored);
+        }
+        return Corrected::Settle(Box::new(outcome), bound);
+    }
     let _ = crate::graduation::save_run(app, run);
     logging::log_warn(
         app,
@@ -107,11 +118,6 @@ pub(super) async fn execute_with_correction<R: tauri::Runtime>(
         return Corrected::Stopped;
     }
 
-    // GRL-FR-PTCE: a cancelled run settles the first turn as it ended. The
-    // correction stays saved, so Continue sends it (GRL-FR-HWLD).
-    if cancellation.is_cancelled() {
-        return Corrected::Settle(Box::new(outcome), bound);
-    }
     // GRD-FR-XHSE: a merge run checks its pinned tips before every dispatch.
     if merge_drive::moved(app, run) {
         return Corrected::Stopped;

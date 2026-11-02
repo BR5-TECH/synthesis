@@ -394,6 +394,9 @@ enum Answer {
     Refused(crate::tools::agent_exec::protocol::EnvelopeInvalid),
     /// GRL-FR-PTCE: the vendor did not resume the session it was asked to.
     ResumeUnavailable,
+    /// GRL-FR-PTCE: the vendor started a new session in place of the one it
+    /// was asked to resume, and reported success there.
+    FromAFreshSession,
     /// Nothing was launched at all.
     Unlaunchable(AgentExecutionError),
 }
@@ -821,6 +824,29 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     return Ok(AgentExecution {
                         resume_unavailable: true,
                         ..execution(ProcessOutcome::Terminated, None, false)
+                    })
+                }
+                Answer::FromAFreshSession => {
+                    return Ok(AgentExecution {
+                        resume_unavailable: true,
+                        session: Some(SessionRef {
+                            session_id: Some("s2".to_string()),
+                            continuation_token: None,
+                        }),
+                        ..execution(
+                            ProcessOutcome::Completed,
+                            Some(AgentResponseEnvelope {
+                                protocol_version: PROTOCOL_VERSION,
+                                outcome: AgentOutcome::Success,
+                                summary: summary.clone(),
+                                result: None,
+                                failure: None,
+                                escalation: None,
+                                session: None,
+                                metadata: None,
+                            }),
+                            false,
+                        )
                     })
                 }
                 Answer::Success => (AgentOutcome::Success, None, None),

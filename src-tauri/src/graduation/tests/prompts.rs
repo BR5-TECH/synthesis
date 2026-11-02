@@ -301,18 +301,19 @@ fn every_correctable_refusal_has_a_correction_that_keeps_the_work() {
             .unwrap_or_else(|| panic!("refusals.md holds the {section} correction"));
         assert!(text.contains("change no file"), "{section} says to change no file");
         assert!(text.contains("work you did stands"), "{section} says that the work stands");
+        assert!(text.contains("Send your answer again"), "{section} asks for the answer again");
     }
-    for correctable in [
-        EnvelopeInvalid::NotFound,
-        EnvelopeInvalid::Malformed,
-        EnvelopeInvalid::ProtocolVersion,
-        EnvelopeInvalid::MultipleDocuments,
-        EnvelopeInvalid::SummaryEmpty,
-        EnvelopeInvalid::Exclusivity,
-        EnvelopeInvalid::EscalationShape,
-        EnvelopeInvalid::TooLarge,
+    for (correctable, section) in [
+        (EnvelopeInvalid::NotFound, "answer_missing"),
+        (EnvelopeInvalid::Malformed, "answer_malformed"),
+        (EnvelopeInvalid::ProtocolVersion, "answer_malformed"),
+        (EnvelopeInvalid::MultipleDocuments, "answer_several"),
+        (EnvelopeInvalid::SummaryEmpty, "answer_summary_empty"),
+        (EnvelopeInvalid::Exclusivity, "answer_outcome_mismatch"),
+        (EnvelopeInvalid::EscalationShape, "answer_escalation_shape"),
+        (EnvelopeInvalid::TooLarge, "answer_too_large"),
     ] {
-        assert!(driver::corrections::correction_section(correctable.as_str()).is_some());
+        assert_eq!(driver::corrections::correction_section(correctable.as_str()), Some(section));
     }
     for not_correctable in [
         EnvelopeInvalid::NotUtf8,

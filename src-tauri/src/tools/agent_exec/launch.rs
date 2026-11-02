@@ -909,10 +909,16 @@ impl AgentCliExecutor {
             Err(EnvelopeInvalid::SessionMismatch) => {
                 refused(EnvelopeInvalid::SessionMismatch, None)
             }
+            // Where the executor assigned the session, only that session is
+            // kept: a refusal decided before the identity was asserted
+            // (`vendor_run_failed`) does not hand back another one.
             Err(reason) => {
-                let session = descriptor.reported_session(text).and_then(|id| {
-                    merge_session(None, Some(id)).map(protocol::SessionRef::sanitized)
-                });
+                let session = descriptor
+                    .reported_session(text)
+                    .filter(|id| expected_session_id.is_none_or(|assigned| assigned == id))
+                    .and_then(|id| {
+                        merge_session(None, Some(id)).map(protocol::SessionRef::sanitized)
+                    });
                 refused(reason, session)
             }
         }

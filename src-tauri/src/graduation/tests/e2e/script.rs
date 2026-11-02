@@ -10,6 +10,7 @@ use crate::graduation::{
     GraduationInterruptionReason, GraduationLogStream, ReviewFinding, ReviewOutcome,
     ReviewSeverity, ReviewVerdict,
 };
+use crate::tools::agent_exec::protocol::EnvelopeInvalid;
 use crate::tools::agent_exec::{AgentExecutionError, ProcessOutcome};
 
 /// GTE-FR-HWQM: something a turn does to the application while it runs.
@@ -143,6 +144,28 @@ impl TurnScript {
     /// GXD-FR-XEUX: the agent's process was ended from outside.
     pub(crate) fn is_terminated() -> Self {
         Self::of(Answer::Process(ProcessOutcome::Terminated))
+    }
+
+    /// GRL-FR-QKDC: the turn ended in its session, and its answer was refused
+    /// for `reason`.
+    pub(crate) fn answers_refused(reason: EnvelopeInvalid) -> Self {
+        Self::of(Answer::Refused(reason)).leaves_a_session()
+    }
+
+    /// GRL-FR-QKDC: a refused answer from a turn that reported no session.
+    pub(crate) fn answers_refused_without_a_session(reason: EnvelopeInvalid) -> Self {
+        Self::of(Answer::Refused(reason))
+    }
+
+    /// GRL-FR-PTCE: the vendor did not resume the session it was asked to.
+    pub(crate) fn cannot_resume() -> Self {
+        Self::of(Answer::ResumeUnavailable)
+    }
+
+    /// GRL-FR-PTCE: the vendor started a new session in place of the one it was
+    /// asked to resume, and reported success there.
+    pub(crate) fn answers_from_a_fresh_session() -> Self {
+        Self::of(Answer::FromAFreshSession)
     }
 
     /// GXD-FR-XEUX: nothing was launched at all.

@@ -44,6 +44,25 @@ if [ "$store_writable" = yes ]; then
 fi
 pin_writable=$(answer sh -c 'echo x >> .git')
 
+# EAC-FR-WTFH / EAC-FR-BZPC: where the launch names a Custom Gateway, the
+# probe resolves its name through the guest's own resolver and reads what the
+# gateway sends. It then tries the same port on this machine's alias, which no
+# rule allows.
+gateway_resolves=""
+gateway_read=""
+alias_read=""
+alias_resolves=""
+if [ -n "$ANTHROPIC_BEDROCK_BASE_URL" ]; then
+    hostport=${ANTHROPIC_BEDROCK_BASE_URL#*://}
+    hostport=${hostport%%/*}
+    gateway_host=${hostport%:*}
+    gateway_port=${hostport##*:}
+    gateway_resolves=$(answer getent hosts "$gateway_host")
+    gateway_read=$(value timeout 20 bash -c "cat < /dev/tcp/$gateway_host/$gateway_port")
+    alias_resolves=$(answer getent hosts host.microsandbox.internal)
+    alias_read=$(value timeout 20 bash -c "cat < /dev/tcp/host.microsandbox.internal/$gateway_port")
+fi
+
 writable=$(answer mkdir -p .probe)
 if [ "$writable" = yes ]; then
     writable=$(answer sh -c 'echo probe > .probe/written')
@@ -75,7 +94,11 @@ result=$(cat <<JSON
   "git_dir_writable": "$git_dir_writable",
   "config_bytes": "$config_bytes",
   "writable": "$writable",
-  "dir_writable": "$dir_writable"
+  "dir_writable": "$dir_writable",
+  "gateway_resolves": "$gateway_resolves",
+  "gateway_read": "$gateway_read",
+  "alias_read": "$alias_read",
+  "alias_resolves": "$alias_resolves"
 }
 JSON
 )

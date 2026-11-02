@@ -88,6 +88,7 @@ Script
          | answers_revise(severity, description) | answers_revise_with(findings)
          | answers_revise_without_findings | answers_with_blank_rationale
          | answers_unreadably                       // GRL-FR-TVXI
+         | answers_refused(reason)                  // GRL-FR-QKDC
          | escalates(questions) | escalates_because(reason, questions)
          | claims_paths(paths)                      // GXD-FR-LBYG
          | is_cancelled | times_out | exits_nonzero | answers_malformed | is_terminated
@@ -175,6 +176,7 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 39  discard cascade           discard, revert and discard of a failed run remove the queued runs behind, runs ahead stay, drafts unlocked
 40  failed run                the failed run holds the queue and no slot, runs behind stay queued, no restart, discard removes them
 41  total time limit          awaiting_author with total_time_limit, work committed, stream and slot held, Continue resets the used time alone
+43  answer corrections        a refused answer is corrected once in its session, a second refusal rests the run, an uncorrectable refusal stops at once, a restart keeps the correction
 ```
 
 ## Non-functional requirements

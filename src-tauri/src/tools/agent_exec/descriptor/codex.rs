@@ -203,6 +203,17 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
     Ok(Extracted { envelope, session_id })
 }
 
+/// EAC-FR-21: the session the `thread.started` event reports (CDX-FR-20).
+pub fn reported_session(stdout: &str) -> Option<String> {
+    stdout
+        .lines()
+        .rev()
+        .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
+        .find(|event| event.get("type").and_then(Value::as_str) == Some(EVENT_THREAD_STARTED))
+        .and_then(|event| event.get(KEY_THREAD_ID)?.as_str().map(str::to_string))
+        .filter(|id| !id.is_empty())
+}
+
 // ---------------------------------------------------------------------------
 // Observed activity (CDX-FR-28)
 // ---------------------------------------------------------------------------

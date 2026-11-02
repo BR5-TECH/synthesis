@@ -18,6 +18,8 @@ pub(super) struct StopFacts {
     pub duration_ms: Option<u64>,
     pub limit_ms: Option<u64>,
     pub exit_code: Option<i32>,
+    /// GLG-FR-RLQZ: why the answer was refused, where it was.
+    pub refusal: Option<&'static str>,
 }
 
 /// One stop: the reason recorded on the run, the sentence the author reads,
@@ -51,6 +53,7 @@ pub(super) fn facts_of(execution: &AgentExecution, limit_ms: u64) -> StopFacts {
         duration_ms: Some(execution.duration_ms),
         limit_ms: Some(limit_ms),
         exit_code: execution.exit_code,
+        refusal: execution.refusal.as_ref().map(|r| r.as_str()),
     }
 }
 
@@ -89,8 +92,17 @@ pub(super) fn stop_of_execution(execution: &AgentExecution, limit_ms: u64) -> Op
         ),
         ProcessOutcome::InvalidStructuredOutput => (
             GraduationInterruptionReason::UnreadableAnswer,
-            "The agent finished, but its answer was not in a shape this application can read."
-                .to_string(),
+            match execution.refusal {
+                // GXD-FR-WJOW: the fixed words of the refusal, and no agent text.
+                Some(refusal) => format!(
+                    "The agent finished, but its answer was not in a shape this application can read: {}.",
+                    refusal.sentence()
+                ),
+                None => {
+                    "The agent finished, but its answer was not in a shape this application can read."
+                        .to_string()
+                }
+            },
         ),
         ProcessOutcome::Cancelled => (
             GraduationInterruptionReason::RetryableFailure,
@@ -190,6 +202,7 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
             duration_ms: None,
             limit_ms: Some(limit_ms),
             exit_code: None,
+            refusal: None,
         },
     }
 }
@@ -293,6 +306,9 @@ pub(super) fn note_interrupted<R: tauri::Runtime>(
     if let Some(code) = stop.facts.exit_code {
         event = event.with("exit_code", code);
     }
+    if let Some(refusal) = stop.facts.refusal {
+        event = event.with("refusal", refusal);
+    }
     logs::emit(app, run, event)
 }
 
@@ -315,6 +331,7 @@ mod tests {
             stderr: CapturedStream::default(),
             duration_ms,
             resume_unavailable: false,
+            refusal: None,
             session: None,
             container_removed: true,
         }

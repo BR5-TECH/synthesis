@@ -405,13 +405,15 @@ fn every_cause() -> Vec<SandboxFailureCause> {
         ImageExportFailed,
         ImageLoadFailed,
         RuntimeCatalogFailed,
+        GatewayUnresolved,
         InsufficientMemory,
         BootFailed,
     ];
     for cause in &all {
         match cause {
             UnsupportedHost | RuntimeUnavailable | ImageUnavailable | ImageExportFailed
-            | ImageLoadFailed | RuntimeCatalogFailed | InsufficientMemory | BootFailed => {}
+            | ImageLoadFailed | RuntimeCatalogFailed | GatewayUnresolved | InsufficientMemory
+            | BootFailed => {}
         }
     }
     all

@@ -1,18 +1,28 @@
-//! EAC-FR-CGCE / EAC-FR-DMYB: the egress rules of one VM, as the microsandbox
-//! network policy states them. Compiled for Linux and macOS, under test as
+//! EAC-FR-CGCE / EAC-FR-DMYB / EAC-FR-BZPC: the egress rules of one VM, as the
+//! microsandbox network policy states them. Compiled for Linux and macOS, under test as
 //! well, so the rules are asserted without a VM.
 
 use microsandbox::{NetworkAction, NetworkPolicy};
+use microsandbox_network::builder::NetworkBuilder;
 
 use super::SandboxSpec;
 use crate::isolation::AllowedHost;
 
-/// EAC-FR-CGCE / EAC-FR-DMYB: the egress rules of one VM.
+/// EAC-FR-CGCE: the network settings of one VM. DNS rebind protection is off
+/// in both switch positions: it answers NXDOMAIN for a private address before
+/// any egress rule runs, also for an allowed name, and the egress rules alone
+/// hold the block.
+pub(super) fn configure(network: NetworkBuilder, policy: NetworkPolicy) -> NetworkBuilder {
+    network.policy(policy).dns(|dns| dns.rebind_protection(false))
+}
+
+/// EAC-FR-CGCE / EAC-FR-DMYB / EAC-FR-BZPC: the egress rules of one VM.
 pub(super) fn policy(spec: &SandboxSpec) -> Result<NetworkPolicy, String> {
     if !spec.network.block_local_network {
         return Ok(NetworkPolicy::allow_all());
     }
     let allowed = spec.network.allowed.clone();
+    let gateway = spec.network.gateway_addresses.clone();
     NetworkPolicy::builder()
         .default_egress(NetworkAction::Deny)
         .default_ingress(NetworkAction::Allow)
@@ -31,6 +41,11 @@ pub(super) fn policy(spec: &SandboxSpec) -> Result<NetworkPolicy, String> {
                         r.allow_host();
                     }
                 }
+            }
+            // EAC-FR-BZPC: each gateway address that is not public.
+            for address in &gateway {
+                let prefix = if address.is_ipv4() { 32 } else { 128 };
+                r.allow().cidr(format!("{address}/{prefix}"));
             }
             r
         })
@@ -53,7 +68,11 @@ mod tests {
             memory_gib: 1,
             disk_gib: 8,
             mounts: Vec::<SandboxMount>::new(),
-            network: SandboxNetwork { block_local_network: block, allowed },
+            network: SandboxNetwork {
+                block_local_network: block,
+                allowed,
+                gateway_addresses: Vec::new(),
+            },
         }
     }
 
@@ -107,5 +126,37 @@ mod tests {
         let json = serde_json::to_value(&policy).unwrap();
         assert_eq!(json["default_egress"], "allow");
         assert!(rules(&policy).is_empty());
+    }
+
+    // EAC-FR-BZPC: each gateway address is an allow rule before the public
+    // rule, and none is stated with the switch off.
+    #[test]
+    fn gateway_addresses_become_allow_rules_before_the_public_rule() {
+        let mut with_gateway = spec(true, Vec::new());
+        with_gateway.network.gateway_addresses =
+            vec!["10.20.30.40".parse().unwrap(), "fd00::7".parse().unwrap()];
+        let stated = rules(&policy(&with_gateway).unwrap());
+        assert_eq!(stated.len(), 4, "{stated:?}");
+        let text = serde_json::to_string(&stated[1..3]).unwrap();
+        assert!(text.contains("10.20.30.40/32"), "{text}");
+        assert!(text.contains("fd00::7/128"), "{text}");
+        assert!(stated[1..3].iter().all(|r| r["action"] == "allow"));
+        assert_eq!(stated[3]["destination"]["group"], "public");
+
+        with_gateway.network.block_local_network = false;
+        assert!(rules(&policy(&with_gateway).unwrap()).is_empty());
+    }
+
+    // EAC-FR-CGCE: DNS rebind protection is off, so a name that resolves to a
+    // private address resolves, and the egress rules hold the block.
+    #[test]
+    fn dns_rebind_protection_is_off() {
+        for block in [true, false] {
+            let network =
+                configure(NetworkBuilder::new(), policy(&spec(block, Vec::new())).unwrap())
+                    .build()
+                    .expect("the network builds");
+            assert!(!network.dns.rebind_protection, "block switch {block}");
+        }
     }
 }

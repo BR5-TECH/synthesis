@@ -403,6 +403,9 @@ pub struct VendorExecutionDescriptor {
     resume_argv: Option<ResumeArgv>,
     effort_supported: Option<EffortSupported>,
     extractor: Extractor,
+    /// EAC-FR-21: the session the stream reports, at the position
+    /// `session_source` names.
+    session_reader: fn(&str) -> Option<String>,
     activity: ActivityReader,
     /// EAC-FR-19's ordered positions, as data.
     pub response_sources: &'static [ResponseSource],
@@ -432,6 +435,7 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     resume_argv: Some(claude_code::resume_argv),
     effort_supported: Some(claude_code::effort_supported),
     extractor: claude_code::extract,
+    session_reader: claude_code::reported_session,
     activity: claude_code::activity,
     // CCP-FR-09: the schema-validated object first, the text form second.
     response_sources: &[
@@ -465,6 +469,7 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     // the override means.
     effort_supported: Some(codex::effort_supported),
     extractor: codex::extract,
+    session_reader: codex::reported_session,
     activity: codex::activity,
     // CDX-FR-12: exactly one position.
     response_sources: &[ResponseSource::JsonlLastItem {
@@ -552,6 +557,14 @@ impl VendorExecutionDescriptor {
     ) -> Result<(AgentResponseEnvelope, Option<String>), EnvelopeInvalid> {
         let extracted = (self.extractor)(&ExtractContext { stdout, assigned_session_id })?;
         Ok((extracted.envelope, extracted.session_id))
+    }
+
+    /// EAC-FR-21: the session a turn reported, read without the envelope.
+    ///
+    /// A refused document has no envelope, and the caller still needs the
+    /// session to ask the turn again. A vendor that cannot resume reports none.
+    pub fn reported_session(&self, stdout: &str) -> Option<String> {
+        self.supports_resume().then(|| (self.session_reader)(stdout)).flatten()
     }
 
     /// Read one line of this vendor's stdout as an activity (EAC-FR-33).

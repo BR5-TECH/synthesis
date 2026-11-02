@@ -50,7 +50,7 @@ pub const ENVELOPE_SCHEMA: &str = concat!(
     r#""properties":{"#,
     r#""protocol_version":{"type":"integer","enum":[1]},"#,
     r#""outcome":{"type":"string","enum":["success","failure","escalation_required"]},"#,
-    r#""summary":{"type":"string","minLength":1},"#,
+    r#""summary":{"type":"string","minLength":1,"maxLength":8192},"#,
     r#""result":{"type":["object","null"]},"#,
     r#""failure":{"type":["object","null"],"additionalProperties":false,"properties":{"#,
     r#""code":{"type":"string"},"message":{"type":"string"},"retryable":{"type":"boolean"}},"#,
@@ -66,25 +66,22 @@ pub const ENVELOPE_SCHEMA: &str = concat!(
     // answer inside the schema and be refused by the decoder afterwards — the
     // one failure CCP-FR-07 is about.
     //
-    // No `maxLength` anywhere below. EAC-FR-08's limits are **byte** bounds and
-    // JSON Schema counts characters, so a transcription of them would be the
-    // looser of the two for any text outside ASCII — a rule stated more freely
-    // here than the decoder enforces it, which is the trap rather than the
-    // convenience. The byte bounds stay with the decoder (CCP-FR-07), together
-    // with the readable word and sentence shapes, which this schema cannot
-    // express faithfully either.
-    r#""reason":{"type":"string","minLength":1,"pattern":"\\S"},"#,
+    // CCP-FR-07: each `maxLength` equals its EAC-FR-08 limit, which counts
+    // characters as JSON Schema does, so the CLI corrects an overlong value
+    // inside the run. Word and sentence counts are guidance (EAC-FR-35), so this
+    // schema does not state them and the decoder does not enforce them.
+    r#""reason":{"type":"string","minLength":1,"maxLength":4096,"pattern":"\\S"},"#,
     r#""questions":{"type":"array","minItems":1,"maxItems":8,"items":{"#,
     r#""type":"object","additionalProperties":false,"properties":{"#,
-    r#""question":{"type":"string","minLength":1,"pattern":"\\S"},"#,
+    r#""question":{"type":"string","minLength":1,"maxLength":2048,"pattern":"\\S"},"#,
     // Not required: `AgentEscalationQuestion` defaults it, and a question with
     // no fixed set of answers leaves it out on purpose. Demanding it here would
     // re-prompt an agent that had answered correctly.
     r#""options":{"type":"array","maxItems":3,"items":{"#,
     r#""type":"object","additionalProperties":false,"properties":{"#,
-    r#""answer":{"type":"string","minLength":1,"pattern":"\\S"},"#,
-    r#""summary":{"type":"string","minLength":1,"pattern":"\\S"},"#,
-    r#""description":{"type":"string","minLength":1,"pattern":"\\S"}},"#,
+    r#""answer":{"type":"string","minLength":1,"maxLength":512,"pattern":"\\S"},"#,
+    r#""summary":{"type":"string","minLength":1,"maxLength":128,"pattern":"\\S"},"#,
+    r#""description":{"type":"string","minLength":1,"maxLength":256,"pattern":"\\S"}},"#,
     r#""required":["answer","summary","description"]}}},"#,
     r#""required":["question"]}}},"#,
     r#""required":["reason","questions"]},"#,
@@ -327,6 +324,17 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
     };
 
     Ok(Extracted { envelope, session_id: reported })
+}
+
+/// EAC-FR-21: the session the last result event reports.
+pub fn reported_session(stdout: &str) -> Option<String> {
+    stdout
+        .lines()
+        .rev()
+        .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
+        .find(|event| event.get(KEY_TYPE).and_then(Value::as_str) == Some(EVENT_RESULT))
+        .and_then(|event| event.get(KEY_SESSION_ID)?.as_str().map(str::to_string))
+        .filter(|id| !id.is_empty())
 }
 
 // ---------------------------------------------------------------------------

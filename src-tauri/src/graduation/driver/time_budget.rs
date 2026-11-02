@@ -145,6 +145,7 @@ mod tests {
             stderr: CapturedStream::default(),
             duration_ms,
             resume_unavailable: false,
+            refusal: None,
             session: None,
             container_removed: true,
         }

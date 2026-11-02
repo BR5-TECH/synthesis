@@ -35,6 +35,8 @@ ignore = "0.4"
 # SCC-FR-05: the `regex` query mode compiles the query as a regular expression.
 # A pattern that does not compile is the typed `"invalid query"` of SCC-FR-06.
 regex = "1"
+# EAC-FR-KVBT: the host of a Custom Gateway URL. Already in the tree.
+url = "2"
 notify-debouncer-mini = "0.4"
 # GTC-FR-09 / GTC-FR-12: `fetch_remote_branches` contacts the project's primary
 # remote, so libgit2 needs its transports compiled in — without them a fetch
@@ -336,6 +338,10 @@ microsandbox = { version = "=0.7.8", default-features = false, features = [
   "embed-binaries",
   "download-binaries",
 ] }
+# EAC-FR-CGCE: the network builder type, so the VM's network settings are one
+# function a test can call. The crate is already in the tree under
+# `microsandbox`, which does not re-export the builder. No feature is added.
+microsandbox-network = { version = "=0.7.8", default-features = false }
 
 # EAC-FR-SQWO: the tests build the image error the runtime gives for a catalog
 # it cannot read. The crate is already in the tree under `microsandbox`, which

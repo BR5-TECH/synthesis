@@ -195,18 +195,25 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
         "the option count is stated where the options are: {options_clause}",
     );
     let summary_clause = clause("`summary` —");
+    // EAC-FR-35: the limit, and the word guidance worded as a request.
     assert!(
-        states(&summary_clause, MAX_SUMMARY_WORDS) && states(&summary_clause, LIMIT_OPTION_SUMMARY),
-        "a summary's word and byte bounds are stated together: {summary_clause}",
+        states(&summary_clause, LIMIT_OPTION_SUMMARY)
+            && states(&summary_clause, 5)
+            && summary_clause.contains("Try to keep"),
+        "a summary's limit and its guidance are stated together: {summary_clause}",
     );
     let description_clause = clause("`description` —");
     assert!(
-        states(&description_clause, MAX_DESCRIPTION_SENTENCES)
-            && states(&description_clause, MAX_DESCRIPTION_WORDS)
-            && states(&description_clause, LIMIT_OPTION_DESCRIPTION),
-        "a description's sentence, word, and byte bounds likewise: {description_clause}",
+        states(&description_clause, LIMIT_OPTION_DESCRIPTION)
+            && states(&description_clause, 12)
+            && description_clause.contains("Try to keep"),
+        "a description's limit and its guidance likewise: {description_clause}",
     );
-    assert!(states(&clause("`reason` —"), LIMIT_ESCALATION_REASON), "and the reason's byte bound",);
+    for clause_text in [&summary_clause, &description_clause] {
+        assert!(!clause_text.contains("refused"), "guidance refuses nothing: {clause_text}");
+        assert!(clause_text.contains("characters"), "a limit counts characters: {clause_text}");
+    }
+    assert!(states(&clause("`reason` —"), LIMIT_ESCALATION_REASON), "and the reason's limit",);
     assert!(states(&clause("`question` —"), LIMIT_ESCALATION_QUESTION), "and each question's",);
     assert!(
         states(&clause("`answer` —"), LIMIT_OPTION_ANSWER),
@@ -238,21 +245,25 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
     }
     assert_eq!(escalation_schema["properties"]["reason"]["pattern"], json!(r"\S"),);
     assert_eq!(question_schema["properties"]["question"]["pattern"], json!(r"\S"),);
-    // CCP-FR-07: and the two classes it cannot express faithfully stay with the
-    // decoder rather than being transcribed more freely than they are enforced.
-    // A byte bound written as a character bound, or a word count written as a
-    // pattern, would pass an agent's answer here and refuse it afterwards.
-    let no_such_key = |value: &serde_json::Value, key: &str| {
-        assert!(
-            value.get(key).is_none(),
-            "the schema states no {key} for the escalation (CCP-FR-07): {value}",
-        );
-    };
-    for field in ["answer", "summary", "description"] {
-        no_such_key(&option_schema["properties"][field], "maxLength");
+    // CCP-FR-07: each text limit is a `maxLength` of the same number, so the
+    // CLI corrects an overlong value inside the run. A word count is guidance,
+    // so no pattern states one.
+    for (field, limit) in [
+        ("answer", LIMIT_OPTION_ANSWER),
+        ("summary", LIMIT_OPTION_SUMMARY),
+        ("description", LIMIT_OPTION_DESCRIPTION),
+    ] {
+        assert_eq!(option_schema["properties"][field]["maxLength"], json!(limit));
     }
-    no_such_key(&escalation_schema["properties"]["reason"], "maxLength");
-    no_such_key(&question_schema["properties"]["question"], "maxLength");
+    assert_eq!(
+        escalation_schema["properties"]["reason"]["maxLength"],
+        json!(LIMIT_ESCALATION_REASON)
+    );
+    assert_eq!(
+        question_schema["properties"]["question"]["maxLength"],
+        json!(LIMIT_ESCALATION_QUESTION)
+    );
+    assert_eq!(schema["properties"]["summary"]["maxLength"], json!(LIMIT_SUMMARY));
 
     // The outcome names, read off the enum rather than spelled here.
     for outcome in ALL_OUTCOMES {

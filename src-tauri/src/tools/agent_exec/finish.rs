@@ -5,6 +5,7 @@
 //! middle of a command: nothing on the run's own channel says it was stopped,
 //! by what, or after how long.
 
+use super::protocol::EnvelopeInvalid;
 use super::ProcessOutcome;
 
 /// EAC-FR-THUT: the line that names how a run ended and after how long.
@@ -15,6 +16,7 @@ pub fn finished_line(
     exit_code: Option<i32>,
     duration_ms: u64,
     limit_ms: u64,
+    refusal: Option<EnvelopeInvalid>,
 ) -> String {
     let after = human_duration(duration_ms);
     match outcome {
@@ -33,9 +35,13 @@ pub fn finished_line(
             format!("Turn stopped: the agent process was terminated after {after}.")
         }
         ProcessOutcome::Cancelled => format!("Turn stopped: it was cancelled after {after}."),
-        ProcessOutcome::InvalidStructuredOutput => {
-            format!("Turn finished after {after}, but its answer could not be read.")
-        }
+        ProcessOutcome::InvalidStructuredOutput => match refusal {
+            Some(reason) => format!(
+                "Turn finished after {after}, but its answer could not be read: {}.",
+                reason.sentence()
+            ),
+            None => format!("Turn finished after {after}, but its answer could not be read."),
+        },
     }
 }
 
@@ -72,32 +78,53 @@ mod tests {
     #[test]
     fn every_outcome_has_a_line_naming_how_the_run_ended() {
         assert_eq!(
-            finished_line(ProcessOutcome::Timeout, None, TWO_HOURS + 2_000, TWO_HOURS),
+            finished_line(ProcessOutcome::Timeout, None, TWO_HOURS + 2_000, TWO_HOURS, None),
             "Turn stopped: it reached the execution time limit of 2 h after 2 h."
         );
         assert_eq!(
-            finished_line(ProcessOutcome::NonZeroExit, Some(137), 5_000, TWO_HOURS),
+            finished_line(ProcessOutcome::NonZeroExit, Some(137), 5_000, TWO_HOURS, None),
             "Turn stopped: the agent process exited with code 137 after 5 s."
         );
         assert_eq!(
-            finished_line(ProcessOutcome::NonZeroExit, None, 5_000, TWO_HOURS),
+            finished_line(ProcessOutcome::NonZeroExit, None, 5_000, TWO_HOURS, None),
             "Turn stopped: the agent process exited after 5 s."
         );
         assert_eq!(
-            finished_line(ProcessOutcome::Terminated, None, 90_000, TWO_HOURS),
+            finished_line(ProcessOutcome::Terminated, None, 90_000, TWO_HOURS, None),
             "Turn stopped: the agent process was terminated after 1 min 30 s."
         );
         assert_eq!(
-            finished_line(ProcessOutcome::Cancelled, None, 60_000, TWO_HOURS),
+            finished_line(ProcessOutcome::Cancelled, None, 60_000, TWO_HOURS, None),
             "Turn stopped: it was cancelled after 1 min."
         );
         assert_eq!(
-            finished_line(ProcessOutcome::Completed, Some(0), 45 * 60 * 1000, TWO_HOURS),
+            finished_line(ProcessOutcome::Completed, Some(0), 45 * 60 * 1000, TWO_HOURS, None),
             "Turn finished after 45 min."
         );
         assert_eq!(
-            finished_line(ProcessOutcome::InvalidStructuredOutput, Some(0), 12_000, TWO_HOURS),
+            finished_line(
+                ProcessOutcome::InvalidStructuredOutput,
+                Some(0),
+                12_000,
+                TWO_HOURS,
+                None
+            ),
             "Turn finished after 12 s, but its answer could not be read."
+        );
+    }
+
+    // EAC-FR-THUT: a refused answer says in fixed words why it was refused.
+    #[test]
+    fn a_refused_answer_names_its_refusal() {
+        assert_eq!(
+            finished_line(
+                ProcessOutcome::InvalidStructuredOutput,
+                Some(0),
+                67_000,
+                TWO_HOURS,
+                Some(EnvelopeInvalid::EscalationShape),
+            ),
+            "Turn finished after 1 min 7 s, but its answer could not be read: the escalation broke a structure rule."
         );
     }
 

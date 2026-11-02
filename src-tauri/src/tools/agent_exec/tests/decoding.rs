@@ -704,3 +704,63 @@ fn an_unverified_docker_backend_refuses_before_any_container() {
         crate::docker::DockerBackendState::Unverified
     );
 }
+
+// EAC-FR-21, EAC-FR-22: a refused document says why, and keeps the session the
+// turn reported so that the caller can resume it. A session that is not the
+// assigned one is never handed back.
+#[test]
+fn a_refused_document_keeps_its_reason_and_its_session() {
+    let blank_summary = json!({
+        "protocol_version": 1,
+        "outcome": "escalation_required",
+        "summary": "stopped to ask",
+        "escalation": { "reason": "r", "questions": [{ "question": "which?", "options": [
+            { "answer": "a", "summary": " ", "description": "What it means." }] }] },
+    })
+    .to_string();
+
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&claude_stdout(&blank_summary));
+    let outcome = run(&harness, runtime.clone(), task("go")).expect("ran");
+    assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
+    assert_eq!(outcome.refusal, Some(EnvelopeInvalid::EscalationShape));
+    assert!(outcome.response.is_none());
+    let session = outcome.session.and_then(|s| s.session_id).expect("the session is kept");
+    assert_eq!(Some(session), assigned_session_id(&runtime.only_run().argv));
+
+    let harness = harness_for("codex");
+    let runtime = RecordingRuntime::replying(&codex_stdout(&blank_summary));
+    let outcome = run(&harness, runtime, task("go")).expect("ran");
+    assert_eq!(outcome.refusal, Some(EnvelopeInvalid::EscalationShape));
+    assert_eq!(outcome.session.and_then(|s| s.session_id).as_deref(), Some(CODEX_THREAD_ID));
+
+    let other_session = json!({
+        "type": "result", "subtype": "success", "is_error": false,
+        "result": envelope_json("success"), "session_id": "another-session"
+    })
+    .to_string();
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&other_session);
+    let outcome = run(&harness, runtime, task("go")).expect("ran");
+    assert_eq!(outcome.refusal, Some(EnvelopeInvalid::SessionMismatch));
+    assert!(outcome.session.is_none(), "a session that is not the assigned one is not kept");
+
+    // A refusal decided before the identity is asserted keeps no other session.
+    let failed_elsewhere = json!({
+        "type": "result", "subtype": "error_max_turns", "is_error": true,
+        "result": envelope_json("success"), "session_id": "another-session"
+    })
+    .to_string();
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&failed_elsewhere);
+    let outcome = run(&harness, runtime, task("go")).expect("ran");
+    assert_eq!(outcome.refusal, Some(EnvelopeInvalid::VendorRunFailed));
+    assert!(outcome.session.is_none(), "a session that is not the assigned one is not kept");
+
+    // A completed turn carries no refusal.
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&claude_stdout(&envelope_json("success")));
+    let outcome = run(&harness, runtime, task("go")).expect("ran");
+    assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
+    assert_eq!(outcome.refusal, None);
+}

@@ -23,6 +23,7 @@ mod binary_protocol;
 mod blockers;
 mod budget;
 mod change_set;
+mod corrections;
 mod dispatch_assert;
 mod escalations;
 mod holds;

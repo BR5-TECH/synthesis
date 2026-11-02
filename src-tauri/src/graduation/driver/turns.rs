@@ -521,7 +521,10 @@ fn stops_in_place(reason: GraduationInterruptionReason) -> bool {
 ///
 /// The store answers, not the copy in hand: the discard is written from
 /// another thread while the turn runs.
-fn discarded_meanwhile<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) -> bool {
+pub(super) fn discarded_meanwhile<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+) -> bool {
     let ended =
         crate::graduation::load_run(app, &run.id).is_ok_and(|stored| stored.state.is_terminal());
     if ended {

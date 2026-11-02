@@ -23,6 +23,11 @@ const POLL_SLICE: Duration = Duration::from_millis(100);
 const KILL_GRACE: Duration = Duration::from_secs(10);
 /// EAC-FR-JRVY: the command that drops the guest's file caches.
 const DROP_CACHES: &str = "sync; echo 2 > /proc/sys/vm/drop_caches";
+/// EAC-FR-WTFH: replace the lines of `/etc/hosts` that end in the pin mark
+/// with the lines on stdin. The new text is held in a shell variable, so no
+/// file outside `/etc/hosts` is written as root. The file keeps its inode, so
+/// the runtime's own host alias line stays, and all users can read it.
+const PIN_HOSTS: &str = "set -e; new=$( { grep -v ' # synthesis-gateway$' /etc/hosts || true; cat; } ); printf '%s\\n' \"$new\" > /etc/hosts; chmod 644 /etc/hosts";
 /// EAC-FR-JRVY: how long a cache drop may take before the VM is rebooted.
 const REFRESH_BOUND: Duration = Duration::from_secs(30);
 /// EAC-FR-SQWO: how long the earlier catalog connections may take to close.
@@ -65,6 +70,53 @@ impl Default for GuardCommand {
 }
 
 impl MicrosandboxRuntime {
+    /// EAC-FR-JRVY / EAC-FR-WTFH: run one `/bin/sh -c` script of this module
+    /// in the running `vm` as root, bounded by [`REFRESH_BOUND`].
+    async fn root_exec(
+        &self,
+        vm: &str,
+        script: &'static str,
+        stdin: Option<Vec<u8>>,
+        what: &str,
+    ) -> Result<(), String> {
+        let vms = self.vms.lock().await;
+        let Some(booted) = vms.get(vm) else {
+            return Err("the sandbox VM is not running".to_string());
+        };
+        let mut handle = booted
+            .sandbox
+            .exec_stream_with("/bin/sh", move |o| {
+                let o = o.args(["-c", script]).user("0:0").tty(false);
+                match stdin {
+                    Some(bytes) => o.stdin_bytes(bytes),
+                    None => o.stdin_null(),
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        drop(vms);
+        let ended = tokio::time::timeout(REFRESH_BOUND, async {
+            while let Some(event) = handle.recv().await {
+                match event {
+                    ExecEvent::Exited { code } => return Some(code),
+                    ExecEvent::Failed(_) => return None,
+                    _ => {}
+                }
+            }
+            None
+        })
+        .await;
+        match ended {
+            Ok(Some(0)) => Ok(()),
+            Ok(Some(code)) => Err(format!("{what} exited with {code}")),
+            Ok(None) => Err(format!("{what} did not run")),
+            Err(_) => {
+                let _ = handle.kill().await;
+                Err(format!("{what} did not end in time"))
+            }
+        }
+    }
+
     /// EAC-FR-NDDZ: a runtime whose guard is started by `command`.
     #[cfg(target_os = "macos")]
     pub fn with_guard_command(
@@ -306,7 +358,7 @@ impl SandboxRuntime for MicrosandboxRuntime {
                 // EAC-FR-ABHG: a VM left under this name by an earlier process
                 // is replaced.
                 .replace()
-                .network(move |n| n.policy(policy));
+                .network(move |n| super::network::configure(n, policy));
             // EAC-FR-BJLI: the mounts the launch names, and nothing else.
             // EAC-FR-KTWO: each shows the real host owner and mode, so the host
             // user the process runs as can write its own working copy, and the
@@ -519,42 +571,14 @@ impl SandboxRuntime for MicrosandboxRuntime {
     }
 
     fn refresh<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, Result<(), String>> {
-        Box::pin(async move {
-            let vms = self.vms.lock().await;
-            let Some(booted) = vms.get(vm) else {
-                return Err("the sandbox VM is not running".to_string());
-            };
-            // EAC-FR-JRVY: as root, a command of this module and never of the
-            // agent. It frees the entries the guest keeps for its mounts.
-            let mut handle = booted
-                .sandbox
-                .exec_stream_with("/bin/sh", |o| {
-                    o.args(["-c", DROP_CACHES]).user("0:0").stdin_null().tty(false)
-                })
-                .await
-                .map_err(|e| e.to_string())?;
-            drop(vms);
-            let ended = tokio::time::timeout(REFRESH_BOUND, async {
-                while let Some(event) = handle.recv().await {
-                    match event {
-                        ExecEvent::Exited { code } => return Some(code),
-                        ExecEvent::Failed(_) => return None,
-                        _ => {}
-                    }
-                }
-                None
-            })
-            .await;
-            match ended {
-                Ok(Some(0)) => Ok(()),
-                Ok(Some(code)) => Err(format!("the cache drop exited with {code}")),
-                Ok(None) => Err("the cache drop did not run".to_string()),
-                Err(_) => {
-                    let _ = handle.kill().await;
-                    Err("the cache drop did not end in time".to_string())
-                }
-            }
-        })
+        // EAC-FR-JRVY: as root, a command of this module and never of the
+        // agent. It frees the entries the guest keeps for its mounts.
+        Box::pin(self.root_exec(vm, DROP_CACHES, None, "the cache drop"))
+    }
+
+    fn pin_hosts<'a>(&'a self, vm: &'a str, text: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        // EAC-FR-WTFH: the lines arrive on stdin, so no value is in shell text.
+        Box::pin(self.root_exec(vm, PIN_HOSTS, Some(text.as_bytes().to_vec()), "the gateway pin"))
     }
 
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()> {

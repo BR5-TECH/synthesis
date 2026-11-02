@@ -266,12 +266,13 @@ describe("Global settings → Isolation (GLS-FR-YAEA through GLS-FR-GHYV)", () =
     expect(allowedHostProblem("Gateway.LAN", ["gateway.lan"])).toMatch(/already holds/);
   });
 
-  it("GLS-FR-CWJX: the section warns that a local Custom Gateway is blocked until its host is listed", async () => {
+  it("GLS-FR-CWJX: the section says the gateway host is added, other local hosts need an entry, and localhost is the sandbox", async () => {
     stored = { ...stored, mode: "microsandbox" };
     render(<IsolationSettings />);
     const warning = await screen.findByTestId("isolation-gateway-warning");
-    expect(warning).toHaveTextContent(/Custom Gateway whose address is localhost or a local network/);
-    expect(warning).toHaveTextContent(/does not add the gateway host for you/);
+    expect(warning).toHaveTextContent(/the application adds its host for you/);
+    expect(warning).toHaveTextContent(/every other local host the agent needs/);
+    expect(warning).toHaveTextContent(/localhost is the sandbox itself/);
   });
 
   it("GLS-FR-WAGX: the section states that Docker-in-Docker is ignored under Microsandbox", async () => {

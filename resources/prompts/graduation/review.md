@@ -128,6 +128,6 @@ Where the decision turns on something only the person who started this run knows
 }
 ```
 
-Ask between one and eight questions, each a single clear thing, with up to three proposed responses each where a fixed choice fits and none where it does not. Each response carries the `answer` itself, a `summary` of one sentence and at most five words, and a `description` of at most two sentences and twelve words.
+Ask between one and eight questions, each a single clear thing, with up to three proposed responses each where a fixed choice fits and none where it does not. Each response carries the `answer` itself, a `summary` that labels it, best in one sentence of five words or fewer, and a `description` of what choosing it means, best in two sentences and twelve words or fewer.
 
 Give **no verdict beside it**: a review that has stopped to ask the author something has stopped deciding, and a verdict returned alongside the question is not read at all.

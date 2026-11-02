@@ -27,7 +27,8 @@ is refused, whatever it holds.
 
 - `protocol_version` — the integer `1`. Required.
 - `outcome` — one of `"success"`, `"failure"`, or `"escalation_required"`. Required.
-- `summary` — one line saying what the turn did. Required, and never empty.
+- `summary` — one line saying what the turn did. Required, never empty, and at
+  most 8192 characters.
 - `result` — an object carrying whatever the caller's own instruction asked you
   to report back. On `"success"` only.
 - `failure` — an object of `code`, `message`, and `retryable`, describing work
@@ -54,7 +55,7 @@ The `escalation` object carries these fields and no others. A singular
 undefined fields they are:
 
 - `reason` — why the turn cannot finish, in a sentence or two. Required, never
-  empty, and at most 4096 bytes.
+  empty, and at most 4096 characters.
 - `questions` — everything you are stuck on, as a list of between one and eight
   entries in the order they are to be answered. Required. The order is the only
   identity a question has: the caller numbers them itself and answers them by
@@ -62,7 +63,7 @@ undefined fields they are:
 
 Each entry of `questions` carries:
 
-- `question` — one thing asked, never empty, at most 2048 bytes. Required.
+- `question` — one thing asked, never empty, at most 2048 characters. Required.
 - `options` — up to three concrete responses to that question, where it has
   them. Leave it out where no fixed response suits; an empty list means the same
   thing.
@@ -70,11 +71,11 @@ Each entry of `questions` carries:
 Each entry of `options` carries all three of these:
 
 - `answer` — the value submitted when that response is chosen. Never empty, at
-  most 512 bytes.
-- `summary` — a label for the response: one sentence, at most five words, at
-  most 128 bytes.
-- `description` — what choosing it means: at most two sentences and twelve words
-  altogether, at most 256 bytes.
+  most 512 characters.
+- `summary` — a label for the response. Never empty, at most 128 characters. Try
+  to keep it to one sentence and five words.
+- `description` — what choosing it means. Never empty, at most 256 characters.
+  Try to keep it to two sentences and twelve words altogether.
 
 One malformed question or one malformed response refuses the whole document
 rather than yielding the questions that happened to parse.

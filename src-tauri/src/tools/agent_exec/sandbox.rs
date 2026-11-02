@@ -32,10 +32,13 @@ mod catalog;
 #[cfg(target_os = "macos")]
 pub mod catalog_guard;
 pub use catalog::{GuardEnd, GuardOutcome, GuardReport};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod daemon;
+mod failure;
 pub mod gateway;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod micro;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use failure::{SandboxFailure, SandboxFailureCause};
 mod network;
 mod stops;
 
@@ -103,6 +106,8 @@ pub struct SandboxSpec {
     /// Sorted, so an order of composition does not count as a difference.
     pub mounts: Vec<SandboxMount>,
     pub network: SandboxNetwork,
+    /// EAC-FR-QMRW: the VM runs a Docker daemon of its own.
+    pub docker_daemon: bool,
 }
 
 impl SandboxSpec {
@@ -126,6 +131,7 @@ impl SandboxSpec {
                 allowed: settings.allowed.clone(),
                 gateway_addresses: Vec::new(),
             },
+            docker_daemon: false,
         }
     }
 }
@@ -150,76 +156,6 @@ pub enum BootError {
     Catalog(String),
     /// Any other failure, with the cause it names (EAC-FR-NCSA).
     Failed(SandboxFailureCause, String),
-}
-
-/// EAC-FR-NCSA: why a VM could not be established.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SandboxFailureCause {
-    UnsupportedHost,
-    RuntimeUnavailable,
-    ImageUnavailable,
-    ImageExportFailed,
-    ImageLoadFailed,
-    RuntimeCatalogFailed,
-    GatewayUnresolved,
-    InsufficientMemory,
-    BootFailed,
-}
-
-impl SandboxFailureCause {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            SandboxFailureCause::UnsupportedHost => "unsupported_host",
-            SandboxFailureCause::RuntimeUnavailable => "runtime_unavailable",
-            SandboxFailureCause::ImageUnavailable => "image_unavailable",
-            SandboxFailureCause::ImageExportFailed => "image_export_failed",
-            SandboxFailureCause::ImageLoadFailed => "image_load_failed",
-            SandboxFailureCause::RuntimeCatalogFailed => "runtime_catalog_failed",
-            SandboxFailureCause::GatewayUnresolved => "gateway_unresolved",
-            SandboxFailureCause::InsufficientMemory => "insufficient_memory",
-            SandboxFailureCause::BootFailed => "boot_failed",
-        }
-    }
-
-    /// GXD-FR-QUCP: the cause in words, for the run's detail.
-    pub fn sentence(self) -> &'static str {
-        match self {
-            SandboxFailureCause::UnsupportedHost => {
-                "this machine cannot run Microsandbox, because it has no usable hardware virtualisation"
-            }
-            SandboxFailureCause::RuntimeUnavailable => {
-                "the sandbox runtime could not be installed or started"
-            }
-            SandboxFailureCause::ImageUnavailable => {
-                "the image is in no registry and in no verified Docker backend"
-            }
-            SandboxFailureCause::ImageExportFailed => {
-                "the image could not be exported from Docker"
-            }
-            SandboxFailureCause::ImageLoadFailed => {
-                "the sandbox runtime could not load the image"
-            }
-            SandboxFailureCause::RuntimeCatalogFailed => {
-                "the sandbox runtime could not read its own catalog"
-            }
-            SandboxFailureCause::GatewayUnresolved => {
-                "the host of the Custom Gateway could not be resolved on this machine"
-            }
-            SandboxFailureCause::InsufficientMemory => {
-                "there is not enough memory for the configured RAM"
-            }
-            SandboxFailureCause::BootFailed => "the VM did not boot",
-        }
-    }
-}
-
-/// EAC-FR-NCSA: a VM that could not be established, with the runtime's own
-/// message. The message goes to the log, and on one line to the run's detail
-/// (GXD-FR-QUCP).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SandboxFailure {
-    pub cause: SandboxFailureCause,
-    pub message: String,
 }
 
 /// One process in a VM (EAC-FR-ZIYG).
@@ -303,6 +239,15 @@ pub trait SandboxRuntime: Send + Sync {
     fn pin_hosts<'a>(&'a self, _vm: &'a str, _text: &'a str) -> BoxFuture<'a, Result<(), String>> {
         Box::pin(async { Ok(()) })
     }
+
+    /// EAC-FR-QMRW: start the image's `dockerd` as root in the running `vm`,
+    /// with `group` as the group of its socket, and wait until it answers. An
+    /// error says why it is not available (EAC-FR-ZPTA).
+    fn start_docker_daemon<'a>(
+        &'a self,
+        vm: &'a str,
+        group: u32,
+    ) -> BoxFuture<'a, Result<(), String>>;
 
     /// EAC-FR-NDDZ: keep a catalog guard running beside the catalog
     /// connection. `renew` ends the earlier guard and starts a new one. A
@@ -479,6 +424,14 @@ impl SandboxPool {
                 }
             }
         }
+        // EAC-FR-QMRW: a reused VM keeps its daemon; one whose daemon no longer
+        // answers and cannot start again is rebooted.
+        if matches!(decision, Reuse::Yes)
+            && launch.spec.docker_daemon
+            && !self.reused_daemon_answers(sink, &launch).await
+        {
+            decision = Reuse::No("daemon_failed");
+        }
         match decision {
             Reuse::Yes => {
                 logging::log_info(
@@ -533,6 +486,13 @@ impl SandboxPool {
                         SandboxFailureCause::BootFailed,
                         format!("the gateway pin could not be written: {message}"),
                     ));
+                }
+                // EAC-FR-QMRW / EAC-FR-ZPTA: a VM whose daemon is not available
+                // is stopped and kept for no later launch.
+                if launch.spec.docker_daemon {
+                    if let Some(outcome) = self.start_docker_daemon(sink, &launch, &cancel).await? {
+                        return Ok(outcome);
+                    }
                 }
                 *booted = Some(fresh);
             }

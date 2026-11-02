@@ -91,8 +91,6 @@ export interface RunRegionProps {
   onActivateStage: (stageId: string) => void;
   /** GEA-FR-VIPR: the backend accepted an answer set. */
   onAnswered: () => void;
-  /** GEA-FR-TEMG: a refusal of an answer set. */
-  onEscalationError: (message: string) => void;
   /** GRT-FR-XHLN: the run an accepted restart created. */
   onRestarted: (created: GraduationRun) => void;
   /** GRU-FR-KQPE: the refusal of this run's last row act. */
@@ -113,7 +111,6 @@ export function RunRegion({
   onOpenSettings,
   onActivateStage,
   onAnswered,
-  onEscalationError,
   onRestarted,
   refusal,
   pressedRef,
@@ -296,8 +293,6 @@ export function RunRegion({
           run={run}
           busy={busy}
           onAnswered={onAnswered}
-          // GRU-FR-KQPE: one refusal alert at most in the region.
-          onError={onEscalationError}
         />
       )}
 

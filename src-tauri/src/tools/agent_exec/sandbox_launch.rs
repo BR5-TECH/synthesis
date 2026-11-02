@@ -67,7 +67,11 @@ impl AgentCliExecutor {
             None => crate::isolation::resolve_isolation(context.store)
                 .map_err(AgentExecutionError::LaunchFailed)?,
         };
-        Ok(match isolation {
+        // EAC-FR-SNMS: the host-socket choice gives up the VM for this launch.
+        let dind = &context.docker_in_docker;
+        let effective =
+            crate::isolation::effective_isolation(isolation, dind.enabled, dind.under_microsandbox);
+        Ok(match effective {
             ResolvedIsolation::None => None,
             ResolvedIsolation::Microsandbox(settings) => Some(settings),
         })
@@ -156,6 +160,11 @@ impl AgentCliExecutor {
         // process runs as that user.
         let mut spec =
             SandboxSpec::new(run.image.to_string(), run.container.user(), run.settings, mounts);
+        // EAC-FR-QMRW / EAC-FR-UEFI: the daemon option is part of what the VM
+        // boots with, so a change of it reboots the VM.
+        let dind = &context.docker_in_docker;
+        spec.docker_daemon =
+            crate::isolation::runs_docker_daemon(dind.enabled, dind.under_microsandbox);
         // EAC-FR-KVBT / EAC-FR-BZPC / EAC-FR-RJDQ: the gateway is resolved on this
         // machine before the VM is touched.
         let gateway = match self.plan_gateway(sink, run.env, run.settings, &run.cancel).await? {

@@ -531,7 +531,13 @@ export function WorkStreamSelector({
    * window both redraw from what the backend holds rather than from what this
    * surface attempted (WSS-FR-FVKO).
    */
-  const driveUpdate = (streamId: string, call: () => Promise<unknown>) => {
+  const driveUpdate = (
+    streamId: string,
+    call: () => Promise<unknown>,
+    // GEA-FR-TEMG: an answer set's refusal renders inline in the question block,
+    // so the window's own error line does not repeat it.
+    { inlineRefusal = false }: { inlineRefusal?: boolean } = {},
+  ) => {
     setResolving(true);
     setResolveError(null);
     // The promise is handed back rather than swallowed: the escalation form
@@ -548,7 +554,7 @@ export function WorkStreamSelector({
           streamId,
           reason: splitRefusal(text)[0] || "unknown",
         });
-        if (mounted.current) setResolveError(refusalText(text));
+        if (mounted.current && !inlineRefusal) setResolveError(refusalText(text));
         throw reason;
       })
       .finally(() => {
@@ -869,11 +875,14 @@ export function WorkStreamSelector({
           busy={resolving}
           onClose={closeResolution}
           onSend={(answers) =>
-            driveUpdate(resolutionFor.subject.streamId, () =>
-              api.answerWorkStreamUpdateEscalation(
-                resolutionFor.subject.streamId,
-                answers,
-              ),
+            driveUpdate(
+              resolutionFor.subject.streamId,
+              () =>
+                api.answerWorkStreamUpdateEscalation(
+                  resolutionFor.subject.streamId,
+                  answers,
+                ),
+              { inlineRefusal: true },
             )
           }
           onRetry={() => {
@@ -894,7 +903,6 @@ export function WorkStreamSelector({
               // still there.
               .catch(() => {});
           }}
-          onError={setResolveError}
           error={resolveError}
         />
       )}

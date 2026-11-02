@@ -541,7 +541,10 @@
 
 /* The block stands where DDS-FR-QZAV puts it — between the scroller and the
    composer, outside both — and takes the stream's own forms while it is there.
-   Every rule below is scoped to this column: the rail's card, the action
+   Every rule below is scoped to this column and to the escalation host
+   (`GEA-graduation-escalation-answering.md` GEA-FR-HWRT), which takes the same
+   presentation so the author meets one look in both places. The block's own
+   placement and measure stay this column's. The rail's card, the action
    control's panel, the overlay and the conversation tab keep the treatment
    `./discussion-questions.css` gives them. */
 .dds-discussion .discussion-questions {
@@ -554,16 +557,20 @@
   border-top: 1px solid var(--border-1);
   padding-top: var(--sp-3-5);
 }
-.dds-discussion .discussion-questions__handle { color: var(--fg-1); }
-.dds-discussion .discussion-questions__title { color: var(--fg-3); }
-.dds-discussion .discussion-questions__progress {
+.dds-discussion .discussion-questions__handle,
+.graduation__escalation .discussion-questions__handle { color: var(--fg-1); }
+.dds-discussion .discussion-questions__title,
+.graduation__escalation .discussion-questions__title { color: var(--fg-3); }
+.dds-discussion .discussion-questions__progress,
+.graduation__escalation .discussion-questions__progress {
   font-size: var(--fs-ui-xs);
   color: var(--fg-3);
 }
 
 /* DQA-FR-XQOR: the question stands above the group rather than inside it, at
    the measure a message body is read on. */
-.dds-discussion .discussion-questions__ask {
+.dds-discussion .discussion-questions__ask,
+.graduation__escalation .discussion-questions__ask {
   /* DQA-FR-FJXQ: one step above the default text, so the question stands out
      from the options below it. */
   font-size: var(--fs-ui-title);
@@ -575,27 +582,30 @@
   padding: 0;
 }
 
-.dds-discussion .discussion-questions__choice {
+.dds-discussion .discussion-questions__choice,
+.graduation__escalation .discussion-questions__choice {
   gap: var(--sp-2-5);
   padding: var(--sp-2) var(--sp-2-5);
   border-radius: var(--r-sm);
   transition: background var(--dur-fast) var(--ease-out);
 }
 /* DDS-FR-PWDG: hover darkens and never re-tints with the accent. */
-.dds-discussion .discussion-questions__choice:hover { background: var(--bg-hover); }
+.dds-discussion .discussion-questions__choice:hover,
+.graduation__escalation .discussion-questions__choice:hover { background: var(--bg-hover); }
 /* DDS-FR-CVLM: the selected row is the third and last place the accent stands
    in this column, and it means the same thing there — what the author chose. */
-.dds-discussion .discussion-questions__choice[data-selected="true"] {
+.dds-discussion .discussion-questions__choice[data-selected="true"],
+.graduation__escalation .discussion-questions__choice[data-selected="true"] {
   background: var(--accent-soft);
 }
-.dds-discussion .discussion-questions__option {
+.dds-discussion .discussion-questions__option,
+.graduation__escalation .discussion-questions__option {
   font-size: var(--fs-ui-md);
   line-height: var(--lh-snug);
   color: var(--fg-2);
 }
-.dds-discussion
-  .discussion-questions__choice[data-selected="true"]
-  .discussion-questions__option {
+.dds-discussion .discussion-questions__choice[data-selected="true"] .discussion-questions__option,
+.graduation__escalation .discussion-questions__choice[data-selected="true"] .discussion-questions__option {
   color: var(--fg-1);
 }
 
@@ -604,7 +614,9 @@
    state first and the row's fill is the second telling of it, so neither rests
    on colour alone. */
 .dds-discussion .discussion-questions__choice > input[type="radio"],
-.dds-discussion .discussion-questions__own-head > input[type="radio"] {
+.dds-discussion .discussion-questions__own-head > input[type="radio"],
+.graduation__escalation .discussion-questions__choice > input[type="radio"],
+.graduation__escalation .discussion-questions__own-head > input[type="radio"] {
   appearance: none;
   -webkit-appearance: none;
   width: var(--sp-3);
@@ -616,43 +628,55 @@
   transition: border var(--dur-fast) var(--ease-out);
 }
 .dds-discussion .discussion-questions__choice > input[type="radio"]:checked,
-.dds-discussion .discussion-questions__own-head > input[type="radio"]:checked {
+.dds-discussion .discussion-questions__own-head > input[type="radio"]:checked,
+.graduation__escalation .discussion-questions__choice > input[type="radio"]:checked,
+.graduation__escalation .discussion-questions__own-head > input[type="radio"]:checked {
   border: var(--sp-1) solid var(--accent);
 }
 .dds-discussion .discussion-questions__choice > input[type="radio"]:focus-visible,
-.dds-discussion .discussion-questions__own-head > input[type="radio"]:focus-visible {
+.dds-discussion .discussion-questions__own-head > input[type="radio"]:focus-visible,
+.graduation__escalation .discussion-questions__choice > input[type="radio"]:focus-visible,
+.graduation__escalation .discussion-questions__own-head > input[type="radio"]:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
-.dds-discussion .discussion-questions__own-head {
+.dds-discussion .discussion-questions__own-head,
+.graduation__escalation .discussion-questions__own-head {
   gap: var(--sp-2-5);
   padding: var(--sp-2) 0;
 }
-.dds-discussion .discussion-questions__choice--own { padding: 0 var(--sp-2-5); }
+.dds-discussion .discussion-questions__choice--own,
+.graduation__escalation .discussion-questions__choice--own { padding: 0 var(--sp-2-5); }
 
 /* DQA-FR-ROXG: the note, marked by its placeholder alone. */
 .dds-discussion .discussion-questions__note-field::placeholder,
-.dds-discussion .discussion-questions__typed::placeholder {
+.dds-discussion .discussion-questions__typed::placeholder,
+.graduation__escalation .discussion-questions__note-field::placeholder,
+.graduation__escalation .discussion-questions__typed::placeholder {
   color: var(--fg-4);
 }
 
 /* DQA-FR-BXHU: the foot — Previous, the position indicator, Next, and Submit.
    Next carries the weight because it is where the author is going; Previous is
    the way back and recedes. */
-.dds-discussion .discussion-questions__foot { gap: var(--sp-3); }
-.dds-discussion .discussion-questions__dots { gap: var(--sp-1-5); }
+.dds-discussion .discussion-questions__foot,
+.graduation__escalation .discussion-questions__foot { gap: var(--sp-3); }
+.dds-discussion .discussion-questions__dots,
+.graduation__escalation .discussion-questions__dots { gap: var(--sp-1-5); }
 
 /* The question stands **above** the answer group rather than inside it: a
    legend notches the border of the box it is in, and the prompt is not one of
    the things being chosen between. So the fieldset carries no box at all here,
    and the group below it is the card. */
-.dds-discussion .discussion-questions__question {
+.dds-discussion .discussion-questions__question,
+.graduation__escalation .discussion-questions__question {
   background: none;
   border: 0;
   border-radius: 0;
   padding: 0;
 }
-.dds-discussion .discussion-questions__group {
+.dds-discussion .discussion-questions__group,
+.graduation__escalation .discussion-questions__group {
   display: flex;
   flex-direction: column;
   gap: var(--sp-0-5);
@@ -666,19 +690,23 @@
    stand inside it. The option rows keep the spacing they have without rails.
    DQA-FR-LFIB: the description takes the row's own top inset and line height,
    so its first line stands level with the first label. */
-.dds-discussion .discussion-questions__options { gap: var(--sp-0-5); }
+.dds-discussion .discussion-questions__options,
+.graduation__escalation .discussion-questions__options { gap: var(--sp-0-5); }
 /* The card's own flex rule is the more specific one, so the railed group is
    made a grid again here, with the rails' own column gap. */
-.dds-discussion .discussion-questions__group--railed {
+.dds-discussion .discussion-questions__group--railed,
+.graduation__escalation .discussion-questions__group--railed {
   display: grid;
   column-gap: var(--sp-3);
 }
-.dds-discussion .discussion-questions__detail {
+.dds-discussion .discussion-questions__detail,
+.graduation__escalation .discussion-questions__detail {
   padding: var(--sp-2) var(--sp-2-5) var(--sp-2) var(--sp-3);
   line-height: var(--lh-snug);
 }
 @container discussion-questions (max-width: 559.98px) {
-  .dds-discussion .discussion-questions__detail {
+  .dds-discussion .discussion-questions__detail,
+.graduation__escalation .discussion-questions__detail {
     padding: var(--sp-2) var(--sp-2-5);
   }
 }

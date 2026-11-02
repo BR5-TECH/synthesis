@@ -77,4 +77,12 @@ impl SandboxRuntime for NoSandbox {
     fn stop<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {})
     }
+
+    fn start_docker_daemon<'a>(
+        &'a self,
+        _vm: &'a str,
+        _group: u32,
+    ) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move { Err("this build holds no microsandbox runtime".to_string()) })
+    }
 }

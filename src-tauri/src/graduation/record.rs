@@ -176,6 +176,19 @@ pub struct GraduationEscalationAnswer {
     pub position: u32,
     pub answer: String,
     pub summary: String,
+    /// GXD-FR-BJYT: the author's optional note beside a chosen response. A
+    /// blank note is stored as no note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl GraduationEscalationAnswer {
+    /// GXD-FR-BJYT: the same answer with a blank note removed and a note
+    /// with text trimmed.
+    pub fn normalized(mut self) -> Self {
+        self.note = self.note.map(|note| note.trim().to_string()).filter(|note| !note.is_empty());
+        self
+    }
 }
 
 /// GXD-FR-HGSU: what a run in `awaiting_author` is waiting for.

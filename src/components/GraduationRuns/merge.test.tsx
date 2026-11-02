@@ -709,11 +709,16 @@ describe("the escalation of a merge run (GEA-FR-MRDK, GEA-FR-WQZH, GEA-FR-HBCF)"
     expect(within(form).getByText(/Which unit should paging move by\?/)).toBeInTheDocument();
   });
 
-  it("GEA-FR-WQZH: it names the unresolved paths as read text and the publication, with the message escaped", async () => {
+  it("GEA-FR-WQZH, GEA-FR-UIEA, DQA-FR-RTWE: it names the unresolved paths as read text and the publication, between the head and the question, with the message escaped", async () => {
     await serve(asking());
 
     const form = screen.getByTestId("graduation-escalation");
     const paths = within(form).getByTestId("graduation-escalation-paths");
+    // The host's context stands between the block's head and its question.
+    const head = form.querySelector(".discussion-questions__head")!;
+    const question = within(form).getByTestId("discussion-questions-question");
+    expect(head.compareDocumentPosition(paths) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(paths.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(paths.textContent).toMatch(/Paths the merge asks about · 2 paths/);
     expect(within(paths).getByText("GRD-graduation.md")).toBeInTheDocument();
     expect(within(paths).getByText("a.ts")).toBeInTheDocument();
@@ -735,13 +740,13 @@ describe("the escalation of a merge run (GEA-FR-MRDK, GEA-FR-WQZH, GEA-FR-HBCF)"
     );
   });
 
-  it("GEA-FR-MRDK, GEA-FR-VWQH: Send answers invokes answer_graduation_escalation once with the whole ordered set, against the run", async () => {
+  it("GEA-FR-MRDK, GEA-FR-VWQH: Submit invokes answer_graduation_escalation once with the whole ordered set, against the run", async () => {
     await serve(asking());
 
     await userEvent.click(
       within(region()).getByRole("radio", { name: /By segment/ }),
     );
-    await userEvent.click(within(region()).getByTestId("graduation-send-answers"));
+    await userEvent.click(within(region()).getByTestId("discussion-questions-submit"));
 
     await waitFor(() => expect(calls("answer_graduation_escalation")).toHaveLength(1));
     expect(calls("answer_graduation_escalation")[0][1]).toEqual({
@@ -770,9 +775,10 @@ describe("the escalation of a merge run (GEA-FR-MRDK, GEA-FR-WQZH, GEA-FR-HBCF)"
     refusals.answer_graduation_escalation = "merge_branch_moved";
     await serve(asking());
     await userEvent.click(within(region()).getByRole("radio", { name: /By segment/ }));
-    await userEvent.click(within(region()).getByTestId("graduation-send-answers"));
+    await userEvent.click(within(region()).getByTestId("discussion-questions-submit"));
 
-    const alert = await screen.findByTestId("graduation-error");
+    // GEA-FR-TEMG: the refusal stands inline at the foot of the question block.
+    const alert = await within(screen.getByTestId("graduation-escalation")).findByRole("alert");
     expect(alert.textContent).toMatch(/stream branch or the base branch moved/);
     expect(alert.textContent).toMatch(/Nothing was written/);
     // Every entered answer stays, every question stays reachable, and the run

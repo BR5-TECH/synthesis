@@ -162,6 +162,9 @@ pub struct ProjectSlot {
     /// and beside `layout`, which TOML also requires to come last.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub document_sources: Vec<crate::documents::StoredSource>,
+    /// GSS-FR-DAKR: the model downgrade suppressions, an array of tables, so after the scalars.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub model_downgrade_suppressions: Vec<crate::model_downgrades::ModelDowngradeSuppression>,
     /// Layout preferences (GSS-FR-17). `None` until the shell first persists.
     /// Skipped when absent — the TOML serialiser rejects a bare `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -307,6 +310,8 @@ pub struct PersistedState {
 
 mod document_limit;
 mod embeddings;
+mod model_downgrades;
+pub use model_downgrades::LoadedSuppressions;
 mod recents;
 mod voice_ai;
 pub use document_limit::*;

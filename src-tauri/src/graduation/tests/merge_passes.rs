@@ -216,6 +216,7 @@ fn an_escalating_merge_turn_pauses_the_run_and_an_answer_over_a_moved_tip_is_ref
         position: 1,
         answer: "The first one.".to_string(),
         summary: "The first one".to_string(),
+        note: None,
     }];
 
     // A tip moved: the answer is refused, and the escalation still stands.
@@ -257,6 +258,7 @@ fn an_answer_goes_into_the_merge_work_turn_that_asked_and_the_pass_does_not_adva
             position: 1,
             answer: "The first one.".to_string(),
             summary: "The first one".to_string(),
+            note: None,
         }],
     )
     .expect("the answers");
@@ -271,4 +273,52 @@ fn an_answer_goes_into_the_merge_work_turn_that_asked_and_the_pass_does_not_adva
     assert_eq!(work[0].pass, 1, "the answer continues the pass that asked");
     assert_eq!(work[0].list_len("escalation_answers"), 1);
     assert_eq!(dispatch.of_part("merge_review").len(), 1);
+}
+
+// GXD-FR-BJYT: a note beside an answer is stored trimmed and reaches the turn
+// with its answer; a blank note is stored as no note and reaches no turn.
+#[test]
+fn a_note_is_stored_trimmed_and_reaches_the_turn_with_its_answer() {
+    let fx = Fixture::new();
+    let (_, run) = queued_merge_run(&fx);
+    let paused = fx.drive(
+        &run,
+        ScriptedDispatch::new(vec![Turn::answering(Answer::Escalate(vec![
+            "Which limit stands?".to_string(),
+            "Which name stands?".to_string(),
+        ]))]),
+    );
+    assert_eq!(paused.state, GraduationRunState::AwaitingAuthor);
+
+    fx.app.state::<GraduationState>().set_loop_enabled(false);
+    crate::graduation::answer_graduation_escalation(
+        fx.app.clone(),
+        run.id.clone(),
+        vec![
+            GraduationEscalationAnswer {
+                position: 1,
+                answer: "The first one.".to_string(),
+                summary: "The first one".to_string(),
+                note: Some("  keep the base value  ".to_string()),
+            },
+            GraduationEscalationAnswer {
+                position: 2,
+                answer: "The stream's.".to_string(),
+                summary: "The stream's".to_string(),
+                note: Some("   ".to_string()),
+            },
+        ],
+    )
+    .expect("the answers");
+    let stored = fx.reload(&run.id).checkpoint.pending_escalation_answers;
+    assert_eq!(stored[0].note.as_deref(), Some("keep the base value"));
+    assert_eq!(stored[1].note, None, "a blank note is stored as no note");
+
+    fx.app.state::<GraduationState>().set_loop_enabled(true);
+    let dispatch = ScriptedDispatch::new(vec![settling(), Turn::ready()]);
+    fx.drive(&fx.reload(&run.id), dispatch.clone());
+    let work = dispatch.of_part("merge_work");
+    let answers = work[0].input["escalation_answers"].as_array().expect("the answers").clone();
+    assert_eq!(answers[0]["note"], "keep the base value");
+    assert!(answers[1].get("note").is_none(), "no note travels for a blank one");
 }

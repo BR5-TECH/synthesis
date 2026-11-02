@@ -382,6 +382,7 @@ fn a_refused_preflight_creates_no_run_and_leaves_no_snapshot_ref() {
             enabled: true,
             socket_path: missing.clone(),
             host_gateway: false,
+            ..Default::default()
         },
     )
     .expect("stored settings");

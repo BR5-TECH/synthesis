@@ -269,6 +269,7 @@ pub(crate) fn answer_work_stream_update_escalation_with<R: tauri::Runtime>(
                 question: question.question.clone(),
                 answer: answer.answer.clone(),
                 summary: answer.summary.clone(),
+                note: answer.clone().normalized().note,
             })
         })
         .collect();

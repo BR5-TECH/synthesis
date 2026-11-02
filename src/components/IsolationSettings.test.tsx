@@ -275,11 +275,13 @@ describe("Global settings → Isolation (GLS-FR-YAEA through GLS-FR-GHYV)", () =
     expect(warning).toHaveTextContent(/localhost is the sandbox itself/);
   });
 
-  it("GLS-FR-WAGX: the section states that Docker-in-Docker is ignored under Microsandbox", async () => {
+  it("GLS-FR-WAGX: the section states that the VM runs a Docker daemon by default and that a project can use the host socket instead", async () => {
     render(<IsolationSettings />);
     await microsandbox();
-    expect(screen.getByText(/Docker-in-Docker setting of a project is ignored/)).toBeInTheDocument();
-    expect(screen.getByText(/does not check the socket/)).toBeInTheDocument();
+    expect(screen.getByText(/VM runs a Docker daemon of its\s+own by default/)).toBeInTheDocument();
+    expect(screen.getByText(/image must hold dockerd/)).toBeInTheDocument();
+    expect(screen.getByText(/host Docker socket instead, which gives up\s+the isolation/)).toBeInTheDocument();
+    expect(screen.queryByText(/is ignored/)).not.toBeInTheDocument();
   });
 
   it("GLS-FR-EZRL: on a machine that cannot run it, Microsandbox is disabled, None stays selected, and the reason is stated", async () => {
@@ -324,6 +326,7 @@ describe("Global settings → Isolation (GLS-FR-YAEA through GLS-FR-GHYV)", () =
     expect(screen.getByLabelText(/Disk — 64 GB/)).toBe(disk);
     expect(screen.getByText("8 – 460 GB")).toBeInTheDocument();
     expect(disk).toHaveAccessibleDescription(/sandbox's own disk.*grows only as it is used.*each\s+writable folder/s);
+    expect(disk).toHaveAccessibleDescription(/Images that tests pull into the Docker daemon of the VM count\s+against this disk/s);
   });
 
   it("GLS-FR-PVQT: on a disk smaller than 8 GB the slider starts and ends at the disk size", async () => {

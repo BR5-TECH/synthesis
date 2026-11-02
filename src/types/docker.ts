@@ -142,12 +142,20 @@ export interface ImageBuildFinished {
 /** PSS-FR-QWTN: how well this platform supports Docker-in-Docker. */
 export type DockerInDockerSupport = "supported" | "best_effort" | "unsupported";
 
-/** PSS-FR-DIND: the three values the project-local store holds. */
+/**
+ * PSS-FR-DIND: how a graduation launch gets Docker where the isolation is
+ * Microsandbox. `vm_daemon` keeps the turn in the VM with a daemon of its own;
+ * `host_socket` gives up the VM and passes the host Docker socket.
+ */
+export type UnderMicrosandbox = "vm_daemon" | "host_socket";
+
+/** PSS-FR-DIND: the four values the project-local store holds. */
 export interface DockerInDockerSettings {
   enabled: boolean;
   /** Empty means the platform default. */
   socketPath: string;
   hostGateway: boolean;
+  underMicrosandbox: UnderMicrosandbox;
 }
 
 /** PSS-FR-QWTN: the stored values and the two the platform reports. */

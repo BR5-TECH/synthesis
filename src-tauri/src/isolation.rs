@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 
 mod host;
 pub use host::{disk_gib_of, read_host, HostFacts};
+mod effective;
+pub use effective::{effective_isolation, runs_docker_daemon};
 
 /// GSS-FR-WHYC: the CPU count an unset record uses.
 pub const DEFAULT_CPUS: u32 = 4;

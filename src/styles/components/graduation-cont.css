@@ -60,74 +60,25 @@
   padding-left: 16px;
   font-size: var(--fs-ui-xs);
 }
-/* GRU-FR-41: the escalation is the one thing on this surface the run is
-   actually stopped on, so it is set as the reading matter of the region rather
-   than as more of the run's own report.
-
-   Held to a **measure** and centred rather than filled to the region's width:
-   the run region is as wide as the window, and a question set across all of it
-   is a line the eye loses its place in and a choice list stranded beside an
-   arm's length of nothing. The cap is a multiple of the UI role's own size, so
-   it moves with the reader's chosen font rather than standing still at a pixel
-   count (OVW-FR-13). Centred, it sits under the middle of the stage row above
-   it, which is the alignment the region already has. */
+/* GEA-FR-DPTT: the escalation's question block is held to a **measure** and
+   centred rather than filled to the region's width. The run region has no
+   conversation whose measure the block could take, and a question set across
+   the whole window is a line the eye loses its place in. The cap is a multiple
+   of the UI role's own size, so it moves with the reader's chosen font
+   (OVW-FR-13). The block itself is the shared one of `kit/discussion-questions.css`
+   (GEA-FR-QBWN). */
 .graduation__escalation {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
   box-sizing: border-box;
   width: 100%;
   max-width: calc(var(--font-ui-size) * 56);
   margin: var(--sp-2) auto 0;
 }
-/* GRU-FR-13 / ESU-FR-12: the reason, verbatim — and legible. Every text in
-   this area is set at least one step above the chrome's own caption size,
-   because a question the run is waiting on is not a caption. */
-.graduation__reason {
-  margin: 0;
-  font-size: var(--fs-ui-title);
-  line-height: var(--lh-normal);
-  color: var(--fg-2);
-}
-/* GRU-FR-41: the question area carries a background of its own, distinct from
-   the panel's and white in neither theme, so the thing being asked reads as a
-   region rather than as more of the run's own report. The tokens are the
-   panel's own, so it follows the application theme in each of its three
-   settings (GLS-FR-04). */
-.graduation__question {
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-1);
-  border-radius: var(--r-md);
-  padding: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.graduation__question-head,
-.graduation__question-foot {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.graduation__question-foot { flex-wrap: wrap; }
-/* GRU-FR-37 / GRU-FR-39: which question of how many, which of the set are
-   answered, and how many still need one. Structural counts rather than reading
-   matter, so they are the quietest thing in the area — but a step above where
-   they were, the whole area having been too small to read. */
-.graduation__question-count {
-  font-size: var(--fs-ui-sm);
-  line-height: var(--lh-snug);
-  color: var(--fg-3);
-}
-/* GEA-FR-GWTH: the same count stands on two grounds — inside a question, on the
-   sunken ground, and in the area's own foot, on the ground beneath it. `--fg-3`
-   clears AA on the first and does not on the second in the dark theme, so the
-   foot takes the step up. It says how many questions still need an answer,
-   which is the one line that explains a control the author cannot press. */
-.graduation__question-foot .graduation__question-count {
-  color: var(--fg-2);
-}
-/* The question itself, in the voice of the thing being asked. */
+/* GEA-FR-HWRT: the parts of the block stand as far apart as they do in the
+   draft's discussion column. */
+.graduation__escalation .discussion-questions { gap: var(--sp-2-5); }
+/* The standing-work choice of the start dialog (`StandingWorkChoice.tsx`): a
+   short ladder of positions, each a raised row with its summary and its
+   description beneath. */
 .graduation__ask {
   padding: 0;
   margin: 0 0 var(--sp-2);
@@ -146,14 +97,6 @@
   padding: 0;
   min-width: 0;
 }
-/* GRU-FR-38: one group, one selection.
-
-   The proposed responses and the author's own words are rows of the same
-   ladder — same card, same radio, same hit area — because they are alternatives
-   to each other rather than a list and a field beside it. Reading them as one
-   ladder is what makes "whatever is selected is the answer" legible without a
-   sentence explaining it. Raised off the sunken ground so a row is something to
-   press rather than a line of text with a dot next to it. */
 .graduation__choice {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -186,8 +129,6 @@
   border-color: var(--accent);
   box-shadow: var(--shadow-focus);
 }
-/* GRU-FR-13: a proposed response reads as its short summary with its
-   description as supporting text beneath — and as nothing else. */
 .graduation__option {
   display: flex;
   flex-direction: column;
@@ -204,59 +145,6 @@
   line-height: var(--lh-normal);
   color: var(--fg-2);
   overflow-wrap: anywhere;
-}
-/* The free-text row's field is the draft-change review's own quiet note field
-   (`.draft-review__feedback`): one rule to write on rather than a box, sized
-   from its content. It is the same gesture in both places — a sentence in the
-   author's own words attached to a decision — so it is the same field. What it
-   gives up here is that field's centred measure: inside a row of the ladder it
-   takes the row's width, the row being the measure already. */
-/* The selector is doubled deliberately, on the same reasoning the graduation
-   review's rules below carry: `kit.css` is imported *after* this file and sets
-   the shared field's centred 420px measure and its caption size, both of which
-   a single class here loses the cascade to. */
-.graduation__choice .graduation__typed {
-  max-width: none;
-  margin: 0;
-  padding-left: 0;
-  padding-right: 0;
-  font-size: var(--fs-ui-title);
-}
-/* The own-words row reads down rather than across: the choice on one line, the
-   field beneath it. Its label wraps the radio and its words and stops there —
-   the field is a sibling, so nothing the author types becomes part of the name
-   the row announces itself by. */
-.graduation__choice--own {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.graduation__own-head {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: var(--sp-2);
-  cursor: pointer;
-}
-.graduation__own-head > input[type="radio"] { margin: 0; cursor: pointer; }
-/* The writing starts under the words of the choice it belongs to rather than
-   under its mark. Taken as padding rather than as a margin, so the rule the
-   field is written on still runs the whole width of the row: a textarea does
-   not stretch to a flex line the way a block does, and a margin left it at its
-   own `cols` width. */
-.graduation__choice--own:not([data-alone="true"]) .graduation__typed {
-  padding-left: calc(var(--sp-2) + var(--sp-3));
-}
-/* GRU-FR-13: with no proposed responses there is nothing to choose between, so
-   the row is the field alone — no card, no radio, and no selected state, none
-   of which would be telling the author anything. */
-.graduation__choice[data-alone="true"] {
-  grid-template-columns: 1fr;
-  padding: 0;
-  border-color: transparent;
-  background: none;
-  box-shadow: none;
-  cursor: auto;
 }
 /* GRU-FR-19: the run's own destructive act, on the stage row's level.
    The stage row takes the width; the control keeps its own and stands at the

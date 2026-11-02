@@ -581,6 +581,16 @@ impl SandboxRuntime for MicrosandboxRuntime {
         Box::pin(self.root_exec(vm, PIN_HOSTS, Some(text.as_bytes().to_vec()), "the gateway pin"))
     }
 
+    fn start_docker_daemon<'a>(
+        &'a self,
+        vm: &'a str,
+        group: u32,
+    ) -> BoxFuture<'a, Result<(), String>> {
+        // EAC-FR-QMRW: as root, a command of this module and never of the
+        // agent. The group is a number the executor reads from the host user.
+        Box::pin(self.docker_daemon_exec(vm, group))
+    }
+
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             let booted = self.vms.lock().await.remove(vm);
@@ -591,6 +601,8 @@ impl SandboxRuntime for MicrosandboxRuntime {
         })
     }
 }
+
+mod daemon;
 
 #[cfg(test)]
 mod tests {

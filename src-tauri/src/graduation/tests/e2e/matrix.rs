@@ -110,6 +110,7 @@ fn a_scenario_that_lets_the_queue_dispatch_fails() {
             position: 1,
             answer: "The editor's.".to_string(),
             summary: "The editor's.".to_string(),
+            note: None,
         }],
     )
     .expect("the answers are recorded");

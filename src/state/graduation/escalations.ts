@@ -12,41 +12,49 @@ import type {
 import { interruptionCause, isFailureStop } from "./stages";
 import { totalTimeLimitRestOf } from "./rest";
 import type { NotificationLevel } from "../toasts";
+import type { QuestionDraftAnswer } from "../questionAnswerDrafts";
 
 /** The questions this run is waiting on, or none. */
 export function questionsOf(run: GraduationRun) {
   return run.escalation?.questions ?? [];
 }
 
-/** GEA: how many of the questions the author has answered so far. */
-export function answeredCount(
-  answers: Record<number, string>,
-  escalation: GraduationEscalation | null | undefined,
-): number {
-  if (!escalation) return 0;
-  return escalation.questions.filter((q) => (answers[q.position] ?? "").trim() !== "")
-    .length;
-}
-
 /**
- * GXD-FR-BJYT: the answers, covering every recorded question and nothing else.
+ * GEA-FR-VWQH: the whole ordered set of answers from the draft, or `null` while
+ * it does not cover every recorded question. The backend records nothing from
+ * a set that does not cover them all, so composing one would only be refused.
  *
- * A set that does not cover them all is not sent: the backend records nothing
- * from one, and composing it here would only produce a refusal.
+ * GEA-FR-TSQO: a chosen proposed response sends its own answer and summary, and
+ * the note where one was written. The own answer sends its text, its first 120
+ * characters as the summary (GEA-FR-NXFQ), and no note (GEA-FR-PLTO).
+ *
+ * GEA-FR-DNBI: an option's position is its 1-based place in the recorded list.
  */
-export function composeAnswers(
+export function composeEscalationAnswers(
   escalation: GraduationEscalation,
-  answers: Record<number, string>,
-  summaries: Record<number, string>,
+  recall: (position: number) => QuestionDraftAnswer,
 ): EscalationAnswerInput[] | null {
   const composed: EscalationAnswerInput[] = [];
   for (const question of escalation.questions) {
-    const answer = (answers[question.position] ?? "").trim();
-    if (answer === "") return null;
+    const draft = recall(question.position);
+    if (question.options.length === 0 || draft.ownWords) {
+      const answer = draft.typed.trim();
+      if (answer === "") return null;
+      // Counted in code points, the unit every escalation limit is counted in
+      // (ESU-FR-11), so a cut never splits a character in two.
+      const summary = Array.from(answer).slice(0, 120).join("");
+      composed.push({ position: question.position, answer, summary });
+      continue;
+    }
+    const option = draft.selected === null ? undefined : question.options[draft.selected - 1];
+    // A selection naming an option the re-read run no longer records is none.
+    if (!option) return null;
+    const note = draft.note.trim();
     composed.push({
       position: question.position,
-      answer,
-      summary: (summaries[question.position] ?? answer).slice(0, 120),
+      answer: option.answer,
+      summary: option.summary,
+      ...(note === "" ? {} : { note }),
     });
   }
   return composed;

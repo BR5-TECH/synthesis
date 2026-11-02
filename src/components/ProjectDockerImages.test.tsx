@@ -135,6 +135,7 @@ function backend(options: Scripted = {}) {
           enabled: false,
           socketPath: "",
           hostGateway: false,
+          underMicrosandbox: "vm_daemon",
           defaultSocketPath: "/var/run/docker.sock",
           support: "supported",
         };

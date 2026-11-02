@@ -150,8 +150,16 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
         // GXD-FR-QUCP: the sandbox cause in words, then the runtime's own
         // message on one line, which tells the author which fault to correct.
         AgentExecutionError::SandboxLaunchFailed(failure) => {
+            // GXD-FR-QUCP / EAC-FR-ZPTA: the daemon in the VM is corrected in
+            // the project's image or in Project settings, never in the run.
+            let daemon = crate::tools::agent_exec::sandbox::SandboxFailureCause::DockerDaemonUnavailable;
+            let correction = if failure.cause == daemon {
+                "Add dockerd to the project's image, or select No isolation for Docker-in-Docker in Project settings, in the Docker section."
+            } else {
+                "Correct the cause, or choose None in Global settings, in the Isolation section."
+            };
             socket_detail = format!(
-                "The Microsandbox VM could not start: {}. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.{}",
+                "The Microsandbox VM could not start: {}. {correction} Then use Continue.{}",
                 failure.cause.sentence(),
                 runtime_report(&failure.message)
             );
@@ -462,6 +470,26 @@ mod tests {
         );
         assert!(!load.detail.contains("exported from Docker"), "{}", load.detail);
         assert_eq!(settled_detail(&load, Some(false)), load.detail, "a launch detail stays whole");
+    }
+
+    // GXD-FR-QUCP, EAC-FR-ZPTA: a Docker daemon that is not available in the
+    // VM tells the author to add dockerd to the image or to select No
+    // isolation in Project settings, and to use Continue. It names no Global
+    // settings control.
+    #[test]
+    fn a_daemon_detail_names_the_project_corrections() {
+        let stop = stop_of_launch_error(
+            &sandbox_failure(
+                SandboxFailureCause::DockerDaemonUnavailable,
+                "dockerd is not in the image (exit 127)",
+            ),
+            TWO_HOURS,
+        );
+        assert_eq!(stop.reason, GraduationInterruptionReason::LaunchFailed);
+        assert_eq!(
+            stop.detail,
+            "The Microsandbox VM could not start: the Docker daemon in the VM is not available. Add dockerd to the project's image, or select No isolation for Docker-in-Docker in Project settings, in the Docker section. Then use Continue. The sandbox runtime reported: dockerd is not in the image (exit 127)"
+        );
     }
 
     // GXD-FR-QUCP: the runtime's message is put on one line, with no control

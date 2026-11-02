@@ -44,6 +44,7 @@ pub mod layout;
 pub mod library;
 pub mod logging;
 pub mod menu;
+pub mod model_downgrades;
 pub mod notes;
 pub mod notifications;
 mod onnx_runtime;
@@ -616,6 +617,8 @@ pub fn run() {
             embeddings::save_project_embeddings_mode,
             embeddings::get_embeddings_status,
             embeddings::start_reindex,
+            model_downgrades::load_model_downgrade_suppressions,
+            model_downgrades::save_model_downgrade_suppression,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

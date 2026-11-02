@@ -737,3 +737,6 @@ fn sandbox_real_a_pinned_gateway_is_reached_and_other_hosts_are_denied() {
     assert_eq!(field(&second, "gateway_read"), "probe-gateway-token", "{second}");
     assert_eq!(field(&first, "boot_id"), field(&second, "boot_id"), "the VM is reused");
 }
+
+#[path = "sandbox_probe_docker.rs"]
+mod docker;

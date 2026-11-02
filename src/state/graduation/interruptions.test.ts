@@ -188,6 +188,22 @@ describe("a Microsandbox VM that could not start", () => {
     );
   });
 
+  it("NTF-FR-BDNY, GXD-FR-QUCP: a Docker daemon that is not available in the VM is named as the cause", () => {
+    const run = makeRun("r1", "interrupted", {
+      interruption: {
+        reason: "launch_failed",
+        detail:
+          "The Microsandbox VM could not start: the Docker daemon in the VM is not available. Add dockerd to the project's image, or select No isolation for Docker-in-Docker in Project settings, in the Docker section. Then use Continue. The sandbox runtime reported: dockerd is not in the image (exit 127)",
+        at: "2026-11-02T14:02:36Z",
+      },
+    });
+    expect(raiseLevel(run)).toBe("Error");
+    expect(sandboxFailureCause(run)).toBe("the Docker daemon in the VM is not available");
+    expect(raiseStatement(run)).toMatch(
+      /stopped: the Microsandbox VM could not start — the Docker daemon in the VM is not available\.$/,
+    );
+  });
+
   it("NTF-FR-BDNY: another launch failure keeps the general cause", () => {
     const run = interrupted("launch_failed");
     expect(sandboxFailureCause(run)).toBeNull();

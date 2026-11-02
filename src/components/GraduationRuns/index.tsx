@@ -170,7 +170,7 @@ export function GraduationRuns({
       queueRef.current = next;
       setQueue(next);
       setCapacity(await capacityRead);
-      // GEA-FR-YFMY: an unsent answer belongs to a run that is still in the
+      // GEA-FR-KTME: an unsent answer belongs to a run that is still in the
       // project's listing. A run that has left it takes its draft with it.
       forgetRunsExcept(next.runs.map((entry) => entry.id));
       setError(null);
@@ -763,10 +763,6 @@ export function GraduationRuns({
               });
             }}
             onAnswered={() => void reload()}
-            onEscalationError={(message) => {
-              setActionRefusal(null);
-              setError(message);
-            }}
             // GRT-FR-XHLN: an accepted restart selects the run it created, also
             // over a run the author selected meanwhile, and focus goes to that
             // run's first control once its row stands. A filter that hides the

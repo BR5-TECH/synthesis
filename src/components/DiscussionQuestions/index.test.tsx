@@ -604,3 +604,32 @@ describe("the answer helpers", () => {
     ]);
   });
 });
+
+describe("one block for every host (DQA-FR-HSBK)", () => {
+  beforeEach(() => {
+    forgetEveryDraft();
+  });
+  afterEach(cleanup);
+
+  it("DQA-FR-HSBK, DQA-FR-CLHJ: two renderings of one set hold radio groups of their own", () => {
+    const set = setOf("s1", 1);
+    renderBlock(set);
+    renderBlock(set);
+    const [first, second] = screen.getAllByTestId("discussion-questions");
+    const names = (block: HTMLElement) =>
+      new Set([...block.querySelectorAll("input[type=radio]")].map((radio) => radio.getAttribute("name")));
+    const a = names(first);
+    const b = names(second);
+    // One group per question in each rendering, and none shared between them.
+    expect(a.size).toBe(1);
+    expect(b.size).toBe(1);
+    expect([...a].some((name) => b.has(name))).toBe(false);
+  });
+
+  it("DQA-FR-QWTB, DQA-FR-ZNOQ: a discussion's question always offers its options, never the field alone", () => {
+    renderBlock(setOf("s1", 1));
+    const question = screen.getByTestId("discussion-questions-question");
+    expect(question.querySelector("[data-alone]")).toBeNull();
+    expect(question.querySelectorAll("input[type=radio]")).toHaveLength(3);
+  });
+});

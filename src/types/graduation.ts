@@ -96,6 +96,8 @@ export interface EscalationAnswerInput {
   position: number;
   answer: string;
   summary: string;
+  /** GXD-FR-BJYT: the author's note beside a chosen response, where one was written. */
+  note?: string;
 }
 
 /** GXD-FR-HGSU: what a run in `awaiting_author` is waiting for. */

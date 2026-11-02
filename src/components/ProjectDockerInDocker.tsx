@@ -1,10 +1,12 @@
 /**
  * Project settings → Docker → **Docker-in-Docker** (SET-FR-21, SET-FR-NXDV,
- * SET-FR-JMHE, SET-FR-PQLA).
+ * SET-FR-JMHE, SET-FR-PQLA, SET-FR-PMHB).
  *
  * One checkbox above the vendor tabs, because the setting belongs to the whole
- * project and not to one vendor. While it is selected, a socket path field and a
- * Host gateway toggle follow it. Every change persists at once through
+ * project and not to one vendor. Under Microsandbox, a selector follows it that
+ * chooses between a Docker daemon in the VM and the host Docker socket. While
+ * the host socket applies, a socket path field and a Host gateway toggle
+ * follow. Every change persists at once through
  * "save docker in docker settings", so the controls hold no dirty state and take
  * no part in the per-section save model of SET-FR-08.
  *
@@ -15,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
 import { logInfo, logWarn } from "../logging";
-import type { DockerInDockerSettings, DockerInDockerState } from "../types";
+import type { DockerInDockerSettings, DockerInDockerState, UnderMicrosandbox } from "../types";
 
 const NOT_READ_MESSAGE =
   "The Docker-in-Docker settings could not be read, so nothing is shown and nothing was changed.";
@@ -29,8 +31,25 @@ export function dockerInDockerRefusalMessage(error: unknown): string {
   if (raw.includes("docker_in_docker_unsupported")) {
     return "Docker-in-Docker is not available on this platform. Nothing was saved.";
   }
+  if (raw.includes("underMicrosandbox") || raw.includes("unknown variant")) {
+    return "That choice for Microsandbox is not known. Nothing was saved.";
+  }
   return raw || "That could not be saved. Nothing was changed.";
 }
+
+/** SET-FR-PMHB: the two choices under Microsandbox, with their trade-off. */
+export const UNDER_MICROSANDBOX_CHOICES: [UnderMicrosandbox, string, string][] = [
+  [
+    "vm_daemon",
+    "Docker daemon in the VM",
+    "Keeps the microVM isolation. The VM starts a Docker daemon of its own, so the project's image must hold dockerd.",
+  ],
+  [
+    "host_socket",
+    "No isolation: use the host Docker socket",
+    "Gives up the isolation for the graduation runs of this project. Their agents run in a Docker container with the host Docker socket, as with Isolation None.",
+  ],
+];
 
 /** The code of a refusal alone: the path a refusal carries is the author's own. */
 function refusalCode(error: unknown): string {
@@ -56,11 +75,12 @@ export function ProjectDockerInDocker() {
   /** Writes go one after another, so the last change is the last write. */
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   /**
-   * SET-FR-PMHB: whether the machine's isolation is Microsandbox, which
-   * ignores this setting. Read once on mount; `false` until it has landed and
-   * where it cannot be read.
+   * SET-FR-PMHB: whether the machine's isolation is Microsandbox, under which
+   * the selector shows. Read once on mount; `null` until it has landed, so no
+   * control shows that the mode would hide, and `false` where it cannot be
+   * read.
    */
-  const [sandboxed, setSandboxed] = useState(false);
+  const [sandboxed, setSandboxed] = useState<boolean | null>(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -80,6 +100,7 @@ export function ProjectDockerInDocker() {
         logWarn(["frontend"], "the isolation mode could not be read", {
           code: refusalCode(reason),
         });
+        if (live) setSandboxed(false);
       });
     return () => {
       live = false;
@@ -97,6 +118,7 @@ export function ProjectDockerInDocker() {
           enabled: false,
           socketPath: "",
           hostGateway: false,
+          underMicrosandbox: "vm_daemon",
           defaultSocketPath: "",
           support: "supported",
         };
@@ -104,9 +126,11 @@ export function ProjectDockerInDocker() {
           enabled: found.enabled,
           socketPath: found.socketPath,
           hostGateway: found.hostGateway,
+          // An older backend that holds no choice reads as the default.
+          underMicrosandbox: found.underMicrosandbox ?? "vm_daemon",
         };
         desired.current = confirmed.current;
-        setState(found);
+        setState({ ...found, underMicrosandbox: confirmed.current.underMicrosandbox });
         setPathDraft(found.socketPath);
       })
       .catch((reason) => {
@@ -148,6 +172,7 @@ export function ProjectDockerInDocker() {
         logInfo(["frontend"], "docker-in-docker settings saved", {
           enabled: next.enabled,
           hostGateway: next.hostGateway,
+          underMicrosandbox: next.underMicrosandbox,
         });
       } catch (reason) {
         logWarn(["frontend"], "docker-in-docker settings were refused", {
@@ -174,7 +199,7 @@ export function ProjectDockerInDocker() {
       </p>
     );
   }
-  if (!state) {
+  if (!state || sandboxed === null) {
     return (
       <p className="docker-state" style={{ margin: 0 }}>
         Reading the Docker-in-Docker settings…
@@ -183,6 +208,10 @@ export function ProjectDockerInDocker() {
   }
 
   const unsupported = state.support === "unsupported";
+  const active = state.enabled && !unsupported;
+  // SET-FR-JMHE: the host socket applies while the isolation is None, and
+  // under Microsandbox only where the project selects it.
+  const hostSocket = !sandboxed || state.underMicrosandbox === "host_socket";
   const commitPath = () => {
     if (pathDraft.trim() === state.socketPath) return;
     void persist({ socketPath: pathDraft });
@@ -205,13 +234,6 @@ export function ProjectDockerInDocker() {
         daemon, for example when tests use Testcontainers. This setting is kept
         on this machine and is not committed with the project.
       </p>
-      {sandboxed && (
-        <p className="docker-state docker-in-docker__note" data-isolation="microsandbox">
-          Isolation is Microsandbox in Global settings, so this setting is
-          ignored: no host Docker socket is mounted, and a graduation start does
-          not check the socket. The setting is kept for when Isolation is None.
-        </p>
-      )}
       {unsupported && (
         <p className="docker-state docker-in-docker__note" data-platform="unsupported">
           Docker-in-Docker is not available on Windows. A named pipe cannot be
@@ -226,7 +248,37 @@ export function ProjectDockerInDocker() {
         </p>
       )}
 
-      {state.enabled && !unsupported && (
+      {sandboxed && active && (
+        <fieldset className="docker-in-docker__choices" data-isolation="microsandbox">
+          <legend className="docker-in-docker__legend">
+            Isolation is Microsandbox in Global settings. Choose how the agent
+            gets Docker:
+          </legend>
+          {UNDER_MICROSANDBOX_CHOICES.map(([value, label, tradeOff]) => (
+            <label key={value} className="docker-in-docker__choice">
+              <input
+                type="radio"
+                name="docker-in-docker-under-microsandbox"
+                value={value}
+                checked={state.underMicrosandbox === value}
+                aria-describedby={`docker-in-docker-${value}-note`}
+                onChange={() => void persist({ underMicrosandbox: value })}
+              />
+              <span>
+                <span className="docker-in-docker__choice-label">{label}</span>
+                <span
+                  id={`docker-in-docker-${value}-note`}
+                  className="docker-state docker-in-docker__note"
+                >
+                  {tradeOff}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      {active && hostSocket && (
         <>
           <div className="docker-field">
             <label className="picker-field__label" htmlFor="docker-in-docker-socket">

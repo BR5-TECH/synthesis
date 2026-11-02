@@ -313,6 +313,7 @@ fn an_answered_escalation_continues_its_pass() {
             position: 1,
             answer: "The first one.".to_string(),
             summary: "The first one".to_string(),
+            note: None,
         }],
     )
     .expect("the answers");

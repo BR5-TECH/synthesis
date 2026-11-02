@@ -8,7 +8,19 @@ fn root_of(dir: &TempDir) -> crate::fs::RootFs {
 }
 
 fn settings(enabled: bool, socket_path: &str, host_gateway: bool) -> DockerInDockerSettings {
-    DockerInDockerSettings { enabled, socket_path: socket_path.to_string(), host_gateway }
+    DockerInDockerSettings {
+        enabled,
+        socket_path: socket_path.to_string(),
+        host_gateway,
+        under_microsandbox: UnderMicrosandbox::VmDaemon,
+    }
+}
+
+fn with_choice(
+    settings: DockerInDockerSettings,
+    choice: UnderMicrosandbox,
+) -> DockerInDockerSettings {
+    DockerInDockerSettings { under_microsandbox: choice, ..settings }
 }
 
 // PSS-FR-DIND: a worktree with nothing stored is disabled, with the default
@@ -21,12 +33,15 @@ fn an_unconfigured_worktree_is_disabled() {
     assert!(!dir.path().join(".synthesis/local.toml").exists());
 }
 
-// PSS-FR-DIND, PSS-FR-QWTN: the three values round trip through local.toml and
-// never reach project.toml.
+// PSS-FR-DIND, PSS-FR-QWTN: the four values round trip through local.toml as
+// one record and never reach project.toml.
 #[test]
-fn the_three_values_round_trip_in_local_toml_only() {
+fn the_four_values_round_trip_in_local_toml_only() {
     let dir = TempDir::new().unwrap();
-    let saved = settings(true, "/run/user/1000/docker.sock", true);
+    let saved = with_choice(
+        settings(true, "/run/user/1000/docker.sock", true),
+        UnderMicrosandbox::HostSocket,
+    );
     save_docker_in_docker_settings_to(&root_of(&dir), saved.clone()).unwrap();
 
     assert_eq!(load_docker_in_docker_settings_from(&root_of(&dir)), saved);
@@ -128,4 +143,57 @@ fn the_support_level_follows_the_platform() {
         DockerInDockerSupport::Unsupported
     };
     assert_eq!(platform_support(), expected);
+}
+
+// PSS-FR-DIND: the Microsandbox choice defaults to the daemon in the VM, and
+// the stored text of each choice is its snake_case name.
+#[test]
+fn the_microsandbox_choice_defaults_to_the_vm_daemon() {
+    let dir = TempDir::new().unwrap();
+    assert_eq!(
+        load_docker_in_docker_settings_from(&root_of(&dir)).under_microsandbox,
+        UnderMicrosandbox::VmDaemon
+    );
+    let saved = with_choice(settings(true, "", false), UnderMicrosandbox::HostSocket);
+    save_docker_in_docker_settings_to(&root_of(&dir), saved).unwrap();
+    let local = std::fs::read_to_string(dir.path().join(".synthesis/local.toml")).unwrap();
+    assert!(local.contains("underMicrosandbox = \"host_socket\""), "{local}");
+
+    save_docker_in_docker_settings_to(&root_of(&dir), settings(true, "", false)).unwrap();
+    assert_eq!(
+        read_docker_in_docker_settings(&root_of(&dir)).under_microsandbox,
+        UnderMicrosandbox::VmDaemon
+    );
+}
+
+// PSS-FR-QWTN: an unknown stored choice reads as the default and costs only
+// itself.
+#[test]
+fn an_unknown_stored_choice_reads_as_the_default() {
+    let dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
+    std::fs::write(
+        dir.path().join(".synthesis/local.toml"),
+        "[docker_in_docker]\nenabled = true\nsocketPath = \"/a/b.sock\"\nhostGateway = true\nunderMicrosandbox = \"host_root\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        load_docker_in_docker_settings_from(&root_of(&dir)),
+        settings(true, "/a/b.sock", true)
+    );
+}
+
+// PSS-FR-VRHC: a save whose choice is not `vm_daemon` or `host_socket` is
+// refused at the command boundary, so nothing is written.
+#[test]
+fn an_unknown_choice_is_refused_by_the_save_command() {
+    let refused = serde_json::from_value::<DockerInDockerSettings>(serde_json::json!({
+        "enabled": true, "socketPath": "", "hostGateway": false, "underMicrosandbox": "privileged",
+    }));
+    assert!(refused.is_err());
+    let accepted = serde_json::from_value::<DockerInDockerSettings>(serde_json::json!({
+        "enabled": true, "socketPath": "", "hostGateway": false, "underMicrosandbox": "host_socket",
+    }))
+    .unwrap();
+    assert_eq!(accepted.under_microsandbox, UnderMicrosandbox::HostSocket);
 }

@@ -61,7 +61,12 @@ mod tests {
     use super::*;
 
     fn settings(path: &str, host_gateway: bool) -> DockerInDockerLaunch {
-        DockerInDockerLaunch { enabled: true, socket_path: path.to_string(), host_gateway }
+        DockerInDockerLaunch {
+            enabled: true,
+            socket_path: path.to_string(),
+            host_gateway,
+            ..Default::default()
+        }
     }
 
     // EAC-FR-DKRS: disabled settings add nothing and read no path.
@@ -71,6 +76,7 @@ mod tests {
             enabled: false,
             socket_path: "/does/not/exist.sock".to_string(),
             host_gateway: true,
+            ..Default::default()
         };
         assert_eq!(additions(&off).unwrap(), DockerInDockerAdditions::default());
     }

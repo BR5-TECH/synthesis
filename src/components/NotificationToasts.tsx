@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { ToastActionMenu } from "./ToastActionMenu";
 import {
   dismissToast,
   INFO_TOAST_MS,
@@ -181,11 +182,17 @@ function ToastItem({
             {toast.link.label}
           </button>
         )}
+        {/* NTF-FR-JXQL: the action menu of a toast with an address. A
+            succeeded pick removes the toast (NTF-FR-LHVU). */}
+        {toast.address && toast.menu && (
+          <ToastActionMenu menu={toast.menu} onDone={() => dismissToast(toast.key)} />
+        )}
       </div>
       <button
         type="button"
         className="icon-btn"
-        aria-label="Dismiss"
+        // NTF-FR-RPZS: "Acknowledge" on the model downgrade toast.
+        aria-label={toast.dismissLabel ?? "Dismiss"}
         onClick={onDismissClick}
         style={{ flex: "0 0 auto" }}
       >

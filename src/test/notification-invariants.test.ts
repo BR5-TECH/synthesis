@@ -71,7 +71,9 @@ describe("ordinary work raises nothing (NTF-FR-24)", () => {
     //    looking at. Nothing raises when such a proposal is *decided*; and
     //  - a graduation start or a merge that the backend refuses because the
     //    Docker socket is not there (GSD-FR-BXKR), which the refused surface
-    //    reports and this file raises as an Error toast.
+    //    reports and this file raises as an Error toast; and
+    //  - a model downgrade (NTF-FR-AGTB), which the backend reports and this
+    //    file raises as a Warn toast unless a suppression rule mutes the pair.
     //
     // This test is the deliberate gate on that list: adding a call means
     // updating it, and updating it means saying which surface now interrupts

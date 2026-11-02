@@ -2,50 +2,46 @@
  * Where a run that stopped to ask something is answered
  * (`../../../specifications/ui/GEA-graduation-escalation-answering.md`).
  *
- * The reason the run raised, then every question it recorded in the order it
- * recorded them (GEA-FR-SXXB). Each question's proposed responses and its own
- * free-text field are rows of **one** answer group rather than a list with a
- * field beside it (GEA-FR-ZSDY), so what is selected is the answer
- * (GEA-FR-UWLK) rather than something inferred from which field holds a value.
+ * The questions render in the application's one question block
+ * (`../QuestionSet/index.tsx`, GEA-FR-QBWN), so an escalation is answered
+ * exactly as a discussion's set is. This host supplies what an escalation owns
+ * (`DQA-discussion-question-answering.md` DQA-FR-RTWE): the turn that asked as
+ * the head (GEA-FR-KMVR), the reason behind a closed disclosure (GEA-FR-SXXB),
+ * the merge or update context (GEA-FR-WQZH, GEA-FR-ZRGP), the draft keyed by the
+ * owner (GEA-FR-XTUE, GEA-FR-LWQD), and the entry each answer sends
+ * (GEA-FR-VWQH, GEA-FR-TSQO).
  *
- * What the author has entered and not yet sent is held outside this component
- * (`../../state/escalationDrafts.ts`), so a reload, a look at the agent output,
- * a move to another run and back, and a refusal of the whole set all leave the
- * work where it was (GEA-FR-YFMY).
- *
- * The whole ordered set goes back in one call (GEA-FR-VWQH), and until the
- * backend has accepted it the run is still rendered as waiting on the author
- * (GEA-FR-VIPR).
- *
- * GEA-FR-LWQD: it serves a work stream update's escalation on the same terms. An
- * update belongs to a stream and to no run, so what this component is given is
- * the recorded escalation, an owner id to hold the draft against, and the send
- * that belongs to whichever record holds it — never a run. A merge run's
- * escalation is a run's (GEA-FR-MRDK) and is answered here through the run.
+ * The whole ordered set goes back in one call, and until the backend has
+ * accepted it the run is still rendered as waiting on the author (GEA-FR-VIPR).
  */
 
-import { useEffect, useReducer, useState, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 
 import * as api from "../../api";
-import { logError } from "../../logging";
 import {
+  adoptEscalation,
   forgetRun,
   recallAnswer,
+  recallRefusal,
   reconcile,
   rememberAnswer,
-  type DraftAnswer,
+  rememberRefusal,
 } from "../../state/escalationDrafts";
 import {
-  answeredCount,
-  composeAnswers,
+  composeEscalationAnswers,
   graduationErrorMessage,
 } from "../../state/graduation";
 import type {
   EscalationAnswerInput,
   GraduationEscalation,
-  GraduationEscalationQuestion,
+  GraduationEscalationOrigin,
   GraduationRun,
 } from "../../types";
+import {
+  QuestionSetBlock,
+  type QuestionSetDrafts,
+  type SetQuestion,
+} from "../QuestionSet";
 
 import { MergeEscalationContext } from "./merge";
 
@@ -60,33 +56,30 @@ export interface EscalationFormProps {
   /** GEA-FR-VWQH: the whole ordered set, in one call. */
   onSend: (answers: EscalationAnswerInput[]) => Promise<unknown>;
   onAnswered: () => void;
-  onError: (message: string) => void;
   /**
-   * GEA-FR-WQZH: what a merge run's escalation additionally names, rendered
-   * under the reason and above the questions.
+   * GEA-FR-WQZH, GEA-FR-ZRGP: what a merge run's or an update's escalation
+   * additionally names, between the head and the question.
    */
   context?: ReactNode;
   /**
-   * How a refusal of this owner's operation reads.
-   *
-   * A run's refusals and a work stream update's are different vocabularies, and
-   * a code one of them does not know renders as the bare code. The owner that
-   * made the call is the one that can name it.
+   * How a refusal of this owner's operation reads. A run's refusals and a work
+   * stream update's are different vocabularies, and the owner that made the call
+   * is the one that can name it.
    */
   describeError?: (reason: string) => string;
+  /** What stopped: a run, or a work stream update (GEA-FR-LWQD). */
+  subject?: "run" | "update";
 }
 
-/** The run-shaped entry point, for the run region that already had one. */
+/** The run-shaped entry point, for the run region. */
 export function RunEscalationForm({
   run,
   busy,
   onAnswered,
-  onError,
 }: {
   run: GraduationRun;
   busy: boolean;
   onAnswered: () => void;
-  onError: (message: string) => void;
 }) {
   return (
     <EscalationForm
@@ -95,12 +88,23 @@ export function RunEscalationForm({
       busy={busy}
       onSend={(answers) => api.answerGraduationEscalation(run.id, answers)}
       onAnswered={onAnswered}
-      onError={onError}
       // GEA-FR-MRDK / GEA-FR-WQZH: a merge run is answered here like any run,
       // and additionally names its unresolved paths and its publication.
       context={run.merge ? <MergeEscalationContext run={run} /> : undefined}
     />
   );
+}
+
+/** GEA-FR-KMVR: the turn that asked, from the escalation's recorded origin. */
+export function askingTurn(origin: GraduationEscalationOrigin): string {
+  switch (origin) {
+    case "work":
+      return "Work turn";
+    case "review":
+      return "Review turn";
+    case "semantic_merge":
+      return "Merge turn";
+  }
 }
 
 export function EscalationForm({
@@ -109,22 +113,13 @@ export function EscalationForm({
   busy,
   onSend,
   onAnswered,
-  onError,
   context,
   describeError = graduationErrorMessage,
+  subject = "run",
 }: EscalationFormProps) {
-  // The draft lives outside this component, so a write to it is what the
-  // render has to be told about.
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
-  const [sending, setSending] = useState(false);
-  const runId = ownerId;
-
-  // A set in flight belongs to the run it was composed for: the region hands
-  // this form the run the author selects, and a call still running for the run
-  // before it must not hold the new one's controls closed.
-  useEffect(() => {
-    setSending(false);
-  }, [runId]);
+  // GEA-FR-KTME: a draft entered against an earlier escalation of this owner is
+  // not offered for a later one. Before the draft is read, so no render shows it.
+  adoptEscalation(ownerId, escalation.raisedAt);
 
   // GEA-FR-VBUG: a re-read of the run is reconciled rather than replaced. Every
   // entry whose position the escalation still records is kept against that
@@ -137,214 +132,64 @@ export function EscalationForm({
     );
   }, [ownerId, escalation]);
 
-  const answers: Record<number, string> = {};
-  const summaries: Record<number, string> = {};
-  for (const question of escalation.questions) {
-    const draft = recallAnswer(ownerId, question.position);
-    const answer = effectiveAnswer(question, draft);
-    if (answer !== "") answers[question.position] = answer;
-    const summary = effectiveSummary(question, draft);
-    if (summary !== null) summaries[question.position] = summary;
-  }
-  const composed = composeAnswers(escalation, answers, summaries);
-  const answered = answeredCount(answers, escalation);
-  const outstanding = escalation.questions.length - answered;
-  const locked = busy || sending;
+  // GEA-FR-DNBI: each proposed response is one option, its summary the label and
+  // its description what the rails show. GEA-FR-BHKU: the description is
+  // display-only. GEA-FR-SKWP: no internal field name is rendered.
+  const questions: SetQuestion[] = useMemo(
+    () =>
+      escalation.questions.map((question) => ({
+        position: question.position,
+        text: question.question,
+        options: question.options.map((option, index) => ({
+          position: index + 1,
+          label: option.summary,
+          description: option.description,
+        })),
+      })),
+    [escalation.questions],
+  );
 
-  const write = (position: number, draft: DraftAnswer) => {
-    rememberAnswer(ownerId, position, draft);
-    redraw();
+  // GEA-FR-XTUE, GEA-FR-LWQD: the draft is keyed by the owner and the position.
+  const drafts: QuestionSetDrafts = {
+    recall: (position) => recallAnswer(ownerId, position),
+    remember: (position, answer) => rememberAnswer(ownerId, position, answer),
+    recallRefusal: () => recallRefusal(ownerId),
+    rememberRefusal: (text) => rememberRefusal(ownerId, text),
   };
 
+  const turn = askingTurn(escalation.origin);
+
   return (
-    <section className="graduation__escalation" data-testid="graduation-escalation">
-      {/* GEA-FR-SXXB / ESU-FR-12: the reason, verbatim. GRU-FR-MRPE: escaped
-          plain text, with no Markdown and no embedded markup. */}
-      <p className="graduation__reason">{escalation.reason}</p>
-
-      {/* GEA-FR-WQZH: a merge run's affected paths and publication choice. */}
-      {context}
-
-      {escalation.questions.map((question, index) => {
-        const draft = recallAnswer(ownerId, question.position);
-        const alone = question.options.length === 0;
-        return (
-          <div
-            className="graduation__question"
-            key={question.position}
-            data-testid="graduation-question"
-          >
-            <div className="graduation__question-head">
-              <span className="graduation__question-count">
-                {/* Counted over the set as it was recorded. A question's
-                    `position` is a stable id rather than an ordinal, so a set
-                    recorded at positions 2 and 5 would otherwise read as
-                    "Question 5 of 2". */}
-                Question {index + 1} of {escalation.questions.length}
-              </span>
-            </div>
-            <fieldset className="graduation__answer">
-              <legend className="graduation__ask">{question.question}</legend>
-
-              {/* GEA-FR-DNBI: each proposed response as its summary, with its
-                  description as supporting text beneath. GEA-FR-BHKU: the
-                  description is display-only and is submitted nowhere. */}
-              {question.options.map((option) => (
-                <label
-                  className="graduation__choice"
-                  key={option.answer}
-                  data-selected={
-                    !draft.ownWords && draft.selected === option.answer
-                      ? "true"
-                      : undefined
-                  }
-                >
-                  <input
-                    type="radio"
-                    name={`graduation-answer-${ownerId}-${question.position}`}
-                    checked={!draft.ownWords && draft.selected === option.answer}
-                    disabled={locked}
-                    // GEA-FR-GCTA: choosing a response leaves the words the
-                    // author typed where they were.
-                    onChange={() =>
-                      write(question.position, {
-                        ...draft,
-                        selected: option.answer,
-                        ownWords: false,
-                      })
-                    }
-                  />
-                  <span className="graduation__option">
-                    <span className="graduation__option-summary">
-                      {option.summary}
-                    </span>
-                    {option.description && (
-                      <span className="graduation__option-description">
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
-
-              {/* GEA-FR-ZGHY / GEA-FR-LRCD: a question recorded with no
-                  proposed responses has this row and no other, so its text
-                  answers it whether or not a choice was ever pressed — there is
-                  nothing else it could have meant. */}
-              <div
-                className="graduation__choice graduation__choice--own"
-                data-selected={draft.ownWords ? "true" : undefined}
-                data-alone={alone ? "true" : undefined}
-              >
-                {!alone && (
-                  <label className="graduation__own-head">
-                    <input
-                      type="radio"
-                      name={`graduation-answer-${ownerId}-${question.position}`}
-                      checked={draft.ownWords}
-                      disabled={locked}
-                      onChange={() =>
-                        write(question.position, { ...draft, ownWords: true })
-                      }
-                    />
-                    <span>In my own words</span>
-                  </label>
-                )}
-                <textarea
-                  className="draft-review__feedback graduation__typed"
-                  aria-label={`Your answer to question ${question.position}`}
-                  value={draft.typed}
-                  disabled={locked}
-                  // GEA-FR-UEFS: typing selects this row, and GEA-FR-GCTA: it
-                  // clears no proposed response the author had chosen.
-                  onChange={(event) =>
-                    write(question.position, {
-                      ...draft,
-                      typed: event.target.value,
-                      ownWords: true,
-                    })
-                  }
-                />
-              </div>
-            </fieldset>
-          </div>
-        );
-      })}
-
-      <div className="graduation__question-foot">
-        {/* GEA-FR-YMLV / GEA-FR-FZMW: which of the set are answered, and how
-            many still need one, so a disabled control is never a mystery. */}
-        <span
-          className="graduation__question-count"
-          data-testid="graduation-answered-count"
-        >
-          {answered} of {escalation.questions.length} answered
-          {outstanding > 0 &&
-            ` · ${outstanding === 1 ? "1 question needs" : `${outstanding} questions need`} an answer`}
-        </span>
-        <span className="spacer" />
-        <button
-          type="button"
-          className="btn btn--sm btn--primary"
-          // GEA-FR-FFKD: enabled only once every recorded question is answered.
-          disabled={locked || composed === null}
-          data-testid="graduation-send-answers"
-          onClick={() => {
-            if (!composed) return;
-            setSending(true);
-            void onSend(composed)
-              .then(() => {
-                // The set is with the backend, so the draft it was composed
-                // from has nothing left to protect.
-                forgetRun(ownerId);
-                onAnswered();
-              })
-              // GEA-FR-TEMG: a refusal leaves every entered answer intact, so
-              // the author corrects what was refused rather than typing the
-              // whole set again.
-              .catch((reason) => {
-                logError(["frontend"], "the answers were refused", {});
-                onError(describeError(String(reason)));
-              })
-              .finally(() => setSending(false));
-          }}
-        >
-          Send answers
-        </button>
-      </div>
-    </section>
+    <div className="graduation__escalation" data-testid="graduation-escalation">
+      <QuestionSetBlock
+        // DQA-FR-GVSA: a later escalation of the same run is a set that
+        // replaces another, so it opens on its first question.
+        setKey={`${ownerId}:${escalation.raisedAt}`}
+        questions={questions}
+        drafts={drafts}
+        label={`Questions from the ${turn.toLowerCase()}`}
+        asker={<span className="discussion-questions__handle">{turn}</span>}
+        headDetail={
+          // GEA-FR-SXXB / ESU-FR-12: the reason, verbatim, behind a disclosure
+          // that is closed by default. GRU-FR-MRPE: escaped plain text.
+          <details className="discussion-questions__reason" data-testid="graduation-reason">
+            <summary>{subject === "update" ? "Why the update stopped" : "Why the run stopped"}</summary>
+            <p className="discussion-questions__reason-text">{escalation.reason}</p>
+          </details>
+        }
+        context={context}
+        disabled={busy}
+        compose={() => composeEscalationAnswers(escalation, drafts.recall)}
+        onSubmit={onSend}
+        onSubmitted={() => {
+          // GEA-FR-KTME: the set is with the backend, so the draft it was
+          // composed from has nothing left to protect.
+          forgetRun(ownerId);
+          onAnswered();
+        }}
+        describeError={describeError}
+        logFields={{ ownerId, origin: escalation.origin }}
+      />
+    </div>
   );
-}
-
-/**
- * GEA-FR-UWLK: the answer is what the selected row holds.
- *
- * GEA-FR-LRCD: a question with no proposed responses is answered by its text
- * whether or not its row was ever pressed.
- */
-function effectiveAnswer(
-  question: GraduationEscalationQuestion,
-  draft: DraftAnswer,
-): string {
-  if (question.options.length === 0) return draft.typed.trim() === "" ? "" : draft.typed;
-  if (draft.ownWords) return draft.typed.trim() === "" ? "" : draft.typed;
-  const chosen = question.options.find(
-    (option) => option.answer === draft.selected,
-  );
-  return chosen ? chosen.answer : "";
-}
-
-/**
- * GEA-FR-TSQO: a selected response submits its own summary. The author's own
- * words carry none, so the operation makes one from the text.
- */
-function effectiveSummary(
-  question: GraduationEscalationQuestion,
-  draft: DraftAnswer,
-): string | null {
-  if (draft.ownWords) return null;
-  const chosen = question.options.find(
-    (option) => option.answer === draft.selected,
-  );
-  return chosen ? chosen.summary : null;
 }

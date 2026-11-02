@@ -87,6 +87,8 @@ pub(super) struct TurnPlan {
     /// AGC-FR-OYVH: the size of the document the input was built from, or
     /// `None` on a note target and where it could not be read.
     pub(super) document: Option<DocumentSize>,
+    /// AGC-FR-UVKF: the model downgrade pairs this turn has emitted.
+    pub(super) reported_downgrades: ReportedDowngrades,
 }
 
 /// AGC-FR-24: `@<nickname> is thinking about <draft name>…` for a draft,
@@ -448,6 +450,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         resolution_baseline,
         document_budget,
         document,
+        reported_downgrades: ReportedDowngrades::default(),
     };
 
     let app = app.clone();

@@ -3623,6 +3623,9 @@ const agentsOfScope = (scope: string) =>
   return made;
 };
 
+/** GSS-FR-DAKR: the model downgrade suppression rules of the session. */
+let modelDowngradeRules: { requestedModel: string; servedModel: string; expiresAt: string | null }[] = [];
+
 /**
  * AGC-FR-22: the turns in flight. Seeded with one so the roster's answering
  * marker (AGT-FR-05) is visible without firing an event first; a turn can be
@@ -6622,6 +6625,77 @@ graduationRuns.push(
       capturedAt: "2026-09-05T16:00:00Z",
     },
   }),
+  // GEA-FR-QBWN / GEA-FR-SXXB / GEA-FR-KMVR: a work run at rest on a
+  // two-question escalation, current shape. The reason is long so the closed
+  // "Why the run stopped" disclosure has something to hold; the second question
+  // has no options, so the text field stands alone.
+  makeStreamRun({
+    id: "g-28",
+    draftId: "d-28",
+    state: "awaiting_author",
+    input: {
+      draftId: "d-28",
+      draftName: "Branch pruning rule",
+      prompt: "A command that prunes branches whose upstream is gone.",
+      promptChecksum: "sha-p28",
+      capturedAt: "2026-09-05T17:00:00Z",
+    },
+    escalation: {
+      origin: "work",
+      raisedAt: "2026-09-06T13:00:00Z",
+      reason:
+        "The prompt asks for stale branches to be pruned, but it never says what counts as stale. " +
+        "The specification of the git panel defines a stale branch as one whose upstream is gone, " +
+        "while the worktree cleanup treats a branch as stale after thirty days without a commit. " +
+        "The two rules disagree on branches that still hold unmerged commits, and picking one " +
+        "silently would either lose work or leave the list of branches as long as it is now. " +
+        "The work turn stopped here so that the author decides which rule the command follows.",
+      questions: [
+        {
+          position: 1,
+          question:
+            "What should the command do with a branch whose upstream is gone but which still holds unmerged commits?",
+          options: [
+            {
+              answer: "skip",
+              summary: "Skip the branch",
+              description: "The branch is reported in the summary and left alone, so no commit is lost.",
+            },
+            {
+              answer: "prune",
+              summary: "Prune it anyway",
+              description: "The branch is deleted with its commits. They stay reachable from the reflog for a time.",
+            },
+            {
+              answer: "ask",
+              summary: "Ask each time",
+              description: "The command lists such branches and asks before it deletes each one.",
+            },
+          ],
+        },
+        {
+          position: 2,
+          question: "Is there any branch name the command must never touch?",
+          options: [],
+        },
+      ],
+    },
+    observability: {
+      observabilityVersion: 1,
+      currentStage: "working",
+      stageCondition: "waiting",
+      stageHistory: [],
+      passes: [
+        {
+          pass: 1,
+          status: "working",
+          task: "Add a command that prunes branches whose upstream is gone.",
+          findings: [],
+          startedAt: "2026-09-06T12:30:00Z",
+        },
+      ],
+    },
+  }),
 );
 
 /**
@@ -7322,7 +7396,12 @@ function mockIsolationState() {
     effectiveDiskGib: Math.min(Math.max(mockIsolation.diskGib ?? 64, 8), host.diskGib),
   };
 }
-const mockDockerInDocker = { enabled: false, socketPath: "", hostGateway: false };
+const mockDockerInDocker: { enabled: boolean; socketPath: string; hostGateway: boolean; underMicrosandbox: "vm_daemon" | "host_socket" } = {
+  enabled: false,
+  socketPath: "",
+  hostGateway: false,
+  underMicrosandbox: "vm_daemon",
+};
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
   {
@@ -10415,12 +10494,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "load_project_docker_images":
       return mockDockerImages;
     // SET-FR-NXDV: the project-local Docker-in-Docker settings. The save keeps
-    // the three values, so a reload shows what the section wrote.
+    // the four values, so a reload shows what the section wrote.
     case "load_docker_in_docker_settings":
       return {
         enabled: mockDockerInDocker.enabled,
         socketPath: mockDockerInDocker.socketPath,
         hostGateway: mockDockerInDocker.hostGateway,
+        underMicrosandbox: mockDockerInDocker.underMicrosandbox,
         defaultSocketPath: "/var/run/docker.sock",
         support: "supported",
       };
@@ -10429,6 +10509,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       mockDockerInDocker.enabled = Boolean(next.enabled);
       mockDockerInDocker.socketPath = String(next.socketPath ?? "").trim();
       mockDockerInDocker.hostGateway = Boolean(next.hostGateway);
+      mockDockerInDocker.underMicrosandbox =
+        next.underMicrosandbox === "host_socket" ? "host_socket" : "vm_daemon";
       return undefined;
     }
     // GLS-FR-YAEA / GSS-FR-DPWS: the isolation settings and the facts of this
@@ -10772,6 +10854,28 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       agentTurns = [turn, ...agentTurns];
       fireBus("agent-turn-state-changed", { ...turn });
       return turn;
+    }
+    // GSS-FR-PCPW / GSS-FR-UUET: the model downgrade suppression rules,
+    // kept for the session. Fire `model-downgrade-detected` with
+    // `__fireBusEvent` to raise the toast (NTF-FR-AGTB).
+    case "load_model_downgrade_suppressions":
+      return modelDowngradeRules.filter(
+        (r) => r.expiresAt == null || Date.parse(r.expiresAt) > Date.now(),
+      );
+    case "save_model_downgrade_suppression": {
+      const hours = { hour: 1, day: 24, week: 168 }[a.duration as string];
+      const rule = {
+        requestedModel: a.requestedModel as string,
+        servedModel: a.servedModel as string,
+        expiresAt: hours ? new Date(Date.now() + hours * 3_600_000).toISOString() : null,
+      };
+      modelDowngradeRules = [
+        ...modelDowngradeRules.filter(
+          (r) => r.requestedModel !== rule.requestedModel || r.servedModel !== rule.servedModel,
+        ),
+        rule,
+      ];
+      return rule;
     }
     case "list_agent_turns":
       // AGC-FR-22: a null origin returns every turn in flight anywhere, which

@@ -98,7 +98,7 @@ export function answerTargetOf(
   for (let step = 1; step < count; step += 1) {
     const next = set.questions[(from + step + count) % count];
     const target = { setId: set.setId, position: next.position };
-    if (!isAnswered(set.setId, next.position) && !taken(target)) return target;
+    if (!isAnswered(set, next.position) && !taken(target)) return target;
   }
   return shown;
 }

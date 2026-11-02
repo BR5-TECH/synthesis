@@ -27,13 +27,17 @@ describe("the accent means one thing (DDS-FR-CVLM)", () => {
     const filled: string[] = [];
     for (const rule of style().matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const background = decl(rule[2], "background") ?? "";
-      if (background.includes("--accent")) filled.push(rule[1].trim());
+      if (!background.includes("--accent")) continue;
+      for (const selector of rule[1].split(",")) filled.push(selector.trim().replace(/\s+/g, " "));
     }
     expect(filled.sort()).toEqual(
       [
         '.dds-stream-chip[data-kind="question"]',
         ".dds-question__option[data-chosen]",
         '.dds-discussion .discussion-questions__choice[data-selected="true"]',
+        // GEA-FR-HWRT: the escalation host's block is the same row, with the
+        // same meaning — what the author chose.
+        '.graduation__escalation .discussion-questions__choice[data-selected="true"]',
       ].sort(),
     );
   });

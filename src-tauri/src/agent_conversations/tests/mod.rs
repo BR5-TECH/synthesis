@@ -659,6 +659,7 @@ mod document_limit_turns;
 mod durable_record;
 mod images;
 mod invalid_arguments;
+mod model_downgrades;
 mod note_discussions;
 mod openrouter;
 mod origin_contract;

@@ -436,4 +436,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "save_project_embeddings_mode",
     "get_embeddings_status",
     "start_reindex",
+    // Model downgrade suppressions (GSS-global-settings-storage.md GSS-FR-PCPW, GSS-FR-UUET).
+    "load_model_downgrade_suppressions",
+    "save_model_downgrade_suppression",
 ];

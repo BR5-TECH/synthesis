@@ -25,6 +25,7 @@ export * from "./git";
 export * from "./githubPolling";
 export * from "./integrations";
 export * from "./library";
+export * from "./modelDowngrades";
 export * from "./panels";
 export * from "./project";
 export * from "./streams";

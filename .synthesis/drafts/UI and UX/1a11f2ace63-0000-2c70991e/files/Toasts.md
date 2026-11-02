@@ -28,6 +28,7 @@ The author who is working in the application window must learn at once, and with
 ### Sources and levels
 
 - Only the existing five raises of NTF-FR-24 raise toasts. Nothing new raises in this work. The API stays open for later surfaces.
+- A model downgrade (the `Model downgrades` draft) is a later toast source: a Warn toast with the Suppress action menu, exempt from NTF-FR-08.
 - Default levels: rehearsal = Info; draft-prompt change proposed = Info; prompt-artifact change proposed = Info; GitHub poll with new ready tasks = Info; graduation run waiting on a question, a review, or a stopped publication = Warn; graduation run completed = Info; graduation run failed or interrupted on a failure reason = Error.
 
 ### Toast behaviour

@@ -183,12 +183,28 @@ Every command errors with a typed `no_project_open` when no project is open.
 
 A turn's states divide two ways, and the two divisions are independent. A state is **terminal** when the turn has made its last model call and its working state is gone — `delivered`, `awaiting_reply`, `failed`, and `cancelled` all are, and `running` alone is not. A turn is **outstanding** when `list_agent_turns` still returns it — `running` and `awaiting_reply` are, the other three are not. `awaiting_reply` is therefore both: the turn is over and nothing of it survives but the registration recording that this agent asked something in this conversation, which is what keeps a surface from drawing it as still working and what a fresh turn for that agent retires (AGC-FR-28, AGC-FR-29).
 
+- `"model downgrade detected"` — carries one `ModelDowngrade`, emitted once for each requested→served pair a turn finds (AGC-FR-BXOS, AGC-FR-UVKF). Consumed by `../ui/NTF-notifications.md` NTF-FR-AGTB.
+
+```
+ModelDowngrade {
+  source: "agent" | "graduation",
+  requested_model: string,    // the model id of the endpoint, exactly as sent
+  served_model: string,       // the model id the response reported, exactly as received
+  provider: string,           // the provider id of the endpoint
+  project_key: string,        // the key of the per-project slot (GSS-FR-18)
+  worktree: string,           // the absolute path of the worktree the work runs in
+  origin: ConversationOrigin | null,  // source "agent": the conversation of the turn
+  run_id: string | null       // source "graduation": the run (`../ai/GRL-graduation-loop.md` GRL-FR-OPRK)
+}
+```
+
 ### Internal (no UI consumer; not Tauri commands and unreachable from the frontend)
 - `record_refinement_lifecycle(turn)` — composes the `RefinementTurnRecord` of the Contract surface for a **draft-scoped** turn that has just reached a terminal state and hands it to `DSS-draft-statistics-storage.md` (AGC-FR-YQMD). It is called once per such turn and never for a turn whose target is an artifact or a note.
 - `record_refinement_usage(turn, usage)` — composes the `RefinementUsageRecord` for one reliable provider-reported usage record the loop surfaced (per `../ai/CVL-conversation-loop.md` CVL-FR-WQZD) and hands it to the same sink (AGC-FR-BVNT). It is called once per surfaced record and never for a non-draft origin.
 
 - `take_steering_messages(turn_id)` and `close_steering(turn_id)` — the consumers of the loop's steering seams (per `../ai/CVL-conversation-loop.md` CVL-FR-EZKC, CVL-FR-YNOE). The first returns the steering messages the turn took and the loop did not append yet, oldest first, and empties them. The second makes the turn take no further message (AGC-FR-CEKN).
 - `wait_for_speech(turn_id)` — the consumer of the loop's hold seam (per `../ai/CVL-conversation-loop.md` CVL-FR-SZKK). It returns when the turn takes a steering message or when its speech ends, and it sets `reply_held` while it waits (AGC-FR-QYNZ). It returns at once for a turn bound to no open speech.
+- `note_served_model(turn_id, model)` — the consumer of the loop's `report_served_model` seam (per `../ai/CVL-conversation-loop.md` CVL-FR-XBMT). It compares the id with the requested id and emits the event of AGC-FR-UVKF for a pair the turn did not emit yet.
 - `hold_turn_context(turn_id, context)` — the consumer of the loop's `report_context` seam (per `../ai/CVL-conversation-loop.md` CVL-FR-OPTI). It completes the figures into a `TurnContext`, sets it on the in-memory turn, and emits the turn (AGC-FR-NJXW). It writes nothing anywhere.
 - `build_input(origin, trigger_comment_id, accepts_image_input, budget)` — the per-target-kind builder set of AGC-FR-05; `budget` is `{ window, percent }`, resolved at dispatch (AGC-FR-GMSF), and decides the bound of the `artifact` section (AGC-FR-XHHT); returns the `InputSection[]` the loop's request carries (per `../ai/CVL-conversation-loop.md` CVL-FR-01), each section holding its ordered content parts. `accepts_image_input` is the resolved endpoint's own capability (AGC-FR-36) and decides whether an image is carried as image content or as the metadata that stands in for it (AGC-FR-35, AGC-FR-37). On a draft origin it also reads that draft's proposals through `DCP-draft-change-proposals.md`'s `read_proposal_changes` (DCP-FR-HNWD), which is the only store this builder reads beyond the conversation and the material under discussion.
 
@@ -299,6 +315,9 @@ A turn's states divide two ways, and the two divisions are independent. A state 
 53. **AGC-FR-JFBZ** `estimate_discussion_context` assembles the input a turn would carry for that target and discussion, with an empty `current_comment` and with the effective context size of `agent_id`'s model as `window` (per `AAP-ai-api-integrations.md` AAP-FR-RANS). It makes no model call, reads no key, registers no turn, emits no event, and records nothing.
 54. **AGC-FR-OBUA** In `estimate_discussion_context`, a `discussion_id` that is absent gives an empty `discussion_history`, and an `agent_id` that is absent or that resolves to no agent or no provider gives the default context size of `AAP-ai-api-integrations.md` AAP-FR-RANS as `window`. Its `split.tool_results` is 0, and its `estimated_tokens` is the sum of its `split`.
 55. **AGC-FR-QCVC** `estimate_discussion_context` returns `no_project_open` when no project is open, and otherwise always returns a `DiscussionContext`. A document that cannot be read gives a null `document`, a zero `split.document`, and a false `above_limit`.
+56. **AGC-FR-BXOS** On each `report_served_model` (per `../ai/CVL-conversation-loop.md` CVL-FR-XBMT), the turn compares the served id with the model id of its endpoint as exact strings, with no normalisation and no ranking. A difference is a **model downgrade**. A turn whose endpoint names no model id raises nothing.
+57. **AGC-FR-UVKF** A turn emits `"model downgrade detected"` once for each requested→served pair it finds, however many rounds, attempts, and compaction calls it makes. The payload is `ModelDowngrade` with `source` `agent` and the turn's origin. A second pair in the same turn emits once more.
+58. **AGC-FR-PNHM** A `ModelDowngrade` carries the two model ids, the provider id, the project key, the worktree path, and the origin. It carries no comment, no message text, no prompt, and no key. The check changes nothing about the turn: the turn continues and ends as it would without it.
 
 ## Non-functional requirements
 - Dispatching is asynchronous and never blocks the surface that requested it: the command returns as soon as the turn is registered, whatever the model is about to do.

@@ -27,6 +27,7 @@ import {
   resetToasts,
   showToast,
   type NotificationLevel,
+  type ToastActionMenu,
 } from "./toasts";
 import {
   clearIndicationsForAddress,
@@ -53,6 +54,16 @@ export interface Raise {
   body: string;
   /** Where the author lands on activation — mint it with `mintAddress`. */
   address: string;
+  /**
+   * NTF-FR-FPBH: true asks for the exemption from NTF-FR-08. The raise is never
+   * suppressed because the author looks at its target, and reaching that target
+   * does not remove its toast. Only the model downgrade raise sets it.
+   */
+  showWhileLooking?: boolean;
+  /** NTF-FR-JXQL: the action menu its toast carries. An OS notification has none. */
+  menu?: ToastActionMenu;
+  /** NTF-FR-RPZS: the accessible name of the toast's dismissal control. */
+  dismissLabel?: string;
 }
 
 /**
@@ -201,7 +212,12 @@ export function decideDelivery(
   // raise made while no project is open, the picker never being where a target
   // lives — which falls out of `isAlreadyVisible`, since a null project key
   // matches no address.
-  if (snapshot.focused && isAlreadyVisible(address, snapshot)) {
+  // NTF-FR-FPBH: a raise that asks for the exemption is never suppressed here.
+  if (
+    !raise.showWhileLooking &&
+    snapshot.focused &&
+    isAlreadyVisible(address, snapshot)
+  ) {
     return { channel: "none", reason: "already-looking" };
   }
 
@@ -466,6 +482,9 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
       title: raise.title,
       body: raise.body,
       address: raise.address,
+      menu: raise.menu ?? null,
+      dismissLabel: raise.dismissLabel,
+      keepOnArrival: raise.showWhileLooking === true,
     });
     logInfo(["frontend"], "toast raised", {
       key: raise.key,

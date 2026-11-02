@@ -32,6 +32,7 @@ const EVENT_NAMES: &[&str] = &[
     draft_proposals::PROPOSALS_CHANGED,
     prompt_proposals::PROMPT_PROPOSALS_CHANGED,
     agent_conversations::AGENT_TURN_STATE_CHANGED,
+    model_downgrades::MODEL_DOWNGRADE_DETECTED,
     agents::AGENTS_CHANGED,
     comments::DISCUSSION_CHANGED,
     github_tokens::GITHUB_TOKENS_CHANGED,

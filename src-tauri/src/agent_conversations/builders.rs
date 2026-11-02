@@ -13,6 +13,9 @@ use super::*;
 pub struct BuiltInput {
     pub sections: Vec<InputSection>,
     pub document: Option<DocumentSize>,
+    /// AGC-FR-QSWD: the kind of a pending question set record that could not
+    /// be read or parsed, for the warning of the caller. It holds no content.
+    pub question_set_unreadable: Option<&'static str>,
 }
 
 /// [`build_input_within`] with the default context size of AAP-FR-RANS, which
@@ -58,9 +61,11 @@ pub fn build_input_within(
             material.document
         }
     };
-    sections.push(discussion_history_section(roots, &discussion, trigger_comment_id));
+    let (history, question_set_unreadable) =
+        discussion_history_with_status(roots, &discussion, trigger_comment_id);
+    sections.push(history);
     sections.push(current_comment_section(roots, &discussion, trigger_comment_id));
-    BuiltInput { sections, document }
+    BuiltInput { sections, document, question_set_unreadable }
 }
 
 /// The discussion an origin names, read from the store through the owner the

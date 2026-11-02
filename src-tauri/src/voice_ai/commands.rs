@@ -229,7 +229,13 @@ pub async fn start_voice_capture(
             load: Box::new(|| Ok(Box::new(SileroModel::load()?) as Box<dyn SpeechModel>)),
         }
     } else {
-        Chunking::Off
+        // VOP-FR-KIMU: a live `openai` capture finds its word gaps with the
+        // same detector. The capture spawns it only on that route.
+        let prefs = store.load_app_preferences().unwrap_or_default();
+        Chunking::Gaps {
+            settings: Settings::new(prefs.voice_vad_silence_ms, prefs.voice_vad_sensitivity),
+            load: Box::new(|| Ok(Box::new(SileroModel::load()?) as Box<dyn SpeechModel>)),
+        }
     };
     let started = voice.start_chunked_capture(config, capture_rate, keyterms, chunking, sink);
     match &started {

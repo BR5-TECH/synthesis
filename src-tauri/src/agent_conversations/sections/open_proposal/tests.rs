@@ -252,3 +252,17 @@ fn an_artifact_target_reads_its_pending_proposal() {
         recorded.ledger[0].id
     )));
 }
+
+// AGC-FR-EPNB, AGC-FR-QSWD
+#[test]
+fn the_open_proposal_stands_before_the_pending_question_set() {
+    let d = draft();
+    let set = super::super::pending_questions::tests::question_set(&d.thread_id);
+    crate::comments::reserve_question_set_record(&d.root, &d.root, &d.thread_id, &set)
+        .expect("reserved");
+    let body = d.history().body;
+    let proposal = body.find("The open proposal to spec.md").expect("the proposal");
+    let questions = body.find("A question set from arch").expect("the set");
+    assert!(proposal < questions, "the proposal comes first");
+    assert!(body.ends_with(&super::super::render_pending_questions(&set)));
+}

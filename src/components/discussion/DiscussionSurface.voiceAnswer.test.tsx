@@ -58,6 +58,7 @@ import { resetDiscussionFocus } from "../../state/discussionFocus";
 import {
   clearAllDiscussionSessions,
   getDiscussionSession,
+  setComposerBody,
 } from "../../state/discussionSession";
 import { recallAnswer, rememberAnswer } from "../../state/questionAnswerDrafts";
 import { clearQuestionSets, publishSet } from "../../state/questionSets";
@@ -175,8 +176,8 @@ function activity(state: string, over: Record<string, unknown> = {}) {
 async function openVadWithSet() {
   render(surface());
   fireEvent.click(screen.getByTestId("voice-button"));
+  // VOM-FR-PDZR: selecting VAD opens the session, with no press.
   fireEvent.click(screen.getByRole("button", { name: "VAD" }));
-  fireEvent.pointerDown(screen.getByTestId("voice-record"));
   await pass();
   act(() => setResponseMode("voice"));
   act(() => publishSet("d1", SET));
@@ -192,6 +193,8 @@ beforeEach(() => {
   api.finishVoiceCapture.mockImplementation(async () => "own words");
   api.speakVoiceSegment.mockReset();
   api.speakVoiceSegment.mockImplementation(async () => undefined);
+  onReply.mockReset();
+  onReply.mockImplementation(async () => undefined);
   submit.submitQuestionAnswers.mockReset();
   submit.submitQuestionAnswers.mockImplementation(async () => undefined);
   resetVoiceStateForTest();
@@ -212,9 +215,9 @@ afterEach(async () => {
 });
 
 describe("question speech", () => {
-  it("VOM-FR-HBLE, VOM-FR-UALP: a set speaks its first question, then its labels, then waits", async () => {
+  it("VOM-FR-HBLE, VOM-FR-UALP: a set speaks the text of its first question alone, then waits", async () => {
     await withSet();
-    expect(spokenTexts()).toEqual(["First? One spec Two specs"]);
+    expect(spokenTexts()).toEqual(["First?"]);
     expect(api.speakVoiceSegment).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
@@ -224,9 +227,9 @@ describe("question speech", () => {
     expect(heading()).toHaveTextContent("First?");
   });
 
-  it("VOM-FR-NWGL: no description and no word for the own-answer row", async () => {
+  it("VOM-FR-NWGL: no label, no description, and no word for the own-answer row", async () => {
     await withSet();
-    expect(spokenTexts()[0]).not.toMatch(/easy to find|Something else/);
+    expect(spokenTexts()[0]).not.toMatch(/One spec|Two specs|easy to find|Something else/);
   });
 
   it("VOM-FR-EWOK: with response mode Text nothing speaks", async () => {
@@ -238,7 +241,7 @@ describe("question speech", () => {
     await withSet();
     fireEvent.click(screen.getByTestId("discussion-questions-next"));
     await pass();
-    expect(spokenTexts()).toEqual(["First? One spec Two specs", "Second? One spec Two specs"]);
+    expect(spokenTexts()).toEqual(["First?", "Second?"]);
     expect(api.cancelVoiceSpeech).toHaveBeenCalled();
   });
 
@@ -268,9 +271,9 @@ describe("question speech", () => {
     fireEvent.click(screen.getByTestId("discussion-questions-previous"));
     await pass();
     expect(spokenTexts()).toEqual([
-      "First? One spec Two specs",
-      "Second? One spec Two specs",
-      "First? One spec Two specs",
+      "First?",
+      "Second?",
+      "First?",
     ]);
   });
 
@@ -291,7 +294,7 @@ describe("question speech", () => {
       publishSet("d1", { ...SET, setId: "s2", questions: [question(1, `Cited ${span}?`)] } as never),
     );
     await pass();
-    expect(spokenTexts()[1]).toBe("Cited? One spec Two specs");
+    expect(spokenTexts()[1]).toBe("Cited?");
   });
 
   it("VOM-FR-LKKN, VOM-FR-QPFQ: a question that fails to speak shows an error and stays", async () => {
@@ -349,13 +352,14 @@ describe("question speech", () => {
 });
 
 describe("a spoken answer", () => {
-  it("VOM-FR-PINR, DQA-FR-SUUU, DQA-FR-ITCZ: it fills the own answer, posts nothing, and moves on", async () => {
+  it("VOM-FR-PINR, VOM-FR-YTKV, DQA-FR-SUUU, DQA-FR-ITCZ, DQA-FR-VJHT: it fills the own answer, posts one comment while the set stands, and moves on", async () => {
     await withSet();
     await say("keep them apart");
     expect(recallAnswer("s1", 1)).toMatchObject({ ownWords: true, typed: "keep them apart" });
-    expect(onReply).not.toHaveBeenCalled();
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(onReply).toHaveBeenCalledWith("d1", "keep them apart", [], []);
     expect(heading()).toHaveTextContent("Second?");
-    expect(spokenTexts()).toContain("Second? One spec Two specs");
+    expect(spokenTexts()).toContain("Second?");
   });
 
   it("VOM-FR-PINR, VOM-FR-EWOK: it works with response mode Text, and nothing speaks", async () => {
@@ -399,11 +403,68 @@ describe("a spoken answer", () => {
     expect(sent[0].optionValue ?? null).toBeNull();
   });
 
-  it("VOM-FR-FUFE: the words stay as spoken, and the session body stays", async () => {
+  it("VOM-FR-FUFE, VOM-FR-YTKV: the answer keeps the words as spoken, and only the comment takes the tag", async () => {
     await withSet();
     await say("at arch two specs");
     expect(recallAnswer("s1", 1).typed).toBe("at arch two specs");
+    expect(onReply).toHaveBeenCalledWith("d1", "@arch two specs", [], []);
     expect(getDiscussionSession("d1").body).toBe("");
+  });
+
+  it("VOM-FR-FUFE: the comment takes no session body and leaves it as it is", async () => {
+    await withSet();
+    act(() => setComposerBody("d1", "typed before"));
+    await say("two specs");
+    expect(onReply).toHaveBeenCalledWith("d1", "two specs", [], []);
+    expect(getDiscussionSession("d1").body).toBe("typed before");
+  });
+
+  it("VOM-FR-HNEB: a comment that fails to post keeps the answer and shows the error", async () => {
+    onReply.mockRejectedValueOnce("comment_refused" as never);
+    await withSet();
+    await say("keep them apart");
+    expect(recallAnswer("s1", 1).typed).toBe("keep them apart");
+    expect(heading()).toHaveTextContent("Second?");
+    expect(getVoiceState()).toMatchObject({ error: "answer_not_posted", canRetry: false });
+    expect(onReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("VOM-FR-YTKV: the comment posts after the answer took effect in the block", async () => {
+    let answered: unknown = null;
+    onReply.mockImplementationOnce(async () => {
+      answered = recallAnswer("s1", 1);
+      return undefined;
+    });
+    await withSet();
+    await say("keep them apart");
+    expect(answered).toMatchObject({ ownWords: true, typed: "keep them apart" });
+  });
+
+  it("VOM-FR-YTKV, VOM-FR-BVNX: a comment that reaches no agent says so", async () => {
+    render(
+      <DiscussionSurface
+        discussion={discussion()}
+        owner="rail"
+        agents={[]}
+        liveTurns={false}
+        onReply={onReply}
+        onSetResolved={vi.fn(async () => undefined)}
+      />,
+    );
+    await pass();
+    fireEvent.click(screen.getByTestId("voice-button"));
+    act(() => publishSet("d1", SET));
+    await pass();
+    await say("nobody hears this");
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(getVoiceState().note).toBe("no_agent");
+  });
+
+  it("VOM-FR-MAVW: an empty spoken answer posts no comment", async () => {
+    await withSet();
+    await say("   ");
+    expect(onReply).not.toHaveBeenCalled();
+    expect(recallAnswer("s1", 1).typed ?? "").toBe("");
   });
 
   it("DQA-FR-ITCZ: the next question comes after the answered one, not from the start", async () => {
@@ -445,7 +506,8 @@ describe("a spoken answer", () => {
       { ownAnswer: "two" },
       { ownAnswer: "three" },
     ]);
-    expect(onReply).not.toHaveBeenCalled();
+    // VOM-FR-YTKV: each spoken answer also posted its comment.
+    expect(onReply).toHaveBeenCalledTimes(3);
   });
 
   it("DQA-FR-YMGD: a set of one question submits on its first answer", async () => {
@@ -574,6 +636,7 @@ describe("a spoken answer", () => {
     expect(heading()).toHaveTextContent("First?");
     expect(getVoiceState().note).toBe("no_speech");
     expect(spokenTexts()).toHaveLength(1);
+    expect(onReply).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-MAVW, VOM-FR-WICV: a failure holds the question, and Retry answers it", async () => {
@@ -588,11 +651,14 @@ describe("a spoken answer", () => {
     expect(heading()).toHaveTextContent("First?");
     expect(getVoiceState().canRetry).toBe(true);
     expect(spokenTexts()).toHaveLength(1);
+    expect(onReply).not.toHaveBeenCalled();
     await act(async () => {
       await retryRecording();
     });
     expect(recallAnswer("s1", 1).typed).toBe("said again");
     expect(heading()).toHaveTextContent("Second?");
+    // VOM-FR-YTKV: the Retry that answers posts its one comment.
+    expect(onReply).toHaveBeenCalledTimes(1);
   });
 
   it("VOM-FR-PINR: it answers the question that showed when it started", async () => {
@@ -625,6 +691,7 @@ describe("a spoken answer", () => {
     await pass();
     expect(getDiscussionSession("d1").body).toBe("too late");
     expect(getVoiceState().note).toBe("kept_in_body");
+    expect(onReply).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-WICV, VOM-FR-UXYH: Retry after the set went joins the session body", async () => {
@@ -641,6 +708,7 @@ describe("a spoken answer", () => {
       await retryRecording();
     });
     expect(getDiscussionSession("d1").body).toBe("said again");
+    expect(onReply).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-UXYH: a set that another replaces takes none of the words", async () => {
@@ -661,6 +729,7 @@ describe("a spoken answer", () => {
     await pass();
     expect(recallAnswer("s2", 1).ownWords).toBe(false);
     expect(getDiscussionSession("d1").body).toBe("too late");
+    expect(onReply).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-ABPU: voice mode that ends during a spoken answer keeps the words", async () => {
@@ -715,7 +784,7 @@ describe("a spoken answer", () => {
 });
 
 describe("a VAD session while a set stands", () => {
-  it("VOM-FR-GTAQ, VOM-FR-PINR: an utterance answers the question and posts nothing", async () => {
+  it("VOM-FR-GTAQ, VOM-FR-PINR, VOM-FR-YTKV: an utterance answers the question and posts it as a comment", async () => {
     await openVadWithSet();
     activity("speech_start");
     activity("speech_confirmed", { captureId: "c7", live: true });
@@ -723,8 +792,22 @@ describe("a VAD session while a set stands", () => {
     activity("speech_end", { captureId: "c7" });
     await pass();
     expect(recallAnswer("s1", 1).typed).toBe("hands free");
-    expect(onReply).not.toHaveBeenCalled();
+    expect(onReply).toHaveBeenCalledWith("d1", "hands free", [], []);
     expect(getVoiceState().vadOpen).toBe(true);
+  });
+
+  it("DQA-FR-GGKI, VOM-FR-LAQO: a move by a VAD answer leaves focus on the Mute toggle", async () => {
+    await openVadWithSet();
+    const mute = screen.getByTestId("voice-mute");
+    mute.focus();
+    activity("speech_start");
+    activity("speech_confirmed", { captureId: "c7", live: true });
+    api.finishVoiceCapture.mockResolvedValueOnce("hands free");
+    activity("speech_end", { captureId: "c7" });
+    await pass();
+    expect(heading()).toHaveTextContent("Second?");
+    expect(screen.queryByTestId("voice-record")).toBeNull();
+    expect(screen.getByTestId("voice-mute")).toHaveFocus();
   });
 
   it("VOM-FR-LKKN, VOM-FR-UNXR: the answer drops the paused question and the next one speaks", async () => {
@@ -736,7 +819,7 @@ describe("a VAD session while a set stands", () => {
     activity("speech_end", { captureId: "c7" });
     await pass();
     expect(getVoiceState()).toMatchObject({ playbackPaused: false, phase: "idle" });
-    expect(spokenTexts().pop()).toBe("Second? One spec Two specs");
+    expect(spokenTexts().pop()).toBe("Second?");
     expect(resumePlayback).not.toHaveBeenCalled();
   });
 
@@ -781,7 +864,6 @@ describe("a VAD session while a set stands", () => {
     render(surface());
     fireEvent.click(screen.getByTestId("voice-button"));
     fireEvent.click(screen.getByRole("button", { name: "VAD" }));
-    fireEvent.pointerDown(screen.getByTestId("voice-record"));
     await pass();
     act(() => setResponseMode("voice"));
     activity("speech_start");
@@ -792,7 +874,7 @@ describe("a VAD session while a set stands", () => {
     api.finishVoiceCapture.mockResolvedValueOnce("from before");
     activity("speech_end", { captureId: "c7" });
     await pass();
-    expect(spokenTexts()).toEqual(["First? One spec Two specs"]);
+    expect(spokenTexts()).toEqual(["First?"]);
     expect(recallAnswer("s1", 1).ownWords).toBe(false);
     expect(getDiscussionSession("d1").body).toBe("from before");
   });
@@ -802,7 +884,6 @@ describe("a VAD session while a set stands", () => {
     await pass();
     fireEvent.click(screen.getByTestId("voice-button"));
     fireEvent.click(screen.getByRole("button", { name: "VAD" }));
-    fireEvent.pointerDown(screen.getByTestId("voice-record"));
     await pass();
     act(() => setResponseMode("voice"));
     activity("speech_start");

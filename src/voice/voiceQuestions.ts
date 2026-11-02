@@ -125,11 +125,12 @@ export function spokenPageOf(setId: string): number | null {
 }
 
 /**
- * VOM-FR-HBLE, VOM-FR-NWGL: the question text, then each option label in
- * recorded order. No description, and no word for the own-answer row.
+ * VOM-FR-HBLE, VOM-FR-NWGL: the question text alone. The author answers in free
+ * form, and the options stay on screen. No label, no description, and no word
+ * for the own-answer row.
  */
 export function questionSpeech(question: PendingQuestion): string {
-  return speakableText([question.text, ...question.options.map((o) => o.value)].join("\n"));
+  return speakableText(question.text);
 }
 
 export function resetVoiceQuestionsForTest(): void {

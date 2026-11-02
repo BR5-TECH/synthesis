@@ -4,8 +4,11 @@
 //! A chunked capture of the `openai` dialect keeps one session and commits the
 //! input buffer at each chunk end (VOP-FR-GLRN). The other dialects end their
 //! session at a commit, so the capture opens one session for each chunk.
+//!
+//! The `openai` dialect transcribes only committed audio. So while the input
+//! continues, the session also sends interim commits at word gaps, and the
+//! live text comes while the author speaks (VOP-FR-KIMU, VOP-FR-TWEZ).
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -14,6 +17,9 @@ use tokio::sync::{mpsc, oneshot};
 use super::pcm::StreamResampler;
 use super::realtime::{self, ServerEvent, Socket, Transcript};
 use super::*;
+use commits::CommitLedger;
+
+mod commits;
 
 const OPEN_LIMIT: Duration = Duration::from_secs(15);
 const CUSTOM_OPEN_LIMIT: Duration = Duration::from_secs(60);
@@ -25,6 +31,8 @@ pub(crate) enum LiveCommand {
     Audio(Vec<i16>),
     /// VOP-FR-GLRN: the end of one chunk in a session that continues.
     Commit(Reply),
+    /// VOP-FR-KIMU: a word gap, where an interim commit can go.
+    Gap,
     Finish(Reply),
 }
 
@@ -81,7 +89,7 @@ async fn drain_until_finish(
 ) {
     while let Some(command) = commands.recv().await {
         match command {
-            LiveCommand::Audio(_) => {}
+            LiveCommand::Audio(_) | LiveCommand::Gap => {}
             LiveCommand::Commit(reply) => {
                 let _ = reply.send(Err(failure.0.to_string()));
             }
@@ -108,30 +116,34 @@ fn session_ended(
     }
 }
 
-/// The chunks of a session that continues after a commit (VOP-FR-GLRN).
-#[derive(Default)]
-struct Commits {
-    /// Commits that the server did not name yet, in commit order.
-    waiting: VecDeque<Reply>,
-    /// The item that each named commit waits for.
-    items: HashMap<String, Reply>,
-    /// The items of chunks that ended. The open chunk holds the others.
-    closed: HashSet<String>,
+/// VOP-FR-KIMU: the audio that no commit holds, at least, before a word gap
+/// sends an interim commit.
+pub(crate) const INTERIM_MIN_SECONDS: u32 = 1;
+/// VOP-FR-KIMU: the audio that no commit holds, at most, before an interim
+/// commit goes with no word gap.
+pub(crate) const INTERIM_MAX_SECONDS: u32 = 4;
+
+/// VOP-FR-KIMU: whether an interim commit goes now. `uncommitted` is the
+/// count of samples at the capture rate that no commit holds.
+pub(crate) fn interim_due(uncommitted: usize, capture_rate: u32, at_gap: bool) -> bool {
+    let seconds = if at_gap { INTERIM_MIN_SECONDS } else { INTERIM_MAX_SECONDS };
+    uncommitted > 0 && uncommitted >= capture_rate as usize * seconds as usize
 }
 
-impl Commits {
-    fn fail_all(&mut self, code: &str) {
-        for reply in self.waiting.drain(..).chain(self.items.drain().map(|(_, r)| r)) {
-            let _ = reply.send(Err(code.to_string()));
-        }
-    }
+/// VOP-FR-KIMU: log an interim commit, with counts alone.
+fn note_interim(sink: &SharedSink, ledger: &CommitLedger, uncommitted: usize, at_gap: bool) {
+    sink.live_step(
+        "voice interim commit sent",
+        &[("group", ledger.open_group()), ("samples", uncommitted), ("atGap", usize::from(at_gap))],
+        false,
+    );
 }
 
 /// The live text: the whole transcript, or for a chunked capture the text of
 /// the open chunk (VOP-FR-JAOB, VOP-FR-WNQW).
-fn shown_text(config: &LiveConfig, transcript: &Transcript, commits: &Commits) -> String {
+fn shown_text(config: &LiveConfig, transcript: &Transcript, ledger: &CommitLedger) -> String {
     if config.chunk_text.is_some() {
-        transcript.text_except(&commits.closed)
+        transcript.text_except(ledger.closed())
     } else {
         transcript.text()
     }
@@ -144,6 +156,24 @@ impl LiveConfig {
             if let Ok(mut open) = shared.lock() {
                 *open = text.to_string();
             }
+        }
+    }
+}
+
+/// The text that the session shows, and its change.
+struct Shown {
+    text: String,
+}
+
+impl Shown {
+    /// VOP-FR-JAOB: emit the live text when it changed.
+    fn update(&mut self, config: &LiveConfig, sink: &SharedSink, text: String) {
+        if text != self.text {
+            // The sentence end check reads the kept text, so it is kept before
+            // anyone hears of it.
+            config.keep_chunk_text(&text);
+            sink.transcript_changed(&config.session_id, &text);
+            self.text = text;
         }
     }
 }
@@ -175,9 +205,13 @@ async fn run_live(
     };
 
     let chunked = config.chunk_text.is_some();
+    // VOP-FR-KIMU: only the `openai` dialect continues after a commit.
+    let interims = dialect == Dialect::Openai;
     let mut transcript = Transcript::default();
-    let mut commits = Commits::default();
-    let mut shown = String::new();
+    let mut ledger = CommitLedger::default();
+    let mut shown = Shown { text: String::new() };
+    // VOP-FR-KIMU: the samples at the capture rate that no commit holds.
+    let mut uncommitted: usize = 0;
     let mut finish: Option<Reply> = None;
     let mut deadline = None::<tokio::time::Instant>;
     let mut failure: Option<LiveFailure> = None;
@@ -186,6 +220,17 @@ async fn run_live(
     let turn_based = realtime::is_turn_based(&session);
 
     loop {
+        // VOP-FR-QQYG: the session has all of its text.
+        if finish.is_some() {
+            let done = if interims {
+                ledger.idle(&transcript)
+            } else {
+                session_ended(dialect, turn_based, final_item.as_deref(), &transcript)
+            };
+            if done {
+                break;
+            }
+        }
         let expired = async {
             match deadline {
                 Some(at) => tokio::time::sleep_until(at).await,
@@ -197,6 +242,7 @@ async fn run_live(
                 // The session was cancelled.
                 None => return,
                 Some(LiveCommand::Audio(samples)) => {
+                    let count = samples.len();
                     let sent = match resampler.push(&samples) {
                         Ok(out) => realtime::send_audio(&mut socket, &out).await,
                         Err(e) => Err(e),
@@ -205,22 +251,80 @@ async fn run_live(
                         failure = Some(LiveFailure(ERR_SESSION_LOST));
                         break;
                     }
+                    uncommitted += count;
+                    if interims && interim_due(uncommitted, config.capture_rate, false) {
+                        if realtime::commit_input(&mut socket).await.is_err() {
+                            failure = Some(LiveFailure(ERR_SESSION_LOST));
+                            break;
+                        }
+                        note_interim(&sink, &ledger, uncommitted, false);
+                        ledger.sent();
+                        uncommitted = 0;
+                    }
+                }
+                Some(LiveCommand::Gap) => {
+                    if interims && interim_due(uncommitted, config.capture_rate, true) {
+                        if realtime::commit_input(&mut socket).await.is_err() {
+                            failure = Some(LiveFailure(ERR_SESSION_LOST));
+                            break;
+                        }
+                        note_interim(&sink, &ledger, uncommitted, true);
+                        ledger.sent();
+                        uncommitted = 0;
+                    }
                 }
                 Some(LiveCommand::Commit(reply)) => {
-                    commits.waiting.push_back(reply);
-                    if realtime::commit_input(&mut socket).await.is_err() {
-                        failure = Some(LiveFailure(ERR_SESSION_LOST));
-                        break;
+                    // VOP-FR-TWEZ: a chunk end with no audio after the last
+                    // commit sends no commit.
+                    if uncommitted > 0 {
+                        if realtime::commit_input(&mut socket).await.is_err() {
+                            let _ = reply.send(Err(ERR_SESSION_LOST.to_string()));
+                            failure = Some(LiveFailure(ERR_SESSION_LOST));
+                            break;
+                        }
+                        ledger.sent();
+                        uncommitted = 0;
                     }
+                    sink.live_step(
+                        "voice chunk sealed",
+                        &[("group", ledger.open_group()), ("waiting", ledger.waiting_count())],
+                        false,
+                    );
+                    ledger.seal(reply, transcript.known_items());
+                    ledger.settle(&transcript);
+                    // The live text of the next chunk starts now.
+                    shown.update(&config, &sink, shown_text(&config, &transcript, &ledger));
                 }
                 Some(LiveCommand::Finish(reply)) => {
                     let ended = match resampler.finish() {
-                        Ok(out) => match realtime::send_audio(&mut socket, &out).await {
-                            Ok(()) => realtime::end_input(&mut socket, dialect).await,
-                            Err(e) => Err(e),
-                        },
+                        Ok(out) => {
+                            // VOP-FR-QQYG: after an interim commit, the final
+                            // commit goes only for audio that no commit holds.
+                            // The drained filter tail is not such audio: it
+                            // is a few milliseconds of the audio that the last
+                            // commit cut.
+                            let skip = interims && ledger.any_sent() && uncommitted == 0;
+                            match realtime::send_audio(&mut socket, &out).await {
+                                Ok(()) if skip => {
+                                    sink.live_step(
+                                        "voice finish sent no final commit",
+                                        &[("group", ledger.open_group())],
+                                        false,
+                                    );
+                                    Ok(())
+                                }
+                                Ok(()) => {
+                                    if interims {
+                                        ledger.sent();
+                                    }
+                                    realtime::end_input(&mut socket, dialect).await
+                                }
+                                Err(e) => Err(e),
+                            }
+                        }
                         Err(e) => Err(e),
                     };
+                    uncommitted = 0;
                     finish = Some(reply);
                     deadline = Some(tokio::time::Instant::now() + FINISH_LIMIT);
                     if ended.is_err() {
@@ -234,17 +338,9 @@ async fn run_live(
                 match event {
                     Ok(Some(ServerEvent::Committed { item_id, previous_item_id })) => {
                         transcript.committed(item_id.as_deref(), previous_item_id.as_deref());
-                        // Commits are named in commit order, and the final
-                        // commit is the last one.
-                        if let Some(reply) = commits.waiting.pop_front() {
-                            match item_id {
-                                Some(item) => {
-                                    commits.closed.insert(item.clone());
-                                    commits.items.insert(item, reply);
-                                }
-                                None => {
-                                    let _ = reply.send(Err(ERR_TRANSCRIPTION_FAILED.to_string()));
-                                }
+                        if ledger.named(item_id.as_deref()) {
+                            if let Some(item) = item_id.as_deref() {
+                                transcript.mark_ours(item);
                             }
                         } else if ending {
                             final_item = item_id;
@@ -255,9 +351,6 @@ async fn run_live(
                     }
                     Ok(Some(ServerEvent::Completed { item_id, text })) => {
                         transcript.completed(item_id.as_deref(), &text);
-                        if let Some(reply) = item_id.and_then(|i| commits.items.remove(&i)) {
-                            let _ = reply.send(Ok(text.trim().to_string()));
-                        }
                     }
                     Ok(Some(ServerEvent::TranscriptionFailed)) => {
                         sink.diagnostic("realtime_transcription", "item_failed");
@@ -267,10 +360,8 @@ async fn run_live(
                     Ok(Some(ServerEvent::Error { code, .. })) => {
                         // A commit with no audio has no transcript to wait for.
                         let empty = code.as_deref().is_some_and(|c| c.contains("commit_empty"));
-                        if empty && !commits.waiting.is_empty() {
-                            if let Some(reply) = commits.waiting.pop_front() {
-                                let _ = reply.send(Ok(String::new()));
-                            }
+                        if empty && ledger.named(None) {
+                            ledger.settle(&transcript);
                             continue;
                         }
                         if !(ending && empty) {
@@ -299,25 +390,22 @@ async fn run_live(
                         break;
                     }
                 }
-                if ending
-                    && commits.waiting.is_empty()
-                    && commits.items.is_empty()
-                    && session_ended(dialect, turn_based, final_item.as_deref(), &transcript)
-                {
-                    break;
-                }
+                ledger.settle(&transcript);
                 // VOP-FR-DSSU: in a chunked capture, the chunk events carry the
                 // text after the finish.
                 if !(chunked && ending) {
-                    let text = shown_text(&config, &transcript, &commits);
-                    if text != shown {
-                        sink.transcript_changed(&config.session_id, &text);
-                        config.keep_chunk_text(&text);
-                        shown = text;
-                    }
+                    shown.update(&config, &sink, shown_text(&config, &transcript, &ledger));
                 }
             }
             _ = expired => {
+                sink.live_step(
+                    "voice finish deadline expired",
+                    &[
+                        ("waiting", ledger.waiting_count()),
+                        ("incomplete", ledger.incomplete_count(&transcript)),
+                    ],
+                    true,
+                );
                 failure = Some(LiveFailure(ERR_TRANSCRIPTION_FAILED));
                 break;
             }
@@ -327,15 +415,15 @@ async fn run_live(
     if !chunked {
         // The final text can end the loop before the check above sees it.
         let text = transcript.text();
-        if text != shown {
+        if text != shown.text {
             sink.transcript_changed(&config.session_id, &text);
         }
     }
     let code = failure.map_or(ERR_TRANSCRIPTION_FAILED, |f| f.0);
-    commits.fail_all(code);
+    ledger.fail_all(code);
     match (finish, failure) {
         (Some(reply), None) => {
-            let text = shown_text(&config, &transcript, &commits);
+            let text = shown_text(&config, &transcript, &ledger);
             let _ = reply.send(Ok(text.trim().to_string()));
         }
         (Some(reply), Some(failure)) => {
@@ -384,6 +472,12 @@ pub(crate) async fn finish_live(
     live: mpsc::UnboundedSender<LiveCommand>,
 ) -> Result<String, String> {
     ask(&live, LiveCommand::Finish).await
+}
+
+/// VOP-FR-KIMU: a word gap of the capture.
+pub(crate) fn gap_live(live: &mpsc::UnboundedSender<LiveCommand>) {
+    // A closed channel means that the socket failed, and the finish reports it.
+    let _ = live.send(LiveCommand::Gap);
 }
 
 /// VOP-FR-GLRN: commit the open chunk, and give a wait for its text. The commit

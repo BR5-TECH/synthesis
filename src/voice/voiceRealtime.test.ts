@@ -126,6 +126,45 @@ describe("chunks and the live bubble", () => {
     expect(getLiveBubble().parts[0].liveText).toBe("");
   });
 
+  it("VOM-FR-HUXY: the live text changes with each update, before any chunk ends", async () => {
+    await speaking();
+    noteTranscript("c1", "Check");
+    expect(getLiveBubble().parts[0]).toMatchObject({ chunks: [], liveText: "Check" });
+    noteTranscript("c1", "Check the second");
+    expect(getLiveBubble().parts[0].liveText).toBe("Check the second");
+  });
+
+  it("VOM-FR-SCAM: the live text of a chunk that ended stays until its transcript comes", async () => {
+    await speaking();
+    noteTranscript("c1", "Check the second paragraph.");
+    noteChunk(chunk("chunk_end", 0));
+    expect(getLiveBubble().parts[0]).toMatchObject({
+      chunks: [{ index: 0, text: null, pending: "Check the second paragraph." }],
+      liveText: "",
+    });
+    noteTranscript("c1", "The scope");
+    expect(getLiveBubble().parts[0].liveText).toBe("The scope");
+    noteChunk(chunk("chunk_transcript", 0, { text: "Check the second paragraph." }));
+    expect(getLiveBubble().parts[0]).toMatchObject({
+      chunks: [{ index: 0, text: "Check the second paragraph.", pending: "" }],
+      liveText: "The scope",
+    });
+  });
+
+  it("VOM-FR-SCAM, VOM-FR-MBHB: an empty or failed chunk takes the place of its live text", async () => {
+    await speaking();
+    noteTranscript("c1", "um");
+    noteChunk(chunk("chunk_end", 0));
+    noteChunk(chunk("chunk_transcript", 0, { text: "" }));
+    noteTranscript("c1", "lost");
+    noteChunk(chunk("chunk_end", 1));
+    noteChunk(chunk("chunk_failed", 1, { code: "provider_unreachable" }));
+    expect(getLiveBubble().parts[0].chunks).toEqual([
+      { index: 0, text: "", failed: null, pending: "" },
+      { index: 1, text: null, failed: "provider_unreachable", pending: "" },
+    ]);
+  });
+
   it("VOM-FR-MBHB: a failed chunk shows at its place, and later chunks go on", async () => {
     await speaking();
     said(0, "One.");
@@ -133,9 +172,9 @@ describe("chunks and the live bubble", () => {
     noteChunk(chunk("chunk_failed", 1, { code: "provider_unreachable" }));
     said(2, "Three.");
     expect(getLiveBubble().parts[0].chunks).toEqual([
-      { index: 0, text: "One.", failed: null },
-      { index: 1, text: null, failed: "provider_unreachable" },
-      { index: 2, text: "Three.", failed: null },
+      { index: 0, text: "One.", failed: null, pending: "" },
+      { index: 1, text: null, failed: "provider_unreachable", pending: "" },
+      { index: 2, text: "Three.", failed: null, pending: "" },
     ]);
     await settle();
     expect(api.steerSpeechTurn).toHaveBeenCalledWith("c1", "Three.");

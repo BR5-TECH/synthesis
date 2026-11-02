@@ -201,7 +201,7 @@ pub const QUESTION_SET_PENDING_FOR_COMMENT: &str = "This discussion already has 
 /// [`CONVERSATION_RESOLVED`] does: no argument the model could compose frees a
 /// slot the author holds, and an agent that keeps asking spends its whole budget
 /// discovering that.
-pub const QUESTION_SET_ALREADY_PENDING: &str = "This discussion already has a question set waiting on the author, so nothing was recorded. Answer with what you already have; asking again will not succeed.";
+pub const QUESTION_SET_ALREADY_PENDING: &str = "This discussion already has a question set waiting on the author, so nothing was recorded. Reply to the author's comment with a comment, with what you already have; asking again will not succeed.";
 
 /// ADQ-FR-VDGT: the discussion takes no further contribution.
 ///

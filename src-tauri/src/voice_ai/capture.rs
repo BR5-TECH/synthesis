@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
 
-use super::chunks::Chunking;
+use super::chunks::{self, Chunking};
 use super::detect::http_stt_model;
 use super::http::{self, HTTP_RATE};
 use super::live::{finish_live, spawn_live, LiveCommand};
@@ -56,6 +56,9 @@ pub(crate) struct CaptureSession {
     live: Option<mpsc::UnboundedSender<LiveCommand>>,
     /// VOP-FR-ERDS: set for a chunked capture.
     chunks: Option<ChunkRun>,
+    /// VOP-FR-KIMU: the word gap detector of a live `openai` capture that is
+    /// not chunked.
+    gaps: Option<std::sync::mpsc::Sender<chunks::DetectorMessage>>,
     /// VOP-FR-IAFL: the code of the last failure.
     failure: Option<String>,
     sink: SharedSink,
@@ -154,6 +157,16 @@ impl VoiceAi {
         let is_live = route == TranscriptionRoute::Realtime
             && config.record.capabilities.as_ref().and_then(|c| c.realtime_transcription)
                 == Some(RealtimeTranscription::Live);
+        let (chunking, gaps) = match chunking {
+            // VOP-FR-KIMU: only the `openai` dialect sends interim commits.
+            Chunking::Gaps { settings, load } => {
+                let gaps = (is_live && config.record.provider == "openai")
+                    .then(|| chunks::spawn_detector(capture_rate, settings, load, sink.clone()))
+                    .flatten();
+                (Chunking::Off, gaps)
+            }
+            other => (other, None),
+        };
         let chunks = ChunkRun::open(&id, capture_rate, chunking, &sink);
         let chunk_text = chunks.as_ref().map(ChunkRun::new_text);
         let live = (route == TranscriptionRoute::Realtime)
@@ -170,6 +183,7 @@ impl VoiceAi {
             is_live,
             live,
             chunks,
+            gaps,
             failure: None,
             sink,
         });
@@ -187,7 +201,7 @@ impl VoiceAi {
         &self,
         session_id: &str,
         samples: Vec<i16>,
-    ) -> Result<Option<tokio::sync::oneshot::Receiver<bool>>, String> {
+    ) -> Result<Option<tokio::sync::oneshot::Receiver<chunks::DetectorAnswer>>, String> {
         let mut slot = self.session_guard()?;
         let session = slot
             .iter_mut()
@@ -195,7 +209,11 @@ impl VoiceAi {
             .ok_or(ERR_SESSION_LOST)?;
         session.last_audio = Instant::now();
         session.pcm.extend_from_slice(&samples);
-        let detection = session.chunks.as_ref().and_then(|c| c.detect(&samples));
+        let detection = match (&session.chunks, &session.gaps) {
+            (Some(chunks), _) => chunks.detect(&samples),
+            (None, Some(gaps)) => chunks::detect_with(gaps, &samples),
+            (None, None) => None,
+        };
         if let Some(live) = &session.live {
             // A closed channel means that the socket failed. The audio is held
             // here for a retry, and the finish reports the failure.
@@ -213,7 +231,11 @@ impl VoiceAi {
         samples: Vec<i16>,
     ) -> Result<(), String> {
         let Some(detection) = self.append_inner(session_id, samples)? else { return Ok(()) };
-        if detection.await.unwrap_or(false) {
+        let answer = detection.await.unwrap_or_default();
+        if answer.gap {
+            self.word_gap(session_id);
+        }
+        if answer.paused {
             self.chunk_pause(session_id)?;
         }
         Ok(())
@@ -227,6 +249,7 @@ impl VoiceAi {
             slot.iter_mut().find(|s| s.id == session_id && s.phase == Phase::Recording)
         {
             session.phase = Phase::Ended;
+            session.gaps = None;
         }
         Ok(())
     }
@@ -248,6 +271,8 @@ impl VoiceAi {
             .find(|s| s.id == session_id && from.contains(&s.phase))
             .ok_or(ERR_SESSION_LOST)?;
         session.phase = Phase::Finishing;
+        // The detector thread ends with its sender.
+        session.gaps = None;
         Ok((session.route, session.live.take()))
     }
 

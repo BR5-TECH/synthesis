@@ -7,10 +7,10 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 
 use super::super::chunks::{
-    is_sentence_end, spawn_detector, ChunkLedger, Chunking, DetectorMessage, SharedLedger,
-    NO_TEXT_SENTENCE_SECONDS,
+    detect_with, is_sentence_end, spawn_detector, ChunkLedger, Chunking, DetectorAnswer,
+    DetectorMessage, SharedLedger, NO_TEXT_SENTENCE_SECONDS,
 };
-use super::super::live::{commit_live, finish_live, spawn_live};
+use super::super::live::{commit_live, finish_live, gap_live, spawn_live};
 use super::*;
 
 /// The chunk state of one capture.
@@ -34,7 +34,7 @@ impl ChunkRun {
         sink: &SharedSink,
     ) -> Option<Self> {
         let detector = match chunking {
-            Chunking::Off => return None,
+            Chunking::Off | Chunking::Gaps { .. } => return None,
             Chunking::Session => None,
             Chunking::Own { settings, load } => {
                 spawn_detector(capture_rate, settings, load, sink.clone())
@@ -55,11 +55,8 @@ impl ChunkRun {
     }
 
     /// Send audio to the detector, and give the wait for its answer.
-    pub(super) fn detect(&self, samples: &[i16]) -> Option<oneshot::Receiver<bool>> {
-        let detector = self.detector.as_ref()?;
-        let (reply, answer) = oneshot::channel();
-        detector.send(DetectorMessage::Audio(samples.to_vec(), reply)).ok()?;
-        Some(answer)
+    pub(super) fn detect(&self, samples: &[i16]) -> Option<oneshot::Receiver<DetectorAnswer>> {
+        detect_with(self.detector.as_ref()?, samples)
     }
 
     fn open_text(&self) -> String {
@@ -176,6 +173,19 @@ impl VoiceAi {
     pub(super) fn is_chunked(&self, session_id: &str) -> bool {
         self.session_guard()
             .is_ok_and(|slot| slot.iter().any(|s| s.id == session_id && s.chunks.is_some()))
+    }
+
+    /// VOP-FR-KIMU: the detector found a word gap. The live session decides
+    /// whether an interim commit goes.
+    pub(crate) fn word_gap(&self, session_id: &str) {
+        let Ok(slot) = self.session_guard() else { return };
+        let live = slot
+            .iter()
+            .find(|s| s.id == session_id && s.phase == Phase::Recording)
+            .and_then(|s| s.live.as_ref());
+        if let Some(live) = live {
+            gap_live(live);
+        }
     }
 
     /// VOP-FR-JRVF: the detector found a short pause. The chunk ends when the

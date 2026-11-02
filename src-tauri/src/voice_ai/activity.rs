@@ -21,7 +21,7 @@ pub(crate) mod detector;
 pub(crate) mod ring;
 pub(crate) mod silero;
 
-use detector::{Action, Conditions, Detector, PauseTracker, Settings, FRAME_SAMPLES};
+use detector::{Action, Conditions, Detector, GapTracker, PauseTracker, Settings, FRAME_SAMPLES};
 use ring::AudioRing;
 use silero::SpeechModel;
 
@@ -123,6 +123,8 @@ pub(crate) trait ActivityHost: Send {
     /// VOP-FR-JRVF: a short pause in a chunked capture. Gives whether a chunk
     /// ended.
     fn chunk_pause(&self, capture_id: &str) -> bool;
+    /// VOP-FR-KIMU: a word gap in a capture, where an interim commit can go.
+    fn word_gap(&self, capture_id: &str);
     /// VOP-FR-WCSB: the utterance of the capture ended.
     fn end_capture(&self, capture_id: &str);
     /// Whether the capture still exists, so that it has not settled.
@@ -159,6 +161,10 @@ pub(crate) struct Worker<H: ActivityHost> {
     capture: Option<String>,
     /// VOP-FR-YDVH: the pause finder of a chunked capture in progress.
     pauses: Option<PauseTracker>,
+    /// VOP-FR-KIMU: the word gap finder of the capture in progress.
+    gaps: Option<GapTracker>,
+    /// VOP-FR-KIMU: a word gap that the frames of this slice found.
+    gap_found: bool,
     /// The captures that have `speech_end` and have not settled, oldest first
     /// (VOP-FR-WCSB, VOP-FR-FAAB).
     settling: Vec<String>,
@@ -194,6 +200,8 @@ impl<H: ActivityHost> Worker<H> {
             cursor: 0,
             capture: None,
             pauses: None,
+            gaps: None,
+            gap_found: false,
             settling: Vec::new(),
             ended: false,
         })
@@ -296,7 +304,19 @@ impl<H: ActivityHost> Worker<H> {
         }
         self.pending.drain(..at);
         self.send_audio();
+        self.check_gap();
         self.check_pause();
+    }
+
+    /// VOP-FR-KIMU: a word gap goes to the capture after the audio of the slice
+    /// reached it, so an interim commit holds the audio before the gap.
+    fn check_gap(&mut self) {
+        if !std::mem::take(&mut self.gap_found) {
+            return;
+        }
+        if let Some(capture_id) = self.capture.as_deref() {
+            self.host.word_gap(capture_id);
+        }
     }
 
     /// VOP-FR-JRVF, VOP-FR-YDVH: the session's detector finds the short pauses
@@ -327,6 +347,9 @@ impl<H: ActivityHost> Worker<H> {
         if let Some(pauses) = self.pauses.as_mut() {
             pauses.step(probability);
         }
+        if let Some(gaps) = self.gaps.as_mut() {
+            self.gap_found |= gaps.step(probability);
+        }
         match self.detector.step(probability, self.settings, self.conditions) {
             Some(Action::SpeechStart) => {
                 self.start_position = position;
@@ -348,6 +371,7 @@ impl<H: ActivityHost> Worker<H> {
         match self.host.start_capture(self.capture_rate, self.keyterms.clone(), self.chunked) {
             Ok(start) => {
                 self.pauses = self.chunked.then(|| PauseTracker::after_speech(self.settings));
+                self.gaps = Some(GapTracker::after_speech(self.settings));
                 self.cursor = self.start_position.saturating_sub(self.pre_roll_samples());
                 let change = ActivityChange {
                     capture_id: Some(start.session_id.clone()),
@@ -381,6 +405,7 @@ impl<H: ActivityHost> Worker<H> {
             // VOP-FR-BTBM.
             self.capture = None;
             self.pauses = None;
+            self.gaps = None;
             self.detector.rearm();
             self.fail(ERR_SESSION_LOST, &detail, false);
         }
@@ -392,6 +417,7 @@ impl<H: ActivityHost> Worker<H> {
         // The last audio can fail, and that failure ended the utterance.
         let Some(capture_id) = self.capture.take() else { return };
         self.pauses = None;
+        self.gaps = None;
         // VOP-FR-WCSB: the capture finishes, and the next utterance can open one.
         self.host.end_capture(&capture_id);
         let host = &self.host;
@@ -417,6 +443,7 @@ impl<H: ActivityHost> Worker<H> {
 
     fn cancel_all(&mut self) {
         self.pauses = None;
+        self.gaps = None;
         let open: Vec<String> =
             self.capture.take().into_iter().chain(self.settling.drain(..)).collect();
         for capture_id in open {

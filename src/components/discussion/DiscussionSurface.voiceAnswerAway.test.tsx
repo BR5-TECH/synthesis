@@ -243,6 +243,16 @@ describe("spoken answers with no surface mounted", () => {
     expect(submit.submitQuestionAnswers).toHaveBeenCalledTimes(1);
   });
 
+  it("VOM-FR-BCRD, VOM-FR-YTKV, VOM-FR-WYIE: with no surface, a spoken answer posts its comment through the retained composer", async () => {
+    const view = await withSet("text");
+    view.unmount();
+    onReply.mockClear();
+    await sayAway("one");
+    expect(recallAnswer("s1", 1).typed).toBe("one");
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(onReply).toHaveBeenCalledWith("d1", "one", [], []);
+  });
+
   it("DQA-FR-GVSA, DQA-FR-ITCZ: a page turn by hand after a spoken move gives a remount the first question", async () => {
     const view = await withSet("text");
     await say("one");

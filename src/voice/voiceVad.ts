@@ -1,13 +1,16 @@
 /**
- * The VAD session of voice mode (`VOM-voice-mode.md` VOM-FR-PDZR to VOM-FR-RTSU,
+ * The VAD session of voice mode (`VOM-voice-mode.md` VOM-FR-PDZR to VOM-FR-PJOC,
  * VOM-FR-NZXN to VOM-FR-GTAQ).
  *
- * The backend finds each utterance. The session stays with the voice discussion
+ * A session opens by itself in VAD mode, and no record control exists there. The
+ * backend finds each utterance. The session stays with the voice discussion
  * while no composer of it is mounted (VOM-FR-BCRD), and it listens for the next
- * utterance while earlier ones transcribe (VOM-FR-GBCN).
+ * utterance while earlier ones transcribe (VOM-FR-GBCN). Mute keeps the session
+ * open and stops its audio (VOM-FR-MUZB).
  */
 import { cancelVoiceCapture, finishVoiceCapture } from "../api";
 import { logInfo, logWarn } from "../logging";
+import { levelOfPcm, noteMicLevel } from "../state/voiceLevel";
 import { getVoiceState, patchVoiceState, subscribeVoiceState } from "../state/voiceSession";
 import type { VoiceActivityChange } from "../types";
 import { MicrophoneError } from "./capture";
@@ -45,14 +48,14 @@ function clearFeedback(): void {
   patchVoiceState({ error: null, canRetry: false, note: null });
 }
 
-/** VOM-FR-GTAQ, VOP-FR-QZCE: what the detector may do now. */
+/** VOM-FR-GTAQ, VOM-FR-MUZB, VOP-FR-QZCE: what the detector may do now. */
 function vadGate(): VadGate {
   const state = getVoiceState();
   const key = state.activeKey;
   const handle = handleOf(key);
   const answers = key === null ? null : answerTargetOf(key);
   return {
-    blocked: handle === null || handle.blocked() || !state.providerReady,
+    blocked: handle === null || handle.blocked() || !state.providerReady || state.muted,
     playing: state.playing && !state.playbackPaused,
     chunked: key !== null && chunkedFor(key, answers),
     keyterms: handle?.nicknames() ?? [],
@@ -75,6 +78,22 @@ function vadLost(code: string): void {
   void endVadSession("release");
 }
 
+/**
+ * VOM-FR-MUZB: muted audio does not go to the session, and silence goes in its
+ * place. An utterance in progress keeps its audio to its end, so the detector
+ * finds that end where the author stopped.
+ */
+function vadFeeds(): boolean {
+  const state = getVoiceState();
+  return !state.muted || state.hearing || speaking !== null;
+}
+
+/** VOM-FR-WFHN, VOM-FR-ZDLY: the level of the microphone, flat while muted. */
+function vadHeard(pcm: ArrayBuffer): void {
+  if (vad === null) return;
+  noteMicLevel(getVoiceState().muted ? 0 : levelOfPcm(pcm));
+}
+
 async function openVad(nicknames: string[]): Promise<void> {
   const opening = { cancelled: false };
   vadOpening = opening;
@@ -86,7 +105,12 @@ async function openVad(nicknames: string[]): Promise<void> {
     return;
   }
   try {
-    const session = await VadSession.open(nicknames, { gate: vadGate, lost: vadLost });
+    const session = await VadSession.open(nicknames, {
+      gate: vadGate,
+      feeds: vadFeeds,
+      heard: vadHeard,
+      lost: vadLost,
+    });
     vadOpening = null;
     if (opening.cancelled) {
       session.stopMicrophone();
@@ -96,7 +120,8 @@ async function openVad(nicknames: string[]): Promise<void> {
     }
     vad = session;
     stopGateWatch = subscribeVoiceState(() => vad?.pushGate());
-    patchVoiceState({ phase: "idle", vadOpen: true });
+    // VOM-FR-RBWX: a session opens unmuted.
+    patchVoiceState({ phase: "idle", vadOpen: true, muted: false });
     session.pushGate();
     logInfo(["frontend", "ai"], "a voice session opened", {});
     const loss = session.takeLoss();
@@ -162,7 +187,9 @@ export async function endVadSession(kind: "release" | "discard"): Promise<void> 
   closingVad = session;
   stopGateWatch?.();
   stopGateWatch = null;
-  patchVoiceState({ vadOpen: false });
+  // VOM-FR-ZDLY: no session, so the waveform is flat.
+  patchVoiceState({ vadOpen: false, muted: false });
+  noteMicLevel(0);
   const closed = closeVad(session, kind).finally(() => {
     closingVad = null;
     vadClosed = null;
@@ -254,25 +281,37 @@ export function noteActivity(change: VoiceActivityChange): void {
   }
 }
 
-/** VOM-FR-PDZR: the record control opens or closes the session. */
-export function pressVad(): void {
-  if (vad) {
-    void endVadSession("release");
-    return;
-  }
-  if (vadOpening) {
-    vadOpening.cancelled = true;
-    return;
-  }
+/**
+ * VOM-FR-PDZR, VOM-FR-CUCN: open a session with no press, at entry with saved
+ * VAD, at a switch to VAD, or from the Open again control. A disabled composer
+ * does not stop it, because the gate blocks utterances then (VOM-FR-GTAQ).
+ */
+export function openVadSession(reason: "entry" | "switch" | "again"): void {
   const state = getVoiceState();
-  const handle = handleOf(state.activeKey);
-  if (!handle || state.activeKey === null || handle.blocked() || state.phase !== "idle") return;
+  if (state.activeKey === null || state.inputMode !== "vad") return;
+  // An exit cancelled an open that is still on its way. That open now serves
+  // this entry, and the gate brings its roster up to date when it opens.
+  if (vadOpening?.cancelled) {
+    vadOpening.cancelled = false;
+    logInfo(["frontend", "ai"], "a voice session open goes on", { reason });
+    return;
+  }
+  if (vad !== null || vadOpening !== null || state.phase !== "idle") return;
+  logInfo(["frontend", "ai"], "a voice session opens", { reason });
   // VOM-FR-VVTY.
   stopSpeech();
   dropHeldRecording();
   clearFeedback();
   patchVoiceState({ transcript: "" });
-  void openVad(handle.nicknames());
+  void openVad(handleOf(state.activeKey)?.nicknames() ?? []);
+}
+
+/** VOM-FR-QKTE, VOM-FR-MUZB, VOM-FR-RBWX: Mute and Unmute keep the session open. */
+export function setVadMuted(muted: boolean): void {
+  if (vad === null || getVoiceState().muted === muted) return;
+  logInfo(["frontend", "ai"], muted ? "a voice session was muted" : "a voice session was unmuted", {});
+  patchVoiceState({ muted });
+  if (muted) noteMicLevel(0);
 }
 
 /** VOM-FR-KQAI, VOM-FR-UXZT: the utterance in progress goes with the session. */

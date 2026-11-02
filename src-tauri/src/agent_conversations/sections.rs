@@ -10,6 +10,10 @@ use super::*;
 mod open_proposal;
 pub(super) use open_proposal::*;
 
+/// AGC-FR-QSWD: the pending question set that ends `discussion_history`.
+mod pending_questions;
+pub(super) use pending_questions::*;
+
 // ---------------------------------------------------------------------------
 // Input builders (AGC-FR-05)
 // ---------------------------------------------------------------------------
@@ -759,6 +763,16 @@ pub(super) fn discussion_history_section(
     thread: &comments::Discussion,
     trigger_comment_id: &str,
 ) -> InputSection {
+    discussion_history_with_status(roots, thread, trigger_comment_id).0
+}
+
+/// [`discussion_history_section`], and the kind of a pending question set
+/// record that could not be read (AGC-FR-QSWD).
+pub(super) fn discussion_history_with_status(
+    roots: Roots<'_>,
+    thread: &comments::Discussion,
+    trigger_comment_id: &str,
+) -> (InputSection, Option<&'static str>) {
     let anchor = match thread.fragment_target.as_ref() {
         Some(fragment) => format!(
             "This conversation is anchored to characters {}..{} of the file:\n\n{}\n\n",
@@ -784,15 +798,22 @@ pub(super) fn discussion_history_section(
         parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
         parts.push(InputPart::Text("\n".to_string()));
     }
-    // AGC-FR-EPNB / AGC-FR-TCCV: the open proposal ends the section, and the
-    // bound of AGC-FR-11 cuts the comments before it rather than the proposal.
-    let Some(open) = open_proposal_text(roots, &thread.target) else {
-        return section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts);
+    // AGC-FR-EPNB / AGC-FR-TCCV / AGC-FR-QSWD: the open proposal, then the
+    // pending question set, end the section. The bound of AGC-FR-11 cuts the
+    // comments before them rather than either of them.
+    let (questions, unreadable) = match pending_questions_text(roots, &thread.id) {
+        Ok(text) => (text, None),
+        Err(kind) => (None, Some(kind)),
     };
-    let room = SECTION_MAX_CHARS.saturating_sub(open.chars().count());
+    let tail: String =
+        [open_proposal_text(roots, &thread.target), questions].into_iter().flatten().collect();
+    if tail.is_empty() {
+        return (section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts), unreadable);
+    }
+    let room = SECTION_MAX_CHARS.saturating_sub(tail.chars().count());
     let mut section = section_of_parts_within(TAG_DISCUSSION_HISTORY, Vec::new(), parts, room);
-    append_open_proposal(&mut section, open);
-    section
+    append_open_proposal(&mut section, tail);
+    (section, unreadable)
 }
 
 /// AGC-FR-06: the body of the comment that addressed the agent.

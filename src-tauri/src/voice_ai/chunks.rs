@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::oneshot;
 
-use super::activity::detector::{PauseTracker, Settings, FRAME_SAMPLES};
+use super::activity::detector::{GapTracker, PauseTracker, Settings, FRAME_SAMPLES};
 use super::activity::silero::SpeechModel;
 use super::pcm::StreamResampler;
 use super::{SharedSink, ERR_SESSION_LOST};
@@ -186,12 +186,33 @@ pub(crate) enum Chunking {
     Session,
     /// The capture runs the local detector over its own audio.
     Own { settings: Settings, load: ModelLoader },
+    /// One transcript (VOP-FR-VZDI). A live `openai` capture runs the local
+    /// detector over its own audio for its word gaps alone (VOP-FR-KIMU).
+    Gaps { settings: Settings, load: ModelLoader },
+}
+
+/// Send audio to a detector, and give the wait for its answer.
+pub(crate) fn detect_with(
+    detector: &Sender<DetectorMessage>,
+    samples: &[i16],
+) -> Option<oneshot::Receiver<DetectorAnswer>> {
+    let (reply, answer) = oneshot::channel();
+    detector.send(DetectorMessage::Audio(samples.to_vec(), reply)).ok()?;
+    Some(answer)
+}
+
+/// What the detector of a Push-to-Talk capture found in one piece of audio.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DetectorAnswer {
+    /// VOP-FR-JRVF: the capture is in a short pause after the audio.
+    pub(crate) paused: bool,
+    /// VOP-FR-KIMU: the audio holds a word gap.
+    pub(crate) gap: bool,
 }
 
 pub(crate) enum DetectorMessage {
-    /// Audio at the capture rate. The reply tells whether the capture is in a
-    /// short pause after the audio.
-    Audio(Vec<i16>, oneshot::Sender<bool>),
+    /// Audio at the capture rate. The reply tells what the audio holds.
+    Audio(Vec<i16>, oneshot::Sender<DetectorAnswer>),
     ChunkEnded,
 }
 
@@ -230,12 +251,13 @@ fn run_detector(
     let (Ok(mut model), Ok(mut resampler)) = (model, resampler) else {
         for message in messages {
             if let DetectorMessage::Audio(_, reply) = message {
-                let _ = reply.send(false);
+                let _ = reply.send(DetectorAnswer::default());
             }
         }
         return;
     };
     let mut tracker = PauseTracker::new(settings);
+    let mut gaps = GapTracker::new(settings);
     let mut pending: Vec<i16> = Vec::new();
     let mut broken = false;
     for message in messages {
@@ -249,6 +271,7 @@ fn run_detector(
                     }
                 }
                 let mut at = 0;
+                let mut gap = false;
                 while !broken && pending.len() - at >= FRAME_SAMPLES {
                     let frame: Vec<f32> = pending[at..at + FRAME_SAMPLES]
                         .iter()
@@ -256,7 +279,10 @@ fn run_detector(
                         .collect();
                     at += FRAME_SAMPLES;
                     match model.probability(&frame) {
-                        Ok(probability) => tracker.step(probability),
+                        Ok(probability) => {
+                            tracker.step(probability);
+                            gap |= gaps.step(probability);
+                        }
                         Err(_) => {
                             sink.diagnostic("chunk_detector", "model_failed");
                             broken = true;
@@ -264,7 +290,7 @@ fn run_detector(
                     }
                 }
                 pending.drain(..at.min(pending.len()));
-                let _ = reply.send(!broken && tracker.paused());
+                let _ = reply.send(DetectorAnswer { paused: !broken && tracker.paused(), gap });
             }
         }
     }

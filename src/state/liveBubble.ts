@@ -15,6 +15,11 @@ export interface LiveChunk {
   text: string | null;
   /** VOM-FR-MBHB: the failure code of a chunk that did not transcribe. */
   failed: string | null;
+  /**
+   * VOM-FR-SCAM: the live text of a chunk that ended, until its chunk
+   * transcript or its failure comes.
+   */
+  pending: string;
 }
 
 export interface LivePart {
@@ -62,17 +67,31 @@ function withChunk(part: LivePart, chunk: LiveChunk): LivePart {
   const chunks = [...part.chunks.filter((c) => c.index !== chunk.index), chunk].sort(
     (a, b) => a.index - b.index,
   );
-  return { ...part, chunks, liveText: "" };
+  return { ...part, chunks };
 }
 
-/** VOM-FR-NCHC: a chunk transcript came. */
+/**
+ * VOM-FR-SCAM: a chunk ended. Its live text stays at its place, and the live
+ * text that comes next is the text of the next chunk.
+ */
+export function noteLiveChunkEnd(captureId: string, index: number): void {
+  patchPart(captureId, (part) => {
+    if (part.chunks.some((c) => c.index === index)) return part;
+    const ended = { index, text: null, failed: null, pending: part.liveText };
+    return { ...withChunk(part, ended), liveText: "" };
+  });
+}
+
+/** VOM-FR-NCHC: a chunk transcript came. It can be empty. */
 export function noteLiveChunk(captureId: string, index: number, text: string): void {
-  patchPart(captureId, (part) => withChunk(part, { index, text, failed: null }));
+  patchPart(captureId, (part) => withChunk(part, { index, text, failed: null, pending: "" }));
 }
 
 /** VOM-FR-MBHB: a chunk failed, and its error shows at its place. */
 export function noteLiveChunkFailed(captureId: string, index: number, code: string): void {
-  patchPart(captureId, (part) => withChunk(part, { index, text: null, failed: code }));
+  patchPart(captureId, (part) =>
+    withChunk(part, { index, text: null, failed: code, pending: "" }),
+  );
 }
 
 /** VOM-FR-HUXY. */
@@ -94,7 +113,7 @@ export function clearLiveBubble(): void {
 
 /** A part holds something to show. */
 export function partShows(part: LivePart): boolean {
-  return part.liveText !== "" || part.chunks.some((c) => c.text || c.failed);
+  return part.liveText !== "" || part.chunks.some((c) => c.text || c.failed || c.pending);
 }
 
 function subscribe(listener: () => void): () => void {

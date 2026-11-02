@@ -362,3 +362,28 @@ fn every_discussion_prompt_asks_for_short_labels_and_concise_descriptions() {
         }
     }
 }
+
+// CVL-FR-BHJE: each discussion prompt says that a waiting question set ends the
+// history, and that while it waits the agent replies with a comment and records
+// no second set.
+#[test]
+fn every_discussion_prompt_says_to_reply_with_a_comment_while_a_set_waits() {
+    for (name, template) in [
+        ("discuss-draft", DISCUSS_DRAFT_PROMPT_TEMPLATE),
+        ("discuss-artifact", DISCUSS_ARTIFACT_PROMPT_TEMPLATE),
+        ("discuss-note", DISCUSS_NOTE_PROMPT_TEMPLATE),
+    ] {
+        let lower = template.to_lowercase();
+        assert!(
+            lower.contains(
+                "a set of questions that waits for the author's answers stands at the end of the discussion history"
+            ),
+            "{name} does not say where the waiting set stands",
+        );
+        assert!(
+            lower.contains("reply to that comment with a comment"),
+            "{name} does not say to reply with a comment",
+        );
+        assert!(lower.contains("do not record another set"), "{name} allows a second set");
+    }
+}

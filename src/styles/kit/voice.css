@@ -127,6 +127,59 @@
   outline-offset: -2px;
 }
 
+/* VOM-FR-VOUG: the VAD indicator has the shape and colours of the record
+   control, but it is not a button. */
+.voice-area__vad-indicator { cursor: default; }
+
+/* VOM-FR-QKTE: the pressed state shows by the icon, the border, and the colour. */
+.voice-area__mute {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.voice-area__mute:hover:not([aria-disabled="true"]) { color: var(--fg-1); }
+.voice-area__mute[aria-pressed="true"] {
+  border-color: var(--danger);
+  border-style: dashed;
+  color: var(--danger);
+}
+.voice-area__mute[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.voice-area__mute:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.voice-area__reopen { flex: none; }
+
+/* VOM-FR-WFHN, VOM-FR-ZDLY, VOM-FR-PJOC: the live level of the microphone. It is
+   flat while muted and while no session is open. */
+.voice-waveform {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+}
+.voice-waveform__bar {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--accent);
+  transform-origin: center;
+  transition: transform 80ms linear;
+}
+.voice-waveform[data-flat="true"] .voice-waveform__bar { background: var(--fg-3); }
+@media (prefers-reduced-motion: reduce) {
+  .voice-waveform__bar { transition: none; }
+}
+
 /* VOM-FR-VGLT: an open microphone stays in view while a question set stands. The
    element also has the class of the composer, for its measure and clearance. */
 .voice-session-bar { flex: 0 0 auto; }

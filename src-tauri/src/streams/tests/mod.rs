@@ -255,6 +255,7 @@ impl crate::graduation::driver::GraduationDispatch<tauri::test::MockRuntime> for
                 stderr: CapturedStream::default(),
                 duration_ms: 0,
                 resume_unavailable: false,
+                refusal: None,
                 session: None,
                 container_removed: true,
             })

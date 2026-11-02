@@ -473,6 +473,22 @@ pub struct GraduationCheckpoint {
     /// The vendor session a resumed turn continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<GraduationResumeRef>,
+    /// GRL-FR-HWLD: the correction a refused answer waits for. Saved before the
+    /// correction turn is dispatched, and cleared when that turn has ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer_correction: Option<GraduationAnswerCorrection>,
+}
+
+/// GRL-FR-QKDC / GRL-FR-HWLD: one refused answer that is asked again.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraduationAnswerCorrection {
+    /// The part of the loop whose turn was refused: `work` or `review`.
+    pub part: String,
+    /// The closed refusal of `EAC-execute-agent-cli.md` EAC-FR-22.
+    pub reason: String,
+    /// The session the refused turn ran in.
+    pub resume: GraduationResumeRef,
 }
 
 // ---------------------------------------------------------------------------

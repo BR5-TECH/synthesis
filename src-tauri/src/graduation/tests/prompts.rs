@@ -289,3 +289,50 @@ fn the_review_refusal_names_the_shape_a_verdict_must_take() {
         assert!(correction.contains(required), "the correction does not name `{required}`",);
     }
 }
+
+// GRL-FR-MZHT, GRL-FR-XSFA: every correctable refusal has its section in
+// `refusals.md`, and each section says that the work stands and that no file
+// changes. A refusal the agent cannot repair has none.
+#[test]
+fn every_correctable_refusal_has_a_correction_that_keeps_the_work() {
+    use crate::tools::agent_exec::protocol::EnvelopeInvalid;
+    for section in driver::corrections::correction_sections() {
+        let text = driver::prompt_section(&driver::REFUSALS, section)
+            .unwrap_or_else(|| panic!("refusals.md holds the {section} correction"));
+        assert!(text.contains("change no file"), "{section} says to change no file");
+        assert!(text.contains("work you did stands"), "{section} says that the work stands");
+    }
+    for correctable in [
+        EnvelopeInvalid::NotFound,
+        EnvelopeInvalid::Malformed,
+        EnvelopeInvalid::ProtocolVersion,
+        EnvelopeInvalid::MultipleDocuments,
+        EnvelopeInvalid::SummaryEmpty,
+        EnvelopeInvalid::Exclusivity,
+        EnvelopeInvalid::EscalationShape,
+        EnvelopeInvalid::TooLarge,
+    ] {
+        assert!(driver::corrections::correction_section(correctable.as_str()).is_some());
+    }
+    for not_correctable in [
+        EnvelopeInvalid::NotUtf8,
+        EnvelopeInvalid::OutputTruncated,
+        EnvelopeInvalid::VendorRunFailed,
+        EnvelopeInvalid::SessionMismatch,
+    ] {
+        assert!(driver::corrections::correction_section(not_correctable.as_str()).is_none());
+    }
+}
+
+// GRL-FR-XSFA: the work instructions tell a turn to act on `correction`.
+#[test]
+fn every_instruction_tells_a_turn_to_act_on_a_correction() {
+    for (name, text) in [
+        ("work.md", driver::WORK_PROMPT.as_str()),
+        ("merge-work.md", driver::MERGE_WORK_PROMPT.as_str()),
+        ("review.md", driver::REVIEW_PROMPT.as_str()),
+        ("merge-review.md", driver::MERGE_REVIEW_PROMPT.as_str()),
+    ] {
+        assert!(text.contains("`input.correction`"), "{name} names `input.correction`");
+    }
+}

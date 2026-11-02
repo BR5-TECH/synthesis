@@ -119,6 +119,7 @@ impl AgentCliExecutor {
                 duration_ms: started.elapsed().as_millis() as u64,
                 resume_unavailable: true,
                 session: None,
+                refusal: None,
                 // No container was ever created, so there is nothing to remove
                 // and nothing left behind.
                 container_removed: true,
@@ -683,7 +684,7 @@ impl AgentCliExecutor {
         let expected_session_id = (descriptor.assigns_session_id() && resume_session.is_none())
             .then_some(assigned_session_id.as_str());
 
-        let (mut execution, invalid) =
+        let mut execution =
             self.interpret(descriptor, outcome, started, container_removed, expected_session_id);
 
         // EAC-FR-30's last clause. One pinned vendor cannot fail a resume: asked
@@ -734,6 +735,7 @@ impl AgentCliExecutor {
             execution.exit_code,
             execution.duration_ms,
             request.task.execution.timeout_ms,
+            execution.refusal,
         );
         observer.emit(AgentActivityEvent {
             at: crate::notes::now_rfc3339(),
@@ -788,7 +790,7 @@ impl AgentCliExecutor {
                     // "invalid_structured_output" alone leaves a reader unable
                     // to tell prose from a schema violation from a stream that
                     // was cut short.
-                    "reason" => invalid.as_ref().map(EnvelopeInvalid::as_str),
+                    "reason" => execution.refusal.as_ref().map(EnvelopeInvalid::as_str),
                     // EAC-FR-29 keeps every byte of both streams out of a
                     // record. Their shape is not a byte of them, and it is what
                     // separates the failures a reader would otherwise have to
@@ -850,7 +852,7 @@ impl AgentCliExecutor {
         started: Instant,
         container_removed: bool,
         expected_session_id: Option<&str>,
-    ) -> (AgentExecution, Option<EnvelopeInvalid>) {
+    ) -> AgentExecution {
         let base = |process_outcome: ProcessOutcome, response, session| AgentExecution {
             process_outcome,
             exit_code: outcome.exit_code,
@@ -860,13 +862,19 @@ impl AgentCliExecutor {
             duration_ms: started.elapsed().as_millis() as u64,
             resume_unavailable: false,
             session,
+            refusal: None,
             container_removed,
+        };
+        // EAC-FR-22: a refused turn says why.
+        let refused = |reason: EnvelopeInvalid, session| AgentExecution {
+            refusal: Some(reason),
+            ..base(ProcessOutcome::InvalidStructuredOutput, None, session)
         };
 
         match outcome.end {
-            RunEnd::TimedOut => return (base(ProcessOutcome::Timeout, None, None), None),
-            RunEnd::Cancelled => return (base(ProcessOutcome::Cancelled, None, None), None),
-            RunEnd::Terminated => return (base(ProcessOutcome::Terminated, None, None), None),
+            RunEnd::TimedOut => return base(ProcessOutcome::Timeout, None, None),
+            RunEnd::Cancelled => return base(ProcessOutcome::Cancelled, None, None),
+            RunEnd::Terminated => return base(ProcessOutcome::Terminated, None, None),
             RunEnd::Exited => {}
         }
 
@@ -874,24 +882,18 @@ impl AgentCliExecutor {
         // did not finish its turn, so whatever is on stdout is a fragment of
         // one at best.
         if outcome.exit_code != Some(0) {
-            return (base(ProcessOutcome::NonZeroExit, None, None), None);
+            return base(ProcessOutcome::NonZeroExit, None, None);
         }
 
         // EAC-FR-23: a truncated stdout is a prefix, and a prefix is never
         // parsed. Parsing one would risk accepting a document that happens to
         // close early as a complete report.
         if outcome.stdout.truncated {
-            return (
-                base(ProcessOutcome::InvalidStructuredOutput, None, None),
-                Some(EnvelopeInvalid::OutputTruncated),
-            );
+            return refused(EnvelopeInvalid::OutputTruncated, None);
         }
 
         let Some(text) = outcome.stdout.as_utf8() else {
-            return (
-                base(ProcessOutcome::InvalidStructuredOutput, None, None),
-                Some(EnvelopeInvalid::NotUtf8),
-            );
+            return refused(EnvelopeInvalid::NotUtf8, None);
         };
 
         match descriptor.extract(text, expected_session_id) {
@@ -900,10 +902,18 @@ impl AgentCliExecutor {
                 // out: an agent does not reliably know the id its CLI assigned,
                 // and without it EAC-FR-30's resume has nothing to carry.
                 let session = merge_session(envelope.session.clone(), vendor_session);
-                (base(ProcessOutcome::Completed, Some(envelope), session), None)
+                base(ProcessOutcome::Completed, Some(envelope), session)
+            }
+            // EAC-FR-21: the session of a refused document stays with the caller,
+            // and a session that is not the assigned one is never handed back.
+            Err(EnvelopeInvalid::SessionMismatch) => {
+                refused(EnvelopeInvalid::SessionMismatch, None)
             }
             Err(reason) => {
-                (base(ProcessOutcome::InvalidStructuredOutput, None, None), Some(reason))
+                let session = descriptor.reported_session(text).and_then(|id| {
+                    merge_session(None, Some(id)).map(protocol::SessionRef::sanitized)
+                });
+                refused(reason, session)
             }
         }
     }

@@ -29,6 +29,7 @@ Where the project says nothing at all, follow what the code around you already d
 - `input.loop_instruction` — present on a `revise` turn: the review's findings, in the order they were returned. Act on all of them.
 - `input.changed_paths` — what the working copy already holds against the commit this run started from. On a `revise` or `resume` turn this is your own earlier work.
 - `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position.
+- `input.correction` — present only where your answer last time could not be read. Your work stands: change no file, and send your answer again in the shape it says.
 - The **working copy you are standing in**, which is a branch of this repository. Everything you write goes here.
 
 ## What you do not do

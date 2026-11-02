@@ -229,6 +229,7 @@ const KNOWN_KEYWORDS: &[&str] = &[
     "minItems",
     "maxItems",
     "minLength",
+    "maxLength",
     "pattern",
 ];
 
@@ -313,6 +314,11 @@ fn schema_admits(schema: &serde_json::Value, value: &serde_json::Value) -> bool 
         serde_json::Value::String(text) => {
             if let Some(min) = schema.get("minLength").and_then(|m| m.as_u64()) {
                 if (text.chars().count() as u64) < min {
+                    return false;
+                }
+            }
+            if let Some(max) = schema.get("maxLength").and_then(|m| m.as_u64()) {
+                if (text.chars().count() as u64) > max {
                     return false;
                 }
             }

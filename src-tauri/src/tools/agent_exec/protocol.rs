@@ -22,6 +22,9 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+mod envelope;
+pub use envelope::*;
+
 /// The one protocol version this build speaks.
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -57,8 +60,8 @@ pub const LIMIT_STDOUT: usize = 64 * 1024 * 1024;
 pub const LIMIT_STDERR: usize = 1024 * 1024;
 /// The extracted response envelope, serialized.
 pub const LIMIT_ENVELOPE: usize = 1024 * 1024;
-/// `summary`.
-pub const LIMIT_SUMMARY: usize = 8 * 1024;
+/// `summary`, in characters.
+pub const LIMIT_SUMMARY: usize = 8192;
 /// `result`, serialized.
 pub const LIMIT_RESULT: usize = 256 * 1024;
 /// `metadata`, serialized.
@@ -67,15 +70,15 @@ pub const LIMIT_METADATA: usize = 64 * 1024;
 pub const LIMIT_SESSION_FIELD: usize = 512;
 /// `escalation`, serialized (EAC-FR-08).
 pub const LIMIT_ESCALATION: usize = 64 * 1024;
-/// An escalation's `reason`.
-pub const LIMIT_ESCALATION_REASON: usize = 4 * 1024;
-/// Each `question` text.
-pub const LIMIT_ESCALATION_QUESTION: usize = 2 * 1024;
-/// A proposed response's `answer`.
+/// An escalation's `reason`, in characters.
+pub const LIMIT_ESCALATION_REASON: usize = 4096;
+/// Each `question` text, in characters.
+pub const LIMIT_ESCALATION_QUESTION: usize = 2048;
+/// A proposed response's `answer`, in characters.
 pub const LIMIT_OPTION_ANSWER: usize = 512;
-/// A proposed response's `summary`.
+/// A proposed response's `summary`, in characters.
 pub const LIMIT_OPTION_SUMMARY: usize = 128;
-/// A proposed response's `description`.
+/// A proposed response's `description`, in characters.
 pub const LIMIT_OPTION_DESCRIPTION: usize = 256;
 
 /// EAC-FR-18: how many questions one escalation may carry.
@@ -83,10 +86,6 @@ pub const MIN_ESCALATION_QUESTIONS: usize = 1;
 pub const MAX_ESCALATION_QUESTIONS: usize = 8;
 /// EAC-FR-18: how many proposed responses one question may carry.
 pub const MAX_QUESTION_OPTIONS: usize = 3;
-/// EAC-FR-18: the readable bounds a proposed response's two display fields keep.
-pub const MAX_SUMMARY_WORDS: usize = 5;
-pub const MAX_DESCRIPTION_SENTENCES: usize = 2;
-pub const MAX_DESCRIPTION_WORDS: usize = 12;
 /// EAC-FR-29: the stderr excerpt a failure record may carry. Small on purpose —
 /// it is a diagnostic, not a transcript, and what makes a CLI's refusal legible
 /// is the last thing it said rather than everything it said.
@@ -642,410 +641,4 @@ impl AgentTaskRequest {
         }
         Ok(bytes)
     }
-}
-
-// ---------------------------------------------------------------------------
-// The response envelope
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentOutcome {
-    Success,
-    Failure,
-    EscalationRequired,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AgentFailure {
-    pub code: String,
-    pub message: String,
-    pub retryable: bool,
-}
-
-// ---------------------------------------------------------------------------
-// The readable shapes a proposed response keeps (EAC-FR-18)
-// ---------------------------------------------------------------------------
-//
-// Two of a proposed response's three fields are held to a *readable* bound as
-// well as a byte one, because they are what an author reads at a glance in a
-// list of choices. The byte limits above bound what is stored; these bound what
-// can be taken in without reading a paragraph.
-//
-// Both are pure and public, because the same two rules are applied in four
-// places — the executor decoding an agent's envelope, the escalation tool
-// validating a model's arguments, the loop grading a clarification proposal, and
-// the backend accepting the author's own answer — and four transcriptions of
-// "one sentence of at most five words" would eventually be four different rules.
-
-/// The words of `text`, counted the way a reader would.
-///
-/// Whitespace-separated runs holding at least one alphanumeric character, so
-/// stray punctuation between words is not itself a word and a trailing full stop
-/// does not make a five-word label six.
-pub fn word_count(text: &str) -> usize {
-    text.split_whitespace().filter(|piece| piece.chars().any(char::is_alphanumeric)).count()
-}
-
-/// The sentences of `text`, counted by terminal punctuation.
-///
-/// A run of sentence-ending marks is one ending rather than several ("what?!"),
-/// and a text with no terminal mark at all is one sentence, because a label
-/// written without a full stop is still a label.
-pub fn sentence_count(text: &str) -> usize {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return 0;
-    }
-    let mut endings = 0usize;
-    let mut in_run = false;
-    for ch in trimmed.chars() {
-        let terminal = matches!(ch, '.' | '!' | '?' | '…');
-        if terminal {
-            if !in_run {
-                endings += 1;
-                in_run = true;
-            }
-        } else if !ch.is_whitespace() {
-            in_run = false;
-        }
-    }
-    // Text after the last ending is a sentence of its own; text ending on one is
-    // already counted.
-    let ends_on_mark = trimmed.chars().last().is_some_and(|ch| matches!(ch, '.' | '!' | '?' | '…'));
-    if endings == 0 {
-        1
-    } else if ends_on_mark {
-        endings
-    } else {
-        endings + 1
-    }
-}
-
-/// EAC-FR-18: a proposed response's `summary` — one sentence, at most five
-/// words, and never blank.
-pub fn summary_shape_ok(summary: &str) -> bool {
-    let trimmed = summary.trim();
-    !trimmed.is_empty()
-        && sentence_count(trimmed) <= 1
-        && word_count(trimmed) <= MAX_SUMMARY_WORDS
-        && word_count(trimmed) >= 1
-}
-
-/// EAC-FR-18: a proposed response's `description` — at most two sentences and
-/// twelve words in total.
-pub fn description_shape_ok(description: &str) -> bool {
-    let trimmed = description.trim();
-    !trimmed.is_empty()
-        && sentence_count(trimmed) <= MAX_DESCRIPTION_SENTENCES
-        && word_count(trimmed) <= MAX_DESCRIPTION_WORDS
-}
-
-/// EAC-FR-18: one concrete response an agent proposes to one of its questions.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AgentProposedResponse {
-    /// The value submitted when this response is chosen.
-    pub answer: String,
-    /// One sentence, at most five words; submitted with the answer.
-    pub summary: String,
-    /// Display-only; at most two sentences and twelve words in total.
-    pub description: String,
-}
-
-/// EAC-FR-18 / EAC-FR-36: one question an agent stopped to ask.
-///
-/// It carries no identity of its own. The order the questions arrive in is the
-/// only identity a question has, and the caller numbers them itself.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AgentEscalationQuestion {
-    pub question: String,
-    /// 0 to 3; empty where no fixed response suits.
-    #[serde(default)]
-    pub options: Vec<AgentProposedResponse>,
-}
-
-/// EAC-FR-18: the whole of what an `escalation_required` turn stopped for.
-///
-/// A singular `question` or `options` field at this level is an undefined field
-/// and is refused as one, which `deny_unknown_fields` is the whole of: an agent
-/// answering the previous single-question shape is corrected rather than half
-/// understood.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AgentEscalation {
-    pub reason: String,
-    /// 1 to 8, in the order they are to be answered.
-    pub questions: Vec<AgentEscalationQuestion>,
-}
-
-impl AgentEscalation {
-    /// EAC-FR-18 / EAC-FR-36: whole or not at all.
-    ///
-    /// One malformed question or one malformed proposed response refuses the
-    /// envelope entire rather than yielding an escalation carrying the questions
-    /// that happened to parse: a caller that paused a run on a partial question
-    /// set would ask its author to settle less than the agent stopped for, and
-    /// the agent would receive answers to questions it did not recognise.
-    fn validate(&self) -> Result<(), EnvelopeInvalid> {
-        if self.reason.trim().is_empty() {
-            return Err(EnvelopeInvalid::Exclusivity);
-        }
-        if !(MIN_ESCALATION_QUESTIONS..=MAX_ESCALATION_QUESTIONS).contains(&self.questions.len()) {
-            return Err(EnvelopeInvalid::Exclusivity);
-        }
-        for question in &self.questions {
-            if question.question.trim().is_empty() {
-                return Err(EnvelopeInvalid::Exclusivity);
-            }
-            if question.options.len() > MAX_QUESTION_OPTIONS {
-                return Err(EnvelopeInvalid::Exclusivity);
-            }
-            for option in &question.options {
-                if option.answer.trim().is_empty()
-                    || !summary_shape_ok(&option.summary)
-                    || !description_shape_ok(&option.description)
-                {
-                    return Err(EnvelopeInvalid::Exclusivity);
-                }
-            }
-        }
-        self.check_limits()
-    }
-
-    /// EAC-FR-08: the byte bounds, beside the readable ones.
-    fn check_limits(&self) -> Result<(), EnvelopeInvalid> {
-        if serde_json::to_vec(self).map_or(usize::MAX, |b| b.len()) > LIMIT_ESCALATION {
-            return Err(EnvelopeInvalid::TooLarge);
-        }
-        if self.reason.len() > LIMIT_ESCALATION_REASON {
-            return Err(EnvelopeInvalid::TooLarge);
-        }
-        for question in &self.questions {
-            if question.question.len() > LIMIT_ESCALATION_QUESTION {
-                return Err(EnvelopeInvalid::TooLarge);
-            }
-            for option in &question.options {
-                if option.answer.len() > LIMIT_OPTION_ANSWER
-                    || option.summary.len() > LIMIT_OPTION_SUMMARY
-                    || option.description.len() > LIMIT_OPTION_DESCRIPTION
-                {
-                    return Err(EnvelopeInvalid::TooLarge);
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AgentResponseEnvelope {
-    pub protocol_version: u32,
-    pub outcome: AgentOutcome,
-    pub summary: String,
-    #[serde(default)]
-    pub result: Option<Map<String, Value>>,
-    #[serde(default)]
-    pub failure: Option<AgentFailure>,
-    #[serde(default)]
-    pub escalation: Option<AgentEscalation>,
-    #[serde(default)]
-    pub session: Option<SessionRef>,
-    #[serde(default)]
-    pub metadata: Option<Map<String, Value>>,
-}
-
-/// Why an envelope is not a valid report of a turn.
-///
-/// Every one of these becomes `invalid_structured_output` (EAC-FR-19). The
-/// variants exist for the log record and for a test to assert against, not to
-/// give a caller a repair path — there is nothing a caller can do about an
-/// agent that answered off-protocol except decide whether to try again.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EnvelopeInvalid {
-    /// Nothing decodable was found where the descriptor said to look.
-    NotFound,
-    /// Prose, partial JSON, a wrong type, or an unknown field.
-    Malformed,
-    /// More than one response document.
-    MultipleDocuments,
-    /// Bytes that are not valid UTF-8 where JSON was required.
-    NotUtf8,
-    /// Not version 1.
-    ProtocolVersion,
-    /// `summary` is empty.
-    SummaryEmpty,
-    /// The `outcome`/`result`/`failure`/`escalation` exclusivity rules.
-    Exclusivity,
-    /// A field exceeded its EAC-FR-08 bound.
-    TooLarge,
-    /// stdout hit its capture bound, so what is there is a prefix rather than a
-    /// document. Never parsed (EAC-FR-23).
-    OutputTruncated,
-    /// The vendor's own output says the run failed — a result document whose
-    /// subtype is not success or whose error flag is set (CCP-FR-12), or a
-    /// stream carrying a turn-failed event (CDX-FR-16).
-    ///
-    /// Distinct from every other variant because nothing was wrong with the
-    /// *shape* of what arrived: the CLI reported a failed run, which is not an
-    /// agent-reported outcome and never becomes one. It is reached under exit 0
-    /// as well as under a non-zero exit, which is precisely why the exit status
-    /// alone cannot stand in for it.
-    VendorRunFailed,
-    /// The run reported a session identity other than the one the executor
-    /// assigned it (CCP-FR-16). Accepting it would hand the caller a reference
-    /// that resumes a different conversation than the one that just ran.
-    SessionMismatch,
-}
-
-impl EnvelopeInvalid {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            EnvelopeInvalid::NotFound => "not_found",
-            EnvelopeInvalid::Malformed => "malformed",
-            EnvelopeInvalid::MultipleDocuments => "multiple_documents",
-            EnvelopeInvalid::NotUtf8 => "not_utf8",
-            EnvelopeInvalid::ProtocolVersion => "protocol_version",
-            EnvelopeInvalid::SummaryEmpty => "summary_empty",
-            EnvelopeInvalid::Exclusivity => "exclusivity",
-            EnvelopeInvalid::TooLarge => "too_large",
-            EnvelopeInvalid::OutputTruncated => "output_truncated",
-            EnvelopeInvalid::VendorRunFailed => "vendor_run_failed",
-            EnvelopeInvalid::SessionMismatch => "session_mismatch",
-        }
-    }
-}
-
-impl AgentResponseEnvelope {
-    /// EAC-FR-18 / EAC-FR-21: everything beyond decoding that a turn can fail.
-    ///
-    /// EAC-FR-20's allowlist is not here. It removes a field rather than
-    /// refusing an envelope, so it belongs beside the decode
-    /// ([`AgentResponseEnvelope::allowlist_metadata`]) and not among the rules
-    /// that end a turn.
-    ///
-    /// Private, and that is what keeps the two halves of EAC-FR-20 in step:
-    /// [`decode_envelope`] is the only way to reach this, and it discards
-    /// before it validates. A caller that could validate an envelope directly
-    /// could hold one whose `metadata` was never emptied.
-    ///
-    /// Exclusivity is checked in both directions — the variant a turn claims
-    /// must carry its own detail, *and* must carry neither of the others — so a
-    /// `success` smuggling a `failure` object is as invalid as a `failure`
-    /// without one. A caller reads `outcome` and acts on it; an envelope where
-    /// the tag and the payload disagree has no reading that is safe to pick.
-    fn validate(&self) -> Result<(), EnvelopeInvalid> {
-        if self.protocol_version != PROTOCOL_VERSION {
-            return Err(EnvelopeInvalid::ProtocolVersion);
-        }
-        if self.summary.trim().is_empty() {
-            return Err(EnvelopeInvalid::SummaryEmpty);
-        }
-
-        let ok = match self.outcome {
-            AgentOutcome::Success => self.failure.is_none() && self.escalation.is_none(),
-            AgentOutcome::Failure => {
-                self.failure.is_some() && self.result.is_none() && self.escalation.is_none()
-            }
-            AgentOutcome::EscalationRequired => {
-                self.escalation.is_some() && self.result.is_none() && self.failure.is_none()
-            }
-        };
-        if !ok {
-            return Err(EnvelopeInvalid::Exclusivity);
-        }
-
-        // EAC-FR-18: the escalation object is closed the same way the envelope
-        // around it is. Checked here rather than at decode so an `escalation`
-        // smuggled onto a `success` is refused for the exclusivity it broke
-        // rather than for the shape of a field that outcome may not carry.
-        if let Some(escalation) = &self.escalation {
-            escalation.validate()?;
-        }
-
-        self.check_limits()
-    }
-
-    /// EAC-FR-20: every key the v1 allowlist does not hold, removed.
-    ///
-    /// The allowlist is empty, so this empties the field. Discarding rather
-    /// than refusing is the point: the emptiness exists to stop transcript
-    /// data, a filesystem claim, a prompt, or a credential arriving through an
-    /// unreviewed key, and a key that never reaches the caller cannot carry any
-    /// of them. Refusing achieved the same guard by destroying the whole turn
-    /// with it — a completed hour of work thrown away over a field nothing
-    /// reads. Callers see `None` either way, so no reader can tell the
-    /// difference, and the vendor schema is where the agent is told the rule
-    /// (`descriptor/claude_code.rs`) so this stays the backstop rather than the
-    /// first line.
-    fn allowlist_metadata(&mut self) {
-        self.metadata = None;
-    }
-
-    fn check_limits(&self) -> Result<(), EnvelopeInvalid> {
-        if self.summary.len() > LIMIT_SUMMARY {
-            return Err(EnvelopeInvalid::TooLarge);
-        }
-        let serialized =
-            |v: &Map<String, Value>| serde_json::to_vec(v).map_or(usize::MAX, |b| b.len());
-        if self.result.as_ref().is_some_and(|r| serialized(r) > LIMIT_RESULT) {
-            return Err(EnvelopeInvalid::TooLarge);
-        }
-        // EAC-FR-08 names a bound for `metadata`, so the bound is here. Under
-        // v1 nothing reaches it: EAC-FR-20's allowlist is empty, so the field
-        // is already `None` by the time validation runs. It is kept rather than
-        // deleted because the day the allowlist admits its first reviewed key
-        // is the day this becomes the only thing standing between that key and
-        // an unbounded payload — and a limit re-added later is a limit somebody
-        // has to remember.
-        if self.metadata.as_ref().is_some_and(|m| serialized(m) > LIMIT_METADATA) {
-            return Err(EnvelopeInvalid::TooLarge);
-        }
-        if let Some(session) = &self.session {
-            for field in [&session.session_id, &session.continuation_token] {
-                if field.as_ref().is_some_and(|v| v.len() > LIMIT_SESSION_FIELD) {
-                    return Err(EnvelopeInvalid::TooLarge);
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Decode exactly one envelope from the JSON text the descriptor pointed at.
-///
-/// "Exactly one" is load-bearing: an agent that emitted two documents has told
-/// us two different things about one turn, and picking either would be a guess.
-/// `StreamDeserializer` is what distinguishes that from trailing whitespace,
-/// which is not a second document.
-pub fn decode_envelope(text: &str) -> Result<AgentResponseEnvelope, EnvelopeInvalid> {
-    // EAC-FR-08 bounds the envelope in its own right, not only the stream that
-    // carried it: stdout's bound is 8 MiB, so without this a 5 MiB envelope
-    // arrives well inside the stream limit and is parsed in full.
-    if text.len() > LIMIT_ENVELOPE {
-        return Err(EnvelopeInvalid::TooLarge);
-    }
-
-    let mut stream = serde_json::Deserializer::from_str(text).into_iter::<AgentResponseEnvelope>();
-
-    let mut first = match stream.next() {
-        Some(Ok(envelope)) => envelope,
-        Some(Err(_)) => return Err(EnvelopeInvalid::Malformed),
-        None => return Err(EnvelopeInvalid::NotFound),
-    };
-
-    // Anything decodable after the first document — valid or not — means the
-    // stream held more than one value.
-    if stream.next().is_some() {
-        return Err(EnvelopeInvalid::MultipleDocuments);
-    }
-
-    // EAC-FR-20, before validation and before the caller sees anything: an
-    // unreviewed key is removed rather than allowed to end the turn.
-    first.allowlist_metadata();
-    first.validate()?;
-    Ok(first)
 }

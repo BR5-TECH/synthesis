@@ -210,7 +210,7 @@ GraduationRun {
   work_turns, review_turns,      // spent against the bounds of GRL
   turn_time_used_ms,             // GRD-FR-UTTX; the used total time, 0 for a new run
   rest?,                         // GraduationRest; GRD-FR-SKLO
-  checkpoint,                    // GraduationCheckpoint
+  checkpoint,                    // GraduationCheckpoint; holds the optional answer_correction { part, reason, resume } of GRL-FR-HWLD
   observability,                 // per GOB-graduation-observability.md
   escalation?,                   // the questions waiting on the author
   blocker?,                      // what blocks it and the act that clears it

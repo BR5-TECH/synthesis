@@ -1,11 +1,13 @@
 //! The one loop: work, then review, at most twice (GRL-FR-VYNX, GRL-FR-ARPX).
 
+use super::corrections::{self, Corrected};
+use super::dispatch::TurnRequest;
 use super::stops::Stop;
 use super::turns::*;
 use super::*;
 use crate::graduation::is_worktree_queue_key;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// What the loop does after a turn.
 pub(super) enum Step {
@@ -422,7 +424,7 @@ async fn drive<R: tauri::Runtime>(
 /// recomputed from what was just read and persisted with it, so what a surface
 /// renders as the run's pass bound and what the loop counts against are one
 /// value.
-fn settings_for_dispatch<R: tauri::Runtime>(
+pub(super) fn settings_for_dispatch<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
     part: &str,
@@ -543,7 +545,8 @@ async fn work_turn<R: tauri::Runtime>(
         run,
         StructuredEvent::new(GraduationLogProducer::WorkTurn, "work turn started")
             .with("purpose", purpose)
-            .with("turn", run.work_turns),
+            .with("turn", run.work_turns)
+            .with("corrected", pending_correction(run, phases::PART_WORK)),
     ) {
         return Step::Stop;
     }
@@ -551,8 +554,19 @@ async fn work_turn<R: tauri::Runtime>(
     // GRL-FR-EFTM: the turn runs under the smaller of the stage time limit and
     // the remaining total time.
     let bound = settings.turn_bound(run.turn_time_used_ms);
-    let turn = TurnRequest { execution_directory: worktree, part: phases::PART_WORK, input, bound };
-    let outcome = execute(app, run, turn, cancellation, dispatch).await;
+    let turn = TurnRequest {
+        execution_directory: worktree,
+        part: phases::PART_WORK,
+        input,
+        bound,
+        resume: None,
+    };
+    // GRL-FR-QKDC: a refused answer is asked again once, in the same session.
+    let (outcome, bound) =
+        match corrections::execute_with_correction(app, run, turn, cancellation, dispatch).await {
+            Corrected::Settle(outcome, bound) => (*outcome, bound),
+            Corrected::Stopped => return Step::Stop,
+        };
     let step = settle_turn(app, run, worktree, outcome, GraduationEscalationOrigin::Work, bound);
     if matches!(step, Step::Continue)
         && !logs::emit(
@@ -566,6 +580,11 @@ async fn work_turn<R: tauri::Runtime>(
         return Step::Stop;
     }
     step
+}
+
+/// GLG-FR-ZJTP: whether the turn about to start is a saved correction.
+fn pending_correction(run: &GraduationRun, part: &str) -> bool {
+    run.checkpoint.answer_correction.as_ref().is_some_and(|pending| pending.part == part)
 }
 
 /// GOB-FR-XYCY: the prompt this pass is asked to answer.
@@ -649,7 +668,11 @@ async fn review_turn<R: tauri::Runtime>(
             run,
             StructuredEvent::new(GraduationLogProducer::ReviewTurn, "review turn started")
                 .with("turn", run.review_turns)
-                .with("corrected", run.checkpoint.verdict_refusals > 0),
+                .with(
+                    "corrected",
+                    run.checkpoint.verdict_refusals > 0
+                        || pending_correction(run, phases::PART_REVIEW),
+                ),
         ) {
             return Step::Stop;
         }
@@ -674,9 +697,17 @@ async fn review_turn<R: tauri::Runtime>(
             }
         };
         let bound = settings.turn_bound(run.turn_time_used_ms);
-        let turn =
-            TurnRequest { execution_directory: &checkout, part: phases::PART_REVIEW, input, bound };
-        let outcome = execute(app, run, turn, cancellation, dispatch).await;
+        let turn = TurnRequest {
+            execution_directory: &checkout,
+            part: phases::PART_REVIEW,
+            input,
+            bound,
+            resume: None,
+        };
+        // GRL-FR-QKDC: the correction runs inside the checkout's lifetime, so it
+        // stands in the directory of the review it corrects.
+        let corrected =
+            corrections::execute_with_correction(app, run, turn, cancellation, dispatch).await;
         // GRL-FR-YKRI: removed when the turn ends, whatever it decided.
         //
         // A release that does not finish is reported rather than dropped. What
@@ -696,6 +727,10 @@ async fn review_turn<R: tauri::Runtime>(
             );
         }
 
+        let (outcome, bound) = match corrected {
+            Corrected::Settle(outcome, bound) => (*outcome, bound),
+            Corrected::Stopped => return Step::Stop,
+        };
         let execution = match settle_execution(
             app,
             run,
@@ -824,125 +859,6 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
         observability::StageReason::ReviewRevision,
     );
     Step::Continue
-}
-
-/// One turn to dispatch: where it runs, which part of the loop it is, its
-/// input, and the timeout read for this dispatch.
-struct TurnRequest<'a> {
-    execution_directory: &'a Path,
-    part: &'a str,
-    input: task_input::GraduationTaskInput,
-    bound: settings::TurnBound,
-}
-
-/// GXD-FR-KXXB: one turn is one call through the dispatch seam.
-async fn execute<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run: &mut GraduationRun,
-    turn: TurnRequest<'_>,
-    cancellation: &CancellationToken,
-    dispatch: &dyn seams::GraduationDispatch<R>,
-) -> Result<AgentExecution, AgentExecutionError> {
-    let TurnRequest { execution_directory, part, input, bound } = turn;
-    let task = AgentTaskRequest {
-        protocol_version: PROTOCOL_VERSION,
-        instruction: prompts::instruction_for_run(run, part).to_string(),
-        input: Some(input.to_map()),
-        // GRL-FR-VIAT: the review names the shape its own answer must take.
-        result_contract: (part == phases::PART_REVIEW).then_some(ResultContract::ReviewVerdict),
-        resume: resume_for(run, part),
-        // GXD-FR-MTVR: the controls are composed from the settings read for
-        // this dispatch, and nothing of an earlier turn's controls is reused.
-        execution: ExecutionControls {
-            cancellation: Cancellation::CallerControlled,
-            timeout_ms: bound.limit_ms,
-        },
-    };
-    let request = AgentExecutionRequest {
-        // GXD-FR-SHNW: the run's queue — its stream, or the pinned worktree of
-        // a direct run outside a stream — is the scope whose VM it shares.
-        sandbox_scope: Some(crate::tools::agent_exec::sandbox::SandboxScope {
-            queue_key: run.queue_key(),
-        }),
-        execution_directory: execution_directory.to_path_buf(),
-        task,
-        supplementary_mount: None,
-        turn_kind: task_input::turn_kind_for_run(run, part),
-        cancellation: cancellation.clone(),
-        // GXD-FR-IOZU: what the agent does reaches the run it is doing it for.
-        // A turn with no sink is a run the author watches an empty panel for.
-        activity: activity_sink(app, run),
-        // GXD-FR-IOZU / GLG-FR-QKVI: the record of what the agent did, which
-        // the executor must deliver durably and acknowledged.
-        durable_output: Some(durable_sink(app, run, part)),
-    };
-    // GXD-FR-CYIW / GRD-FR-NHRY: the interval is the turn's own execution, from
-    // the moment it is dispatched to the moment it returns. Held on this stack,
-    // so it can span no queue wait and no author wait.
-    let recorder = crate::graduation::statistics::OperationRecorder::begin(
-        crate::graduation::statistics::bucket_for_part(part),
-    );
-    // GLG-FR-QNLC: the dispatch of each merge turn is a record of the run.
-    if run.is_merge() {
-        crate::graduation::log_merge_boundary(
-            app,
-            run,
-            crate::graduation::MergeBoundary {
-                level: crate::logging::LogLevel::Info,
-                domains: &[Domain::Ai, Domain::Backend],
-                message: "graduation dispatched a merge turn",
-                boundary: "dispatch",
-                outcome: "dispatched",
-                pass: Some(run.pass()),
-                paths: None,
-                extra: log_fields! { "turn_kind" => request.turn_kind.as_str() },
-            },
-        );
-    }
-    let started = std::time::Instant::now();
-    let outcome = dispatch.dispatch_graduation_turn(app, &run.project_key, request).await;
-    // GRD-FR-UTTX: the turn's execution time counts against the run's total.
-    time_budget::charge(run, started, &outcome, bound);
-    recorder.finish(app, run);
-    outcome
-}
-
-/// GXD-FR-IOZU: the live activity sink one turn of this run reports through.
-///
-/// `None` where the application holds no activity store, which costs the live
-/// panel and nothing else: no turn is refused over it.
-fn activity_sink<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run: &GraduationRun,
-) -> Option<Arc<dyn crate::tools::agent_exec::AgentActivitySink>> {
-    // AGV: the live panel, which is bounded and evicted.
-    let store = app
-        .try_state::<Arc<crate::agent_activity::ActivityStore>>()
-        .map(|state| state.inner().clone())?;
-    let fs = crate::graduation::store_fs(app).ok();
-    Some(Arc::new(crate::agent_activity::RunActivitySink::new(app, &run.id, store, fs)))
-}
-
-/// GXD-FR-IOZU / GLG-FR-QKVI: the durable activity sink one turn of this run
-/// reports through.
-///
-/// GRS-FR-JQOO: the record is retained for the lifetime of the run record and
-/// is what the author reads a finished run back from.
-fn durable_sink<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run: &GraduationRun,
-    part: &str,
-) -> Arc<dyn crate::tools::agent_exec::DurableOutputSink> {
-    Arc::new(logs::GraduationActivitySink::new(app, run, source_producer(part)))
-}
-
-/// GRS-FR-KJVN: which producer a turn's activity is attributed to.
-fn source_producer(part: &str) -> GraduationLogProducer {
-    match part {
-        phases::PART_REVIEW => GraduationLogProducer::ReviewTurn,
-        phases::PART_SEMANTIC_MERGE => GraduationLogProducer::SemanticMergeTurn,
-        _ => GraduationLogProducer::WorkTurn,
-    }
 }
 
 #[cfg(test)]

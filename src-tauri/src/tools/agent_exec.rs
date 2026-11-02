@@ -349,8 +349,12 @@ pub struct AgentExecution {
     /// cannot, so a fresh session was *not* silently started — nothing ran.
     pub resume_unavailable: bool,
     /// The session reference to carry into a later turn, where the vendor
-    /// supports one (EAC-FR-21). Never a credential.
+    /// supports one (EAC-FR-21). Never a credential. A refused document keeps
+    /// the session the turn reported, so that the caller can resume it.
     pub session: Option<protocol::SessionRef>,
+    /// EAC-FR-22: why the answer was refused. Present only for
+    /// [`ProcessOutcome::InvalidStructuredOutput`].
+    pub refusal: Option<protocol::EnvelopeInvalid>,
     /// EAC-FR-26: whether the container's removal was confirmed. `false` means
     /// one may still be running under a name this application will never reuse
     /// — a fact a caller can act on, and one that would otherwise be visible

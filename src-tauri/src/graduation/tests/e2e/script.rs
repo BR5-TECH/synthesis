@@ -10,6 +10,7 @@ use crate::graduation::{
     GraduationInterruptionReason, GraduationLogStream, ReviewFinding, ReviewOutcome,
     ReviewSeverity, ReviewVerdict,
 };
+use crate::tools::agent_exec::protocol::EnvelopeInvalid;
 use crate::tools::agent_exec::{AgentExecutionError, ProcessOutcome};
 
 /// GTE-FR-HWQM: something a turn does to the application while it runs.
@@ -146,6 +147,22 @@ impl TurnScript {
     }
 
     /// GXD-FR-XEUX: nothing was launched at all.
+    /// GRL-FR-QKDC: the turn ended in its session, and its answer was refused
+    /// for `reason`.
+    pub(crate) fn answers_refused(reason: EnvelopeInvalid) -> Self {
+        Self::of(Answer::Refused(reason)).leaves_a_session()
+    }
+
+    /// GRL-FR-QKDC: a refused answer from a turn that reported no session.
+    pub(crate) fn answers_refused_without_a_session(reason: EnvelopeInvalid) -> Self {
+        Self::of(Answer::Refused(reason))
+    }
+
+    /// GRL-FR-PTCE: the vendor did not resume the session it was asked to.
+    pub(crate) fn cannot_resume() -> Self {
+        Self::of(Answer::ResumeUnavailable)
+    }
+
     pub(crate) fn cannot_launch(error: AgentExecutionError) -> Self {
         Self::of(Answer::Unlaunchable(error))
     }

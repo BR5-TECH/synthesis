@@ -111,21 +111,13 @@ fn a_malformed_escalation_refuses_the_whole_envelope() {
                 "description": "What it means.",
             }))
             .collect::<Vec<_>>() }] }),
-        // Each of the three response formats, one at a time.
+        // Each of the three response fields blank, one at a time.
         json!({ "reason": "r", "questions": [{ "question": "which?", "options": [
             { "answer": "  ", "summary": "A choice", "description": "What it means." }] }] }),
         json!({ "reason": "r", "questions": [{ "question": "which?", "options": [
-            { "answer": "a", "summary": "one two three four five six",
-              "description": "What it means." }] }] }),
+            { "answer": "a", "summary": " ", "description": "What it means." }] }] }),
         json!({ "reason": "r", "questions": [{ "question": "which?", "options": [
-            { "answer": "a", "summary": "Two. Sentences.",
-              "description": "What it means." }] }] }),
-        json!({ "reason": "r", "questions": [{ "question": "which?", "options": [
-            { "answer": "a", "summary": "A choice",
-              "description": "One. Two. Three." }] }] }),
-        json!({ "reason": "r", "questions": [{ "question": "which?", "options": [
-            { "answer": "a", "summary": "A choice",
-              "description": "one two three four five six seven eight nine ten eleven twelve thirteen" }] }] }),
+            { "answer": "a", "summary": "A choice", "description": "\t" }] }] }),
     ];
 
     for escalation in violations {
@@ -203,11 +195,8 @@ fn a_value_exactly_at_its_limit_is_accepted() {
                         (0..MAX_QUESTION_OPTIONS)
                             .map(|option| json!({
                                 "answer": at(LIMIT_OPTION_ANSWER),
-                                // Exactly five words, and exactly two sentences
-                                // of exactly twelve words.
-                                "summary": "one two three four five",
-                                "description": "one two three four five six. \
-                                                seven eight nine ten eleven twelve.",
+                                "summary": at(LIMIT_OPTION_SUMMARY),
+                                "description": at(LIMIT_OPTION_DESCRIPTION),
                                 "_": option,
                             }))
                             .map(|mut value| {
@@ -229,44 +218,78 @@ fn a_value_exactly_at_its_limit_is_accepted() {
     assert_eq!(escalation.questions.len(), MAX_ESCALATION_QUESTIONS);
     assert_eq!(escalation.questions[0].options.len(), MAX_QUESTION_OPTIONS);
     assert_eq!(escalation.reason.len(), LIMIT_ESCALATION_REASON);
-    assert_eq!(word_count(&escalation.questions[0].options[0].summary), MAX_SUMMARY_WORDS,);
-    assert_eq!(
-        sentence_count(&escalation.questions[0].options[0].description),
-        MAX_DESCRIPTION_SENTENCES,
-    );
-    assert_eq!(word_count(&escalation.questions[0].options[0].description), MAX_DESCRIPTION_WORDS,);
+    assert_eq!(escalation.questions[0].options[0].summary.len(), LIMIT_OPTION_SUMMARY);
+    assert_eq!(escalation.questions[0].options[0].description.len(), LIMIT_OPTION_DESCRIPTION);
 }
 
-/// The two readable shapes, exercised where they are defined rather than only
-/// through an envelope (EAC-FR-18).
+fn escalation_document(options: serde_json::Value) -> String {
+    json!({
+        "protocol_version": 1,
+        "outcome": "escalation_required",
+        "summary": "stopped to ask",
+        "escalation": { "reason": "r", "questions": [{ "question": "which?", "options": options }] },
+    })
+    .to_string()
+}
+
+// EAC-FR-18, EAC-FR-35: a count of words or sentences refuses nothing. These
+// are three options of a real run that was refused for them: two descriptions
+// of sixteen words, and one whose numbers hold dots.
 #[test]
-fn the_readable_shapes_count_words_and_sentences_as_a_reader_would() {
-    assert_eq!(word_count("one two three"), 3);
-    assert_eq!(word_count("  one   two  "), 2);
-    // Stray punctuation between words is not itself a word.
-    assert_eq!(word_count("one - two"), 2);
-    assert_eq!(word_count(""), 0);
+fn a_long_description_and_dotted_numbers_are_accepted() {
+    let options = json!([
+        { "answer": "Add an optional allowedTypes list to each generic argument.",
+          "summary": "Per-argument allowedTypes list",
+          "description": "Small change to the contract. Each generic argument of Random Value repeats the 4 numeric tags." },
+        { "answer": "Add an optional top-level typeParameters list.",
+          "summary": "Top-level typeParameters declaration",
+          "description": "One declaration for each parameter. This is a larger change to the contract and the checks." },
+        { "answer": "The larger scale of Min value and Max value.",
+          "summary": "Larger scale of the bounds. Really.",
+          "description": "For example, 1.50 to 2.0 gives 2 fraction digits." },
+    ]);
+    let envelope = decode_envelope(&escalation_document(options)).expect("the envelope is read");
+    let escalation = envelope.escalation.expect("the escalation");
+    assert_eq!(escalation.questions[0].options.len(), 3);
+    assert_eq!(
+        escalation.questions[0].options[2].description,
+        "For example, 1.50 to 2.0 gives 2 fraction digits.",
+    );
+}
 
-    assert_eq!(sentence_count("One sentence"), 1);
-    assert_eq!(sentence_count("One sentence."), 1);
-    assert_eq!(sentence_count("One. Two."), 2);
-    assert_eq!(sentence_count("One. Two"), 2);
-    // A run of marks is one ending rather than several.
-    assert_eq!(sentence_count("What?!"), 1);
-    assert_eq!(sentence_count("   "), 0);
+// EAC-FR-08: a text limit counts characters, so a text of multi-byte
+// characters at its limit is inside it, and one character more is not.
+#[test]
+fn a_text_limit_counts_characters_not_bytes() {
+    let option = |description: String| json!([{ "answer": "a", "summary": "A choice", "description": description }]);
+    let at = "é".repeat(LIMIT_OPTION_DESCRIPTION);
+    assert!(at.len() > LIMIT_OPTION_DESCRIPTION, "the text is over the limit in bytes");
+    decode_envelope(&escalation_document(option(at))).expect("a text at its limit is accepted");
+    let over = "é".repeat(LIMIT_OPTION_DESCRIPTION + 1);
+    assert_eq!(
+        decode_envelope(&escalation_document(option(over))).unwrap_err(),
+        EnvelopeInvalid::TooLarge,
+    );
+    let summary = "é".repeat(LIMIT_SUMMARY);
+    let document = json!({ "protocol_version": 1, "outcome": "success", "summary": summary });
+    decode_envelope(&document.to_string()).expect("an envelope summary at its limit is accepted");
+}
 
-    assert!(summary_shape_ok("Fail the run"));
-    assert!(summary_shape_ok("Fail the run."));
-    assert!(!summary_shape_ok("one two three four five six"));
-    assert!(!summary_shape_ok("One. Two."));
-    assert!(!summary_shape_ok("   "));
-
-    assert!(description_shape_ok("Nothing is published until then."));
-    assert!(description_shape_ok("One thing. Then another."));
-    assert!(!description_shape_ok("One. Two. Three."));
-    assert!(!description_shape_ok(
-        "one two three four five six seven eight nine ten eleven twelve thirteen"
-    ));
+// EAC-FR-18: a broken escalation rule is refused as `escalation_shape`, and a
+// broken rule between the outcome and its payload as `exclusivity`.
+#[test]
+fn an_escalation_rule_and_an_outcome_rule_have_their_own_refusals() {
+    let blank = json!([{ "answer": "a", "summary": "  ", "description": "What it means." }]);
+    assert_eq!(
+        decode_envelope(&escalation_document(blank)).unwrap_err(),
+        EnvelopeInvalid::EscalationShape,
+    );
+    let no_escalation =
+        json!({ "protocol_version": 1, "outcome": "escalation_required", "summary": "s" });
+    assert_eq!(
+        decode_envelope(&no_escalation.to_string()).unwrap_err(),
+        EnvelopeInvalid::Exclusivity,
+    );
 }
 
 /// EAC-FR-18, EAC-FR-19 — every exclusivity and schema violation is invalid output, never

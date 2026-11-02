@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 
 use super::ToolRefusal;
 use crate::graduation::{GraduationEscalationQuestion, GraduationProposedResponse};
-use crate::tools::agent_exec::protocol::{description_shape_ok, summary_shape_ok};
 
 // ---------------------------------------------------------------------------
 // The contract surface (ESU contract surface)
@@ -29,7 +28,7 @@ use crate::tools::agent_exec::protocol::{description_shape_ok, summary_shape_ok}
 pub const NAME: &str = "escalate_to_user";
 
 /// ESU-FR-19: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Stop and ask the person who started this graduation what you cannot answer yourself. Use this when deciding whether the work is finished turns on something only they know — which of two readings of their prompt they meant, whether a change they did not ask for is wanted, whether a gap you found should be filled here or left. The run pauses where it stands and waits, however long that takes, so ask everything you are stuck on in this one call rather than stopping the run again later. Ask between one and eight questions, each a single clear thing rather than three things in one sentence, and say enough about what you found that they can answer without opening anything. Give each question up to three concrete responses where you can see them, and none where no fixed choice fits; each response carries the answer itself, a label of at most five words, and a line of at most two sentences and twelve words saying what choosing it means. They may always answer in their own words instead. Do not use it to report progress, to explain what you did, or to ask something you could settle by reading a file. Calling it ends your turn: nothing else you asked for in the same reply is done, and no verdict you give alongside it is read.";
+pub const DESCRIPTION: &str = "Stop and ask the person who started this graduation what you cannot answer yourself. Use this when deciding whether the work is finished turns on something only they know — which of two readings of their prompt they meant, whether a change they did not ask for is wanted, whether a gap you found should be filled here or left. The run pauses where it stands and waits, however long that takes, so ask everything you are stuck on in this one call rather than stopping the run again later. Ask between one and eight questions, each a single clear thing rather than three things in one sentence, and say enough about what you found that they can answer without opening anything. Give each question up to three concrete responses where you can see them, and none where no fixed choice fits; each response carries the answer itself, a short label of about five words, and a line of about two sentences and twelve words saying what choosing it means. They may always answer in their own words instead. Do not use it to report progress, to explain what you did, or to ask something you could settle by reading a file. Calling it ends your turn: nothing else you asked for in the same reply is done, and no verdict you give alongside it is read.";
 
 /// ESU-FR-11: the named limits. Each exists because the recorded escalation is
 /// persisted in the run's checkpoint, rendered in the run surface, and travels
@@ -52,22 +51,24 @@ const REASON_BLANK: &str =
 const QUESTION_BLANK: &str =
     "The question text must say what you want to know. Write it as you would write it to a colleague.";
 const REASON_TOO_LONG: &str =
-    "The reason is longer than 4 KiB, which is its limit. Say the same thing more briefly.";
+    "The reason is longer than 4096 characters, which is its limit. Say the same thing more briefly.";
 const QUESTION_TOO_LONG: &str =
-    "The question is longer than 2 KiB, which is its limit. Ask one thing, more briefly.";
+    "The question is longer than 2048 characters, which is its limit. Ask one thing, more briefly.";
 const WRONG_QUESTION_COUNT: &str = "This call must carry between one and eight questions, and it carried a number outside that. Ask everything you are stuck on, in that many entries or fewer.";
 const TOO_MANY_OPTIONS: &str =
     "This question carries more than three proposed responses, which is the limit. Offer the choices that actually differ.";
 const OPTION_ANSWER_BLANK: &str =
     "A proposed response must carry the answer it stands for. Write what would be given if it were chosen.";
-const OPTION_SUMMARY_SHAPE: &str = "A proposed response's summary must be one sentence of at most five words. Write a label rather than a sentence about it.";
-const OPTION_DESCRIPTION_SHAPE: &str = "A proposed response's description must be at most two sentences and twelve words altogether. Say what choosing it means, more briefly.";
+const OPTION_SUMMARY_BLANK: &str =
+    "A proposed response must carry a summary. Write a short label for the choice.";
+const OPTION_DESCRIPTION_BLANK: &str =
+    "A proposed response must carry a description. Say what choosing it means.";
 const OPTION_ANSWER_TOO_LONG: &str =
-    "A proposed response's answer is longer than 512 bytes, which is its limit. Shorten it.";
+    "A proposed response's answer is longer than 512 characters, which is its limit. Shorten it.";
 const OPTION_SUMMARY_TOO_LONG: &str =
-    "A proposed response's summary is longer than 128 bytes, which is its limit. Shorten it.";
+    "A proposed response's summary is longer than 128 characters, which is its limit. Shorten it.";
 const OPTION_DESCRIPTION_TOO_LONG: &str =
-    "A proposed response's description is longer than 256 bytes, which is its limit. Shorten it.";
+    "A proposed response's description is longer than 256 characters, which is its limit. Shorten it.";
 
 /// ESU contract surface: one proposed response, as the model writes it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -125,7 +126,7 @@ pub fn normalize(
     if reason.is_empty() {
         return Err(ToolRefusal::InvalidArguments(REASON_BLANK));
     }
-    if reason.len() > REASON_LIMIT {
+    if reason.chars().count() > REASON_LIMIT {
         return Err(ToolRefusal::InvalidArguments(REASON_TOO_LONG));
     }
     if !(MIN_QUESTIONS..=MAX_QUESTIONS).contains(&args.questions.len()) {
@@ -144,7 +145,7 @@ pub fn normalize(
         if text.is_empty() {
             return Err(refuse(QUESTION_BLANK));
         }
-        if text.len() > QUESTION_LIMIT {
+        if text.chars().count() > QUESTION_LIMIT {
             return Err(refuse(QUESTION_TOO_LONG));
         }
         // ESU-FR-10: absent means no options, and an empty list means that no
@@ -166,20 +167,20 @@ pub fn normalize(
             if answer.is_empty() {
                 return Err(refuse(OPTION_ANSWER_BLANK));
             }
-            if answer.len() > OPTION_ANSWER_LIMIT {
+            if answer.chars().count() > OPTION_ANSWER_LIMIT {
                 return Err(refuse(OPTION_ANSWER_TOO_LONG));
             }
-            if summary.len() > OPTION_SUMMARY_LIMIT {
+            if summary.is_empty() {
+                return Err(refuse(OPTION_SUMMARY_BLANK));
+            }
+            if description.is_empty() {
+                return Err(refuse(OPTION_DESCRIPTION_BLANK));
+            }
+            if summary.chars().count() > OPTION_SUMMARY_LIMIT {
                 return Err(refuse(OPTION_SUMMARY_TOO_LONG));
             }
-            if description.len() > OPTION_DESCRIPTION_LIMIT {
+            if description.chars().count() > OPTION_DESCRIPTION_LIMIT {
                 return Err(refuse(OPTION_DESCRIPTION_TOO_LONG));
-            }
-            if !summary_shape_ok(summary) {
-                return Err(refuse(OPTION_SUMMARY_SHAPE));
-            }
-            if !description_shape_ok(description) {
-                return Err(refuse(OPTION_DESCRIPTION_SHAPE));
             }
             options.push(GraduationProposedResponse {
                 answer: answer.to_string(),

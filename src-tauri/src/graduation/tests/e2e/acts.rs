@@ -326,6 +326,7 @@ impl Outcome {
                 position: positions.get(index).copied().unwrap_or(index as u32 + 1),
                 answer: answer.to_string(),
                 summary: answer.to_string(),
+                note: None,
             })
             .collect()
     }

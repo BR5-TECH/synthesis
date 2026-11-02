@@ -1,126 +1,197 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { invoke } from "@tauri-apps/api/core";
 
-import { forgetEveryDraft } from "../../state/escalationDrafts";
+import { resetLogBufferForTest } from "../../logging";
+import {
+  forgetEveryDraft,
+  recallAnswer,
+  recallRefusal,
+  rememberAnswer,
+  streamOwner,
+} from "../../state/escalationDrafts";
+import { graduationErrorMessage } from "../../state/graduation";
 import { makeEscalation, makeRun } from "../../test/graduationFixtures";
-import type { GraduationEscalation } from "../../types";
-import { RunEscalationForm } from "./escalation";
+import type { GraduationEscalation, GraduationRun } from "../../types";
+import { noteQuestionShown } from "../../voice/voiceController";
+import { noteSpokenPage, registerQuestionBlock } from "../../voice/voiceQuestions";
+import { askingTurn, EscalationForm, RunEscalationForm } from "./escalation";
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+// DQA-FR-CYVA: voice mode is a discussion's alone, so an escalation reaches it
+// by no route.
+vi.mock("../../voice/voiceQuestions", async (original) => ({
+  ...(await original<typeof import("../../voice/voiceQuestions")>()),
+  registerQuestionBlock: vi.fn(() => () => {}),
+  noteSpokenPage: vi.fn(),
+}));
+vi.mock("../../voice/voiceController", async (original) => ({
+  ...(await original<typeof import("../../voice/voiceController")>()),
+  noteQuestionShown: vi.fn(),
+}));
 
 const invoked = vi.mocked(invoke);
 
-beforeEach(() => {
-  invoked.mockReset();
-  invoked.mockResolvedValue(undefined);
-  forgetEveryDraft();
-});
-afterEach(cleanup);
+/** What `answer_graduation_escalation` does in this test; accepts by default. */
+let answer: () => Promise<unknown> = () => Promise.resolve(undefined);
+/** A deferred answer still pending when a test ends is settled here. */
+let release: (() => void) | null = null;
 
-function draw(escalation: GraduationEscalation, id = "r1") {
-  const run = makeRun(id, "awaiting_author", { escalation });
-  const onAnswered = vi.fn();
-  const onError = vi.fn();
-  render(
-    <RunEscalationForm
-      run={run}
-      busy={false}
-      onAnswered={onAnswered}
-      onError={onError}
-    />,
-  );
-  return { run, onAnswered, onError };
+beforeEach(() => {
+  resetLogBufferForTest();
+  forgetEveryDraft();
+  answer = () => Promise.resolve(undefined);
+  release = null;
+  vi.mocked(registerQuestionBlock).mockClear();
+  vi.mocked(noteQuestionShown).mockClear();
+  vi.mocked(noteSpokenPage).mockClear();
+  invoked.mockReset();
+  invoked.mockImplementation((command: string) => {
+    if (command === "append_log_records") return Promise.resolve(undefined);
+    if (command === "answer_graduation_escalation") return answer();
+    return Promise.reject(new Error(`unexpected command ${command}`));
+  });
+});
+afterEach(() => {
+  release?.();
+  cleanup();
+});
+
+function runOf(escalation: GraduationEscalation, id = "r1"): GraduationRun {
+  return makeRun(id, "awaiting_author", { escalation });
 }
 
-const twoQuestions = (): GraduationEscalation =>
+function draw(escalation: GraduationEscalation, id = "r1", busy = false) {
+  const onAnswered = vi.fn();
+  const view = render(
+    <RunEscalationForm run={runOf(escalation, id)} busy={busy} onAnswered={onAnswered} />,
+  );
+  const redraw = (next: GraduationEscalation, nextBusy = busy) =>
+    view.rerender(
+      <RunEscalationForm run={runOf(next, id)} busy={nextBusy} onAnswered={onAnswered} />,
+    );
+  return { onAnswered, redraw, unmount: view.unmount };
+}
+
+const twoQuestions = (over: Partial<GraduationEscalation> = {}): GraduationEscalation =>
   makeEscalation({
-    // Recorded at 5 before 2, so the order the questions were recorded in and
-    // the order their positions sort in disagree.
+    // Recorded at 5 before 2, so the recorded order and the order their
+    // positions sort in disagree.
     questions: [
       { position: 5, question: "Should search hold its place?", options: [] },
       {
         position: 2,
         question: "Which unit should paging move by?",
         options: [
-          {
-            answer: "record",
-            summary: "By record",
-            description: "A page is a fixed number of records.",
-          },
-          {
-            answer: "segment",
-            summary: "By segment",
-            description: "A page is one phase and pass.",
-          },
+          { answer: "record", summary: "By record", description: "A page is a fixed number of records." },
+          { answer: "segment", summary: "By segment", description: "A page is one phase and pass." },
         ],
       },
     ],
+    ...over,
   });
 
-describe("what the escalation renders", () => {
-  it("GEA-FR-SXXB: the reason and every recorded question, in the order they were recorded", () => {
-    const escalation = twoQuestions();
-    draw(escalation);
-    expect(screen.getByText(escalation.reason)).toBeInTheDocument();
-    const asked = screen
-      .getAllByTestId("graduation-question")
-      .map((question) => within(question).getByRole("group").textContent);
-    // The order they were recorded in, which is not the order their positions
-    // sort in.
-    expect(asked[0]).toMatch(/Should search hold its place\?/);
-    expect(asked[1]).toMatch(/Which unit should paging move by\?/);
+const block = () => screen.getByTestId("discussion-questions");
+const progress = () => screen.getByTestId("discussion-questions-progress");
+const submit = () => screen.getByTestId("discussion-questions-submit");
+const next = () => screen.getByTestId("discussion-questions-next");
+const previous = () => screen.getByTestId("discussion-questions-previous");
+const answerCalls = () =>
+  invoked.mock.calls.filter(([command]) => command === "answer_graduation_escalation");
+
+/** Answer both questions of `twoQuestions`: own text on 5, "By segment" on 2. */
+async function answerBoth(note?: string) {
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Your own answer to question 1 of 2" }),
+    "Yes",
+  );
+  await userEvent.click(next());
+  await userEvent.click(screen.getByRole("radio", { name: "By segment" }));
+  if (note !== undefined) {
+    await userEvent.type(screen.getByTestId("discussion-questions-note"), note);
+  }
+}
+
+describe("the block an escalation renders", () => {
+  it("GEA-FR-QBWN, GEA-FR-KMVR: the shared question block, headed by the turn that asked", () => {
+    draw(twoQuestions({ origin: "review" }));
+    expect(screen.getByRole("region", { name: "Questions from the review turn" })).toBe(block());
+    expect(block().querySelector("header")).toHaveTextContent("Review turn");
+    expect(screen.queryByText("Send answers")).toBeNull();
+    expect(screen.queryByTestId("graduation-question")).toBeNull();
   });
 
-  it("GEA-FR-ZSDY: the proposed responses and the free text are rows of one group", () => {
+  it.each([
+    ["work", "Work turn"],
+    ["review", "Review turn"],
+    ["semantic_merge", "Merge turn"],
+  ] as const)("GEA-FR-KMVR: the origin %s is named as the %s", (origin, name) => {
+    expect(askingTurn(origin)).toBe(name);
+  });
+
+  it("GEA-FR-SXXB, ESU-FR-12, GRU-FR-MRPE: the reason is verbatim, escaped, and closed by default", () => {
+    const reason = "Line one <b>bold</b>\n\nLine  two";
+    draw(twoQuestions({ reason }));
+    const disclosure = screen.getByTestId("graduation-reason");
+    expect(disclosure.tagName).toBe("DETAILS");
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(within(disclosure).getByText("Why the run stopped").tagName).toBe("SUMMARY");
+    const text = disclosure.querySelector("p")!;
+    expect(text.textContent).toBe(reason);
+    expect(text).not.toBeVisible();
+    expect(disclosure.querySelector("b")).toBeNull();
+    // The questions show in full while it is closed.
+    expect(screen.getByText("Should search hold its place?")).toBeVisible();
+    (disclosure as HTMLDetailsElement).open = true;
+    expect(text).toBeVisible();
+  });
+
+  it("GEA-FR-LWQD: an update's disclosure says the update stopped", () => {
+    render(
+      <EscalationForm
+        ownerId={streamOwner("w1")}
+        escalation={twoQuestions({ origin: "semantic_merge" })}
+        busy={false}
+        onSend={() => Promise.resolve()}
+        onAnswered={() => {}}
+        subject="update"
+      />,
+    );
+    expect(screen.getByText("Why the update stopped")).toBeInTheDocument();
+    expect(block().querySelector("header")).toHaveTextContent("Merge turn");
+  });
+
+  it("DQA-FR-BXHU, GEA-FR-QBWN: one question at a time, paged both ways, in recorded order", async () => {
     draw(twoQuestions());
-    const first = screen.getAllByTestId("graduation-question")[1];
-    const radios = within(first).getAllByRole("radio");
-    // Two proposed responses and the author's own words.
-    expect(radios).toHaveLength(3);
-    expect(new Set(radios.map((radio) => radio.getAttribute("name"))).size).toBe(1);
+    expect(progress()).toHaveTextContent("Question 1 of 2");
+    expect(screen.getByText("Should search hold its place?")).toBeInTheDocument();
+    expect(screen.queryByText("Which unit should paging move by?")).toBeNull();
+    expect(previous()).toBeDisabled();
+    const dots = screen.getByTestId("discussion-questions-dots").children;
+    expect(dots).toHaveLength(2);
+    expect(dots[0]).toHaveAttribute("data-current", "true");
+
+    await userEvent.click(next());
+    expect(progress()).toHaveTextContent("Question 2 of 2");
+    expect(screen.getByText("Which unit should paging move by?")).toBeInTheDocument();
+    expect(next()).toBeDisabled();
+    // DQA-FR-TFCE: focus lands in the question that arrived.
+    expect(screen.getByTestId("discussion-questions-question")).toHaveFocus();
   });
 
-  it("GEA-FR-DNBI: a response reads as its summary with its description beneath", () => {
+  it("GEA-FR-DNBI, GEA-FR-SKWP, GEA-FR-RZQX, GEA-FR-NPUV: a response reads as its summary, described by its description, and nothing is preselected", async () => {
     draw(twoQuestions());
-    expect(screen.getByText("By record")).toBeInTheDocument();
-    expect(
-      screen.getByText("A page is a fixed number of records."),
-    ).toBeInTheDocument();
+    await userEvent.click(next());
+    const record = screen.getByRole("radio", { name: "By record" });
+    expect(record).toHaveAccessibleDescription("A page is a fixed number of records.");
+    for (const radio of screen.getAllByRole("radio")) expect(radio).not.toBeChecked();
+    expect(screen.queryByTestId("discussion-questions-note")).toBeNull();
+    expect(block().textContent).not.toMatch(/confiden/i);
   });
 
-  it("GEA-FR-YMLV: the count is over the set rather than over the recorded positions", () => {
-    draw(twoQuestions());
-    const heads = screen
-      .getAllByTestId("graduation-question")
-      .map((question) => within(question).getByText(/^Question /).textContent);
-    // The questions are recorded at positions 5 and 2, which are stable ids
-    // rather than places in a set of two.
-    expect(heads).toEqual(["Question 1 of 2", "Question 2 of 2"]);
-  });
-
-  it("GEA-FR-ZGHY: a question recorded with no proposed responses renders the field alone", () => {
-    draw(twoQuestions());
-    const alone = screen.getAllByTestId("graduation-question")[0];
-    expect(within(alone).queryAllByRole("radio")).toHaveLength(0);
-    expect(
-      within(alone).getByRole("textbox", { name: "Your answer to question 5" }),
-    ).toBeInTheDocument();
-  });
-
-  it("GEA-FR-RZQX: nothing is preselected and no field is prefilled", () => {
-    draw(twoQuestions());
-    for (const radio of screen.getAllByRole("radio")) {
-      expect(radio).not.toBeChecked();
-    }
-    for (const field of screen.getAllByRole("textbox")) {
-      expect(field).toHaveValue("");
-    }
-  });
-
-  it("GEA-FR-SKWP / GEA-FR-NPUV: a response reads as its summary and its description and as nothing else", () => {
+  it("GEA-FR-SKWP: the value a response is answered with is never what the author reads", () => {
     draw(
       makeEscalation({
         questions: [
@@ -128,256 +199,296 @@ describe("what the escalation renders", () => {
             position: 1,
             question: "Which side wins?",
             options: [
-              {
-                answer: "rebase_onto_theirs",
-                summary: "Take theirs",
-                description: "Their version of the file stands.",
-              },
+              { answer: "rebase_onto_theirs", summary: "Take theirs", description: "Theirs stands." },
             ],
           },
         ],
       }),
     );
-    const area = screen.getByTestId("graduation-escalation");
-    // The value the operation is answered with is what goes back, never what
-    // the author is asked to read.
-    expect(area.textContent).not.toContain("rebase_onto_theirs");
-    // A confidence is a value a later contract may ask for; this one does not.
-    expect(area.textContent).not.toMatch(/confiden/i);
+    expect(block().textContent).not.toContain("rebase_onto_theirs");
+    expect(screen.getByRole("radio", { name: "Take theirs" })).toBeInTheDocument();
   });
 
-  it("GEA-FR-BVMQ: it is an in-panel dialog rather than an overlay of the window", () => {
+  it("GEA-FR-ZGHY, DQA-FR-ZNOQ: a question with no responses is the field alone, and its text answers it", async () => {
+    draw(makeEscalation({ questions: [{ position: 3, question: "Anything else?", options: [] }] }));
+    const question = screen.getByTestId("discussion-questions-question");
+    expect(within(question).queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByTestId("discussion-questions-rails")).toBeNull();
+    const field = within(question).getByRole("textbox", { name: "Your own answer to question 1 of 1" });
+    expect(field).toHaveValue("");
+    expect(submit()).toBeDisabled();
+    await userEvent.type(field, "No");
+    expect(submit()).toBeEnabled();
+    expect(screen.getByTestId("discussion-questions-dots").children[0]).toHaveAttribute(
+      "data-answered",
+      "true",
+    );
+    expect(screen.queryByTestId("discussion-questions-note")).toBeNull();
+  });
+
+  it("DQA-FR-CYVA: an escalation registers nothing with voice mode and speaks nothing", async () => {
+    draw(twoQuestions());
+    await userEvent.click(next());
+    expect(vi.mocked(registerQuestionBlock)).not.toHaveBeenCalled();
+    expect(vi.mocked(noteQuestionShown)).not.toHaveBeenCalled();
+    expect(vi.mocked(noteSpokenPage)).not.toHaveBeenCalled();
+  });
+
+  it("GEA-FR-BVMQ: it is an in-panel block rather than an overlay of the window", () => {
     draw(twoQuestions());
     const area = screen.getByTestId("graduation-escalation");
     expect(area).not.toHaveAttribute("role", "dialog");
-    expect(area).not.toHaveAttribute("aria-modal");
-  });
-
-  it("GRU-FR-MRPE: agent text renders as escaped plain text", () => {
-    draw(
-      makeEscalation({
-        reason: "# Head <b>bold</b>",
-        questions: [
-          {
-            position: 1,
-            question: "<i>Which</i>?",
-            options: [
-              {
-                answer: "a",
-                summary: "<b>A</b>",
-                description: "<b>because</b>",
-              },
-            ],
-          },
-        ],
-      }),
-    );
-    const area = screen.getByTestId("graduation-escalation");
-    expect(area.querySelector("b")).toBeNull();
-    expect(area.querySelector("i")).toBeNull();
-    expect(area.textContent).toContain("<b>bold</b>");
-  });
-});
-
-describe("what is selected is the answer", () => {
-  it("GEA-FR-UEFS: typing selects the free-text row", async () => {
-    draw(twoQuestions());
-    const first = screen.getAllByTestId("graduation-question")[1];
-    await userEvent.click(within(first).getByRole("radio", { name: /By record/ }));
-    await userEvent.type(
-      within(first).getByRole("textbox", { name: "Your answer to question 2" }),
-      "neither",
-    );
-    expect(within(first).getByRole("radio", { name: /In my own words/ })).toBeChecked();
-    expect(within(first).getByRole("radio", { name: /By record/ })).not.toBeChecked();
-  });
-
-  it("GEA-FR-GCTA: neither act clears the other's content", async () => {
-    draw(twoQuestions());
-    const first = screen.getAllByTestId("graduation-question")[1];
-    const field = within(first).getByRole("textbox", {
-      name: "Your answer to question 2",
-    });
-    await userEvent.click(within(first).getByRole("radio", { name: /By record/ }));
-    await userEvent.type(field, "my words");
-    await userEvent.click(within(first).getByRole("radio", { name: /By record/ }));
-    // The words are still there to change back to.
-    expect(field).toHaveValue("my words");
-    await userEvent.click(
-      within(first).getByRole("radio", { name: /In my own words/ }),
-    );
-    expect(field).toHaveValue("my words");
-  });
-
-  it("GEA-FR-YLWC / GEA-FR-RVWL: the free-text row selected and empty answers nothing", async () => {
-    draw(twoQuestions());
-    const first = screen.getAllByTestId("graduation-question")[1];
-    await userEvent.click(
-      within(first).getByRole("radio", { name: /In my own words/ }),
-    );
-    expect(screen.getByTestId("graduation-answered-count")).toHaveTextContent(
-      "0 of 2 answered",
-    );
-    await userEvent.type(
-      within(first).getByRole("textbox", { name: "Your answer to question 2" }),
-      "   ",
-    );
-    expect(screen.getByTestId("graduation-answered-count")).toHaveTextContent(
-      "0 of 2 answered",
-    );
-  });
-
-  it("GEA-FR-FZMW: the surface says how many questions still need an answer", async () => {
-    draw(twoQuestions());
-    expect(screen.getByTestId("graduation-answered-count")).toHaveTextContent(
-      "2 questions need an answer",
-    );
-    await userEvent.click(screen.getByRole("radio", { name: /By record/ }));
-    expect(screen.getByTestId("graduation-answered-count")).toHaveTextContent(
-      "1 of 2 answered · 1 question needs an answer",
-    );
+    expect(area.querySelector("[aria-modal]")).toBeNull();
   });
 });
 
 describe("sending the set", () => {
-  const answerBoth = async () => {
-    await userEvent.click(screen.getByRole("radio", { name: /By segment/ }));
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-      "Yes",
-    );
-  };
-
-  it("GEA-FR-FFKD: Send is enabled only once every recorded question is answered", async () => {
-    draw(twoQuestions());
-    expect(screen.getByTestId("graduation-send-answers")).toBeDisabled();
-    await answerBoth();
-    expect(screen.getByTestId("graduation-send-answers")).toBeEnabled();
-  });
-
-  it("GEA-FR-VWQH / GEA-FR-BHKU: the whole ordered set goes back once, each entry at its recorded position", async () => {
+  it("GEA-FR-VWQH, GEA-FR-TSQO, GEA-FR-PLTO: Submit sends the whole ordered set once, a chosen response with its trimmed note", async () => {
     const { onAnswered } = draw(twoQuestions());
-    await answerBoth();
-    await userEvent.click(screen.getByTestId("graduation-send-answers"));
-    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
-    const calls = invoked.mock.calls.filter(
-      ([command]) => command === "answer_graduation_escalation",
-    );
-    expect(calls).toHaveLength(1);
-    const [, args] = calls[0] as [string, { answers: unknown[] }];
-    // Every entry names the question's recorded position, in the order the
-    // questions were recorded, and a proposed response submits its own answer
-    // and its own summary — the description it was described by is submitted
-    // nowhere.
-    expect(args.answers).toEqual([
-      { position: 5, answer: "Yes", summary: "Yes" },
-      { position: 2, answer: "segment", summary: "By segment" },
-    ]);
-  });
-
-  it("GEA-FR-VIPR: nothing reads as answered until the backend has accepted the set", async () => {
-    let accept: (() => void) | null = null;
-    invoked.mockImplementation(async (command: string) => {
-      if (command !== "answer_graduation_escalation") return undefined;
-      await new Promise<void>((resolve) => {
-        accept = resolve;
-      });
-      return undefined;
+    expect(submit()).toBeDisabled();
+    await answerBoth("  keep it short ");
+    expect(submit()).toBeEnabled();
+    await userEvent.click(submit());
+    await waitFor(() => expect(onAnswered).toHaveBeenCalledTimes(1));
+    expect(answerCalls()).toHaveLength(1);
+    expect(answerCalls()[0][1]).toStrictEqual({
+      runId: "r1",
+      answers: [
+        { position: 5, answer: "Yes", summary: "Yes" },
+        { position: 2, answer: "segment", summary: "By segment", note: "keep it short" },
+      ],
     });
+  });
+
+  it("GEA-FR-PLTO, DQA-FR-JJON, GEA-FR-QKDA: the own answer offers no note and sends none, and the note returns with the option", async () => {
     const { onAnswered } = draw(twoQuestions());
-    await answerBoth();
-    await userEvent.click(screen.getByTestId("graduation-send-answers"));
-    // The call is in flight: the questions are still the surface, and nothing
-    // it holds can be changed or sent again.
-    await waitFor(() =>
-      expect(screen.getByTestId("graduation-send-answers")).toBeDisabled(),
+    await answerBoth("for the option");
+    await userEvent.click(screen.getByRole("radio", { name: "Something else — I will say" }));
+    expect(screen.queryByTestId("discussion-questions-note")).toBeNull();
+    await userEvent.click(screen.getByRole("radio", { name: "By segment" }));
+    expect(screen.getByTestId("discussion-questions-note")).toHaveValue("for the option");
+    await userEvent.click(screen.getByRole("radio", { name: "Something else — I will say" }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Your own answer to question 2 of 2" }),
+      "neither",
     );
-    expect(screen.getByTestId("graduation-escalation")).toBeInTheDocument();
+    await userEvent.click(submit());
+    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+    const [, args] = answerCalls()[0] as [string, { answers: Record<string, unknown>[] }];
+    expect(args.answers[1]).toStrictEqual({ position: 2, answer: "neither", summary: "neither" });
+  });
+
+  it("GEA-FR-VIPR, DQA-FR-AYNP: one submission at a time, and nothing reads as answered until the backend accepts", async () => {
+    answer = () =>
+      new Promise((resolve) => {
+        release = () => resolve(undefined);
+      });
+    const { onAnswered } = draw(twoQuestions());
+    await answerBoth("n");
+    await userEvent.dblClick(submit());
+    await waitFor(() => expect(submit()).toBeDisabled());
+    expect(answerCalls()).toHaveLength(1);
     for (const radio of screen.getAllByRole("radio")) expect(radio).toBeDisabled();
     for (const field of screen.getAllByRole("textbox")) expect(field).toBeDisabled();
+    expect(previous()).toBeDisabled();
     expect(onAnswered).not.toHaveBeenCalled();
-    accept!();
-    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+    expect(block()).toBeInTheDocument();
+    release!();
+    await waitFor(() => expect(onAnswered).toHaveBeenCalledTimes(1));
+    // GEA-FR-KTME: the accepted set takes its draft with it.
+    expect(recallAnswer("r1", 2).selected).toBeNull();
+    expect(recallRefusal("r1")).toBeNull();
   });
 
-  it("GEA-FR-KTME: the draft is discarded once the backend has accepted the set", async () => {
-    const escalation = twoQuestions();
-    const { onAnswered } = draw(escalation);
-    await answerBoth();
-    await userEvent.click(screen.getByTestId("graduation-send-answers"));
-    await waitFor(() => expect(onAnswered).toHaveBeenCalled());
-    cleanup();
-    draw(escalation);
-    expect(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-    ).toHaveValue("");
-    expect(screen.getByRole("radio", { name: /By segment/ })).not.toBeChecked();
+  it("GEA-FR-TEMG: a refusal renders inline at the foot of the block, keeps every answer, and a retry succeeds", async () => {
+    answer = () => Promise.reject("run_state_not_permitted");
+    const { onAnswered } = draw(twoQuestions());
+    await answerBoth("my note");
+    await userEvent.click(submit());
+    const alert = await within(block()).findByRole("alert");
+    expect(alert).toHaveTextContent(graduationErrorMessage("run_state_not_permitted"));
+    expect(screen.getByRole("radio", { name: "By segment" })).toBeChecked();
+    expect(screen.getByTestId("discussion-questions-note")).toHaveValue("my note");
+    expect(submit()).toBeEnabled();
+    expect(previous()).toBeEnabled();
+    expect(onAnswered).not.toHaveBeenCalled();
+
+    answer = () => Promise.resolve(undefined);
+    await userEvent.click(submit());
+    await waitFor(() => expect(onAnswered).toHaveBeenCalledTimes(1));
+    expect(answerCalls()).toHaveLength(2);
   });
 
-  it("GEA-FR-TEMG: a refusal leaves every entered answer intact", async () => {
-    invoked.mockImplementation(async (command: string) => {
-      if (command === "answer_graduation_escalation") throw "run_not_waiting";
-      return undefined;
-    });
-    const { onError } = draw(twoQuestions());
+  it("DQA-FR-EWLB, GEA-FR-TEMG: a refused submission gives the keyboard back to Submit", async () => {
+    answer = () => Promise.reject("run_state_not_permitted");
+    draw(twoQuestions());
     await answerBoth();
-    await userEvent.click(screen.getByTestId("graduation-send-answers"));
-    await waitFor(() => expect(onError).toHaveBeenCalled());
-    expect(screen.getByRole("radio", { name: /By segment/ })).toBeChecked();
-    expect(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-    ).toHaveValue("Yes");
-    expect(screen.getByTestId("graduation-send-answers")).toBeEnabled();
+    submit().focus();
+    await userEvent.keyboard("{Enter}");
+    await within(block()).findByRole("alert");
+    await waitFor(() => expect(submit()).toHaveFocus());
+  });
+
+  it("GEA-FR-TEMG: a refusal that arrives as an Error reads as its message, not as the error's name", async () => {
+    answer = () => Promise.reject(new Error("run_state_not_permitted"));
+    draw(twoQuestions());
+    await answerBoth();
+    await userEvent.click(submit());
+    const alert = await within(block()).findByRole("alert");
+    expect(alert.textContent).not.toMatch(/^Error:/);
+    expect(alert).toHaveTextContent(graduationErrorMessage("run_state_not_permitted"));
+  });
+
+  it("busy: while the run is busy no control of the block can be used", () => {
+    rememberAnswer("r1", 5, { selected: null, ownWords: true, typed: "Yes", note: "" });
+    const { redraw } = draw(twoQuestions(), "r1", true);
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    expect(next()).toBeDisabled();
+    expect(submit()).toBeDisabled();
+    redraw(twoQuestions(), false);
+    expect(screen.getByRole("textbox")).toBeEnabled();
+    expect(next()).toBeEnabled();
   });
 });
 
 describe("the unsent answer draft", () => {
-  it("GEA-FR-QULY: an answer entered is still there when the form is drawn again", async () => {
-    const escalation = twoQuestions();
-    draw(escalation);
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-      "Yes",
-    );
-    cleanup();
-    draw(escalation);
-    expect(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-    ).toHaveValue("Yes");
-  });
-
-  it("GEA-FR-XTUE / GEA-FR-THNY: the draft is keyed by its run, so no run reads another's", async () => {
-    const escalation = twoQuestions();
-    draw(escalation, "r1");
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-      "Yes",
-    );
-    cleanup();
-    draw(escalation, "r2");
-    expect(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-    ).toHaveValue("");
-  });
-
-  it("GEA-FR-VBUG: a re-read keeps every entry it still records a question for", async () => {
+  it("GEA-FR-QULY: an answer and its note survive paging", async () => {
     draw(twoQuestions());
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-      "Yes",
+    await answerBoth("noted");
+    await userEvent.click(previous());
+    expect(screen.getByRole("textbox", { name: "Your own answer to question 1 of 2" })).toHaveValue("Yes");
+    await userEvent.click(next());
+    expect(screen.getByRole("radio", { name: "By segment" })).toBeChecked();
+    expect(screen.getByTestId("discussion-questions-note")).toHaveValue("noted");
+  });
+
+  it("GEA-FR-QULY, GEA-FR-TEMG: the draft and the refusal survive the block being drawn again", async () => {
+    answer = () => Promise.reject("run_state_not_permitted");
+    const escalation = twoQuestions();
+    const { unmount } = draw(escalation);
+    await answerBoth();
+    await userEvent.click(submit());
+    await within(block()).findByRole("alert");
+    unmount();
+    draw(escalation);
+    expect(within(block()).getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Your own answer to question 1 of 2" })).toHaveValue("Yes");
+  });
+
+  it("GEA-FR-XTUE, GEA-FR-THNY: the draft is keyed by its run, so no run reads another's", async () => {
+    const escalation = twoQuestions();
+    const { unmount } = draw(escalation, "r1");
+    await userEvent.type(screen.getByRole("textbox"), "Yes");
+    unmount();
+    draw(escalation, "r2");
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("GEA-FR-VBUG: a re-read keeps every entry it still records, and drops the rest", async () => {
+    const { redraw } = draw(twoQuestions());
+    await answerBoth();
+    redraw(
+      makeEscalation({ questions: [{ position: 5, question: "Should search hold its place?", options: [] }] }),
     );
-    cleanup();
-    // The second escalation records question 5 and nothing else.
-    draw(
-      makeEscalation({
-        questions: [
-          { position: 5, question: "Should search hold its place?", options: [] },
-        ],
-      }),
-    );
-    expect(
-      screen.getByRole("textbox", { name: "Your answer to question 5" }),
-    ).toHaveValue("Yes");
-    expect(screen.getAllByTestId("graduation-question")).toHaveLength(1);
+    // DQA-FR-DYFR: the page it stood on is gone, so the block shows what is left.
+    expect(progress()).toHaveTextContent("Question 1 of 1");
+    expect(screen.getByRole("textbox")).toHaveValue("Yes");
+    redraw(twoQuestions());
+    await userEvent.click(next());
+    expect(screen.getByRole("radio", { name: "By segment" })).not.toBeChecked();
+  });
+
+  it("DQA-FR-GVSA, GEA-FR-KTME: a re-read keeps the page; a later escalation opens on its first question with nothing of the earlier one", async () => {
+    answer = () => Promise.reject("run_state_not_permitted");
+    const { redraw } = draw(twoQuestions());
+    await answerBoth();
+    await userEvent.click(submit());
+    await within(block()).findByRole("alert");
+
+    redraw(twoQuestions({ reason: "A newer account." }));
+    expect(progress()).toHaveTextContent("Question 2 of 2");
+    expect(screen.getByTestId("graduation-reason")).toHaveTextContent("A newer account.");
+
+    redraw(twoQuestions({ raisedAt: "2026-09-07T10:00:00Z" }));
+    expect(progress()).toHaveTextContent("Question 1 of 2");
+    expect(previous()).toBeDisabled();
+    expect(within(block()).queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("GEA-FR-KTME, DQA-FR-AYNP: a send that settles after a later escalation arrived changes nothing of the later one", async () => {
+    answer = () =>
+      new Promise((resolve) => {
+        release = () => resolve(undefined);
+      });
+    const { onAnswered, redraw } = draw(twoQuestions());
+    await answerBoth();
+    await userEvent.click(submit());
+    await waitFor(() => expect(submit()).toBeDisabled());
+
+    const later = twoQuestions({ raisedAt: "2026-09-07T10:00:00Z" });
+    redraw(later);
+    // The new set's controls are not held closed by the old send.
+    await userEvent.type(screen.getByRole("textbox"), "later");
+    expect(screen.getByRole("textbox")).toBeEnabled();
+    // Settle the old send, then let every handler chained on it run: a
+    // macrotask runs only after every pending microtask has.
+    await act(async () => {
+      release!();
+      release = null;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(answerCalls()).toHaveLength(1);
+    expect(onAnswered).not.toHaveBeenCalled();
+    expect(recallAnswer("r1", 5).typed).toBe("later");
+  });
+
+  it("GEA-FR-KTME, GEA-FR-TEMG: a refusal that arrives after a later escalation is not that escalation's, and the later one can be sent", async () => {
+    let refuse: (() => void) | null = null;
+    answer = () =>
+      new Promise((_, reject) => {
+        refuse = () => reject("run_state_not_permitted");
+      });
+    const { onAnswered, redraw } = draw(twoQuestions());
+    await answerBoth();
+    await userEvent.click(submit());
+    await waitFor(() => expect(submit()).toBeDisabled());
+
+    redraw(makeEscalation({ raisedAt: "2026-09-07T10:00:00Z", questions: [{ position: 1, question: "Later?", options: [] }] }));
+    await act(async () => {
+      refuse!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(within(block()).queryByRole("alert")).toBeNull();
+    expect(recallRefusal("r1")).toBeNull();
+
+    answer = () => Promise.resolve(undefined);
+    await userEvent.type(screen.getByRole("textbox"), "yes");
+    await userEvent.click(submit());
+    await waitFor(() => expect(onAnswered).toHaveBeenCalledTimes(1));
+    expect(answerCalls()).toHaveLength(2);
+  });
+
+  it("DQA-FR-AYNP: two activations before the block repaints are one submission", async () => {
+    answer = () =>
+      new Promise((resolve) => {
+        release = () => resolve(undefined);
+      });
+    draw(twoQuestions());
+    await answerBoth();
+    const button = submit();
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(answerCalls()).toHaveLength(1);
+  });
+
+  it("GEA-FR-THNY: what the author enters is written to no backend operation", async () => {
+    draw(twoQuestions());
+    await answerBoth("a note");
+    const commands = new Set(invoked.mock.calls.map(([command]) => command));
+    commands.delete("append_log_records");
+    expect([...commands]).toEqual([]);
   });
 });

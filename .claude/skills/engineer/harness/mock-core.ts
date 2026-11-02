@@ -6625,6 +6625,77 @@ graduationRuns.push(
       capturedAt: "2026-09-05T16:00:00Z",
     },
   }),
+  // GEA-FR-QBWN / GEA-FR-SXXB / GEA-FR-KMVR: a work run at rest on a
+  // two-question escalation, current shape. The reason is long so the closed
+  // "Why the run stopped" disclosure has something to hold; the second question
+  // has no options, so the text field stands alone.
+  makeStreamRun({
+    id: "g-28",
+    draftId: "d-28",
+    state: "awaiting_author",
+    input: {
+      draftId: "d-28",
+      draftName: "Branch pruning rule",
+      prompt: "A command that prunes branches whose upstream is gone.",
+      promptChecksum: "sha-p28",
+      capturedAt: "2026-09-05T17:00:00Z",
+    },
+    escalation: {
+      origin: "work",
+      raisedAt: "2026-09-06T13:00:00Z",
+      reason:
+        "The prompt asks for stale branches to be pruned, but it never says what counts as stale. " +
+        "The specification of the git panel defines a stale branch as one whose upstream is gone, " +
+        "while the worktree cleanup treats a branch as stale after thirty days without a commit. " +
+        "The two rules disagree on branches that still hold unmerged commits, and picking one " +
+        "silently would either lose work or leave the list of branches as long as it is now. " +
+        "The work turn stopped here so that the author decides which rule the command follows.",
+      questions: [
+        {
+          position: 1,
+          question:
+            "What should the command do with a branch whose upstream is gone but which still holds unmerged commits?",
+          options: [
+            {
+              answer: "skip",
+              summary: "Skip the branch",
+              description: "The branch is reported in the summary and left alone, so no commit is lost.",
+            },
+            {
+              answer: "prune",
+              summary: "Prune it anyway",
+              description: "The branch is deleted with its commits. They stay reachable from the reflog for a time.",
+            },
+            {
+              answer: "ask",
+              summary: "Ask each time",
+              description: "The command lists such branches and asks before it deletes each one.",
+            },
+          ],
+        },
+        {
+          position: 2,
+          question: "Is there any branch name the command must never touch?",
+          options: [],
+        },
+      ],
+    },
+    observability: {
+      observabilityVersion: 1,
+      currentStage: "working",
+      stageCondition: "waiting",
+      stageHistory: [],
+      passes: [
+        {
+          pass: 1,
+          status: "working",
+          task: "Add a command that prunes branches whose upstream is gone.",
+          findings: [],
+          startedAt: "2026-09-06T12:30:00Z",
+        },
+      ],
+    },
+  }),
 );
 
 /**

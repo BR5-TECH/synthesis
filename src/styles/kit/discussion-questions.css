@@ -1,8 +1,9 @@
-/* Where the author answers a discussion agent that asked several things at once
-   (`../../../specifications/ui/DQA-discussion-question-answering.md`).
+/* The application's one question block
+   (`../../../specifications/ui/DQA-discussion-question-answering.md` DQA-FR-HSBK).
+   A discussion's set and every graduation or update escalation render it.
 
-   The block sits between the conversation's message list and its composer,
-   inside whichever surface renders the discussion. It is no floating overlay and
+   In a discussion the block sits between the conversation's message list and
+   its composer, inside whichever surface renders the discussion. It is no floating overlay and
    no modal (DQA-FR-CKYP), so it takes part in the panel's own layout and the
    rest of the window stays operable while it stands.
 
@@ -75,6 +76,34 @@
   line-height: var(--lh-snug);
   color: var(--fg-3);
   margin-left: auto;
+}
+
+/* GEA-FR-SXXB, GEA-FR-JEOX: an escalation's reason stands behind a disclosure
+   on its own line under the head, closed by default, at the chrome's caption
+   size in the quieter tone. The questions are what the author reads; the reason
+   is one click away. */
+.discussion-questions__reason {
+  flex-basis: 100%;
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+.discussion-questions__reason > summary {
+  width: fit-content;
+  padding: var(--sp-0-5) var(--sp-1);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+/* The ring is drawn inside the summary: the block scrolls inside itself, so a
+   ring outside the summary's own box is cut where it meets the block's edge. */
+.discussion-questions__reason > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.discussion-questions__reason-text {
+  margin: var(--sp-1) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* DQA-FR-VNKQ: the question area carries a background of its own, distinct from
@@ -290,6 +319,11 @@
      thing saying there is somewhere to write, so the rule is taken one step up
      the same ladder (`.input` hovers to this) to stay visible unfocused. */
   border-bottom-color: var(--border-3);
+}
+/* DQA-FR-ZNOQ: a question with no options has the own-answer field alone.
+   There is no mark to step past, so the writing starts at the row's own inset. */
+.discussion-questions__group[data-alone="true"] .discussion-questions__typed {
+  padding-inline: var(--sp-2);
 }
 .discussion-questions__note-field {
   margin-top: var(--sp-2);

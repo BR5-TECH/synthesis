@@ -12,7 +12,9 @@ import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { resetLogBufferForTest } from "../../logging";
 import { resetAppPreferencesCache } from "../../state/appPreferences";
+import { graduationErrorMessage } from "../../state/graduation";
 import { forgetEveryDraft } from "../../state/escalationDrafts";
 import { forgetEverything } from "../../state/graduationSelection";
 import {
@@ -61,6 +63,7 @@ beforeEach(() => {
   resetAppPreferencesCache();
   forgetEverything();
   forgetEveryDraft();
+  resetLogBufferForTest();
 });
 afterEach(() => {
   cleanup();
@@ -617,7 +620,7 @@ describe("the run region", () => {
     ]);
     await open();
     expect(await screen.findByTestId("graduation-escalation")).toBeInTheDocument();
-    expect(screen.getAllByTestId("graduation-send-answers")).toHaveLength(1);
+    expect(screen.getAllByTestId("discussion-questions-submit")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /^Answer/ })).toBeNull();
   });
 
@@ -791,19 +794,47 @@ describe("the rail and the region together", () => {
     );
   });
 
+  it("GEA-FR-TEMG, GRU-FR-KQPE, GEA-FR-QULY: a refused answer set is one alert, inside the block, and it and the answer survive a switch to another run and back", async () => {
+    refusals.answer_graduation_escalation = "run_state_not_permitted";
+    queue = makeQueue([
+      makeRun("r1", "awaiting_author", { escalation: makeEscalation() }),
+      makeRun("r2", "working"),
+    ]);
+    await open();
+    await userEvent.click(await screen.findByRole("radio", { name: "By segment" }));
+    await userEvent.type(screen.getByTestId("discussion-questions-note"), "kept");
+    await userEvent.click(screen.getByTestId("discussion-questions-submit"));
+
+    const region = () => screen.getByRole("region", { name: "The selected run" });
+    const alert = await within(screen.getByTestId("discussion-questions")).findByRole("alert");
+    expect(alert).toHaveTextContent(graduationErrorMessage("run_state_not_permitted"));
+    expect(within(region()).getAllByRole("alert")).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Run r2" }));
+    await waitFor(() => expect(region()).toHaveAttribute("data-run", "r2"));
+    await userEvent.click(screen.getByRole("button", { name: "Run r1" }));
+    await waitFor(() => expect(region()).toHaveAttribute("data-run", "r1"));
+    expect(within(screen.getByTestId("discussion-questions")).getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "By segment" })).toBeChecked();
+    expect(screen.getByTestId("discussion-questions-note")).toHaveValue("kept");
+  });
+
   it("GEA-FR-QULY: an unsent answer survives a re-list of the queue", async () => {
     queue = makeQueue([
       makeRun("r1", "awaiting_author", { escalation: makeEscalation() }),
     ]);
     await open();
-    const field = await screen.findByRole("textbox", {
-      name: "Your answer to question 1",
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Something else — I will say" }),
+    );
+    const field = screen.getByRole("textbox", {
+      name: "Your own answer to question 1 of 1",
     });
     await userEvent.type(field, "By record, please");
     await fire("graduation-queue-changed");
     await waitFor(() => expect(commands().filter(isListing).length).toBe(2));
     expect(
-      screen.getByRole("textbox", { name: "Your answer to question 1" }),
+      screen.getByRole("textbox", { name: "Your own answer to question 1 of 1" }),
     ).toHaveValue("By record, please");
   });
 

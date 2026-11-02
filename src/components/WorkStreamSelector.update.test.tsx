@@ -15,6 +15,8 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 
 import { WorkStreamSelector, refusalText } from "./WorkStreamSelector";
+import { resetLogBufferForTest } from "../logging";
+import { forgetEveryDraft } from "../state/escalationDrafts";
 import { STREAM_ERRORS, type WorkStreamSummary } from "../types";
 import {
   mergeRunLink,
@@ -90,6 +92,8 @@ const behind = (over: Parameters<typeof summary>[1] = {}) =>
 beforeEach(() => {
   invokeMock.mockReset();
   handlers = [];
+  resetLogBufferForTest();
+  forgetEveryDraft();
 });
 afterEach(cleanup);
 
@@ -583,7 +587,7 @@ describe("an update that stopped (WSS-FR-FVKO, WSS-FR-GTQL, WSS-FR-PMYA)", () =>
       within(dialog).getByRole("radio", { name: /Keep the base branch's/ }),
     );
     await userEvent.click(
-      within(dialog).getByTestId("graduation-send-answers"),
+      within(dialog).getByTestId("discussion-questions-submit"),
     );
 
     await waitFor(() =>
@@ -593,5 +597,70 @@ describe("an update that stopped (WSS-FR-FVKO, WSS-FR-GTQL, WSS-FR-PMYA)", () =>
     expect(
       calls("answer_work_stream_update_escalation")[0][1],
     ).toMatchObject({ streamId: "w1" });
+  });
+
+  it("GEA-FR-LWQD, GEA-FR-KMVR, WKS-FR-CBXW: an update's questions say the update stopped, and the note goes with the chosen answer", async () => {
+    const row = await openRow([behind({ update: updateAskedOnce() })]);
+    await userEvent.click(within(row).getByTestId("stream-update-open-w1"));
+    const dialog = await screen.findByTestId("update-resolution");
+    expect(within(dialog).getByText("Why the update stopped")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("discussion-questions").querySelector("header")).toHaveTextContent(
+      "Merge turn",
+    );
+
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Keep the stream's/ }));
+    await userEvent.type(within(dialog).getByTestId("discussion-questions-note"), " tested ");
+    await userEvent.click(within(dialog).getByTestId("discussion-questions-submit"));
+
+    await waitFor(() =>
+      expect(calls("answer_work_stream_update_escalation")).toHaveLength(1),
+    );
+    expect(calls("answer_work_stream_update_escalation")[0][1]).toStrictEqual({
+      streamId: "w1",
+      answers: [{ position: 1, answer: "stream", summary: "Keep the stream's", note: "tested" }],
+    });
+  });
+
+  it("GEA-FR-TEMG, GEA-FR-BZQN: a refused answer set shows once, inline in the block, with the answer kept", async () => {
+    const row = await openRow([behind({ update: updateAskedOnce() })], {
+      answer_work_stream_update_escalation: () => {
+        throw new Error(STREAM_ERRORS.staleBaseRevision);
+      },
+    });
+    await userEvent.click(within(row).getByTestId("stream-update-open-w1"));
+    const dialog = await screen.findByTestId("update-resolution");
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Keep the base branch's/ }));
+    await userEvent.click(within(dialog).getByTestId("discussion-questions-submit"));
+
+    const alert = await within(within(dialog).getByTestId("discussion-questions")).findByRole("alert");
+    expect(alert).toHaveTextContent(refusalText(STREAM_ERRORS.staleBaseRevision));
+    expect(within(dialog).getAllByRole("alert")).toHaveLength(1);
+    expect(within(dialog).getByRole("radio", { name: /Keep the base branch's/ })).toBeChecked();
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it("WSS-FR-ZMPC: a refused action of the window itself still shows on the window's own error line", async () => {
+    const row = await openRow(
+      [
+        behind({
+          update: updateRecord("conflicted", {
+            conflicts: [
+              { path: "README.md", baseChange: "updated", streamChange: "updated" },
+            ],
+          }),
+        }),
+      ],
+      {
+        retry_work_stream_update: () => {
+          throw new Error(STREAM_ERRORS.staleBaseRevision);
+        },
+      },
+    );
+    await userEvent.click(within(row).getByTestId("stream-update-open-w1"));
+    const dialog = await screen.findByTestId("update-resolution");
+    await userEvent.click(within(dialog).getByTestId("update-resolution-retry"));
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveClass("update-resolution__error");
+    expect(alert).toHaveTextContent(refusalText(STREAM_ERRORS.staleBaseRevision));
   });
 });

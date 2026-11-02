@@ -295,3 +295,56 @@ describe("the question text (DQA-FR-FJXQ)", () => {
     }
   });
 });
+
+describe("an escalation's question block (GEA-graduation-escalation-answering.md)", () => {
+  const graduation = () => sheet("components/graduation-cont.css");
+
+  it("GEA-FR-DPTT: the block is held to a measure in the UI role's own size and centred", () => {
+    const block = blocksFor(graduation(), ".graduation__escalation")[0];
+    expect(decl(block, "max-width")).toBe("calc(var(--font-ui-size) * 56)");
+    // Centred: both horizontal margins are `auto`, in whichever shorthand.
+    const margin = (decl(block, "margin") ?? "").split(/\s+/);
+    const horizontal = margin.length === 1 ? [margin[0], margin[0]] : margin.length === 4 ? [margin[1], margin[3]] : [margin[1], margin[1]];
+    expect(horizontal).toEqual(["auto", "auto"]);
+  });
+
+  it("GEA-FR-JEOX, GEA-FR-SXXB: the reason disclosure is set at the caption size in the quieter tone", () => {
+    const reason = blocksFor(style(), ".discussion-questions__reason")[0];
+    expect(decl(reason, "font-size")).toBe("var(--fs-ui-xs)");
+    expect(decl(reason, "color")).toBe("var(--fg-2)");
+    // On a line of its own under the head row.
+    expect(decl(reason, "flex-basis")).toBe("100%");
+    // Verbatim: the reason keeps its line breaks and its spaces as recorded.
+    const text = blocksFor(style(), ".discussion-questions__reason-text")[0];
+    expect(decl(text, "white-space")).toBe("pre-wrap");
+  });
+
+  it("GEA-FR-HWRT, DQA-FR-VNKQ: the escalation host takes the draft column's presentation of the block", () => {
+    const stream = sheet("kit/discussion-stream.css");
+    for (const part of [
+      "__question",
+      "__group",
+      "__ask",
+      "__choice",
+      '__choice[data-selected="true"]',
+      '__choice > input[type="radio"]',
+      '__choice > input[type="radio"]:checked',
+    ]) {
+      const column = blocksFor(stream, `.dds-discussion .discussion-questions${part}`);
+      const escalation = blocksFor(stream, `.graduation__escalation .discussion-questions${part}`);
+      expect(escalation.length, part).toBeGreaterThan(0);
+      // One rule for both, so the two cannot drift apart.
+      expect(escalation, part).toEqual(column);
+    }
+    // The question carries no box, and the group is the card on the canvas tone.
+    const group = blocksFor(stream, ".graduation__escalation .discussion-questions__group")[0];
+    expect(decl(group, "background")).toBe("var(--bg-canvas)");
+    const question = blocksFor(stream, ".graduation__escalation .discussion-questions__question")[0];
+    expect(decl(question, "border")).toBe("0");
+  });
+
+  it("DQA-FR-EWLB, GEA-FR-SXXB: the reason's focus ring is drawn inside its summary, so the block's own edge never cuts it", () => {
+    const ring = blocksFor(style(), ".discussion-questions__reason > summary:focus-visible")[0];
+    expect(decl(ring, "outline-offset")).toBe("-2px");
+  });
+});

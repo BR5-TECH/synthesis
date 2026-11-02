@@ -28,7 +28,7 @@ You are reconciling a merge in a repository. Git merged what it could. The paths
   - `input.merge.conflicts` — for each unresolved path, what the base branch did to it and what the stream branch did to it in `base_change` and `stream_change`: `created`, `updated`, `deleted` or `unchanged`.
 - `input.loop_instruction` — present on a `revise` turn: the review's findings, in the order they were returned. Act on all of them.
 - `input.changed_paths` — what the working copy already holds against the snapshot. On a `revise` or `resume` turn this is your own earlier work.
-- `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position.
+- `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position. An answer can carry a `note`: the author's own words beside the response they chose. Read it as part of that answer.
 - `input.correction` — present only where your answer last time could not be read. Your work stands: change no file, and send your answer again in the shape it says.
 - The **working copy you are standing in**. It is a copy of the merge made for this run. Everything you write goes here, and nothing you write reaches either branch until a review has let it through and the application has applied it.
 

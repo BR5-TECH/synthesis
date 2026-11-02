@@ -355,6 +355,13 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
     }
     let Some(escalation) = run.escalation.clone() else {
+        logging::log_warn(
+            &app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation refused answers to a run that asks nothing",
+            log_fields! { "run_id" => run.id.clone(), "state" => run.state.as_str().to_string() },
+        );
         return Err(ERR_RUN_STATE_NOT_PERMITTED.to_string());
     };
     // GRD-FR-XHSE: answering resumes the run, so a moved tip refuses it first.
@@ -365,8 +372,34 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
     positions.sort_unstable();
     let expected: Vec<u32> = escalation.questions.iter().map(|q| q.position).collect();
     if positions != expected || answers.iter().any(|a| a.answer.trim().is_empty()) {
+        logging::log_warn(
+            &app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation answers do not cover every question",
+            log_fields! {
+                "run_id" => run.id.clone(),
+                "answered" => answers.len() as i64,
+                "questions" => expected.len() as i64,
+            },
+        );
         return Err("the answers do not cover every question".to_string());
     }
+    // GXD-FR-BJYT: a blank note is stored as no note.
+    let answers: Vec<GraduationEscalationAnswer> =
+        answers.into_iter().map(GraduationEscalationAnswer::normalized).collect();
+    // The count of notes, never their text.
+    logging::log_info(
+        &app,
+        &BUFFER,
+        &[Domain::Backend],
+        "graduation answers accepted",
+        log_fields! {
+            "run_id" => run.id.clone(),
+            "answers" => answers.len() as i64,
+            "notes" => answers.iter().filter(|a| a.note.is_some()).count() as i64,
+        },
+    );
     run.checkpoint.pending_escalation_answers = answers;
     run.checkpoint.resume = escalation.resume.clone();
     run.escalation = None;

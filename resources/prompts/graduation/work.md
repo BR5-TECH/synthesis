@@ -28,7 +28,7 @@ Where the project says nothing at all, follow what the code around you already d
 - `input.purpose` — why this turn is running: `generate` for the first attempt, `revise` when a review asked for changes, `resume` when an earlier turn stopped part-way, `escalation_answer` when the author has answered your question.
 - `input.loop_instruction` — present on a `revise` turn: the review's findings, in the order they were returned. Act on all of them.
 - `input.changed_paths` — what the working copy already holds against the commit this run started from. On a `revise` or `resume` turn this is your own earlier work.
-- `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position.
+- `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position. An answer can carry a `note`: the author's own words beside the response they chose. Read it as part of that answer.
 - `input.correction` — present only where your answer last time could not be read. Your work stands: change no file, and send your answer again in the shape it says.
 - The **working copy you are standing in**, which is a branch of this repository. Everything you write goes here.
 

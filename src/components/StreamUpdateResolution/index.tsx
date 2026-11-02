@@ -21,6 +21,7 @@ import { useEffect, useRef } from "react";
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
 import { EscalationForm } from "../GraduationRuns/escalation";
+import { streamOwner } from "../../state/escalationDrafts";
 import { fateSentence, type ResolutionSubject } from "./subject";
 import { refusalText } from "../WorkStreamSelector/refusals";
 
@@ -50,7 +51,6 @@ export interface StreamUpdateResolutionProps {
   onRetry: () => void;
   onCancelUpdate: () => void;
   onDismissUpdate: () => void;
-  onError: (message: string) => void;
 }
 
 export function StreamUpdateResolution({
@@ -64,7 +64,6 @@ export function StreamUpdateResolution({
   onRetry,
   onCancelUpdate,
   onDismissUpdate,
-  onError,
 }: StreamUpdateResolutionProps) {
   // WSS-FR-KDVU: Escape puts the window down, like every other overlay of this
   // window.
@@ -190,7 +189,7 @@ export function StreamUpdateResolution({
               terms GEA sets for every escalation, keyed by the stream. */}
           {escalation && (
             <EscalationForm
-              ownerId={subject.streamId}
+              ownerId={streamOwner(subject.streamId)}
               escalation={escalation}
               busy={busy}
               onSend={(answers) => {
@@ -205,8 +204,8 @@ export function StreamUpdateResolution({
                 return onSend(answers);
               }}
               onAnswered={onClose}
-              onError={onError}
               describeError={refusalText}
+              subject="update"
             />
           )}
         </div>

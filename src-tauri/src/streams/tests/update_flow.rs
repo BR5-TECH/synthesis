@@ -271,6 +271,7 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
         position: escalation.questions[0].position,
         answer: "the base limit stands".to_string(),
         summary: String::new(),
+        note: Some("  the stream value was a test  ".to_string()),
     }];
     let started = update_commands::answer_work_stream_update_escalation(
         fx.app.clone(),
@@ -280,6 +281,8 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
     .expect("accepted");
     assert_eq!(started.state, StreamUpdateState::Running);
     assert_eq!(started.decisions.len(), 1);
+    // WKS-FR-CBXW: the note travels with its decision, trimmed.
+    assert_eq!(started.decisions[0].note.as_deref(), Some("the stream value was a test"));
     assert_eq!(started.base_revision, pinned.to_string());
 }
 
@@ -663,6 +666,7 @@ fn an_answer_set_that_does_not_cover_every_question_starts_nothing() {
         position,
         answer: text.to_string(),
         summary: String::new(),
+        note: None,
     };
 
     refused(Vec::new());
@@ -783,4 +787,39 @@ fn a_settled_path_keeps_the_mode_it_was_settled_at() {
         .filemode();
     assert_eq!(record.semantic_turns, 1, "a turn settled the script: {record:?}");
     assert_eq!(mode, 0o100755, "the settled path is still executable");
+}
+
+// WKS-FR-CBXW: a decision recorded before the note existed still reads, and a
+// decision without a note writes no note field.
+#[test]
+fn a_decision_without_a_note_reads_and_writes_no_note() {
+    let read: crate::streams::StreamMergeDecision =
+        serde_json::from_str(r#"{"position":1,"question":"Q?","answer":"A.","summary":"A"}"#)
+            .expect("reads");
+    assert_eq!(read.note, None);
+    let written = serde_json::to_value(&read).expect("writes");
+    assert!(written.get("note").is_none());
+}
+
+// WKS-FR-CBXW, GXD-FR-BJYT, GRB-FR-KMXT: a semantic turn is told each decision
+// with its question, its answer, and the note beside it, and no note field
+// where none was written.
+#[test]
+fn a_decision_reaches_the_semantic_turn_with_its_note() {
+    let decision = |note: Option<&str>| crate::streams::StreamMergeDecision {
+        position: 1,
+        question: "Which limit stands?".to_string(),
+        answer: "The base limit.".to_string(),
+        summary: "Base".to_string(),
+        note: note.map(str::to_string),
+    };
+    let told = serde_json::to_value(crate::streams::semantic_turn::author_decisions(&[
+        decision(Some("the stream value was a test")),
+        decision(None),
+    ]))
+    .expect("serializes");
+    assert_eq!(told[0]["question"], "Which limit stands?");
+    assert_eq!(told[0]["answer"], "The base limit.");
+    assert_eq!(told[0]["note"], "the stream value was a test");
+    assert!(told[1].get("note").is_none());
 }

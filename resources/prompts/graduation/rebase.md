@@ -25,7 +25,7 @@ The structured input beside this instruction carries the merge. Read it before y
 
 - `input.merge_base_revision` — the revision both branches last shared.
 
-- `input.author_decisions` — **decisions the author has already made about this merge.** Each carries the `question` they were asked and the `answer` they gave. The list is empty where no question has been asked.
+- `input.author_decisions` — **decisions the author has already made about this merge.** Each carries the `question` they were asked and the `answer` they gave, and can carry a `note`: the author's own words beside that answer. Read it as part of the answer. The list is empty where no question has been asked.
 
 **Work one question at a time.** Take a question, read its path's two sides, settle that path, then move to the next.
 

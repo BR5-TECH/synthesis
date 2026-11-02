@@ -565,3 +565,32 @@ fn the_new_fields_cross_the_seam_under_the_names_the_frontend_reads() {
         serde_json::json!("blocked_retry")
     );
 }
+
+// GXD-FR-BJYT: an answer recorded before the note existed still reads, and an
+// answer without a note writes no note field.
+#[test]
+fn an_answer_without_a_note_reads_and_writes_no_note() {
+    let read: GraduationEscalationAnswer =
+        serde_json::from_str(r#"{"position":1,"answer":"A.","summary":"A"}"#).expect("reads");
+    assert_eq!(read.note, None);
+    let written = serde_json::to_value(&read).expect("writes");
+    assert!(written.get("note").is_none());
+}
+
+// GXD-FR-BJYT: a note is trimmed, and a note that is blank once trimmed is no note.
+#[test]
+fn a_note_is_trimmed_and_a_blank_one_is_no_note() {
+    let with = |note: &str| {
+        GraduationEscalationAnswer {
+            position: 1,
+            answer: "A.".to_string(),
+            summary: "A".to_string(),
+            note: Some(note.to_string()),
+        }
+        .normalized()
+        .note
+    };
+    assert_eq!(with("\n x \t").as_deref(), Some("x"));
+    assert_eq!(with(" \n\t "), None);
+    assert_eq!(with(""), None);
+}

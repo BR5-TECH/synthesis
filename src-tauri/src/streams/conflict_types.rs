@@ -34,4 +34,7 @@ pub struct StreamMergeDecision {
     /// The proposed response's summary, or empty for the author's own words.
     #[serde(default)]
     pub summary: String,
+    /// WKS-FR-CBXW: the author's note beside a chosen response, where one was written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }

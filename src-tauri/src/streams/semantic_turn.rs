@@ -32,9 +32,26 @@ const MERGE_INPUT_VERSION: u32 = 2;
 /// branches that may have moved since the question was asked.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
-struct MergeAuthorDecision {
+pub(crate) struct MergeAuthorDecision {
     question: String,
     answer: String,
+    /// WKS-FR-CBXW, GXD-FR-BJYT: the author's note beside the answer, where one
+    /// was written. It reaches the turn with its answer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+}
+
+/// GRB-FR-KMXT: the decisions a semantic turn is told, each question with its
+/// answer and the note beside it.
+pub(crate) fn author_decisions(decisions: &[StreamMergeDecision]) -> Vec<MergeAuthorDecision> {
+    decisions
+        .iter()
+        .map(|decision| MergeAuthorDecision {
+            question: decision.question.clone(),
+            answer: decision.answer.clone(),
+            note: decision.note.clone(),
+        })
+        .collect()
 }
 
 /// GRB contract surface: what one semantic turn is told.
@@ -118,14 +135,7 @@ pub(super) async fn execute_semantic_turn<R: tauri::Runtime>(
         unresolved_questions: asked.conflicts,
         // GRB-FR-KMXT: the question travels with the answer, so the turn reads
         // a decision rather than a value with nothing to attach it to.
-        author_decisions: asked
-            .decisions
-            .iter()
-            .map(|decision| MergeAuthorDecision {
-                question: decision.question.clone(),
-                answer: decision.answer.clone(),
-            })
-            .collect(),
+        author_decisions: author_decisions(&asked.decisions),
     };
     execute(app, project_key, attempt_id, artifact, input, cancellation, dispatch).await
 }

@@ -132,6 +132,11 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 }
                 reply
             });
+        // CVL-FR-XBMT: every answered attempt, a compaction call included,
+        // reports the model the response names.
+        if let Ok(reply) = &outcome {
+            report_served_model(app, turns, plan, endpoint, reply.response_model.as_deref());
+        }
         // CVL-FR-TQRD: a reply the Custom gateway repair changed. Recorded for
         // every answered attempt, usable or not, and also when the framework
         // still refused the repaired reply, so a gateway that keeps returning
@@ -572,7 +577,7 @@ fn bounded_identifier(value: Option<&str>) -> String {
 }
 
 /// The most characters of a provider's identifier or reason a record keeps.
-const IDENTIFIER_LIMIT: usize = 120;
+pub(super) const IDENTIFIER_LIMIT: usize = 120;
 
 /// CVL-FR-28: a count the provider gave, or `not reported` where it gave none.
 fn reported(tokens: Option<u64>) -> String {

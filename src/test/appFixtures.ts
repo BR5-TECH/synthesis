@@ -366,6 +366,9 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
     case "list_recoverable_agent_turn_failures":
     case "list_agent_turn_image_notices":
       return [];
+    // NTF-FR-CYTU: no model downgrade suppression rule is saved.
+    case "load_model_downgrade_suppressions":
+      return [];
     default:
       return undefined;
   }

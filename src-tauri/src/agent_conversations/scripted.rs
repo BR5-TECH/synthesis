@@ -55,6 +55,9 @@ pub struct ScriptedReply {
     /// its position, as a Responses provider gives one as its `call_id`.
     /// `None` gives each call the id `call-{position}`.
     pub call_id_prefix: Option<String>,
+    /// CVL-FR-XBMT: the model id the response reports. `None` stands for a
+    /// response that names no model, which is what `rig`'s mock yields.
+    pub response_model: Option<String>,
 }
 
 /// CVL-FR-31: one tool a scripted provider ran for itself.
@@ -100,6 +103,7 @@ impl ScriptedReply {
             served_by: None,
             prompt_tokens: None,
             call_id_prefix: None,
+            response_model: None,
         }
     }
 
@@ -114,6 +118,7 @@ impl ScriptedReply {
             served_by: None,
             prompt_tokens: None,
             call_id_prefix: None,
+            response_model: None,
         }
     }
 
@@ -165,6 +170,12 @@ impl ScriptedReply {
     pub fn routed_by(mut self, upstream: &str, prompt_tokens: u64) -> Self {
         self.served_by = Some(upstream.to_string());
         self.prompt_tokens = Some(prompt_tokens);
+        self
+    }
+
+    /// CVL-FR-XBMT: a reply whose response names the model that served it.
+    pub fn served_model(mut self, model: &str) -> Self {
+        self.response_model = Some(model.to_string());
         self
     }
 
@@ -502,6 +513,7 @@ impl CompletionSeam for ScriptedCompletion {
                 // call it carried, which `rig`'s mock has no shape for.
                 let scripted_served_by = reply.served_by.clone();
                 let scripted_prompt_tokens = reply.prompt_tokens;
+                let scripted_response_model = reply.response_model.clone();
                 // CVL-FR-31: the provider's own traffic, in the shape
                 // `carry_openrouter` extracts it into. Applied to what
                 // `run_model` returned rather than replacing it, so the rest of
@@ -572,6 +584,9 @@ impl CompletionSeam for ScriptedCompletion {
                     }
                     if scripted_prompt_tokens.is_some() {
                         reply.prompt_tokens = scripted_prompt_tokens;
+                    }
+                    if scripted_response_model.is_some() {
+                        reply.response_model = scripted_response_model;
                     }
                     reply
                 })

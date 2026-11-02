@@ -3623,6 +3623,9 @@ const agentsOfScope = (scope: string) =>
   return made;
 };
 
+/** GSS-FR-DAKR: the model downgrade suppression rules of the session. */
+let modelDowngradeRules: { requestedModel: string; servedModel: string; expiresAt: string | null }[] = [];
+
 /**
  * AGC-FR-22: the turns in flight. Seeded with one so the roster's answering
  * marker (AGT-FR-05) is visible without firing an event first; a turn can be
@@ -10780,6 +10783,28 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       agentTurns = [turn, ...agentTurns];
       fireBus("agent-turn-state-changed", { ...turn });
       return turn;
+    }
+    // GSS-FR-PCPW / GSS-FR-UUET: the model downgrade suppression rules,
+    // kept for the session. Fire `model-downgrade-detected` with
+    // `__fireBusEvent` to raise the toast (NTF-FR-AGTB).
+    case "load_model_downgrade_suppressions":
+      return modelDowngradeRules.filter(
+        (r) => r.expiresAt == null || Date.parse(r.expiresAt) > Date.now(),
+      );
+    case "save_model_downgrade_suppression": {
+      const hours = { hour: 1, day: 24, week: 168 }[a.duration as string];
+      const rule = {
+        requestedModel: a.requestedModel as string,
+        servedModel: a.servedModel as string,
+        expiresAt: hours ? new Date(Date.now() + hours * 3_600_000).toISOString() : null,
+      };
+      modelDowngradeRules = [
+        ...modelDowngradeRules.filter(
+          (r) => r.requestedModel !== rule.requestedModel || r.servedModel !== rule.servedModel,
+        ),
+        rule,
+      ];
+      return rule;
     }
     case "list_agent_turns":
       // AGC-FR-22: a null origin returns every turn in flight anywhere, which

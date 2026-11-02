@@ -39,12 +39,14 @@ import {
 import { clearToasts, releaseToastsForRoot } from "../state/toasts";
 import { logDebug, logInfo } from "../logging";
 import { dockerSocketRaise, onDockerSocketRefusal } from "../state/dockerSocketRefusal";
+import { modelDowngradeRaise } from "../state/modelDowngrades";
 import { setSelectionFollowsTab } from "../state/selectionFollowsTab";
 import {
   onAppPreferencesChanged,
   onDraftChangeProposalsChanged,
   onGithubPollingChanged,
   onGraduationRunChanged,
+  onModelDowngradeDetected,
   onPromptChangeProposalsChanged,
   onSettingsRehearsalRequested,
   onSettingsWindowChanged,
@@ -485,6 +487,28 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       }),
     [],
   );
+
+  /**
+   * NTF-FR-AGTB / NTF-FR-CYTU / NTF-FR-DYHQ: a provider served another model
+   * than the request named. The rules, the record, and the shape of the
+   * raise are in `../state/modelDowngrades.ts`.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void onModelDowngradeDetected((payload) => {
+      void modelDowngradeRaise(payload, () => rootRef.current).then((raise) => {
+        if (raise !== null) void raiseNotification(raise);
+      });
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   /**
    * NTF-FR-JLXL / NTF-FR-VALU: a GitHub poll found new ready tasks.

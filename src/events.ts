@@ -9,6 +9,7 @@
  */
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  ModelDowngrade,
   VoiceActivityChange,
   VoiceChunkChange,
   VoiceAiIntegrations,
@@ -193,6 +194,8 @@ export const DISCUSSION_CHANGED = "discussion-changed";
 export const DISCUSSION_QUESTION_SET_CHANGED = "discussion-question-set-changed";
 /** AGC-FR-21: a turn was registered, or reached a terminal state. */
 export const AGENT_TURN_STATE_CHANGED = "agent-turn-state-changed";
+/** AGC-FR-UVKF: a provider served another model than the request named. */
+export const MODEL_DOWNGRADE_DETECTED = "model-downgrade-detected";
 /** AGR-FR-ZRJD: an agent of either scope was created, edited, or deleted. */
 export const AGENTS_CHANGED = "agents-changed";
 /** LGC-FR-17: records were appended to the session buffer, or it was cleared. */
@@ -537,6 +540,15 @@ export const onAgentTurnStateChanged = (
   handler: (turn: AgentTurn) => void,
 ): Promise<UnlistenFn> =>
   listen<AgentTurn>(AGENT_TURN_STATE_CHANGED, (ev) => handler(ev.payload));
+
+/**
+ * AGC-FR-UVKF: a turn found a model downgrade. Emitted once for each
+ * requested→served pair of a turn.
+ */
+export const onModelDowngradeDetected = (
+  handler: (payload: ModelDowngrade) => void,
+): Promise<UnlistenFn> =>
+  listen<ModelDowngrade>(MODEL_DOWNGRADE_DETECTED, (ev) => handler(ev.payload));
 
 /**
  * AGR-FR-ZRJD: an agent was created, edited, or deleted, in either scope and

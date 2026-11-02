@@ -39,6 +39,21 @@ export interface ToastEntry {
    */
   link?: ToastLink | null;
   /**
+   * NTF-FR-JXQL: one action menu of a toast with an address. A click on its
+   * control or an item never routes to the address.
+   */
+  menu?: ToastActionMenu | null;
+  /**
+   * NTF-FR-RPZS: the accessible name of the dismissal control, "Dismiss" when
+   * absent.
+   */
+  dismissLabel?: string;
+  /**
+   * NTF-FR-FPBH: the raise asked for the exemption from NTF-FR-08, so reaching
+   * its target does not remove the toast (NTF-FR-ZSIK).
+   */
+  keepOnArrival?: boolean;
+  /**
    * Counts the replacements of this toast. A change restarts the Info timer
    * (NTF-FR-HZNF).
    */
@@ -51,6 +66,19 @@ export type ToastInput = Omit<ToastEntry, "revision">;
 export interface ToastLink {
   label: string;
   onActivate: () => void;
+}
+
+/** NTF-FR-JXQL: the action menu a toast with an address may carry. */
+export interface ToastActionMenu {
+  /** The text of the control, for example "Suppress". */
+  label: string;
+  /** In the order the menu shows them. None is pre-selected. */
+  items: { id: string; label: string }[];
+  /**
+   * Runs the action of an item. Resolves when it is done, and the toast then
+   * leaves the stack. Rejects on failure, and the toast stays (NTF-FR-LHVU).
+   */
+  onPick: (id: string) => Promise<void>;
 }
 
 /** The visible toasts in arrival order: the oldest first. */
@@ -120,7 +148,8 @@ export function dismissToast(key: string): void {
 
 /** NTF-FR-14: the author reached what the toasts address. */
 export function removeToastsForAddress(address: string): void {
-  removeWhere((t) => t.address === address);
+  // NTF-FR-FPBH / NTF-FR-ZSIK: an exempt toast stays when its target is reached.
+  removeWhere((t) => t.address === address && !t.keepOnArrival);
 }
 
 /** NTF-FR-38: the surface retracted the key. */

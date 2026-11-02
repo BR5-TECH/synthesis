@@ -404,6 +404,8 @@ struct Turn {
     answer: Answer,
     /// Something to do inside the turn — cancel the run, move a branch.
     side_effect: Option<Box<dyn Fn() + Send + Sync>>,
+    /// Something to do once the verdict of this review is durable.
+    after_verdict: Option<Box<dyn Fn() + Send + Sync>>,
     /// Whether the answer carries a resumable vendor session.
     session: bool,
     /// Whether the turn answers as scripted even where the run was stopped
@@ -420,6 +422,7 @@ impl Turn {
             removed_dirs: Vec::new(),
             answer,
             side_effect: None,
+            after_verdict: None,
             session: false,
             ignores_cancellation: false,
         }
@@ -498,6 +501,11 @@ impl Turn {
         self.side_effect = Some(Box::new(side_effect));
         self
     }
+
+    fn after_the_verdict(mut self, act: impl Fn() + Send + Sync + 'static) -> Self {
+        self.after_verdict = Some(Box::new(act));
+        self
+    }
 }
 
 /// What a scripted turn reports while it runs: two activities the durable
@@ -572,6 +580,8 @@ impl Seen {
 struct ScriptedDispatch {
     turns: Mutex<std::collections::VecDeque<Turn>>,
     seen: Mutex<Vec<Seen>>,
+    /// What the turn dispatched last does once its verdict is durable.
+    after_verdict: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl ScriptedDispatch {
@@ -579,6 +589,7 @@ impl ScriptedDispatch {
         Arc::new(Self {
             turns: Mutex::new(turns.into_iter().collect()),
             seen: Mutex::new(Vec::new()),
+            after_verdict: Mutex::new(None),
         })
     }
 
@@ -659,6 +670,14 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
 }
 
 impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch {
+    fn review_verdict_recorded(&self) {
+        // Taken before it runs: an act can reach the store and this seam again.
+        let act = self.after_verdict.lock().unwrap().take();
+        if let Some(act) = act {
+            act();
+        }
+    }
+
     fn dispatch_graduation_turn<'a>(
         &'a self,
         _app: &'a tauri::AppHandle<Runtime>,
@@ -695,13 +714,14 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
             project_key: project_key.to_string(),
         });
 
-        let turn = self.turns.lock().unwrap().pop_front().unwrap_or_else(|| {
+        let mut turn = self.turns.lock().unwrap().pop_front().unwrap_or_else(|| {
             panic!(
                 "the loop dispatched a turn nobody scripted: part {:?}, purpose {:?}",
                 self.seen.lock().unwrap().last().map(|s| s.part.clone()),
                 self.seen.lock().unwrap().last().map(|s| s.purpose.clone()),
             )
         });
+        *self.after_verdict.lock().unwrap() = turn.after_verdict.take();
         Box::pin(async move {
             for (path, content) in &turn.writes {
                 let target = directory.join(path);

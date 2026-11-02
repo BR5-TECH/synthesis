@@ -105,7 +105,7 @@ fn the_delivered_comment_carries_the_answer_alone_and_nothing_records_the_reques
 
     let threads = h.threads("spec.md");
     let comments = &threads[0].comments;
-    assert_eq!(comments[1].body, "Just the answer.");
+    assert_eq!(comments[1].body, said("Just the answer."));
     assert!(!comments[1].body.contains("A distinctive artifact phrase."));
     assert!(
         !comments[1].body.contains(prompt_sentence),
@@ -561,7 +561,7 @@ fn an_answer_lands_in_the_discussion_log_beside_the_anchored_one() {
     let folded = crate::comments::fold_artifact_discussion(&h.root(), "spec.md");
     assert_eq!(folded.len(), 1);
     assert_eq!(folded[0].comments.len(), 2, "the answer joined the discussion");
-    assert_eq!(folded[0].comments[1].body, "It reads well.");
+    assert_eq!(folded[0].comments[1].body, said("It reads well."));
 
     // The anchored thread on the same file gained nothing.
     let still = crate::comments::list_fragment_discussions_in(&h.root(), "spec.md");

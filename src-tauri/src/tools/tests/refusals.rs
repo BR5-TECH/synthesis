@@ -96,6 +96,12 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
             at: 3,
             of: 8,
         },
+        // PDC-FR-SNUK: and of a refusal that names one update of several.
+        ToolRefusal::InvalidUpdateAt {
+            message: crate::tools::proposal_updates::UPDATE_NO_SUCH_CHANGE,
+            at: 2,
+            of: 4,
+        },
         // MDT-FR-OTUZ, MDT-FR-TWVZ, MDT-FR-TVWI, MDT-FR-VHHI: this tool's own
         // refusals join the group and are held to exactly the same rules.
         ToolRefusal::InvalidArguments(crate::tools::MEASURE_NOT_ONE_TARGET),
@@ -108,6 +114,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         ToolRefusal::NoProjectOpen
         | ToolRefusal::InvalidArguments(_)
         | ToolRefusal::InvalidArgumentsAt { .. }
+        | ToolRefusal::InvalidUpdateAt { .. }
         | ToolRefusal::SkillNotFound
         | ToolRefusal::SkillUnreadable
         | ToolRefusal::SkillNameNotUnique
@@ -662,12 +669,30 @@ fn a_resolved_conversation_is_refused_in_the_declared_words() {
     }
 }
 
-// PDC-FR-GMWR: the refusal of a `revises` that names no change the model can
-// still revise, in the declared words.
+// PDC-FR-UOBH / PDC-FR-DBFT: the update refusals, in the declared words.
 #[test]
-fn a_change_that_cannot_be_revised_is_refused_in_the_declared_words() {
+fn the_update_refusals_are_in_the_declared_words() {
+    use crate::tools::proposal_updates::*;
     assert_eq!(
-        crate::tools::propose_draft_changes::PROPOSAL_NO_SUCH_CHANGE,
-        "The change you named is not one of the changes you can still revise. Propose a new change instead.",
+        UPDATE_NO_SUCH_CHANGE,
+        "The `id` you gave is not a change of your open proposal. Name a change of it, or use `add` for a new change.",
     );
+    assert_eq!(
+        UPDATE_CHANGE_SETTLED,
+        "The change you named is accepted or withdrawn, so it can not be updated. Use `add` for a new change.",
+    );
+    assert_eq!(
+        UPDATE_NAMED_TWICE,
+        "Two of your updates name the same change. Put what you want for it in one update.",
+    );
+    assert_eq!(
+        UPDATE_MALFORMED,
+        "Each update gives `action`: `change` or `withdraw` with the `id` of a change, or `add` with no `id`.",
+    );
+    assert_eq!(
+        UPDATE_NONE,
+        "Pass at least one update. An empty list has nothing for the author to decide.",
+    );
+    let refusal = crate::tools::ToolRefusal::InvalidUpdateAt { message: UPDATE_NONE, at: 2, of: 4 };
+    assert_eq!(refusal.to_string(), format!("Update 2 of 4: {UPDATE_NONE}"));
 }

@@ -79,7 +79,11 @@ fn a_delivered_turn_reports_every_stage_it_passed_through() {
     );
 
     let answered = find(&by_turn, "model answered");
-    assert_eq!(require(&answered, "replyChars"), "10", "\"An answer.\" is ten characters");
+    assert_eq!(
+        require(&answered, "replyChars"),
+        said("An answer.").chars().count().to_string(),
+        "the size of the reply",
+    );
     assert!(
         answered.fields.contains_key("durationMs"),
         "how long the model took is the first thing anyone asks",

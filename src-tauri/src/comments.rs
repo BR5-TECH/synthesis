@@ -60,6 +60,7 @@ mod question_sets;
 mod question_submit;
 mod rename;
 mod scope;
+mod spoken_part;
 
 pub use attachment_store::*;
 pub use commands::*;
@@ -75,6 +76,7 @@ pub use question_sets::*;
 pub use question_submit::*;
 pub use rename::*;
 pub use scope::*;
+pub use spoken_part::{spoken_part, without_spoken_tags};
 
 #[cfg(test)]
 mod tests;

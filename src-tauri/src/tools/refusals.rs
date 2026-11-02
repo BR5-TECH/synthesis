@@ -174,6 +174,9 @@ pub const MEASURE_UNREADABLE: &str = "That document could not be read. It may no
 pub const QUESTION_BLANK: &str =
     "The question must say what you want to know. Write it as you would write it to a colleague.";
 
+/// AUC-FR-IEVY: the comment would carry no spoken part (CVL-FR-AGNN).
+pub const QUESTION_NO_SPOKEN_PART: &str = "The question has no spoken part. Put one or two short sentences in one `<spoken>…</spoken>` tag in `question`.";
+
 /// AUC-FR-10: the conversation takes no further comments (CMS-FR-17).
 ///
 /// Says outright that a further call will not succeed, for the reason
@@ -198,7 +201,7 @@ pub const QUESTION_SET_PENDING_FOR_COMMENT: &str = "This discussion already has 
 /// [`CONVERSATION_RESOLVED`] does: no argument the model could compose frees a
 /// slot the author holds, and an agent that keeps asking spends its whole budget
 /// discovering that.
-pub const QUESTION_SET_ALREADY_PENDING: &str = "This discussion already has a question set waiting on the author, so nothing was recorded. Answer with what you already have; asking again will not succeed.";
+pub const QUESTION_SET_ALREADY_PENDING: &str = "This discussion already has a question set waiting on the author, so nothing was recorded. Reply to the author's comment with a comment, with what you already have; asking again will not succeed.";
 
 /// ADQ-FR-VDGT: the discussion takes no further contribution.
 ///
@@ -262,6 +265,10 @@ pub const PROPOSAL_CONTENT_BLANK: &str =
 /// something.
 pub const PROPOSAL_RATIONALE_BLANK: &str =
     "Say why the change is worth making. The author reads this beside the diff.";
+
+/// PDC-FR-ZQOH, PPC-FR-HMEH: the comment would carry no spoken part
+/// (CVL-FR-AGNN).
+pub const RATIONALE_NO_SPOKEN_PART: &str = "The rationale has no spoken part. Put one or two short sentences in one `<spoken>…</spoken>` tag in `rationale`.";
 
 /// PDC-FR-07: the text passed is what the file already holds.
 ///
@@ -390,6 +397,13 @@ pub enum ToolRefusal {
     /// are counts of what the model itself sent and the message is still fixed
     /// text this application wrote, so the refusal echoes nothing back.
     InvalidArgumentsAt {
+        message: &'static str,
+        /// One-based, as the model would count its own list.
+        at: usize,
+        of: usize,
+    },
+    /// PDC-FR-SNUK / PPC-FR-RVKS: the same, about one entry of `updates`.
+    InvalidUpdateAt {
         message: &'static str,
         /// One-based, as the model would count its own list.
         at: usize,
@@ -533,6 +547,7 @@ impl ToolRefusal {
             | ToolRefusal::GraduationWorkingCopyUnavailable => ToolErrorKind::NotFound,
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillAmbiguous(_)
             // PPC-FR-06: the path was well-formed and names a file of the wrong
@@ -650,6 +665,7 @@ impl ToolRefusal {
             // a text file instead of a binary one.
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillNotFound
             | ToolRefusal::SkillAmbiguous(_)
@@ -705,9 +721,9 @@ impl ToolRefusal {
     pub fn reason(&self) -> &'static str {
         match self {
             ToolRefusal::NoProjectOpen => "no_project_open",
-            ToolRefusal::InvalidArguments(_) | ToolRefusal::InvalidArgumentsAt { .. } => {
-                "invalid_arguments"
-            }
+            ToolRefusal::InvalidArguments(_)
+            | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidUpdateAt { .. } => "invalid_arguments",
             ToolRefusal::InvalidQuestion(..) => "invalid_arguments",
             ToolRefusal::SkillNotFound => "skill_not_found",
             ToolRefusal::SkillAmbiguous(_) => "skill_ambiguous",
@@ -763,6 +779,9 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::InvalidArguments(message) => f.write_str(message),
             ToolRefusal::InvalidArgumentsAt { message, at, of } => {
                 write!(f, "Change {at} of {of}: {message}")
+            }
+            ToolRefusal::InvalidUpdateAt { message, at, of } => {
+                write!(f, "Update {at} of {of}: {message}")
             }
             // The number is the position this application assigned, in the order
             // the model wrote its questions — not a value it supplied.

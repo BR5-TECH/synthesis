@@ -80,7 +80,7 @@ fn a_discard_of_a_resting_merge_run_reclaims_at_once() {
         .expect_live_state_unchanged();
 }
 
-// GTE-FR-WXEJ, GTE-FR-HWQM / GRD-FR-EWTN, GRD-FR-AQNW, GRD-FR-KZPT: a discard that
+// GTE-FR-WXEJ, GTE-FR-KVYE / GRD-FR-EWTN, GRD-FR-AQNW, GRD-FR-KZPT: a discard that
 // lands after the review wrote its `ready` verdict and before the apply stops the
 // apply. Neither branch and neither working copy is written, the run records no
 // result, and what it owned is reclaimed once the loop has returned.
@@ -106,7 +106,7 @@ fn a_discard_between_the_verdict_and_the_apply_applies_nothing() {
         .expect_merge_workspace_reclaimed();
 }
 
-// GTE-FR-WXEJ, GTE-FR-HWQM / GRD-FR-MDQZ, GRD-FR-AQNW: a pause that lands between
+// GTE-FR-WXEJ, GTE-FR-KVYE / GRD-FR-MDQZ, GRD-FR-AQNW: a pause that lands between
 // the verdict and the apply stops the apply the same way. The run rests
 // `interrupted`, keeps what it owns, and nothing reached either branch.
 #[test]
@@ -163,7 +163,7 @@ fn a_ready_verdict_that_arrives_with_a_discard_or_a_pause_applies_nothing() {
         .expect_merge_workspace_standing();
 }
 
-// GTE-FR-VRHN, GTE-FR-CZPM / GRS-FR-WNRC, GRD-FR-AQNW, GRD-FR-IKVE: the log stream
+// GTE-FR-VRHN, GTE-FR-KVYE / GRS-FR-WNRC, GRD-FR-AQNW, GRD-FR-IKVE: the log stream
 // stops being writable after the verdict, so the record of the apply is lost. The
 // merge has reached the base branch by then, so the run is `completed`, records
 // its result and its commit, releases its stream and its slot, and reclaims what

@@ -160,6 +160,7 @@ where
         proposal_id: id.clone(),
         draft_id: new.draft_id.to_string(),
         path: new.path.to_string(),
+        update: None,
     };
     let appended = match comments::append_agent_comment_with(
         store,
@@ -198,7 +199,7 @@ where
     // Drafts panel's row and the shell's notification all redraw from
     // (NAW-FR-35, CMT-FR-67, DRP-FR-19, DCR-FR-18); without it a proposal made
     // during a session reaches no surface until the project is reopened.
-    announce(app, &BUFFER, &record);
+    announce(app, &BUFFER, &record, ProposalChangeCause::Recorded);
     Ok(record)
 }
 

@@ -109,6 +109,19 @@ pub struct CommentQuote {
     pub excerpt: String,
 }
 
+/// CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
+/// withdrawn. Stored and folded as appended; this module validates nothing
+/// about the counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProposalUpdateCounts {
+    #[serde(default)]
+    pub changed: u32,
+    #[serde(default)]
+    pub added: u32,
+    #[serde(default)]
+    pub withdrawn: u32,
+}
+
 /// CMS-FR-42: an attachment as stored and as served back.
 ///
 /// Five kinds rather than one shape with optional fields, because what an
@@ -146,6 +159,10 @@ pub enum Attachment {
         draft_id: String,
         /// Draft-relative path the proposal would replace.
         path: String,
+        /// CMS-FR-BSQB: present on the comment an update of the proposal
+        /// appended, and absent on the comment that recorded it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<ProposalUpdateCounts>,
     },
     /// CMS-FR-66: a reference to a change an agent proposed to a **prompt
     /// artifact the project already holds** (`PCP-prompt-change-proposals.md`
@@ -167,6 +184,10 @@ pub enum Attachment {
         artifact_id: String,
         /// Project-relative path the proposal would replace.
         path: String,
+        /// CMS-FR-BSQB: present on the comment an update of the proposal
+        /// appended, and absent on the comment that recorded it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<ProposalUpdateCounts>,
     },
     /// CMS-FR-42 / CMS-FR-TQVB: one change of a draft change proposal
     /// (`DCP-draft-change-proposals.md` DCP-FR-FHWN) or of a prompt change

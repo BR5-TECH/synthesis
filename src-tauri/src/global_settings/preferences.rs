@@ -6,7 +6,7 @@
 //! One part of `global_settings.rs`, which re-exports every item here, so a
 //! caller names them through that module as before.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// App theme preference (GSS-FR-04). `system` is the default when unset; the
 /// app-wide application of the value and the behaviour of `system` are owned
@@ -75,6 +75,89 @@ pub enum VoiceHotkeyBehaviour {
     #[default]
     Hold,
     Toggle,
+}
+
+/// GSS-FR-KOAB: how readily a VAD session hears speech.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceVadSensitivity {
+    Low,
+    #[default]
+    Medium,
+    High,
+}
+
+/// GSS-FR-WYHC: how the author gives speech in voice mode.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceInputMode {
+    #[default]
+    Ptt,
+    Vad,
+}
+
+/// GSS-FR-WYHC: how an agent reply comes back in voice mode.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceResponseMode {
+    #[default]
+    Text,
+    Voice,
+}
+
+/// GSS-FR-WYHC: a missing or unknown value reads as the default, and the other
+/// fields of the file stay.
+fn lenient_or_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored<T> {
+        Known(T),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::<T>::deserialize(deserializer)? {
+        Stored::Known(value) => value,
+        Stored::Other(_) => T::default(),
+    })
+}
+
+/// GSS-FR-KOAB: the silence that ends an utterance, where nothing is stored.
+pub const VOICE_VAD_SILENCE_MS_DEFAULT: u32 = 1500;
+
+/// GSS-FR-KOAB: a stored value of another type reads as nothing stored. A failed
+/// field would make the whole file unreadable, and the store then repairs every
+/// setting to its default. The range is the reader's concern
+/// (`VOP-voice-ai-providers.md` VOP-FR-DSNZ).
+fn lenient_vad_silence<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Whole(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Whole(ms) => u32::try_from(ms).unwrap_or(VOICE_VAD_SILENCE_MS_DEFAULT),
+        Stored::Other(_) => VOICE_VAD_SILENCE_MS_DEFAULT,
+    })
+}
+
+/// GSS-FR-KOAB: as `lenient_vad_silence`, for the sensitivity.
+fn lenient_vad_sensitivity<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<VoiceVadSensitivity, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Known(VoiceVadSensitivity),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Known(level) => level,
+        Stored::Other(_) => VoiceVadSensitivity::default(),
+    })
 }
 
 /// Which of the Changes panel's three footer actions is selected (GSS-FR-25).
@@ -284,6 +367,18 @@ pub struct AppPreferences {
     /// the default width rather than as a column of no width.
     #[serde(default = "git_files_width_default")]
     pub git_files_width_fraction: f64,
+    /// GSS-FR-KOAB: the silence that ends a VAD utterance, in milliseconds.
+    #[serde(default = "voice_vad_silence_default", deserialize_with = "lenient_vad_silence")]
+    pub voice_vad_silence_ms: u32,
+    /// GSS-FR-KOAB: how readily a VAD session hears speech.
+    #[serde(default, deserialize_with = "lenient_vad_sensitivity")]
+    pub voice_vad_sensitivity: VoiceVadSensitivity,
+    /// GSS-FR-WYHC: Push-to-Talk or VAD, `ptt` when unset.
+    #[serde(default, deserialize_with = "lenient_or_default")]
+    pub voice_input_mode: VoiceInputMode,
+    /// GSS-FR-WYHC: Text or Voice, `text` when unset.
+    #[serde(default, deserialize_with = "lenient_or_default")]
+    pub voice_response_mode: VoiceResponseMode,
     /// GSS-FR-29: the three typographic roles' font settings, every field
     /// independently unset until chosen. The Appearance section reads them on
     /// mount and writes them whenever the user changes a control
@@ -303,6 +398,10 @@ fn notifications_enabled_default() -> bool {
 
 fn voice_hotkey_default() -> String {
     "Ctrl+Shift+Space".to_string()
+}
+
+fn voice_vad_silence_default() -> u32 {
+    VOICE_VAD_SILENCE_MS_DEFAULT
 }
 
 /// GSS-FR-33: the panel follows the active tab until the author turns it off.
@@ -343,6 +442,10 @@ impl Default for AppPreferences {
             graduation_rail_width_fraction: graduation_rail_width_default(),
             graduation_paths_width_fraction: graduation_paths_width_default(),
             git_files_width_fraction: git_files_width_default(),
+            voice_vad_silence_ms: voice_vad_silence_default(),
+            voice_vad_sensitivity: VoiceVadSensitivity::default(),
+            voice_input_mode: VoiceInputMode::default(),
+            voice_response_mode: VoiceResponseMode::default(),
             fonts: FontSettings::default(),
         }
     }

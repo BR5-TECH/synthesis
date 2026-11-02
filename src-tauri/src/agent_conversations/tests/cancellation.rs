@@ -68,7 +68,7 @@ fn cancelling_a_delivered_turn_leaves_the_comment_and_the_state_alone() {
         .expect("a late cancel still succeeds");
     assert_eq!(late.state, AgentTurnState::Delivered);
     assert_eq!(h.threads("spec.md")[0].comments.len(), 2);
-    assert_eq!(h.threads("spec.md")[0].comments[1].body, "Delivered before the cancel.",);
+    assert_eq!(h.threads("spec.md")[0].comments[1].body, said("Delivered before the cancel."),);
 }
 
 #[test]
@@ -89,8 +89,9 @@ fn a_cancel_that_arrives_after_the_delivery_claim_cannot_take_the_turn() {
     let (turn, cancelled) = h.turns().register(
         &agent,
         ConversationOrigin::stub_artifact("t1", "a.md", true),
-        "c1",
+        Some("c1"),
         PROJECT_KEY,
+        None,
     );
 
     // Before the claim, a cancellation takes the turn.
@@ -123,8 +124,9 @@ fn a_cancel_before_the_claim_stops_the_delivery() {
     let (turn, cancelled) = h.turns().register(
         &agent,
         ConversationOrigin::stub_artifact("t1", "a.md", true),
-        "c1",
+        Some("c1"),
         PROJECT_KEY,
+        None,
     );
     cancelled.store(true, Ordering::SeqCst);
     assert!(!h.turns().begin_delivery(&turn.id));
@@ -345,7 +347,7 @@ fn a_second_question_in_one_reply_is_never_posted_even_when_the_first_refused() 
         2,
         "AGC-FR-01: one contribution — the answer — and no question beside it",
     );
-    assert_eq!(thread.comments[1].body, "Two specs, then.");
+    assert_eq!(thread.comments[1].body, said("Two specs, then."));
 
     // The model was told why, rather than left with a call nothing answered.
     let second = &h.seam.exchanges()[1];

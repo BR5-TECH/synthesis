@@ -489,7 +489,7 @@ fn an_agents_answer_lands_in_the_discussion_it_was_asked_in() {
     assert_eq!(folded.len(), 1);
     let answered = &folded[0];
     assert_eq!(answered.comments.len(), 2);
-    assert_eq!(answered.comments[1].body, "Graduate it into ui/.");
+    assert_eq!(answered.comments[1].body, said("Graduate it into ui/."));
     assert!(matches!(
         answered.comments[1].author,
         Participant::Agent { ref handle, .. } if handle == "arch"

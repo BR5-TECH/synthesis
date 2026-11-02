@@ -29,7 +29,7 @@ import {
   getDiscussionSession,
   setComposerBody,
 } from "../../state/discussionSession";
-import { hunkPosition, hunkStateOf } from "../../state/draftProposals";
+import { hunkPosition, hunkStateOf, reviewedHunkTotal } from "../../state/draftProposals";
 import { rereadHunks } from "../../state/proposalHunks";
 import { hunkDiscussionOf, openingHunkOf } from "../DraftDiscussion/hunkDiscussion";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
@@ -120,7 +120,7 @@ export function useHunkDiscussion(input: {
       setOpening({
         reference,
         position: hunkPosition(proposal, hunkId),
-        total: proposal.hunkCount,
+        total: reviewedHunkTotal(proposal),
       });
       logInfo(["frontend"], "a discussion of a change is being opened", {
         draftId,

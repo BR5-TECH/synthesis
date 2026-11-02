@@ -371,7 +371,10 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "imagesOmitted",
                 "nickname",
                 "origin",
+                "replyHeld",
                 "retryPermitted",
+                // AGC-FR-QYNZ: the open speech the turn is bound to.
+                "speechId",
                 "startedAt",
                 "state",
                 // AGC-FR-RWPT: null except on a refused certificate.
@@ -552,7 +555,8 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
     let h = Harness::scripted(vec![Ok(ScriptedReply::answer("unused"))]);
     let agent = h.create_agent("arch", "");
     let origin = ConversationOrigin::stub_artifact("t1", "a.md", true);
-    let (turn, _cancelled) = h.turns().register(&agent, origin.clone(), "c1", PROJECT_KEY);
+    let (turn, _cancelled) =
+        h.turns().register(&agent, origin.clone(), Some("c1"), PROJECT_KEY, None);
 
     let (tx, rx) = mpsc::channel::<AgentTurn>();
     h.app.listen(AGENT_TURN_STATE_CHANGED, move |event| {
@@ -684,7 +688,8 @@ fn a_turn_cancelled_with_calls_active_leaves_none_behind() {
     let h = Harness::scripted(vec![Ok(ScriptedReply::answer("unused"))]);
     let agent = h.create_agent("arch", "");
     let origin = ConversationOrigin::stub_artifact("t1", "a.md", true);
-    let (turn, _cancelled) = h.turns().register(&agent, origin.clone(), "c1", PROJECT_KEY);
+    let (turn, _cancelled) =
+        h.turns().register(&agent, origin.clone(), Some("c1"), PROJECT_KEY, None);
 
     let (tx, rx) = mpsc::channel::<AgentTurn>();
     h.app.listen(AGENT_TURN_STATE_CHANGED, move |event| {
@@ -767,7 +772,7 @@ fn prose_carried_alongside_a_tool_call_below_the_bound_is_not_delivered() {
     assert_eq!(h.seam.call_count(), 2, "the mid-loop prose did not end the turn");
     let comments = h.threads("spec.md")[0].comments.clone();
     assert_eq!(comments.len(), 2);
-    assert_eq!(comments[1].body, "The answer.");
+    assert_eq!(comments[1].body, said("The answer."));
     assert!(
         !comments[1].body.contains("Let me check"),
         "the narration was delivered as the answer",

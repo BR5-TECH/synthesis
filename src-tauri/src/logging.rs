@@ -210,6 +210,14 @@ impl<R: tauri::Runtime> LogSink for tauri::AppHandle<R> {
         // `eprintln!`-reported the way a dropped progress event is: a logging
         // channel that reports its own failure through a second channel is the
         // shape that turns one dropped event into a loop.
+        //
+        // LGC-FR-RJSM: a test app stays silent. The trailing flush emits from a
+        // thread of its own, and while that thread holds Tauri's listener table
+        // an `emit` by the code under test is only queued, so a test listener
+        // can miss its event.
+        if cfg!(test) {
+            return;
+        }
         let _ = self.emit(LOG_RECORDS_APPENDED, state);
     }
 }

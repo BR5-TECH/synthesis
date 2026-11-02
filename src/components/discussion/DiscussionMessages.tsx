@@ -17,6 +17,7 @@ import { CommentMarkdown } from "../CommentMarkdown";
 import { formatRelative } from "../ProjectPicker";
 import { activityStatus } from "../../state/agentActivity";
 import { ToolDisclosure } from "./ToolActivity";
+import { splitAroundBubble } from "./LiveBubble";
 import type { AgentRoster } from "../agentTags";
 import {
   discussionDraftId,
@@ -34,6 +35,7 @@ import {
   QuestionWithDescriptions,
 } from "./OptionDescriptions";
 import { useParticipantLabel } from "../../state/projectIdentity";
+import { visibleBody } from "../../text/spokenPart";
 
 /**
  * CVP-FR-32: whether this message is one the author wrote.
@@ -75,6 +77,8 @@ export interface DiscussionMessagesProps {
   visibleFrom: number;
   /** The unread divider of a first-unread that is not a comment, drawn after the last one. */
   afterComments?: React.ReactNode;
+  /** CVP-FR-TGPV: the live bubble of voice mode, after the comments. */
+  liveBubble?: React.ReactNode;
   footer: React.ReactNode;
 }
 
@@ -93,6 +97,7 @@ export function DiscussionMessages({
   beforeComment,
   visibleFrom,
   afterComments,
+  liveBubble,
   footer,
 }: DiscussionMessagesProps) {
   const participantLabel = useParticipantLabel();
@@ -105,6 +110,51 @@ export function DiscussionMessages({
       if (!next.delete(commentId)) next.add(commentId);
       return next;
     });
+  // CVP-FR-TGPV: a turn that the speech registered shows below the live bubble.
+  const split = splitAroundBubble(pendingTurns, Boolean(liveBubble));
+  const pendingRow = (turn: AgentTurn) => (
+        <div
+          key={turn.agentId}
+          className="comment comment--pending"
+          data-own={false}
+          data-testid="comment-pending"
+          data-turn-id={turn.id}
+          aria-live="polite"
+        >
+          <div className="comment__head">
+            <span className="comment__author" data-agent="true">
+              ✦ {turn.nickname}
+            </span>
+            <button
+              className="btn btn--ghost btn--icon-xs"
+              aria-label={`Cancel ${turn.nickname}'s reply`}
+              title="Cancel"
+              data-testid="comment-pending-cancel"
+              onClick={() => onCancelTurn(turn.id)}
+            >
+              <Icon.X size={11} />
+            </button>
+          </div>
+          {/* CTA-FR-XMCQ / CTA-FR-FBJR: the activity status, worded as a
+              participant who has been asked something and has not answered yet.
+              CTA-FR-GGYJ: a disclosure of the tool list once a call was made. */}
+          <div
+            className="comment__body comment__body--pending"
+            data-testid="comment-pending-status"
+          >
+            {(toolCallsByRow?.get(turn.id)?.length ?? 0) > 0 ? (
+              <ToolDisclosure
+                label={activityStatus(turn)}
+                calls={toolCallsByRow?.get(turn.id) ?? []}
+                testId="comment-pending-toggle"
+              />
+            ) : (
+              activityStatus(turn)
+            )}
+          </div>
+        </div>
+      );
+
   return (
     <>
       {thread.comments.map((comment, index) => (
@@ -187,7 +237,7 @@ export function DiscussionMessages({
                   roster={roster}
                 />
               ) : (
-                <CommentMarkdown body={comment.body} agentRoster={roster} />
+                <CommentMarkdown body={visibleBody(comment.body)} agentRoster={roster} />
               )}
               {/* CMT-FR-48: below the body, an image as a thumbnail and anything
                   else as a named chip. */}
@@ -205,48 +255,9 @@ export function DiscussionMessages({
       {/* CTA-FR-ZOLW: each outstanding turn renders as a pending contribution
           attributed to the agent it is waiting on, in the position its answer
           will take, with a control that cancels it. */}
-      {pendingTurns.map((turn) => (
-        <div
-          key={turn.agentId}
-          className="comment comment--pending"
-          data-own={false}
-          data-testid="comment-pending"
-          data-turn-id={turn.id}
-          aria-live="polite"
-        >
-          <div className="comment__head">
-            <span className="comment__author" data-agent="true">
-              ✦ {turn.nickname}
-            </span>
-            <button
-              className="btn btn--ghost btn--icon-xs"
-              aria-label={`Cancel ${turn.nickname}'s reply`}
-              title="Cancel"
-              data-testid="comment-pending-cancel"
-              onClick={() => onCancelTurn(turn.id)}
-            >
-              <Icon.X size={11} />
-            </button>
-          </div>
-          {/* CTA-FR-XMCQ / CTA-FR-FBJR: the activity status, worded as a
-              participant who has been asked something and has not answered yet.
-              CTA-FR-GGYJ: a disclosure of the tool list once a call was made. */}
-          <div
-            className="comment__body comment__body--pending"
-            data-testid="comment-pending-status"
-          >
-            {(toolCallsByRow?.get(turn.id)?.length ?? 0) > 0 ? (
-              <ToolDisclosure
-                label={activityStatus(turn)}
-                calls={toolCallsByRow?.get(turn.id) ?? []}
-                testId="comment-pending-toggle"
-              />
-            ) : (
-              activityStatus(turn)
-            )}
-          </div>
-        </div>
-      ))}
+      {split.before.map(pendingRow)}
+      {liveBubble}
+      {split.after.map(pendingRow)}
       {footer}
     </>
   );

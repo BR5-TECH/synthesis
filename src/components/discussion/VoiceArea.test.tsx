@@ -201,16 +201,19 @@ describe("the voice area", () => {
     expect(screen.getByTestId("voice-record")).toHaveFocus();
   });
 
-  it("VOM-FR-IKIK: VAD is visible and disabled, and says that it comes later", () => {
+  it("VOM-FR-IKIK: VAD is enabled, and each option is a named icon button", () => {
     renderReply();
     enterVoice();
     const vad = screen.getByRole("button", { name: "VAD" });
-    expect(vad).toBeDisabled();
-    expect(vad.getAttribute("title")).toMatch(/later/);
-    expect(screen.getByRole("button", { name: "Push-to-Talk" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(vad).toBeEnabled();
+    expect(vad).toHaveAttribute("title", "VAD");
+    expect(vad.querySelector("svg")).not.toBeNull();
+    expect(vad).toHaveTextContent("");
+    const ptt = screen.getByRole("button", { name: "Push-to-Talk" });
+    expect(ptt).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(vad);
+    expect(vad).toHaveAttribute("aria-pressed", "true");
+    expect(ptt).toHaveAttribute("aria-pressed", "false");
   });
 
   it("VOM-FR-IAVZ: the default is Text, and Voice can be chosen", () => {

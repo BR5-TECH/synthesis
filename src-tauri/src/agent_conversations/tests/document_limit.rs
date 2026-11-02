@@ -431,6 +431,7 @@ fn a_turn_holds_the_context_figures_of_its_latest_call() {
     assert!(split.tool_results > 0, "the read_file result of the first round");
 
     // CVL-FR-OPTI: one report per answered call.
+    deliver_queued_events(&h);
     let reports: Vec<AgentTurn> =
         h.context_events.lock().unwrap().iter().filter(|t| t.id == turn.id).cloned().collect();
     assert_eq!(reports.len(), 2);
@@ -443,7 +444,9 @@ fn a_turn_holds_the_context_figures_of_its_latest_call() {
 fn a_failed_attempt_reports_no_context() {
     let h = window_harness(
         vec![Err(FAIL_UNREACHABLE), Ok(ScriptedReply::answer("Done."))],
-        Some(10_000),
+        // The window keeps the tool definitions below the compaction budget
+        // (CVL-FR-EBJG).
+        Some(12_000),
         30,
     );
     let (terminal, _) = run_one(&h, "arch");
@@ -478,7 +481,7 @@ fn a_note_turn_has_no_document_and_the_default_window() {
 // nowhere.
 #[test]
 fn the_context_figures_are_numbers_and_never_reach_disk() {
-    let h = window_harness(vec![Ok(ScriptedReply::answer("Done."))], Some(10_000), 30);
+    let h = window_harness(vec![Ok(ScriptedReply::answer("Done."))], Some(12_000), 30);
     let (terminal, _) = run_one(&h, "arch");
     let json = serde_json::to_value(terminal.context.unwrap()).unwrap();
     fn leaves_are_numbers(value: &serde_json::Value) -> bool {

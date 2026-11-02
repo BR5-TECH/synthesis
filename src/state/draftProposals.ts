@@ -22,7 +22,11 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { listDraftChangeProposals } from "../api";
 import { logDebug, logWarn } from "../logging";
-import { hunkCandidateBuffers } from "./candidateBuffers";
+import {
+  hunkCandidateBuffers,
+  hunkKey,
+  type CandidateBufferStore,
+} from "./candidateBuffers";
 import { hunksOf, rereadHunks } from "./proposalHunks";
 import { PROPOSAL_ERRORS } from "../types";
 import { isUndecided, undecidedCount } from "../types";
@@ -312,7 +316,8 @@ function ask(draftId: string): void {
 export function noteProposalChanged(payload: ProposalsChangedPayload): void {
   const { draftId, proposal } = payload;
   const current = byDraft.get(draftId) ?? [];
-  const known = current.some((p) => p.id === proposal.id);
+  const previous = current.find((p) => p.id === proposal.id);
+  const known = previous !== undefined;
   const next = known
     ? current.map((p) => (p.id === proposal.id ? proposal : p))
     : [proposal, ...current];
@@ -366,8 +371,30 @@ export function noteProposalChanged(payload: ProposalsChangedPayload): void {
   // that would refuse it (DCP-FR-26).
   if (proposal.state !== "pending") {
     hunkCandidateBuffers.dropProposal(proposal.id);
+  } else {
+    dropRevisedEdits(hunkCandidateBuffers, previous, proposal);
   }
   emit();
+}
+
+/**
+ * DCR-FR-WRJP / PCR-FR-QHZN: an update rewrote or withdrew some changes, so an
+ * author's edit of one of them that is not written yet is dropped. The text on
+ * screen is then the agent's new text.
+ */
+export function dropRevisedEdits(
+  buffers: CandidateBufferStore,
+  before: (LedgerHolder & { id: string }) | undefined,
+  after: LedgerHolder & { id: string },
+): void {
+  const ids = revisedHunkIds(before, after);
+  for (const hunkId of ids) buffers.drop(hunkKey(after.id, hunkId));
+  if (ids.length > 0) {
+    logDebug(["frontend"], "edits of changes an update rewrote were dropped", {
+      proposalId: after.id,
+      count: ids.length,
+    });
+  }
 }
 
 // --- Per-change selectors (DCP-FR-PWSF) -----------------------------------
@@ -462,13 +489,63 @@ export function hunkStateOf(
  *
  * Counted over every change rather than over the undecided ones, so a change
  * keeps the number the author has been calling it by after its neighbours are
- * decided.
+ * decided. DCR-FR-OZVU: a withdrawn change is not counted, and has no
+ * position (0).
  */
 export function hunkPosition(
   proposal: LedgerHolder,
   hunkId: string,
 ): number {
-  return ledgerOf(proposal).findIndex((row) => row.id === hunkId) + 1;
+  return reviewedRows(proposal).findIndex((row) => row.id === hunkId) + 1;
+}
+
+/** DCR-FR-OZVU: whether the agent withdrew the change with an update. */
+export function isWithdrawn(state: HunkState | undefined): boolean {
+  return state === "withdrawn";
+}
+
+/** DCR-FR-OZVU: the ledger rows the review shows, in proposal order. */
+function reviewedRows(proposal: LedgerHolder): readonly HunkLedgerRow[] {
+  return ledgerOf(proposal).filter((row) => !isWithdrawn(row.state));
+}
+
+/**
+ * DCR-FR-11 / DCR-FR-OZVU: how many changes the proposal holds that are not
+ * withdrawn — the `M` of `change N of M`.
+ *
+ * Counted from the ledger where the record carries one. A record written
+ * before proposals held changes has no ledger, and its `hunkCount` is used.
+ */
+export function reviewedHunkTotal(
+  proposal: LedgerHolder & { hunkCount: number },
+): number {
+  const rows = ledgerOf(proposal);
+  return rows.length === 0 ? proposal.hunkCount : reviewedRows(proposal).length;
+}
+
+/**
+ * DCR-FR-WRJP: the changes an update rewrote or withdrew, from the record as
+ * it stood before the update and the record after it.
+ *
+ * A change is rewritten when its `revision` went up (DCP-FR-TQBO), and an
+ * author's edit of it that is not written yet must then go. A change that
+ * became `withdrawn` takes no edit at all (DCP-FR-MKIM).
+ */
+export function revisedHunkIds(
+  before: LedgerHolder | undefined,
+  after: LedgerHolder,
+): string[] {
+  if (before === undefined) return [];
+  const old = new Map(ledgerOf(before).map((row) => [row.id, row]));
+  const ids: string[] = [];
+  for (const row of ledgerOf(after)) {
+    const prior = old.get(row.id);
+    if (prior === undefined) continue;
+    const rewritten = row.revision > prior.revision;
+    const withdrawn = isWithdrawn(row.state) && !isWithdrawn(prior.state);
+    if (rewritten || withdrawn) ids.push(row.id);
+  }
+  return ids;
 }
 
 /**

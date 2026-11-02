@@ -363,6 +363,18 @@
   font-style: normal;
 }
 
+/* CVP-FR-TGPV / CVP-FR-GHWN: the live bubble of voice mode. Its dotted border
+   marks it as local: it is not a comment and nothing saves it. */
+.live-bubble {
+  border: 1px dotted var(--border-2, var(--border-1));
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.live-bubble__marker { font-style: italic; }
+.live-bubble__part { margin: 0; }
+.live-bubble__live { color: var(--fg-2); }
+.live-bubble__error { color: var(--danger); font-style: italic; }
+
 /* CMT-FR-42: the placeholder sits where the agent's answer will, in the same
    measure a comment does, so a card holding several outstanding turns stays
    legible and the reply that replaces it does not reflow the card. */

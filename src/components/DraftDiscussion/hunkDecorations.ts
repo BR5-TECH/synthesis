@@ -229,7 +229,8 @@ function blockBoundary(doc: PMNode, pos: number): number {
  * whole of "acceptance is per hunk".
  */
 export function undecoratedByDecision(hunk: DecoratedHunk): boolean {
-  return hunk.state === "accepted";
+  // DCR-FR-07 / DCR-FR-OZVU: a withdrawn change renders no decoration either.
+  return hunk.state === "accepted" || hunk.state === "withdrawn";
 }
 
 /**

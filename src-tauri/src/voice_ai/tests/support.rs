@@ -62,6 +62,23 @@ impl Bench {
 pub(super) struct RecordingSink {
     pub(super) transcripts: Mutex<Vec<String>>,
     pub(super) diagnostics: Mutex<Vec<String>>,
+    pub(super) chunks: Mutex<Vec<crate::voice_ai::chunks::ChunkChange>>,
+    /// A signal for each transcript and each chunk event.
+    pub(super) changed: tokio::sync::Notify,
+}
+
+impl RecordingSink {
+    /// Wait until a transcript or a chunk event makes `done` true. The limit
+    /// only stops a broken test, and no result depends on it.
+    pub(super) async fn wait_for(&self, mut done: impl FnMut(&Self) -> bool) {
+        tokio::time::timeout(std::time::Duration::from_secs(60), async {
+            while !done(self) {
+                self.changed.notified().await;
+            }
+        })
+        .await
+        .expect("the state did not come");
+    }
 }
 
 impl VoiceSink for RecordingSink {
@@ -69,6 +86,14 @@ impl VoiceSink for RecordingSink {
 
     fn transcript_changed(&self, _: &str, text: &str) {
         self.transcripts.lock().unwrap().push(text.to_string());
+        self.changed.notify_one();
+    }
+
+    fn activity_changed(&self, _: &crate::voice_ai::activity::ActivityChange) {}
+
+    fn chunk_changed(&self, change: &crate::voice_ai::chunks::ChunkChange) {
+        self.chunks.lock().unwrap().push(change.clone());
+        self.changed.notify_one();
     }
 
     fn diagnostic(&self, stage: &str, detail: &str) {

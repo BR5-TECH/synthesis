@@ -56,6 +56,10 @@ where
     // acceptance an undecided or a rejected one. An accepted hunk is final.
     if let Some(hunk_id) = hunk {
         let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+        // PCP-FR-18: the agent took this hunk back, so it is not decided.
+        if row.state == HunkState::Withdrawn {
+            return Err(ERR_HUNK_WITHDRAWN.to_string());
+        }
         let open = row.state.is_undecided()
             || (decision == Decision::Accept && row.state == HunkState::Rejected);
         if !open {
@@ -131,7 +135,7 @@ where
         .map_err(|e| e.to_string())?;
 
     if !resolves {
-        announce(app, &BUFFER, &record);
+        announce(app, &BUFFER, &record, PromptProposalChangeCause::Decided);
         return Ok(PromptDecisionOutcome {
             proposal: record,
             resolved: false,
@@ -167,7 +171,7 @@ where
         }
     };
 
-    announce(app, &BUFFER, &record);
+    announce(app, &BUFFER, &record, PromptProposalChangeCause::Decided);
     Ok(PromptDecisionOutcome {
         proposal: record,
         resolved: true,
@@ -191,6 +195,10 @@ pub fn hold_hunk_impl(
     // overwritten by a copy read before it.
     let mut record = read_proposal(root, proposal_id)?;
     let row = record.ledger.iter_mut().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // PCP-FR-18: a withdrawn hunk is not held.
+    if row.state == HunkState::Withdrawn {
+        return Err(ERR_HUNK_WITHDRAWN.to_string());
+    }
     if !row.state.is_undecided() {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }

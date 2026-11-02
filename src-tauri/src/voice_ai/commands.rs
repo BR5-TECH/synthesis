@@ -6,9 +6,12 @@ use std::time::Instant;
 use tauri::ipc::{Channel, InvokeBody, InvokeResponseBody, Request};
 use tauri::State;
 
+use super::activity::detector::Settings;
+use super::activity::silero::{SileroModel, SpeechModel};
 use super::capture::WATCHDOG_TICK;
+use super::chunks::Chunking;
 use super::models::{fallback_models, list_models, list_voices, listing_target};
-use super::pcm::samples_of;
+use super::pcm::{frame, samples_of, FRAME_END};
 use super::registry::{
     clear_integration, list_integrations, set_active, set_default_voice, set_routes,
 };
@@ -21,8 +24,8 @@ use crate::logging::{self, Domain};
 
 const SPEECH_DOMAINS: &[Domain] = &[Domain::Ai, Domain::Remote];
 
-/// The header of "append voice capture".
-const SESSION_HEADER: &str = "x-voice-session";
+/// The header of "append voice capture" and "feed voice activity".
+pub(crate) const SESSION_HEADER: &str = "x-voice-session";
 
 fn announce(app: &tauri::AppHandle, store: &GlobalSettingsStore) {
     if let Ok(integrations) = list_integrations(store) {
@@ -209,6 +212,7 @@ pub async fn list_voice_ai_voices(
 pub async fn start_voice_capture(
     capture_rate: u32,
     keyterms: Vec<String>,
+    chunked: bool,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     voice: State<'_, VoiceAi>,
@@ -216,7 +220,24 @@ pub async fn start_voice_capture(
     let config = resolve_active_voice(&store, &voice)?;
     let provider = config.record.provider.clone();
     let sink: SharedSink = Arc::new(app.clone());
-    let started = voice.start_capture(config, capture_rate, keyterms, sink);
+    // VOP-FR-YDVH: a Push-to-Talk capture runs the local detector over its own
+    // audio, with the pause and the thresholds of the VAD preferences.
+    let chunking = if chunked {
+        let prefs = store.load_app_preferences().unwrap_or_default();
+        Chunking::Own {
+            settings: Settings::new(prefs.voice_vad_silence_ms, prefs.voice_vad_sensitivity),
+            load: Box::new(|| Ok(Box::new(SileroModel::load()?) as Box<dyn SpeechModel>)),
+        }
+    } else {
+        // VOP-FR-KIMU: a live `openai` capture finds its word gaps with the
+        // same detector. The capture spawns it only on that route.
+        let prefs = store.load_app_preferences().unwrap_or_default();
+        Chunking::Gaps {
+            settings: Settings::new(prefs.voice_vad_silence_ms, prefs.voice_vad_sensitivity),
+            load: Box::new(|| Ok(Box::new(SileroModel::load()?) as Box<dyn SpeechModel>)),
+        }
+    };
+    let started = voice.start_chunked_capture(config, capture_rate, keyterms, chunking, sink);
     match &started {
         Ok(start) => logging::log_info(
             &app,
@@ -227,6 +248,7 @@ pub async fn start_voice_capture(
                 "provider" => &provider,
                 "route" => format!("{:?}", start.route),
                 "live" => start.live,
+                "chunked" => chunked,
                 "captureRate" => capture_rate,
             },
         ),
@@ -260,7 +282,7 @@ pub async fn append_voice_capture(
         .and_then(|v| v.to_str().ok())
         .ok_or(ERR_SESSION_LOST)?
         .to_string();
-    voice.append_capture(&session_id, body_samples(request.body()))
+    voice.append_and_detect(&session_id, body_samples(request.body())).await
 }
 
 #[tauri::command]
@@ -309,6 +331,14 @@ pub fn cancel_voice_capture(session_id: String, voice: State<'_, VoiceAi>) -> Re
     voice.cancel_capture(&session_id)
 }
 
+/// VOP-FR-MOSY: a failed segment sends no end frame, and the command returns its
+/// failure.
+pub(crate) fn end_segment(result: &Result<(), String>, emit: &mut impl FnMut(Vec<u8>)) {
+    if result.is_ok() {
+        emit(frame(FRAME_END, 0, &[]));
+    }
+}
+
 #[tauri::command]
 pub async fn speak_voice_segment(
     speech_id: String,
@@ -342,6 +372,7 @@ pub async fn speak_voice_segment(
         Err(code) => Err(code),
     };
     voice.release_speech(&speech_id);
+    end_segment(&result, &mut emit);
     match &result {
         Ok(()) => logging::log_debug(
             &app,

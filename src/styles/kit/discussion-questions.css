@@ -25,9 +25,21 @@
   box-sizing: border-box;
   width: 100%;
   margin: var(--sp-2) 0;
+  /* In a short column the block scrolls inside itself, so the line and the voice
+     session control below it stay in view (VOM-FR-VGLT). */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   /* DQA-FR-OGVU: the block measures its own width, so the rails stack wherever
      it is narrow — a floating panel, a narrow column — whatever the window. */
   container: discussion-questions / inline-size;
+}
+
+/* The block keeps its full height while the list can give way. The list starts
+   from nothing and takes what is left, down to this floor. */
+.comment-card > .comment-card__messages:has(~ .discussion-questions) {
+  flex: 1 1 0;
+  min-height: 96px;
 }
 
 .discussion-questions__head {
@@ -89,7 +101,7 @@
 .discussion-questions__question:focus { outline: none; }
 .discussion-questions__question:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 /* The answer rows and the note, as one group. It adds no box of its own: a
    presentation that draws the group as a card styles this element, and every
@@ -299,6 +311,9 @@
   color: var(--danger);
 }
 
+/* The block scrolls, so it clips at its edge, and these controls stand on that
+   edge. WebKit has no `overflow-clip-margin`, so the ring goes inside them. */
+.discussion-questions__foot .btn:focus-visible { outline-offset: -2px; }
 .discussion-questions__foot {
   display: flex;
   align-items: center;
@@ -325,6 +340,10 @@
    from the frame by `--sp-4`. */
 .draft-workspace .discussion-questions__composer-note {
   padding-bottom: calc(var(--draft-actions-size, 36px) + var(--sp-4));
+}
+/* The session control holds that clearance itself (DDS-FR-QPHL). */
+.draft-workspace .discussion-questions__composer-note:has(+ .voice-session-bar) {
+  padding-bottom: 0;
 }
 /* The position indicator. Decorative — the head already states the position in
    words (DQA-FR-MJPV), which is what carries it for a reader who cannot see

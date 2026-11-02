@@ -150,8 +150,39 @@ fn a_comment_for_a_running_turn_steers_it_before_its_next_call() {
     assert!(steering.contains("Focus on the security part, please."));
     assert_eq!(
         delivered_bodies(&h, &draft_id, &thread.id),
-        vec!["The answer that takes the new comment in.".to_string()],
+        vec![said("The answer that takes the new comment in.")],
         "the reply composed before the comment is not delivered",
+    );
+}
+
+// CVL-FR-NOHO: the reply that a steering message sets aside is not delivered, so
+// it needs no spoken part and costs no retry.
+#[test]
+fn a_reply_set_aside_for_a_steering_message_needs_no_spoken_part() {
+    let (h, gate) = gated(
+        vec![
+            Ok(ScriptedReply::unspoken("The answer to the first question.")),
+            Ok(ScriptedReply::answer("The answer that takes the new comment in.")),
+        ],
+        DEFAULT_CONCURRENCY,
+    );
+    let (draft_id, thread) = seed_discussion(&h, &["@arch what now?"]);
+    let origin = ConversationOrigin::of(&thread);
+    let turn = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
+    gate.wait_entered(1);
+
+    let steer_id = post(&h, &draft_id, &thread, "Focus on the security part, please.");
+    h.dispatch("arch", origin.clone(), &steer_id).expect("steer");
+    gate.release();
+    gate.wait_entered(2);
+    gate.release();
+
+    let terminal = wait_for_terminal(&h, &turn.id);
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    assert_eq!(h.seam.call_count(), 2, "no attempt was spent on a retry");
+    assert_eq!(
+        delivered_bodies(&h, &draft_id, &thread.id),
+        vec![said("The answer that takes the new comment in.")],
     );
 }
 
@@ -268,7 +299,7 @@ fn a_steering_message_the_turn_could_not_read_goes_to_a_new_turn() {
         .into_iter()
         .find(|t| t.id != turn.id && t.state == AgentTurnState::Running)
         .expect("a new turn for the message");
-    assert_eq!(fallback.trigger_comment_id, steer_id);
+    assert_eq!(fallback.trigger_comment_id.as_deref(), Some(steer_id.as_str()));
     gate.release();
     assert_eq!(wait_for_terminal(&h, &fallback.id).state, AgentTurnState::Delivered);
     h.settle();

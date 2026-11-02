@@ -315,11 +315,6 @@ describe("the opening and the reply composer are one field (DDS-FR-MCDG)", () =>
     expect(decl(reply, "margin")?.split(/\s+/).pop()).toBe(openFoot);
   });
 
-  it("DDS-FR-MCDG: the accelerator hint sets its own line height", () => {
-    // Inherited, it took the line height of whichever state it stood in.
-    expect(decl(blocksFor(style(), ".dds-reply__kbd")[0], "line-height")).toBe("var(--lh-normal)");
-  });
-
   it("DDS-FR-MCDG: the placeholder tone is set for the column, not for one state", () => {
     expect(blocksFor(style(), ".dds-discussion .comment-card__composer::placeholder")[0]).toBeDefined();
     const stateOnly = [...style().matchAll(/([^{}]+)\{[^{}]*\}/g)]

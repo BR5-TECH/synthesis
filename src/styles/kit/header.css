@@ -238,6 +238,23 @@
   justify-self: end; min-width: 0;
 }
 
+/* STB-FR-OSOL / STB-FR-PYRC: the voice indicator truncates and never grows the
+   strip. Its Stop control is a separate button beside it (STB-FR-JHZF). */
+.status-bar__voice {
+  display: inline-flex; align-items: center; gap: 2px; min-width: 0;
+}
+.status-bar__voice-indicator {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  max-width: 260px; height: var(--ctl-h-xs); padding: 0 6px;
+  border: none; border-radius: 4px; background: transparent;
+  color: var(--fg-1); font: inherit; cursor: pointer;
+}
+.status-bar__voice-indicator:hover { background: var(--bg-active); }
+.status-bar__voice-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.status-bar__voice-state { flex: 0 0 auto; color: var(--fg-2); }
+
 .status-bar__btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: var(--ctl-sq); height: var(--ctl-h-xs);

@@ -73,7 +73,7 @@ fn provider_tool_traffic_reaches_no_surface_and_no_record() {
     assert_eq!(threads[0].comments.len(), 2);
     // The answer alone: naming a tool, quoting a result, or listing anything the
     // agent consulted would each make this something other than what it is.
-    assert_eq!(&threads[0].comments[1].body, "Teardown runs last.");
+    assert_eq!(threads[0].comments[1].body, said("Teardown runs last."));
 
     // TLC-FR-26 / CVL-FR-28 / CVL-FR-34: the counts and the entry types are
     // there to be read, so they are asserted present as well as harmless — a
@@ -327,7 +327,7 @@ fn prose_carried_alongside_provider_traffic_is_the_turn_s_answer() {
     assert_eq!(h.seam.call_count(), 1, "the reply answered; no further round");
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2);
-    assert_eq!(threads[0].comments[1].body, "Found it.");
+    assert_eq!(threads[0].comments[1].body, said("Found it."));
 }
 
 #[test]

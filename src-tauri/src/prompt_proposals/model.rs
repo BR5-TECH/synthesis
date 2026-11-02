@@ -31,6 +31,8 @@ pub const ERR_HUNK_CONTEXT_TOO_LONG: &str = "hunk_context_too_long";
 pub const ERR_HUNK_NOT_FOUND: &str = "hunk_not_found";
 /// PCP-FR-ZQAH / PCP-FR-RJHN: that hunk is already decided.
 pub const ERR_HUNK_ALREADY_DECIDED: &str = "hunk_already_decided";
+/// PCP-FR-18: a decision, a hold, or an edit of a hunk its agent withdrew.
+pub const ERR_HUNK_WITHDRAWN: &str = "hunk_withdrawn";
 /// PCP-FR-14: a failure at or before the commit point. The artifact was never
 /// written and the proposal is still `pending`.
 pub const ERR_WRITE_FAILED: &str = "write_failed";

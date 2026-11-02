@@ -89,13 +89,18 @@ export function openingHunkOf(discussion: Discussion): ProposalHunkReference | u
  *
  * DCR-FR-17: only an open proposal decorates the document, and DCR-FR-07: an
  * accepted change carries no decoration, so the review does not visit it
- * (DCR-FR-QPRV).
+ * (DCR-FR-QPRV). DCR-FR-OZVU: a withdrawn change is hidden in review.
  */
 export function isShownInDocument(
   proposal: { state: string } | null,
   state: HunkState | undefined,
 ): boolean {
-  return proposal?.state === "pending" && state !== undefined && state !== "accepted";
+  return (
+    proposal?.state === "pending" &&
+    state !== undefined &&
+    state !== "accepted" &&
+    state !== "withdrawn"
+  );
 }
 
 /**

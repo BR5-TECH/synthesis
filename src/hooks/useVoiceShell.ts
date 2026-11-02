@@ -9,7 +9,9 @@ import * as api from "../api";
 import {
   onAppPreferencesChanged,
   onDiscussionChanged,
+  onVoiceActivityChanged,
   onVoiceAiChanged,
+  onVoiceChunkChanged,
   onVoiceTranscriptChanged,
 } from "../events";
 import { isTextField } from "../dropGuard";
@@ -20,6 +22,8 @@ import type { AppPreferences, VoiceAiIntegrations } from "../types";
 import { DEFAULT_VOICE_HOTKEY, chordOf, mainKeyOf, matchesHotkey } from "../voice/hotkey";
 import { errorCode } from "../voice/voiceMessages";
 import {
+  noteActivity,
+  noteChunk,
   noteDiscussionChanged,
   noteProvider,
   noteTranscript,
@@ -77,6 +81,9 @@ export function useVoiceShell(): void {
       });
     void onVoiceAiChanged(applyIntegrations).then(keep);
     void onVoiceTranscriptChanged(({ sessionId, text }) => noteTranscript(sessionId, text)).then(keep);
+    void onVoiceActivityChanged(noteActivity).then(keep);
+    // VOM-FR-NZXN, VOP-FR-DSSU.
+    void onVoiceChunkChanged(noteChunk).then(keep);
     void onDiscussionChanged(noteDiscussionChanged).then(keep);
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -90,6 +97,8 @@ export function useVoiceShell(): void {
       if (isTextField(event.target) || event.isComposing) return;
       if (foreignOverlayMounted()) return;
       stopHere(event);
+      // VOM-FR-WPRW: stopped all the same, or the record control takes the Space.
+      if (getVoiceState().inputMode === "vad") return;
       held = true;
       pressRecord();
     };

@@ -8,15 +8,16 @@
 /// CVL-FR-JPHT: the name of the attached tool whose call `text` is, written as
 /// prose, or `None` where the text is anything else.
 ///
-/// The text qualifies when, trimmed and with one enclosing code fence removed,
-/// it is exactly one JSON object, and that object either fits one attached
+/// The text qualifies when, less its spoken tags, trimmed, and less one enclosing
+/// code fence, it is exactly one JSON object, and that object either fits one attached
 /// tool's argument schema or names an attached tool in `name` beside an
 /// `arguments` or `parameters` object.
 pub(super) fn tool_written_as_prose<'a>(
     text: &str,
     tools: &'a [rig::completion::ToolDefinition],
 ) -> Option<&'a str> {
-    let body = without_fence(text.trim());
+    let written = crate::comments::without_spoken_tags(text);
+    let body = without_fence(written.trim());
     let mut values = serde_json::Deserializer::from_str(body).into_iter::<serde_json::Value>();
     let value = values.next()?.ok()?;
     if !body[values.byte_offset()..].trim().is_empty() {

@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type {
-  DraftChangeProposal,
-  DraftSummary,
-  GithubPollingView,
-  PromptChangeProposal,
-} from "../types";
+import type { DraftSummary, GithubPollingView } from "../types";
 import type { useAppOverlays } from "./useAppOverlays";
 
 /**
@@ -69,6 +64,7 @@ import {
   undecidedHunks,
 } from "../state/draftProposals";
 import { setFocusedHunk } from "../state/draftDiscussion";
+import { draftProposalRaise, promptProposalReaction } from "../state/proposalRaises";
 import {
   CONFIGURATION_ERROR_KEY,
   CONFIGURATION_ERROR_TITLE,
@@ -428,7 +424,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       : undefined;
 
   /**
-   * DCR-FR-18: a change was proposed to a draft, or one was decided.
+   * DCR-FR-18: a change was proposed to a draft, updated, or decided.
    *
    * Subscribed at the **shell** rather than in the New Artifact tab that renders
    * the modal: a tab-scoped listener would hear nothing for a draft whose tab is
@@ -459,25 +455,11 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       // proposal recorded or decided anywhere re-lists it — which is also what
       // keeps the panel's cost at one call however many drafts it shows.
       s.bumpDrafts();
-      // DCR-FR-18: nothing is raised when a proposal is *decided* — the author
-      // decided it.
-      if (payload.proposal.state !== "pending") return;
-      const { projectKey: key, worktree: tree } = rootRef.current;
-      if (!key || !tree) return;
-      void raiseNotification({
-        // NTF-FR-07: one slot per draft, so an agent that proposes, is declined,
-        // and proposes again replaces its own notification rather than stacking
-        // a second beside it.
-        key: `draft-proposal:${payload.draftId}`,
-        // DCR-FR-18: a proposal waiting for review is Info.
-        level: "Info",
-        title: `${proposerHandle(payload.proposal)} proposed a change`,
-        body: payload.proposal.path,
-        address: mintAddress(key, tree, {
-          kind: "draft",
-          draftId: payload.draftId,
-        }),
-      });
+      // DCR-FR-18 / DCR-FR-QXFU: a recording, or an update that leaves the
+      // proposal open, raises. A decision, a hold, and an update that closes
+      // the proposal raise nothing — the cause tells them apart.
+      const raise = draftProposalRaise(payload, rootRef.current);
+      if (raise !== null) void raiseNotification(raise);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -602,7 +584,8 @@ export function useAppNotifications(deps: AppNotificationDeps) {
    * control in the rail — is current at once.
    *
    * The subscriber does two things and no others (PCR-FR-17): it **raises** on a
-   * recording, and it **retracts** on a decision. It reaches no notification
+   * recording and on an update that leaves the proposal pending, and it
+   * **retracts** when the proposal closes (PCR-FR-26). It reaches no notification
    * command of its own.
    */
   /**
@@ -639,37 +622,15 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     let unlisten: (() => void) | undefined;
     void onPromptChangeProposalsChanged((payload) => {
       notePromptProposalChanged(payload);
-      const key = promptRaiseKey(payload.proposal.id);
-      // PCR-FR-26: a decided proposal — accepted, rejected, or accepted with its
-      // comment still owed — is settled however it was settled, so the raise is
-      // taken back. Unconditionally rather than after working out what became of
-      // it: a raise that was suppressed, or a notification already reached,
-      // retracts to a no-op (NTF-FR-38).
-      if (payload.proposal.state !== "pending") {
-        retractNotification(key);
-        return;
-      }
-      const { projectKey: openKey, worktree: tree } = rootRef.current;
-      if (!openKey || !tree) return;
-      void raiseNotification({
-        // PCR-FR-17: derived from the **proposal's own id**, so two proposals
-        // against one artifact never share a key and one proposal's retraction
-        // never reaches another's notification.
-        key,
-        // PCR-FR-17: a proposal waiting for review is Info.
-        level: "Info",
-        // PCR-FR-17: a title naming the agent **and the file**, and a body
-        // naming the prompt — so a notification read in a centre beside a dozen
-        // others says which file is waiting without being opened.
-        title: `${promptProposerHandle(payload.proposal)} proposed a change to ${basename(payload.proposal.path)}`,
-        body: payload.proposal.path,
-        // NTF-FR-03: the project-file address, so activating it opens or
-        // focuses that artifact's Editor tab (PCR-FR-18).
-        address: mintAddress(openKey, tree, {
-          kind: "file",
-          path: payload.proposal.path,
-        }),
-      });
+      // PCR-FR-26: a closed proposal — accepted, rejected, accepted with its
+      // comment still owed, or closed by an update — is settled however it was
+      // settled, so the raise is taken back. Unconditionally rather than after
+      // working out what became of it: a raise that was suppressed, or a
+      // notification already reached, retracts to a no-op (NTF-FR-38).
+      // PCR-FR-17: a recording, or an update that leaves it pending, raises.
+      const { retract, raise } = promptProposalReaction(payload, rootRef.current);
+      if (retract !== null) retractNotification(retract);
+      if (raise !== null) void raiseNotification(raise);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -969,32 +930,3 @@ export function useAppNotifications(deps: AppNotificationDeps) {
   return { notifications, tabAttention, runsAttention };
 }
 
-/** DCR-FR-18: who a raise says proposed the change. */
-/**
- * PCR-FR-17: the key a proposal against a prompt artifact is raised under.
- *
- * Derived from the proposal's **own id** rather than from its artifact, so two
- * proposals against one file never share a key — and one proposal's retraction
- * never withdraws another's notification (NTF-FR-38).
- */
-function promptRaiseKey(proposalId: string): string {
-  return `prompt-proposal:${proposalId}`;
-}
-
-/** The file's own name, for a title that has to name it in a few words. */
-function basename(path: string): string {
-  const tail = path.split("/").pop();
-  return tail === undefined || tail === "" ? path : tail;
-}
-
-function promptProposerHandle(proposal: PromptChangeProposal): string {
-  return proposal.agent.kind === "agent"
-    ? `@${proposal.agent.handle}`
-    : proposal.agent.login;
-}
-
-function proposerHandle(proposal: DraftChangeProposal): string {
-  return proposal.agent.kind === "agent"
-    ? `@${proposal.agent.handle}`
-    : proposal.agent.login;
-}

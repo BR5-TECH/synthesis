@@ -8,6 +8,9 @@
 // Never inlined: a `data:` URL is no module that every WebView loads.
 import workletUrl from "./pcmCapture.worklet.js?url&no-inline";
 
+/** VOM non-functional. */
+const FRAME_SECONDS = 0.03;
+
 export interface Microphone {
   /** The rate of the audio that `onChunk` receives. */
   rate: number;
@@ -24,7 +27,11 @@ function failureCode(error: unknown): string {
   return "microphone_unavailable";
 }
 
-export async function openMicrophone(onChunk: (pcm: ArrayBuffer) => void): Promise<Microphone> {
+/** `onLost`: the track ended with no call to `stop`, as when a device goes. */
+export async function openMicrophone(
+  onChunk: (pcm: ArrayBuffer) => void,
+  onLost?: () => void,
+): Promise<Microphone> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new MicrophoneError("microphone_unavailable");
   }
@@ -41,7 +48,11 @@ export async function openMicrophone(onChunk: (pcm: ArrayBuffer) => void): Promi
   } catch (error) {
     throw new MicrophoneError(failureCode(error));
   }
-  const stopTracks = () => stream.getTracks().forEach((track) => track.stop());
+  const stopTracks = () =>
+    stream.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
   let context: AudioContext | null = null;
   try {
     const running = new AudioContext();
@@ -58,6 +69,7 @@ export async function openMicrophone(onChunk: (pcm: ArrayBuffer) => void): Promi
     silence.gain.value = 0;
     node.connect(silence);
     silence.connect(running.destination);
+    if (onLost) stream.getTracks().forEach((track) => (track.onended = onLost));
     return {
       rate: running.sampleRate,
       stop() {
@@ -70,6 +82,49 @@ export async function openMicrophone(onChunk: (pcm: ArrayBuffer) => void): Promi
     stopTracks();
     void context?.close();
     throw new MicrophoneError("microphone_unavailable");
+  }
+}
+
+function joined(chunks: Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return out;
+}
+
+/**
+ * VOM non-functional: a VAD session sends frames of about 30 ms. The worklet
+ * gives a block of about 3 ms, and a whole session of those would be hundreds of
+ * calls each second. This counts bytes and holds no timer.
+ */
+export class FrameBatcher {
+  private held: Uint8Array[] = [];
+  private size = 0;
+  private frameBytes = 0;
+
+  constructor(private readonly emit: (pcm: ArrayBuffer) => void) {}
+
+  /** Audio held until now goes out with the next block. */
+  setRate(rate: number): void {
+    this.frameBytes = Math.round(rate * FRAME_SECONDS) * 2;
+  }
+
+  push(pcm: ArrayBuffer): void {
+    this.held.push(new Uint8Array(pcm));
+    this.size += pcm.byteLength;
+    if (this.frameBytes > 0 && this.size >= this.frameBytes) this.flush();
+  }
+
+  flush(): void {
+    if (this.size === 0) return;
+    const out = joined(this.held);
+    this.held = [];
+    this.size = 0;
+    this.emit(out.buffer as ArrayBuffer);
   }
 }
 
@@ -96,22 +151,12 @@ export class ChunkPump {
     this.pump();
   }
 
-  private merged(): Uint8Array {
-    const total = this.backlog.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const chunk of this.backlog) {
-      out.set(chunk, at);
-      at += chunk.byteLength;
-    }
-    this.backlog = [];
-    return out;
-  }
-
   private pump(): void {
     if (this.running || this.target === null || this.backlog.length === 0) return;
     const sessionId = this.target;
-    this.running = this.send(sessionId, this.merged())
+    const bytes = joined(this.backlog);
+    this.backlog = [];
+    this.running = this.send(sessionId, bytes)
       .then(() => undefined, () => undefined)
       .finally(() => {
         this.running = null;

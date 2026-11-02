@@ -33,7 +33,7 @@ impl Fixture {
     ) -> Result<ProposePromptChangesOutput, ToolRefusal> {
         block_on(self.tool().call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            revises: None,
+            updates: None,
             content: None,
             hunks: Some(hunks),
             rationale: RATIONALE.into(),
@@ -62,7 +62,7 @@ fn both_forms_or_neither_is_refused_and_records_nothing() {
     for (content, hunks) in [(Some(PROPOSED.to_string()), Some(to_proposed())), (None, None)] {
         let refusal = block_on(f.tool().call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            revises: None,
+            updates: None,
             content,
             hunks,
             rationale: RATIONALE.into(),
@@ -219,7 +219,7 @@ fn a_hunk_refusal_is_logged_with_its_place_and_no_text() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        revises: None,
+        updates: None,
         content: None,
         hunks: Some(vec![hunk("# Review", "# Read"), hunk("Not in the file.", "secret words")]),
         rationale: RATIONALE.into(),
@@ -248,7 +248,7 @@ fn a_hunk_proposal_is_logged_with_its_form_and_count_and_no_text() {
     let tool = f.tool().with_buffer(&BUFFER);
     block_on(tool.call(ProposePromptChangesArgs {
         path: PROMPT.into(),
-        revises: None,
+        updates: None,
         content: None,
         hunks: Some(to_proposed()),
         rationale: RATIONALE.into(),
@@ -337,7 +337,7 @@ fn each_context_refusal_is_logged_under_its_own_code() {
         BUFFER.clear();
         block_on(f.tool().with_buffer(&BUFFER).call(ProposePromptChangesArgs {
             path: PROMPT.into(),
-            revises: None,
+            updates: None,
             content: None,
             hunks: Some(vec![hunk]),
             rationale: RATIONALE.into(),

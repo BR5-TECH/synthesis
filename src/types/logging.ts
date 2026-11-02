@@ -1,4 +1,4 @@
-import type { VoiceHotkeyBehaviour } from "./voice";
+import type { VoiceHotkeyBehaviour, VoiceVadSensitivity } from "./voice";
 // Session logging (LGC-logging.md / LOG-logs.md)
 //
 // Split out of one `types.ts` that had grown past four thousand lines.
@@ -181,6 +181,14 @@ export interface AppPreferences {
   voiceHotkey?: string;
   /** GSS-FR-RHYJ: how the Push-to-Talk hotkey and button act. */
   voiceHotkeyBehaviour?: VoiceHotkeyBehaviour;
+  /** GSS-FR-KOAB: the silence that ends a VAD utterance, in milliseconds. */
+  voiceVadSilenceMs?: number;
+  /** GSS-FR-KOAB: how readily a VAD session hears speech. */
+  voiceVadSensitivity?: VoiceVadSensitivity;
+  /** GSS-FR-WYHC, VOM-FR-KEMU: the saved input mode of voice mode. */
+  voiceInputMode?: "ptt" | "vad";
+  /** GSS-FR-WYHC, VOM-FR-KEMU: the saved response mode of voice mode. */
+  voiceResponseMode?: "text" | "voice";
   /**
    * GSS-FR-21 / SCH-FR-13: the universal search bar's active query mode. Read
    * when the search input mounts and written whenever the user changes the

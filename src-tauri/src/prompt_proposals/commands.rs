@@ -13,14 +13,39 @@ use super::*;
 /// dead in production.
 pub const PROMPT_PROPOSALS_CHANGED: &str = "prompt-change-proposals-changed";
 
-/// What the event carries (PCP-FR-17): the artifact, and the whole proposal as
-/// it then stood, so a consumer redraws from the payload without a read of its
-/// own.
+/// PCP-FR-17: which of the things the event is about. A subscriber reads it to
+/// tell an update from a decision, a hold, or a reconciliation (PCR-FR-17).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptProposalChangeCause {
+    Recorded,
+    Updated,
+    Decided,
+    Held,
+    Reconciled,
+}
+
+impl PromptProposalChangeCause {
+    fn as_str(self) -> &'static str {
+        match self {
+            PromptProposalChangeCause::Recorded => "recorded",
+            PromptProposalChangeCause::Updated => "updated",
+            PromptProposalChangeCause::Decided => "decided",
+            PromptProposalChangeCause::Held => "held",
+            PromptProposalChangeCause::Reconciled => "reconciled",
+        }
+    }
+}
+
+/// What the event carries (PCP-FR-17): the artifact, the whole proposal as it
+/// then stood, so a consumer redraws from the payload without a read of its
+/// own, and the cause.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptProposalsChanged {
     pub artifact_id: String,
     pub proposal: PromptChangeProposal,
+    pub cause: PromptProposalChangeCause,
 }
 
 /// PCP-FR-17 / PCP-FR-28: announce the change and record it.
@@ -31,6 +56,7 @@ pub fn announce<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
     proposal: &PromptChangeProposal,
+    cause: PromptProposalChangeCause,
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
@@ -39,6 +65,7 @@ pub fn announce<R: tauri::Runtime>(
         PromptProposalsChanged {
             artifact_id: proposal.artifact_id.clone(),
             proposal: proposal.clone(),
+            cause,
         },
     );
     // PCP-FR-28: the artifact, the proposal, the path, and the outcome — and
@@ -58,6 +85,8 @@ pub fn announce<R: tauri::Runtime>(
             "accepted" => proposal.counts.accepted,
             "rejected" => proposal.counts.rejected,
             "discussing" => proposal.counts.discussing,
+            "withdrawn" => proposal.counts.withdrawn,
+            "cause" => cause.as_str(),
         },
     );
 }
@@ -178,7 +207,25 @@ where
     // that cannot be attributed changes neither the file nor the record.
     let by = comments::acting_participant(store, project)?;
     let request = DecisionRequest { proposal_id, decision, hunk, feedback, by: &by };
-    let outcome = decide(app, &root, &repo_store, request, tracker)
+    decide_in_process(app, operation, &root, &repo_store, request, tracker)
+}
+
+/// PCP-FR-MXSB: the decision a command and `decide_prompt_changes` share, once
+/// the root, the store, and the author are resolved.
+pub(super) fn decide_in_process<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    operation: &'static str,
+    root: &fs::RootFs,
+    repo_store: &fs::RootFs,
+    request: DecisionRequest<'_>,
+    tracker: &ContentTracker,
+) -> Result<PromptDecisionOutcome, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let proposal_id = request.proposal_id;
+    let hunk = request.hunk;
+    let outcome = decide(app, root, repo_store, request, tracker)
         .inspect_err(|e| log_refusal(app, operation, e))?;
     // PCP-FR-28: the decision and its shape, never the feedback. DEBUG, because
     // `announce` has already recorded the proposal's new state at INFO.
@@ -267,9 +314,24 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let root = require_root(&project)?;
-    let proposal = hold_hunk_impl(&root, &proposal_id, &hunk_id, discussing)
-        .inspect_err(|e| log_refusal(&app, "hold_hunk", e))?;
-    announce(&app, &BUFFER, &proposal);
+    hold_in_process(&app, &root, &proposal_id, &hunk_id, discussing)
+}
+
+/// PCP-FR-HLDQ / PCP-FR-MXSB: the hold a command and `decide_prompt_changes`
+/// share.
+pub(crate) fn hold_in_process<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &fs::RootFs,
+    proposal_id: &str,
+    hunk_id: &str,
+    discussing: bool,
+) -> Result<PromptChangeProposal, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let proposal = hold_hunk_impl(root, proposal_id, hunk_id, discussing)
+        .inspect_err(|e| log_refusal(app, "hold_hunk", e))?;
+    announce(app, &BUFFER, &proposal, PromptProposalChangeCause::Held);
     Ok(proposal)
 }
 
@@ -351,15 +413,29 @@ where
 {
     let root = require_root(&project)?;
     let repo_store = require_store(&project)?;
-    let held = read_proposal(&root, &proposal_id)?;
+    complete_in_process(&app, &root, &repo_store, &proposal_id)
+}
+
+/// PCP-FR-14 / PCP-FR-MXSB: the completion a command and
+/// `decide_prompt_changes` share.
+pub(crate) fn complete_in_process<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &fs::RootFs,
+    repo_store: &fs::RootFs,
+    proposal_id: &str,
+) -> Result<PromptDecisionOutcome, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let held = read_proposal(root, proposal_id)?;
     let _guard = artifact_lock(&held.artifact_id);
-    let reconciled = reconcile_locked(&app, &root, &repo_store, &proposal_id)
-        .inspect_err(|e| log_refusal(&app, "complete", e))?;
-    let record = read_proposal(&root, &proposal_id)?;
-    let (_, discussion) = locate_thread(&root, &repo_store, &record.thread_id)?;
+    let reconciled = reconcile_locked(app, root, repo_store, proposal_id)
+        .inspect_err(|e| log_refusal(app, "complete", e))?;
+    let record = read_proposal(root, proposal_id)?;
+    let (_, discussion) = locate_thread(root, repo_store, &record.thread_id)?;
     let comment_id = match &reconciled {
         Reconciliation::Settled { proposal_id: completed, comment_id }
-            if completed == &proposal_id =>
+            if completed == proposal_id =>
         {
             comment_id.clone()
         }

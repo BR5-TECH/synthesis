@@ -97,8 +97,9 @@ export function useHunkPlacement(
     const placed: DecoratedHunk[] = [];
     for (const hunk of review.hunks) {
       // DCR-FR-07 / DCR-FR-17: an accepted change is in the prompt already; a
-      // rejected one stays drawn while its proposal is open.
-      if (hunk.state === "accepted") continue;
+      // rejected one stays drawn while its proposal is open. DCR-FR-OZVU: a
+      // withdrawn change is not drawn.
+      if (hunk.state === "accepted" || hunk.state === "withdrawn") continue;
       // DCR-FR-05: placed by its kind, in `./hunkMatch`.
       //
       // DCR-FR-31: a change this surface cannot place stays in the review,

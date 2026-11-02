@@ -2,21 +2,32 @@
  * The voice area of the shared composer (`VOM-voice-mode.md` VOM-FR-TISN).
  *
  * It takes the place of the text field. It shows the transcript, the record
- * control, the Stop control, and the two toggles. The process behind these
- * controls is `../../voice/voiceController.ts`.
+ * control in Push-to-Talk or the controls of VAD mode (`./VadControls.tsx`), the
+ * Stop control, and the two toggles. The process behind these controls is
+ * `../../voice/voiceController.ts`.
  */
 import { useEffect, useRef, useState } from "react";
 
-import { useVoiceState, type VoiceNote, type VoiceState } from "../../state/voiceSession";
+import {
+  useVoiceState,
+  type VoiceInputMode,
+  type VoiceNote,
+  type VoiceResponseMode,
+  type VoiceState,
+} from "../../state/voiceSession";
 import { voiceMessage } from "../../voice/voiceMessages";
 import {
   pressRecord,
   releaseRecord,
   retryRecording,
+  setInputMode,
   setResponseMode,
   stopSpeech,
 } from "../../voice/voiceController";
 import { Icon } from "../icons";
+import { VadControls, transcribing, vadIndicator, type VadIndicator } from "./VadControls";
+
+export { transcribing, vadIndicator } from "./VadControls";
 
 const NOTES: Record<VoiceNote, string> = {
   no_speech: "No speech was heard, so nothing was posted.",
@@ -29,22 +40,24 @@ function elapsed(since: number, now: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+const VAD_STATUS: Record<VadIndicator, string> = {
+  idle: "The voice session is not open.",
+  listening: "Listening…",
+  hearing: "Hearing speech…",
+  transcribing: "Transcribing…",
+  paused: "Reply paused. Hearing speech…",
+};
+
 /** VOM-FR-HSKZ: the phase of the record control, in its name. */
 function recordName(state: VoiceState): string {
-  switch (state.phase) {
-    case "opening":
-    case "recording":
-      return "Recording. Release or press to stop";
-    case "transcribing":
-      return "Transcribing";
-    case "posting":
-      return "Posting";
-    default:
-      return "Record";
+  // VOM-FR-QTAQ: Recording, then Transcribing, then Idle.
+  if (state.phase === "opening" || state.phase === "recording") {
+    return "Recording. Release or press to stop";
   }
+  return transcribing(state) ? "Transcribing. Press to record again" : "Record";
 }
 
-function useClock(active: boolean): number {
+export function useClock(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
@@ -54,25 +67,150 @@ function useClock(active: boolean): number {
   return now;
 }
 
-function statusOf(state: VoiceState, now: number): string {
+export function statusOf(state: VoiceState, now: number): string {
   // VOM-FR-HUXY.
   if (state.transcript !== "") return state.transcript;
   // VOM-FR-SRGN.
   if (state.phase === "recording" && !state.live && state.recordingSince !== null) {
     return `Recording ${elapsed(state.recordingSince, now)}`;
   }
+  if (state.inputMode === "vad") {
+    if (state.phase === "opening") return "Opening the voice session…";
+    const indicator = vadIndicator(state);
+    // VOM-FR-MUZB: muted shows by text too, and not by colour alone.
+    if (state.vadOpen && state.muted && indicator === "listening") {
+      return "Muted. Unmute to speak.";
+    }
+    return VAD_STATUS[indicator];
+  }
   if (state.phase === "recording" || state.phase === "opening") return "Listening…";
-  if (state.phase === "transcribing") return "Transcribing…";
-  if (state.phase === "posting") return "Posting…";
+  if (transcribing(state)) return "Transcribing…";
   return "Press to talk";
+}
+
+/** The record control of Push-to-Talk. VAD mode has none (VOM-FR-PDZR). */
+export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
+  const state = useVoiceState();
+  // VOM-FR-QTAQ: a new press can start a recording while Transcribing shows.
+  const busy = state.phase === "opening";
+  return (
+    <button
+      type="button"
+      className="voice-area__record"
+      data-voice-focus="true"
+      data-recording={state.phase === "opening" || state.phase === "recording"}
+      data-testid="voice-record"
+      aria-label={recordName(state)}
+      title={recordName(state)}
+      // Not `disabled` while busy: that would take the focus away after each
+      // recording. A press in a busy phase does nothing.
+      aria-disabled={busy}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        pressRecord();
+      }}
+      onPointerUp={releaseRecord}
+      onPointerCancel={releaseRecord}
+      onKeyDown={(event) => {
+        // VOM-FR-PECJ.
+        if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+          event.preventDefault();
+          pressRecord();
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          releaseRecord();
+        }
+      }}
+    >
+      <Icon.Mic size={14} />
+    </button>
+  );
+}
+
+/** VOM-FR-TISN, VOM-FR-VGLT: the record control, or the controls of VAD mode. */
+export function VoiceInputControls({ disabled }: { disabled: boolean }) {
+  const state = useVoiceState();
+  return state.inputMode === "vad" ? <VadControls /> : <VoiceRecordControl disabled={disabled} />;
+}
+
+/** VOM-FR-QDWW. */
+export function VoiceStopControl() {
+  const state = useVoiceState();
+  if (!state.playing) return null;
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--icon-sm comment-composer__control"
+      aria-label="Stop speech"
+      title="Stop speech"
+      data-testid="voice-stop"
+      onClick={(event) => {
+        // VOM-FR-LAQO: this control goes with the speech, so focus does not fall
+        // to the document.
+        const record = event.currentTarget.parentElement?.querySelector<HTMLElement>(
+          "[data-voice-focus]",
+        );
+        stopSpeech();
+        record?.focus();
+      }}
+    >
+      <Icon.Stop size={13} />
+    </button>
+  );
+}
+
+function ToggleOption(props: {
+  name: string;
+  pressed: boolean;
+  children: React.ReactNode;
+  reason?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="voice-toggle__option"
+      aria-pressed={props.pressed}
+      aria-label={props.name}
+      title={props.reason ?? props.name}
+      aria-description={props.reason}
+      disabled={props.reason !== undefined}
+      onClick={props.onSelect}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+const INPUT_MODES: { mode: VoiceInputMode; name: string; icon: React.ReactNode }[] = [
+  { mode: "ptt", name: "Push-to-Talk", icon: <Icon.KeyPress size={13} /> },
+  { mode: "vad", name: "VAD", icon: <Icon.Waveform size={13} /> },
+];
+
+const RESPONSE_MODES: { mode: VoiceResponseMode; name: string; icon: React.ReactNode }[] = [
+  { mode: "text", name: "Text", icon: <Icon.TextLines size={13} /> },
+  { mode: "voice", name: "Voice", icon: <Icon.Speaker size={13} /> },
+];
+
+const VAD_BUSY = "VAD is not available during a recording.";
+const NO_SPEECH_ROUTE = "The active provider has no speech route.";
+const VAD_SOUND = "Other applications can sound lower during a voice session.";
+
+/** VOM-FR-RTSU: OS voice processing runs for as long as the microphone is open. */
+function isMacPlatform(): boolean {
+  return typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
 }
 
 export function VoiceArea({ disabled }: { disabled: boolean }) {
   const state = useVoiceState();
   const recording = state.phase === "recording";
   const now = useClock(recording && !state.live);
-  const busy = state.phase === "transcribing" || state.phase === "posting";
   const status = statusOf(state, now);
+  const vadBusy = state.inputMode === "ptt" && (state.phase !== "idle" || transcribing(state));
 
   // The newest words are what the author checks while speaking.
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -83,101 +221,49 @@ export function VoiceArea({ disabled }: { disabled: boolean }) {
 
   return (
     <div className="voice-area" data-testid="voice-area">
-      <button
-        type="button"
-        className="voice-area__record"
-        data-voice-record="true"
-        data-recording={state.phase === "opening" || recording}
-        data-testid="voice-record"
-        aria-label={recordName(state)}
-        title={recordName(state)}
-        // Not `disabled` while busy: that would take the focus away after each
-        // recording. A press in a busy phase does nothing.
-        aria-disabled={busy}
-        disabled={disabled}
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-          pressRecord();
-        }}
-        onPointerUp={releaseRecord}
-        onPointerCancel={releaseRecord}
-        onKeyDown={(event) => {
-          // VOM-FR-PECJ.
-          if ((event.key === " " || event.key === "Enter") && !event.repeat) {
-            event.preventDefault();
-            pressRecord();
-          }
-        }}
-        onKeyUp={(event) => {
-          if (event.key === " " || event.key === "Enter") {
-            event.preventDefault();
-            releaseRecord();
-          }
-        }}
-      >
-        <Icon.Mic size={14} />
-      </button>
+      <VoiceInputControls disabled={disabled} />
       <div ref={transcriptRef} className="voice-area__transcript" data-testid="voice-transcript">
         {status}
       </div>
-      {state.playing && (
-        <button
-          type="button"
-          className="btn btn--ghost btn--icon-sm comment-composer__control"
-          aria-label="Stop speech"
-          title="Stop speech"
-          data-testid="voice-stop"
-          onClick={stopSpeech}
-        >
-          <Icon.Stop size={13} />
-        </button>
-      )}
+      <VoiceStopControl />
       <div className="voice-area__toggles">
+        {state.inputMode === "vad" && isMacPlatform() && (
+          <span
+            className="voice-area__info"
+            role="img"
+            tabIndex={0}
+            aria-label={VAD_SOUND}
+            title={VAD_SOUND}
+            data-testid="voice-vad-hint"
+          >
+            <Icon.Info size={13} />
+          </span>
+        )}
         <div className="voice-toggle" role="group" aria-label="Input mode">
-          <button
-            type="button"
-            className="voice-toggle__option"
-            aria-pressed="true"
-            aria-label="Push-to-Talk"
-            title="Push-to-Talk"
-          >
-            PTT
-          </button>
-          <button
-            type="button"
-            className="voice-toggle__option"
-            aria-pressed="false"
-            disabled
-            title="Voice activity detection comes later."
-            aria-description="Voice activity detection comes later."
-          >
-            VAD
-          </button>
+          {INPUT_MODES.map(({ mode, name, icon }) => (
+            <ToggleOption
+              key={mode}
+              name={name}
+              pressed={state.inputMode === mode}
+              reason={mode === "vad" && vadBusy ? VAD_BUSY : undefined}
+              onSelect={() => setInputMode(mode)}
+            >
+              {icon}
+            </ToggleOption>
+          ))}
         </div>
         <div className="voice-toggle" role="group" aria-label="Response mode">
-          <button
-            type="button"
-            className="voice-toggle__option"
-            aria-pressed={state.responseMode === "text"}
-            onClick={() => setResponseMode("text")}
-          >
-            Text
-          </button>
-          <button
-            type="button"
-            className="voice-toggle__option"
-            aria-pressed={state.responseMode === "voice"}
-            disabled={!state.providerSpeaks}
-            title={
-              state.providerSpeaks ? "Speak replies" : "The active provider has no speech route."
-            }
-            aria-description={
-              state.providerSpeaks ? undefined : "The active provider has no speech route."
-            }
-            onClick={() => setResponseMode("voice")}
-          >
-            Voice
-          </button>
+          {RESPONSE_MODES.map(({ mode, name, icon }) => (
+            <ToggleOption
+              key={mode}
+              name={name}
+              pressed={state.responseMode === mode}
+              reason={mode === "voice" && !state.providerSpeaks ? NO_SPEECH_ROUTE : undefined}
+              onSelect={() => setResponseMode(mode)}
+            >
+              {icon}
+            </ToggleOption>
+          ))}
         </div>
       </div>
     </div>

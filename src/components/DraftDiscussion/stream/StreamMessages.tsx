@@ -20,6 +20,7 @@ import { questionCardOf } from "./questionParse";
 import { coveredBy, streamItems, type StreamItem } from "./streamItems";
 import { activityStatus } from "../../../state/agentActivity";
 import { ToolDisclosure } from "../../discussion/ToolActivity";
+import { splitAroundBubble } from "../../discussion/LiveBubble";
 import type { AgentRoster } from "../../agentTags";
 import type { AgentTurn, Comment, TurnToolCall } from "../../../types";
 import type { PairedHalf } from "../../discussion/questionPairs";
@@ -44,6 +45,8 @@ export interface StreamMessagesProps {
   /** CTA-FR-BJWN: each pending row's tool list, keyed by the turn it reads. */
   toolCallsByRow?: ReadonlyMap<string, readonly TurnToolCall[]>;
   onCancelTurn: (turnId: string) => void;
+  /** CVP-FR-TGPV: the live bubble of voice mode, after the comments. */
+  liveBubble?: React.ReactNode;
   /**
    * CTA-FR-MGVJ / CTA-FR-ARBB: what a turn left behind, at the foot of the
    * column rather than beside it, so it takes the content column's own measure
@@ -82,36 +85,10 @@ export function StreamMessages(props: StreamMessagesProps) {
   /** Which marks this pass has already placed (see the render below). */
   const drawn = new Set<string>();
 
-  return (
-    <div className="dds-stream" data-testid="dds-stream">
-      <div className="dds-stream__column">
-        {items.map((item) => (
-          <Fragment key={item.key}>
-            {/* One comment can produce two items — a block for its body and a
-                row for the change it announces — and the mark above it belongs
-                to the comment rather than to either, so it is drawn once, above
-                the first of them. */}
-            {coveredBy(item).map((id) => {
-              if (!marks.has(id) || drawn.has(id)) return null;
-              drawn.add(id);
-              return <Fragment key={`mark:${id}`}>{marks.get(id)}</Fragment>;
-            })}
-            <StreamRow
-              item={item}
-              props={props}
-              openingId={openingId}
-              positions={positions}
-            />
-          </Fragment>
-        ))}
-
-        {/* CTA-FR-ZOLW: a turn that has not answered yet, in the position its
-            answer will take. DDS-FR-TGWY: a dot and one lowercase word, and the
-            message that arrives replaces this row rather than landing below it —
-            which it does because the turn is gone the moment the comment lands.
-            One row for each agent (CTA-FR-ZOLW), so the row is keyed by the
-            agent and stays in place while a newer turn of that agent runs. */}
-        {props.pendingTurns.map((turn) => (
+  // CVP-FR-TGPV: a turn that the speech registered shows below the live bubble.
+  const liveBubble = props.liveBubble;
+  const split = splitAroundBubble(props.pendingTurns, Boolean(liveBubble));
+  const pendingRow = (turn: AgentTurn) => (
           <div
             key={turn.agentId}
             className="dds-message"
@@ -155,7 +132,40 @@ export function StreamMessages(props: StreamMessagesProps) {
               )}
             </div>
           </div>
+        );
+
+  return (
+    <div className="dds-stream" data-testid="dds-stream">
+      <div className="dds-stream__column">
+        {items.map((item) => (
+          <Fragment key={item.key}>
+            {/* One comment can produce two items — a block for its body and a
+                row for the change it announces — and the mark above it belongs
+                to the comment rather than to either, so it is drawn once, above
+                the first of them. */}
+            {coveredBy(item).map((id) => {
+              if (!marks.has(id) || drawn.has(id)) return null;
+              drawn.add(id);
+              return <Fragment key={`mark:${id}`}>{marks.get(id)}</Fragment>;
+            })}
+            <StreamRow
+              item={item}
+              props={props}
+              openingId={openingId}
+              positions={positions}
+            />
+          </Fragment>
         ))}
+
+        {/* CTA-FR-ZOLW: a turn that has not answered yet, in the position its
+            answer will take. DDS-FR-TGWY: a dot and one lowercase word, and the
+            message that arrives replaces this row rather than landing below it —
+            which it does because the turn is gone the moment the comment lands.
+            One row for each agent (CTA-FR-ZOLW), so the row is keyed by the
+            agent and stays in place while a newer turn of that agent runs. */}
+        {split.before.map(pendingRow)}
+        {liveBubble}
+        {split.after.map(pendingRow)}
 
         {props.footer}
       </div>

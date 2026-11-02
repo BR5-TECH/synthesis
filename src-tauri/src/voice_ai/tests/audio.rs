@@ -121,3 +121,20 @@ fn a_frame_has_its_kind_rate_and_payload() {
     assert_eq!(frame(FRAME_PCM, 24_000, &[9, 8]), vec![0, 0xC0, 0x5D, 0, 0, 9, 8]);
     assert_eq!(frame(FRAME_FILE, 0, &[1]), vec![1, 0, 0, 0, 0, 1]);
 }
+
+// VOP-FR-XZET, VOP-FR-MOSY: an end frame has the header and no payload.
+#[test]
+fn a_segment_that_ends_sends_one_end_frame() {
+    let mut frames = Vec::new();
+    crate::voice_ai::commands::end_segment(&Ok(()), &mut |frame| frames.push(frame));
+    assert_eq!(frames, vec![vec![2, 0, 0, 0, 0]]);
+}
+
+// VOP-FR-MOSY: a failed segment sends none.
+#[test]
+fn a_failed_segment_sends_no_end_frame() {
+    let mut frames = Vec::new();
+    let failed = Err("speech_failed".to_string());
+    crate::voice_ai::commands::end_segment(&failed, &mut |frame| frames.push(frame));
+    assert!(frames.is_empty());
+}

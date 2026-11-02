@@ -299,3 +299,4 @@ mod hunk_reads;
 mod lifecycle;
 mod recording;
 mod rejected_hunks;
+mod updates;

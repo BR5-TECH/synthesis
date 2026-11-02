@@ -26,6 +26,7 @@ import { setFocusedHunk, useDraftReviewState } from "../../state/draftDiscussion
 import {
   hunkPosition,
   hunkStateOf,
+  isWithdrawn,
   nextUndecidedAfter,
   undecidedHunks,
   visitedHunks,
@@ -109,17 +110,27 @@ export function useProposalReview<P extends ReviewableProposal>({
     if (hunkReading?.status !== "read") return [];
     const { hunks, resolutions, legacy } = hunkReading.hunks;
     const agent = participantName(pendingProposal.agent);
-    return hunks.map((hunk, at) => ({
+    // DCR-FR-OZVU: a withdrawn change is hidden in review. It is dropped here,
+    // so no decoration, gutter mark, chip, count, or move can reach it. The
+    // resolution is kept with its change, because the two lists are parallel.
+    const shown = hunks
+      .map((hunk, at) => ({
+        hunk,
+        lost: resolutions[at]?.kind === "lost",
+        state: hunkStateOf(pendingProposal, hunk.id) ?? "pending",
+      }))
+      .filter((entry) => !isWithdrawn(entry.state));
+    return shown.map(({ hunk, lost, state }, at) => ({
       id: hunk.id,
       kind: hunk.kind,
-      state: hunkStateOf(pendingProposal, hunk.id) ?? "pending",
+      state,
       before: hunk.before ?? "",
       after: hunk.after ?? "",
       lead: hunk.anchor.lead,
       hint: hunk.anchor.hint_start,
-      lost: resolutions[at]?.kind === "lost",
+      lost,
       position: at + 1,
-      total: hunks.length,
+      total: shown.length,
       agent,
       // DCR-FR-25: what the author has written into this change, if anything.
       draft: hunkBufferVersion >= 0
@@ -197,12 +208,21 @@ export function useProposalReview<P extends ReviewableProposal>({
     [pendingProposal, buffers, kind, reviewKey, source],
   );
 
-  const acceptHunk = useCallback((hunkId: string) => void decide(hunkId, "accept"), [decide]);
+  const acceptHunk = useCallback(
+    (hunkId: string) => {
+      // DCR-FR-NYDA: the surface offers no decision on a withdrawn change.
+      if (pendingProposal && isWithdrawn(hunkStateOf(pendingProposal, hunkId))) return;
+      void decide(hunkId, "accept");
+    },
+    [decide, pendingProposal],
+  );
   const rejectHunk = useCallback(
     (hunkId: string) => {
       // DCR-FR-12: a rejected change offers no Reject, so its accelerator does
-      // nothing either; the backend would refuse it.
-      if (pendingProposal && hunkStateOf(pendingProposal, hunkId) === "rejected") return;
+      // nothing either; the backend would refuse it. DCR-FR-NYDA: a withdrawn
+      // change takes no decision.
+      const state = pendingProposal ? hunkStateOf(pendingProposal, hunkId) : undefined;
+      if (state === "rejected" || isWithdrawn(state)) return;
       void decide(hunkId, "reject");
     },
     [decide, pendingProposal],
@@ -244,12 +264,14 @@ export function useProposalReview<P extends ReviewableProposal>({
       if (proposalId === null) return;
       const key = hunkKey(proposalId, hunkId);
       const hunk = reviewHunks.find((h) => h.id === hunkId);
+      // DCR-FR-NYDA: no edit on a change the review does not show.
+      if (hunk === undefined) return;
       // DCR-FR-25: the buffer is adopted from the agent's own text the first
       // time the author touches it, and never afterwards.
       if (!buffers.get(key)) {
         buffers.adopt(
           key,
-          hunk?.after ?? "",
+          hunk.after,
           hunkReading?.status === "read" ? hunkReading.hunks.checksum : "",
         );
       }

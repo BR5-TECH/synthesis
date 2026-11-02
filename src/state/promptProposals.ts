@@ -26,7 +26,7 @@ import { listPromptChangeProposals } from "../api";
 import { logDebug, logInfo, logWarn } from "../logging";
 import { promptHunkCandidateBuffers } from "./candidateBuffers";
 import { artifactReviewKey, revealHunk } from "./draftDiscussion";
-import { firstUndecidedHunk } from "./draftProposals";
+import { dropRevisedEdits, firstUndecidedHunk } from "./draftProposals";
 import { hunksOf, rereadHunks } from "./proposalHunks";
 import type {
   PromptChangeProposal,
@@ -259,7 +259,8 @@ export function notePromptProposalChanged(
 ): void {
   const { artifactId, proposal } = payload;
   const current = byArtifact.get(artifactId) ?? [];
-  const known = current.some((p) => p.id === proposal.id);
+  const previous = current.find((p) => p.id === proposal.id);
+  const known = previous !== undefined;
   const next = known
     ? current.map((p) => (p.id === proposal.id ? proposal : p))
     : [proposal, ...current];
@@ -273,6 +274,9 @@ export function notePromptProposalChanged(
   // left to edit, so any hunk edit still unwritten is dropped with the decision
   // controls rather than written into a proposal that would refuse it.
   if (proposal.state !== "pending") promptHunkCandidateBuffers.dropProposal(proposal.id);
+  // PCR-FR-QHZN / DCR-FR-WRJP: an update rewrote or withdrew some changes, so
+  // an unwritten edit of one of them is dropped.
+  else dropRevisedEdits(promptHunkCandidateBuffers, previous, proposal);
   // PCP-FR-RVSN / DDS-FR-EHDK: a revision replaces a change in place, so the
   // changes a surface already holds are read again.
   if (hunksOf(proposal.id) !== undefined) rereadHunks(proposal.id, "prompt");

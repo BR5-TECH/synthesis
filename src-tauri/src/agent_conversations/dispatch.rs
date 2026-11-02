@@ -135,6 +135,51 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     origin: ConversationOrigin,
     trigger_comment_id: &str,
 ) -> Result<AgentTurn, String> {
+    dispatch_with(app, roots, project_key, nickname, origin, Trigger::Comment(trigger_comment_id))
+}
+
+/// What a dispatch answers: a comment that addressed the agent, or the first
+/// chunk of a speech (AGC-FR-SJQP).
+#[derive(Clone, Copy)]
+pub(super) enum Trigger<'a> {
+    Comment(&'a str),
+    Speech { speech_id: &'a str, text: &'a str, speaker: &'a Participant },
+}
+
+impl Trigger<'_> {
+    /// AGC-FR-ANBX: a turn that a speech registered has no trigger comment.
+    fn comment_id(&self) -> Option<&str> {
+        match self {
+            Trigger::Comment(id) => Some(id),
+            Trigger::Speech { .. } => None,
+        }
+    }
+
+    fn speech_id(&self) -> Option<&str> {
+        match self {
+            Trigger::Comment(_) => None,
+            Trigger::Speech { speech_id, .. } => Some(speech_id),
+        }
+    }
+
+    /// AGC-FR-ISKZ, AGC-FR-SJQP: the steering message a running turn takes.
+    fn steering_item(&self) -> SteeringItem {
+        match self {
+            Trigger::Comment(id) => SteeringItem::Comment(id.to_string()),
+            Trigger::Speech { text, .. } => SteeringItem::Chunk(text.to_string()),
+        }
+    }
+}
+
+/// [`dispatch_impl`] for either kind of trigger.
+pub(super) fn dispatch_with<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    roots: Roots<'_>,
+    project_key: &str,
+    nickname: &str,
+    origin: ConversationOrigin,
+    trigger: Trigger<'_>,
+) -> Result<AgentTurn, String> {
     use tauri::Manager;
     let store = app.state::<GlobalSettingsStore>();
     let turns = app.state::<TurnRegistry>();
@@ -219,7 +264,11 @@ pub fn dispatch_impl<R: tauri::Runtime>(
 
     // AGC-FR-ISKZ: a running turn of this agent in this conversation takes the
     // comment as a steering message, and no new turn is registered for it.
-    if let Some(steered) = turns.offer_steering(app, &agent.id, &origin, trigger_comment_id) {
+    // AGC-FR-SJQP: the first chunk of a speech goes to it on the same terms,
+    // and binds it to the speech.
+    if let Some(steered) =
+        turns.offer_steering(app, &agent.id, &origin, trigger.steering_item(), trigger.speech_id())
+    {
         logging::log_info(
             app,
             turns.buffer(),
@@ -229,7 +278,8 @@ pub fn dispatch_impl<R: tauri::Runtime>(
                 "turnId" => &steered.id,
                 "agent" => &agent.nickname,
                 "agentId" => &agent.id,
-                "commentId" => trigger_comment_id,
+                "commentId" => trigger.comment_id().unwrap_or_default(),
+                "speech" => trigger.speech_id().is_some(),
                 "originKind" => origin.kind().as_str(),
                 "discussionId" => origin.discussion_id(),
             },
@@ -237,7 +287,13 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         return Ok(steered);
     }
 
-    let (turn, cancelled) = turns.register(&agent, origin.clone(), trigger_comment_id, project_key);
+    let (turn, cancelled) = turns.register(
+        &agent,
+        origin.clone(),
+        trigger.comment_id(),
+        project_key,
+        trigger.speech_id(),
+    );
     publish(app, &turn);
     logging::log_info(
         app,
@@ -253,6 +309,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
             "reasoning" => reasoning_label(agent.reasoning.as_ref()),
             "originKind" => origin.kind().as_str(),
             "discussionId" => origin.discussion_id(),
+            "speech" => trigger.speech_id().is_some(),
         },
     );
 
@@ -268,8 +325,24 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     let document_budget = DocumentBudget::resolve(&store, &provider, &agent.model_id);
     // AGC-FR-13: input is assembled at dispatch, so a turn answers the
     // conversation as it stood when the agent was addressed.
-    let BuiltInput { sections: input, document } =
-        build_input_within(roots, &origin, trigger_comment_id, &document_budget);
+    // AGC-FR-SJQP: a speech turn's `current_comment` holds the first chunk.
+    let BuiltInput { sections: input, document, question_set_unreadable } = match trigger {
+        Trigger::Comment(id) => build_input_within(roots, &origin, id, &document_budget),
+        Trigger::Speech { text, speaker, .. } => {
+            speech_input(roots, &origin, text, speaker, &document_budget)
+        }
+    };
+    // AGC-FR-QSWD: a record that cannot be read adds no question set. The kind
+    // is the whole of the record: no path and no content.
+    if let Some(kind) = question_set_unreadable {
+        logging::log_warn(
+            app,
+            turns.buffer(),
+            &[Domain::Ai, Domain::Backend],
+            "a pending question set could not be read for a turn",
+            log_fields! { "discussionId" => origin.discussion_id(), "kind" => kind },
+        );
+    }
     // The shape of the material and nothing of the material itself: which
     // sections a builder could produce, how much they came to, and whether the
     // bound of AGC-FR-11 bit — which is what explains a reply about half a

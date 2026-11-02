@@ -156,6 +156,9 @@ pub(crate) fn fix_riff_sizes(mut wav: Vec<u8>) -> Vec<u8> {
 /// VOP-FR-XZET: one frame of a `Channel`.
 pub(crate) const FRAME_PCM: u8 = 0;
 pub(crate) const FRAME_FILE: u8 = 1;
+/// VOP-FR-MOSY: a frame of 1 KB or more reaches the WebView after the command
+/// resolves, so this frame, which comes last, shows that all audio arrived.
+pub(crate) const FRAME_END: u8 = 2;
 
 pub(crate) fn frame(kind: u8, rate: u32, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(5 + payload.len());

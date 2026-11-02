@@ -33,6 +33,9 @@ export const THINKING = "Thinking…";
  */
 export const WORKING = "Working…";
 
+/** CTA-FR-HPXE: a turn bound to a speech that is still open. */
+export const WAITING_FOR_SPEECH = "Waiting for you to finish speaking…";
+
 /**
  * CTA-FR-HEYB: the whole of the vocabulary a conversation needs — the tools a
  * conversation turn is lent (CVL-FR-08, CVL-FR-30) and no others.
@@ -54,6 +57,8 @@ export const TOOL_ACTIVITY_STATUS: Readonly<Record<string, string>> = {
   ask_discussion_questions: "Preparing questions for you…",
   propose_draft_changes: "Preparing draft changes…",
   propose_prompt_changes: "Preparing prompt changes…",
+  decide_draft_changes: "Deciding draft changes…",
+  decide_prompt_changes: "Deciding prompt changes…",
   "openrouter:web_search": "Searching the web…",
   "openrouter:web_fetch": "Fetching from the web…",
 };
@@ -85,10 +90,12 @@ export function toolActivityStatus(tool: string): string {
  * and a turn with nothing active is back to waiting on a model response.
  */
 export function activityStatus(
-  turn: Pick<AgentTurn, "activeToolCalls">,
+  turn: Pick<AgentTurn, "activeToolCalls" | "speechId">,
 ): string {
   const latest = latestActiveCall(turn.activeToolCalls);
-  return latest ? toolActivityStatus(latest.tool) : THINKING;
+  if (latest) return toolActivityStatus(latest.tool);
+  // CTA-FR-HPXE, CVP-FR-RNYK: the agent waits for the author to stop speaking.
+  return turn.speechId ? WAITING_FOR_SPEECH : THINKING;
 }
 
 /**

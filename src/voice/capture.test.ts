@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ChunkPump, MicrophoneError, openMicrophone } from "./capture";
+import { ChunkPump, FrameBatcher, MicrophoneError, openMicrophone } from "./capture";
 
 function buffer(...bytes: number[]): ArrayBuffer {
   return new Uint8Array(bytes).buffer;
@@ -57,6 +57,57 @@ describe("the chunk pump", () => {
     pump.push(buffer(2));
     await pump.flush();
     expect(sent).toEqual([[1], [2]]);
+  });
+});
+
+describe("the frame batcher", () => {
+  function batcher(rate?: number) {
+    const sent: number[] = [];
+    const batch = new FrameBatcher((pcm) => sent.push(pcm.byteLength));
+    if (rate !== undefined) batch.setRate(rate);
+    return { batch, sent };
+  }
+
+  it("VOM non-functional: with no rate, audio waits", () => {
+    const { batch, sent } = batcher();
+    batch.push(new ArrayBuffer(100_000));
+    expect(sent).toEqual([]);
+  });
+
+  it.each([
+    [48_000, 2880],
+    [16_000, 960],
+  ])("VOM non-functional: at %i Hz, a frame of 30 ms is %i bytes", (rate, bytes) => {
+    const { batch, sent } = batcher(rate);
+    batch.push(new ArrayBuffer(bytes - 2));
+    expect(sent).toEqual([]);
+    batch.push(new ArrayBuffer(2));
+    expect(sent).toEqual([bytes]);
+  });
+
+  it("VOM non-functional: blocks join in order", () => {
+    const parts: number[][] = [];
+    const batch = new FrameBatcher((pcm) => parts.push([...new Uint8Array(pcm)]));
+    batch.setRate(100);
+    batch.push(buffer(1, 2));
+    batch.push(buffer(3, 4, 5, 6));
+    expect(parts).toEqual([[1, 2, 3, 4, 5, 6]]);
+  });
+
+  it("VOM non-functional: audio from before the rate goes with the next block", () => {
+    const { batch, sent } = batcher();
+    batch.push(new ArrayBuffer(4000));
+    batch.setRate(48_000);
+    batch.push(new ArrayBuffer(2));
+    expect(sent).toEqual([4002]);
+  });
+
+  it("VOM-FR-XEIA: a flush sends a part of a frame, and an empty flush sends nothing", () => {
+    const { batch, sent } = batcher(48_000);
+    batch.push(new ArrayBuffer(10));
+    batch.flush();
+    batch.flush();
+    expect(sent).toEqual([10]);
   });
 });
 
@@ -157,5 +208,52 @@ describe("the microphone", () => {
     expect(track.stop).toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
     expect(node.port.onmessage).toBeNull();
+  });
+
+  describe("a track that ends", () => {
+    class Context {
+      sampleRate = 48_000;
+      destination = {};
+      audioWorklet = { addModule: vi.fn(async () => undefined) };
+      resume = vi.fn(async () => undefined);
+      close = vi.fn(async () => undefined);
+      createMediaStreamSource = () => ({ connect: vi.fn() });
+      createGain = () => ({ gain: { value: 1 }, connect: vi.fn() });
+    }
+
+    function tracked() {
+      const track = stubbed(Context) as { stop: () => void; onended?: (() => void) | null };
+      vi.stubGlobal(
+        "AudioWorkletNode",
+        class {
+          connect = vi.fn();
+          port = { onmessage: null };
+        },
+      );
+      return track;
+    }
+
+    it("VOM-FR-CSXI: reports a loss", async () => {
+      const track = tracked();
+      const lost = vi.fn();
+      await openMicrophone(() => undefined, lost);
+      track.onended?.();
+      expect(lost).toHaveBeenCalledTimes(1);
+    });
+
+    it("VOM-FR-CSXI: `stop` is no loss", async () => {
+      const track = tracked();
+      const lost = vi.fn();
+      const mic = await openMicrophone(() => undefined, lost);
+      mic.stop();
+      expect(track.onended).toBeNull();
+      expect(lost).not.toHaveBeenCalled();
+    });
+
+    it("VOM-FR-CSXI: with no listener, no handler is set", async () => {
+      const track = tracked();
+      await openMicrophone(() => undefined);
+      expect(track.onended).toBeUndefined();
+    });
   });
 });

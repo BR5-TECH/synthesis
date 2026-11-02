@@ -488,8 +488,8 @@
 
 /* ---------- the reply field (DDS-FR-HQTX) ---------- */
 
-/* One bounded field carrying the placeholder, the attach and post controls, and
-   the hint for the accelerator. It stays **docked** below the scroller
+/* One bounded field carrying the placeholder and the attach and post controls.
+   It stays **docked** below the scroller
    (DDS-FR-QZAV): an author reading back through a long discussion must still
    reach the field they reply in. */
 /* DDS-FR-ZMXQ: the field takes the content column's own measure and centres on
@@ -532,21 +532,6 @@
 /* DDS-FR-MCDG: one placeholder tone for the opening and the reply composer. */
 .dds-discussion .comment-card__composer::placeholder {
   color: var(--fg-4);
-}
-/* Quieter than the kit's own key cap, which is drawn to be pressed. This one is
-   a reminder beside a field, so it recedes to the tone every other piece of meta
-   in the column takes. */
-.dds-reply__kbd {
-  font-size: var(--fs-ui-xs);
-  /* DDS-FR-MCDG: set here, not inherited, so the hint has one size in the
-     opening and in the reply composer. */
-  line-height: var(--lh-normal);
-  font-weight: var(--fw-regular);
-  color: var(--fg-4);
-  background: none;
-  border: 1px solid var(--border-1);
-  border-bottom-width: 1px;
-  flex: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .dds-discussion .comment-card--stream .comment-composer { transition: none; }

@@ -32,6 +32,10 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "cancel_voice_capture",
     "speak_voice_segment",
     "cancel_voice_speech",
+    "open_voice_activity_session",
+    "feed_voice_activity",
+    "set_voice_activity_gate",
+    "close_voice_activity_session",
     "list_recent_projects",
     "open_project_at_path",
     "open_project_from_git_url",
@@ -404,6 +408,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // material under discussion, the other reaches a model with a key
     // (CVL-FR-11).
     "dispatch_agent_turn",
+    "dispatch_speech_turn",
+    "steer_speech_turn",
+    "end_speech_turn",
     "cancel_agent_turn",
     "list_agent_turns",
     "estimate_discussion_context",

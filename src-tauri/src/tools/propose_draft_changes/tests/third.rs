@@ -6,7 +6,7 @@ use super::second::{PDC_SEVERAL_LEAK_LOG, PDC_SEVERAL_REFUSAL_LOG};
 use super::*;
 
 // ---------------------------------------------------------------------------
-// What `revises` can mean on the draft as it stands (PDC-FR-GMWR)
+// Several changes in one call (PDC-FR-TZKQ)
 // ---------------------------------------------------------------------------
 
 /// One well-formed change, for a call that is about something else.
@@ -47,542 +47,6 @@ fn five_changes() -> Vec<HunkArg> {
         .collect()
 }
 
-/// Several well-formed changes, each naming text the prompt holds once, and
-/// **given out of document order** so that a claim about a change keeping its
-/// position says something: written in document order, argument order and
-/// document order are the same list and neither can be told from the other.
-fn three_changes() -> Vec<HunkArg> {
-    let anchors = ["original", "# Spec", "The"];
-    for anchor in anchors {
-        assert_eq!(
-            ORIGINAL.matches(anchor).count(),
-            1,
-            "the fixture prompt must hold {anchor:?} once, or these changes are refused as text naming more than one place",
-        );
-    }
-    anchors
-        .iter()
-        .zip(["revised", "# Specification", "This"])
-        .map(|(before, after)| HunkArg {
-            kind: Some("replace".into()),
-            before: Some((*before).into()),
-            after: Some(after.into()),
-            after_text: None,
-            lead: None,
-            trail: None,
-            note: None,
-        })
-        .collect()
-}
-
-// PDC-FR-GMWR / TLC-FR-07: a draft holding no standing proposal holds no change
-// a name could have meant, so the field is ignored and the call is the ordinary
-// new proposal the model composed.
-//
-// This is the state a model cannot otherwise leave: a call naming a change never
-// reaches the recording path, so refusing it would answer every call the model
-// made with a refusal about a change that is not there, and the model could
-// propose nothing at all.
-#[test]
-fn a_name_on_a_draft_holding_no_proposal_is_ignored_and_the_changes_are_recorded() {
-    let f = Fixture::new();
-    let out = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some("a-change-that-was-never-there".into()),
-            hunks: three_changes(),
-        })
-        .expect("the field is ignored, not refused");
-    assert!(out.proposed);
-    assert_eq!(f.proposals().len(), 1, "the proposal was recorded");
-    assert_eq!(f.hunks_of_the_one_proposal().len(), 3, "all three changes");
-}
-
-// PDC-FR-GMWR: a name that resolves to a change awaiting the author replaces
-// that one change in place, keeping its id and its position.
-#[test]
-fn a_name_that_resolves_replaces_that_one_change_in_place() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: three_changes(),
-    })
-    .expect("a proposal stands");
-    let before = f.hunks_of_the_one_proposal();
-    let second = before[1].id.clone();
-
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: Some(second.clone()),
-        hunks: vec![HunkArg {
-            kind: Some("replace".into()),
-            before: Some("The".into()),
-            after: Some("That".into()),
-            after_text: None,
-            lead: None,
-            trail: None,
-            note: None,
-        }],
-    })
-    .expect("the revision is taken");
-
-    let after = f.hunks_of_the_one_proposal();
-    assert_eq!(after.len(), before.len(), "a revision adds no change");
-    // Its id and its place, which is what "in place" means. The changes are
-    // given out of document order, so a revision whose new text sits elsewhere
-    // in the prompt staying at this index is the position claim rather than a
-    // coincidence of the two orders being one list.
-    assert_eq!(after[1].id, second, "the change keeps its id and its place");
-    assert_eq!(after[1].after_text(), "That");
-    // And the changes either side of it are untouched — the same changes, not
-    // merely the same number of them.
-    for index in [0, 2] {
-        assert_eq!(after[index].id, before[index].id);
-        assert_eq!(after[index].before_text(), before[index].before_text());
-        assert_eq!(after[index].after_text(), before[index].after_text());
-        assert_eq!(after[index].revision, before[index].revision);
-    }
-}
-
-// PDC-FR-GMWR: a name that resolves, carrying more than one change, is the
-// refusal that names the correction — which of several changes replaces the one
-// named is a question only the model can answer.
-//
-// This is the call a user's log named: `revising: true` beside eight changes.
-#[test]
-fn a_name_that_resolves_beside_several_changes_asks_for_the_one_that_replaces_it() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
-
-    let refused = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some(standing),
-            hunks: three_changes(),
-        })
-        .unwrap_err();
-    assert_eq!(refused.to_string(), PROPOSAL_REVISE_ONE);
-    // The correction, and what to do with the changes it did not take.
-    assert!(refused.to_string().contains("only the one change"));
-    assert!(refused.to_string().contains("Wait for the author"));
-}
-
-// PDC-FR-GMWR: a name that does not resolve while a proposal stands is the
-// no-such-change refusal, whatever the call carries beside it — the model named
-// a change wrongly, and being asked to send one change instead would ask it to
-// correct the thing that is not wrong.
-#[test]
-fn a_name_that_does_not_resolve_while_a_proposal_stands_names_the_change_as_the_fault() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-
-    for hunks in [one_change(), three_changes()] {
-        let refused = f
-            .call(ProposeDraftChangesArgs {
-                path: FILE.into(),
-                rationale: RATIONALE.into(),
-                revises: Some("a-change-that-was-never-there".into()),
-                hunks,
-            })
-            .unwrap_err();
-        assert_eq!(refused.to_string(), PROPOSAL_NO_SUCH_CHANGE);
-    }
-}
-
-// PDC-FR-GMWR / TLC-FR-07: a blank name is no name at all, so the call is an
-// ordinary new proposal rather than a revision of nothing.
-#[test]
-fn a_blank_name_is_no_name_at_all() {
-    let f = Fixture::new();
-    let out = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some("   ".into()),
-            hunks: one_change(),
-        })
-        .expect("a blank name is ignored");
-    assert!(out.proposed);
-    // A revision answers `proposed` too, so the flag alone tells the two
-    // branches apart no better than the name does.
-    assert_eq!(f.proposals().len(), 1, "it recorded rather than revised");
-    assert_eq!(f.hunks_of_the_one_proposal().len(), 1);
-}
-
-// PDC-FR-02: the model is told the one-change rule **before** it composes, in
-// the description it reads and in the field's own description. A rule that only
-// a refusal states is one the model breaks first and reads afterwards.
-#[test]
-fn the_one_change_rule_is_stated_where_the_model_reads_it() {
-    let f = Fixture::new();
-    let tool = f.tool();
-    let schema = tool.parameters();
-    let description = tool.description();
-    assert!(description.contains("`revises`"), "the description names the field: {description}",);
-    for text in [
-        description.clone(),
-        schema["properties"]["revises"]["description"].as_str().expect("description").to_string(),
-    ] {
-        assert!(text.contains("one change"), "the text states the one-change rule: {text}",);
-    }
-}
-
-// PDC-FR-GMWR / PDC-FR-TZKQ: a revision is placed against the prompt as a
-// recording is, so a replacement naming text the prompt does not hold reads the
-// refusal for **that** mistake. Reported as a name that resolved to nothing, it
-// would send the model looking for a change it had named correctly.
-#[test]
-fn a_revision_naming_text_the_prompt_does_not_hold_is_told_that_and_not_that_the_change_is_gone() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
-
-    let refused = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some(standing),
-            hunks: vec![HunkArg {
-                kind: Some("replace".into()),
-                before: Some("words the prompt has never held".into()),
-                after: Some("something else".into()),
-                after_text: None,
-                lead: None,
-                trail: None,
-                note: None,
-            }],
-        })
-        .unwrap_err();
-    assert_eq!(refused.to_string(), PROPOSAL_TEXT_NOT_FOUND);
-}
-
-/// Put one change of the standing proposal into a state, without going through
-/// the surface that usually does.
-fn set_state(f: &Fixture, hunk_id: &str, state: crate::draft_proposals::hunks::HunkState) {
-    let proposal = f.proposals()[0].id.clone();
-    crate::draft_proposals::set_hunk_state(&f.root(), &f.draft_id, &proposal, hunk_id, state)
-        .expect("the state is set");
-}
-
-// PDC-FR-GMWR: a change the author held for discussion is the case this field
-// exists for — it is how the agent answers about the change it was asked to
-// reconsider — and a change held for discussion is undecided.
-#[test]
-fn a_change_the_author_held_for_discussion_is_revisable() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: three_changes(),
-    })
-    .expect("a proposal stands");
-    let held = f.hunks_of_the_one_proposal()[1].id.clone();
-    set_state(&f, &held, crate::draft_proposals::hunks::HunkState::Discussing);
-
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: Some(held.clone()),
-        hunks: vec![HunkArg {
-            kind: Some("replace".into()),
-            before: Some("The".into()),
-            after: Some("That".into()),
-            after_text: None,
-            lead: None,
-            trail: None,
-            note: None,
-        }],
-    })
-    .expect("the change held for discussion is revised");
-
-    let after = f.hunks_of_the_one_proposal();
-    assert_eq!(after[1].id, held, "it keeps its id and its place");
-    assert_eq!(after[1].after_text(), "That");
-}
-
-// PDC-FR-GMWR / DCP-FR-XDRV: a change already accepted, while its siblings are
-// still undecided, is not one the model can revise. The proposal still stands,
-// so this is a name the model can correct.
-#[test]
-fn a_change_already_accepted_is_not_one_the_model_can_revise() {
-    {
-        let state = crate::draft_proposals::hunks::HunkState::Accepted;
-        let f = Fixture::new();
-        f.call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: None,
-            hunks: three_changes(),
-        })
-        .expect("a proposal stands");
-        let settled = f.hunks_of_the_one_proposal()[0].id.clone();
-        set_state(&f, &settled, state);
-
-        let refused = f
-            .call(ProposeDraftChangesArgs {
-                path: FILE.into(),
-                rationale: RATIONALE.into(),
-                revises: Some(settled),
-                hunks: one_change(),
-            })
-            .unwrap_err();
-        assert_eq!(refused.to_string(), PROPOSAL_NO_SUCH_CHANGE, "{state:?}");
-    }
-}
-
-// PDC-FR-GMWR / DCP-FR-XDRV: a change the author rejected, while its siblings
-// are still undecided, is revised in place and is undecided again: `pending`,
-// with `decided_at` and `edited` cleared and its `revision` bumped.
-#[test]
-fn a_change_the_author_rejected_is_revised_and_undecided_again() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: three_changes(),
-    })
-    .expect("a proposal stands");
-    let rejected = f.hunks_of_the_one_proposal()[2].id.clone();
-    set_state(&f, &rejected, crate::draft_proposals::hunks::HunkState::Rejected);
-    let row_of = |f: &Fixture| {
-        f.proposals()[0].ledger.iter().find(|row| row.id == rejected).cloned().expect("the row")
-    };
-    let before = row_of(&f);
-    assert!(before.decided_at.is_some());
-
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: Some(rejected.clone()),
-        hunks: vec![HunkArg {
-            kind: Some("replace".into()),
-            before: Some("The".into()),
-            after: Some("That".into()),
-            after_text: None,
-            lead: None,
-            trail: None,
-            note: None,
-        }],
-    })
-    .expect("the rejected change is revised");
-
-    let after = row_of(&f);
-    assert_eq!(after.state, crate::draft_proposals::hunks::HunkState::Pending);
-    assert_eq!(after.decided_at, None);
-    assert!(!after.edited);
-    assert_eq!(after.revision, before.revision + 1);
-    let hunks = f.hunks_of_the_one_proposal();
-    assert_eq!(hunks[2].id, rejected, "it keeps its id and its place");
-    assert_eq!(hunks[2].after_text(), "That");
-}
-
-// PDC-FR-GMWR / PDC-FR-TZKQ: a revision whose text the prompt holds twice reads
-// the refusal for **that** mistake. A revision is placed exactly as a recording
-// is, so it must be refused in the same words: told the text was not found, the
-// model would copy it again rather than copy more of the words around it.
-#[test]
-fn a_revision_naming_text_the_prompt_holds_twice_is_asked_for_more_of_it() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
-
-    let refused = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some(standing),
-            hunks: vec![HunkArg {
-                kind: Some("replace".into()),
-                // The prompt is `# Spec\n\nThe original.\n`, which holds this
-                // twice inside `original` alone.
-                before: Some("i".into()),
-                after: Some("y".into()),
-                after_text: None,
-                lead: None,
-                trail: None,
-                note: None,
-            }],
-        })
-        .unwrap_err();
-    assert_eq!(refused.to_string(), PROPOSAL_TEXT_NOT_UNIQUE);
-}
-
-// PDC-FR-GMWR: a name that resolved when the proposal stood means nothing once
-// every change of it is decided — the draft holds no standing proposal, so the
-// call is the ordinary new proposal the model composed.
-#[test]
-fn a_real_name_on_a_proposal_since_fully_decided_is_ignored() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let settled = f.hunks_of_the_one_proposal()[0].id.clone();
-    set_state(&f, &settled, crate::draft_proposals::hunks::HunkState::Rejected);
-
-    let out = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some(settled),
-            hunks: three_changes(),
-        })
-        .expect("the name is ignored and the changes are recorded");
-    assert!(out.proposed);
-    assert_eq!(f.proposals().len(), 2, "a second proposal was recorded");
-}
-
-// PDC-FR-07 / PDC-FR-GMWR: a call carrying no changes is asked for changes,
-// whatever it names in `revises`. Asked instead to "send only the one change
-// that replaces it", a model that sent none would have nothing to correct.
-#[test]
-fn a_name_beside_no_changes_at_all_is_asked_for_changes() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
-
-    let refused = f
-        .call(ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: Some(standing),
-            hunks: vec![],
-        })
-        .unwrap_err();
-    assert_eq!(refused.to_string(), PROPOSAL_NO_HUNKS);
-}
-
-// PDC-FR-GMWR: a name with space around it is the name. A model that padded it
-// is naming the change it was asked about.
-#[test]
-fn a_name_with_space_around_it_still_names_the_change() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
-
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: Some(format!("  {standing}  ")),
-        hunks: vec![HunkArg {
-            kind: Some("replace".into()),
-            before: Some("The".into()),
-            after: Some("That".into()),
-            after_text: None,
-            lead: None,
-            trail: None,
-            note: None,
-        }],
-    })
-    .expect("the padded name resolves");
-    assert_eq!(f.proposals().len(), 1, "it revised rather than recorded");
-    assert_eq!(f.hunks_of_the_one_proposal()[0].id, standing);
-}
-
-// PDC-FR-GMWR: a revision replaces a change of the proposal already standing,
-// so it records no proposal and appends no comment. The author reads it in the
-// change itself, which is where they asked about it.
-#[test]
-fn a_revision_records_no_proposal_and_appends_no_comment() {
-    let f = Fixture::new();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: None,
-        hunks: one_change(),
-    })
-    .expect("a proposal stands");
-    let standing = f.hunks_of_the_one_proposal()[0].id.clone();
-    let comments = f.discussion().comments.len();
-
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: Some(standing),
-        hunks: vec![HunkArg {
-            kind: Some("replace".into()),
-            before: Some("The".into()),
-            after: Some("That".into()),
-            after_text: None,
-            lead: None,
-            trail: None,
-            note: None,
-        }],
-    })
-    .expect("the revision is taken");
-
-    assert_eq!(f.proposals().len(), 1, "no second proposal");
-    assert_eq!(f.discussion().comments.len(), comments, "no second comment");
-}
-
-// TLC-FR-07 / PDC-FR-GMWR: an ignored name leaves an **ordinary** call — the
-// proposal is announced in the conversation as any other is, rather than
-// recorded somewhere the author never sees it.
-#[test]
-fn a_call_whose_name_was_ignored_is_an_ordinary_proposal() {
-    let f = Fixture::new();
-    let before = f.discussion().comments.len();
-    f.call(ProposeDraftChangesArgs {
-        path: FILE.into(),
-        rationale: RATIONALE.into(),
-        revises: Some("a-change-that-was-never-there".into()),
-        hunks: three_changes(),
-    })
-    .expect("the name is ignored");
-    assert_eq!(
-        f.discussion().comments.len(),
-        before + 1,
-        "the proposal was announced as any other is",
-    );
-}
-
 // PDC-FR-TZKQ / PDC-FR-18: a call carrying several changes and refused for one
 // of them names **which**, as the model counted its own list.
 //
@@ -611,7 +75,7 @@ fn a_refusal_about_one_of_several_changes_names_which_one() {
         block_on(f.tool().with_buffer(&PDC_SEVERAL_REFUSAL_LOG).call(ProposeDraftChangesArgs {
             path: FILE.into(),
             rationale: RATIONALE.into(),
-            revises: None,
+            updates: None,
             hunks,
         }))
         .unwrap_err();
@@ -642,7 +106,7 @@ fn a_refusal_that_names_a_change_still_records_no_text() {
     let _ = block_on(f.tool().with_buffer(&PDC_SEVERAL_LEAK_LOG).call(ProposeDraftChangesArgs {
         path: FILE.into(),
         rationale: RATIONALE.into(),
-        revises: None,
+        updates: None,
         hunks: vec![
             one_change().remove(0),
             HunkArg {
@@ -689,7 +153,7 @@ fn every_placement_refusal_names_the_change_it_is_about() {
         .call(ProposeDraftChangesArgs {
             path: FILE.into(),
             rationale: RATIONALE.into(),
-            revises: None,
+            updates: None,
             hunks,
         })
         .unwrap_err();
@@ -701,7 +165,7 @@ fn every_placement_refusal_names_the_change_it_is_about() {
         .call(ProposeDraftChangesArgs {
             path: FILE.into(),
             rationale: RATIONALE.into(),
-            revises: None,
+            updates: None,
             hunks: vec![
                 HunkArg {
                     kind: Some("replace".into()),
@@ -819,4 +283,53 @@ fn a_change_carrying_no_text_at_all_is_refused_rather_than_recorded() {
 #[test]
 fn the_kind_description_says_the_fields_decide() {
     assert!(KIND_DESCRIPTION.contains("The fields you send are what decide"));
+}
+
+// PDC-FR-ZQOH, CVL-FR-UCTB
+#[test]
+fn a_rationale_with_no_spoken_part_is_refused_and_records_nothing() {
+    let f = Fixture::new();
+    let before = f.discussion().comments.len();
+
+    let refusal = f
+        .call(ProposeDraftChangesArgs {
+            path: FILE.into(),
+            rationale: "The opening buries the point.".into(),
+            updates: None,
+            hunks: one_change(),
+        })
+        .expect_err("refused");
+
+    assert_eq!(refusal, ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
+    assert!(refusal.retryable(), "the model can add the tag");
+    assert!(f.proposals().is_empty());
+    assert_eq!(f.discussion().comments.len(), before);
+}
+
+// CVL-FR-HREC: the model is told the rule in the text it reads.
+#[test]
+fn the_description_states_the_rule_of_the_spoken_part() {
+    assert!(DESCRIPTION.contains("one `<spoken>…</spoken>` tag in `rationale`"));
+    assert!(DESCRIPTION.contains("A rationale with no tag is refused."));
+    assert!(RATIONALE_DESCRIPTION.contains("`<spoken>…</spoken>`"));
+}
+
+// PDC-FR-ZQOH, PDC-FR-18: the refusal is found by its code, with no text in it.
+#[test]
+fn a_refusal_for_no_spoken_part_logs_its_code_and_no_text() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    BUFFER.clear();
+    let f = Fixture::new();
+    block_on(f.tool().with_buffer(&BUFFER).call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: "Zanzibarreason.".into(),
+        updates: None,
+        hunks: one_change(),
+    }))
+    .expect_err("refused");
+    let records = records(&BUFFER, Domain::Ai);
+    let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
+    let fields = serde_json::to_value(&warn.fields).expect("fields");
+    assert_eq!(fields["refusal"], "no_spoken_part");
+    assert!(!fields.to_string().contains("Zanzibarreason"), "{fields}");
 }

@@ -148,6 +148,11 @@ export type Attachment =
       draftId: string;
       /** Draft-relative path the proposal would replace. */
       path: string;
+      /**
+       * CMS-FR-BSQB: present only on the comment an update of the proposal
+       * appended. It holds the counts of that update.
+       */
+      update?: ProposalUpdateCounts;
     }
   /**
    * CMS-FR-66: a reference to a change an agent proposed to a **prompt artifact
@@ -170,6 +175,8 @@ export type Attachment =
       artifactId: string;
       /** Project-relative path the proposal would replace. */
       path: string;
+      /** CMS-FR-BSQB: present only on the comment an update appended. */
+      update?: ProposalUpdateCounts;
     }
   /**
    * CMS-FR-TQVB: a reference to **one change** of a draft change proposal. It
@@ -178,6 +185,16 @@ export type Attachment =
    * content, and the rail renders it as a control (CMT-FR-48).
    */
   | ProposalHunkReference;
+
+/**
+ * CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
+ * withdrawn. The values are as the update appended them.
+ */
+export interface ProposalUpdateCounts {
+  changed: number;
+  added: number;
+  withdrawn: number;
+}
 
 /** CMS-FR-42: the `proposal_hunk` attachment, as stored and as supplied. */
 export interface ProposalHunkReference {
@@ -276,8 +293,12 @@ export type HunkKind = "add" | "del" | "replace";
  * `pending` and `discussing` are both undecided, so either holds the draft's
  * one pending slot. They differ only in what the surface says about them: a
  * change held for discussion is one the author has answered without settling.
+ *
+ * DCP-FR-IAFV: `withdrawn` is a change its agent took back with an update. It
+ * is not undecided and it is not decided. The review does not show it
+ * (DCR-FR-OZVU).
  */
-export type HunkState = "pending" | "accepted" | "rejected" | "discussing";
+export type HunkState = "pending" | "accepted" | "rejected" | "discussing" | "withdrawn";
 
 /** Whether the author has settled this change either way (DCP-FR-PWSF). */
 export function isUndecided(state: HunkState): boolean {
@@ -334,6 +355,11 @@ export interface HunkCounts {
   accepted: number;
   rejected: number;
   discussing: number;
+  /**
+   * DCP-FR-PWSF: the changes an update withdrew. A record written before
+   * updates existed does not carry it, so a reader takes absent as 0.
+   */
+  withdrawn?: number;
 }
 
 /** DCP-FR-01: one row of a proposal's decision ledger. Identity, never text. */
@@ -464,10 +490,21 @@ export interface CandidateSaved {
   checksum: string;
 }
 
+/**
+ * DCP-FR-16: what happened to the proposal an event carries. The shell reads
+ * it to tell an update from a decision or a hold (DCR-FR-QXFU).
+ */
+export type ProposalChangeCause = "recorded" | "updated" | "decided" | "held";
+
 /** DCP-FR-16: what `draft-change-proposals-changed` carries. */
 export interface ProposalsChangedPayload {
   draftId: string;
   proposal: DraftChangeProposal;
+  /**
+   * DCP-FR-16: optional on this side, because an event from an older backend
+   * does not carry it. A reader treats absent as before causes existed.
+   */
+  cause?: ProposalChangeCause;
 }
 
 /** DCP contract surface: the typed refusals a decision can return. */
@@ -519,6 +556,11 @@ export const PROPOSAL_ERRORS = {
    * change stops holding the draft's pending slot.
    */
   anchorLost: "anchor_lost",
+  /**
+   * DCP-FR-MKIM: the agent withdrew the change, so it takes no decision and no
+   * edit. A decision made from a stale reading gets this (DCR-FR-NYDA).
+   */
+  hunkWithdrawn: "hunk_withdrawn",
 } as const;
 
 /**
@@ -596,10 +638,20 @@ export interface PromptDecisionOutcome {
   originKind: "artifact_discussion" | "artifact_comment";
 }
 
+/** PCP-FR-17: what happened to the proposal an event carries. */
+export type PromptProposalChangeCause =
+  | "recorded"
+  | "updated"
+  | "decided"
+  | "held"
+  | "reconciled";
+
 /** PCP-FR-17: what `prompt-change-proposals-changed` carries. */
 export interface PromptProposalsChangedPayload {
   artifactId: string;
   proposal: PromptChangeProposal;
+  /** PCP-FR-17: optional on this side, for an event from an older backend. */
+  cause?: PromptProposalChangeCause;
 }
 
 /** PCP contract surface: the typed refusals its operations can return. */
@@ -633,6 +685,8 @@ export const PROMPT_PROPOSAL_ERRORS = {
   hunkAlreadyDecided: "hunk_already_decided",
   /** PCP-FR-ZQAH: the text this change names is no longer in the file. */
   anchorLost: "anchor_lost",
+  /** PCP-FR-18: the agent withdrew the change (PCR-FR-QHZN, DCR-FR-NYDA). */
+  hunkWithdrawn: "hunk_withdrawn",
 } as const;
 
 export interface Comment {

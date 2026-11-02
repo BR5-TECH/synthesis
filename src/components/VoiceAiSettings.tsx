@@ -1,7 +1,7 @@
 /**
  * Global settings → **Voice AI** (`VAI-voice-ai-settings.md`).
  *
- * The speech providers and the Push-to-Talk key. Each action applies at once, so
+ * The speech providers, the Push-to-Talk key, and the VAD settings. Each action applies at once, so
  * the section has no dirty state (VAI-FR-QARI). Candidate field values stay
  * here until a verification commits them, and a key never comes back from the
  * backend (VAI-FR-LLAE).
@@ -24,6 +24,7 @@ import type {
 import { DEFAULT_VOICE_HOTKEY, chordOf, hotkeyProblem, type HotkeyProblem } from "../voice/hotkey";
 import { errorCode, voiceMessage } from "../voice/voiceMessages";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
+import { VoiceVadSettings } from "./VoiceVadSettings";
 
 const TAB_ORDER: VoiceProviderId[] = ["openai", "openrouter", "custom"];
 const TAB_NAMES: Record<VoiceProviderId, string> = {
@@ -151,6 +152,10 @@ function PushToTalkSettings() {
   return (
     <div data-testid="voice-push-to-talk" style={{ marginTop: 20 }}>
       <h3 className="t-h3">Push-to-Talk</h3>
+      {/* VAI-FR-HVNJ, VAI-FR-RASA. */}
+      <div className="t-ui-sm t-muted" data-testid="voice-ptt-scope" style={{ marginBottom: 10 }}>
+        These settings apply to Push-to-Talk only.
+      </div>
       <div role="radiogroup" aria-label="Push-to-Talk behaviour" style={{ marginBottom: 10 }}>
         {(["hold", "toggle"] as const).map((value) => (
           <label key={value} style={{ marginRight: 12 }}>
@@ -636,6 +641,7 @@ export function VoiceAiSettings() {
       </div>
 
       <PushToTalkSettings />
+      <VoiceVadSettings />
     </>
   );
 }

@@ -9,7 +9,7 @@
  * the file's own is here — the prompt module's commands, and the order an
  * acceptance takes against the tab's edit session.
  */
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
@@ -75,6 +75,8 @@ export function useArtifactReview({
   /** PCR-FR-15: the proposal whose acceptance landed with its comment owed. */
   const [owedHere, setOwedHere] = useState<PromptChangeProposal | null>(null);
   const [retrying, setRetrying] = useState(false);
+  /** PCR-FR-LAGZ: the changes that this surface accepted itself. */
+  const acceptedHere = useRef(new Set<string>());
   const kind = useMemo<ProposalReviewKind<PromptChangeProposal>>(
     () => ({
       source: "prompt",
@@ -165,6 +167,7 @@ export function useArtifactReview({
     try {
       await sessions.quiesce([artifactId]);
       sessions.dismissConflict(artifactId);
+      acceptedHere.current.add(hunkId);
       outcome = await api.acceptPromptChangeHunk(pending.id, hunkId);
     } catch (error) {
       const reason = String(error);
@@ -201,6 +204,54 @@ export function useArtifactReview({
     }
     return true;
   }
+
+  /**
+   * PCR-FR-LAGZ, DPC-FR-TVKX: a change accepted elsewhere, such as by an agent's
+   * tool, wrote the file. A session with no unsaved edit takes the file's text.
+   * A session with an unsaved edit gets the external-change modal
+   * (EXC-FR-QCNO), so the author chooses. The write went through the
+   * self-write path, so the watch does not raise it.
+   */
+  // Per proposal: a proposal that this surface did not see before, such as
+  // one that the first reading brings, holds no change accepted elsewhere.
+  const seenAccepted = useRef<Map<string, Set<string>>>(new Map());
+  useEffect(() => {
+    const before = seenAccepted.current;
+    const now = new Map(
+      proposals.map((p) => [
+        p.id,
+        new Set(p.ledger.filter((h) => h.state === "accepted").map((h) => h.id)),
+      ]),
+    );
+    seenAccepted.current = now;
+    if (!enabled) return;
+    const elsewhere = [...now].flatMap(([id, accepted]) => {
+      const seen = before.get(id);
+      if (!seen) return [];
+      return [...accepted].filter((h) => !seen.has(h) && !acceptedHere.current.has(h));
+    });
+    if (elsewhere.length === 0) return;
+    const session = sessions.get(artifactId);
+    if (!session) return;
+    if (session.dirty) {
+      logInfo(["frontend"], "a change accepted elsewhere meets unsaved edits", {
+        artifactId,
+        changes: elsewhere.length,
+      });
+      void sessions.raiseWrittenElsewhere(artifactId);
+      return;
+    }
+    logInfo(["frontend"], "a change accepted elsewhere resets the file session", {
+      artifactId,
+      changes: elsewhere.length,
+    });
+    void sessions.resetRestored(artifactId).catch((error: unknown) => {
+      logWarn(["frontend"], "the file could not be read again after an acceptance elsewhere", {
+        artifactId,
+        error: String(error),
+      });
+    });
+  }, [proposals, enabled, sessions, artifactId]);
 
   const review = useProposalReview({
     kind,

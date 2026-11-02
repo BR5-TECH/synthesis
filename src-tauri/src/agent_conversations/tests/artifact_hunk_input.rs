@@ -125,7 +125,7 @@ fn an_artifact_proposal_hunk_names_the_state_its_hunk_holds_now() {
 }
 
 // AGC-FR-DKHT: a reference that cannot be read degrades to the bare line that
-// names it, so the agent can still pass its id as `revises`.
+// names it, so the agent can still pass its id in an update.
 #[test]
 fn an_artifact_proposal_hunk_that_cannot_be_read_keeps_a_bare_line() {
     let h = Harness::new(vec![]);
@@ -142,13 +142,34 @@ fn an_artifact_proposal_hunk_that_cannot_be_read_keeps_a_bare_line() {
     );
 }
 
-// AGC-FR-09 / CMS-FR-66: the proposal's own `prompt_proposal` reference still
-// renders in the history of the conversation it was posted into.
+// AGC-FR-CGCI / AGC-FR-RVQP / AGC-FR-RENU: the proposal's own
+// `prompt_proposal` reference renders its changes with their ids and states in
+// the history of the conversation it was posted into, and an update's reference
+// renders the counts of what it did.
 #[test]
-fn a_prompt_proposal_reference_still_renders_in_the_history() {
+fn a_prompt_proposal_reference_renders_its_changes_and_an_update_its_counts() {
     let h = Harness::new(vec![]);
     let thread = seed_prompt(&h);
-    record_one(&h, &thread.id);
+    let proposal = record_one(&h, &thread.id);
+    let hunk_id = proposal.ledger[0].id.clone();
+    crate::prompt_proposals::update_prompt_proposal(
+        &h.app.handle().clone(),
+        &h.root(),
+        &h.root(),
+        crate::prompt_proposals::PromptProposalUpdate {
+            artifact_id: PROMPT_PATH,
+            updates: &[crate::text_hunks::updates::UpdateEntry::Withdraw { id: hunk_id.clone() }],
+            rationale: "Not needed. <spoken>Withdrawn.</spoken>",
+            agent: &crate::comments::Participant::Agent {
+                agent_id: "a1".into(),
+                handle: "arch".into(),
+                model: None,
+                title: None,
+            },
+            thread_id: &thread.id,
+        },
+    )
+    .expect("updated");
     let thread = crate::comments::add_comment_to(
         &h.root(),
         crate::comments::ThreadRef::artifact_discussion(PROMPT_PATH),
@@ -163,7 +184,18 @@ fn a_prompt_proposal_reference_still_renders_in_the_history() {
     let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
     assert!(
-        history.body.contains(&format!("[proposed a new version of {PROMPT_PATH}]")),
+        history
+            .body
+            .contains(&format!("1. replace — withdrawn — changed: \"file a note\" — id {hunk_id}")),
+        "{}",
+        history.body
+    );
+    assert!(!history.body.contains("offered: \"file two notes\""), "{}", history.body);
+    assert!(history.body.contains("1 withdrawn]"), "{}", history.body);
+    assert!(
+        history.body.contains(&format!(
+            "[updated the proposed changes to {PROMPT_PATH}: 0 changed, 0 added, 1 withdrawn]"
+        )),
         "{}",
         history.body
     );

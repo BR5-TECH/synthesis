@@ -84,7 +84,7 @@ fn a_compaction_call_reports_no_context() {
             Ok(ScriptedReply::answer("The earlier rounds read hld.md.")),
             Ok(ScriptedReply::answer("Done.")),
         ],
-        Some(10_000),
+        Some(12_000),
         1,
     );
     // A fragment discussion opens its history with the fragment, which is the
@@ -93,6 +93,7 @@ fn a_compaction_call_reports_no_context() {
     let turn = h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).unwrap();
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::Delivered);
     assert_eq!(h.seam.call_count(), 3, "two answered calls and one compaction call");
+    deliver_queued_events(&h);
     let reports = h.context_events.lock().unwrap().iter().filter(|t| t.id == turn.id).count();
     assert_eq!(reports, 2, "the compaction call reports nothing");
 }
@@ -126,6 +127,7 @@ fn the_context_figures_add_no_usage_record() {
         .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
         .unwrap();
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::Delivered);
+    deliver_queued_events(&h);
     let reports = h.context_events.lock().unwrap().iter().filter(|t| t.id == turn.id).count();
     assert_eq!(reports, 2);
     crate::statistics::wait_for_writer();

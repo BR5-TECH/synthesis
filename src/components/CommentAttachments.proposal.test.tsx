@@ -25,6 +25,7 @@ import {
   draftDiscussionState,
   resetDraftDiscussions,
 } from "../state/draftDiscussion";
+import { resetLogBufferForTest } from "../logging";
 import type { Attachment, DraftChangeProposal } from "../types";
 
 const DRAFT = "d1";
@@ -362,4 +363,81 @@ describe("beside the other kinds", () => {
     expect(draftDiscussionState(DRAFT).focusedHunkId).toBe("h2");
   });
 
+});
+
+describe("an update comment's reference (DCR-FR-OYRR, CMT-FR-48)", () => {
+  /** What the reading answers in this block. */
+  let listed: DraftChangeProposal[] = [];
+
+  beforeEach(() => {
+    listed = [];
+    resetLogBufferForTest();
+    // Routed by command: the background log flush is answered, and a command
+    // this block does not expect is a rejected promise rather than a throw.
+    invokeMock.mockReset();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (cmd === "list_draft_change_proposals") return Promise.resolve(listed);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
+    });
+  });
+
+  const updated: Attachment = {
+    kind: "proposal",
+    proposalId: "p1",
+    draftId: DRAFT,
+    path: "ui/spec.md",
+    update: { changed: 1, added: 1, withdrawn: 0 },
+  };
+
+  const open = () =>
+    proposal({
+      hunkCount: 3,
+      counts: { pending: 1, accepted: 0, rejected: 1, discussing: 0, withdrawn: 1 },
+      ledger: [
+        { id: "h1", kind: "replace", state: "withdrawn", edited: false, revision: 0 },
+        { id: "h2", kind: "add", state: "rejected", edited: false, revision: 0 },
+        { id: "h3", kind: "del", state: "pending", edited: false, revision: 1 },
+      ],
+    });
+
+  it("DCR-FR-OYRR, DCR-FR-HVXK: carries the update's counts in place of the count of changes, and scrolls to the first undecided change", async () => {
+    listed = [open()];
+    renderList([updated]);
+    const card = await screen.findByTestId("comment-attachment-proposal");
+    await waitFor(() => expect(card).toBeEnabled());
+    expect(screen.getByTestId("comment-attachment-proposal-update")).toHaveTextContent(
+      /^1 changed, 1 added, 0 withdrawn$/,
+    );
+    expect(card).not.toHaveTextContent(/\d changes?\b/);
+    expect(card).toHaveTextContent("Review on the left");
+
+    await userEvent.click(card);
+    expect(draftDiscussionState(DRAFT).focusedHunkId).toBe("h3");
+  });
+
+  it("DCR-FR-OYRR: states no route where no change is undecided", async () => {
+    listed = [
+      proposal({
+        state: "rejected",
+        counts: { pending: 0, accepted: 0, rejected: 1, discussing: 0, withdrawn: 1 },
+        ledger: [
+          { id: "h1", kind: "replace", state: "withdrawn", edited: false, revision: 0 },
+          { id: "h2", kind: "add", state: "rejected", edited: false, revision: 0 },
+        ],
+      }),
+    ];
+    renderList([updated]);
+    const card = await screen.findByTestId("comment-attachment-proposal");
+    await waitFor(() => expect(card).toHaveAttribute("data-state", "rejected"));
+    expect(card).toHaveTextContent("1 changed, 1 added, 0 withdrawn");
+    expect(card).not.toHaveTextContent("Review on the left");
+  });
+
+  it("DCR-FR-OZVU, DCR-FR-HVXK: a recording's count of changes leaves out a withdrawn change", async () => {
+    listed = [open()];
+    renderList();
+    const card = await screen.findByTestId("comment-attachment-proposal");
+    await waitFor(() => expect(card).toHaveTextContent("2 changes"));
+  });
 });

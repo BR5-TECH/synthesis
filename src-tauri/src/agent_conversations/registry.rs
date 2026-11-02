@@ -38,9 +38,11 @@ pub(super) struct Live {
     /// after it however the two events reach a surface, and a sequence a
     /// finished call held is not given to a later one.
     pub(super) next_seq: u64,
-    /// AGC-FR-ISKZ: the steering messages the turn took and the loop did not
-    /// append yet, as comment ids, oldest first.
-    pub(super) steering: Vec<String>,
+    /// AGC-FR-ISKZ, AGC-FR-KXOJ: the steering messages the turn took and the
+    /// loop did not append yet, oldest first. Memory only.
+    pub(super) steering: Vec<SteeringItem>,
+    /// AGC-FR-NFYK: the speech that registered this turn, if one did.
+    pub(super) registered_by: Option<String>,
     /// CVL-FR-YNOE: whether the turn still takes steering messages.
     pub(super) steering_open: bool,
     /// AGC-FR-URXV: the whole-turn timeout and the instant the current
@@ -106,6 +108,8 @@ pub(super) struct Inner {
     /// nothing: it is in no log, in no thread, and in nothing any reader of the
     /// conversation ever sees.
     pub(super) image_notices: HashMap<String, Recoverable>,
+    /// AGC-FR-TCXX, AGC-FR-BMLY, AGC-FR-YLJW: the open and the ended speeches.
+    pub(super) speeches: SpeechBook,
 }
 
 /// AGC-FR-31: what is left of a turn the author may ask again.
@@ -130,6 +134,8 @@ pub(super) struct Awaiting {
 /// turn interrupted by a relaunch left nothing to resume.
 pub struct TurnRegistry {
     inner: Mutex<Inner>,
+    /// CVL-FR-SZKK: wakes a turn that holds its reply for a speech.
+    pub(super) speech_changed: Condvar,
     pub(super) seam: Box<dyn CompletionSeam>,
     /// AGC-FR-25: the concurrency bound, as a counting semaphore. A turn
     /// dispatched beyond it is still registered, still running, and still
@@ -183,6 +189,7 @@ impl TurnRegistry {
     pub fn new(seam: Box<dyn CompletionSeam>, concurrency: usize, timeout: Duration) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
+            speech_changed: Condvar::new(),
             seam,
             permits: Arc::new((Mutex::new(concurrency.max(1)), Condvar::new())),
             concurrency: concurrency.max(1),
@@ -193,24 +200,6 @@ impl TurnRegistry {
             #[cfg(test)]
             turn_threads: Mutex::new(Vec::new()),
         }
-    }
-
-    /// A registry whose backoff jitter is scripted. Test-only: the application
-    /// wants a decorrelated delay and `new` already gives it one.
-    #[cfg(test)]
-    pub fn with_jitter(mut self, jitter: Box<dyn JitterSource>) -> Self {
-        self.jitter = jitter;
-        self
-    }
-
-    /// A registry whose retry schedule is not the module's own. Test-only, for
-    /// the same reason `with_jitter` is: what most of the suite wants is the
-    /// retry *behaviour* without paying for the waits, and one test asserts the
-    /// default schedule is exactly what CVL-FR-19 says.
-    #[cfg(test)]
-    pub fn with_retry_policy(mut self, retry: RetryPolicy) -> Self {
-        self.retry = retry;
-        self
     }
 
     /// The retry schedule this registry runs under before the project's own
@@ -258,14 +247,6 @@ impl TurnRegistry {
         bounds
     }
 
-    /// A registry reporting into a buffer other than the session's. Test-only:
-    /// the application has one buffer and `new` already names it.
-    #[cfg(test)]
-    pub fn reporting_into(mut self, buffer: &'static LogBuffer) -> Self {
-        self.buffer = buffer;
-        self
-    }
-
     /// Where this registry's turns report themselves.
     pub(super) fn buffer(&self) -> &'static LogBuffer {
         self.buffer
@@ -282,8 +263,9 @@ impl TurnRegistry {
         &self,
         agent: &Agent,
         origin: ConversationOrigin,
-        trigger_comment_id: &str,
+        trigger_comment_id: Option<&str>,
         project_key: &str,
+        speech_id: Option<&str>,
     ) -> (AgentTurn, Arc<AtomicBool>) {
         let mut inner = self.lock();
         let turn = AgentTurn {
@@ -291,7 +273,7 @@ impl TurnRegistry {
             agent_id: agent.id.clone(),
             nickname: agent.nickname.clone(),
             origin,
-            trigger_comment_id: trigger_comment_id.to_string(),
+            trigger_comment_id: trigger_comment_id.map(str::to_string),
             state: AgentTurnState::Running,
             failure: None,
             tls_failure: None,
@@ -314,6 +296,8 @@ impl TurnRegistry {
             // AGC-FR-URXV: the deadline starts when the turn takes its slot.
             deadline_started_at: None,
             deadline_at: None,
+            speech_id: speech_id.map(str::to_string),
+            reply_held: false,
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         inner.live.insert(
@@ -327,6 +311,7 @@ impl TurnRegistry {
                 delivering: false,
                 next_seq: 1,
                 steering: Vec::new(),
+                registered_by: speech_id.map(str::to_string),
                 steering_open: true,
                 deadline: None,
             },
@@ -464,12 +449,15 @@ impl TurnRegistry {
             return None;
         }
         let live = inner.live.remove(turn_id)?;
+        // CVL-FR-SZKK: a turn that holds its reply stops waiting.
+        self.speech_changed.notify_all();
         let project_key = live.project_key.clone();
         let reached_model = live.reached_model.load(Ordering::SeqCst);
         let mut turn = live.turn;
         turn.state = state;
         turn.failure = failure.map(str::to_string);
         turn.ended_at = Some(now_rfc3339());
+        turn.reply_held = false;
         // AGC-FR-34: a terminal event carries an empty list whatever was active
         // when the turn ended, so a terminating turn leaves no call behind for
         // a surface to keep reading a status from (CVL-FR-33).

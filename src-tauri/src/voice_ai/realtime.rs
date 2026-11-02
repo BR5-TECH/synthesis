@@ -306,6 +306,11 @@ pub(crate) async fn end_input(socket: &mut Socket, dialect: Dialect) -> Result<(
     send(socket, event).await
 }
 
+/// VOP-FR-GLRN: the end of one chunk, in a session that continues.
+pub(crate) async fn commit_input(socket: &mut Socket) -> Result<(), String> {
+    send(socket, json!({ "type": "input_audio_buffer.commit" })).await
+}
+
 /// VOP-FR-XXAB: the transcript of a session, joined from its items.
 #[derive(Default)]
 pub(crate) struct Transcript {
@@ -315,6 +320,9 @@ pub(crate) struct Transcript {
     follows: HashMap<String, String>,
     deltas: HashMap<String, String>,
     done: HashMap<String, String>,
+    /// VOP-FR-XXAB: the items that a commit of this client named. Such an item
+    /// continues the same line after one space.
+    ours: HashSet<String>,
 }
 
 /// A dialect with no item id has one implicit item.
@@ -353,6 +361,16 @@ impl Transcript {
         !self.seen.is_empty() && self.seen.iter().all(|i| self.done.contains_key(i))
     }
 
+    /// VOP-FR-XXAB: a commit of this client named the item.
+    pub(crate) fn mark_ours(&mut self, item_id: &str) {
+        self.ours.insert(item_id.to_string());
+    }
+
+    /// Each item that the transcript knows, in the order first seen.
+    pub(crate) fn known_items(&self) -> impl Iterator<Item = &String> {
+        self.seen.iter()
+    }
+
     pub(crate) fn is_completed(&self, item_id: &str) -> bool {
         self.done.contains_key(item_id)
     }
@@ -384,13 +402,39 @@ impl Transcript {
     }
 
     pub(crate) fn text(&self) -> String {
-        let mut parts: Vec<&str> = Vec::new();
-        for id in self.ordered() {
-            let part = self.done.get(id).or_else(|| self.deltas.get(id));
-            if let Some(part) = part.map(|p| p.trim()).filter(|p| !p.is_empty()) {
-                parts.push(part);
+        self.text_except(&HashSet::new())
+    }
+
+    /// The text of the items that `skip` does not hold, in commit order. A
+    /// chunked capture skips the items of the chunks that ended.
+    pub(crate) fn text_except(&self, skip: &HashSet<String>) -> String {
+        let mut text = String::new();
+        for id in self.ordered().into_iter().filter(|id| !skip.contains(*id)) {
+            let Some(part) = self.part(id) else { continue };
+            if !text.is_empty() {
+                text.push(if self.ours.contains(id) { ' ' } else { '\n' });
             }
+            text.push_str(part);
         }
-        parts.join("\n")
+        text
+    }
+
+    /// VOP-FR-GLRN: the text of the items of one chunk, in commit order, with
+    /// one space between them.
+    pub(crate) fn text_of(&self, items: &HashSet<String>) -> String {
+        let parts: Vec<&str> = self
+            .ordered()
+            .into_iter()
+            .filter(|id| items.contains(*id))
+            .filter_map(|id| self.part(id))
+            .collect();
+        parts.join(" ")
+    }
+
+    /// The final text of an item, or its deltas so far, trimmed. `None` when
+    /// it is empty.
+    fn part(&self, id: &str) -> Option<&str> {
+        let part = self.done.get(id).or_else(|| self.deltas.get(id));
+        part.map(|p| p.trim()).filter(|p| !p.is_empty())
     }
 }

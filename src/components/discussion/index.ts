@@ -15,5 +15,5 @@ export type {
 export { DiscussionBadges } from "./DiscussionParts";
 export type { OwnerAvailability } from "./DiscussionParts";
 export { UnreadDivider, UnreadIndicator } from "./UnreadMarks";
-export { isPostAccelerator, isImeComposing, postAcceleratorHint } from "./composerKeys";
+export { isPostAccelerator, isImeComposing } from "./composerKeys";
 export { useDiscussionFollow, TAIL_SLACK } from "./useDiscussionFollow";

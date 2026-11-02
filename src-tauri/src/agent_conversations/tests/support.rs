@@ -7,6 +7,10 @@
 //! `use super::*` exactly as it reaches the harness.
 
 use super::*;
+use tauri::Emitter;
+
+/// An event with a listener, so an emit of it delivers what Tauri has queued.
+pub(super) const FLUSH_QUEUED_EMITS: &str = "test-flush-queued-emits";
 
 /// Wait until the number of open agent sessions settles at `expected`.
 ///
@@ -80,6 +84,22 @@ impl crate::ai_shared::SecretStore for LockedSecrets {
     }
 }
 
+/// Wait until every event of the ended turns has reached every listener.
+///
+/// The terminal event can reach the harness before it reaches a listener of the
+/// test, and an earlier event can still stand in Tauri's queue. So a test that
+/// counts events calls this first. The turn threads have returned after the join,
+/// so the emit here competes with none of their events.
+pub(super) fn deliver_queued_events(h: &Harness) {
+    h.join_turns();
+    let _ = h.app.emit(FLUSH_QUEUED_EMITS, ());
+}
+
+/// Whether the registry holds the turn as running.
+fn is_running(h: &Harness, turn_id: &str) -> bool {
+    h.turns().in_flight(None).iter().any(|turn| turn.id == turn_id && turn.ended_at.is_none())
+}
+
 /// Wait for a turn's terminal event and return the turn it carried.
 ///
 /// Polls the capture the harness has been holding since construction, rather
@@ -97,6 +117,12 @@ pub(super) fn wait_for_terminal(h: &Harness, turn_id: &str) -> AgentTurn {
             .cloned()
         {
             return turn;
+        }
+        // The turn has ended, so its terminal event is on its way or in Tauri's
+        // queue. This waits on the turn's state, so no emit here competes with
+        // the turn's own events and changes their order.
+        if !is_running(h, turn_id) {
+            let _ = h.app.emit(FLUSH_QUEUED_EMITS, ());
         }
         std::thread::sleep(Duration::from_millis(10));
     }
@@ -177,6 +203,7 @@ pub(super) fn run_one(h: &Harness, nickname: &str) -> (AgentTurn, Discussion) {
         .dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let terminal = wait_for_terminal(h, &turn.id);
+    deliver_queued_events(h);
     (terminal, thread)
 }
 
@@ -220,7 +247,7 @@ pub(super) const ARTIFACT_ONLY_TOOL: &str = "propose_prompt_changes";
 pub(super) fn asks(question: &str) -> ScriptedReply {
     ScriptedReply::calls(
         crate::tools::ask_user_comment::NAME,
-        serde_json::json!({ "question": question }),
+        serde_json::json!({ "question": said(question) }),
     )
 }
 
@@ -648,7 +675,7 @@ impl CompletionSeam for ToolThenGated {
             released = cvar.wait(released).unwrap_or_else(|e| e.into_inner());
         }
         Ok(ModelReply {
-            text: "Should never be delivered.".into(),
+            text: said("Should never be delivered."),
             tool_calls: Vec::new(),
             native_calls: Vec::new(),
             native_usage: None,

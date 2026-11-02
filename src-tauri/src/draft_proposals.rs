@@ -77,6 +77,8 @@ pub const ERR_HUNK_CONTEXT_TOO_LONG: &str = "hunk_context_too_long";
 pub const ERR_HUNK_NOT_FOUND: &str = "hunk_not_found";
 /// DCP-FR-17: that change is already accepted or rejected.
 pub const ERR_HUNK_ALREADY_DECIDED: &str = "hunk_already_decided";
+/// DCP-FR-MKIM: a decision, a hold, or an edit of a hunk its agent withdrew.
+pub const ERR_HUNK_WITHDRAWN: &str = "hunk_withdrawn";
 /// DCP-FR-27: the stored candidate has moved on since the caller read it.
 pub const ERR_CANDIDATE_STALE: &str = "candidate_stale";
 /// DCP-FR-13: the draft file could not be written; the proposal stays pending.
@@ -274,49 +276,6 @@ pub fn pending_for(root: &fs::RootFs, draft_id: &str) -> Option<DraftChangePropo
         .ok()?
         .into_iter()
         .find(|p| p.state == ProposalState::Pending)
-}
-
-/// What a change id a model named can mean on the draft as it stands
-/// (`../specifications/tools/PDC-propose-draft-changes-tool.md` PDC-FR-GMWR).
-///
-/// Three answers rather than two, because the two ways a name can fail call for
-/// different corrections: a draft holding a standing proposal that does not hold
-/// that change is a name the model can correct, and a draft holding no proposal
-/// at all is a name that could not have meant anything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RevisionTarget {
-    /// The change is one of the standing proposal's, undecided or rejected.
-    Revisable,
-    /// A proposal stands and holds no such change that can still be revised.
-    NoSuchChange,
-    /// The draft holds no standing proposal, so no name could have meant one.
-    NothingStanding,
-}
-
-/// DCP-FR-XDRV / PDC-FR-GMWR: whether a change id names something its agent
-/// can still revise on this draft — an undecided or a rejected change of the
-/// standing proposal.
-pub fn revision_target(root: &fs::RootFs, draft_id: &str, hunk_id: &str) -> RevisionTarget {
-    let Some(mut record) = pending_for(root, draft_id) else {
-        return RevisionTarget::NothingStanding;
-    };
-    // DCP-FR-QLMH: a proposal an older build recorded carries no ledger, and its
-    // one change is looked up by the row this gives it. Without the backfill the
-    // lookup below finds nothing whatever the model names, so the one change
-    // actually standing reads as a change that is not there.
-    if let Ok(dir) = drafts::draft_proposals_dir(root, draft_id) {
-        let prompt = drafts::require_prompt(root, draft_id)
-            .and_then(|path| drafts::load_draft_file_impl(root, draft_id, &path))
-            .map(|contents| contents.body)
-            .unwrap_or_default();
-        reads::backfill_legacy_ledger(root, &dir, &mut record, &prompt);
-    }
-    let revisable = record.ledger.iter().any(|row| row.id == hunk_id && row.state.is_revisable());
-    if revisable {
-        RevisionTarget::Revisable
-    } else {
-        RevisionTarget::NoSuchChange
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +546,11 @@ where
     // still be accepted while the proposal stands; an accepted one is final.
     if let Some(hunk_id) = hunk {
         let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+        // DCP-FR-MKIM: the agent took this change back, so nothing about it is
+        // the author's to decide.
+        if row.state == hunks::HunkState::Withdrawn {
+            return Err(ERR_HUNK_WITHDRAWN.to_string());
+        }
         let open = row.state.is_undecided()
             || (decision == Decision::Accept && row.state == hunks::HunkState::Rejected);
         if !open {
@@ -879,13 +843,37 @@ pub struct Decided {
 /// dead in production.
 pub const PROPOSALS_CHANGED: &str = "draft-change-proposals-changed";
 
-/// What the event carries (DCP-FR-16): the draft, and the whole proposal as it
-/// then stood, so a consumer redraws from the payload without a read of its own.
+/// DCP-FR-16: which of the four things the event is about. A subscriber reads
+/// it to tell an update from a decision or a hold (DCR-FR-QXFU).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProposalChangeCause {
+    Recorded,
+    Updated,
+    Decided,
+    Held,
+}
+
+impl ProposalChangeCause {
+    fn as_str(self) -> &'static str {
+        match self {
+            ProposalChangeCause::Recorded => "recorded",
+            ProposalChangeCause::Updated => "updated",
+            ProposalChangeCause::Decided => "decided",
+            ProposalChangeCause::Held => "held",
+        }
+    }
+}
+
+/// What the event carries (DCP-FR-16): the draft, the whole proposal as it
+/// then stood, so a consumer redraws from the payload without a read of its
+/// own, and the cause.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProposalsChanged {
     pub draft_id: String,
     pub proposal: DraftChangeProposal,
+    pub cause: ProposalChangeCause,
 }
 
 /// DCP-FR-16 / DCP-FR-24: announce the change and record it.
@@ -897,12 +885,13 @@ pub(crate) fn announce<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
     proposal: &DraftChangeProposal,
+    cause: ProposalChangeCause,
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let _ = app.emit(
         PROPOSALS_CHANGED,
-        ProposalsChanged { draft_id: proposal.draft_id.clone(), proposal: proposal.clone() },
+        ProposalsChanged { draft_id: proposal.draft_id.clone(), proposal: proposal.clone(), cause },
     );
     // DCP-FR-WTKA: a proposal that reaches a **final decision** contributes
     // exactly one `proposal_decision` line to that draft's statistics log,
@@ -942,6 +931,7 @@ pub(crate) fn announce<R: tauri::Runtime>(
             "proposalId" => &proposal.id,
             "path" => &proposal.path,
             "state" => proposal.state.as_str(),
+            "cause" => cause.as_str(),
         },
     );
 }
@@ -966,7 +956,7 @@ mod tests;
 /// Settling a record and the rows of its ledger — every write about where a
 /// proposal and its changes stand, and nothing about the draft's own files.
 mod ledger;
-pub use ledger::*;
+pub(crate) use ledger::*;
 
 /// Reading what a draft's proposals are and what they hold. Nothing in there
 /// writes anything, which is what lets a surface ask freely.
@@ -977,6 +967,11 @@ pub use reads::*;
 /// refuses on before anything reaches disk.
 mod recording;
 pub use recording::*;
+
+/// How the open proposal is updated — its hunks changed, added, and withdrawn
+/// in one call that appends one comment.
+mod updating;
+pub use updating::*;
 
 /// The record on disk and the shapes the frontend reads it as. Split out
 /// because they are a vocabulary rather than behaviour: nothing in there does
@@ -989,6 +984,9 @@ pub use record::*;
 /// engine above is read without the argument-shuffling around it.
 mod commands;
 pub use commands::*;
+/// DCP-FR-LAWR: the decision functions that the commands and the tool share.
+mod in_process;
+pub(crate) use in_process::*;
 
 pub use crate::text_hunks::anchors;
 pub mod hunks;

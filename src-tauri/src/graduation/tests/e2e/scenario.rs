@@ -387,7 +387,7 @@ pub(crate) fn bind(ctx: &TurnContext, scripts: Vec<TurnScript>) -> Arc<ScriptedD
     let turns: Vec<Turn> = scripts
         .into_iter()
         .map(|script| {
-            let TurnScript { mut inner, changes_setting, hooks } = script;
+            let TurnScript { mut inner, changes_setting, hooks, after_verdict } = script;
             if changes_setting.is_some() || !hooks.is_empty() {
                 let root = ctx.project_root.clone();
                 let hook_ctx = ctx.clone();
@@ -399,6 +399,10 @@ pub(crate) fn bind(ctx: &TurnContext, scripts: Vec<TurnScript>) -> Arc<ScriptedD
                         hook(&hook_ctx);
                     }
                 });
+            }
+            if let Some(act) = after_verdict {
+                let hook_ctx = ctx.clone();
+                inner = inner.after_the_verdict(move || act(&hook_ctx));
             }
             inner
         })

@@ -29,6 +29,9 @@ import { agentRoster } from "../agentTags";
 import { DiscussionQuestions } from "../DiscussionQuestions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import { StreamMessages } from "../DraftDiscussion/stream";
+import { VoiceSessionBar } from "./VoiceSessionBar";
+import { useLiveBubbleNode } from "./LiveBubble";
+import { visibleBody } from "../../text/spokenPart";
 import { commentErrorMessage, turnFailureMessage } from "./messages";
 import { pairedHalves } from "./questionPairs";
 import { useDiscussionRuntime } from "../../hooks/useDiscussionRuntime";
@@ -47,6 +50,7 @@ import {
   useDiscussionSession,
 } from "../../state/discussionSession";
 import { useQuestionSet } from "../../state/questionSets";
+import { useVoiceState } from "../../state/voiceSession";
 import {
   AGENT_TURN_FAILURES,
   discussionDraftId,
@@ -151,8 +155,6 @@ export interface DiscussionSurfaceProps {
   beforeComment?: (commentId: string, index: number) => React.ReactNode;
   /** ACT-FR-QWNP: raised to put the caret in the composer. */
   composerFocusSignal?: number;
-  /** Show the post accelerator hint beside the composer (DDS-FR-HQTX). */
-  showAcceleratorHint?: boolean;
 }
 
 export function DiscussionSurface(props: DiscussionSurfaceProps) {
@@ -184,6 +186,9 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
   const pairing = useMemo(() => pairedHalves(thread.comments), [thread.comments]);
   // DQA-FR-NRZB: the set a discussion holds, whatever it is about.
   const questionSet = useQuestionSet(thread.id);
+  const voice = useVoiceState();
+  // CVP-FR-TGPV: the live bubble shows in the voice discussion alone.
+  const liveBubble = useLiveBubbleNode(thread.id);
   const quoted = discussionFragment(thread);
 
   /**
@@ -198,7 +203,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         target === "composer" ||
         (target === "discussion" && getDiscussionSession(thread.id).focusWasComposer);
       const field = wantComposer
-        ? root.querySelector<HTMLElement>("textarea, [data-voice-record]")
+        ? root.querySelector<HTMLElement>("textarea, [data-voice-focus]")
         : null;
       if (field) field.focus();
       else root.focus();
@@ -279,7 +284,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
     const excerpt =
       selected !== ""
         ? selected
-        : (thread.comments.find((c) => c.id === commentId)?.body ?? "").trim();
+        : visibleBody(thread.comments.find((c) => c.id === commentId)?.body ?? "").trim();
     if (excerpt === "") return;
     const held = getDiscussionSession(thread.id).quotes;
     if (held.some((q) => q.commentId === commentId && q.excerpt === excerpt)) return;
@@ -461,6 +466,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             pendingTurns={pendingTurns}
             toolCallsByRow={toolCallsByRow}
             onCancelTurn={onCancelTurn}
+            liveBubble={liveBubble}
             footer={
               <>
                 {dividerAtEnd}
@@ -486,6 +492,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             beforeComment={beforeComment}
             visibleFrom={props.visibleFrom ?? 0}
             afterComments={dividerAtEnd}
+            liveBubble={liveBubble}
             footer={
               <>
                 {turnOutcomes}
@@ -532,6 +539,15 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         </p>
       )}
 
+      {/* VOM-FR-VGLT: the composer is gone, and voice mode stays usable. */}
+      {questionSet && composerOpen && voice.activeKey === thread.id && (
+        <VoiceSessionBar
+          sessionKey={thread.id}
+          voiceOf={(agentId) => agents.find((a) => a.agent.id === agentId)?.agent.voice || null}
+          nicknames={() => [...roster.nicknames]}
+        />
+      )}
+
       {/* CMT-FR-16: a resolved discussion renders no composer, and its
           messages stay fully readable. */}
       {composerShown && (
@@ -547,7 +563,6 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
           attachDismissSignal={menuOpenings}
           dismissSignal={menu.open ? 1 : 0}
           focusSignal={props.composerFocusSignal}
-          showAcceleratorHint={props.showAcceleratorHint ?? stream}
           turnDeadline={turnDeadline}
         />
       )}

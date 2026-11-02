@@ -321,4 +321,4 @@ mod hunks;
 mod legacy;
 mod per_hunk;
 mod recording;
-mod revisions;
+mod updates;

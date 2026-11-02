@@ -16,10 +16,13 @@ use tauri::Emitter;
 use crate::ai_shared::{mask_hint, SecretStore};
 use crate::global_settings::GlobalSettingsStore;
 
+pub(crate) mod activity;
 pub(crate) mod capture;
+pub(crate) mod chunks;
 pub(crate) mod commands;
 pub(crate) mod detect;
 pub(crate) mod http;
+pub(crate) mod live;
 pub(crate) mod models;
 pub(crate) mod pcm;
 pub(crate) mod realtime;
@@ -30,6 +33,7 @@ pub(crate) mod verify;
 #[cfg(target_os = "linux")]
 pub mod linux_media;
 
+pub use activity::commands::*;
 pub use commands::*;
 
 #[cfg(test)]
@@ -42,6 +46,10 @@ pub const VAULT_NAMESPACE: &[&str] = &["voice_ai", "providers"];
 pub const VOICE_AI_CHANGED: &str = "voice-ai-changed";
 /// VOP-FR-JAOB: the live transcript of a capture session changed.
 pub const VOICE_TRANSCRIPT_CHANGED: &str = "voice-transcript-changed";
+/// VOP-FR-DICU: a VAD session reports each step of an utterance.
+pub const VOICE_ACTIVITY_CHANGED: &str = "voice-activity-changed";
+/// VOP-FR-DSSU: a chunk of a chunked capture ended, or has its result.
+pub const VOICE_CHUNK_CHANGED: &str = "voice-chunk-changed";
 
 pub const ERR_BASE_URL_EMPTY: &str = "base_url_empty";
 pub const ERR_BASE_URL_INVALID: &str = "base_url_invalid";
@@ -253,9 +261,15 @@ pub struct VoiceModels {
 pub trait VoiceSink: Send + Sync {
     fn integrations_changed(&self, integrations: &VoiceAiIntegrations);
     fn transcript_changed(&self, session_id: &str, text: &str);
+    fn activity_changed(&self, change: &activity::ActivityChange);
+    fn chunk_changed(&self, change: &chunks::ChunkChange);
     /// A failure that the typed code does not explain. `detail` is a kind, a
     /// status, or a server code, and never a URL, a key, or text.
     fn diagnostic(&self, stage: &str, detail: &str);
+    /// A step of a live session (VOP-FR-KIMU). `counts` hold counts and group
+    /// indexes alone, and never text. `warn` gives the `WARN` level, and
+    /// otherwise the level is `DEBUG`.
+    fn live_step(&self, _message: &str, _counts: &[(&str, usize)], _warn: bool) {}
 }
 
 impl VoiceSink for tauri::AppHandle {
@@ -270,6 +284,14 @@ impl VoiceSink for tauri::AppHandle {
         );
     }
 
+    fn activity_changed(&self, change: &activity::ActivityChange) {
+        let _ = self.emit(VOICE_ACTIVITY_CHANGED, change.payload());
+    }
+
+    fn chunk_changed(&self, change: &chunks::ChunkChange) {
+        let _ = self.emit(VOICE_CHUNK_CHANGED, change.payload());
+    }
+
     fn diagnostic(&self, stage: &str, detail: &str) {
         crate::logging::log_warn(
             self,
@@ -278,6 +300,19 @@ impl VoiceSink for tauri::AppHandle {
             "voice provider call failed",
             crate::log_fields! { "stage" => stage, "detail" => detail },
         );
+    }
+
+    fn live_step(&self, message: &str, counts: &[(&str, usize)], warn: bool) {
+        let mut fields = crate::logging::Fields::new();
+        for (key, value) in counts {
+            fields.insert((*key).to_string(), serde_json::json!(value));
+        }
+        let domains = [crate::logging::Domain::Ai, crate::logging::Domain::Remote];
+        if warn {
+            crate::logging::log_warn(self, &crate::logging::BUFFER, &domains, message, fields);
+        } else {
+            crate::logging::log_debug(self, &crate::logging::BUFFER, &domains, message, fields);
+        }
     }
 }
 
@@ -293,7 +328,8 @@ pub struct ActiveVoice {
 pub struct VoiceAi {
     pub(crate) secrets: Box<dyn SecretStore>,
     pub(crate) write_lock: Mutex<()>,
-    pub(crate) capture: Mutex<Option<capture::CaptureSession>>,
+    pub(crate) capture: Mutex<Vec<capture::CaptureSession>>,
+    pub(crate) activity: Mutex<Option<activity::ActivityHandle>>,
     pub(crate) speeches: Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>,
     /// VOP-FR-DWSB: the last cancelled speech. A cancel can arrive between two
     /// segments of one reply, when no segment is registered. One slot is
@@ -319,7 +355,8 @@ impl VoiceAi {
         Self {
             secrets,
             write_lock: Mutex::new(()),
-            capture: Mutex::new(None),
+            capture: Mutex::new(Vec::new()),
+            activity: Mutex::new(None),
             speeches: Mutex::new(HashMap::new()),
             cancelled_speech: Mutex::new(None),
             voice_cache: Mutex::new(None),

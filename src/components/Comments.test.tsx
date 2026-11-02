@@ -193,6 +193,22 @@ describe("CMP-FR-06 … CMP-FR-09: what a row shows", () => {
     ).toBe("specs/onboarding.md");
   });
 
+  it("CMT-FR-BMCI: a row shows the written text, and no spoken part", async () => {
+    listReturns([
+      thread({
+        id: "t1",
+        artifactId: "specs/onboarding.md",
+        comments: [comment("c1", "<spoken>Hidden words.</spoken>\n\nThe written text.")],
+      }),
+    ]);
+    render(<Harness />);
+    const row = (await screen.findAllByRole("button"))
+      .map((b) => b)
+      .find((b) => b.className.includes("comment-row"))!;
+    expect(within(row).getByText("The written text.")).toBeInTheDocument();
+    expect(row.textContent).not.toContain("Hidden words");
+  });
+
   it("shows no reply count on a thread of one comment", async () => {
     listReturns([thread({ id: "t1" })]);
     render(<Harness />);

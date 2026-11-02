@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 
 import { useShellSession } from "./useShellSession";
+import { noteOwnerDeleted } from "../voice/voiceController";
 import { clearConversationThreads } from "../state/conversationThreads";
 import {
   consumePendingFocus,
@@ -38,6 +39,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 type EventHandler = (ev: { payload: unknown }) => void;
 let eventHandlers: [string, EventHandler][] = [];
+vi.mock("../voice/voiceController", async (original) => ({
+  ...(await original<typeof import("../voice/voiceController")>()),
+  noteOwnerDeleted: vi.fn(),
+}));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (name: string, handler: EventHandler) => {
     eventHandlers.push([name, handler]);
@@ -386,7 +391,7 @@ describe("TAB-FR-24, TAB-FR-25, TAB-FR-19, TAB-FR-15, CVP-FR-47: closing and pat
 });
 
 describe("NTS-FR-30, CVP-FR-61: deleting a note", () => {
-  it("closes its tab and drops its session state, leaving other tabs alone", () => {
+  it("VOM-FR-LSBQ: closes its tab and drops its session state, leaving other tabs alone", () => {
     const { result } = renderHook(() => useShellSession());
     act(() => {
       result.current.revealDiscussion(noteReveal("t1", "n1"));
@@ -395,6 +400,8 @@ describe("NTS-FR-30, CVP-FR-61: deleting a note", () => {
     act(() => setComposerBody("t1", "typed"));
 
     act(() => result.current.dropNoteConversationTab("n1"));
+    // VOM-FR-LSBQ, CVP-FR-61: voice mode ends when it is in this note's discussion.
+    expect(noteOwnerDeleted).toHaveBeenCalledWith({ kind: "note", noteId: "n1" });
 
     const left = convTabs(result.current.tabs);
     expect(left).toHaveLength(1);

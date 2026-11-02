@@ -1,5 +1,5 @@
 //! The per-hunk decision ledger of a prompt change proposal
-//! (`PCP-prompt-change-proposals.md` PCP-FR-HKLD, PCP-FR-RVSN, PCP-FR-LGXQ).
+//! (`PCP-prompt-change-proposals.md` PCP-FR-HKLD, PCP-FR-LGXQ).
 //!
 //! The shapes copy the draft ledger's (DCP-FR-PWSF) so a surface reads both
 //! alike, and none of them is shared with `crate::draft_proposals`
@@ -12,7 +12,7 @@
 
 use super::*;
 use crate::text_hunks::anchors::HunkKind;
-use crate::text_hunks::hunks::{self as text, ProposalHunk, ProposedHunk};
+use crate::text_hunks::hunks::{self as text, ProposalHunk};
 
 /// PCP-FR-HKLD: where one hunk stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,6 +24,9 @@ pub enum HunkState {
     /// PCP-FR-HLDQ: held for discussion. Undecided, so it still holds the
     /// artifact's one slot.
     Discussing,
+    /// PCP-FR-RVSN (as DCP-FR-IAFV): taken back by its agent's update. It
+    /// counts for neither final state.
+    Withdrawn,
 }
 
 impl HunkState {
@@ -32,9 +35,9 @@ impl HunkState {
         matches!(self, HunkState::Pending | HunkState::Discussing)
     }
 
-    /// PCP-FR-RVSN: a hunk its agent may still replace — an undecided one, or
-    /// one the author rejected while the proposal stands.
-    pub fn is_revisable(self) -> bool {
+    /// PCP-FR-RVSN: a hunk its agent's update may still change or withdraw —
+    /// an undecided one, or one the author rejected while the proposal stands.
+    pub fn is_updatable(self) -> bool {
         self.is_undecided() || self == HunkState::Rejected
     }
 
@@ -44,6 +47,7 @@ impl HunkState {
             HunkState::Accepted => "accepted",
             HunkState::Rejected => "rejected",
             HunkState::Discussing => "discussing",
+            HunkState::Withdrawn => "withdrawn",
         }
     }
 }
@@ -63,7 +67,8 @@ pub struct HunkLedgerRow {
     /// PCP-FR-EDTW: true while this hunk's text differs from the agent's own.
     #[serde(default)]
     pub edited: bool,
-    /// PCP-FR-RVSN: bumped by an agent revision, never by an author edit.
+    /// PCP-FR-RVSN: bumped by an agent's `change` update, never by an author
+    /// edit.
     #[serde(default)]
     pub revision: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -98,6 +103,10 @@ pub struct HunkCounts {
     pub rejected: u32,
     #[serde(default)]
     pub discussing: u32,
+    /// PCP-FR-HKLD: absent from a record written before hunks could be
+    /// withdrawn, and then zero.
+    #[serde(default)]
+    pub withdrawn: u32,
 }
 
 impl HunkCounts {
@@ -109,6 +118,7 @@ impl HunkCounts {
                 HunkState::Accepted => c.accepted += 1,
                 HunkState::Rejected => c.rejected += 1,
                 HunkState::Discussing => c.discussing += 1,
+                HunkState::Withdrawn => c.withdrawn += 1,
             }
         }
         c
@@ -192,87 +202,6 @@ pub(super) fn legacy_document(current: &str, candidate: &str) -> text::HunkDocum
     }])
 }
 
-/// What a change id a model named can mean on the artifact as it stands
-/// (PPC-FR-RVKS, on the terms of PDC-FR-GMWR).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RevisionTarget {
-    /// The hunk is one of the standing proposal's, undecided or rejected.
-    Revisable,
-    /// A proposal stands and holds no such hunk that can still be revised.
-    NoSuchChange,
-    /// The artifact holds no standing proposal, so no name could have meant one.
-    NothingStanding,
-}
-
-/// PPC-FR-RVKS: whether a hunk id names something its agent can still revise on
-/// this artifact.
-pub fn revision_target(root: &fs::RootFs, artifact_id: &str, hunk_id: &str) -> RevisionTarget {
-    let Some(record) = pending_for(root, artifact_id) else {
-        return RevisionTarget::NothingStanding;
-    };
-    if record.ledger.iter().any(|row| row.id == hunk_id && row.state.is_revisable()) {
-        RevisionTarget::Revisable
-    } else {
-        RevisionTarget::NoSuchChange
-    }
-}
-
-/// PCP-FR-RVSN: replace one undecided or rejected hunk of the artifact's
-/// standing proposal in place, keeping its id and its position. The hunk is
-/// `pending` after it, and reads as unedited.
-///
-/// The replacement is placed against the file as it stands, exactly as a
-/// recording is, so it refuses with the same typed errors.
-pub fn revise_prompt_change_hunk(
-    root: &fs::RootFs,
-    artifact_id: &str,
-    hunk_id: &str,
-    proposed: &ProposedHunk,
-) -> Result<PromptChangeProposal, String> {
-    let _guard = artifact_lock(artifact_id);
-    // Read inside the lock: which proposal stands, and where its hunks stand,
-    // can both have moved since the caller decided to revise.
-    let mut record = pending_for(root, artifact_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
-    let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
-    if !row.state.is_revisable() {
-        return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
-    }
-    let dir = ensure_folder(root)?;
-    let artifact_path = require_prompt_artifact(root, artifact_id)?;
-    let current = root.read_text(&artifact_path).map_err(|_| ERR_ARTIFACT_NOT_FOUND.to_string())?;
-    let (mut doc, _legacy) = read_hunk_document(root, &dir, &record.id, &current)?;
-    let planned = text::plan(&current, std::slice::from_ref(proposed), || hunk_id.to_string())
-        .map_err(|e| match e {
-            text::PlanError::Ambiguous(_) => ERR_HUNK_AMBIGUOUS.to_string(),
-            text::PlanError::ContextTooLong(_, side) => {
-                format!("{ERR_HUNK_CONTEXT_TOO_LONG}:{}", side.as_str())
-            }
-            // A one-hunk revision can neither overlap another hunk of its own
-            // nor be empty, so the remaining errors are one lost anchor.
-            _ => ERR_ANCHOR_LOST.to_string(),
-        })?;
-    let next = planned.hunks.into_iter().next().ok_or(ERR_ANCHOR_LOST)?;
-    let origin = fs::sha256_bytes(next.after_text().as_bytes());
-    if !doc.replace_in_place(hunk_id, next) {
-        return Err(ERR_HUNK_NOT_FOUND.to_string());
-    }
-    // PCP-FR-RVSN: a revised legacy proposal is a hunk proposal from here on.
-    // The `.content` file is left exactly as it is (PCP-FR-LGXQ).
-    root.write_text_atomic(at(&dir, &record.id, HUNKS_EXT), &doc.to_toml())
-        .map_err(|_| ERR_WRITE_FAILED.to_string())?;
-    record.legacy = false;
-    if let Some(row) = record.ledger.iter_mut().find(|row| row.id == hunk_id) {
-        row.edited = false;
-        row.revision += 1;
-        row.state = HunkState::Pending;
-        row.decided_at = None;
-    }
-    record.origin_checksums.insert(hunk_id.to_string(), origin);
-    resettle(&mut record);
-    root.write_toml_atomic(at(&dir, &record.id, RECORD_EXT), &record).map_err(|e| e.to_string())?;
-    Ok(record)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,10 +233,12 @@ mod tests {
     // PCP-FR-HLDQ: a held hunk is undecided; PCP-FR-RVSN: a rejected one is
     // still revisable and an accepted one is not.
     #[test]
-    fn a_held_hunk_is_undecided_and_a_rejected_one_is_revisable() {
+    fn a_held_hunk_is_undecided_and_a_rejected_one_is_updatable() {
         assert!(HunkState::Discussing.is_undecided());
         assert!(!HunkState::Rejected.is_undecided());
-        assert!(HunkState::Rejected.is_revisable());
-        assert!(!HunkState::Accepted.is_revisable());
+        assert!(HunkState::Rejected.is_updatable());
+        assert!(!HunkState::Accepted.is_updatable());
+        assert!(!HunkState::Withdrawn.is_updatable());
+        assert!(!HunkState::Withdrawn.is_undecided());
     }
 }

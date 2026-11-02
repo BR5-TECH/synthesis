@@ -15,8 +15,10 @@ const mic = vi.hoisted(() => ({
 }));
 const audio = vi.hoisted(() => ({
   isPlaybackIdle: vi.fn(() => false),
+  pausePlayback: vi.fn(),
   playFrame: vi.fn(),
   prepareAudio: vi.fn(),
+  resumePlayback: vi.fn(),
   setDrainedListener: vi.fn(),
   stopPlayback: vi.fn(),
 }));
@@ -38,6 +40,7 @@ import {
   getDiscussionSession,
   setComposerBody,
 } from "../state/discussionSession";
+import { getLiveBubble, resetLiveBubbleForTest } from "../state/liveBubble";
 import { getVoiceState, resetVoiceStateForTest } from "../state/voiceSession";
 import type { Comment, Discussion } from "../types";
 import { MicrophoneError } from "./capture";
@@ -51,6 +54,7 @@ import {
   enterVoiceMode,
   leaveVoiceMode,
   noteDiscussionChanged,
+  noteQuestionShown,
   noteProvider,
   noteTranscript,
   pressRecord,
@@ -75,7 +79,8 @@ function comment(id: string, kind: "agent" | "human", body = "A reply."): Commen
       kind === "agent"
         ? { kind: "agent", agentId: "a1", handle: "arch" }
         : { kind: "human", login: "me" },
-    body,
+    // VOM-FR-TRWN: an agent comment speaks its spoken part.
+    body: kind === "agent" ? `<spoken>${body}</spoken>` : body,
     quotes: [],
     attachments: [],
     createdAt: "2026-02-01T00:00:00Z",
@@ -124,6 +129,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetVoiceStateForTest();
   resetVoiceControllerForTest();
+  resetLiveBubbleForTest();
   clearAllDiscussionSessions();
   api.finishVoiceCapture.mockImplementation(async () => "hello");
   api.retryVoiceCapture.mockImplementation(async () => "again");
@@ -156,15 +162,15 @@ describe("entering and leaving", () => {
     expect(api.speakVoiceSegment).not.toHaveBeenCalled();
   });
 
-  it("VOM-FR-MQHD: nothing leaves memory, and leaving resets the response mode", () => {
+  it("VOM-FR-MQHD, VOM-FR-KEMU: leaving ends voice mode and keeps the response mode", () => {
     enterVoiceMode(KEY, discussion([]));
     setResponseMode("voice");
     expect(getVoiceState().responseMode).toBe("voice");
     leaveVoiceMode();
-    expect(getVoiceState()).toMatchObject({ activeKey: null, responseMode: "text" });
+    expect(getVoiceState()).toMatchObject({ activeKey: null, responseMode: "voice" });
   });
 
-  it("VOM-FR-FHYY: voice mode with no mounted composer is not reachable", () => {
+  it("VOM-FR-FHYY, VOM-FR-BCRD: no handle records nothing, and an unmounted handle stays", () => {
     enterVoiceMode(KEY, null);
     expect(voiceComposerMounted()).toBe(false);
     pressRecord();
@@ -172,6 +178,8 @@ describe("entering and leaving", () => {
     const unregister = registerVoiceComposer(KEY, handle());
     expect(voiceComposerMounted()).toBe(true);
     unregister();
+    expect(voiceComposerMounted()).toBe(true);
+    leaveVoiceMode();
     expect(voiceComposerMounted()).toBe(false);
   });
 
@@ -192,7 +200,8 @@ describe("recording", () => {
     const composer = handle();
     registerVoiceComposer(KEY, composer);
     await record();
-    expect(api.startVoiceCapture).toHaveBeenCalledWith(48_000, ["arch"]);
+    // VOM-FR-GBCN: an utterance in a discussion is chunked.
+    expect(api.startVoiceCapture).toHaveBeenCalledWith(48_000, ["arch"], true);
     expect(api.finishVoiceCapture).toHaveBeenCalledWith("s1");
     expect(composer.post).toHaveBeenCalledWith("hello");
     expect(getVoiceState().phase).toBe("idle");
@@ -280,16 +289,17 @@ describe("recording", () => {
     registerVoiceComposer(KEY, handle());
     pressRecord();
     await settle();
+    // VOM-FR-HUXY: a chunked utterance shows its live text in the live bubble.
     noteTranscript("s1", "hel");
-    expect(getVoiceState().transcript).toBe("hel");
+    expect(getLiveBubble().parts[0]).toMatchObject({ captureId: "s1", liveText: "hel" });
     noteTranscript("other", "x");
-    expect(getVoiceState().transcript).toBe("hel");
+    expect(getLiveBubble().parts[0].liveText).toBe("hel");
     await vi.advanceTimersByTimeAsync(1000);
     releaseRecord();
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     await settle();
     noteTranscript("s1", "hello");
-    expect(getVoiceState().transcript).toBe("hello");
+    expect(getLiveBubble().parts[0].liveText).toBe("hello");
     finish("hello");
     await settle();
   });
@@ -311,7 +321,8 @@ describe("recording", () => {
     releaseRecord();
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     await settle();
-    expect(getVoiceState().phase).toBe("transcribing");
+    // VOM-FR-QTAQ: the record control is free while the utterance transcribes.
+    expect(getVoiceState()).toMatchObject({ phase: "idle", transcribing: 1 });
     finish("done");
     await settle();
   });
@@ -346,15 +357,41 @@ describe("recording", () => {
     expect(getVoiceState().note).toBe("kept_in_body");
   });
 
-  it("VOM-FR-ABPU, VOM-FR-EGNX: a composer that goes ends the recording, and the text stays", async () => {
-    const unregister = registerVoiceComposer(KEY, handle());
+  it("VOM-FR-BCRD, VOM-FR-WYIE: a composer that goes keeps the recording, and it posts", async () => {
+    const composer = handle();
+    const unregister = registerVoiceComposer(KEY, composer);
     pressRecord();
     await settle();
     unregister();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(getVoiceState().phase).toBe("recording");
+    releaseRecord();
     await vi.advanceTimersByTimeAsync(TAIL_MS);
     await settle();
-    expect(getDiscussionSession(KEY).body).toBe("hello");
-    expect(getVoiceState().note).toBe("kept_in_body");
+    expect(composer.post).toHaveBeenCalledWith("hello");
+    expect(getDiscussionSession(KEY).body).toBe("");
+  });
+
+  it("VOM-FR-QTAQ, VOM-FR-GBCN: a new press records while the last utterance transcribes", async () => {
+    const composer = handle();
+    registerVoiceComposer(KEY, composer);
+    let finish: (text: string) => void = () => undefined;
+    api.finishVoiceCapture.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+    await record();
+    expect(getVoiceState().transcribing).toBe(1);
+    api.startVoiceCapture.mockImplementationOnce(async () => ({
+      sessionId: "s2",
+      route: "realtime",
+      live: true,
+    }));
+    api.finishVoiceCapture.mockImplementationOnce(async () => "second");
+    await record();
+    expect(api.startVoiceCapture).toHaveBeenCalledTimes(2);
+    // VOM-FR-QCZQ: the comments post in the order of the utterances.
+    expect(composer.post).not.toHaveBeenCalled();
+    finish("first");
+    await settle();
+    expect(vi.mocked(composer.post).mock.calls.map((c) => c[0])).toEqual(["first", "second"]);
   });
 
   it("VOM-FR-ABPU: a question set that arrives keeps the transcript", async () => {
@@ -475,6 +512,17 @@ describe("failure", () => {
   });
 });
 
+describe("question speech with no surface", () => {
+  it("VOM-FR-HBLE, VOM-FR-BCRD: a question speaks with no surface of voice mode", async () => {
+    enterVoiceMode(KEY, discussion([]));
+    setResponseMode("voice");
+    const question = { position: 1, text: "First?", options: [] };
+    noteQuestionShown(KEY, "s1", question, { kind: "human", login: "me" } as never, true);
+    await settle();
+    expect(api.speakVoiceSegment).toHaveBeenCalled();
+  });
+});
+
 describe("spoken replies", () => {
   const old = comment("c1", "agent", "Old reply.");
 
@@ -494,6 +542,37 @@ describe("spoken replies", () => {
       expect.any(Function),
     );
     expect(getVoiceState().playing).toBe(true);
+  });
+
+  it("VOM-FR-TRWN: speech is the spoken part alone, and the written text is not read", async () => {
+    const reply = comment("r1", "human", "<spoken>The **short** part.</spoken>\n\nThe long written text.");
+    noteDiscussionChanged(
+      discussion([old, { ...reply, author: { kind: "agent", agentId: "a1", handle: "arch" } }]),
+    );
+    await settle();
+    expect(api.speakVoiceSegment).toHaveBeenCalledTimes(1);
+    expect(api.speakVoiceSegment).toHaveBeenCalledWith(
+      expect.any(String),
+      "The short part.",
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it("VOM-FR-VSCQ, VOM-FR-TRWN: an agent comment with no spoken part is not spoken", async () => {
+    const reply = comment("r1", "human", "Written alone, with `<spoken>x</spoken>` in code.");
+    noteDiscussionChanged(
+      discussion([old, { ...reply, author: { kind: "agent", agentId: "a1", handle: "arch" } }]),
+    );
+    await settle();
+    expect(api.speakVoiceSegment).not.toHaveBeenCalled();
+  });
+
+  it("VOM-FR-ZLAY, VOM-FR-EWOK: with response mode Text a spoken part stays silent", async () => {
+    setResponseMode("text");
+    noteDiscussionChanged(discussion([old, comment("r1", "agent")]));
+    await settle();
+    expect(api.speakVoiceSegment).not.toHaveBeenCalled();
   });
 
   it("VOM-FR-UALP: an agent with no voice uses the provider default", async () => {
@@ -620,7 +699,7 @@ describe("spoken replies", () => {
     expect(audio.stopPlayback).toHaveBeenCalled();
   });
 
-  it("VOM-FR-EGNX: a composer that goes stops playback, and a new comment is not spoken", async () => {
+  it("VOM-FR-ZLAY, VOM-FR-BCRD: a composer that goes keeps playback, and a new comment is spoken", async () => {
     resetVoiceControllerForTest();
     enterVoiceMode(KEY, discussion([old]));
     const unregister = registerVoiceComposer(KEY, handle());
@@ -630,11 +709,16 @@ describe("spoken replies", () => {
     await settle();
     audio.stopPlayback.mockClear();
     unregister();
-    expect(audio.stopPlayback).toHaveBeenCalled();
+    expect(audio.stopPlayback).not.toHaveBeenCalled();
     api.speakVoiceSegment.mockClear();
     noteDiscussionChanged(discussion([old, c2, comment("c3", "agent")]));
     await settle();
-    expect(api.speakVoiceSegment).not.toHaveBeenCalled();
+    expect(api.speakVoiceSegment).toHaveBeenCalledWith(
+      expect.any(String),
+      "A reply.",
+      "cedar",
+      expect.any(Function),
+    );
   });
 
   it("VOM-FR-KQAI: the teardown ends voice mode, and keeps the provider state", async () => {
@@ -682,7 +766,7 @@ describe("the end of voice mode while text is on its way", () => {
 
   async function untilTranscribing() {
     await record();
-    expect(getVoiceState().phase).toBe("transcribing");
+    expect(getVoiceState().transcribing).toBe(1);
   }
 
   it("VOM-FR-JBJI, VOM-FR-ABPU: leaving during transcription keeps the text and posts nothing", async () => {
@@ -708,7 +792,7 @@ describe("the end of voice mode while text is on its way", () => {
     expect(getVoiceState().activeKey).toBe("other");
   });
 
-  it("VOM-FR-ABPU: a composer that unmounts during the tail keeps the text", async () => {
+  it("VOM-FR-BCRD: a composer that unmounts during the tail still posts", async () => {
     const composer = handle();
     const unregister = registerVoiceComposer(KEY, composer);
     pressRecord();
@@ -721,8 +805,8 @@ describe("the end of voice mode while text is on its way", () => {
     await settle();
     finish("hello");
     await settle();
-    expect(composer.post).not.toHaveBeenCalled();
-    expect(getDiscussionSession(KEY).body).toBe("hello");
+    expect(composer.post).toHaveBeenCalledWith("hello");
+    expect(getDiscussionSession(KEY).body).toBe("");
   });
 
   it("VOM-FR-FASJ: a finish that fails after a leave holds nothing for Retry", async () => {
@@ -754,7 +838,7 @@ describe("the end of voice mode while text is on its way", () => {
     expect(getDiscussionSession(KEY).body).toBe("again");
   });
 
-  it("VOM-FR-WICV: a Retry with the composer gone keeps the text", async () => {
+  it("VOM-FR-WICV, VOM-FR-BCRD: a Retry with the composer gone posts through its handle", async () => {
     const composer = handle();
     const unregister = registerVoiceComposer(KEY, composer);
     await untilTranscribing();
@@ -762,8 +846,8 @@ describe("the end of voice mode while text is on its way", () => {
     await settle();
     unregister();
     await retryRecording();
-    expect(composer.post).not.toHaveBeenCalled();
-    expect(getDiscussionSession(KEY).body).toBe("again");
+    expect(composer.post).toHaveBeenCalledWith("again");
+    expect(getDiscussionSession(KEY).body).toBe("");
   });
 
   it("VOM-FR-DGOG: a release after 300 ms, before the microphone opens, still posts", async () => {
@@ -783,7 +867,7 @@ describe("the end of voice mode while text is on its way", () => {
     expect(composer.post).toHaveBeenCalledWith("hello");
   });
 
-  it("VOM-FR-EGNX: one of two surfaces going changes nothing", async () => {
+  it("VOM-FR-BCRD: one of two surfaces going changes nothing", async () => {
     registerVoiceComposer(KEY, handle());
     const second = registerVoiceComposer(KEY, handle());
     audio.stopPlayback.mockClear();

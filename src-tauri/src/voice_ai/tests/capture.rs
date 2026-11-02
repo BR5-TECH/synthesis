@@ -110,7 +110,7 @@ async fn a_live_session_streams_audio_and_text() {
     assert_eq!(shown.last().map(String::as_str), Some("Hello there."));
     let bytes = *received.lock().unwrap();
     assert!((bytes as i64 - 32_000).abs() < 2_100, "one second at 16 kHz, got {bytes} bytes");
-    assert!(voice.capture.lock().unwrap().is_none(), "a success ends the session");
+    assert!(voice.capture.lock().unwrap().is_empty(), "a success ends the session");
 }
 
 // VOP-FR-XXAB, VOP-FR-HOGR: `openai` waits for `completed` of the item that
@@ -420,7 +420,7 @@ async fn a_failed_recording_retries_with_the_same_audio() {
         body[at..at + 44 + 800 * 2].to_vec()
     };
     assert_eq!(audio(&seen[0].body), audio(&seen[1].body), "the same audio");
-    assert!(bench.voice.capture.lock().unwrap().is_none());
+    assert!(bench.voice.capture.lock().unwrap().is_empty());
 }
 
 // VOP-FR-UOYP: an unreachable provider has its own code.
@@ -567,7 +567,7 @@ async fn a_cancel_closes_the_socket() {
         )
         .unwrap();
     bench.voice.cancel_capture(&start.session_id).unwrap();
-    assert!(bench.voice.capture.lock().unwrap().is_none());
+    assert!(bench.voice.capture.lock().unwrap().is_empty());
     tokio::time::timeout(Duration::from_secs(30), wait_closed).await.unwrap().unwrap();
     assert_eq!(
         bench.voice.append_capture(&start.session_id, vec![1]).unwrap_err(),

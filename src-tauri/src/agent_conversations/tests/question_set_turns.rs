@@ -105,7 +105,7 @@ fn a_refused_question_set_ends_nothing_and_the_turn_answers_with_what_it_has() {
 fn a_reply_asking_for_a_set_and_a_question_makes_one_contribution() {
     let reply = asks_questions(two_questions()).and_calls(
         crate::tools::ask_user_comment::NAME,
-        serde_json::json!({ "question": "And one more thing?" }),
+        serde_json::json!({ "question": said("And one more thing?") }),
     );
     let h = Harness::scripted(vec![Ok(reply), Ok(ScriptedReply::answer("unreachable"))]);
     h.mount();
@@ -130,7 +130,7 @@ fn asking_one_question_is_refused_while_a_question_set_stands() {
         // The second tries to ask openly instead, and is refused.
         Ok(ScriptedReply::calls(
             crate::tools::ask_user_comment::NAME,
-            serde_json::json!({ "question": "And one more thing?" }),
+            serde_json::json!({ "question": said("And one more thing?") }),
         )),
         Ok(ScriptedReply::answer("Answered with what I had.")),
     ]);
@@ -149,6 +149,13 @@ fn asking_one_question_is_refused_while_a_question_set_stands() {
         settled.state,
         AgentTurnState::Delivered,
         "AUC-FR-QSVN: the refusal does not end the calling turn",
+    );
+    // AUC-FR-QSVN: this refusal, and not the refusal of a comment with no tag.
+    let exchanges = h.seam.exchanges();
+    let results = tool_results(exchanges.last().expect("the last call"));
+    assert!(
+        results.iter().any(|r| r.contains(crate::tools::QUESTION_SET_PENDING_FOR_COMMENT)),
+        "{results:?}",
     );
     let folded = folded_discussion(&h, &draft_id, &thread.id);
     assert_eq!(

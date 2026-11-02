@@ -472,7 +472,7 @@ fn agc_ts55_a_text_only_model_answers_and_the_turn_records_that_it_omitted_image
     )
     .expect("thread");
     let answer = thread.comments.last().expect("the answer");
-    assert_eq!(answer.body, "Answered.");
+    assert_eq!(answer.body, said("Answered."));
     assert!(!answer.body.to_lowercase().contains("image"));
 }
 
@@ -489,7 +489,7 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
         agent_id: "a".into(),
         nickname: "arch".into(),
         origin: origin.clone(),
-        trigger_comment_id: "c1".into(),
+        trigger_comment_id: Some("c1".into()),
         state: AgentTurnState::Delivered,
         failure: None,
         tls_failure: None,
@@ -502,6 +502,8 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
         tool_calls: Vec::new(),
         deadline_started_at: None,
         deadline_at: None,
+        speech_id: None,
+        reply_held: false,
     };
 
     turns.record_image_notice(&entry("turn-1", &origin, true), PROJECT_KEY);

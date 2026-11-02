@@ -31,7 +31,7 @@ Users: the author (a human) who reviews a draft in the New Artifact tab, and the
 - A proposal closes when no hunk is undecided (DCP-FR-PWSF). Accepting 3 of 5 closes it only after the other 2 are decided.
 - While the proposal is open, a **rejected** hunk stays decorated in the document. Its chip offers **Discuss** and **Accept**, so the author can reverse the rejection. An accepted hunk is not decorated.
 - Accepting a rejected hunk is allowed while the proposal is open. When the proposal closes, all decoration and the review bar go (DCR-FR-17). Hunk discussions stay readable.
-- An agent may revise a rejected hunk in place (`revises`). The hunk then becomes undecided. A closed proposal can not be revised. A new `revises` call on a closed proposal is an ordinary new proposal.
+- An agent may change a rejected hunk in place with a `change` entry of `updates`. The hunk then becomes undecided. A closed proposal can not be updated. An `updates` call where no proposal is open is refused, and the agent sends a new proposal.
 - The decision comment of DCP-FR-15 counts the final state of each hunk.
 
 **One resolved state (all discussions, all surfaces)**
@@ -53,7 +53,7 @@ Users: the author (a human) who reviews a draft in the New Artifact tab, and the
 
 - `specifications/ui/DCR-draft-change-review.md`: DCR-FR-MTFD (Discuss), DCR-FR-12 (chip), DCR-FR-17 (decoration until close).
 - `specifications/core/DCP-draft-change-proposals.md`: DCP-FR-11 and DCP-FR-17 (accept a rejected hunk), DCP-FR-XDRV (revise a rejected hunk), DCP-FR-15, and the hunk-to-discussion link.
-- `specifications/tools/PDC-propose-draft-changes-tool.md`: PDC-FR-GMWR (`revises` on a rejected hunk).
+- `specifications/tools/PDC-propose-draft-changes-tool.md`: PDC-FR-GMWR (`updates` on a rejected hunk).
 - `specifications/ui/CMT-comments.md`: CMT-FR-11, CMT-FR-15, CMT-FR-16 (one state, one menu entry).
 - `specifications/ui/DDS-draft-discussion.md`: resolve and reopen in the draft discussion column.
 - `specifications/core/CMS-comments-storage.md`: CMS-FR-17 and the lock/resolution fold (resolved refuses posts, legacy lock reads as resolved).

@@ -9,6 +9,8 @@
  */
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  VoiceActivityChange,
+  VoiceChunkChange,
   VoiceAiIntegrations,
   ImageBuildFinished,
   ImageBuildProgress,
@@ -167,6 +169,10 @@ export const GIT_OPERATION_FINISHED = "git-operation-finished";
 export const VOICE_AI_CHANGED = "voice-ai-changed";
 /** VOP-FR-JAOB: the live transcript of a capture session changed. */
 export const VOICE_TRANSCRIPT_CHANGED = "voice-transcript-changed";
+/** VOP-FR-DICU: a VAD session reports each step of an utterance. */
+export const VOICE_ACTIVITY_CHANGED = "voice-activity-changed";
+/** VOP-FR-DSSU: the chunk events of a chunked capture. */
+export const VOICE_CHUNK_CHANGED = "voice-chunk-changed";
 /** SCC-FR-19: hits found since the previous emission of the same search. */
 export const SEARCH_RESULTS = "search-results";
 /** SCC-FR-13: emitted exactly once per search, whatever the outcome. */
@@ -570,6 +576,18 @@ export const onVoiceTranscriptChanged = (
   listen<{ sessionId: string; text: string }>(VOICE_TRANSCRIPT_CHANGED, (ev) =>
     handler(ev.payload),
   );
+
+/** VOP-FR-DICU: subscribe to [`VOICE_ACTIVITY_CHANGED`]. */
+export const onVoiceActivityChanged = (
+  handler: (change: VoiceActivityChange) => void,
+): Promise<UnlistenFn> =>
+  listen<VoiceActivityChange>(VOICE_ACTIVITY_CHANGED, (ev) => handler(ev.payload));
+
+/** VOP-FR-DSSU: subscribe to [`VOICE_CHUNK_CHANGED`]. */
+export const onVoiceChunkChanged = (
+  handler: (change: VoiceChunkChange) => void,
+): Promise<UnlistenFn> =>
+  listen<VoiceChunkChange>(VOICE_CHUNK_CHANGED, (ev) => handler(ev.payload));
 
 /** GTS-FR-AEQO: subscribe to [`GITHUB_TOKENS_CHANGED`]. */
 export const onGithubTokensChanged = (handler: () => void): Promise<UnlistenFn> =>

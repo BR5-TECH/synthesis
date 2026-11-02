@@ -43,6 +43,15 @@ pub trait GraduationDispatch<R: tauri::Runtime>: Send + Sync {
         project_key: &'a str,
         request: AgentExecutionRequest,
     ) -> DispatchFuture<'a>;
+
+    /// GXD-FR-TBOW: the `review verdict` record of a review is durable, and the
+    /// verdict has had no effect yet. The loop calls this on its own thread and
+    /// waits for it.
+    ///
+    /// Production does nothing here. A scripted implementation uses it to land
+    /// an act between the verdict and the apply, a moment no turn can reach
+    /// (GTE-FR-KVYE).
+    fn review_verdict_recorded(&self) {}
 }
 
 /// The production dispatch: one call to `../tools/EAC-execute-agent-cli.md`'s

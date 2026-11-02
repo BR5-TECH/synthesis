@@ -30,7 +30,6 @@ vi.mock("@tauri-apps/api/event", () => ({
   ),
 }));
 
-import { postAcceleratorHint } from "./discussion";
 import { resetDraftDiscussions } from "../state/draftDiscussion";
 import {
   noteProposalChanged,
@@ -529,11 +528,18 @@ describe("the transient row (DDS-FR-TGWY, DDS-FR-YSNB)", () => {
 });
 
 describe("the reply field (DDS-FR-HQTX)", () => {
-  it("DDS-FR-HQTX: carries the hint for the post accelerator", async () => {
+  it("DDS-FR-HQTX: carries no hint for the post accelerator", async () => {
     renderColumn([message("c1", HELGA, "anything")]);
-    await screen.findByTestId("draft-discussion-column");
-    // The hint is the platform's own words, so it is read from the same rule.
-    expect(screen.getByText(postAcceleratorHint())).toBeInTheDocument();
+    const column = await screen.findByTestId("draft-discussion-column");
+    expect(column.querySelector(".kbd")).toBeNull();
+    expect(column).not.toHaveTextContent("⌘↵");
+    expect(column).not.toHaveTextContent("Ctrl↵");
+  });
+
+  it("DDS-FR-HQTX: the opening composer carries no hint either", async () => {
+    renderColumn([]);
+    const column = await screen.findByTestId("draft-discussion-column");
+    expect(column.querySelector(".kbd")).toBeNull();
   });
 });
 
@@ -545,6 +551,19 @@ describe("the message actions (DDS-FR-FKZL)", () => {
     // In the author line rather than below the body, and in the document at all
     // times rather than mounted on hover — the stylesheet reveals it.
     expect(block.firstElementChild!.contains(quote)).toBe(true);
+  });
+});
+
+describe("the spoken part (CMT-FR-BMCI, CMT-FR-XWVW)", () => {
+  it("CMT-FR-BMCI: a message of the column hides the tag and its text", async () => {
+    renderColumn([message("c1", HELGA, "<spoken>Hidden words.</spoken>\n\nThe written text.")]);
+    expect(await screen.findByText("The written text.")).toBeInTheDocument();
+    expect(screen.queryByText(/Hidden words/)).toBeNull();
+  });
+
+  it("CMT-FR-XWVW: a message of the tag alone shows its text", async () => {
+    renderColumn([message("c1", HELGA, "<spoken>Yes, two specs.</spoken>")]);
+    expect(await screen.findByText("Yes, two specs.")).toBeInTheDocument();
   });
 });
 

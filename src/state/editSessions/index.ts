@@ -1,5 +1,5 @@
 import { onArtifactChangedExternally } from "../../events";
-import { logDebug, logError } from "../../logging";
+import { logDebug, logError, logWarn } from "../../logging";
 import { artifactTransport, type DocumentTransport } from "../documentTransport";
 import type { ArtifactChangedPayload } from "../../types";
 import { createHistory, hasEdits } from "../editHistory";
@@ -157,6 +157,9 @@ export class EditSessionStore {
    */
   private externalHold = new Map<string, number>();
 
+  /** Counts each quiesce of a document, so a caller lifts only its own. */
+  private quiesceEpochs = new Map<string, number>();
+
   /**
    * PCR-FR-AXPW: hold back the external-change modal for `artifactId`.
    *
@@ -202,6 +205,44 @@ export class EditSessionStore {
     if (!s || s.conflict) return;
     if (s.pending === null || s.pending === s.baseline) return;
     this.update(artifactId, { conflict: true });
+  }
+
+  /**
+   * PCR-FR-LAGZ / DPC-FR-TVKX: the file was written on the author's behalf
+   * through the self-write path, so the watch reports nothing. An agent's
+   * decision by tool does this. A session with an unsaved edit then raises the
+   * external-change modal (EXC-FR-QCNO), so the author chooses between the
+   * file and the buffer.
+   *
+   * The session is quiesced first: a scheduled write of the buffer would
+   * otherwise land over the new file text before the author chooses. After the
+   * modal is up, the write of the buffer is held behind it (EDT-FR-70).
+   */
+  async raiseWrittenElsewhere(artifactId: string): Promise<void> {
+    const s = this.sessions.get(artifactId);
+    // A session that is quiesced already belongs to an acceptance or a
+    // rollback, which resets it to the file when it ends.
+    if (!s?.dirty || s.quiesced) return;
+    // `quiesce` marks the session before its first `await`, so the count is
+    // read before any other quiesce can come.
+    const quiesced = this.quiesce([artifactId]);
+    const mine = this.quiesceEpochs.get(artifactId);
+    await quiesced;
+    try {
+      const res = await this.transport.load(artifactId);
+      this.applyExternalChange({ artifactId, checksum: res.checksum });
+    } catch (e) {
+      logWarn(["frontend"], "a file written elsewhere could not be read", {
+        artifact: artifactId,
+        reason: String(e),
+      });
+      // The file changed all the same, so the write of the buffer waits for
+      // the author's choice and does not land over the new text.
+      if (!this.externalHold.has(artifactId)) this.update(artifactId, { conflict: true });
+    } finally {
+      // Another quiesce that came during the read is not lifted here.
+      if (this.quiesceEpochs.get(artifactId) === mine) this.unquiesce(artifactId);
+    }
   }
 
   /**
@@ -780,6 +821,7 @@ export class EditSessionStore {
     for (const id of held) {
       const s = this.sessions.get(id);
       if (!s) continue;
+      this.quiesceEpochs.set(id, (this.quiesceEpochs.get(id) ?? 0) + 1);
       s.quiesced = true;
       this.cancelWrite(id);
       s.heldWrite = false;

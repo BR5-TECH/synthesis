@@ -219,11 +219,28 @@ pub fn read_question_set(
     worktree: &crate::fs::RootFs,
     thread_id: &str,
 ) -> Option<PendingQuestionSet> {
-    let thread = read_discussion_by_id(root, worktree, thread_id)?;
-    let discussion = discussion_ref_of(&thread)?;
-    let path = discussion.thread_ref().scope.question_set_path(root, thread_id).ok()?;
-    let bytes = root.read_bytes(&path).ok()?;
-    serde_json::from_slice::<PendingQuestionSet>(&bytes).ok()
+    read_question_set_checked(root, worktree, thread_id).ok().flatten()
+}
+
+/// [`read_question_set`], and it tells a set that is absent (`Ok(None)`) from
+/// a record that cannot be read or parsed (`Err`). The error is a kind alone:
+/// `unreadable` or `malformed`, and never a path or any content.
+pub fn read_question_set_checked(
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    thread_id: &str,
+) -> Result<Option<PendingQuestionSet>, &'static str> {
+    let Some(thread) = read_discussion_by_id(root, worktree, thread_id) else { return Ok(None) };
+    let Some(discussion) = discussion_ref_of(&thread) else { return Ok(None) };
+    let Ok(path) = discussion.thread_ref().scope.question_set_path(root, thread_id) else {
+        return Ok(None);
+    };
+    let bytes = match root.read_bytes(&path) {
+        Ok(bytes) => bytes,
+        Err(crate::fs::FsError::NotFound { .. }) => return Ok(None),
+        Err(_) => return Err("unreadable"),
+    };
+    serde_json::from_slice::<PendingQuestionSet>(&bytes).map(Some).map_err(|_| "malformed")
 }
 
 /// CMS-FR-JWVH: `"read discussion question set"`.

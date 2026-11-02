@@ -10,6 +10,7 @@
  * transport.
  */
 import { ownerLabelOf } from "../state/ownerAvailability";
+import { visibleBody } from "../text/spokenPart";
 import { attachmentName, discussionFragment } from "../types";
 import type { Comment, DiscussionListItem } from "../types";
 
@@ -89,7 +90,8 @@ export function matchesFilter(
   // matched on the rest. The owner label is what the row shows as its owner.
   const haystacks: string[] = [
     discussionFragment(item.discussion)?.quote ?? "",
-    firstComment(item)?.body ?? "",
+    // CMT-FR-RZGT.
+    visibleBody(firstComment(item)?.body ?? ""),
     ownerLabelOf(item.discussion.target),
     ...(firstComment(item)?.attachments ?? []).map(attachmentName),
   ];

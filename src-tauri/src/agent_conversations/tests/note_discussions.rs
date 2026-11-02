@@ -306,6 +306,7 @@ fn a_deleted_note_leaves_a_turn_no_material() {
 /// The five new arms the note origin added — the tool set, `deliver`, the resolution
 /// gate, the prompt, and the builder — are only reachable by actually dispatching
 /// one, which the builder-level tests above do not do.
+// DDC-FR-UOLP, DPC-FR-RFEF: a note turn is attached neither decision tool.
 #[test]
 fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
     let h = Harness::new(vec![Ok("Split it in two.".into())]);
@@ -370,7 +371,7 @@ fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
     assert_eq!(folded.id, thread_id);
     assert_eq!(folded.comments.len(), 2, "the opening and the answer");
     let answer = folded.comments.last().unwrap();
-    assert_eq!(answer.body, "Split it in two.");
+    assert_eq!(answer.body, said("Split it in two."));
     assert!(
         matches!(&answer.author, Participant::Agent { handle, .. } if handle == "arch"),
         "{:?}",

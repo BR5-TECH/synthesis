@@ -119,7 +119,7 @@ fn a_provider_run_search_and_fetch_are_finished_before_the_reply_that_reports_th
     // CVL-FR-26: the comment carries the answer alone — no call, no result.
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2);
-    assert_eq!(threads[0].comments[1].body, "The current release settles this.");
+    assert_eq!(threads[0].comments[1].body, said("The current release settles this."));
 }
 
 #[test]
@@ -430,7 +430,7 @@ fn a_reply_at_the_model_call_bound_still_records_what_the_provider_ran() {
         .map(|_| Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))))
         .collect();
     replies.push(Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
-        .with_text("What I had concluded.")
+        .with_text(said("What I had concluded."))
         .and_native("openrouter:web_search", "{}", "A")));
     let h = Harness::scripted(replies);
     h.mount();
@@ -439,7 +439,7 @@ fn a_reply_at_the_model_call_bound_still_records_what_the_provider_ran() {
 
     assert_eq!(terminal.state, AgentTurnState::Delivered);
     let threads = h.threads("spec.md");
-    assert_eq!(threads[0].comments[1].body, "What I had concluded.");
+    assert_eq!(threads[0].comments[1].body, said("What I had concluded."));
     let bound = wait_for_record(&terminal.id, "agent turn reached its model-call bound");
     assert_eq!(require(&bound, "undispatchedToolCalls"), "1");
     let records = provider_tool_records(&terminal.id);

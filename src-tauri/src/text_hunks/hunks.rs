@@ -238,6 +238,21 @@ impl ContextSide {
 pub fn plan(
     prompt: &str,
     proposed: &[ProposedHunk],
+    mint_id: impl FnMut() -> String,
+) -> Result<HunkDocument, PlanError> {
+    plan_among(prompt, proposed, &[], mint_id)
+}
+
+/// Place proposed changes beside changes that already stand, or refuse them
+/// all (DCP-FR-BFDR, PDC-FR-DGUC).
+///
+/// `standing` holds the ranges of the hunks an update leaves in place. A new
+/// change must not overlap one of them, and its context stops short of them
+/// as it stops short of a neighbour of its own list.
+pub fn plan_among(
+    prompt: &str,
+    proposed: &[ProposedHunk],
+    standing: &[(usize, usize)],
     mut mint_id: impl FnMut() -> String,
 ) -> Result<HunkDocument, PlanError> {
     if proposed.is_empty() {
@@ -300,7 +315,9 @@ pub fn plan(
 
         // DCP-FR-JGCD: non-overlap at record time plus content anchors is what
         // makes every hunk decidable whatever order the author takes them in.
-        if placed.iter().any(|(s, e, _)| anchors::ranges_overlap((*s, *e), (start, end))) {
+        if placed.iter().any(|(s, e, _)| anchors::ranges_overlap((*s, *e), (start, end)))
+            || standing.iter().any(|range| anchors::ranges_overlap(*range, (start, end)))
+        {
             return Err(PlanError::Overlap(at));
         }
 
@@ -348,11 +365,20 @@ pub fn plan(
     //
     // The bounds are the neighbours' own ranges, which is why this waits until
     // every change has been placed.
-    let mut order: Vec<usize> = (0..placed.len()).collect();
-    order.sort_by_key(|&i| placed[i].0);
-    for (position, &i) in order.iter().enumerate() {
-        let floor = position.checked_sub(1).map(|p| placed[order[p]].1).unwrap_or(0);
-        let ceiling = order.get(position + 1).map(|&n| placed[n].0).unwrap_or(usize::MAX);
+    //
+    // A hunk that stands beside them is a neighbour as well (DCP-FR-BFDR). It
+    // sorts after a new change at the same start, so a plan with nothing
+    // standing bounds each context exactly as before.
+    let mut order: Vec<(usize, usize, Option<usize>)> =
+        placed.iter().enumerate().map(|(i, (s, e, _))| (*s, *e, Some(i))).collect();
+    order.extend(standing.iter().map(|(s, e)| (*s, *e, None)));
+    order.sort_by_key(|(start, _, _)| *start);
+    for position in 0..order.len() {
+        let Some(i) = order[position].2 else {
+            continue;
+        };
+        let floor = position.checked_sub(1).map(|p| order[p].1).unwrap_or(0);
+        let ceiling = order.get(position + 1).map(|n| n.0).unwrap_or(usize::MAX);
         let (start, end, hunk) = &mut placed[i];
         hunk.anchor.lead = anchors::lead_context_from(&prompt, *start, floor);
         hunk.anchor.trail = anchors::trail_context_to(&prompt, *end, ceiling);

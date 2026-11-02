@@ -37,7 +37,7 @@ fn the_json_a_model_sends_deserialises_into_the_arguments() {
     assert_eq!(parsed.hunks[0].before.as_deref(), Some(ORIGINAL));
     assert_eq!(parsed.hunks[1].after_text.as_deref(), Some(ORIGINAL));
     assert_eq!(parsed.hunks[2].kind.as_deref(), Some("del"));
-    assert!(parsed.revises.is_none());
+    assert!(parsed.updates.is_none());
 }
 
 // TLC-FR-06: every property the schema publishes is one the arguments read, and
@@ -50,14 +50,16 @@ fn every_published_property_is_read_under_its_own_name() {
     let sent: serde_json::Value = serde_json::json!({
         "path": FILE,
         "rationale": RATIONALE,
-        "revises": "h-1",
+        "updates": [{ "action": "withdraw", "id": "h-1" }],
         "hunks": [{ "kind": "replace", "before": ORIGINAL, "after": PROPOSED, "note": "why" }],
     });
     for key in &top {
         assert!(sent.get(key).is_some(), "the schema publishes `{key}` and nothing sends it");
     }
     let parsed = from_json(sent);
-    assert_eq!(parsed.revises.as_deref(), Some("h-1"));
+    let updates = parsed.updates.expect("updates");
+    assert_eq!(updates[0].action.as_deref(), Some("withdraw"));
+    assert_eq!(updates[0].id.as_deref(), Some("h-1"));
     assert_eq!(parsed.hunks[0].note.as_deref(), Some("why"));
 
     // And the same for each change's own properties: a property the schema
@@ -129,7 +131,7 @@ fn a_refused_call_records_which_refusal_and_the_shape_of_the_arguments() {
     let refused = block_on(f.tool().with_buffer(&PDC_REFUSAL_LOG).call(ProposeDraftChangesArgs {
         path: FILE.into(),
         rationale: RATIONALE.into(),
-        revises: None,
+        updates: None,
         hunks: vec![],
     }))
     .unwrap_err();
@@ -146,7 +148,7 @@ fn a_refused_call_records_which_refusal_and_the_shape_of_the_arguments() {
     assert_eq!(record.fields["refusal"], serde_json::json!("no_changes"));
     // And the shape that produced it.
     assert_eq!(record.fields["hunks"], serde_json::json!(0));
-    assert_eq!(record.fields["revising"], serde_json::json!(false));
+    assert_eq!(record.fields["updates"], serde_json::json!(0));
 }
 
 // PDC-FR-18: the record carries the shape and never the text — not the prompt,
@@ -154,13 +156,13 @@ fn a_refused_call_records_which_refusal_and_the_shape_of_the_arguments() {
 #[test]
 fn a_refused_call_records_no_text_the_model_or_the_author_wrote() {
     let f = Fixture::new();
-    // PDC-FR-GMWR: a name is only wrong where a proposal stands to be wrong
+    // PDC-FR-UOBH: a name is only wrong where a proposal stands to be wrong
     // about, so one is recorded first and the refused call names a change of it
     // that is not there.
     f.call(ProposeDraftChangesArgs {
         path: FILE.into(),
         rationale: RATIONALE.into(),
-        revises: None,
+        updates: None,
         hunks: vec![HunkArg {
             kind: Some("replace".into()),
             before: Some(ORIGINAL.into()),
@@ -177,17 +179,17 @@ fn a_refused_call_records_no_text_the_model_or_the_author_wrote() {
     let secret_after = "A REPLACEMENT NOBODY SHOULD SEE IN A LOG";
     let _ = block_on(f.tool().with_buffer(&PDC_LEAK_LOG).call(ProposeDraftChangesArgs {
         path: FILE.into(),
-        rationale: "A RATIONALE NOBODY SHOULD SEE IN A LOG".into(),
-        revises: Some("no-such-change".into()),
-        hunks: vec![HunkArg {
+        rationale: "A RATIONALE NOBODY SHOULD SEE IN A LOG <spoken>Hidden.</spoken>".into(),
+        updates: Some(vec![UpdateArg {
+            action: Some("change".into()),
+            id: Some("no-such-change".into()),
             kind: Some("replace".into()),
             before: Some(secret_before.into()),
             after: Some(secret_after.into()),
-            after_text: None,
-            lead: None,
-            trail: None,
             note: Some("A NOTE NOBODY SHOULD SEE IN A LOG".into()),
-        }],
+            ..UpdateArg::default()
+        }]),
+        hunks: Vec::new(),
     }));
 
     let rendered = serde_json::to_string(
@@ -210,7 +212,7 @@ fn a_refused_call_records_no_text_the_model_or_the_author_wrote() {
     assert!(rendered.contains("no_such_change"));
     // And never the sentence the model was shown, which is what `reason` and
     // `refusal` exist to stand in for.
-    assert!(!rendered.contains(PROPOSAL_NO_SUCH_CHANGE));
+    assert!(!rendered.contains(UPDATE_NO_SUCH_CHANGE));
 }
 
 // ---------------------------------------------------------------------------

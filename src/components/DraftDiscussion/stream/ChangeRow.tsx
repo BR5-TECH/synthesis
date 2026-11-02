@@ -17,9 +17,11 @@
  */
 import {
   openReview,
+  reviewedHunkTotal,
   undecidedHunks,
   useProposalReference,
 } from "../../../state/draftProposals";
+import { changeCountSummary, updateSummary } from "../../proposalSummary";
 import {
   showPromptProposal,
   usePromptProposalReference,
@@ -27,7 +29,7 @@ import {
 import { setFocusedHunk } from "../../../state/draftDiscussion";
 import { formatRelative } from "../../ProjectPicker";
 import { TypeChip } from "./TypeChip";
-import type { ProposalState } from "../../../types";
+import type { ProposalState, ProposalUpdateCounts } from "../../../types";
 import type { ChangeReference } from "./streamItems";
 
 /**
@@ -74,7 +76,9 @@ function DraftChangeRow({
   return (
     <Row
       path={reference.path}
-      changes={proposal?.hunkCount ?? 0}
+      // DCR-FR-OZVU: a withdrawn change is not counted.
+      changes={proposal ? reviewedHunkTotal(proposal) : 0}
+      update={reference.update}
       state={proposal?.state ?? null}
       gone={read.kind === "gone"}
       createdAt={createdAt}
@@ -109,7 +113,8 @@ function PromptChangeRow({
     <Row
       path={reference.path}
       // PCP-FR-HKLD: a prompt or DOC proposal carries its count of changes.
-      changes={proposal?.hunkCount ?? 0}
+      changes={proposal ? reviewedHunkTotal(proposal) : 0}
+      update={reference.update}
       state={proposal?.state ?? null}
       gone={read.kind === "gone"}
       createdAt={createdAt}
@@ -122,6 +127,7 @@ function PromptChangeRow({
 function Row({
   path,
   changes,
+  update,
   state,
   gone,
   createdAt,
@@ -129,12 +135,17 @@ function Row({
 }: {
   path: string;
   changes: number;
+  /** DCR-FR-OYRR: the counts of the update that appended the comment, if any. */
+  update?: ProposalUpdateCounts;
   state: ProposalState | null;
   gone: boolean;
   createdAt: string;
   onOpen: () => void;
 }) {
   const status = stateWord(state, gone);
+  // DCR-FR-HVXK / DCR-FR-OYRR: the count of changes, or what the update did.
+  const summary =
+    update !== undefined ? updateSummary(update) : changes > 0 ? changeCountSummary(changes) : null;
   return (
     <button
       type="button"
@@ -149,7 +160,7 @@ function Row({
       aria-label={
         status === null
           ? path
-          : `${path}, ${changes} ${changes === 1 ? "change" : "changes"}, ${status.word}`
+          : `${path}, ${summary ?? changeCountSummary(changes)}, ${status.word}`
       }
       // The row truncates a long file name, so the whole of it is readable on
       // hover — the path is what says which artifact the row is about.
@@ -158,11 +169,7 @@ function Row({
     >
       <TypeChip kind="change" />
       <span className="dds-change__path">{path}</span>
-      {changes > 0 && (
-        <span className="dds-change__count">
-          {changes} {changes === 1 ? "change" : "changes"}
-        </span>
-      )}
+      {summary !== null && <span className="dds-change__count">{summary}</span>}
       <span className="dds-stream__spacer" />
       {status !== null && (
         <>

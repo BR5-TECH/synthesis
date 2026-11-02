@@ -25,6 +25,7 @@ enum Call {
     Run(String, Vec<String>),
     Refresh(String),
     Stop(String),
+    Pin(String, String),
 }
 
 /// A sandbox runtime that records every call and answers what it is told.
@@ -51,6 +52,9 @@ struct RecordingSandbox {
     guards: StdMutex<Vec<GuardReport>>,
     /// The `renew` of every guard request, kept apart from `calls`.
     guard_requests: StdMutex<Vec<bool>>,
+    /// Answers for successive gateway pins; `Ok` once the list is empty
+    /// (EAC-FR-WTFH).
+    pins: StdMutex<Vec<Result<(), String>>>,
 }
 
 impl RecordingSandbox {
@@ -165,6 +169,18 @@ impl SandboxRuntime for RecordingSandbox {
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             self.calls.lock().unwrap().push(Call::Stop(vm.to_string()));
+        })
+    }
+
+    fn pin_hosts<'a>(&'a self, vm: &'a str, text: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move {
+            self.calls.lock().unwrap().push(Call::Pin(vm.to_string(), text.to_string()));
+            let mut pins = self.pins.lock().unwrap();
+            if pins.is_empty() {
+                Ok(())
+            } else {
+                pins.remove(0)
+            }
         })
     }
 }
@@ -302,6 +318,7 @@ fn launch<'a>(
         exporter,
         fs: &fx.fs,
         export_root: fx.root.join(EXPORT_CACHE_DIRNAME),
+        gateway: None,
     }
 }
 
@@ -966,4 +983,5 @@ fn another_disk_size_boots_a_new_vm() {
 #[cfg(target_os = "macos")]
 mod catalog_lock;
 mod causes;
+mod gateway;
 mod idle;

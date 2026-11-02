@@ -660,3 +660,80 @@ fn sandbox_real_a_boot_starts_a_catalog_guard_and_a_new_connection_renews_it() {
     assert_eq!(unsafe { libc::kill(earlier, 0) }, -1, "the earlier guard process is gone");
     assert_eq!(field(&first, "boot_id"), field(&second, "boot_id"), "the VM kept running");
 }
+
+/// EAC-FR-RVQE: a resolver that answers one fixed address for every name.
+struct OneAddress(std::net::IpAddr);
+
+impl super::sandbox::gateway::GatewayResolver for OneAddress {
+    fn resolve<'a>(
+        &'a self,
+        _host: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<std::net::IpAddr>, String>> {
+        let address = self.0;
+        Box::pin(async move { Ok(vec![address]) })
+    }
+}
+
+/// This machine's own address on its local network, where it has one.
+fn local_network_address() -> Option<std::net::IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    // No packet is sent: a connect of a UDP socket only picks the route.
+    socket.connect("192.0.2.1:9").ok()?;
+    let address = socket.local_addr().ok()?.ip();
+    (!address.is_loopback() && !address.is_unspecified()).then_some(address)
+}
+
+// EAC-FR-RVQE, EAC-FR-KVBT, EAC-FR-BZPC, EAC-FR-WTFH, EAC-FR-CGCE: with the block
+// switch on and no allowed host, a gateway name that no DNS knows resolves in
+// the guest through its pin and is reached at a local network address, and
+// this machine's alias stays denied. A second turn reuses the VM.
+#[test]
+#[ignore = "needs hardware virtualisation and a Docker daemon"]
+fn sandbox_real_a_pinned_gateway_is_reached_and_other_hosts_are_denied() {
+    use std::io::Write;
+
+    let Some(address) = local_network_address() else {
+        eprintln!("skipped: this machine has no local network address");
+        return;
+    };
+    build_probe_image();
+    let listener = std::net::TcpListener::bind("0.0.0.0:0").expect("a gateway stand-in");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let _ = stream.write_all(b"probe-gateway-token");
+        }
+    });
+
+    let harness = harness_verified_with(
+        "claude_code",
+        Some(VerifyConfig {
+            auth_mode: Some("custom_gateway".into()),
+            gateway_base_url: Some(format!("http://probe-gateway.synthesis.test:{port}")),
+            gateway_token: Some("gw-FAKE-TEST-TOKEN-NOT-A-CREDENTIAL".into()),
+            ..Default::default()
+        }),
+    );
+    let root = tempfile::tempdir().unwrap();
+    repository(root.path(), &harness.workspace(), "gateway", "one\n");
+    let pool = real_pool();
+    let rt = runtime();
+    let _stop = StopOnDrop(&rt, pool.clone());
+    let executor = executor(&harness, microsandbox(), &pool)
+        .with_gateway_resolver(Arc::new(OneAddress(address)));
+    let scope = probe_scope();
+
+    let (first, second) = rt.block_on(async {
+        let first = probe(&executor, &harness, &harness.workspace(), TurnKind::Work, &scope).await;
+        let second = probe(&executor, &harness, &harness.workspace(), TurnKind::Work, &scope).await;
+        (first, second)
+    });
+
+    assert_eq!(field(&first, "gateway_resolves"), "yes", "{first}");
+    assert_eq!(field(&first, "gateway_read"), "probe-gateway-token", "{first}");
+    // The alias resolves, so an empty read is the egress rule denying it.
+    assert_eq!(field(&first, "alias_resolves"), "yes", "{first}");
+    assert_eq!(field(&first, "alias_read"), "", "{first}");
+    assert_eq!(field(&second, "gateway_read"), "probe-gateway-token", "{second}");
+    assert_eq!(field(&first, "boot_id"), field(&second, "boot_id"), "the VM is reused");
+}

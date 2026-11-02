@@ -554,6 +554,9 @@ pub struct AgentCliExecutor {
     /// the verified backend at launch, which is what production does; a test
     /// that binds its own pool names one here or reaches none.
     image_exporter: Option<Arc<dyn sandbox::ImageExporter>>,
+    /// EAC-FR-KVBT: how a gateway name is resolved on this machine. `None` is
+    /// the system resolver, which is what production uses.
+    gateway_resolver: Option<Arc<dyn sandbox::gateway::GatewayResolver>>,
 }
 
 /// EAC-FR-FNFV: what [`AgentCliExecutor::repository_mounts`] grants one launch:
@@ -569,6 +572,7 @@ impl Default for AgentCliExecutor {
             isolation: None,
             sandbox_pool: None,
             image_exporter: None,
+            gateway_resolver: None,
         }
     }
 }
@@ -581,6 +585,7 @@ impl AgentCliExecutor {
             isolation: None,
             sandbox_pool: None,
             image_exporter: None,
+            gateway_resolver: None,
         }
     }
 
@@ -631,6 +636,17 @@ impl AgentCliExecutor {
     #[cfg(test)]
     pub fn with_image_exporter(mut self, exporter: Arc<dyn sandbox::ImageExporter>) -> Self {
         self.image_exporter = Some(exporter);
+        self
+    }
+
+    /// The same executor resolving gateway names through `resolver`
+    /// (EAC-FR-KVBT), for a test.
+    #[cfg(test)]
+    pub fn with_gateway_resolver(
+        mut self,
+        resolver: Arc<dyn sandbox::gateway::GatewayResolver>,
+    ) -> Self {
+        self.gateway_resolver = Some(resolver);
         self
     }
 

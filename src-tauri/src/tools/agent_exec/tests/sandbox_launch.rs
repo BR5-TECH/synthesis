@@ -9,7 +9,7 @@ use super::sandbox::{
     SandboxScope, SandboxSpec,
 };
 use super::*;
-use crate::isolation::{ResolvedIsolation, SandboxSettings};
+use crate::isolation::{AllowedHost, ResolvedIsolation, SandboxSettings};
 
 /// One process the double was asked to run.
 #[derive(Clone, Debug)]
@@ -29,6 +29,8 @@ struct RecordingSandbox {
     boot_error: Option<BootError>,
     boots: StdMutex<Vec<(String, SandboxSpec, BootImage)>>,
     processes: StdMutex<Vec<RecordedProcess>>,
+    /// EAC-FR-WTFH: every hosts text written.
+    pins: StdMutex<Vec<String>>,
 }
 
 impl RecordingSandbox {
@@ -38,6 +40,7 @@ impl RecordingSandbox {
             boot_error: None,
             boots: StdMutex::new(Vec::new()),
             processes: StdMutex::new(Vec::new()),
+            pins: StdMutex::new(Vec::new()),
         })
     }
 
@@ -47,6 +50,7 @@ impl RecordingSandbox {
             boot_error: Some(error),
             boots: StdMutex::new(Vec::new()),
             processes: StdMutex::new(Vec::new()),
+            pins: StdMutex::new(Vec::new()),
         })
     }
 
@@ -132,6 +136,13 @@ impl SandboxRuntime for RecordingSandbox {
 
     fn stop<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {})
+    }
+
+    fn pin_hosts<'a>(&'a self, _vm: &'a str, text: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move {
+            self.pins.lock().unwrap().push(text.to_string());
+            Ok(())
+        })
     }
 }
 
@@ -531,4 +542,322 @@ fn a_link_left_in_the_generated_store_is_never_followed() {
     let config = std::fs::symlink_metadata(first.join("config")).unwrap();
     assert!(config.is_file() && config.len() == 0);
     assert_ne!(crate::fs::probe_directory_identity(&first), before);
+}
+
+// ---------------------------------------------------------------------------
+// EAC-FR-KVBT, EAC-FR-BZPC, EAC-FR-RJDQ, EAC-FR-WTFH: the Custom Gateway
+// ---------------------------------------------------------------------------
+
+use std::net::IpAddr;
+
+use super::sandbox::gateway::GatewayResolver;
+
+const GATEWAY_URL: &str = "https://gateway.corp.example:8443/v1";
+
+/// A resolver that answers what it is told, and records what it was asked.
+struct FixedResolver {
+    answer: Result<Vec<IpAddr>, String>,
+    asked: StdMutex<Vec<String>>,
+    /// Whether the lookup never ends.
+    hangs: bool,
+    /// A run this lookup cancels as it starts.
+    cancels: Option<CancellationToken>,
+}
+
+impl FixedResolver {
+    fn answering(addresses: &[&str]) -> Arc<FixedResolver> {
+        Arc::new(FixedResolver {
+            answer: Ok(addresses.iter().map(|a| a.parse().unwrap()).collect()),
+            asked: StdMutex::new(Vec::new()),
+            hangs: false,
+            cancels: None,
+        })
+    }
+
+    fn failing(message: &str) -> Arc<FixedResolver> {
+        Arc::new(FixedResolver {
+            answer: Err(message.to_string()),
+            asked: StdMutex::new(Vec::new()),
+            hangs: false,
+            cancels: None,
+        })
+    }
+
+    fn hanging() -> Arc<FixedResolver> {
+        Arc::new(FixedResolver {
+            answer: Ok(Vec::new()),
+            asked: StdMutex::new(Vec::new()),
+            hangs: true,
+            cancels: None,
+        })
+    }
+
+    /// A lookup that cancels the run as it starts, and never ends.
+    fn cancelling(token: CancellationToken) -> Arc<FixedResolver> {
+        Arc::new(FixedResolver {
+            answer: Ok(Vec::new()),
+            asked: StdMutex::new(Vec::new()),
+            hangs: true,
+            cancels: Some(token),
+        })
+    }
+}
+
+impl GatewayResolver for FixedResolver {
+    fn resolve<'a>(&'a self, host: &'a str) -> BoxFuture<'a, Result<Vec<IpAddr>, String>> {
+        Box::pin(async move {
+            self.asked.lock().unwrap().push(host.to_string());
+            if let Some(token) = &self.cancels {
+                token.cancel();
+            }
+            if self.hangs {
+                std::future::pending::<()>().await;
+            }
+            self.answer.clone()
+        })
+    }
+}
+
+fn gateway_harness(entries: &[&str]) -> Harness {
+    gateway_harness_at(GATEWAY_URL, entries)
+}
+
+fn gateway_harness_at(url: &str, entries: &[&str]) -> Harness {
+    harness_verified_with(
+        "claude_code",
+        Some(VerifyConfig {
+            auth_mode: Some("custom_gateway".into()),
+            gateway_base_url: Some(url.into()),
+            gateway_token: Some("gw-FAKE-TEST-TOKEN-NOT-A-CREDENTIAL".into()),
+            env_vars: Some(entries.iter().map(|e| e.to_string()).collect()),
+            ..Default::default()
+        }),
+    )
+}
+
+fn isolation(block: bool) -> ResolvedIsolation {
+    match microsandbox() {
+        ResolvedIsolation::Microsandbox(settings) => {
+            ResolvedIsolation::Microsandbox(SandboxSettings {
+                block_local_network: block,
+                ..settings
+            })
+        }
+        other => other,
+    }
+}
+
+fn gateway_launch(
+    harness: &Harness,
+    sandbox: Arc<RecordingSandbox>,
+    resolver: Arc<FixedResolver>,
+    block: bool,
+    cancellation: CancellationToken,
+) -> Result<AgentExecution, AgentExecutionError> {
+    let executor = AgentCliExecutor::new(RecordingRuntime::replying(""))
+        .with_session_state_root(harness.sessions_root())
+        .with_isolation(isolation(block))
+        .with_sandbox_pool(Arc::new(SandboxPool::new(sandbox)))
+        .with_gateway_resolver(resolver);
+    block_on(executor.execute_agent_cli(
+        &Silent,
+        &harness.context(),
+        AgentExecutionRequest {
+            sandbox_scope: scope(),
+            turn_kind: TurnKind::Work,
+            execution_directory: harness.workspace(),
+            task: task("go"),
+            cancellation,
+            activity: None,
+            durable_output: None,
+            supplementary_mount: None,
+        },
+    ))
+}
+
+fn ips(addresses: &[&str]) -> Vec<IpAddr> {
+    addresses.iter().map(|a| a.parse().unwrap()).collect()
+}
+
+// EAC-FR-KVBT, EAC-FR-BZPC, EAC-FR-RJDQ, EAC-FR-WTFH: a gateway name is resolved
+// on this machine; with the block switch on, each address that is not public
+// is allowed; every address but loopback is pinned in the guest.
+#[test]
+fn a_private_gateway_is_resolved_here_allowed_and_pinned() {
+    let harness = gateway_harness(&[]);
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    let resolver = FixedResolver::answering(&["52.1.1.1", "10.1.2.3", "127.0.0.1"]);
+    let execution =
+        gateway_launch(&harness, sandbox.clone(), resolver.clone(), true, CancellationToken::new())
+            .expect("runs");
+    assert_eq!(execution.process_outcome, ProcessOutcome::Completed);
+    assert_eq!(*resolver.asked.lock().unwrap(), vec!["gateway.corp.example".to_string()]);
+    assert_eq!(sandbox.only_boot().network.gateway_addresses, ips(&["10.1.2.3"]));
+    assert_eq!(
+        *sandbox.pins.lock().unwrap(),
+        vec!["10.1.2.3 gateway.corp.example # synthesis-gateway\n\
+             52.1.1.1 gateway.corp.example # synthesis-gateway\n"
+            .to_string()]
+    );
+    sandbox.only_process();
+
+    // EAC-FR-BZPC: with the switch off nothing is allowed, and the name is still
+    // pinned.
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    gateway_launch(
+        &harness,
+        sandbox.clone(),
+        FixedResolver::answering(&["10.1.2.3"]),
+        false,
+        CancellationToken::new(),
+    )
+    .expect("runs");
+    assert!(sandbox.only_boot().network.gateway_addresses.is_empty());
+    assert_eq!(sandbox.pins.lock().unwrap().len(), 1);
+}
+
+// EAC-FR-KVBT: the URL is read from the final environment, so an author entry
+// that replaces it names the host that is resolved.
+#[test]
+fn the_final_environment_names_the_gateway() {
+    let harness = gateway_harness(&["ANTHROPIC_BEDROCK_BASE_URL=https://other.corp.example"]);
+    let resolver = FixedResolver::answering(&["10.9.9.9"]);
+    gateway_launch(
+        &harness,
+        RecordingSandbox::replying(&valid_claude_stdout()),
+        resolver.clone(),
+        true,
+        CancellationToken::new(),
+    )
+    .expect("runs");
+    assert_eq!(*resolver.asked.lock().unwrap(), vec!["other.corp.example".to_string()]);
+}
+
+// EAC-FR-RJDQ: a lookup that fails, or that leaves only loopback, fails the
+// launch with `gateway_unresolved` before the VM is touched.
+#[test]
+fn an_unresolved_gateway_fails_before_the_vm_is_touched() {
+    let harness = gateway_harness(&[]);
+    for resolver in
+        [FixedResolver::failing("no such host"), FixedResolver::answering(&["127.0.0.1"])]
+    {
+        let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+        let error =
+            gateway_launch(&harness, sandbox.clone(), resolver, true, CancellationToken::new())
+                .expect_err("refused");
+        match error {
+            AgentExecutionError::SandboxLaunchFailed(failure) => {
+                assert_eq!(failure.cause, SandboxFailureCause::GatewayUnresolved);
+                assert!(
+                    failure.message.starts_with("gateway.corp.example: "),
+                    "{}",
+                    failure.message
+                );
+            }
+            other => panic!("expected a sandbox failure, got {other:?}"),
+        }
+        assert!(sandbox.boots.lock().unwrap().is_empty());
+        assert!(sandbox.processes.lock().unwrap().is_empty());
+    }
+}
+
+// EAC-FR-KVBT, EAC-FR-MIQG: a run cancelled during the lookup ends cancelled,
+// and boots nothing.
+#[test]
+fn a_run_cancelled_during_the_lookup_ends_cancelled() {
+    let harness = gateway_harness(&[]);
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    let execution =
+        gateway_launch(&harness, sandbox.clone(), FixedResolver::hanging(), true, cancellation)
+            .expect("a cancelled turn is an execution");
+    assert_eq!(execution.process_outcome, ProcessOutcome::Cancelled);
+    assert!(sandbox.boots.lock().unwrap().is_empty());
+}
+
+// EAC-FR-KVBT: a launch with no Custom Gateway looks nothing up and pins
+// nothing.
+#[test]
+fn a_subscription_launch_looks_nothing_up() {
+    let harness = harness_for("claude_code");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    let resolver = FixedResolver::answering(&["10.1.2.3"]);
+    gateway_launch(&harness, sandbox.clone(), resolver.clone(), true, CancellationToken::new())
+        .expect("runs");
+    assert!(resolver.asked.lock().unwrap().is_empty());
+    assert!(sandbox.pins.lock().unwrap().is_empty());
+    assert!(sandbox.only_boot().network.gateway_addresses.is_empty());
+}
+
+// EAC-FR-KVBT, EAC-FR-MIQG: a run cancelled while the lookup runs ends
+// cancelled, and boots nothing.
+#[test]
+fn a_run_cancelled_while_the_lookup_runs_ends_cancelled() {
+    let harness = gateway_harness(&[]);
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    let cancellation = CancellationToken::new();
+    let resolver = FixedResolver::cancelling(cancellation.clone());
+    let execution = gateway_launch(&harness, sandbox.clone(), resolver.clone(), true, cancellation)
+        .expect("a cancelled turn is an execution");
+    assert_eq!(*resolver.asked.lock().unwrap(), vec!["gateway.corp.example".to_string()]);
+    assert_eq!(execution.process_outcome, ProcessOutcome::Cancelled);
+    assert!(sandbox.boots.lock().unwrap().is_empty());
+}
+
+// EAC-FR-BZPC: an IP gateway gets an address rule and no lookup; this
+// machine's alias allows this machine; `localhost` and an unreadable URL add
+// nothing; a name with public addresses only gets no rule and is pinned.
+#[test]
+fn each_gateway_form_adds_what_it_names() {
+    let launch_with = |harness: Harness, block: bool, answers: &[&str]| {
+        let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+        let resolver = FixedResolver::answering(answers);
+        let execution = gateway_launch(
+            &harness,
+            sandbox.clone(),
+            resolver.clone(),
+            block,
+            CancellationToken::new(),
+        )
+        .expect("runs");
+        assert_eq!(execution.process_outcome, ProcessOutcome::Completed);
+        let asked = resolver.asked.lock().unwrap().clone();
+        let pins = sandbox.pins.lock().unwrap().clone();
+        (sandbox.only_boot().network, asked, pins)
+    };
+    let launch_at = |url: &str, block: bool, answers: &[&str]| {
+        launch_with(gateway_harness_at(url, &[]), block, answers)
+    };
+
+    let (network, asked, pins) = launch_at("http://10.1.2.3:4000", true, &[]);
+    assert_eq!(network.gateway_addresses, ips(&["10.1.2.3"]));
+    assert!(asked.is_empty() && pins.is_empty());
+
+    let (network, asked, _) = launch_at("http://52.1.1.1:4000", true, &[]);
+    assert!(network.gateway_addresses.is_empty() && asked.is_empty());
+
+    let (network, asked, pins) = launch_at("http://host.microsandbox.internal:4000", true, &[]);
+    assert!(network.allowed.contains(&AllowedHost::HostMachine));
+    assert!(asked.is_empty() && pins.is_empty());
+    let (network, _, _) = launch_at("http://host.microsandbox.internal:4000", false, &[]);
+    assert!(!network.allowed.contains(&AllowedHost::HostMachine));
+
+    // An unreadable URL can come only from an author entry, which verify does
+    // not parse.
+    let unreadable = || gateway_harness(&["ANTHROPIC_BEDROCK_BASE_URL=not-a-url"]);
+    for (url, harness) in [
+        ("localhost", gateway_harness_at("http://localhost:4000", &[])),
+        ("loopback", gateway_harness_at("http://127.0.0.1:4000", &[])),
+        ("unreadable", unreadable()),
+    ] {
+        let (network, asked, pins) = launch_with(harness, true, &["10.1.2.3"]);
+        assert!(network.gateway_addresses.is_empty() && network.allowed.is_empty(), "{url}");
+        assert!(asked.is_empty() && pins.is_empty(), "{url}");
+    }
+
+    let (network, asked, pins) = launch_at(GATEWAY_URL, true, &["52.1.1.1"]);
+    assert!(network.gateway_addresses.is_empty());
+    assert_eq!(asked, vec!["gateway.corp.example".to_string()]);
+    assert_eq!(pins, vec!["52.1.1.1 gateway.corp.example # synthesis-gateway\n".to_string()]);
 }

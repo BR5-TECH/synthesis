@@ -491,9 +491,10 @@ export function IsolationSettings() {
               </p>
             )}
             <p className="t-ui-xs t-muted" data-testid="isolation-gateway-warning" style={{ marginTop: 8 }}>
-              A Custom Gateway whose address is localhost or a local network
-              address is blocked until you add its host to this list. The
-              application does not add the gateway host for you.
+              Your Custom Gateway is always reachable: the application adds its
+              host for you. Add every other local host the agent needs to this
+              list. Inside a sandbox, localhost is the sandbox itself, not this
+              computer.
             </p>
           </fieldset>
         </>

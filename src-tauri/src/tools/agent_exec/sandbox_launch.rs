@@ -7,12 +7,13 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use super::sandbox::gateway::{self, GatewayEndpoint, GatewayRoute};
 use super::sandbox::{
     self, ImageExporter, SandboxLaunch, SandboxLaunchError, SandboxMount, SandboxPool,
     SandboxProcess, SandboxSpec,
 };
 use super::*;
-use crate::isolation::{ResolvedIsolation, SandboxSettings};
+use crate::isolation::{AllowedHost, ResolvedIsolation, SandboxSettings};
 
 /// The program an invocation activity names for a sandbox launch (EAC-FR-34).
 pub(super) const SANDBOX_PROGRAM: &str = "microsandbox";
@@ -30,6 +31,17 @@ pub(super) struct SandboxRun<'a> {
     pub timeout: Duration,
     pub cancel: runtime::CancellationToken,
     pub observer: &'a dyn runtime::StreamObserver,
+}
+
+/// EAC-FR-BZPC / EAC-FR-WTFH: what the Custom Gateway of a launch adds to it.
+#[derive(Default)]
+struct GatewayPlan {
+    /// `host.microsandbox.internal`: this machine is allowed.
+    allowed: Option<AllowedHost>,
+    /// The gateway addresses that are not public, with the block switch on.
+    addresses: Vec<std::net::IpAddr>,
+    /// The resolved name the guest pins.
+    route: Option<GatewayRoute>,
 }
 
 impl AgentCliExecutor {
@@ -142,8 +154,20 @@ impl AgentCliExecutor {
             .collect();
         // EAC-FR-KTWO: the host user owns what the mounts show, and the
         // process runs as that user.
-        let spec =
+        let mut spec =
             SandboxSpec::new(run.image.to_string(), run.container.user(), run.settings, mounts);
+        // EAC-FR-KVBT / EAC-FR-BZPC / EAC-FR-RJDQ: the gateway is resolved on this
+        // machine before the VM is touched.
+        let gateway = match self.plan_gateway(sink, run.env, run.settings, &run.cancel).await? {
+            Some(plan) => plan,
+            None => return Ok(sandbox::cancelled_outcome()),
+        };
+        spec.network.gateway_addresses = gateway.addresses.clone();
+        if let Some(host) = gateway.allowed.clone() {
+            spec.network.allowed.push(host);
+            spec.network.allowed.sort();
+            spec.network.allowed.dedup();
+        }
         // EAC-FR-15: every value on this process alone. The literals are paths
         // and names this application chose, never a secret.
         let mut env: Vec<(String, SecretString)> = run
@@ -162,6 +186,7 @@ impl AgentCliExecutor {
             exporter: self.image_exporter(context.store),
             fs: context.fs,
             export_root: self.export_root()?,
+            gateway: gateway.route.as_ref(),
         };
         let process = SandboxProcess {
             vendor_args: &run.container.vendor_args,
@@ -194,6 +219,8 @@ impl AgentCliExecutor {
                 "mounts" => spec.mounts.len(),
                 "block_local_network" => spec.network.block_local_network,
                 "allowed_hosts" => spec.network.allowed.len(),
+                "gateway_host" => gateway.route.as_ref().map(|route| route.host.clone()),
+                "gateway_addresses" => spec.network.gateway_addresses.len(),
             },
         );
         self.pool().launch(sink, launch, process).await.map_err(|error| match error {
@@ -214,4 +241,118 @@ impl AgentCliExecutor {
             }
         })
     }
+
+    /// EAC-FR-KVBT / EAC-FR-BZPC / EAC-FR-RJDQ: what the gateway of this launch
+    /// adds to its VM. `Ok(None)` where the run was cancelled during the lookup.
+    async fn plan_gateway<S>(
+        &self,
+        sink: &S,
+        env: &BTreeMap<String, SecretString>,
+        settings: &SandboxSettings,
+        cancel: &runtime::CancellationToken,
+    ) -> Result<Option<GatewayPlan>, AgentExecutionError>
+    where
+        S: LogSink + Clone + Send + Sync + 'static,
+    {
+        let block = settings.block_local_network;
+        let mut plan = GatewayPlan::default();
+        let endpoint = match gateway::endpoint_of(env) {
+            Ok(endpoint) => endpoint,
+            Err(_) => {
+                logging::log_warn(
+                    sink,
+                    &BUFFER,
+                    &[Domain::Ai, Domain::Backend],
+                    "sandbox gateway URL could not be read, so nothing is added for it",
+                    log_fields! {},
+                );
+                None
+            }
+        };
+        match endpoint {
+            None => {}
+            Some(GatewayEndpoint::Loopback) => {
+                logging::log_warn(
+                    sink,
+                    &BUFFER,
+                    &[Domain::Ai, Domain::Backend],
+                    "sandbox gateway URL names localhost, which in a VM is the VM itself",
+                    log_fields! {},
+                );
+            }
+            Some(GatewayEndpoint::HostMachine) if block => {
+                plan.allowed = Some(AllowedHost::HostMachine);
+            }
+            Some(GatewayEndpoint::Address(address)) if block && !gateway::is_public(address) => {
+                plan.addresses = vec![address];
+            }
+            Some(GatewayEndpoint::HostMachine | GatewayEndpoint::Address(_)) => {}
+            Some(GatewayEndpoint::Name(host)) => {
+                let resolver: Arc<dyn gateway::GatewayResolver> = match &self.gateway_resolver {
+                    Some(resolver) => resolver.clone(),
+                    None => Arc::new(gateway::SystemResolver),
+                };
+                let lookup = tokio::time::timeout(gateway::LOOKUP_BOUND, resolver.resolve(&host));
+                let answered = tokio::select! {
+                    biased;
+                    () = sandbox::until_cancelled(cancel) => return Ok(None),
+                    answered = lookup => answered,
+                };
+                let addresses = match answered {
+                    Ok(Ok(answers)) => gateway::usable_addresses(answers),
+                    Ok(Err(message)) => return Err(unresolved(sink, &host, &message)),
+                    Err(_) => {
+                        return Err(unresolved(
+                            sink,
+                            &host,
+                            "the lookup did not end within 15 seconds",
+                        ))
+                    }
+                };
+                if addresses.is_empty() {
+                    return Err(unresolved(sink, &host, "the lookup gave no usable address"));
+                }
+                if block {
+                    plan.addresses =
+                        addresses.iter().copied().filter(|a| !gateway::is_public(*a)).collect();
+                }
+                logging::log_info(
+                    sink,
+                    &BUFFER,
+                    &[Domain::Ai, Domain::Backend],
+                    "sandbox gateway resolved on this machine",
+                    log_fields! {
+                        "gateway_host" => host.as_str(),
+                        "addresses" => addresses.len(),
+                        "allowed_addresses" => plan.addresses.len(),
+                    },
+                );
+                plan.route = Some(GatewayRoute { host, addresses });
+            }
+        }
+        Ok(Some(plan))
+    }
+}
+
+/// EAC-FR-RJDQ: a gateway name that could not be resolved, as the launch
+/// failure that names it.
+fn unresolved<S>(sink: &S, host: &str, message: &str) -> AgentExecutionError
+where
+    S: LogSink + Clone + Send + Sync + 'static,
+{
+    let message = format!("{host}: {message}");
+    logging::log_error(
+        sink,
+        &BUFFER,
+        &[Domain::Ai, Domain::Backend],
+        "sandbox VM could not be established",
+        log_fields! {
+            "cause" => sandbox::SandboxFailureCause::GatewayUnresolved.as_str(),
+            "message" => message.as_str(),
+        },
+    );
+    AgentExecutionError::SandboxLaunchFailed(sandbox::SandboxFailure {
+        cause: sandbox::SandboxFailureCause::GatewayUnresolved,
+        message,
+    })
 }

@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::runtime::{
@@ -32,6 +32,7 @@ mod catalog;
 #[cfg(target_os = "macos")]
 pub mod catalog_guard;
 pub use catalog::{GuardEnd, GuardOutcome, GuardReport};
+pub mod gateway;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod micro;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -80,6 +81,10 @@ pub struct SandboxNetwork {
     pub block_local_network: bool,
     /// Sorted and without repeats.
     pub allowed: Vec<AllowedHost>,
+    /// EAC-FR-BZPC: the gateway addresses that are not public, each allowed by
+    /// an address rule. Sorted, without repeats, and empty with the block
+    /// switch off. Compared by EAC-FR-LYGN rather than by equality.
+    pub gateway_addresses: Vec<std::net::IpAddr>,
 }
 
 /// Everything a VM boots with (EAC-FR-UEFI). Two launches whose specs are
@@ -119,6 +124,7 @@ impl SandboxSpec {
             network: SandboxNetwork {
                 block_local_network: settings.block_local_network,
                 allowed: settings.allowed.clone(),
+                gateway_addresses: Vec::new(),
             },
         }
     }
@@ -155,6 +161,7 @@ pub enum SandboxFailureCause {
     ImageExportFailed,
     ImageLoadFailed,
     RuntimeCatalogFailed,
+    GatewayUnresolved,
     InsufficientMemory,
     BootFailed,
 }
@@ -168,6 +175,7 @@ impl SandboxFailureCause {
             SandboxFailureCause::ImageExportFailed => "image_export_failed",
             SandboxFailureCause::ImageLoadFailed => "image_load_failed",
             SandboxFailureCause::RuntimeCatalogFailed => "runtime_catalog_failed",
+            SandboxFailureCause::GatewayUnresolved => "gateway_unresolved",
             SandboxFailureCause::InsufficientMemory => "insufficient_memory",
             SandboxFailureCause::BootFailed => "boot_failed",
         }
@@ -193,6 +201,9 @@ impl SandboxFailureCause {
             }
             SandboxFailureCause::RuntimeCatalogFailed => {
                 "the sandbox runtime could not read its own catalog"
+            }
+            SandboxFailureCause::GatewayUnresolved => {
+                "the host of the Custom Gateway could not be resolved on this machine"
             }
             SandboxFailureCause::InsufficientMemory => {
                 "there is not enough memory for the configured RAM"
@@ -287,6 +298,12 @@ pub trait SandboxRuntime: Send + Sync {
     /// Stop and remove `vm`. A VM that is not there is not an error.
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()>;
 
+    /// EAC-FR-WTFH: replace the lines of the guest `/etc/hosts` that the
+    /// executor owns with `text`, as root.
+    fn pin_hosts<'a>(&'a self, _vm: &'a str, _text: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// EAC-FR-NDDZ: keep a catalog guard running beside the catalog
     /// connection. `renew` ends the earlier guard and starts a new one. A
     /// runtime that needs no guard reports `NotNeeded`.
@@ -324,6 +341,8 @@ struct Booted {
     identities: Vec<Option<(u64, u64)>>,
     /// The stop epoch it booted in (EAC-FR-ABHG).
     epoch: u64,
+    /// EAC-FR-WTFH: the hosts text last written to the VM.
+    pins: Option<String>,
 }
 
 /// One VM's slot. Held for the whole of a launch, so launches of one scope run
@@ -355,6 +374,8 @@ pub struct SandboxLaunch<'a> {
     pub fs: &'a FsAccess,
     /// EAC-FR-IGBY: where exports are kept.
     pub export_root: PathBuf,
+    /// EAC-FR-WTFH: the resolved gateway name the guest pins, if any.
+    pub gateway: Option<&'a gateway::GatewayRoute>,
 }
 
 /// How a sandbox launch failed.
@@ -443,6 +464,21 @@ impl SandboxPool {
                 decision = Reuse::No("refresh_failed");
             }
         }
+        if matches!(decision, Reuse::Yes) {
+            // EAC-FR-XDTN: a reused VM whose pin cannot be written is rebooted.
+            if let Some(slot) = booted.as_mut() {
+                if let Err(message) = self.pin(launch.vm, &launch, slot).await {
+                    logging::log_warn(
+                        sink,
+                        &BUFFER,
+                        &DOMAINS,
+                        "sandbox gateway pin could not be written",
+                        log_fields! { "vm" => launch.vm, "message" => message.as_str() },
+                    );
+                    decision = Reuse::No("pin_failed");
+                }
+            }
+        }
         match decision {
             Reuse::Yes => {
                 logging::log_info(
@@ -485,7 +521,20 @@ impl SandboxPool {
                     self.runtime.stop(launch.vm).await;
                     return Ok(cancelled_outcome());
                 }
-                *booted = Some(Booted { spec: launch.spec.clone(), identities, epoch });
+                let mut fresh = Booted { spec: launch.spec.clone(), identities, epoch, pins: None };
+                // EAC-FR-XDTN: a VM that this launch booted and cannot pin is
+                // stopped, and the launch fails.
+                if let Err(message) = self.pin(launch.vm, &launch, &mut fresh).await {
+                    self.runtime.stop(launch.vm).await;
+                    return Err(self.failed(
+                        sink,
+                        launch.vm,
+                        &launch.spec.image,
+                        SandboxFailureCause::BootFailed,
+                        format!("the gateway pin could not be written: {message}"),
+                    ));
+                }
+                *booted = Some(fresh);
             }
         }
         let outcome = self.runtime.run(launch.vm, process).await;
@@ -713,9 +762,36 @@ impl SandboxPool {
         }
     }
 
+    /// EAC-FR-WTFH / EAC-FR-LYGN: write the gateway pin of `launch`, where it
+    /// differs from what the VM holds. A reused VM pins public addresses and
+    /// the addresses it booted with only, because its egress rules are those of
+    /// its boot.
+    async fn pin(
+        &self,
+        vm: &str,
+        launch: &SandboxLaunch<'_>,
+        booted: &mut Booted,
+    ) -> Result<(), String> {
+        let Some(route) = launch.gateway else {
+            return Ok(());
+        };
+        let network = &booted.spec.network;
+        let text = route.hosts_text(|address| {
+            !network.block_local_network
+                || gateway::is_public(address)
+                || network.gateway_addresses.contains(&address)
+        });
+        if booted.pins.as_deref() == Some(text.as_str()) {
+            return Ok(());
+        }
+        self.runtime.pin_hosts(vm, &text).await?;
+        booted.pins = Some(text);
+        Ok(())
+    }
+
     /// EAC-FR-FUNB: every failure is an `ERROR` naming the cause and the
     /// runtime's own message.
-    fn failed<S>(
+    pub(super) fn failed<S>(
         &self,
         sink: &S,
         vm: &str,
@@ -820,8 +896,17 @@ fn reuse(
     let Some(booted) = booted else {
         return Reuse::Empty;
     };
-    if booted.epoch != epoch || &booted.spec != launch.spec {
+    if booted.epoch != epoch || !equal_apart_from_gateway(&booted.spec, launch.spec) {
         return Reuse::No("changed_spec");
+    }
+    // EAC-FR-LYGN: the egress rules are those of the boot, so a VM is reused
+    // only where it can reach a wanted gateway address.
+    let (had, wants) =
+        (&booted.spec.network.gateway_addresses, &launch.spec.network.gateway_addresses);
+    let reachable =
+        (had.is_empty() && wants.is_empty()) || wants.iter().any(|address| had.contains(address));
+    if !reachable {
+        return Reuse::No("changed_gateway");
     }
     if matches!(launch.turn_kind, TurnKind::Review | TurnKind::MergeReview) {
         return Reuse::No("fresh_checkout");
@@ -832,6 +917,13 @@ fn reuse(
         return Reuse::No("changed_directory");
     }
     Reuse::Yes
+}
+
+/// EAC-FR-UEFI: two specs that are equal in all but their gateway addresses.
+fn equal_apart_from_gateway(a: &SandboxSpec, b: &SandboxSpec) -> bool {
+    let mut b = b.clone();
+    b.network.gateway_addresses = a.network.gateway_addresses.clone();
+    *a == b
 }
 
 /// EAC-FR-HXDN: the identity of each read/write mount source, in the order of
@@ -845,7 +937,7 @@ fn source_identities(spec: &SandboxSpec) -> Vec<Option<(u64, u64)>> {
 }
 
 /// EAC-FR-MIQG: ends when `cancel` is cancelled, and never before.
-async fn until_cancelled(cancel: &CancellationToken) {
+pub(super) async fn until_cancelled(cancel: &CancellationToken) {
     while !cancel.is_cancelled() {
         tokio::time::sleep(CANCEL_POLL).await;
     }
@@ -853,7 +945,7 @@ async fn until_cancelled(cancel: &CancellationToken) {
 
 /// EAC-FR-MIQG: the outcome of a launch cancelled before its process started.
 /// It carries no output, so its `response` is null (EAC-FR-25).
-fn cancelled_outcome() -> RuntimeOutcome {
+pub(super) fn cancelled_outcome() -> RuntimeOutcome {
     RuntimeOutcome {
         end: RunEnd::Cancelled,
         exit_code: None,
@@ -869,82 +961,8 @@ pub fn vm_name(project_key: &str, scope: &SandboxScope) -> String {
     format!("synthesis-{}", &digest[..20])
 }
 
-// ---------------------------------------------------------------------------
-// The production pool (EAC-FR-HMBJ, EAC-FR-ABHG)
-// ---------------------------------------------------------------------------
-
-/// The one pool a shipped build launches through, created on first use.
-pub fn production_pool() -> &'static SandboxPool {
-    static POOL: OnceLock<SandboxPool> = OnceLock::new();
-    POOL.get_or_init(|| SandboxPool::new(production_runtime()))
-}
-
-/// Linux and macOS: the embedded microsandbox runtime.
-#[cfg(all(not(test), any(target_os = "linux", target_os = "macos")))]
-fn production_runtime() -> Arc<dyn SandboxRuntime> {
-    Arc::new(micro::MicrosandboxRuntime::default())
-}
-
-/// Every other build, and every test build: no VM can be booted, so every
-/// sandbox launch reports `unsupported_host` (EAC-FR-HMBJ). A test binds its own
-/// double through [`super::AgentCliExecutor::with_sandbox_pool`].
-#[cfg(any(test, not(any(target_os = "linux", target_os = "macos"))))]
-fn production_runtime() -> Arc<dyn SandboxRuntime> {
-    Arc::new(NoSandbox)
-}
-
-#[cfg(any(test, not(any(target_os = "linux", target_os = "macos"))))]
-struct NoSandbox;
-
-#[cfg(any(test, not(any(target_os = "linux", target_os = "macos"))))]
-impl SandboxRuntime for NoSandbox {
-    fn boot<'a>(
-        &'a self,
-        _vm: &'a str,
-        _spec: &'a SandboxSpec,
-        _image: &'a BootImage,
-    ) -> BoxFuture<'a, Result<(), BootError>> {
-        Box::pin(async move {
-            Err(BootError::Failed(
-                SandboxFailureCause::UnsupportedHost,
-                "this build holds no microsandbox runtime".to_string(),
-            ))
-        })
-    }
-
-    fn load_export<'a>(
-        &'a self,
-        _archive: &'a Path,
-        _reference: &'a str,
-    ) -> BoxFuture<'a, Result<(), BootError>> {
-        Box::pin(async move {
-            Err(BootError::Failed(
-                SandboxFailureCause::UnsupportedHost,
-                "this build holds no microsandbox runtime".to_string(),
-            ))
-        })
-    }
-
-    fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>> {
-        Box::pin(async move { Err("this build holds no microsandbox runtime".to_string()) })
-    }
-
-    fn run<'a>(
-        &'a self,
-        _vm: &'a str,
-        _process: SandboxProcess<'a>,
-    ) -> BoxFuture<'a, Result<RuntimeOutcome, RuntimeError>> {
-        Box::pin(async move { Err(RuntimeError::Unavailable) })
-    }
-
-    fn refresh<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, Result<(), String>> {
-        Box::pin(async move { Err("this build holds no microsandbox runtime".to_string()) })
-    }
-
-    fn stop<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, ()> {
-        Box::pin(async move {})
-    }
-}
+mod production;
+pub use production::production_pool;
 
 #[cfg(test)]
 mod tests;

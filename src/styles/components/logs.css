@@ -587,3 +587,30 @@
 .docker-in-docker__note {
   margin-top: 0;
 }
+/* SET-FR-PMHB: the choice under Microsandbox, each with its trade-off. */
+.docker-in-docker__choices {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--sp-3);
+}
+.docker-in-docker__legend {
+  padding: 0;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.docker-in-docker__choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.docker-in-docker__choice input {
+  margin-top: 3px;
+}
+.docker-in-docker__choice-label {
+  display: block;
+}

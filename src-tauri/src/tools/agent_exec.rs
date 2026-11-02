@@ -488,6 +488,22 @@ pub struct DockerInDockerLaunch {
     /// default where the stored path is empty.
     pub socket_path: String,
     pub host_gateway: bool,
+    /// PSS-FR-DIND: how the launch gets Docker where the isolation is
+    /// Microsandbox (EAC-FR-SNMS, EAC-FR-QMRW).
+    pub under_microsandbox: crate::project_settings::UnderMicrosandbox,
+}
+
+/// EAC-FR-DKRS / PSS-FR-MTJE: the settings the application read hand the launch
+/// every value it needs, the Microsandbox choice included (EAC-FR-SNMS).
+impl From<crate::project_settings::EffectiveDockerInDocker> for DockerInDockerLaunch {
+    fn from(read: crate::project_settings::EffectiveDockerInDocker) -> Self {
+        DockerInDockerLaunch {
+            enabled: read.enabled,
+            socket_path: read.effective_socket_path,
+            host_gateway: read.host_gateway,
+            under_microsandbox: read.under_microsandbox,
+        }
+    }
 }
 
 /// EAC-FR-38: the image the open project commits for a vendor.

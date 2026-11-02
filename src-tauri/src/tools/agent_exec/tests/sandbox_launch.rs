@@ -31,6 +31,10 @@ struct RecordingSandbox {
     processes: StdMutex<Vec<RecordedProcess>>,
     /// EAC-FR-WTFH: every hosts text written.
     pins: StdMutex<Vec<String>>,
+    /// EAC-FR-QMRW: the group of every daemon start.
+    daemons: StdMutex<Vec<u32>>,
+    /// EAC-FR-ZPTA: the answer of every daemon start; `None` succeeds.
+    daemon_error: Option<String>,
 }
 
 impl RecordingSandbox {
@@ -41,6 +45,8 @@ impl RecordingSandbox {
             boots: StdMutex::new(Vec::new()),
             processes: StdMutex::new(Vec::new()),
             pins: StdMutex::new(Vec::new()),
+            daemons: StdMutex::new(Vec::new()),
+            daemon_error: None,
         })
     }
 
@@ -51,6 +57,8 @@ impl RecordingSandbox {
             boots: StdMutex::new(Vec::new()),
             processes: StdMutex::new(Vec::new()),
             pins: StdMutex::new(Vec::new()),
+            daemons: StdMutex::new(Vec::new()),
+            daemon_error: None,
         })
     }
 
@@ -142,6 +150,20 @@ impl SandboxRuntime for RecordingSandbox {
         Box::pin(async move {
             self.pins.lock().unwrap().push(text.to_string());
             Ok(())
+        })
+    }
+
+    fn start_docker_daemon<'a>(
+        &'a self,
+        _vm: &'a str,
+        group: u32,
+    ) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move {
+            self.daemons.lock().unwrap().push(group);
+            match &self.daemon_error {
+                Some(error) => Err(error.clone()),
+                None => Ok(()),
+            }
         })
     }
 }
@@ -357,31 +379,6 @@ fn a_generated_store_drops_what_a_turn_added_and_keeps_its_mount_points() {
     assert!(generated.join("HEAD").is_file());
     assert_eq!(crate::fs::probe_directory_identity(&generated), before);
     assert_eq!(crate::fs::probe_directory_identity(&generated.join("objects")), objects);
-}
-
-/// EAC-FR-DARS: under Microsandbox, Docker-in-Docker adds nothing and its
-/// socket check does not run, so a missing socket refuses nothing.
-#[test]
-fn docker_in_docker_is_ignored_in_the_vm() {
-    let mut harness = harness_for("claude_code");
-    harness.docker_in_docker = DockerInDockerLaunch {
-        enabled: true,
-        socket_path: "/does/not/exist.sock".to_string(),
-        host_gateway: true,
-    };
-    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
-    launch(
-        &harness,
-        RecordingRuntime::replying(""),
-        sandbox.clone(),
-        microsandbox(),
-        scope(),
-        TurnKind::Work,
-    )
-    .expect("a missing socket refuses nothing in the VM");
-    let spec = sandbox.only_boot();
-    assert!(spec.mounts.iter().all(|m| !m.target.contains("docker.sock")));
-    assert!(!sandbox.only_process().env.contains_key("TESTCONTAINERS_HOST_OVERRIDE"));
 }
 
 /// EAC-FR-SNMS, EAC-FR-QYBJ: isolation `none`, a launch with no scope, and a
@@ -861,3 +858,6 @@ fn each_gateway_form_adds_what_it_names() {
     assert_eq!(asked, vec!["gateway.corp.example".to_string()]);
     assert_eq!(pins, vec!["52.1.1.1 gateway.corp.example # synthesis-gateway\n".to_string()]);
 }
+
+#[path = "sandbox_launch_docker.rs"]
+mod docker;

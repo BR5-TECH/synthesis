@@ -10,7 +10,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-import { ProjectDockerInDocker } from "./ProjectDockerInDocker";
+import { ProjectDockerInDocker, dockerInDockerRefusalMessage } from "./ProjectDockerInDocker";
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
@@ -18,6 +18,7 @@ const state = (patch: Partial<DockerInDockerState> = {}): DockerInDockerState =>
   enabled: false,
   socketPath: "",
   hostGateway: false,
+  underMicrosandbox: "vm_daemon",
   defaultSocketPath: "/var/run/docker.sock",
   support: "supported",
   ...patch,
@@ -69,21 +70,136 @@ afterEach(cleanup);
 const checkbox = () => screen.findByRole("checkbox", { name: "Docker-in-Docker" });
 
 describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-JMHE, SET-FR-PQLA)", () => {
-  it("SET-FR-PMHB: under Microsandbox the section states that the setting is ignored, and the checkbox stays editable", async () => {
+  it("SET-FR-PMHB: under Microsandbox with the checkbox off, no selector shows, and the checkbox stays editable", async () => {
     isolationMode = "microsandbox";
     render(<ProjectDockerInDocker />);
-    expect(await screen.findByText(/so this setting is\s+ignored/)).toBeInTheDocument();
     const box = await checkbox();
+    await waitFor(() => expect(calls("load_isolation_settings")).toHaveLength(1));
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(box).toBeEnabled();
     await userEvent.click(box);
     await waitFor(() => expect(calls("save_docker_in_docker_settings")).toHaveLength(1));
   });
 
-  it("SET-FR-PMHB: under None the section states nothing about Microsandbox", async () => {
+  it("SET-FR-PMHB, SET-FR-JMHE: under Microsandbox with the checkbox on, the selector shows the daemon choice by default with both trade-offs, and no host socket controls", async () => {
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true });
     render(<ProjectDockerInDocker />);
-    await checkbox();
+    const daemon = await screen.findByRole("radio", { name: /Docker daemon in the VM/ });
+    const host = screen.getByRole("radio", { name: /No isolation: use the host Docker socket/ });
+    expect(daemon).toBeChecked();
+    expect(host).not.toBeChecked();
+    expect(daemon).toHaveAccessibleDescription(/keeps the microVM isolation.*image must hold dockerd/is);
+    expect(host).toHaveAccessibleDescription(/gives up the isolation.*host Docker socket/is);
+    expect(screen.queryByLabelText("Docker socket path")).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Host gateway" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/ignored/)).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-PMHB, SET-FR-JMHE: selecting the host socket saves the whole record at once and shows the socket path and the Host gateway", async () => {
+    const user = userEvent.setup();
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true, socketPath: "/a/d.sock", hostGateway: true });
+    render(<ProjectDockerInDocker />);
+    await user.click(
+      await screen.findByRole("radio", { name: /No isolation: use the host Docker socket/ }),
+    );
+
+    await waitFor(() => expect(stored.underMicrosandbox).toBe("host_socket"));
+    expect(calls("save_docker_in_docker_settings")[0][1]).toEqual({
+      settings: {
+        enabled: true,
+        socketPath: "/a/d.sock",
+        hostGateway: true,
+        underMicrosandbox: "host_socket",
+      },
+    });
+    expect(await screen.findByLabelText("Docker socket path")).toHaveValue("/a/d.sock");
+    expect(screen.getByRole("switch", { name: "Host gateway" })).toBeChecked();
+
+    await user.click(screen.getByRole("radio", { name: /Docker daemon in the VM/ }));
+    await waitFor(() => expect(stored.underMicrosandbox).toBe("vm_daemon"));
+    expect(screen.queryByLabelText("Docker socket path")).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-PMHB: a refused choice keeps the previous choice and renders the refusal", async () => {
+    const user = userEvent.setup();
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true });
+    refuseSave = "invalid value for underMicrosandbox";
+    render(<ProjectDockerInDocker />);
+    await user.click(
+      await screen.findByRole("radio", { name: /No isolation: use the host Docker socket/ }),
+    );
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Docker daemon in the VM/ })).toBeChecked();
+    expect(stored.underMicrosandbox).toBe("vm_daemon");
+  });
+
+  it("SET-FR-PMHB, SET-FR-JMHE: under None no selector shows, and the host socket controls show whatever choice is stored", async () => {
+    stored = state({ enabled: true, underMicrosandbox: "vm_daemon" });
+    render(<ProjectDockerInDocker />);
+    expect(await screen.findByLabelText("Docker socket path")).toBeInTheDocument();
     await waitFor(() => expect(calls("load_isolation_settings")).toHaveLength(1));
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByText(/Isolation is Microsandbox/)).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-JMHE, SET-FR-PMHB: no host socket control shows before the isolation mode lands, and the daemon choice hides them once it does", async () => {
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true });
+    let land: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      land = resolve;
+    });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "load_isolation_settings") await held;
+      return base(cmd, args);
+    });
+    render(<ProjectDockerInDocker />);
+    await waitFor(() => expect(calls("load_docker_in_docker_settings")).toHaveLength(1));
+    expect(screen.getByText(/Reading the Docker-in-Docker settings/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Docker socket path")).not.toBeInTheDocument();
+
+    land();
+    expect(await screen.findByRole("radio", { name: /Docker daemon in the VM/ })).toBeChecked();
+    expect(screen.queryByLabelText("Docker socket path")).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-PMHB: a backend that reports no choice reads as the daemon choice", async () => {
+    isolationMode = "microsandbox";
+    const { underMicrosandbox: _dropped, ...older } = state({ enabled: true });
+    stored = older as DockerInDockerState;
+    render(<ProjectDockerInDocker />);
+    expect(await screen.findByRole("radio", { name: /Docker daemon in the VM/ })).toBeChecked();
+  });
+
+  it("SET-FR-PMHB, SET-FR-JMHE: an isolation mode that cannot be read shows no selector and the host socket controls", async () => {
+    stored = state({ enabled: true });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "load_isolation_settings") throw new Error("store unreadable");
+      return base(cmd, args);
+    });
+    render(<ProjectDockerInDocker />);
+    expect(await screen.findByLabelText("Docker socket path")).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-PMHB, SET-FR-PQLA: on Windows under Microsandbox no selector shows", async () => {
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true, support: "unsupported" });
+    render(<ProjectDockerInDocker />);
+    expect(await checkbox()).toBeDisabled();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("PSS-FR-VRHC, SET-FR-PMHB: a refusal of an unknown choice is stated in words", () => {
+    expect(
+      dockerInDockerRefusalMessage(new Error("invalid args `settings`: unknown variant `privileged`")),
+    ).toBe("That choice for Microsandbox is not known. Nothing was saved.");
   });
 
   it("SET-FR-NXDV: the checkbox is off for a project that stored nothing, and the path field and toggle are not shown", async () => {
@@ -106,7 +222,7 @@ describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-
     expect(screen.getByRole("switch", { name: "Host gateway" })).not.toBeChecked();
     expect(calls("save_docker_in_docker_settings")).toHaveLength(1);
     expect(calls("save_docker_in_docker_settings")[0][1]).toEqual({
-      settings: { enabled: true, socketPath: "", hostGateway: false },
+      settings: { enabled: true, socketPath: "", hostGateway: false, underMicrosandbox: "vm_daemon" },
     });
   });
 
@@ -130,7 +246,7 @@ describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-
     await waitFor(() => expect(stored.socketPath).toBe("/other/docker.sock"));
   });
 
-  it("SET-FR-JMHE: the Host gateway toggle saves at once and carries the other two values through", async () => {
+  it("SET-FR-JMHE: the Host gateway toggle saves at once and carries the other three values through", async () => {
     const user = userEvent.setup();
     stored = state({ enabled: true, socketPath: "/a/d.sock" });
     render(<ProjectDockerInDocker />);
@@ -138,7 +254,12 @@ describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-
 
     await waitFor(() => expect(stored.hostGateway).toBe(true));
     expect(calls("save_docker_in_docker_settings")[0][1]).toEqual({
-      settings: { enabled: true, socketPath: "/a/d.sock", hostGateway: true },
+      settings: {
+        enabled: true,
+        socketPath: "/a/d.sock",
+        hostGateway: true,
+        underMicrosandbox: "vm_daemon",
+      },
     });
     expect(screen.getByText(/TESTCONTAINERS_HOST_OVERRIDE/)).toBeInTheDocument();
   });
@@ -186,7 +307,12 @@ describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-
       expect(stored).toMatchObject({ socketPath: "/new/d.sock", hostGateway: true }),
     );
     expect(calls("save_docker_in_docker_settings")[1][1]).toEqual({
-      settings: { enabled: true, socketPath: "/new/d.sock", hostGateway: true },
+      settings: {
+        enabled: true,
+        socketPath: "/new/d.sock",
+        hostGateway: true,
+        underMicrosandbox: "vm_daemon",
+      },
     });
     expect(screen.getByLabelText("Docker socket path")).toHaveValue("/new/d.sock");
   });

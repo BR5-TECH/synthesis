@@ -60,6 +60,7 @@ mod record;
 mod run_progress;
 mod runs;
 mod scheduler;
+mod socket_preflight;
 mod standing;
 mod state;
 mod store;

@@ -2,7 +2,7 @@
 //! GSU-FR-RQDS, GSU-FR-LMPW).
 
 use super::*;
-use crate::project_settings::DockerInDockerSettings;
+use crate::project_settings::{DockerInDockerSettings, UnderMicrosandbox};
 
 impl Fixture {
     /// Store the project's Docker-in-Docker settings, as the Docker section of
@@ -16,6 +16,7 @@ impl Fixture {
                 enabled,
                 socket_path: socket_path.to_string(),
                 host_gateway: false,
+                ..Default::default()
             },
         )
         .expect("stored settings");
@@ -163,8 +164,37 @@ fn a_restart_takes_the_socket_check_afresh() {
     assert_eq!(refused, format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {comma}"));
 }
 
-/// GSU-FR-RQDS, GSU-FR-HIPF: under Microsandbox the socket is not read, so a
-/// start whose project enables Docker-in-Docker with a missing socket passes.
+impl Fixture {
+    fn microsandbox(&self) {
+        let store = self.app.state::<crate::global_settings::GlobalSettingsStore>();
+        store
+            .save_isolation(&crate::isolation::IsolationRecord {
+                mode: crate::isolation::IsolationMode::Microsandbox,
+                ..crate::isolation::IsolationRecord::default()
+            })
+            .expect("stored isolation");
+    }
+
+    fn under_microsandbox(&self, socket_path: &str, choice: UnderMicrosandbox) {
+        let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
+        let root = crate::fs::RootFs::new(self.root(), access);
+        crate::project_settings::save_docker_in_docker_settings_to(
+            &root,
+            DockerInDockerSettings {
+                enabled: true,
+                socket_path: socket_path.to_string(),
+                host_gateway: false,
+                under_microsandbox: choice,
+            },
+        )
+        .expect("stored settings");
+    }
+}
+
+/// GSU-FR-RQDS, GSU-FR-HIPF: where the effective isolation is Microsandbox
+/// (the daemon choice), the socket is not read, so a start whose project
+/// enables Docker-in-Docker with a missing socket passes. The image is not
+/// inspected for a daemon.
 #[test]
 fn microsandbox_isolation_reads_no_socket_path() {
     let fx = Fixture::new();
@@ -172,14 +202,45 @@ fn microsandbox_isolation_reads_no_socket_path() {
     let stream = fx.stream("editor");
     fx.hold_stream(&stream.id);
     let draft = fx.draft("task");
-    fx.docker_in_docker(true, "/does/not/exist.sock");
-    let store = fx.app.state::<crate::global_settings::GlobalSettingsStore>();
-    store
-        .save_isolation(&crate::isolation::IsolationRecord {
-            mode: crate::isolation::IsolationMode::Microsandbox,
-            ..crate::isolation::IsolationRecord::default()
-        })
-        .expect("stored isolation");
+    fx.under_microsandbox("/does/not/exist.sock", UnderMicrosandbox::VmDaemon);
+    fx.microsandbox();
 
-    fx.start_on(&draft, &stream).expect("Microsandbox mounts no socket, so none is checked");
+    fx.start_on(&draft, &stream).expect("the VM mounts no host socket, so none is checked");
+}
+
+/// GSU-FR-RQDS, EAC-FR-SNMS: under Microsandbox with the host socket choice,
+/// the effective isolation is None, so the start checks the socket and a
+/// missing one refuses it.
+#[test]
+fn the_host_socket_choice_under_microsandbox_checks_the_socket() {
+    let fx = Fixture::new();
+    fx.allow_execution();
+    let stream = fx.stream("editor");
+    fx.hold_stream(&stream.id);
+    let draft = fx.draft("task");
+    let path = fx.root().join("gone.sock").to_string_lossy().into_owned();
+    fx.under_microsandbox(&path, UnderMicrosandbox::HostSocket);
+    fx.microsandbox();
+
+    let refused = fx.start_on(&draft, &stream).unwrap_err();
+    assert_eq!(refused, format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {path}"));
+}
+
+/// GSU-FR-RQDS: the host socket choice under Microsandbox with a socket that
+/// exists starts the run.
+#[cfg(unix)]
+#[test]
+fn the_host_socket_choice_with_a_socket_starts() {
+    let fx = Fixture::new();
+    fx.allow_execution();
+    let stream = fx.stream("editor");
+    fx.hold_stream(&stream.id);
+    let draft = fx.draft("task");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("docker.sock");
+    let _listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+    fx.under_microsandbox(path.to_str().unwrap(), UnderMicrosandbox::HostSocket);
+    fx.microsandbox();
+
+    fx.start_on(&draft, &stream).expect("the socket exists");
 }

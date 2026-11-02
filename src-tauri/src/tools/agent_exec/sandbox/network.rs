@@ -73,6 +73,7 @@ mod tests {
                 allowed,
                 gateway_addresses: Vec::new(),
             },
+            docker_daemon: false,
         }
     }
 

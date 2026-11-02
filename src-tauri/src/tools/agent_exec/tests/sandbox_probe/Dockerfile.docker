@@ -1,0 +1,11 @@
+# EAC-FR-RVQE / EAC-FR-QMRW: the probe image with a Docker daemon. It adds
+# `dockerd`, the Docker CLI, and a static busybox that the probe imports as a
+# local image, so a container runs in the VM with no registry.
+FROM synthesis-sandbox-probe:test
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker.io iptables curl busybox-static \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/probe/rootfs/bin \
+    && cp /bin/busybox /opt/probe/rootfs/bin/busybox
+USER 10001:10001

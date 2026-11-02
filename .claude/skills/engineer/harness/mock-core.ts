@@ -7322,7 +7322,12 @@ function mockIsolationState() {
     effectiveDiskGib: Math.min(Math.max(mockIsolation.diskGib ?? 64, 8), host.diskGib),
   };
 }
-const mockDockerInDocker = { enabled: false, socketPath: "", hostGateway: false };
+const mockDockerInDocker: { enabled: boolean; socketPath: string; hostGateway: boolean; underMicrosandbox: "vm_daemon" | "host_socket" } = {
+  enabled: false,
+  socketPath: "",
+  hostGateway: false,
+  underMicrosandbox: "vm_daemon",
+};
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
   {
@@ -10415,12 +10420,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "load_project_docker_images":
       return mockDockerImages;
     // SET-FR-NXDV: the project-local Docker-in-Docker settings. The save keeps
-    // the three values, so a reload shows what the section wrote.
+    // the four values, so a reload shows what the section wrote.
     case "load_docker_in_docker_settings":
       return {
         enabled: mockDockerInDocker.enabled,
         socketPath: mockDockerInDocker.socketPath,
         hostGateway: mockDockerInDocker.hostGateway,
+        underMicrosandbox: mockDockerInDocker.underMicrosandbox,
         defaultSocketPath: "/var/run/docker.sock",
         support: "supported",
       };
@@ -10429,6 +10435,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       mockDockerInDocker.enabled = Boolean(next.enabled);
       mockDockerInDocker.socketPath = String(next.socketPath ?? "").trim();
       mockDockerInDocker.hostGateway = Boolean(next.hostGateway);
+      mockDockerInDocker.underMicrosandbox =
+        next.underMicrosandbox === "host_socket" ? "host_socket" : "vm_daemon";
       return undefined;
     }
     // GLS-FR-YAEA / GSS-FR-DPWS: the isolation settings and the facts of this

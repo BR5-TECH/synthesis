@@ -15,8 +15,12 @@ fn enabled_harness(
     let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
     let socket = path.to_str().unwrap().to_string();
     let mut harness = harness_for("claude_code");
-    harness.docker_in_docker =
-        DockerInDockerLaunch { enabled: true, socket_path: socket.clone(), host_gateway };
+    harness.docker_in_docker = DockerInDockerLaunch {
+        enabled: true,
+        socket_path: socket.clone(),
+        host_gateway,
+        ..Default::default()
+    };
     (harness, listener, dir, socket)
 }
 
@@ -144,8 +148,12 @@ fn a_missing_socket_fails_the_launch_naming_the_path() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("gone.sock").to_str().unwrap().to_string();
     let mut harness = harness_for("claude_code");
-    harness.docker_in_docker =
-        DockerInDockerLaunch { enabled: true, socket_path: path.clone(), host_gateway: false };
+    harness.docker_in_docker = DockerInDockerLaunch {
+        enabled: true,
+        socket_path: path.clone(),
+        host_gateway: false,
+        ..Default::default()
+    };
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
 
     match run(&harness, runtime.clone(), task("go")) {
@@ -167,6 +175,7 @@ fn a_restored_socket_lets_the_next_launch_run() {
         enabled: true,
         socket_path: path.to_str().unwrap().to_string(),
         host_gateway: false,
+        ..Default::default()
     };
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     assert!(run(&harness, runtime.clone(), task("go")).is_err());
@@ -230,6 +239,7 @@ fn a_masked_turn_gets_none_of_the_additions() {
         enabled: true,
         socket_path: dir.path().join("gone.sock").to_str().unwrap().to_string(),
         host_gateway: true,
+        ..Default::default()
     };
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     run_as(&harness, runtime.clone(), None, None, super::super::TurnKind::SemanticRebase)

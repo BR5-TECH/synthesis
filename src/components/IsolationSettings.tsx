@@ -326,9 +326,11 @@ export function IsolationSettings() {
         {sandboxed
           ? "Each work stream runs its agents in one micro VM, booted from the Docker image the agent is configured with."
           : "Agents run in their Docker containers as they always have."}{" "}
-        Under Microsandbox, the Docker-in-Docker setting of a project is ignored:
-        no host Docker socket is mounted into the sandbox, and a graduation start
-        does not check the socket.
+        {/* GLS-FR-WAGX: how Microsandbox meets a project's Docker-in-Docker. */}
+        Where a project uses Docker-in-Docker, the VM runs a Docker daemon of its
+        own by default, and the project's image must hold dockerd. In Project
+        settings, a project can use the host Docker socket instead, which gives up
+        the isolation for its graduation runs.
       </p>
 
       {sandboxed && (
@@ -400,7 +402,8 @@ export function IsolationSettings() {
             <p id="isolation-disk-note" className="t-ui-xs t-muted" style={{ marginTop: 6 }}>
               Sizes the sandbox's own disk, which grows only as it is used, and caps
               what an agent writes into each writable folder, such as the working
-              copy.
+              copy. Images that tests pull into the Docker daemon of the VM count
+              against this disk.
             </p>
           </div>
 

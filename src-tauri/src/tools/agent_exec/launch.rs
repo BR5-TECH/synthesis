@@ -358,8 +358,15 @@ impl AgentCliExecutor {
         // EAC-FR-DKRS: a masked turn gets none of it. The socket reaches the
         // host repository that the masking of step 5c hides, so a masked turn
         // is launched as though the setting were off.
-        // EAC-FR-DARS: under Microsandbox the settings add nothing, and the
-        // socket check does not run.
+        // EAC-FR-DARS: a sandbox launch gets none of these additions, and the
+        // socket check does not run. EAC-FR-QMRW: where its VM runs a Docker
+        // daemon of its own, the process reaches it through `DOCKER_HOST`.
+        let dind_settings = &context.docker_in_docker;
+        let vm_daemon = sandboxed.is_some()
+            && crate::isolation::runs_docker_daemon(
+                dind_settings.enabled,
+                dind_settings.under_microsandbox,
+            );
         let dind = if masked || sandboxed.is_some() {
             docker_in_docker::DockerInDockerAdditions::default()
         } else {
@@ -379,6 +386,12 @@ impl AgentCliExecutor {
         }
         mounts.extend(dind.mounts);
         env_literals.extend(dind.env_literals);
+        if vm_daemon {
+            env_literals.push((
+                descriptor::DOCKER_HOST_ENV.to_string(),
+                descriptor::VM_DOCKER_HOST_VALUE.to_string(),
+            ));
+        }
 
         // --- 6. The runtime --------------------------------------------------
         //

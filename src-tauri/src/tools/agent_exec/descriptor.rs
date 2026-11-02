@@ -192,6 +192,12 @@ pub const DOCKER_HOST_GATEWAY_MAPPING: &str = "host.docker.internal:host-gateway
 pub const TESTCONTAINERS_HOST_OVERRIDE_ENV: &str = "TESTCONTAINERS_HOST_OVERRIDE";
 /// EAC-FR-DKRS: the value of [`TESTCONTAINERS_HOST_OVERRIDE_ENV`].
 pub const TESTCONTAINERS_HOST_OVERRIDE_VALUE: &str = "host.docker.internal";
+/// EAC-FR-QMRW: the variable the sandbox process reaches the Docker daemon of
+/// its VM through.
+pub const DOCKER_HOST_ENV: &str = "DOCKER_HOST";
+/// EAC-FR-QMRW: the value of [`DOCKER_HOST_ENV`], the guest socket of the
+/// daemon in the VM.
+pub const VM_DOCKER_HOST_VALUE: &str = "unix:///var/run/docker.sock";
 /// The environment variable Claude Code reads its OAuth token from (EAC-FR-15).
 pub const CLAUDE_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 

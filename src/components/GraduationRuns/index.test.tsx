@@ -307,6 +307,23 @@ describe("the run region", () => {
     expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
   });
 
+  it("GRU-FR-XHDI: a run whose Docker daemon in the VM is not available renders the detail and offers Continue, with no control for the choice", async () => {
+    const detail =
+      "The Microsandbox VM could not start: the Docker daemon in the VM is not available. Add dockerd to the project's image, or select No isolation for Docker-in-Docker in Project settings, in the Docker section. Then use Continue.";
+    queue = makeQueue([
+      makeRun("r1", "interrupted", {
+        interruption: { reason: "launch_failed", detail, at: "2026-11-02T14:02:36Z" },
+      }),
+    ]);
+    await open({ onOpenSettings: vi.fn() });
+    expect(await screen.findByTestId("graduation-interruption")).toHaveTextContent(detail);
+    const region = screen.getByRole("region", { name: "The selected run" });
+    expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
+    for (const control of [...within(region).queryAllByRole("button"), ...within(region).queryAllByRole("radio")]) {
+      expect(control).not.toHaveAccessibleName(/isolation|socket|settings|docker/i);
+    }
+  });
+
   it("GRU-FR-QLRQ, GRU-FR-BHJO: a run stopped on any other cause offers no route to the time limit", async () => {
     queue = makeQueue([
       makeRun("r1", "interrupted", {

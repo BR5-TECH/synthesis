@@ -63,6 +63,28 @@ if [ -n "$ANTHROPIC_BEDROCK_BASE_URL" ]; then
     alias_read=$(value timeout 20 bash -c "cat < /dev/tcp/host.microsandbox.internal/$gateway_port")
 fi
 
+# EAC-FR-QMRW: where the VM runs a Docker daemon of its own, the probe reaches
+# it as the host user through `DOCKER_HOST`, and runs a container from a local
+# image. Each check keeps its own words, so a kernel limit shows its error.
+said() { "$@" 2>&1 | tr '\n\t\r' '   ' | sed 's/ *$//; s/\\/\\\\/g; s/"/\\"/g'; }
+docker_host=$(value printenv DOCKER_HOST)
+docker_driver=""
+docker_cgroup=""
+docker_socket_group=""
+docker_root_fs=""
+docker_import=""
+docker_run=""
+docker_bridge=""
+if [ -n "$docker_host" ]; then
+    docker_driver=$(said docker info --format '{{.Driver}}')
+    docker_cgroup=$(said docker info --format '{{.CgroupVersion}}')
+    docker_socket_group=$(value stat -c %g /var/run/docker.sock)
+    docker_root_fs=$(said sh -c 'grep -w overlay /proc/filesystems; stat -f -c %T /var/lib/docker; grep -E " / | /var/lib/docker " /proc/mounts')
+    docker_import=$(said sh -c 'tar -C /opt/probe/rootfs -c . | docker import - probe-local:test')
+    docker_run=$(said docker run --rm --network none probe-local:test /bin/busybox echo container-ran)
+    docker_bridge=$(said docker run --rm probe-local:test /bin/busybox echo bridge-ran)
+fi
+
 writable=$(answer mkdir -p .probe)
 if [ "$writable" = yes ]; then
     writable=$(answer sh -c 'echo probe > .probe/written')
@@ -98,7 +120,15 @@ result=$(cat <<JSON
   "gateway_resolves": "$gateway_resolves",
   "gateway_read": "$gateway_read",
   "alias_read": "$alias_read",
-  "alias_resolves": "$alias_resolves"
+  "alias_resolves": "$alias_resolves",
+  "docker_host": "$docker_host",
+  "docker_driver": "$docker_driver",
+  "docker_cgroup": "$docker_cgroup",
+  "docker_socket_group": "$docker_socket_group",
+  "docker_root_fs": "$docker_root_fs",
+  "docker_import": "$docker_import",
+  "docker_run": "$docker_run",
+  "docker_bridge": "$docker_bridge"
 }
 JSON
 )

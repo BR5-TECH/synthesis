@@ -3,7 +3,7 @@
 //!
 //! Project-local: the Docker socket is a fact of one machine, and a setting that
 //! gives a container access to the host Docker daemon is never committed. The
-//! three values live in their own section of `.synthesis/local.toml`, so the
+//! four values live in their own section of `.synthesis/local.toml`, so the
 //! save carries every other section through unchanged.
 
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,20 @@ const PLATFORM_DEFAULT_SOCKET: &str = "/var/run/docker.sock";
 #[cfg(not(unix))]
 const PLATFORM_DEFAULT_SOCKET: &str = "";
 
-/// PSS-FR-DIND: the three stored values.
+/// PSS-FR-DIND: how a graduation launch gets Docker where the isolation is
+/// Microsandbox (EAC-FR-SNMS). It has no effect while the isolation is None.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnderMicrosandbox {
+    /// The launch stays in the VM, and the VM runs a Docker daemon of its own
+    /// (EAC-FR-QMRW).
+    #[default]
+    VmDaemon,
+    /// The launch gives up the VM and is a Docker launch with the host socket.
+    HostSocket,
+}
+
+/// PSS-FR-DIND: the four stored values.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DockerInDockerSettings {
@@ -35,6 +48,7 @@ pub struct DockerInDockerSettings {
     /// Empty means the platform default.
     pub socket_path: String,
     pub host_gateway: bool,
+    pub under_microsandbox: UnderMicrosandbox,
 }
 
 /// PSS-FR-QWTN: how well the platform supports the feature.
@@ -53,6 +67,7 @@ pub struct DockerInDockerState {
     pub enabled: bool,
     pub socket_path: String,
     pub host_gateway: bool,
+    pub under_microsandbox: UnderMicrosandbox,
     pub default_socket_path: String,
     pub support: DockerInDockerSupport,
 }
@@ -64,6 +79,7 @@ pub struct EffectiveDockerInDocker {
     pub enabled: bool,
     pub socket_path: String,
     pub host_gateway: bool,
+    pub under_microsandbox: UnderMicrosandbox,
     pub effective_socket_path: String,
 }
 
@@ -93,6 +109,9 @@ pub fn load_docker_in_docker_settings_from(root: &crate::fs::RootFs) -> DockerIn
         host_gateway: field("hostGateway")
             .and_then(|v| v.try_into::<bool>().ok())
             .unwrap_or_default(),
+        under_microsandbox: field("underMicrosandbox")
+            .and_then(|v| v.try_into::<UnderMicrosandbox>().ok())
+            .unwrap_or_default(),
     }
 }
 
@@ -108,6 +127,7 @@ pub fn read_docker_in_docker_settings(root: &crate::fs::RootFs) -> EffectiveDock
         enabled: stored.enabled,
         socket_path: stored.socket_path,
         host_gateway: stored.host_gateway,
+        under_microsandbox: stored.under_microsandbox,
         effective_socket_path,
     }
 }
@@ -117,6 +137,7 @@ fn state_of(settings: DockerInDockerSettings) -> DockerInDockerState {
         enabled: settings.enabled,
         socket_path: settings.socket_path,
         host_gateway: settings.host_gateway,
+        under_microsandbox: settings.under_microsandbox,
         default_socket_path: PLATFORM_DEFAULT_SOCKET.to_string(),
         support: platform_support(),
     }
@@ -134,7 +155,7 @@ fn validate_socket_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// PSS-FR-QWTN / PSS-FR-VRHC: write the three values whole to project-local
+/// PSS-FR-QWTN / PSS-FR-VRHC: write the four values whole to project-local
 /// scope, leaving every other section of `local.toml` as it was. The socket is
 /// never checked here, because the author may start Docker after the save.
 pub fn save_docker_in_docker_settings_to(

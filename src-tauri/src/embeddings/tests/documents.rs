@@ -140,6 +140,27 @@ fn a_documents_change_reaches_the_documents_layer() {
     assert_eq!(document_chunks(&h), 1);
 }
 
+// EMB-FR-IBXK, EMB-FR-WWMW: a pass of the documents part alone, as the
+// collection asks for after a refresh, schedules an incremental pass, and that
+// pass embeds the added document.
+#[test]
+fn a_documents_pass_alone_schedules_an_incremental_pass() {
+    let h = Harness::new();
+    let docs = Docs::manage(&h);
+    docs.write("manual.md", MANUAL);
+    docs.ready(&h);
+    let embedded = h.embedded();
+
+    docs.write("guide.md", GUIDE);
+    Docs::refresh(&h);
+    assert!(!h.incremental_due(), "nothing is due before the pass");
+    h.pass_scope(PassScope::DOCUMENTS);
+    assert!(h.incremental_due());
+    h.settle(Instant::now() + LATER);
+    assert_eq!(document_chunks(&h), 2);
+    assert_eq!(h.embedded() - embedded, 1, "the added document only");
+}
+
 // EMB-FR-PYCS, EMB-FR-NHQG: a branch change keeps the one documents layer.
 #[test]
 fn a_branch_change_keeps_the_documents_layer() {

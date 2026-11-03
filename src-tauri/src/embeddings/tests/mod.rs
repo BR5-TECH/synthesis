@@ -118,6 +118,16 @@ impl Harness {
         pass_on(self.handle(), &self.rooted);
     }
 
+    /// Run one BM25 pass of `scope` only, as one trigger channel asks for it.
+    fn pass_scope(&self, scope: PassScope) {
+        pass_scope_on(self.handle(), &self.rooted, scope);
+    }
+
+    /// Whether an incremental pass is due (EMB-FR-WWMW).
+    fn incremental_due(&self) -> bool {
+        self.service().lock().project.as_ref().is_some_and(|p| p.pending.incremental_at.is_some())
+    }
+
     fn settle(&self, now: Instant) {
         self.service().run_until_idle(self.handle(), now);
     }
@@ -170,10 +180,18 @@ impl Harness {
 /// One BM25 pass of `root`, with the candidate list invalidated first — as the
 /// watcher does on every change, since a test writes files directly.
 fn pass_on(app: &tauri::AppHandle<tauri::test::MockRuntime>, root: &crate::fs::RootFs) {
+    pass_scope_on(app, root, PassScope::ALL);
+}
+
+fn pass_scope_on(
+    app: &tauri::AppHandle<tauri::test::MockRuntime>,
+    root: &crate::fs::RootFs,
+    scope: PassScope,
+) {
     app.state::<crate::scanning::CandidateStore>().invalidate();
     let indexer = app.state::<Bm25Indexer>();
     let generation = indexer.generation();
-    indexer.run_pass(app, root, PassScope::ALL, generation);
+    indexer.run_pass(app, root, scope, generation);
 }
 
 /// Every record of the shared log buffer, rendered, for a leak scan by a

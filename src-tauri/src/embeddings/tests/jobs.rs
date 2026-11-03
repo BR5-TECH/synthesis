@@ -72,6 +72,37 @@ fn edits_are_debounced_into_one_incremental_pass() {
     assert_eq!(h.phase(), Some(Phase::Ready));
 }
 
+// EMB-FR-WWMW: the window starts at the first change of a burst and lasts 2
+// seconds. A later change inside it does not move the deadline, and the one
+// pass takes in both changes. The deadline comes from the clock at each
+// publish, so the checks use the instants read just before and just after the
+// first publish, which hold on a runner of any speed.
+#[test]
+fn the_window_starts_at_the_first_change_and_a_later_change_does_not_extend_it() {
+    // The 2 seconds of the requirement, not the constant, so a changed window fails here.
+    let debounce = Duration::from_secs(2);
+    let h = Harness::new();
+    h.ready();
+    let before = h.embedded();
+    let jobs = h.jobs().len();
+
+    h.write("specifications/b.md", "# Search\n\nThe search bar ranks files by meaning.");
+    let first_before = Instant::now();
+    h.pass_scope(PassScope::ARTIFACTS);
+    let first_after = Instant::now();
+    h.write("specifications/c.md", "# Third\n\nAnother specification.");
+    h.pass_scope(PassScope::ARTIFACTS);
+
+    h.settle(first_before + debounce - Duration::from_millis(1));
+    assert_eq!(h.jobs().len(), jobs, "nothing runs inside the window");
+    assert!(h.incremental_due());
+
+    h.settle(first_after + debounce);
+    assert_eq!(h.jobs()[jobs..], [JobKind::Incremental], "one pass at the end of the window");
+    assert_eq!(h.embedded(), before + 2, "the pass takes in both changes");
+    assert!(!h.incremental_due());
+}
+
 // EMB-FR-HWRQ, EMB-FR-VFPV: a publish that touched no specification and no
 // document starts no job; a change to a file that is not a specification is
 // not embedded.
@@ -87,6 +118,35 @@ fn a_change_outside_the_specifications_starts_no_job() {
     h.settle(Instant::now() + LATER);
     assert_eq!(h.jobs().len(), jobs);
     assert!(h.texts().iter().all(|t| !t.contains("in code") && !t.contains("notes")));
+}
+
+// EMB-FR-HWRQ, EMB-FR-WWMW: a pass of the drafts or the notes part changes no
+// chunk of this index, so it schedules no incremental pass. A pass of the
+// artifact part, which the project watcher asks for on every change, schedules
+// one, and that pass embeds the edited specification.
+#[test]
+fn a_drafts_or_notes_pass_schedules_no_incremental_pass_and_an_artifacts_pass_does() {
+    let h = Harness::new();
+    h.ready();
+    let before = h.embedded();
+    let jobs = h.jobs().len();
+    h.write("specifications/b.md", "# Search\n\nThe search bar ranks files by meaning.");
+    assert!(!h.incremental_due(), "nothing is due before the passes");
+
+    h.pass_scope(PassScope::DRAFTS);
+    assert!(!h.incremental_due(), "a drafts pass schedules nothing");
+    h.pass_scope(PassScope::NOTES);
+    assert!(!h.incremental_due(), "a notes pass schedules nothing");
+    h.settle(Instant::now() + LATER);
+    assert_eq!(h.jobs().len(), jobs);
+    assert_eq!(h.embedded(), before);
+
+    h.pass_scope(PassScope::ARTIFACTS);
+    assert!(h.incremental_due(), "an artifacts pass schedules the pass");
+    h.settle(Instant::now() + LATER);
+    assert_eq!(h.jobs()[jobs..], [JobKind::Incremental]);
+    assert_eq!(h.embedded(), before + 1, "the edited chunk only");
+    assert!(!h.incremental_due());
 }
 
 // EMB-FR-VFPV: only specification and document chunks are embedded — skills,

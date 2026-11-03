@@ -138,7 +138,11 @@ impl EmbeddingsService {
         if std::mem::take(&mut project.pending.root_check) {
             return Some(Work::RootCheck { serial });
         }
-        if project.pending.incremental_at.is_some_and(|at| at <= now) {
+        // EMB-FR-KPWZ: the evaluation that waits for a fresh BM25 pass takes in
+        // every change an incremental pass would, so none runs before it.
+        if project.pending.awaiting.is_none()
+            && project.pending.incremental_at.is_some_and(|at| at <= now)
+        {
             project.pending.incremental_at = None;
             return Some(Work::Incremental { serial });
         }
@@ -149,7 +153,7 @@ impl EmbeddingsService {
         match work {
             Work::PrepareModel(id) => self.prepare_model(app, &id),
             Work::Full { serial, kind, drop } => self.run_job(app, serial, kind, drop, false),
-            Work::RootCheck { serial } => self.root_check(serial),
+            Work::RootCheck { serial } => self.root_check(app, serial),
             Work::Incremental { serial } => self.incremental(app, serial),
         }
     }
@@ -274,28 +278,83 @@ impl EmbeddingsService {
         self.emit(app);
     }
 
-    /// EMB-FR-VQSK, EMB-FR-HTIQ: queue a full evaluation when the root tip,
-    /// the branch, or the `HEAD` moved.
-    fn root_check(&self, serial: u64) {
-        let root = {
+    /// EMB-FR-VQSK, EMB-FR-HTIQ: find whether the root tip, the branch, or the
+    /// `HEAD` moved, and when it did, wait for a fresh BM25 pass
+    /// (EMB-FR-KPWZ).
+    fn root_check<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>, serial: u64) {
+        let (root, previous) = {
             let st = self.lock();
             match st.project.as_ref().filter(|p| p.serial == serial) {
-                Some(project) if project.facts.is_some() => project.root.clone(),
-                _ => return,
+                Some(project) => match project.facts.clone() {
+                    Some(previous) => (project.root.clone(), previous),
+                    None => return,
+                },
+                None => return,
             }
         };
         let facts = layers::git_facts(&root);
-        let mut st = self.lock();
-        if let Some(project) = st.project.as_mut().filter(|p| p.serial == serial) {
-            if let Some(kind) = project.facts.as_ref().and_then(|previous| moved(previous, &facts))
-            {
-                project.pending.full.get_or_insert(kind);
-            }
+        if let Some(kind) = moved(&previous, &facts) {
+            self.await_index_pass(app, serial, kind);
         }
     }
 
-    /// EMB-FR-BZZT, EMB-FR-NHQG: an incremental pass, or a full evaluation
-    /// when the branch, the `HEAD`, or the root tip changed under it.
+    /// EMB-FR-KPWZ: the Git facts moved. The files of a checkout reach the
+    /// BM25 snapshot after the Git metadata, so the evaluation of `kind` waits
+    /// for a pass of the artifact indexes that starts after now, and the
+    /// service asks for that pass.
+    fn await_index_pass<R: tauri::Runtime>(
+        &self,
+        app: &tauri::AppHandle<R>,
+        serial: u64,
+        kind: JobKind,
+    ) {
+        let Some(indexer) = app.try_state::<Bm25Indexer>() else {
+            log_warn(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "embeddings found a Git change and no index to wait for",
+                crate::log_fields! { "job" => job_name(kind) },
+            );
+            return;
+        };
+        // Read before the pass is asked for, so the pass has a higher number.
+        let after = indexer.passes_started();
+        let waiting = {
+            let mut st = self.lock();
+            let Some(project) = st.project.as_mut().filter(|p| p.serial == serial) else {
+                return;
+            };
+            let kind = match project.pending.awaiting {
+                Some(previous) if previous.kind == JobKind::RootUpdate => JobKind::RootUpdate,
+                _ => kind,
+            };
+            project.pending.awaiting = Some(super::service::Awaiting { kind, after });
+            kind
+        };
+        log_debug(
+            app,
+            &BUFFER,
+            &[Domain::Backend],
+            "embeddings wait for an index pass after a Git change",
+            crate::log_fields! { "job" => job_name(waiting) },
+        );
+        // The file list of the old checkout must not serve the pass, as for
+        // every other caller that asks for a pass of the artifact indexes.
+        if let Some(candidates) = app.try_state::<crate::scanning::CandidateStore>() {
+            candidates.invalidate();
+        }
+        let scope = crate::bm25_index::PassScope::ARTIFACTS;
+        if self.spawn_worker {
+            crate::bm25_index::request_pass(app, scope);
+        }
+        #[cfg(test)]
+        self.passes_asked.lock().unwrap().push(scope);
+    }
+
+    /// EMB-FR-BZZT, EMB-FR-NHQG: an incremental pass. When the branch, the
+    /// `HEAD`, or the root tip changed under it, the full evaluation waits for
+    /// a fresh BM25 pass instead (EMB-FR-KPWZ).
     fn incremental<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>, serial: u64) {
         let previous = {
             let st = self.lock();
@@ -359,10 +418,11 @@ impl EmbeddingsService {
         }
         let fingerprint = fingerprint_of(&working, documents_fed.then_some(&documents));
         let facts = layers::git_facts(&root);
-        // EMB-FR-DQVX: the root tip or the branch moved after the incremental
-        // pass was chosen. The pass then becomes a full evaluation, so the
-        // facts it records always match the layers it wrote.
-        let mut skip_root = skip_root;
+        // EMB-FR-DQVX, EMB-FR-KPWZ: the root tip or the branch moved after the
+        // incremental pass was chosen. The snapshot can then be one of the
+        // previous checkout, so no pass runs now: the full evaluation waits for
+        // a fresh BM25 pass, and the facts it records match the layers it
+        // writes.
         if kind == JobKind::Incremental {
             let previous = self
                 .lock()
@@ -371,13 +431,10 @@ impl EmbeddingsService {
                 .filter(|p| p.serial == serial)
                 .and_then(|p| p.facts.clone());
             if let Some(full) = previous.as_ref().and_then(|previous| moved(previous, &facts)) {
-                kind = full;
-                skip_root = false;
+                self.await_index_pass(app, serial, full);
+                return;
             }
         }
-        // EMB-FR-USBA: only a full evaluation deletes branch layers, so only it
-        // lists the worktrees.
-        let facts = if skip_root { facts } else { layers::keep_checked_out(facts, &root) };
         // EMB-FR-BZZT: a pass of another index changed no chunk this index
         // holds, so there is nothing to compare and no operation to show.
         if kind == JobKind::Incremental {

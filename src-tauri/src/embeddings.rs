@@ -36,7 +36,7 @@ pub use commands::*;
 pub use engine::ReindexScope;
 pub use hybrid::{hybrid_search, VectorRanker};
 pub use jobs::EMBEDDINGS_STATUS_CHANGED;
-pub use service::{EmbeddingsService, EmbeddingsStatus, MountInput};
+pub use service::{EmbeddingsService, EmbeddingsStatus, MountInput, Published};
 pub use settings::{EmbeddingsRecord, EmbeddingsSettings, ProjectEmbeddingsMode};
 
 use crate::bm25_index::{IndexId, PassScope};
@@ -192,14 +192,23 @@ pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-/// EMB-FR-HWRQ, EMB-FR-IBXK: the BM25 indexer published a pass of `scope`.
+/// EMB-FR-HWRQ, EMB-FR-IBXK, EMB-FR-KPWZ: the BM25 indexer published pass
+/// number `pass`, of `scope`.
 pub fn note_index_published<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     scope: PassScope,
     generation: u64,
+    pass: u64,
 ) {
     if let Some(service) = app.try_state::<EmbeddingsService>() {
-        service.index_published(scope.artifacts || scope.documents, generation, Instant::now());
+        service.index_published(
+            Published {
+                touched: scope.artifacts || scope.documents,
+                artifacts_pass: scope.artifacts.then_some(pass),
+            },
+            generation,
+            Instant::now(),
+        );
     }
 }
 

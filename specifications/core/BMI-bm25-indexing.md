@@ -11,6 +11,7 @@ The project's ranked-retrieval substrate: a set of in-memory BM25 indexes — on
 The whole surface of this module. Exposed by `synthesis-core` alongside `FSA-filesystem-access.md`'s primitives and `LGC-logging.md`'s emit functions, and imported directly by the backend modules that retrieve against it. This module registers no Tauri command and emits no Tauri event, so no `invoke()` in `src/**` can reach it.
 
 - **`search(indexes, query, limit)`** → `[ChunkHit]` *(consumed by `EMB-embeddings-index.md`, `SCC-search.md`, `../tools/DST-draft-search-tool.md`, and `../tools/NST-note-search-tool.md`; `../tools/SPS-specification-search-tool.md` and `../tools/SDT-search-documents-tool.md` reach it through `EMB-embeddings-index.md`'s `hybrid_search`)* — the `limit` highest-scoring chunks across the selected indexes, ordered by descending `score`. Returns a list and never an error (BMI-FR-10). Reads nothing from disk and mutates nothing.
+- **`request_pass(scope)`** *(consumed by `EMB-embeddings-index.md` EMB-FR-KPWZ)* — asks for a pass of the parts of the index set that `scope` names. It returns at once, and requests that arrive close together collapse into one pass (BMI-FR-21).
 
 ### Payload shapes
 ```

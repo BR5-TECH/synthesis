@@ -120,12 +120,7 @@ impl Run {
             let repo = Repository::open(&root_dir).unwrap();
             root_chunks(&repo, tip, prefix)
         };
-        // The worker lists the worktrees for a full evaluation only.
-        let facts = if skip_root {
-            fx.facts()
-        } else {
-            crate::embeddings::layers::keep_checked_out(fx.facts(), fx.repo_dir.path())
-        };
+        let facts = fx.facts();
         let mut embed = |texts: &[String]| -> Result<Vec<Vec<f32>>, String> {
             if self.fail.get() {
                 return Err("model failed".to_string());
@@ -604,30 +599,37 @@ fn a_wrong_number_of_vectors_fails_the_pass() {
     assert!(store.layers().unwrap().is_empty());
 }
 
-// EMB-FR-USBA: at a full evaluation, a branch that still exists but that no
-// worktree has checked out loses its layer.
+// EMB-FR-USBA: at a full evaluation, a branch that still exists keeps its
+// layer although no worktree has it checked out, so a switch back to it embeds
+// nothing again.
 #[test]
-fn the_layer_of_a_branch_with_no_worktree_is_removed() {
+fn the_layer_of_a_branch_with_no_worktree_is_kept() {
     let files = [("specifications/a.md", SPEC_A)];
     let fx = Fixture::new(&files);
     let mut store = fx.store();
     let run = Run::new();
     run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
     fx.branch("feature");
-    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    let edited = SPEC_A.replace("torn down", "removed");
+    let work = working(&[("specifications/a.md", edited.as_str())]);
+    run.eval(&mut store, &fx, &work, &Chunks::new(), false, None).unwrap();
     assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_some());
 
     fx.repo.set_head("refs/heads/main").unwrap();
     run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
-    assert!(fx.repo.find_branch("feature", git2::BranchType::Local).is_ok(), "the branch stays");
-    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_none());
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_some());
+
+    run.take();
+    fx.repo.set_head("refs/heads/feature").unwrap();
+    run.eval(&mut store, &fx, &work, &Chunks::new(), false, None).unwrap();
+    assert!(run.take().is_empty(), "the switch back embeds nothing");
 }
 
 // EMB-FR-USBA: a branch that a linked worktree has checked out keeps its layer
-// while another worktree is active; the layer goes when that worktree is
-// removed.
+// while another worktree is active, and keeps it when that worktree is
+// removed. The layer goes only with the branch.
 #[test]
-fn a_branch_checked_out_in_a_linked_worktree_keeps_its_layer() {
+fn a_branch_layer_outlives_its_linked_worktree_and_goes_with_the_branch() {
     let files = [("specifications/a.md", SPEC_A)];
     let fx = Fixture::new(&files);
     let mut store = fx.store();
@@ -647,6 +649,10 @@ fn a_branch_checked_out_in_a_linked_worktree_keeps_its_layer() {
     let mut prune = git2::WorktreePruneOptions::new();
     prune.valid(true).working_tree(true);
     fx.repo.find_worktree("feature").unwrap().prune(Some(&mut prune)).unwrap();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_some());
+
+    fx.repo.find_branch("feature", git2::BranchType::Local).unwrap().delete().unwrap();
     run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
     assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_none());
 }

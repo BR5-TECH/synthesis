@@ -81,45 +81,93 @@ pub fn request_pass<R: tauri::Runtime>(app: &tauri::AppHandle<R>, scope: PassSco
     let Some(indexer) = app.try_state::<Bm25Indexer>() else {
         return;
     };
-    let mut schedule = indexer.schedule();
-    if schedule.root.is_none() {
-        // Nothing is mounted; a pass would have no root to reconcile against.
+    if !enqueue(&indexer, scope) {
         return;
     }
-    schedule.pending = schedule.pending.merge(scope);
-    if schedule.scheduled {
-        return;
-    }
-    schedule.scheduled = true;
-    drop(schedule);
 
     let app = app.clone();
     std::thread::spawn(move || {
         let Some(indexer) = app.try_state::<Bm25Indexer>() else {
             return;
         };
-        loop {
-            std::thread::sleep(COALESCE_WINDOW);
-            let (root, scope) = {
-                let mut schedule = indexer.schedule();
-                let scope = std::mem::take(&mut schedule.pending);
-                match (&schedule.root, scope.is_empty()) {
-                    (Some(root), false) => (root.clone(), scope),
-                    _ => {
-                        schedule.scheduled = false;
-                        return;
-                    }
-                }
-            };
-            let generation = indexer.generation();
-            indexer.run_pass(&app, &root, scope, generation);
-            let mut schedule = indexer.schedule();
-            if schedule.pending.is_empty() || schedule.root.is_none() {
-                schedule.scheduled = false;
-                return;
-            }
-        }
+        run_scheduled(
+            &indexer,
+            || std::thread::sleep(COALESCE_WINDOW),
+            |root, scope| {
+                let generation = indexer.generation();
+                indexer.run_pass(&app, root, scope, generation);
+            },
+        );
     });
+}
+
+/// BMI-FR-21: the body of the pass thread. It calls `wait` for the coalescing
+/// window before each pass, then `run` once with the scope that accumulated,
+/// until no request is pending.
+///
+/// `wait` and `run` are parameters so that the tests can send requests inside
+/// the window or during a pass with no real-time wait.
+pub(super) fn run_scheduled(
+    indexer: &Bm25Indexer,
+    mut wait: impl FnMut(),
+    mut run: impl FnMut(&crate::fs::RootFs, PassScope),
+) {
+    loop {
+        wait();
+        let Some((root, scope)) = take_pass(indexer) else {
+            return;
+        };
+        run(&root, scope);
+        if !finish_pass(indexer) {
+            return;
+        }
+    }
+}
+
+/// BMI-FR-21: add `scope` to the pending scope. Returns true when the caller
+/// must start the pass thread, and false when a thread that is alive already
+/// takes in this scope, or when nothing is mounted.
+///
+/// The three steps of the scheduler are separate from the thread so that the
+/// tests can drive the coalescing with no real-time wait.
+pub(super) fn enqueue(indexer: &Bm25Indexer, scope: PassScope) -> bool {
+    let mut schedule = indexer.schedule();
+    if schedule.root.is_none() {
+        // Nothing is mounted; a pass would have no root to reconcile against.
+        return false;
+    }
+    schedule.pending = schedule.pending.merge(scope);
+    if schedule.scheduled {
+        return false;
+    }
+    schedule.scheduled = true;
+    true
+}
+
+/// BMI-FR-21: take the scope that accumulated during the coalescing window,
+/// with the root to run it against. Returns `None`, and ends the thread, when
+/// nothing is pending or nothing is mounted.
+pub(super) fn take_pass(indexer: &Bm25Indexer) -> Option<(crate::fs::RootFs, PassScope)> {
+    let mut schedule = indexer.schedule();
+    let scope = std::mem::take(&mut schedule.pending);
+    match (&schedule.root, scope.is_empty()) {
+        (Some(root), false) => Some((root.clone(), scope)),
+        _ => {
+            schedule.scheduled = false;
+            None
+        }
+    }
+}
+
+/// BMI-FR-21: a pass ended. Returns true when a request arrived during it, so
+/// the thread runs one more pass, and false, which ends the thread, otherwise.
+pub(super) fn finish_pass(indexer: &Bm25Indexer) -> bool {
+    let mut schedule = indexer.schedule();
+    if schedule.pending.is_empty() || schedule.root.is_none() {
+        schedule.scheduled = false;
+        return false;
+    }
+    true
 }
 
 /// DRS-FR-28 / BMI-FR-19: a draft's file set or a draft file's contents

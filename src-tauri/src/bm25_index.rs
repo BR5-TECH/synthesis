@@ -560,6 +560,10 @@ pub struct Bm25Indexer {
     /// lock so a query runs against an `Arc` nothing can mutate under it.
     published: Mutex<Published>,
     schedule: Mutex<Schedule>,
+    /// EMB-FR-KPWZ: how many passes have started. Each pass takes the next
+    /// number when it starts, before it reads a file, so a consumer can tell a
+    /// pass that started after a moment from one that started before it.
+    passes_started: std::sync::atomic::AtomicU64,
     /// Draft changes seen on the DRS-FR-28 channel, for the tests that assert
     /// what each command reports. Not compiled into the shipped binary.
     #[cfg(test)]
@@ -584,6 +588,12 @@ impl Bm25Indexer {
     /// The snapshot a query runs against.
     pub fn snapshot(&self) -> Arc<IndexSet> {
         Arc::clone(&self.published().set)
+    }
+
+    /// EMB-FR-KPWZ: the number of the last pass that started. A pass that
+    /// starts later has a higher number.
+    pub(crate) fn passes_started(&self) -> u64 {
+        self.passes_started.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// The generation a pass starting now belongs to.
@@ -729,6 +739,7 @@ impl Bm25Indexer {
         scope: PassScope,
         generation: u64,
     ) -> Option<PassStats> {
+        let pass = self.passes_started.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
         let registry = app.state::<ProgressRegistry>();
 
         // BMI-FR-22: one operation per pass, terminated whatever the outcome.
@@ -847,7 +858,7 @@ impl Bm25Indexer {
         // EMB-FR-HWRQ / EMB-FR-IBXK: the vector index takes its working-copy
         // and document chunks from this snapshot, so every change that reached
         // this pass reaches it too, on the same channels and the same rules.
-        crate::embeddings::note_index_published(app, scope, generation);
+        crate::embeddings::note_index_published(app, scope, generation, pass);
         log_info(
             app,
             &BUFFER,

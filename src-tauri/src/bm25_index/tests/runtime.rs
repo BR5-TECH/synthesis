@@ -57,6 +57,149 @@ fn requesting_a_pass_with_nothing_mounted_does_nothing() {
     assert!(!app.state::<Bm25Indexer>().schedule().scheduled);
 }
 
+/// Mount `name` and drain the build that the mount asks for, so that a test
+/// starts from a scheduler with nothing pending.
+fn idle_scheduler(name: &str) -> (Bm25Indexer, crate::fs::RootFs) {
+    use crate::bm25_index::scheduling::{enqueue, finish_pass, take_pass};
+    let indexer = Bm25Indexer::default();
+    let root = scratch_root(name);
+    indexer.mount(&root);
+    assert!(enqueue(&indexer, PassScope::ALL));
+    assert_eq!(take_pass(&indexer).map(|(_, scope)| scope), Some(PassScope::ALL));
+    assert!(!finish_pass(&indexer));
+    (indexer, root)
+}
+
+// BMI-FR-21: a burst of requests on a mounted root starts one pass thread, and
+// that thread runs one pass that covers the scope of every request of the
+// burst. The thread body runs here with a wait that sends the rest of the
+// burst, so no test waits out the real window.
+#[test]
+fn a_burst_of_requests_collapses_into_one_pass() {
+    use crate::bm25_index::scheduling::{enqueue, run_scheduled};
+    let (indexer, root) = idle_scheduler("burst");
+    assert!(enqueue(&indexer, PassScope::ARTIFACTS), "the first request starts the thread");
+
+    let mut waits = 0;
+    let mut passes: Vec<(std::path::PathBuf, PassScope)> = Vec::new();
+    run_scheduled(
+        &indexer,
+        || {
+            waits += 1;
+            if waits == 1 {
+                assert!(!enqueue(&indexer, PassScope::DRAFTS), "a later request starts no thread");
+                assert!(!enqueue(&indexer, PassScope::NOTES));
+                assert!(!enqueue(&indexer, PassScope::ARTIFACTS));
+            }
+        },
+        |pass_root, scope| passes.push((pass_root.to_path_buf(), scope)),
+    );
+
+    assert_eq!(
+        passes,
+        [(
+            root.to_path_buf(),
+            PassScope { artifacts: true, drafts: true, notes: true, documents: false }
+        )],
+        "one pass covers every request of the burst"
+    );
+    assert!(!indexer.schedule().scheduled, "the thread ended");
+}
+
+// BMI-FR-21: a request that arrives while a pass runs is served by one more
+// pass of the same thread, which covers that request only.
+#[test]
+fn a_request_during_a_pass_is_served_by_one_more_pass() {
+    use crate::bm25_index::scheduling::{enqueue, run_scheduled};
+    let (indexer, _root) = idle_scheduler("during");
+    assert!(enqueue(&indexer, PassScope::ARTIFACTS));
+
+    let mut passes: Vec<PassScope> = Vec::new();
+    run_scheduled(
+        &indexer,
+        || {},
+        |_, scope| {
+            if passes.is_empty() {
+                assert!(!enqueue(&indexer, PassScope::DOCUMENTS), "the running thread takes it in");
+                assert!(!enqueue(&indexer, PassScope::DOCUMENTS));
+            }
+            passes.push(scope);
+        },
+    );
+
+    assert_eq!(passes, [PassScope::ARTIFACTS, PassScope::DOCUMENTS]);
+    assert!(!indexer.schedule().scheduled);
+}
+
+// BMI-FR-21, BMI-FR-25: a project switch closes and mounts inside the window of
+// a thread that is alive. The request of the new mount starts no second thread,
+// and the one thread runs one pass of the new root only.
+#[test]
+fn a_new_mount_inside_the_window_is_served_by_the_thread_that_is_alive() {
+    use crate::bm25_index::scheduling::{enqueue, run_scheduled};
+    let (indexer, _old) = idle_scheduler("switch-old");
+    assert!(enqueue(&indexer, PassScope::DRAFTS));
+    let new_root = scratch_root("switch-new");
+
+    let mut waits = 0;
+    let mut passes: Vec<(std::path::PathBuf, PassScope)> = Vec::new();
+    run_scheduled(
+        &indexer,
+        || {
+            waits += 1;
+            if waits == 1 {
+                indexer.clear();
+                indexer.mount(&new_root);
+                assert!(!enqueue(&indexer, PassScope::ALL), "the thread that is alive takes it in");
+            }
+        },
+        |pass_root, scope| passes.push((pass_root.to_path_buf(), scope)),
+    );
+
+    assert_eq!(passes, [(new_root.to_path_buf(), PassScope::ALL)]);
+    assert!(!indexer.schedule().scheduled);
+}
+
+// BMI-FR-21, BMI-FR-25: a close during a pass, with a request pending, ends the
+// thread after that pass. No pass runs against the closed root.
+#[test]
+fn a_close_during_a_pass_ends_the_thread_after_it() {
+    use crate::bm25_index::scheduling::{enqueue, run_scheduled};
+    let (indexer, _root) = idle_scheduler("close-during");
+    assert!(enqueue(&indexer, PassScope::ARTIFACTS));
+
+    let mut passes = 0;
+    run_scheduled(
+        &indexer,
+        || {},
+        |_, _| {
+            passes += 1;
+            assert!(!enqueue(&indexer, PassScope::DOCUMENTS));
+            indexer.clear();
+        },
+    );
+
+    assert_eq!(passes, 1);
+    assert!(!indexer.schedule().scheduled);
+}
+
+// BMI-FR-21, BMI-FR-25: a close during the window ends the thread with no
+// pass, and a later request on a new mount starts a new thread.
+#[test]
+fn a_close_during_the_window_ends_the_thread_with_no_pass() {
+    use crate::bm25_index::scheduling::{enqueue, take_pass};
+    let indexer = Bm25Indexer::default();
+    indexer.mount(&scratch_root("close"));
+    assert!(enqueue(&indexer, PassScope::ARTIFACTS));
+    indexer.clear();
+    assert!(take_pass(&indexer).is_none());
+    assert!(!indexer.schedule().scheduled);
+    assert!(!enqueue(&indexer, PassScope::ARTIFACTS), "nothing is mounted");
+
+    indexer.mount(&scratch_root("close-again"));
+    assert!(enqueue(&indexer, PassScope::ARTIFACTS), "a new mount starts a new thread");
+}
+
 #[test]
 fn a_draft_change_is_recorded_on_the_internal_channel_and_dirties_the_drafts_scope() {
     // DRS-FR-28 / BMI-FR-19. The channel is internal by construction, so what
@@ -209,6 +352,28 @@ fn a_pass_terminates_its_progress_operation_and_leaves_nothing_in_flight() {
         in_flight.iter().all(|op| op.kind != "index"),
         "no index operation may be left running: {in_flight:?}"
     );
+}
+
+// BMI contract `request_pass(scope)`, EMB-FR-KPWZ: each pass takes the next
+// number when it starts, also a pass whose result is dropped, so a consumer can
+// tell a pass that started after a moment from one that started before it.
+#[test]
+fn each_pass_takes_the_next_number_when_it_starts() {
+    let dir = project_with_artifacts();
+    let root = crate::fs::RootFs::for_root(crate::changes::canonicalize_lenient(dir.path()));
+    let app = mounted_app();
+    let handle = app.handle().clone();
+    let indexer = app.state::<Bm25Indexer>();
+    indexer.mount(&root);
+    assert_eq!(indexer.passes_started(), 0);
+
+    let generation = indexer.generation();
+    assert!(indexer.run_pass(&handle, &root, PassScope::ARTIFACTS, generation).is_some());
+    assert_eq!(indexer.passes_started(), 1);
+
+    indexer.mount(&root);
+    assert!(indexer.run_pass(&handle, &root, PassScope::ALL, generation).is_none());
+    assert_eq!(indexer.passes_started(), 2, "a dropped pass also takes a number");
 }
 
 #[test]

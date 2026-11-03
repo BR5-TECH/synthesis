@@ -138,6 +138,26 @@ pub(super) struct Pending {
     pub incremental_at: Option<Instant>,
     pub root_check: bool,
     pub reindex: Option<ReindexScope>,
+    /// EMB-FR-KPWZ: an evaluation that waits for a BM25 pass of the artifact
+    /// indexes that starts after the Git facts were found to move.
+    pub awaiting: Option<Awaiting>,
+}
+
+/// EMB-FR-KPWZ: the evaluation that a move of the Git facts needs, and the
+/// number of the last BM25 pass that started before the move was found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Awaiting {
+    pub kind: JobKind,
+    pub after: u64,
+}
+
+/// What a BM25 publish tells the service (EMB-FR-HWRQ, EMB-FR-KPWZ).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Published {
+    /// The pass covered the artifact indexes or the documents index.
+    pub touched: bool,
+    /// The number of the pass, when it covered the artifact indexes.
+    pub artifacts_pass: Option<u64>,
 }
 
 pub(super) struct Project {
@@ -200,12 +220,18 @@ pub struct EmbeddingsService {
     pub(super) queries: Mutex<usize>,
     pub(super) queries_done: Condvar,
     pub(super) factory: Box<dyn EmbedderFactory>,
-    /// Whether triggers start the worker thread. Tests run jobs themselves.
+    /// Whether the service starts background work: the worker thread, and
+    /// the BM25 passes that it asks for (EMB-FR-KPWZ). Tests run both
+    /// themselves.
     pub(super) spawn_worker: bool,
     pub(super) worker_started: Mutex<bool>,
     /// Every job that started, for the tests that count passes.
     #[cfg(test)]
     pub(super) jobs_run: Mutex<Vec<JobKind>>,
+    /// The scope of each BM25 pass the service asked for (EMB-FR-KPWZ), for
+    /// the tests, which do not start them.
+    #[cfg(test)]
+    pub(super) passes_asked: Mutex<Vec<crate::bm25_index::PassScope>>,
 }
 
 impl EmbeddingsService {
@@ -234,6 +260,8 @@ impl EmbeddingsService {
             worker_started: Mutex::new(false),
             #[cfg(test)]
             jobs_run: Mutex::new(Vec::new()),
+            #[cfg(test)]
+            passes_asked: Mutex::new(Vec::new()),
         }
     }
 
@@ -399,6 +427,7 @@ impl EmbeddingsService {
                 root_check: false,
                 incremental_at: None,
                 reindex: None,
+                awaiting: None,
             },
             phase: if works { Phase::Preparing } else { Phase::Off },
             job: None,
@@ -417,11 +446,14 @@ impl EmbeddingsService {
         self.wake.notify_all();
     }
 
-    /// EMB-FR-HWRQ, EMB-FR-IBXK, EMB-FR-WWMW: the BM25 index published a pass.
-    /// The first publish of a mount lets the waiting full job run; a later one
-    /// schedules an incremental pass when it touched specifications or
-    /// documents.
-    pub fn index_published(&self, touched: bool, generation: u64, now: Instant) {
+    /// EMB-FR-HWRQ, EMB-FR-IBXK, EMB-FR-WWMW, EMB-FR-KPWZ: the BM25 index
+    /// published a pass. The first publish of a mount lets the waiting full job
+    /// run; a later one schedules an incremental pass when it touched
+    /// specifications or documents. A pass of the artifact indexes that started
+    /// after a move of the Git facts was found lets the evaluation for that
+    /// move run.
+    pub fn index_published(&self, published: Published, generation: u64, now: Instant) {
+        let touched = published.touched;
         let mut st = self.lock();
         let enabled = st.settings.enabled;
         let Some(project) = st.project.as_mut() else {
@@ -429,6 +461,17 @@ impl EmbeddingsService {
         };
         if project.generation != generation {
             return;
+        }
+        if let (Some(awaiting), Some(pass)) = (project.pending.awaiting, published.artifacts_pass) {
+            if pass > awaiting.after {
+                project.pending.awaiting = None;
+                // A root update also evaluates the branch layer, so it takes
+                // the place of a queued branch update and names the job right.
+                project.pending.full = match project.pending.full {
+                    None | Some(JobKind::BranchUpdate) => Some(awaiting.kind),
+                    queued => queued,
+                };
+            }
         }
         if !project.snapshot_ready {
             project.snapshot_ready = true;

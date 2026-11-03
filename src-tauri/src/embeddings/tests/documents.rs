@@ -177,7 +177,7 @@ fn a_branch_change_keeps_the_documents_layer() {
     let head = h.repo.head().unwrap().peel_to_commit().unwrap();
     h.repo.branch("feature", &head, false).unwrap();
     h.repo.set_head("refs/heads/feature").unwrap();
-    h.service().request_root_check();
+    h.git_change();
     h.settle(Instant::now());
     assert_eq!(h.jobs().last(), Some(&JobKind::BranchUpdate));
     assert_eq!(layer(&h), before);

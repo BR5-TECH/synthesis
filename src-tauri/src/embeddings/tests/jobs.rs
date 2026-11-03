@@ -111,7 +111,11 @@ fn a_change_outside_the_specifications_starts_no_job() {
     let h = Harness::new();
     h.ready();
     let jobs = h.jobs().len();
-    h.service().index_published(false, h.app.state::<Bm25Indexer>().generation(), Instant::now());
+    h.service().index_published(
+        Published { touched: false, artifacts_pass: None },
+        h.app.state::<Bm25Indexer>().generation(),
+        Instant::now(),
+    );
     h.write("src/main.rs", "// worktree teardown, in code");
     h.write("notes/plan.md", "# Plan\n\nworktree teardown notes");
     h.pass();
@@ -342,14 +346,15 @@ fn a_root_tip_check_updates_the_root_layer() {
     let h = Harness::new();
     h.ready();
     let jobs = h.jobs().len();
+    let asked = h.passes_asked();
     h.service().request_root_check();
     h.settle(Instant::now());
     assert_eq!(h.jobs().len(), jobs, "the tip did not move");
+    assert_eq!(h.passes_asked(), asked, "a check with no move asks for no pass");
 
     let old_tip = h.service().status().project.unwrap().root_tip;
     commit(&h.repo, &[("specifications/c.md", "# Third\n\nA committed specification.")]);
-    h.pass();
-    h.service().request_root_check();
+    h.git_change();
     h.settle(Instant::now());
     let project = h.service().status().project.unwrap();
     assert_ne!(project.root_tip, old_tip);

@@ -229,10 +229,11 @@ pub fn evaluate(
         None => find(LayerKind::Documents, None).map(|layer| LayerRef::Stored(layer.id)),
     };
 
-    // EMB-FR-USBA: at each full evaluation, a branch that no longer exists, or
-    // that no worktree has checked out, loses its layer. The active
-    // branch keeps its layer even while it is unborn, and so is not yet in the
-    // list; an empty list means the list could not be read, and deletes nothing.
+    // EMB-FR-USBA: at each full evaluation, a branch that is not a local branch
+    // any more loses its layer. A branch that no worktree has checked out keeps
+    // it. The active branch keeps its layer even while it is unborn, and so is
+    // not yet in the list; an empty list means the list could not be read, and
+    // deletes nothing.
     let mut deleted = dropped.clone();
     // Only a full evaluation deletes the layers of other branches; an
     // incremental pass changes the active layers alone.

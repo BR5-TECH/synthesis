@@ -354,6 +354,28 @@ fn a_pass_terminates_its_progress_operation_and_leaves_nothing_in_flight() {
     );
 }
 
+// BMI contract `request_pass(scope)`, EMB-FR-KPWZ: each pass takes the next
+// number when it starts, also a pass whose result is dropped, so a consumer can
+// tell a pass that started after a moment from one that started before it.
+#[test]
+fn each_pass_takes_the_next_number_when_it_starts() {
+    let dir = project_with_artifacts();
+    let root = crate::fs::RootFs::for_root(crate::changes::canonicalize_lenient(dir.path()));
+    let app = mounted_app();
+    let handle = app.handle().clone();
+    let indexer = app.state::<Bm25Indexer>();
+    indexer.mount(&root);
+    assert_eq!(indexer.passes_started(), 0);
+
+    let generation = indexer.generation();
+    assert!(indexer.run_pass(&handle, &root, PassScope::ARTIFACTS, generation).is_some());
+    assert_eq!(indexer.passes_started(), 1);
+
+    indexer.mount(&root);
+    assert!(indexer.run_pass(&handle, &root, PassScope::ALL, generation).is_none());
+    assert_eq!(indexer.passes_started(), 2, "a dropped pass also takes a number");
+}
+
 #[test]
 fn a_pass_whose_root_moved_under_it_publishes_nothing() {
     // BMI-FR-25: a result describing a checkout the application has stopped

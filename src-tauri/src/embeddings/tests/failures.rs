@@ -193,7 +193,11 @@ fn a_failed_incremental_pass_is_logged_and_tried_again() {
 
     h.log.fail_embed.store(false, Ordering::SeqCst);
     let generation = h.app.state::<Bm25Indexer>().generation();
-    h.service().index_published(true, generation, Instant::now());
+    h.service().index_published(
+        Published { touched: true, artifacts_pass: None },
+        generation,
+        Instant::now(),
+    );
     h.settle(Instant::now() + LATER);
     let project = h.service().status().project.unwrap();
     assert_eq!(project.spec_chunks, 4);

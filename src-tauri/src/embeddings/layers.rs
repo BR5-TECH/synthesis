@@ -95,9 +95,8 @@ pub enum GitFacts {
         root_branch: Option<String>,
         root_tip: Option<String>,
         head: Head,
-        /// EMB-FR-USBA: the local branches that exist now; in a full
-        /// evaluation, only those that a worktree has checked out
-        /// ([`keep_checked_out`]). Only these keep a branch layer.
+        /// EMB-FR-USBA: the local branches that exist now. Only these keep a
+        /// branch layer, whether a worktree has them checked out or not.
         branches: Vec<String>,
     },
 }
@@ -156,20 +155,6 @@ pub fn git_facts(root: &Path) -> GitFacts {
         })
         .unwrap_or_default();
     GitFacts::Repository { prefix, root_branch, root_tip, head, branches }
-}
-
-/// EMB-FR-USBA: `facts` with only the branches that a worktree has checked
-/// out, for a full evaluation: a branch with no worktree has no layer. When
-/// the worktrees cannot be read, every local branch keeps its layer.
-pub fn keep_checked_out(mut facts: GitFacts, root: &Path) -> GitFacts {
-    if let GitFacts::Repository { branches, .. } = &mut facts {
-        let checked_out = crate::changes::open_repo(root)
-            .and_then(|repo| crate::worktree::checked_out_branches(&repo));
-        if let Ok(checked_out) = checked_out {
-            branches.retain(|name| checked_out.contains(name));
-        }
-    }
-    facts
 }
 
 /// What the root reader found: the chunks, and each specification file that

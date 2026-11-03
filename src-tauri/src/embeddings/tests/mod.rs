@@ -123,6 +123,38 @@ impl Harness {
         pass_scope_on(self.handle(), &self.rooted, scope);
     }
 
+    /// EMB-FR-KPWZ: a Git change that the root check finds, then the BM25 pass
+    /// that the service asks for after it. The pass runs here, on the test
+    /// thread, because the service starts none in a test. It does not make the
+    /// candidate list new itself: the service must do that.
+    fn git_change(&self) {
+        let asked = self.passes_asked();
+        self.service().request_root_check();
+        self.settle(Instant::now());
+        assert_eq!(self.passes_asked(), asked + 1, "the service asks for a pass");
+        self.requested_pass();
+    }
+
+    /// How many BM25 passes the service asked for (EMB-FR-KPWZ).
+    fn passes_asked(&self) -> usize {
+        let asked = self.service().passes_asked.lock().unwrap().clone();
+        assert!(asked.iter().all(|scope| *scope == PassScope::ARTIFACTS), "{asked:?}");
+        asked.len()
+    }
+
+    /// One BM25 pass of the artifact indexes with the candidate list as it
+    /// stands, as the pass that the service asks for runs.
+    fn requested_pass(&self) {
+        let indexer = self.app.state::<Bm25Indexer>();
+        let generation = indexer.generation();
+        indexer.run_pass(self.handle(), &self.rooted, PassScope::ARTIFACTS, generation);
+    }
+
+    /// Whether an evaluation waits for a fresh BM25 pass (EMB-FR-KPWZ).
+    fn awaiting(&self) -> bool {
+        self.service().lock().project.as_ref().is_some_and(|p| p.pending.awaiting.is_some())
+    }
+
     /// Whether an incremental pass is due (EMB-FR-WWMW).
     fn incremental_due(&self) -> bool {
         self.service().lock().project.as_ref().is_some_and(|p| p.pending.incremental_at.is_some())

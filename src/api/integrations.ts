@@ -22,6 +22,7 @@ import type {
   DiscussionContext,
   DiscussionTarget,
   ProjectAgent,
+  ProjectSkill,
   GithubTokenBinding,
   GithubTokenRecord,
   ProjectAgenticIntegration,
@@ -373,6 +374,14 @@ export const updateAgent = (scope: AgentScope, id: string, draft: AgentDraft) =>
  */
 export const deleteAgent = (scope: AgentScope, id: string) =>
   invoke<ProjectAgent[]>("delete_agent", { scope, id });
+
+/**
+ * DSL-FR-PEHR: every project skill of the open project's registry, in path
+ * order, for the Project-skills selector of a Project agent's editor
+ * (AGT-FR-KVDA). Rejects `no_project_open` with no project open.
+ */
+export const listProjectSkills = () =>
+  invoke<ProjectSkill[]>("list_project_skills");
 
 // --- Agent conversations (agent_conversations.rs / AGC) -------------------
 

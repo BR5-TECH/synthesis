@@ -21,7 +21,7 @@ use crate::skills::SKILL_FOLDERS;
 /// it. Returns how many paths it removed.
 ///
 /// Two kinds of path stay whatever the rules say:
-/// - a path in, or above, one of the four skill folders, because the skills
+/// - a path in, or above, one of the five skill folders, because the skills
 ///   index enumerates them with no ignore rule (DSL-FR-06, DSL-FR-19);
 /// - a path in, or above, `.synthesis/`, whose files this application owns and
 ///   whose consumers apply their own rules (ASC-FR-20).

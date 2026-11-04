@@ -23,7 +23,8 @@ use super::{documents, FileRef, IndexId, IndexSet, PassScope, SourceFile, MAX_FI
 ///
 /// DSL-FR-19: the skills half is enumerated in full on every pass whatever the
 /// scope, because its folders may be gitignored and so invisible to the scan
-/// that drives the other two halves.
+/// that drives the other two halves. The built-in skills join it on every pass
+/// (DSL-FR-ZUFC).
 pub(super) fn collect_sources<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &crate::fs::RootFs,
@@ -68,7 +69,27 @@ pub(super) fn collect_sources<R: tauri::Runtime>(
 
     // DSL-FR-13: the skills index's documents are the descriptors themselves,
     // already read — this module performs no read for them (BMI-FR-26).
-    let (skills, excluded) = crate::skills::enumerate(root);
+    let (mut skills, excluded) = crate::skills::enumerate(root);
+    // DSL-FR-ZUFC: the built-in skills join every pass, beside the project
+    // skills, in the one registry and the one `skills` index. The registry
+    // stays in path order (DSL-FR-15): `builtin:` sorts after every project
+    // path, which all start with a `.`.
+    let (builtin, not_eligible) = crate::skills::enumerate_builtin();
+    skills.extend(builtin);
+    // DSL-FR-UYMA: the application ships no such skill, and a test of the build
+    // fails when one appears; this record is what tells a reader of the Logs
+    // panel when it happened anyway. The folder name is the application's own,
+    // never user content.
+    for folder in not_eligible {
+        log_warn(
+            app,
+            &BUFFER,
+            &[Domain::Backend],
+            "built-in skill excluded from the index",
+            crate::log_fields! { "builtin" => folder },
+        );
+    }
+    skills.sort_by(|a, b| a.path.cmp(&b.path));
     for skill in &skills {
         sources.push(SourceFile {
             index: IndexId::Skills,
@@ -80,6 +101,26 @@ pub(super) fn collect_sources<R: tauri::Runtime>(
     let exclusions: BTreeMap<String, &'static str> =
         excluded.into_iter().map(|e| (e.path, e.reason)).collect();
     (sources, skills, exclusions)
+}
+
+/// DSL-FR-ZUFC: the built-in skills, as the `skills` index's documents.
+///
+/// They come from the binary, so they are known before any pass has read the
+/// disk. [`super::Bm25Indexer::mount`] indexes them at once with this, so a new
+/// content root holds the built-in skills from its first moment rather than
+/// from the end of its first pass.
+pub(super) fn builtin_skill_sources() -> (Vec<SourceFile>, Vec<crate::skills::SkillDescriptor>) {
+    let skills = crate::skills::enumerate_builtin().0;
+    let sources = skills
+        .iter()
+        .map(|skill| SourceFile {
+            index: IndexId::Skills,
+            file: FileRef::artifact(skill.path.clone()),
+            text: Ok(skill.document()),
+            plain_text: false,
+        })
+        .collect();
+    (sources, skills)
 }
 
 /// DSL-FR-24: emit a `WARN` for each skill exclusion that is new, or whose

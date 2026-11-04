@@ -11,7 +11,10 @@ fn the_tool_is_a_portable_tool_named_load_skill() {
     // LSK-FR-01. The absence from `invoke_handler` is asserted for the whole
     // group in `tools/tests.rs`; what is this tool's own is its name.
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillLoadTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillLoadTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(definition.name, "load_skill");
     assert_eq!(
@@ -24,7 +27,10 @@ fn the_tool_is_a_portable_tool_named_load_skill() {
 #[test]
 fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillLoadTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillLoadTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
     assert_eq!(definition.description, DESCRIPTION);
 
     // Asserting `description() == DESCRIPTION` alone proves only that the
@@ -48,7 +54,7 @@ fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     // because a model reads the description and does not reliably infer a set
     // from a schema keyword (TLC-FR-06).
     let documented = schema["properties"]["ecosystem"]["description"].as_str().unwrap();
-    for value in ["claude", "codex", "github", "opencode"] {
+    for value in ["claude", "codex", "github", "opencode", "synthesis", "builtin"] {
         assert!(
             documented.contains(value),
             "LSK-FR-02: {value:?} is named in the parameter's own description",

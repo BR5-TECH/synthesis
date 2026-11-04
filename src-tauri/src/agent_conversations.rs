@@ -440,6 +440,11 @@ fn substitute_once(template: &str, pairs: &[(&str, &str)]) -> String {
 /// reference document the user selected is material any work may rest on, so an
 /// agent of any kind can find one and read it by id (SDT-FR-LNNL, GDT-FR-LITM).
 ///
+/// `skills` is the skill filter of the turn's agent (CVL-FR-VZZR): the three
+/// skill tools answer only with the built-in skills and the project skills the
+/// agent's persona selects. It changes what they answer and never which tools
+/// the turn carries or their definitions (CVL-FR-08).
+///
 /// `session` is the agent session the turn runs inside (CVL-FR-24). The four
 /// tools that touch the filesystem take it — `read_file`, `search_drafts`,
 /// `read_draft`, and `search_notes` — so an agent's whole reach is that
@@ -453,6 +458,10 @@ fn substitute_once(template: &str, pairs: &[(&str, &str)]) -> String {
 /// as *this* agent on the same terms (ADQ-FR-HTGC). `asked`, `asked_questions`
 /// and `proposed` come back the other way, so the loop can tell a contribution
 /// that went out from one that was refused (CVL-FR-15).
+// Each argument binds a different tool to this one turn — its session, its
+// conversation, its author, its flags, its budget, and its agent's skills — and
+// a struct that held them together would be read by this function alone.
+#[allow(clippy::too_many_arguments)]
 fn conversation_tools<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     session: &str,
@@ -461,6 +470,7 @@ fn conversation_tools<R: tauri::Runtime>(
     author: &Participant,
     flags: ContributionFlags<'_>,
     budget: DocumentBudget,
+    skills: &crate::skills::SkillFilter,
 ) -> Vec<rig::tool::DynamicTool> {
     let ContributionFlags { asked, asked_questions, proposed } = flags;
     let mut tools = vec![
@@ -474,9 +484,9 @@ fn conversation_tools<R: tauri::Runtime>(
         // own read-only instance and never through the session's (GDT-FR-HCYY).
         erase_tool(crate::tools::document_search::SearchDocumentsTool::new(app.clone())),
         erase_tool(crate::tools::document_get::GetDocumentTool::new(app.clone())),
-        erase_tool(crate::tools::skill_search::SkillSearchTool::new(app.clone())),
-        erase_tool(crate::tools::skill_list::SkillListTool::new(app.clone())),
-        erase_tool(crate::tools::skill_load::SkillLoadTool::new(app.clone())),
+        erase_tool(crate::tools::skill_search::SkillSearchTool::new(app.clone(), skills.clone())),
+        erase_tool(crate::tools::skill_list::SkillListTool::new(app.clone(), skills.clone())),
+        erase_tool(crate::tools::skill_load::SkillLoadTool::new(app.clone(), skills.clone())),
         // CVL-FR-08, MDT-FR-EEFA: bound to this turn's window and percent.
         erase_tool(crate::tools::measure_document::MeasureDocumentTool::new(
             app.clone(),

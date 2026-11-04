@@ -11,7 +11,8 @@ use super::{normalize_rel, ArtifactType};
 /// The representative recognizer table below spans Claude Code
 /// (`.claude/skills`, `.claude/agents`, `.claude/commands`), Codex
 /// (`AGENTS.md`), GitHub Copilot (`.github/**instructions**`,
-/// `.github/prompts`), and the synthesis convention (`specifications/`). It is
+/// `.github/prompts`), and the synthesis conventions (`.synthesis/skills`,
+/// `specifications/`). It is
 /// intentionally extensible; the *type set* (ASC-FR-02) is what is fixed.
 pub fn infer_from_path(rel: &str) -> Option<ArtifactType> {
     let rel = normalize_rel(rel);
@@ -22,6 +23,10 @@ pub fn infer_from_path(rel: &str) -> Option<ArtifactType> {
     // Directory-convention recognizers: a window of two consecutive path
     // segments anchors the ecosystem (e.g. `.claude/skills`).
     if has_dir_pair(&segs, ".claude", "skills") {
+        return Some(ArtifactType::Skill);
+    }
+    // The synthesis skills of `DSL-dynamic-skills-loading.md` DSL-FR-NWKE.
+    if has_dir_pair(&segs, ".synthesis", "skills") {
         return Some(ArtifactType::Skill);
     }
     if has_dir_pair(&segs, ".claude", "agents") {

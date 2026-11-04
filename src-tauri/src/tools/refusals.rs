@@ -33,6 +33,13 @@ pub const SKILL_NOT_FOUND: &str = "No skill by that name is available in this pr
 /// LSK-FR-15: the descriptor was there, the file behind it was not.
 pub const SKILL_UNREADABLE: &str = "That skill's file could not be read. It may have changed since the list was built; call `list_skills` to see what is available now.";
 
+/// LSK-FR-PZZE: the `file` argument of `load_skill` named a path outside the
+/// skill's own folder.
+pub const SKILL_FILE_OUTSIDE: &str = "The file must be a path inside the skill's own folder, for example `references/example.md`. Call again with a path exactly as the skill's instructions name it.";
+
+/// LSK-FR-ULLF: the skill holds no readable file at the path the model named.
+pub const SKILL_FILE_NOT_FOUND: &str = "The skill has no readable file at that path. Load the skill without `file` to see which files its instructions name, then call again with one of them.";
+
 /// LSK-FR-10: the opening of the ambiguity refusal, completed by the ecosystems
 /// that hold the name.
 pub const SKILL_AMBIGUOUS: &str =
@@ -421,6 +428,8 @@ pub enum ToolRefusal {
     SkillNameNotUnique,
     /// LSK-FR-15: the registry named the file and the read of it failed.
     SkillUnreadable,
+    /// LSK-FR-ULLF: the skill holds no readable file at the `file` path.
+    SkillFileNotFound,
     /// RFT-FR-04: the path resolved outside the project root. `PermissionDenied`
     /// rather than `InvalidArgs` because the argument was well-formed — it named
     /// somewhere this tool may not go, which is a matter of reach and not of
@@ -529,6 +538,7 @@ impl ToolRefusal {
             ToolRefusal::NoProjectOpen
             | ToolRefusal::SkillNotFound
             | ToolRefusal::SkillUnreadable
+            | ToolRefusal::SkillFileNotFound
             | ToolRefusal::FileNotFound
             // PDC-FR-05: material the model named that the draft does not hold —
             // the same shape as a path `read_file` cannot find, and retryable for
@@ -682,6 +692,7 @@ impl ToolRefusal {
             | ToolRefusal::SkillNotFound
             | ToolRefusal::SkillAmbiguous(_)
             | ToolRefusal::SkillUnreadable
+            | ToolRefusal::SkillFileNotFound
             | ToolRefusal::PathOutsideProject
             | ToolRefusal::PathThroughLink
             | ToolRefusal::FileNotFound
@@ -741,6 +752,7 @@ impl ToolRefusal {
             ToolRefusal::SkillAmbiguous(_) => "skill_ambiguous",
             ToolRefusal::SkillNameNotUnique => "skill_name_not_unique",
             ToolRefusal::SkillUnreadable => "skill_unreadable",
+            ToolRefusal::SkillFileNotFound => "skill_file_not_found",
             ToolRefusal::PathOutsideProject => "path_outside_project",
             ToolRefusal::PathThroughLink => "path_through_link",
             ToolRefusal::FileNotFound => "file_not_found",
@@ -805,6 +817,7 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::SkillNotFound => f.write_str(SKILL_NOT_FOUND),
             ToolRefusal::SkillNameNotUnique => f.write_str(SKILL_NAME_NOT_UNIQUE),
             ToolRefusal::SkillUnreadable => f.write_str(SKILL_UNREADABLE),
+            ToolRefusal::SkillFileNotFound => f.write_str(SKILL_FILE_NOT_FOUND),
             ToolRefusal::PathOutsideProject => f.write_str(PATH_OUTSIDE_PROJECT),
             ToolRefusal::PathThroughLink => f.write_str(PATH_THROUGH_LINK),
             ToolRefusal::FileNotFound => f.write_str(FILE_NOT_FOUND),

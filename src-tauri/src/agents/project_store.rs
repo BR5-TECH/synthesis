@@ -36,6 +36,17 @@ struct AgentFile {
     model_id: String,
     instructions: String,
     voice: String,
+    /// PSS-FR-AGKY / AGR-FR-IGIL: the selected project skill paths. A file
+    /// without the key reads as an empty selection (AGR-FR-XWVP), and an empty
+    /// selection writes no key, so a file of an agent that selects nothing
+    /// stays as it was.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    skills: Vec<String>,
+    /// PSS-FR-AGKY / AGR-FR-HMVQ: the synthesis skill paths the agent turns
+    /// off, under the key `disabledSkills`. A file without the key reads as an
+    /// empty list (AGR-FR-WDZT), and an empty list writes no key.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    disabled_skills: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<ReasoningChoice>,
 }
@@ -71,6 +82,8 @@ fn agent_of(id: &str, file: AgentFile) -> Agent {
         model_id: file.model_id,
         instructions: file.instructions,
         voice: file.voice,
+        skills: file.skills,
+        disabled_skills: file.disabled_skills,
         // A Project agent carries no timestamp (PSS-FR-AGKY).
         created_at: String::new(),
         updated_at: String::new(),
@@ -115,7 +128,14 @@ pub fn list(root: &RootFs) -> Result<ProjectAgentFiles, String> {
 
 /// PSS-FR-AGFL: write the one file of one agent atomically. The folder is
 /// created by the write itself (FSA-FR-05).
-pub fn write(root: &RootFs, id: &str, draft: &AgentDraft, title: &str) -> Result<(), String> {
+pub fn write(
+    root: &RootFs,
+    id: &str,
+    draft: &AgentDraft,
+    title: &str,
+    skills: &[String],
+    disabled_skills: &[String],
+) -> Result<(), String> {
     if !is_valid_id(id) {
         return Err(super::ERR_AGENT_NOT_FOUND.into());
     }
@@ -125,6 +145,8 @@ pub fn write(root: &RootFs, id: &str, draft: &AgentDraft, title: &str) -> Result
         model_id: draft.model_id.clone(),
         instructions: draft.instructions.clone(),
         voice: draft.voice.trim().to_string(),
+        skills: skills.to_vec(),
+        disabled_skills: disabled_skills.to_vec(),
         reasoning: draft.reasoning.clone(),
     };
     root.write_toml_atomic(agent_path(root, id), &file)

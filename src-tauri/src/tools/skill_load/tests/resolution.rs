@@ -66,20 +66,22 @@ fn the_module_enumerates_no_folder_of_its_own() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    for forbidden in
-        ["read_dir", "list_dir", "SKILL_FOLDERS", "SKILL_FILE", "enumerate(", "WalkDir", "glob"]
-    {
+    // `SKILL_FILE` is allowed: the tool names the `SKILL.md` of a skill it
+    // already resolved, to find that skill's folder (LSK-FR-UBQE) and its
+    // embedded instructions (LSK-FR-SGVX), and never to look for skills.
+    for forbidden in ["read_dir", "list_dir", "SKILL_FOLDERS", "enumerate(", "WalkDir", "glob"] {
         assert!(
             !code.contains(forbidden),
             "LSK-FR-03: skill_load must not discover paths itself, found {forbidden:?}",
         );
     }
-    // And exactly one read call, so a second file cannot be picked up beside
-    // the one the registry named.
+    // And exactly two read calls — one for the `SKILL.md`, one for `file` —
+    // each on its own path, so a call reads one file and a second file cannot
+    // be picked up beside it (LSK-FR-03, LSK-FR-KDVE).
     assert_eq!(
         code.matches("read_text").count(),
-        1,
-        "LSK-FR-03: exactly one read, of the descriptor's own path",
+        2,
+        "LSK-FR-03: one read for the instructions and one for a named file",
     );
 }
 
@@ -268,6 +270,7 @@ fn an_ecosystem_of_the_wrong_json_shape_does_not_lose_the_name_beside_it() {
 
     assert_eq!(parse_ecosystem("claude"), Some(Ecosystem::Claude));
     assert_eq!(parse_ecosystem(" GITHUB "), Some(Ecosystem::Github));
+    assert_eq!(parse_ecosystem("Synthesis"), Some(Ecosystem::Synthesis));
     assert_eq!(parse_ecosystem("elsewhere"), None);
     assert_eq!(parse_ecosystem(""), None);
 }

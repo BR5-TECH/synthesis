@@ -525,6 +525,8 @@ impl Harness {
             None,
             agents::AgentScope::Personal,
             &AgentDraft {
+                skills: Vec::new(),
+                disabled_skills: Vec::new(),
                 voice: String::new(),
                 nickname: nickname.into(),
                 title: String::new(),
@@ -541,6 +543,33 @@ impl Harness {
         self.create_titled_agent(nickname, instructions, "")
     }
 
+    /// AGR-FR-IGIL: a Project agent that selects the project skills at
+    /// `skills`, for the turns that reach a project skill (CVL-FR-VZZR).
+    fn create_project_agent_with_skills(
+        &self,
+        nickname: &str,
+        instructions: &str,
+        skills: &[&str],
+    ) -> agents::Agent {
+        agents::create_agent_impl(
+            &self.store(),
+            "",
+            Some(&crate::fs::RootFs::for_root(self.root().path())),
+            agents::AgentScope::Project,
+            &AgentDraft {
+                skills: skills.iter().map(|s| s.to_string()).collect(),
+                disabled_skills: Vec::new(),
+                voice: String::new(),
+                nickname: nickname.into(),
+                title: String::new(),
+                model_id: "m".into(),
+                instructions: instructions.into(),
+                reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
+            },
+        )
+        .expect("project agent")
+    }
+
     /// AGR-FR-23: an agent carrying a title, for the paths that snapshot one.
     fn create_titled_agent(
         &self,
@@ -554,6 +583,8 @@ impl Harness {
             None,
             agents::AgentScope::Personal,
             &AgentDraft {
+                skills: Vec::new(),
+                disabled_skills: Vec::new(),
                 voice: String::new(),
                 nickname: nickname.into(),
                 title: title.into(),
@@ -678,6 +709,7 @@ mod responses_repair;
 mod retries;
 mod rig_replies;
 mod session_log;
+mod skill_turns;
 mod speech_turns;
 mod spoken_part;
 mod steering;

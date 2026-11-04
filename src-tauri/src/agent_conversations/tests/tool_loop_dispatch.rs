@@ -486,7 +486,9 @@ fn a_turn_that_called_every_tool_changes_nothing_in_the_project() {
     )
     .expect("a note");
     h.mount();
-    h.create_agent("arch", "");
+    // CVL-FR-VZZR: a Project agent that selects the seeded skill, so the three
+    // skill tools reach it.
+    h.create_project_agent_with_skills("arch", "", &[".claude/skills/analyst/SKILL.md"]);
 
     // Seeded before the snapshot: the artifact and its thread are the test's own
     // setup, and counting them as changes would make this pass for the wrong

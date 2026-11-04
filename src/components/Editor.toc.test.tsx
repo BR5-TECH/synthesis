@@ -265,6 +265,20 @@ describe("the table of contents panel", () => {
     expect(screen.queryByText("No headings")).toBeNull();
   });
 
+  it("EDT-FR-QWZN: a heading with no text is not listed, in either mode, and the heading stays in the document", async () => {
+    wireBackend("# Intro\n\n#\n\n## Next\n");
+    await mount();
+    await screen.findByRole("heading", { name: "Intro" });
+    fireEvent.click(tocButton());
+    expect(entryTexts()).toEqual(["1:Intro", "2:Next"]);
+    expect(tiptap().view.dom.querySelectorAll("h1, h2")).toHaveLength(3);
+    fireEvent.keyDown(tocFilter(), { key: "Escape" });
+
+    await toRaw();
+    fireEvent.click(tocButton());
+    await waitFor(() => expect(entryTexts()).toEqual(["1:Intro", "2:Next"]));
+  });
+
   it("EDT-FR-KJLQ: while open, the list follows an edit, an undo, and a redo", async () => {
     wireBackend();
     await mountMarkdown();

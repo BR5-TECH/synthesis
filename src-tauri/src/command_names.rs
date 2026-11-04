@@ -404,6 +404,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // `resolve_project_agent` is deliberately absent: it is the read path a
     // dispatch takes and must stay unreachable from the frontend (AGR-FR-18).
     "list_personal_agents",
+    "list_project_skills",
     "list_project_agents",
     "create_agent",
     "update_agent",

@@ -234,6 +234,10 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
         store
             .save_agent_registry(vec![
                 Agent {
+                    skills: Vec::new(),
+                    // GSS-FR-30 / AGR-FR-HMVQ: the opt-outs are written as a
+                    // value before the `reasoning` table.
+                    disabled_skills: vec![".synthesis/skills/glossary/SKILL.md".into()],
                     voice: String::new(),
                     id: "a1".into(),
                     nickname: "arch".into(),
@@ -245,6 +249,8 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
                     reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
                 },
                 Agent {
+                    skills: Vec::new(),
+                    disabled_skills: Vec::new(),
                     voice: String::new(),
                     id: "a2".into(),
                     nickname: "scribe".into(),
@@ -269,6 +275,9 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
         "gpt-5",
         // GSS-FR-30: the title is persisted beside the rest of the record.
         "Architect",
+        // GSS-FR-30 / AGR-FR-HMVQ: and the synthesis skills it turns off.
+        "disabledSkills",
+        ".synthesis/skills/glossary/SKILL.md",
     ] {
         assert!(text.contains(expected), "{expected:?} is missing from {text}");
     }
@@ -289,6 +298,8 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
     assert_eq!(agents[1].title, "");
     assert_eq!(agents[0].reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }),);
     assert_eq!(agents[1].reasoning, None);
+    assert_eq!(agents[0].disabled_skills, vec![".synthesis/skills/glossary/SKILL.md".to_string()]);
+    assert!(agents[1].disabled_skills.is_empty());
 }
 
 #[test]
@@ -323,6 +334,8 @@ updatedAt = "2026-07-01T09:00:00Z"
     assert_eq!(agents[0].title, "");
     assert_eq!(agents[0].nickname, "arch");
     assert_eq!(agents[0].instructions, "Argue about structure.");
+    // AGR-FR-WDZT: a record that predates the opt-outs turns nothing off.
+    assert!(agents[0].disabled_skills.is_empty());
     // And nothing else in the store was reset on the way past.
     assert_eq!(store.load_app_preferences().unwrap().theme, Theme::Dark);
     // Reading does not rewrite: the file is untouched until something saves.

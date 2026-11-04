@@ -46,6 +46,10 @@ scope = "file"
 type = "prompt"
 scope = "folder"
 
+[assignments."resources/skills"]
+type = "skill"
+scope = "folder"
+
 [assignments."resources/system"]
 type = "prompt"
 scope = "folder"

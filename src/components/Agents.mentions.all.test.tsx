@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import type React from "react";
 import { useState } from "react";
 
+import { resetLogBufferForTest } from "../logging";
 import {
   notifyAgentRegistryChanged,
   publishProjectAgents,
@@ -151,6 +152,12 @@ function wire(b: Backend) {
       }
       case "list_agent_turns":
         return b.turns;
+      // AGT-FR-KVDA: a Project agent's editor reads the project skills.
+      case "list_project_skills":
+        return [];
+      // The log flush runs in the background of every surface.
+      case "append_log_records":
+        return undefined;
       case "create_agent": {
         if (b.createError) throw b.createError;
         const { draft } = args as { draft: Agent };
@@ -197,6 +204,7 @@ beforeEach(() => {
   // The write signal is module-level, so one test's writes must not be served
   // to the next.
   resetAgentRegistry();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 

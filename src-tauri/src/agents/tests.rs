@@ -60,6 +60,8 @@ fn with_openrouter(store: &GlobalSettingsStore) {
 
 fn draft(nickname: &str) -> AgentDraft {
     AgentDraft {
+        skills: Vec::new(),
+        disabled_skills: Vec::new(),
         voice: String::new(),
         nickname: nickname.into(),
         title: String::new(),
@@ -148,6 +150,8 @@ fn a_created_agent_carries_an_id_two_timestamps_and_every_supplied_field() {
         &store,
         "",
         &AgentDraft {
+            skills: Vec::new(),
+            disabled_skills: Vec::new(),
             voice: String::new(),
             nickname: "arch".into(),
             title: "Architect".into(),
@@ -549,6 +553,8 @@ fn update_replaces_every_field_keeps_created_at_and_the_id_and_refuses_a_missing
         "",
         &arch.id,
         &AgentDraft {
+            skills: Vec::new(),
+            disabled_skills: Vec::new(),
             voice: String::new(),
             nickname: "architect".into(),
             title: String::new(),

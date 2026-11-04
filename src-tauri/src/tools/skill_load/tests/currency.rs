@@ -75,11 +75,12 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
         indexer.mount(&crate::fs::RootFs::for_root(&root));
     }
 
-    let refusal = block_on(
-        SkillLoadTool::new(handle)
-            .call(LoadSkillArgs { name: "settled".to_string(), ecosystem: None }),
-    )
-    .unwrap_err();
+    let refusal =
+        block_on(
+            SkillLoadTool::new(handle, crate::skills::SkillFilter::all_project())
+                .call(LoadSkillArgs { name: "settled".to_string(), ecosystem: None, file: None }),
+        )
+        .unwrap_err();
     assert_eq!(
         refusal,
         ToolRefusal::SkillNotFound,
@@ -93,7 +94,10 @@ fn one_instance_serves_two_callers_without_either_observing_the_other() {
     // holding a filesystem handle, so it is the one where a shared instance
     // could plausibly interleave two reads.
     let fixture = collision_project();
-    let tool = std::sync::Arc::new(SkillLoadTool::new(fixture.handle()));
+    let tool = std::sync::Arc::new(SkillLoadTool::new(
+        fixture.handle(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     let a = std::sync::Arc::clone(&tool);
     let b = std::sync::Arc::clone(&tool);
@@ -101,12 +105,14 @@ fn one_instance_serves_two_callers_without_either_observing_the_other() {
         block_on(a.call(LoadSkillArgs {
             name: "review".to_string(),
             ecosystem: Some("codex".to_string()),
+            file: None,
         }))
     });
     let two = std::thread::spawn(move || {
         block_on(b.call(LoadSkillArgs {
             name: "review".to_string(),
             ecosystem: Some("opencode".to_string()),
+            file: None,
         }))
     });
 

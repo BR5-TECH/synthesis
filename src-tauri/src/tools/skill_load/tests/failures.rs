@@ -74,8 +74,8 @@ fn a_skill_that_became_a_symlink_is_refused_rather_than_followed() {
 fn no_project_open_is_the_shared_refusal_and_not_the_unknown_skill_one() {
     let app = closed_project();
     let refusal = block_on(
-        SkillLoadTool::new(app.handle().clone())
-            .call(LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
+        SkillLoadTool::new(app.handle().clone(), crate::skills::SkillFilter::all_project())
+            .call(LoadSkillArgs { name: "analyst".to_string(), ecosystem: None, file: None }),
     )
     .unwrap_err();
 

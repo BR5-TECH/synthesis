@@ -108,7 +108,9 @@ fn rerooting_discards_the_outgoing_worktrees_skill_registry_and_builds_the_incom
     // `indexer.mount` call from `remount_content_root`, and leaving
     // `Bm25Indexer::reset` to bump the generation without emptying the
     // published set.
-    use crate::skills::{list_skills, search_skills};
+    use crate::skills::test_support::{
+        listed_project as list_skills, searched_project as search_skills,
+    };
     use tauri::Manager;
     let f = Fixture::new();
     f.branch("alpha");

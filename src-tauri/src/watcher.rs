@@ -346,7 +346,7 @@ pub fn start_watching<R: tauri::Runtime>(
             // burst into one (BMI-FR-21).
             //
             // ASC-FR-20 / DSL-FR-19: `changed` is the raw path channel, which
-            // keeps a gitignored path in the four skill folders (ASC-FR-RSGA),
+            // keeps a gitignored path in the five skill folders (ASC-FR-RSGA),
             // and a pass always re-enumerates those folders whatever scope it
             // was asked for. That pairing
             // is what makes an edit to a gitignored `.claude/skills/*/SKILL.md`

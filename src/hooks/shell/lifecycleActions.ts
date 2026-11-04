@@ -23,6 +23,7 @@ import { resetOwnerAvailability } from "../../state/ownerAvailability";
 import { clearConversationThreads } from "../../state/conversationThreads";
 import { clearQuestionSets } from "../../state/questionSets";
 import { resetDraftProposals } from "../../state/draftProposals";
+import { resetNewDraftProposals } from "../../state/newDraftProposals";
 import { resetProposalHunks } from "../../state/proposalHunks";
 import { resetDraftDiscussions } from "../../state/draftDiscussion";
 import { resetPromptProposals } from "../../state/promptProposals";
@@ -256,6 +257,7 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
      * (DCR-FR-22).
      */
     resetDraftProposals();
+    resetNewDraftProposals();
     // DCR-FR-33: the changes those proposals hold, and where the author had got
     // to in each draft's two columns, belong to the same content root and go
     // with it. Left standing, the incoming tree's first review would draw the

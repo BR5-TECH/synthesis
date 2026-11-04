@@ -67,6 +67,7 @@ import {
 } from "../state/draftProposals";
 import { setFocusedHunk } from "../state/draftDiscussion";
 import { draftProposalRaise, promptProposalReaction } from "../state/proposalRaises";
+import { useDecompositionShell } from "./useDecompositionShell";
 import {
   CONFIGURATION_ERROR_KEY,
   CONFIGURATION_ERROR_TITLE,
@@ -471,6 +472,10 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       unlisten?.();
     };
   }, []);
+
+  // DCR-FR-QQLE / DCR-FR-HWLA / CMT-FR-MPKL: the decomposition surfaces.
+  // DCR-FR-QQLE: a new-draft proposal waiting for the author raises Info.
+  useDecompositionShell(s, knownDrafts, rootRef, (raise) => void raiseNotification(raise));
 
   /**
    * GSD-FR-BXKR / NTF-FR-24: a start or a merge was refused because the Docker

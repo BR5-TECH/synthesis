@@ -108,6 +108,19 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         ToolRefusal::MeasureFileNotFound,
         ToolRefusal::MeasureDraftInconsistent,
         ToolRefusal::MeasureUnreadable,
+        // PND-FR-GPNN / PND-FR-SQTD: the new-draft tool's refusals join the
+        // group and are held to exactly the same rules.
+        ToolRefusal::Denied {
+            message: crate::tools::propose_new_draft::DRAFT_ARCHIVED,
+            code: "draft_archived",
+            retryable: false,
+        },
+        ToolRefusal::Denied {
+            message: crate::tools::propose_new_draft::PROPOSAL_OPEN,
+            code: "proposal_open",
+            retryable: true,
+        },
+        ToolRefusal::NotRecordedWith(crate::tools::propose_new_draft::NOT_RECORDED),
     ]
     .into_iter()
     .inspect(|refusal| match refusal {
@@ -131,6 +144,8 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::ProposalPending
         | ToolRefusal::ProposalConversationResolved
         | ToolRefusal::ProposalNotRecorded
+        | ToolRefusal::Denied { .. }
+        | ToolRefusal::NotRecordedWith(_)
         | ToolRefusal::DraftNotFound
         | ToolRefusal::DraftInconsistent
         | ToolRefusal::DraftPromptUnreadable

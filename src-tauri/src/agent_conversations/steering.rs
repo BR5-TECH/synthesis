@@ -49,6 +49,10 @@ impl SteeringItem {
 /// AGC-FR-ISCZ: a turn that holds its reply has no deadline, and the end of the
 /// hold restarts it.
 pub(super) fn give_steering(live: &mut Live, item: SteeringItem) {
+    // AGC-FR-DTCL: a comment item is a received comment. A chunk is not.
+    if let Some(comment_id) = item.comment_id() {
+        live.received.push(comment_id.to_string());
+    }
     live.steering.push(item);
     if live.turn.reply_held {
         return;

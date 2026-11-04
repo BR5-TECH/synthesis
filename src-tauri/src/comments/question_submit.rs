@@ -269,6 +269,21 @@ pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     if outcome.appended_questions > 0 {
         crate::agent_conversations::retire_awaiting_for_thread(&app, &thread_id);
     }
+    // CMS-FR-VRZA: each answer comment of this set is an author comment
+    // (AGC-FR-TFEN). The question comments are the agent's. Also on the
+    // CMS-FR-GAVT retry, whose answers this command appended on its first call.
+    {
+        let prefix = format!("{set_id}:");
+        super::commands::note_author_comments(
+            &app,
+            outcome
+                .submitted
+                .discussion
+                .comments
+                .iter()
+                .filter(|c| c.id.starts_with(&prefix) && c.id.ends_with("-2a")),
+        );
+    }
     emit_discussion_changed(&app, &outcome.submitted.discussion);
     if outcome.appended_questions > 0 {
         // CMS-FR-BQEN: the set is gone. A retry that appended nothing changed no

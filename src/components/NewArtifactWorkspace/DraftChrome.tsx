@@ -3,6 +3,8 @@
  * rail's toggle, the draft's name, the tags beside it, and the split controls.
  * Split out of `index.tsx` to keep that file within the size rule.
  */
+import { DecompositionTags } from "./DecompositionTags";
+import type { DraftSequence, SupersededMarker } from "../../types";
 import { undecidedCount } from "../../types";
 import type {
   DraftChangeProposal,
@@ -30,6 +32,8 @@ export function DraftChrome({
   shadow,
   shadowIssue,
   archived,
+  sequence,
+  superseded,
   graduation,
   onOpenRun,
   publication,
@@ -47,6 +51,9 @@ export function DraftChrome({
   shadow: boolean;
   shadowIssue: GithubIssueLink | null;
   archived: boolean;
+  /** NAW-FR-IDIJ / NAW-FR-MONI. */
+  sequence: DraftSequence | null;
+  superseded: SupersededMarker | null;
   graduation: DraftGraduation | null;
   onOpenRun: (runId: string) => void;
   publication: UseDraftPublicationResult;
@@ -128,6 +135,8 @@ export function DraftChrome({
       {archived && (
         <span className="draft-workspace__archived t-ui-xs">Archived</span>
       )}
+      {/* NAW-FR-MONI / NAW-FR-IDIJ: the decomposition facts. */}
+      <DecompositionTags sequence={sequence} superseded={superseded} />
       {/* NAW-FR-BJQX: the run's state, as a tag beside the draft's label, and as
           the route to it. A run is where an author acts on a graduation
           (GRU-FR-MYFA), so this says which one holds the prompt and takes them

@@ -21,6 +21,7 @@ export * from "./documents";
 export * from "./embeddings";
 export * from "./remoteConnectivity";
 export * from "./drafts";
+export * from "./newDraftProposals";
 export * from "./git";
 export * from "./githubPolling";
 export * from "./integrations";

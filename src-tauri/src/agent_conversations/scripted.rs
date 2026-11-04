@@ -443,6 +443,9 @@ impl CompletionSeam for ScriptedCompletion {
             .flat_map(|base| {
                 let mut with_draft = base.clone();
                 with_draft.push(crate::tools::propose_draft_changes::NAME);
+                // CVL-FR-08 / PND-FR-YFES: a draft turn can also propose one
+                // new draft of a decomposition.
+                with_draft.push(crate::tools::propose_new_draft::NAME);
                 // CVL-FR-08: the decision tool of the same store follows.
                 with_draft.push(crate::tools::decide_draft_changes::NAME);
                 let mut with_prompt = base.clone();

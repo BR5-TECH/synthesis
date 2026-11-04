@@ -10,6 +10,13 @@ import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-document
 import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
+import {
+  DECOMPOSITION_ORIGINAL,
+  decompositionDiscussion,
+  decompositionInvoke,
+  hasPendingNewDraft,
+  sequenceOf,
+} from "./mock-decomposition";
 
 const now = "2026-07-28T11:24:00Z";
 
@@ -2208,6 +2215,8 @@ const discussionsByTarget: Record<string, any[]> = {
    * reachable without writing anything, which is why only one is seeded.
    */
   "note:n-2": [noteDiscussion("disc-note-2", "n-2")],
+  // DCR-FR-RDLK: the discussion of the original draft of a decomposition.
+  "draft:d-19": [decompositionDiscussion(human, agent)],
 };
 
 /**
@@ -2397,6 +2406,50 @@ function reparentDraftsSubtree(from: string, to: string) {
   }
 }
 
+const SUPERSEDED_21 = {
+  setId: "set-21",
+  confirmedAt: "2026-09-08T16:00:00Z",
+  drafts: [
+    { id: "d-22", name: "Invoice line rounding rules for multi-currency accounts" },
+    { id: "d-23", name: "Invoice PDF layout" },
+  ],
+};
+
+const DECOMPOSITION_ROWS: any[] = [
+  {
+    id: "d-19",
+    name: DECOMPOSITION_ORIGINAL,
+    status: "active",
+    folder: "backend",
+    updatedAt: "2026-09-12T10:14:00Z",
+  },
+  {
+    id: "d-20",
+    name: "Release build matrix",
+    status: "active",
+    folder: "backend",
+    updatedAt: "2026-09-12T10:10:00Z",
+    sequence: sequenceOf("set-19", 1, 3, "d-19", DECOMPOSITION_ORIGINAL),
+  },
+  {
+    id: "d-21",
+    name: "Billing refactor",
+    status: "archived",
+    folder: "backend",
+    updatedAt: "2026-09-08T16:00:00Z",
+    superseded: SUPERSEDED_21,
+  },
+  {
+    id: "d-22",
+    name: "Invoice line rounding rules for multi-currency accounts",
+    status: "active",
+    folder: "UI/Components/Buttons and other long-named interactive controls",
+    updatedAt: "2026-09-08T15:00:00Z",
+    sequence: sequenceOf("set-21", 1, 2, "d-21", "Billing refactor"),
+    superseded: null,
+  },
+];
+
 const drafts = [
   {
     id: "d-1",
@@ -2576,9 +2629,22 @@ const drafts = [
     githubIssue: SHADOW_ISSUE,
     updatedAt: "2026-09-30T10:00:00Z",
   },
+  /**
+   * DCR-FR-RDLK / DRP-FR-KAWD / DRP-FR-AOLJ (`mock-decomposition.ts`): `d-19`
+   * is decomposing, `d-20` is its accepted part 1, `d-21` is a superseded
+   * original, and `d-22` is a part of it with a name long enough to crowd its
+   * badge in the narrow panel.
+   */
+  ...DECOMPOSITION_ROWS.map((r) => ({ ...r })),
 ];
 
 const draftRecords: Record<string, Record<string, unknown>> = {
+  ...Object.fromEntries(
+    DECOMPOSITION_ROWS.map(({ folder: _folder, ...r }) => [
+      r.id,
+      { ...r, promptPath: `${r.name}.md`, createdAt: r.updatedAt },
+    ]),
+  ),
   "d-1": {
     id: "d-1",
     name: "Worktree cleanup command",
@@ -2959,6 +3025,7 @@ const draftFiles: Record<string, string[]> = {
   "d-18": ["Mirror selection.md"],
   // GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft.
   "gh-1": ["Cache invalidation.md"],
+  ...Object.fromEntries(DECOMPOSITION_ROWS.map((r) => [r.id, [`${r.name}.md`]])),
 };
 
 // ---- the draft's own version history (DHS-draft-history.md) --------------
@@ -7784,6 +7851,28 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // PPK-project-picker.md: the recent list, with Pin, Unpin, and Hide state.
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
+  // DCP "New-draft proposals": the decomposition commands.
+  const decomposition = decompositionInvoke(cmd, a, {
+    createDraft: (name, sequence) => {
+      const id = `d-np-${nextDraftId++}`;
+      const at = new Date().toISOString();
+      const record = { id, name, promptPath: `${name}.md`, status: "active", sequence, createdAt: at, updatedAt: at };
+      draftRecords[id] = record;
+      draftFiles[id] = [`${name}.md`];
+      draftHistories[id] = [];
+      drafts.unshift({ id, name, status: "active", folder: "backend", updatedAt: at, sequence } as any);
+      return record;
+    },
+    supersede: (draftId, marker) => {
+      const record: any = draftRecords[draftId];
+      record.superseded = marker;
+      const row: any = drafts.find((d: any) => d.id === draftId);
+      if (row) row.superseded = marker;
+      return record;
+    },
+    fire: fireBus,
+  });
+  if (decomposition !== NOT_HANDLED) return decomposition;
   switch (cmd) {
     // VOP-voice-ai-providers.md. `?voice` starts with a verified Custom provider
     // on llama.cpp, so that the composer shows the Voice button as enabled.
@@ -8265,9 +8354,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       // DRP-FR-19: the flag follows what the proposals actually say, so
       // deciding one clears the row's marker.
       for (const d of drafts as any[]) {
-        d.hasPendingProposal = (proposalsByDraft[d.id] ?? []).some(
-          (p) => p.state === "pending",
-        );
+        d.hasPendingProposal =
+          (proposalsByDraft[d.id] ?? []).some((p) => p.state === "pending") ||
+          hasPendingNewDraft(d.id);
         // DRS-FR-18 / DRP-FR-35: the row's graduation comes from the queue and
         // is never cached on the draft, so a row shows what the queue holds.
         d.graduation = draftGraduation(d.id);

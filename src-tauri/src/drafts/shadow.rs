@@ -74,6 +74,8 @@ pub fn create_github_shadow_draft(
         created_at: now.clone(),
         updated_at: now,
         github_issue: Some(link),
+        sequence: None,
+        superseded: None,
     };
     let starting = project_settings::line_endings_for(root).normalize(prompt);
     scaffold_draft(root, &parent, &record, &primary, &starting)?;

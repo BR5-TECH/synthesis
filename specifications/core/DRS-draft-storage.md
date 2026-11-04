@@ -32,8 +32,26 @@ Draft {
   status: DraftStatus,
   github_issue,        // GithubIssueLink | null — present on a GitHub-shadow
                        //   draft alone, and never removed (DRS-FR-XDWS)
+  sequence,            // DraftSequence | null — present on a draft that an
+                       //   accepted new-draft proposal created (DRS-FR-MXQF)
+  superseded,          // SupersededMarker | null — present on a draft whose
+                       //   decomposition the author confirmed (DRS-FR-LPCX)
   created_at,          // RFC 3339 UTC
   updated_at           // RFC 3339 UTC — the draft's last activity
+}
+
+DraftSequence {
+  set_id,              // the decomposition (DCP-draft-change-proposals.md DCP-FR-CKWC)
+  position,            // N, counted from 1
+  total,               // M
+  original_draft_id,   // the draft that was decomposed
+  original_name        // that draft's name when this draft was created
+}
+
+SupersededMarker {
+  set_id,
+  drafts: [{ id, name }],  // the accepted drafts, oldest first (DCP-FR-FAQQ)
+  confirmed_at             // RFC 3339 UTC
 }
 
 BuildState =
@@ -54,8 +72,8 @@ DraftListItem {
   prompt_activity_at,  // RFC 3339 UTC — the filesystem modification time of the
                        //   draft's one prompt file (DRS-FR-41)
   build: BuildState,
-  has_pending_proposal,// an agent has proposed a change the author has not
-                       //   decided (DCP-draft-change-proposals.md DCP-FR-04)
+  has_pending_proposal,// an agent has proposed a change or a new draft the
+                       //   author has not decided (DRS-FR-WMIK)
   graduation,          // the draft's most recent graduation run, or null
                        //   (DRS-FR-18)
   publication,         // DraftListPublication of the newest publication
@@ -172,6 +190,8 @@ Every command errors with a typed "no project open" when no project is open, wit
 - `draft_prompt_activity(id)` → the draft's `prompt_activity_at` alone, for a caller holding an id that needs the activity time without the whole hierarchy (DRS-FR-41). It returns the same typed "not found" and `draft_not_single_file` `draft_record` returns, and refreshes nothing.
 - `set_draft_graduated(id, run_id)` — the one path to the `graduated` status, reached by `GRD-graduation.md` alone when a run completes (DRS-FR-20). It is registered as no Tauri command, so no frontend call can graduate a draft.
 - `create_github_shadow_draft(name, prompt, link)` → `Draft` — the one path to a GitHub-shadow draft, reached by `GPP-github-polling.md` alone (DRS-FR-INCJ). It is registered as no Tauri command, so no frontend call can create one.
+- `create_draft_with_prompt(name, folder, prompt, sequence)` → `Draft` — the one path to a draft that carries a `sequence`, reached by `DCP-draft-change-proposals.md` alone when a new-draft proposal is accepted (DRS-FR-EMKG).
+- `mark_draft_superseded(id, marker)` → `Draft` — the one path to a `superseded` marker, reached by `DCP-draft-change-proposals.md` alone when a decomposition is confirmed (DRS-FR-UBWN).
 - `draft_publication_path(id)` — the **legacy publication store** of DRS-FR-ULKN, the `publication.toml` directly inside that draft's own directory, resolved by the walk of DRS-FR-29 on exactly the terms `draft_assets_dir` resolves its folder (DRS-FR-40). It is the one route by which `GHP-github-publication.md` reaches the legacy store, which it reads and never writes. The publication store itself is addressed by the draft's stable id in the repository machine store (DRS-FR-EJBM).
 
 ### Internal channel (Rust, consumed by `BMI-bm25-indexing.md`)
@@ -180,7 +200,7 @@ Every command errors with a typed "no project open" when no project is open, wit
 ## Functional requirements
 1. **DRS-FR-01** Every draft is one folder named for its id, holding `draft.toml` (the record), `files/` (the draft's one prompt), `proposals/` (the changes agents have proposed to the prompt, owned by `DCP-draft-change-proposals.md` DCP-FR-01), `history/` (the prompt's settled versions and the acceptance journal, owned by `DHS-draft-history.md` DHS-FR-01), and `assets/` (the images the prompt embeds, owned by `DAS-draft-assets.md` DAS-FR-01). It sits at `.synthesis/drafts/<folder-path>/<draft-id>/` inside the active worktree, `<folder-path>` being the drafts folder it is filed in and empty for a draft at the root (DRS-FR-29). Everything a draft holds is inside that one folder, so filing it somewhere else moves its record, its prompt, its assets, its proposals, and its history together as one directory. A legacy `publication.toml` an earlier build wrote may also stand in the folder (DRS-FR-ULKN) and moves with it. Its review threads and its publication store are addressed by its stable id in the repository machine store and move with nothing (per `CMS-comments-storage.md` CMS-FR-37, DRS-FR-EJBM). The `drafts/` parent is part of the project scaffold (`PST-project-storage.md` PST-FR-02).
 2. **DRS-FR-02** A draft's `id` is opaque, generated at creation, and stable for its lifetime. It is derived from neither the draft's name nor its contents, so renaming a draft changes neither its id nor its folder.
-3. **DRS-FR-03** `draft.toml` carries the `Draft` record of the Contract surface: `id`, `name`, `prompt_path`, `status`, `created_at`, and `updated_at`, the last two RFC 3339 instants in UTC. `created_at` is never rewritten after creation.
+3. **DRS-FR-03** `draft.toml` carries the `Draft` record of the Contract surface: `id`, `name`, `prompt_path`, `status`, `created_at`, and `updated_at`, the last two RFC 3339 instants in UTC, and `github_issue`, `sequence`, and `superseded` where present. `created_at` is never rewritten after creation.
 4. **DRS-FR-04** The **committed draft storage** of DRS-FR-ZIVL is committed to the project's Git repository, so a draft's record, prompt, and images reach every checkout and every worktree through Git. No ignore rule covers it (per `FSA-filesystem-access.md` FSA-FR-08). The whole `.synthesis/drafts/` subtree is skipped by the project scan (`ASC-artifact-scanning.md` ASC-FR-09) and absent from the Project panel and from project search (`SCC-search.md` SCC-FR-03).
    - *Why:* Two authors of one project work on the same drafts, so a draft that stayed on one machine would take the whole collaboration around it with it.
 5. **DRS-FR-05** Drafts and the folders they are filed in belong to the active worktree, being inside it. Every command resolves `.synthesis/drafts/` against that worktree alone, so a draft or a folder created in one worktree is invisible from another and changing the active worktree changes the whole hierarchy (per `../ui/NAW-new-artifact.md` NAW-FR-24). No organisation crosses between worktrees by any act of this module, and none is copied into a worktree that has none of its own: what reaches a second worktree reaches it through Git alone (DRS-FR-AFSU).
@@ -276,6 +296,14 @@ Every command errors with a typed "no project open" when no project is open, wit
 72. **DRS-FR-ULKN** A **legacy publication store** is a `publication.toml` directly inside a draft's own directory, which an earlier build wrote there. It is private draft storage (DRS-FR-ZIVL, DRS-FR-WYIN). A read uses it only where the machine store holds no file for that draft (DRS-FR-PSCH), and no write goes to it. Nothing here rewrites or removes it, save the deletion of the whole draft (DRS-FR-21), and the import pass of `RMS-repository-machine-storage.md` (RMS-FR-JVEC) copies it into the machine store. A draft that holds neither store reads as an empty history with no attempt, and no file is created for it before its first attempt.
 73. **DRS-FR-RJYF** `list_drafts` and every read here report the draft's stored status as it stands, the legacy `published` among the values of `DraftStatus` (DRS-FR-VKQO). No read rewrites a stored `published`, and `publication.toml` never makes a draft `inconsistent` (DRS-FR-15).
 74. **DRS-FR-PXHW** `list_drafts` carries, for each draft on every status, the newest record of its publication store, read as DRS-FR-PSCH reads it, as `publication`, or null where the history is empty or no store exists. A store that does not parse reads as null for that draft alone, is logged as a warning, and fails nothing else in the listing. A repository machine store that cannot be resolved (per `RMS-repository-machine-storage.md` RMS-FR-WGQS) reads as null for every draft, is logged as a warning, and fails nothing else in the listing.
+
+74. **DRS-FR-MXQF** A draft's `sequence` is written once, by `create_draft_with_prompt`, and no operation rewrites or removes it. A draft created by any other path carries none.
+75. **DRS-FR-LPCX** A draft's `superseded` marker is written once, by `mark_draft_superseded`, and no operation rewrites or removes it. `set_draft_status`, `rename_draft`, `move_draft_to_folder`, and `save_draft_file_contents` each keep `sequence` and `superseded` as they are.
+76. **DRS-FR-EMKG** `create_draft_with_prompt(name, folder, prompt, sequence)` creates a draft as `create_draft` does (DRS-FR-06), in `folder`, with `name` and `sequence`. Its prompt holds `prompt` normalised to the project's line-ending convention, and never the draft template. It emits `"drafts changed"` (DRS-FR-22).
+77. **DRS-FR-UBWN** `mark_draft_superseded(id, marker)` stores the status `archived` and the marker in one atomic write of `draft.toml`, and emits `"drafts changed"`. It refuses `draft_locked_by_graduation`, `draft_github_shadow`, a `graduated` draft, and a draft that already carries a marker, and writes nothing for any of them.
+78. **DRS-FR-NAZG** Restoring a superseded draft through `set_draft_status` stores `active` and keeps the marker. Whether a draft is superseded comes from its marker, on any status, and never from its status.
+79. **DRS-FR-HIOF** `sequence` and `superseded` are part of `draft.toml`, so both are committed draft storage (DRS-FR-ZIVL) and reach every checkout through Git. `list_drafts` carries both on every status as part of the draft's record.
+80. **DRS-FR-WMIK** `has_pending_proposal` is true where the draft holds a draft change proposal that is not resolved (per `DCP-draft-change-proposals.md` DCP-FR-04) or a pending new-draft proposal (per `DCP-draft-change-proposals.md` DCP-FR-BZHR), and false otherwise.
 
 ## Non-functional requirements
 - The drafts-root watch of DRS-FR-42 is async and event-driven, like the project watcher it sits beside, and it reads no file's contents: it stats the prompt a change names and emits. A burst of writes to one prompt costs one stat per change reported rather than a walk of the drafts root.

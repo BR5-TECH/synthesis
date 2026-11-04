@@ -16,6 +16,7 @@ import { Fragment } from "react";
 import { MessageBlock } from "./MessageBlock";
 import { QuestionCard } from "./QuestionCard";
 import { ChangeRow } from "./ChangeRow";
+import { NewDraftCard } from "./NewDraftCard";
 import { questionCardOf } from "./questionParse";
 import { coveredBy, streamItems, type StreamItem } from "./streamItems";
 import { activityStatus } from "../../../state/agentActivity";
@@ -197,6 +198,18 @@ function StreamRow({
         <span className="dds-day__label">{item.label}</span>
         <span className="dds-day__rule" aria-hidden="true" />
       </div>
+    );
+  }
+
+  // DCR-FR-RDLK: the new-draft card, below the comment that carries it.
+  if (item.kind === "newDraft") {
+    return (
+      <NewDraftCard
+        reference={item.reference}
+        comment={item.comment}
+        comments={props.comments}
+        pendingTurns={props.pendingTurns}
+      />
     );
   }
 

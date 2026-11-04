@@ -382,10 +382,13 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 // no comment at all (ADQ-FR-DHZK, ADQ-FR-FQPA).
                 || call.function.name == crate::tools::ask_discussion_questions::NAME
                 || call.function.name == crate::tools::propose_draft_changes::NAME
+                // CVL-FR-15 / PND-FR-KGRN: a recorded new draft ends the turn.
+                || call.function.name == crate::tools::propose_new_draft::NAME
                 // CVL-FR-15: the artifact origins' proposal tool ends a turn on
-                // exactly the terms the draft origins' does. The two are never
-                // attached together (CVL-FR-08), so at most one of these three
-                // names can be present in any reply this loop ever reads.
+                // exactly the terms the draft origins' do. It is never attached
+                // with the two draft tools (CVL-FR-08). Where a reply names more
+                // than one, the first is dispatched and the rest are told
+                // one-at-a-time below.
                 || call.function.name == crate::tools::propose_prompt_changes::NAME
         });
         if let Some(index) = ending_first {
@@ -474,6 +477,8 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::ask_discussion_questions::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_draft_changes::NAME {
                 Some(crate::tools::propose_draft_changes::ONE_AT_A_TIME)
+            } else if call.function.name == crate::tools::propose_new_draft::NAME {
+                Some(crate::tools::propose_new_draft::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_prompt_changes::NAME {
                 Some(crate::tools::propose_prompt_changes::ONE_AT_A_TIME)
             } else {

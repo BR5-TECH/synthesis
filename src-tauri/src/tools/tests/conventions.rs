@@ -122,6 +122,7 @@ fn every_tool_name_is_snake_case_unique_and_matches_its_definition() {
                 .to_string(),
             <propose_draft_changes::ProposeDraftChangesTool<tauri::test::MockRuntime> as PortableTool>::NAME
                 .to_string(),
+            crate::tools::propose_new_draft::NAME.to_string(),
                     <ask_discussion_questions::AskDiscussionQuestionsTool<tauri::test::MockRuntime> as PortableTool>::NAME
                 .to_string(),
             <measure_document::MeasureDocumentTool<tauri::test::MockRuntime> as PortableTool>::NAME
@@ -204,6 +205,10 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             n if n == escalate_to_user::NAME => "The run pauses where it stands",
             // MDT-FR-YFZQ: the answer is the size and the limit.
             n if n == measure_document::NAME => "it tells you how many lines and characters",
+            // PND-FR-KGRN: the turn ends, so nothing comes back.
+            n if n == crate::tools::propose_new_draft::NAME => {
+                "Your turn ends when the proposal is recorded"
+            }
             other => panic!("no result phrase declared for {other} (TLC-FR-03)"),
         };
         assert!(
@@ -262,6 +267,10 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             n if n == ask_discussion_questions::NAME => "use `ask_user_comment` instead",
             // MDT-FR-PPCH: it returns no text of the document.
             n if n == measure_document::NAME => "It returns no text of the document",
+            // PND-FR-UQCD: nothing is created, and the author ends it.
+            n if n == crate::tools::propose_new_draft::NAME => {
+                "nothing is created until they accept"
+            }
             other => panic!("no boundary phrase declared for {other} (TLC-FR-03)"),
         };
         assert!(
@@ -288,6 +297,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // from `ask_user_comment`'s one on that sentence alone.
             n if n == ask_discussion_questions::NAME => "several questions",
             n if n == propose_draft_changes::NAME => "draft",
+            n if n == crate::tools::propose_new_draft::NAME => "new draft",
             n if n == draft_search::NAME || n == draft_read::NAME => "draft",
             n if n == note_search::NAME => "notes",
             n if n == document_search::NAME => "documents",

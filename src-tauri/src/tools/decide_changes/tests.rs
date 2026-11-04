@@ -104,6 +104,7 @@ impl ProposalBackend for Fake {
 
 fn args(decisions: &[(&str, &str)]) -> DecideChangesArgs {
     DecideChangesArgs {
+        instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
         decisions: Some(
             decisions
                 .iter()
@@ -127,7 +128,7 @@ fn entries_run_one_at_a_time_in_call_order() {
     assert_eq!(places, vec![1, 2, 3]);
     assert_eq!(output.decisions[1].refusal.as_ref().unwrap().code, RefusalCode::UnknownHunk);
     assert!(output.closed);
-    assert_eq!(output.proposal_state, ProposalStateView::Accepted);
+    assert_eq!(output.proposal_state, Some(ProposalStateView::Accepted));
 }
 
 // DDC-FR-ZGXF, DPC-FR-RGGP

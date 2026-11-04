@@ -399,7 +399,7 @@ fn decision_body(
 /// reconciliation reconstructs it from disk with no record in hand at all. A
 /// proposal is always in a draft conversation (PDC-FR-06), so it is one of the
 /// draft's two shapes.
-fn locate_thread(
+pub(crate) fn locate_thread(
     store: &fs::RootFs,
     draft_id: &str,
     thread_id: &str,
@@ -414,7 +414,7 @@ fn locate_thread(
 }
 
 /// [`locate_thread`]'s answer as the [`ThreadRef`] the write paths take.
-fn thread_ref<'a>(draft_id: &'a str, file_rel: Option<&'a String>) -> ThreadRef<'a> {
+pub(crate) fn thread_ref<'a>(draft_id: &'a str, file_rel: Option<&'a String>) -> ThreadRef<'a> {
     match file_rel {
         None => ThreadRef::discussion(draft_id),
         Some(rel) => ThreadRef::draft_file(draft_id, rel),

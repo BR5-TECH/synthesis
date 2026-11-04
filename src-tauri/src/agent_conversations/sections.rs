@@ -7,6 +7,8 @@
 use super::*;
 
 /// AGC-FR-EPNB / AGC-FR-TCCV: the open proposal that ends `discussion_history`.
+mod decomposition;
+pub(super) use decomposition::*;
 mod open_proposal;
 pub(super) use open_proposal::*;
 
@@ -177,6 +179,11 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
                 None => format!("[about proposed change {hunk_id} to {path}]"),
             }
         }
+        // AGC-FR-ZZWP: a new-draft reference reads from the proposal store.
+        comments::Attachment::NewDraftProposal { .. }
+        | comments::Attachment::NewDraftSubject { .. } => {
+            new_draft_line(attachment, &reads.new_drafts)
+        }
     }
 }
 
@@ -275,6 +282,8 @@ pub(super) struct AttachmentReads {
     digests: ProposalDigests,
     /// AGC-FR-DKHT: read for `discussion_history` and `current_comment` alike.
     hunks: HunkReads,
+    /// AGC-FR-ZZWP: the new-draft proposals of the thread's draft, by id.
+    new_drafts: NewDraftReads,
 }
 
 /// AGC-FR-RVQP / AGC-FR-DKHT: read every proposal the thread's `proposal`
@@ -429,7 +438,7 @@ fn attachment_reads(
             ProposalDigest { counts: proposal.counts, changes: full.then_some(proposal.changes) },
         );
     }
-    AttachmentReads { digests, hunks }
+    AttachmentReads { digests, hunks, new_drafts: new_draft_reads(roots, thread) }
 }
 
 /// AGC-FR-DKHT: a prompt proposal's hunk in the shape a draft's renders from,
@@ -805,8 +814,14 @@ pub(super) fn discussion_history_with_status(
         Ok(text) => (text, None),
         Err(kind) => (None, Some(kind)),
     };
-    let tail: String =
-        [open_proposal_text(roots, &thread.target), questions].into_iter().flatten().collect();
+    let tail: String = [
+        decomposition_text(roots, &thread.target),
+        open_proposal_text(roots, &thread.target),
+        questions,
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     if tail.is_empty() {
         return (section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts), unreadable);
     }

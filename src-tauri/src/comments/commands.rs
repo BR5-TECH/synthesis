@@ -98,6 +98,8 @@ pub fn get_or_create_note_discussion<R: tauri::Runtime>(
         );
     })?;
     if created {
+        // CMS-FR-VRZA: the opening comment is an author comment (AGC-FR-TFEN).
+        note_author_comments(&app, discussion.comments.first().into_iter());
         crate::logging::log_info(
             &app,
             &crate::logging::BUFFER,
@@ -203,6 +205,8 @@ pub fn open_discussion<R: tauri::Runtime>(
             crate::log_fields! { "error" => err.clone() },
         );
     })?;
+    // CMS-FR-VRZA: the opening comment is an author comment (AGC-FR-TFEN).
+    note_author_comments(&app, discussion.comments.first().into_iter());
     crate::logging::log_info(
         &app,
         &crate::logging::BUFFER,
@@ -231,7 +235,7 @@ pub fn add_comment<R: tauri::Runtime>(
     let worktree = project.require_root()?;
     let by = acting_participant(&store, &project)?;
     let current = discussion_for_write(&root, &worktree, &discussion_id)?;
-    let discussion = add_comment_to(
+    let (discussion, comment_id) = add_comment_reporting_id(
         &root,
         current.log_ref(),
         &discussion_id,
@@ -240,6 +244,10 @@ pub fn add_comment<R: tauri::Runtime>(
         attachments,
         Stamp { by: &by, at: &now_rfc3339() },
     )?;
+    // CMS-FR-VRZA: the appended comment is an author comment (AGC-FR-TFEN),
+    // named by the id the append minted, so a decision comment of the same
+    // author that lands in the same moment is never taken for it.
+    crate::agent_conversations::note_author_comment(&app, &comment_id);
     // AGC-FR-31 / CTA-FR-RUVS: a later **human** comment retires this
     // conversation's offer to retry a failed turn. Here rather than in the agent
     // write path because that is exactly the distinction the rule turns on: an
@@ -355,4 +363,15 @@ pub fn reanchor_discussion_fragment<R: tauri::Runtime>(
         emit_discussion_changed(&app, &discussion);
     }
     Ok(discussion)
+}
+
+/// CMS-FR-VRZA: give each human comment to `note_author_comment`
+/// (AGC-FR-TFEN). An agent comment is never given.
+pub(super) fn note_author_comments<'a, R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    comments: impl Iterator<Item = &'a super::Comment>,
+) {
+    for comment in comments.filter(|c| matches!(c.author, Participant::Human { .. })) {
+        crate::agent_conversations::note_author_comment(app, &comment.id);
+    }
 }

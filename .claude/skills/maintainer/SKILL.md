@@ -85,6 +85,27 @@ gh pr view <number> --json url,title,baseRefName,headRefName
 
 Tell the user the URL and what you did, in two to four lines. Do not copy the full body into the reply: it is on the PR.
 
+### 7. Watch the checks and report
+
+After you create or update a PR, watch its checks until each one has finished. Run the watch in the background, so that the session is free while CI runs:
+
+```bash
+gh pr checks <number> --watch --fail-fast=false
+```
+
+When the watch ends, report the result to the user:
+
+- **All checks pass.** Tell the user in one line. Say if auto-merge is on.
+- **A check fails.** Name each failed check and give its URL. Read the failure and give its reason in one or two sentences. For a code scanning check (CodeQL), get the alerts from the check run annotations:
+
+  ```bash
+  gh api repos/<owner>/<repo>/check-runs/<check-run-id>/annotations
+  ```
+
+  Give the rule, the file and line, and the message of each alert.
+
+**Report only.** A failed check is a decision for the user. Do not fix code, re-run a check, push a commit, change the PR, dismiss an alert, or change auto-merge. Do these only when the user tells you to, after you report the failure. This rule also applies when the fix looks small or certain.
+
 ## Simplified Technical English
 
 All text in the PR and in your replies to the user uses STE. The rules that apply most:

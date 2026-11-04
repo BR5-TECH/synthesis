@@ -7,7 +7,6 @@ import type { DocumentOutline } from "./useDocumentOutline";
 const NONE: readonly OutlineEntry[] = [];
 const noSubscription = () => () => {};
 const noEntries = () => NONE;
-const EMPTY_HEADING = "Empty heading";
 
 /**
  * EDT-FR-IZHD: the filter keeps the entries whose heading text contains it,
@@ -21,7 +20,8 @@ export function matchesHeading(option: FilterableOption, filter: string): boolea
 }
 
 /**
- * EDT-FR-LGQA / EDT-FR-PNGU / EDT-FR-IZHD / EDT-FR-EBNU / EDT-FR-AQCR /
+ * EDT-FR-LGQA / EDT-FR-PNGU / EDT-FR-QWZN / EDT-FR-IZHD / EDT-FR-EBNU /
+ * EDT-FR-AQCR /
  * EDT-FR-KOUB: the table of contents control and the panel it opens, in the
  * action cluster of an Editor tab and of the live prompt of a New Artifact tab
  * (NAW-FR-TFFX). The panel is the filterable selector of
@@ -37,18 +37,24 @@ export function TocControl({ outline }: { outline: DocumentOutline }) {
     open ? outline.subscribe : noSubscription,
     open ? outline.getSnapshot : noEntries,
   );
-  const options: FilterableOption[] = entries.map((entry, index) => {
-    // A heading with no text still has a place in the list, so it shows a
-    // stand-in rather than a blank row.
-    const text = entry.text === "" ? EMPTY_HEADING : entry.text;
-    return {
-      id: String(index),
-      label: text,
-      title: entry.text,
-      level: entry.level,
-      ariaLabel: `${text}, heading level ${entry.level}`,
-    };
-  });
+  // EDT-FR-QWZN: a heading with no text is not listed. The id stays the
+  // index into `entries`, so a dropped heading moves no other entry.
+  const options: FilterableOption[] = entries.flatMap((entry, index) =>
+    entry.text.trim() === ""
+      ? []
+      : [
+          {
+            id: String(index),
+            label: entry.text,
+            title: entry.text,
+            level: entry.level,
+            ariaLabel: `${entry.text}, heading level ${entry.level}`,
+          },
+        ],
+  );
+  // EDT-FR-EBNU: a document whose headings all have no text has no heading to
+  // list.
+  const listed = options.length;
 
   return (
     <FilterableSelect
@@ -61,12 +67,12 @@ export function TocControl({ outline }: { outline: DocumentOutline }) {
       label="Table of contents"
       testId="toc"
       matches={matchesHeading}
-      emptyText={entries.length === 0 ? "No headings" : "No heading matches"}
+      emptyText={listed === 0 ? "No headings" : "No heading matches"}
       fitWindow
       alwaysNotify
       returnFocus={false}
       menuWidth={320}
-      menuClassName={entries.length === 0 ? "toc__panel toc__panel--empty" : "toc__panel"}
+      menuClassName={listed === 0 ? "toc__panel toc__panel--empty" : "toc__panel"}
       className="toc"
       onOpenChange={setOpen}
       trigger={{ content: <Icon.Toc size={15} />, className: "btn btn--ghost btn--icon toc__trigger" }}

@@ -73,12 +73,40 @@ describe("TocControl", () => {
     expect(screen.getByRole("option", { name: "Six, heading level 6" })).toBeInTheDocument();
   });
 
-  it("EDT-FR-PNGU: a heading with no text shows a stand-in rather than a blank row", () => {
-    const { outline } = fakeOutline([entry(2, "", 0)]);
+  it("EDT-FR-QWZN, EDT-FR-YSJX: a heading with no text is not listed, and the entries after it still reveal their own heading", () => {
+    const after = entry(3, "After", 9);
+    const { outline } = fakeOutline([entry(1, "Before", 0), entry(2, "", 5), after]);
     render(<TocControl outline={outline} />);
     fireEvent.click(trigger());
-    expect(options()[0]).toHaveTextContent("Empty heading");
-    expect(options()[0]).toHaveAccessibleName("Empty heading, heading level 2");
+    expect(options().map((o) => o.textContent)).toEqual(["Before", "After"]);
+    fireEvent.click(screen.getByRole("option", { name: "After, heading level 3" }));
+    expect(outline.reveal).toHaveBeenCalledWith(after);
+  });
+
+  it("EDT-FR-QWZN, EDT-FR-KJLQ, EDT-FR-EBNU: the open list follows a heading that gains or loses its text", () => {
+    const { outline, set } = fakeOutline([entry(2, "", 0), entry(2, " ", 4)]);
+    render(<TocControl outline={outline} />);
+    fireEvent.click(trigger());
+    expect(options()).toHaveLength(0);
+    expect(screen.getByTestId("toc-menu")).toHaveClass("toc__panel--empty");
+
+    set([entry(2, "", 0), entry(2, "X", 4)]);
+    expect(options().map((o) => o.textContent)).toEqual(["X"]);
+    expect(screen.queryByText("No headings")).toBeNull();
+    expect(screen.getByTestId("toc-menu")).not.toHaveClass("toc__panel--empty");
+
+    set([entry(2, "", 0), entry(2, "", 4)]);
+    expect(screen.getByText("No headings")).toBeInTheDocument();
+    expect(screen.getByTestId("toc-menu")).toHaveClass("toc__panel--empty");
+  });
+
+  it("EDT-FR-QWZN, EDT-FR-EBNU: a document whose headings all have no text shows \"No headings\"", () => {
+    const { outline } = fakeOutline([entry(2, "", 0), entry(3, "", 4)]);
+    render(<TocControl outline={outline} />);
+    fireEvent.click(trigger());
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.getByText("No headings")).toBeInTheDocument();
+    expect(screen.getByTestId("toc-menu")).toHaveClass("toc__panel--empty");
   });
 
   it("EDT-FR-YSJX: one click on an entry closes the panel and reveals that entry", () => {
@@ -210,6 +238,6 @@ describe("TocControl", () => {
 
   it("matchesHeading: an empty filter keeps all entries, and the label alone never matches", () => {
     expect(matchesHeading({ id: "0", label: "One", title: "One" }, "  ")).toBe(true);
-    expect(matchesHeading({ id: "0", label: "Empty heading", title: "" }, "empty")).toBe(false);
+    expect(matchesHeading({ id: "0", label: "", title: "" }, "empty")).toBe(false);
   });
 });

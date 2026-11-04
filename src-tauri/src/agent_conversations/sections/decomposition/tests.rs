@@ -137,7 +137,7 @@ fn a_target_with_no_new_draft_proposal_has_no_decomposition() {
 #[test]
 fn a_reference_names_the_proposal_as_it_stands() {
     let d = Draft::new();
-    let p = d.propose("relay-auth", "SECRET-BODY", 1);
+    let p = d.propose("relay-auth", "ZEBRA-BODY", 1);
     let reads = new_draft_reads(d.roots(), &d.thread());
     let line = new_draft_line(
         &comments::Attachment::NewDraftProposal {
@@ -149,7 +149,7 @@ fn a_reference_names_the_proposal_as_it_stands() {
     );
     assert!(line.starts_with("[proposed a new draft: id "), "{line}");
     assert!(line.contains("part 1 of 3 — “relay-auth” — pending"));
-    assert!(!line.contains("SECRET-BODY"));
+    assert!(!line.contains("ZEBRA-BODY"));
     let changed = new_draft_line(
         &comments::Attachment::NewDraftProposal {
             proposal_id: p.id.clone(),

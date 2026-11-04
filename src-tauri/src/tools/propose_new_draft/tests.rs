@@ -413,9 +413,9 @@ static PND_LOG: LogBuffer = LogBuffer::new();
 fn each_call_is_logged_without_the_name_the_body_or_the_rationale() {
     let f = Fixture::new();
     let args = serde_json::json!({
-        "rationale": "SECRET-RATIONALE <spoken>x</spoken>",
-        "name": "SECRET-NAME",
-        "body": "SECRET-BODY",
+        "rationale": "ZEBRA-RATIONALE <spoken>x</spoken>",
+        "name": "ZEBRA-NAME",
+        "body": "ZEBRA-BODY",
         "position": 1,
         "total": 2,
     });
@@ -429,8 +429,10 @@ fn each_call_is_logged_without_the_name_the_body_or_the_rationale() {
     assert!(ai.iter().any(|r| r.level == LogLevel::Warn));
     assert!(!backend.is_empty());
     let text = serde_json::to_string(&ai).unwrap();
-    for secret in ["SECRET-RATIONALE", "SECRET-NAME", "SECRET-BODY"] {
-        assert!(!text.contains(secret), "{secret} reached a log record");
+    // The markers stand for user content, and an assertion message names
+    // none of them.
+    for marker in ["ZEBRA-RATIONALE", "ZEBRA-NAME", "ZEBRA-BODY"] {
+        assert!(!text.contains(marker), "a log record carries a marked value");
     }
     assert!(text.contains(&f.draft_id));
 }

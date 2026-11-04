@@ -453,5 +453,5 @@ fn a_recording_writes_only_under_new_drafts_and_goes_with_the_draft() {
 #[test]
 fn a_refusal_reason_is_logged_as_a_typed_code() {
     assert_eq!(typed_reason(ERR_PROPOSAL_PENDING), ERR_PROPOSAL_PENDING);
-    assert_eq!(typed_reason("io error: /Users/someone/secret/drafts"), ERR_WRITE_FAILED);
+    assert_eq!(typed_reason("io error: /Users/someone/private/drafts"), ERR_WRITE_FAILED);
 }

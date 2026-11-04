@@ -29,6 +29,7 @@ import { DraftHistoryRail } from "./DraftHistoryRail";
 import { GithubShadowBanner } from "./GithubShadow";
 import { useDraftReview } from "./useDraftReview";
 import { useHunkDiscussion } from "./useHunkDiscussion";
+import { useNewDraftDiscussRoute } from "./useNewDraftDiscussRoute";
 import { useDraftPublication } from "../../hooks/useDraftPublication";
 import { DraftPublicationBand, PublicationOverlays } from "../DraftPublication";
 import { isRefusal, versionCountOf } from "./labels";
@@ -608,6 +609,7 @@ export function NewArtifactWorkspace({
     selectDiscussion: setFocusedThreadId,
     focusComposer: () => setDiscussFocus((n) => n + 1),
   });
+  useNewDraftDiscussRoute(draftId, hunkDiscussion.discussNewDraft);
   const review = useDraftReview({
     draftId,
     proposal: pendingProposal,
@@ -690,6 +692,8 @@ export function NewArtifactWorkspace({
         shadow={shadow}
         shadowIssue={shadowIssue}
         archived={archived}
+        sequence={record?.sequence ?? null}
+        superseded={record?.superseded ?? null}
         graduation={graduation}
         onOpenRun={onOpenRun}
         publication={publication}

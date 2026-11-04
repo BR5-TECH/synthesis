@@ -15,6 +15,7 @@
 @import "./components/draft-discussion.css";
 @import "./components/discussion-surface.css";
 @import "./components/the-drafts-tree.css";
+@import "./components/decomposition.css";
 @import "./components/logs.css";
 @import "./components/graduation-log-window.css";
 @import "./components/ready-tasks.css";

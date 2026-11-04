@@ -24,12 +24,14 @@ import type {
   DiscussionTarget,
   FragmentTarget,
   ProjectAgent,
+  NewDraftSubjectReference,
   ProposalHunkReference,
 } from "../../types";
 
 /** DDS-FR-RHKW: the change a new hunk discussion is about. */
 export interface HunkOpening {
-  reference: ProposalHunkReference;
+  /** DCR-FR-AMLR: or the proposed draft a new discussion is about. */
+  reference: ProposalHunkReference | NewDraftSubjectReference;
   /** The change's place in its proposal, for `change N of M`. */
   position: number;
   total: number;
@@ -61,6 +63,13 @@ function statementFor(
   noun: string,
   material: string,
 ): { lead: string; hint: string } {
+  if (state === "hunk" && hunk?.reference.kind === "newDraftSubject") {
+    // DCR-FR-AMLR: talking about a proposed draft decides nothing.
+    return {
+      lead: `This begins a discussion about part ${hunk.position} of ${hunk.total} of the decomposition.`,
+      hint: "The proposed draft is not decided by this discussion. Accept or reject it on its card.",
+    };
+  }
   if (state === "hunk") {
     // DDS-FR-RHKW: the composer names the change it is about. DCR-FR-JTXE: and
     // says that talking about it decides nothing.

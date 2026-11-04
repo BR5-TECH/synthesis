@@ -181,7 +181,8 @@ export interface Tab {
     | "conversation"
     | "map"
     | "document"
-    | "pdf";
+    | "pdf"
+    | "draftPreview";
   dirty?: boolean;
   // The backend artifact id (project-relative path, ASC-FR-13) when this tab
   // was opened from a real filesystem node. Present -> the Editor loads/saves
@@ -218,6 +219,8 @@ export interface Tab {
    * and holds no savable content, so no path removal reaches it (TAB-FR-19).
    */
   documentId?: string;
+  /** TAB-FR-CIGU: the new-draft proposal a draft preview tab shows. */
+  proposalId?: string;
   /** CVP-FR-60: the note a conversation tab is about, before and after it opens. */
   noteId?: string;
   /** CVP-FR-45: the owner of the conversation, for the availability check. */

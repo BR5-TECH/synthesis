@@ -140,11 +140,14 @@ impl Fixture {
         origin: ConversationOrigin,
         buffer: &'static LogBuffer,
     ) -> DecidePromptChangesTool<tauri::test::MockRuntime> {
+        let turn =
+            crate::tools::tests::authorized_turn_for(&self.open.handle(), &self.root(), &origin);
         DecidePromptChangesTool::new(
             self.open.handle(),
             OwnedRoots { worktree: self.root(), store: self.root() },
             origin,
             agent(),
+            &turn,
         )
         .for_test(human(), buffer)
     }
@@ -184,6 +187,7 @@ impl Fixture {
 
 fn args(decisions: &[(&str, &str)]) -> DecideChangesArgs {
     DecideChangesArgs {
+        instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
         decisions: Some(
             decisions
                 .iter()
@@ -227,11 +231,37 @@ fn it_is_a_portable_tool_with_the_fixed_description_and_the_shared_schema() {
     };
     assert!(action(&mut prompt).as_str().is_some_and(|d| d.contains("into the file")));
     action(&mut draft);
+    // DDC-FR-GGWO: DDC's `id` text names a proposed draft too, so the two
+    // schemas share their structure and each keeps its own descriptions.
+    let id = |schema: &mut serde_json::Value| {
+        schema["properties"]["decisions"]["items"]["properties"]["id"]
+            .as_object_mut()
+            .expect("id")
+            .remove("description");
+    };
+    id(&mut prompt);
+    id(&mut draft);
+    // DPC-FR-RJBJ: `confirm` is left out of this tool's enum.
+    let actions = |schema: &mut serde_json::Value| {
+        schema["properties"]["decisions"]["items"]["properties"]["action"]
+            .as_object_mut()
+            .expect("action")
+            .remove("enum")
+            .expect("enum")
+    };
+    assert_eq!(actions(&mut prompt), serde_json::json!(["accept", "reject", "discuss"]));
+    assert_eq!(actions(&mut draft), serde_json::json!(["accept", "reject", "discuss", "confirm"]));
     assert_eq!(prompt, draft);
+    // DPC-FR-HWOT: the description asks for the author's words.
+    assert!(
+        DESCRIPTION.contains("Copy into `instruction` the words of the author's latest comment")
+    );
     // DPC-FR-QMZE: no argument names an artifact, a path, a proposal, a
     // conversation, or a participant.
     let properties = definition.parameters["properties"].as_object().expect("properties");
-    assert_eq!(properties.keys().collect::<Vec<_>>(), vec!["decisions"]);
+    let mut names: Vec<&String> = properties.keys().collect();
+    names.sort();
+    assert_eq!(names, vec!["decisions", "instruction"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +292,7 @@ fn a_turn_that_is_not_about_an_artifact_is_refused() {
         OwnedRoots { worktree: root.clone(), store: root },
         f.origin(),
         agent(),
+        "turn-closed",
     );
     let refused = block_on(tool.call(args(&[("h", "accept")]))).expect_err("closed");
     assert_eq!(refused, CallRefusal::NoProjectOpen);
@@ -271,9 +302,10 @@ fn a_turn_that_is_not_about_an_artifact_is_refused() {
 #[test]
 fn the_arguments_and_the_whole_call_refusals_are_those_of_ddc() {
     let f = Fixture::new();
-    let refused = block_on(
-        f.tool_for(f.origin(), &QUIET).call(DecideChangesArgs { decisions: Some(Vec::new()) }),
-    )
+    let refused = block_on(f.tool_for(f.origin(), &QUIET).call(DecideChangesArgs {
+        instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
+        decisions: Some(Vec::new()),
+    }))
     .expect_err("malformed");
     assert_eq!(refused, CallRefusal::Malformed);
     f.call(&[(f.hunk(1), "reject"), (f.hunk(2), "reject")]).expect("closed");
@@ -388,7 +420,12 @@ fn an_entry_is_refused_on_the_codes_of_ddc() {
     // DPC-FR-JEXJ: only these two typed errors are retryable.
     assert_eq!(RETRYABLE_ERRORS, ["write_failed", "acceptance_in_progress"]);
     let tool = f.tool_for(f.origin(), &QUIET);
-    let backend = PromptBackend { tool: &tool, artifact_id: PROMPT, author: Ok(human()) };
+    let backend = PromptBackend {
+        tool: &tool,
+        artifact_id: PROMPT,
+        author: Ok(human()),
+        line: String::new(),
+    };
     for (error, retryable) in [
         ("write_failed", true),
         ("acceptance_in_progress", true),
@@ -512,4 +549,151 @@ fn the_comment_thread_is_found_through_the_thread_ref_of_the_artifact() {
     let thread = f.thread();
     let agents = thread.comments.iter().filter(|c| c.author == agent()).count();
     assert_eq!(agents, 1, "the proposal's own comment, and no other");
+}
+
+// ---------------------------------------------------------------------------
+// Authority (DPC-FR-VJIG, PCP-FR-QKCT)
+// ---------------------------------------------------------------------------
+
+// DPC-FR-VJIG / DDC-FR-IHAY: a turn whose newest comment is not an author
+// comment decides nothing on a file either.
+#[test]
+fn the_authority_rules_of_ddc_hold_for_a_file() {
+    let f = Fixture::new();
+    let handle = f.open.handle();
+    let turn = crate::agent_conversations::authority_for_test::register_turn(
+        &handle,
+        f.origin(),
+        None,
+        None,
+    );
+    let tool = DecidePromptChangesTool::new(
+        handle,
+        OwnedRoots { worktree: f.root(), store: f.root() },
+        f.origin(),
+        agent(),
+        &turn,
+    )
+    .for_test(human(), &QUIET);
+    let refused = block_on(tool.call(args(&[(f.hunk(1), "accept")]))).expect_err("refused");
+    assert_eq!(
+        refused,
+        CallRefusal::Authority(crate::agent_conversations::AuthorityRefusal::NotAuthorized)
+    );
+    assert_eq!(refused.to_execution_error().kind(), ToolErrorKind::PermissionDenied);
+    assert_eq!(f.state_of(1), HunkState::Pending);
+    // DDC-FR-PZBH: an absent instruction is malformed here too.
+    let mut call = args(&[(f.hunk(1), "accept")]);
+    call.instruction = None;
+    assert_eq!(block_on(f.tool_for(f.origin(), &QUIET).call(call)), Err(CallRefusal::Malformed));
+}
+
+// DPC-FR-VJIG: a file has no decomposition, so `confirm` is `invalid_action`.
+#[test]
+fn a_confirm_entry_is_an_invalid_action_for_a_file() {
+    let f = Fixture::new();
+    let out = f.call(&[(f.hunk(1), "confirm")]).expect("answers");
+    assert_eq!(code_of(&out, 1), Some(RefusalCode::InvalidAction));
+    let message = &out.decisions[0].refusal.as_ref().unwrap().message;
+    assert!(!message.contains("decomposition"), "{message}");
+    assert_eq!(f.state_of(1), HunkState::Pending);
+}
+
+// PCP-FR-QKCT / DPC-FR-VJIG: the accept that resolves the proposal appends a
+// decision comment, through its journal, that ends with the instruction line.
+#[test]
+fn a_resolving_accept_by_tool_ends_its_comment_with_the_instruction_line() {
+    let f = Fixture::new();
+    let out = f.call(&[(f.hunk(1), "reject"), (f.hunk(2), "accept")]).expect("decided");
+    assert!(out.closed);
+    assert_eq!(out.decisions[1].comment_owed, Some(false));
+    let thread =
+        f.discussions().into_iter().find(|d| d.id == f.thread_id).expect("the conversation");
+    let last = thread.comments.last().expect("the decision comment");
+    assert!(last.body.starts_with("Accepted the proposed change"), "{}", last.body);
+    assert!(last.body.ends_with("\n\nDecided by arch on the author's instruction: “arch”"));
+}
+
+impl Fixture {
+    /// An author comment with `body` in the conversation, and a turn it
+    /// triggers. The spent comments are left as they are.
+    fn author_turn(&self, body: &str) -> (String, String) {
+        let id = crate::notes::new_note_id();
+        comments::add_comment_with_id(
+            &self.root(),
+            comments::ThreadRef::artifact_discussion(PROMPT),
+            &self.thread_id,
+            id.clone(),
+            body.into(),
+            &human(),
+            "2026-01-01T00:00:02Z",
+        )
+        .expect("comment");
+        let turn = crate::agent_conversations::authority_for_test::register_turn(
+            &self.open.handle(),
+            self.origin(),
+            Some(&id),
+            None,
+        );
+        crate::agent_conversations::note_author_comment(&self.open.handle(), &id);
+        (id, turn)
+    }
+
+    fn call_on(
+        &self,
+        turn: &str,
+        instruction: &str,
+        decisions: &[(&str, &str)],
+    ) -> Result<DecideChangesOutput, CallRefusal> {
+        let tool = DecidePromptChangesTool::new(
+            self.open.handle(),
+            OwnedRoots { worktree: self.root(), store: self.root() },
+            self.origin(),
+            agent(),
+            turn,
+        )
+        .for_test(human(), &QUIET);
+        let mut call = args(decisions);
+        call.instruction = Some(instruction.into());
+        block_on(tool.call(call))
+    }
+}
+
+// DPC-FR-VJIG / DDC-FR-VONX: a call that decides spends the comment, a call
+// that decides nothing does not, and a call refused whole after the
+// reservation gives it back.
+#[test]
+fn a_comment_authorizes_one_deciding_call_on_a_file() {
+    let f = Fixture::new();
+    let used =
+        CallRefusal::Authority(crate::agent_conversations::AuthorityRefusal::InstructionUsed);
+
+    let (_, turn) = f.author_turn("@arch reject the first one");
+    let out = f.call_on(&turn, "reject the first one", &[("nope", "reject")]).unwrap();
+    assert_eq!(code_of(&out, 1), Some(RefusalCode::UnknownHunk));
+    let out = f.call_on(&turn, "reject the first one", &[(f.hunk(1), "reject")]).unwrap();
+    assert_eq!(out.decisions[0].outcome, Outcome::Rejected);
+    assert_eq!(f.call_on(&turn, "reject the first one", &[(f.hunk(2), "reject")]), Err(used));
+    assert_eq!(f.state_of(2), HunkState::Pending);
+
+    // DDC-FR-NKAB on a file.
+    let (_, other) = f.author_turn("@arch accept the second");
+    assert_eq!(
+        f.call_on(&other, "reject the second", &[(f.hunk(2), "reject")]),
+        Err(CallRefusal::Authority(
+            crate::agent_conversations::AuthorityRefusal::InstructionNotFound
+        ))
+    );
+    // Close the proposal, then a whole-call refusal after the reservation
+    // leaves the comment unspent.
+    f.call_on(&other, "accept the second", &[(f.hunk(2), "accept")]).unwrap();
+    let (late_comment, late) = f.author_turn("@arch accept the second");
+    assert!(matches!(
+        f.call_on(&late, "accept the second", &[(f.hunk(2), "accept")]),
+        Err(CallRefusal::NoOpenProposal(_))
+    ));
+    assert!(!crate::agent_conversations::authority_for_test::is_spent(
+        &f.open.handle(),
+        &late_comment
+    ));
 }

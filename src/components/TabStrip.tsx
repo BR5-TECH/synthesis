@@ -476,6 +476,9 @@ export function TabStrip({
                   <Icon.Doc size={12} data-icon="document" />
                 ) : t.kind === "pdf" ? (
                   <Icon.Pdf size={12} data-icon="pdf" />
+                ) : t.kind === "draftPreview" ? (
+                  // TAB-FR-CIGU: a viewer of a proposed draft, not a draft's tab.
+                  <Icon.Doc size={12} data-icon="draft-preview" />
                 ) : (
                   <Icon.Settings size={12} />
                 )}

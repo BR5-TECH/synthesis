@@ -325,3 +325,27 @@ describe("the folded head of a long discussion (DDS-FR-CLBK)", () => {
     ).toBe("c3");
   });
 });
+
+describe("new-draft cards (DCR-FR-RDLK)", () => {
+  it("DCR-FR-RDLK: a comment with a new-draft reference is its body, then a card below it", () => {
+    const withCard: Comment = {
+      id: "nd1",
+      author: { kind: "agent", agentId: "a1", handle: "arch" },
+      body: "The auth part ships alone.",
+      quotes: [],
+      attachments: [{ kind: "newDraftProposal", proposalId: "p1", draftId: "d1" }],
+      createdAt: "2026-01-01T00:00:00Z",
+    };
+    const items = streamItems({
+      comments: [withCard],
+      pairing: new Map(),
+      isOwn: () => false,
+      now: new Date("2026-01-01T12:00:00Z"),
+    });
+    const kinds = items.map((i) => i.kind);
+    expect(kinds).toEqual(["date", "message", "newDraft"]);
+    const card = items[2];
+    expect(card.kind === "newDraft" && card.reference.proposalId).toBe("p1");
+    expect(coveredBy(card)).toEqual(["nd1"]);
+  });
+});

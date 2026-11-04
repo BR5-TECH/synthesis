@@ -97,6 +97,9 @@ The context menu on `spec.md`, right-clicked while `plan.md` is the active tab a
 41. **TAB-FR-FJXM** Closing a viewer tab ends the tab and nothing else: no write is brought forward, no close request is refused, and no source reference changes.
 42. **TAB-FR-ZMGX** Each viewer tab closed under TAB-FR-KUIN produces one `DEBUG` record through `"append log records (records)"` (`../core/LGC-logging.md`) under the `frontend` domain, naming the document id, the kind of tab, and the rule that closed it. No record is produced for a viewer tab that the user closes, and no record carries a path or a file name.
 
+39. **TAB-FR-CIGU** A **draft preview tab** is a viewer-only kind of tab that shows the body of one new-draft proposal (per `DCR-draft-change-review.md` DCR-FR-HWLA). It is identified by the proposal id, and a request to open one already showing focuses that tab. It holds no editing session or savable buffer, so File → Save stays unavailable while it is active.
+40. **TAB-FR-OMWY** A draft preview tab is not a draft's tab. Renaming, deleting, or graduating any draft does not rename or close it. It closes with no prompt when its proposal is decided or withdrawn (per `DCR-draft-change-review.md` DCR-FR-RJZP), when the original draft is deleted, and with every other tab on TAB-FR-14's terms.
+
 ## Non-functional requirements
 - Tab focus and close are immediate UI operations (no backend round-trip required to respond), except for an Editor, Diff, or Flow tab close that must first write pending changes. An automatic close under TAB-FR-19 writes nothing and is therefore immediate in every case.
 - A burst that removes many paths at once closes every affected tab in one pass rather than one re-render per tab, so deleting a folder holding a dozen open files does not visibly cascade through the strip. A commit closing several Diff tabs at once (TAB-FR-22) does the same, and so does a mass close removing a dozen tabs at the author's word (TAB-FR-38).

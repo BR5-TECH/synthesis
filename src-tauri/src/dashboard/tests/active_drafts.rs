@@ -23,6 +23,8 @@ fn draft(id: &str, name: &str, status: DraftStatus, activity: Option<&str>) -> D
         github_issue: None,
         publication: None,
         publication_unreadable: false,
+        sequence: None,
+        superseded: None,
     }
 }
 

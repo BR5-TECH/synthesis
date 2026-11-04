@@ -24,8 +24,8 @@
 use tauri::Manager;
 
 use super::decide_changes::{
-    self, Accepted, CallRefusal, DecideChangesArgs, DecideChangesOutput, HunkStateView,
-    ProposalBackend, ProposalStateView, ProposalView,
+    self, Accepted, CallRefusal, DecideChangesArgs, DecideChangesOutput, DecisionRow,
+    HunkStateView, ProposalBackend, ProposalStateView, ProposalView,
 };
 use super::require_open_project;
 
@@ -38,10 +38,10 @@ use crate::logging::{LogBuffer, LogSink, BUFFER};
 pub const NAME: &str = "decide_draft_changes";
 
 /// DDC-FR-VAYO / DDC-FR-ROLG / DDC-FR-MDCX: the fixed text the model reads.
-pub const DESCRIPTION: &str = "Decide changes of the open proposal of the draft under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss a change, for example \"accept the second change\". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each change the author named, in the order the author named them. Each entry gives the `id` of a change and an `action`. `accept` writes the change into the prompt as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that change, with a first comment from you that says the author asked to discuss it; it does not decide the change. A rejected change can still be accepted while the proposal is open. Your input lists each change of the open proposal with its id, its place, its state, and its text. When the author names a change by its place, count the changes in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. This tool never makes, changes, or withdraws a change; use `propose_draft_changes` for that.";
+pub const DESCRIPTION: &str = "Decide changes of the open proposal of the draft under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss a change, for example \"accept the second change\". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each change the author named, in the order the author named them. Each entry gives the `id` of a change and an `action`. `accept` writes the change into the prompt as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that change, with a first comment from you that says the author asked to discuss it; it does not decide the change. A rejected change can still be accepted while the proposal is open. Your input lists each change of the open proposal with its id, its place, its state, and its text. When the author names a change by its place, count the changes in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. The same entries decide the proposed new draft that waits on the author during a decomposition: give its id with `accept`, `reject`, or `discuss`. When the author tells you to confirm the decomposition, give the id of the decomposition with `confirm`. Copy into `instruction` the words of the author's latest comment that ask for these decisions, exactly as the author wrote or said them. A call is refused when the latest comment is not the author's, when the words are not in it, or when that comment already gave a decision. While the author is still speaking, wait until the comment of the speech arrives. This tool never makes, changes, or withdraws a change or a proposed draft; use `propose_draft_changes` or `propose_new_draft` for that.";
 
 /// DDC-FR-VAYO: the parameter text of `action`.
-const ACTION_DESCRIPTION: &str = "`accept` to write the change into the prompt, `reject` to decline it, or `discuss` to open a new discussion about it.";
+const ACTION_DESCRIPTION: &str = "`accept` to write the change into the prompt, `reject` to decline it, `discuss` to open a new discussion about it, or `confirm` with the id of the decomposition to end it.";
 
 /// DDC-FR-LYTA: the typed errors worth a retry.
 const RETRYABLE_ERRORS: [&str; 3] = [
@@ -51,8 +51,15 @@ const RETRYABLE_ERRORS: [&str; 3] = [
 ];
 
 /// TLC-FR-06: the JSON Schema of [`DecideChangesArgs`] for this tool.
+/// DDC contract surface: the `id` description, which names a proposed draft
+/// too (DDC-FR-GGWO).
+const ID_DESCRIPTION: &str = "The id of a change of the open proposal, of the proposed new draft that waits on the author, or of the decomposition, as your input lists it.";
+
+/// DDC contract surface: a draft takes `confirm` beside the three hunk actions.
+const ACTIONS: [&str; 4] = ["accept", "reject", "discuss", "confirm"];
+
 pub fn parameters() -> serde_json::Value {
-    decide_changes::parameters(ACTION_DESCRIPTION)
+    decide_changes::parameters_with(ACTION_DESCRIPTION, ID_DESCRIPTION, &ACTIONS)
 }
 
 /// DDC-FR-SQYQ: `decide_draft_changes` as a `rig` portable tool.
@@ -61,6 +68,9 @@ pub struct DecideDraftChangesTool<R: tauri::Runtime> {
     roots: OwnedRoots,
     origin: ConversationOrigin,
     agent: Participant,
+    /// AGC-FR-DTCL: the turn that calls the tool, whose received comments
+    /// carry the author's authority (DDC-FR-ELAE).
+    turn_id: String,
     /// The author a decision is recorded as. `None` resolves the author from
     /// the open project at call time, as the chip's command does.
     decider: Option<Participant>,
@@ -72,14 +82,24 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     /// DDC-FR-QRIY: bound to the turn's draft (through its origin), the
-    /// origin of the turn's conversation, and the turn's agent participant.
+    /// origin of the turn's conversation, the turn's agent participant, and
+    /// the turn itself (DDC-FR-ELAE).
     pub fn new(
         app: tauri::AppHandle<R>,
         roots: OwnedRoots,
         origin: ConversationOrigin,
         agent: Participant,
+        turn_id: &str,
     ) -> Self {
-        DecideDraftChangesTool { app, roots, origin, agent, decider: None, buffer: &BUFFER }
+        DecideDraftChangesTool {
+            app,
+            roots,
+            origin,
+            agent,
+            turn_id: turn_id.to_string(),
+            decider: None,
+            buffer: &BUFFER,
+        }
     }
 
     /// The same tool, with the author fixed and reporting into `buffer`. A
@@ -123,8 +143,36 @@ where
         let Some(draft_id) = self.origin.draft_id() else {
             return Err(CallRefusal::WrongConversation(decide_changes::NOT_A_DRAFT_CONVERSATION));
         };
-        let backend = DraftBackend { tool: self, draft_id, author: self.author() };
-        decide_changes::run_entries(&backend, args)
+        // DDC-FR-VYLJ: the malformed arguments, then the author's authority,
+        // then the no-open-proposal refusal of the entry loop.
+        let instruction = decide_changes::check_arguments(args)?;
+        let grant = crate::agent_conversations::authorize_decision(
+            &self.app,
+            self.roots.borrowed(),
+            &self.origin,
+            &self.turn_id,
+            instruction,
+        )
+        .map_err(CallRefusal::Authority)?;
+        // DDC-FR-GGWO / DDC-FR-ZWKS: the new-draft proposal pending when the call
+        // began. Only its id is a new-draft entry of this call.
+        let new_draft_open =
+            crate::new_draft_proposals::pending_for(&self.roots.worktree, draft_id).map(|p| p.id);
+        let backend = DraftBackend {
+            tool: self,
+            draft_id,
+            author: self.author(),
+            new_draft_open,
+            decomposition: new_drafts::decomposition_of(&self.roots.worktree, draft_id),
+            line: decide_changes::instruction_line(&self.agent, instruction),
+        };
+        let output = decide_changes::run_entries(&backend, args)?;
+        // DDC-FR-VONX: a call that decided an entry spends the comment. A call
+        // that decided nothing gives it back as the grant drops.
+        if decide_changes::decided_any(&output) {
+            grant.commit();
+        }
+        Ok(output)
     }
 }
 
@@ -135,6 +183,14 @@ struct DraftBackend<'a, R: tauri::Runtime> {
     /// Resolved once per call. A failure refuses each accept and reject with
     /// `decision_failed`, as the chip's command refuses.
     author: Result<Participant, String>,
+    /// DDC-FR-GGWO: the pending new-draft proposal when the call began.
+    new_draft_open: Option<String>,
+    /// DDC-FR-VEKP / DDC-FR-ZGXF: the decomposition of the draft, if it has
+    /// one, when the call began.
+    decomposition: Option<new_drafts::Decomposition>,
+    /// DDC-FR-JJHZ: the instruction line that ends each decision comment and
+    /// confirmation comment that this call causes.
+    line: String,
 }
 
 impl<R: tauri::Runtime> DraftBackend<'_, R>
@@ -148,12 +204,15 @@ where
     /// DCP-FR-LAWR: one hunk decision, through the chip's own function.
     fn decide(&self, proposal_id: &str, hunk_id: &str, decision: Decision) -> Result<(), String> {
         let by = self.author.clone()?;
+        // DDC-FR-JJHZ / DCP-FR-HMUG: no feedback. The instruction line takes
+        // the place feedback takes in the decision comment, after one empty
+        // line, so the body ends with it and holds nothing else of the call.
         draft_proposals::decide_hunk_in_process(
             &self.tool.app,
             &self.tool.roots.worktree,
             &self.tool.roots.store,
             proposal_id,
-            Verdict { decision, hunk: Some(hunk_id), feedback: None },
+            Verdict { decision, hunk: Some(hunk_id), feedback: Some(&self.line) },
             &by,
         )
         .map(|_| ())
@@ -263,6 +322,20 @@ where
     fn retryable_error(&self, error: &str) -> bool {
         RETRYABLE_ERRORS.contains(&error)
     }
+
+    fn side_open(&self) -> bool {
+        new_drafts::side_open(self)
+    }
+
+    fn side_entry(
+        &self,
+        id: &str,
+        action: &str,
+        place: usize,
+        total: usize,
+    ) -> Option<DecisionRow> {
+        new_drafts::side_entry(self, id, action, place, total)
+    }
 }
 
 impl<R: tauri::Runtime> rig::tool::PortableTool for DecideDraftChangesTool<R>
@@ -296,6 +369,8 @@ where
         std::future::ready(self.run(arguments))
     }
 }
+
+mod new_drafts;
 
 #[cfg(test)]
 mod tests;

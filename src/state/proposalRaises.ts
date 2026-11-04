@@ -9,6 +9,7 @@
  * notification facility, because a raise is made from that file alone.
  */
 import type {
+  NewDraftProposalsChangedPayload,
   DraftChangeProposal,
   PromptChangeProposal,
   PromptProposalsChangedPayload,
@@ -141,4 +142,30 @@ function basename(path: string): string {
 /** DCR-FR-18 / PCR-FR-17: who a raise says proposed the change. */
 function proposerHandle(proposal: DraftChangeProposal | PromptChangeProposal): string {
   return proposal.agent.kind === "agent" ? `@${proposal.agent.handle}` : proposal.agent.login;
+}
+
+/**
+ * DCR-FR-QQLE: the raise for one `"new draft proposals changed"` event, or
+ * `null`. A recording, and an update that leaves the proposal pending, raise
+ * at level Info with the draft's address. Nothing else raises.
+ */
+export function newDraftProposalRaise(
+  payload: NewDraftProposalsChangedPayload,
+  root: OpenRoot,
+): Raise | null {
+  const proposal = payload.proposal;
+  if (!proposal || proposal.state !== "pending") return null;
+  if (payload.cause !== "recorded" && payload.cause !== "updated") return null;
+  if (!root.projectKey || !root.worktree) return null;
+  const who = proposal.agent.kind === "agent" ? `@${proposal.agent.handle}` : proposal.agent.login;
+  return {
+    key: `new-draft-proposal:${payload.draftId}`,
+    level: "Info",
+    title: `${who} proposed a new draft`,
+    body: `Part ${proposal.position} of ${proposal.total} · ${proposal.name}`,
+    address: mintAddress(root.projectKey, root.worktree, {
+      kind: "draft",
+      draftId: payload.draftId,
+    }),
+  };
 }

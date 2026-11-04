@@ -214,6 +214,28 @@ pub enum Attachment {
         /// Draft-relative path for a draft, project-relative for an artifact.
         path: String,
     },
+    /// CMS-FR-YKGI / CMS-FR-LIBT: a reference to a new draft an agent proposed
+    /// during a decomposition (`DCP-draft-change-proposals.md` DCP-FR-TGRN).
+    /// Identity alone, appended through `append_as` alone.
+    #[serde(rename_all = "camelCase")]
+    NewDraftProposal {
+        proposal_id: String,
+        draft_id: String,
+        /// CMS-FR-YKGI: the action of the update that appended it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<NewDraftUpdateAction>,
+    },
+    /// CMS-FR-KAXQ: the comment is about one new-draft proposal.
+    #[serde(rename_all = "camelCase")]
+    NewDraftSubject { proposal_id: String, draft_id: String },
+}
+
+/// CMS-FR-YKGI: what one update of a new-draft proposal did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NewDraftUpdateAction {
+    Change,
+    Withdraw,
 }
 
 /// CMS-FR-43: what a caller supplies on an append.
@@ -258,6 +280,9 @@ pub enum AttachmentInput {
         artifact_id: Option<String>,
         path: String,
     },
+    /// CMS-FR-KAXQ: stored verbatim as an [`Attachment::NewDraftSubject`].
+    #[serde(rename_all = "camelCase")]
+    NewDraftSubject { proposal_id: String, draft_id: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

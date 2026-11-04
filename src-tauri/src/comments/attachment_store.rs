@@ -102,6 +102,16 @@ pub(super) fn stage_attachment(
                 bytes: None,
             })
         }
+        // CMS-FR-KAXQ: recorded verbatim; both ids must name something.
+        AttachmentInput::NewDraftSubject { proposal_id, draft_id } => {
+            if proposal_id.trim().is_empty() || draft_id.trim().is_empty() {
+                return Err(ERR_MALFORMED_ATTACHMENT.to_string());
+            }
+            Ok(StagedAttachment {
+                attachment: Attachment::NewDraftSubject { proposal_id, draft_id },
+                bytes: None,
+            })
+        }
     }
 }
 

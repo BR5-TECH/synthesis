@@ -39,6 +39,7 @@ import {
   type Discussion,
   type DiscussionTarget,
   type HunkLedgerRow,
+  type NewDraftProposal,
   type Participant,
   type ProposalHunkReference,
 } from "../../types";
@@ -142,6 +143,44 @@ export function useHunkDiscussion(input: {
     ],
   );
 
+  /**
+   * DCR-FR-AMLR: Discuss on a proposed draft. It opens the composer of a new
+   * discussion of the draft, seeded with the proposing agent's tag, whose
+   * opening comment carries one `new_draft_subject`. A discussion that exists
+   * is shown instead.
+   */
+  const discussNewDraft = useCallback(
+    (proposal: NewDraftProposal) => {
+      if (!draftId) return;
+      if (showColumnInput) showColumnInput();
+      else setDraftDiscussionHidden(draftId, false);
+      const existing = discussions.find((d) =>
+        (d.comments[0]?.attachments ?? []).some(
+          (a) => a.kind === "newDraftSubject" && a.proposalId === proposal.id,
+        ),
+      );
+      if (existing) {
+        setOpening(null);
+        selectDiscussion(existing.id);
+        focusComposer();
+        return;
+      }
+      const handle = proposal.agent.kind === "agent" ? proposal.agent.handle : "";
+      setComposerBody(targetKey, seededBody(handle, getDiscussionSession(targetKey).body));
+      setOpening({
+        reference: { kind: "newDraftSubject", proposalId: proposal.id, draftId },
+        position: proposal.position,
+        total: proposal.total,
+      });
+      logInfo(["frontend"], "a discussion of a proposed draft is being opened", {
+        draftId,
+        proposalId: proposal.id,
+      });
+      focusComposer();
+    },
+    [draftId, discussions, selectDiscussion, focusComposer, showColumnInput, targetKey],
+  );
+
   /** DDS-FR-RHKW / DDS-FR-YLRM: the author discarded or left the composer. */
   const cancel = useCallback(() => {
     setOpening(null);
@@ -182,5 +221,5 @@ export function useHunkDiscussion(input: {
     [draftId, artifactId, proposal],
   );
 
-  return { opening, discuss, cancel, opened };
+  return { opening, discuss, discussNewDraft, cancel, opened };
 }

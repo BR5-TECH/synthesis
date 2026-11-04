@@ -117,6 +117,27 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
             },
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         )),
+        // PND-FR-XJHL: constructed per turn like the one above, and its
+        // definition fixed on the same terms.
+        rig::tool::tool_definition(&crate::tools::propose_new_draft::ProposeNewDraftTool::new(
+            handle3.clone(),
+            crate::agent_conversations::OwnedRoots {
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
+            },
+            crate::agent_conversations::ConversationOrigin::stub_draft(
+                "definitions",
+                "definitions",
+                false,
+            ),
+            crate::comments::Participant::Agent {
+                agent_id: "definitions".into(),
+                handle: "definitions".into(),
+                model: None,
+                title: None,
+            },
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )),
         // ADQ-FR-KZNV: constructed per turn like the two above, and held to
         // every convention this list checks. Bound to a discussion origin
         // because that is the only kind it is ever attached to (CVL-FR-08,
@@ -470,3 +491,25 @@ mod conventions;
 mod native;
 mod refusals;
 mod surface;
+
+/// DDC-FR-ELAE: a turn in `origin` whose trigger is the opening comment of
+/// its discussion, noted as an author comment, for a decision tool test. The
+/// fixtures open each discussion with a comment that tags `@arch`, so
+/// [`DECISION_INSTRUCTION`] matches it (DDC-FR-NKAB).
+pub(crate) fn authorized_turn_for(
+    app: &tauri::AppHandle<tauri::test::MockRuntime>,
+    root: &crate::fs::RootFs,
+    origin: &crate::agent_conversations::ConversationOrigin,
+) -> String {
+    let opening = crate::agent_conversations::resolve_origin(
+        crate::agent_conversations::Roots::same(root),
+        origin,
+    )
+    .and_then(|d| d.comments.first().map(|c| c.id.clone()))
+    .unwrap_or_else(|| "no-comment".to_string());
+    crate::agent_conversations::authority_for_test::authorized_turn(app, origin.clone(), &opening)
+}
+
+/// DDC-FR-PZBH: the instruction of a decision tool test, in the opening
+/// comment of every fixture.
+pub(crate) const DECISION_INSTRUCTION: &str = "arch";

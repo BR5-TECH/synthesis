@@ -183,7 +183,12 @@ export function MessageBlock({
             threadId={threadId}
             draftId={draftId}
             attachments={comment.attachments.filter(
-              (a) => a.kind !== "proposal" && a.kind !== "promptProposal",
+              (a) =>
+                a.kind !== "proposal" &&
+                a.kind !== "promptProposal" &&
+                // DCR-FR-RDLK: the new-draft card is an item of its own.
+                a.kind !== "newDraftProposal" &&
+                a.kind !== "newDraftSubject",
             )}
           />
         </div>

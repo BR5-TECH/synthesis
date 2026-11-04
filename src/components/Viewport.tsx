@@ -1,4 +1,5 @@
 import type { OpenableArtifact, Tab } from "../types";
+import { DraftPreviewView } from "./DraftPreview";
 import type { EditSessionStore } from "../state/editSessions";
 import type { DraftSessionStore } from "../state/draftSessions";
 import type { FlowSessionStore } from "../state/flowSessions";
@@ -211,6 +212,11 @@ export function Viewport({
   // viewer a fresh mount. Neither is an Editor and neither holds a session.
   if (activeT?.kind === "document" && activeT.documentId)
     return <DocumentTextViewer key={activeT.id} documentId={activeT.documentId} />;
+  // TAB-FR-CIGU / DCR-FR-HWLA: the read-only preview of a new-draft proposal.
+  if (activeT?.kind === "draftPreview" && activeT.proposalId)
+    return (
+      <DraftPreviewView key={activeT.id} proposalId={activeT.proposalId} label={activeT.label} />
+    );
   if (activeT?.kind === "pdf" && activeT.documentId)
     return <PdfViewer key={activeT.id} documentId={activeT.documentId} />;
   if (activeT?.kind === "flow")

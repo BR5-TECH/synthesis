@@ -13,7 +13,12 @@
  * Nothing here reads a record the conversation does not already hold, and a
  * surface that ignored this module would draw the same comments ungrouped.
  */
-import { isProposalAttachment, type Attachment, type Comment } from "../../../types";
+import {
+  isProposalAttachment,
+  type Attachment,
+  type Comment,
+  type NewDraftProposalReference,
+} from "../../../types";
 import type { PairedHalf } from "../../discussion/questionPairs";
 import { visibleBody } from "../../../text/spokenPart";
 
@@ -40,6 +45,13 @@ export type StreamItem =
       key: string;
       comment: Comment;
       reference: ChangeReference;
+    }
+  /** DCR-FR-RDLK: a new-draft card, below the comment that carries it. */
+  | {
+      kind: "newDraft";
+      key: string;
+      comment: Comment;
+      reference: NewDraftProposalReference;
     };
 
 export interface StreamInput {
@@ -182,12 +194,15 @@ export function streamItems(input: StreamInput): StreamItem[] {
     const carries =
       body !== "" ||
       comment.quotes.length > 0 ||
-      comment.attachments.some((a) => !isProposalAttachment(a));
+      comment.attachments.some(
+        (a) => !isProposalAttachment(a) && a.kind !== "newDraftProposal",
+      );
 
     // CMT-FR-15: the comment the thread opens with carries the thread's own
     // actions, whatever it holds — so it always gets a block to carry them on,
     // exactly as it did when every comment was drawn the same way.
-    if (carries || references.length === 0 || at === 0) {
+    const cards = comment.attachments.some((a) => a.kind === "newDraftProposal");
+    if (carries || (references.length === 0 && !cards) || at === 0) {
       if (
         open !== null &&
         !breaks.has(comment.id) &&
@@ -210,6 +225,17 @@ export function streamItems(input: StreamInput): StreamItem[] {
       items.push({
         kind: "change",
         key: `${comment.id}:${referenceKey(reference)}`,
+        comment,
+        reference,
+      });
+    }
+    // DCR-FR-RDLK: the new-draft card stands below the comment's body.
+    for (const reference of comment.attachments) {
+      if (reference.kind !== "newDraftProposal") continue;
+      open = null;
+      items.push({
+        kind: "newDraft",
+        key: `${comment.id}:newDraft:${reference.proposalId}`,
         comment,
         reference,
       });
@@ -237,6 +263,6 @@ export function coveredBy(item: StreamItem): string[] {
   if (item.kind === "question") {
     return item.answer ? [item.question.id, item.answer.id] : [item.question.id];
   }
-  if (item.kind === "change") return [item.comment.id];
+  if (item.kind === "change" || item.kind === "newDraft") return [item.comment.id];
   return [];
 }

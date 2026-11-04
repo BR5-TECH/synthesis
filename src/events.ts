@@ -873,3 +873,4 @@ export const emitAppPreferencesChanged = (): Promise<void> =>
 /** SET-FR-11 / STB-FR-19: the project's line-ending convention was written. */
 export const emitLineEndingsChanged = (value: "lf" | "crlf"): Promise<void> =>
   announce(LINE_ENDINGS_CHANGED, { value });
+export * from "./newDraftEvents";

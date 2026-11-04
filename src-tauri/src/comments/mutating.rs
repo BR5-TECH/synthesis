@@ -133,6 +133,24 @@ pub fn add_comment_to(
     attachments: Vec<AttachmentInput>,
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
+    add_comment_reporting_id(root, target, thread_id, body, quotes, attachments, stamp)
+        .map(|(discussion, _)| discussion)
+}
+
+/// [`add_comment_to`], also answering the id of the comment it appended.
+///
+/// CMS-FR-VRZA: `add_comment` gives exactly that id to `note_author_comment`.
+/// A re-fold can not tell which comment was appended, because a decision
+/// comment of the same author can land in the same moment.
+pub fn add_comment_reporting_id(
+    root: &crate::fs::RootFs,
+    target: ThreadRef<'_>,
+    thread_id: &str,
+    body: String,
+    quotes: Vec<CommentQuote>,
+    attachments: Vec<AttachmentInput>,
+    stamp: Stamp<'_>,
+) -> Result<(Discussion, String), String> {
     let Stamp { by, at } = stamp;
     let thread = target.find(root, thread_id)?;
     // CMS-FR-17: a resolved discussion takes no further comment.
@@ -148,6 +166,7 @@ pub fn add_comment_to(
     // already had its say, so nothing reaches the attachments folder for an
     // append that was going to be refused anyway (CMS-FR-47).
     let stored = store_attachments(root, target.scope, attachments)?;
+    let comment_id = new_note_id();
     append_as_scoped(
         root,
         target.scope,
@@ -157,7 +176,7 @@ pub fn add_comment_to(
         vec![(
             thread_id.to_string(),
             EventBody::CommentAdded {
-                comment_id: new_note_id(),
+                comment_id: comment_id.clone(),
                 body,
                 quotes,
                 attachments: stored,
@@ -165,7 +184,7 @@ pub fn add_comment_to(
             },
         )],
     )?;
-    target.find(root, thread_id)
+    Ok((target.find(root, thread_id)?, comment_id))
 }
 
 /// CMS-FR-18 / CMS-FR-19 / CMS-FR-20: set the one lifecycle flag of a

@@ -101,6 +101,52 @@ pub struct DraftRecord {
     /// must follow every plain value of the record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub github_issue: Option<GithubIssueLink>,
+    /// DRS-FR-MXQF: the place of this draft in a decomposition. Written once,
+    /// by `create_draft_with_prompt`, and never rewritten. A table, so it
+    /// follows every plain value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<DraftSequence>,
+    /// DRS-FR-LPCX: the marker of a draft whose decomposition the author
+    /// confirmed. Written once, by `mark_draft_superseded`, and never removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded: Option<SupersededMarker>,
+}
+
+/// DRS-FR-MXQF: where an accepted new-draft proposal put this draft in its
+/// decomposition (`DCP-draft-change-proposals.md` DCP-FR-KOOA).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftSequence {
+    pub set_id: String,
+    /// N, counted from 1.
+    pub position: u32,
+    /// M, as the agent gave it.
+    pub total: u32,
+    pub original_draft_id: String,
+    /// The original draft's name when this draft was created.
+    pub original_name: String,
+}
+
+/// DRS-FR-LPCX: one accepted draft that a superseded marker names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupersedingDraft {
+    pub id: String,
+    pub name: String,
+}
+
+/// DRS-FR-LPCX: the fact that a draft was decomposed and the author confirmed
+/// it (`DCP-draft-change-proposals.md` DCP-FR-VLLP).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupersededMarker {
+    pub set_id: String,
+    /// RFC 3339 UTC.
+    pub confirmed_at: String,
+    /// The accepted drafts, oldest first (DCP-FR-FAQQ). Last: an array of
+    /// tables follows every plain value.
+    #[serde(default)]
+    pub drafts: Vec<SupersedingDraft>,
 }
 
 /// DRS-FR-XDWS: the claim state a [`GithubIssueLink`] records. One value
@@ -213,6 +259,12 @@ pub struct DraftSummary {
     /// from this (DRP-FR-TQUB).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication: Option<DraftListPublication>,
+    /// DRS-FR-HIOF: the record's `sequence`, on every status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<DraftSequence>,
+    /// DRS-FR-HIOF: the record's `superseded` marker, on every status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded: Option<SupersededMarker>,
     /// DRS-FR-PXHW: the publication store is present but does not parse. The
     /// row then carries no `publication`, and `list_drafts` logs a warning.
     /// Not sent to the frontend.

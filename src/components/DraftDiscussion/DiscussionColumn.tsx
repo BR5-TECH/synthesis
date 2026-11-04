@@ -250,7 +250,15 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   const transcript = thread !== undefined;
   // DDS-FR-WKTQ: the change the column is about, while it reads a hunk
   // discussion or holds the composer of a new one.
-  const subject = hunk?.reference ?? (thread ? openingHunkOf(thread) : undefined);
+  // DCR-FR-AMLR: a proposed draft is no change, so it has no subject strip.
+  const subject =
+    hunk !== null
+      ? hunk.reference.kind === "proposalHunk"
+        ? hunk.reference
+        : undefined
+      : thread
+        ? openingHunkOf(thread)
+        : undefined;
   // The surface keeps the reading position in the session store; the column
   // only says what it holds.
   const session = useDiscussionSession(thread?.id ?? "");

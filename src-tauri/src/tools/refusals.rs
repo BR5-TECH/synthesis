@@ -513,6 +513,12 @@ pub enum ToolRefusal {
     QuestionSetConversationResolved,
     /// ADQ-FR-HBLN: the reservation failed for any other reason.
     QuestionSetNotRecorded,
+    /// PND-FR-GPNN / PND-FR-BGJI / PND-FR-BVNO: a well-formed call the draft
+    /// or the conversation will not take. The message and the code are fixed
+    /// text of the tool.
+    Denied { message: &'static str, code: &'static str, retryable: bool },
+    /// PND-FR-SQTD: the write failed, with the tool's fixed message.
+    NotRecordedWith(&'static str),
 }
 
 impl ToolRefusal {
@@ -581,6 +587,7 @@ impl ToolRefusal {
             | ToolRefusal::QuestionSetPendingForComment
             | ToolRefusal::QuestionSetAlreadyPending
             | ToolRefusal::QuestionSetConversationResolved
+            | ToolRefusal::Denied { .. }
             | ToolRefusal::ProposalConversationResolved => ToolErrorKind::PermissionDenied,
             // Neither `InvalidArgs` — no argument is at fault or would help —
             // nor `NotFound`, the skills plainly being there. TLC-FR-10's
@@ -614,6 +621,7 @@ impl ToolRefusal {
             // collection and its id was right, so not `NotFound`, and no
             // argument makes it readable, so not `InvalidArgs`.
             | ToolRefusal::DocumentUnavailable
+            | ToolRefusal::NotRecordedWith(_)
             | ToolRefusal::DocumentNoText => ToolErrorKind::Other,
         }
     }
@@ -629,6 +637,10 @@ impl ToolRefusal {
     /// `NotFound` no argument touches — no project open — is not.
     pub fn retryable(&self) -> bool {
         match self {
+            // PND-FR-GPNN / PND-FR-BGJI: the tool decides per refusal.
+            ToolRefusal::Denied { retryable, .. } => *retryable,
+            // PND-FR-SQTD: a write that failed once may succeed next time.
+            ToolRefusal::NotRecordedWith(_) => true,
             // Neither is reachable by any argument: one wants a project the
             // model cannot open, the other a name the project made ambiguous.
             // AUC-FR-10 joins them: no argument a model composes reopens a
@@ -763,6 +775,8 @@ impl ToolRefusal {
             ToolRefusal::GraduationWorkingCopyUnavailable => "working_copy_unavailable",
             ToolRefusal::NotEscalatableNow => "not_escalatable_now",
             ToolRefusal::AlreadyEscalated => "already_escalated",
+            ToolRefusal::Denied { code, .. } => code,
+            ToolRefusal::NotRecordedWith(_) => "proposal_not_recorded",
         }
     }
 
@@ -833,6 +847,9 @@ impl std::fmt::Display for ToolRefusal {
             }
             ToolRefusal::NotEscalatableNow => f.write_str(NOT_ESCALATABLE_NOW),
             ToolRefusal::AlreadyEscalated => f.write_str(ALREADY_ESCALATED),
+            ToolRefusal::Denied { message, .. } | ToolRefusal::NotRecordedWith(message) => {
+                f.write_str(message)
+            }
             // Every word after the fixed opening comes from `Ecosystem`, whose
             // four spellings are compiled in — so this sentence carries no path,
             // no skill name, and nothing the model sent (TLC-FR-09).

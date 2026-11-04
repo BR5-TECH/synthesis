@@ -1,0 +1,101 @@
+/* DCR-FR-HWLA: the draft preview tab. It takes the reading's own sheet. */
+.draft-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-canvas);
+}
+.draft-preview__strip { flex: none; }
+.draft-preview__error,
+.draft-preview__loading {
+  margin: 16px;
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+}
+.draft-preview__error { color: var(--danger); }
+/* DRP-FR-KAWD: the sequence badge is drawn as the publication marker is drawn,
+   but it is no link, so it takes no hover colour. */
+.drafts-tree__sequence { white-space: nowrap; }
+
+/* DCR-FR-LFDJ: the new-draft card is drawn as the question card is drawn. */
+.dds-stream-chip[data-kind="newDraft"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.dds-newdraft__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 4px 12px;
+}
+.dds-newdraft__name { font-weight: var(--fw-semi); color: var(--fg-1); min-width: 0; overflow-wrap: anywhere; }
+.dds-newdraft__state { color: var(--fg-2); font-size: var(--fs-ui-xs); white-space: nowrap; }
+.dds-newdraft__state[data-state="pending"] { color: var(--warn); }
+.dds-newdraft__state[data-state="accepted"] { color: var(--ok); }
+.dds-newdraft__state[data-state="rejected"] { color: var(--danger); }
+.dds-newdraft__created,
+.dds-newdraft__reason,
+.dds-newdraft__error {
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+.dds-newdraft__error { color: var(--danger); }
+.dds-newdraft__decide { display: flex; flex-direction: column; gap: 6px; padding: 4px 12px 10px; }
+.dds-newdraft__decide .dds-newdraft__reason { padding: 0; }
+.dds-newdraft__feedback {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  padding: 3px 6px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+}
+.dds-newdraft__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.dds-newdraft-ref {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+
+/* DCR-FR-KNDA: the What next? row is a quiet row, not a card. */
+.dds-next-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+.dds-next-step__label { font-size: var(--fs-ui-xs); color: var(--fg-2); }
+.dds-next-step__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.dds-next-step > .dds-next-step__reason,
+.dds-next-step > .dds-next-step__error {
+  flex-basis: 100%;
+}
+.dds-next-step__reason,
+.dds-next-step__error,
+.dds-next-step__done {
+  margin: 0;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+.dds-next-step__error { color: var(--danger); }
+/* DCR-FR-QWXP: a decided card keeps its frame; its state is in its words. The
+   stream is a flex column, so neither the card nor the rows below it shrink. */
+.dds-newdraft { display: flex; flex-direction: column; flex: none; }
+.dds-newdraft:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.dds-next-step,
+.dds-next-step__done,
+.dds-newdraft-ref { flex: none; }
+/* DRP-FR-KAWD: a badge beside the name never squeezes the row's icon. */
+.draft-row__name > svg { flex: none; }

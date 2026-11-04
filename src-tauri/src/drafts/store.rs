@@ -206,6 +206,8 @@ pub(super) fn hierarchy_from(
             created_at: String::new(),
             updated_at: String::new(),
             github_issue: None,
+            sequence: None,
+            superseded: None,
         });
         // DRS-FR-15: reported, never repaired. The row is returned with every
         // field that could be recovered, so an inconsistent draft is visible and
@@ -225,12 +227,18 @@ pub(super) fn hierarchy_from(
             updated_at: record.updated_at,
             prompt_activity_at,
             build: BuildState::Idle,
-            has_pending_proposal: crate::draft_proposals::has_pending_at(root, &at.dir),
+            // DRS-FR-WMIK: a pending change proposal or a pending new-draft
+            // proposal.
+            has_pending_proposal: crate::draft_proposals::has_pending_at(root, &at.dir)
+                || crate::new_draft_proposals::has_pending_at(root, &at.dir),
             // Filled in by `list_drafts` from one queue read (DRS-FR-18); the
             // walk itself knows nothing about graduation.
             graduation: None,
             // DRS-FR-XDWS: the list reports the link of a shadow draft.
             github_issue: record.github_issue,
+            // DRS-FR-HIOF: the decomposition facts the panel badges read.
+            sequence: record.sequence,
+            superseded: record.superseded,
             // Filled in by `list_drafts` from the repository machine store
             // (DRS-FR-PXHW); the walk itself knows nothing about that store.
             publication: None,

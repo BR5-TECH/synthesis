@@ -15,20 +15,24 @@
 //!
 //! ## Why it cannot be steered at another file
 //!
-//! The only path this tool ever reads is one the registry produced (LSK-FR-03).
-//! A model supplies a *name*, which selects a descriptor or selects nothing;
-//! there is no argument through which a path reaches the filesystem, so path
-//! traversal is not defended against here so much as unrepresentable.
+//! A model supplies a *name*, which selects a descriptor the registry produced
+//! or selects nothing (LSK-FR-03). The one path it can compose is `file`, and
+//! that path is confined to the folder of the skill it named: a `..` or an
+//! absolute path is refused before anything is read (LSK-FR-PZZE), a project
+//! skill's file is read only through the `FsAccess` gate with its symlink
+//! refusal (LSK-FR-KDVE), and a built-in skill's file is looked up in the
+//! embedded list and never on disk (LSK-FR-TLXK).
 
 use serde::Deserialize;
 
+use super::refusals::SKILL_FILE_OUTSIDE;
 use super::{
     log_tool_refusal, log_tool_success, normalize_skill_name, require_open_project, ToolRefusal,
 };
 use crate::bm25_index::Bm25Indexer;
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
-use crate::skills::{self, Ecosystem, SkillDescriptor};
+use crate::skills::{self, Ecosystem, SkillDescriptor, SkillFilter, SKILL_FILE};
 
 #[cfg(test)]
 mod tests;
@@ -41,11 +45,13 @@ mod tests;
 pub const NAME: &str = "load_skill";
 
 /// LSK-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Read one skill's full instructions, so you can follow them. Use this once `search_skills` or `list_skills` has told you which skill you want and you are ready to carry out its procedure rather than to weigh whether it applies. Give the skill's name exactly as it was reported to you; add `ecosystem` only when you were shown two skills sharing a name and you mean a particular one. Returns the skill's instructions as plain text, without the short header block carrying the name and description you have already been given. This tool reads one skill and nothing else — it opens no other file in the project, and it does not carry out what the skill says, which is yours to do.";
+pub const DESCRIPTION: &str = "Read one skill's full instructions, so you can follow them, or one file that the skill refers to. Use this once `search_skills` or `list_skills` has told you which skill you want and you are ready to carry out its procedure rather than to weigh whether it applies. Give the skill's name exactly as it was reported to you; add `ecosystem` only when you were shown two skills sharing a name and you mean a particular one. Without `file`, returns the skill's SKILL.md instructions as plain text, without the short header block carrying the name and description you have already been given. A skill's SKILL.md often names other files in its own folder, for example `references/example.md`, that hold the detail for one case; to read one, call again with the same name and `file` set to that path, and the file is returned whole as plain text. This tool reads only files inside the skill's own folder, and it does not carry out what the skill says or run any script it ships, which is yours to decide.";
 
 const NAME_DESCRIPTION: &str = "The skill's name, exactly as `list_skills` or `search_skills` reported it. Leading and trailing spaces and differences in letter case are ignored.";
 
-const ECOSYSTEM_DESCRIPTION: &str = "Which ecosystem's copy to load, when two skills share a name: one of `claude`, `codex`, `github`, or `opencode`. Leave it out unless you have been told the name is ambiguous.";
+const ECOSYSTEM_DESCRIPTION: &str = "Which ecosystem's copy to load, when two skills share a name: one of `claude`, `codex`, `github`, `opencode`, or `builtin`. Leave it out unless you have been told the name is ambiguous.";
+
+const FILE_DESCRIPTION: &str = "A file of the skill to read instead of its SKILL.md, as a path relative to the skill's own folder, exactly as the skill's instructions name it. For example: 'references/agentflow-beta.md'. Leave it out to read the skill's instructions.";
 
 /// LSK-FR-06: what a model that named no skill is told.
 pub const BLANK_NAME: &str = "The name must name a skill. Call `list_skills` to see which names this project offers, then call again with one of them.";
@@ -59,6 +65,23 @@ pub struct LoadSkillArgs {
     pub name: String,
     #[serde(default, deserialize_with = "lenient_ecosystem")]
     pub ecosystem: Option<String>,
+    /// LSK-FR-UBQE: a path relative to the skill's own folder.
+    #[serde(default, deserialize_with = "lenient_file")]
+    pub file: Option<String>,
+}
+
+/// TLC-FR-07 applied to `file`: a `null` and an absent key mean no file, and a
+/// value of another JSON shape is read as its JSON text, which names no file
+/// of any skill and so reaches the model as the file-not-found refusal.
+fn lenient_file<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(text) => Some(text),
+        other => Some(other.to_string()),
+    })
 }
 
 /// TLC-FR-07 applied to an enumerated parameter.
@@ -96,8 +119,12 @@ pub fn parameters() -> serde_json::Value {
             },
             "ecosystem": {
                 "type": "string",
-                "enum": ["claude", "codex", "github", "opencode"],
+                "enum": ["claude", "codex", "github", "opencode", "builtin"],
                 "description": ECOSYSTEM_DESCRIPTION,
+            },
+            "file": {
+                "type": "string",
+                "description": FILE_DESCRIPTION,
             },
         },
         "required": ["name"],
@@ -105,12 +132,18 @@ pub fn parameters() -> serde_json::Value {
 }
 
 /// The spelling of an ecosystem a model may send, or `None` for anything that
-/// names none of the four (LSK-FR-07).
+/// names none of the five (LSK-FR-07).
 pub fn parse_ecosystem(value: &str) -> Option<Ecosystem> {
     let value = value.trim();
-    [Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Github, Ecosystem::Opencode]
-        .into_iter()
-        .find(|e| e.as_str().eq_ignore_ascii_case(value))
+    [
+        Ecosystem::Claude,
+        Ecosystem::Codex,
+        Ecosystem::Github,
+        Ecosystem::Opencode,
+        Ecosystem::Builtin,
+    ]
+    .into_iter()
+    .find(|e| e.as_str().eq_ignore_ascii_case(value))
 }
 
 // ---------------------------------------------------------------------------
@@ -239,16 +272,96 @@ pub fn read_instructions(
     Ok(strip_frontmatter(&text).to_string())
 }
 
+// ---------------------------------------------------------------------------
+// The `file` argument (LSK-FR-UBQE through LSK-FR-ULLF)
+// ---------------------------------------------------------------------------
+
+/// LSK-FR-UBQE / LSK-FR-PZZE: the segments of the requested file, `None` when
+/// no file was asked for, or the refusal for a path outside the skill.
+///
+/// Checked before any read, so a path that escapes the skill's folder costs no
+/// filesystem access at all.
+pub fn requested_file(args: &LoadSkillArgs) -> Result<Option<Vec<String>>, ToolRefusal> {
+    let Some(file) = args.file.as_deref().filter(|f| !f.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let segments = skills::builtin::relative_segments(file)
+        .ok_or(ToolRefusal::InvalidArguments(SKILL_FILE_OUTSIDE))?;
+    // A path of nothing but `.` names the skill's folder itself, which is not
+    // a file (LSK-FR-ULLF).
+    if segments.is_empty() {
+        return Err(ToolRefusal::SkillFileNotFound);
+    }
+    Ok(Some(segments.into_iter().map(str::to_string).collect()))
+}
+
+/// LSK-FR-KDVE / LSK-FR-ULLF: read one file of a project skill.
+///
+/// The path is the skill's folder joined with segments that hold no `..`, and
+/// it goes through the `FsAccess` gate, so FSA-FR-10 and FSA-FR-17 bind it: a
+/// symbolic link at the file or at any folder on the way is refused, and
+/// nothing is read through it. Every failure is the one retryable refusal,
+/// because the model's remedy is the same for each: read the `SKILL.md` and
+/// name a file it names.
+pub fn read_project_file(
+    root: &crate::fs::RootFs,
+    skill: &SkillDescriptor,
+    segments: &[String],
+) -> Result<String, ToolRefusal> {
+    let folder = skill.path.strip_suffix(SKILL_FILE).unwrap_or(&skill.path).trim_end_matches('/');
+    let rel = format!("{folder}/{}", segments.join("/"));
+    let abs = crate::fs::resolve_under(root.path(), &rel)
+        .map_err(|_| ToolRefusal::InvalidArguments(SKILL_FILE_OUTSIDE))?;
+    let info = root.file_info(&abs).map_err(|_| ToolRefusal::SkillFileNotFound)?;
+    if info.kind != crate::fs::EntryKind::File {
+        return Err(ToolRefusal::SkillFileNotFound);
+    }
+    root.read_text(&abs).map_err(|_| ToolRefusal::SkillFileNotFound)
+}
+
+/// LSK-FR-SGVX / LSK-FR-TLXK: a built-in skill's instructions or one of its
+/// files, from the embedded list alone.
+pub fn read_builtin(
+    skill: &SkillDescriptor,
+    segments: Option<&[String]>,
+) -> Result<String, ToolRefusal> {
+    match segments {
+        None => skills::builtin_skill_file(&skill.folder_name, SKILL_FILE)
+            .map(|text| strip_frontmatter(text).to_string())
+            // The registry admitted this skill from the same embedded list, so
+            // its `SKILL.md` is there; this is the shape of the answer if not.
+            .ok_or(ToolRefusal::SkillUnreadable),
+        Some(segments) => skills::builtin_skill_file(&skill.folder_name, &segments.join("/"))
+            .map(str::to_string)
+            .ok_or(ToolRefusal::SkillFileNotFound),
+    }
+}
+
 /// The whole call against a mounted project.
-pub fn load(indexer: &Bm25Indexer, args: &LoadSkillArgs) -> Result<String, ToolRefusal> {
-    let skill = resolve(&skills::list_skills(indexer), args)?;
+///
+/// LSK-FR-BSJS: names resolve only among the skills `filter` admits, so a
+/// project skill the agent's persona does not select is the unknown-skill
+/// refusal, with or without `file`.
+pub fn load(
+    indexer: &Bm25Indexer,
+    args: &LoadSkillArgs,
+    filter: &SkillFilter,
+) -> Result<String, ToolRefusal> {
+    let skill = resolve(&skills::list_skills(indexer, filter), args)?;
+    let segments = requested_file(args)?;
+    if skill.ecosystem == Ecosystem::Builtin {
+        return read_builtin(&skill, segments.as_deref());
+    }
     // Taken after the resolve so a project closed mid-call refuses rather than
     // reading through a root the application has already let go of. The caller
     // has already seen a mounted root, so this is a race guard rather than a
     // path a test can drive: it fires only if a close lands between the two
     // reads of the schedule.
     let root = indexer.root_fs().ok_or(ToolRefusal::NoProjectOpen)?;
-    read_instructions(&root, &skill)
+    match segments {
+        None => read_instructions(&root, &skill),
+        Some(segments) => read_project_file(&root, &skill, &segments),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -261,35 +374,49 @@ pub struct SkillLoadTool<R: tauri::Runtime> {
     /// Threaded rather than reached for as a global, so a test can assert on
     /// the records this tool emits without racing the process-wide buffer.
     buffer: &'static LogBuffer,
+    /// LSK-FR-BSJS: the skills the turn's agent may use.
+    filter: SkillFilter,
 }
 
 impl<R: tauri::Runtime> SkillLoadTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name;
-    /// there is no registry that would attach it on anyone's behalf.
-    pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SkillLoadTool { app, buffer: &BUFFER }
+    /// there is no registry that would attach it on anyone's behalf. The
+    /// filter is the turn's agent's (CVL-FR-VZZR).
+    pub fn new(app: tauri::AppHandle<R>, filter: SkillFilter) -> Self {
+        SkillLoadTool { app, buffer: &BUFFER, filter }
     }
 
-    /// The same tool, reporting into `buffer`.
+    /// The same tool, reporting into `buffer`, admitting every project skill
+    /// and no built-in skill until [`Self::with_filter`] says otherwise.
     #[cfg(test)]
     pub fn with_buffer(app: tauri::AppHandle<R>, buffer: &'static LogBuffer) -> Self {
-        SkillLoadTool { app, buffer }
+        SkillLoadTool { app, buffer, filter: SkillFilter::all_project() }
+    }
+
+    /// The same tool with another filter.
+    #[cfg(test)]
+    pub fn with_filter(mut self, filter: SkillFilter) -> Self {
+        self.filter = filter;
+        self
     }
 
     /// The whole call, with its logging (TLC-FR-14).
     fn run(&self, args: LoadSkillArgs) -> Result<String, ToolRefusal> {
-        let outcome = require_open_project(&self.app).and_then(|indexer| load(&indexer, &args));
+        let with_file = args.file.as_deref().is_some_and(|f| !f.trim().is_empty());
+        let outcome =
+            require_open_project(&self.app).and_then(|indexer| load(&indexer, &args, &self.filter));
         match &outcome {
-            // LSK-FR-19: the size of the answer and nothing drawn from it. The
-            // requested name was composed by a model out of the conversation it
-            // is having, and the instructions are project material, so neither
-            // the name, the resolved path, the ecosystem, nor any part of the
-            // text belongs in a record.
+            // LSK-FR-19: the size of the answer, whether a file was asked for,
+            // and nothing drawn from either. The requested name and file were
+            // composed by a model out of the conversation it is having, and the
+            // text is project material, so neither the name, the file, the
+            // resolved path, the ecosystem, nor any part of the text belongs in
+            // a record.
             Ok(text) => log_tool_success(
                 &self.app,
                 self.buffer,
                 NAME,
-                log_fields! { "bytes" => text.len() },
+                log_fields! { "bytes" => text.len(), "file" => with_file },
             ),
             Err(refusal) => log_tool_refusal(&self.app, self.buffer, NAME, refusal),
         }

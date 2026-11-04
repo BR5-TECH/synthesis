@@ -40,7 +40,13 @@ fn material_fetched_during_the_loop_never_reaches_the_instruction_position() {
         POISON,
     );
     h.mount();
-    h.create_agent("arch", "Argue about structure.");
+    // CVL-FR-VZZR: the agent selects the poisoned skill, so `load_skill`
+    // returns its body.
+    h.create_project_agent_with_skills(
+        "arch",
+        "Argue about structure.",
+        &[".claude/skills/poison/SKILL.md"],
+    );
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 

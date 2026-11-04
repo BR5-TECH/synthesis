@@ -13,7 +13,10 @@ use crate::tools::tests::{
 use crate::tools::ToolRefusal;
 
 fn call(fixture: &Fixture) -> Result<SkillListOutput, ToolRefusal> {
-    block_on(SkillListTool::new(fixture.handle()).call(SkillListArgs::default()))
+    block_on(
+        SkillListTool::new(fixture.handle(), crate::skills::SkillFilter::all_project())
+            .call(SkillListArgs::default()),
+    )
 }
 
 fn names(output: &SkillListOutput) -> Vec<&str> {
@@ -32,7 +35,10 @@ fn paths(output: &SkillListOutput) -> Vec<&str> {
 fn the_tool_is_a_portable_tool_named_list_skills() {
     // SLT-FR-01.
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillListTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillListTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(definition.name, "list_skills");
     assert_eq!(<SkillListTool<tauri::test::MockRuntime> as PortableTool>::NAME, "list_skills",);
@@ -43,7 +49,10 @@ fn the_tool_is_a_portable_tool_named_list_skills() {
 fn the_definition_is_the_fixed_text_and_a_schema_declaring_no_parameters() {
     // SLT-FR-02, SLT-FR-03.
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillListTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillListTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(definition.description, DESCRIPTION);
 
@@ -89,8 +98,14 @@ fn a_call_carrying_an_invented_filter_still_returns_the_complete_list() {
     let filtered: SkillListArgs =
         serde_json::from_value(serde_json::json!({ "ecosystem": "claude" })).unwrap();
 
-    let a = block_on(SkillListTool::new(handle.clone()).call(bare)).unwrap();
-    let b = block_on(SkillListTool::new(handle).call(filtered)).unwrap();
+    let a = block_on(
+        SkillListTool::new(handle.clone(), crate::skills::SkillFilter::all_project()).call(bare),
+    )
+    .unwrap();
+    let b = block_on(
+        SkillListTool::new(handle, crate::skills::SkillFilter::all_project()).call(filtered),
+    )
+    .unwrap();
 
     assert_eq!(
         a, b,
@@ -108,7 +123,7 @@ fn the_tool_returns_exactly_what_the_skills_module_produced() {
     let fixture = demo_project();
     let indexer = fixture.app.state::<crate::bm25_index::Bm25Indexer>();
 
-    let direct = crate::skills::list_skills(&indexer);
+    let direct = crate::skills::test_support::listed_project(&indexer);
     let through_tool = call(&fixture).unwrap();
 
     assert_eq!(through_tool.skills.len(), direct.len());
@@ -327,8 +342,11 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
     let app = closed_project();
     let handle = app.handle().clone();
 
-    let refusal =
-        block_on(SkillListTool::new(handle).call(SkillListArgs::default())).expect_err("SLT-FR-11");
+    let refusal = block_on(
+        SkillListTool::new(handle, crate::skills::SkillFilter::all_project())
+            .call(SkillListArgs::default()),
+    )
+    .expect_err("SLT-FR-11");
     assert_eq!(refusal, ToolRefusal::NoProjectOpen);
 
     let error = refusal.to_execution_error();
@@ -337,7 +355,7 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
 
     // DSL-FR-15 would have answered an empty list here; the tool does not.
     let indexer = app.state::<crate::bm25_index::Bm25Indexer>();
-    assert!(crate::skills::list_skills(&indexer).is_empty());
+    assert!(crate::skills::test_support::listed_project(&indexer).is_empty());
 }
 
 #[test]
@@ -346,7 +364,9 @@ fn map_error_is_what_carries_a_refusal_to_the_model() {
     // `ToolRefusal::to_execution_error` alone would leave the trait method
     // free to return anything at all.
     let app = closed_project();
-    let mapped = SkillListTool::new(app.handle().clone()).map_error(ToolRefusal::NoProjectOpen);
+    let mapped =
+        SkillListTool::new(app.handle().clone(), crate::skills::SkillFilter::all_project())
+            .map_error(ToolRefusal::NoProjectOpen);
 
     assert_eq!(mapped.kind(), ToolErrorKind::NotFound);
     assert_eq!(mapped.retryable(), Some(false));
@@ -450,10 +470,11 @@ fn the_two_tools_agree_on_names_and_may_differ_on_which_copy_stands_behind_one()
 
     // The `.codex` copy matches this query best, so the search keeps it while
     // the list keeps `.claude`'s. SLT-FR-14 promises the *name*, not the file.
-    let found = block_on(SkillSearchTool::new(fixture.handle()).call(SkillSearchArgs {
-        query: "pull request diff regressions".to_string(),
-        limit: Some(25),
-    }))
+    let found = block_on(
+        SkillSearchTool::new(fixture.handle(), crate::skills::SkillFilter::all_project()).call(
+            SkillSearchArgs { query: "pull request diff regressions".to_string(), limit: Some(25) },
+        ),
+    )
     .unwrap();
 
     let listed_review = listed.skills.iter().find(|s| s.name == "review").unwrap();
@@ -483,7 +504,7 @@ fn every_listed_skill_is_rankable_and_every_ranked_skill_is_listed() {
     // Every listed skill is one `search_skills` can rank.
     for entry in &listed.skills {
         let found = block_on(
-            SkillSearchTool::new(handle.clone())
+            SkillSearchTool::new(handle.clone(), crate::skills::SkillFilter::all_project())
                 .call(SkillSearchArgs { query: entry.description.clone(), limit: Some(25) }),
         )
         .unwrap();
@@ -495,11 +516,14 @@ fn every_listed_skill_is_rankable_and_every_ranked_skill_is_listed() {
     }
 
     // And every skill a broad query returns appears in the list.
-    let broad = block_on(SkillSearchTool::new(handle).call(SkillSearchArgs {
-        query: "specification deploy reformat source production style".to_string(),
-        limit: Some(25),
-    }))
-    .unwrap();
+    let broad =
+        block_on(SkillSearchTool::new(handle, crate::skills::SkillFilter::all_project()).call(
+            SkillSearchArgs {
+                query: "specification deploy reformat source production style".to_string(),
+                limit: Some(25),
+            },
+        ))
+        .unwrap();
     assert!(!broad.skills.is_empty());
     for matched in &broad.skills {
         assert!(
@@ -528,8 +552,11 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
         indexer.mount(&crate::fs::RootFs::for_root(&root));
     }
 
-    let output = block_on(SkillListTool::new(handle).call(SkillListArgs::default()))
-        .expect("SLT-FR-15: answers from the registry as it stands");
+    let output = block_on(
+        SkillListTool::new(handle, crate::skills::SkillFilter::all_project())
+            .call(SkillListArgs::default()),
+    )
+    .expect("SLT-FR-15: answers from the registry as it stands");
     assert!(output.skills.is_empty(), "the call returned rather than waiting");
 }
 

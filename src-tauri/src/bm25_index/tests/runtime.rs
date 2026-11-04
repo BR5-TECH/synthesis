@@ -288,6 +288,8 @@ fn a_pass_over_a_real_tree_indexes_the_typed_files_and_nothing_else() {
     let stats = indexer
         .run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ALL, generation)
         .expect("the pass publishes");
+    // DSL-FR-ZUFC: the built-in skills' descriptors were indexed at mount, so
+    // this pass finds them unchanged and indexes the project's files alone.
     assert_eq!(stats.files_indexed, 2, "the spec and the skill, not main.rs");
 
     let snapshot = indexer.snapshot();

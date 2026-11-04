@@ -16,6 +16,9 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         ToolRefusal::InvalidArguments(skill_load::BLANK_NAME),
         ToolRefusal::SkillNotFound,
         ToolRefusal::SkillUnreadable,
+        // LSK-FR-PZZE, LSK-FR-ULLF: the two refusals of the `file` argument.
+        ToolRefusal::InvalidArguments(crate::tools::refusals::SKILL_FILE_OUTSIDE),
+        ToolRefusal::SkillFileNotFound,
         ToolRefusal::SkillNameNotUnique,
         ToolRefusal::SkillAmbiguous(vec![
             crate::skills::Ecosystem::Claude,
@@ -130,6 +133,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::InvalidUpdateAt { .. }
         | ToolRefusal::SkillNotFound
         | ToolRefusal::SkillUnreadable
+        | ToolRefusal::SkillFileNotFound
         | ToolRefusal::SkillNameNotUnique
         | ToolRefusal::SkillAmbiguous(_)
         | ToolRefusal::PathOutsideProject
@@ -262,34 +266,64 @@ fn every_declared_failure_returns_rather_than_panicking() {
 
     let outcomes: Vec<ToolRefusal> = vec![
         block_on(
-            skill_search::SkillSearchTool::new(closed_handle.clone())
-                .call(skill_search::SkillSearchArgs { query: "anything".to_string(), limit: None }),
+            skill_search::SkillSearchTool::new(
+                closed_handle.clone(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_search::SkillSearchArgs { query: "anything".to_string(), limit: None }),
         )
         .unwrap_err(),
         block_on(
-            skill_search::SkillSearchTool::new(open.handle())
-                .call(skill_search::SkillSearchArgs { query: "   ".to_string(), limit: None }),
+            skill_search::SkillSearchTool::new(
+                open.handle(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_search::SkillSearchArgs { query: "   ".to_string(), limit: None }),
         )
         .unwrap_err(),
         block_on(
-            skill_list::SkillListTool::new(closed_handle.clone())
-                .call(skill_list::SkillListArgs::default()),
+            skill_list::SkillListTool::new(
+                closed_handle.clone(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_list::SkillListArgs::default()),
         )
         .unwrap_err(),
         block_on(
-            skill_load::SkillLoadTool::new(closed_handle)
-                .call(skill_load::LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
+            skill_load::SkillLoadTool::new(
+                closed_handle,
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_load::LoadSkillArgs {
+                name: "analyst".to_string(),
+                ecosystem: None,
+                file: None,
+            }),
         )
         .unwrap_err(),
         block_on(
-            skill_load::SkillLoadTool::new(open.handle())
-                .call(skill_load::LoadSkillArgs { name: "  ".to_string(), ecosystem: None }),
+            skill_load::SkillLoadTool::new(
+                open.handle(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_load::LoadSkillArgs {
+                name: "  ".to_string(),
+                ecosystem: None,
+                file: None,
+            }),
         )
         .unwrap_err(),
-        block_on(skill_load::SkillLoadTool::new(open.handle()).call(skill_load::LoadSkillArgs {
-            name: "no such skill".to_string(),
-            ecosystem: None,
-        }))
+        block_on(
+            skill_load::SkillLoadTool::new(
+                open.handle(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_load::LoadSkillArgs {
+                name: "no such skill".to_string(),
+                ecosystem: None,
+                file: None,
+            }),
+        )
         .unwrap_err(),
     ];
     // Each `unwrap_err` above is the assertion; what is worth stating here is
@@ -319,20 +353,28 @@ fn no_open_project_reads_identically_from_every_tool() {
     let handle2 = handle.clone();
 
     let search = block_on(
-        skill_search::SkillSearchTool::new(handle.clone())
-            .call(skill_search::SkillSearchArgs { query: "anything".to_string(), limit: None }),
+        skill_search::SkillSearchTool::new(
+            handle.clone(),
+            crate::skills::SkillFilter::all_project(),
+        )
+        .call(skill_search::SkillSearchArgs { query: "anything".to_string(), limit: None }),
     )
     .unwrap_err();
     let list = block_on(
-        skill_list::SkillListTool::new(handle.clone()).call(skill_list::SkillListArgs::default()),
+        skill_list::SkillListTool::new(handle.clone(), crate::skills::SkillFilter::all_project())
+            .call(skill_list::SkillListArgs::default()),
     )
     .unwrap_err();
     // LSK-FR-16: the no-project refusal rather than the unknown-skill one — a
     // model told "no skill by that name" would conclude the project lacks a
     // skill it has.
     let load = block_on(
-        skill_load::SkillLoadTool::new(handle.clone())
-            .call(skill_load::LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
+        skill_load::SkillLoadTool::new(handle.clone(), crate::skills::SkillFilter::all_project())
+            .call(skill_load::LoadSkillArgs {
+                name: "analyst".to_string(),
+                ecosystem: None,
+                file: None,
+            }),
     )
     .unwrap_err();
     let specs =
@@ -441,17 +483,21 @@ fn nothing_matched_and_nothing_present_are_successes_not_refusals() {
     let fixture = demo_project();
     let handle = fixture.handle();
 
-    let search =
-        block_on(skill_search::SkillSearchTool::new(handle).call(skill_search::SkillSearchArgs {
-            query: "zzzzz nonexistent terminology".to_string(),
-            limit: None,
-        }))
-        .expect("nothing matched is an answer, not a failure (TLC-FR-12)");
+    let search = block_on(
+        skill_search::SkillSearchTool::new(handle, crate::skills::SkillFilter::all_project()).call(
+            skill_search::SkillSearchArgs {
+                query: "zzzzz nonexistent terminology".to_string(),
+                limit: None,
+            },
+        ),
+    )
+    .expect("nothing matched is an answer, not a failure (TLC-FR-12)");
     assert!(search.skills.is_empty());
 
     let empty = empty_project();
     let list = block_on(
-        skill_list::SkillListTool::new(empty.handle()).call(skill_list::SkillListArgs::default()),
+        skill_list::SkillListTool::new(empty.handle(), crate::skills::SkillFilter::all_project())
+            .call(skill_list::SkillListArgs::default()),
     )
     .expect("a project with no skills is a fact, not a failure (TLC-FR-12)");
     assert!(list.skills.is_empty());
@@ -629,7 +675,10 @@ fn a_tools_own_fields_cannot_displace_the_tool_name_on_a_success() {
 #[test]
 fn one_instance_serves_two_callers_without_either_observing_the_other() {
     let fixture = demo_project();
-    let tool = std::sync::Arc::new(skill_search::SkillSearchTool::new(fixture.handle()));
+    let tool = std::sync::Arc::new(skill_search::SkillSearchTool::new(
+        fixture.handle(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     let a = std::sync::Arc::clone(&tool);
     let b = std::sync::Arc::clone(&tool);

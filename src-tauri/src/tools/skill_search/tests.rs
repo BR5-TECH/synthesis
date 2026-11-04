@@ -19,7 +19,7 @@ use crate::tools::tests::{
 use crate::tools::ToolRefusal;
 
 fn tool(fixture: &crate::tools::tests::Fixture) -> SkillSearchTool<tauri::test::MockRuntime> {
-    SkillSearchTool::new(fixture.handle())
+    SkillSearchTool::new(fixture.handle(), crate::skills::SkillFilter::all_project())
 }
 
 fn call(
@@ -46,7 +46,10 @@ fn paths(output: &SkillSearchOutput) -> Vec<&str> {
 fn the_tool_is_a_portable_tool_named_search_skills() {
     // SST-FR-01.
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillSearchTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(definition.name, "search_skills");
     assert_eq!(<SkillSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME, "search_skills",);
@@ -57,7 +60,10 @@ fn the_tool_is_a_portable_tool_named_search_skills() {
 fn the_definition_is_the_fixed_text_and_the_documented_schema() {
     // SST-FR-02.
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillSearchTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(definition.description, DESCRIPTION);
 
@@ -101,7 +107,8 @@ fn the_tool_returns_exactly_what_the_skills_module_produced() {
     let fixture = demo_project();
     let indexer = fixture.app.state::<crate::bm25_index::Bm25Indexer>();
 
-    let direct = crate::skills::search_skills(&indexer, "review a specification", 10);
+    let direct =
+        crate::skills::test_support::searched_project(&indexer, "review a specification", 10);
     let through_tool = call(&fixture, "review a specification", None).unwrap();
 
     assert_eq!(through_tool.skills.len(), direct.len());
@@ -238,7 +245,7 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
     let handle = app.handle().clone();
 
     let refusal = block_on(
-        SkillSearchTool::new(handle)
+        SkillSearchTool::new(handle, crate::skills::SkillFilter::all_project())
             .call(SkillSearchArgs { query: "review a specification".to_string(), limit: None }),
     )
     .expect_err("SST-FR-07");
@@ -250,7 +257,8 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
 
     // DSL-FR-15 would have answered an empty list here; the tool does not.
     let indexer = app.state::<crate::bm25_index::Bm25Indexer>();
-    assert!(crate::skills::search_skills(&indexer, "review a specification", 10).is_empty());
+    assert!(crate::skills::test_support::searched_project(&indexer, "review a specification", 10)
+        .is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +376,8 @@ fn map_error_is_what_carries_a_refusal_to_the_model() {
     // `ToolRefusal::to_execution_error` alone would leave the trait method
     // free to return anything at all.
     let app = closed_project();
-    let tool = SkillSearchTool::new(app.handle().clone());
+    let tool =
+        SkillSearchTool::new(app.handle().clone(), crate::skills::SkillFilter::all_project());
 
     let mapped = tool.map_error(ToolRefusal::NoProjectOpen);
     assert_eq!(mapped.kind(), ToolErrorKind::NotFound);
@@ -495,7 +504,11 @@ fn a_colliding_name_is_kept_by_whichever_copy_matched_better() {
 
     // And once more for the copy that sorts last, so no single position can
     // account for all three outcomes.
-    let third = call(&fixture, "review database migration destructive", None).unwrap();
+    // The query restates that copy's own description, so its margin holds
+    // whatever else the index holds: the built-in skills' descriptors join the
+    // index too (DSL-FR-ZUFC) and move the statistics the scores rest on.
+    let third =
+        call(&fixture, "review a database migration for destructive operations", None).unwrap();
     let reviews: Vec<&SkillMatch> = third.skills.iter().filter(|s| s.name == "review").collect();
     assert_eq!(reviews.len(), 1);
     assert_eq!(reviews[0].ecosystem, Ecosystem::Opencode);
@@ -539,7 +552,7 @@ fn deduplication_here_is_insensitive_to_case_too() {
 /// that never sees two candidates is a rule no assertion can test.
 fn candidates(fixture: &crate::tools::tests::Fixture, query: &str) -> usize {
     let indexer = fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    crate::skills::search_skills(&indexer, query, 25)
+    crate::skills::test_support::searched_project(&indexer, query, 25)
         .iter()
         .filter(|r| r.skill.name == "review")
         .count()
@@ -665,7 +678,7 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
     }
 
     let output = block_on(
-        SkillSearchTool::new(handle)
+        SkillSearchTool::new(handle, crate::skills::SkillFilter::all_project())
             .call(SkillSearchArgs { query: "does a thing".to_string(), limit: None }),
     )
     .expect("SST-FR-14: answers from the index as it stands");

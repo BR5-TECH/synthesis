@@ -413,6 +413,7 @@ fn a_dispatched_turn_carries_its_agents_title_in_the_prompt_it_works_under() {
         agents::AgentScope::Personal,
         &agent.id,
         &AgentDraft {
+            skills: Vec::new(),
             voice: String::new(),
             nickname: "arch".into(),
             title: "Architect".into(),

@@ -400,6 +400,17 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     // request carries are taken from the very tools the loop will dispatch, so
     // what the model is offered and what it can actually reach cannot drift
     // apart.
+    let skill_filter = crate::skills::SkillFilter::with_project_paths(agent.skills.iter().cloned());
+    // CVL-FR-VZZR: how many project skills this turn's agent selected, so a
+    // report that an agent does not see a skill can be read against it. A
+    // count only: a path names project material.
+    logging::log_debug(
+        app,
+        turns.buffer(),
+        &[Domain::Ai],
+        "agent turn skill selection",
+        log_fields! { "turnId" => &turn.id, "projectSkills" => skill_filter.project_path_count() },
+    );
     let tools = conversation_tools(
         app,
         &turn.id,
@@ -408,6 +419,8 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         &author,
         ContributionFlags { asked: &asked, asked_questions: &asked_questions, proposed: &proposed },
         document_budget,
+        // CVL-FR-VZZR / AGR-FR-LAQP: the selection as it stands at dispatch.
+        &skill_filter,
     );
     let plan = TurnPlan {
         turn_id: turn.id.clone(),

@@ -31,7 +31,7 @@ use super::{
 use crate::bm25_index::Bm25Indexer;
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
-use crate::skills::{self, Ecosystem};
+use crate::skills::{self, Ecosystem, SkillFilter};
 
 #[cfg(test)]
 mod tests;
@@ -49,7 +49,7 @@ pub const NAME: &str = "list_skills";
 /// It names `search_skills` outright so a model holding a specific task is
 /// pointed at the ranked call rather than reading the whole set to find one
 /// skill.
-pub const DESCRIPTION: &str = "List every skill this project makes available to you, each with the description it wrote about itself. Use this to survey what the project can do, or when a search for a specific task came back with nothing useful and you want to see the whole set before concluding no skill applies. Each entry gives the skill's name, its description, the ecosystem it belongs to, and the path to its SKILL.md file; read that file to actually use the skill. Every skill name available to you appears exactly once, so a name that is not in this list names nothing you can use. This tool takes no parameters. When you already know what task you need a skill for, prefer `search_skills`, which ranks the same set against that task.";
+pub const DESCRIPTION: &str = "List every skill available to you, each with the description it wrote about itself. The list holds the application's built-in skills (ecosystem `builtin`) and the project skills made available to you. Use this to survey what you can do, or when a search for a specific task came back with nothing useful and you want to see the whole set before concluding no skill applies. Each entry gives the skill's name, its description, the ecosystem it belongs to, and the path of its SKILL.md; call `load_skill` with the name to actually use the skill. A `builtin` skill's path is not a file in the project. Every skill name available to you appears exactly once, so a name that is not in this list names nothing you can use. This tool takes no parameters. When you already know what task you need a skill for, prefer `search_skills`, which ranks the same set against that task.";
 
 /// The arguments: none (SLT-FR-03).
 ///
@@ -103,9 +103,11 @@ pub fn parameters() -> serde_json::Value {
 /// `.codex`, `.codex` over `.github`, and `.github` over `.opencode`, those
 /// folder names sorting that way. Entries are removed from the order without
 /// reordering what remains (SLT-FR-08).
-pub fn list(indexer: &Bm25Indexer) -> SkillListOutput {
+///
+/// SLT-FR-XKDW: only the skills `filter` admits are listed.
+pub fn list(indexer: &Bm25Indexer, filter: &SkillFilter) -> SkillListOutput {
     let mut seen: HashSet<String> = HashSet::new();
-    let skills = skills::list_skills(indexer)
+    let skills = skills::list_skills(indexer, filter)
         .into_iter()
         .filter(|skill| seen.insert(normalize_skill_name(&skill.name)))
         .map(|skill| SkillEntry {
@@ -128,24 +130,35 @@ pub struct SkillListTool<R: tauri::Runtime> {
     /// Threaded rather than reached for as a global, so a test can assert on
     /// the records this tool emits without racing the process-wide buffer.
     buffer: &'static LogBuffer,
+    /// SLT-FR-XKDW: the skills the turn's agent may use.
+    filter: SkillFilter,
 }
 
 impl<R: tauri::Runtime> SkillListTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name;
-    /// there is no registry that would attach it on anyone's behalf.
-    pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SkillListTool { app, buffer: &BUFFER }
+    /// there is no registry that would attach it on anyone's behalf. The
+    /// filter is the turn's agent's (CVL-FR-VZZR).
+    pub fn new(app: tauri::AppHandle<R>, filter: SkillFilter) -> Self {
+        SkillListTool { app, buffer: &BUFFER, filter }
     }
 
-    /// The same tool, reporting into `buffer`.
+    /// The same tool, reporting into `buffer`, admitting every project skill
+    /// and no built-in skill until [`Self::with_filter`] says otherwise.
     #[cfg(test)]
     pub fn with_buffer(app: tauri::AppHandle<R>, buffer: &'static LogBuffer) -> Self {
-        SkillListTool { app, buffer }
+        SkillListTool { app, buffer, filter: SkillFilter::all_project() }
+    }
+
+    /// The same tool with another filter.
+    #[cfg(test)]
+    pub fn with_filter(mut self, filter: SkillFilter) -> Self {
+        self.filter = filter;
+        self
     }
 
     /// The whole call, with its logging (TLC-FR-14).
     fn run(&self) -> Result<SkillListOutput, ToolRefusal> {
-        let outcome = require_open_project(&self.app).map(|indexer| list(&indexer));
+        let outcome = require_open_project(&self.app).map(|indexer| list(&indexer, &self.filter));
         match &outcome {
             Ok(output) => log_tool_success(
                 &self.app,

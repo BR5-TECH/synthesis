@@ -27,17 +27,24 @@
 //! (DSL-FR-14) — so ranking a skill on how it describes itself is not disturbed
 //! by how much it wrote.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde::Serialize;
+use tauri::State;
 
 use crate::bm25_index::{self, Bm25Indexer, IndexId, MAX_FILE_BYTES};
+
+pub mod builtin;
+
+pub use builtin::{builtin_skill_file, enumerate_builtin, BUILTIN_PATH_PREFIX};
 
 // ---------------------------------------------------------------------------
 // The four special folders (DSL-FR-02)
 // ---------------------------------------------------------------------------
 
-/// Which of the four folder families a skill was found in.
+/// Which of the four folder families a project skill was found in, or
+/// `Builtin` for a skill the application ships (DSL-FR-YBDO).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ecosystem {
@@ -45,6 +52,7 @@ pub enum Ecosystem {
     Codex,
     Github,
     Opencode,
+    Builtin,
 }
 
 impl Ecosystem {
@@ -54,6 +62,7 @@ impl Ecosystem {
             Ecosystem::Codex => "codex",
             Ecosystem::Github => "github",
             Ecosystem::Opencode => "opencode",
+            Ecosystem::Builtin => "builtin",
         }
     }
 }
@@ -113,6 +122,75 @@ pub struct RankedSkill {
     pub skill: SkillDescriptor,
     /// BM25 score against the `skills` index (BMI-FR-11).
     pub score: f32,
+}
+
+/// DSL-FR-VJZD: which skills one agent may use.
+///
+/// Every built-in skill passes. A project skill passes only when its `path` is
+/// one of `project_paths`, which is the agent's stored selection
+/// (AGR-FR-IGIL). A path that names no project skill admits nothing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SkillFilter {
+    project_paths: BTreeSet<String>,
+    /// Test support: admit every project skill and no built-in skill, so a
+    /// test of the project source sees that source alone. Absent from a
+    /// production build, where every filter admits every built-in skill.
+    #[cfg(test)]
+    all_project: bool,
+}
+
+impl SkillFilter {
+    /// A filter that admits the built-in skills alone — the filter of a
+    /// Personal agent, and of a Project agent that selects nothing.
+    pub fn builtin_only() -> SkillFilter {
+        SkillFilter::default()
+    }
+
+    /// A filter that admits the built-in skills and the project skills at
+    /// `paths`.
+    pub fn with_project_paths<I, S>(paths: I) -> SkillFilter
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        SkillFilter {
+            project_paths: paths.into_iter().map(Into::into).collect(),
+            #[cfg(test)]
+            all_project: false,
+        }
+    }
+
+    /// Test support: a filter that admits every project skill and no built-in
+    /// skill.
+    #[cfg(test)]
+    pub fn all_project() -> SkillFilter {
+        SkillFilter { all_project: true, ..SkillFilter::default() }
+    }
+
+    /// Whether the agent may use `skill`.
+    pub fn admits(&self, skill: &SkillDescriptor) -> bool {
+        #[cfg(test)]
+        if self.all_project {
+            return skill.ecosystem != Ecosystem::Builtin;
+        }
+        skill.ecosystem == Ecosystem::Builtin || self.project_paths.contains(&skill.path)
+    }
+
+    /// How many project paths the filter holds, for a log record.
+    pub fn project_path_count(&self) -> usize {
+        self.project_paths.len()
+    }
+}
+
+/// One project skill as `list_project_skills` returns it (DSL contract
+/// surface). Never a built-in skill.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSkill {
+    pub path: String,
+    pub ecosystem: Ecosystem,
+    pub name: String,
+    pub description: String,
 }
 
 /// A file at an eligible path that was excluded, and why (DSL-FR-24).
@@ -416,7 +494,7 @@ fn resolve_skill(root: &Path, rel: &str) -> Result<std::path::PathBuf, &'static 
 }
 
 /// The two declarations that exclude an otherwise well-placed skill.
-fn eligible(front: &Frontmatter) -> Result<(), &'static str> {
+pub(crate) fn eligible(front: &Frontmatter) -> Result<(), &'static str> {
     if front.disable_model_invocation {
         return Err(REASON_DISABLED);
     }
@@ -441,8 +519,8 @@ fn eligible(front: &Frontmatter) -> Result<(), &'static str> {
 /// flight, and never disagrees with [`search_skills`] (DSL-FR-18): both read
 /// one snapshot, in which the registry and the `skills` index were published
 /// together.
-pub fn list_skills(indexer: &Bm25Indexer) -> Vec<SkillDescriptor> {
-    indexer.snapshot().skills().to_vec()
+pub fn list_skills(indexer: &Bm25Indexer, filter: &SkillFilter) -> Vec<SkillDescriptor> {
+    indexer.snapshot().skills().iter().filter(|s| filter.admits(s)).cloned().collect()
 }
 
 /// DSL-FR-16: the `limit` best-matching skills for `query`, ordered by
@@ -451,19 +529,139 @@ pub fn list_skills(indexer: &Bm25Indexer) -> Vec<SkillDescriptor> {
 /// Scores against the `skills` index alone and never against another, so a term
 /// that appears only in some skill's body ranks nothing here (DSL-FR-14).
 /// Returns a list in every circumstance rather than an error.
-pub fn search_skills(indexer: &Bm25Indexer, query: &str, limit: usize) -> Vec<RankedSkill> {
+///
+/// The filter applies before the limit: the search ranks every document of
+/// the index, and the first `limit` that the filter admits are the result, so
+/// a skill the agent may not use never takes a place in it.
+pub fn search_skills(
+    indexer: &Bm25Indexer,
+    query: &str,
+    limit: usize,
+    filter: &SkillFilter,
+) -> Vec<RankedSkill> {
+    if limit == 0 {
+        return Vec::new();
+    }
     let snapshot = indexer.snapshot();
-    bm25_index::search_snapshot(&snapshot, &[IndexId::Skills], query, limit)
+    let every = snapshot.skills().len();
+    bm25_index::search_snapshot(&snapshot, &[IndexId::Skills], query, every)
         .into_iter()
         .filter_map(|hit| {
             snapshot
                 .skills()
                 .iter()
                 .find(|s| s.path == hit.path)
+                .filter(|skill| filter.admits(skill))
                 .map(|skill| RankedSkill { skill: skill.clone(), score: hit.score })
+        })
+        .take(limit)
+        .collect()
+}
+
+/// DSL-FR-PEHR: every eligible project skill of the registry, in path order,
+/// and never a built-in skill. Pure over the indexer so it is testable without
+/// a Tauri runtime.
+pub fn project_skills(indexer: &Bm25Indexer) -> Vec<ProjectSkill> {
+    indexer
+        .snapshot()
+        .skills()
+        .iter()
+        .filter(|s| s.ecosystem != Ecosystem::Builtin)
+        .map(|s| ProjectSkill {
+            path: s.path.clone(),
+            ecosystem: s.ecosystem,
+            name: s.name.clone(),
+            description: s.description.clone(),
         })
         .collect()
 }
 
+/// DSL-FR-PEHR: the typed refusal with no project open.
+pub const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
+
+/// DSL-FR-PEHR: the answer of `list_project_skills` against an indexer, or the
+/// typed refusal when no project is mounted.
+pub fn list_project_skills_impl(indexer: &Bm25Indexer) -> Result<Vec<ProjectSkill>, String> {
+    if indexer.root().is_none() {
+        return Err(ERR_NO_PROJECT_OPEN.to_string());
+    }
+    Ok(project_skills(indexer))
+}
+
+/// DSL-FR-PEHR: the project skills the persona editor of a Project agent
+/// offers (`../ui/AGT-agents.md` AGT-FR-KVDA).
+#[tauri::command]
+pub fn list_project_skills<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    indexer: State<'_, Bm25Indexer>,
+) -> Result<Vec<ProjectSkill>, String> {
+    list_project_skills_logged(&app, &crate::logging::BUFFER, &indexer)
+}
+
+/// DSL-FR-WJPI: the command with its records — one `DEBUG` with the count, or
+/// one `WARN` with the refusal; never a path, a name, or a description. The
+/// buffer is threaded so a test reads its own records.
+pub fn list_project_skills_logged<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    buffer: &'static crate::logging::LogBuffer,
+    indexer: &Bm25Indexer,
+) -> Result<Vec<ProjectSkill>, String> {
+    use crate::logging::{log_debug, log_warn, Domain};
+    let result = list_project_skills_impl(indexer);
+    match &result {
+        Ok(skills) => log_debug(
+            app,
+            buffer,
+            &[Domain::Backend],
+            "project skills listed",
+            crate::log_fields! { "skills" => skills.len() },
+        ),
+        Err(reason) => log_warn(
+            app,
+            buffer,
+            &[Domain::Backend],
+            "project skills not listed",
+            crate::log_fields! { "reason" => reason.clone() },
+        ),
+    }
+    result
+}
+
+/// Test support: the registry's project skills, read through the filtered
+/// APIs with a filter that admits every project skill, so a test of the
+/// project source is not disturbed by the built-in skills every registry
+/// also holds (DSL-FR-ZUFC).
+#[cfg(test)]
+pub mod test_support {
+    use super::*;
+
+    /// A filter that admits every project skill the registry holds now.
+    pub fn every_project_skill(_indexer: &Bm25Indexer) -> SkillFilter {
+        SkillFilter::all_project()
+    }
+
+    /// `list_skills` with every project skill admitted, less the built-in
+    /// skills.
+    pub fn listed_project(indexer: &Bm25Indexer) -> Vec<SkillDescriptor> {
+        list_skills(indexer, &every_project_skill(indexer))
+            .into_iter()
+            .filter(|s| s.ecosystem != Ecosystem::Builtin)
+            .collect()
+    }
+
+    /// `search_skills` with every project skill admitted, less the built-in
+    /// skills, at most `limit` of them.
+    pub fn searched_project(indexer: &Bm25Indexer, query: &str, limit: usize) -> Vec<RankedSkill> {
+        let builtins = enumerate_builtin().0.len();
+        search_skills(indexer, query, limit.saturating_add(builtins), &every_project_skill(indexer))
+            .into_iter()
+            .filter(|r| r.skill.ecosystem != Ecosystem::Builtin)
+            .take(limit)
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod builtin_tests;
 #[cfg(test)]
 mod tests;

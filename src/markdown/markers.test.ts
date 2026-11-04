@@ -6,6 +6,7 @@ import {
   canonicalBreak,
   classifyMarkerLine,
   commentText,
+  findCommentClose,
   scanBlockComment,
   splitInlineComments,
 } from "./markers";
@@ -117,5 +118,25 @@ describe("tooltip text (EDT-FR-IGZL)", () => {
     );
     expect(commentText("<!-- -->")).toBe("");
     expect(commentText("<!-- <script>alert(1)</script> -->")).toBe("<script>alert(1)</script>");
+  });
+});
+
+describe("the close of a comment (EDT-FR-UYPS, EDT-FR-KMAR)", () => {
+  it("EDT-FR-UYPS: a comment ends at the first --> or --!>, as HTML ends it", () => {
+    expect(findCommentClose("<!-- a --> b", 4)).toEqual({ at: 7, end: 10 });
+    expect(findCommentClose("<!-- a --!> b -->", 4)).toEqual({ at: 7, end: 11 });
+    expect(findCommentClose("<!-- a --> b --!>", 4)).toEqual({ at: 7, end: 10 });
+    expect(findCommentClose("<!-- open", 4)).toBeNull();
+  });
+
+  it("EDT-FR-KMAR: text after --!> is prose, not part of the chip", () => {
+    expect(splitInlineComments("a <!-- x --!> b -->")).toEqual([
+      { kind: "text", text: "a " },
+      { kind: "comment", raw: "<!-- x --!>" },
+      { kind: "text", text: " b -->" },
+    ]);
+    expect(scanBlockComment(["<!-- x --!>"], 0)).toEqual({ end: 1, raw: "<!-- x --!>" });
+    expect(scanBlockComment(["<!-- x --!> shown -->"], 0)).toBeNull();
+    expect(commentText("<!-- x --!>")).toBe("x");
   });
 });

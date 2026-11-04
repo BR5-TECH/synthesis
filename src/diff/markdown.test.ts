@@ -268,6 +268,15 @@ describe("HTML comments as blocks (DFV-FR-SZZX, EDT-FR-QALB, EDT-FR-XPMC, EDT-FR
     ]);
   });
 
+  it("EDT-FR-UYPS, EDT-FR-KMAR: a comment closed by --!> ends there, on both surfaces", () => {
+    expect(kinds("<!-- x --!>\nText")).toEqual(["comment", "paragraph"]);
+    expect(parseInline("a <!-- x --!> b -->")).toEqual([
+      { kind: "text", text: "a " },
+      { kind: "comment", text: "", raw: "<!-- x --!>" },
+      { kind: "text", text: " b -->" },
+    ]);
+  });
+
   it("EDT-FR-QALB: a CRLF line is read as its LF form", () => {
     expect(kinds("<!-- %% -->\r\nText\r\n")).toEqual(["break", "paragraph"]);
   });

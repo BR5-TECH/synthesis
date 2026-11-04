@@ -79,6 +79,20 @@ export function breakLabel(level: BreakLevel): string {
 /** EDT-FR-UYPS: the accessible name of a chip. */
 export const COMMENT_CHIP_LABEL = "HTML comment";
 
+/**
+ * EDT-FR-UYPS / EDT-FR-KMAR: where the HTML comment that is open at `from`
+ * ends, or `null`. HTML ends a comment at `-->` and also at `--!>`, so both
+ * close it here: a chip never holds text that a browser shows outside the
+ * comment. `end` is the index after the close.
+ */
+export function findCommentClose(text: string, from: number): { at: number; end: number } | null {
+  const plain = text.indexOf("-->", from);
+  const bang = text.indexOf("--!>", from);
+  if (plain === -1 && bang === -1) return null;
+  if (bang === -1 || (plain !== -1 && plain < bang)) return { at: plain, end: plain + 3 };
+  return { at: bang, end: bang + 4 };
+}
+
 /** A line that starts an HTML comment, after an indent of up to 3 spaces. */
 export function startsComment(line: string): boolean {
   return /^ {0,3}<!--/.test(line);
@@ -104,11 +118,11 @@ export function scanBlockComment(
   for (let i = start; i < lines.length; i++) {
     const line = lines[i];
     const from = i === start ? open + 4 : 0;
-    const close = line.indexOf("-->", from);
+    const close = findCommentClose(line, from);
     body.push(i === start ? line.slice(open) : line);
-    if (close === -1) continue;
-    if (line.slice(close + 3).trim() !== "") return null;
-    body[body.length - 1] = (i === start ? line.slice(open, close + 3) : line.slice(0, close + 3));
+    if (!close) continue;
+    if (line.slice(close.end).trim() !== "") return null;
+    body[body.length - 1] = i === start ? line.slice(open, close.end) : line.slice(0, close.end);
     return { end: i + 1, raw: body.join("\n") };
   }
   return null;
@@ -126,11 +140,11 @@ export function splitInlineComments(
   while (at < text.length) {
     const open = text.indexOf("<!--", at);
     if (open === -1) break;
-    const close = text.indexOf("-->", open + 4);
-    if (close === -1) break;
+    const close = findCommentClose(text, open + 4);
+    if (!close) break;
     if (open > at) out.push({ kind: "text", text: text.slice(at, open) });
-    out.push({ kind: "comment", raw: text.slice(open, close + 3) });
-    at = close + 3;
+    out.push({ kind: "comment", raw: text.slice(open, close.end) });
+    at = close.end;
   }
   if (at < text.length) out.push({ kind: "text", text: text.slice(at) });
   return out;
@@ -138,10 +152,11 @@ export function splitInlineComments(
 
 /**
  * EDT-FR-IGZL: the text a chip tooltip shows, which is the comment text
- * without its `<!--` and `-->` delimiters, with its line breaks kept.
+ * without its `<!--` and `-->` (or `--!>`) delimiters, with its line breaks
+ * kept.
  */
 export function commentText(raw: string): string {
-  const lines = raw.replace(/^<!--/, "").replace(/-->$/, "").split("\n");
+  const lines = raw.replace(/^<!--/, "").replace(/--!?>$/, "").split("\n");
   while (lines.length > 0 && lines[0].trim() === "") lines.shift();
   while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
   // The first line follows `<!--` on its own line, so its indent is not the

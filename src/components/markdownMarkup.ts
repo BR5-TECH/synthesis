@@ -29,6 +29,7 @@ import {
   classifyMarkerLine,
   commentText,
   COMMENT_CHIP_LABEL,
+  findCommentClose,
   startsComment,
   type BlockAlignment,
   type BreakLevel,
@@ -117,14 +118,14 @@ function commentBlockRule(state: BlockState, startLine: number, endLine: number,
   let line = startLine;
   for (; line < endLine; line++) {
     const text = lineText(state, line);
-    const close = text.indexOf("-->", line === startLine ? open + 4 : 0);
-    if (close === -1) {
+    const close = findCommentClose(text, line === startLine ? open + 4 : 0);
+    if (!close) {
       lines.push(text);
       continue;
     }
     // Text after the close makes the comment inline text of a paragraph.
-    if (text.slice(close + 3).trim() !== "") return false;
-    lines.push(text.slice(0, close + 3));
+    if (text.slice(close.end).trim() !== "") return false;
+    lines.push(text.slice(0, close.end));
     break;
   }
   if (line >= endLine) return false;
@@ -161,13 +162,13 @@ function commentBlockRule(state: BlockState, startLine: number, endLine: number,
 /** EDT-FR-UYPS: an HTML comment inside a paragraph. */
 function commentInlineRule(state: InlineState, silent: boolean): boolean {
   if (!state.src.startsWith("<!--", state.pos)) return false;
-  const close = state.src.indexOf("-->", state.pos + 4);
-  if (close === -1 || close + 3 > state.posMax) return false;
+  const close = findCommentClose(state.src, state.pos + 4);
+  if (!close || close.end > state.posMax) return false;
   if (!silent) {
     const token = state.push("md_comment_inline", "span", 0);
-    token.meta = { raw: state.src.slice(state.pos, close + 3) };
+    token.meta = { raw: state.src.slice(state.pos, close.end) };
   }
-  state.pos = close + 3;
+  state.pos = close.end;
   return true;
 }
 

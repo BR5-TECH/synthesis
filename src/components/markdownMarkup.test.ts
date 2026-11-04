@@ -233,6 +233,22 @@ describe("edges of the grammar (EDT-FR-ANTD, EDT-FR-OZPO, EDT-FR-67)", () => {
     expect(roundTrip(src)).toBe(src);
   });
 
+  it("EDT-FR-UYPS, EDT-FR-KMAR: a comment closed by --!> ends there, and the text after it is prose", () => {
+    const editor = new Editor({
+      extensions: markdownExtensions(),
+      content: "A <!-- x --!> shown -->\n\n<!-- block --!>\n\nB",
+    });
+    const raws: string[] = [];
+    editor.state.doc.descendants((node) => {
+      if (node.type.name.startsWith("htmlComment")) raws.push(node.attrs.raw);
+    });
+    expect(raws).toEqual(["<!-- x --!>", "<!-- block --!>"]);
+    expect(editor.state.doc.textContent).toContain(" shown -->");
+    editor.destroy();
+    const src = "A <!-- x --!> shown -->\n\n<!-- block --!>\n\nB";
+    expect(roundTrip(src)).toBe(src);
+  });
+
   it("EDT-FR-OZPO: an indented marker keeps its indent", () => {
     expect(roundTrip("   <!-- %% -->\nA")).toBe("   <!-- %% -->\nA");
     expect(roundTrip("  <!-- right -->\nA")).toBe("  <!-- right -->\nA");

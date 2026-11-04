@@ -11,6 +11,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 
 import { Editor } from "./Editor";
+import { resetLogBufferForTest } from "../logging";
 import { EditSessionStore } from "../state/editSessions";
 import type {
   AgentTurn,
@@ -155,8 +156,10 @@ function wire(b: Backend) {
         b.threads = b.threads.map((t) => (t.id === threadId ? updated : t));
         return updated;
       }
+      case "append_log_records":
+        return undefined;
       default:
-        return null;
+        throw new Error(`unexpected command: ${cmd}`);
     }
   });
 }
@@ -164,6 +167,7 @@ function wire(b: Backend) {
 beforeEach(() => {
   invokeMock.mockReset();
   listeners.clear();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 
@@ -555,6 +559,44 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
             createdAt: "2026-01-03T00:00:00Z",
           },
         ],
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("comment-failed")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("CTA-FR-RUVS, CTA-FR-GQSP: a delivery of the same agent for the same comment retires the offer, and no other delivery does", async () => {
+    await mount({ recoverable: [failedTurn()] });
+    await screen.findByTestId("comment-failed");
+    const failed = failedTurn();
+
+    // Another agent answers the same comment.
+    emitTurn(
+      turn({ id: "turn-bob", nickname: "bob", state: "delivered", triggerCommentId: failed.triggerCommentId }),
+    );
+    expect(screen.getByTestId("comment-failed")).toBeInTheDocument();
+
+    // The same agent's turn for the same comment ends with no delivery.
+    emitTurn(
+      turn({ id: "turn-gone", nickname: failed.nickname, agentId: failed.agentId, state: "cancelled", triggerCommentId: failed.triggerCommentId }),
+    );
+    expect(screen.getByTestId("comment-failed")).toBeInTheDocument();
+
+    // The same agent answers another comment.
+    emitTurn(
+      turn({ id: "turn-other", nickname: failed.nickname, agentId: failed.agentId, state: "delivered", triggerCommentId: "c9" }),
+    );
+    expect(screen.getByTestId("comment-failed")).toBeInTheDocument();
+
+    // The same agent answers the same comment.
+    emitTurn(
+      turn({
+        id: "turn-again",
+        nickname: failed.nickname,
+        agentId: failed.agentId,
+        state: "delivered",
+        triggerCommentId: failed.triggerCommentId,
       }),
     );
     await waitFor(() =>

@@ -71,6 +71,9 @@ pub struct ModelReply {
     /// `None` where the client returned no such turn, and for a reply the
     /// framework reports as failed (CVL-FR-UALC).
     pub turn: Option<rig::completion::message::AssistantMessage>,
+    /// CVL-FR-UALC, CVL-FR-QXHL: the framework reported this reply as failed,
+    /// so it is `empty_reply` and never a placeholder.
+    pub refused: bool,
     /// CVL-FR-31: the tools the **provider** executed for itself while carrying
     /// this call, each with the result it produced, in the order they arrived.
     /// The loop dispatches none of them and appends none of them to the

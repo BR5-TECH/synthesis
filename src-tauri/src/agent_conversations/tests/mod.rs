@@ -710,6 +710,7 @@ mod retries;
 mod rig_replies;
 mod session_log;
 mod skill_turns;
+mod speech_placeholders;
 mod speech_turns;
 mod spoken_part;
 mod steering;

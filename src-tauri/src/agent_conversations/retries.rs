@@ -18,6 +18,8 @@ pub(super) struct ModelCall {
     /// invocation `model_calls`, so its usage record has an identity of its
     /// own (CVL-FR-CSLX).
     pub(super) compaction: bool,
+    /// CVL-FR-KPOY: the turn is bound to an open speech when the call begins.
+    pub(super) speech_open: bool,
 }
 
 /// CVL-FR-17 / CVL-FR-19: one **logical** `complete` invocation, made as up to
@@ -39,7 +41,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
     exchange: &[rig::completion::Message],
     call: ModelCall,
 ) -> Result<ModelReply, TurnEnd> {
-    let ModelCall { policy, deadline, model_calls, at_bound, compaction } = call;
+    let ModelCall { policy, deadline, model_calls, at_bound, compaction, speech_open } = call;
     let model_label = endpoint.model_id.as_deref().unwrap_or("<provider default>");
     for attempt in 1..=policy.max_attempts {
         check_cancelled(plan)?;
@@ -165,14 +167,28 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 },
             );
         }
-        // CVL-FR-NOHO: an answer the provider wrote and billed, with no spoken part.
-        let no_spoken_part = outcome.as_ref().is_ok_and(|reply| {
-            reply_is_usable(reply, at_bound, &request.tools)
-                && reply_is_final(reply, at_bound, compaction, turns.has_steering(&plan.turn_id))
-                && crate::comments::spoken_part(&reply.text).is_none()
+        // CVL-FR-KPOY: a reply that holds back for an open speech. It is not
+        // `empty_reply`, and the loop holds it (CVL-FR-NEXN).
+        let placeholder = outcome.as_ref().is_ok_and(|reply| {
+            speech_open && !at_bound && !compaction && is_placeholder(reply, &request.tools)
         });
+        // CVL-FR-NOHO: an answer the provider wrote and billed, with no spoken part.
+        let no_spoken_part = !placeholder
+            && outcome.as_ref().is_ok_and(|reply| {
+                reply_is_usable(reply, at_bound, &request.tools)
+                    && reply_is_final(
+                        reply,
+                        at_bound,
+                        compaction,
+                        turns.has_steering(&plan.turn_id),
+                    )
+                    && crate::comments::spoken_part(&reply.text).is_none()
+            });
         let failure = match outcome {
-            Ok(reply) if !no_spoken_part && reply_is_usable(&reply, at_bound, &request.tools) => {
+            Ok(reply)
+                if placeholder
+                    || (!no_spoken_part && reply_is_usable(&reply, at_bound, &request.tools)) =>
+            {
                 count_answered_call(app, plan, model_calls, attempt as u32, compaction, &reply);
                 // CVL-FR-OPTI: the context figures of this answered call, for
                 // every target kind. A compaction call reports none.
@@ -208,6 +224,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                         // conversation it is having (CVL-FR-26).
                         "replyChars" => reply.text.chars().count(),
                         "toolCalls" => reply.tool_calls.len(),
+                        // CVL-FR-KPOY: the loop holds this reply for the speech.
+                        "speechPlaceholder" => placeholder,
                         // CVL-FR-28 / CVL-FR-40: which upstream the provider
                         // routed this call to, and what the call presented. The
                         // two together are what says whether the caching of

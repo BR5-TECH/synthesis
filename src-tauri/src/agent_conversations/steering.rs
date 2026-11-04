@@ -14,7 +14,13 @@ working on your reply. Read it and take it into account before you continue.";
 
 /// CVL-FR-VCYR: the fixed line that opens a chunk message.
 pub const PARTIAL_SPEECH_LINE: &str = "Partial speech: the author is still speaking. This is \
-a part of what the author says. More text follows. Do not reply to this part alone.";
+a part of what the author says. More text follows. Do not reply to this part alone. You can use \
+a tool to prepare, or give an empty reply.";
+
+/// CVL-FR-APIT: the fixed line that the loop appends when the hold of a
+/// placeholder ends with no steering message to append.
+pub const SPEECH_WITHDRAWN_LINE: &str = "Speech ended: the author stopped speaking and posted \
+no comment. Disregard the partial speech. Reply to the comment that addressed you.";
 
 /// CVL-FR-WLTP: the fixed line that opens the final steering message of a
 /// speech, in place of [`STEERING_PREFACE`].

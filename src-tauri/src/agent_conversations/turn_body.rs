@@ -260,6 +260,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 model_calls: model_calls + 1,
                 at_bound: false,
                 compaction: true,
+                speech_open: false,
             },
         )?;
 
@@ -270,6 +271,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // content. At the bound those calls are never dispatched, so prose is
         // the whole of what such a reply could still contribute.
         let at_bound = model_calls >= MAX_MODEL_CALLS;
+        // CVL-FR-KPOY, CVL-FR-WHEY: a call below the bound, made while the turn
+        // is bound to an open speech, can return a placeholder.
+        let speech_open = !at_bound && turns.bound_to_open_speech(&plan.turn_id);
         let reply = complete_with_retries(
             app,
             turns,
@@ -277,7 +281,14 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             &endpoint,
             conversation.request(plan),
             &conversation.exchange,
-            ModelCall { policy: bounds.retry, deadline, model_calls, at_bound, compaction: false },
+            ModelCall {
+                policy: bounds.retry,
+                deadline,
+                model_calls,
+                at_bound,
+                compaction: false,
+                speech_open,
+            },
         )?;
 
         // CVL-FR-31: what the provider ran for itself is reported and recorded
@@ -290,13 +301,19 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // CVL-FR-12: a reply that asks for no tool ends the loop and its prose
         // is the answer, whether or not the provider searched or fetched on its
         // way to composing it.
+        // CVL-FR-KPOY: a placeholder is held and never delivered.
+        if speech_open && is_placeholder(&reply, &conversation.request(plan).tools) {
+            hold_placeholder(app, turns, plan, &mut conversation, &reply, model_calls)?;
+            continue;
+        }
+
         if reply.tool_calls.is_empty() {
             // CVL-FR-SZKK: a turn bound to an open speech holds the reply until
             // it takes a steering message or the speech ends. CVL-FR-WHEY: the
             // reply of the last call under the bound is not held.
             let held = model_calls < MAX_MODEL_CALLS
                 && !turns.has_steering(&plan.turn_id)
-                && turns.wait_for_speech(app, &plan.turn_id);
+                && turns.wait_for_speech(app, &plan.turn_id, HoldUntil::AnyMessage);
             // AGC-FR-NFYK: a speech with no comment cancels the turn it
             // registered, and its output goes with it.
             if held {
@@ -653,6 +670,63 @@ pub(super) fn reply_is_usable(
     // said nothing — there is no round that follows in which it would say what
     // it made of the result, and calling again with an unchanged exchange would
     // only ask the same question twice.
+}
+
+/// CVL-FR-NEXN, CVL-FR-JJRH, CVL-FR-APIT: hold a placeholder until the turn
+/// takes a comment, the speech ends, or the turn is cancelled. The loop never
+/// delivers it. A placeholder with text goes into the exchange, and one with
+/// empty text adds nothing. A hold that ends with no steering message to
+/// append adds the withdrawn line, so the next call answers the comment that
+/// addressed the turn.
+fn hold_placeholder<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    turns: &TurnRegistry,
+    plan: &TurnPlan,
+    conversation: &mut compaction::Conversation,
+    reply: &ModelReply,
+    model_calls: usize,
+) -> Result<(), TurnEnd> {
+    let held = turns.wait_for_speech(app, &plan.turn_id, HoldUntil::FinalMessage);
+    // AGC-FR-NFYK: a speech with no comment cancels the turn it registered,
+    // and its output goes with it.
+    check_cancelled(plan)?;
+    if !reply.text.trim().is_empty() {
+        conversation.exchange.push(assistant_message(reply));
+    }
+    let withdrawn = !turns.has_steering(&plan.turn_id);
+    if withdrawn {
+        conversation.exchange.push(rig::completion::Message::user(SPEECH_WITHDRAWN_LINE));
+    }
+    logging::log_debug(
+        app,
+        turns.buffer(),
+        &[Domain::Ai, Domain::Backend],
+        "agent placeholder set aside for a speech",
+        log_fields! {
+            "turnId" => &plan.turn_id,
+            "agent" => &plan.agent.nickname,
+            "agentId" => &plan.agent.id,
+            "modelCalls" => model_calls,
+            "replyChars" => reply.text.chars().count(),
+            "held" => held,
+            "withdrawn" => withdrawn,
+        },
+    );
+    Ok(())
+}
+
+/// CVL-FR-KPOY, CVL-FR-QXHL: whether a reply to an open speech is a
+/// placeholder — it asks for no tool and has no spoken part. A tool call
+/// written as prose and a reply that the framework refused stay
+/// `empty_reply`. The caller checks the speech and the bound.
+pub(super) fn is_placeholder(
+    reply: &ModelReply,
+    tools: &[rig::completion::ToolDefinition],
+) -> bool {
+    !reply.refused
+        && reply.tool_calls.is_empty()
+        && tool_written_as_prose(&reply.text, tools).is_none()
+        && crate::comments::spoken_part(&reply.text).is_none()
 }
 
 /// CVL-FR-NOHO: whether this reply becomes a comment, so it needs a spoken part.

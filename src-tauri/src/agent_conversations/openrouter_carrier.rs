@@ -216,7 +216,16 @@ pub(super) fn reply_from_openrouter(
     if let Some(upstream) = served_by.as_deref() {
         remember_upstream(model, upstream);
     }
+    let finish_reason = response
+        .choices
+        .first()
+        .and_then(|choice| choice.finish_reason())
+        .and_then(|reason| serde_json::to_value(reason).ok())
+        .and_then(|reason| reason.as_str().map(str::to_string));
     ModelReply {
+        // CVL-FR-UALC, CVL-FR-QXHL: filtered content and a provider error are
+        // failed replies, so they are never a placeholder.
+        refused: matches!(finish_reason.as_deref(), Some("content_filter" | "error")),
         native_calls,
         native_usage,
         native_entries_dropped: 0,
@@ -253,12 +262,7 @@ pub(super) fn reply_from_openrouter(
         provider_request_id: None,
         response_id: Some(response.id.clone()).filter(|id| !id.is_empty()),
         response_model: Some(response.model.clone()).filter(|model| !model.is_empty()),
-        finish_reason: response
-            .choices
-            .first()
-            .and_then(|choice| choice.finish_reason())
-            .and_then(|reason| serde_json::to_value(reason).ok())
-            .and_then(|reason| reason.as_str().map(str::to_string)),
+        finish_reason,
         // The exchange takes this reply back as its text and its calls: this
         // client returns no framework turn.
         turn: None,

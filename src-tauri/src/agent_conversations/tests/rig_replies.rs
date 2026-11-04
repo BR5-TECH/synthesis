@@ -83,6 +83,8 @@ fn a_filtered_reply_supplies_neither_prose_nor_a_tool_request() {
     assert!(reply.tool_calls.is_empty(), "no tool of it is dispatched");
     assert_eq!(reply.turn, None, "nothing of it is appended");
     assert_eq!(reply.finish_reason.as_deref(), Some("content_filter"));
+    // CVL-FR-QXHL: a failed reply is never a placeholder.
+    assert!(reply.refused);
 }
 
 // CVL-FR-UALC: a finish reason the framework does not know ends a reply
@@ -97,6 +99,7 @@ fn an_unknown_finish_reason_ends_a_reply_normally() {
     assert_eq!(reply.tool_calls.len(), 1);
     assert!(reply.turn.is_some());
     assert_eq!(reply.finish_reason.as_deref(), Some("gateway_done"));
+    assert!(!reply.refused);
 }
 
 // CVL-FR-UALC: a reply cut off at the output-token limit is not failed.
@@ -106,6 +109,7 @@ fn a_reply_cut_off_at_the_output_limit_keeps_its_prose() {
     let reply = reply_to(turn).expect("the reply is read");
     assert_eq!(reply.text, "A long answer");
     assert_eq!(reply.finish_reason.as_deref(), Some("length"));
+    assert!(!reply.refused);
 }
 
 // CVL-FR-ETAH: a reply that asks for tools goes back into the exchange as the

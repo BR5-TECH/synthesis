@@ -8,10 +8,17 @@
  * (`./voiceHandles.ts`). The utterances, the VAD session, and the spoken replies
  * live in `./voiceUtterances.ts`, `./voiceVad.ts`, and `./voiceReplies.ts`.
  */
-import { appendVoiceCapture, finishVoiceCapture, retryVoiceCapture, startVoiceCapture } from "../api";
+import {
+  appendVoiceCapture,
+  cancelVoiceCapture,
+  finishVoiceCapture,
+  retryVoiceCapture,
+  startVoiceCapture,
+} from "../api";
 import { logDebug, logInfo, logWarn } from "../logging";
 import { loadAppPreferences, patchAppPreferences, peekAppPreferences } from "../state/appPreferences";
 import { clearLiveBubble } from "../state/liveBubble";
+import { showToast } from "../state/toasts";
 import { ownerLabelOf } from "../state/ownerAvailability";
 import {
   INITIAL_VOICE_STATE,
@@ -43,6 +50,7 @@ import {
 import {
   forgetSpokenQuestion,
   latestVoiceDiscussion,
+  noteDiscussionChanged as noteRepliesDiscussionChanged,
   resetVoiceRepliesForTest,
   setBaseline,
   stopSpeech,
@@ -73,16 +81,20 @@ import {
   pushVadGate,
   resetVoiceVadForTest,
   vadIsBusy,
+  vadMicClosed,
 } from "./voiceVad";
 
 export { noteChunk } from "./voiceUtterances";
 export { noteActivity, openVadSession, setVadMuted } from "./voiceVad";
-export { noteDiscussionChanged, noteQuestionShown, stopSpeech } from "./voiceReplies";
+export { noteQuestionShown, stopSpeech } from "./voiceReplies";
 export type { PostOutcome, VoiceComposerHandle } from "./voiceHandles";
 export { TAIL_MS };
 
 /** VOM-FR-DGOG. */
 export const SHORT_PRESS_MS = 300;
+/** VOM-FR-HRFL. */
+export const VOICE_RESOLVED_TOAST_KEY = "voice-mode-resolved";
+export const VOICE_RESOLVED_TOAST_TITLE = "Voice mode ended: the discussion is resolved";
 /** VOM-FR-WSXW. */
 export const RECORDING_LIMIT_MS = 10 * 60 * 1000;
 
@@ -213,10 +225,14 @@ export function voiceReveal(): {
   return { discussion: latestVoiceDiscussion(), discussionId, target: voiceTarget };
 }
 
-/** What a recording in progress does when voice mode ends. */
+/**
+ * What a recording in progress does when voice mode ends. VOM-FR-ONLA: a
+ * recording whose microphone and capture are not open yet has nothing to
+ * keep, so it is discarded.
+ */
 function endCapture(kind: "keep" | "discard"): void {
   if (!capture) return;
-  if (kind === "discard") capture.discard = true;
+  if (kind === "discard" || capture.utterance === null) capture.discard = true;
   else capture.keepInBody = true;
   endRecording();
 }
@@ -364,16 +380,39 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
   capture = active;
   patchVoiceState({ phase: "opening" });
   try {
-    active.mic = await openMicrophone((pcm) => pump.push(pcm));
+    // VOM-FR-JMMF: a closing VAD session releases its microphone first.
+    const vadMic = vadMicClosed();
+    if (vadMic !== null) {
+      await vadMic;
+      if (active.discard) {
+        settleUnopened(active);
+        return;
+      }
+    }
+    active.mic = await openMicrophone(
+      (pcm) => pump.push(pcm),
+      () => microphoneLost(active),
+    );
     // Nobody waits for this recording now: a short press, or a teardown.
     if (active.discard) {
       active.mic.stop();
-      if (capture === active) capture = null;
-      patchVoiceState({ phase: "idle", recordingSince: null });
+      settleUnopened(active);
       return;
     }
     const chunked = chunkedFor(active.key, answers);
     const start = await startVoiceCapture(active.mic.rate, handle.nicknames(), chunked);
+    // VOM-FR-ONLA: voice mode ended or moved while the capture opened.
+    if (active.discard || capture !== active) {
+      active.mic.stop();
+      void cancelVoiceCapture(start.sessionId).catch((error: unknown) => {
+        logWarn(["frontend", "ai"], "a discarded voice capture did not cancel", {
+          code: errorCode(error),
+        });
+      });
+      logDebug(["frontend", "ai"], "a voice recording was discarded while it opened", {});
+      settleUnopened(active);
+      return;
+    }
     active.utterance = beginUtterance(active.key, start.sessionId, chunked, answers);
     liveSession = start.sessionId;
     pump.attach(start.sessionId);
@@ -382,9 +421,14 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
     logDebug(["frontend", "ai"], "a voice recording started", { live: start.live, chunked });
   } catch (error) {
     active.mic?.stop();
-    if (capture === active) capture = null;
     const code = error instanceof MicrophoneError ? error.message : errorCode(error);
     logWarn(["frontend", "ai"], "a voice recording did not start", { code });
+    // VOM-FR-ONLA: a recording that voice mode left shows no error.
+    if (active.discard) {
+      settleUnopened(active);
+      return;
+    }
+    if (capture === active) capture = null;
     patchVoiceState({ phase: "idle", error: code, canRetry: false });
     return;
   }
@@ -393,6 +437,26 @@ async function beginRecording(key: string, handle: VoiceComposerHandle): Promise
     active.released = false;
     endRecording();
   }
+}
+
+/**
+ * VOM-FR-ONLA: a recording that ends before it opened. It gives the phase back
+ * only while it still holds it, so the state of a new entry does not change.
+ */
+function settleUnopened(active: Capture): void {
+  if (capture !== active) return;
+  capture = null;
+  patchVoiceState({ phase: "idle", recordingSince: null });
+}
+
+/** VOM-FR-NXEB: the track of a Push-to-Talk recording ended by itself. */
+function microphoneLost(active: Capture): void {
+  if (capture !== active || active.released) return;
+  logWarn(["frontend", "ai"], "a voice recording lost its microphone", {});
+  // VOM-FR-DGOG: as a release does, so a short recording posts nothing.
+  if (Date.now() - active.pressedAt < SHORT_PRESS_MS) active.discard = true;
+  patchVoiceState({ error: "microphone_unavailable", canRetry: false });
+  endRecording();
 }
 
 /** VOM-FR-IKIK, VOM-FR-VGCE, VOM-FR-BQBI, VOM-FR-KEMU. */
@@ -464,6 +528,28 @@ export function noteProvider(ready: boolean, speaks: boolean): void {
     patchVoiceState({ responseMode: "text" });
   }
   if (!ready) void endVadSession("release");
+}
+
+/**
+ * VOM-FR-HRFL, VOM-FR-LSBQ: a resolved voice discussion ends voice mode. Every
+ * other change goes to the spoken replies.
+ */
+export function noteDiscussionChanged(discussion: Discussion): void {
+  const { activeKey, discussionId } = getVoiceState();
+  if (activeKey !== null && discussion.id === discussionId && discussion.resolved) {
+    logInfo(["frontend"], "voice mode ended with a resolved discussion", {});
+    discardAll();
+    closeVoiceState();
+    showToast({
+      key: VOICE_RESOLVED_TOAST_KEY,
+      level: "Info",
+      title: VOICE_RESOLVED_TOAST_TITLE,
+      body: "",
+      address: null,
+    });
+    return;
+  }
+  noteRepliesDiscussionChanged(discussion);
 }
 
 /** CVP-FR-51, VOM-FR-LSBQ: the owner of the voice discussion was deleted. */

@@ -23,7 +23,8 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 ### The voice discussion
 
 10. **VOM-FR-BCRD** Voice mode is bound to the voice discussion, not to a mounted composer. Opening another draft, tab, or document, and closing the tab of the discussion's owner, do not end it. A VAD session, the hotkey, spoken replies, spoken questions, posting, and spoken answers keep working while no composer of that discussion is mounted.
-11. **VOM-FR-LSBQ** Voice mode ends only on the Stop control of the status bar voice indicator (`STB-status-bar.md` STB-FR-JHZF), the Voice button of a composer of the voice discussion (VOM-FR-JBJI), the teardown of `CVP-conversation-presentation.md` CVP-FR-49 (VOM-FR-KQAI), and the deletion of the discussion's owner (`CVP-conversation-presentation.md` CVP-FR-51): its draft, its note (`CVP-conversation-presentation.md` CVP-FR-61), or its project file, a project document or a published prompt, deleted from the Library alone or with a folder that holds it (`LCM-library-context-menu.md` LCM-FR-11). The Voice button of another composer moves voice mode (VOM-FR-OSTM).
+11. **VOM-FR-LSBQ** Voice mode ends only on the Stop control of the status bar voice indicator (`STB-status-bar.md` STB-FR-JHZF), the Voice button of a composer of the voice discussion (VOM-FR-JBJI), the teardown of `CVP-conversation-presentation.md` CVP-FR-49 (VOM-FR-KQAI), the resolution of the voice discussion (VOM-FR-HRFL), and the deletion of the discussion's owner (`CVP-conversation-presentation.md` CVP-FR-51): its draft, its note (`CVP-conversation-presentation.md` CVP-FR-61), or its project file, a project document or a published prompt, deleted from the Library alone or with a folder that holds it (`LCM-library-context-menu.md` LCM-FR-11). The Voice button of another composer moves voice mode (VOM-FR-OSTM).
+11. **VOM-FR-HRFL** When the voice discussion becomes resolved, a legacy lock included (`../core/CMS-comments-storage.md` CMS-FR-WKZR), voice mode ends. It discards what is in progress as the deletion of the owner does, and it shows the toast `Voice mode ended: the discussion is resolved` (`NTF-notifications.md`). The graduation of the owner draft does not end voice mode.
 12. **VOM-FR-NERG** An opening composer that enters voice mode binds voice mode to its target key, and its first post binds voice mode to the discussion that the post creates. Until that post, its utterances are not chunked and start no early turn.
     - *Why:* a speech turn needs a discussion as its origin, and an opening composer has none.
 13. **VOM-FR-XDUY** While voice mode is on, the status bar shows the voice indicator (`STB-status-bar.md` STB-FR-OSOL). Voice mode gives it the display name of the voice discussion's owner and one state: Paused, Hearing speech, Transcribing, Speaking, Listening, or Idle, in that order of precedence.
@@ -39,9 +40,14 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 ### Recording
 
 19. **VOM-FR-HHWL** In Push-to-Talk with Hold behaviour, recording lasts while the record control or the hotkey is held.
+19. **VOM-FR-FZJY** A pointer or key release anywhere in the window, a lost pointer capture, and a record control that becomes disabled or unmounts during a hold end the recording as a release does.
 20. **VOM-FR-LIFL** In Push-to-Talk with Toggle behaviour, one press of the record control or the hotkey starts recording, and the next press stops it.
 21. **VOM-FR-PECJ** On the focused record control, Space and Enter act as a press, and their release acts as a release.
 22. **VOM-FR-YIJS** A Push-to-Talk press, or the opening of a VAD session, calls `getUserMedia` with `echoCancellation`, `noiseSuppression`, and `autoGainControl`. The microphone is released after recording ends, or when the VAD session closes.
+22. **VOM-FR-NXEB** A lost microphone track during a Push-to-Talk recording ends the recording as a release does, and the voice area shows the inline error `microphone_unavailable`.
+22. **VOM-FR-ONLA** A leave of voice mode, or a move to another discussion, before the microphone and the capture of a press are open discards that recording. No capture starts for it, and the phase of the new state does not change.
+22. **VOM-FR-JMMF** A Push-to-Talk press waits until a closing VAD microphone is released before it opens its own microphone.
+22. **VOM-FR-LDKK** When the audio worklet does not load or the audio context does not resume within 10 seconds after `getUserMedia` resolves, the open fails with `microphone_unavailable` and the microphone is released.
     - *Why:* on macOS this capture uses the OS voice processing, which lowers the sound of other applications while it runs.
 23. **VOM-FR-FTFU** After the release, or after the silence that ends a VAD utterance, capture continues for 200 ms so that the last word is complete.
 24. **VOM-FR-DGOG** A hold or VAD speech under 300 ms records nothing and posts nothing.
@@ -150,7 +156,8 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 91. **VOM-FR-VSCQ** Only comments with an Agent author and a spoken part are spoken. Comments that a question submission creates carry no spoken part, so they are not spoken.
 92. **VOM-FR-TRWN** Speech is the comment's spoken part alone (`../ai/CVL-conversation-loop.md` CVL-FR-AGNN), as the text of its Markdown, with citation markers removed. A code block or a table in it is replaced by a short spoken phrase. A comment with no speakable spoken part is not spoken.
 93. **VOM-FR-QOXX** Text is split at sentence ends into segments under 4096 characters, and the first segment is short.
-94. **VOM-FR-UALP** Each segment uses the voice of the agent that wrote the comment or recorded the question set (`AGR-agent-registry.md` AGR-FR-ABCF), or else the provider's default voice.
+94. **VOM-FR-UALP** Each segment uses the voice, the speed, and the style of the agent that wrote the comment or recorded the question set (`AGR-agent-registry.md` AGR-FR-ABCF, AGR-FR-EPYX). Each value that the agent does not set is the provider's value.
+94. **VOM-FR-QUSH** Playback plays the audio of a segment at the rate of its rate frame (`../core/VOP-voice-ai-providers.md` VOP-FR-EMJY). A segment with no rate frame plays at rate 1, and Stop resets the rate.
 95. **VOM-FR-RKOG** A new agent comment or a new question stops the current playback at once, and its speech replaces it. No reply queues behind another, except as VOM-FR-ZPOD states.
 96. **VOM-FR-QDWW** A Stop control of the voice area is visible while audio plays or a reply is paused. It stops playback at once, drops a paused or waiting reply, and calls "cancel voice speech".
 97. **VOM-FR-SJYH** Frames of one reply play in order and with no gap between them. A segment ends at its end frame (`../core/VOP-voice-ai-providers.md` VOP-FR-XZET), so no audio frame is lost.

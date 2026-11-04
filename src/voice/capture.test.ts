@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ChunkPump, FrameBatcher, MicrophoneError, openMicrophone } from "./capture";
+const log = vi.hoisted(() => ({ logDebug: vi.fn(), logInfo: vi.fn(), logWarn: vi.fn() }));
+vi.mock("../logging", () => log);
+
+import {
+  ChunkPump,
+  FrameBatcher,
+  MIC_OPEN_LIMIT_MS,
+  MicrophoneError,
+  openMicrophone,
+} from "./capture";
 
 function buffer(...bytes: number[]): ArrayBuffer {
   return new Uint8Array(bytes).buffer;
@@ -254,6 +263,62 @@ describe("the microphone", () => {
       const track = tracked();
       await openMicrophone(() => undefined);
       expect(track.onended).toBeUndefined();
+    });
+
+    it("VOM-FR-YIJS: a muted track is logged, and `stop` clears the handler", async () => {
+      const track = tracked() as { onmute?: (() => void) | null };
+      const mic = await openMicrophone(() => undefined);
+      track.onmute?.();
+      expect(log.logInfo).toHaveBeenCalledWith(["frontend"], "the microphone track was muted", {});
+      mic.stop();
+      expect(track.onmute).toBeNull();
+    });
+  });
+
+  describe("the open limit", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it.each(["addModule", "resume"])(
+      "VOM-FR-LDKK: a %s that does not settle in 10 seconds fails and releases the microphone",
+      async (step) => {
+        vi.useFakeTimers();
+        const close = vi.fn(async () => undefined);
+        const never = () => new Promise<void>(() => undefined);
+        const track = stubbed(
+          class {
+            audioWorklet = { addModule: step === "addModule" ? never : vi.fn(async () => undefined) };
+            resume = step === "resume" ? never : vi.fn(async () => undefined);
+            close = close;
+          },
+        );
+        const opened = openMicrophone(() => undefined).catch((e: MicrophoneError) => e.message);
+        await vi.advanceTimersByTimeAsync(MIC_OPEN_LIMIT_MS - 1);
+        expect(track.stop).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await opened).toBe("microphone_unavailable");
+        expect(track.stop).toHaveBeenCalled();
+        expect(close).toHaveBeenCalled();
+      },
+    );
+
+    it("VOM-FR-LDKK: the limit holds for both steps together", async () => {
+      vi.useFakeTimers();
+      const track = stubbed(
+        class {
+          audioWorklet = {
+            addModule: () => new Promise<void>((done) => setTimeout(done, 6000)),
+          };
+          resume = () => new Promise<void>(() => undefined);
+          close = vi.fn(async () => undefined);
+        },
+      ) as { stop: () => void; onmute?: (() => void) | null };
+      const opened = openMicrophone(() => undefined).catch((e: MicrophoneError) => e.message);
+      await vi.advanceTimersByTimeAsync(MIC_OPEN_LIMIT_MS - 1);
+      expect(track.stop).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await opened).toBe("microphone_unavailable");
+      expect(track.stop).toHaveBeenCalled();
+      expect(track.onmute).toBeNull();
     });
   });
 });

@@ -8,6 +8,8 @@
 // Never inlined: a `data:` URL is no module that every WebView loads.
 import workletUrl from "./pcmCapture.worklet.js?url&no-inline";
 
+import { logInfo } from "../logging";
+
 /** VOM non-functional. */
 const FRAME_SECONDS = 0.03;
 
@@ -19,6 +21,29 @@ export interface Microphone {
 
 /** A typed reason, which `voiceMessage` turns into text. */
 export class MicrophoneError extends Error {}
+
+/** VOM-FR-LDKK: the limit on the load of the worklet and the resume. */
+export const MIC_OPEN_LIMIT_MS = 10_000;
+
+/** VOM-FR-LDKK: `step`, or a failure when it does not settle by `deadline`. */
+function withinOpenLimit<T>(step: Promise<T>, deadline: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const limit = setTimeout(
+      () => reject(new MicrophoneError("microphone_unavailable")),
+      Math.max(0, deadline - Date.now()),
+    );
+    step.then(
+      (value) => {
+        clearTimeout(limit);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(limit);
+        reject(error);
+      },
+    );
+  });
+}
 
 function failureCode(error: unknown): string {
   const name = error instanceof DOMException || error instanceof Error ? error.name : "";
@@ -51,14 +76,21 @@ export async function openMicrophone(
   const stopTracks = () =>
     stream.getTracks().forEach((track) => {
       track.onended = null;
+      track.onmute = null;
       track.stop();
     });
+  // A muted track sends silence. Only the log says so.
+  stream.getTracks().forEach((track) => {
+    track.onmute = () => logInfo(["frontend"], "the microphone track was muted", {});
+  });
   let context: AudioContext | null = null;
   try {
     const running = new AudioContext();
     context = running;
-    await running.audioWorklet.addModule(workletUrl);
-    await running.resume();
+    // VOM-FR-LDKK: one limit for both steps, from the resolve of `getUserMedia`.
+    const deadline = Date.now() + MIC_OPEN_LIMIT_MS;
+    await withinOpenLimit(running.audioWorklet.addModule(workletUrl), deadline);
+    await withinOpenLimit(running.resume(), deadline);
     const source = running.createMediaStreamSource(stream);
     const node = new AudioWorkletNode(running, "pcm-capture");
     node.port.onmessage = (event: MessageEvent<ArrayBuffer>) => onChunk(event.data);

@@ -73,6 +73,10 @@ fn expected_tools(is_discussion: bool, proposal: Option<&'static str>) -> Vec<&'
         names.push(DISCUSSION_ONLY_TOOL);
     }
     names.extend(proposal);
+    // CVL-FR-08 / PND-FR-YFES: a draft turn is also offered the new-draft tool.
+    if proposal == Some(DRAFT_ONLY_TOOL) {
+        names.push(crate::tools::propose_new_draft::NAME);
+    }
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool of the same
     // store follows the proposal tool, and the other one is never offered.
     names.extend(proposal.map(|tool| {

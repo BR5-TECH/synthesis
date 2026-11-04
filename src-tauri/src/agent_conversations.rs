@@ -119,6 +119,7 @@ use crate::scanning;
 // [`conversation_tools`], whose exclusive attachment of the two proposal tools
 // is read by `crate::tools::propose_prompt_changes`.
 
+mod authority;
 mod builders;
 mod cancellation;
 mod citation_markers;
@@ -150,6 +151,7 @@ mod tool_wiring;
 mod turn_body;
 mod wire;
 
+pub use authority::*;
 pub use builders::*;
 pub use cancellation::*;
 pub(crate) use citation_markers::strip_citation_markers;
@@ -525,6 +527,15 @@ fn conversation_tools<R: tauri::Runtime>(
             author.clone(),
             Arc::clone(proposed),
         )));
+        // CVL-FR-08 / PND-FR-YFES: a draft turn can also propose one new draft
+        // of a decomposition. It ends the turn on the same flag (CVL-FR-15).
+        tools.push(erase_tool(crate::tools::propose_new_draft::ProposeNewDraftTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(proposed),
+        )));
     } else if origin.is_artifact() {
         tools.push(erase_tool(
             crate::tools::propose_prompt_changes::ProposePromptChangesTool::new(
@@ -539,11 +550,14 @@ fn conversation_tools<R: tauri::Runtime>(
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool, by the same
     // rule. Never both, none on a note, and neither ends the turn (CVL-FR-15).
     if origin.is_draft() {
+        // DDC-FR-ELAE: bound to this turn, whose received comments carry the
+        // author's authority.
         tools.push(erase_tool(crate::tools::decide_draft_changes::DecideDraftChangesTool::new(
             app.clone(),
             roots.owned(),
             origin.clone(),
             author.clone(),
+            session,
         )));
     } else if origin.is_artifact() {
         tools.push(erase_tool(crate::tools::decide_prompt_changes::DecidePromptChangesTool::new(
@@ -551,6 +565,7 @@ fn conversation_tools<R: tauri::Runtime>(
             roots.owned(),
             origin.clone(),
             author.clone(),
+            session,
         )));
     }
     tools

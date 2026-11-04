@@ -6,6 +6,7 @@
 
 import { Participant } from "./comments";
 import { DraftGraduation } from "./graduation";
+import type { DraftSequence, SupersededMarker } from "./newDraftProposals";
 
 // ---------------------------------------------------------------------------
 // Drafts (NAW-new-artifact.md / DRP-drafts-panel.md, stored by `drafts.rs`)
@@ -88,6 +89,10 @@ export interface DraftRecord {
   updatedAt: string;
   /** DRS-FR-XDWS: present on a GitHub-shadow draft alone. */
   githubIssue?: GithubIssueLink | null;
+  /** DRS-FR-MXQF. */
+  sequence?: DraftSequence | null;
+  /** DRS-FR-LPCX. */
+  superseded?: SupersededMarker | null;
 }
 
 /**
@@ -275,6 +280,10 @@ export interface DraftSummary {
    * publication marker from this (DRP-FR-TQUB).
    */
   publication?: DraftListPublication | null;
+  /** DRS-FR-HIOF: the place of this draft in a decomposition (DRP-FR-KAWD). */
+  sequence?: DraftSequence | null;
+  /** DRS-FR-HIOF: the superseded marker (DRP-FR-AOLJ). */
+  superseded?: SupersededMarker | null;
 }
 
 /** DRS-FR-PXHW: the newest publication record, as a `list_drafts` row carries it. */

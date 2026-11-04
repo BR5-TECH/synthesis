@@ -138,6 +138,7 @@ mod folders;
 mod hierarchy;
 mod naming;
 mod records;
+mod sequence;
 mod shadow;
 mod store;
 
@@ -146,6 +147,7 @@ pub use folders::*;
 pub use hierarchy::*;
 pub use naming::*;
 pub use records::*;
+pub use sequence::*;
 pub use shadow::*;
 pub use store::*;
 
@@ -212,6 +214,8 @@ pub fn create_draft_impl(
         created_at: now.clone(),
         updated_at: now,
         github_issue: None,
+        sequence: None,
+        superseded: None,
     };
     // DRS-FR-39: the bytes the prompt is created with — the project's template
     // where one is configured, and nothing at all where the store reports it

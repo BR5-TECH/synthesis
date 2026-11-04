@@ -17,7 +17,8 @@ use rig::tool::{ToolErrorKind, ToolExecutionError};
 use serde::{Deserialize, Serialize};
 
 use super::{ToolRefusal, NO_PROJECT_OPEN};
-use crate::comments::{self, Attachment, Discussion};
+use crate::agent_conversations::{instruction_is_well_formed, AuthorityRefusal};
+use crate::comments::{self, Attachment, Discussion, Participant};
 use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink};
 
@@ -30,8 +31,19 @@ pub const DISCUSSION_BODY: &str = "The author asked to discuss this change.";
 
 /// DDC-FR-WRFY: the shared **malformed arguments** refusal, in this tool's
 /// words.
-pub const DECISIONS_MALFORMED: &str =
-    "Pass `decisions` with 1 to 50 entries, each with the `id` of a change and an `action`.";
+pub const DECISIONS_MALFORMED: &str = "Pass `instruction` with the author's words, up to 500 characters, and `decisions` with 1 to 50 entries, each with the `id` of a change and an `action`.";
+
+/// DDC-FR-ZYOL: the speech-not-posted refusal.
+pub const SPEECH_NOT_POSTED: &str = "The author is still speaking, and the comment of the speech has not arrived. Nothing was decided. Call again after the comment arrives.";
+/// DDC-FR-ELAE: the not-authorized refusal.
+pub const NOT_AUTHORIZED: &str = "The latest comment you received is not one the author wrote or spoke, so it can not authorize a decision. Nothing was decided. Tell the author what you would decide and let them decide.";
+/// DDC-FR-NKAB: the instruction-not-found refusal.
+pub const INSTRUCTION_NOT_FOUND: &str = "The words in `instruction` are not in the author's latest comment. Nothing was decided. Copy the words of that comment that ask for these decisions.";
+/// DDC-FR-VONX: the instruction-used refusal.
+pub const INSTRUCTION_USED: &str = "The author's latest comment already gave a decision. Nothing was decided. Ask the author what to do next.";
+
+/// DDC-FR-ROLG / DPC-FR-HWOT: the parameter text of `instruction`.
+const INSTRUCTION_DESCRIPTION: &str = "The words of the author's latest comment that ask for these decisions, copied exactly as the author wrote or said them, for example \"accept the second change\".";
 
 /// DDC-FR-VAYO / DPC-FR-RJBJ: the parameter text of `decisions`.
 const DECISIONS_DESCRIPTION: &str = "The decisions the author asked for in the latest comment, in the order the author gave them. Each entry names one change by its `id` and gives one `action`.";
@@ -57,6 +69,10 @@ pub struct DecideChangesArgs {
     /// refuses it as malformed arguments rather than the decoder.
     #[serde(default)]
     pub decisions: Option<Vec<DecisionArg>>,
+    /// DDC-FR-PZBH: the author's words that ask for the decisions. Absent is
+    /// the malformed-arguments refusal.
+    #[serde(default)]
+    pub instruction: Option<String>,
 }
 
 /// One entry, as the model composed it.
@@ -74,9 +90,24 @@ pub struct DecisionArg {
 /// DDC-FR-VAYO / DPC-FR-RJBJ: the JSON Schema of the arguments, with the
 /// description of `action` that names what an acceptance writes into.
 pub fn parameters(action_description: &str) -> serde_json::Value {
+    parameters_with(action_description, ID_DESCRIPTION, &["accept", "reject", "discuss"])
+}
+
+/// [`parameters`] with an `id` description and an `action` enum of the tool's
+/// own (DDC contract surface, DPC-FR-RJBJ).
+pub fn parameters_with(
+    action_description: &str,
+    id_description: &str,
+    actions: &[&str],
+) -> serde_json::Value {
     serde_json::json!({
         "type": "object",
         "properties": {
+            "instruction": {
+                "type": "string",
+                "description": INSTRUCTION_DESCRIPTION,
+                "maxLength": crate::agent_conversations::MAX_INSTRUCTION_CHARS,
+            },
             "decisions": {
                 "type": "array",
                 "description": DECISIONS_DESCRIPTION,
@@ -85,10 +116,10 @@ pub fn parameters(action_description: &str) -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": { "type": "string", "description": ID_DESCRIPTION },
+                        "id": { "type": "string", "description": id_description },
                         "action": {
                             "type": "string",
-                            "enum": ["accept", "reject", "discuss"],
+                            "enum": actions,
                             "description": action_description,
                         },
                     },
@@ -96,7 +127,7 @@ pub fn parameters(action_description: &str) -> serde_json::Value {
                 },
             },
         },
-        "required": ["decisions"],
+        "required": ["instruction", "decisions"],
     })
 }
 
@@ -104,6 +135,33 @@ pub fn parameters(action_description: &str) -> serde_json::Value {
 struct Entry<'a> {
     id: &'a str,
     action: &'a str,
+}
+
+/// DDC-FR-WRFY / DDC-FR-PZBH: the instruction of a well-formed call, or the
+/// malformed-arguments refusal. Nothing is decided before this passes.
+pub fn check_arguments(args: &DecideChangesArgs) -> Result<&str, CallRefusal> {
+    entries(args).map_err(CallRefusal::from)?;
+    args.instruction
+        .as_deref()
+        .filter(|i| instruction_is_well_formed(i))
+        .ok_or(CallRefusal::Malformed)
+}
+
+/// DDC contract surface: the instruction line that ends a decision comment or
+/// a confirmation comment that a call causes (DDC-FR-JJHZ, DCP-FR-HMUG,
+/// PCP-FR-QKCT).
+pub fn instruction_line(agent: &Participant, instruction: &str) -> String {
+    let name = match agent {
+        Participant::Agent { handle, .. } => handle.as_str(),
+        Participant::Human { login, display_name, .. } => display_name.as_deref().unwrap_or(login),
+    };
+    format!("Decided by {name} on the author's instruction: “{}”", instruction.trim())
+}
+
+/// DDC-FR-VONX: whether a call decided at least one entry, which spends its
+/// authorizing comment.
+pub fn decided_any(output: &DecideChangesOutput) -> bool {
+    output.decisions.iter().any(|row| row.outcome != Outcome::Refused)
 }
 
 /// DDC-FR-WRFY: the entries of a well-formed call, or the malformed-arguments
@@ -151,8 +209,10 @@ pub enum ProposalStateView {
 /// whole-call refusals.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DecideChangesOutput {
-    /// The proposal's state after the last entry.
-    pub proposal_state: ProposalStateView,
+    /// The proposal's state after the last entry; absent where the call began
+    /// with no open change proposal (DDC contract surface).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposal_state: Option<ProposalStateView>,
     /// True where an entry of this call closed the proposal.
     pub closed: bool,
     /// One row per entry, in call order.
@@ -176,6 +236,42 @@ pub struct DecisionRow {
     /// DPC-FR-WNHU / DPC-FR-UEXT: on an accepted row of a prompt proposal.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment_owed: Option<bool>,
+    /// DDC contract surface: the new-draft proposal's state after the entry,
+    /// for a new-draft entry alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_draft_state: Option<&'static str>,
+    /// DDC contract surface: the draft an accepted new-draft entry created.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_draft_id: Option<String>,
+}
+
+impl DecisionRow {
+    /// A row for entry `place` of `total`, not yet run.
+    pub fn new(place: usize, id: &str, action: &str) -> DecisionRow {
+        DecisionRow {
+            place,
+            id: id.to_string(),
+            action: action.to_string(),
+            outcome: Outcome::Refused,
+            hunk_state: None,
+            discussion_id: None,
+            refusal: None,
+            comment_owed: None,
+            new_draft_state: None,
+            created_draft_id: None,
+        }
+    }
+
+    /// DDC-FR-SLBB: refuse this row with `code`, its message naming the place.
+    pub fn refuse(&mut self, code: RefusalCode, total: usize, text: &str, error: Option<String>) {
+        self.outcome = Outcome::Refused;
+        self.refusal = Some(EntryRefusal {
+            code,
+            error,
+            message: format!("Decision {} of {total}: {text}", self.place),
+            retryable: code != RefusalCode::DecisionFailed,
+        });
+    }
 }
 
 /// The outcome of one entry.
@@ -185,6 +281,8 @@ pub enum Outcome {
     Accepted,
     Rejected,
     DiscussionOpened,
+    /// DDC-FR-VEKP: a `confirm` entry confirmed the decomposition.
+    Confirmed,
     Refused,
 }
 
@@ -194,6 +292,7 @@ impl Outcome {
             Outcome::Accepted => "accepted",
             Outcome::Rejected => "rejected",
             Outcome::DiscussionOpened => "discussion_opened",
+            Outcome::Confirmed => "confirmed",
             Outcome::Refused => "refused",
         }
     }
@@ -264,6 +363,9 @@ fn refusal_text(code: RefusalCode, file: &str, already: Option<Action>) -> Strin
             _ => "this change is already rejected, so nothing changed.",
         }
         .to_string(),
+        // DDC contract surface: a draft also takes `confirm`. A file has no
+        // decomposition, so its message names the three it takes (DPC-FR-VJIG).
+        RefusalCode::InvalidAction if file == "the prompt" => INVALID_DRAFT_ACTION.to_string(),
         RefusalCode::InvalidAction => {
             "the action must be `accept`, `reject`, or `discuss`.".to_string()
         }
@@ -284,7 +386,9 @@ pub const NOT_A_DRAFT_CONVERSATION: &str = "This conversation is not about a dra
 /// DPC-FR-JJGY: the not-an-artifact-conversation refusal.
 pub const NOT_AN_ARTIFACT_CONVERSATION: &str = "This conversation is not about a prompt or a project document, so there is no proposal here to decide. Asking again will not succeed.";
 /// DDC-FR-ZGXF: no open proposal on the draft.
-pub const NO_OPEN_DRAFT_PROPOSAL: &str = "No proposal is open on this draft, so there is no change to decide. Tell the author that nothing is waiting for a decision.";
+pub const NO_OPEN_DRAFT_PROPOSAL: &str = "No proposal, no proposed draft, and no decomposition to confirm is open on this draft, so there is nothing to decide. Tell the author that nothing is waiting for a decision.";
+/// DDC-FR-JCSV: the `invalid_action` text of a draft entry.
+pub const INVALID_DRAFT_ACTION: &str = "the action must be `accept`, `reject`, or `discuss` for a change or a proposed draft, and `confirm` for the decomposition.";
 /// DPC-FR-RGGP: no open proposal on the file.
 pub const NO_OPEN_FILE_PROPOSAL: &str = "No proposal is open on this file, so there is no change to decide. Tell the author that nothing is waiting for a decision.";
 
@@ -299,6 +403,8 @@ pub enum CallRefusal {
     Malformed,
     /// DDC-FR-ZGXF / DPC-FR-RGGP.
     NoOpenProposal(&'static str),
+    /// DDC-FR-ZYOL, DDC-FR-ELAE, DDC-FR-NKAB, DDC-FR-VONX.
+    Authority(AuthorityRefusal),
 }
 
 impl CallRefusal {
@@ -309,6 +415,7 @@ impl CallRefusal {
             CallRefusal::WrongConversation(_) => "wrong_conversation",
             CallRefusal::Malformed => "invalid_arguments",
             CallRefusal::NoOpenProposal(_) => "no_open_proposal",
+            CallRefusal::Authority(refusal) => refusal.reason(),
         }
     }
 
@@ -326,6 +433,15 @@ impl CallRefusal {
             CallRefusal::NoOpenProposal(message) => {
                 ToolExecutionError::new(ToolErrorKind::InvalidArgs, *message).with_retryable(true)
             }
+            CallRefusal::Authority(refusal) => {
+                let (kind, retryable) = match refusal {
+                    AuthorityRefusal::SpeechNotPosted => (ToolErrorKind::Other, true),
+                    AuthorityRefusal::NotAuthorized => (ToolErrorKind::PermissionDenied, false),
+                    AuthorityRefusal::InstructionNotFound => (ToolErrorKind::InvalidArgs, true),
+                    AuthorityRefusal::InstructionUsed => (ToolErrorKind::PermissionDenied, false),
+                };
+                ToolExecutionError::new(kind, authority_message(*refusal)).with_retryable(retryable)
+            }
         }
     }
 }
@@ -338,7 +454,18 @@ impl std::fmt::Display for CallRefusal {
             CallRefusal::WrongConversation(message) | CallRefusal::NoOpenProposal(message) => {
                 f.write_str(message)
             }
+            CallRefusal::Authority(refusal) => f.write_str(authority_message(*refusal)),
         }
+    }
+}
+
+/// The DDC contract surface text of each authority refusal.
+fn authority_message(refusal: AuthorityRefusal) -> &'static str {
+    match refusal {
+        AuthorityRefusal::SpeechNotPosted => SPEECH_NOT_POSTED,
+        AuthorityRefusal::NotAuthorized => NOT_AUTHORIZED,
+        AuthorityRefusal::InstructionNotFound => INSTRUCTION_NOT_FOUND,
+        AuthorityRefusal::InstructionUsed => INSTRUCTION_USED,
     }
 }
 
@@ -403,6 +530,22 @@ pub trait ProposalBackend {
     fn hold(&self, proposal_id: &str, hunk_id: &str) -> Result<(), String>;
     /// DDC-FR-LYTA / DPC-FR-JEXJ: whether a typed error is worth a retry.
     fn retryable_error(&self, error: &str) -> bool;
+    /// DDC-FR-ZGXF: whether something besides a change proposal is open, so a
+    /// call without an open change proposal still runs.
+    fn side_open(&self) -> bool {
+        false
+    }
+    /// DDC-FR-GGWO: run an entry that names something besides a hunk — the
+    /// new-draft proposal of a draft. `None`: the entry is about a hunk.
+    fn side_entry(
+        &self,
+        _id: &str,
+        _action: &str,
+        _place: usize,
+        _total: usize,
+    ) -> Option<DecisionRow> {
+        None
+    }
 }
 
 /// DCP-FR-FHWN / DPC-FR-NXZF: a hunk discussion is one whose **opening**
@@ -471,14 +614,31 @@ pub fn run_entries<B: ProposalBackend>(
     args: &DecideChangesArgs,
 ) -> Result<DecideChangesOutput, CallRefusal> {
     let entries = entries(args).map_err(CallRefusal::from)?;
-    let open =
-        backend.open_proposal().ok_or(CallRefusal::NoOpenProposal(backend.no_open_message()))?;
+    let open = backend.open_proposal();
+    if open.is_none() && !backend.side_open() {
+        return Err(CallRefusal::NoOpenProposal(backend.no_open_message()));
+    }
     let total = entries.len();
     let mut rows = Vec::with_capacity(total);
     let mut closed = false;
-    let mut last_state = open.state;
+    let mut last_state = open.as_ref().map(|o| o.state);
     for (index, entry) in entries.iter().enumerate() {
         let place = index + 1;
+        // DDC-FR-GGWO: an entry naming the new-draft proposal.
+        if let Some(row) = backend.side_entry(entry.id, entry.action, place, total) {
+            rows.push(row);
+            continue;
+        }
+        let Some(open) = &open else {
+            let mut row = DecisionRow::new(place, entry.id, entry.action);
+            let code = match Action::parse(entry.action) {
+                None => RefusalCode::InvalidAction,
+                Some(_) => RefusalCode::UnknownHunk,
+            };
+            row.refuse(code, total, &refusal_text(code, backend.file_word(), None), None);
+            rows.push(row);
+            continue;
+        };
         // DDC-FR-DSTU: the proposal as it stands after the entries before.
         let now = backend.proposal(&open.id).unwrap_or_else(|| open.clone());
         let row = run_entry(backend, &now, entry, place, total);
@@ -487,7 +647,7 @@ pub fn run_entries<B: ProposalBackend>(
             {
                 closed = true;
             }
-            last_state = after.state;
+            last_state = Some(after.state);
         }
         rows.push(row);
     }
@@ -512,6 +672,8 @@ fn run_entry<B: ProposalBackend>(
         discussion_id: None,
         refusal: None,
         comment_owed: None,
+        new_draft_state: None,
+        created_draft_id: None,
     };
     let refuse = |row: &mut DecisionRow, code: RefusalCode, action: Option<Action>| {
         row.refusal = Some(EntryRefusal {
@@ -608,7 +770,7 @@ fn run_entry<B: ProposalBackend>(
 
 /// DDC-FR-TBVA: one `INFO` record for the call, with the count of each
 /// outcome, and one `WARN` record for each refused entry. No record carries
-/// hunk text, comment text, or the agent's input.
+/// hunk text, comment text, the `instruction`, or the agent's input.
 pub fn log_call<S: LogSink + Clone + Send + 'static>(
     sink: &S,
     buffer: &'static LogBuffer,
@@ -642,9 +804,13 @@ pub fn log_call<S: LogSink + Clone + Send + 'static>(
                 "entries" => output.decisions.len(),
                 "closed" => output.closed,
             };
-            for outcome in
-                [Outcome::Accepted, Outcome::Rejected, Outcome::DiscussionOpened, Outcome::Refused]
-            {
+            for outcome in [
+                Outcome::Accepted,
+                Outcome::Rejected,
+                Outcome::DiscussionOpened,
+                Outcome::Confirmed,
+                Outcome::Refused,
+            ] {
                 fields.insert(outcome.as_str().to_string(), serde_json::json!(count(outcome)));
             }
             fields.insert(target_key.to_string(), serde_json::json!(target_value));

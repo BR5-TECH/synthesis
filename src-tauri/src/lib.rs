@@ -45,6 +45,7 @@ pub mod library;
 pub mod logging;
 pub mod menu;
 pub mod model_downgrades;
+pub mod new_draft_proposals;
 pub mod notes;
 pub mod notifications;
 mod onnx_runtime;
@@ -441,6 +442,11 @@ pub fn run() {
             draft_proposals::set_draft_change_hunk_discussing,
             draft_proposals::edit_draft_change_hunk,
             draft_proposals::decline_draft_change_proposal,
+            new_draft_proposals::list_new_draft_proposals,
+            new_draft_proposals::load_new_draft_proposal_body,
+            new_draft_proposals::accept_new_draft_proposal,
+            new_draft_proposals::reject_new_draft_proposal,
+            new_draft_proposals::confirm_draft_decomposition,
             prompt_proposals::list_prompt_change_proposals,
             prompt_proposals::load_prompt_change_proposal_hunks,
             prompt_proposals::accept_prompt_change_hunk,

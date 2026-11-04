@@ -43,6 +43,10 @@ pub(super) struct Live {
     pub(super) steering: Vec<SteeringItem>,
     /// AGC-FR-NFYK: the speech that registered this turn, if one did.
     pub(super) registered_by: Option<String>,
+    /// AGC-FR-DTCL: the ids of the comments the turn received, its trigger and
+    /// each steering comment, in the order taken. Never drained, unlike
+    /// `steering`, so a decision tool reads the newest at any time.
+    pub(super) received: Vec<String>,
     /// CVL-FR-YNOE: whether the turn still takes steering messages.
     pub(super) steering_open: bool,
     /// AGC-FR-URXV: the whole-turn timeout and the instant the current
@@ -110,6 +114,9 @@ pub(super) struct Inner {
     pub(super) image_notices: HashMap<String, Recoverable>,
     /// AGC-FR-TCXX, AGC-FR-BMLY, AGC-FR-YLJW: the open and the ended speeches.
     pub(super) speeches: SpeechBook,
+    /// AGC-FR-TFEN, AGC-FR-QZVW: the author comments of the run, and the ones
+    /// spent on a decision by tool.
+    pub(super) authority: AuthorityBook,
 }
 
 /// AGC-FR-31: what is left of a turn the author may ask again.
@@ -312,6 +319,7 @@ impl TurnRegistry {
                 next_seq: 1,
                 steering: Vec::new(),
                 registered_by: speech_id.map(str::to_string),
+                received: trigger_comment_id.map(str::to_string).into_iter().collect(),
                 steering_open: true,
                 deadline: None,
             },

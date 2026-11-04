@@ -55,6 +55,7 @@ import {
   createDocumentActions,
   useViewerStatePruning,
 } from "./shell/documentActions";
+import { createDraftPreviewActions } from "./shell/draftPreviewActions";
 import { useTabScrollPruning } from "./shell/tabScrollPruning";
 
 export { conversationTabId };
@@ -593,6 +594,13 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     activateTab,
     openProjectFile: (path, name) => openArtifact({ id: path, name }),
   });
+  // TAB-FR-CIGU / TAB-FR-OMWY: the preview tab of a new-draft proposal.
+  const { openDraftPreview, closeDraftPreview } = createDraftPreviewActions({
+    tabsRef,
+    setTabs,
+    setActiveTab,
+    activateTab,
+  });
   useViewerStatePruning(tabs);
   useTabScrollPruning(tabs);
 
@@ -794,6 +802,9 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     // DPN-FR-CDFO / TAB-FR-KUIN: the viewer tabs of the Documents collection.
     openDocument,
     closeTabsForRemovedDocuments,
+    // TAB-FR-CIGU / TAB-FR-OMWY: the draft preview tab.
+    openDraftPreview,
+    closeDraftPreview,
     // TAB-FR-22: the strip closes exactly the Diff tabs a commit has finished
     // with, from the paths the commit recorded.
     closeDiffTabsForCommittedPaths,

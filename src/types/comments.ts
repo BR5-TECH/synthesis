@@ -4,6 +4,7 @@
 // Every name is re-exported from `./index`, so `from "../types"` still
 // resolves to the same set and no import site moved.
 
+import type { NewDraftProposalReference, NewDraftSubjectReference } from "./newDraftProposals";
 import { GITHUB_TOKEN_ERRORS } from "./github";
 
 // --- Comments (CMS-comments-storage.md / CMT-comments.md) -----------------
@@ -184,7 +185,10 @@ export type Attachment =
    * of a hunk discussion carries one (DCP-FR-FHWN, DCR-FR-VBQN). It holds no
    * content, and the rail renders it as a control (CMT-FR-48).
    */
-  | ProposalHunkReference;
+  | ProposalHunkReference
+  /** CMS-FR-YKGI / CMS-FR-KAXQ: the two new-draft references. */
+  | NewDraftProposalReference
+  | NewDraftSubjectReference;
 
 /**
  * CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
@@ -232,7 +236,9 @@ export type AttachmentInput =
       data: string;
     }
   /** CMS-FR-43: both append paths take a reference to one change. */
-  | ProposalHunkReference;
+  | ProposalHunkReference
+  /** CMS-FR-KAXQ: and a reference to one new-draft proposal. */
+  | NewDraftSubjectReference;
 
 /** CMS-FR-48: what `read_comment_attachment` serves back. */
 export interface AttachmentContent {
@@ -250,6 +256,7 @@ export interface AttachmentContent {
  */
 export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
+  if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
   if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
     return a.path;
   }
@@ -260,7 +267,13 @@ export function attachmentName(a: Attachment): string {
 export function isImageAttachment(a: Attachment): boolean {
   // CMS-FR-42: the two reference kinds hold no content at all, so neither has a
   // media type to read and neither is ever a thumbnail (CMT-FR-48).
-  if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
+  if (
+    a.kind === "proposal" ||
+    a.kind === "promptProposal" ||
+    a.kind === "proposalHunk" ||
+    a.kind === "newDraftProposal" ||
+    a.kind === "newDraftSubject"
+  ) {
     return false;
   }
   return a.mediaType.split(";")[0].trim().toLowerCase().startsWith("image/");

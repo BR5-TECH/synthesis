@@ -32,7 +32,7 @@ use crate::prompt_proposals::{self, HunkState, PromptProposalState};
 pub const NAME: &str = "decide_prompt_changes";
 
 /// DPC-FR-RJBJ / DPC-FR-HWOT: the fixed text the model reads.
-pub const DESCRIPTION: &str = "Decide changes of the open proposal of the prompt or project document under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss a change, for example \"accept the second change\". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each change the author named, in the order the author named them. Each entry gives the `id` of a change and an `action`. `accept` writes the change into the file as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that change, with a first comment from you that says the author asked to discuss it; it does not decide the change. A rejected change can still be accepted while the proposal is open. Your input lists each change of the open proposal with its id, its place, its state, and its text. When the author names a change by its place, count the changes in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. This tool never makes, changes, or withdraws a change; use `propose_prompt_changes` for that.";
+pub const DESCRIPTION: &str = "Decide changes of the open proposal of the prompt or project document under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss a change, for example \"accept the second change\". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each change the author named, in the order the author named them. Each entry gives the `id` of a change and an `action`. `accept` writes the change into the file as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that change, with a first comment from you that says the author asked to discuss it; it does not decide the change. A rejected change can still be accepted while the proposal is open. Your input lists each change of the open proposal with its id, its place, its state, and its text. When the author names a change by its place, count the changes in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. Copy into `instruction` the words of the author's latest comment that ask for these decisions, exactly as the author wrote or said them. A call is refused when the latest comment is not the author's, when the words are not in it, or when that comment already gave a decision. While the author is still speaking, wait until the comment of the speech arrives. This tool never makes, changes, or withdraws a change; use `propose_prompt_changes` for that.";
 
 /// DPC-FR-RJBJ: the parameter text of `action`.
 const ACTION_DESCRIPTION: &str = "`accept` to write the change into the file, `reject` to decline it, or `discuss` to open a new discussion about it.";
@@ -53,6 +53,8 @@ pub struct DecidePromptChangesTool<R: tauri::Runtime> {
     roots: OwnedRoots,
     origin: ConversationOrigin,
     agent: Participant,
+    /// AGC-FR-DTCL: the turn that calls the tool (DPC-FR-VJIG).
+    turn_id: String,
     /// The author a decision is recorded as. `None` resolves the author from
     /// the open project at call time, as the chip's command does.
     decider: Option<Participant>,
@@ -65,14 +67,23 @@ where
 {
     /// DPC-FR-QMZE: bound to the artifact of the turn's target (through its
     /// origin), the origin of the turn's conversation, and the turn's agent
-    /// participant.
+    /// participant, and the turn itself (DPC-FR-VJIG).
     pub fn new(
         app: tauri::AppHandle<R>,
         roots: OwnedRoots,
         origin: ConversationOrigin,
         agent: Participant,
+        turn_id: &str,
     ) -> Self {
-        DecidePromptChangesTool { app, roots, origin, agent, decider: None, buffer: &BUFFER }
+        DecidePromptChangesTool {
+            app,
+            roots,
+            origin,
+            agent,
+            turn_id: turn_id.to_string(),
+            decider: None,
+            buffer: &BUFFER,
+        }
     }
 
     /// The same tool, with the author fixed and reporting into `buffer`.
@@ -120,8 +131,28 @@ where
                 decide_changes::NOT_AN_ARTIFACT_CONVERSATION,
             ));
         };
-        let backend = PromptBackend { tool: self, artifact_id, author: self.author() };
-        decide_changes::run_entries(&backend, args)
+        // DPC-FR-VJIG: the authority rules of DDC, in the order of DDC-FR-VYLJ.
+        let instruction = decide_changes::check_arguments(args)?;
+        let grant = crate::agent_conversations::authorize_decision(
+            &self.app,
+            self.roots.borrowed(),
+            &self.origin,
+            &self.turn_id,
+            instruction,
+        )
+        .map_err(CallRefusal::Authority)?;
+        let backend = PromptBackend {
+            tool: self,
+            artifact_id,
+            author: self.author(),
+            line: decide_changes::instruction_line(&self.agent, instruction),
+        };
+        let output = decide_changes::run_entries(&backend, args)?;
+        // DDC-FR-VONX: a call that decided an entry spends the comment.
+        if decide_changes::decided_any(&output) {
+            grant.commit();
+        }
+        Ok(output)
     }
 }
 
@@ -130,6 +161,8 @@ struct PromptBackend<'a, R: tauri::Runtime> {
     tool: &'a DecidePromptChangesTool<R>,
     artifact_id: &'a str,
     author: Result<Participant, String>,
+    /// PCP-FR-QKCT: the instruction line of the decision comment.
+    line: String,
 }
 
 impl<R: tauri::Runtime> PromptBackend<'_, R> {
@@ -205,9 +238,12 @@ where
             &self.tool.app,
             worktree,
             store,
-            proposal_id,
-            hunk_id,
-            &by,
+            prompt_proposals::HunkByTool {
+                proposal_id,
+                hunk_id,
+                by: &by,
+                instruction_line: Some(&self.line),
+            },
             &tracker,
         );
         match accepted {
@@ -238,9 +274,12 @@ where
             &self.tool.app,
             &self.tool.roots.worktree,
             &self.tool.roots.store,
-            proposal_id,
-            hunk_id,
-            &by,
+            prompt_proposals::HunkByTool {
+                proposal_id,
+                hunk_id,
+                by: &by,
+                instruction_line: Some(&self.line),
+            },
             &tracker,
         )
         .map(|_| ())

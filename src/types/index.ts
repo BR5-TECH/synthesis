@@ -9,6 +9,7 @@ export * from "./diff";
 export * from "./search";
 export * from "./embeddings";
 export * from "./drafts";
+export * from "./newDraftProposals";
 export * from "./publication";
 export * from "./statistics";
 export * from "./graduation";

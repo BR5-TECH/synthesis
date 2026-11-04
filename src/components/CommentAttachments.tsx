@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
 import { ProposalHunkControl } from "./ProposalHunkControl";
+import { NewDraftReferenceControl } from "./NewDraftReferenceControl";
 import {
   openReview,
   reviewedHunkTotal,
@@ -739,7 +740,7 @@ function AttachmentView({
 }: {
   threadId: string;
   draftId?: string;
-  attachment: Attachment;
+  attachment: Exclude<Attachment, { kind: "newDraftProposal" | "newDraftSubject" }>;
 }) {
   const name = attachmentName(attachment);
   const [stored, loadStored] = useBlobSource(threadId, draftId, attachment);
@@ -876,7 +877,10 @@ export function CommentAttachmentList({
           <PromptProposalAttachmentView key={i} attachment={a} />
         ) : a.kind === "proposalHunk" ? (
           <ProposalHunkControl key={i} attachment={a} />
-        ) : (
+        ) : a.kind === "newDraftProposal" ? (
+          // CMT-FR-MPKL: a reference control that shows the card.
+          <NewDraftReferenceControl key={i} attachment={a} />
+        ) : a.kind === "newDraftSubject" ? null : (
           <AttachmentView
             key={i}
             threadId={threadId}

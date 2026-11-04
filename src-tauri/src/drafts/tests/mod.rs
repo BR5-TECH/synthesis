@@ -124,6 +124,7 @@ mod registry;
 mod resolution;
 mod root_organisation;
 mod search;
+mod sequence;
 mod statistics_log;
 mod status_rename;
 mod storage;

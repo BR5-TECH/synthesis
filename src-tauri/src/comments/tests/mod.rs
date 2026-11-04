@@ -276,6 +276,7 @@ mod agents_and_titles;
 mod artifact_discussions;
 mod attachment_read;
 mod attachments;
+mod author_comments;
 mod errors_and_lifecycle;
 mod local_participant;
 mod log_and_fold;

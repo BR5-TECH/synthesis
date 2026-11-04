@@ -123,11 +123,14 @@ impl Fixture {
         origin: ConversationOrigin,
         buffer: &'static LogBuffer,
     ) -> DecideDraftChangesTool<tauri::test::MockRuntime> {
+        let turn =
+            crate::tools::tests::authorized_turn_for(&self.open.handle(), &self.root(), &origin);
         DecideDraftChangesTool::new(
             self.open.handle(),
             OwnedRoots { worktree: self.root(), store: self.root() },
             origin,
             agent(),
+            &turn,
         )
         .for_test(human(), buffer)
     }
@@ -185,6 +188,7 @@ impl Fixture {
 
 fn args(decisions: &[(&str, &str)]) -> DecideChangesArgs {
     DecideChangesArgs {
+        instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
         decisions: Some(
             decisions
                 .iter()
@@ -239,13 +243,20 @@ fn it_is_a_portable_tool_with_the_fixed_description_and_schema() {
     assert_eq!(decisions["items"]["required"], serde_json::json!(["id", "action"]));
     assert_eq!(
         decisions["items"]["properties"]["action"]["enum"],
-        serde_json::json!(["accept", "reject", "discuss"])
+        serde_json::json!(["accept", "reject", "discuss", "confirm"])
     );
+    // DDC-FR-PZBH: `instruction` is required, up to 500 characters.
+    assert_eq!(schema["properties"]["instruction"]["type"], "string");
+    assert_eq!(schema["properties"]["instruction"]["maxLength"], 500);
+    assert!(schema["properties"]["instruction"]["description"]
+        .as_str()
+        .is_some_and(|d| d.contains("latest comment")));
+    assert!(DESCRIPTION.contains("Copy into `instruction`"));
     assert!(decisions["description"].as_str().is_some_and(|d| d.contains("latest comment")));
     assert!(decisions["items"]["properties"]["action"]["description"]
         .as_str()
         .is_some_and(|d| d.contains("into the prompt")));
-    assert_eq!(schema["required"], serde_json::json!(["decisions"]));
+    assert_eq!(schema["required"], serde_json::json!(["instruction", "decisions"]));
 }
 
 // DDC-FR-QRIY, DDC-FR-VAYO
@@ -259,7 +270,9 @@ fn no_argument_names_a_draft_a_proposal_a_conversation_or_a_participant() {
     assert_eq!(one.parameters, two.parameters);
     assert_eq!(one.description, two.description);
     let properties = one.parameters["properties"].as_object().expect("properties");
-    assert_eq!(properties.keys().collect::<Vec<_>>(), vec!["decisions"]);
+    let mut names: Vec<&String> = properties.keys().collect();
+    names.sort();
+    assert_eq!(names, vec!["decisions", "instruction"]);
     let entry = one.parameters["properties"]["decisions"]["items"]["properties"]
         .as_object()
         .expect("entry");
@@ -301,6 +314,7 @@ fn with_no_project_open_the_call_is_the_shared_refusal() {
         OwnedRoots { worktree: root.clone(), store: root },
         ConversationOrigin::stub_draft("t", "d1", false),
         agent(),
+        "turn-closed",
     )
     .for_test(human(), &QUIET);
     let refused = block_on(tool.call(args(&[("h", "accept")]))).expect_err("refused");
@@ -316,13 +330,21 @@ fn a_malformed_list_is_refused_and_nothing_is_decided() {
     let f = Fixture::new();
     let many: Vec<(&str, &str)> = (0..51).map(|_| (f.hunk(1), "reject")).collect();
     let cases = vec![
-        DecideChangesArgs { decisions: None },
-        DecideChangesArgs { decisions: Some(Vec::new()) },
+        DecideChangesArgs {
+            instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
+            decisions: None,
+        },
+        DecideChangesArgs {
+            instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
+            decisions: Some(Vec::new()),
+        },
         args(&many),
         DecideChangesArgs {
+            instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
             decisions: Some(vec![DecisionArg { id: None, action: Some("accept".into()) }]),
         },
         DecideChangesArgs {
+            instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
             decisions: Some(vec![
                 DecisionArg { id: Some(f.hunk(1).into()), action: Some("reject".into()) },
                 DecisionArg { id: Some(f.hunk(2).into()), action: None },
@@ -379,7 +401,7 @@ fn accept_writes_the_hunk_and_records_one_version() {
     // DDC-FR-IBYT: the event of DCP-FR-16, as the chip's decision emits it.
     assert!(*events.lock().unwrap() >= 1);
     assert!(!output.closed);
-    assert_eq!(output.proposal_state, ProposalStateView::Pending);
+    assert_eq!(output.proposal_state, Some(ProposalStateView::Pending));
 }
 
 // DDC-FR-YKPP
@@ -569,7 +591,7 @@ fn an_entry_after_the_close_is_refused_and_the_close_is_reported() {
         ])
         .expect("answers");
     assert!(output.closed);
-    assert_eq!(output.proposal_state, ProposalStateView::Rejected);
+    assert_eq!(output.proposal_state, Some(ProposalStateView::Rejected));
     assert_eq!(code_of(&output, 4), Some(RefusalCode::NoOpenProposal));
     assert!(output.decisions[3].refusal.as_ref().expect("refusal").retryable);
     // DDC-FR-IBYT: the close appends the decision comment as the author.
@@ -694,8 +716,11 @@ fn each_call_logs_one_info_record_and_one_warn_record_per_refused_entry() {
 
     // A whole-call refusal is one WARN.
     BUFFER.clear();
-    block_on(f.tool_for(f.origin(), &BUFFER).call(DecideChangesArgs { decisions: None }))
-        .expect_err("malformed");
+    block_on(f.tool_for(f.origin(), &BUFFER).call(DecideChangesArgs {
+        instruction: Some(crate::tools::tests::DECISION_INSTRUCTION.into()),
+        decisions: None,
+    }))
+    .expect_err("malformed");
     let records = log_records(&BUFFER);
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].level, LogLevel::Warn);
@@ -709,10 +734,63 @@ fn the_tool_holds_no_state_between_calls_and_resolves_at_once() {
     // `block_on` fails a future that is not ready on its first poll, so no
     // network wait and no timer stands in a call.
     let first = block_on(tool.call(args(&[(f.hunk(1), "reject")]))).expect("first");
+    // The first call spent its comment (DDC-FR-VONX). Clear the spent comments,
+    // so the second call reaches the entries.
+    crate::tools::tests::authorized_turn_for(&f.open.handle(), &f.root(), &f.origin());
     let second = block_on(tool.call(args(&[(f.hunk(1), "reject")]))).expect("second");
     assert_eq!(first.decisions[0].outcome, Outcome::Rejected);
     // The second call reads storage, not anything the first call kept.
     assert_eq!(code_of(&second, 1), Some(RefusalCode::AlreadyInState));
     let source = include_str!("../decide_draft_changes.rs");
     assert!(!source.contains("reqwest") && !source.contains("Mutex<"));
+}
+
+// DDC-FR-JJHZ / DCP-FR-HMUG / DDC-FR-TBVA: the decision that resolves the
+// proposal appends its comment with the instruction line last, and no log
+// record carries the instruction.
+#[test]
+fn the_instruction_ends_the_decision_comment_and_reaches_no_log_record() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    BUFFER.clear();
+    let f = Fixture::new();
+    let handle = f.open.handle();
+    let comment = crate::notes::new_note_id();
+    comments::add_comment_with_id(
+        &f.root(),
+        ThreadRef::discussion(&f.draft_id),
+        &f.thread_id,
+        comment.clone(),
+        "@arch Reject every change, zebra words.".into(),
+        &human(),
+        "2026-01-01T00:00:03Z",
+    )
+    .expect("comment");
+    let turn = crate::agent_conversations::authority_for_test::register_turn(
+        &handle,
+        f.origin(),
+        Some(&comment),
+        None,
+    );
+    crate::agent_conversations::note_author_comment(&handle, &comment);
+    let tool = DecideDraftChangesTool::new(
+        handle,
+        OwnedRoots { worktree: f.root(), store: f.root() },
+        f.origin(),
+        agent(),
+        &turn,
+    )
+    .for_test(human(), &BUFFER);
+    let mut call = args(&[(f.hunk(1), "reject"), (f.hunk(2), "reject"), (f.hunk(3), "reject")]);
+    call.instruction = Some("  reject every change, zebra words ".into());
+    let out = block_on(tool.call(call)).expect("decided");
+    assert!(out.closed);
+    let last = f.thread().comments.last().cloned().expect("the decision comment");
+    assert!(last.body.starts_with("Declined"), "{}", last.body);
+    assert!(last.body.ends_with(
+        "\n\nDecided by arch on the author's instruction: “reject every change, zebra words”"
+    ));
+    let all =
+        serde_json::to_string(&log_records(&BUFFER).iter().map(|r| &r.fields).collect::<Vec<_>>())
+            .expect("json");
+    assert!(!all.contains("zebra"), "a record carries the instruction");
 }

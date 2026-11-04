@@ -15,6 +15,12 @@ import { Icon } from "./icons";
 import { formatRelative } from "./ProjectPicker";
 import { stateLabel } from "../state/graduation";
 import { AnchoredMenu } from "./DraftsPanelParts";
+import {
+  decompositionSuffix,
+  originalNameOf,
+  SequenceBadge,
+  SupersededBadge,
+} from "./draftsRowBadges";
 import { DRAG_TYPE, folderName, ROOT } from "./draftsTree";
 import type { DraftMatches, MenuAnchor, TreeItem } from "./draftsTree";
 import type { DraftsPanel as DraftsPanelState } from "../hooks/useDraftsPanelState";
@@ -263,7 +269,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                   : ""
         }${shadow ? `, mirrors ${issueLabel}` : ""}${
           draft.graduation?.locked ? ", graduating" : ""
-        }`}
+        }${decompositionSuffix(draft)}`}
         tabIndex={0}
         // DRP-FR-NPZO: a GitHub-shadow row cannot be dragged.
         draggable={!locked && !renaming && !shadow}
@@ -388,6 +394,10 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 Published
               </span>
             )}
+          {/* DRP-FR-KAWD / DRP-FR-AOLJ: the decomposition facts, on every
+              status. The superseded marker stands after the status label. */}
+          <SequenceBadge draft={draft} originalName={originalNameOf(draft, draftsByFolder)} />
+          <SupersededBadge draft={draft} />
           {/* DRP-FR-ZRJJ: a GitHub-shadow draft carries a GitHub marker naming
               its repository and issue, and reads `GitHub task` while its
               status is `github_shadow`. Once it reports `graduated` the

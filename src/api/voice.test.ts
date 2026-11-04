@@ -19,10 +19,12 @@ import {
   setVoiceActivityGate,
   setVoiceAiDefaultVoice,
   setVoiceAiRoutes,
+  setVoiceAiSpeechOptions,
   speakVoiceSegment,
   startVoiceCapture,
   verifyVoiceAiIntegration,
 } from "./voice";
+import { translateVoiceTranscript } from "./integrations";
 
 beforeEach(() => core.invoke.mockClear());
 
@@ -152,6 +154,39 @@ describe("the voice commands", () => {
       captureRate: 48_000,
       keyterms: ["arch"],
       chunked: false,
+    });
+  });
+
+  it("VOP-FR-HQTQ, VOP-FR-MOSY: the speed and the style reach the commands by their names", async () => {
+    await setVoiceAiSpeechOptions("custom", 130, "warm");
+    expect(core.invoke).toHaveBeenLastCalledWith("set_voice_ai_speech_options", {
+      provider: "custom",
+      speedPercent: 130,
+      style: "warm",
+    });
+    void speakVoiceSegment("id", "text", "v", () => undefined, { speedPercent: 150, style: "calm" });
+    expect(core.invoke).toHaveBeenLastCalledWith(
+      "speak_voice_segment",
+      expect.objectContaining({ voiceName: "v", voiceSpeed: 150, voiceStyle: "calm" }),
+    );
+    void speakVoiceSegment("id", "text", null, () => undefined, { speedPercent: null, style: "" });
+    expect(core.invoke).toHaveBeenLastCalledWith(
+      "speak_voice_segment",
+      expect.objectContaining({ voiceSpeed: null, voiceStyle: null }),
+    );
+    void speakVoiceSegment("id", "text", null, () => undefined);
+    expect(core.invoke).toHaveBeenLastCalledWith(
+      "speak_voice_segment",
+      expect.objectContaining({ voiceSpeed: null, voiceStyle: null }),
+    );
+  });
+
+  it("AGC-FR-QEOF: the translation takes the text and the nicknames", async () => {
+    core.invoke.mockResolvedValueOnce({ text: "Hello." });
+    await expect(translateVoiceTranscript("Hola.", ["arch"])).resolves.toEqual({ text: "Hello." });
+    expect(core.invoke).toHaveBeenLastCalledWith("translate_voice_transcript", {
+      text: "Hola.",
+      nicknames: ["arch"],
     });
   });
 

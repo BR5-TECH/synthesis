@@ -63,6 +63,8 @@ fn draft(nickname: &str) -> AgentDraft {
         skills: Vec::new(),
         disabled_skills: Vec::new(),
         voice: String::new(),
+        voice_speed_percent: None,
+        voice_style: String::new(),
         nickname: nickname.into(),
         title: String::new(),
         model_id: "m".into(),
@@ -153,6 +155,8 @@ fn a_created_agent_carries_an_id_two_timestamps_and_every_supplied_field() {
             skills: Vec::new(),
             disabled_skills: Vec::new(),
             voice: String::new(),
+            voice_speed_percent: None,
+            voice_style: String::new(),
             nickname: "arch".into(),
             title: "Architect".into(),
             model_id: "m".into(),
@@ -556,6 +560,8 @@ fn update_replaces_every_field_keeps_created_at_and_the_id_and_refuses_a_missing
             skills: Vec::new(),
             disabled_skills: Vec::new(),
             voice: String::new(),
+            voice_speed_percent: None,
+            voice_style: String::new(),
             nickname: "architect".into(),
             title: String::new(),
             model_id: "m2".into(),
@@ -775,4 +781,39 @@ fn a_personal_agent_keeps_its_voice() {
     assert_eq!(store.load_agent_registry().unwrap()[0].voice, "cedar");
     let old: Agent = toml::from_str("nickname = \"arch\"\n").unwrap();
     assert_eq!(old.voice, "");
+}
+
+// AGR-FR-EPYX: an agent keeps its voice speed and style, a value out of range
+// is refused and writes nothing, and a record from an earlier build reads with
+// neither.
+#[test]
+fn an_agent_keeps_its_voice_speed_and_style() {
+    let store = store();
+    with_openrouter(&store);
+    let mut d = draft("arch");
+    d.voice_speed_percent = Some(201);
+    assert_eq!(
+        create_agent_impl(&store, "", &d),
+        Err(crate::agents::ERR_VOICE_OPTIONS_INVALID.to_string())
+    );
+    assert!(store.load_agent_registry().unwrap().is_empty(), "nothing is written");
+    d.voice_speed_percent = Some(130);
+    d.voice_style = " warm ".into();
+    let created = create_agent_impl(&store, "", &d).unwrap();
+    assert_eq!(created.voice_speed_percent, Some(130));
+    assert_eq!(created.voice_style, "warm");
+    d.voice_style = "x".repeat(201);
+    assert_eq!(
+        update_agent_impl(&store, "", &created.id, &d),
+        Err(crate::agents::ERR_VOICE_OPTIONS_INVALID.to_string())
+    );
+    d.voice_speed_percent = Some(70);
+    d.voice_style = "bright".into();
+    update_agent_impl(&store, "", &created.id, &d).unwrap();
+    let stored = &store.load_agent_registry().unwrap()[0];
+    assert_eq!(stored.voice_speed_percent, Some(70));
+    assert_eq!(stored.voice_style, "bright");
+    let old: Agent = toml::from_str("nickname = \"arch\"\n").unwrap();
+    assert_eq!(old.voice_speed_percent, None);
+    assert_eq!(old.voice_style, "");
 }

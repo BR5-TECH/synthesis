@@ -27,7 +27,7 @@ fn config(
         http_transcription: http,
         ..VoiceCapabilities::default()
     });
-    ActiveVoice { record, key: key.map(str::to_string) }
+    ActiveVoice { record, key: key.map(str::to_string), language: None }
 }
 
 fn pcm_of(event: &serde_json::Value) -> usize {
@@ -267,9 +267,9 @@ async fn the_http_route_sends_one_wav() {
 fn hints_follow_the_provider() {
     use crate::voice_ai::http::hint_fields;
     let terms = vec!["arch".to_string()];
-    assert_eq!(hint_fields("openrouter", &terms), vec![("keyterms[]", "arch".to_string())]);
-    assert!(hint_fields("custom", &terms).is_empty());
-    assert_eq!(hint_fields("openai", &terms), vec![("prompt", "arch".to_string())]);
+    assert_eq!(hint_fields("openrouter", &terms, None), vec![("keyterms[]", "arch".to_string())]);
+    assert!(hint_fields("custom", &terms, None).is_empty());
+    assert_eq!(hint_fields("openai", &terms, None), vec![("prompt", "arch".to_string())]);
 }
 
 // VOP-FR-INCC: the Realtime route of `openai` sends `keywords`, with no nickname

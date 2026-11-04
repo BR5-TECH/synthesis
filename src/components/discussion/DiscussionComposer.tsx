@@ -52,6 +52,7 @@ import {
   type VoiceComposerHandle,
 } from "../../voice/voiceController";
 import { boundDiscussionOf } from "../../voice/voiceHandles";
+import { agentVoiceOptions } from "../../voice/voiceOptions";
 import { VoiceArea, VoiceFeedback } from "./VoiceArea";
 import {
   clearComposer,
@@ -345,6 +346,8 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
       nicknames: () => [...rosterRef.current.nicknames],
       voiceOf: (agentId) =>
         agentsRef.current.find((a) => a.agent.id === agentId)?.agent.voice || null,
+      voiceOptionsOf: (agentId) =>
+        agentVoiceOptions(agentsRef.current.find((a) => a.agent.id === agentId)?.agent),
     };
     return registerVoiceComposer(sessionKey, handle);
   }, [sessionKey]);

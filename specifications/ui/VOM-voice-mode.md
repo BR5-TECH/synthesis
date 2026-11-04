@@ -130,6 +130,9 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 
 74. **VOM-FR-WYIE** At the end of an utterance, its transcript posts into the voice discussion as one normal user comment, through the same path as a typed comment, whether or not a composer of that discussion is mounted. It replaces the live bubble part of the utterance. No review step exists. A spoken answer posts as VOM-FR-YTKV states.
 75. **VOM-FR-RFWC** The comment body is the unsent session body, then the transcript. Pending attachments go with it.
+75. **VOM-FR-QWMK** With a spoken language set (`../core/GSS-global-settings-storage.md` GSS-FR-DNAW), the transcript is translated into English through "translate voice transcript" before it posts. The translation takes the place of the transcript in the comment body, and the comment carries the transcript as its `spoken_original` (`../core/CMS-comments-storage.md` CMS-FR-UYVK). The voice area shows `Translating…` while it waits.
+75. **VOM-FR-DLPA** A translation that fails posts the transcript as it stands, with no `spoken_original`, and the voice area shows the note `Not translated. The original text was posted.` A translation equal to the transcript stores no `spoken_original`.
+75. **VOM-FR-GZCV** A chunk message and a spoken answer to a question set are not translated.
 76. **VOM-FR-RENV** An empty transcript posts nothing, and the voice area states that it heard no speech.
 77. **VOM-FR-ABPU** A transcript that cannot post joins the session body of its discussion and is not posted. The voice area states this. This applies when voice mode ended by the Voice button before the transcript arrived, and when a question set arrived after the recording started.
     - *Why:* the speech is kept, and the author does not post into a discussion state they did not see.
@@ -255,7 +258,7 @@ Status bar, trailing region, voice mode on in another tab
 - **Owned by the UI**: the voice area, the toggles, the single voice discussion rule, the binding of voice mode to a discussion, capture through the WebView, the press and hotkey logic, the VAD session lifecycle, the Mute toggle, the waveform and its level from the microphone stream, the reaction to `voice-activity-changed` and `voice-chunk-changed` events, the live bubble, the order of posts, the spoken tag conversion and the fuzzy nickname match, the reading of the spoken part, the conversion of Markdown to speech text, the split into segments, playback, reply detection, the speech of question sets, the spoken answer and its comment, the state given to the status bar voice indicator, and all messages.
 - **Delegated to backend (abstract)**:
   - "start voice capture", "append voice capture", "finish voice capture", "retry voice capture", "cancel voice capture", "speak voice segment", "cancel voice speech", "open voice activity session", "feed voice activity", "set voice activity gate", "close voice activity session", "list voice ai integrations", and the `voice-chunk-changed` event, each owned by `../core/VOP-voice-ai-providers.md`.
-  - "dispatch speech turn", "steer speech turn", and "end speech turn", each owned by `../core/AGC-agent-conversations.md`.
+  - "dispatch speech turn", "steer speech turn", "end speech turn", and "translate voice transcript", each owned by `../core/AGC-agent-conversations.md`.
   - "save app preferences" and "load app preferences", each owned by `../core/GSS-global-settings-storage.md`.
 
 ## Non-functional requirements

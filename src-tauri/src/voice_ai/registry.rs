@@ -102,6 +102,25 @@ pub fn set_default_voice(
     })
 }
 
+/// VOP-FR-HQTQ: the speed and the style of a provider.
+pub fn set_speech_options(
+    store: &GlobalSettingsStore,
+    voice: &VoiceAi,
+    provider: &str,
+    speed_percent: Option<u16>,
+    style: &str,
+) -> Result<VoiceAiRecord, String> {
+    let style = style.trim();
+    if !super::speech_options::valid_options(speed_percent, style) {
+        return Err(super::ERR_INVALID_SPEECH_OPTIONS.into());
+    }
+    update_records(store, voice, provider, |record| {
+        record.speech_speed_percent = speed_percent.filter(|p| *p != 100);
+        record.speech_style = style.to_string();
+        Ok(())
+    })
+}
+
 /// VOP-FR-KRMY: only a verified provider can become active.
 pub fn set_active(
     store: &GlobalSettingsStore,

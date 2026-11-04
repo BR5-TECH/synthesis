@@ -124,6 +124,24 @@ where
     })
 }
 
+/// GSS-FR-DNAW: the longest spoken language, in characters.
+pub const VOICE_SPOKEN_LANGUAGE_LIMIT: usize = 40;
+
+/// GSS-FR-DNAW: a value that is not a string, or that is longer than the
+/// limit, reads as no spoken language.
+fn lenient_spoken_language<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Text(String),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Text(text) if text.chars().count() <= VOICE_SPOKEN_LANGUAGE_LIMIT => text,
+        _ => String::new(),
+    })
+}
+
 /// GSS-FR-KOAB: the silence that ends an utterance, where nothing is stored.
 pub const VOICE_VAD_SILENCE_MS_DEFAULT: u32 = 1500;
 
@@ -379,6 +397,9 @@ pub struct AppPreferences {
     /// GSS-FR-WYHC: Text or Voice, `text` when unset.
     #[serde(default, deserialize_with = "lenient_or_default")]
     pub voice_response_mode: VoiceResponseMode,
+    /// GSS-FR-DNAW: the language the author speaks, `""` for no translation.
+    #[serde(default, deserialize_with = "lenient_spoken_language")]
+    pub voice_spoken_language: String,
     /// GSS-FR-29: the three typographic roles' font settings, every field
     /// independently unset until chosen. The Appearance section reads them on
     /// mount and writes them whenever the user changes a control
@@ -446,6 +467,7 @@ impl Default for AppPreferences {
             voice_vad_sensitivity: VoiceVadSensitivity::default(),
             voice_input_mode: VoiceInputMode::default(),
             voice_response_mode: VoiceResponseMode::default(),
+            voice_spoken_language: String::new(),
             fonts: FontSettings::default(),
         }
     }

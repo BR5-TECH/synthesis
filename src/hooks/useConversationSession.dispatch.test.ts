@@ -12,7 +12,7 @@ vi.mock("../logging", () => ({
   logWarn: (...a: unknown[]) => logWarn(...a),
 }));
 
-import { dispatchTurnsFor } from "./useConversationSession";
+import { dispatchTurnsFor, postReply } from "./useConversationSession";
 import { beginSpeechPost, finishSpeechPost, resetSpeechPostsForTest } from "../state/speechPosts";
 import {
   clearAllDiscussionSessions,
@@ -165,5 +165,27 @@ describe("dispatching from the shared surface (CTA-FR-QUXJ, CTA-FR-UUXA)", () =>
     expect(getDiscussionSession("d1").turnFailure).toBe(raw);
     expect(JSON.stringify(logWarn.mock.calls)).not.toContain("a private passage");
     expect(logWarn.mock.calls[0][2]).toMatchObject({ failure: "unexpected" });
+  });
+});
+
+describe("the transcript of a translated speech comment", () => {
+  it("VOM-FR-QWMK, CMS-FR-UYVK: postReply sends the transcript of the speech body, and of no other", async () => {
+    resetSpeechPostsForTest();
+    clearAllDiscussionSessions();
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "add_comment") return discussion((args as { body: string }).body);
+      return undefined;
+    });
+    beginSpeechPost("d1", [], "held text\nLook here.", "Mira aquí.");
+    await postReply({ noteId: "n1" }, "d1", "held text\nLook here.", [], [], []);
+    expect(invokeMock).toHaveBeenCalledWith(
+      "add_comment",
+      expect.objectContaining({ body: "held text\nLook here.", spokenOriginal: "Mira aquí." }),
+    );
+    finishSpeechPost();
+    invokeMock.mockClear();
+    await postReply({ noteId: "n1" }, "d1", "A typed comment.", [], [], []);
+    const [, args] = invokeMock.mock.calls.find(([cmd]) => cmd === "add_comment")!;
+    expect((args as { spokenOriginal?: string }).spokenOriginal).toBeUndefined();
   });
 });

@@ -258,6 +258,11 @@ impl TurnRegistry {
             let cancel = ending == SpeechEnding::Nothing
                 && live.registered_by.as_deref() == Some(speech_id)
                 && live.turn.trigger_comment_id.is_none();
+            // AGC-FR-NFYK: marked under the lock, before the hold wakes, so a
+            // held reply never delivers between this end and the cancel.
+            if cancel {
+                live.cancelled.store(true, Ordering::SeqCst);
+            }
             publish(app, &live.turn);
             unbound.push(Unbound { turn: live.turn.clone(), cancel, took_comment });
         }

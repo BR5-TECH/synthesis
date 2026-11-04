@@ -5,7 +5,7 @@ use tokio::sync::watch;
 
 use super::support::*;
 use crate::voice_ai::pcm::{wav_of, FRAME_FILE, FRAME_PCM};
-use crate::voice_ai::speech::speak_segment;
+use crate::voice_ai::speech::{speak_segment, SegmentVoice};
 use crate::voice_ai::*;
 
 fn active(provider: &str, base_url: &str, route: SpeechRoute) -> ActiveVoice {
@@ -17,7 +17,7 @@ fn active(provider: &str, base_url: &str, route: SpeechRoute) -> ActiveVoice {
         record.default_voice = "marin".to_string();
     }
     record.speech_route = Some(route);
-    ActiveVoice { record, key: None }
+    ActiveVoice { record, key: None, language: None }
 }
 
 async fn speak(
@@ -30,7 +30,16 @@ async fn speak(
     let mut frames = Vec::new();
     let mut emit = |frame: Vec<u8>| frames.push(frame);
     let sink = RecordingSink::default();
-    let result = speak_segment(voice, config, text, name, &mut cancel, &mut emit, &sink).await;
+    let result = speak_segment(
+        voice,
+        config,
+        text,
+        SegmentVoice { name, ..Default::default() },
+        &mut cancel,
+        &mut emit,
+        &sink,
+    )
+    .await;
     (result, frames)
 }
 
@@ -351,9 +360,17 @@ async fn a_cancel_stops_the_frames() {
         frames += 1;
         voice.cancel_speech("s");
     };
-    speak_segment(voice, &config, "x", None, &mut cancel, &mut emit, &RecordingSink::default())
-        .await
-        .unwrap();
+    speak_segment(
+        voice,
+        &config,
+        "x",
+        SegmentVoice::default(),
+        &mut cancel,
+        &mut emit,
+        &RecordingSink::default(),
+    )
+    .await
+    .unwrap();
     voice.release_speech("s");
     assert_eq!(frames, 1);
     assert!(voice.speeches.lock().unwrap().is_empty());
@@ -384,7 +401,15 @@ async fn a_cancel_aborts_an_http_request() {
     let mut frames = 0;
     let mut emit = |_: Vec<u8>| frames += 1;
     let sink = RecordingSink::default();
-    let speaking = speak_segment(&bench.voice, &config, "x", None, &mut cancel, &mut emit, &sink);
+    let speaking = speak_segment(
+        &bench.voice,
+        &config,
+        "x",
+        SegmentVoice::default(),
+        &mut cancel,
+        &mut emit,
+        &sink,
+    );
     let stopper = async {
         seen_rx.await.unwrap();
         stop.send(true).unwrap();
@@ -424,7 +449,9 @@ async fn a_cancel_is_not_hidden_by_a_burst_of_audio() {
         voice.cancel_speech("s");
     };
     let sink = RecordingSink::default();
-    speak_segment(voice, &config, "x", None, &mut cancel, &mut emit, &sink).await.unwrap();
+    speak_segment(voice, &config, "x", SegmentVoice::default(), &mut cancel, &mut emit, &sink)
+        .await
+        .unwrap();
     assert_eq!(frames, 1, "the burst stops at the cancel");
 }
 
@@ -446,7 +473,9 @@ async fn a_cancel_between_segments_stops_the_next_segment() {
     let mut frames = 0;
     let mut emit = |_: Vec<u8>| frames += 1;
     let sink = RecordingSink::default();
-    speak_segment(voice, &config, "x", None, &mut cancel, &mut emit, &sink).await.unwrap();
+    speak_segment(voice, &config, "x", SegmentVoice::default(), &mut cancel, &mut emit, &sink)
+        .await
+        .unwrap();
     assert_eq!(frames, 0);
     assert!(server.http.lock().unwrap().is_empty(), "no request goes out");
 }

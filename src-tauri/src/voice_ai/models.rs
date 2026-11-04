@@ -106,7 +106,7 @@ pub async fn list_voices(
                 .into_iter()
                 .find(|r| r.provider == provider)
                 .unwrap_or_else(|| VoiceAiRecord::seeded(d));
-            ActiveVoice { record, key: None }
+            ActiveVoice { record, key: None, language: None }
         }
         None => match resolve_active_voice(store, voice) {
             Ok(active) => active,

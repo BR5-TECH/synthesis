@@ -218,6 +218,7 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                         quotes,
                         attachments,
                         option_descriptions,
+                        spoken_original,
                     } => {
                         if discussion.comments.iter().any(|c| c.id == comment_id) {
                             continue;
@@ -229,6 +230,7 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                             quotes,
                             attachments,
                             option_descriptions,
+                            spoken_original,
                             created_at: event.at.clone(),
                         });
                     }

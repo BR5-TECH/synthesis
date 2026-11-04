@@ -11,7 +11,7 @@ Voice AI is the section of the Settings window where the author chooses the spee
 
 1. **VAI-FR-CEJC** The Global group of the Settings window holds a **Voice AI** section (`GLS-global-settings.md` GLS-FR-03). It populates from "list voice ai integrations" when it opens.
 2. **VAI-FR-IDIV** The section has one tab per provider, in this order: OpenAI, OpenRouter, Custom. Each tab configures its provider independently.
-3. **VAI-FR-UJNQ** A tab holds a base URL field, a key field, an STT model field, a TTS model field, and a default voice field.
+3. **VAI-FR-UJNQ** A tab holds a base URL field, a key field, an STT model field, a TTS model field, a default voice field, a speech speed control, and a speaking style field.
 4. **VAI-FR-QARI** Each action applies at once, so the section has no dirty state (`GLS-global-settings.md` GLS-FR-10).
 5. **VAI-FR-KWOT** Before any provider is verified, the section states that voice mode needs a verified provider.
 6. **VAI-FR-BSDN** While the section is open, a `voice-ai-changed` event refreshes each tab that has no candidate edit.
@@ -40,6 +40,8 @@ Voice AI is the section of the Settings window where the author chooses the spee
 23. **VAI-FR-EEMC** On Custom, an empty TTS model is valid, and the tab states that spoken replies stay off.
 24. **VAI-FR-NIWH** When the speech route is a `llamacpp` Realtime route, the tab states that agent voices have no effect on it and that the `/tts` route takes a voice.
 25. **VAI-FR-OJBE** The default voice field calls "set voice ai default voice" when it loses focus with a changed value. It offers the provider's voices where a list exists.
+25. **VAI-FR-USDR** The speech speed control offers 50% to 200% in steps of 10%, and 100% is the default. A change calls "set voice ai speech options" at once. The speaking style field takes free text of at most 200 characters, and it calls the same operation when it loses focus with a changed value.
+25. **VAI-FR-EIHC** After verification, when `speech_speed` is not `server`, the tab states: `This server cannot change speed. Playback changes speed and pitch.` When `speech_instructions` is false, it states: `This server does not support a speaking style.`
 
 ### Push-to-Talk
 
@@ -59,6 +61,11 @@ Voice AI is the section of the Settings window where the author chooses the spee
 35. **VAI-FR-MZZU** Both controls state that they apply to VAD only.
 36. **VAI-FR-WVEV** A stored Silence timeout out of range shows clamped to the range.
 
+### Spoken language
+
+37. **VAI-FR-RGPV** The section holds a **Spoken language** control with `Auto (no translation)`, the languages of the table by English name (`../core/VOP-voice-ai-providers.md` VOP-FR-IRZC), and `Other…`. `Other…` shows a text field of at most 40 characters. The control saves `voice_spoken_language` through `patchAppPreferences`.
+38. **VAI-FR-JPZK** With a spoken language set, the control states: `Your speech is translated into English before it posts. Agents speak to you in this language.`
+
 ## Wireframes
 
 ```
@@ -70,6 +77,8 @@ Key        [ •••• (optional)                      ]
 STT model  [ voxtral-mini-4b-realtime          v  ]
 TTS model  [ lfm3-audio                        v  ]
 Voice      [                                      ]
+Speed      [ 100% v ]
+Style      [ Calm, slow, warm                     ]
 Verification sends short real requests. A provider can charge for them.
 [ Verify ]  [ Activate ]  [ Clear ]
 Verified 14:02. Live transcription, 16 kHz. Speech: Realtime.
@@ -86,7 +95,7 @@ Sensitivity      ( ) Low  ( ) Medium  ( ) High
 
 ## UI contract boundary
 - **Owned by the UI**: the tabs, candidate field values, the unverified state after an edit, hotkey capture and its refusals, and all messages.
-- **Delegated to backend (abstract)**: "list voice ai integrations", "verify voice ai integration", "set voice ai routes", "set voice ai default voice", "set active voice ai integration", "clear voice ai integration", "list voice ai models", "list voice ai voices", each owned by `../core/VOP-voice-ai-providers.md`; "save app preferences", owned by `../core/GSS-global-settings-storage.md`.
+- **Delegated to backend (abstract)**: "list voice ai integrations", "verify voice ai integration", "set voice ai routes", "set voice ai default voice", "set voice ai speech options", "set active voice ai integration", "clear voice ai integration", "list voice ai models", "list voice ai voices", each owned by `../core/VOP-voice-ai-providers.md`; "save app preferences", owned by `../core/GSS-global-settings-storage.md`.
 
 ## Non-functional requirements
 - Each control has an accessible name, and each is operable from the keyboard.

@@ -6,6 +6,8 @@
 
 /** VOP-FR-XZET. */
 const FRAME_PCM = 0;
+/** VOP-FR-EMJY: the playback rate of the frames that follow, times 1000. */
+export const FRAME_RATE = 3;
 const HEADER = 5;
 /** A small lead, so that the first frame does not start in the past. */
 const LEAD_SECONDS = 0.05;
@@ -17,6 +19,8 @@ let decoding: Promise<void> = Promise.resolve();
 let pendingDecodes = 0;
 const sources = new Set<AudioBufferSourceNode>();
 let onDrained: (() => void) | null = null;
+/** VOM-FR-QUSH: the rate of the segment that plays now. */
+let playbackRate = 1;
 /** VOM-FR-FVRS: the clock of the context stands, so queued audio waits. */
 let paused = false;
 
@@ -33,6 +37,8 @@ function schedule(buffer: AudioBuffer): void {
   if (!context) return;
   const source = context.createBufferSource();
   source.buffer = buffer;
+  // VOM-FR-QUSH: the rate changes the length that the buffer takes.
+  source.playbackRate.value = playbackRate;
   source.connect(context.destination);
   const start = Math.max(nextStart, context.currentTime + LEAD_SECONDS);
   source.onended = () => {
@@ -41,7 +47,7 @@ function schedule(buffer: AudioBuffer): void {
   };
   sources.add(source);
   source.start(start);
-  nextStart = start + buffer.duration;
+  nextStart = start + buffer.duration / playbackRate;
 }
 
 function bufferOfPcm(payload: ArrayBuffer, rate: number): AudioBuffer | null {
@@ -69,6 +75,11 @@ export function playFrame(frame: ArrayBuffer): void {
   // A chain, so that a PCM frame cannot pass a file that is still decoding.
   decoding = decoding
     .then(async () => {
+      // VOM-FR-QUSH: in the chain, so the rate applies to the frames after it.
+      if (kind === FRAME_RATE) {
+        if (mine === generation && rate > 0) playbackRate = rate / 1000;
+        return;
+      }
       const buffer =
         kind === FRAME_PCM ? bufferOfPcm(payload, rate) : await context_.decodeAudioData(payload);
       if (buffer && mine === generation) schedule(buffer);
@@ -105,6 +116,8 @@ export function stopPlayback(): void {
   resumePlayback();
   generation += 1;
   nextStart = 0;
+  // VOM-FR-QUSH: Stop resets the rate.
+  playbackRate = 1;
   for (const source of sources) {
     source.onended = null;
     try {

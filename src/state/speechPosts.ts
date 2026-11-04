@@ -16,6 +16,8 @@ interface SpeechPost {
   body: string;
   reached: ReadonlySet<string>;
   commentId: string | null;
+  /** CMS-FR-UYVK, VOM-FR-QWMK: the transcript of a translated speech. */
+  spokenOriginal: string | null;
 }
 
 let active: SpeechPost | null = null;
@@ -28,8 +30,25 @@ export function beginSpeechPost(
   discussionId: string,
   reached: readonly string[],
   body: string,
+  spokenOriginal: string | null = null,
 ): void {
-  active = { discussionId, body: body.trim(), reached: new Set(reached), commentId: null };
+  active = {
+    discussionId,
+    body: body.trim(),
+    reached: new Set(reached),
+    commentId: null,
+    spokenOriginal,
+  };
+}
+
+/**
+ * VOM-FR-QWMK, CMS-FR-UYVK: the transcript that the append of this body
+ * carries, or undefined, so the arguments of every other append stay as they are. A body that is not the speech comment, such as a typed
+ * comment that posts during the speech post, carries none.
+ */
+export function spokenOriginalFor(body: string): string | undefined {
+  if (active === null || active.commentId !== null || active.body !== body.trim()) return undefined;
+  return active.spokenOriginal ?? undefined;
 }
 
 /** The post ended. Gives the id of the comment that it posted, if one posted. */
@@ -65,4 +84,13 @@ const EMPTY: ReadonlySet<string> = new Set();
 
 export function resetSpeechPostsForTest(): void {
   active = null;
+}
+
+/**
+ * VOM-FR-QWMK: the `spokenOriginal` argument of the append of this body. Empty
+ * for every other append, so its arguments stay as they are.
+ */
+export function spokenOriginalArgs(body: string): { spokenOriginal?: string } {
+  const spokenOriginal = spokenOriginalFor(body);
+  return spokenOriginal === undefined ? {} : { spokenOriginal };
 }

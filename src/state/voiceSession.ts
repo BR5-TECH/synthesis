@@ -11,7 +11,14 @@ import { useSyncExternalStore } from "react";
 
 export type VoicePhase = "idle" | "opening" | "recording" | "transcribing" | "posting";
 export type VoiceResponseMode = "text" | "voice";
-export type VoiceNote = "no_speech" | "no_agent" | "kept_in_body";
+export type VoiceNote =
+  | "no_speech"
+  | "no_agent"
+  | "kept_in_body"
+  /** VOM-FR-QWMK. */
+  | "translating"
+  /** VOM-FR-DLPA. */
+  | "not_translated";
 /** VOM-FR-IKIK. */
 export type VoiceInputMode = "ptt" | "vad";
 

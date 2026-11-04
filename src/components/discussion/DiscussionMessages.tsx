@@ -34,6 +34,7 @@ import {
   descriptionsOf,
   QuestionWithDescriptions,
 } from "./OptionDescriptions";
+import { SpokenOriginal } from "./SpokenOriginal";
 import { useParticipantLabel } from "../../state/projectIdentity";
 import { visibleBody } from "../../text/spokenPart";
 
@@ -239,6 +240,8 @@ export function DiscussionMessages({
               ) : (
                 <CommentMarkdown body={visibleBody(comment.body)} agentRoster={roster} />
               )}
+              {/* CMT-FR-HCVB: what the author said, under the translation. */}
+              <SpokenOriginal comment={comment} />
               {/* CMT-FR-48: below the body, an image as a thumbnail and anything
                   else as a named chip. */}
               <CommentAttachmentList

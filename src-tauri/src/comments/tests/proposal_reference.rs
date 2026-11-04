@@ -277,6 +277,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
                     )
                     .unwrap(),
                     option_descriptions: Vec::new(),
+                    spoken_original: None,
                 },
             ),
         ],
@@ -423,6 +424,7 @@ fn a_thread_is_read_by_its_id_alone_in_either_scope() {
                     quotes: Vec::new(),
                     attachments: Vec::new(),
                     option_descriptions: Vec::new(),
+                    spoken_original: None,
                 },
             ),
         ],

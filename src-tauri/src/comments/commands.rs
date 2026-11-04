@@ -73,20 +73,19 @@ pub fn get_or_create_note_discussion<R: tauri::Runtime>(
     note_id: String,
     body: String,
     attachments: Vec<AttachmentInput>,
+    spoken_original: Option<String>,
     store: State<'_, GlobalSettingsStore>,
     project: State<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
     let by = acting_participant(&store, &project)?;
-    let (discussion, created) = get_or_create_note_discussion_in(
+    let (discussion, created) = get_or_create_note_discussion_spoken_in(
         &root,
         &worktree,
         &note_id,
-        body,
-        attachments,
-        &by,
-        &now_rfc3339(),
+        Opening { body, attachments, spoken_original },
+        Stamp { by: &by, at: &now_rfc3339() },
     )
     .inspect_err(|err| {
         crate::logging::log_warn(
@@ -174,6 +173,8 @@ pub fn emit_discussion_changed<R: tauri::Runtime>(
 ///
 /// A `note` target is `not_supported`: a note's discussion is created by
 /// `get_or_create_note_discussion`, so a note never holds two.
+// Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn open_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -181,19 +182,19 @@ pub fn open_discussion<R: tauri::Runtime>(
     fragment_target: Option<FragmentTarget>,
     body: String,
     attachments: Vec<AttachmentInput>,
+    spoken_original: Option<String>,
     store: State<'_, GlobalSettingsStore>,
     project: State<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
     let by = acting_participant(&store, &project)?;
-    let discussion = open_discussion_in(
+    let discussion = open_discussion_spoken_in(
         &root,
         &worktree,
         &target,
         fragment_target,
-        body,
-        attachments,
+        Opening { body, attachments, spoken_original },
         Stamp { by: &by, at: &now_rfc3339() },
     )
     .inspect_err(|err| {
@@ -221,6 +222,8 @@ pub fn open_discussion<R: tauri::Runtime>(
     Ok(discussion)
 }
 
+// Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn add_comment<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -228,6 +231,7 @@ pub fn add_comment<R: tauri::Runtime>(
     body: String,
     quotes: Vec<CommentQuote>,
     attachments: Vec<AttachmentInput>,
+    spoken_original: Option<String>,
     store: State<'_, GlobalSettingsStore>,
     project: State<'_, ProjectState>,
 ) -> Result<Discussion, String> {
@@ -242,6 +246,7 @@ pub fn add_comment<R: tauri::Runtime>(
         body,
         quotes,
         attachments,
+        spoken_original,
         Stamp { by: &by, at: &now_rfc3339() },
     )?;
     // CMS-FR-VRZA: the appended comment is an author comment (AGC-FR-TFEN),

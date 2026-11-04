@@ -10,6 +10,7 @@ import type {
   VoiceAiRecord,
   VoiceCaptureStart,
   VoiceModels,
+  VoiceOptions,
   VoiceProviderId,
   VoiceSpeechRoute,
   VoiceTranscriptionRoute,
@@ -87,11 +88,13 @@ const FRAME_END = 2;
  * resolves. A large frame comes through a fetch of its own, so it can arrive
  * after the command. A failed command rejects, and it sends no end frame.
  */
+/** VOP-FR-MOSY, VOP-FR-STVA: `options` absent takes the values of the provider. */
 export const speakVoiceSegment = (
   speechId: string,
   text: string,
   voiceName: string | null,
   onFrame: (frame: ArrayBuffer) => void,
+  options?: VoiceOptions | null,
 ) =>
   new Promise<void>((resolve, reject) => {
     const channel = new Channel<ArrayBuffer>();
@@ -99,10 +102,22 @@ export const speakVoiceSegment = (
       if (new Uint8Array(frame)[0] === FRAME_END) resolve();
       else onFrame(frame);
     };
-    invoke<void>("speak_voice_segment", { speechId, text, voiceName, onFrame: channel }).catch(
-      reject,
-    );
+    invoke<void>("speak_voice_segment", {
+      speechId,
+      text,
+      voiceName,
+      voiceSpeed: options?.speedPercent ?? null,
+      voiceStyle: options?.style || null,
+      onFrame: channel,
+    }).catch(reject);
   });
+
+/** VOP-FR-HQTQ. */
+export const setVoiceAiSpeechOptions = (
+  provider: VoiceProviderId,
+  speedPercent: number | null,
+  style: string,
+) => invoke<VoiceAiRecord>("set_voice_ai_speech_options", { provider, speedPercent, style });
 
 export const cancelVoiceSpeech = (speechId: string) =>
   invoke<void>("cancel_voice_speech", { speechId });

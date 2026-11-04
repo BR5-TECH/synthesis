@@ -176,6 +176,29 @@ pub fn open_discussion_in(
     attachments: Vec<AttachmentInput>,
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
+    let opening = Opening { body, attachments, spoken_original: None };
+    open_discussion_spoken_in(root, worktree, target, fragment_target, opening, stamp)
+}
+
+/// The opening comment of a new discussion (CMS-FR-UYVK).
+pub struct Opening {
+    pub body: String,
+    pub attachments: Vec<AttachmentInput>,
+    /// CMS-FR-UYVK: the transcript of a translated voice comment.
+    pub spoken_original: Option<String>,
+}
+
+/// [`open_discussion_in`], with the `spoken_original` of the opening comment.
+pub fn open_discussion_spoken_in(
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    target: &DiscussionTarget,
+    fragment_target: Option<FragmentTarget>,
+    opening: Opening,
+    stamp: Stamp<'_>,
+) -> Result<Discussion, String> {
+    let Opening { body, attachments, spoken_original } = opening;
+    let spoken_original = spoken_original.filter(|t| !t.trim().is_empty());
     let Stamp { by, at } = stamp;
     if matches!(target, DiscussionTarget::Note { .. }) {
         return Err(ERR_NOT_SUPPORTED.to_string());
@@ -200,7 +223,13 @@ pub fn open_discussion_in(
         }
         _ => {}
     }
-    open_discussion_unchecked(root, target, fragment, body, attachments, by, at)
+    open_discussion_unchecked_spoken(
+        root,
+        target,
+        fragment,
+        Opening { body, attachments, spoken_original },
+        Stamp { by, at },
+    )
 }
 
 /// The append of [`open_discussion_in`] without the checks of the open project.
@@ -217,6 +246,21 @@ pub fn open_discussion_unchecked(
     by: &Participant,
     at: &str,
 ) -> Result<Discussion, String> {
+    let opening = Opening { body, attachments, spoken_original: None };
+    open_discussion_unchecked_spoken(root, target, fragment_target, opening, Stamp { by, at })
+}
+
+/// [`open_discussion_unchecked`], with the `spoken_original` of the opening
+/// comment (CMS-FR-UYVK).
+fn open_discussion_unchecked_spoken(
+    root: &crate::fs::RootFs,
+    target: &DiscussionTarget,
+    fragment_target: Option<FragmentTarget>,
+    opening: Opening,
+    stamp: Stamp<'_>,
+) -> Result<Discussion, String> {
+    let Opening { body, attachments, spoken_original } = opening;
+    let Stamp { by, at } = stamp;
     let log = log_ref_of(target, fragment_target.as_ref());
     // CMS-FR-45 / CMS-FR-47: every attachment is stored before a line is written,
     // so a refusal of one leaves no discussion behind and no folded comment can
@@ -246,6 +290,7 @@ pub fn open_discussion_unchecked(
                     quotes: Vec::new(),
                     attachments: stored,
                     option_descriptions: Vec::new(),
+                    spoken_original,
                 },
             ),
         ],
@@ -298,6 +343,22 @@ pub fn get_or_create_note_discussion_in(
     by: &Participant,
     at: &str,
 ) -> Result<(Discussion, bool), String> {
+    let opening = Opening { body, attachments, spoken_original: None };
+    get_or_create_note_discussion_spoken_in(root, worktree, note_id, opening, Stamp { by, at })
+}
+
+/// [`get_or_create_note_discussion_in`], with the `spoken_original` of the
+/// opening comment (CMS-FR-UYVK).
+pub fn get_or_create_note_discussion_spoken_in(
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    note_id: &str,
+    opening: Opening,
+    stamp: Stamp<'_>,
+) -> Result<(Discussion, bool), String> {
+    let Stamp { by, at } = stamp;
+    let Opening { body, attachments, spoken_original } = opening;
+    let spoken_original = spoken_original.filter(|t| !t.trim().is_empty());
     let _guard = lock_note_discussions();
 
     // CMS-FR-62 / NTC-FR-22: checked **inside** the lock, which is what the lock
@@ -349,6 +410,7 @@ pub fn get_or_create_note_discussion_in(
                     quotes: Vec::new(),
                     attachments: stored,
                     option_descriptions: Vec::new(),
+                    spoken_original,
                 },
             ),
         ],

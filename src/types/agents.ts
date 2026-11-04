@@ -38,6 +38,10 @@ export interface Agent {
   modelId: string;
   /** AGR-FR-ABCF: a plain voice name. `""` means the provider's default. */
   voice?: string;
+  /** AGR-FR-EPYX: 50 to 200. Absent or null means the provider's speed. */
+  voiceSpeedPercent?: number | null;
+  /** AGR-FR-EPYX: absent or `""` means the provider's style. */
+  voiceStyle?: string;
   /** Free text. Empty is an ordinary state, not an unconfigured one. */
   instructions: string;
   /**
@@ -69,6 +73,9 @@ export interface AgentDraft {
   instructions: string;
   /** AGR-FR-ABCF. */
   voice?: string;
+  /** AGR-FR-EPYX. */
+  voiceSpeedPercent?: number | null;
+  voiceStyle?: string;
   /** AGR-FR-IGIL: the selected project skill paths. Always empty for a
    * Personal agent (AGT-FR-WTSR). */
   skills?: string[];

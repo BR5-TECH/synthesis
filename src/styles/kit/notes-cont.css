@@ -635,3 +635,27 @@
   margin-left: auto;
 }
 
+
+/* CMT-FR-HCVB: the transcript of a translated voice comment, collapsed under
+   its body. */
+.comment__spoken-original {
+  margin: var(--sp-1) 0 0;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+}
+.comment__spoken-original-summary {
+  cursor: pointer;
+  width: fit-content;
+  border-radius: var(--r-sm);
+}
+.comment__spoken-original-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.comment__spoken-original-text {
+  margin: var(--sp-1) 0 0;
+  border-left: 2px solid var(--border-2);
+  padding-left: var(--sp-2);
+  white-space: pre-wrap;
+}

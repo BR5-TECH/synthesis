@@ -98,6 +98,7 @@ Comment {
   attachments: Attachment[], // empty when the comment attaches nothing
   option_descriptions: string[], // a question comment's option descriptions, in
                              //   option order; empty on every other comment (CMS-FR-QAHZ)
+  spoken_original: string | null, // the transcript of a translated voice comment (CMS-FR-UYVK)
   created_at                 // RFC 3339 UTC
 }
 
@@ -141,7 +142,8 @@ Every line of a log is one event. All events carry `v`, `event_id`, `thread_id`,
 discussion_opened … target: DiscussionTarget, fragment_target?: FragmentTarget
 fragment_moved    … fragment_target: FragmentTarget
 comment_added     … comment_id, body, quotes: CommentQuote[],
-                     attachments: Attachment[], option_descriptions?: string[]
+                     attachments: Attachment[], option_descriptions?: string[],
+                     spoken_original?: string
 thread_resolved   … (no further fields)
 thread_reopened   … (no further fields)
 thread_unlocked   … (no further fields)
@@ -153,9 +155,9 @@ A log may also hold lines written in the legacy vocabulary: `thread_opened`, whi
 - `"list discussions for target"` → `list_discussions(target: DiscussionTarget)` → `Discussion[]`, every discussion of that owner, fragment-targeted and whole-target alike. Fragment-targeted ones come first, ordered by `fragment_target.start` ascending and tie-broken by `created_at`; whole-target ones follow, ordered by `created_at` ascending.
 - `"list all discussions"` → `list_all_discussions()` → `Discussion[]` spanning every log of every owner kind — artifact, draft, and note — each carrying its owner `target`, ordered by `updated_at` descending and tie-broken by `id`.
 - `"read discussion"` → `read_discussion(discussion_id)` → the one `Discussion` that id names, folded as it stands on disk, whatever its owner. The only read keyed by a discussion rather than by the owner it belongs to (CMS-FR-61).
-- `"open discussion (target, fragment target, body, attachments)"` → `open_discussion(target: DiscussionTarget, fragment_target?: FragmentTarget, body, attachments)` → the created `Discussion`. It refuses a `note` target with a typed `not_supported`, a note's one discussion being reached through the get-or-create below and never through an operation that can open a second (CMS-FR-62).
-- `"get or create note discussion (note, body, attachments)"` → `get_or_create_note_discussion(note_id, body, attachments)` → the one `Discussion` that note carries: the existing one where the note already has a discussion, appending nothing; the newly created one carrying `body` and `attachments` as its single opening comment where it does not. Atomic and idempotent under concurrent and repeated calls (CMS-FR-62).
-- `"add comment to discussion (discussion, body, quotes, attachments)"` → `add_comment(discussion_id, body, quotes, attachments)` → the updated `Discussion`.
+- `"open discussion (target, fragment target, body, attachments)"` → `open_discussion(target: DiscussionTarget, fragment_target?: FragmentTarget, body, attachments, spoken_original?)` → the created `Discussion`. It refuses a `note` target with a typed `not_supported`, a note's one discussion being reached through the get-or-create below and never through an operation that can open a second (CMS-FR-62).
+- `"get or create note discussion (note, body, attachments)"` → `get_or_create_note_discussion(note_id, body, attachments, spoken_original?)` → the one `Discussion` that note carries: the existing one where the note already has a discussion, appending nothing; the newly created one carrying `body` and `attachments` as its single opening comment where it does not. Atomic and idempotent under concurrent and repeated calls (CMS-FR-62).
+- `"add comment to discussion (discussion, body, quotes, attachments)"` → `add_comment(discussion_id, body, quotes, attachments, spoken_original?)` → the updated `Discussion`.
 - `"set discussion resolution"` → `set_discussion_resolution(discussion_id, resolved)` → the updated `Discussion`.
 - `"reanchor discussion fragment"` → `reanchor_discussion_fragment(discussion_id, fragment_target)` → the updated `Discussion`.
 - `"resolve comment author identity"` → `resolve_comment_author_identity()` → the human `Participant` this machine writes as — a GitHub account, or the local participant where no token is stored (CMS-FR-HTOA) — or a typed refusal. It is also the read a surface uses to learn the current project identity it displays (CMS-FR-KTHN).
@@ -266,6 +268,7 @@ Errors are typed: `no_project_open`, `store_unavailable`, `discussion_not_found`
 74. **CMS-FR-JWVH** `read_discussion_question_set(discussion_id)` returns the record that discussion holds or null where it holds none, resolving which owner's folder to read from the discussion id exactly as `read_discussion` resolves a log (CMS-FR-61). It writes nothing and emits nothing.
 75. **CMS-FR-TXRB** `submit_discussion_question_answers(discussion_id, set_id, answers)` appends **two comments per recorded question, in the recorded question order** — the agent-authored question comment stamped with the set's own participant snapshot (CMS-FR-41), then the human-authored answer comment stamped with the acting identity (CMS-FR-11), each carrying the body `../tools/ADQ-ask-discussion-questions-tool.md` fixes (ADQ-FR-MRSK, ADQ-FR-RECR, ADQ-FR-NUEB) — and **then** deletes the set.
 75. **CMS-FR-QAHZ** A submission's question comment carries the recorded option descriptions in `option_descriptions` (per `../tools/ADQ-ask-discussion-questions-tool.md` ADQ-FR-QUKU). A `comment_added` event carries the field only where the list is non-empty, and the fold reads an event without the field as an empty list. Only the question comment of a submission (CMS-FR-TXRB) writes a non-empty list. No Tauri command accepts the field.
+75. **CMS-FR-UYVK** A comment carries `spoken_original` when the author spoke it in another language and it posts as a translation (`../ui/VOM-voice-mode.md` VOM-FR-QWMK). "add comment to discussion", "open discussion", and "get or create note discussion" take an optional `spoken_original` for the comment they append. A `comment_added` event carries the field only where it is not empty, and the fold reads an event without it as null.
 75. **CMS-FR-TVOF** A `PendingQuestionSet` option carries `description` only where it was recorded with one. A record whose options carry none is read, served, and submitted on the same terms as any other (per `../tools/ADQ-ask-discussion-questions-tool.md` ADQ-FR-RTDD).
 76. **CMS-FR-PJBV** The submission is refused and appends nothing when `set_id` names no set the discussion holds or has already committed (`question_set_not_found`), when the answers do not cover every recorded question exactly once, when an `option_position` names no option of its question, and when an `option_value` differs from that option's recorded value (`question_answers_incomplete`).
 77. **CMS-FR-GNTB** An answer entry names **either** a chosen option or the author's own words, never both and never neither. The submission is refused with `question_answers_incomplete` and appends nothing when an entry names both, names neither, carries own words that are blank once trimmed, or carries a note beside own words.

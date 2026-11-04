@@ -31,6 +31,7 @@ import {
 } from "../state/conversationThreads";
 import { announceDiscussion } from "../state/discussionAnnouncer";
 import { consumePendingFocus } from "../state/discussionFocus";
+import { spokenOriginalArgs } from "../state/speechPosts";
 import { useOwnerAvailable } from "../state/ownerAvailability";
 import {
   discussionTargetKey,
@@ -94,6 +95,8 @@ export function ConversationTabView({
       noteId,
       body: request.body,
       attachments: request.attachments,
+      // VOM-FR-QWMK: the transcript of a translated speech comment.
+      ...spokenOriginalArgs(request.body),
     });
     const justOpened =
       created.comments.length === 1 && created.comments[0]?.body === request.body;
@@ -104,6 +107,7 @@ export function ConversationTabView({
         body: request.body,
         quotes: [],
         attachments: request.attachments,
+        ...spokenOriginalArgs(request.body),
       });
     }
     openedBody.current = request.body;

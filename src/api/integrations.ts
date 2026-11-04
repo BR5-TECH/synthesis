@@ -419,6 +419,10 @@ export const steerSpeechTurn = (speechId: string, text: string) =>
 export const endSpeechTurn = (speechId: string, commentId: string | null) =>
   invoke<AgentTurn[]>("end_speech_turn", { speechId, commentId });
 
+/** AGC-FR-QEOF: the transcript of a voice comment, in English. */
+export const translateVoiceTranscript = (text: string, nicknames: string[]) =>
+  invoke<{ text: string }>("translate_voice_transcript", { text, nicknames });
+
 /** AGC-FR-20: abandon the model call and terminate the turn `cancelled`,
  * appending nothing. */
 export const cancelAgentTurn = (turnId: string) =>

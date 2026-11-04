@@ -221,6 +221,8 @@ fn a_catalogue_agrees_with_what_an_agents_availability_is_computed_from() {
             skills: Vec::new(),
             disabled_skills: Vec::new(),
             voice: String::new(),
+            voice_speed_percent: None,
+            voice_style: String::new(),
             id: "a1".into(),
             nickname: "arch".into(),
             title: String::new(),

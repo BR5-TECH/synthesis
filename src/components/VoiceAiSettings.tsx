@@ -24,6 +24,8 @@ import type {
 import { DEFAULT_VOICE_HOTKEY, chordOf, hotkeyProblem, type HotkeyProblem } from "../voice/hotkey";
 import { errorCode, voiceMessage } from "../voice/voiceMessages";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
+import { VoiceSpeechOptions } from "./VoiceSpeechOptions";
+import { VoiceSpokenLanguage } from "./VoiceSpokenLanguage";
 import { VoiceVadSettings } from "./VoiceVadSettings";
 
 const TAB_ORDER: VoiceProviderId[] = ["openai", "openrouter", "custom"];
@@ -511,6 +513,12 @@ export function VoiceAiSettings() {
             ))}
           </datalist>
         </div>
+        <VoiceSpeechOptions
+          provider={provider}
+          record={record}
+          verified={!unverified}
+          onError={setError}
+        />
 
         {/* VAI-FR-JSNS. */}
         <p className="t-ui-sm t-muted" data-testid="voice-cost">
@@ -642,6 +650,7 @@ export function VoiceAiSettings() {
 
       <PushToTalkSettings />
       <VoiceVadSettings />
+      <VoiceSpokenLanguage />
     </>
   );
 }

@@ -14,8 +14,9 @@ use super::models::{fallback_models, list_models, list_voices, listing_target};
 use super::pcm::{frame, samples_of, FRAME_END};
 use super::registry::{
     clear_integration, list_integrations, set_active, set_default_voice, set_routes,
+    set_speech_options,
 };
-use super::speech::speak_segment;
+use super::speech::{speak_segment, SegmentVoice};
 use super::verify::{verify_integration, VerifyRequest};
 use super::*;
 use crate::ai_shared::loggable_base_url;
@@ -152,6 +153,23 @@ pub fn set_voice_ai_default_voice(
 ) -> Result<VoiceAiRecord, String> {
     let result = set_default_voice(&store, &voice, &provider, &voice_name);
     log_change(&app, "voice default selected", &provider, &result);
+    let record = result?;
+    announce(&app, &store);
+    Ok(record)
+}
+
+/// VOP-FR-HQTQ.
+#[tauri::command]
+pub fn set_voice_ai_speech_options(
+    provider: String,
+    speed_percent: Option<u16>,
+    style: String,
+    app: tauri::AppHandle,
+    store: State<'_, GlobalSettingsStore>,
+    voice: State<'_, VoiceAi>,
+) -> Result<VoiceAiRecord, String> {
+    let result = set_speech_options(&store, &voice, &provider, speed_percent, &style);
+    log_change(&app, "voice speech options set", &provider, &result);
     let record = result?;
     announce(&app, &store);
     Ok(record)
@@ -339,11 +357,15 @@ pub(crate) fn end_segment(result: &Result<(), String>, emit: &mut impl FnMut(Vec
     }
 }
 
+// Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn speak_voice_segment(
     speech_id: String,
     text: String,
     voice_name: Option<String>,
+    voice_speed: Option<u16>,
+    voice_style: Option<String>,
     on_frame: Channel<InvokeResponseBody>,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
@@ -362,7 +384,11 @@ pub async fn speak_voice_segment(
                 &voice,
                 &active,
                 &text,
-                voice_name.as_deref(),
+                SegmentVoice {
+                    name: voice_name.as_deref(),
+                    speed_percent: voice_speed,
+                    style: voice_style.as_deref(),
+                },
                 &mut cancel,
                 &mut emit,
                 &app,

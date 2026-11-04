@@ -427,12 +427,14 @@ fn each_discussion_kind_is_answered_under_its_own_prompt() {
     assert_eq!(
         draft,
         DISCUSS_DRAFT_PROMPT_TEMPLATE
+            .replacen(SPOKEN_LANGUAGE_PLACEHOLDER, "", 1)
             .replacen(AGENT_INSTRUCTIONS_PLACEHOLDER, instructions, 1)
             .replacen(AGENT_TITLE_PLACEHOLDER, AGENT_TITLE_UNDEFINED, 1),
     );
     assert_eq!(
         artifact,
         DISCUSS_ARTIFACT_PROMPT_TEMPLATE
+            .replacen(SPOKEN_LANGUAGE_PLACEHOLDER, "", 1)
             .replacen(AGENT_INSTRUCTIONS_PLACEHOLDER, instructions, 1)
             .replacen(AGENT_TITLE_PLACEHOLDER, AGENT_TITLE_UNDEFINED, 1),
     );

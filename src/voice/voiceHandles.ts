@@ -9,7 +9,7 @@
  * same path as a typed comment (VOM-FR-WYIE).
  */
 import { getVoiceState } from "../state/voiceSession";
-import type { Discussion } from "../types";
+import type { Discussion, VoiceOptions } from "../types";
 
 export type PostOutcome = "posted" | "reached_nobody" | "busy" | "failed";
 
@@ -31,6 +31,8 @@ export interface VoiceComposerHandle {
   nicknames(): string[];
   /** VOM-FR-UALP. */
   voiceOf(agentId: string): string | null;
+  /** VOM-FR-UALP, AGR-FR-EPYX: the speed and the style of the agent's voice. */
+  voiceOptionsOf?(agentId: string): VoiceOptions | null;
   /**
    * VOM-FR-RNBS, CTA-FR-QWLB: the agents that a typed comment of this text
    * reaches. Absent on a surface that cannot post.

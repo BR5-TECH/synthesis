@@ -33,6 +33,8 @@ const NOTES: Record<VoiceNote, string> = {
   no_speech: "No speech was heard, so nothing was posted.",
   no_agent: "No agent received this comment. Say an agent's name first, or tag one.",
   kept_in_body: "The transcript was kept as unsent text.",
+  translating: "Translating…",
+  not_translated: "Not translated. The original text was posted.",
 };
 
 function elapsed(since: number, now: number): string {

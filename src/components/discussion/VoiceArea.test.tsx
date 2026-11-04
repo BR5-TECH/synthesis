@@ -305,13 +305,20 @@ describe("the voice area", () => {
     expect(screen.getByTestId("voice-retry")).toBeInTheDocument();
   });
 
-  it("VOM-FR-RENV, VOM-FR-BVNX: a note says what happened", () => {
+  it("VOM-FR-RENV, VOM-FR-BVNX, VOM-FR-QWMK, VOM-FR-DLPA: a note says what happened", () => {
     renderReply();
     enterVoice();
     act(() => patchVoiceState({ note: "no_speech" }));
     expect(screen.getByTestId("voice-note")).toHaveTextContent(/No speech/);
     act(() => patchVoiceState({ note: "no_agent" }));
     expect(screen.getByTestId("voice-note")).toHaveTextContent(/No agent/);
+    // VOM-FR-QWMK, VOM-FR-DLPA.
+    act(() => patchVoiceState({ note: "translating" }));
+    expect(screen.getByTestId("voice-note")).toHaveTextContent("Translating…");
+    act(() => patchVoiceState({ note: "not_translated" }));
+    expect(screen.getByTestId("voice-note")).toHaveTextContent(
+      "Not translated. The original text was posted.",
+    );
   });
 });
 

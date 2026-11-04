@@ -32,6 +32,7 @@ import { postingHandleOf, type PostOutcome } from "./voiceHandles";
 import { canRetry, errorCode } from "./voiceMessages";
 import { questionBlockOf, type AnswerTarget } from "./voiceQuestions";
 import { afterSettle, latestVoiceDiscussion, noteAnswered } from "./voiceReplies";
+import { translateSpoken } from "./voiceTranslation";
 
 /** VOM-FR-QCZQ: one utterance until it settles. Flags read late, so they can change. */
 export interface Utterance {
@@ -317,12 +318,28 @@ async function deliver(u: Utterance, text: string): Promise<Delivery> {
     return none;
   }
   let outcome: PostOutcome = "failed";
-  const tagged = handle.tagged(spoken);
+  // VOM-FR-QWMK: with a spoken language, the transcript posts in English and
+  // the comment keeps what the author said.
+  const translated = await translateSpoken(spoken, handle.nicknames());
+  // The translation waits on the network, so voice mode can end, move, or
+  // block the post meanwhile. The checks run again on what stands now.
+  const now = postingHandleOf(u.key);
+  if (u.keepInBody || u.discard || !now || now.blocked() || questionBlockOf(u.key) !== null) {
+    if (!u.discard) joinToBody(u.key, spoken);
+    patchVoiceState({ transcript: "", note: u.discard ? null : "kept_in_body" });
+    return none;
+  }
+  const tagged = now.tagged(translated.text);
   // VOM-FR-RFWC: the handle posts the session body, then the transcript.
   const held = getDiscussionSession(u.key).body.trimEnd();
-  beginSpeechPost(u.key, u.reached, held === "" ? tagged : `${held}\n${tagged}`);
+  beginSpeechPost(
+    u.key,
+    u.reached,
+    held === "" ? tagged : `${held}\n${tagged}`,
+    translated.original,
+  );
   try {
-    outcome = await handle.post(tagged);
+    outcome = await now.post(tagged);
   } catch (error) {
     logWarn(["frontend", "ai"], "a voice transcript did not post", { code: errorCode(error) });
   }
@@ -332,7 +349,10 @@ async function deliver(u: Utterance, text: string): Promise<Delivery> {
     patchVoiceState({ transcript: "", note: "kept_in_body" });
     return none;
   }
-  patchVoiceState({ transcript: "", note: outcome === "reached_nobody" ? "no_agent" : null });
+  // VOM-FR-BVNX, VOM-FR-DLPA.
+  const note =
+    outcome === "reached_nobody" ? "no_agent" : translated.failed ? "not_translated" : null;
+  patchVoiceState({ transcript: "", note });
   return { commentId, answered: true };
 }
 

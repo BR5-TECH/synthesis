@@ -30,6 +30,7 @@ import { DiscussionQuestions } from "../DiscussionQuestions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import { StreamMessages } from "../DraftDiscussion/stream";
 import { VoiceSessionBar } from "./VoiceSessionBar";
+import { agentVoiceOptions } from "../../voice/voiceOptions";
 import { useLiveBubbleNode } from "./LiveBubble";
 import { visibleBody } from "../../text/spokenPart";
 import { commentErrorMessage, turnFailureMessage } from "./messages";
@@ -544,6 +545,9 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         <VoiceSessionBar
           sessionKey={thread.id}
           voiceOf={(agentId) => agents.find((a) => a.agent.id === agentId)?.agent.voice || null}
+          voiceOptionsOf={(agentId) =>
+            agentVoiceOptions(agents.find((a) => a.agent.id === agentId)?.agent)
+          }
           nicknames={() => [...roster.nicknames]}
         />
       )}

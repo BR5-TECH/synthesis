@@ -36,6 +36,11 @@ struct AgentFile {
     model_id: String,
     instructions: String,
     voice: String,
+    /// AGR-FR-EPYX.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voice_speed_percent: Option<u16>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    voice_style: String,
     /// PSS-FR-AGKY / AGR-FR-IGIL: the selected project skill paths. A file
     /// without the key reads as an empty selection (AGR-FR-XWVP), and an empty
     /// selection writes no key, so a file of an agent that selects nothing
@@ -82,6 +87,8 @@ fn agent_of(id: &str, file: AgentFile) -> Agent {
         model_id: file.model_id,
         instructions: file.instructions,
         voice: file.voice,
+        voice_speed_percent: file.voice_speed_percent,
+        voice_style: file.voice_style,
         skills: file.skills,
         disabled_skills: file.disabled_skills,
         // A Project agent carries no timestamp (PSS-FR-AGKY).
@@ -145,6 +152,8 @@ pub fn write(
         model_id: draft.model_id.clone(),
         instructions: draft.instructions.clone(),
         voice: draft.voice.trim().to_string(),
+        voice_speed_percent: draft.voice_speed_percent,
+        voice_style: draft.voice_style.trim().to_string(),
         skills: skills.to_vec(),
         disabled_skills: disabled_skills.to_vec(),
         reasoning: draft.reasoning.clone(),

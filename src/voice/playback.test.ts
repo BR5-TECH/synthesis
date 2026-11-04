@@ -12,6 +12,7 @@ import {
 
 class FakeSource {
   buffer: { duration: number } | null = null;
+  playbackRate = { value: 1 };
   onended: (() => void) | null = null;
   startedAt: number | null = null;
   stopped = false;
@@ -56,6 +57,13 @@ class FakeContext {
 function pcmFrame(samples: number, rate = 24_000): ArrayBuffer {
   const out = new Uint8Array(5 + samples * 2);
   new DataView(out.buffer).setUint32(1, rate, true);
+  return out.buffer;
+}
+
+function rateFrame(rate: number): ArrayBuffer {
+  const out = new Uint8Array(5);
+  out[0] = 3;
+  new DataView(out.buffer).setUint32(1, Math.round(rate * 1000), true);
   return out.buffer;
 }
 
@@ -182,5 +190,37 @@ describe("playback", () => {
     await new Promise((done) => setTimeout(done, 0));
     expect(context.suspend).toHaveBeenCalledTimes(1);
     expect(context.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("VOM-FR-QUSH: a rate frame sets the rate of later buffers and their schedule, and Stop resets it", async () => {
+    prepareAudio();
+    playFrame(rateFrame(1.5));
+    playFrame(pcmFrame(24_000));
+    playFrame(pcmFrame(24_000));
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    expect(sources.map((s) => s.playbackRate.value)).toEqual([1.5, 1.5]);
+    const gap = (sources[1].startedAt ?? 0) - (sources[0].startedAt ?? 0);
+    expect(gap).toBeCloseTo(1 / 1.5, 5);
+    stopPlayback();
+    playFrame(pcmFrame(24_000));
+    await vi.waitFor(() => expect(sources).toHaveLength(3));
+    expect(sources[2].playbackRate.value).toBe(1);
+  });
+
+  it("VOM-FR-QUSH: a rate frame that waits behind a file is dropped by Stop, and a rate of 0 is ignored", async () => {
+    prepareAudio();
+    let finish: (value: { duration: number }) => void = () => undefined;
+    context.decodeAudioData.mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    playFrame(fileFrame(1));
+    playFrame(rateFrame(1.5));
+    await vi.waitFor(() => expect(context.decodeAudioData).toHaveBeenCalled());
+    stopPlayback();
+    finish({ duration: 0.5 });
+    playFrame(rateFrame(0));
+    playFrame(pcmFrame(24_000));
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+    expect(sources[0].playbackRate.value).toBe(1);
   });
 });

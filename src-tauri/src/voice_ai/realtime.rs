@@ -254,12 +254,17 @@ pub(crate) async fn configure_transcription(
     session: &SessionInfo,
     stt_model: &str,
     keywords: &[String],
+    language: Option<&str>,
 ) -> Result<(), String> {
     match dialect {
         Dialect::Openai => {
             let mut transcription = json!({ "model": stt_model });
             if !keywords.is_empty() {
                 transcription["keywords"] = json!(keywords);
+            }
+            // VOP-FR-TSUS: the spoken language as a hint.
+            if let Some(language) = language {
+                transcription["language"] = json!(language);
             }
             send(
                 socket,

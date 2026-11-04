@@ -716,6 +716,8 @@ export interface Comment {
    * control (DQA-FR-MDMU).
    */
   optionDescriptions?: string[];
+  /** CMS-FR-UYVK: the transcript of a comment that posted as a translation. */
+  spokenOriginal?: string | null;
   createdAt: string;
 }
 

@@ -443,7 +443,13 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
             // CVL-FR-04 / CVL-FR-03: the prompt the origin kind selects, with the
             // persona composed into it. What differs between two turns of one kind
             // is the persona and the material, never the shape of the request.
-            instructions: compile_prompt(origin_kind, &agent.instructions, &agent.title),
+            // CVL-FR-FQMM: the rule of the author's spoken language, if any.
+            instructions: compile_prompt_spoken(
+                origin_kind,
+                &agent.instructions,
+                &agent.title,
+                &spoken_language_rule(&app.state::<GlobalSettingsStore>()),
+            ),
             // CVL-FR-39: the material under discussion leads, and the discussion
             // itself follows it (CVL-FR-06), so the head is the run of sections
             // before the first one the conversation grows.

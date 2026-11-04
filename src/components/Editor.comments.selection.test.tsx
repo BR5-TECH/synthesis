@@ -631,3 +631,35 @@ describe("CMT-FR-06: a selection that spans blocks", () => {
     expect(screen.queryByRole("button", { name: "Comment on selection" })).toBeNull();
   });
 });
+
+describe("selections over HTML comment markup (CMT-FR-WJED)", () => {
+  const MARKUP = "# Notes\n\nIntro text.\n\n<!-- %% -->\n<!-- center -->\nTitle line\n\nBefore <!-- a note --> after.\n";
+
+  async function postOver(selected: string) {
+    const { backend } = await mount({ load: { body: MARKUP, checksum: "ck1" } });
+    await openColumn();
+    selectInBody(selected);
+    fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "why here?" } });
+    fireEvent.click(openerButton("Post"));
+    await waitFor(() => expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true));
+    const call = backend.calls.find((c) => c.cmd === "open_discussion")!;
+    return (call.args as { fragmentTarget: FragmentRange }).fragmentTarget;
+  }
+
+  it("CMT-FR-WJED: a selection across a spacer and an aligned block includes the break and marker lines", async () => {
+    // What a browser copies: the blocks on lines of their own, the spacer
+    // and the marker with no text.
+    const fragment = await postOver("text.\n\n\nTitle line");
+    expect(fragment.quote).toBe("text.\n\n<!-- %% -->\n<!-- center -->\nTitle line");
+    expect(MARKUP.slice(fragment.start, fragment.end)).toBe(fragment.quote);
+  });
+
+  it("CMT-FR-WJED: a selection over an inline chip includes its full comment text", async () => {
+    // The chip holds its raw comment as hidden text, so the copy holds it too.
+    const fragment = await postOver("Before <!-- a note --> after");
+    expect(fragment.quote).toBe("Before <!-- a note --> after");
+    expect(MARKUP.slice(fragment.start, fragment.end)).toBe(fragment.quote);
+  });
+});

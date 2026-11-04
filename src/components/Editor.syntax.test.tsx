@@ -148,7 +148,9 @@ describe("EFR-FR-APFR, ESH-FR-FKZB, ESH-FR-DCQX, EDT-FR-16, EDT-FR-17: the two s
     mount("src/main.rs", RUST);
     await screen.findByLabelText("Source");
     expect(screen.queryByRole("button", { name: "Bold" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Heading 1" })).toBeNull();
+    for (const name of ["Heading", "Vertical break", "Alignment"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
 
     const band = document.querySelector(".editor__toolbar")!;
     expect(band).not.toBeNull();

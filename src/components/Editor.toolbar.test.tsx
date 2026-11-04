@@ -18,6 +18,7 @@ import { resetLogBufferForTest } from "../logging";
 import { resetMermaidMock } from "../test/mermaidMock";
 import { resetMermaidForTest } from "./markdownMermaidRender";
 import { DIAGRAM_TEMPLATES } from "./Editor/diagramTemplates";
+import { blockMenuTrigger, chooseToolbarItem } from "../test/toolbarMenus";
 
 const BODY = "# Title\n\nSome text.\n";
 
@@ -92,33 +93,42 @@ afterEach(() => {
 
 describe("heading buttons (EDT-FR-NTHC)", () => {
   it.each([1, 2, 3, 4])(
-    "EDT-FR-NTHC: Heading %i makes the block a heading of its level, shows it active, and makes it a paragraph again",
+    "EDT-FR-NTHC, EDT-FR-GELS: Heading %i makes the block a heading of its level, shows it active, and makes it a paragraph again",
     async (level) => {
       wireBackend("Some text.\n");
       render(<Editor artifactId="a.md" artifactName="a.md" sessions={sessions} />);
       await screen.findByText("Some text.");
       caretIn("Some text.");
-      const button = screen.getByRole("button", { name: `Heading ${level}` });
-      expect(button).toHaveAttribute("title", `Heading ${level}`);
-      expect(button).toHaveAttribute("data-active", "false");
+      const trigger = blockMenuTrigger("Heading");
+      expect(trigger).toHaveTextContent("Hx");
 
-      fireEvent.mouseDown(button);
+      chooseToolbarItem("Heading", `Heading ${level}`);
       expect(pmEl().querySelector(`h${level}`)).toHaveTextContent("Some text.");
-      expect(button).toHaveAttribute("data-active", "true");
+      // EDT-FR-GELS: the trigger shows the level, and the item is pressed.
+      expect(trigger).toHaveTextContent(`H${level}`);
+      fireEvent.click(trigger);
+      const item = within(screen.getByRole("group", { name: "Heading" })).getByRole("button", {
+        name: `Heading ${level}`,
+      });
+      expect(item).toHaveAttribute("title", `Heading ${level}`);
+      expect(item).toHaveAttribute("aria-pressed", "true");
 
-      fireEvent.mouseDown(button);
+      fireEvent.mouseDown(item);
+      fireEvent.click(item);
       expect(pmEl().querySelector(`h${level}`)).toBeNull();
       expect(pmEl().querySelector("p")).toHaveTextContent("Some text.");
-      expect(button).toHaveAttribute("data-active", "false");
+      expect(trigger).toHaveTextContent("Hx");
     },
   );
 
-  it("EDT-FR-NTHC: the heading buttons are H1 to H4, side by side, as text glyphs", async () => {
+  it("EDT-FR-NTHC: the Hx dropdown holds H1 to H4, side by side, as text glyphs", async () => {
     wireBackend();
     await mount();
-    const labels = [1, 2, 3, 4].map(
-      (n) => screen.getByRole("button", { name: `Heading ${n}` }).textContent,
-    );
+    fireEvent.click(blockMenuTrigger("Heading"));
+    const popup = screen.getByRole("group", { name: "Heading" });
+    const labels = within(popup)
+      .getAllByRole("button")
+      .map((button) => button.textContent);
     expect(labels).toEqual(["H1", "H2", "H3", "H4"]);
     expect(screen.queryByRole("button", { name: "Heading 5" })).toBeNull();
   });
@@ -128,18 +138,19 @@ describe("heading buttons (EDT-FR-NTHC)", () => {
     await mount();
     fireEvent.click(screen.getByRole("button", { name: "Edit as Markdown source" }));
     await screen.findByLabelText("Markdown source");
-    expect(screen.queryByRole("button", { name: "Heading 1" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Insert diagram" })).toBeNull();
+    for (const name of ["Heading", "Vertical break", "Alignment", "Insert diagram"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
 
     // EFR-FR-ABVQ: closing a find panel in raw-text mode brings no toolbar.
     act(() => sessions.setFind("a.md", { form: "find" }));
     await screen.findByRole("textbox", { name: /find/i });
     act(() => sessions.setFind("a.md", { form: null }));
     await waitFor(() => expect(screen.queryByRole("textbox", { name: /find/i })).toBeNull());
-    expect(screen.queryByRole("button", { name: "Heading 1" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Heading" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit as rich text" }));
-    await screen.findByRole("button", { name: "Heading 4" });
+    await screen.findByRole("button", { name: "Heading" });
     expect(diagramButton()).toBeInTheDocument();
   });
 });
@@ -331,11 +342,11 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     // them that nothing seals apart, however slow the machine.
     const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
     try {
-      fireEvent.mouseDown(screen.getByRole("button", { name: "Heading 2" }));
+      chooseToolbarItem("Heading", "Heading 2");
       fireEvent.click(diagramButton());
       fireEvent.click(typeOption("Pie chart"));
       caretIn("Some text.");
-      fireEvent.mouseDown(screen.getByRole("button", { name: "Heading 2" }));
+      chooseToolbarItem("Heading", "Heading 2");
     } finally {
       now.mockRestore();
     }

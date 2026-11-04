@@ -9,6 +9,7 @@
  */
 import { parseMarkdownBlocks } from "../../diff/markdown";
 import type { MarkdownBlock } from "../../diff/markdown";
+import type { MarkerAlignment } from "../../markdown/markers";
 
 export interface ListItemNode {
   text: string;
@@ -20,13 +21,15 @@ export interface ListNode {
   /** The number of the first item of an ordered list. */
   start: number;
   items: ListItemNode[];
+  /** DTV-FR-HCHX / EDT-FR-GVJM: the alignment of a top-level list. */
+  align?: MarkerAlignment;
 }
 
 export type DocNode =
   | { kind: "frontmatter"; text: string }
   | { kind: "block"; block: MarkdownBlock }
   | { kind: "list"; list: ListNode }
-  | { kind: "table"; header: string[] | null; rows: string[][] };
+  | { kind: "table"; header: string[] | null; rows: string[][]; align?: MarkerAlignment };
 
 /** A leading region between two `---` lines at the very start of the text. */
 const FRONTMATTER = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/;
@@ -83,15 +86,18 @@ function attach(
 
 function buildTable(rows: MarkdownBlock[]): DocNode {
   const dividerAt = rows.findIndex((row) => row.isDivider === true);
+  const align = rows[0]?.align;
   if (dividerAt === 1) {
     return {
       kind: "table",
+      align,
       header: rows[0].cells ?? [],
       rows: rows.slice(2).filter((r) => !r.isDivider).map((r) => r.cells ?? []),
     };
   }
   return {
     kind: "table",
+    align,
     header: null,
     rows: rows.filter((r) => !r.isDivider).map((r) => r.cells ?? []),
   };
@@ -110,15 +116,20 @@ export function buildDocument(text: string): DocNode[] {
   let i = 0;
   while (i < blocks.length) {
     const block = blocks[i];
+    // EDT-FR-XPMC: an alignment marker starts a list or a table of its own.
+    const sameRun = (next: MarkdownBlock, kind: MarkdownBlock["kind"], first: boolean) =>
+      next.kind === kind && (first || !next.alignMarker);
     if (block.kind === "list-item") {
       const run: MarkdownBlock[] = [];
-      while (i < blocks.length && blocks[i].kind === "list-item") {
+      while (i < blocks.length && sameRun(blocks[i], "list-item", run.length === 0)) {
         run.push(blocks[i++]);
       }
-      for (const list of buildLists(run)) nodes.push({ kind: "list", list });
+      const lists = buildLists(run);
+      if (lists[0] && run[0].align) lists[0].align = run[0].align;
+      for (const list of lists) nodes.push({ kind: "list", list });
     } else if (block.kind === "table-row") {
       const run: MarkdownBlock[] = [];
-      while (i < blocks.length && blocks[i].kind === "table-row") {
+      while (i < blocks.length && sameRun(blocks[i], "table-row", run.length === 0)) {
         run.push(blocks[i++]);
       }
       nodes.push(buildTable(run));

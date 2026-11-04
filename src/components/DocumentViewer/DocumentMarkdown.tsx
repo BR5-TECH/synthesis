@@ -9,6 +9,8 @@
  * - An image is a placeholder with its alt text. Only an image that holds its
  *   own bytes (a `data:` source) becomes an `<img>`. No other image source is
  *   ever given to an element, so the view loads no remote resource.
+ * - An HTML comment is a chip whose text is a React text node (DTV-FR-HCHX,
+ *   EDT-FR-KMAR). A vertical break is an empty spacer.
  */
 import { memo, useMemo } from "react";
 import type { ReactNode } from "react";
@@ -18,6 +20,7 @@ import {
   parseInlineWithImages,
 } from "./markdownInline";
 import { buildDocument } from "./markdownStructure";
+import { BreakSpacer, CommentChip, CommentChipLine } from "../markdownChips";
 import type { DocNode, ListNode } from "./markdownStructure";
 
 function Inline({ text }: { text: string }) {
@@ -32,6 +35,8 @@ function Inline({ text }: { text: string }) {
             return <em key={index}>{part.text}</em>;
           case "code":
             return <code key={index}>{part.text}</code>;
+          case "comment":
+            return <CommentChip key={index} raw={part.raw} />;
           case "link":
             return (
               <span
@@ -101,8 +106,12 @@ function List({ list }: { list: ListNode }) {
       ))}
     </li>
   ));
-  if (!list.ordered) return <ul>{items}</ul>;
-  return <ol start={list.start}>{items}</ol>;
+  if (!list.ordered) return <ul data-align={list.align}>{items}</ul>;
+  return (
+    <ol start={list.start} data-align={list.align}>
+      {items}
+    </ol>
+  );
 }
 
 const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
@@ -120,7 +129,7 @@ function Node({ node }: { node: DocNode }) {
     case "table":
       return (
         <div className="tableWrapper">
-          <table>
+          <table data-align={node.align}>
             {node.header && (
               <thead>
                 <tr>
@@ -148,34 +157,40 @@ function Node({ node }: { node: DocNode }) {
       );
     default: {
       const { block } = node;
+      // DTV-FR-HCHX / EDT-FR-GVJM: the alignment its marker sets.
+      const align = block.align;
       switch (block.kind) {
+        case "break":
+          return <BreakSpacer level={block.level ?? 4} />;
+        case "comment":
+          return <CommentChipLine raw={block.text} />;
         case "heading": {
           const Tag = HEADINGS[Math.min(Math.max(block.level ?? 1, 1), 6) - 1];
           return (
-            <Tag>
+            <Tag data-align={align}>
               <Inline text={block.text} />
             </Tag>
           );
         }
         case "code":
           return (
-            <pre data-language={block.language}>
+            <pre data-language={block.language} data-align={align}>
               <code>{block.text}</code>
             </pre>
           );
         case "quote":
           return (
-            <blockquote>
+            <blockquote data-align={align}>
               <p>
                 <Inline text={block.text} />
               </p>
             </blockquote>
           );
         case "rule":
-          return <hr />;
+          return <hr data-align={align} />;
         default:
           return (
-            <p>
+            <p data-align={align}>
               <Inline text={block.text} />
             </p>
           );

@@ -332,6 +332,16 @@ function seededTree(): any {
                 artifactType: "spec",
                 typeSource: "inferred",
               },
+              // EDT-FR-UPNB / EDT-FR-IRNA / EDT-FR-CSKH: a file with spacer,
+              // alignment and comment markers. See `MD_BODY_MARKUP`.
+              {
+                id: "specifications/ui/MKP-markup.md",
+                name: "MKP-markup.md",
+                path: "specifications/ui/MKP-markup.md",
+                nodeKind: "file",
+                artifactType: "spec",
+                typeSource: "inferred",
+              },
             ],
           },
           {
@@ -959,6 +969,54 @@ graph TD
 A paragraph between the two diagrams.
 `;
 
+/** EDT-FR-UPNB / EDT-FR-IRNA / EDT-FR-CSKH: HTML-comment markup fixture. */
+const MD_BODY_MARKUP = `<!-- %% -->
+<!-- center -->
+# Centered title
+
+Intro text with an inline <!-- inline note --> chip.
+
+<!-- % -->
+Paragraph after a V1 spacer.
+
+<!-- %% -->
+Paragraph after a V2 spacer.
+
+<!-- %%% -->
+Paragraph after a V3 spacer.
+
+<!-- %%%% -->
+<!--
+  A block comment
+  on two lines
+-->
+
+<!-- center -->
+| a | b |
+| --- | --- |
+| 1 | 2 |
+
+<!-- center -->
+\`\`\`js
+const x = 1;
+\`\`\`
+
+<!-- right -->
+- one
+- two
+
+Last paragraph.
+`;
+
+const MD_BODY_MARKUP_OLD = `# Centered title
+
+Intro text with an old <!-- old note --> chip.
+
+<!-- An old block comment -->
+
+Last paragraph.
+`;
+
 const MD_BODY_FIDELITY = `# Fidelity fixture
 
 A paragraph carrying **strong**, *emphasis*, ~~strikethrough~~, \`inline code\`,
@@ -1050,6 +1108,17 @@ const worktreeContext = {
 };
 
 const changeEntries = [
+  {
+    id: "specifications/ui/MKP-markup.md",
+    path: "specifications/ui/MKP-markup.md",
+    name: "MKP-markup.md",
+    changeStatus: "modified",
+    addedLines: 30,
+    removedLines: 1,
+    isBinary: false,
+    artifactType: "spec",
+    typeSource: "inferred",
+  },
   {
     id: "specifications/ui/DIA-diagrams.md",
     path: "specifications/ui/DIA-diagrams.md",
@@ -8211,6 +8280,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
               ? MD_BODY_FM
               : String(a.id).endsWith("DIA-diagrams.md")
                 ? MD_BODY_DIAGRAMS
+                : String(a.id).endsWith("MKP-markup.md")
+                ? MD_BODY_MARKUP
                 : String(a.id).endsWith("FID-fidelity.md")
                 ? MD_BODY_FIDELITY
                 : String(a.id).endsWith("SKILL.md")
@@ -9850,6 +9921,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const newSource = SOURCE_BODIES[ext];
       if (oldSource !== undefined && newSource !== undefined) {
         return { old: oldSource, new: newSource, isBinary: false };
+      }
+      if (path.endsWith("MKP-markup.md")) {
+        return { old: MD_BODY_MARKUP_OLD, new: MD_BODY_MARKUP, isBinary: false };
       }
       if (path.endsWith("DIA-diagrams.md")) {
         return { old: MD_BODY_DIAGRAMS_OLD, new: MD_BODY_DIAGRAMS, isBinary: false };

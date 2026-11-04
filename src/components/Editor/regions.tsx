@@ -8,6 +8,7 @@ import {
 import type { FindMatch } from "../../state/findMatches";
 import { highlightYaml } from "./highlight";
 import { DiagramInsertMenu } from "./DiagramInsertMenu";
+import { BlockGroup } from "./BlockGroup";
 import type { DiagramTemplate } from "./diagramTemplates";
 
 /**
@@ -198,12 +199,15 @@ export function FormattingButtons({
   editor,
   editable,
   onInsertDiagram,
+  onMarkupEdit,
 }: {
   editor: TiptapEditor | null;
-  /** EDT-FR-VUGQ: whether the surface accepts input. */
+  /** EDT-FR-VUGQ / EDT-FR-IRNA: whether the surface accepts input. */
   editable: boolean;
   /** EDT-FR-IPMX: inserts a diagram fence that holds the example of a type. */
   onInsertDiagram: (template: DiagramTemplate) => void;
+  /** EDT-FR-RZTS: runs a break or an alignment edit as one step of the history. */
+  onMarkupEdit: (run: () => boolean) => boolean;
 }) {
   // `onMouseDown` preventDefault keeps the selection in the editor when a
   // toolbar button is clicked (otherwise the button steals focus first).
@@ -241,23 +245,8 @@ export function FormattingButtons({
         <span style={{ fontFamily: "var(--font-mono)" }}>{"<>"}</span>
       </button>
       <span className="sep--v" style={{ height: 18, margin: "0 6px" }} />
-      {/* EDT-FR-NTHC: H1 to H4. The command makes a heading of the level a
-          paragraph again. */}
-      {([1, 2, 3, 4] as const).map((level) => (
-        <button
-          key={level}
-          type="button"
-          className="btn btn--ghost btn--sm"
-          title={`Heading ${level}`}
-          aria-label={`Heading ${level}`}
-          data-active={active("heading", { level })}
-          onMouseDown={cmd(() =>
-            editor?.chain().focus().toggleHeading({ level }).run(),
-          )}
-        >
-          H{level}
-        </button>
-      ))}
+      {/* EDT-FR-UPNB: the Hx, Vx, and Ax dropdowns. */}
+      <BlockGroup editor={editor} editable={editable} edit={onMarkupEdit} />
       <span className="sep--v" style={{ height: 18, margin: "0 6px" }} />
       <button
         className="btn btn--ghost btn--sm"

@@ -182,3 +182,15 @@ describe("AGT-FR-29: a live tag is bold and nothing else is", () => {
     expect(text).toContain("quoted");
   });
 });
+
+describe("HTML comments in a message (EDT-FR-UYPS, EDT-FR-KMAR)", () => {
+  it("EDT-FR-UYPS, EDT-FR-KMAR: a comment is a chip, a break is the chip of its line, and no comment text is markup", () => {
+    const { container } = render(
+      <CommentMarkdown body={"<!-- %% -->\n\nText <!-- <b>x</b> --> end.\n\n<!-- block -->\n"} />,
+    );
+    expect(container.querySelector(".md-break")).toBeNull();
+    expect(screen.getAllByRole("img", { name: "HTML comment" })).toHaveLength(3);
+    expect(container.querySelector("b")).toBeNull();
+    expect(container.textContent).toContain("Text");
+  });
+});

@@ -21,9 +21,10 @@
  * - **Raw HTML is not parsed** (`html: false`). With HTML parsing on, a sequence
  *   that merely looks like a tag is read as markup the schema has no node for
  *   and is dropped outright: `<artifact>` disappears from the file. Off, it is
- *   the prose the author wrote, and it round-trips as itself — as do HTML
- *   comments, which survive as the inert literal text EDT-FR-68 requires rather
- *   than being deleted.
+ *   the prose the author wrote, and it round-trips as itself. HTML comments are
+ *   the one exception: rules of their own read them as vertical breaks,
+ *   alignment markers, and chips (`markdownMarkup.ts`, EDT-FR-68), and each
+ *   writes back the comment it was read from.
  *
  * The rest is coverage: every construct this project's files are written in has
  * a node in the schema, so round-tripping one is a question of spelling rather
@@ -38,6 +39,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Markdown } from "tiptap-markdown";
 import { LiteralBacktick } from "./markdownBacktick";
 import { MermaidDiagrams } from "./markdownMermaid";
+import { markupExtensions } from "./markdownMarkup";
 
 /** The shape `tiptap-markdown` calls a node's serializer with. */
 type SerializerState = { text: (value: string, escape?: boolean) => void };
@@ -63,7 +65,13 @@ export const LiteralText = Node.create({
     return {
       markdown: {
         serialize(state: SerializerState, node: TextNode) {
-          state.text(node.text ?? "");
+          // EDT-FR-67 / EDT-FR-UYPS: prose that holds `<!--` is prose, so it is
+          // written as `\<!--` and does not come back as an HTML comment.
+          const parts = (node.text ?? "").split("<!--");
+          parts.forEach((part, index) => {
+            if (index > 0) state.text("\\<!--", false);
+            if (part) state.text(part);
+          });
         },
         parse: {},
       },
@@ -202,6 +210,9 @@ export function markdownExtensions(
     // EDT-FR-MOYS: a `mermaid` fence shows as its diagram. Decorations only, so
     // the fence round-trips as the plain fenced block it is (EDT-FR-67).
     MermaidDiagrams.configure({ editButton: diagramEditor }),
+    // EDT-FR-QALB, EDT-FR-XPMC, EDT-FR-UYPS: HTML comments as vertical breaks,
+    // alignment markers, and chips.
+    ...markupExtensions,
     Markdown.configure({ html: false }),
     ...extra,
   ];

@@ -110,6 +110,36 @@ The frontend uses no external state library. It uses React state and hooks, and
 small stores built on `useSyncExternalStore`. The editor uses TipTap 3, which is
 based on ProseMirror, with a Markdown source mode.
 
+### Rich Markdown markers
+
+Markdown has no syntax for vertical space or for alignment. The author writes
+both as HTML comments, so the file stays valid Markdown. The rich surfaces (the
+Editor tab, the New Artifact tab, the Draft template, Diff Rich, and the
+Document tab) render them. Raw-text and source surfaces show them as text.
+
+| Marker | Effect |
+| --- | --- |
+| `<!-- % -->` | A vertical break of 12 body line heights (V1). |
+| `<!-- %% -->` | A vertical break of 8 body line heights (V2). |
+| `<!-- %%% -->` | A vertical break of 5 body line heights (V3). |
+| `<!-- %%%% -->` | A vertical break of 3 body line heights (V4). Five or more `%` also give V4. |
+| `<!-- center -->` | Centres the top-level block on the very next line. |
+| `<!-- right -->` | Right-aligns the top-level block on the very next line. |
+
+- A marker is one line at the top level. Inside a list item or a quote it is an
+  ordinary comment.
+- An alignment marker aligns only the block directly below it. With a blank
+  line, another comment, or the end of the file below it, it is an ordinary
+  comment. Left is the default and has no marker.
+- A break line goes above an alignment line.
+- Every other HTML comment shows as a small chip. A tooltip shows its text.
+- The formatting toolbar writes the markers through its **Vx** and **Ax**
+  dropdowns, in the canonical form shown above.
+
+The grammar is in `src/markdown/markers.ts`. The editor rules are in
+`src/components/markdownMarkup.ts`. The requirements are in
+`specifications/ui/EDT-editor.md` (EDT-FR-QALB, EDT-FR-XPMC, EDT-FR-UYPS).
+
 ## Runtime flows
 
 ### Open a project

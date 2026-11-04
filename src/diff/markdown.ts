@@ -14,7 +14,18 @@
  * code blocks, links — because those are what a Spec or a Skill is written in.
  * Anything it does not recognise falls through to a paragraph and renders as
  * its own text, which is a legible outcome rather than a broken one.
+ *
+ * HTML comments are blocks of their own (DFV-FR-SZZX): a vertical break, and
+ * an ordinary comment on lines of its own, which renders as a chip. An
+ * alignment marker is part of the block it aligns (EDT-FR-XPMC).
  */
+
+import {
+  classifyMarkerLine,
+  scanBlockComment,
+  startsComment,
+  type MarkerAlignment,
+} from "../markdown/markers";
 
 export type BlockKind =
   | "heading"
@@ -23,7 +34,9 @@ export type BlockKind =
   | "table-row"
   | "quote"
   | "code"
-  | "rule";
+  | "rule"
+  | "break"
+  | "comment";
 
 export interface MarkdownBlock {
   kind: BlockKind;
@@ -34,8 +47,20 @@ export interface MarkdownBlock {
   source: string;
   /** The text to render, with the construct's own syntax stripped. */
   text: string;
-  /** Heading level 1..6. */
+  /** Heading level 1..6, or the level 1..4 of a vertical break (EDT-FR-QALB). */
   level?: number;
+  /**
+   * DFV-FR-SZZX / EDT-FR-XPMC: the alignment of the block, set by the marker
+   * line directly above it. The marker line is part of `source` and of `line`,
+   * so a changed marker marks this block.
+   */
+  align?: MarkerAlignment;
+  /**
+   * True on the block whose `source` holds the alignment marker. The items of
+   * an aligned list and the rows of an aligned table carry the `align` of the
+   * first one, because a list and a table align as a whole (EDT-FR-GVJM).
+   */
+  alignMarker?: boolean;
   /** List item: how deep it is nested, and its bullet or number. */
   depth?: number;
   marker?: string;
@@ -74,6 +99,16 @@ function tableCells(line: string): string[] {
     .map((cell) => cell.trim());
 }
 
+/** The column the content of a list item starts at, after its marker. */
+function itemContentIndent(block: MarkdownBlock): number {
+  const lines = block.source.split("\n");
+  const first = lines[block.alignMarker ? 1 : 0] ?? "";
+  const match = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(first);
+  if (!match) return 2;
+  const gap = match[3].length > 4 ? 1 : match[3].length;
+  return match[1].length + match[2].length + gap;
+}
+
 /**
  * DFV-FR-19: split Markdown into the blocks change is marked against. A `null`
  * revision (one the comparison has no version of) has no blocks at all.
@@ -87,7 +122,7 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];
   let i = 0;
 
-  const isBlockStart = (line: string) =>
+  const isLineStart = (line: string) =>
     HEADING.test(line) ||
     FENCE.test(line) ||
     RULE.test(line) ||
@@ -95,6 +130,38 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
     QUOTE.test(line) ||
     TABLE_ROW.test(line) ||
     line.trim() === "";
+  // EDT-FR-UYPS: a comment on lines of its own interrupts a paragraph.
+  const isBlockStart = (at: number) =>
+    isLineStart(lines[at]) || (startsComment(lines[at]) && scanBlockComment(lines, at) !== null);
+
+  // EDT-FR-XPMC: the marker waiting for the block on the next line.
+  let pendingAlign: { value: MarkerAlignment; source: string; line: number } | null = null;
+  const push = (block: MarkdownBlock) => {
+    if (pendingAlign) {
+      block.align = pendingAlign.value;
+      block.alignMarker = true;
+      block.source = `${pendingAlign.source}\n${block.source}`;
+      block.line = pendingAlign.line;
+      pendingAlign = null;
+    }
+    // EDT-FR-GVJM: the rest of an aligned list or table takes its alignment.
+    // A table ends at a blank line. A list goes on over one while its items
+    // keep the kind of their marker; another marker starts another list.
+    const previous = blocks[blocks.length - 1];
+    const adjacent =
+      previous !== undefined && previous.line + previous.source.split("\n").length === block.line;
+    const sameList =
+      block.kind === "list-item" &&
+      previous?.kind === "list-item" &&
+      (adjacent ||
+        (previous.ordered === block.ordered &&
+          (block.ordered || previous.marker === block.marker)));
+    const sameTable = block.kind === "table-row" && previous?.kind === "table-row" && adjacent;
+    if (!block.align && previous?.align && (sameList || sameTable)) {
+      block.align = previous.align;
+    }
+    blocks.push(block);
+  };
 
   while (i < lines.length) {
     const line = lines[i];
@@ -102,6 +169,49 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
 
     if (line.trim() === "") {
       i++;
+      continue;
+    }
+
+    // EDT-FR-ANTD: a comment indented to the content of the list item above
+    // it is inside that item, as the editor reads it. It joins the item, so it
+    // is no marker and no block of its own (DFV-FR-SZZX).
+    const last = blocks[blocks.length - 1];
+    const lead = /^ */.exec(line)![0].length;
+    if (last?.kind === "list-item" && lead >= itemContentIndent(last) && line.trimStart().startsWith("<!--")) {
+      const inner = scanBlockComment([line.slice(lead), ...lines.slice(i + 1)], 0);
+      if (inner) {
+        const end = i + inner.end;
+        const from = last.line + last.source.split("\n").length;
+        last.source = [last.source, ...lines.slice(from, end)].join("\n");
+        last.text = `${last.text} ${inner.raw}`;
+        i = end;
+        continue;
+      }
+    }
+
+    const comment = startsComment(line) ? scanBlockComment(lines, i) : null;
+    if (comment) {
+      const marker = comment.end === i + 1 ? classifyMarkerLine(line) : null;
+      if (marker?.kind === "break") {
+        push({ kind: "break", source: line, text: "", level: marker.level, line: start });
+        i = comment.end;
+        continue;
+      }
+      if (marker?.kind === "align") {
+        const next = lines[i + 1];
+        if (next !== undefined && next.trim() !== "" && !startsComment(next)) {
+          pendingAlign = { value: marker.value, source: line, line: start };
+          i++;
+          continue;
+        }
+      }
+      push({
+        kind: "comment",
+        source: lines.slice(i, comment.end).join("\n"),
+        text: comment.raw,
+        line: start,
+      });
+      i = comment.end;
       continue;
     }
 
@@ -123,7 +233,7 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
         body.push(lines[i]);
         i++;
       }
-      blocks.push({
+      push({
         kind: "code",
         source: source.join("\n"),
         text: body.join("\n"),
@@ -135,7 +245,7 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
 
     const heading = line.match(HEADING);
     if (heading) {
-      blocks.push({
+      push({
         kind: "heading",
         source: line,
         text: heading[2].trim(),
@@ -147,14 +257,14 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
     }
 
     if (RULE.test(line)) {
-      blocks.push({ kind: "rule", source: line, text: "", line: start });
+      push({ kind: "rule", source: line, text: "", line: start });
       i++;
       continue;
     }
 
     if (TABLE_ROW.test(line)) {
       const inner = line.match(TABLE_ROW)![1];
-      blocks.push({
+      push({
         kind: "table-row",
         source: line,
         text: line.trim(),
@@ -178,7 +288,7 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
         body.push(next[1]);
         i++;
       }
-      blocks.push({
+      push({
         kind: "quote",
         source: source.join("\n"),
         text: body.join("\n").trim(),
@@ -197,14 +307,14 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
       while (
         i < lines.length &&
         lines[i].trim() !== "" &&
-        !isBlockStart(lines[i]) &&
+        !isBlockStart(i) &&
         lines[i].startsWith(" ")
       ) {
         source.push(lines[i]);
         body.push(lines[i].trim());
         i++;
       }
-      blocks.push({
+      push({
         kind: "list-item",
         source: source.join("\n"),
         text: body.join(" ").trim(),
@@ -218,11 +328,11 @@ export function parseMarkdownBlocks(text: string | null): MarkdownBlock[] {
 
     const source: string[] = [line];
     i++;
-    while (i < lines.length && !isBlockStart(lines[i])) {
+    while (i < lines.length && !isBlockStart(i)) {
       source.push(lines[i]);
       i++;
     }
-    blocks.push({
+    push({
       kind: "paragraph",
       source: source.join("\n"),
       text: source.join("\n").trim(),
@@ -242,7 +352,12 @@ export type InlineSpan =
   | { kind: "strong"; text: string }
   | { kind: "em"; text: string }
   | { kind: "code"; text: string }
-  | { kind: "link"; text: string; href: string };
+  | { kind: "link"; text: string; href: string }
+  /**
+   * EDT-FR-UYPS: an HTML comment inside the text, shown as a chip. It has no
+   * text of its own: what a reader sees of it is the chip.
+   */
+  | { kind: "comment"; text: ""; raw: string };
 
 /**
  * Ordered by precedence: code first (its content is literal), then the
@@ -316,7 +431,7 @@ function showEscaped(text: string): string {
 }
 
 const INLINE =
-  /(`[^`]+`)|(\*\*(?:[^\s*][^*]*[^\s*]|[^\s*])\*\*)|(__(?:[^\s_][^_]*[^\s_]|[^\s_])__)|(\*(?:[^\s*][^*]*[^\s*]|[^\s*])\*)|(_(?:[^\s_][^_]*[^\s_]|[^\s_])_)|(\[[^\]]*\]\([^)\s]*\))/;
+  /(<!--[\s\S]*?--!?>)|(`[^`]+`)|(\*\*(?:[^\s*][^*]*[^\s*]|[^\s*])\*\*)|(__(?:[^\s_][^_]*[^\s_]|[^\s_])__)|(\*(?:[^\s*][^*]*[^\s*]|[^\s*])\*)|(_(?:[^\s_][^_]*[^\s_]|[^\s_])_)|(\[[^\]]*\]\([^)\s]*\))/;
 
 /**
  * DFV-FR-17: the emphasis, code, and links a rendered document shows as
@@ -324,7 +439,8 @@ const INLINE =
  */
 export function parseInline(text: string): InlineSpan[] {
   const spans: InlineSpan[] = [];
-  let rest = hideEscaped(text);
+  const hidden = hideEscaped(text);
+  let rest = hidden;
 
   while (rest.length > 0) {
     const match = rest.match(INLINE);
@@ -333,7 +449,13 @@ export function parseInline(text: string): InlineSpan[] {
       spans.push({ kind: "text", text: showEscaped(rest.slice(0, match.index)) });
     }
     const token = match[0];
-    if (token.startsWith("`")) {
+    if (token.startsWith("<!--")) {
+      // EDT-FR-UYPS: a comment is raw text, so its backslashes stay. An
+      // escape takes the same two characters as its sentinel, so the offsets
+      // of the hidden text are offsets of the original.
+      const at = hidden.length - rest.length + match.index;
+      spans.push({ kind: "comment", text: "", raw: text.slice(at, at + token.length) });
+    } else if (token.startsWith("`")) {
       spans.push({ kind: "code", text: showEscaped(token.slice(1, -1)) });
     } else if (token.startsWith("**") || token.startsWith("__")) {
       spans.push({ kind: "strong", text: showEscaped(token.slice(2, -2)) });

@@ -3,7 +3,7 @@
 // never runs a script, never renders raw HTML, and never loads a remote
 // resource.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 
 import { resetViewStateForTest } from "../../state/documentViewState";
 import { sheet, blocksFor, decl } from "../../test/cssRules";
@@ -158,5 +158,56 @@ describe("DTV-FR-SSQI: the typographic roles", () => {
     const doc = blocksFor(base, ".doc");
     expect(doc).toHaveLength(1);
     expect(decl(doc[0], "font-family")).toBe("var(--font-rich-family)");
+  });
+});
+
+describe("DTV-FR-HCHX: HTML comments", () => {
+  it("DTV-FR-HCHX: a break is a spacer, a marker aligns its block, and a comment is a chip", async () => {
+    const { region } = await rich(
+      [
+        "<!-- % -->",
+        "<!-- center -->",
+        "# Title",
+        "",
+        "<!-- right -->",
+        "- a",
+        "- b",
+        "",
+        "<!-- center -->",
+        "| a |",
+        "|---|",
+        "| 1 |",
+        "",
+        "<!--",
+        "  a note",
+        "-->",
+        "",
+        "Body <!-- inline --> text.",
+      ].join("\n"),
+    );
+    const spacer = within(region).getByRole("separator", { name: "Vertical break V1" });
+    expect(spacer).toHaveAttribute("data-level", "1");
+    expect(within(region).getByRole("heading", { name: "Title" })).toHaveAttribute("data-align", "center");
+    expect(region.querySelector("ul")).toHaveAttribute("data-align", "right");
+    expect(region.querySelector("table")).toHaveAttribute("data-align", "center");
+    const chips = within(region).getAllByRole("img", { name: "HTML comment" });
+    expect(chips).toHaveLength(2);
+    // The markers themselves show nothing.
+    expect(region.textContent).not.toContain("center");
+  });
+
+  it("DTV-FR-HCHX: a chip takes focus and shows its text as plain text, and the view removes nothing", async () => {
+    const { region } = await rich("<!-- <b>bold</b> note -->\n\nBody.");
+    const chip = within(region).getByRole("img", { name: "HTML comment" });
+    expect(chip).toHaveAttribute("tabindex", "0");
+    act(() => chip.focus());
+    const tooltip = await within(region).findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("<b>bold</b> note");
+    expect(tooltip.querySelector("b")).toBeNull();
+    expect(chip).toHaveAttribute("aria-describedby", tooltip.id);
+    act(() => chip.blur());
+    expect(within(region).queryByRole("tooltip")).toBeNull();
+    expect(region.querySelector("[contenteditable='true']")).toBeNull();
+    expect(within(region).queryByRole("button", { name: /remove|delete/i })).toBeNull();
   });
 });

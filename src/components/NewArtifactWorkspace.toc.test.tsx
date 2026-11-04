@@ -158,13 +158,18 @@ describe("the table of contents of a draft (NAW-FR-TFFX)", () => {
     expectPairedWithToggle("Edit as Markdown source");
   });
 
-  it("NAW-FR-11, EDT-FR-NTHC, EDT-FR-VUGQ: the live prompt has the same toolbar, with H4 and Insert diagram", async () => {
+  it("NAW-FR-11, EDT-FR-NTHC, EDT-FR-UPNB, EDT-FR-VUGQ: the live prompt has the same toolbar, with Hx, Vx, Ax, and Insert diagram", async () => {
     stub();
     withPromptBody();
     renderWorkspace();
     await screen.findByRole("heading", { name: "Artifact window" });
+    for (const name of ["Heading", "Vertical break", "Alignment"]) {
+      expect(screen.getByRole("button", { name })).not.toBeDisabled();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Heading" }));
+    const popup = screen.getByRole("group", { name: "Heading" });
     for (const n of [1, 2, 3, 4]) {
-      expect(screen.getByRole("button", { name: `Heading ${n}` })).toBeInTheDocument();
+      expect(within(popup).getByRole("button", { name: `Heading ${n}` })).toBeInTheDocument();
     }
     expect(screen.getByRole("button", { name: "Insert diagram" })).not.toBeDisabled();
   });

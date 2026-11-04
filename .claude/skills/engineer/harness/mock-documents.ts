@@ -146,7 +146,7 @@ export function documentsInvoke(cmd: string, a: Record<string, any>): unknown {
         id: doc.id,
         name: doc.name,
         format: doc.format,
-        text: `# ${doc.name}\n\nSeeded content of the harness.\n`,
+        text: `# ${doc.name}\n\nSeeded content of the harness, with an inline <!-- doc note --> chip.\n\n<!-- A block note in a document -->\n\n<!-- %% -->\n<!-- center -->\nCentered paragraph.\n`,
         revision: doc.revision,
       };
     }

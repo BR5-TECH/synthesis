@@ -158,10 +158,10 @@ export function EditorToolbar({ dirty }: { dirty: boolean }) {
         <span style={{ fontFamily: "var(--font-mono)" }}>{"<>"}</span>
       </button>
       <span className="sep--v" style={{ height: 18, margin: "0 6px" }} />
-      <button className="btn btn--ghost btn--sm">H1</button>
-      <button className="btn btn--ghost btn--sm">H2</button>
-      <button className="btn btn--ghost btn--sm">H3</button>
-      <button className="btn btn--ghost btn--sm">H4</button>
+      {/* EDT-FR-UPNB: the block group, closed. */}
+      <button className="btn btn--ghost btn--sm" title="Heading">Hx ▾</button>
+      <button className="btn btn--ghost btn--sm" title="Vertical break">Vx ▾</button>
+      <button className="btn btn--ghost btn--sm" title="Alignment">Ax ▾</button>
       <span className="sep--v" style={{ height: 18, margin: "0 6px" }} />
       <button className="btn btn--ghost btn--sm" title="Bulleted list">
         •

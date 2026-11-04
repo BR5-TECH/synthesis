@@ -20,7 +20,13 @@ export function bodyOffsetOfSelection(
   // in it is the text before it — which `textBetween` over the same separator
   // reproduces exactly.
   try {
-    return editor.state.doc.textBetween(0, from, "\n", "\n").length;
+    // CMT-FR-WJED: a chip stands for its raw comment, which is the text a DOM
+    // selection over it holds.
+    return editor.state.doc.textBetween(0, from, "\n", (leaf) =>
+      leaf.type.name === "htmlComment" || leaf.type.name === "htmlCommentInline"
+        ? String(leaf.attrs.raw ?? "")
+        : "\n",
+    ).length;
   } catch {
     return 0;
   }

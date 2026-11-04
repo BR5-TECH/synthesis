@@ -187,3 +187,97 @@ describe("backslash escapes", () => {
     ]);
   });
 });
+
+describe("HTML comments as blocks (DFV-FR-SZZX, EDT-FR-QALB, EDT-FR-XPMC, EDT-FR-ANTD)", () => {
+  it("DFV-FR-SZZX, EDT-FR-QALB: a break line is a block of its own with its level", () => {
+    const blocks = parseMarkdownBlocks("Intro\n<!-- %%% -->\n# Title");
+    expect(blocks.map((b) => b.kind)).toEqual(["paragraph", "break", "heading"]);
+    expect(blocks[1]).toMatchObject({ level: 3, source: "<!-- %%% -->", line: 1 });
+    expect(parseMarkdownBlocks("<!-- %%%%%% -->")[0]).toMatchObject({ kind: "break", level: 4 });
+  });
+
+  it("DFV-FR-SZZX, EDT-FR-UYPS: a comment on lines of its own is one comment block", () => {
+    const blocks = parseMarkdownBlocks("<!--\n  one\n\n  two\n-->\nAfter");
+    expect(blocks.map((b) => b.kind)).toEqual(["comment", "paragraph"]);
+    expect(blocks[0]).toMatchObject({ text: "<!--\n  one\n\n  two\n-->", line: 0 });
+    expect(blocks[1].line).toBe(5);
+  });
+
+  it("DFV-FR-SZZX, EDT-FR-XPMC: a marker is part of the block under it, source and line included", () => {
+    const [block] = parseMarkdownBlocks("<!-- center -->\n# Title");
+    expect(block).toMatchObject({
+      kind: "heading",
+      align: "center",
+      alignMarker: true,
+      source: "<!-- center -->\n# Title",
+      line: 0,
+      text: "Title",
+    });
+  });
+
+  it("DFV-FR-SZZX: a changed marker line changes the identity of its block", () => {
+    const [left] = parseMarkdownBlocks("<!-- center -->\nText");
+    const [right] = parseMarkdownBlocks("<!-- right -->\nText");
+    expect(left.source).not.toBe(right.source);
+  });
+
+  it("EDT-FR-ANTD: a marker before a blank line, a comment, or the end is a comment block", () => {
+    expect(kinds("<!-- center -->\n\nText")).toEqual(["comment", "paragraph"]);
+    expect(kinds("<!-- right -->\n<!-- x -->\nText")).toEqual(["comment", "comment", "paragraph"]);
+    expect(kinds("Text\n\n<!-- center -->")).toEqual(["paragraph", "comment"]);
+  });
+
+  it("EDT-FR-ANTD: a comment indented to the content of a list item is part of that item", () => {
+    const blocks = parseMarkdownBlocks("- item\n  <!-- %% -->\n- next\n\n  <!--\n  two\n  -->\n\n1. n\n   <!-- c -->");
+    expect(blocks.map((b) => b.kind)).toEqual(["list-item", "list-item", "list-item"]);
+    expect(blocks[0]).toMatchObject({ source: "- item\n  <!-- %% -->", text: "item <!-- %% -->" });
+    expect(blocks[1].source).toBe("- next\n\n  <!--\n  two\n  -->");
+    expect(blocks[2].text).toBe("n <!-- c -->");
+  });
+
+  it("EDT-FR-ANTD: a comment indented less than the content of the item above is top level", () => {
+    expect(kinds("- a\n\n <!-- % -->\nText")).toEqual(["list-item", "break", "paragraph"]);
+  });
+
+  it("EDT-FR-GVJM: the items of an aligned list and the rows of an aligned table share its alignment", () => {
+    const list = parseMarkdownBlocks("<!-- right -->\n- a\n- b\n  - c");
+    expect(list.map((b) => b.align)).toEqual(["right", "right", "right"]);
+    const table = parseMarkdownBlocks("<!-- center -->\n| a |\n| --- |\n| 1 |");
+    expect(table.map((b) => b.align)).toEqual(["center", "center", "center"]);
+  });
+
+  it("EDT-FR-GVJM: the alignment does not reach a second table or a list of another marker", () => {
+    expect(parseMarkdownBlocks("<!-- center -->\n| a |\n\n| b |").map((b) => b.align)).toEqual([
+      "center",
+      undefined,
+    ]);
+    expect(parseMarkdownBlocks("<!-- center -->\n- a\n\n* b").map((b) => b.align)).toEqual([
+      "center",
+      undefined,
+    ]);
+    expect(parseMarkdownBlocks("<!-- center -->\n- a\n\n- b").map((b) => b.align)).toEqual([
+      "center",
+      "center",
+    ]);
+  });
+
+  it("EDT-FR-UYPS, EDT-FR-QALB: marker and comment lines inside a fence are code", () => {
+    expect(kinds("```md\n<!-- % -->\n<!-- center -->\n<!-- note -->\n```\nAfter")).toEqual([
+      "code",
+      "paragraph",
+    ]);
+  });
+
+  it("EDT-FR-QALB: a CRLF line is read as its LF form", () => {
+    expect(kinds("<!-- %% -->\r\nText\r\n")).toEqual(["break", "paragraph"]);
+  });
+
+  it("EDT-FR-UYPS: an inline comment is a comment span with no text, and keeps its raw spelling", () => {
+    expect(parseInline("a <!-- b \\* c --> d")).toEqual([
+      { kind: "text", text: "a " },
+      { kind: "comment", text: "", raw: "<!-- b \\* c -->" },
+      { kind: "text", text: " d" },
+    ]);
+    expect(parseInline("`<!-- code -->`")).toEqual([{ kind: "code", text: "<!-- code -->" }]);
+  });
+});

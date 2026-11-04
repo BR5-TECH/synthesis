@@ -18,6 +18,7 @@ import { parseInline, parseMarkdownBlocks } from "../diff/markdown";
 import { rosterOf, segmentBody } from "./agentTags";
 import type { Roster } from "./agentTags";
 import { stripCitationMarkers } from "../text/citationMarkers";
+import { CommentChip, CommentChipLine } from "./markdownChips";
 
 const EMPTY: readonly string[] = [];
 
@@ -38,6 +39,8 @@ function Inline({
             return <em key={i}>{span.text}</em>;
           case "code":
             return <code key={i}>{span.text}</code>;
+          case "comment":
+            return <CommentChip key={i} raw={span.raw} />;
           case "link":
             return (
               <a key={i} title={span.href} aria-disabled>
@@ -167,6 +170,11 @@ export function CommentMarkdown({
             );
           case "rule":
             return <hr key={i} />;
+          // EDT-FR-UYPS: a comment in a message is a chip. A narrow card shows
+          // a vertical break as the chip of its comment, not as a tall spacer.
+          case "comment":
+          case "break":
+            return <CommentChipLine key={i} raw={block.kind === "comment" ? block.text : block.source} />;
           case "table-row":
             // A table in a comment is rare and a real table in a narrow rail is
             // unreadable; the row's cells render as plain text rather than being

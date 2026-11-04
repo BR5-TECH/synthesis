@@ -1,0 +1,136 @@
+/* ---------- HTML comments on a rich surface (EDT-editor.md EDT-FR-QALB – EDT-FR-PCCA) ---------- */
+
+/* EDT-FR-CSKH: a spacer is a fixed number of body line heights, so it follows
+   the Rich Markdown size and line height. The level sets the count in
+   `--md-break-lines`. A spacer is empty: it shows an outline only while it is
+   selected, or under the pointer on an editable surface. */
+.doc .md-break {
+  display: block;
+  height: calc(var(--md-break-lines, 3) * var(--fs-doc-md) * var(--font-rich-line-height));
+  margin: 0;
+  border-radius: var(--r-sm);
+  outline: 1px dashed transparent;
+  outline-offset: -1px;
+}
+.doc .md-break[data-level="1"] { --md-break-lines: 12; }
+.doc .md-break[data-level="2"] { --md-break-lines: 8; }
+.doc .md-break[data-level="3"] { --md-break-lines: 5; }
+.doc .md-break[data-level="4"] { --md-break-lines: 3; }
+.doc[contenteditable="true"] .md-break:hover { outline-color: var(--border-2); }
+/* A selection shows only while its surface has the focus: an editable run of
+   a Diff tab that holds only a spacer starts with it selected. Placed after the
+   hover rule, so the selection outline wins under the pointer too. */
+.doc.ProseMirror-focused .md-break.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* EDT-FR-UYPS: a chip is a small glyph in a receding treatment. The comment
+   text is in the DOM for selection and copy, but visually hidden; the glyph is
+   CSS content, which no selection holds. */
+.doc .md-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 1.35em;
+  padding: 0 0.35em;
+  margin: 0 0.15em;
+  vertical-align: text-bottom;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  text-decoration: none;
+  cursor: default;
+  white-space: nowrap;
+}
+.doc .md-chip::before { content: "<!--"; }
+.doc .md-chip__raw {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: pre;
+}
+.doc .md-chip-line { display: block; margin: 0 0 var(--sp-3); line-height: 1.6; }
+.doc.ProseMirror-focused .md-chip.ProseMirror-selectednode,
+.doc.ProseMirror-focused .md-chip-line.ProseMirror-selectednode .md-chip,
+.doc .md-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.doc .md-chip-anchor { position: relative; display: inline-flex; }
+
+/* EDT-FR-IGZL: the tooltip of a chip holds the comment text as plain text. It
+   takes no pointer event, so it is a hover affordance and not an overlay. */
+.md-chip-tooltip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  max-width: min(480px, 80vw);
+  max-height: 40vh;
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  color: var(--fg-1);
+  border: 1px solid var(--border-1);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-xs);
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.md-chip-tooltip[hidden] { display: none; }
+.md-chip-anchor > .md-chip-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+}
+
+/* EDT-FR-GVJM: a text block aligns its text, and a list takes its markers with
+   its text. A table, a code block, and a diagram move as a box at their content
+   width, and code text stays left-aligned. */
+.doc [data-align="center"] { text-align: center; }
+.doc [data-align="right"] { text-align: right; }
+.doc ul[data-align], .doc ol[data-align] { list-style-position: inside; padding-left: 0; }
+/* The first paragraph of an item stays on the line of its marker. */
+.doc ul[data-align] > li > p:first-child,
+.doc ol[data-align] > li > p:first-child { display: inline; }
+.doc pre[data-align], .doc table[data-align] {
+  width: fit-content;
+  max-width: 100%;
+  text-align: left;
+}
+.doc pre[data-align="center"], .doc table[data-align="center"] { margin-left: auto; margin-right: auto; }
+.doc pre[data-align="right"], .doc table[data-align="right"] { margin-left: auto; margin-right: 0; }
+
+/* EDT-FR-UPNB: the Hx, Vx, and Ax dropdowns of the toolbar. The popup is
+   fixed to the window, because the band clips what does not fit in it. */
+.block-menu { display: inline-flex; flex: none; }
+.block-menu__trigger { gap: 2px; min-width: 2.6em; }
+.block-menu__trigger[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.block-menu__value { display: inline-flex; align-items: center; font-weight: var(--fw-semi, 600); }
+.block-menu__caret { font-size: 0.7em; color: var(--fg-3); }
+.block-menu__popup {
+  position: fixed;
+  z-index: var(--z-overlay);
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-1);
+  background: var(--bg-elevated);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+}
+.block-menu__item { min-width: 2.2em; justify-content: center; font-weight: var(--fw-semi, 600); }
+.block-menu__item[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }

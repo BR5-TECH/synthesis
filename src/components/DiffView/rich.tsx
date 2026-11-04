@@ -17,6 +17,7 @@ import { frontmatterLineCount } from "../markdownFidelity";
 import { DIAGRAM_LANGUAGE } from "../markdownMermaid";
 import { MermaidStatic } from "./MermaidStatic";
 import type { FileRevisions } from "../../types";
+import { BreakSpacer, CommentChip, CommentChipLine } from "../markdownChips";
 
 // ---------------------------------------------------------------------------
 // Rich rendering (DFV-FR-17 .. DFV-FR-22)
@@ -334,6 +335,9 @@ function Inline({ text, ranges }: { text: string; ranges?: Range[] }) {
                 {content}
               </a>
             );
+          case "comment":
+            // DFV-FR-NJIS: a comment is a chip, inert on this side.
+            return <CommentChip key={index} raw={span.raw} />;
           default:
             return <span key={index}>{content}</span>;
         }
@@ -356,6 +360,9 @@ function blockDiffBasis(block: MarkdownBlock): string | null {
       return block.text;
     case "table-row":
     case "rule":
+    // DFV-FR-SZZX: a spacer and a chip have no words of their own to mark.
+    case "break":
+    case "comment":
       return null;
     default:
       return inlineText(block.text);
@@ -392,19 +399,25 @@ function MarkdownBody({
   block: MarkdownBlock;
   ranges?: Range[];
 }) {
+  // DFV-FR-NJIS / EDT-FR-GVJM: the alignment its marker sets.
+  const align = block.align;
   switch (block.kind) {
+    case "break":
+      return <BreakSpacer level={block.level ?? 4} />;
+    case "comment":
+      return <CommentChipLine raw={block.text} />;
     case "heading": {
       const level = Math.min(Math.max(block.level ?? 1, 1), 6);
       const Tag = `h${level}` as "h1";
       return (
-        <Tag>
+        <Tag data-align={align}>
           <Inline text={block.text} ranges={ranges} />
         </Tag>
       );
     }
     case "code": {
       const fence = (
-        <pre data-language={block.language ?? ""}>
+        <pre data-language={block.language ?? ""} data-align={align}>
           <code>
             <Marked text={block.text} offset={0} ranges={ranges} />
           </code>
@@ -428,11 +441,17 @@ function MarkdownBody({
       );
       const indent = { marginLeft: (block.depth ?? 0) * 20 };
       return block.ordered ? (
-        <ol style={indent} start={Number.parseInt(block.marker ?? "1", 10) || 1}>
+        <ol
+          style={indent}
+          start={Number.parseInt(block.marker ?? "1", 10) || 1}
+          data-align={align}
+        >
           {item}
         </ol>
       ) : (
-        <ul style={indent}>{item}</ul>
+        <ul style={indent} data-align={align}>
+          {item}
+        </ul>
       );
     }
     case "table-row":
@@ -441,7 +460,7 @@ function MarkdownBody({
       return block.isDivider ? (
         <div className="md-table-divider" aria-hidden />
       ) : (
-        <div className="md-table-row">
+        <div className="md-table-row" data-align={align}>
           {(block.cells ?? []).map((cell, index) => (
             <span className="md-table-cell" key={index}>
               <Inline text={cell} />
@@ -451,15 +470,15 @@ function MarkdownBody({
       );
     case "quote":
       return (
-        <blockquote>
+        <blockquote data-align={align}>
           <Inline text={block.text} ranges={ranges} />
         </blockquote>
       );
     case "rule":
-      return <hr />;
+      return <hr data-align={align} />;
     default:
       return (
-        <p>
+        <p data-align={align}>
           <Inline text={block.text} ranges={ranges} />
         </p>
       );

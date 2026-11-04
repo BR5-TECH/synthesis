@@ -128,6 +128,14 @@ function markableUnits(doc: PmNode): { pos: number; node: PmNode }[] {
       if (parent?.type.name === "doc") units.push({ pos, node });
       return false;
     }
+    // DFV-FR-SZZX: a vertical break and a comment on lines of its own are
+    // blocks of their own at the top level. The block parse reads a comment
+    // inside a list item as part of that item, and one inside a quote as text
+    // of the quote, which is not descended into above.
+    if (name === "verticalBreak" || name === "htmlComment") {
+      if (parent?.type.name === "doc") units.push({ pos, node });
+      return false;
+    }
     return true;
   });
   return units;
@@ -184,6 +192,8 @@ const NODE_OF: Record<string, readonly string[]> = {
   quote: ["blockquote"],
   rule: ["horizontalRule"],
   "table-row": ["tableRow"],
+  break: ["verticalBreak"],
+  comment: ["htmlComment"],
 };
 
 function buildDecorations(doc: PmNode, units: RichUnitMark[]): DecorationSet {

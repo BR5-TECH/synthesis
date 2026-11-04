@@ -190,7 +190,7 @@ describe("the table of contents control (EDT-FR-LGQA, EDT-FR-16)", () => {
   it("EDT-FR-LGQA, EDT-FR-16, CMT-FR-29: in WYSIWYG with the formatting toolbar, directly before the mode toggle, before the column's controls", async () => {
     wireBackend();
     await mountMarkdown();
-    expect(screen.getByRole("button", { name: "Heading 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Heading" })).toBeInTheDocument();
     expectPairedWithToggle("Edit as Markdown source");
   });
 
@@ -211,7 +211,7 @@ describe("the table of contents control (EDT-FR-LGQA, EDT-FR-16)", () => {
         sessions.setFind("a.md", { form });
       });
       await screen.findByLabelText("Find");
-      expect(screen.queryByRole("button", { name: "Heading 1" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Heading" })).toBeNull();
       expectPairedWithToggle("Edit as Markdown source");
     },
   );

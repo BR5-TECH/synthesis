@@ -752,4 +752,20 @@ export const Icon = {
       <path d="M6 5h12M12 5v14M9 19h6" />
     </I>
   ),
+  /* EDT-FR-EUUI: the standard alignment icons of the Ax dropdown. */
+  AlignLeft: (p: IconProps) => (
+    <I {...p}>
+      <path d="M4 6h16M4 10h10M4 14h16M4 18h10" />
+    </I>
+  ),
+  AlignCenter: (p: IconProps) => (
+    <I {...p}>
+      <path d="M4 6h16M7 10h10M4 14h16M7 18h10" />
+    </I>
+  ),
+  AlignRight: (p: IconProps) => (
+    <I {...p}>
+      <path d="M4 6h16M10 10h10M4 14h16M10 18h10" />
+    </I>
+  ),
 };

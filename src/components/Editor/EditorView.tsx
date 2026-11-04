@@ -221,6 +221,17 @@ export function EditorView(props: EditorViewProps) {
   };
 
   /**
+   * EDT-FR-RZTS: a break or an alignment edit is one step of the history of
+   * its own, sealed on both sides as the diagram insert is.
+   */
+  const markupEdit = (run: () => boolean): boolean => {
+    sealBurst(session.history);
+    const changed = run();
+    sealBurst(session.history);
+    return changed;
+  };
+
+  /**
    * CMT-FR-05: a non-empty selection reveals the affordance that starts a thread
    * over it. A zero-length selection reveals nothing.
    *
@@ -581,6 +592,7 @@ export function EditorView(props: EditorViewProps) {
                 editor={editor}
                 editable={!blocked}
                 onInsertDiagram={insertDiagram}
+                onMarkupEdit={markupEdit}
               />
             )
           )}

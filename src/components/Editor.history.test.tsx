@@ -15,6 +15,7 @@ import { EditSessionStore } from "../state/editSessions";
 import type { ArtifactChangedPayload, ArtifactContents } from "../types";
 import { ARTIFACT_CHANGED_EXTERNALLY } from "../events";
 import { letWriteLand } from "../test/autosave";
+import { chooseToolbarItem } from "../test/toolbarMenus";
 
 // Same invoke/listen mocking convention as the rest of the suite. The detailed
 // lifecycle (load/save/external-change resolution) is covered against the hook
@@ -107,7 +108,9 @@ const editSurface = (): HTMLElement =>
 
 const bodyEdit = (toolbarTitle: string) => {
   fireEvent.keyDown(pmEl(), { key: "a", ctrlKey: true }); // selectAll
-  fireEvent.mouseDown(screen.getByTitle(toolbarTitle));
+  // EDT-FR-NTHC: the heading buttons are in the Hx dropdown.
+  if (toolbarTitle.startsWith("Heading ")) chooseToolbarItem("Heading", toolbarTitle);
+  else fireEvent.mouseDown(screen.getByTitle(toolbarTitle));
 };
 const pressUndo = () =>
   fireEvent.keyDown(editSurface(), { key: "z", metaKey: true });

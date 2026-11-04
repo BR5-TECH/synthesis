@@ -1,6 +1,6 @@
 /**
  * EDT-FR-QJJP: more hint sets of the other chart types, mostly of the beta
- * chart types of the bundled Mermaid version (11.17.2).
+ * chart types of the bundled Mermaid version (12.2.0).
  */
 import type { Hint, HintSet } from "./types";
 
@@ -458,6 +458,86 @@ const RAILROAD_PEG: HintSet = {
   ].join("\n"),
 };
 
+const AGENTFLOW: HintSet = {
+  key: "agentflow",
+  name: "Agent flow",
+  mermaidIds: ["agentflow"],
+  detect: /^agentflow-beta\b/,
+  declaration: hint("agentflow-beta TB", "Declares an agent flow. TB, TD, BT, LR, and RL set the direction."),
+  groups: [
+    {
+      title: "Steps",
+      hints: [
+        hint('draft["Draft the notes"]@{ shape: task }', "A unit of work that an agent does."),
+        hint('lookup["changelog_search"]@{ shape: tool }', "A tool that the agent calls."),
+        hint('ok["Accurate?"]@{ shape: decision }', "A branch point. Other shapes are input, refdoc, and action."),
+      ],
+    },
+    {
+      title: "Edges",
+      hints: [
+        hint("draft --> lookup", "Control or data goes from one step to the next."),
+        hint("draft -.- guide", "The step reads the reference material. No control goes there."),
+        hint("fix --x check", "The failure path out of a step."),
+        hint("check -- yes --> ship", "An edge with a label."),
+      ],
+    },
+    {
+      title: "Containers",
+      hints: [hint('flow team["Content team"]\n  gather["Gather sources"]\nend', "A flow block groups steps.")],
+    },
+  ],
+  example: [
+    "agentflow-beta TB",
+    '  changes["Gather changes"]@{ shape: input }',
+    '  analyse["Analyse diff"]@{ shape: task }',
+    '  lint["run_linter"]@{ shape: tool }',
+    '  ok["Clean?"]@{ shape: decision }',
+    "  changes --> analyse --> lint --> ok",
+  ].join("\n"),
+};
+
+const USECASE: HintSet = {
+  key: "usecase",
+  name: "Use case diagram",
+  mermaidIds: ["usecase"],
+  detect: /^usecase-beta(?:\s|$)/,
+  declaration: hint("usecase-beta", "Declares a use case diagram."),
+  groups: [
+    {
+      title: "Actors and use cases",
+      hints: [
+        hint('actor Admin("Main administrator")', "An actor, with an identifier and a label."),
+        hint('Login("Sign in")', "A use case as an ellipse."),
+        hint("Report[Generate report]", "A use case as a rectangle."),
+        hint('systemBoundary "Order system"\n  Checkout("Place order")\nend', "A system boundary around use cases."),
+      ],
+    },
+    {
+      title: "Relationships",
+      hints: [
+        hint("Customer --> Checkout", "An actor uses a use case."),
+        hint("Checkout ..> : include Payment", "The source use case includes the target."),
+        hint("ApplyCoupon ..> : extend Checkout", "The source use case extends the target."),
+        hint("Admin --|> Person", "A generalization, from the special to the general."),
+      ],
+    },
+    {
+      title: "Layout",
+      hints: [hint("direction LR", "TD, TB, BT, LR, and RL set the direction.")],
+    },
+  ],
+  example: [
+    "usecase-beta",
+    "direction LR",
+    'actor Customer("Customer")',
+    'systemBoundary "Order system"',
+    '  Checkout("Place order")',
+    "end",
+    "Customer --> Checkout",
+  ].join("\n"),
+};
+
 export const OTHER_SETS_2: readonly HintSet[] = [
   SWIMLANE,
   INFO,
@@ -473,4 +553,6 @@ export const OTHER_SETS_2: readonly HintSet[] = [
   RAILROAD_EBNF,
   RAILROAD_ABNF,
   RAILROAD_PEG,
+  AGENTFLOW,
+  USECASE,
 ];

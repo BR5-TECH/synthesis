@@ -25,7 +25,7 @@ export interface HintSet {
   name: string;
   /**
    * The ids that the bundled Mermaid version gives to the chart types this
-   * set covers, for example `["flowchart", "flowchart-v2", "flowchart-elk"]`.
+   * set covers, for example `["flowchart-v2", "flowchart-elk"]`.
    */
   mermaidIds: readonly string[];
   /**

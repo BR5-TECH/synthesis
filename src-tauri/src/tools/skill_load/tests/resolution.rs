@@ -270,6 +270,7 @@ fn an_ecosystem_of_the_wrong_json_shape_does_not_lose_the_name_beside_it() {
 
     assert_eq!(parse_ecosystem("claude"), Some(Ecosystem::Claude));
     assert_eq!(parse_ecosystem(" GITHUB "), Some(Ecosystem::Github));
+    assert_eq!(parse_ecosystem("Synthesis"), Some(Ecosystem::Synthesis));
     assert_eq!(parse_ecosystem("elsewhere"), None);
     assert_eq!(parse_ecosystem(""), None);
 }

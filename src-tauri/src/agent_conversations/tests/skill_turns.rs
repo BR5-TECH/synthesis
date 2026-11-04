@@ -110,3 +110,62 @@ fn a_turn_answers_skills_through_its_agents_filter_and_keeps_its_definitions() {
     };
     assert_eq!(definitions(&personal), definitions(&project), "CVL-FR-08: the same definitions");
 }
+
+// CVL-FR-VZZR, AGR-FR-HMVQ: a turn reaches every synthesis skill its agent
+// does not turn off. A Personal agent reaches them too, and an opt-out removes
+// that one skill from the list and from `load_skill`.
+#[test]
+fn a_turn_reaches_the_synthesis_skills_its_agent_does_not_turn_off() {
+    let script = || {
+        vec![
+            Ok(ScriptedReply::calls("list_skills", serde_json::json!({}))
+                .and_calls("load_skill", serde_json::json!({ "name": "glossary" }))),
+            Ok(ScriptedReply::answer("Done.")),
+        ]
+    };
+    let seed = |h: &Harness| {
+        for (name, body) in [("glossary", "Use the glossary."), ("style", "Use the style.")] {
+            crate::tools::tests::write_skill(
+                h.root().path(),
+                ".synthesis/skills",
+                name,
+                &format!("name: {name}\ndescription: The house {name} of this project."),
+                body,
+            );
+        }
+    };
+
+    let open = Harness::scripted(script());
+    seed(&open);
+    open.mount();
+    open.create_agent("arch", "");
+    let (terminal, _) = run_one(&open, "arch");
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    let results = tool_results(&open.seam.exchanges()[1]);
+    assert!(results[0].contains("\"synthesis\"") && results[0].contains("glossary"));
+    assert!(results[1].contains("Use the glossary."), "{}", results[1]);
+
+    let off = Harness::scripted(script());
+    seed(&off);
+    off.mount();
+    agents::create_agent_impl(
+        &off.store(),
+        "",
+        None,
+        agents::AgentScope::Personal,
+        &AgentDraft {
+            nickname: "arch".into(),
+            model_id: "m".into(),
+            disabled_skills: vec![".synthesis/skills/glossary/SKILL.md".into()],
+            reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
+            ..AgentDraft::default()
+        },
+    )
+    .expect("agent");
+    let (terminal, _) = run_one(&off, "arch");
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    let results = tool_results(&off.seam.exchanges()[1]);
+    assert!(!results[0].contains("glossary"), "the opt-out removes it: {}", results[0]);
+    assert!(results[0].contains("style"), "and only it");
+    assert!(results[1].contains("No skill by that name"), "{}", results[1]);
+}

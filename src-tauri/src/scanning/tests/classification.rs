@@ -48,6 +48,29 @@ fn ts2_skill_inferred_from_claude_skills_path() {
     assert_eq!(foo.type_source, Some(TypeSource::Inferred));
 }
 
+// ASC-FR-03, DSL-FR-NWKE: a synthesis skill shows in the tree as a `skill`,
+// together with the files of its folder.
+#[test]
+fn skill_inferred_from_synthesis_skills_path() {
+    assert_eq!(infer_from_path(".synthesis/skills/glossary/SKILL.md"), Some(ArtifactType::Skill));
+    assert_eq!(
+        infer_from_path(".synthesis/skills/glossary/references/terms.md"),
+        Some(ArtifactType::Skill)
+    );
+    assert_ne!(infer_from_path(".synthesis/agents/a.toml"), Some(ArtifactType::Skill));
+
+    let entries = [
+        entry(".synthesis", true),
+        entry(".synthesis/skills", true),
+        entry(".synthesis/skills/glossary", true),
+        entry(".synthesis/skills/glossary/SKILL.md", false),
+    ];
+    let tree = build_tree("p", &entries, &LibraryAssignments::default(), &no_content);
+    let skill = find(&tree, ".synthesis/skills/glossary/SKILL.md").unwrap();
+    assert_eq!(skill.artifact_type, Some(ArtifactType::Skill));
+    assert_eq!(skill.type_source, Some(TypeSource::Inferred));
+}
+
 #[test]
 fn ts3_agent_inferred_across_ecosystems() {
     // `.claude/agents/a.md` (Claude Code) and top-level `AGENTS.md` (Codex)

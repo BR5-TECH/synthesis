@@ -48,6 +48,7 @@ fn worktree() -> (TempDir, RootFs) {
 fn draft(nickname: &str) -> AgentDraft {
     AgentDraft {
         skills: Vec::new(),
+        disabled_skills: Vec::new(),
         voice: String::new(),
         nickname: nickname.into(),
         title: String::new(),

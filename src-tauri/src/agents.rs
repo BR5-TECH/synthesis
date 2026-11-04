@@ -119,6 +119,11 @@ pub struct Agent {
     /// while empty, so the Personal agent registry holds no such field.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<String>,
+    /// AGR-FR-HMVQ: the paths of the synthesis skills this agent may not use.
+    /// Held by both scopes, and omitted from the store while empty, so a record
+    /// written before the field existed reads as an empty list (AGR-FR-WDZT).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled_skills: Vec<String>,
     /// RFC 3339 UTC. Empty for a Project agent, whose file carries no timestamp.
     pub created_at: String,
     /// RFC 3339 UTC. Empty for a Project agent.
@@ -147,6 +152,9 @@ pub struct AgentDraft {
     /// AGR-FR-IGIL: the selected project skill paths, normalised by
     /// [`normalise_skills`] before anything is written.
     pub skills: Vec<String>,
+    /// AGR-FR-HMVQ: the synthesis skill paths the agent turns off, normalised
+    /// by [`normalise_skills`] before anything is written (AGR-FR-CJPB).
+    pub disabled_skills: Vec<String>,
     pub reasoning: Option<ReasoningChoice>,
 }
 
@@ -303,7 +311,7 @@ pub fn availability_of(
 
 /// GSS-FR-30 / AGR-FR-QKOV: the Personal agents as the store holds them, with
 /// no project skill selection — a hand-edited record that carries one reads
-/// back without it.
+/// back without it. The synthesis opt-outs stay (AGR-FR-HMVQ).
 pub fn load_personal(store: &GlobalSettingsStore) -> Result<Vec<Agent>, String> {
     let mut agents = store.load_agent_registry()?;
     agents.iter_mut().for_each(|agent| agent.skills.clear());
@@ -311,7 +319,8 @@ pub fn load_personal(store: &GlobalSettingsStore) -> Result<Vec<Agent>, String> 
 }
 
 /// GSS-FR-30 / AGR-FR-QKOV: write the Personal agents, none of them with a
-/// project skill selection, so the registry holds no `skills` field.
+/// project skill selection, so the registry holds no `skills` field. Their
+/// `disabled_skills` are written as they are (AGR-FR-HMVQ).
 fn save_personal(store: &GlobalSettingsStore, mut agents: Vec<Agent>) -> Result<(), String> {
     agents.iter_mut().for_each(|agent| agent.skills.clear());
     store.save_agent_registry(agents)
@@ -454,7 +463,8 @@ pub fn normalise_title(title: &str) -> String {
     title.trim().to_string()
 }
 
-/// AGR-FR-GBJL: the stored form of a Project agent's skill selection — each
+/// AGR-FR-GBJL, AGR-FR-CJPB: the stored form of a skill list — a Project
+/// agent's selection, or either scope's synthesis opt-outs — each
 /// entry trimmed, blank entries removed, later duplicates removed, in the order
 /// given. No entry is checked against the registry: a skill can be absent from
 /// this worktree and present in another, and an entry that names no project
@@ -534,6 +544,8 @@ pub fn create_agent_impl(
                 // AGR-FR-QKOV: a Personal agent has no project skill selection,
                 // and a draft that carries one is stored without it.
                 skills: Vec::new(),
+                // AGR-FR-HMVQ, AGR-FR-CJPB: a Personal agent keeps its opt-outs.
+                disabled_skills: normalise_skills(&draft.disabled_skills),
                 created_at: now.clone(),
                 updated_at: now,
                 reasoning: draft.reasoning.clone(),
@@ -548,7 +560,8 @@ pub fn create_agent_impl(
             validate_draft(store, project_key, &existing, draft, None)?;
             let id = new_note_id();
             let skills = normalise_skills(&draft.skills);
-            project_store::write(root, &id, draft, &title, &skills)?;
+            let disabled_skills = normalise_skills(&draft.disabled_skills);
+            project_store::write(root, &id, draft, &title, &skills, &disabled_skills)?;
             Ok(Agent {
                 id,
                 nickname: draft.nickname.clone(),
@@ -557,6 +570,7 @@ pub fn create_agent_impl(
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
                 skills,
+                disabled_skills,
                 created_at: String::new(),
                 updated_at: String::new(),
                 reasoning: draft.reasoning.clone(),
@@ -591,6 +605,8 @@ pub fn update_agent_impl(
                 voice: draft.voice.trim().to_string(),
                 // AGR-FR-QKOV.
                 skills: Vec::new(),
+                // AGR-FR-HMVQ, AGR-FR-CJPB.
+                disabled_skills: normalise_skills(&draft.disabled_skills),
                 created_at: agents[index].created_at.clone(),
                 updated_at: now_rfc3339(),
                 reasoning: draft.reasoning.clone(),
@@ -607,7 +623,8 @@ pub fn update_agent_impl(
             }
             validate_draft(store, project_key, &existing, draft, Some(id))?;
             let skills = normalise_skills(&draft.skills);
-            project_store::write(root, id, draft, &title, &skills)?;
+            let disabled_skills = normalise_skills(&draft.disabled_skills);
+            project_store::write(root, id, draft, &title, &skills, &disabled_skills)?;
             Ok(Agent {
                 id: id.to_string(),
                 nickname: draft.nickname.clone(),
@@ -616,6 +633,7 @@ pub fn update_agent_impl(
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
                 skills,
+                disabled_skills,
                 created_at: String::new(),
                 updated_at: String::new(),
                 reasoning: draft.reasoning.clone(),
@@ -830,6 +848,8 @@ fn require_project(project: &ProjectState) -> Result<String, String> {
     project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.into())
 }
 
+#[cfg(test)]
+mod disabled_skills_tests;
 #[cfg(test)]
 mod project_tests;
 #[cfg(test)]

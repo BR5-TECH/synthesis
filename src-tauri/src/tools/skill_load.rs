@@ -49,7 +49,7 @@ pub const DESCRIPTION: &str = "Read one skill's full instructions, so you can fo
 
 const NAME_DESCRIPTION: &str = "The skill's name, exactly as `list_skills` or `search_skills` reported it. Leading and trailing spaces and differences in letter case are ignored.";
 
-const ECOSYSTEM_DESCRIPTION: &str = "Which ecosystem's copy to load, when two skills share a name: one of `claude`, `codex`, `github`, `opencode`, or `builtin`. Leave it out unless you have been told the name is ambiguous.";
+const ECOSYSTEM_DESCRIPTION: &str = "Which ecosystem's copy to load, when two skills share a name: one of `claude`, `codex`, `github`, `opencode`, `synthesis`, or `builtin`. Leave it out unless you have been told the name is ambiguous.";
 
 const FILE_DESCRIPTION: &str = "A file of the skill to read instead of its SKILL.md, as a path relative to the skill's own folder, exactly as the skill's instructions name it. For example: 'references/agentflow-beta.md'. Leave it out to read the skill's instructions.";
 
@@ -89,7 +89,7 @@ fn lenient_file<'de, D: serde::Deserializer<'de>>(
 /// A `null` and an absent key both mean "any ecosystem". A value of some other
 /// JSON shape is neither: the model asked to be narrowed, and it named nothing
 /// this project has. Decoding it to an empty string carries that through to
-/// [`parse_ecosystem`], which matches none of the four, so it lands on the
+/// [`parse_ecosystem`], which matches none of the six, so it lands on the
 /// unknown-skill refusal along with every other way of naming a skill that is
 /// not there (LSK-FR-07) rather than failing the whole decode and losing the
 /// perfectly good `name` beside it.
@@ -106,7 +106,7 @@ fn lenient_ecosystem<'de, D: serde::Deserializer<'de>>(
 
 /// TLC-FR-06: the JSON Schema for [`LoadSkillArgs`].
 ///
-/// The four values are declared as an `enum` as well as named in the
+/// The six values are declared as an `enum` as well as named in the
 /// description: the schema is what a provider can constrain a model against,
 /// and the description is what the model reads.
 pub fn parameters() -> serde_json::Value {
@@ -119,7 +119,7 @@ pub fn parameters() -> serde_json::Value {
             },
             "ecosystem": {
                 "type": "string",
-                "enum": ["claude", "codex", "github", "opencode", "builtin"],
+                "enum": ["claude", "codex", "github", "opencode", "synthesis", "builtin"],
                 "description": ECOSYSTEM_DESCRIPTION,
             },
             "file": {
@@ -132,7 +132,7 @@ pub fn parameters() -> serde_json::Value {
 }
 
 /// The spelling of an ecosystem a model may send, or `None` for anything that
-/// names none of the five (LSK-FR-07).
+/// names none of the six (LSK-FR-07).
 pub fn parse_ecosystem(value: &str) -> Option<Ecosystem> {
     let value = value.trim();
     [
@@ -140,6 +140,7 @@ pub fn parse_ecosystem(value: &str) -> Option<Ecosystem> {
         Ecosystem::Codex,
         Ecosystem::Github,
         Ecosystem::Opencode,
+        Ecosystem::Synthesis,
         Ecosystem::Builtin,
     ]
     .into_iter()
@@ -170,7 +171,7 @@ pub fn resolve(
     let by_name: Vec<&SkillDescriptor> =
         skills.iter().filter(|s| normalize_skill_name(&s.name) == wanted).collect();
 
-    // LSK-FR-07: the filter narrows, and a value naming none of the four
+    // LSK-FR-07: the filter narrows, and a value naming none of the six
     // narrows to nothing rather than being refused as malformed.
     let candidates: Vec<&SkillDescriptor> = match args.ecosystem.as_deref() {
         None => by_name,

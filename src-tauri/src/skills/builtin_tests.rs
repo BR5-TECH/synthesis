@@ -177,10 +177,9 @@ fn builtin_skill_file_reads_inside_one_skill_folder_and_nowhere_else() {
 fn every_pass_adds_the_builtin_skills_to_the_registry_and_the_index() {
     let empty = crate::tools::tests::empty_project();
     let indexer = empty.app.state::<Bm25Indexer>();
-    let listed = list_skills(&indexer, &SkillFilter::builtin_only());
+    let listed = list_skills(&indexer, &SkillFilter::empty());
     assert!(builtin_named(&listed, "mermaid").is_some(), "present with no skill folder");
-    let ranked =
-        search_skills(&indexer, "sequence diagram flowchart", 5, &SkillFilter::builtin_only());
+    let ranked = search_skills(&indexer, "sequence diagram flowchart", 5, &SkillFilter::empty());
     assert!(ranked.iter().any(|r| r.skill.name == "mermaid"), "and rankable");
 
     let demo = demo_project();
@@ -228,13 +227,14 @@ fn a_project_skill_named_like_a_builtin_skill_does_not_replace_it() {
 // ---------------------------------------------------------------------------
 
 // DSL-FR-VJZD: the filter admits every built-in skill, and a project skill
-// only by its path. A path naming nothing admits nothing.
+// only by its path. A path naming nothing admits nothing. The fixture holds no
+// synthesis skill, which `synthesis_tests.rs` covers.
 #[test]
-fn the_filter_admits_builtin_skills_and_selected_project_skills_alone() {
+fn the_filter_admits_builtin_skills_and_selected_project_skills() {
     let fixture = demo_project();
     let indexer = fixture.app.state::<Bm25Indexer>();
 
-    let none = list_skills(&indexer, &SkillFilter::builtin_only());
+    let none = list_skills(&indexer, &SkillFilter::empty());
     assert!(none.iter().all(|s| s.ecosystem == Ecosystem::Builtin));
     assert!(builtin_named(&none, "mermaid").is_some());
 
@@ -289,8 +289,8 @@ fn the_search_filter_applies_before_the_limit() {
 fn a_closed_project_lists_and_ranks_no_skill_at_all() {
     let app = closed_project();
     let indexer = app.state::<Bm25Indexer>();
-    assert!(list_skills(&indexer, &SkillFilter::builtin_only()).is_empty());
-    assert!(search_skills(&indexer, "diagram", 10, &SkillFilter::builtin_only()).is_empty());
+    assert!(list_skills(&indexer, &SkillFilter::empty()).is_empty());
+    assert!(search_skills(&indexer, "diagram", 10, &SkillFilter::empty()).is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -352,10 +352,9 @@ fn the_builtin_skills_are_present_at_mount_before_any_pass() {
     let second = tempfile::TempDir::new().unwrap();
     for root in [first.path(), second.path()] {
         indexer.mount(&crate::fs::RootFs::for_root(root));
-        let listed = list_skills(&indexer, &SkillFilter::builtin_only());
+        let listed = list_skills(&indexer, &SkillFilter::empty());
         assert!(builtin_named(&listed, "mermaid").is_some(), "listed before any pass");
-        let ranked =
-            search_skills(&indexer, "draw a sequence diagram", 5, &SkillFilter::builtin_only());
+        let ranked = search_skills(&indexer, "draw a sequence diagram", 5, &SkillFilter::empty());
         assert!(ranked.iter().any(|r| r.skill.name == "mermaid"), "and rankable");
     }
 }

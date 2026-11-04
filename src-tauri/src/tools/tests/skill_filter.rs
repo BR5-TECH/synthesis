@@ -96,12 +96,12 @@ fn the_list_holds_the_selected_project_skills_and_every_builtin_skill() {
     )));
 }
 
-// SLT-FR-12 / SLT-FR-GTZM: an agent that selects nothing gets the built-in
-// skills alone, as a success.
+// SLT-FR-12 / SLT-FR-GTZM: an agent that selects nothing, in a project with
+// no synthesis skill, gets the built-in skills alone, as a success.
 #[test]
-fn an_agent_that_selects_nothing_lists_the_builtin_skills_alone() {
+fn an_agent_that_selects_nothing_lists_no_project_skill() {
     let fixture = referencing_project();
-    let entries = listed(&fixture, SkillFilter::builtin_only());
+    let entries = listed(&fixture, SkillFilter::empty());
     assert!(!entries.is_empty());
     assert!(entries.iter().all(|(_, ecosystem, _)| *ecosystem == Ecosystem::Builtin));
 }
@@ -149,7 +149,7 @@ fn the_search_never_ranks_a_project_skill_the_agent_does_not_select() {
 #[test]
 fn the_search_ranks_a_builtin_skill_for_every_agent() {
     let fixture = referencing_project();
-    for filter in [SkillFilter::builtin_only(), only_release()] {
+    for filter in [SkillFilter::empty(), only_release()] {
         let ranked = searched(&fixture, filter, "draw a sequence diagram of the login flow");
         assert_eq!(ranked.first(), Some(&("mermaid".to_string(), Ecosystem::Builtin)));
     }
@@ -165,7 +165,7 @@ fn the_search_ranks_a_builtin_skill_for_every_agent() {
 fn an_unselected_project_skill_is_unknown_with_or_without_file() {
     let fixture = referencing_project();
     assert!(load(&fixture, SkillFilter::all_project(), "triage", None).is_ok(), "precondition");
-    let filter = SkillFilter::builtin_only();
+    let filter = SkillFilter::empty();
     assert_eq!(load(&fixture, filter.clone(), "release", None), Err(ToolRefusal::SkillNotFound));
     assert_eq!(
         load(&fixture, filter, "release", Some("references/checklist.md")),
@@ -180,37 +180,32 @@ fn an_unselected_project_skill_is_unknown_with_or_without_file() {
 #[test]
 fn a_builtin_skill_and_its_reference_file_load_from_the_binary() {
     let fixture = referencing_project();
-    let instructions = load(&fixture, SkillFilter::builtin_only(), "mermaid", None).unwrap();
+    let instructions = load(&fixture, SkillFilter::empty(), "mermaid", None).unwrap();
     assert!(
         instructions.starts_with("\n# Mermaid diagrams") || instructions.starts_with("# Mermaid")
     );
     assert!(!instructions.contains("description:"), "the frontmatter is removed");
 
-    let reference = load(
-        &fixture,
-        SkillFilter::builtin_only(),
-        "mermaid",
-        Some("references/agentflow-beta.md"),
-    )
-    .unwrap();
+    let reference =
+        load(&fixture, SkillFilter::empty(), "mermaid", Some("references/agentflow-beta.md"))
+            .unwrap();
     assert_eq!(
         reference,
         crate::skills::builtin_skill_file("mermaid", "references/agentflow-beta.md").unwrap(),
     );
-    let whole = load(&fixture, SkillFilter::builtin_only(), "mermaid", Some("SKILL.md")).unwrap();
+    let whole = load(&fixture, SkillFilter::empty(), "mermaid", Some("SKILL.md")).unwrap();
     assert!(
         whole.starts_with("---\nname: mermaid"),
         "LSK-FR-UBQE: `SKILL.md` keeps its frontmatter"
     );
 
     // `ecosystem: builtin` narrows to the built-in copy (LSK-FR-07).
-    let narrowed = block_on(
-        SkillLoadTool::new(fixture.handle(), SkillFilter::builtin_only()).call(LoadSkillArgs {
+    let narrowed =
+        block_on(SkillLoadTool::new(fixture.handle(), SkillFilter::empty()).call(LoadSkillArgs {
             name: "MERMAID ".to_string(),
             ecosystem: Some("builtin".to_string()),
             file: None,
-        }),
-    );
+        }));
     assert_eq!(narrowed.unwrap(), instructions);
 }
 
@@ -222,8 +217,7 @@ fn a_builtin_skill_never_reads_the_project() {
     std::fs::create_dir_all(dir.path().join("mermaid/references")).unwrap();
     std::fs::write(dir.path().join("mermaid/references/pie.md"), "PROJECT COPY").unwrap();
     let fixture = mounted(dir);
-    let text =
-        load(&fixture, SkillFilter::builtin_only(), "mermaid", Some("references/pie.md")).unwrap();
+    let text = load(&fixture, SkillFilter::empty(), "mermaid", Some("references/pie.md")).unwrap();
     assert!(!text.contains("PROJECT COPY"));
 }
 
@@ -231,11 +225,13 @@ fn a_builtin_skill_never_reads_the_project() {
 #[test]
 fn a_builtin_skill_is_refused_with_no_project_open() {
     let app = closed_project();
-    let result =
-        block_on(
-            SkillLoadTool::new(app.handle().clone(), SkillFilter::builtin_only())
-                .call(LoadSkillArgs { name: "mermaid".to_string(), ecosystem: None, file: None }),
-        );
+    let result = block_on(
+        SkillLoadTool::new(app.handle().clone(), SkillFilter::empty()).call(LoadSkillArgs {
+            name: "mermaid".to_string(),
+            ecosystem: None,
+            file: None,
+        }),
+    );
     assert_eq!(result, Err(ToolRefusal::NoProjectOpen));
 }
 
@@ -261,7 +257,7 @@ fn a_project_skill_file_is_returned_whole() {
 #[test]
 fn a_file_outside_the_skill_folder_is_refused_before_any_read() {
     let fixture = referencing_project();
-    for (filter, name) in [(only_release(), "release"), (SkillFilter::builtin_only(), "mermaid")] {
+    for (filter, name) in [(only_release(), "release"), (SkillFilter::empty(), "mermaid")] {
         for path in
             ["../../../outside.md", "/etc/hosts", "references/../../triage/SKILL.md", "..\\x"]
         {
@@ -292,7 +288,7 @@ fn a_missing_file_a_folder_and_a_binary_file_are_not_found() {
         assert!(refusal.to_string().contains("without `file`"));
     }
     assert_eq!(
-        load(&fixture, SkillFilter::builtin_only(), "mermaid", Some("references/nothing.md")),
+        load(&fixture, SkillFilter::empty(), "mermaid", Some("references/nothing.md")),
         Err(ToolRefusal::SkillFileNotFound),
     );
 }

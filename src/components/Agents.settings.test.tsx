@@ -253,7 +253,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     expect(rows[1]).toHaveTextContent("no-such-model");
   });
 
-  it("AGT-FR-12: opens a modal editor with the six controls in order, empty or seeded", async () => {
+  it("AGT-FR-12: opens a modal editor with the seven controls in order, empty or seeded", async () => {
     // AGT-FR-12 / AGT-FR-11, FR-12, and AGT-FR-42, AGT-FR-19, AGR-FR-23's ordering clause.
     backend({
       agents: [
@@ -271,7 +271,9 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     expect(within(editor).getByTestId("agent-nickname")).toHaveValue("");
     expect(within(editor).getByTestId("agent-title")).toHaveValue("");
     expect(within(editor).getByTestId("agent-instructions")).toHaveValue("");
-    // Field order: nickname, title, model, [reasoning], instructions.
+    // Field order: nickname, title, model, [reasoning], instructions, voice,
+    // skills. The skills selector shows after its read settles.
+    await within(editor).findByTestId("agent-skills");
     const order = Array.from(
       editor.querySelectorAll("[data-testid^='agent-']"),
     ).map((e) => e.getAttribute("data-testid"));
@@ -279,6 +281,8 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
       ["agent-nickname", "agent-title"],
       ["agent-title", "agent-model"],
       ["agent-model", "agent-instructions"],
+      ["agent-instructions", "agent-voice"],
+      ["agent-voice", "agent-skills"],
     ]) {
       expect(order.indexOf(before)).toBeLessThan(order.indexOf(after));
     }

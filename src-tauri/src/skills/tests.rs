@@ -876,3 +876,33 @@ fn the_module_registers_exactly_one_tauri_command() {
         "and the frontend can reach it (DSL-FR-PEHR)"
     );
 }
+
+// DSL-FR-05: a symlinked synthesis folder contributes nothing.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_synthesis_folder_contributes_no_skills() {
+    let outside = tempfile::TempDir::new().unwrap();
+    write_skill(outside.path(), "skills", "x", "name: x\ndescription: outside");
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
+    std::os::unix::fs::symlink(outside.path().join("skills"), dir.path().join(".synthesis/skills"))
+        .unwrap();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let (skills, excluded) = enumerate(root);
+    assert!(skills.is_empty());
+    assert_eq!(excluded.len(), 1);
+    assert_eq!(excluded[0].path, ".synthesis/skills");
+
+    // DSL-FR-05: a symlinked `<skill-name>` folder inside a real
+    // `.synthesis/skills` contributes nothing either.
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(dir.path().join(".synthesis/skills")).unwrap();
+    std::os::unix::fs::symlink(
+        outside.path().join("skills/x"),
+        dir.path().join(".synthesis/skills/x"),
+    )
+    .unwrap();
+    let (skills, excluded) = enumerate(&crate::fs::RootFs::for_root(dir.path()));
+    assert!(skills.is_empty());
+    assert_eq!(excluded[0].path, ".synthesis/skills/x");
+}

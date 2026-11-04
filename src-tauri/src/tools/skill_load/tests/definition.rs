@@ -54,7 +54,7 @@ fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     // because a model reads the description and does not reliably infer a set
     // from a schema keyword (TLC-FR-06).
     let documented = schema["properties"]["ecosystem"]["description"].as_str().unwrap();
-    for value in ["claude", "codex", "github", "opencode"] {
+    for value in ["claude", "codex", "github", "opencode", "synthesis", "builtin"] {
         assert!(
             documented.contains(value),
             "LSK-FR-02: {value:?} is named in the parameter's own description",

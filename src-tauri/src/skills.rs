@@ -1,7 +1,8 @@
 //! Dynamic skills loading (`DSL-dynamic-skills-loading.md`).
 //!
 //! The registry of skills an AI agent may reach for on its own: the four
-//! folders the agent ecosystems keep their project skills in, walked directly,
+//! folders the agent ecosystems keep their project skills in and the project's
+//! own `.synthesis/skills` folder (DSL-FR-NWKE), walked directly,
 //! each eligible `SKILL.md`'s declared name and description read out of its
 //! frontmatter. The descriptors are published as the `skills` index of
 //! `BMI-bm25-indexing.md` (DSL-FR-13) and answered from by [`list_skills`] and
@@ -15,8 +16,8 @@
 //! that gitignores `.claude/` would otherwise have no skills at all (DSL-FR-06).
 //! The cost of that choice is that the scan cannot be the trigger either: a
 //! gitignored file's edit changes nothing in the tree. The watcher's raw path
-//! channel (ASC-FR-20) is what reports it, and every pass re-enumerates all four
-//! folders in full rather than interpreting the event (DSL-FR-19) — four shallow
+//! channel (ASC-FR-20) is what reports it, and every pass re-enumerates all five
+//! folders in full rather than interpreting the event (DSL-FR-19) — five shallow
 //! directory listings, which is cheaper than being clever and cannot drift.
 //!
 //! ## Why a descriptor rather than the file
@@ -40,10 +41,11 @@ pub mod builtin;
 pub use builtin::{builtin_skill_file, enumerate_builtin, BUILTIN_PATH_PREFIX};
 
 // ---------------------------------------------------------------------------
-// The four special folders (DSL-FR-02)
+// The five special folders (DSL-FR-02)
 // ---------------------------------------------------------------------------
 
-/// Which of the four folder families a project skill was found in, or
+/// Which of the four folder families a project skill was found in, `Synthesis`
+/// for a skill of the project's `.synthesis/skills` folder (DSL-FR-NWKE), or
 /// `Builtin` for a skill the application ships (DSL-FR-YBDO).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -52,6 +54,7 @@ pub enum Ecosystem {
     Codex,
     Github,
     Opencode,
+    Synthesis,
     Builtin,
 }
 
@@ -62,19 +65,22 @@ impl Ecosystem {
             Ecosystem::Codex => "codex",
             Ecosystem::Github => "github",
             Ecosystem::Opencode => "opencode",
+            Ecosystem::Synthesis => "synthesis",
             Ecosystem::Builtin => "builtin",
         }
     }
 }
 
-/// DSL-FR-02: the four folders, relative to the project root and matched there
-/// alone. A package's own `.claude/skills/` deeper in a monorepo is not one of
-/// them, so two packages cannot collide over a skill name.
-pub const SKILL_FOLDERS: [(&str, Ecosystem); 4] = [
+/// DSL-FR-02: the five special folders, relative to the project root and
+/// matched there alone. A package's own `.claude/skills/` deeper in a monorepo
+/// is not one of them, so two packages cannot collide over a skill name. The
+/// last one holds the synthesis skills (DSL-FR-NWKE).
+pub const SKILL_FOLDERS: [(&str, Ecosystem); 5] = [
     (".claude/skills", Ecosystem::Claude),
     (".codex/skills", Ecosystem::Codex),
     (".github/skills", Ecosystem::Github),
     (".opencode/skills", Ecosystem::Opencode),
+    (".synthesis/skills", Ecosystem::Synthesis),
 ];
 
 /// DSL-FR-03: the one basename that identifies a skill, compared
@@ -95,7 +101,8 @@ pub const SKILL_FILE: &str = "SKILL.md";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillDescriptor {
-    /// Project-relative path of the `SKILL.md`.
+    /// Project-relative path of the `SKILL.md`, or the virtual path of a
+    /// built-in skill (DSL-FR-YBDO).
     pub path: String,
     pub ecosystem: Ecosystem,
     /// The `<skill-name>` folder segment.
@@ -126,12 +133,15 @@ pub struct RankedSkill {
 
 /// DSL-FR-VJZD: which skills one agent may use.
 ///
-/// Every built-in skill passes. A project skill passes only when its `path` is
-/// one of `project_paths`, which is the agent's stored selection
-/// (AGR-FR-IGIL). A path that names no project skill admits nothing.
+/// Every built-in skill passes. A synthesis skill passes unless its `path` is
+/// one of `disabled_paths`, the agent's stored opt-outs (AGR-FR-HMVQ). A
+/// project skill passes only when its `path` is one of `project_paths`, the
+/// agent's stored selection (AGR-FR-IGIL). A path that names no skill of the
+/// matching kind has no effect.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SkillFilter {
     project_paths: BTreeSet<String>,
+    disabled_paths: BTreeSet<String>,
     /// Test support: admit every project skill and no built-in skill, so a
     /// test of the project source sees that source alone. Absent from a
     /// production build, where every filter admits every built-in skill.
@@ -140,21 +150,34 @@ pub struct SkillFilter {
 }
 
 impl SkillFilter {
-    /// A filter that admits the built-in skills alone — the filter of a
-    /// Personal agent, and of a Project agent that selects nothing.
-    pub fn builtin_only() -> SkillFilter {
+    /// The filter of an agent with empty skill lists: every built-in skill
+    /// and every synthesis skill, and no project skill.
+    pub fn empty() -> SkillFilter {
         SkillFilter::default()
     }
 
-    /// A filter that admits the built-in skills and the project skills at
-    /// `paths`.
+    /// A filter that admits the built-in skills, the synthesis skills, and the
+    /// project skills at `paths`.
     pub fn with_project_paths<I, S>(paths: I) -> SkillFilter
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
+        SkillFilter::for_agent(paths, std::iter::empty::<String>())
+    }
+
+    /// The filter of one agent: its selected project skills (`skills`) and the
+    /// synthesis skills it turns off (`disabled_skills`).
+    pub fn for_agent<P, D, S, T>(project_paths: P, disabled_paths: D) -> SkillFilter
+    where
+        P: IntoIterator<Item = S>,
+        D: IntoIterator<Item = T>,
+        S: Into<String>,
+        T: Into<String>,
+    {
         SkillFilter {
-            project_paths: paths.into_iter().map(Into::into).collect(),
+            project_paths: project_paths.into_iter().map(Into::into).collect(),
+            disabled_paths: disabled_paths.into_iter().map(Into::into).collect(),
             #[cfg(test)]
             all_project: false,
         }
@@ -173,12 +196,21 @@ impl SkillFilter {
         if self.all_project {
             return skill.ecosystem != Ecosystem::Builtin;
         }
-        skill.ecosystem == Ecosystem::Builtin || self.project_paths.contains(&skill.path)
+        match skill.ecosystem {
+            Ecosystem::Builtin => true,
+            Ecosystem::Synthesis => !self.disabled_paths.contains(&skill.path),
+            _ => self.project_paths.contains(&skill.path),
+        }
     }
 
     /// How many project paths the filter holds, for a log record.
     pub fn project_path_count(&self) -> usize {
         self.project_paths.len()
+    }
+
+    /// How many disabled synthesis paths the filter holds, for a log record.
+    pub fn disabled_path_count(&self) -> usize {
+        self.disabled_paths.len()
     }
 }
 
@@ -370,7 +402,7 @@ fn unquote(value: &str) -> &str {
 // Enumeration (DSL-FR-02 through DSL-FR-11, DSL-FR-23, DSL-FR-25)
 // ---------------------------------------------------------------------------
 
-/// Walk the four special folders under `root` and return every eligible skill,
+/// Walk the five special folders under `root` and return every eligible skill,
 /// together with the files that sat at an eligible path but were excluded.
 ///
 /// Pure over the filesystem alone — no Tauri runtime — so every eligibility
@@ -558,8 +590,8 @@ pub fn search_skills(
         .collect()
 }
 
-/// DSL-FR-PEHR: every eligible project skill of the registry, in path order,
-/// and never a built-in skill. Pure over the indexer so it is testable without
+/// DSL-FR-PEHR: every eligible synthesis skill and project skill of the
+/// registry, in path order, and never a built-in skill. Pure over the indexer so it is testable without
 /// a Tauri runtime.
 pub fn project_skills(indexer: &Bm25Indexer) -> Vec<ProjectSkill> {
     indexer
@@ -588,7 +620,7 @@ pub fn list_project_skills_impl(indexer: &Bm25Indexer) -> Result<Vec<ProjectSkil
     Ok(project_skills(indexer))
 }
 
-/// DSL-FR-PEHR: the project skills the persona editor of a Project agent
+/// DSL-FR-PEHR: the synthesis skills and project skills the persona editor
 /// offers (`../ui/AGT-agents.md` AGT-FR-KVDA).
 #[tauri::command]
 pub fn list_project_skills<R: tauri::Runtime>(
@@ -663,5 +695,7 @@ pub mod test_support {
 
 #[cfg(test)]
 mod builtin_tests;
+#[cfg(test)]
+mod synthesis_tests;
 #[cfg(test)]
 mod tests;

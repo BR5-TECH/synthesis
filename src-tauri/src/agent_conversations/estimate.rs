@@ -106,8 +106,9 @@ pub fn estimate_impl<R: tauri::Runtime>(
         budget,
         // CVL-FR-VZZR: the filter changes no definition, so the estimate holds
         // for every selection.
-        &crate::skills::SkillFilter::with_project_paths(
+        &crate::skills::SkillFilter::for_agent(
             agent.as_ref().map(|a| a.skills.clone()).unwrap_or_default(),
+            agent.as_ref().map(|a| a.disabled_skills.clone()).unwrap_or_default(),
         ),
     );
     let definitions: Vec<_> = tools.iter().map(|tool| tool.definition()).collect();

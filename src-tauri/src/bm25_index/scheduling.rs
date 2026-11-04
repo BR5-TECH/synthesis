@@ -54,7 +54,7 @@ impl PassScope {
 
     pub(super) fn covers(self, index: IndexId) -> bool {
         match index {
-            // DSL-FR-19: every pass re-enumerates all four skill folders in
+            // DSL-FR-19: every pass re-enumerates all five skill folders in
             // full whatever triggered it, so the skills index is always in
             // scope. That is what makes the registry converge on what is on
             // disk rather than on the sequence of events that reached it — and

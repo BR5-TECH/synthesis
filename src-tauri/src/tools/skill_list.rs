@@ -100,8 +100,9 @@ pub fn parameters() -> serde_json::Value {
 ///
 /// SLT-FR-13: a name appears at most once. Keeping the *first* occurrence in an
 /// already path-sorted list is the whole rule — which prefers `.claude` over
-/// `.codex`, `.codex` over `.github`, and `.github` over `.opencode`, those
-/// folder names sorting that way. Entries are removed from the order without
+/// `.codex`, `.codex` over `.github`, `.github` over `.opencode`, `.opencode`
+/// over `.synthesis`, and every skill on disk over a built-in skill, those
+/// paths sorting that way. Entries are removed from the order without
 /// reordering what remains (SLT-FR-08).
 ///
 /// SLT-FR-XKDW: only the skills `filter` admits are listed.

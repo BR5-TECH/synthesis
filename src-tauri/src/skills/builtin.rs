@@ -14,7 +14,7 @@ use super::{eligible, parse_frontmatter, Ecosystem, SkillDescriptor, SKILL_FILE}
 include!(concat!(env!("OUT_DIR"), "/builtin_skills.rs"));
 
 /// DSL-FR-YBDO: the prefix of every built-in skill's path. The colon makes the
-/// path virtual: the four project folders start with a `.`, and no
+/// path virtual: the five special folders start with a `.`, and no
 /// project-relative path that the registry produces holds a `:`.
 pub const BUILTIN_PATH_PREFIX: &str = "builtin:";
 

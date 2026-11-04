@@ -10991,6 +10991,19 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           name: "review",
           description: "Review a change for defects.",
         },
+        /* DSL-FR-NWKE: the synthesis skills of `.synthesis/skills`. */
+        {
+          path: ".synthesis/skills/glossary/SKILL.md",
+          ecosystem: "synthesis",
+          name: "glossary",
+          description: "Use the project glossary of domain terms.",
+        },
+        {
+          path: ".synthesis/skills/style/SKILL.md",
+          ecosystem: "synthesis",
+          name: "style",
+          description: "Follow the house writing style.",
+        },
       ];
     /* AGC-FR-55: the recovery registry — at most one entry per conversation,
        each `failed` and each carrying `retryPermitted`. What a card reads when

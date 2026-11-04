@@ -112,14 +112,24 @@ fn info_exclude_ignores_and_a_gitignore_negation_overrides_it() {
     assert_eq!(out, vec!["keep.bak"]);
 }
 
-// ASC-FR-RSGA, DSL-FR-19: the four skill folders stay under an ignored
+// ASC-FR-RSGA, DSL-FR-19: the five skill folders stay under an ignored
 // parent, and so does a parent itself, whose delete removes every skill
-// under it. Other ignored paths beside them, and look-alike prefixes, go.
+// under it. Other ignored paths beside the four agent-ecosystem folders, and
+// look-alike prefixes, go. All of `.synthesis/` stays (ASC-FR-20), so the
+// synthesis folder has no ignored path beside it.
 #[test]
 fn skill_folders_stay_even_when_ignored() {
-    let (_tmp, root) =
-        project(&[(".gitignore", ".claude/\n.codex/\n.github/\n.opencode/\n.claudex/\n")]);
-    for (folder, _) in crate::skills::SKILL_FOLDERS {
+    let (_tmp, root) = project(&[(
+        ".gitignore",
+        ".claude/\n.codex/\n.github/\n.opencode/\n.claudex/\n.synthesis/\n",
+    )]);
+    let (out, _) =
+        kept(&root, &[".synthesis/skills/a/SKILL.md", ".synthesis/skills", ".synthesis"]);
+    assert_eq!(out, vec![".synthesis/skills/a/SKILL.md", ".synthesis/skills", ".synthesis"]);
+    for (folder, ecosystem) in crate::skills::SKILL_FOLDERS {
+        if ecosystem == crate::skills::Ecosystem::Synthesis {
+            continue;
+        }
         let parent = folder.split('/').next().unwrap();
         let skill = format!("{folder}/a/SKILL.md");
         let beside = format!("{parent}/settings.json");

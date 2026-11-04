@@ -38,7 +38,7 @@ import {
   reasoningValue,
 } from "./AiIntegrations";
 import { FilterableSelect } from "./FilterableSelect";
-import { ProjectSkillsSelector } from "./ProjectSkillsSelector";
+import { SkillsSelector } from "./SkillsSelector";
 import { Icon } from "./icons";
 import type {
   Agent,
@@ -106,6 +106,9 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
   // AGT-FR-XGWD: a new agent selects no project skill; an existing one opens
   // on its stored selection.
   const [skills, setSkills] = useState<string[]>(agent?.skills ?? []);
+  // AGT-FR-PQSM: a new agent turns no synthesis skill off; an existing one
+  // opens on its stored opt-outs, the paths of other projects included.
+  const [disabledSkills, setDisabledSkills] = useState<string[]>(agent?.disabledSkills ?? []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   // AGT-FR-11 / AGT non-functional: every control here is reachable from the
@@ -180,6 +183,9 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
       // AGT-FR-WTSR: a Personal agent never receives project skills, so its
       // editor sends none.
       skills: scope === "project" ? skills : [],
+      // AGT-FR-JRWE: the opt-outs of either scope, with the stored paths that
+      // this project does not hold kept as they are.
+      disabledSkills,
       reasoning: reasoningChoiceFor(reasoning),
     };
     setBusy(true);
@@ -253,8 +259,9 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
         {agent ? `Edit @${agent.nickname}` : `New ${SCOPE_LABEL[scope]} agent`}
       </h3>
 
-      {/* AGT-FR-12: exactly six controls, in this order, and a seventh — the
-          project skills — for a Project agent alone. The model and the
+      {/* AGT-FR-12: exactly seven controls, in this order, for either scope.
+          The skills selector shows its project group for a Project agent
+          alone (AGT-FR-KVDA, AGT-FR-WTSR). The model and the
           reasoning among them are this agent's own — nothing here reads the AI
           API section's stored selections, and nothing chosen here reaches a
           graduation run (AGT-FR-01, AAP-FR-19). */}
@@ -389,9 +396,14 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
         <span className="t-ui-sm t-muted">Optional.</span>
       </label>
 
-      {/* AGT-FR-KVDA / AGT-FR-WTSR: the seventh control, for a Project agent
-          only. */}
-      {scope === "project" && <ProjectSkillsSelector selected={skills} onChange={setSkills} />}
+      {/* AGT-FR-KVDA / AGT-FR-WTSR: the seventh control. */}
+      <SkillsSelector
+        scope={scope}
+        selected={skills}
+        onSelectedChange={setSkills}
+        disabled={disabledSkills}
+        onDisabledChange={setDisabledSkills}
+      />
 
       {error && (
         <span className="picker-error" data-testid="agent-editor-error">

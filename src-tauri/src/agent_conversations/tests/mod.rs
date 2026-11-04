@@ -526,6 +526,7 @@ impl Harness {
             agents::AgentScope::Personal,
             &AgentDraft {
                 skills: Vec::new(),
+                disabled_skills: Vec::new(),
                 voice: String::new(),
                 nickname: nickname.into(),
                 title: String::new(),
@@ -557,6 +558,7 @@ impl Harness {
             agents::AgentScope::Project,
             &AgentDraft {
                 skills: skills.iter().map(|s| s.to_string()).collect(),
+                disabled_skills: Vec::new(),
                 voice: String::new(),
                 nickname: nickname.into(),
                 title: String::new(),
@@ -582,6 +584,7 @@ impl Harness {
             agents::AgentScope::Personal,
             &AgentDraft {
                 skills: Vec::new(),
+                disabled_skills: Vec::new(),
                 voice: String::new(),
                 nickname: nickname.into(),
                 title: title.into(),

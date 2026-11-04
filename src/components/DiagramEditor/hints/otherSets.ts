@@ -1,7 +1,7 @@
 /**
  * EDT-FR-QJJP: the hint sets of the other chart types. Each holds the
  * declaration, the main element forms, and a short example, as the bundled
- * Mermaid version (11.17.2) reads them.
+ * Mermaid version (12.2.0) reads them.
  */
 import { OTHER_SETS_2 } from "./otherSets2";
 import type { Hint, HintSet } from "./types";

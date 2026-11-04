@@ -52,6 +52,33 @@ interface ExampleCheck {
 
 const checks = new Map<string, ExampleCheck>();
 
+/** What the bundled Mermaid version detects for each source of `ALIASES`. */
+const aliasTypes = new Map<string, string | null>();
+
+/**
+ * EDT-FR-NWZX: the declaration forms that a hint set detects, and the set each
+ * one picks, or null where neither the hints nor Mermaid know the source.
+ */
+const ALIASES: ReadonlyArray<[string, string | null]> = [
+  ["flowchart LR", "flowchart"],
+  ["flowchart TD", "flowchart"],
+  ["graph TD", "flowchart"],
+  ["graph", "flowchart"],
+  ["flowchart-elk TD", "flowchart"],
+  ["classDiagram", "class"],
+  ["classDiagram-v2", "class"],
+  ["stateDiagram", "state"],
+  ["stateDiagram-v2", "state"],
+  ["agentflow-beta LR", "agentflow"],
+  ["usecase-beta", "usecase"],
+  ["usecase-betax", null],
+  ["usecase-beta-foo", null],
+  ["usecase-beta:", null],
+  ["usecaseDiagram", null],
+  ["agentflow-betax", null],
+  ["agentflow", null],
+];
+
 // Mermaid loads the chunk of each chart type at its first parse, and that load
 // takes real time. All of the loads happen here, under one generous limit, so
 // no single test depends on how fast the runner is. The tests below only read
@@ -73,6 +100,13 @@ beforeAll(async () => {
       error ??= cause instanceof Error ? cause.message : String(cause);
     }
     checks.set(set.key, { error, detected });
+  }
+  for (const [source] of ALIASES) {
+    try {
+      aliasTypes.set(source, mermaid.detectType(source));
+    } catch {
+      aliasTypes.set(source, null);
+    }
   }
 }, 300_000);
 
@@ -98,6 +132,16 @@ describe("hint sets against the bundled Mermaid version", () => {
     );
     expect(unknown).toEqual([]);
   });
+
+  for (const [source, key] of ALIASES) {
+    it(`EDT-FR-NWZX: "${source}" picks the ${key ?? "no"} set, as the bundled version detects it`, () => {
+      const set = hintSetFor(source);
+      expect(set?.key ?? null).toBe(key);
+      const detected = aliasTypes.get(source) ?? null;
+      if (set) expect(set.mermaidIds).toContain(detected);
+      else expect(detected).toBeNull();
+    });
+  }
 
   it("EDT-FR-QJJP: the keys of the hint sets are unique", () => {
     const keys = HINT_SETS.map((set) => set.key);

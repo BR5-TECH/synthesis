@@ -1,7 +1,7 @@
 /**
  * EDT-FR-DUSC: the rich hint sets. Each holds the element forms, the
  * connection forms, the labels, the grouping, the styling, and the comments
- * of its chart type, as the bundled Mermaid version (11.17.2) reads them.
+ * of its chart type, as the bundled Mermaid version (12.2.0) reads them.
  */
 import type { Hint, HintGroup, HintSet } from "./types";
 
@@ -19,7 +19,7 @@ const COMMENTS: HintGroup = {
 const FLOWCHART: HintSet = {
   key: "flowchart",
   name: "Flowchart",
-  mermaidIds: ["flowchart", "flowchart-v2", "flowchart-elk"],
+  mermaidIds: ["flowchart-v2", "flowchart-elk"],
   detect: /^(?:flowchart(?:-elk)?|graph)\b/,
   declaration: hint(
     "flowchart LR",
@@ -204,7 +204,7 @@ const SEQUENCE: HintSet = {
 const CLASS: HintSet = {
   key: "class",
   name: "Class diagram",
-  mermaidIds: ["class", "classDiagram"],
+  mermaidIds: ["classDiagram"],
   detect: /^classDiagram(?:-v2)?\b/,
   declaration: hint("classDiagram", "Declares a class diagram."),
   groups: [
@@ -287,7 +287,7 @@ const CLASS: HintSet = {
 const STATE: HintSet = {
   key: "state",
   name: "State diagram",
-  mermaidIds: ["state", "stateDiagram"],
+  mermaidIds: ["stateDiagram"],
   detect: /^stateDiagram(?:-v2)?\b/,
   declaration: hint("stateDiagram-v2", "Declares a state diagram."),
   groups: [

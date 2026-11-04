@@ -50,6 +50,11 @@
 /* A wide diagram scales down to the page measure rather than scrolling, which
    the Diff viewer does not allow. */
 .doc .mermaid-diagram svg { max-width: 100%; height: auto; }
+/* Mermaid measures each HTML label at its own font size before it draws the
+   label in a fixed box. The paragraph rule of the page must not change that
+   size, or a label is cut. This holds for the inline figure and for the
+   preview of the diagram editor, which are both under `.doc`. */
+.doc svg p { font-size: inherit; line-height: inherit; color: inherit; }
 /* EDT-FR-KQXZ: a diagram that takes input says so under the pointer. */
 .doc .mermaid-diagram[role="button"] { cursor: pointer; }
 .doc .mermaid-diagram[role="button"]:hover { background: var(--bg-hover); }

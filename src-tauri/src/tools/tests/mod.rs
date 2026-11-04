@@ -44,9 +44,18 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
     let handle2 = handle.clone();
     let handle3 = handle.clone();
     vec![
-        rig::tool::tool_definition(&skill_search::SkillSearchTool::new(handle.clone())),
-        rig::tool::tool_definition(&skill_list::SkillListTool::new(handle.clone())),
-        rig::tool::tool_definition(&skill_load::SkillLoadTool::new(handle.clone())),
+        rig::tool::tool_definition(&skill_search::SkillSearchTool::new(
+            handle.clone(),
+            crate::skills::SkillFilter::all_project(),
+        )),
+        rig::tool::tool_definition(&skill_list::SkillListTool::new(
+            handle.clone(),
+            crate::skills::SkillFilter::all_project(),
+        )),
+        rig::tool::tool_definition(&skill_load::SkillLoadTool::new(
+            handle.clone(),
+            crate::skills::SkillFilter::all_project(),
+        )),
         rig::tool::tool_definition(&spec_search::SpecSearchTool::new(handle.clone())),
         rig::tool::tool_definition(&file_read::FileReadTool::new(handle.clone(), "definitions")),
         rig::tool::tool_definition(&draft_search::DraftSearchTool::new(
@@ -490,6 +499,7 @@ pub(crate) fn tree_snapshot(root: &std::path::Path) -> Vec<(String, Vec<u8>)> {
 mod conventions;
 mod native;
 mod refusals;
+mod skill_filter;
 mod surface;
 
 /// DDC-FR-ELAE: a turn in `origin` whose trigger is the opening comment of

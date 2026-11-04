@@ -191,8 +191,9 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             {
                 "brings you no answer back"
             }
+            // LSK-FR-UBQE: the instructions without `file`, the named file with it.
+            n if n == skill_load::NAME => "returns the skill's SKILL.md instructions",
             n if n == skill_search::NAME
-                || n == skill_load::NAME
                 || n == spec_search::NAME
                 || n == file_read::NAME
                 || n == read_graduation_file::NAME =>
@@ -220,7 +221,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
         // would only prove they were copied from each other.
         let disclaims = match name.as_str() {
             n if n == skill_search::NAME || n == skill_list::NAME => {
-                "read that file to actually use the skill"
+                "call `load_skill` with the name to actually use the skill"
             }
             n if n == skill_load::NAME => "it does not carry out what the skill says",
             n if n == spec_search::NAME => "nothing that is found is changed",
@@ -346,11 +347,22 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             );
         }
         // A specification identifier is not a word, so these stay substrings.
-        for forbidden in ["TLC-FR", "SST-FR", "SLT-FR", "LSK-FR", "DSL-FR", "BMI-FR", ".md`"] {
+        for forbidden in ["TLC-FR", "SST-FR", "SLT-FR", "LSK-FR", "DSL-FR", "BMI-FR"] {
             assert!(
                 !text.contains(forbidden),
                 "{name}: the description must not name {forbidden:?} (TLC-FR-04)",
             );
+        }
+        // A specification file name — `XXX-some-name.md` — is not for the
+        // model. A Markdown path the model can act on, such as the
+        // `references/example.md` a skill names (LSK-FR-UBQE), is allowed.
+        for quoted in text.split('`').skip(1).step_by(2) {
+            let base = quoted.rsplit('/').next().unwrap_or(quoted);
+            let spec_like = base.ends_with(".md")
+                && base.len() > 4
+                && base[..3].chars().all(|c| c.is_ascii_uppercase())
+                && base.as_bytes()[3] == b'-';
+            assert!(!spec_like, "{name}: the description must not name {quoted:?} (TLC-FR-04)");
         }
     }
 }
@@ -378,10 +390,18 @@ fn definitions_are_identical_across_instances_and_project_states() {
     let open = demo_project();
     let closed = closed_project();
 
-    let a = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
-    let b = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
-    let c =
-        rig::tool::tool_definition(&skill_search::SkillSearchTool::new(closed.handle().clone()));
+    let a = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(
+        open.handle(),
+        crate::skills::SkillFilter::all_project(),
+    ));
+    let b = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(
+        open.handle(),
+        crate::skills::SkillFilter::all_project(),
+    ));
+    let c = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(
+        closed.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(a.description, b.description);
     assert_eq!(a.description, c.description);
@@ -394,13 +414,25 @@ fn definitions_are_identical_across_instances_and_project_states() {
     // fields in different orders, and a provider sees the bytes.
     assert_eq!(a.parameters.to_string(), c.parameters.to_string());
 
-    let l1 = rig::tool::tool_definition(&skill_list::SkillListTool::new(open.handle()));
-    let l2 = rig::tool::tool_definition(&skill_list::SkillListTool::new(closed.handle().clone()));
+    let l1 = rig::tool::tool_definition(&skill_list::SkillListTool::new(
+        open.handle(),
+        crate::skills::SkillFilter::all_project(),
+    ));
+    let l2 = rig::tool::tool_definition(&skill_list::SkillListTool::new(
+        closed.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
     assert_eq!(l1.description, l2.description);
     assert_eq!(l1.parameters, l2.parameters);
 
-    let k1 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(open.handle()));
-    let k2 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(closed.handle().clone()));
+    let k1 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(
+        open.handle(),
+        crate::skills::SkillFilter::all_project(),
+    ));
+    let k2 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(
+        closed.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
     assert_eq!(k1.description, k2.description);
     assert_eq!(k1.parameters, k2.parameters);
 }
@@ -546,9 +578,16 @@ fn every_output_is_an_object_carrying_its_collection_under_a_named_field() {
     let fixture = demo_project();
     let handle = fixture.handle();
 
-    let search = block_on(skill_search::SkillSearchTool::new(handle.clone()).call(
-        skill_search::SkillSearchArgs { query: "review a specification".to_string(), limit: None },
-    ))
+    let search = block_on(
+        skill_search::SkillSearchTool::new(
+            handle.clone(),
+            crate::skills::SkillFilter::all_project(),
+        )
+        .call(skill_search::SkillSearchArgs {
+            query: "review a specification".to_string(),
+            limit: None,
+        }),
+    )
     .unwrap();
     let value = serde_json::to_value(&search).unwrap();
     assert!(value.is_object(), "never a bare array (TLC-FR-08)");
@@ -557,9 +596,11 @@ fn every_output_is_an_object_carrying_its_collection_under_a_named_field() {
         "the collection sits under a named field (TLC-FR-08)",
     );
 
-    let list =
-        block_on(skill_list::SkillListTool::new(handle).call(skill_list::SkillListArgs::default()))
-            .unwrap();
+    let list = block_on(
+        skill_list::SkillListTool::new(handle, crate::skills::SkillFilter::all_project())
+            .call(skill_list::SkillListArgs::default()),
+    )
+    .unwrap();
     let value = serde_json::to_value(&list).unwrap();
     assert!(value.is_object());
     assert!(value.get("skills").map(|s| s.is_array()).unwrap_or(false));
@@ -578,8 +619,12 @@ fn a_document_shaped_output_is_one_unwrapped_text_block() {
     // output type is ever changed to a struct.
     let fixture = collision_project();
     let text = block_on(
-        skill_load::SkillLoadTool::new(fixture.handle())
-            .call(skill_load::LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
+        skill_load::SkillLoadTool::new(fixture.handle(), crate::skills::SkillFilter::all_project())
+            .call(skill_load::LoadSkillArgs {
+                name: "analyst".to_string(),
+                ecosystem: None,
+                file: None,
+            }),
     )
     .unwrap();
 

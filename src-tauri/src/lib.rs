@@ -592,6 +592,7 @@ pub fn run() {
             ai_api::get_project_ai_api_integration,
             ai_api::set_project_ai_api_integration,
             agents::list_personal_agents,
+            skills::list_project_skills,
             agents::list_project_agents,
             agents::create_agent,
             agents::update_agent,

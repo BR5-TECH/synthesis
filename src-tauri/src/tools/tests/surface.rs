@@ -19,22 +19,35 @@ fn calling_the_tools_changes_nothing_on_disk() {
     let handle = fixture.handle();
     for query in ["review a specification", "deploy", "nothing at all matches"] {
         let _ = block_on(
-            skill_search::SkillSearchTool::new(handle.clone())
-                .call(skill_search::SkillSearchArgs { query: query.to_string(), limit: None }),
+            skill_search::SkillSearchTool::new(
+                handle.clone(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_search::SkillSearchArgs { query: query.to_string(), limit: None }),
         );
     }
     for _ in 0..5 {
         let _ = block_on(
-            skill_list::SkillListTool::new(handle.clone())
-                .call(skill_list::SkillListArgs::default()),
+            skill_list::SkillListTool::new(
+                handle.clone(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_list::SkillListArgs::default()),
         );
     }
     // LSK-FR-18: the one tool that opens a file opens it for reading alone —
     // no mtime change, no truncation, nothing created beside it.
     for name in ["analyst", "deployer", "no such skill", ""] {
         let _ = block_on(
-            skill_load::SkillLoadTool::new(handle.clone())
-                .call(skill_load::LoadSkillArgs { name: name.to_string(), ecosystem: None }),
+            skill_load::SkillLoadTool::new(
+                handle.clone(),
+                crate::skills::SkillFilter::all_project(),
+            )
+            .call(skill_load::LoadSkillArgs {
+                name: name.to_string(),
+                ecosystem: None,
+                file: None,
+            }),
         );
     }
 

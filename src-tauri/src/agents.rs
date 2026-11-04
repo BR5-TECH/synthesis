@@ -114,6 +114,11 @@ pub struct Agent {
     /// AGR-FR-ABCF: a plain voice name that names no provider. `""` means the
     /// provider's default voice.
     pub voice: String,
+    /// AGR-FR-IGIL: the paths of the project skills this agent may use. Always
+    /// empty for a Personal agent (AGR-FR-QKOV), and omitted from the store
+    /// while empty, so the Personal agent registry holds no such field.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
     /// RFC 3339 UTC. Empty for a Project agent, whose file carries no timestamp.
     pub created_at: String,
     /// RFC 3339 UTC. Empty for a Project agent.
@@ -139,6 +144,9 @@ pub struct AgentDraft {
     pub instructions: String,
     /// AGR-FR-ABCF.
     pub voice: String,
+    /// AGR-FR-IGIL: the selected project skill paths, normalised by
+    /// [`normalise_skills`] before anything is written.
+    pub skills: Vec<String>,
     pub reasoning: Option<ReasoningChoice>,
 }
 
@@ -293,9 +301,25 @@ pub fn availability_of(
 // Implementations (testable without a Tauri runtime)
 // ---------------------------------------------------------------------------
 
+/// GSS-FR-30 / AGR-FR-QKOV: the Personal agents as the store holds them, with
+/// no project skill selection — a hand-edited record that carries one reads
+/// back without it.
+pub fn load_personal(store: &GlobalSettingsStore) -> Result<Vec<Agent>, String> {
+    let mut agents = store.load_agent_registry()?;
+    agents.iter_mut().for_each(|agent| agent.skills.clear());
+    Ok(agents)
+}
+
+/// GSS-FR-30 / AGR-FR-QKOV: write the Personal agents, none of them with a
+/// project skill selection, so the registry holds no `skills` field.
+fn save_personal(store: &GlobalSettingsStore, mut agents: Vec<Agent>) -> Result<(), String> {
+    agents.iter_mut().for_each(|agent| agent.skills.clear());
+    store.save_agent_registry(agents)
+}
+
 /// AGR-FR-02: every Personal agent, ordered by nickname without regard to case.
 fn sorted_personal(store: &GlobalSettingsStore) -> Result<Vec<Agent>, String> {
-    let mut agents = store.load_agent_registry()?;
+    let mut agents = load_personal(store)?;
     sort_by_nickname(&mut agents);
     Ok(agents)
 }
@@ -430,6 +454,22 @@ pub fn normalise_title(title: &str) -> String {
     title.trim().to_string()
 }
 
+/// AGR-FR-GBJL: the stored form of a Project agent's skill selection — each
+/// entry trimmed, blank entries removed, later duplicates removed, in the order
+/// given. No entry is checked against the registry: a skill can be absent from
+/// this worktree and present in another, and an entry that names no project
+/// skill has no effect (DSL-FR-VJZD).
+pub fn normalise_skills(skills: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for entry in skills {
+        let entry = entry.trim();
+        if !entry.is_empty() && !out.iter().any(|kept| kept == entry) {
+            out.push(entry.to_string());
+        }
+    }
+    out
+}
+
 /// The whole of AGR-FR-04 through AGR-FR-07, run against the agents of **one
 /// scope** that do not yet contain the draft. `exclude` is the id being
 /// updated, so an agent keeping its own nickname is not a collision with itself.
@@ -481,7 +521,7 @@ pub fn create_agent_impl(
     let title = normalise_title(&draft.title);
     match scope {
         AgentScope::Personal => {
-            let mut agents = store.load_agent_registry()?;
+            let mut agents = load_personal(store)?;
             validate_draft(store, project_key, &agents, draft, None)?;
             let now = now_rfc3339();
             let agent = Agent {
@@ -491,12 +531,15 @@ pub fn create_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                // AGR-FR-QKOV: a Personal agent has no project skill selection,
+                // and a draft that carries one is stored without it.
+                skills: Vec::new(),
                 created_at: now.clone(),
                 updated_at: now,
                 reasoning: draft.reasoning.clone(),
             };
             agents.push(agent.clone());
-            store.save_agent_registry(agents)?;
+            save_personal(store, agents)?;
             Ok(agent)
         }
         AgentScope::Project => {
@@ -504,7 +547,8 @@ pub fn create_agent_impl(
             let existing = project_store::list(root)?.agents;
             validate_draft(store, project_key, &existing, draft, None)?;
             let id = new_note_id();
-            project_store::write(root, &id, draft, &title)?;
+            let skills = normalise_skills(&draft.skills);
+            project_store::write(root, &id, draft, &title, &skills)?;
             Ok(Agent {
                 id,
                 nickname: draft.nickname.clone(),
@@ -512,6 +556,7 @@ pub fn create_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                skills,
                 created_at: String::new(),
                 updated_at: String::new(),
                 reasoning: draft.reasoning.clone(),
@@ -534,7 +579,7 @@ pub fn update_agent_impl(
     let title = normalise_title(&draft.title);
     match scope {
         AgentScope::Personal => {
-            let mut agents = store.load_agent_registry()?;
+            let mut agents = load_personal(store)?;
             let index = agents.iter().position(|a| a.id == id).ok_or(ERR_AGENT_NOT_FOUND)?;
             validate_draft(store, project_key, &agents, draft, Some(id))?;
             let updated = Agent {
@@ -544,12 +589,14 @@ pub fn update_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                // AGR-FR-QKOV.
+                skills: Vec::new(),
                 created_at: agents[index].created_at.clone(),
                 updated_at: now_rfc3339(),
                 reasoning: draft.reasoning.clone(),
             };
             agents[index] = updated.clone();
-            store.save_agent_registry(agents)?;
+            save_personal(store, agents)?;
             Ok(updated)
         }
         AgentScope::Project => {
@@ -559,7 +606,8 @@ pub fn update_agent_impl(
                 return Err(ERR_AGENT_NOT_FOUND.into());
             }
             validate_draft(store, project_key, &existing, draft, Some(id))?;
-            project_store::write(root, id, draft, &title)?;
+            let skills = normalise_skills(&draft.skills);
+            project_store::write(root, id, draft, &title, &skills)?;
             Ok(Agent {
                 id: id.to_string(),
                 nickname: draft.nickname.clone(),
@@ -567,6 +615,7 @@ pub fn update_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                skills,
                 created_at: String::new(),
                 updated_at: String::new(),
                 reasoning: draft.reasoning.clone(),
@@ -586,9 +635,9 @@ pub fn delete_agent_impl(
 ) -> Result<Vec<ProjectAgent>, String> {
     match scope {
         AgentScope::Personal => {
-            let mut agents = store.load_agent_registry()?;
+            let mut agents = load_personal(store)?;
             agents.retain(|a| a.id != id);
-            store.save_agent_registry(agents)?;
+            save_personal(store, agents)?;
         }
         AgentScope::Project => {
             project_store::remove(require_worktree(worktree)?, id)?;
@@ -783,5 +832,7 @@ fn require_project(project: &ProjectState) -> Result<String, String> {
 
 #[cfg(test)]
 mod project_tests;
+#[cfg(test)]
+mod skills_tests;
 #[cfg(test)]
 mod tests;

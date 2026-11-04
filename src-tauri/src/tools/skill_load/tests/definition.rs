@@ -11,7 +11,10 @@ fn the_tool_is_a_portable_tool_named_load_skill() {
     // LSK-FR-01. The absence from `invoke_handler` is asserted for the whole
     // group in `tools/tests.rs`; what is this tool's own is its name.
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillLoadTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillLoadTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
 
     assert_eq!(definition.name, "load_skill");
     assert_eq!(
@@ -24,7 +27,10 @@ fn the_tool_is_a_portable_tool_named_load_skill() {
 #[test]
 fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     let app = closed_project();
-    let definition = rig::tool::tool_definition(&SkillLoadTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillLoadTool::new(
+        app.handle().clone(),
+        crate::skills::SkillFilter::all_project(),
+    ));
     assert_eq!(definition.description, DESCRIPTION);
 
     // Asserting `description() == DESCRIPTION` alone proves only that the

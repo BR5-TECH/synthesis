@@ -32,7 +32,7 @@ use super::{
 use crate::bm25_index::Bm25Indexer;
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
-use crate::skills::{self, Ecosystem};
+use crate::skills::{self, Ecosystem, SkillFilter};
 
 #[cfg(test)]
 mod tests;
@@ -46,7 +46,7 @@ mod tests;
 pub const NAME: &str = "search_skills";
 
 /// SST-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Find the skills most relevant to a task, ranked by how well each skill's own description matches what you are trying to do. Use this when you have a job to do and want to know whether this project already provides a skill for it — search with a plain description of the task, not with a guessed skill name. Returns the best matches first, each with the skill's name, the description it wrote about itself, the ecosystem it belongs to, and the path to its SKILL.md file; read that file to actually use the skill. Matching is over each skill's short self-description rather than its full text, so describe the task rather than quoting words you expect to find inside the skill. Only skills this project makes available to models are searched. Each name appears once: where two ecosystems provide a skill under the same name, you are shown whichever of them matched your query better. Returns an empty list when nothing matches, which means this project has no skill for that task.";
+pub const DESCRIPTION: &str = "Find the skills most relevant to a task, ranked by how well each skill's own description matches what you are trying to do. Use this when you have a job to do and want to know whether a skill for it is available to you — search with a plain description of the task, not with a guessed skill name. The skills searched are the application's built-in skills (ecosystem `builtin`) and the project skills made available to you. Returns the best matches first, each with the skill's name, the description it wrote about itself, the ecosystem it belongs to, and the path of its SKILL.md; call `load_skill` with the name to actually use the skill. A `builtin` skill's path is not a file in the project. Matching is over each skill's short self-description rather than its full text, so describe the task rather than quoting words you expect to find inside the skill. Each name appears once: where two ecosystems provide a skill under the same name, you are shown whichever of them matched your query better. Returns an empty list when nothing matches, which means no skill available to you covers that task.";
 
 const QUERY_DESCRIPTION: &str = "A plain description of the task you are trying to accomplish, in your own words. For example: 'review a specification for internal contradictions'.";
 
@@ -157,16 +157,19 @@ pub fn normalize_limit(limit: Option<i64>) -> usize {
 ///
 /// Reads no file, enumerates no folder, holds no registry, consults no index
 /// directly, and applies no ranking of its own.
+///
+/// SST-FR-BDHX: only the skills `filter` admits are ranked.
 pub fn search(
     indexer: &Bm25Indexer,
     args: &SkillSearchArgs,
+    filter: &SkillFilter,
 ) -> Result<SkillSearchOutput, ToolRefusal> {
     if args.query.trim().is_empty() {
         return Err(ToolRefusal::InvalidArguments(EMPTY_QUERY));
     }
     let limit = normalize_limit(args.limit);
     let mut seen: HashSet<String> = HashSet::new();
-    let skills = skills::search_skills(indexer, &args.query, limit)
+    let skills = skills::search_skills(indexer, &args.query, limit, filter)
         .into_iter()
         // SST-FR-12: a name appears at most once, and the delegated call
         // already ordering by descending score means the first arrival is the
@@ -203,25 +206,37 @@ pub struct SkillSearchTool<R: tauri::Runtime> {
     /// so a test can assert on the records this tool emits without racing every
     /// other suite over the process-wide buffer.
     buffer: &'static LogBuffer,
+    /// SST-FR-BDHX: the skills the turn's agent may use.
+    filter: SkillFilter,
 }
 
 impl<R: tauri::Runtime> SkillSearchTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name;
-    /// there is no registry that would attach it on anyone's behalf.
-    pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SkillSearchTool { app, buffer: &BUFFER }
+    /// there is no registry that would attach it on anyone's behalf. The
+    /// filter is the turn's agent's (CVL-FR-VZZR).
+    pub fn new(app: tauri::AppHandle<R>, filter: SkillFilter) -> Self {
+        SkillSearchTool { app, buffer: &BUFFER, filter }
     }
 
-    /// The same tool, reporting into `buffer`.
+    /// The same tool, reporting into `buffer`, admitting every project skill
+    /// and no built-in skill until [`Self::with_filter`] says otherwise.
     #[cfg(test)]
     pub fn with_buffer(app: tauri::AppHandle<R>, buffer: &'static LogBuffer) -> Self {
-        SkillSearchTool { app, buffer }
+        SkillSearchTool { app, buffer, filter: SkillFilter::all_project() }
+    }
+
+    /// The same tool with another filter.
+    #[cfg(test)]
+    pub fn with_filter(mut self, filter: SkillFilter) -> Self {
+        self.filter = filter;
+        self
     }
 
     /// The whole call, with its logging (TLC-FR-14). Split out so the
     /// `PortableTool` impl below is the trait plumbing and nothing else.
     fn run(&self, args: SkillSearchArgs) -> Result<SkillSearchOutput, ToolRefusal> {
-        let outcome = require_open_project(&self.app).and_then(|indexer| search(&indexer, &args));
+        let outcome = require_open_project(&self.app)
+            .and_then(|indexer| search(&indexer, &args, &self.filter));
         match &outcome {
             Ok(output) => log_tool_success(
                 &self.app,

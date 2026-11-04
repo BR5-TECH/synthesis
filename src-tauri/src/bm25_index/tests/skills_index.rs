@@ -67,7 +67,9 @@ fn the_skills_index_holds_the_descriptor_while_the_skill_index_holds_the_body() 
 fn list_and_search_skills_answer_from_one_snapshot() {
     // DSL-FR-16 / DSL-FR-18, DSL-FR-20: the registry and the index agree, and both
     // degenerate inputs and an unmounted indexer yield an empty list.
-    use crate::skills::{list_skills, search_skills};
+    use crate::skills::test_support::{
+        listed_project as list_skills, searched_project as search_skills,
+    };
     let dir = project_with_a_skill();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = indexed(&root);
@@ -94,7 +96,9 @@ fn list_and_search_skills_answer_from_one_snapshot() {
 fn opting_out_removes_a_skill_from_both_the_registry_and_the_index() {
     // DSL-FR-18, DSL-FR-20 / DSL-FR-22: a change to what a SKILL.md declares takes effect
     // on the next pass, in both directions and in both halves at once.
-    use crate::skills::{list_skills, search_skills};
+    use crate::skills::test_support::{
+        listed_project as list_skills, searched_project as search_skills,
+    };
     let dir = project_with_a_skill();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = indexed(&root);
@@ -140,7 +144,9 @@ fn a_gitignored_skill_is_indexed_and_a_pass_scoped_to_artifacts_still_re_enumera
     // on every pass whatever scope it was asked for, which is what makes a
     // gitignored skill's edit — invisible to the scan, and so to the candidate
     // list the artifacts half reads — still land.
-    use crate::skills::{list_skills, search_skills};
+    use crate::skills::test_support::{
+        listed_project as list_skills, searched_project as search_skills,
+    };
     let dir = tempfile::TempDir::new().unwrap();
     let root = crate::changes::canonicalize_lenient(dir.path());
     std::fs::write(root.join(".gitignore"), ".claude/\n").unwrap();
@@ -189,7 +195,7 @@ fn a_gitignored_skill_is_indexed_and_a_pass_scoped_to_artifacts_still_re_enumera
 fn a_removed_skill_folder_leaves_the_registry_and_the_index() {
     // DSL-FR-19 / DSL-FR-25: the pass re-enumerates rather than applying a
     // delta, so a deletion needs no event of its own to be noticed.
-    use crate::skills::list_skills;
+    use crate::skills::test_support::listed_project as list_skills;
     let dir = project_with_a_skill();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = indexed(&root);
@@ -213,7 +219,9 @@ fn a_removed_skill_folder_leaves_the_registry_and_the_index() {
 fn closing_a_project_discards_the_skill_registry_with_the_indexes() {
     // DSL-FR-22: the registry rides the snapshot, so BMI-FR-25's
     // teardown carries it without needing one of its own.
-    use crate::skills::{list_skills, search_skills};
+    use crate::skills::test_support::{
+        listed_project as list_skills, searched_project as search_skills,
+    };
     let dir = project_with_a_skill();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = indexed(&root);
@@ -234,8 +242,8 @@ fn indexing_skills_writes_nothing_anywhere_under_the_project() {
     let before = tree_fingerprint(&root);
     let app = indexed(&root);
     let indexer = app.state::<Bm25Indexer>();
-    let _ = crate::skills::search_skills(&indexer, "teardown", 10);
-    let _ = crate::skills::list_skills(&indexer);
+    let _ = crate::skills::test_support::searched_project(&indexer, "teardown", 10);
+    let _ = crate::skills::test_support::listed_project(&indexer);
     assert_eq!(tree_fingerprint(&root), before, "no file under the project changed");
 }
 
@@ -243,7 +251,7 @@ fn indexing_skills_writes_nothing_anywhere_under_the_project() {
 fn a_skills_query_selects_only_the_skills_index() {
     // DSL-FR-16: `search_skills` scores against the skills index alone, so a
     // spec that shares the descriptor's wording cannot be returned as a skill.
-    use crate::skills::search_skills;
+    use crate::skills::test_support::searched_project as search_skills;
     let dir = project_with_a_skill();
     let root = crate::changes::canonicalize_lenient(dir.path());
     std::fs::create_dir_all(root.join("specifications")).unwrap();
@@ -271,7 +279,7 @@ fn a_drafts_scoped_pass_still_reconciles_the_skills_index() {
     // would set the registry from a fresh enumeration while leaving the
     // removed skill's document in the index — the registry and the index
     // disagreeing, which DSL-FR-18 forbids outright.
-    use crate::skills::list_skills;
+    use crate::skills::test_support::listed_project as list_skills;
     let dir = project_with_a_skill();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = indexed(&root);
@@ -300,7 +308,7 @@ fn skills_rank_by_relevance_and_honour_the_limit() {
     // DSL-FR-16 / DSL-FR-17: with more than one skill in the
     // registry, ordering and truncation become assertable — and so does the
     // `filter_map` in `search_skills` not silently dropping entries.
-    use crate::skills::search_skills;
+    use crate::skills::test_support::searched_project as search_skills;
     let dir = tempfile::TempDir::new().unwrap();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let write = |folder: &str, name: &str, desc: &str| {
@@ -370,7 +378,7 @@ fn a_registry_reached_incrementally_equals_one_enumerated_fresh() {
     // (which `read_dir`'s stability gives for free) but "a registry brought to
     // a state by a series of passes is identical to one enumerated from
     // scratch against the same tree".
-    use crate::skills::list_skills;
+    use crate::skills::test_support::listed_project as list_skills;
     let dir = tempfile::TempDir::new().unwrap();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let write = |folder: &str, name: &str, body: &str| {
@@ -434,7 +442,7 @@ fn a_draft_skill_becomes_eligible_only_once_it_is_published() {
     // DSL-FR-21: a draft's files live under `.synthesis/drafts/` rather than
     // in a special folder, so they are never eligible; the pass that carries a
     // graduation is what makes the published `SKILL.md` reachable.
-    use crate::skills::list_skills;
+    use crate::skills::test_support::listed_project as list_skills;
     let dir = tempfile::TempDir::new().unwrap();
     let root = crate::changes::canonicalize_lenient(dir.path());
     let drafted = root.join(".synthesis/drafts/d1/files/.claude/skills/new");

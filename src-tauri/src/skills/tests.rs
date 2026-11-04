@@ -853,19 +853,26 @@ fn an_exclusion_reason_never_carries_any_of_the_files_contents() {
 }
 
 // ---------------------------------------------------------------------------
-// DSL-FR-01 — no frontend can reach this module
+// DSL-FR-01 — the frontend reaches this module through one command alone
 // ---------------------------------------------------------------------------
 
 #[test]
-fn no_part_of_this_module_is_reachable_from_the_frontend() {
-    // DSL-FR-01: no `#[tauri::command]`, so nothing here can be `invoke`d.
-    // Comment lines are stripped first — this file's own prose mentions the
-    // attribute, and matching that would be a false positive.
+fn the_module_registers_exactly_one_tauri_command() {
+    // DSL-FR-01: `list_project_skills` is the one `#[tauri::command]`, so
+    // nothing else here can be `invoke`d. Comment lines are stripped first —
+    // this file's own prose mentions the attribute, and matching that would be
+    // a false positive.
     let source = include_str!("../skills.rs");
     let code: String =
         source.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
+    assert_eq!(
+        code.matches("#[tauri::command]").count(),
+        1,
+        "this module registers one Tauri command (DSL-FR-01)"
+    );
+    assert!(code.contains("pub fn list_project_skills<"), "and it is list_project_skills");
     assert!(
-        !code.contains("#[tauri::command]"),
-        "this module registers no Tauri command (DSL-FR-01)"
+        crate::command_names::COMMAND_NAMES.contains(&"list_project_skills"),
+        "and the frontend can reach it (DSL-FR-PEHR)"
     );
 }

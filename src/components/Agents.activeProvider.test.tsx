@@ -109,6 +109,9 @@ function backend(over: Partial<Backend> = {}): Backend {
         return b.projectAgents;
       case "list_agent_turns":
         return [];
+      // AGT-FR-KVDA: a Project agent's editor reads the project skills.
+      case "list_project_skills":
+        return [];
       case "append_log_records":
         return null;
       case "create_agent": {

@@ -27,6 +27,7 @@ fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
         block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
             name: "analyst".to_string(),
             ecosystem: Some("claude".to_string()),
+            file: None,
         }))
         .unwrap();
     assert!(
@@ -34,10 +35,11 @@ fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
         "the fixture must distinguish bytes from characters",
     );
 
-    block_on(
-        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER)
-            .call(LoadSkillArgs { name: "a skill nobody wrote".to_string(), ecosystem: None }),
-    )
+    block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
+        name: "a skill nobody wrote".to_string(),
+        ecosystem: None,
+        file: None,
+    }))
     .unwrap_err();
 
     let query = |domain| {
@@ -117,10 +119,12 @@ fn every_refusal_this_tool_can_produce_is_logged_under_its_own_reason() {
     // And the two this tool reaches through a real call carry the right one.
     let fixture = collision_project();
     LSK_BUFFER.clear();
-    let _ = block_on(
-        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER)
-            .call(LoadSkillArgs { name: "review".to_string(), ecosystem: None }),
-    );
+    let _ =
+        block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
+            name: "review".to_string(),
+            ecosystem: None,
+            file: None,
+        }));
     let records = LSK_BUFFER
         .query(
             &LogFilter {

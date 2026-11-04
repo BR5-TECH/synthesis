@@ -40,6 +40,12 @@ export interface Agent {
   voice?: string;
   /** Free text. Empty is an ordinary state, not an unconfigured one. */
   instructions: string;
+  /**
+   * AGR-FR-IGIL: the paths of the project skills a Project agent may use. The
+   * backend omits the key while the list is empty, and a Personal agent never
+   * holds one (AGR-FR-QKOV), so an absent value means no project skill.
+   */
+  skills?: string[];
   createdAt: string;
   updatedAt: string;
   /** `null` means the model's own default (AGR-FR-07). */
@@ -57,7 +63,20 @@ export interface AgentDraft {
   instructions: string;
   /** AGR-FR-ABCF. */
   voice?: string;
+  /** AGR-FR-IGIL: the selected project skill paths. Always empty for a
+   * Personal agent (AGT-FR-WTSR). */
+  skills?: string[];
   reasoning: ReasoningChoice | null;
+}
+
+/** DSL-FR-PEHR: one project skill as `listProjectSkills` returns it. Never a
+ * built-in skill, which every agent has without a selection. */
+export interface ProjectSkill {
+  /** The project-relative path of its `SKILL.md`: the skill's identity. */
+  path: string;
+  ecosystem: "claude" | "codex" | "github" | "opencode";
+  name: string;
+  description: string;
 }
 
 /**

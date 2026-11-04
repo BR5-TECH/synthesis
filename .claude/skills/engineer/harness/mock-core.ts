@@ -3595,6 +3595,8 @@ type MockAgent = {
   title: string;
   modelId: string;
   instructions: string;
+  /** AGR-FR-IGIL: the selected project skill paths of a Project agent. */
+  skills?: string[];
   createdAt: string;
   updatedAt: string;
   reasoning: { kind: string; effort?: string } | null;
@@ -10917,6 +10919,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         title: String(draft.title ?? "").trim(),
         modelId: draft.modelId,
         instructions: draft.instructions ?? "",
+        // AGR-FR-QKOV: a Personal agent stores no selection.
+        skills: a.scope === "project" ? (draft.skills ?? []) : [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         reasoning: draft.reasoning ?? null,
@@ -10947,6 +10951,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           title: String(draft.title ?? "").trim(),
           modelId: draft.modelId,
           instructions: draft.instructions ?? "",
+          skills: a.scope === "project" ? (draft.skills ?? []) : [],
           reasoning: draft.reasoning ?? null,
           updatedAt: new Date().toISOString(),
         };
@@ -10963,6 +10968,30 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return agentsOfScope(String(a.scope));
     case "list_project_agents":
       return projectAgents();
+    /* DSL-FR-PEHR: the project skills of the seeded project, in path order,
+       for the Project-skills selector of a Project agent's editor
+       (AGT-FR-KVDA). Never a built-in skill. */
+    case "list_project_skills":
+      return [
+        {
+          path: ".claude/skills/analyst/SKILL.md",
+          ecosystem: "claude",
+          name: "analyst",
+          description: "Capture a feature request as specifications.",
+        },
+        {
+          path: ".claude/skills/engineer/SKILL.md",
+          ecosystem: "claude",
+          name: "engineer",
+          description: "Implement a specification.",
+        },
+        {
+          path: ".codex/skills/review/SKILL.md",
+          ecosystem: "codex",
+          name: "review",
+          description: "Review a change for defects.",
+        },
+      ];
     /* AGC-FR-55: the recovery registry — at most one entry per conversation,
        each `failed` and each carrying `retryPermitted`. What a card reads when
        it mounts, so a conversation reopened while a failure stands renders its

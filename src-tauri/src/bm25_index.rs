@@ -623,10 +623,24 @@ impl Bm25Indexer {
     /// BMI-FR-NEIW: a new content root discards what the outgoing root's files
     /// produced and keeps the `documents` index, whose sources belong to the
     /// repository. The pass that follows reconciles it against the same sources.
+    ///
+    /// DSL-FR-ZUFC: the new set already holds the built-in skills, in the
+    /// registry and in the `skills` index together (DSL-FR-18), because they
+    /// come from the binary and need no pass to be read.
     fn reset_keeping_documents(&self) {
         let mut published = self.published();
         published.generation += 1;
-        published.set = Arc::new(published.set.only_documents());
+        let (sources, skills) = sources::builtin_skill_sources();
+        let scope = PassScope { artifacts: false, drafts: false, notes: false, documents: false };
+        let (mut next, _) = reconcile::reconcile(
+            &published.set.only_documents(),
+            sources,
+            scope,
+            |_, _, _| {},
+            |_| {},
+        );
+        next.set_skills(skills);
+        published.set = Arc::new(next);
     }
 
     #[cfg(test)]

@@ -54,7 +54,7 @@ fn the_request_carries_the_compiled_prompt_and_the_input_alone() {
     assert_eq!(
         request.instructions,
         COMMENT_PROMPT_TEMPLATE
-            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, "")
+            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, &document_rule("English"))
             .replace(AGENT_INSTRUCTIONS_PLACEHOLDER, "Argue about structure.")
             // The harness's agent carries no title, so the other placeholder
             // holds CVL-FR-04's fallback (CVL-FR-02, CVL-FR-03).
@@ -117,7 +117,7 @@ fn an_agent_carrying_no_instructions_answers_under_the_rest_of_the_prompt() {
     assert_eq!(
         empty,
         COMMENT_PROMPT_TEMPLATE
-            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, "")
+            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, &document_rule("English"))
             .replace(AGENT_INSTRUCTIONS_PLACEHOLDER, "")
             // The turns above were compiled for an untitled agent, so the other
             // placeholder carries CVL-FR-04's fallback rather than nothing.
@@ -379,7 +379,7 @@ fn an_agents_own_placeholder_is_text_and_expands_no_further() {
     assert_eq!(
         compiled,
         COMMENT_PROMPT_TEMPLATE
-            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, "")
+            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, &document_rule("English"))
             .replace(AGENT_TITLE_PLACEHOLDER, AGENT_TITLE_UNDEFINED)
             .replace(AGENT_INSTRUCTIONS_PLACEHOLDER, &sneaky),
     );
@@ -493,7 +493,7 @@ fn neither_substituted_value_is_scanned_for_the_others_placeholder() {
     assert_eq!(
         compiled,
         COMMENT_PROMPT_TEMPLATE
-            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, "")
+            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, &document_rule("English"))
             .replace(AGENT_TITLE_PLACEHOLDER, "\u{0}")
             .replace(AGENT_INSTRUCTIONS_PLACEHOLDER, AGENT_TITLE_PLACEHOLDER)
             .replace('\u{0}', AGENT_INSTRUCTIONS_PLACEHOLDER),
@@ -521,7 +521,7 @@ fn a_title_fills_its_placeholder_in_every_prompt_and_an_empty_one_is_not_defined
         assert_eq!(
             titled,
             prompt_template(kind)
-                .replace(SPOKEN_LANGUAGE_PLACEHOLDER, "")
+                .replace(SPOKEN_LANGUAGE_PLACEHOLDER, &document_rule("English"))
                 .replace(AGENT_TITLE_PLACEHOLDER, "Developer")
                 .replace(AGENT_INSTRUCTIONS_PLACEHOLDER, "Argue about structure."),
             "{kind:?} did not fill its two placeholders with their own values",
@@ -708,7 +708,7 @@ fn nothing_a_participant_wrote_reaches_the_instruction_position() {
     assert_eq!(
         request.instructions,
         COMMENT_PROMPT_TEMPLATE
-            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, "")
+            .replace(SPOKEN_LANGUAGE_PLACEHOLDER, &document_rule("English"))
             .replace(AGENT_INSTRUCTIONS_PLACEHOLDER, "Argue about structure.")
             .replace(AGENT_TITLE_PLACEHOLDER, AGENT_TITLE_UNDEFINED),
         "the instruction position holds the template and the author's persona alone",

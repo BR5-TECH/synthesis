@@ -125,6 +125,9 @@ zeroize = "1"
 # already in the tree as `bm25`'s own dependency; naming it here is what makes
 # `whichlang::detect_language` callable at the one call site that needs it.
 whichlang = "0.1"
+# The document language of a discussion target (AGC-FR-LDTX). `whichlang` has no
+# Polish and no reliability value, and both are what that detection needs.
+whatlang = "0.18"
 # DAS-FR-06: a draft prompt's image references are read with **the same
 # Markdown semantics the prompt is rendered with** — the inline image form and
 # the reference-style form in its full, collapsed, and shortcut spellings, with

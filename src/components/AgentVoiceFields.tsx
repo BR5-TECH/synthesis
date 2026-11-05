@@ -1,8 +1,9 @@
 /**
  * The voice of an agent in the persona editor (`AGT-agents.md` AGT-FR-DIVM,
- * AGT-FR-MWOF): the voice, the speed, and the speaking style.
+ * AGT-FR-HXVQ, AGT-FR-MWOF): the voice, the speed, and the speaking style.
  */
-import { SPEECH_STYLE_LIMIT } from "../types";
+import { SPEECH_STYLE_LIMIT, type VoiceProviderId } from "../types";
+import { VoiceNamePicker } from "./VoiceNamePicker";
 import { SPEED_CHOICES } from "./VoiceSpeechOptions";
 
 export interface AgentVoiceValue {
@@ -15,19 +16,33 @@ export interface AgentVoiceValue {
 export function AgentVoiceFields({
   value,
   voices,
-  ready,
+  provider,
   onChange,
 }: {
   value: AgentVoiceValue;
   /** The provider's voices, or null for free text (AGT-FR-DIVM). */
   voices: string[] | null | undefined;
-  ready: boolean;
+  /** The active Voice AI provider, or null for none. */
+  provider: VoiceProviderId | null;
   onChange: (next: AgentVoiceValue) => void;
 }) {
   const { voice } = value;
+  const ready = provider !== null;
   return (
     <>
-      {/* AGT-FR-DIVM. */}
+      {/* AGT-FR-DIVM, AGT-FR-HXVQ. */}
+      {provider === "custom" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <VoiceNamePicker
+            value={voice}
+            defaultLabel="Provider default"
+            liveName
+            testId="agent-voice-picker"
+            onChange={(name) => onChange({ ...value, voice: name })}
+          />
+          <span className="t-ui-sm t-muted">Optional.</span>
+        </div>
+      ) : (
       <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span className="t-ui-sm">Voice</span>
         {voices ? (
@@ -62,6 +77,7 @@ export function AgentVoiceFields({
         )}
         <span className="t-ui-sm t-muted">Optional.</span>
       </label>
+      )}
 
       {/* AGT-FR-MWOF. */}
       <div style={{ display: "flex", gap: 8 }}>

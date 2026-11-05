@@ -48,6 +48,7 @@ import type {
   AiApiCatalog,
   ModelOption,
   ProjectAgent,
+  VoiceProviderId,
 } from "../types";
 
 import {
@@ -106,7 +107,8 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
   const [voiceSpeed, setVoiceSpeed] = useState<number | null>(agent?.voiceSpeedPercent ?? null);
   const [voiceStyle, setVoiceStyle] = useState(agent?.voiceStyle ?? "");
   const [voices, setVoices] = useState<string[] | null | undefined>(undefined);
-  const [voiceReady, setVoiceReady] = useState(false);
+  // AGT-FR-DIVM, AGT-FR-HXVQ: the active Voice AI provider, or null for none.
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId | null>(null);
   // AGT-FR-XGWD: a new agent selects no project skill; an existing one opens
   // on its stored selection.
   const [skills, setSkills] = useState<string[]>(agent?.skills ?? []);
@@ -123,7 +125,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
     void api
       .listVoiceAiIntegrations()
       .then((list) => {
-        if (!cancelled) setVoiceReady(list.active !== null);
+        if (!cancelled) setVoiceProvider(list.active);
       })
       .catch(() => undefined);
     void api
@@ -369,7 +371,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
       <AgentVoiceFields
         value={{ voice, speedPercent: voiceSpeed, style: voiceStyle }}
         voices={voices}
-        ready={voiceReady}
+        provider={voiceProvider}
         onChange={(next) => {
           setVoice(next.voice);
           setVoiceSpeed(next.speedPercent);

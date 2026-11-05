@@ -9,7 +9,7 @@
  * same path as a typed comment (VOM-FR-WYIE).
  */
 import { getVoiceState } from "../state/voiceSession";
-import type { Discussion, VoiceOptions } from "../types";
+import type { Discussion, DiscussionTarget, VoiceOptions } from "../types";
 
 export type PostOutcome = "posted" | "reached_nobody" | "busy" | "failed";
 
@@ -29,6 +29,8 @@ export interface VoiceComposerHandle {
   blocked(): boolean;
   /** VOM-FR-LNUH. */
   nicknames(): string[];
+  /** VOM-FR-QWMK: what the discussion is about, for its document language. */
+  target?(): DiscussionTarget | null;
   /** VOM-FR-UALP. */
   voiceOf(agentId: string): string | null;
   /** VOM-FR-UALP, AGR-FR-EPYX: the speed and the style of the agent's voice. */

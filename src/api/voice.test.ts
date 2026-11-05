@@ -181,12 +181,16 @@ describe("the voice commands", () => {
     );
   });
 
-  it("AGC-FR-QEOF: the translation takes the text and the nicknames", async () => {
+  it("AGC-FR-QEOF: the translation takes the text, the nicknames, and the target", async () => {
     core.invoke.mockResolvedValueOnce({ text: "Hello." });
-    await expect(translateVoiceTranscript("Hola.", ["arch"])).resolves.toEqual({ text: "Hello." });
+    const target = { kind: "draft", draftId: "d1" } as const;
+    await expect(translateVoiceTranscript("Hola.", ["arch"], target)).resolves.toEqual({
+      text: "Hello.",
+    });
     expect(core.invoke).toHaveBeenLastCalledWith("translate_voice_transcript", {
       text: "Hola.",
       nicknames: ["arch"],
+      target,
     });
   });
 

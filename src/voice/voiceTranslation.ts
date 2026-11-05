@@ -4,9 +4,8 @@
  */
 import { translateVoiceTranscript } from "../api";
 import { logInfo, logWarn } from "../logging";
-import { peekAppPreferences } from "../state/appPreferences";
 import { patchVoiceState } from "../state/voiceSession";
-import { isSpokenLanguage } from "./languages";
+import type { DiscussionTarget } from "../types";
 import { errorCode } from "./voiceMessages";
 
 export interface Translated {
@@ -14,33 +13,34 @@ export interface Translated {
   text: string;
   /** The transcript as the author spoke it, or null where nothing was translated. */
   original: string | null;
-  /** VOM-FR-DLPA: a spoken language is set and the translation failed. */
+  /** VOM-FR-DLPA: the translation failed. */
   failed: boolean;
 }
 
 /**
- * VOM-FR-QWMK, VOP-FR-BYZC: the spoken language of the preferences, or "" for
- * none. A value that is no spoken language is none, as the backend reads it.
+ * VOM-FR-QWMK, VOM-FR-DLPA: the transcript in the document language of
+ * `target`, also with no spoken language. The backend gives a transcript that
+ * is already in that language as it stands (AGC-FR-WSKP). With no target, the
+ * transcript as it stands. A failure posts the transcript.
  */
-export function spokenLanguage(): string {
-  const value = peekAppPreferences()?.voiceSpokenLanguage?.trim() ?? "";
-  return isSpokenLanguage(value) ? value : "";
-}
-
-/**
- * VOM-FR-QWMK, VOM-FR-DLPA: the transcript in English. With no spoken
- * language, the transcript as it stands. A failure posts the transcript.
- */
-export async function translateSpoken(spoken: string, nicknames: string[]): Promise<Translated> {
-  if (spokenLanguage() === "") return { text: spoken, original: null, failed: false };
+export async function translateSpoken(
+  spoken: string,
+  nicknames: string[],
+  target: DiscussionTarget | null,
+): Promise<Translated> {
+  if (target === null) {
+    logWarn(["frontend", "ai"], "a voice transcript has no target to translate for", {});
+    return { text: spoken, original: null, failed: false };
+  }
   patchVoiceState({ note: "translating" });
   try {
-    const { text } = await translateVoiceTranscript(spoken, nicknames);
+    const { text } = await translateVoiceTranscript(spoken, nicknames, target);
     const translated = text.trim();
     if (translated === "") throw new Error("translation_failed");
     logInfo(["frontend", "ai"], "a voice transcript was translated", {
       chars: spoken.length,
       translatedChars: translated.length,
+      changed: translated !== spoken,
     });
     // VOM-FR-DLPA: a translation equal to the transcript keeps no original.
     return {

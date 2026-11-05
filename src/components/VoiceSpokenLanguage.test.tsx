@@ -30,17 +30,19 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the spoken language", () => {
-  it("VAI-FR-RGPV: Auto first, the table by name, and Other last; Auto states nothing", async () => {
+  it("VAI-FR-RGPV, VAI-FR-JPZK: Auto first, the table by name, and Other last; Auto states the translation alone", async () => {
     stored(undefined);
     render(<VoiceSpokenLanguage />);
     const select = (await screen.findByLabelText("Spoken language")) as HTMLSelectElement;
     const names = Array.from(select.options).map((o) => o.textContent);
-    expect(names[0]).toBe("Auto (no translation)");
+    expect(names[0]).toBe("Auto");
     expect(names).toContain("Russian");
     expect(names[names.length - 1]).toBe("Other…");
     expect(names).toHaveLength(17);
     expect(select.value).toBe("");
-    expect(screen.queryByTestId("voice-spoken-language-note")).toBeNull();
+    expect(screen.getByTestId("voice-spoken-language-note").textContent).toBe(
+      "Your speech is translated into the language of the document before it posts.",
+    );
   });
 
   it("VAI-FR-RGPV, VAI-FR-JPZK: a preset saves its code and states the translation", async () => {
@@ -52,7 +54,7 @@ describe("the spoken language", () => {
     fireEvent.change(select, { target: { value: "ru" } });
     await waitFor(() => expect(lastSaved()).toBe("ru"));
     expect(screen.getByTestId("voice-spoken-language-note")).toHaveTextContent(
-      "Your speech is translated into English before it posts. Agents speak to you in this language.",
+      "Your speech is translated into the language of the document before it posts. Agents speak to you in this language.",
     );
   });
 
@@ -76,18 +78,20 @@ describe("the spoken language", () => {
     expect(field).toHaveValue("Basque");
     fireEvent.change(screen.getByLabelText("Spoken language"), { target: { value: "" } });
     await waitFor(() => expect(lastSaved()).toBe(""));
-    expect(screen.queryByTestId("voice-spoken-language-note")).toBeNull();
+    expect(screen.getByTestId("voice-spoken-language-note")).not.toHaveTextContent("Agents speak");
   });
 
   it("VAI-FR-JPZK, VOP-FR-BYZC: a stored free name states the translation, and a value that is no language does not", async () => {
     stored("Basque");
     render(<VoiceSpokenLanguage />);
-    expect(await screen.findByTestId("voice-spoken-language-note")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("voice-spoken-language-note")).toHaveTextContent("Agents speak"),
+    );
     cleanup();
     resetAppPreferencesCache();
     stored("Klingon 2");
     render(<VoiceSpokenLanguage />);
     await waitFor(() => expect(screen.getByLabelText("Language name")).toHaveValue("Klingon 2"));
-    expect(screen.queryByTestId("voice-spoken-language-note")).toBeNull();
+    expect(screen.getByTestId("voice-spoken-language-note")).not.toHaveTextContent("Agents speak");
   });
 });

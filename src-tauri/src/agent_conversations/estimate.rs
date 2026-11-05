@@ -90,8 +90,25 @@ pub fn estimate_impl<R: tauri::Runtime>(
         ),
         None => ("", "", String::new(), String::new(), None),
     };
-    let prompt =
-        compile_prompt_spoken(origin.kind(), instructions, title, &spoken_language_rule(&store));
+    // CVL-FR-FQMM: the same language rules as the turn.
+    let language = document_language::document_language(
+        roots,
+        &origin.target,
+        origin.fragment_target.as_ref(),
+    );
+    document_language::log_document_language(
+        app,
+        app.state::<TurnRegistry>().buffer(),
+        "estimate",
+        &origin.target,
+        language,
+    );
+    let prompt = compile_prompt_spoken(
+        origin.kind(),
+        instructions,
+        title,
+        &language_rules(&store, language.name),
+    );
     let author =
         Participant::Agent { agent_id: agent_key, handle, model, title: Some(title.to_string()) };
     // CVL-FR-AAPA: the definitions the turn would be offered. Constructing a

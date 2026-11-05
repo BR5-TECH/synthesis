@@ -11,7 +11,7 @@ Voice AI is the section of the Settings window where the author chooses the spee
 
 1. **VAI-FR-CEJC** The Global group of the Settings window holds a **Voice AI** section (`GLS-global-settings.md` GLS-FR-03). It populates from "list voice ai integrations" when it opens.
 2. **VAI-FR-IDIV** The section has one tab per provider, in this order: OpenAI, OpenRouter, Custom. Each tab configures its provider independently.
-3. **VAI-FR-UJNQ** A tab holds a base URL field, a key field, an STT model field, a TTS model field, a default voice field, a speech speed control, and a speaking style field.
+3. **VAI-FR-UJNQ** A tab holds a base URL field, a key field, an STT model field, a TTS model field, a default voice control (VAI-FR-KWSN on Custom, a field on the other tabs), a speech speed control, and a speaking style field.
 4. **VAI-FR-QARI** Each action applies at once, so the section has no dirty state (`GLS-global-settings.md` GLS-FR-10).
 5. **VAI-FR-KWOT** Before any provider is verified, the section states that voice mode needs a verified provider.
 6. **VAI-FR-BSDN** While the section is open, a `voice-ai-changed` event refreshes each tab that has no candidate edit.
@@ -40,6 +40,9 @@ Voice AI is the section of the Settings window where the author chooses the spee
 23. **VAI-FR-EEMC** On Custom, an empty TTS model is valid, and the tab states that spoken replies stay off.
 24. **VAI-FR-NIWH** When the speech route is a `llamacpp` Realtime route, the tab states that agent voices have no effect on it and that the `/tts` route takes a voice.
 25. **VAI-FR-OJBE** The default voice field calls "set voice ai default voice" when it loses focus with a changed value. It offers the provider's voices where a list exists.
+25. **VAI-FR-KWSN** On Custom, the default voice control is two selectors. **Voice** offers `Server default`, `Female`, `Male`, and `Other name…`. `Other name…` shows a text field for the name. **Voice language** offers `None` and these languages: `american-english`, `arabic`, `british-english`, `chinese`, `danish`, `dutch`, `english`, `finnish`, `french`, `german`, `greek`, `hebrew`, `italian`, `japanese`, `korean`, `polish`, `portuguese`, `spanish`, `swedish`, `turkish`. It is disabled for `Server default` and for `Other name…`. A change of a selector calls "set voice ai default voice" at once, and the name field calls it when it loses focus with a changed value.
+    - *Why:* The speech route of a local server such as Ollama with LFM3-Audio takes a voice as a sex and an optional language, and it gives no list of voices. A free-text field hides that.
+25. **VAI-FR-PMDX** The voice name of the two selectors is `""` for `Server default`, `female` or `male` with the language `None`, and `<sex>-<language>` with a language, for example `female-polish`. A stored name of that form shows in the two selectors. Each other non-empty stored name shows as `Other name…` with the name in its field.
 25. **VAI-FR-USDR** The speech speed control offers 50% to 200% in steps of 10%, and 100% is the default. A change calls "set voice ai speech options" at once. The speaking style field takes free text of at most 200 characters, and it calls the same operation when it loses focus with a changed value.
 25. **VAI-FR-EIHC** After verification, when `speech_speed` is not `server`, the tab states: `This server cannot change speed. Playback changes speed and pitch.` When `speech_instructions` is false, it states: `This server does not support a speaking style.`
 
@@ -63,8 +66,8 @@ Voice AI is the section of the Settings window where the author chooses the spee
 
 ### Spoken language
 
-37. **VAI-FR-RGPV** The section holds a **Spoken language** control with `Auto (no translation)`, the languages of the table by English name (`../core/VOP-voice-ai-providers.md` VOP-FR-IRZC), and `Other…`. `Other…` shows a text field of at most 40 characters. The control saves `voice_spoken_language` through `patchAppPreferences`.
-38. **VAI-FR-JPZK** With a spoken language set, the control states: `Your speech is translated into English before it posts. Agents speak to you in this language.`
+37. **VAI-FR-RGPV** The section holds a **Spoken language** control with `Auto`, the languages of the table by English name (`../core/VOP-voice-ai-providers.md` VOP-FR-IRZC), and `Other…`. `Other…` shows a text field of at most 40 characters. The control saves `voice_spoken_language` through `patchAppPreferences`.
+38. **VAI-FR-JPZK** The control states: `Your speech is translated into the language of the document before it posts.` With a spoken language set, it also states: `Agents speak to you in this language.`
 
 ## Wireframes
 

@@ -72,7 +72,7 @@ export function VoiceSpokenLanguage() {
             save(next);
           }}
         >
-          <option value={AUTO}>Auto (no translation)</option>
+          <option value={AUTO}>Auto</option>
           {SPOKEN_LANGUAGES.map((language) => (
             <option key={language.code} value={language.code}>
               {language.name}
@@ -99,12 +99,10 @@ export function VoiceSpokenLanguage() {
         </div>
       )}
       {/* VAI-FR-JPZK. */}
-      {isSpokenLanguage(stored) && (
-        <div className="t-ui-sm t-muted" data-testid="voice-spoken-language-note">
-          Your speech is translated into English before it posts. Agents speak to you in this
-          language.
-        </div>
-      )}
+      <div className="t-ui-sm t-muted" data-testid="voice-spoken-language-note">
+        Your speech is translated into the language of the document before it posts.
+        {isSpokenLanguage(stored) && " Agents speak to you in this language."}
+      </div>
     </div>
   );
 }

@@ -127,6 +127,7 @@ mod compaction;
 mod context_figures;
 mod delivery;
 mod dispatch;
+pub mod document_language;
 mod estimate;
 mod failures;
 mod key_input;
@@ -331,8 +332,18 @@ pub const AGENT_TITLE_UNDEFINED: &str = "Not defined";
 ///
 /// What the registry stores is untouched by any of this — a decision about what
 /// to *send*, not about what to keep.
+///
+/// The language rules are those of a turn on an English document with no
+/// spoken language (CVL-FR-FQMM), so the result is the prompt such a turn
+/// carries.
+#[cfg(test)]
 pub fn compile_prompt(origin_kind: OriginKind, instructions: &str, title: &str) -> String {
-    compile_prompt_spoken(origin_kind, instructions, title, "")
+    compile_prompt_spoken(
+        origin_kind,
+        instructions,
+        title,
+        &document_rule(document_language::FALLBACK_LANGUAGE),
+    )
 }
 
 /// CVL-FR-04: the placeholder the spoken-language rule is substituted into.

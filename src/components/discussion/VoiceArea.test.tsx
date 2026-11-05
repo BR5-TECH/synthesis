@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({
   cancelVoiceCapture: vi.fn(async () => undefined),
   cancelVoiceSpeech: vi.fn(async () => undefined),
   finishVoiceCapture: vi.fn(async (): Promise<string> => "hello there"),
+  // VOM-FR-QWMK: a transcript already in the document language.
+  translateVoiceTranscript: vi.fn(async (text: string) => ({ text })),
   retryVoiceCapture: vi.fn(async (): Promise<string> => "again"),
   speakVoiceSegment: vi.fn(async () => undefined),
   startVoiceCapture: vi.fn(async () => ({ sessionId: "s1", route: "http", live: false })),
@@ -372,6 +374,20 @@ describe("posting by voice", () => {
     expect(onReply).toHaveBeenCalledWith("d1", "@arch look here", [], []);
     await waitFor(() => expect(getVoiceState().phase).toBe("idle"));
     expect(getVoiceState().note).toBeNull();
+  });
+
+  it("VOM-FR-QWMK: a reply composer gives the target of its discussion to the translation", async () => {
+    api.finishVoiceCapture.mockImplementationOnce(async () => "look here");
+    api.translateVoiceTranscript.mockImplementationOnce(async () => ({ text: "spójrz tutaj" }));
+    renderReply();
+    enterVoice();
+    await holdAndRelease(screen.getByTestId("voice-record"));
+    await waitFor(() => expect(onReply).toHaveBeenCalled());
+    expect(api.translateVoiceTranscript).toHaveBeenCalledWith("look here", ["arch"], {
+      kind: "artifact",
+      artifactId: "a.md",
+    });
+    expect(onReply).toHaveBeenCalledWith("d1", "spójrz tutaj", [], []);
   });
 
   it("VOM-FR-PECJ: Space acts as a press, and its release as a release", async () => {

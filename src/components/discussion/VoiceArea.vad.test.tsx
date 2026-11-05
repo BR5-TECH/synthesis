@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   })),
   feedVoiceActivity: vi.fn(async () => undefined),
   finishVoiceCapture: vi.fn(async (): Promise<string> => "hello there"),
+  // VOM-FR-QWMK: a transcript already in the document language.
+  translateVoiceTranscript: vi.fn(async (text: string) => ({ text })),
   openVoiceActivitySession: vi.fn(async () => ({ activityId: "va1" })),
   setVoiceActivityGate: vi.fn(async () => undefined),
   speakVoiceSegment: vi.fn(async () => undefined),

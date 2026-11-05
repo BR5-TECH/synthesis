@@ -48,12 +48,16 @@ export function discussion(comments: Comment[], id = KEY): Discussion {
   };
 }
 
+/** VOM-FR-QWMK: what the voice discussion of the bench is about. */
+export const TARGET = { kind: "draft", draftId: "d1" } as const;
+
 export function handle(over: Partial<VoiceComposerHandle> = {}) {
   return {
     post: vi.fn(async (): Promise<PostOutcome> => "posted"),
     tagged: (text: string) => text,
     blocked: () => false,
     nicknames: () => ["arch"],
+    target: () => TARGET,
     voiceOf: () => "cedar",
     ...over,
   } satisfies VoiceComposerHandle;

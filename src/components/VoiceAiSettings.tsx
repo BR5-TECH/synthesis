@@ -24,6 +24,7 @@ import type {
 import { DEFAULT_VOICE_HOTKEY, chordOf, hotkeyProblem, type HotkeyProblem } from "../voice/hotkey";
 import { errorCode, voiceMessage } from "../voice/voiceMessages";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
+import { VoiceNamePicker } from "./VoiceNamePicker";
 import { VoiceSpeechOptions } from "./VoiceSpeechOptions";
 import { VoiceSpokenLanguage } from "./VoiceSpokenLanguage";
 import { VoiceVadSettings } from "./VoiceVadSettings";
@@ -376,6 +377,28 @@ export function VoiceAiSettings() {
   }
 
   const custom = provider === "custom";
+  // VAI-FR-OJBE, VAI-FR-KWSN. The save sends no change event, so the record
+  // that it answers takes the place of the held one.
+  const saveDefaultVoice = (voice: string): Promise<void> => {
+    logInfo(["frontend"], "a default voice was changed", { provider });
+    return api.setVoiceAiDefaultVoice(provider, voice).then(
+      (updated) =>
+        setIntegrations((held) =>
+          held
+            ? {
+                ...held,
+                records: held.records.map((r) => (r.provider === provider ? updated : r)),
+              }
+            : held,
+        ),
+      (err: unknown) => {
+        const code = errorCode(err);
+        logWarn(["frontend"], "a default voice was not saved", { provider, code });
+        setError(code);
+        throw err;
+      },
+    );
+  };
   const notLive =
     record.transcriptionRoute === "http" || capabilities?.realtimeTranscription === "turn";
   return (
@@ -489,30 +512,49 @@ export function VoiceAiSettings() {
             </div>
           )}
         </div>
-        <div className="picker-field" style={{ marginBottom: 10 }}>
-          <label className="picker-field__label" htmlFor="voice-default">
-            Default voice
-          </label>
-          <input
-            id="voice-default"
-            className="input input--mono"
-            list="voice-voices"
-            spellCheck={false}
-            defaultValue={record.defaultVoice}
-            key={`${provider}-${record.defaultVoice}`}
-            onBlur={(e) => {
-              if (e.target.value === record.defaultVoice) return;
-              api
-                .setVoiceAiDefaultVoice(provider, e.target.value)
-                .catch((err: unknown) => setError(errorCode(err)));
-            }}
-          />
-          <datalist id="voice-voices">
-            {voices.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-        </div>
+        {custom ? (
+          // VAI-FR-KWSN, VAI-FR-PMDX: a sex and an optional language.
+          <div
+            className="picker-field"
+            style={{ marginBottom: 10 }}
+            role="group"
+            aria-labelledby="voice-default-group"
+          >
+            <div id="voice-default-group" className="picker-field__label">
+              Default voice
+            </div>
+            <VoiceNamePicker
+              key={provider}
+              value={record.defaultVoice}
+              defaultLabel="Server default"
+              testId="voice-default-picker"
+              onChange={saveDefaultVoice}
+            />
+          </div>
+        ) : (
+          <div className="picker-field" style={{ marginBottom: 10 }}>
+            <label className="picker-field__label" htmlFor="voice-default">
+              Default voice
+            </label>
+            <input
+              id="voice-default"
+              className="input input--mono"
+              list="voice-voices"
+              spellCheck={false}
+              defaultValue={record.defaultVoice}
+              key={`${provider}-${record.defaultVoice}`}
+              onBlur={(e) => {
+                if (e.target.value === record.defaultVoice) return;
+                saveDefaultVoice(e.target.value).catch(() => undefined);
+              }}
+            />
+            <datalist id="voice-voices">
+              {voices.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          </div>
+        )}
         <VoiceSpeechOptions
           provider={provider}
           record={record}

@@ -358,6 +358,117 @@ describe("routes and models", () => {
   });
 });
 
+describe("the voice of Custom", () => {
+  it("VAI-FR-KWSN, VAI-FR-UJNQ: Custom has the two selectors, and the other tabs keep the field", async () => {
+    await open("Custom");
+    // The heading names the group of the two selectors, and no text field.
+    expect(screen.getByRole("group", { name: "Default voice" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Default voice" })).toBeNull();
+    const sex = screen.getByTestId("voice-default-picker-sex") as HTMLSelectElement;
+    expect(Array.from(sex.options).map((o) => o.textContent)).toEqual([
+      "Server default",
+      "Female",
+      "Male",
+      "Other name…",
+    ]);
+    const language = screen.getByTestId("voice-default-picker-language") as HTMLSelectElement;
+    expect(language.options).toHaveLength(21);
+    expect(language.options[0].textContent).toBe("None");
+    expect(language).toBeDisabled();
+    fireEvent.click(screen.getByRole("tab", { name: "OpenAI" }));
+    expect(screen.getByLabelText("Default voice")).toBeInTheDocument();
+  });
+
+  it("VAI-FR-KWSN, VAI-FR-PMDX: each selector saves the composed name at once", async () => {
+    // The backend answers with the record that holds the saved name.
+    api.setVoiceAiDefaultVoice.mockImplementation(async (_provider: string, voice: string) =>
+      record({ provider: "custom", defaultVoice: voice }),
+    );
+    await open("Custom");
+    const sex = screen.getByTestId("voice-default-picker-sex");
+    fireEvent.change(sex, { target: { value: "female" } });
+    expect(api.setVoiceAiDefaultVoice).toHaveBeenLastCalledWith("custom", "female");
+    const language = screen.getByTestId("voice-default-picker-language");
+    expect(language).toBeEnabled();
+    fireEvent.change(language, { target: { value: "polish" } });
+    expect(api.setVoiceAiDefaultVoice).toHaveBeenLastCalledWith("custom", "female-polish");
+    fireEvent.change(sex, { target: { value: "" } });
+    expect(api.setVoiceAiDefaultVoice).toHaveBeenLastCalledWith("custom", "");
+  });
+
+  it("VAI-FR-KWSN: Other name saves the name when it loses focus, and an empty name saves nothing", async () => {
+    await open("Custom");
+    fireEvent.change(screen.getByTestId("voice-default-picker-sex"), { target: { value: "other" } });
+    expect(api.setVoiceAiDefaultVoice).not.toHaveBeenCalled();
+    expect(screen.getByTestId("voice-default-picker-language")).toBeDisabled();
+    const name = screen.getByLabelText("Voice name");
+    fireEvent.change(name, { target: { value: "af_bella" } });
+    expect(api.setVoiceAiDefaultVoice).not.toHaveBeenCalled();
+    fireEvent.blur(name);
+    expect(api.setVoiceAiDefaultVoice).toHaveBeenCalledWith("custom", "af_bella");
+  });
+
+  it("VAI-FR-KWSN: a saved name stays after a move to another tab and back", async () => {
+    api.setVoiceAiDefaultVoice.mockImplementation(async (_provider: string, voice: string) =>
+      record({ provider: "custom", defaultVoice: voice }),
+    );
+    await open("Custom");
+    fireEvent.change(screen.getByTestId("voice-default-picker-sex"), { target: { value: "female" } });
+    await waitFor(() => expect(api.setVoiceAiDefaultVoice).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("tab", { name: "OpenAI" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Custom" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("voice-default-picker-sex")).toHaveValue("female"),
+    );
+  });
+
+  it("VAI-FR-KWSN: a failed save shows the error, and the same choice sends the save again", async () => {
+    api.setVoiceAiDefaultVoice.mockRejectedValueOnce("unreachable");
+    await open("Custom");
+    const sex = screen.getByTestId("voice-default-picker-sex");
+    fireEvent.change(sex, { target: { value: "male" } });
+    // The picker shows the stored value again.
+    await waitFor(() => expect(sex).toHaveValue(""));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    fireEvent.change(sex, { target: { value: "male" } });
+    expect(api.setVoiceAiDefaultVoice).toHaveBeenCalledTimes(2);
+    expect(api.setVoiceAiDefaultVoice).toHaveBeenLastCalledWith("custom", "male");
+  });
+
+  it("VAI-FR-KWSN: a name that loses focus with no change saves nothing", async () => {
+    api.listVoiceAiIntegrations.mockResolvedValue(
+      integrations({
+        records: [
+          record({ provider: "openai" }),
+          record({ provider: "openrouter" }),
+          record({ provider: "custom", defaultVoice: "af_bella" }),
+        ],
+      }),
+    );
+    await open("Custom");
+    const name = screen.getByLabelText("Voice name");
+    expect(name).toHaveValue("af_bella");
+    fireEvent.focus(name);
+    fireEvent.blur(name);
+    expect(api.setVoiceAiDefaultVoice).not.toHaveBeenCalled();
+  });
+
+  it("VAI-FR-PMDX: a stored name opens in the selectors", async () => {
+    api.listVoiceAiIntegrations.mockResolvedValue(
+      integrations({
+        records: [
+          record({ provider: "openai" }),
+          record({ provider: "openrouter" }),
+          record({ provider: "custom", defaultVoice: "male-french" }),
+        ],
+      }),
+    );
+    await open("Custom");
+    expect(screen.getByTestId("voice-default-picker-sex")).toHaveValue("male");
+    expect(screen.getByTestId("voice-default-picker-language")).toHaveValue("french");
+  });
+});
+
 describe("messages", () => {
   it("VAI-FR-HJHX: each verification code has its own message", () => {
     const codes = [

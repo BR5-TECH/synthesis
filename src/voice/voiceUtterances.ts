@@ -318,9 +318,9 @@ async function deliver(u: Utterance, text: string): Promise<Delivery> {
     return none;
   }
   let outcome: PostOutcome = "failed";
-  // VOM-FR-QWMK: with a spoken language, the transcript posts in English and
-  // the comment keeps what the author said.
-  const translated = await translateSpoken(spoken, handle.nicknames());
+  // VOM-FR-QWMK: the transcript posts in the document language, and the
+  // comment keeps what the author said.
+  const translated = await translateSpoken(spoken, handle.nicknames(), handle.target?.() ?? null);
   // The translation waits on the network, so voice mode can end, move, or
   // block the post meanwhile. The checks run again on what stands now.
   const now = postingHandleOf(u.key);

@@ -119,6 +119,18 @@ describe("an opening composer in voice mode", () => {
     expect(getDiscussionSession("created").error).toBeUndefined();
   });
 
+  it("VOM-FR-QWMK: the handle names the target of the discussion, before and after the first post", async () => {
+    const onOpen = vi.fn(async () => discussion([comment("c1", "first")]));
+    render(<DiscussionComposer mode="opening" target={TARGET} agents={[]} onOpen={onOpen} />);
+    enterVoiceMode(TARGET_KEY, null, TARGET);
+    const handle = postingHandleOf(TARGET_KEY)!;
+    expect(handle.target?.()).toEqual(TARGET);
+    await act(async () => {
+      await handle.post("first");
+    });
+    expect(postingHandleOf("created")!.target?.()).toEqual(TARGET);
+  });
+
   it("VOM-FR-NERG: the transcript follows the session body of the created discussion", async () => {
     const onOpen = vi.fn(async () => discussion([comment("c1", "first")]));
     render(<DiscussionComposer mode="opening" target={TARGET} agents={[]} onOpen={onOpen} />);

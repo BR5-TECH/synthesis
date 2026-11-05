@@ -344,6 +344,12 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
       },
       blocked: () => blockedRef.current,
       nicknames: () => [...rosterRef.current.nicknames],
+      // VOM-FR-QWMK: the target whose document language a transcript takes.
+      target: () => {
+        const current = latestProps.current;
+        if (current.mode === "reply") return current.discussion.target;
+        return boundDiscussionOf(handle)?.target ?? current.target;
+      },
       voiceOf: (agentId) =>
         agentsRef.current.find((a) => a.agent.id === agentId)?.agent.voice || null,
       voiceOptionsOf: (agentId) =>

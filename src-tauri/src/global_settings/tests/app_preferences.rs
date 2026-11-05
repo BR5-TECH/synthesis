@@ -179,6 +179,10 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
             voice_input_mode: VoiceInputMode::Vad,
             voice_response_mode: VoiceResponseMode::Voice,
             voice_spoken_language: "ru".to_string(),
+            // Non-default for the same reason (GSS-FR-THBY, GSS-FR-EKHX).
+            voice_echo_cancellation: false,
+            voice_input_device: Some(VoiceDevice { id: "in-1".into(), label: "USB Mic".into() }),
+            voice_output_device: Some(VoiceDevice { id: "out-1".into(), label: "Desk".into() }),
             theme: Theme::System,
             main_window_fullscreen: true,
             search_query_mode: SearchQueryMode::Regex,
@@ -231,6 +235,9 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert!(!after_fullscreen.main_window_fullscreen);
     assert_eq!(after_fullscreen.voice_input_mode, VoiceInputMode::Vad);
     assert_eq!(after_fullscreen.voice_response_mode, VoiceResponseMode::Voice);
+    assert!(!after_fullscreen.voice_echo_cancellation);
+    assert_eq!(after_fullscreen.voice_input_device.as_ref().unwrap().label, "USB Mic");
+    assert_eq!(after_fullscreen.voice_output_device.as_ref().unwrap().id, "out-1");
     assert_eq!(after_fullscreen.theme, Theme::Dark, "a full-screen write must not reset the theme");
     // GSS-FR-20 / GSS-FR-21: neither write may disturb the query mode.
     assert_eq!(
@@ -530,4 +537,108 @@ fn voice_modes_survive_a_write_of_another_field() {
     assert_eq!(held.theme, Theme::Dark);
     assert_eq!(held.voice_input_mode, VoiceInputMode::Vad);
     assert_eq!(held.voice_response_mode, VoiceResponseMode::Voice);
+}
+
+// ---- Audio devices and echo cancellation (GSS-FR-EKHX, GSS-FR-THBY) ----
+
+// GSS-FR-EKHX, GSS-FR-THBY: a record from an earlier build reads back with the
+// system default devices and echo cancellation on.
+#[test]
+fn audio_devices_default_to_the_system_and_echo_cancellation_to_on() {
+    let read: AppPreferences = toml::from_str("theme = \"dark\"\n").unwrap();
+    assert_eq!(read.voice_input_device, None);
+    assert_eq!(read.voice_output_device, None);
+    assert!(read.voice_echo_cancellation);
+    assert!(AppPreferences::default().voice_echo_cancellation);
+}
+
+// GSS-FR-EKHX, GSS-FR-THBY: a value of another shape, or a text over the limit,
+// reads as the default, and the other fields of the file stay.
+#[test]
+fn a_malformed_device_or_echo_flag_reads_as_the_default_and_the_rest_stays() {
+    let long = "x".repeat(VOICE_DEVICE_TEXT_LIMIT + 1);
+    let read: AppPreferences = toml::from_str(&format!(
+        "theme = \"dark\"\nvoiceEchoCancellation = \"no\"\nvoiceVadSilenceMs = 900\n\
+         voiceInputDevice = \"usb\"\n\
+         [voiceOutputDevice]\nid = \"{long}\"\nlabel = \"Desk\"\n"
+    ))
+    .unwrap();
+    assert_eq!(read.theme, Theme::Dark);
+    assert_eq!(read.voice_vad_silence_ms, 900);
+    assert!(read.voice_echo_cancellation);
+    assert_eq!(read.voice_input_device, None);
+    assert_eq!(read.voice_output_device, None);
+}
+
+// GSS-FR-EKHX: a text at the limit is kept.
+#[test]
+fn a_device_text_at_the_limit_is_kept() {
+    let id = "y".repeat(VOICE_DEVICE_TEXT_LIMIT);
+    let read: AppPreferences =
+        toml::from_str(&format!("[voiceInputDevice]\nid = \"{id}\"\nlabel = \"Mic\"\n")).unwrap();
+    assert_eq!(read.voice_input_device, Some(VoiceDevice { id, label: "Mic".into() }));
+}
+
+// GSS-FR-EKHX, GSS-FR-THBY: the wire names, and a TOML round trip with both
+// devices set, which puts the sub-tables after the scalar fields.
+#[test]
+fn audio_devices_have_their_wire_names_and_round_trip() {
+    let prefs = AppPreferences {
+        voice_echo_cancellation: false,
+        voice_input_device: Some(VoiceDevice { id: "a".into(), label: "USB Mic".into() }),
+        voice_output_device: Some(VoiceDevice { id: "b".into(), label: "Desk".into() }),
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&prefs).unwrap();
+    assert_eq!(json["voiceEchoCancellation"], false);
+    assert_eq!(json["voiceInputDevice"]["label"], "USB Mic");
+    assert_eq!(json["voiceOutputDevice"]["id"], "b");
+    let back: AppPreferences = toml::from_str(&toml::to_string(&prefs).unwrap()).unwrap();
+    assert_eq!(back, prefs);
+    let none = serde_json::to_value(AppPreferences::default()).unwrap();
+    assert!(none.get("voiceInputDevice").is_none_or(|v| v.is_null()));
+}
+
+// GSS-FR-EKHX, GSS-FR-20: a write of another field carries the devices through.
+#[test]
+fn audio_devices_survive_a_write_of_another_field() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("synthesis.toml");
+    let store = GlobalSettingsStore::with_path(path.clone());
+    store
+        .save_app_preferences(AppPreferences {
+            voice_echo_cancellation: false,
+            voice_input_device: Some(VoiceDevice { id: "a".into(), label: "USB Mic".into() }),
+            ..Default::default()
+        })
+        .unwrap();
+    let mut editing = store.load_app_preferences().unwrap();
+    editing.theme = Theme::Dark;
+    store.save_app_preferences(editing).unwrap();
+
+    let held = GlobalSettingsStore::with_path(path).load_app_preferences().unwrap();
+    assert_eq!(held.theme, Theme::Dark);
+    assert!(!held.voice_echo_cancellation);
+    assert_eq!(held.voice_input_device.unwrap().label, "USB Mic");
+    assert_eq!(held.voice_output_device, None);
+}
+
+// GSS-FR-EKHX: a label over the limit, a table with no label, and an id that is
+// not a string each read as the system default. The limit counts characters.
+#[test]
+fn a_device_of_another_shape_reads_as_the_system_default() {
+    let long = "x".repeat(VOICE_DEVICE_TEXT_LIMIT + 1);
+    let read: AppPreferences = toml::from_str(&format!(
+        "[voiceInputDevice]\nid = \"a\"\nlabel = \"{long}\"\n[voiceOutputDevice]\nid = \"b\"\n"
+    ))
+    .unwrap();
+    assert_eq!(read.voice_input_device, None);
+    assert_eq!(read.voice_output_device, None);
+    let read: AppPreferences =
+        toml::from_str("[voiceInputDevice]\nid = 7\nlabel = \"Mic\"\n").unwrap();
+    assert_eq!(read.voice_input_device, None);
+    let wide = "\u{00e9}".repeat(VOICE_DEVICE_TEXT_LIMIT);
+    let read: AppPreferences =
+        toml::from_str(&format!("[voiceInputDevice]\nid = \"a\"\nlabel = \"{wide}\"\n")).unwrap();
+    assert_eq!(read.voice_input_device.map(|d| d.label), Some(wide));
 }

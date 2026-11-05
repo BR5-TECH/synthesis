@@ -28,6 +28,7 @@ import { VoiceNamePicker } from "./VoiceNamePicker";
 import { VoiceSpeechOptions } from "./VoiceSpeechOptions";
 import { VoiceSpokenLanguage } from "./VoiceSpokenLanguage";
 import { VoiceTestControl } from "./VoiceTestControl";
+import { VoiceDeviceSettings } from "./VoiceDeviceSettings";
 import { VoiceVadSettings } from "./VoiceVadSettings";
 
 const TAB_ORDER: VoiceProviderId[] = ["openai", "openrouter", "custom"];
@@ -701,6 +702,7 @@ export function VoiceAiSettings() {
       <PushToTalkSettings />
       <VoiceVadSettings />
       <VoiceSpokenLanguage />
+      <VoiceDeviceSettings />
     </>
   );
 }

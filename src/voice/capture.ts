@@ -9,6 +9,7 @@
 import workletUrl from "./pcmCapture.worklet.js?url&no-inline";
 
 import { logInfo } from "../logging";
+import { audioSettings, listAudioDevices, matchDevice, reportDeviceFallback } from "./audioDevices";
 
 /** VOM non-functional. */
 const FRAME_SECONDS = 0.03;
@@ -52,6 +53,44 @@ function failureCode(error: unknown): string {
   return "microphone_unavailable";
 }
 
+/**
+ * VOM-FR-EQQV, VOM-FR-OGFM: the audio constraints, with the saved microphone
+ * as the `ideal` device. A device whose id changed is found by its label.
+ */
+async function audioConstraints(): Promise<MediaTrackConstraints> {
+  const { input, echoCancellation } = audioSettings();
+  const constraints: MediaTrackConstraints = {
+    echoCancellation,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1,
+  };
+  if (input) {
+    const match = matchDevice(input, await listAudioDevices("audioinput"));
+    constraints.deviceId = { ideal: match?.id ?? input.id };
+  }
+  return constraints;
+}
+
+/**
+ * VOM-FR-GIES, VOM-FR-IQNQ: log the device in use, and report a saved device
+ * that is not the one that opened.
+ */
+function noteOpenedDevice(stream: MediaStream, echoCancellation: boolean): void {
+  const { input } = audioSettings();
+  const track = stream.getAudioTracks?.()[0];
+  const label = track?.label ?? "";
+  const id = track?.getSettings?.().deviceId ?? "";
+  const found = input ? id === input.id || (label !== "" && label === input.label) : null;
+  logInfo(["frontend"], "the microphone opened", {
+    device: label === "" ? "unknown" : label,
+    saved: input !== null,
+    found,
+    echoCancellation,
+  });
+  if (found === false) reportDeviceFallback("microphone");
+}
+
 /** `onLost`: the track ended with no call to `stop`, as when a device goes. */
 export async function openMicrophone(
   onChunk: (pcm: ArrayBuffer) => void,
@@ -61,18 +100,13 @@ export async function openMicrophone(
     throw new MicrophoneError("microphone_unavailable");
   }
   let stream: MediaStream;
+  const audio = await audioConstraints();
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-      },
-    });
+    stream = await navigator.mediaDevices.getUserMedia({ audio });
   } catch (error) {
     throw new MicrophoneError(failureCode(error));
   }
+  noteOpenedDevice(stream, audio.echoCancellation !== false);
   const stopTracks = () =>
     stream.getTracks().forEach((track) => {
       track.onended = null;

@@ -142,6 +142,49 @@ fn lenient_spoken_language<'de, D: Deserializer<'de>>(deserializer: D) -> Result
     })
 }
 
+/// GSS-FR-EKHX: the longest device id or label, in characters.
+pub const VOICE_DEVICE_TEXT_LIMIT: usize = 512;
+
+/// GSS-FR-EKHX: a microphone or a speaker that the author chose. The id is the
+/// id of the WebView, and the label finds the device again when its id changes.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct VoiceDevice {
+    pub id: String,
+    pub label: String,
+}
+
+/// GSS-FR-EKHX: a value of another shape, or with a text over the limit, reads
+/// as the system default. The other fields of the file stay.
+fn lenient_voice_device<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<VoiceDevice>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Device(VoiceDevice),
+        Other(serde::de::IgnoredAny),
+    }
+    let fits = |s: &str| s.chars().count() <= VOICE_DEVICE_TEXT_LIMIT;
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Device(device) if fits(&device.id) && fits(&device.label) => Some(device),
+        _ => None,
+    })
+}
+
+/// GSS-FR-THBY: a value that is not a bool reads as on.
+fn lenient_echo_cancellation<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Flag(bool),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Flag(on) => on,
+        Stored::Other(_) => true,
+    })
+}
+
 /// GSS-FR-KOAB: the silence that ends an utterance, where nothing is stored.
 pub const VOICE_VAD_SILENCE_MS_DEFAULT: u32 = 1500;
 
@@ -400,15 +443,38 @@ pub struct AppPreferences {
     /// GSS-FR-DNAW: the language the author speaks, `""` for no translation.
     #[serde(default, deserialize_with = "lenient_spoken_language")]
     pub voice_spoken_language: String,
+    /// GSS-FR-THBY: whether capture asks for echo cancellation, on when unset.
+    #[serde(
+        default = "voice_echo_cancellation_default",
+        deserialize_with = "lenient_echo_cancellation"
+    )]
+    pub voice_echo_cancellation: bool,
+    /// GSS-FR-EKHX: the chosen microphone, `None` for the system default.
+    ///
+    /// A device is a TOML sub-table, so this field and the next stand after
+    /// every scalar field.
+    #[serde(
+        default,
+        deserialize_with = "lenient_voice_device",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub voice_input_device: Option<VoiceDevice>,
+    /// GSS-FR-EKHX: the chosen speaker, `None` for the system default.
+    #[serde(
+        default,
+        deserialize_with = "lenient_voice_device",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub voice_output_device: Option<VoiceDevice>,
     /// GSS-FR-29: the three typographic roles' font settings, every field
     /// independently unset until chosen. The Appearance section reads them on
     /// mount and writes them whenever the user changes a control
     /// (`../ui/GLS-global-settings.md` GLS-FR-17 / GLS-FR-20).
     ///
-    /// Declared **last** deliberately: this is the record's only sub-table, and
-    /// TOML requires a table's scalar values to be emitted before its
-    /// sub-tables. Serde serialises fields in declaration order, so a scalar
-    /// declared after this one would fail to serialise at all.
+    /// Declared **last** deliberately, with the two devices before it: these are
+    /// the record's sub-tables, and TOML requires a table's scalar values to be
+    /// emitted before its sub-tables. Serde serialises fields in declaration
+    /// order, so a scalar declared after them would fail to serialise at all.
     pub fonts: FontSettings,
 }
 
@@ -419,6 +485,10 @@ fn notifications_enabled_default() -> bool {
 
 fn voice_hotkey_default() -> String {
     "Ctrl+Shift+Space".to_string()
+}
+
+fn voice_echo_cancellation_default() -> bool {
+    true
 }
 
 fn voice_vad_silence_default() -> u32 {
@@ -468,6 +538,9 @@ impl Default for AppPreferences {
             voice_input_mode: VoiceInputMode::default(),
             voice_response_mode: VoiceResponseMode::default(),
             voice_spoken_language: String::new(),
+            voice_echo_cancellation: voice_echo_cancellation_default(),
+            voice_input_device: None,
+            voice_output_device: None,
             fonts: FontSettings::default(),
         }
     }

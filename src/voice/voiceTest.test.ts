@@ -19,6 +19,9 @@ const audio = vi.hoisted(() => ({
   playFrame: vi.fn(),
   prepareAudio: vi.fn(),
   stopPlayback: vi.fn(),
+  beginSegment: vi.fn(),
+  endSegmentInput: vi.fn(),
+  failed: null as null | ((code: string) => void),
 }));
 const mic = vi.hoisted(() => ({
   open: vi.fn(),
@@ -37,6 +40,11 @@ vi.mock("./playback", () => ({
   setDrainedListener: (listener: (() => void) | null) => {
     audio.drained = listener;
   },
+  setPlaybackFailureListener: (listener: ((code: string) => void) | null) => {
+    audio.failed = listener;
+  },
+  beginSegment: audio.beginSegment,
+  endSegmentInput: audio.endSegmentInput,
   stopPlayback: audio.stopPlayback,
 }));
 vi.mock("./capture", async (original) => ({
@@ -101,6 +109,37 @@ beforeEach(() => {
 afterEach(() => {
   for (const test of made.splice(0)) test.cancel();
   vi.useRealTimers();
+});
+
+describe("the playback of a test", () => {
+  it("VAI-FR-NLYF, VOM-FR-EPBL: the speech of a test logs as a test segment, and its end closes the input", async () => {
+    const { test } = bench();
+    test.press();
+    await settle();
+    test.release();
+    await settle();
+    expect(audio.beginSegment).toHaveBeenCalledWith("test");
+    expect(audio.endSegmentInput).toHaveBeenCalledTimes(1);
+  });
+
+  it("VOM-FR-VGQF, VAI-FR-YBQE: a frame that cannot play ends the test with playback_failed", async () => {
+    const segment = deferred<void>();
+    api.speakVoiceSegment.mockImplementationOnce(() => segment.promise);
+    const { test, last } = bench();
+    test.press();
+    await settle();
+    test.release();
+    await settle();
+    expect(last().phase).toBe("speaking");
+    // Playback calls the failure listener, then the drained listener.
+    audio.failed?.("playback_failed");
+    audio.drained?.();
+    expect(last()).toMatchObject({ phase: "idle", error: "playback_failed" });
+    expect(api.cancelVoiceSpeech).toHaveBeenCalled();
+    segment.resolve();
+    await settle();
+    expect(last()).toMatchObject({ phase: "idle", error: "playback_failed" });
+  });
 });
 
 describe("a test of the tab", () => {

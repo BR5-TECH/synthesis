@@ -7,7 +7,15 @@ import { logDebug, logWarn } from "../logging";
 import { getVoiceState, patchVoiceState } from "../state/voiceSession";
 import { spokenPart } from "../text/spokenPart";
 import type { Comment, VoiceOptions } from "../types";
-import { isPlaybackIdle, playFrame, setDrainedListener, stopPlayback } from "./playback";
+import {
+  beginSegment,
+  endSegmentInput,
+  isPlaybackIdle,
+  playFrame,
+  setDrainedListener,
+  setPlaybackFailureListener,
+  stopPlayback,
+} from "./playback";
 import { speakableText, speechSegments } from "./speakableText";
 import { handleOf } from "./voiceHandles";
 import { errorCode } from "./voiceMessages";
@@ -75,6 +83,20 @@ export function commentSpeech(comment: Comment): Speech | null {
   return { text: part === null ? "" : speakableText(part), agentId: comment.author.agentId };
 }
 
+/** VOM-FR-QPFQ, VOM-FR-UCQN: a speech fails, by its provider or by playback. */
+function failSpeech(code: string, filler: boolean): void {
+  if (filler) {
+    // VOM-FR-UCQN: a failed filler stops and shows no error.
+    logWarn(["frontend", "ai"], "a voice filler failed", { code });
+    dropReply();
+    return;
+  }
+  // VOM-FR-QPFQ: the text of the comment stays as it is.
+  logWarn(["frontend", "ai"], "a voice reply failed", { code });
+  dropReply();
+  patchVoiceState({ error: code, canRetry: false });
+}
+
 /** One reply: it replaces what sounds now, and it goes out in order. */
 export async function speak(
   { text, filler = false }: Speech,
@@ -89,12 +111,19 @@ export async function speak(
   currentFiller = filler;
   patchVoiceState({ playing: true });
   setDrainedListener(drained);
+  // VOM-FR-VGQF: a frame that cannot play fails the speech, and it never
+  // counts as played.
+  setPlaybackFailureListener((code) => {
+    if (currentSpeech === id) failSpeech(code, filler);
+  });
   try {
     for (const segment of speechSegments(text)) {
       if (currentSpeech !== id) return;
+      // VOM-FR-EPBL: the log of playback counts each segment apart.
+      beginSegment(filler ? "filler" : "reply");
       // A frame can still be in the channel after Stop.
       let first = true;
-      const onFrame = (frame: ArrayBuffer) => {
+      const onFrame = (frame: ArrayBuffer | number[]) => {
         if (currentSpeech !== id) return;
         // VOM-FR-QUSH: a segment with no rate frame plays at rate 1.
         if (first && rateChanged && new Uint8Array(frame)[0] !== RATE_FRAME_KIND) {
@@ -109,6 +138,7 @@ export async function speak(
       await (options
         ? speakVoiceSegment(id, segment, voiceName, onFrame, options)
         : speakVoiceSegment(id, segment, voiceName, onFrame));
+      if (currentSpeech === id) endSegmentInput();
     }
     if (currentSpeech === id) {
       segmentsSent = true;
@@ -118,17 +148,7 @@ export async function speak(
     }
   } catch (error) {
     if (currentSpeech !== id) return;
-    const code = errorCode(error);
-    if (filler) {
-      // VOM-FR-UCQN: a failed filler stops and shows no error.
-      logWarn(["frontend", "ai"], "a voice filler failed", { code });
-      dropReply();
-      return;
-    }
-    // VOM-FR-QPFQ: the text of the comment stays as it is.
-    logWarn(["frontend", "ai"], "a voice reply failed", { code });
-    dropReply();
-    patchVoiceState({ error: code, canRetry: false });
+    failSpeech(errorCode(error), filler);
   }
 }
 

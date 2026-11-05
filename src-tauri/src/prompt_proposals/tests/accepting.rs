@@ -32,9 +32,33 @@ fn an_acceptance_writes_through_the_projects_own_save_path() {
     );
 
     let seen = events.lock().unwrap();
-    assert_eq!(seen.len(), 2, "one for the recording, one for the decision");
+    assert_eq!(
+        seen.len(),
+        3,
+        "one for the recording, one at the commit point, one after the comment"
+    );
     assert_eq!(seen[1]["proposal"]["state"], "accepted");
     assert_eq!(seen[1]["artifactId"], PROMPT);
+    assert_eq!(seen[2]["proposal"]["state"], "accepted");
+    assert_eq!(seen[2]["cause"], seen[1]["cause"]);
+}
+
+#[test]
+fn the_last_event_of_a_settled_acceptance_owes_no_comment() {
+    // PCP-FR-14, PCP-FR-17: a listener that reads only events (a decision by
+    // tool, PCR-FR-PFOW) must not keep an owed comment after it was appended.
+    let f = Fixture::new();
+    let events = f.watch();
+    let proposal = f.pending();
+
+    f.accept(&proposal.id).expect("accepted");
+
+    let seen = events.lock().unwrap();
+    let decided: Vec<_> = seen.iter().filter(|e| e["proposal"]["state"] == "accepted").collect();
+    assert_eq!(decided.len(), 2, "{seen:?}");
+    assert_eq!(decided[0]["proposal"]["commentOwed"], true, "at the commit point");
+    assert_eq!(decided[1]["proposal"]["commentOwed"], false, "after the append");
+    assert_eq!(seen.last().unwrap()["proposal"]["commentOwed"], false);
 }
 
 #[test]

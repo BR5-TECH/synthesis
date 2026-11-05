@@ -461,6 +461,35 @@ describe("PCR-FR-AXPW: deciding one change", () => {
   });
 });
 
+describe("PCR-FR-PFOW: a decision by tool that settles", () => {
+  it("PCR-FR-PFOW, PCR-FR-KCVC, PCP-FR-17: the events of a settled acceptance by tool leave no owed statement", async () => {
+    withMd(["pending"]);
+    backend.hunks = { hunks: [MD_HUNKS[0]], resolutions: [], checksum: "hk-1", legacy: false };
+    renderTab(MD, sessions);
+    await screen.findByRole("region", { name: "Proposed changes" });
+
+    // The event at the commit point, then the event after the comment landed.
+    await act(async () => {
+      notePromptProposalChanged({
+        artifactId: MD,
+        proposal: proposalFor(MD, ["accepted"], { commentOwed: true }),
+      });
+    });
+    expect(await screen.findByRole("region", { name: "Decision comment owed" })).toBeInTheDocument();
+    await act(async () => {
+      notePromptProposalChanged({
+        artifactId: MD,
+        proposal: proposalFor(MD, ["accepted"], { commentOwed: false }),
+      });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Decision comment owed" })).toBeNull(),
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(callsTo("complete_prompt_change_decision")).toHaveLength(0);
+  });
+});
+
 describe("PCR-FR-WLTE: the rich surface only", () => {
   it("PCR-FR-WLTE, EDT-FR-RCHS: a Markdown file showing raw text switches to rich", async () => {
     withMd();

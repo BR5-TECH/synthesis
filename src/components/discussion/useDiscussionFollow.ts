@@ -2,7 +2,8 @@
  * CVP-FR-TWRL: positional auto-follow and the unread rule of a message list.
  *
  * The list opens at its foot. While the author is at the foot, a message that
- * arrives keeps the list there. Once the author scrolls away, the list does not
+ * arrives, content that grows, and a smaller list box keep the list there
+ * (CVP-FR-MPDK). Once the author scrolls away, the list does not
  * move: an arrival marks the discussion unread, and reaching the foot or
  * activating the unread indicator clears it. There is no scroll-lock control.
  * Where the author is looking already says what they want.
@@ -12,7 +13,7 @@
  * draft, so the scroll position and the unread state survive a change of owner
  * surface (CVP-FR-47).
  */
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import {
   clearDiscussionUnread,
@@ -60,6 +61,11 @@ function atFoot(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= TAIL_SLACK;
 }
 
+/** Any distance below the visible part, so a follow lands at the very foot. */
+function belowFoot(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight > 0.5;
+}
+
 export function useDiscussionFollow({
   discussionId,
   enabled,
@@ -69,12 +75,35 @@ export function useDiscussionFollow({
   const ref = useRef<HTMLDivElement | null>(null);
   /** The discussion whose scroll position this surface has restored. */
   const restoredFor = useRef<string | null>(null);
+  /**
+   * CVP-FR-SWDH: the offset of the last move that the list made itself. A scroll
+   * event that still reads it was caused by that move, not by the author.
+   */
+  const pinnedTop = useRef<number | null>(null);
+
+  /** CVP-FR-TWRL, CVP-FR-MPDK: go to the very foot. */
+  const pin = useCallback((el: HTMLElement) => {
+    el.scrollTop = el.scrollHeight;
+    pinnedTop.current = el.scrollTop;
+  }, []);
 
   const onScroll = useCallback(() => {
     const el = ref.current;
     if (!el) return;
+    // CVP-FR-SWDH: the event of a move that the list made itself can arrive
+    // after the content grew again. It does not take the list off the foot.
+    if (
+      pinnedTop.current !== null &&
+      el.scrollTop === pinnedTop.current &&
+      getDiscussionSession(discussionId).atTail
+    ) {
+      if (belowFoot(el)) pin(el);
+      setDiscussionScroll(discussionId, el.scrollTop, true);
+      return;
+    }
+    pinnedTop.current = null;
     setDiscussionScroll(discussionId, el.scrollTop, atFoot(el));
-  }, [discussionId]);
+  }, [discussionId, pin]);
 
   const goToFirstUnread = useCallback(() => {
     const el = ref.current;
@@ -113,12 +142,13 @@ export function useDiscussionFollow({
       if (seen === null || held.atTail) {
         // CVP-FR-TWRL: a list opens at its foot, because a conversation is
         // opened to see what was said last.
-        el.scrollTop = el.scrollHeight;
+        pin(el);
         setDiscussionScroll(discussionId, el.scrollTop, true);
       } else {
         // CVP-FR-47: a list the author scrolled away from comes back where they
         // left it.
         el.scrollTop = held.scrollTop;
+        pinnedTop.current = null;
       }
     }
 
@@ -127,7 +157,7 @@ export function useDiscussionFollow({
       const grown = growthIds.some((id) => !seen.has(id));
       if (grown || arrived.length > 0) {
         if (getDiscussionSession(discussionId).atTail) {
-          el.scrollTop = el.scrollHeight;
+          pin(el);
         } else {
           // The view does not move. The arrivals land below the divider and the
           // indicator says how many there are.
@@ -138,6 +168,40 @@ export function useDiscussionFollow({
     setDiscussionSeen(discussionId, growthIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discussionId, enabled, countedKey, growthKey]);
+
+  // CVP-FR-MPDK: content that grows with no new id (a status, a tool list, an
+  // image that loads) and a list box that becomes smaller keep a list at its
+  // foot. The rows are observed, because the scroller keeps its own size when
+  // only its content grows.
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el || typeof ResizeObserver === "undefined") return;
+    const follow = () => {
+      if (getDiscussionSession(discussionId).atTail && belowFoot(el)) pin(el);
+    };
+    const observer = new ResizeObserver(follow);
+    observer.observe(el);
+    const observeRows = () => {
+      for (const row of Array.from(el.children)) observer.observe(row);
+    };
+    observeRows();
+    const rows =
+      typeof MutationObserver === "undefined"
+        ? null
+        : new MutationObserver((records) => {
+            for (const record of records) {
+              record.removedNodes.forEach((node) => {
+                if (node instanceof Element) observer.unobserve(node);
+              });
+            }
+            observeRows();
+          });
+    rows?.observe(el, { childList: true });
+    return () => {
+      observer.disconnect();
+      rows?.disconnect();
+    };
+  }, [discussionId, enabled, pin]);
 
   return { ref, onScroll, goToFirstUnread };
 }

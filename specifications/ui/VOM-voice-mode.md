@@ -3,7 +3,7 @@
 **Spec code:** `VOM`
 
 ## Intent
-Voice mode lets a person talk in a discussion instead of typing, on a draft, a published prompt, or a project document. A person who shapes or reviews a document often thinks faster aloud, and wants to hear an answer while they look at the work. The author talks, hears the answer, and decides the agent's proposed changes by voice. It lives in the one shared composer, so it exists in every discussion. Speech becomes an ordinary user comment and starts agent turns as a typed comment does, so the discussion stays the log of the work and voice adds no new conversation surface. The experience feels like a real-time collaboration with a human: the agent gets the author's speech in chunks of one or two sentences while the author still speaks, and transcription, context gathering, and tool calls run in the background, off the interaction path, so the reply is ready soon after the author stops. When a turn takes longer, a short spoken phrase tells the author that the agent works on the answer, so the silence does not sound like a lost connection. Voice mode belongs to one discussion, not to a visible composer, so the author can open another draft, tab, or document to look something up, and the conversation continues there. A status bar indicator shows where voice mode is and stops it. The input mode and the response mode are app preferences, so the author sets them one time. The agent's text is always there, and speech is an option on top of it. Speech is short, so an answer stays fast to hear: each agent comment carries a spoken part of one or two sentences, and where the written text holds more, that part offers to read it. Voice mode speaks the question text of a question set, one question at a time, and the author answers aloud in free form. A spoken answer also reaches the agent as a comment, so the author can ask about the options, and the agent replies while the set stands. A VAD session makes this hands-free: it opens by itself in VAD mode, a waveform shows that the microphone hears, a local detector in the backend finds each utterance, and each utterance posts with no press. A Mute toggle stops the audio and keeps the session open. Out of scope: a full conversational IDE; starting a draft by voice, and a voice-first entry on any other surface; more than one voice discussion at a time; saving voice mode or an open VAD session across a restart or a project switch; a floating voice control; a control for a read-through and command phrases for decisions; streamed speech of a reply; chunks of a spoken answer; a partial comment, and an edit of a posted comment; voice activity detection on a server or a provider; native microphone capture in the backend; a level meter other than the waveform; near-live text on a route that is not live; an automatic retry of a VAD session that did not open; an OS-wide hotkey; review or edit of a transcript before it posts; a hard limit on the length of the spoken part; a response mode other than Text and Voice; and Accept or Reject controls for the offer to read more.
+Voice mode lets a person talk in a discussion instead of typing, on a draft, a published prompt, or a project document. A person who shapes or reviews a document often thinks faster aloud, and wants to hear an answer while they look at the work. The author talks, hears the answer, and decides the agent's proposed changes by voice. It lives in the one shared composer, so it exists in every discussion. Speech becomes an ordinary user comment and starts agent turns as a typed comment does, so the discussion stays the log of the work and voice adds no new conversation surface. The experience feels like a real-time collaboration with a human: the agent gets the author's speech in chunks of one or two sentences while the author still speaks, and transcription, context gathering, and tool calls run in the background, off the interaction path, so the reply is ready soon after the author stops. When a turn takes longer, a short spoken phrase tells the author that the agent works on the answer, so the silence does not sound like a lost connection. Voice mode belongs to one discussion, not to a visible composer, so the author can open another draft, tab, or document to look something up, and the conversation continues there. A status bar indicator shows where voice mode is and stops it. The input mode and the response mode are app preferences, so the author sets them one time. The agent's text is always there, and speech is an option on top of it. Speech is short, so an answer stays fast to hear: each agent comment carries a spoken part of one or two sentences, and where the written text holds more, that part offers to read it. Voice mode speaks the question text of a question set, one question at a time, and the author answers aloud in free form. A spoken answer also reaches the agent as a comment, so the author can ask about the options, and the agent replies while the set stands. A VAD session makes this hands-free: it opens by itself in VAD mode, a waveform shows that the microphone hears, a local detector in the backend finds each utterance, and each utterance posts with no press. A Mute toggle stops the audio and keeps the session open. The author chooses the microphone and the speaker in the settings, and playback reports in the log what it played, so a reply that the author does not hear can be traced to its cause. Out of scope: a full conversational IDE; starting a draft by voice, and a voice-first entry on any other surface; more than one voice discussion at a time; saving voice mode or an open VAD session across a restart or a project switch; a floating voice control; a control for a read-through and command phrases for decisions; streamed speech of a reply; chunks of a spoken answer; a partial comment, and an edit of a posted comment; voice activity detection on a server or a provider; native microphone capture in the backend; a level meter other than the waveform; near-live text on a route that is not live; a speaker choice where the WebView cannot route audio to a device; an automatic retry of a VAD session that did not open; an OS-wide hotkey; review or edit of a transcript before it posts; a hard limit on the length of the spoken part; a response mode other than Text and Voice; and Accept or Reject controls for the offer to read more.
 
 ## Functional requirements
 
@@ -43,7 +43,7 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 19. **VOM-FR-FZJY** A pointer or key release anywhere in the window, a lost pointer capture, and a record control that becomes disabled or unmounts during a hold end the recording as a release does.
 20. **VOM-FR-LIFL** In Push-to-Talk with Toggle behaviour, one press of the record control or the hotkey starts recording, and the next press stops it.
 21. **VOM-FR-PECJ** On the focused record control, Space and Enter act as a press, and their release acts as a release.
-22. **VOM-FR-YIJS** A Push-to-Talk press, or the opening of a VAD session, calls `getUserMedia` with `echoCancellation`, `noiseSuppression`, and `autoGainControl`. The microphone is released after recording ends, or when the VAD session closes.
+22. **VOM-FR-YIJS** A Push-to-Talk press, or the opening of a VAD session, calls `getUserMedia` with the chosen microphone (VOM-FR-EQQV), `echoCancellation` as VOM-FR-OGFM states, `noiseSuppression`, and `autoGainControl`. The microphone is released after recording ends, or when the VAD session closes.
 22. **VOM-FR-NXEB** A lost microphone track during a Push-to-Talk recording ends the recording as a release does, and the voice area shows the inline error `microphone_unavailable`.
 22. **VOM-FR-ONLA** A leave of voice mode, or a move to another discussion, before the microphone and the capture of a press are open discards that recording. No capture starts for it, and the phase of the new state does not change.
 22. **VOM-FR-JMMF** A Push-to-Talk press waits until a closing VAD microphone is released before it opens its own microphone.
@@ -65,7 +65,7 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 32. **VOM-FR-XEIA** Closing during an utterance ends that utterance as a release does, and VOM-FR-ABPU applies. Then the WebView releases the microphone and calls "close voice activity session".
 33. **VOM-FR-CSXI** A lost microphone track, a refused feed, or a `failed` event with `fatal` true closes the session as VOM-FR-XEIA states, and it shows an inline error.
 34. **VOM-FR-VGCE** The VAD option is disabled while a recording, a transcript, or a post is in progress. Selecting VAD opens a session at once (VOM-FR-PDZR). Push-to-Talk can be selected at any time.
-35. **VOM-FR-RTSU** On macOS, while VAD is selected, an info icon near the input mode toggle states in its tooltip and accessible name that other applications can sound lower for the whole session (VOM-FR-YIJS). The icon takes keyboard focus.
+35. **VOM-FR-RTSU** On macOS, while VAD is selected and echo cancellation is on (VOM-FR-OGFM), an info icon near the input mode toggle states in its tooltip and accessible name that other applications can sound lower for the whole session (VOM-FR-YIJS). The icon takes keyboard focus.
 
 ### Mute and waveform
 
@@ -73,8 +73,9 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 37. **VOM-FR-MUZB** While muted, the WebView feeds silence to the session in place of the microphone audio, and the gate reports `blocked`, so no utterance starts. The session and the microphone stay open. A Mute during an utterance takes effect when that utterance ends.
     - *Why:* a session that receives no feed for 30 s ends (`../core/VOP-voice-ai-providers.md` VOP-FR-KUGV), so a long Mute must still feed.
 38. **VOM-FR-RBWX** Unmute feeds audio to the session again and clears `blocked`. A session opens unmuted. The muted state is session state in memory and is not saved.
-39. **VOM-FR-WFHN** In VAD mode, a **waveform** shows the live level of the microphone. Its level comes from the WebView microphone stream of the session. It calls no provider and no backend operation.
+39. **VOM-FR-WFHN** In VAD mode, a **waveform** shows the live level of the microphone. It fills the width that the other parts of the voice area leave free. Its level comes from the WebView microphone stream of the session. It calls no provider and no backend operation.
 40. **VOM-FR-ZDLY** The waveform is flat while muted and while no session is open.
+40. **VOM-FR-VQIU** The number of waveform bars follows the width of the waveform, and it is never less than 16. When a transcript or a note needs the width, the waveform shrinks to its minimum.
 41. **VOM-FR-PJOC** The waveform is decorative: it is hidden from assistive technology and is not an `aria-live` region. With a reduced-motion setting, it is not animated and changes at most two times each second.
 
 ### VAD utterances
@@ -191,6 +192,29 @@ Voice mode lets a person talk in a discussion instead of typing, on a draft, a p
 108. **VOM-FR-MAVW** An empty or a failed spoken answer changes no answer, posts no comment, the question stays, and it does not speak again. VOM-FR-RENV applies to an empty transcript, and VOM-FR-ZFSA and VOM-FR-WICV apply to a failure.
 109. **VOM-FR-UXYH** The transcript of a spoken answer whose set no longer stands joins the session body, as VOM-FR-ABPU states, and posts no comment.
 
+### Audio devices
+
+109. **VOM-FR-EQQV** Capture asks for the saved microphone (`../core/GSS-global-settings-storage.md` GSS-FR-EKHX) as the `ideal` device of `getUserMedia`. With no saved microphone, capture uses the system default.
+109. **VOM-FR-KKNN** Where the WebView has `AudioContext.setSinkId`, playback sends its audio to the saved speaker (GSS-FR-EKHX). Where it does not, playback uses the system default output, and the saved speaker has no effect.
+109. **VOM-FR-GIES** A saved device is found by its id, else by its label. When no present device matches, capture or playback uses the system default, and the voice area shows the note `The chosen microphone is not connected. The system default is used.` or the same note for the speaker. The note shows one time for each entry into voice mode.
+109. **VOM-FR-OGFM** Capture asks for `echoCancellation` as the saved `voice_echo_cancellation` states (`../core/GSS-global-settings-storage.md` GSS-FR-THBY). A change of the value applies when a microphone opens next.
+    - *Why:* on macOS, echo cancellation uses the OS voice processing, which can make the agent's own voice too quiet to hear.
+
+### Playback
+
+109. **VOM-FR-DYTO** Playback takes a frame as an `ArrayBuffer` or as an array of byte values, and plays both forms the same (`../core/VOP-voice-ai-providers.md` VOP-FR-XZET).
+    - *Why:* after one failed IPC fetch, the Tauri channel gives large frames as JSON arrays for the rest of the session.
+109. **VOM-FR-VGQF** A frame that playback cannot read, decode, or turn into audio fails its segment with the code `playback_failed`, and VOM-FR-QPFQ applies. The error never stops the delivery of later frames, and the segment never counts as played.
+109. **VOM-FR-WFTM** Before a segment plays, playback waits for the resume of its audio context, except while a reply is paused. A context in the `closed` state, or one that does not run within 2 s after the resume, is replaced one time by a new context. When the new context does not run either, the segment fails with `playback_failed`.
+
+### Playback diagnostics
+
+109. **VOM-FR-ULPY** Playback logs, at DEBUG, the creation and each state change of its audio context, with the state, the sample rate, the base latency, the output latency, and whether `setSinkId` exists.
+109. **VOM-FR-EPBL** When a segment ends, playback logs one record with the count of frames by kind and by form (VOM-FR-DYTO), the count of bytes, the first 4 bytes of an encoded file as text, the summed audio duration, the time from the first scheduled audio to the end, and whether the microphone and a VAD session are open.
+109. **VOM-FR-NFQT** The record of VOM-FR-EPBL is WARN when the segment ended in less than half of its audio duration at its rate, and the segment was not stopped. Otherwise it is DEBUG.
+109. **VOM-FR-IQNQ** Each open of the microphone, and the first segment of a voice mode entry, log at INFO the label of the device that is in use, and whether the saved device was found (VOM-FR-GIES).
+109. **VOM-FR-OXLD** A playback error logs at WARN, with the error name and the frame kind. A playback log holds no text and no audio, except the 4 bytes of VOM-FR-EPBL.
+
 ### Lifecycle
 
 110. **VOM-FR-KQAI** The surface teardown of `CVP-conversation-presentation.md` CVP-FR-49 ends voice mode, closes a VAD session, discards any recording, drops the live bubble, and stops playback. The saved input mode and response mode stay.
@@ -223,12 +247,12 @@ Voice mode, audio playing
 
 Voice mode, VAD session listening
 +----------------------------------------------------------+
-| [>] ((o)) Listening  [Mute] ~^~~^^~~  (i) [m|w] [T|s]    |
+| [>] ((o)) [Mute] Listening ~^~~^^~~^~~~^^~^~~ (i) [m|w] [T|s] |
 +----------------------------------------------------------+
 
 Voice mode, VAD session muted
 +----------------------------------------------------------+
-| [>] ((o)) Listening  [Unmute] -------  (i) [m|w] [T|s]   |
+| [>] ((o)) [Unmute] Listening -------------- (i) [m|w] [T|s] |
 +----------------------------------------------------------+
 
 Voice mode, VAD session did not open
@@ -258,7 +282,7 @@ Status bar, trailing region, voice mode on in another tab
 
 - Toggle legend: `m` is Push-to-Talk, `w` is VAD, `T` is Text, and `s` is Voice. Each is an icon button. `(i)` is the info icon of VOM-FR-RTSU. `((o))` without brackets is the VAD indicator, which is not a button. `~^~~^^~~` is the waveform, and `-------` is the flat waveform.
 
-- Layout notes: the voice area has the geometry of the text field, in all owner surfaces. Its parts stand on one line, and they wrap only where the column is too narrow for that line, as a growing text field does. Its trailing end holds the clearance of `DDS-draft-discussion.md` DDS-FR-QPHL.
+- Layout notes: the voice area has the geometry of the text field, in all owner surfaces. Its parts stand on one line, and they wrap only where the column is too narrow for that line, as a growing text field does. In VAD mode the waveform takes the free width of that line. Its trailing end holds the clearance of `DDS-draft-discussion.md` DDS-FR-QPHL.
 
 - Layout notes: the live bubble is the last item of the log, after every comment and pending row. Its dotted border marks it as local. A failed chunk shows its error inline at its place.
 
@@ -273,7 +297,7 @@ Status bar, trailing region, voice mode on in another tab
 
 ## Non-functional requirements
 - Each voice control is operable from the keyboard and has an accessible name.
-- One `AudioContext` serves playback. It is created by the activation of the Voice button, and it resumes before each segment, except while a reply is paused.
+- One `AudioContext` serves playback at a time. It is created by the activation of the Voice button, and VOM-FR-WFTM states when it is replaced.
 - Audio chunks reach the backend in order. One chunk is in flight at a time, and a backlog merges into the next chunk. A VAD session sends frames of about 30 ms.
 - In a VAD session, the microphone stays open for the whole session, and the detector audio is not stored.
 - Transcription of a chunk, the speech turn calls, and the post of a comment do not block the capture of later audio.

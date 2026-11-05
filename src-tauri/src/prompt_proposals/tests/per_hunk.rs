@@ -112,8 +112,11 @@ fn accepting_one_hunk_writes_that_hunk_alone_and_the_last_one_resolves() {
         decision.body,
         format!("Accepted the proposed change to `{PROMPT}`. 2 accepted, 0 rejected.")
     );
-    // PCP-FR-17: one event per decision.
-    assert_eq!(events.lock().unwrap().len(), 2);
+    // PCP-FR-17: one event per decision, and one more when the resolving
+    // decision clears its owed comment.
+    let seen = events.lock().unwrap();
+    assert_eq!(seen.len(), 3);
+    assert_eq!(seen[2]["proposal"]["commentOwed"], false);
 }
 
 // PCP-FR-ZQAH: a hunk is placed against the file as the author has since

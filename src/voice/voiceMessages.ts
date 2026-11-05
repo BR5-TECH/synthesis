@@ -15,6 +15,7 @@ const MESSAGES: Record<string, string> = {
   voice_detector_failed: "The voice detector stopped, so the session closed.",
   voice_no_audio: "The microphone stopped sending audio, so the session closed.",
   speech_failed: "The reply could not be spoken.",
+  playback_failed: "The reply could not play. See the log for details.",
   answer_not_posted: "The answer was taken, but it did not post as a comment.",
   voice_segment_too_long: "The reply could not be spoken.",
   base_url_empty: "Enter a base URL.",

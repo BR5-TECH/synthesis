@@ -206,7 +206,31 @@ where
     // PCP-FR-14 / PCP-FR-16: the append is the tail of a successful acceptance.
     match append_decision(app, store, &journal, thread_artifact, discussion) {
         Ok(()) => {
-            let settled = clear_owed(root, &dir, &record.id).unwrap_or(accepted);
+            // PCP-FR-14 / PCP-FR-17: the event goes again with the settled
+            // record. A listener that only reads events (a decision by tool,
+            // PCR-FR-PFOW) then sees no owed comment that stays.
+            let settled = match clear_owed(root, &dir, &record.id) {
+                Ok(cleared) => {
+                    announce(app, &BUFFER, &cleared, PromptProposalChangeCause::Decided);
+                    cleared
+                }
+                Err(reason) => {
+                    // The comment landed, but the flag stays on disk. The next
+                    // reconciliation clears it (PCP-FR-14).
+                    logging::log_warn(
+                        app,
+                        &BUFFER,
+                        &[Domain::Backend],
+                        "prompt change owed flag not cleared",
+                        log_fields! {
+                            "artifactId" => &record.artifact_id,
+                            "proposalId" => &record.id,
+                            "reason" => &reason,
+                        },
+                    );
+                    accepted
+                }
+            };
             finish(root, &dir, &record.id);
             Ok(PromptDecisionOutcome {
                 proposal: settled,

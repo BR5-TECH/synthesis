@@ -29,7 +29,9 @@ import {
 } from "../state/voiceSession";
 import type { AppPreferences, Discussion, DiscussionTarget, VoiceHotkeyBehaviour } from "../types";
 import { ChunkPump, MicrophoneError, openMicrophone, type Microphone } from "./capture";
-import { prepareAudio } from "./playback";
+import { setDeviceFallbackListener, type FallbackKind } from "./audioDevices";
+import { notePlaybackEntry, prepareAudio } from "./playback";
+import { setPlaybackEnvironmentProbe } from "./playbackDiagnostics";
 import { armFiller, cancelFiller } from "./voiceFiller";
 import {
   addHandle,
@@ -173,6 +175,21 @@ function ownerNameOf(target: DiscussionTarget): string {
 }
 
 let voiceTarget: DiscussionTarget | null = null;
+/** VOM-FR-GIES: the fallback notes that this entry already showed. */
+let fallbacksShown = new Set<FallbackKind>();
+
+/** VOM-FR-GIES: one note for each device kind and each entry. */
+function showDeviceFallback(kind: FallbackKind): void {
+  if (getVoiceState().activeKey === null || fallbacksShown.has(kind)) return;
+  fallbacksShown.add(kind);
+  patchVoiceState({ note: kind === "microphone" ? "microphone_fallback" : "speaker_fallback" });
+}
+
+/** VOM-FR-EPBL: what the playback log says about the microphone. */
+function playbackEnvironment() {
+  const { phase, vadOpen } = getVoiceState();
+  return { microphoneOpen: vadOpen || phase === "opening" || phase === "recording", vadOpen };
+}
 
 /** VOM-FR-OSTM, VOM-FR-ILJW, VOM-FR-KEMU, VOM-FR-XDUY. */
 export function enterVoiceMode(
@@ -182,6 +199,11 @@ export function enterVoiceMode(
 ): void {
   if (getVoiceState().activeKey !== null) leaveVoiceMode();
   prepareAudio();
+  // VOM-FR-IQNQ, VOM-FR-GIES: each entry logs the speaker and shows its notes.
+  notePlaybackEntry();
+  fallbacksShown = new Set();
+  setDeviceFallbackListener(showDeviceFallback);
+  setPlaybackEnvironmentProbe(playbackEnvironment);
   setBaseline(discussion);
   forgetSpokenQuestion();
   voiceTarget = target;
@@ -594,6 +616,9 @@ export function resetVoiceControllerForTest(): void {
   voiceTarget = null;
   entry = 0;
   toggled = false;
+  fallbacksShown = new Set();
+  setDeviceFallbackListener(null);
+  setPlaybackEnvironmentProbe(null);
   resetVoiceHandlesForTest();
   resetVoiceVadForTest();
   resetVoiceUtterancesForTest();

@@ -166,6 +166,12 @@ export interface PanelRevealRequest {
 }
 export type BottomSurface = "runs" | "logs" | "git" | "history";
 
+/** GSS-FR-EKHX: a microphone or a speaker, by its WebView id and its label. */
+export interface VoiceDevice {
+  id: string;
+  label: string;
+}
+
 // The user-global theme preference (GSS-FR-04). Distinct from the applied
 // `Theme` ("light" | "dark") because "system" follows the OS colour scheme.
 export type ThemePreference = "light" | "dark" | "system";
@@ -191,6 +197,12 @@ export interface AppPreferences {
   voiceResponseMode?: "text" | "voice";
   /** GSS-FR-DNAW: the language the author speaks, `""` for no translation. */
   voiceSpokenLanguage?: string;
+  /** GSS-FR-EKHX: the chosen microphone, `null` for the system default. */
+  voiceInputDevice?: VoiceDevice | null;
+  /** GSS-FR-EKHX: the chosen speaker, `null` for the system default. */
+  voiceOutputDevice?: VoiceDevice | null;
+  /** GSS-FR-THBY: capture asks for echo cancellation. On when unset. */
+  voiceEchoCancellation?: boolean;
   /**
    * GSS-FR-21 / SCH-FR-13: the universal search bar's active query mode. Read
    * when the search input mounts and written whenever the user changes the

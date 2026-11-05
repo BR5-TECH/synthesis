@@ -95,7 +95,7 @@ describe("the voice commands", () => {
   }
 
   it("VOP-FR-MOSY, VOP-FR-XZET: a segment gets a channel that delivers each frame", async () => {
-    const frames: ArrayBuffer[] = [];
+    const frames: (ArrayBuffer | number[])[] = [];
     const segment = speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
     const [command, args] = speakCall();
     expect(command).toBe("speak_voice_segment");
@@ -108,7 +108,7 @@ describe("the voice commands", () => {
   });
 
   it("VOP-FR-MOSY, VOM-FR-SJYH: a frame that comes after the command is not lost", async () => {
-    const frames: ArrayBuffer[] = [];
+    const frames: (ArrayBuffer | number[])[] = [];
     let ended = false;
     const segment = speakVoiceSegment("id", "text", "cedar", (frame) => frames.push(frame));
     void segment.then(() => (ended = true));
@@ -120,6 +120,31 @@ describe("the voice commands", () => {
     args.onFrame.onmessage?.(END);
     await segment;
     expect(frames).toHaveLength(1);
+  });
+
+  it("VOM-FR-DYTO: a frame as a byte array reaches playback, and an end frame as an array ends the segment", async () => {
+    const frames: unknown[] = [];
+    const segment = speakVoiceSegment("id", "text", null, (frame) => frames.push(frame));
+    const [, args] = speakCall();
+    const onmessage = args.onFrame.onmessage as unknown as (frame: unknown) => void;
+    onmessage([0, 0x80, 0xbb, 0, 0, 1, 2]);
+    onmessage([2, 0, 0, 0, 0]);
+    await segment;
+    expect(frames).toEqual([[0, 0x80, 0xbb, 0, 0, 1, 2]]);
+  });
+
+  it("VOM-FR-VGQF: a frame that playback cannot take rejects the segment, and later frames are ignored", async () => {
+    const seen: unknown[] = [];
+    const segment = speakVoiceSegment("id", "text", null, (frame) => {
+      seen.push(frame);
+      throw new TypeError("not a buffer");
+    });
+    const [, args] = speakCall();
+    args.onFrame.onmessage?.(new ArrayBuffer(8));
+    args.onFrame.onmessage?.(new ArrayBuffer(8));
+    args.onFrame.onmessage?.(END);
+    await expect(segment).rejects.toBe("playback_failed");
+    expect(seen).toHaveLength(1);
   });
 
   it("VOP-FR-MOSY: a failed segment rejects with no end frame", async () => {

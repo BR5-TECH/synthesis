@@ -6,7 +6,7 @@
  * stand the VAD indicator, which is not a button, the Mute toggle, the Open
  * again control while no session is open, and the waveform.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useVoiceState, type VoiceState } from "../../state/voiceSession";
 import { getMicLevel, subscribeMicLevel } from "../../state/voiceLevel";
@@ -115,7 +115,10 @@ export function VadReopenControl() {
   );
 }
 
-const BARS = 16;
+/** VOM-FR-VQIU: the fewest bars. */
+export const MIN_BARS = 16;
+/** VOM-FR-VQIU: the width of one bar and of the gap after it, in px. */
+const BAR_PITCH = 5;
 /** VOM-FR-PJOC: the time between two updates, in ms. */
 const MOTION_MS = 50;
 const REDUCED_MS = 500;
@@ -128,24 +131,49 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-const FLAT: readonly number[] = Object.freeze(Array<number>(BARS).fill(0));
+function flatBars(count: number): number[] {
+  return Array<number>(count).fill(0);
+}
+
+/** VOM-FR-VQIU: as many bars as the width holds, and never less than the minimum. */
+export function barsFor(width: number): number {
+  return Math.max(MIN_BARS, Math.floor((width + 2) / BAR_PITCH));
+}
+
+/** VOM-FR-VQIU: the bar count of a waveform that fills its width. */
+function useBarCount(fill: boolean): [React.RefObject<HTMLSpanElement | null>, number] {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [count, setCount] = useState(MIN_BARS);
+  useEffect(() => {
+    const el = ref.current;
+    if (!fill || !el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setCount(barsFor(el.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fill]);
+  return [ref, count];
+}
 
 /**
  * VOM-FR-WFHN, VOM-FR-ZDLY, VOM-FR-PJOC: the live level of the microphone. It is
  * decorative. It updates on the audio that comes and has no timer of its own.
+ * With `fill`, it takes the free width of its row (VOM-FR-VQIU).
  */
-export function VoiceWaveform() {
+export function VoiceWaveform({ fill = false }: { fill?: boolean }) {
   const state = useVoiceState();
   const flat = !state.vadOpen || state.muted;
-  const [bars, setBars] = useState<readonly number[]>(FLAT);
+  const [ref, count] = useBarCount(fill);
+  const [bars, setBars] = useState<readonly number[]>(() => flatBars(MIN_BARS));
   useEffect(() => {
     if (flat) {
-      setBars(FLAT);
+      setBars(flatBars(count));
       return;
     }
     const step = prefersReducedMotion() ? REDUCED_MS : MOTION_MS;
     let last = 0;
-    let history = [...FLAT];
+    let history = flatBars(count);
     const take = (level: number) => {
       const now = Date.now();
       if (now - last < step) return;
@@ -155,10 +183,11 @@ export function VoiceWaveform() {
     };
     take(getMicLevel());
     return subscribeMicLevel(take);
-  }, [flat]);
+  }, [flat, count]);
   return (
     <span
-      className="voice-waveform"
+      ref={ref}
+      className={fill ? "voice-waveform voice-waveform--fill" : "voice-waveform"}
       aria-hidden="true"
       data-flat={flat}
       data-reduced-motion={prefersReducedMotion()}
@@ -176,14 +205,18 @@ export function VoiceWaveform() {
   );
 }
 
-/** VOM-FR-TISN, VOM-FR-VGLT: the controls of VAD mode, in this order. */
-export function VadControls() {
+/**
+ * VOM-FR-TISN, VOM-FR-VGLT: the controls of VAD mode, in this order. The voice
+ * area puts the waveform after its status, where it fills the free width
+ * (VOM-FR-WFHN), so it asks for the controls with no waveform.
+ */
+export function VadControls({ waveform = true }: { waveform?: boolean }) {
   return (
     <>
       <VadIndicatorView />
       <VadMuteToggle />
       <VadReopenControl />
-      <VoiceWaveform />
+      {waveform && <VoiceWaveform />}
     </>
   );
 }

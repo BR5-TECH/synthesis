@@ -16,6 +16,8 @@
 .comment-composer__row > .voice-area { flex: 1 1 0; }
 
 .voice-area__record {
+  /* The VAD indicator is a span, so it takes the box of the buttons. */
+  box-sizing: border-box;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -179,6 +181,24 @@
 @media (prefers-reduced-motion: reduce) {
   .voice-waveform__bar { transition: none; }
 }
+/* VOM-FR-WFHN, VOM-FR-VQIU: in the voice area the waveform takes the width that
+   the other parts leave free. The bar count follows that width, so the bars
+   spread over it. Its minimum is the width of 16 bars. */
+.voice-waveform--fill {
+  flex: 1 1 78px;
+  min-width: 78px;
+  justify-content: space-between;
+  height: 22px;
+}
+.voice-waveform--fill .voice-waveform__bar {
+  width: 3px;
+  border-radius: 1.5px;
+}
+/* In VAD mode the status is a short line, so it takes only its own width. A
+   transcript takes the width, and the waveform keeps its minimum. */
+.voice-area[data-vad="true"] .voice-area__transcript { flex: 0 1 auto; }
+.voice-area[data-vad="true"][data-transcript="true"] .voice-area__transcript { flex: 1 1 120px; }
+.voice-area[data-vad="true"][data-transcript="true"] .voice-waveform--fill { flex: 0 0 78px; }
 
 /* VOM-FR-VGLT: an open microphone stays in view while a question set stands. The
    element also has the class of the composer, for its measure and clearance. */

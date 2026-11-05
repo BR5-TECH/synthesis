@@ -469,6 +469,30 @@ describe("the voice of Custom", () => {
   });
 });
 
+describe("the test of a tab", () => {
+  it("VAI-FR-HTVQ: a verified tab enables the test, and an unverified tab or an unsaved edit disables it", async () => {
+    api.listVoiceAiIntegrations.mockResolvedValue(
+      integrations({
+        records: [
+          record({ provider: "openai", verifiedAt: "2026-11-05T00:00:00Z" }),
+          record({ provider: "openrouter" }),
+          record({ provider: "custom", baseUrl: "", sttModel: "", ttsModel: "" }),
+        ],
+      }),
+    );
+    await open();
+    const hold = screen.getByTestId("voice-test-hold");
+    expect(hold).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: "https://other.example/v1" },
+    });
+    expect(screen.getByTestId("voice-test-hold")).toBeDisabled();
+    fireEvent.click(screen.getByRole("tab", { name: "OpenRouter" }));
+    expect(screen.getByTestId("voice-test-hold")).toBeDisabled();
+    expect(screen.getByTestId("voice-test")).toHaveTextContent("Verify this provider first.");
+  });
+});
+
 describe("messages", () => {
   it("VAI-FR-HJHX: each verification code has its own message", () => {
     const codes = [

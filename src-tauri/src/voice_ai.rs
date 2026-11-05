@@ -400,12 +400,33 @@ pub(crate) fn resolve_active_voice(
     store: &GlobalSettingsStore,
     voice: &VoiceAi,
 ) -> Result<ActiveVoice, String> {
+    resolve_voice(store, voice, None)
+}
+
+/// VOP-FR-TPXA: the active provider, or the named one in its place. A named
+/// provider needs a verified record.
+pub(crate) fn resolve_voice(
+    store: &GlobalSettingsStore,
+    voice: &VoiceAi,
+    provider: Option<&str>,
+) -> Result<ActiveVoice, String> {
     let (records, active) = store.load_voice_ai_registry()?;
-    let active = active.ok_or(ERR_NO_ACTIVE_PROVIDER)?;
-    let record = records
-        .into_iter()
-        .find(|r| r.provider == active && r.verified_at.is_some())
-        .ok_or(ERR_NO_ACTIVE_PROVIDER)?;
+    let record = match provider {
+        Some(named) => {
+            descriptor(named).ok_or(ERR_UNKNOWN_PROVIDER)?;
+            records
+                .into_iter()
+                .find(|r| r.provider == named && r.verified_at.is_some())
+                .ok_or(ERR_NOT_VERIFIED)?
+        }
+        None => {
+            let active = active.ok_or(ERR_NO_ACTIVE_PROVIDER)?;
+            records
+                .into_iter()
+                .find(|r| r.provider == active && r.verified_at.is_some())
+                .ok_or(ERR_NO_ACTIVE_PROVIDER)?
+        }
+    };
     let key = voice
         .secrets
         .get(&record.provider)

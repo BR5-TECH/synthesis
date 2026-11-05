@@ -46,6 +46,15 @@ Voice AI is the section of the Settings window where the author chooses the spee
 25. **VAI-FR-USDR** The speech speed control offers 50% to 200% in steps of 10%, and 100% is the default. A change calls "set voice ai speech options" at once. The speaking style field takes free text of at most 200 characters, and it calls the same operation when it loses focus with a changed value.
 25. **VAI-FR-EIHC** After verification, when `speech_speed` is not `server`, the tab states: `This server cannot change speed. Playback changes speed and pitch.` When `speech_instructions` is false, it states: `This server does not support a speaking style.`
 
+### Test
+
+25. **VAI-FR-HTVQ** A tab holds a **Hold to test** control below the speaking style field, with the line `Hold, speak, and release. You hear what you said in the voice of this tab.` The control is enabled when the saved record of the tab is verified and the tab holds no unsaved candidate edit (VAI-FR-BSDN). Otherwise it is disabled and states `Verify this provider first.` The test uses the provider of the tab, also when another provider is active (`../core/VOP-voice-ai-providers.md` VOP-FR-TPXA), with the saved default voice, speed, and speaking style of the tab.
+    - *Why:* An author hears a voice and checks the microphone before voice mode starts, and compares two providers before one becomes active.
+25. **VAI-FR-ZCMB** A press opens the microphone and starts a capture through "start voice capture" with the provider of the tab. Audio goes out through "append voice capture", and a release finishes the capture through "finish voice capture". The control states `Listening…`, then `Transcribing…`. Then the tab shows the transcript and states `Speaking…` while "speak voice segment" speaks the transcript with the provider of the tab. An empty transcript states `Nothing was heard. Hold the control while you speak.` and nothing is spoken.
+25. **VAI-FR-NWRL** A hold of the test ends as a hold of voice mode does (`VOM-voice-mode.md` VOM-FR-FZJY): on a release anywhere in the window, on a lost pointer capture, on the release of Space or Enter, and when the control is disabled or goes away. A hold ends after 15 seconds. A release before the capture opens discards the capture, and no capture stays open. A move to another tab and the close of the window cancel the capture and the speech through "cancel voice capture" and "cancel voice speech", and close the microphone.
+25. **VAI-FR-YBQE** A new press stops a test that still speaks. A failure shows its message (VAI-FR-HJHX), and the microphone closes.
+25. **VAI-FR-SKOF** The test posts no comment, reaches no agent, and translates nothing. The transcript goes when the tab changes. A log record of the test holds the provider, counts, and codes, and no text.
+
 ### Push-to-Talk
 
 26. **VAI-FR-HVNJ** The section holds a Push-to-Talk behaviour control, labelled as applying to Push-to-Talk only, with two values: **Hold** and **Toggle**. The default is Hold. It saves through `patchAppPreferences`.
@@ -82,6 +91,8 @@ TTS model  [ lfm3-audio                        v  ]
 Voice      [                                      ]
 Speed      [ 100% v ]
 Style      [ Calm, slow, warm                     ]
+[ Hold to test ]  Hold, speak, and release. You hear what you said in the voice of this tab.
+                  "Hello, can you hear me?"  Speaking…
 Verification sends short real requests. A provider can charge for them.
 [ Verify ]  [ Activate ]  [ Clear ]
 Verified 14:02. Live transcription, 16 kHz. Speech: Realtime.
@@ -98,7 +109,7 @@ Sensitivity      ( ) Low  ( ) Medium  ( ) High
 
 ## UI contract boundary
 - **Owned by the UI**: the tabs, candidate field values, the unverified state after an edit, hotkey capture and its refusals, and all messages.
-- **Delegated to backend (abstract)**: "list voice ai integrations", "verify voice ai integration", "set voice ai routes", "set voice ai default voice", "set voice ai speech options", "set active voice ai integration", "clear voice ai integration", "list voice ai models", "list voice ai voices", each owned by `../core/VOP-voice-ai-providers.md`; "save app preferences", owned by `../core/GSS-global-settings-storage.md`.
+- **Delegated to backend (abstract)**: "list voice ai integrations", "verify voice ai integration", "set voice ai routes", "set voice ai default voice", "set voice ai speech options", "set active voice ai integration", "clear voice ai integration", "list voice ai models", "list voice ai voices", "start voice capture", "append voice capture", "finish voice capture", "cancel voice capture", "speak voice segment", "cancel voice speech", each owned by `../core/VOP-voice-ai-providers.md`; "save app preferences", owned by `../core/GSS-global-settings-storage.md`.
 
 ## Non-functional requirements
 - Each control has an accessible name, and each is operable from the keyboard.

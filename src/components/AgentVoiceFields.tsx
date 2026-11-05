@@ -43,40 +43,40 @@ export function AgentVoiceFields({
           <span className="t-ui-sm t-muted">Optional.</span>
         </div>
       ) : (
-      <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <span className="t-ui-sm">Voice</span>
-        {voices ? (
-          <select
-            className="input"
-            // The sticky footer covers the end of the card, so a focused control
-            // scrolls clear of it.
-            style={{ scrollMarginBottom: 72 }}
-            data-testid="agent-voice"
-            disabled={!ready}
-            value={voice}
-            onChange={(e) => onChange({ ...value, voice: e.target.value })}
-          >
-            <option value="">Provider default</option>
-            {voice !== "" && !voices.includes(voice) && <option value={voice}>{voice}</option>}
-            {voices.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            className="input"
-            style={{ scrollMarginBottom: 72 }}
-            data-testid="agent-voice"
-            disabled={!ready}
-            placeholder="Provider default"
-            value={voice}
-            onChange={(e) => onChange({ ...value, voice: e.target.value })}
-          />
-        )}
-        <span className="t-ui-sm t-muted">Optional.</span>
-      </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span className="t-ui-sm">Voice</span>
+          {voices ? (
+            <select
+              className="input"
+              // The sticky footer covers the end of the card, so a focused control
+              // scrolls clear of it.
+              style={{ scrollMarginBottom: 72 }}
+              data-testid="agent-voice"
+              disabled={!ready}
+              value={voice}
+              onChange={(e) => onChange({ ...value, voice: e.target.value })}
+            >
+              <option value="">Provider default</option>
+              {voice !== "" && !voices.includes(voice) && <option value={voice}>{voice}</option>}
+              {voices.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="input"
+              style={{ scrollMarginBottom: 72 }}
+              data-testid="agent-voice"
+              disabled={!ready}
+              placeholder="Provider default"
+              value={voice}
+              onChange={(e) => onChange({ ...value, voice: e.target.value })}
+            />
+          )}
+          <span className="t-ui-sm t-muted">Optional.</span>
+        </label>
       )}
 
       {/* AGT-FR-MWOF. */}

@@ -181,6 +181,24 @@ describe("the voice commands", () => {
     );
   });
 
+  it("VOP-FR-TPXA: a provider reaches the capture and the speech only when it is given", async () => {
+    await startVoiceCapture(48_000, [], false, "custom");
+    expect(core.invoke).toHaveBeenLastCalledWith("start_voice_capture", {
+      captureRate: 48_000,
+      keyterms: [],
+      chunked: false,
+      provider: "custom",
+    });
+    void speakVoiceSegment("id", "text", null, () => undefined, null, "openai");
+    expect(core.invoke).toHaveBeenLastCalledWith(
+      "speak_voice_segment",
+      expect.objectContaining({ provider: "openai" }),
+    );
+    void speakVoiceSegment("id", "text", null, () => undefined);
+    const args = (core.invoke.mock.lastCall as unknown[] | undefined)?.[1] as Record<string, unknown>;
+    expect("provider" in args).toBe(false);
+  });
+
   it("AGC-FR-QEOF: the translation takes the text, the nicknames, and the target", async () => {
     core.invoke.mockResolvedValueOnce({ text: "Hello." });
     const target = { kind: "draft", draftId: "d1" } as const;

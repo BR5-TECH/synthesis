@@ -231,11 +231,13 @@ pub async fn start_voice_capture(
     capture_rate: u32,
     keyterms: Vec<String>,
     chunked: bool,
+    provider: Option<String>,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     voice: State<'_, VoiceAi>,
 ) -> Result<VoiceCaptureStart, String> {
-    let config = resolve_active_voice(&store, &voice)?;
+    // VOP-FR-TPXA: a named provider is the test of a settings tab.
+    let config = resolve_voice(&store, &voice, provider.as_deref())?;
     let provider = config.record.provider.clone();
     let sink: SharedSink = Arc::new(app.clone());
     // VOP-FR-YDVH: a Push-to-Talk capture runs the local detector over its own
@@ -367,6 +369,7 @@ pub async fn speak_voice_segment(
     voice_speed: Option<u16>,
     voice_style: Option<String>,
     on_frame: Channel<InvokeResponseBody>,
+    provider: Option<String>,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     voice: State<'_, VoiceAi>,
@@ -378,7 +381,8 @@ pub async fn speak_voice_segment(
         let _ = on_frame.send(InvokeResponseBody::Raw(bytes));
     };
     let chars = text.chars().count() as u64;
-    let result = match resolve_active_voice(&store, &voice) {
+    // VOP-FR-TPXA.
+    let result = match resolve_voice(&store, &voice, provider.as_deref()) {
         Ok(active) => {
             speak_segment(
                 &voice,

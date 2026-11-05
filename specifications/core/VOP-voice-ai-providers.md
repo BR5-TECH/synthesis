@@ -68,7 +68,9 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 
 ### Capture
 
-38. **VOP-FR-KBPZ** "start voice capture" copies the active provider's configuration and the spoken language (`GSS-global-settings-storage.md` GSS-FR-DNAW), and opens one capture session. A second session while one is open, is not finishing (VOP-FR-WCSB), and has not failed returns `voice_session_active`. A start replaces a failed session. Later changes to the record do not affect an open session.
+38. **VOP-FR-TPXA** "start voice capture" and "speak voice segment" take an optional `provider`. With one, the call uses the verified record and the key of that provider in place of the active provider's, through the read path of VOP-FR-EBQI. A provider with no verified record returns `not_verified`, and a provider that has no descriptor returns `unknown_provider`. With none, the call uses the active provider.
+    - *Why:* The test of a settings tab (`../ui/VAI-voice-ai-settings.md` VAI-FR-HTVQ) speaks with a provider before it becomes active.
+38. **VOP-FR-KBPZ** "start voice capture" copies the configuration of the provider of the call (VOP-FR-TPXA) and the spoken language (`GSS-global-settings-storage.md` GSS-FR-DNAW), and opens one capture session. A second session while one is open, is not finishing (VOP-FR-WCSB), and has not failed returns `voice_session_active`. A start replaces a failed session. Later changes to the record do not affect an open session.
 39. **VOP-FR-DXPK** "append voice capture" takes mono PCM16 at the capture rate as a raw request body. It also accepts a JSON array of bytes.
     - *Why:* one failed IPC fetch moves Tauri to JSON bodies for the life of the webview.
 40. **VOP-FR-GZOC** Audio is resampled from the capture rate to the rate of the selected route. Detector audio is resampled to 16 kHz.
@@ -156,7 +158,7 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
     - *Why:* Ollama writes maximum values in those fields, and a decoder can refuse them.
 57. **VOP-FR-IAEN** `openai` has no HTTP speech route. Its TTS model is `gpt-realtime-2.1-mini`.
     - *Why:* OpenAI shuts down every model of `/v1/audio/speech` on 2027-01-06, and the replacement is available only through Realtime.
-58. **VOP-FR-RABZ** The module speaks with the requested voice. A voice outside the voices of the active provider becomes the default voice. On `custom`, a 400 for a request with a voice, a `speed`, or `instructions` repeats once with the default voice and with no `speed` and no `instructions`. The playback rate then carries the whole requested speed.
+58. **VOP-FR-RABZ** The module speaks with the requested voice. A voice outside the voices of the provider of the call becomes the default voice. On `custom`, a 400 for a request with a voice, a `speed`, or `instructions` repeats once with the default voice and with no `speed` and no `instructions`. The playback rate then carries the whole requested speed.
 59. **VOP-FR-INDT** A `llamacpp` Realtime speech route takes no voice. The requested voice has no effect on that route.
 60. **VOP-FR-DWSB** "cancel voice speech" ends the segment at once. It sends `response.cancel` or aborts the HTTP request, and it sends no more frames.
 61. **VOP-FR-GQJS** A failed segment returns one of `provider_unreachable`, `provider_rejected`, or `speech_failed`.
@@ -287,12 +289,12 @@ VoiceChunkChanged {
 - `"clear voice ai integration"` → `clear_voice_ai_integration(provider)` → `VoiceAiIntegrations`
 - `"list voice ai models"` → `list_voice_ai_models(provider, base_url, api_key)` → `{ stt_models: string[], tts_models: string[] }`
 - `"list voice ai voices"` → `list_voice_ai_voices(provider)` → `string[] | null`. `provider` is optional
-- `"start voice capture"` → `start_voice_capture(capture_rate, keyterms, chunked)` → `VoiceCaptureStart`, or `no_active_provider`, `voice_session_active`
+- `"start voice capture"` → `start_voice_capture(capture_rate, keyterms, chunked, provider)` → `VoiceCaptureStart`, or `no_active_provider`, `not_verified`, `unknown_provider`, `voice_session_active`. `provider` is optional (VOP-FR-TPXA)
 - `"append voice capture"` → `append_voice_capture` with a raw body and the header `x-voice-session`
 - `"finish voice capture"` → `finish_voice_capture(session_id)` → `string`, or a typed failure (VOP-FR-UOYP)
 - `"retry voice capture"` → `retry_voice_capture(session_id)` → `string`, or a typed failure (VOP-FR-UOYP)
 - `"cancel voice capture"` → `cancel_voice_capture(session_id)` → nothing
-- `"speak voice segment"` → `speak_voice_segment(speech_id, text, voice_name, voice_speed, voice_style, on_frame)` → nothing, or a typed failure (VOP-FR-GQJS). A null `voice_speed` and a null or empty `voice_style` take the values of the provider
+- `"speak voice segment"` → `speak_voice_segment(speech_id, text, voice_name, voice_speed, voice_style, on_frame, provider)` → nothing, or a typed failure (VOP-FR-GQJS). `provider` is optional (VOP-FR-TPXA). A null `voice_speed` and a null or empty `voice_style` take the values of the provider
 - `"cancel voice speech"` → `cancel_voice_speech(speech_id)` → nothing
 - `"open voice activity session"` → `open_voice_activity_session(capture_rate, keyterms)` → `{ activity_id }`, or `voice_detector_unavailable`, `no_active_provider`
 - `"feed voice activity"` → `feed_voice_activity` with a raw body and the header `x-voice-session`

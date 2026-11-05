@@ -27,6 +27,7 @@ import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { VoiceNamePicker } from "./VoiceNamePicker";
 import { VoiceSpeechOptions } from "./VoiceSpeechOptions";
 import { VoiceSpokenLanguage } from "./VoiceSpokenLanguage";
+import { VoiceTestControl } from "./VoiceTestControl";
 import { VoiceVadSettings } from "./VoiceVadSettings";
 
 const TAB_ORDER: VoiceProviderId[] = ["openai", "openrouter", "custom"];
@@ -560,6 +561,13 @@ export function VoiceAiSettings() {
           record={record}
           verified={!unverified}
           onError={setError}
+        />
+        {/* VAI-FR-HTVQ: keyed by the tab, so a move to another tab ends the test. */}
+        <VoiceTestControl
+          key={provider}
+          provider={provider}
+          record={record}
+          enabled={!unverified}
         />
 
         {/* VAI-FR-JSNS. */}

@@ -10,6 +10,7 @@ mod chunks;
 mod interim;
 mod languages;
 mod protocol;
+mod provider_override;
 mod speech;
 mod speech_options;
 mod support;

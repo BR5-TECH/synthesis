@@ -87,15 +87,23 @@ fn authorized(
     }
 }
 
-/// The hints of one provider's HTTP route (VOP-FR-INCC).
-pub(crate) fn hint_fields(provider: &str, keyterms: &[String]) -> Vec<(&'static str, String)> {
-    match provider {
+/// The hints of one provider's HTTP route (VOP-FR-INCC, VOP-FR-TSUS).
+pub(crate) fn hint_fields(
+    provider: &str,
+    keyterms: &[String],
+    language: Option<&str>,
+) -> Vec<(&'static str, String)> {
+    let mut hints = match provider {
         "openai" if !keyterms.is_empty() => {
             vec![("prompt", keyterms.join(", "))]
         }
         "openrouter" => keyterms.iter().map(|k| ("keyterms[]", k.clone())).collect(),
         _ => Vec::new(),
+    };
+    if let Some(language) = language.filter(|_| matches!(provider, "openai" | "custom")) {
+        hints.push(("language", language.to_string()));
     }
+    hints
 }
 
 /// VOP-FR-EYHP: one recording as multipart `file`.
@@ -147,6 +155,10 @@ pub(crate) struct SpeechCall<'a> {
     pub(crate) model: &'a str,
     pub(crate) text: &'a str,
     pub(crate) voice: Option<&'a str>,
+    /// VOP-FR-TSVV: the server speed, where the route has one.
+    pub(crate) speed: Option<f32>,
+    /// VOP-FR-TSVV: the style, where the route takes `instructions`.
+    pub(crate) instructions: Option<&'a str>,
 }
 
 async fn post_speech(
@@ -181,6 +193,12 @@ fn speech_body(call: &SpeechCall<'_>, format: &str) -> Value {
     }
     if let Some(voice) = call.voice.filter(|v| !v.is_empty()) {
         body["voice"] = json!(voice);
+    }
+    if let Some(speed) = call.speed {
+        body["speed"] = json!(super::speech_options::wire_speed(speed));
+    }
+    if let Some(instructions) = call.instructions.filter(|i| !i.is_empty()) {
+        body["instructions"] = json!(instructions);
     }
     body
 }

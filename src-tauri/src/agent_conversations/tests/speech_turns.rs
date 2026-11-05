@@ -9,27 +9,31 @@ use super::*;
 
 /// A seam that holds every call until the test lets one through, and then
 /// answers it from the scripted queue.
-struct GatedScript {
+pub(super) struct GatedScript {
     inner: Arc<ScriptedCompletion>,
     gate: Arc<Gate>,
 }
 
 #[derive(Default)]
-struct Gate {
+pub(super) struct Gate {
     /// How many calls entered the seam, and how many can leave it.
     counts: Mutex<(usize, usize)>,
     changed: Condvar,
 }
 
 impl Gate {
-    fn wait_entered(&self, calls: usize) {
+    /// A regression fails here with the count it waited for, and does not hang.
+    pub(super) fn wait_entered(&self, calls: usize) {
+        let limit = std::time::Instant::now() + Duration::from_secs(60);
         let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
         while counts.0 < calls {
-            counts = self.changed.wait(counts).unwrap_or_else(|e| e.into_inner());
+            let left = limit.saturating_duration_since(std::time::Instant::now());
+            assert!(!left.is_zero(), "call {calls} never entered the seam ({} did)", counts.0);
+            counts = self.changed.wait_timeout(counts, left).unwrap_or_else(|e| e.into_inner()).0;
         }
     }
 
-    fn release(&self) {
+    pub(super) fn release(&self) {
         self.counts.lock().unwrap_or_else(|e| e.into_inner()).1 += 1;
         self.changed.notify_all();
     }
@@ -56,7 +60,7 @@ impl CompletionSeam for GatedScript {
     }
 }
 
-fn gated(replies: Vec<Result<ScriptedReply, &'static str>>) -> (Harness, Arc<Gate>) {
+pub(super) fn gated(replies: Vec<Result<ScriptedReply, &'static str>>) -> (Harness, Arc<Gate>) {
     let inner = Arc::new(ScriptedCompletion::scripted(replies));
     let gate = Arc::new(Gate::default());
     let seam = GatedScript { inner: inner.clone(), gate: gate.clone() };
@@ -87,7 +91,7 @@ impl SpeechClock for ManualClock {
     }
 }
 
-fn speak(
+pub(super) fn speak(
     h: &Harness,
     origin: &ConversationOrigin,
     speech_id: &str,
@@ -106,17 +110,17 @@ fn speak(
     )
 }
 
-fn steer(h: &Harness, speech_id: &str, text: &str) -> Vec<AgentTurn> {
+pub(super) fn steer(h: &Harness, speech_id: &str, text: &str) -> Vec<AgentTurn> {
     steer_speech_impl(&h.app.handle().clone(), speech_id, text)
 }
 
-fn end(h: &Harness, speech_id: &str, comment_id: Option<&str>) -> Vec<AgentTurn> {
+pub(super) fn end(h: &Harness, speech_id: &str, comment_id: Option<&str>) -> Vec<AgentTurn> {
     let root = h.root();
     end_speech_impl(&h.app.handle().clone(), Some(Roots::same(&root)), speech_id, comment_id)
 }
 
 /// Every event the harness captured, whichever sink holds it.
-fn every_event(h: &Harness) -> Vec<AgentTurn> {
+pub(super) fn every_event(h: &Harness) -> Vec<AgentTurn> {
     [&h.events, &h.context_events, &h.deadline_events]
         .iter()
         .flat_map(|sink| sink.lock().unwrap_or_else(|e| e.into_inner()).clone())
@@ -124,7 +128,11 @@ fn every_event(h: &Harness) -> Vec<AgentTurn> {
 }
 
 /// Wait for a published state of the turn, and return it.
-fn wait_for_event(h: &Harness, turn_id: &str, what: impl Fn(&AgentTurn) -> bool) -> AgentTurn {
+pub(super) fn wait_for_event(
+    h: &Harness,
+    turn_id: &str,
+    what: impl Fn(&AgentTurn) -> bool,
+) -> AgentTurn {
     for _ in 0..1000 {
         let found = every_event(h).into_iter().find(|t| t.id == turn_id && what(t));
         if let Some(turn) = found {
@@ -136,7 +144,7 @@ fn wait_for_event(h: &Harness, turn_id: &str, what: impl Fn(&AgentTurn) -> bool)
 }
 
 /// Append a human comment to the seeded draft discussion, and answer its id.
-fn post(h: &Harness, draft_id: &str, thread: &Discussion, body: &str) -> String {
+pub(super) fn post(h: &Harness, draft_id: &str, thread: &Discussion, body: &str) -> String {
     let after = crate::comments::add_comment_to(
         &h.root(),
         crate::comments::ThreadRef::discussion(draft_id),
@@ -150,11 +158,11 @@ fn post(h: &Harness, draft_id: &str, thread: &Discussion, body: &str) -> String 
     after.comments.last().expect("the reply").id.clone()
 }
 
-fn user_texts(exchange: &[rig::completion::Message]) -> Vec<String> {
+pub(super) fn user_texts(exchange: &[rig::completion::Message]) -> Vec<String> {
     exchange.iter().map(rig_user_text).filter(|t| !t.is_empty()).collect()
 }
 
-fn delivered_bodies(h: &Harness, draft_id: &str, thread_id: &str) -> Vec<String> {
+pub(super) fn delivered_bodies(h: &Harness, draft_id: &str, thread_id: &str) -> Vec<String> {
     let target = crate::comments::DiscussionTarget::Draft { draft_id: draft_id.to_string() };
     crate::comments::list_discussions_in(&h.root(), &target)
         .into_iter()
@@ -241,13 +249,19 @@ fn a_speech_registers_a_turn_that_holds_its_reply_until_the_speech_ends() {
     assert_eq!(delivered_bodies(&h, &draft_id, &thread.id), vec![said("Final.")]);
 }
 
-// CVL-FR-VCYR, CVL-FR-WLTP: the two fixed lines, byte for byte.
+// CVL-FR-VCYR, CVL-FR-WLTP, CVL-FR-APIT: the three fixed lines, byte for byte.
 #[test]
 fn the_speech_lines_are_the_fixed_lines_of_the_spec() {
     assert_eq!(
         PARTIAL_SPEECH_LINE,
         "Partial speech: the author is still speaking. This is a part of what the author says. \
-         More text follows. Do not reply to this part alone.",
+         More text follows. Do not reply to this part alone. You can use a tool to prepare, or \
+         give an empty reply.",
+    );
+    assert_eq!(
+        SPEECH_WITHDRAWN_LINE,
+        "Speech ended: the author stopped speaking and posted no comment. Disregard the partial \
+         speech. Reply to the comment that addressed you.",
     );
     assert_eq!(
         FULL_SPEECH_LINE,

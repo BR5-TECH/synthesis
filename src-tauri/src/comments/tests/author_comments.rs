@@ -51,6 +51,7 @@ impl Opened {
             None,
             body.into(),
             Vec::new(),
+            None,
             self.app.state(),
             self.app.state(),
         )
@@ -64,6 +65,7 @@ impl Opened {
             body.into(),
             Vec::new(),
             Vec::new(),
+            None,
             self.app.state(),
             self.app.state(),
         )
@@ -136,6 +138,7 @@ fn the_opening_comment_of_a_note_discussion_is_an_author_comment() {
         note.id.clone(),
         "@arch read this note".into(),
         Vec::new(),
+        None,
         o.app.state(),
         o.app.state(),
     )
@@ -189,6 +192,7 @@ fn the_append_reports_its_own_id_and_only_that_comment_is_noted() {
         "accept it".into(),
         Vec::new(),
         Vec::new(),
+        None,
         Stamp { by: &human("raver119"), at: "2026-01-01T00:00:01Z" },
     )
     .expect("appended");

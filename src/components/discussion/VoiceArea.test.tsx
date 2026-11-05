@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({
   cancelVoiceCapture: vi.fn(async () => undefined),
   cancelVoiceSpeech: vi.fn(async () => undefined),
   finishVoiceCapture: vi.fn(async (): Promise<string> => "hello there"),
+  // VOM-FR-QWMK: a transcript already in the document language.
+  translateVoiceTranscript: vi.fn(async (text: string) => ({ text })),
   retryVoiceCapture: vi.fn(async (): Promise<string> => "again"),
   speakVoiceSegment: vi.fn(async () => undefined),
   startVoiceCapture: vi.fn(async () => ({ sessionId: "s1", route: "http", live: false })),
@@ -59,6 +61,8 @@ import { resetLogBufferForTest } from "../../logging";
 import { voiceMessage } from "../../voice/voiceMessages";
 import {
   noteProvider,
+  pressRecord,
+  releaseRecord,
   resetVoiceControllerForTest,
   setVoiceBehaviour,
 } from "../../voice/voiceController";
@@ -303,13 +307,20 @@ describe("the voice area", () => {
     expect(screen.getByTestId("voice-retry")).toBeInTheDocument();
   });
 
-  it("VOM-FR-RENV, VOM-FR-BVNX: a note says what happened", () => {
+  it("VOM-FR-RENV, VOM-FR-BVNX, VOM-FR-QWMK, VOM-FR-DLPA: a note says what happened", () => {
     renderReply();
     enterVoice();
     act(() => patchVoiceState({ note: "no_speech" }));
     expect(screen.getByTestId("voice-note")).toHaveTextContent(/No speech/);
     act(() => patchVoiceState({ note: "no_agent" }));
     expect(screen.getByTestId("voice-note")).toHaveTextContent(/No agent/);
+    // VOM-FR-QWMK, VOM-FR-DLPA.
+    act(() => patchVoiceState({ note: "translating" }));
+    expect(screen.getByTestId("voice-note")).toHaveTextContent("Translating…");
+    act(() => patchVoiceState({ note: "not_translated" }));
+    expect(screen.getByTestId("voice-note")).toHaveTextContent(
+      "Not translated. The original text was posted.",
+    );
   });
 });
 
@@ -318,6 +329,8 @@ describe("posting by voice", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
   afterEach(() => {
+    // VOM-FR-FZJY: an unmount releases a hold, so its timers stay fake.
+    cleanup();
     vi.useRealTimers();
   });
 
@@ -363,6 +376,20 @@ describe("posting by voice", () => {
     expect(getVoiceState().note).toBeNull();
   });
 
+  it("VOM-FR-QWMK: a reply composer gives the target of its discussion to the translation", async () => {
+    api.finishVoiceCapture.mockImplementationOnce(async () => "look here");
+    api.translateVoiceTranscript.mockImplementationOnce(async () => ({ text: "spójrz tutaj" }));
+    renderReply();
+    enterVoice();
+    await holdAndRelease(screen.getByTestId("voice-record"));
+    await waitFor(() => expect(onReply).toHaveBeenCalled());
+    expect(api.translateVoiceTranscript).toHaveBeenCalledWith("look here", ["arch"], {
+      kind: "artifact",
+      artifactId: "a.md",
+    });
+    expect(onReply).toHaveBeenCalledWith("d1", "spójrz tutaj", [], []);
+  });
+
   it("VOM-FR-PECJ: Space acts as a press, and its release as a release", async () => {
     renderReply();
     enterVoice();
@@ -374,6 +401,116 @@ describe("posting by voice", () => {
     fireEvent.keyUp(record, { key: " " });
     await advance(250);
     await waitFor(() => expect(onReply).toHaveBeenCalledTimes(1));
+  });
+
+  it("VOM-FR-FZJY: a release outside the control ends the hold", async () => {
+    renderReply();
+    enterVoice();
+    fireEvent.pointerDown(screen.getByTestId("voice-record"), { pointerId: 1 });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    await advance(250);
+    await waitFor(() => expect(onReply).toHaveBeenCalledTimes(1));
+  });
+
+  it("VOM-FR-FZJY: a Space released after the focus moved ends the hold", async () => {
+    renderReply();
+    enterVoice();
+    fireEvent.keyDown(screen.getByTestId("voice-record"), { key: " " });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    fireEvent.keyUp(document.body, { key: " " });
+    await advance(250);
+    await waitFor(() => expect(onReply).toHaveBeenCalledTimes(1));
+  });
+
+  it("VOM-FR-FZJY: a lost pointer capture ends the hold", async () => {
+    renderReply();
+    enterVoice();
+    const record = screen.getByTestId("voice-record");
+    fireEvent.pointerDown(record, { pointerId: 1 });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    fireEvent.lostPointerCapture(record, { pointerId: 1 });
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1));
+  });
+
+  it("VOM-FR-FZJY: a window pointercancel and a window Enter release end the hold, and another key does not", async () => {
+    renderReply();
+    enterVoice();
+    const record = screen.getByTestId("voice-record");
+    fireEvent.pointerDown(record, { pointerId: 1 });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    fireEvent.keyUp(document.body, { key: "a" });
+    expect(getVoiceState().phase).toBe("recording");
+    fireEvent.pointerCancel(window, { pointerId: 1 });
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1));
+
+    fireEvent.keyDown(screen.getByTestId("voice-record"), { key: "Enter" });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    fireEvent.keyUp(document.body, { key: "Enter" });
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(2));
+  });
+
+  it("VOM-FR-FZJY, VOM-FR-HHWL: a window release does not end a hold of the hotkey", async () => {
+    renderReply();
+    enterVoice();
+    act(() => pressRecord());
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    fireEvent.keyUp(document.body, { key: " " });
+    await advance(250);
+    expect(getVoiceState().phase).toBe("recording");
+    act(() => releaseRecord());
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1));
+  });
+
+  it("VOM-FR-FZJY, VOM-FR-LIFL: with Toggle behaviour a window release does not stop the recording", async () => {
+    setVoiceBehaviour("toggle");
+    renderReply();
+    enterVoice();
+    fireEvent.pointerDown(screen.getByTestId("voice-record"), { pointerId: 1 });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    await advance(250);
+    expect(getVoiceState().phase).toBe("recording");
+    fireEvent.pointerDown(screen.getByTestId("voice-record"), { pointerId: 1 });
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1));
+  });
+
+  it("VOM-FR-FZJY: a control that becomes disabled during a hold ends it", async () => {
+    const view = renderReply();
+    enterVoice();
+    fireEvent.pointerDown(screen.getByTestId("voice-record"), { pointerId: 1 });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    view.rerender(
+      <DiscussionComposer mode="reply" discussion={discussion()} onReply={onReply} agents={[archAgent]} disabled />,
+    );
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1));
+    expect(getVoiceState().phase).not.toBe("recording");
+  });
+
+  it("VOM-FR-FZJY: a control that unmounts during a hold ends it", async () => {
+    const view = renderReply();
+    enterVoice();
+    fireEvent.pointerDown(screen.getByTestId("voice-record"), { pointerId: 1 });
+    await waitFor(() => expect(getVoiceState().phase).toBe("recording"));
+    await advance(310);
+    view.unmount();
+    await advance(250);
+    await waitFor(() => expect(api.finishVoiceCapture).toHaveBeenCalledTimes(1));
+    expect(getVoiceState().phase).not.toBe("recording");
   });
 
   it("VOM-FR-LIFL: a press on the control starts and the next stops", async () => {

@@ -38,6 +38,8 @@ let vad: VadSession | null = null;
 /** A session that closes. Its events still count until the close comes back. */
 let closingVad: VadSession | null = null;
 let vadClosed: Promise<void> | null = null;
+/** VOM-FR-JMMF: the closing session still holds the microphone. */
+let micReleased: Promise<void> | null = null;
 /** A session that opens. The author can close it before it is open. */
 let vadOpening: { cancelled: boolean } | null = null;
 let stopGateWatch: (() => void) | null = null;
@@ -69,6 +71,14 @@ export function pushVadGate(): void {
 
 export function vadIsBusy(): boolean {
   return vad !== null || vadOpening !== null;
+}
+
+/**
+ * VOM-FR-JMMF: while a closing session still holds the microphone, a promise
+ * that resolves when it releases it. Null when no session holds it.
+ */
+export function vadMicClosed(): Promise<void> | null {
+  return micReleased;
 }
 
 /** VOM-FR-CSXI. */
@@ -142,12 +152,17 @@ function finishSpoken(u: Utterance): void {
 }
 
 /** VOM-FR-XEIA: the tail, the last audio, then the close. */
-async function closeVad(session: VadSession, kind: "release" | "discard"): Promise<void> {
+async function closeVad(
+  session: VadSession,
+  kind: "release" | "discard",
+  released: () => void,
+): Promise<void> {
   const job = speaking;
   if (kind === "release" && job !== null) {
     await new Promise((done) => setTimeout(done, TAIL_MS));
   }
   session.stopMicrophone();
+  released();
   // A teardown during the tail discards too (VOM-FR-KQAI).
   // A capture that transcribes stays, because a failure leaves it for Retry.
   const discard =
@@ -190,7 +205,15 @@ export async function endVadSession(kind: "release" | "discard"): Promise<void> 
   // VOM-FR-ZDLY: no session, so the waveform is flat.
   patchVoiceState({ vadOpen: false, muted: false });
   noteMicLevel(0);
-  const closed = closeVad(session, kind).finally(() => {
+  let release: () => void = () => undefined;
+  const free = new Promise<void>((done) => (release = done));
+  micReleased = free;
+  const released = () => {
+    if (micReleased === free) micReleased = null;
+    release();
+  };
+  const closed = closeVad(session, kind, released).finally(() => {
+    released();
     closingVad = null;
     vadClosed = null;
     logInfo(["frontend", "ai"], "a voice session closed", { kind });
@@ -328,6 +351,7 @@ export function resetVoiceVadForTest(): void {
   vad = null;
   closingVad = null;
   vadClosed = null;
+  micReleased = null;
   vadOpening = null;
   stopGateWatch?.();
   stopGateWatch = null;

@@ -118,6 +118,18 @@ export function useRecoverableFailures(
         if (turn.state === "failed" && turn.retryPermitted) {
           return { ...prev, [threadId]: turn };
         }
+        // CTA-FR-RUVS / AGC-FR-RGIX: the same agent answered the comment
+        // whose turn failed, so the offer to retry it goes.
+        const offer = prev[threadId];
+        if (offer && answersOffer(turn, offer)) {
+          const { [threadId]: gone, ...rest } = prev;
+          logDebug(["ai", "frontend"], "an offer to retry was retired by a delivery", {
+            threadId,
+            turnId: gone.id,
+            deliveredTurnId: turn.id,
+          });
+          return rest;
+        }
         // A later turn in this conversation reaching any other terminal state
         // does not retire the offer — only a turn of its own would, and that
         // turn is the one the branch above replaced it with. What clears an
@@ -237,6 +249,20 @@ function byThread(turns: readonly AgentTurn[]): Record<string, AgentTurn> {
   const out: Record<string, AgentTurn> = {};
   for (const turn of turns) out[turn.origin.discussionId] = turn;
   return out;
+}
+
+/**
+ * CTA-FR-RUVS / AGC-FR-RGIX: whether a turn is a delivery of the same agent
+ * for the same trigger comment as the failed turn of the offer.
+ */
+function answersOffer(turn: AgentTurn, offer: AgentTurn): boolean {
+  return (
+    turn.state === "delivered" &&
+    turn.id !== offer.id &&
+    turn.agentId === offer.agentId &&
+    turn.triggerCommentId != null &&
+    turn.triggerCommentId === offer.triggerCommentId
+  );
 }
 
 /**

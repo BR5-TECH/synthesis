@@ -508,6 +508,7 @@ fn a_retry_with_the_set_still_standing_appends_no_duplicate() {
                         quotes: Vec::new(),
                         attachments: Vec::new(),
                         option_descriptions: Vec::new(),
+                        spoken_original: None,
                     },
                 ),
                 (
@@ -520,6 +521,7 @@ fn a_retry_with_the_set_still_standing_appends_no_duplicate() {
                         quotes: Vec::new(),
                         attachments: Vec::new(),
                         option_descriptions: Vec::new(),
+                        spoken_original: None,
                     },
                 ),
             ]

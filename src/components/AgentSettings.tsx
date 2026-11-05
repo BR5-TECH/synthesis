@@ -39,6 +39,7 @@ import {
 } from "./AiIntegrations";
 import { FilterableSelect } from "./FilterableSelect";
 import { SkillsSelector } from "./SkillsSelector";
+import { AgentVoiceFields } from "./AgentVoiceFields";
 import { Icon } from "./icons";
 import type {
   Agent,
@@ -47,6 +48,7 @@ import type {
   AiApiCatalog,
   ModelOption,
   ProjectAgent,
+  VoiceProviderId,
 } from "../types";
 
 import {
@@ -101,8 +103,12 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
   // AGT-FR-DIVM: `undefined` until the list is read, and `null` is free text.
   const [voice, setVoice] = useState(agent?.voice ?? "");
+  // AGT-FR-MWOF: null and "" mean the provider's values.
+  const [voiceSpeed, setVoiceSpeed] = useState<number | null>(agent?.voiceSpeedPercent ?? null);
+  const [voiceStyle, setVoiceStyle] = useState(agent?.voiceStyle ?? "");
   const [voices, setVoices] = useState<string[] | null | undefined>(undefined);
-  const [voiceReady, setVoiceReady] = useState(false);
+  // AGT-FR-DIVM, AGT-FR-HXVQ: the active Voice AI provider, or null for none.
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId | null>(null);
   // AGT-FR-XGWD: a new agent selects no project skill; an existing one opens
   // on its stored selection.
   const [skills, setSkills] = useState<string[]>(agent?.skills ?? []);
@@ -119,7 +125,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
     void api
       .listVoiceAiIntegrations()
       .then((list) => {
-        if (!cancelled) setVoiceReady(list.active !== null);
+        if (!cancelled) setVoiceProvider(list.active);
       })
       .catch(() => undefined);
     void api
@@ -180,6 +186,8 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
       modelId,
       instructions,
       voice,
+      voiceSpeedPercent: voiceSpeed,
+      voiceStyle,
       // AGT-FR-WTSR: a Personal agent never receives project skills, so its
       // editor sends none.
       skills: scope === "project" ? skills : [],
@@ -259,7 +267,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
         {agent ? `Edit @${agent.nickname}` : `New ${SCOPE_LABEL[scope]} agent`}
       </h3>
 
-      {/* AGT-FR-12: exactly seven controls, in this order, for either scope.
+      {/* AGT-FR-12: exactly nine controls, in this order, for either scope.
           The skills selector shows its project group for a Project agent
           alone (AGT-FR-KVDA, AGT-FR-WTSR). The model and the
           reasoning among them are this agent's own — nothing here reads the AI
@@ -360,41 +368,16 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
         <span className="t-ui-sm t-muted">Optional.</span>
       </label>
 
-      {/* AGT-FR-DIVM. */}
-      <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <span className="t-ui-sm">Voice</span>
-        {voices ? (
-          <select
-            className="input"
-            // The sticky footer covers the end of the card, so a focused control
-            // scrolls clear of it.
-            style={{ scrollMarginBottom: 72 }}
-            data-testid="agent-voice"
-            disabled={!voiceReady}
-            value={voice}
-            onChange={(e) => setVoice(e.target.value)}
-          >
-            <option value="">Provider default</option>
-            {voice !== "" && !voices.includes(voice) && <option value={voice}>{voice}</option>}
-            {voices.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            className="input"
-            style={{ scrollMarginBottom: 72 }}
-            data-testid="agent-voice"
-            disabled={!voiceReady}
-            placeholder="Provider default"
-            value={voice}
-            onChange={(e) => setVoice(e.target.value)}
-          />
-        )}
-        <span className="t-ui-sm t-muted">Optional.</span>
-      </label>
+      <AgentVoiceFields
+        value={{ voice, speedPercent: voiceSpeed, style: voiceStyle }}
+        voices={voices}
+        provider={voiceProvider}
+        onChange={(next) => {
+          setVoice(next.voice);
+          setVoiceSpeed(next.speedPercent);
+          setVoiceStyle(next.style);
+        }}
+      />
 
       {/* AGT-FR-KVDA / AGT-FR-WTSR: the seventh control. */}
       <SkillsSelector

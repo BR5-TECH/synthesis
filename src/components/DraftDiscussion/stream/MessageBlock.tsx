@@ -14,6 +14,7 @@
 import { useState } from "react";
 
 import { CommentMarkdown } from "../../CommentMarkdown";
+import { SpokenOriginal } from "../../discussion/SpokenOriginal";
 import {
   DescriptionsToggle,
   descriptionsOf,
@@ -214,11 +215,15 @@ function MessageBody({
   const descriptions = descriptionsOf(comment);
   if (descriptions.length === 0) {
     return (
-      <CommentMarkdown
-        body={visibleBody(comment.body)}
-        agentRoster={roster}
-        className="dds-message__body"
-      />
+      <>
+        <CommentMarkdown
+          body={visibleBody(comment.body)}
+          agentRoster={roster}
+          className="dds-message__body"
+        />
+        {/* CMT-FR-HCVB: what the author said, under the translation. */}
+        <SpokenOriginal comment={comment} />
+      </>
     );
   }
   return (

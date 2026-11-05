@@ -100,18 +100,34 @@ impl HttpJob {
         let samples = resample_all(&pcm, self.capture_rate, HTTP_RATE)
             .map_err(|_| ERR_TRANSCRIPTION_FAILED.to_string())?;
         let (client, _) = http::client().map_err(|f| f.transcription_code().to_string())?;
-        let hints = http::hint_fields(&record.provider, &self.keyterms);
-        http::transcribe(
-            &client,
-            &record.provider,
-            &record.base_url,
-            self.config.key.as_deref(),
-            &http_stt_model(&record.provider, &record.stt_model),
-            &samples,
-            &hints,
-        )
-        .await
-        .map_err(|f| {
+        let model = http_stt_model(&record.provider, &record.stt_model);
+        let key = self.config.key.as_deref();
+        let hints = http::hint_fields(&record.provider, &self.keyterms, self.config.language);
+        let send = |hints: Vec<(&'static str, String)>| {
+            let (client, model, samples) = (&client, &model, &samples);
+            async move {
+                http::transcribe(
+                    client,
+                    &record.provider,
+                    &record.base_url,
+                    key,
+                    model,
+                    samples,
+                    &hints,
+                )
+                .await
+            }
+        };
+        let with_language = self.config.language.is_some() && record.provider == "custom";
+        let transcribed = match send(hints).await {
+            // VOP-FR-TSUS: on `custom`, a 400 for a language repeats once
+            // without it.
+            Err(http::HttpFailure::BadRequest) if with_language => {
+                send(http::hint_fields(&record.provider, &self.keyterms, None)).await
+            }
+            other => other,
+        };
+        transcribed.map_err(|f| {
             self.sink.diagnostic("http_transcription", &f.detail());
             f.transcription_code().to_string()
         })

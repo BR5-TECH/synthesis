@@ -372,6 +372,13 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     );
     // Read before the origin is moved into the plan below.
     let origin_kind = origin.kind();
+    // AGC-FR-LDTX: the language of what the discussion is about.
+    let language = document_language::document_language(
+        roots,
+        &origin.target,
+        origin.fragment_target.as_ref(),
+    );
+    document_language::log_document_language(app, turns.buffer(), "turn", &origin.target, language);
     // AGC-FR-16: the participant an agent contributes as, whether it is
     // answering or asking. Composed here so the two paths cannot disagree about
     // who a comment came from.
@@ -443,7 +450,14 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
             // CVL-FR-04 / CVL-FR-03: the prompt the origin kind selects, with the
             // persona composed into it. What differs between two turns of one kind
             // is the persona and the material, never the shape of the request.
-            instructions: compile_prompt(origin_kind, &agent.instructions, &agent.title),
+            // CVL-FR-FQMM: the rules of the document language and of the
+            // author's spoken language.
+            instructions: compile_prompt_spoken(
+                origin_kind,
+                &agent.instructions,
+                &agent.title,
+                &language_rules(&app.state::<GlobalSettingsStore>(), language.name),
+            ),
             // CVL-FR-39: the material under discussion leads, and the discussion
             // itself follows it (CVL-FR-06), so the head is the run of sections
             // before the first one the conversation grows.

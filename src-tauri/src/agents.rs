@@ -52,6 +52,8 @@ pub const ERR_NICKNAME_INVALID: &str = "nickname_invalid";
 pub const ERR_NICKNAME_RESERVED: &str = "nickname_reserved";
 /// Another agent already answers to that nickname (AGR-FR-05).
 pub const ERR_NICKNAME_TAKEN: &str = "nickname_taken";
+/// AGR-FR-EPYX.
+pub const ERR_VOICE_OPTIONS_INVALID: &str = "voice_options_invalid";
 /// No AI API provider is configured at all (AGR-FR-06).
 pub const ERR_PROVIDER_UNCONFIGURED: &str = "provider_unconfigured";
 /// Providers are configured, but none resolves for the project (AGR-FR-06).
@@ -114,6 +116,12 @@ pub struct Agent {
     /// AGR-FR-ABCF: a plain voice name that names no provider. `""` means the
     /// provider's default voice.
     pub voice: String,
+    /// AGR-FR-EPYX: 50 to 200, or `None` for the provider's speed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice_speed_percent: Option<u16>,
+    /// AGR-FR-EPYX: `""` means the provider's style.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub voice_style: String,
     /// AGR-FR-IGIL: the paths of the project skills this agent may use. Always
     /// empty for a Personal agent (AGR-FR-QKOV), and omitted from the store
     /// while empty, so the Personal agent registry holds no such field.
@@ -149,6 +157,12 @@ pub struct AgentDraft {
     pub instructions: String,
     /// AGR-FR-ABCF.
     pub voice: String,
+    /// AGR-FR-EPYX: 50 to 200, or `None` for the provider's speed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice_speed_percent: Option<u16>,
+    /// AGR-FR-EPYX: `""` means the provider's style.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub voice_style: String,
     /// AGR-FR-IGIL: the selected project skill paths, normalised by
     /// [`normalise_skills`] before anything is written.
     pub skills: Vec<String>,
@@ -510,6 +524,13 @@ fn validate_draft(
     // rule that governs a provider's own selection, against the provider the
     // open project resolves to, so an agent can never be saved pointing at a
     // model the active endpoint does not serve.
+    // AGR-FR-EPYX: the speed and the style of the voice.
+    if !crate::voice_ai::speech_options::valid_options(
+        draft.voice_speed_percent,
+        draft.voice_style.trim(),
+    ) {
+        return Err(ERR_VOICE_OPTIONS_INVALID.into());
+    }
     let provider = ai_api::resolve_agent_provider(store, project_key)
         .map_err(|e| map_selection_error(&e).to_string())?;
     ai_api::validate_ai_api_selection(store, &provider, &draft.model_id, draft.reasoning.as_ref())
@@ -541,6 +562,8 @@ pub fn create_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                voice_speed_percent: draft.voice_speed_percent,
+                voice_style: draft.voice_style.trim().to_string(),
                 // AGR-FR-QKOV: a Personal agent has no project skill selection,
                 // and a draft that carries one is stored without it.
                 skills: Vec::new(),
@@ -569,6 +592,8 @@ pub fn create_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                voice_speed_percent: draft.voice_speed_percent,
+                voice_style: draft.voice_style.trim().to_string(),
                 skills,
                 disabled_skills,
                 created_at: String::new(),
@@ -603,6 +628,8 @@ pub fn update_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                voice_speed_percent: draft.voice_speed_percent,
+                voice_style: draft.voice_style.trim().to_string(),
                 // AGR-FR-QKOV.
                 skills: Vec::new(),
                 // AGR-FR-HMVQ, AGR-FR-CJPB.
@@ -632,6 +659,8 @@ pub fn update_agent_impl(
                 model_id: draft.model_id.clone(),
                 instructions: draft.instructions.clone(),
                 voice: draft.voice.trim().to_string(),
+                voice_speed_percent: draft.voice_speed_percent,
+                voice_style: draft.voice_style.trim().to_string(),
                 skills,
                 disabled_skills,
                 created_at: String::new(),

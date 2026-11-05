@@ -10,7 +10,8 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 ### Providers
 
 1. **VOP-FR-IHLG** Three Voice AI providers exist, each with a stable id: `openai`, `openrouter`, and `custom`. These ids are independent of the AI API provider ids.
-2. **VOP-FR-SURK** Each provider has one record. It holds a base URL, the masked hint of its key, an STT model, a TTS model, a transcription route, a speech route, a default voice, the detected capabilities, and the time of its last successful verification.
+2. **VOP-FR-SURK** Each provider has one record. It holds a base URL, the masked hint of its key, an STT model, a TTS model, a transcription route, a speech route, a default voice, a speech speed, a speaking style, the detected capabilities, and the time of its last successful verification.
+2. **VOP-FR-HQTQ** The speech speed is an integer percent from 50 to 200, and null means 100. The speaking style is free text of at most 200 characters, and `""` means no style. "set voice ai speech options" sets both, and a value out of range returns `invalid_speech_options`. A verification keeps both.
 3. **VOP-FR-CVLB** A provider's descriptor sets its default base URL, STT models, TTS model, and default voice, as the descriptor table of the contract surface states.
 4. **VOP-FR-ZSXI** A provider's key is stored at `["voice_ai", "providers", <provider_id>]` in the application secret vault (`ASV-application-secret-vault.md` ASV-FR-03). This module reads no key of the `ai_api` namespace.
 5. **VOP-FR-UWUE** `openai` and `openrouter` require a key. `custom` does not require a key, and a `custom` provider with no key sends no authorization header.
@@ -37,6 +38,9 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 20. **VOP-FR-WUEI** Detection confirms a transcription capability with short silence and a commit. It requires a transcript event or an `input_audio_buffer.committed` event. An `error` event removes the capability.
 21. **VOP-FR-USQZ** With a TTS model set, detection opens a second session with no `intent`. Realtime speech is present when that session reports an output rate and one word gives a `response.output_audio.delta`. Detection then sends `response.cancel`.
 22. **VOP-FR-OMTM** Detection probes the HTTP routes of the descriptor with a short silent WAV and, with a TTS model set, one word. On `openrouter` it also calls `GET /key`, and a 401 there returns `rejected`.
+22. **VOP-FR-TGIB** With an `openai_speech` route on `custom`, detection speaks one phrase with no `speed` and one phrase with `speed: 2.0`. A 400 to the second request, or a second WAV longer than 75% of the first, gives `speech_speed` `client`. Otherwise it gives `server`. An `openai` Realtime speech route is `server`, and each other route is `client`.
+    - *Why:* a server can accept `speed` and ignore it, and only the length of the audio shows that.
+22. **VOP-FR-COMJ** With an `openai_speech` route on `custom`, detection speaks one phrase with `instructions`. A 400 gives `speech_instructions` false, and an answer gives true. An `openai` Realtime speech route has `speech_instructions` true, and each other route has false.
 23. **VOP-FR-KAUL** Verification fails with `no_transcription_route` when no transcription route answers. With a TTS model set, it fails with `no_speech_route` when no speech route answers. A missing Realtime route alone never fails it.
 24. **VOP-FR-IKUE** A successful verification selects Realtime live transcription, then Realtime turn-based transcription, then HTTP. It selects Realtime speech, then `openai_speech`, then `llama_tts`. An earlier choice of the author stands while the capabilities still hold it.
 25. **VOP-FR-GGBG** A record with an empty TTS model has no speech route, and it is still a verified record.
@@ -64,7 +68,9 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 
 ### Capture
 
-38. **VOP-FR-KBPZ** "start voice capture" copies the active provider's configuration and opens one capture session. A second session while one is open, is not finishing (VOP-FR-WCSB), and has not failed returns `voice_session_active`. A start replaces a failed session. Later changes to the record do not affect an open session.
+38. **VOP-FR-TPXA** "start voice capture" and "speak voice segment" take an optional `provider`. With one, the call uses the verified record and the key of that provider in place of the active provider's, through the read path of VOP-FR-EBQI. A provider with no verified record returns `not_verified`, and a provider that has no descriptor returns `unknown_provider`. With none, the call uses the active provider.
+    - *Why:* The test of a settings tab (`../ui/VAI-voice-ai-settings.md` VAI-FR-HTVQ) speaks with a provider before it becomes active.
+38. **VOP-FR-KBPZ** "start voice capture" copies the configuration of the provider of the call (VOP-FR-TPXA) and the spoken language (`GSS-global-settings-storage.md` GSS-FR-DNAW), and opens one capture session. A second session while one is open, is not finishing (VOP-FR-WCSB), and has not failed returns `voice_session_active`. A start replaces a failed session. Later changes to the record do not affect an open session.
 39. **VOP-FR-DXPK** "append voice capture" takes mono PCM16 at the capture rate as a raw request body. It also accepts a JSON array of bytes.
     - *Why:* one failed IPC fetch moves Tauri to JSON bodies for the life of the webview.
 40. **VOP-FR-GZOC** Audio is resampled from the capture rate to the rate of the selected route. Detector audio is resampled to 16 kHz.
@@ -75,6 +81,9 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 43. **VOP-FR-VZDI** "finish voice capture" ends the input, waits for the final transcript, and returns it. The text is trimmed. An empty transcript is a success with empty text.
 44. **VOP-FR-EYHP** On the HTTP route, audio is held at 16 kHz. "finish voice capture" sends one WAV as multipart `file` with `response_format=json`, to `<base>/audio/transcriptions` on a named provider and `<base>/v1/audio/transcriptions` on `custom`.
 45. **VOP-FR-INCC** Agent nicknames are sent as hints only where a provider documents them: `keywords` on the `openai` Realtime route, `prompt` on the `openai` HTTP route, and `keyterms` on `openrouter`. A nickname that holds `<`, `>`, a carriage return, or a line feed is left out.
+45. **VOP-FR-BYZC** A spoken language is a code of the language table (VOP-FR-IRZC), or a free name of at most 40 letters, spaces, hyphens, and brackets. Each other value reads as no spoken language.
+45. **VOP-FR-IRZC** The language table holds these codes and English names: `es` Spanish, `fr` French, `de` German, `it` Italian, `pt` Portuguese, `ru` Russian, `uk` Ukrainian, `pl` Polish, `nl` Dutch, `tr` Turkish, `ar` Arabic, `hi` Hindi, `zh` Chinese, `ja` Japanese, `ko` Korean.
+45. **VOP-FR-TSUS** A spoken language from the table goes to transcription as a hint: `language` on the HTTP route of `openai` and `custom`, and `transcription.language` on the `openai` Realtime route. A free name, `openrouter`, and the `llamacpp` and `vllm` dialects get no hint. On `custom`, a 400 for a request with `language` repeats once without it.
 46. **VOP-FR-YEFK** A session holds its PCM in memory until a success, the next start, or a cancel. Audio and transcripts are never written to disk, and they never appear in a log. Detector audio stays in memory on the same terms.
 47. **VOP-FR-IAFL** "retry voice capture" sends the held PCM again on the same route. When a Realtime socket failed and the capabilities hold the HTTP route, it uses the HTTP route.
 48. **VOP-FR-UOYP** A failed capture returns one of `provider_unreachable`, `provider_rejected`, `transcription_failed`, or `voice_session_lost`. The session stays open for "retry voice capture".
@@ -134,20 +143,22 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 
 ### Speech
 
-50. **VOP-FR-MOSY** "speak voice segment" takes one text segment, a voice, and a `Channel`. It sends audio frames on the channel, then one end frame, and it resolves when the segment ends. A segment over 4096 characters returns `voice_segment_too_long`. A failed segment sends no end frame.
+50. **VOP-FR-MOSY** "speak voice segment" takes one text segment, a voice, a speed, a style, and a `Channel`. It sends audio frames on the channel, then one end frame, and it resolves when the segment ends. A segment over 4096 characters returns `voice_segment_too_long`. A failed segment sends no end frame.
     - *Why:* a large frame reaches the WebView after the command resolves, so only the end frame shows that all audio arrived.
-51. **VOP-FR-XZET** A frame is raw bytes. Byte 0 is the kind: `0` for PCM16 mono, `1` for one encoded audio file, `2` for the end of a segment. Bytes 1 to 4 are the sample rate as little-endian `u32`, and `0` for a file or an end frame. The rest is the payload, which an end frame does not have.
+51. **VOP-FR-XZET** A frame is raw bytes. Byte 0 is the kind: `0` for PCM16 mono, `1` for one encoded audio file, `2` for the end of a segment, `3` for the playback rate. Bytes 1 to 4 are the sample rate as little-endian `u32`, `0` for a file or an end frame, and the playback rate times 1000 for a rate frame. The rest is the payload, which an end frame and a rate frame do not have.
+51. **VOP-FR-STVA** The requested speed of a segment is the speed it takes, or else the speed of the provider (VOP-FR-HQTQ), clamped to 50 to 200 percent. The server speed is the requested speed clamped to the range of the route: 0.25 to 4.0 on an `openai_speech` route with `speech_speed` `server`, 0.25 to 1.5 on an `openai` Realtime route, and none on each other route. The playback rate is the requested speed divided by the server speed.
+51. **VOP-FR-EMJY** A segment whose playback rate is not 1 sends one rate frame before its first audio frame.
 52. **VOP-FR-TZDV** On a Realtime speech route, each `response.output_audio.delta` becomes one PCM frame at once, so audio starts to play before the segment ends.
-53. **VOP-FR-UPRG** In the `openai` dialect, each segment opens a new session with its voice. The segment is a `response.create` with `conversation: "none"`, `input: []`, `output_modalities: ["audio"]`, and instructions that say to speak the text exactly.
+53. **VOP-FR-UPRG** In the `openai` dialect, each segment opens a new session with its voice. The segment is a `response.create` with `conversation: "none"`, `input: []`, `output_modalities: ["audio"]`, and instructions that say to speak the text exactly. The `session.update` sets `audio.output.speed` to the server speed (VOP-FR-STVA) where it is not 1, and a style that is not empty goes into the instructions.
     - *Why:* the voice of a session cannot change after its first audio, and no socket stays open while voice mode is idle.
 54. **VOP-FR-TOFP** In the `llamacpp` dialect, each segment opens a new session. It sends `session.update` with the instructions and `output_modalities: ["audio"]`, then `conversation.item.create` with `input_text`, then `response.create`. The output rate comes from `session.created`.
     - *Why:* this server fixes `instructions` after the first message and has no `conversation: "none"`.
 55. **VOP-FR-QTZJ** On `openrouter`, speech is `POST <base>/audio/speech` with `response_format: "mp3"`. On a 400, it sends the request once more with `pcm`, at the rate of the `Content-Type` or else 24 kHz.
-56. **VOP-FR-TSVV** On `custom`, `openai_speech` is `POST <base>/v1/audio/speech` with `response_format: "wav"`, and `llama_tts` is `POST <base>/tts` with `input`. The module rewrites the RIFF and `data` sizes to the real length, then sends one file frame.
+56. **VOP-FR-TSVV** On `custom`, `openai_speech` is `POST <base>/v1/audio/speech` with `response_format: "wav"`, and `llama_tts` is `POST <base>/tts` with `input`. The module rewrites the RIFF and `data` sizes to the real length, then sends one file frame. The `openai_speech` body carries `speed` with the server speed where the route has one, and `instructions` with the style where `speech_instructions` is true and the style is not empty.
     - *Why:* Ollama writes maximum values in those fields, and a decoder can refuse them.
 57. **VOP-FR-IAEN** `openai` has no HTTP speech route. Its TTS model is `gpt-realtime-2.1-mini`.
     - *Why:* OpenAI shuts down every model of `/v1/audio/speech` on 2027-01-06, and the replacement is available only through Realtime.
-58. **VOP-FR-RABZ** The module speaks with the requested voice. A voice outside the voices of the active provider becomes the default voice. On `custom`, a 400 for a request with a voice repeats once with the default voice.
+58. **VOP-FR-RABZ** The module speaks with the requested voice. A voice outside the voices of the provider of the call becomes the default voice. On `custom`, a 400 for a request with a voice, a `speed`, or `instructions` repeats once with the default voice and with no `speed` and no `instructions`. The playback rate then carries the whole requested speed.
 59. **VOP-FR-INDT** A `llamacpp` Realtime speech route takes no voice. The requested voice has no effect on that route.
 60. **VOP-FR-DWSB** "cancel voice speech" ends the segment at once. It sends `response.cancel` or aborts the HTTP request, and it sends no more frames.
 61. **VOP-FR-GQJS** A failed segment returns one of `provider_unreachable`, `provider_rejected`, or `speech_failed`.
@@ -198,6 +209,8 @@ VoiceAiRecord {
   transcription_route:   "realtime" | "http",
   speech_route:          "realtime" | "openai_speech" | "llama_tts" | null,
   default_voice:         string,
+  speech_speed_percent:  number | null,                  // 50..200; null means 100 (VOP-FR-HQTQ)
+  speech_style:          string,                         // "" means no style
   capabilities:          VoiceCapabilities | null,
   capability_note:       string | null,                  // the server's refusal message (VOP-FR-AVXY)
   verified_at:           string | null,
@@ -211,6 +224,8 @@ VoiceCapabilities {
   realtime_speech:       bool,
   openai_speech:         bool,
   llama_tts:             bool,
+  speech_speed:          "server" | "client" | null,     // VOP-FR-TGIB; null reads as client
+  speech_instructions:   bool,                           // VOP-FR-COMJ
 }
 
 VoiceAiIntegrations {
@@ -269,16 +284,17 @@ VoiceChunkChanged {
 - `"verify voice ai integration"` → `verify_voice_ai_integration(provider, base_url, api_key, stt_model, tts_model)` → `VoiceAiRecord`, or a typed error (VOP-FR-DBDI)
 - `"set voice ai routes"` → `set_voice_ai_routes(provider, transcription_route, speech_route)` → `VoiceAiRecord`, or `route_not_detected`
 - `"set voice ai default voice"` → `set_voice_ai_default_voice(provider, voice)` → `VoiceAiRecord`
+- `"set voice ai speech options"` → `set_voice_ai_speech_options(provider, speed_percent, style)` → `VoiceAiRecord`, or `invalid_speech_options`
 - `"set active voice ai integration"` → `set_active_voice_ai_integration(provider)` → `VoiceAiIntegrations`, or `not_verified`
 - `"clear voice ai integration"` → `clear_voice_ai_integration(provider)` → `VoiceAiIntegrations`
 - `"list voice ai models"` → `list_voice_ai_models(provider, base_url, api_key)` → `{ stt_models: string[], tts_models: string[] }`
 - `"list voice ai voices"` → `list_voice_ai_voices(provider)` → `string[] | null`. `provider` is optional
-- `"start voice capture"` → `start_voice_capture(capture_rate, keyterms, chunked)` → `VoiceCaptureStart`, or `no_active_provider`, `voice_session_active`
+- `"start voice capture"` → `start_voice_capture(capture_rate, keyterms, chunked, provider)` → `VoiceCaptureStart`, or `no_active_provider`, `not_verified`, `unknown_provider`, `voice_session_active`. `provider` is optional (VOP-FR-TPXA)
 - `"append voice capture"` → `append_voice_capture` with a raw body and the header `x-voice-session`
 - `"finish voice capture"` → `finish_voice_capture(session_id)` → `string`, or a typed failure (VOP-FR-UOYP)
 - `"retry voice capture"` → `retry_voice_capture(session_id)` → `string`, or a typed failure (VOP-FR-UOYP)
 - `"cancel voice capture"` → `cancel_voice_capture(session_id)` → nothing
-- `"speak voice segment"` → `speak_voice_segment(speech_id, text, voice, on_frame)` → nothing, or a typed failure (VOP-FR-GQJS)
+- `"speak voice segment"` → `speak_voice_segment(speech_id, text, voice_name, voice_speed, voice_style, on_frame, provider)` → nothing, or a typed failure (VOP-FR-GQJS). `provider` is optional (VOP-FR-TPXA). A null `voice_speed` and a null or empty `voice_style` take the values of the provider
 - `"cancel voice speech"` → `cancel_voice_speech(speech_id)` → nothing
 - `"open voice activity session"` → `open_voice_activity_session(capture_rate, keyterms)` → `{ activity_id }`, or `voice_detector_unavailable`, `no_active_provider`
 - `"feed voice activity"` → `feed_voice_activity` with a raw body and the header `x-voice-session`

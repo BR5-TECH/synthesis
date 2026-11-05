@@ -16,7 +16,7 @@
  * The discussion comes from `../state/conversationThreads`, which keeps
  * `"read comment thread"` to a conversation no surface has listed.
  */
-import { claimSpeechPost } from "../state/speechPosts";
+import { claimSpeechPost, spokenOriginalArgs } from "../state/speechPosts";
 import { useCallback, useMemo, useRef } from "react";
 
 import {
@@ -155,6 +155,8 @@ export async function postReply(
       body,
       quotes,
       attachments,
+      // VOM-FR-QWMK: the transcript of a translated speech comment.
+      ...spokenOriginalArgs(body),
     });
     setDiscussionError(discussionId, undefined);
     publishThread(updated);

@@ -62,7 +62,7 @@ fn config(provider: &str, base_url: &str, route: TranscriptionRoute) -> ActiveVo
         http_transcription: true,
         ..VoiceCapabilities::default()
     });
-    ActiveVoice { record, key: Some("k".to_string()) }
+    ActiveVoice { record, key: Some("k".to_string()), language: None }
 }
 
 fn events(sink: &RecordingSink) -> Vec<(usize, ChunkState, Option<String>, Option<String>)> {

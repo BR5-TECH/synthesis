@@ -304,6 +304,11 @@ pub struct Comment {
     /// (ADQ-FR-ZKXL).
     #[serde(default)]
     pub option_descriptions: Vec<String>,
+    /// CMS-FR-UYVK: the transcript of a comment that posted as a translation.
+    /// `None` on every other comment. It is not part of the body, so a turn
+    /// never reads it (AGC-FR-JRXG).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoken_original: Option<String>,
     pub created_at: String,
 }
 
@@ -513,6 +518,10 @@ pub enum EventBody {
         /// a submission. A line without it folds to an empty list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         option_descriptions: Vec<String>,
+        /// CMS-FR-UYVK: written only where not empty. A line without it folds
+        /// to `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        spoken_original: Option<String>,
     },
     /// Legacy. Read as a resolution (CMS-FR-WKZR). This build never writes it.
     ThreadLocked,

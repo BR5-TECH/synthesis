@@ -99,6 +99,7 @@ pub fn append_agent_comment_with(
                 quotes: Vec::new(),
                 attachments,
                 option_descriptions: Vec::new(),
+                spoken_original: None,
             },
         )],
     )?;

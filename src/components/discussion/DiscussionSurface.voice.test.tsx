@@ -44,8 +44,11 @@ import { clearAllDiscussionSessions } from "../../state/discussionSession";
 import { clearQuestionSets, publishSet } from "../../state/questionSets";
 import { getVoiceState, resetVoiceStateForTest } from "../../state/voiceSession";
 import type { Discussion, PendingQuestionSet, ProjectAgent } from "../../types";
+import { resetToasts, visibleToasts } from "../../state/toasts";
 import {
+  VOICE_RESOLVED_TOAST_TITLE,
   endVoiceForTeardown,
+  noteDiscussionChanged,
   noteProvider,
   resetVoiceControllerForTest,
 } from "../../voice/voiceController";
@@ -120,6 +123,7 @@ beforeEach(() => {
   clearQuestionSets();
   resetDiscussionFocus();
   resetLogBufferForTest();
+  resetToasts();
   noteProvider(true, true);
 });
 
@@ -215,14 +219,27 @@ describe("a question set with a session open", () => {
     expect(screen.queryByTestId("voice-record")).toBeNull();
   });
 
-  it("VOM-FR-LSBQ, VOM-FR-BCRD: a discussion that resolves shows no bar, and the session stays", async () => {
+  it("VOM-FR-HRFL, VOM-FR-LSBQ: a discussion that resolves ends voice mode, closes the session, and shows a toast", async () => {
     const view = render(surface());
     await openSession();
     act(() => publishSet("d1", QUESTION_SET));
     view.rerender(surface({ resolved: true }));
     expect(screen.queryByTestId("voice-session-bar")).toBeNull();
+    act(() => noteDiscussionChanged(discussion({ resolved: true })));
+    await pass(LONG_WAIT_MS);
+    expect(getVoiceState()).toMatchObject({ activeKey: null, vadOpen: false });
+    expect(api.closeVoiceActivitySession).toHaveBeenCalled();
+    expect(visibleToasts().map((t) => t.title)).toEqual([VOICE_RESOLVED_TOAST_TITLE]);
+  });
+
+  it("VOM-FR-HRFL: a change of the voice discussion that does not resolve it keeps voice mode", async () => {
+    render(surface());
+    await openSession();
+    act(() => noteDiscussionChanged(discussion()));
+    act(() => noteDiscussionChanged(discussion({ id: "other", resolved: true })));
     await pass(LONG_WAIT_MS);
     expect(getVoiceState().vadOpen).toBe(true);
     expect(api.closeVoiceActivitySession).not.toHaveBeenCalled();
+    expect(visibleToasts()).toEqual([]);
   });
 });

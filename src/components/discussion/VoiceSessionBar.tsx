@@ -22,6 +22,7 @@ import {
   useClock,
 } from "./VoiceArea";
 import type { VoiceState } from "../../state/voiceSession";
+import type { VoiceOptions } from "../../types";
 
 /** VOM-FR-VGLT: how to answer aloud, and whether the microphone is open or muted. */
 function answerLine(voice: VoiceState, now: number): string {
@@ -38,6 +39,8 @@ function answerLine(voice: VoiceState, now: number): string {
 export function VoiceSessionBar(props: {
   sessionKey: string;
   voiceOf: (agentId: string) => string | null;
+  /** VOM-FR-UALP. */
+  voiceOptionsOf?: (agentId: string) => VoiceOptions | null;
   /** VOM-FR-LNUH. */
   nicknames: () => string[];
 }) {
@@ -46,6 +49,8 @@ export function VoiceSessionBar(props: {
   const now = useClock(recording);
   const voiceOfRef = useRef(props.voiceOf);
   voiceOfRef.current = props.voiceOf;
+  const voiceOptionsOfRef = useRef(props.voiceOptionsOf);
+  voiceOptionsOfRef.current = props.voiceOptionsOf;
   const nicknamesRef = useRef(props.nicknames);
   nicknamesRef.current = props.nicknames;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -70,6 +75,7 @@ export function VoiceSessionBar(props: {
         blocked: () => false,
         nicknames: () => nicknamesRef.current(),
         voiceOf: (agentId) => voiceOfRef.current(agentId),
+        voiceOptionsOf: (agentId) => voiceOptionsOfRef.current?.(agentId) ?? null,
       }),
     [props.sessionKey],
   );

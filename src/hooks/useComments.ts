@@ -9,7 +9,7 @@
  * The anchoring arithmetic lives in `../state/commentAnchors`, kept pure. This
  * hook is the part that has to talk to the backend and to React.
  */
-import { claimSpeechPost } from "../state/speechPosts";
+import { claimSpeechPost, spokenOriginalArgs } from "../state/speechPosts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addComment as addCommentApi,
@@ -622,6 +622,8 @@ export function useComments(
           fragmentTarget,
           body,
           attachments,
+          // VOM-FR-QWMK: the transcript of a translated speech comment.
+          ...spokenOriginalArgs(body),
         });
         clearError(DRAFT_KEY);
         // Upsert rather than append, for the reason the turn registration above
@@ -663,6 +665,8 @@ export function useComments(
           body,
           quotes,
           attachments,
+          // VOM-FR-QWMK: the transcript of a translated speech comment.
+          ...spokenOriginalArgs(body),
         });
         clearError(threadId);
         mergeThread(updated);

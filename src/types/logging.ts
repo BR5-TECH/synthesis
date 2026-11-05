@@ -189,6 +189,8 @@ export interface AppPreferences {
   voiceInputMode?: "ptt" | "vad";
   /** GSS-FR-WYHC, VOM-FR-KEMU: the saved response mode of voice mode. */
   voiceResponseMode?: "text" | "voice";
+  /** GSS-FR-DNAW: the language the author speaks, `""` for no translation. */
+  voiceSpokenLanguage?: string;
   /**
    * GSS-FR-21 / SCH-FR-13: the universal search bar's active query mode. Read
    * when the search input mounts and written whenever the user changes the

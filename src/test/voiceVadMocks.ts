@@ -34,6 +34,7 @@ export const api = {
     activeToolCalls: [],
   })),
   steerSpeechTurn: vi.fn(async () => []),
+  translateVoiceTranscript: vi.fn(async (text: string) => ({ text })),
   endSpeechTurn: vi.fn(async () => []),
 };
 

@@ -178,6 +178,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
             // Non-default for the same reason (GSS-FR-WYHC).
             voice_input_mode: VoiceInputMode::Vad,
             voice_response_mode: VoiceResponseMode::Voice,
+            voice_spoken_language: "ru".to_string(),
             theme: Theme::System,
             main_window_fullscreen: true,
             search_query_mode: SearchQueryMode::Regex,

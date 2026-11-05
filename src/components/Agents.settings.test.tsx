@@ -253,7 +253,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     expect(rows[1]).toHaveTextContent("no-such-model");
   });
 
-  it("AGT-FR-12: opens a modal editor with the seven controls in order, empty or seeded", async () => {
+  it("AGT-FR-12, AGT-FR-MWOF: opens a modal editor with the nine controls in order, empty or seeded", async () => {
     // AGT-FR-12 / AGT-FR-11, FR-12, and AGT-FR-42, AGT-FR-19, AGR-FR-23's ordering clause.
     backend({
       agents: [
@@ -272,7 +272,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     expect(within(editor).getByTestId("agent-title")).toHaveValue("");
     expect(within(editor).getByTestId("agent-instructions")).toHaveValue("");
     // Field order: nickname, title, model, [reasoning], instructions, voice,
-    // skills. The skills selector shows after its read settles.
+    // speed, style, skills. The skills selector shows after its read settles.
     await within(editor).findByTestId("agent-skills");
     const order = Array.from(
       editor.querySelectorAll("[data-testid^='agent-']"),
@@ -282,7 +282,9 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
       ["agent-title", "agent-model"],
       ["agent-model", "agent-instructions"],
       ["agent-instructions", "agent-voice"],
-      ["agent-voice", "agent-skills"],
+      ["agent-voice", "agent-voice-speed"],
+      ["agent-voice-speed", "agent-voice-style"],
+      ["agent-voice-style", "agent-skills"],
     ]) {
       expect(order.indexOf(before)).toBeLessThan(order.indexOf(after));
     }
@@ -386,7 +388,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
   it("AGT-FR-DIVM: a free-text server gets a field, and no provider disables it", async () => {
     backend({ agents: [agent({ id: "a1", nickname: "arch", voice: "female" })] });
     const inner = invokeMock.getMockImplementation()!;
-    let active: string | null = "custom";
+    let active: string | null = "openrouter";
     invokeMock.mockImplementation((cmd: string, args?: unknown) => {
       if (cmd === "list_voice_ai_voices") return Promise.resolve(null);
       if (cmd === "list_voice_ai_integrations") {
@@ -409,6 +411,101 @@ describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
     const voice = within(editor).getByTestId("agent-voice");
     expect(voice).toBeDisabled();
     expect(voice).toHaveValue("female");
+  });
+
+  it("AGT-FR-HXVQ: a Custom provider gets the two selectors, and a choice saves the composed name", async () => {
+    const b = backend({ agents: [agent({ id: "a1", nickname: "arch", voice: "female-polish" })] });
+    const inner = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "list_voice_ai_voices") return Promise.resolve(null);
+      if (cmd === "list_voice_ai_integrations") {
+        return Promise.resolve({ active: "custom", records: [] });
+      }
+      return inner(cmd, args);
+    });
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    const editor = await screen.findByTestId("agent-editor");
+    const sex = (await within(editor).findByTestId("agent-voice-picker-sex")) as HTMLSelectElement;
+    const language = within(editor).getByTestId(
+      "agent-voice-picker-language",
+    ) as HTMLSelectElement;
+    expect(sex.value).toBe("female");
+    expect(language.value).toBe("polish");
+    expect(sex.options[0].textContent).toBe("Provider default");
+    await userEvent.selectOptions(sex, "male");
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "update_agent")).toHaveLength(1));
+    const { draft } = calls(b, "update_agent")[0].args as { draft: Agent };
+    expect(draft.voice).toBe("male-polish");
+  });
+
+  it("AGT-FR-MWOF: the speed and the style open on the stored values and save the choice", async () => {
+    const b = backend({
+      agents: [agent({ id: "a1", nickname: "arch", voiceSpeedPercent: 130, voiceStyle: "warm" })],
+    });
+    const inner = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "list_voice_ai_voices") return Promise.resolve(null);
+      if (cmd === "list_voice_ai_integrations") {
+        return Promise.resolve({ active: "custom", records: [] });
+      }
+      return inner(cmd, args);
+    });
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    const editor = await screen.findByTestId("agent-editor");
+    const speed = within(editor).getByTestId("agent-voice-speed");
+    const style = within(editor).getByTestId("agent-voice-style");
+    await waitFor(() => expect(speed).toBeEnabled());
+    expect(speed).toHaveValue("130");
+    expect(style).toHaveValue("warm");
+    await userEvent.selectOptions(speed, "70");
+    await userEvent.clear(style);
+    await userEvent.type(style, "bright");
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "update_agent")).toHaveLength(1));
+    const { draft } = calls(b, "update_agent")[0].args as { draft: Agent };
+    expect(draft.voiceSpeedPercent).toBe(70);
+    expect(draft.voiceStyle).toBe("bright");
+  });
+
+  it("AGT-FR-MWOF: Provider default saves no speed, and no provider disables both", async () => {
+    const b = backend({ agents: [agent({ id: "a1", nickname: "arch", voiceSpeedPercent: 130 })] });
+    const inner = invokeMock.getMockImplementation()!;
+    let active: string | null = "custom";
+    invokeMock.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "list_voice_ai_voices") return Promise.resolve(null);
+      if (cmd === "list_voice_ai_integrations") return Promise.resolve({ active, records: [] });
+      return inner(cmd, args);
+    });
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    let editor = await screen.findByTestId("agent-editor");
+    const speed = within(editor).getByTestId("agent-voice-speed");
+    await waitFor(() => expect(speed).toBeEnabled());
+    await userEvent.selectOptions(speed, "");
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "update_agent")).toHaveLength(1));
+    const { draft } = calls(b, "update_agent")[0].args as { draft: Agent };
+    expect(draft.voiceSpeedPercent).toBeNull();
+
+    cleanup();
+    active = null;
+    const reads = invokeMock.mock.calls.filter(([cmd]) => cmd === "list_voice_ai_integrations").length;
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    editor = await screen.findByTestId("agent-editor");
+    // The read of the provider settles before the check, so the gate is real.
+    await waitFor(() =>
+      expect(
+        invokeMock.mock.calls.filter(([cmd]) => cmd === "list_voice_ai_integrations").length,
+      ).toBeGreaterThan(reads),
+    );
+    await act(async () => undefined);
+    expect(within(editor).getByTestId("agent-voice-speed")).toBeDisabled();
+    expect(within(editor).getByTestId("agent-voice-speed")).toHaveValue("130");
+    expect(within(editor).getByTestId("agent-voice-style")).toBeDisabled();
   });
 
   it("saves an untitled agent with an empty title rather than omitting the field", async () => {

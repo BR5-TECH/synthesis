@@ -10,6 +10,7 @@ import type {
   VoiceAiRecord,
   VoiceCaptureStart,
   VoiceModels,
+  VoiceOptions,
   VoiceProviderId,
   VoiceSpeechRoute,
   VoiceTranscriptionRoute,
@@ -59,12 +60,22 @@ export const listVoiceAiModels = (
 export const listVoiceAiVoices = (provider?: VoiceProviderId) =>
   invoke<string[] | null>("list_voice_ai_voices", { provider: provider ?? null });
 
-/** VOP-FR-ERDS: a chunked capture splits its audio into chunks. */
+/**
+ * VOP-FR-ERDS: a chunked capture splits its audio into chunks. VOP-FR-TPXA: a
+ * `provider` takes the place of the active one, for the test of a settings tab.
+ */
 export const startVoiceCapture = (
   captureRate: number,
   keyterms: readonly string[],
   chunked = false,
-) => invoke<VoiceCaptureStart>("start_voice_capture", { captureRate, keyterms, chunked });
+  provider?: VoiceProviderId,
+) =>
+  invoke<VoiceCaptureStart>("start_voice_capture", {
+    captureRate,
+    keyterms,
+    chunked,
+    ...(provider ? { provider } : {}),
+  });
 
 /** VOP-FR-DXPK: PCM16 bytes as a raw body, so no JSON array is built. */
 export const appendVoiceCapture = (sessionId: string, bytes: Uint8Array) =>
@@ -87,11 +98,17 @@ const FRAME_END = 2;
  * resolves. A large frame comes through a fetch of its own, so it can arrive
  * after the command. A failed command rejects, and it sends no end frame.
  */
+/**
+ * VOP-FR-MOSY, VOP-FR-STVA: `options` absent takes the values of the provider.
+ * VOP-FR-TPXA: a `provider` takes the place of the active one.
+ */
 export const speakVoiceSegment = (
   speechId: string,
   text: string,
   voiceName: string | null,
   onFrame: (frame: ArrayBuffer) => void,
+  options?: VoiceOptions | null,
+  provider?: VoiceProviderId,
 ) =>
   new Promise<void>((resolve, reject) => {
     const channel = new Channel<ArrayBuffer>();
@@ -99,10 +116,23 @@ export const speakVoiceSegment = (
       if (new Uint8Array(frame)[0] === FRAME_END) resolve();
       else onFrame(frame);
     };
-    invoke<void>("speak_voice_segment", { speechId, text, voiceName, onFrame: channel }).catch(
-      reject,
-    );
+    invoke<void>("speak_voice_segment", {
+      speechId,
+      text,
+      voiceName,
+      voiceSpeed: options?.speedPercent ?? null,
+      voiceStyle: options?.style || null,
+      onFrame: channel,
+      ...(provider ? { provider } : {}),
+    }).catch(reject);
   });
+
+/** VOP-FR-HQTQ. */
+export const setVoiceAiSpeechOptions = (
+  provider: VoiceProviderId,
+  speedPercent: number | null,
+  style: string,
+) => invoke<VoiceAiRecord>("set_voice_ai_speech_options", { provider, speedPercent, style });
 
 export const cancelVoiceSpeech = (speechId: string) =>
   invoke<void>("cancel_voice_speech", { speechId });

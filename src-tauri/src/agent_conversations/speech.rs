@@ -258,6 +258,11 @@ impl TurnRegistry {
             let cancel = ending == SpeechEnding::Nothing
                 && live.registered_by.as_deref() == Some(speech_id)
                 && live.turn.trigger_comment_id.is_none();
+            // AGC-FR-NFYK: marked under the lock, before the hold wakes, so a
+            // held reply never delivers between this end and the cancel.
+            if cancel {
+                live.cancelled.store(true, Ordering::SeqCst);
+            }
             publish(app, &live.turn);
             unbound.push(Unbound { turn: live.turn.clone(), cancel, took_comment });
         }
@@ -272,6 +277,16 @@ impl TurnRegistry {
         self.lock().speeches.idle()
     }
 
+    /// CVL-FR-KPOY: whether the turn is bound to a speech that is still open.
+    pub(super) fn bound_to_open_speech(&self, turn_id: &str) -> bool {
+        let inner = self.lock();
+        inner
+            .live
+            .get(turn_id)
+            .and_then(|live| live.turn.speech_id.as_deref())
+            .is_some_and(|speech_id| inner.speeches.is_open(speech_id))
+    }
+
     /// CVL-FR-SZKK, AGC-FR-QYNZ, AGC-FR-ISCZ: hold the reply of a turn that is
     /// bound to an open speech, until the turn takes a steering message or the
     /// speech ends. `reply_held` is true and the deadline is null while it
@@ -281,10 +296,14 @@ impl TurnRegistry {
     /// Returns at once for a turn bound to no open speech, and for a turn that
     /// takes no further steering message (CVL-FR-WHEY). Answers whether it
     /// held the reply.
+    ///
+    /// CVL-FR-NEXN: with [`HoldUntil::FinalMessage`], a chunk does not end the
+    /// hold, so a placeholder waits for a comment or for the end of the speech.
     pub(super) fn wait_for_speech<R: tauri::Runtime>(
         &self,
         app: &tauri::AppHandle<R>,
         turn_id: &str,
+        until: HoldUntil,
     ) -> bool {
         let mut inner = self.lock();
         let Some(speech_id) = inner.live.get(turn_id).and_then(|l| l.turn.speech_id.clone()) else {
@@ -298,7 +317,7 @@ impl TurnRegistry {
             publish(app, &live.turn);
             return false;
         }
-        if !live.steering_open || !live.steering.is_empty() {
+        if !live.steering_open || until.ends_on(&live.steering) {
             return false;
         }
         live.turn.reply_held = true;
@@ -315,6 +334,7 @@ impl TurnRegistry {
                 "agent" => &live.turn.nickname,
                 "agentId" => &live.turn.agent_id,
                 "speechId" => &speech_id,
+                "until" => until.label(),
             },
         );
         loop {
@@ -322,7 +342,7 @@ impl TurnRegistry {
                 None => true,
                 Some(live) => {
                     live.cancelled.load(Ordering::SeqCst)
-                        || !live.steering.is_empty()
+                        || until.ends_on(&live.steering)
                         || live.turn.speech_id.as_deref() != Some(speech_id.as_str())
                         || !inner.speeches.is_open(&speech_id)
                 }
@@ -350,6 +370,34 @@ impl TurnRegistry {
             publish(app, &live.turn);
         }
         true
+    }
+}
+
+/// CVL-FR-SZKK, CVL-FR-NEXN: what ends the hold of a reply to an open speech.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum HoldUntil {
+    /// Any steering message, a chunk included (CVL-FR-SZKK).
+    AnyMessage,
+    /// A steering message that is not a chunk (CVL-FR-NEXN).
+    FinalMessage,
+}
+
+impl HoldUntil {
+    /// Whether the steering messages that wait end the hold.
+    pub(super) fn ends_on(self, steering: &[SteeringItem]) -> bool {
+        match self {
+            HoldUntil::AnyMessage => !steering.is_empty(),
+            HoldUntil::FinalMessage => {
+                steering.iter().any(|item| !matches!(item, SteeringItem::Chunk(_)))
+            }
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            HoldUntil::AnyMessage => "any_message",
+            HoldUntil::FinalMessage => "final_message",
+        }
     }
 }
 

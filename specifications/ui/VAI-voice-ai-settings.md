@@ -11,7 +11,7 @@ Voice AI is the section of the Settings window where the author chooses the spee
 
 1. **VAI-FR-CEJC** The Global group of the Settings window holds a **Voice AI** section (`GLS-global-settings.md` GLS-FR-03). It populates from "list voice ai integrations" when it opens.
 2. **VAI-FR-IDIV** The section has one tab per provider, in this order: OpenAI, OpenRouter, Custom. Each tab configures its provider independently.
-3. **VAI-FR-UJNQ** A tab holds a base URL field, a key field, an STT model field, a TTS model field, and a default voice field.
+3. **VAI-FR-UJNQ** A tab holds a base URL field, a key field, an STT model field, a TTS model field, a default voice control (VAI-FR-KWSN on Custom, a field on the other tabs), a speech speed control, and a speaking style field.
 4. **VAI-FR-QARI** Each action applies at once, so the section has no dirty state (`GLS-global-settings.md` GLS-FR-10).
 5. **VAI-FR-KWOT** Before any provider is verified, the section states that voice mode needs a verified provider.
 6. **VAI-FR-BSDN** While the section is open, a `voice-ai-changed` event refreshes each tab that has no candidate edit.
@@ -40,6 +40,20 @@ Voice AI is the section of the Settings window where the author chooses the spee
 23. **VAI-FR-EEMC** On Custom, an empty TTS model is valid, and the tab states that spoken replies stay off.
 24. **VAI-FR-NIWH** When the speech route is a `llamacpp` Realtime route, the tab states that agent voices have no effect on it and that the `/tts` route takes a voice.
 25. **VAI-FR-OJBE** The default voice field calls "set voice ai default voice" when it loses focus with a changed value. It offers the provider's voices where a list exists.
+25. **VAI-FR-KWSN** On Custom, the default voice control is two selectors. **Voice** offers `Server default`, `Female`, `Male`, and `Other name…`. `Other name…` shows a text field for the name. **Voice language** offers `None` and these languages: `american-english`, `arabic`, `british-english`, `chinese`, `danish`, `dutch`, `english`, `finnish`, `french`, `german`, `greek`, `hebrew`, `italian`, `japanese`, `korean`, `polish`, `portuguese`, `spanish`, `swedish`, `turkish`. It is disabled for `Server default` and for `Other name…`. A change of a selector calls "set voice ai default voice" at once, and the name field calls it when it loses focus with a changed value.
+    - *Why:* The speech route of a local server such as Ollama with LFM3-Audio takes a voice as a sex and an optional language, and it gives no list of voices. A free-text field hides that.
+25. **VAI-FR-PMDX** The voice name of the two selectors is `""` for `Server default`, `female` or `male` with the language `None`, and `<sex>-<language>` with a language, for example `female-polish`. A stored name of that form shows in the two selectors. Each other non-empty stored name shows as `Other name…` with the name in its field.
+25. **VAI-FR-USDR** The speech speed control offers 50% to 200% in steps of 10%, and 100% is the default. A change calls "set voice ai speech options" at once. The speaking style field takes free text of at most 200 characters, and it calls the same operation when it loses focus with a changed value.
+25. **VAI-FR-EIHC** After verification, when `speech_speed` is not `server`, the tab states: `This server cannot change speed. Playback changes speed and pitch.` When `speech_instructions` is false, it states: `This server does not support a speaking style.`
+
+### Test
+
+25. **VAI-FR-HTVQ** A tab holds a **Hold to test** control below the speaking style field, with the line `Hold, speak, and release. You hear what you said in the voice of this tab.` The control is enabled when the saved record of the tab is verified and the tab holds no unsaved candidate edit (VAI-FR-BSDN). Otherwise it is disabled and states `Verify this provider first.` The test uses the provider of the tab, also when another provider is active (`../core/VOP-voice-ai-providers.md` VOP-FR-TPXA), with the saved default voice, speed, and speaking style of the tab.
+    - *Why:* An author hears a voice and checks the microphone before voice mode starts, and compares two providers before one becomes active.
+25. **VAI-FR-ZCMB** A press opens the microphone and starts a capture through "start voice capture" with the provider of the tab. Audio goes out through "append voice capture", and a release finishes the capture through "finish voice capture". The control states `Listening…`, then `Transcribing…`. Then the tab shows the transcript and states `Speaking…` while "speak voice segment" speaks the transcript with the provider of the tab. An empty transcript states `Nothing was heard. Hold the control while you speak.` and nothing is spoken.
+25. **VAI-FR-NWRL** A hold of the test ends as a hold of voice mode does (`VOM-voice-mode.md` VOM-FR-FZJY): on a release anywhere in the window, on a lost pointer capture, on the release of Space or Enter, and when the control is disabled or goes away. A hold ends after 15 seconds. A release before the capture opens discards the capture, and no capture stays open. A move to another tab and the close of the window cancel the capture and the speech through "cancel voice capture" and "cancel voice speech", and close the microphone.
+25. **VAI-FR-YBQE** A new press stops a test that still speaks. A failure shows its message (VAI-FR-HJHX), and the microphone closes.
+25. **VAI-FR-SKOF** The test posts no comment, reaches no agent, and translates nothing. The transcript goes when the tab changes. A log record of the test holds the provider, counts, and codes, and no text.
 
 ### Push-to-Talk
 
@@ -59,6 +73,11 @@ Voice AI is the section of the Settings window where the author chooses the spee
 35. **VAI-FR-MZZU** Both controls state that they apply to VAD only.
 36. **VAI-FR-WVEV** A stored Silence timeout out of range shows clamped to the range.
 
+### Spoken language
+
+37. **VAI-FR-RGPV** The section holds a **Spoken language** control with `Auto`, the languages of the table by English name (`../core/VOP-voice-ai-providers.md` VOP-FR-IRZC), and `Other…`. `Other…` shows a text field of at most 40 characters. The control saves `voice_spoken_language` through `patchAppPreferences`.
+38. **VAI-FR-JPZK** The control states: `Your speech is translated into the language of the document before it posts.` With a spoken language set, it also states: `Agents speak to you in this language.`
+
 ## Wireframes
 
 ```
@@ -70,6 +89,10 @@ Key        [ •••• (optional)                      ]
 STT model  [ voxtral-mini-4b-realtime          v  ]
 TTS model  [ lfm3-audio                        v  ]
 Voice      [                                      ]
+Speed      [ 100% v ]
+Style      [ Calm, slow, warm                     ]
+[ Hold to test ]  Hold, speak, and release. You hear what you said in the voice of this tab.
+                  "Hello, can you hear me?"  Speaking…
 Verification sends short real requests. A provider can charge for them.
 [ Verify ]  [ Activate ]  [ Clear ]
 Verified 14:02. Live transcription, 16 kHz. Speech: Realtime.
@@ -86,7 +109,7 @@ Sensitivity      ( ) Low  ( ) Medium  ( ) High
 
 ## UI contract boundary
 - **Owned by the UI**: the tabs, candidate field values, the unverified state after an edit, hotkey capture and its refusals, and all messages.
-- **Delegated to backend (abstract)**: "list voice ai integrations", "verify voice ai integration", "set voice ai routes", "set voice ai default voice", "set active voice ai integration", "clear voice ai integration", "list voice ai models", "list voice ai voices", each owned by `../core/VOP-voice-ai-providers.md`; "save app preferences", owned by `../core/GSS-global-settings-storage.md`.
+- **Delegated to backend (abstract)**: "list voice ai integrations", "verify voice ai integration", "set voice ai routes", "set voice ai default voice", "set voice ai speech options", "set active voice ai integration", "clear voice ai integration", "list voice ai models", "list voice ai voices", "start voice capture", "append voice capture", "finish voice capture", "cancel voice capture", "speak voice segment", "cancel voice speech", each owned by `../core/VOP-voice-ai-providers.md`; "save app preferences", owned by `../core/GSS-global-settings-storage.md`.
 
 ## Non-functional requirements
 - Each control has an accessible name, and each is operable from the keyboard.

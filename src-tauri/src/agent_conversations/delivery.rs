@@ -272,6 +272,23 @@ pub(super) fn finish<R: tauri::Runtime>(
             },
         );
     }
+    // AGC-FR-RGIX: the same agent answered the comment whose turn failed, so
+    // the offer to retry it goes. Removed before the terminal event, which is
+    // what the surface retires its offer on (CTA-FR-RUVS).
+    if state == AgentTurnState::Delivered && turns.retire_recoverable_for_delivery(&turn) {
+        logging::log_info(
+            app,
+            turns.buffer(),
+            &[Domain::Ai, Domain::Backend],
+            "agent turn failure retired by a delivery",
+            log_fields! {
+                "turnId" => &turn.id,
+                "agent" => &turn.nickname,
+                "agentId" => &turn.agent_id,
+                "discussionId" => turn.origin.discussion_id(),
+            },
+        );
+    }
     log_turn_ended(app, turns.buffer(), &turn, counts);
     // AGC-FR-YQMD: `reached_model` is true once one `complete` invocation has
     // been made for the turn, and false where it terminated before any — a
@@ -291,4 +308,24 @@ pub(super) fn finish<R: tauri::Runtime>(
         );
     }
     publish(app, &turn);
+}
+
+impl TurnRegistry {
+    /// AGC-FR-RGIX: remove the recovery entry of the conversation of `turn`
+    /// when that entry is another turn of the same agent with the same
+    /// trigger comment. Answers whether it removed one.
+    pub(super) fn retire_recoverable_for_delivery(&self, turn: &AgentTurn) -> bool {
+        let Some(trigger) = turn.trigger_comment_id.as_deref() else { return false };
+        let key = turn.origin.discussion_id();
+        let mut inner = self.lock();
+        let same = inner.recoverable.get(key).is_some_and(|entry| {
+            entry.turn.id != turn.id
+                && entry.turn.agent_id == turn.agent_id
+                && entry.turn.trigger_comment_id.as_deref() == Some(trigger)
+        });
+        if same {
+            inner.recoverable.remove(key);
+        }
+        same
+    }
 }

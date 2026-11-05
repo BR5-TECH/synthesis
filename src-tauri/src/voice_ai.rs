@@ -22,12 +22,14 @@ pub(crate) mod chunks;
 pub(crate) mod commands;
 pub(crate) mod detect;
 pub(crate) mod http;
+pub(crate) mod languages;
 pub(crate) mod live;
 pub(crate) mod models;
 pub(crate) mod pcm;
 pub(crate) mod realtime;
 pub(crate) mod registry;
 pub(crate) mod speech;
+pub(crate) mod speech_options;
 pub(crate) mod verify;
 
 #[cfg(target_os = "linux")]
@@ -70,6 +72,8 @@ pub const ERR_PROVIDER_REJECTED: &str = "provider_rejected";
 pub const ERR_TRANSCRIPTION_FAILED: &str = "transcription_failed";
 pub const ERR_SPEECH_FAILED: &str = "speech_failed";
 pub const ERR_SEGMENT_TOO_LONG: &str = "voice_segment_too_long";
+/// VOP-FR-HQTQ.
+pub const ERR_INVALID_SPEECH_OPTIONS: &str = "invalid_speech_options";
 
 /// VOP-FR-IAEN: the OpenAI TTS model. `/v1/audio/speech` has no model
 /// after 2027-01-06, so this name is reached through Realtime only.
@@ -188,6 +192,19 @@ pub struct VoiceCapabilities {
     pub realtime_speech: bool,
     pub openai_speech: bool,
     pub llama_tts: bool,
+    /// VOP-FR-TGIB: who changes the speed. `None` reads as client.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speech_speed: Option<SpeechSpeed>,
+    /// VOP-FR-COMJ: the speech route takes `instructions`.
+    pub speech_instructions: bool,
+}
+
+/// VOP-FR-TGIB: the server changes the speed, or playback does.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechSpeed {
+    Server,
+    Client,
 }
 
 /// VOP-FR-SURK: one provider. It holds no key, so it is safe to log and to
@@ -208,6 +225,11 @@ pub struct VoiceAiRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speech_route: Option<SpeechRoute>,
     pub default_voice: String,
+    /// VOP-FR-HQTQ: 50 to 200. `None` means 100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speech_speed_percent: Option<u16>,
+    /// VOP-FR-HQTQ: `""` means no style.
+    pub speech_style: String,
     /// VOP-FR-AVXY: the server's message for a refused model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capability_note: Option<String>,
@@ -322,6 +344,9 @@ impl VoiceSink for tauri::AppHandle {
 pub struct ActiveVoice {
     pub record: VoiceAiRecord,
     pub key: Option<String>,
+    /// VOP-FR-KBPZ, VOP-FR-TSUS: the code of the spoken language that
+    /// transcription takes as a hint, or `None`.
+    pub language: Option<&'static str>,
 }
 
 /// The managed state of this module.
@@ -375,18 +400,44 @@ pub(crate) fn resolve_active_voice(
     store: &GlobalSettingsStore,
     voice: &VoiceAi,
 ) -> Result<ActiveVoice, String> {
+    resolve_voice(store, voice, None)
+}
+
+/// VOP-FR-TPXA: the active provider, or the named one in its place. A named
+/// provider needs a verified record.
+pub(crate) fn resolve_voice(
+    store: &GlobalSettingsStore,
+    voice: &VoiceAi,
+    provider: Option<&str>,
+) -> Result<ActiveVoice, String> {
     let (records, active) = store.load_voice_ai_registry()?;
-    let active = active.ok_or(ERR_NO_ACTIVE_PROVIDER)?;
-    let record = records
-        .into_iter()
-        .find(|r| r.provider == active && r.verified_at.is_some())
-        .ok_or(ERR_NO_ACTIVE_PROVIDER)?;
+    let record = match provider {
+        Some(named) => {
+            descriptor(named).ok_or(ERR_UNKNOWN_PROVIDER)?;
+            records
+                .into_iter()
+                .find(|r| r.provider == named && r.verified_at.is_some())
+                .ok_or(ERR_NOT_VERIFIED)?
+        }
+        None => {
+            let active = active.ok_or(ERR_NO_ACTIVE_PROVIDER)?;
+            records
+                .into_iter()
+                .find(|r| r.provider == active && r.verified_at.is_some())
+                .ok_or(ERR_NO_ACTIVE_PROVIDER)?
+        }
+    };
     let key = voice
         .secrets
         .get(&record.provider)
         .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
         .filter(|k| !k.is_empty());
-    Ok(ActiveVoice { record, key })
+    // VOP-FR-KBPZ: the spoken language is copied with the configuration. A
+    // record that cannot be read gives no hint, and the capture goes on.
+    let language = store.load_app_preferences().ok().and_then(|prefs| {
+        languages::transcription_hint(&record.provider, &prefs.voice_spoken_language)
+    });
+    Ok(ActiveVoice { record, key, language })
 }
 
 /// The root that API paths join on. A `custom` base URL holds no `/v1`

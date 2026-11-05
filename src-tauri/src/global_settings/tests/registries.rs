@@ -239,6 +239,8 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
                     // value before the `reasoning` table.
                     disabled_skills: vec![".synthesis/skills/glossary/SKILL.md".into()],
                     voice: String::new(),
+                    voice_speed_percent: None,
+                    voice_style: String::new(),
                     id: "a1".into(),
                     nickname: "arch".into(),
                     title: "Architect".into(),
@@ -252,6 +254,8 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
                     skills: Vec::new(),
                     disabled_skills: Vec::new(),
                     voice: String::new(),
+                    voice_speed_percent: None,
+                    voice_style: String::new(),
                     id: "a2".into(),
                     nickname: "scribe".into(),
                     title: String::new(),

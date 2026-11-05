@@ -20,7 +20,7 @@
  * in `../state/activeAgents`; this hook is the part that has to talk to the
  * backend and to React.
  */
-import { claimSpeechPost } from "../state/speechPosts";
+import { claimSpeechPost, spokenOriginalArgs } from "../state/speechPosts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addComment as addCommentApi,
@@ -560,6 +560,8 @@ export function useDiscussions(
           fragmentTarget,
           body,
           attachments,
+          // VOM-FR-QWMK: the transcript of a translated speech comment.
+          ...spokenOriginalArgs(body),
         });
         clearError(COMPOSER_KEY);
         mergeThread(created);
@@ -592,6 +594,8 @@ export function useDiscussions(
           body,
           quotes,
           attachments,
+          // VOM-FR-QWMK: the transcript of a translated speech comment.
+          ...spokenOriginalArgs(body),
         });
         clearError(threadId);
         mergeThread(updated);

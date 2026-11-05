@@ -297,6 +297,18 @@ fn settle_image_input(
 /// `validate_ai_api_selection` (AAP-FR-33) cannot disagree about whether a
 /// model exists — a disagreement would let a selection be stored against a
 /// model the selector never showed.
+/// AGC-FR-QEOF: the model of a call that no agent owns — the provider's
+/// selected model, or else the first model it offers.
+pub(crate) fn default_model_of(store: &GlobalSettingsStore, provider: &str) -> Option<String> {
+    let descriptor = provider_descriptor(provider)?;
+    let (records, _) = store.load_ai_api_registry().ok()?;
+    let record = records.into_iter().find(|r| r.provider == provider)?;
+    record
+        .selected_model
+        .clone()
+        .or_else(|| available_models(&record, descriptor).first().map(|m| m.id.clone()))
+}
+
 fn available_models(record: &AiApiRecord, descriptor: &AiApiProvider) -> Vec<ModelOption> {
     let models = if record.models.is_empty() {
         catalog_models(descriptor)

@@ -7,6 +7,9 @@ use tokio::sync::watch;
 use super::http::{self, HttpFailure, SpeechCall};
 use super::pcm::{frame, FRAME_PCM};
 use super::realtime::{self, ServerEvent, SessionInfo, Socket};
+use super::speech_options::{
+    rate_frame, server_range, speed_plan, style_for, SPEED_MAX_PERCENT, SPEED_MIN_PERCENT,
+};
 use super::{
     descriptor, ActiveVoice, Dialect, SpeechRoute, VoiceAi, VoiceSink, ERR_PROVIDER_UNREACHABLE,
     ERR_SEGMENT_TOO_LONG, ERR_SPEECH_FAILED,
@@ -24,19 +27,35 @@ const OPENAI_OUTPUT_RATE: u32 = 24_000;
 
 pub(crate) type EmitFrame<'a> = &'a mut (dyn FnMut(Vec<u8>) + Send);
 
+/// VOP-FR-UPRG: the instructions of one segment, with the style where one
+/// is set.
+fn openai_instructions(text: &str, style: Option<&str>) -> String {
+    match style {
+        Some(style) => format!("{SAY_EXACTLY} Speak in this style: {style}\n\n{text}"),
+        None => format!("{SAY_EXACTLY}\n\n{text}"),
+    }
+}
+
 /// VOP-FR-UPRG: one `response.create` out of band.
-async fn request_openai(socket: &mut Socket, text: &str, voice: &str) -> Result<(), String> {
+async fn request_openai(
+    socket: &mut Socket,
+    text: &str,
+    voice: &str,
+    speed: Option<f32>,
+    style: Option<&str>,
+) -> Result<(), String> {
+    let mut output = json!({
+        "format": { "type": "audio/pcm", "rate": OPENAI_OUTPUT_RATE },
+        "voice": voice,
+    });
+    if let Some(speed) = speed {
+        output["speed"] = json!(super::speech_options::wire_speed(speed));
+    }
     realtime::send(
         socket,
         json!({
             "type": "session.update",
-            "session": {
-                "type": "realtime",
-                "audio": { "output": {
-                    "format": { "type": "audio/pcm", "rate": OPENAI_OUTPUT_RATE },
-                    "voice": voice,
-                }},
-            },
+            "session": { "type": "realtime", "audio": { "output": output } },
         }),
     )
     .await?;
@@ -48,7 +67,7 @@ async fn request_openai(socket: &mut Socket, text: &str, voice: &str) -> Result<
                 "conversation": "none",
                 "input": [],
                 "output_modalities": ["audio"],
-                "instructions": format!("{SAY_EXACTLY}\n\n{text}"),
+                "instructions": openai_instructions(text, style),
             },
         }),
     )
@@ -134,6 +153,10 @@ pub(crate) struct RealtimeSpeech<'a> {
     pub(crate) tts_model: &'a str,
     pub(crate) text: &'a str,
     pub(crate) voice: &'a str,
+    /// VOP-FR-STVA: the server speed. `None` sends no speed.
+    pub(crate) speed: Option<f32>,
+    /// VOP-FR-UPRG: the style, on the `openai` dialect.
+    pub(crate) style: Option<&'a str>,
     pub(crate) sink: Option<&'a dyn VoiceSink>,
 }
 
@@ -143,7 +166,8 @@ pub(crate) async fn speak_realtime(
     cancel: &mut watch::Receiver<bool>,
     emit: EmitFrame<'_>,
 ) -> Result<(), String> {
-    let RealtimeSpeech { provider, base_url, key, tts_model, text, voice, sink } = call;
+    let RealtimeSpeech { provider, base_url, key, tts_model, text, voice, speed, style, sink } =
+        call;
     let url = realtime::speech_url(provider, base_url, tts_model);
     let mut socket = realtime::connect(&url, key, OPEN_LIMIT).await.map_err(|kind| {
         if let Some(sink) = sink {
@@ -164,7 +188,7 @@ pub(crate) async fn speak_realtime(
         _ => session.output_rate.ok_or(ERR_SPEECH_FAILED)?,
     };
     let request = match dialect {
-        Dialect::Openai => request_openai(&mut socket, text, voice).await,
+        Dialect::Openai => request_openai(&mut socket, text, voice, speed, style).await,
         _ => request_llamacpp(&mut socket, text).await,
     };
     request.map_err(|_| ERR_SPEECH_FAILED.to_string())?;
@@ -207,12 +231,21 @@ fn voice_for(requested: Option<&str>, default_voice: &str, known: Option<&[Strin
     }
 }
 
+/// VOP-FR-MOSY, VOP-FR-STVA: what one segment asks for. Each `None` takes the
+/// value of the provider.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SegmentVoice<'a> {
+    pub(crate) name: Option<&'a str>,
+    pub(crate) speed_percent: Option<u16>,
+    pub(crate) style: Option<&'a str>,
+}
+
 /// VOP-FR-MOSY: one segment on the selected route.
 pub(crate) async fn speak_segment(
     voice: &VoiceAi,
     active: &ActiveVoice,
     text: &str,
-    requested_voice: Option<&str>,
+    requested: SegmentVoice<'_>,
     cancel: &mut watch::Receiver<bool>,
     emit: EmitFrame<'_>,
     sink: &dyn VoiceSink,
@@ -225,8 +258,16 @@ pub(crate) async fn speak_segment(
     }
     let record = &active.record;
     let route = record.speech_route.ok_or(ERR_SPEECH_FAILED)?;
+    // VOP-FR-STVA: the speed of the agent, else of the provider.
+    let percent = requested
+        .speed_percent
+        .or(record.speech_speed_percent)
+        .unwrap_or(100)
+        .clamp(SPEED_MIN_PERCENT, SPEED_MAX_PERCENT);
+    let plan = speed_plan(server_range(record, route), percent);
+    let style = style_for(record, requested.style);
     // A catalogue call has a cost, and with no requested voice it has no use.
-    let requested = requested_voice.filter(|v| !v.is_empty() && *v != record.default_voice);
+    let requested = requested.name.filter(|v| !v.is_empty() && *v != record.default_voice);
     let known = match requested {
         Some(_) => known_voices(voice, active).await,
         None => None,
@@ -240,12 +281,21 @@ pub(crate) async fn speak_segment(
             tts_model: &record.tts_model,
             text,
             voice: &chosen,
+            speed: plan.server,
+            style: if record.provider == "openai" { style } else { None },
             sink: Some(sink),
         };
+        // VOP-FR-EMJY: the rate frame comes before the first audio frame.
+        if let Some(rate) = rate_frame(plan.playback) {
+            emit(rate);
+        }
         return speak_realtime(call, cancel, emit).await;
     }
+    // VOP-FR-TSVV: only `openai_speech` on `custom` carries a speed or a style.
+    let options = route == SpeechRoute::OpenaiSpeech && record.provider == "custom";
+    let style = if options { style.map(str::to_string) } else { None };
     let (client, _) = http::client().map_err(|f| f.speech_code().to_string())?;
-    let attempt = |voice_name: Option<String>| {
+    let attempt = |voice_name: Option<String>, speed: Option<f32>, instructions: Option<String>| {
         let client = client.clone();
         let provider = record.provider.clone();
         let base_url = record.base_url.clone();
@@ -261,6 +311,8 @@ pub(crate) async fn speak_segment(
                 model: &model,
                 text: &text,
                 voice: voice_name.as_deref(),
+                speed,
+                instructions: instructions.as_deref(),
             };
             match (route, provider.as_str()) {
                 (SpeechRoute::LlamaTts, _) => http::speak_llama_tts(&call).await,
@@ -269,27 +321,36 @@ pub(crate) async fn speak_segment(
             }
         }
     };
+    let server = if options { plan.server } else { None };
     let call = async {
-        match attempt(Some(chosen.clone())).await {
-            // VOP-FR-RABZ: on `custom`, a 400 for a voice gets one more
-            // request with the default voice.
+        match attempt(Some(chosen.clone()), server, style.clone()).await {
+            // VOP-FR-RABZ: on `custom`, a 400 for a voice, a speed, or a style
+            // gets one more request with the default voice and neither of the
+            // two. Playback then carries the whole speed.
             Err(HttpFailure::BadRequest)
                 if record.provider == "custom"
-                    && !chosen.is_empty()
-                    && chosen != record.default_voice =>
+                    && ((!chosen.is_empty() && chosen != record.default_voice)
+                        || server.is_some()
+                        || style.is_some()) =>
             {
-                attempt(Some(record.default_voice.clone())).await
+                attempt(Some(record.default_voice.clone()), None, None)
+                    .await
+                    .map(|bytes| (bytes, plan.playback * server.unwrap_or(1.0)))
             }
-            other => other,
+            other => other.map(|bytes| (bytes, plan.playback)),
         }
     };
     tokio::select! {
         result = call => {
-            let bytes = result.map_err(|f| {
+            let (bytes, playback) = result.map_err(|f| {
                 sink.diagnostic("http_speech", &f.detail());
                 f.speech_code().to_string()
             })?;
             if !*cancel.borrow() {
+                // VOP-FR-EMJY: the rate frame comes before the audio.
+                if let Some(rate) = rate_frame(playback) {
+                    emit(rate);
+                }
                 emit(bytes);
             }
             Ok(())

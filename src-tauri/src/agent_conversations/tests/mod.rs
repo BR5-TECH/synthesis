@@ -528,6 +528,8 @@ impl Harness {
                 skills: Vec::new(),
                 disabled_skills: Vec::new(),
                 voice: String::new(),
+                voice_speed_percent: None,
+                voice_style: String::new(),
                 nickname: nickname.into(),
                 title: String::new(),
                 model_id: "m".into(),
@@ -560,6 +562,8 @@ impl Harness {
                 skills: skills.iter().map(|s| s.to_string()).collect(),
                 disabled_skills: Vec::new(),
                 voice: String::new(),
+                voice_speed_percent: None,
+                voice_style: String::new(),
                 nickname: nickname.into(),
                 title: String::new(),
                 model_id: "m".into(),
@@ -586,6 +590,8 @@ impl Harness {
                 skills: Vec::new(),
                 disabled_skills: Vec::new(),
                 voice: String::new(),
+                voice_speed_percent: None,
+                voice_style: String::new(),
                 nickname: nickname.into(),
                 title: title.into(),
                 model_id: "m".into(),
@@ -710,7 +716,9 @@ mod retries;
 mod rig_replies;
 mod session_log;
 mod skill_turns;
+mod speech_placeholders;
 mod speech_turns;
+mod spoken_language;
 mod spoken_part;
 mod steering;
 mod tls_carriers;

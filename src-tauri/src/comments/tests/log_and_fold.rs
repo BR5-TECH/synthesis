@@ -201,6 +201,7 @@ fn the_fold_replays_by_instant_rather_than_by_physical_line_order() {
             quotes: vec![],
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
     let resolved = Event {
@@ -267,6 +268,7 @@ fn a_comment_that_ties_or_precedes_its_own_opening_is_still_folded() {
             quotes: vec![],
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
     // And one whose clock ran a whole second behind the opening.
@@ -282,6 +284,7 @@ fn a_comment_that_ties_or_precedes_its_own_opening_is_still_folded() {
             quotes: vec![],
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
 
@@ -324,6 +327,7 @@ fn the_fold_is_independent_of_the_order_its_events_arrive_in() {
                 quotes: vec![],
                 attachments: Vec::new(),
                 option_descriptions: Vec::new(),
+                spoken_original: None,
             },
         },
         Event {
@@ -361,6 +365,7 @@ fn an_event_for_a_thread_that_was_never_opened_is_dropped() {
             quotes: vec![],
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
     assert!(fold_events("specs/a.md", vec![orphan]).is_empty());
@@ -398,6 +403,7 @@ fn a_second_opening_for_one_thread_id_cannot_rewrite_its_anchor() {
             quotes: vec![],
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
     let folded = fold_events("specs/a.md", vec![first, second, comment]);
@@ -436,6 +442,7 @@ fn two_different_events_sharing_an_event_id_fold_as_one() {
             quotes: vec![],
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
     let mut c2 = c1.clone();
@@ -445,6 +452,7 @@ fn two_different_events_sharing_an_event_id_fold_as_one() {
         quotes: vec![],
         attachments: Vec::new(),
         option_descriptions: Vec::new(),
+        spoken_original: None,
     };
     let folded = fold_events("specs/a.md", vec![base, c1, c2]);
     assert_eq!(folded[0].comments.len(), 1, "one id, one event");

@@ -154,6 +154,8 @@ export const openDiscussion = (args: {
   fragmentTarget?: FragmentTarget | null;
   body: string;
   attachments: AttachmentInput[];
+  /** CMS-FR-UYVK: the transcript of a translated voice comment. */
+  spokenOriginal?: string | null;
 }) => invoke<Discussion>("open_discussion", args);
 
 /**
@@ -165,6 +167,8 @@ export const getOrCreateNoteDiscussion = (args: {
   noteId: string;
   body: string;
   attachments: AttachmentInput[];
+  /** CMS-FR-UYVK. */
+  spokenOriginal?: string | null;
 }) => invoke<Discussion>("get_or_create_note_discussion", args);
 
 /**
@@ -184,6 +188,8 @@ export const addComment = (
     body: string;
     quotes: CommentQuote[];
     attachments: AttachmentInput[];
+    /** CMS-FR-UYVK. */
+    spokenOriginal?: string | null;
   },
 ) => invoke<Discussion>("add_comment", args);
 

@@ -48,6 +48,8 @@ struct LiveConfig {
     stt_model: String,
     capture_rate: u32,
     keyterms: Vec<String>,
+    /// VOP-FR-TSUS: the code of the spoken language, or `None`.
+    language: Option<&'static str>,
     session_id: String,
     /// Set for a chunked capture: the live text of the open chunk
     /// (VOP-FR-WNQW).
@@ -197,6 +199,7 @@ async fn run_live(
         &session,
         &config.stt_model,
         &config.keyterms,
+        config.language,
     )
     .await;
     let resampler = StreamResampler::new(config.capture_rate, rate);
@@ -451,6 +454,7 @@ pub(crate) fn spawn_live(
         stt_model: config.record.stt_model.clone(),
         capture_rate,
         keyterms: keyterms.to_vec(),
+        language: config.language,
         session_id: session_id.to_string(),
         chunk_text,
     };

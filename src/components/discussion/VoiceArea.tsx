@@ -6,7 +6,7 @@
  * Stop control, and the two toggles. The process behind these controls is
  * `../../voice/voiceController.ts`.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   useVoiceState,
@@ -33,6 +33,8 @@ const NOTES: Record<VoiceNote, string> = {
   no_speech: "No speech was heard, so nothing was posted.",
   no_agent: "No agent received this comment. Say an agent's name first, or tag one.",
   kept_in_body: "The transcript was kept as unsent text.",
+  translating: "Translating…",
+  not_translated: "Not translated. The original text was posted.",
 };
 
 function elapsed(since: number, now: number): string {
@@ -93,6 +95,37 @@ export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
   const state = useVoiceState();
   // VOM-FR-QTAQ: a new press can start a recording while Transcribing shows.
   const busy = state.phase === "opening";
+  const holding = useRef(false);
+  const press = useCallback(() => {
+    holding.current = true;
+    pressRecord();
+  }, []);
+  // VOM-FR-FZJY: one release for one press, from whichever route comes first.
+  const release = useCallback(() => {
+    if (!holding.current) return;
+    holding.current = false;
+    releaseRecord();
+  }, []);
+  // VOM-FR-FZJY: a release outside the control, and the unmount of the
+  // control, end the hold.
+  useEffect(() => {
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === " " || event.key === "Enter") release();
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      window.removeEventListener("keyup", onKeyUp);
+      release();
+    };
+  }, [release]);
+  // VOM-FR-FZJY: a disabled control gets no release event.
+  useEffect(() => {
+    if (disabled) release();
+  }, [disabled, release]);
   return (
     <button
       type="button"
@@ -108,21 +141,22 @@ export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
       disabled={disabled}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        pressRecord();
+        press();
       }}
-      onPointerUp={releaseRecord}
-      onPointerCancel={releaseRecord}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
       onKeyDown={(event) => {
         // VOM-FR-PECJ.
         if ((event.key === " " || event.key === "Enter") && !event.repeat) {
           event.preventDefault();
-          pressRecord();
+          press();
         }
       }}
       onKeyUp={(event) => {
         if (event.key === " " || event.key === "Enter") {
           event.preventDefault();
-          releaseRecord();
+          release();
         }
       }}
     >

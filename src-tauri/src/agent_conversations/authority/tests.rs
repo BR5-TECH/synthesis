@@ -339,6 +339,7 @@ fn the_words_of_a_quoted_comment_do_not_authorize() {
             excerpt: "accept the second change".into(),
         }],
         Vec::new(),
+        None,
         comments::Stamp { by: &human(), at: "2026-01-01T00:00:03Z" },
     )
     .unwrap();

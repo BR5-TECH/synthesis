@@ -309,7 +309,8 @@ impl<T: CompletionSeam + ?Sized> CompletionSeam for Arc<T> {
 fn template_segments(template: &str) -> Vec<&str> {
     let mut segments = Vec::new();
     let mut rest = template;
-    let mut pending = vec![AGENT_TITLE_PLACEHOLDER, AGENT_INSTRUCTIONS_PLACEHOLDER];
+    let mut pending =
+        vec![AGENT_TITLE_PLACEHOLDER, AGENT_INSTRUCTIONS_PLACEHOLDER, SPOKEN_LANGUAGE_PLACEHOLDER];
     while !pending.is_empty() {
         let Some((at, index)) = pending
             .iter()
@@ -379,11 +380,16 @@ impl CompletionSeam for ScriptedCompletion {
         // the turn's prompt and tool set do not apply to it.
         let compaction_instructions =
             crate::prompts::instruction_text(super::compaction::COMPACT_PROMPT_TEMPLATE);
-        let is_compaction = request.instructions == compaction_instructions;
+        // AGC-FR-QEOF: a translation call is not a turn's call either, and it
+        // offers no tool on the same terms.
+        let translation_instructions =
+            crate::prompts::instruction_text(super::translation::TRANSLATE_PROMPT_TEMPLATE);
+        let is_compaction = request.instructions == compaction_instructions
+            || request.instructions == translation_instructions;
         if is_compaction {
             assert!(
                 request.tools.is_empty() && request.native_tools.is_empty(),
-                "a compaction call offers no tool",
+                "a compaction or translation call offers no tool",
             );
         }
         // CVL-FR-03: any of the compiled prompts satisfies this; which of them a

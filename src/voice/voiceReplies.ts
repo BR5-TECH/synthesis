@@ -56,7 +56,9 @@ export function stopSpeech(): void {
 /** Speak with the voice that the handle of the discussion knows for the agent. */
 function speakAs(speech: Speech, key: string | null): Promise<void> {
   const { agentId } = speech;
-  return speak(speech, agentId === null ? null : (handleOf(key)?.voiceOf(agentId) ?? null));
+  if (agentId === null) return speak(speech, null);
+  const handle = handleOf(key);
+  return speak(speech, handle?.voiceOf(agentId) ?? null, handle?.voiceOptionsOf?.(agentId) ?? null);
 }
 
 /** VOM-FR-ZPOD: speech that comes while the author speaks waits for them. */

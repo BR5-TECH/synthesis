@@ -127,6 +127,7 @@ mod compaction;
 mod context_figures;
 mod delivery;
 mod dispatch;
+pub mod document_language;
 mod estimate;
 mod failures;
 mod key_input;
@@ -148,6 +149,7 @@ mod speech;
 mod steering;
 mod tool_dispatch;
 mod tool_wiring;
+mod translation;
 mod turn_body;
 mod wire;
 
@@ -181,6 +183,7 @@ pub use speech::*;
 use steering::*;
 use tool_dispatch::*;
 use tool_wiring::*;
+pub use translation::*;
 use turn_body::*;
 pub use wire::*;
 
@@ -329,8 +332,32 @@ pub const AGENT_TITLE_UNDEFINED: &str = "Not defined";
 ///
 /// What the registry stores is untouched by any of this — a decision about what
 /// to *send*, not about what to keep.
+///
+/// The language rules are those of a turn on an English document with no
+/// spoken language (CVL-FR-FQMM), so the result is the prompt such a turn
+/// carries.
+#[cfg(test)]
 pub fn compile_prompt(origin_kind: OriginKind, instructions: &str, title: &str) -> String {
-    compile_from_template(prompt_template(origin_kind), instructions, title)
+    compile_prompt_spoken(
+        origin_kind,
+        instructions,
+        title,
+        &document_rule(document_language::FALLBACK_LANGUAGE),
+    )
+}
+
+/// CVL-FR-04: the placeholder the spoken-language rule is substituted into.
+pub const SPOKEN_LANGUAGE_PLACEHOLDER: &str = "{{ spoken-language }}";
+
+/// CVL-FR-04, CVL-FR-FQMM: [`compile_prompt`] with the rule of the author's
+/// spoken language, or `""` where the author set none.
+pub fn compile_prompt_spoken(
+    origin_kind: OriginKind,
+    instructions: &str,
+    title: &str,
+    spoken_rule: &str,
+) -> String {
+    compile_from_template_spoken(prompt_template(origin_kind), instructions, title, spoken_rule)
 }
 
 /// The composition itself, over whichever template it is handed.
@@ -341,7 +368,19 @@ pub fn compile_prompt(origin_kind: OriginKind, instructions: &str, title: &str) 
 /// only ever see templates that carry no comment, which is every one of the
 /// four today. Handed a template that does, this is the path that has to get
 /// the order right.
+#[cfg(test)]
 pub(crate) fn compile_from_template(template: &str, instructions: &str, title: &str) -> String {
+    compile_from_template_spoken(template, instructions, title, "")
+}
+
+/// [`compile_from_template`] with the spoken-language rule (CVL-FR-FQMM). All
+/// three values go in the same single pass.
+pub(crate) fn compile_from_template_spoken(
+    template: &str,
+    instructions: &str,
+    title: &str,
+    spoken_rule: &str,
+) -> String {
     let instructions = if instructions.trim().is_empty() { "" } else { instructions };
     let title = title.trim();
     let title = if title.is_empty() { AGENT_TITLE_UNDEFINED } else { title };
@@ -350,7 +389,11 @@ pub(crate) fn compile_from_template(template: &str, instructions: &str, title: &
         // taken **before** the substitution rather than after it, so a comment
         // can never contribute a placeholder or a substituted value.
         &crate::prompts::instruction_text(template),
-        &[(AGENT_TITLE_PLACEHOLDER, title), (AGENT_INSTRUCTIONS_PLACEHOLDER, instructions)],
+        &[
+            (AGENT_TITLE_PLACEHOLDER, title),
+            (AGENT_INSTRUCTIONS_PLACEHOLDER, instructions),
+            (SPOKEN_LANGUAGE_PLACEHOLDER, spoken_rule),
+        ],
     )
 }
 

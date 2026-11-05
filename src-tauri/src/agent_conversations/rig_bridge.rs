@@ -170,6 +170,7 @@ pub(super) mod rig_seam {
             text,
             tool_calls,
             turn,
+            refused: failed,
             // CVL-FR-40: these providers are reached directly, so no upstream
             // stands between the call and the model that served it.
             served_by: None,

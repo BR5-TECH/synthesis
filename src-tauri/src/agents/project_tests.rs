@@ -50,6 +50,8 @@ fn draft(nickname: &str) -> AgentDraft {
         skills: Vec::new(),
         disabled_skills: Vec::new(),
         voice: String::new(),
+        voice_speed_percent: None,
+        voice_style: String::new(),
         nickname: nickname.into(),
         title: String::new(),
         model_id: "m".into(),
@@ -422,4 +424,30 @@ fn two_merged_files_with_one_nickname_stay_editable() {
         .unwrap_err(),
         ERR_NICKNAME_TAKEN,
     );
+}
+
+// AGR-FR-EPYX, PSS-FR-AGKY: a Project agent's file holds its voice speed and
+// style, and a null speed and an empty style write no key.
+#[test]
+fn a_project_agent_file_holds_its_voice_speed_and_style() {
+    let store = store();
+    let (dir, root) = worktree();
+    let plain = create_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &draft("arch"))
+        .unwrap();
+    let path = dir.path().join(".synthesis/agents").join(format!("{}.toml", plain.id));
+    let text = read(&root, &path);
+    assert!(!text.contains("voiceSpeedPercent") && !text.contains("voiceStyle"), "{text}");
+
+    let mut d = draft("arch");
+    d.voice_speed_percent = Some(140);
+    d.voice_style = " warm ".into();
+    let updated =
+        update_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &plain.id, &d).unwrap();
+    assert_eq!(updated.voice_speed_percent, Some(140));
+    let text = read(&root, &path);
+    assert!(text.contains("voiceSpeedPercent = 140"), "{text}");
+    assert!(text.contains("voiceStyle = \"warm\""), "{text}");
+    let listed = crate::agents::project_store::list(&root).unwrap().agents;
+    assert_eq!(listed[0].voice_speed_percent, Some(140));
+    assert_eq!(listed[0].voice_style, "warm");
 }

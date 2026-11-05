@@ -6,7 +6,7 @@ import { cancelVoiceSpeech, speakVoiceSegment } from "../api";
 import { logDebug, logWarn } from "../logging";
 import { getVoiceState, patchVoiceState } from "../state/voiceSession";
 import { spokenPart } from "../text/spokenPart";
-import type { Comment } from "../types";
+import type { Comment, VoiceOptions } from "../types";
 import { isPlaybackIdle, playFrame, setDrainedListener, stopPlayback } from "./playback";
 import { speakableText, speechSegments } from "./speakableText";
 import { errorCode } from "./voiceMessages";
@@ -23,6 +23,12 @@ export interface Speech {
 let currentSpeech: string | null = null;
 let segmentsSent = false;
 let speechCounter = 0;
+/** VOM-FR-QUSH: a segment set a rate, so the next one sets its own. */
+let rateChanged = false;
+
+/** VOP-FR-XZET, VOP-FR-EMJY: the kind of a rate frame, and a frame of rate 1. */
+const RATE_FRAME_KIND = 3;
+const RATE_ONE = new Uint8Array([RATE_FRAME_KIND, 0xe8, 0x03, 0, 0]).buffer;
 
 /** The reply that sounds or stands paused goes. A reply that waits stays. */
 export function dropReply(): void {
@@ -31,6 +37,8 @@ export function dropReply(): void {
     currentSpeech = null;
   }
   stopPlayback();
+  // VOM-FR-QUSH: Stop resets the rate of playback.
+  rateChanged = false;
   segmentsSent = false;
   const { playing, playbackPaused } = getVoiceState();
   if (playing || playbackPaused) patchVoiceState({ playing: false, playbackPaused: false });
@@ -56,7 +64,11 @@ export function commentSpeech(comment: Comment): Speech | null {
 }
 
 /** One reply: it replaces what sounds now, and it goes out in order. */
-export async function speak({ text }: Speech, voiceName: string | null): Promise<void> {
+export async function speak(
+  { text }: Speech,
+  voiceName: string | null,
+  options: VoiceOptions | null = null,
+): Promise<void> {
   dropReply();
   if (text === "") return;
   speechCounter += 1;
@@ -68,9 +80,22 @@ export async function speak({ text }: Speech, voiceName: string | null): Promise
     for (const segment of speechSegments(text)) {
       if (currentSpeech !== id) return;
       // A frame can still be in the channel after Stop.
-      await speakVoiceSegment(id, segment, voiceName, (frame) => {
-        if (currentSpeech === id) playFrame(frame);
-      });
+      let first = true;
+      const onFrame = (frame: ArrayBuffer) => {
+        if (currentSpeech !== id) return;
+        // VOM-FR-QUSH: a segment with no rate frame plays at rate 1.
+        if (first && rateChanged && new Uint8Array(frame)[0] !== RATE_FRAME_KIND) {
+          playFrame(RATE_ONE.slice(0));
+          rateChanged = false;
+        }
+        if (new Uint8Array(frame)[0] === RATE_FRAME_KIND) rateChanged = true;
+        first = false;
+        playFrame(frame);
+      };
+      // VOM-FR-UALP: the options of the agent, where it sets any.
+      await (options
+        ? speakVoiceSegment(id, segment, voiceName, onFrame, options)
+        : speakVoiceSegment(id, segment, voiceName, onFrame));
     }
     if (currentSpeech === id) {
       segmentsSent = true;
@@ -90,6 +115,7 @@ export async function speak({ text }: Speech, voiceName: string | null): Promise
 
 export function resetVoiceSpeechForTest(): void {
   currentSpeech = null;
+  rateChanged = false;
   segmentsSent = false;
   speechCounter = 0;
 }

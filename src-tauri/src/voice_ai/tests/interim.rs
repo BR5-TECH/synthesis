@@ -30,7 +30,7 @@ fn config(provider: &str, base_url: &str) -> ActiveVoice {
         realtime_transcription: Some(RealtimeTranscription::Live),
         ..VoiceCapabilities::default()
     });
-    ActiveVoice { record, key: Some("k".to_string()) }
+    ActiveVoice { record, key: Some("k".to_string()), language: None }
 }
 
 fn speech(seconds: f32) -> Vec<i16> {

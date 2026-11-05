@@ -60,6 +60,7 @@ pub fn add_comment_with_id(
                 quotes: Vec::new(),
                 attachments: Vec::new(),
                 option_descriptions: Vec::new(),
+                spoken_original: None,
             },
         )],
     )?;
@@ -113,6 +114,7 @@ pub fn append_decision_comment_event(
             quotes: Vec::new(),
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
+            spoken_original: None,
         },
     };
     let line = serde_json::to_string(&event).map_err(|e| format!("could not encode event: {e}"))?;
@@ -133,7 +135,7 @@ pub fn add_comment_to(
     attachments: Vec<AttachmentInput>,
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
-    add_comment_reporting_id(root, target, thread_id, body, quotes, attachments, stamp)
+    add_comment_reporting_id(root, target, thread_id, body, quotes, attachments, None, stamp)
         .map(|(discussion, _)| discussion)
 }
 
@@ -142,6 +144,8 @@ pub fn add_comment_to(
 /// CMS-FR-VRZA: `add_comment` gives exactly that id to `note_author_comment`.
 /// A re-fold can not tell which comment was appended, because a decision
 /// comment of the same author can land in the same moment.
+// Reason: one argument for each part of the comment that the append writes.
+#[allow(clippy::too_many_arguments)]
 pub fn add_comment_reporting_id(
     root: &crate::fs::RootFs,
     target: ThreadRef<'_>,
@@ -149,6 +153,7 @@ pub fn add_comment_reporting_id(
     body: String,
     quotes: Vec<CommentQuote>,
     attachments: Vec<AttachmentInput>,
+    spoken_original: Option<String>,
     stamp: Stamp<'_>,
 ) -> Result<(Discussion, String), String> {
     let Stamp { by, at } = stamp;
@@ -181,6 +186,8 @@ pub fn add_comment_reporting_id(
                 quotes,
                 attachments: stored,
                 option_descriptions: Vec::new(),
+                // CMS-FR-UYVK: only a transcript that is not empty is written.
+                spoken_original: spoken_original.filter(|t| !t.trim().is_empty()),
             },
         )],
     )?;

@@ -9,6 +9,7 @@ import { spokenPart } from "../text/spokenPart";
 import type { Comment, VoiceOptions } from "../types";
 import { isPlaybackIdle, playFrame, setDrainedListener, stopPlayback } from "./playback";
 import { speakableText, speechSegments } from "./speakableText";
+import { handleOf } from "./voiceHandles";
 import { errorCode } from "./voiceMessages";
 
 /** `ADQ-FR-YQTB`: the identity of a question comment ends so. */
@@ -18,9 +19,13 @@ const QUESTION_COMMENT = /:\d{2}-1q$/;
 export interface Speech {
   text: string;
   agentId: string | null;
+  /** VOM-FR-UCQN: a filler, which is not a reply. */
+  filler?: boolean;
 }
 
 let currentSpeech: string | null = null;
+/** VOM-FR-UCQN: the speech that sounds now is a filler. */
+let currentFiller = false;
 let segmentsSent = false;
 let speechCounter = 0;
 /** VOM-FR-QUSH: a segment set a rate, so the next one sets its own. */
@@ -36,6 +41,7 @@ export function dropReply(): void {
     void cancelVoiceSpeech(currentSpeech).catch(() => undefined);
     currentSpeech = null;
   }
+  currentFiller = false;
   stopPlayback();
   // VOM-FR-QUSH: Stop resets the rate of playback.
   rateChanged = false;
@@ -44,9 +50,15 @@ export function dropReply(): void {
   if (playing || playbackPaused) patchVoiceState({ playing: false, playbackPaused: false });
 }
 
+/** VOM-FR-UCQN: a filler sounds or stands paused now. */
+export function fillerSounds(): boolean {
+  return currentSpeech !== null && currentFiller;
+}
+
 function drained(): void {
   if (segmentsSent) {
     currentSpeech = null;
+    currentFiller = false;
     segmentsSent = false;
     patchVoiceState({ playing: false, playbackPaused: false });
   }
@@ -65,7 +77,7 @@ export function commentSpeech(comment: Comment): Speech | null {
 
 /** One reply: it replaces what sounds now, and it goes out in order. */
 export async function speak(
-  { text }: Speech,
+  { text, filler = false }: Speech,
   voiceName: string | null,
   options: VoiceOptions | null = null,
 ): Promise<void> {
@@ -74,6 +86,7 @@ export async function speak(
   speechCounter += 1;
   const id = `speech-${speechCounter}`;
   currentSpeech = id;
+  currentFiller = filler;
   patchVoiceState({ playing: true });
   setDrainedListener(drained);
   try {
@@ -105,16 +118,34 @@ export async function speak(
     }
   } catch (error) {
     if (currentSpeech !== id) return;
-    // VOM-FR-QPFQ: the text of the comment stays as it is.
     const code = errorCode(error);
+    if (filler) {
+      // VOM-FR-UCQN: a failed filler stops and shows no error.
+      logWarn(["frontend", "ai"], "a voice filler failed", { code });
+      dropReply();
+      return;
+    }
+    // VOM-FR-QPFQ: the text of the comment stays as it is.
     logWarn(["frontend", "ai"], "a voice reply failed", { code });
     dropReply();
     patchVoiceState({ error: code, canRetry: false });
   }
 }
 
+/**
+ * VOM-FR-UALP, VOM-FR-UFBT: speak with the voice and the options that the
+ * handle of the discussion knows for the agent.
+ */
+export function speakAs(speech: Speech, key: string | null): Promise<void> {
+  const { agentId } = speech;
+  if (agentId === null) return speak(speech, null);
+  const handle = handleOf(key);
+  return speak(speech, handle?.voiceOf(agentId) ?? null, handle?.voiceOptionsOf?.(agentId) ?? null);
+}
+
 export function resetVoiceSpeechForTest(): void {
   currentSpeech = null;
+  currentFiller = false;
   rateChanged = false;
   segmentsSent = false;
   speechCounter = 0;

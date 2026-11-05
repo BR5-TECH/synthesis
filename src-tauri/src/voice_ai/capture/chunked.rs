@@ -10,7 +10,7 @@ use super::super::chunks::{
     detect_with, is_sentence_end, spawn_detector, ChunkLedger, Chunking, DetectorAnswer,
     DetectorMessage, SharedLedger, NO_TEXT_SENTENCE_SECONDS,
 };
-use super::super::live::{commit_live, finish_live, gap_live, spawn_live};
+use super::super::live::{close_live, commit_live, finish_live, gap_live, spawn_live};
 use super::*;
 
 /// The chunk state of one capture.
@@ -95,31 +95,36 @@ where
     })
 }
 
-/// VOP-FR-JRVF, VOP-FR-GLRN: end the open chunk of `session`. `last` is the
+/// VOP-FR-JRVF, VOP-FR-GLRN, VOP-FR-ZIHM: end the open chunk of `session` at
+/// `cut`, the speech end of its pause, or at the newest audio. `last` is the
 /// end of the capture, so no session opens for a next chunk.
-fn end_chunk(session: &mut CaptureSession, last: bool) {
+fn end_chunk(session: &mut CaptureSession, last: bool, cut: Option<usize>) {
     let job = HttpJob::of(session);
     let Some(run) = session.chunks.as_mut() else { return };
     let index = match run.ledger.lock() {
         Ok(mut ledger) => ledger.end(),
         Err(_) => return,
     };
-    let audio = session.pcm[run.start.min(session.pcm.len())..].to_vec();
-    run.start = session.pcm.len();
+    let len = session.pcm.len();
+    let from = run.start.min(len);
+    let to = cut.map_or(len, |cut| cut.clamp(from, len));
+    let audio = session.pcm[from..to].to_vec();
+    // VOP-FR-ZIHM: the audio after the speech end starts the next chunk.
+    run.start = to;
     let task = match session.route {
         TranscriptionRoute::Http => spawn_chunk(&run.ledger, index, job.run(audio)),
         TranscriptionRoute::Realtime if last => {
             let live = session.live.take();
             spawn_chunk(&run.ledger, index, async move {
                 match live {
-                    Some(live) => finish_live(live).await,
+                    Some(live) => finish_live(live, cut).await,
                     None => Err(ERR_SESSION_LOST.to_string()),
                 }
             })
         }
         // VOP-FR-GLRN: the `openai` session continues after a commit.
         TranscriptionRoute::Realtime if session.config.record.provider == "openai" => {
-            let answer = session.live.as_ref().map(commit_live);
+            let answer = session.live.as_ref().map(|live| commit_live(live, cut));
             if let Ok(mut text) = run.text.lock() {
                 text.clear();
             }
@@ -147,7 +152,7 @@ fn end_chunk(session: &mut CaptureSession, last: bool) {
             ));
             spawn_chunk(&run.ledger, index, async move {
                 match ended {
-                    Some(live) => finish_live(live).await,
+                    Some(live) => finish_live(live, cut).await,
                     None => Err(ERR_SESSION_LOST.to_string()),
                 }
             })
@@ -159,12 +164,14 @@ fn end_chunk(session: &mut CaptureSession, last: bool) {
     }
 }
 
-/// VOP-FR-WNQW: whether the open chunk stands at a sentence end.
-fn at_sentence_end(session: &CaptureSession, run: &ChunkRun) -> bool {
+/// VOP-FR-WNQW: whether the open chunk stands at a sentence end. On a route
+/// with no live text, the chunk audio counts up to the speech end `until`.
+fn at_sentence_end(session: &CaptureSession, run: &ChunkRun, until: Option<usize>) -> bool {
     if session.is_live {
         is_sentence_end(&run.open_text())
     } else {
-        let audio = session.pcm.len().saturating_sub(run.start);
+        let end = until.unwrap_or(session.pcm.len()).min(session.pcm.len());
+        let audio = end.saturating_sub(run.start);
         audio >= session.capture_rate as usize * NO_TEXT_SENTENCE_SECONDS
     }
 }
@@ -188,9 +195,14 @@ impl VoiceAi {
         }
     }
 
-    /// VOP-FR-JRVF: the detector found a short pause. The chunk ends when the
-    /// pause follows a sentence end. Gives whether a chunk ended.
-    pub(crate) fn chunk_pause(&self, session_id: &str) -> Result<bool, String> {
+    /// VOP-FR-JRVF, VOP-FR-ZIHM: the detector found a short pause, with the
+    /// speech end `until` before it. The chunk ends when the pause follows a
+    /// sentence end. Gives whether a chunk ended.
+    pub(crate) fn chunk_pause(
+        &self,
+        session_id: &str,
+        until: Option<usize>,
+    ) -> Result<bool, String> {
         let mut slot = self.session_guard()?;
         let Some(session) =
             slot.iter_mut().find(|s| s.id == session_id && s.phase == Phase::Recording)
@@ -198,15 +210,15 @@ impl VoiceAi {
             return Ok(false);
         };
         let Some(run) = session.chunks.as_ref() else { return Ok(false) };
-        if !at_sentence_end(session, run) {
+        if !at_sentence_end(session, run, until) {
             return Ok(false);
         }
-        end_chunk(session, false);
+        end_chunk(session, false, until);
         Ok(true)
     }
 
-    /// VOP-FR-GLDR: end the last chunk, wait for every chunk, and join the texts
-    /// that succeeded.
+    /// VOP-FR-GLDR, VOP-FR-HSJU, VOP-FR-CWWL: end the last chunk at the speech
+    /// end, wait for every chunk, and join the texts that succeeded.
     pub(super) async fn finish_chunked(&self, session_id: &str) -> Result<String, String> {
         let (tasks, ledger) = {
             let mut slot = self.session_guard()?;
@@ -217,13 +229,30 @@ impl VoiceAi {
             session.phase = Phase::Finishing;
             let Some(run) = session.chunks.as_mut() else { return Err(ERR_SESSION_LOST.into()) };
             run.detector = None;
-            let open_audio = session.pcm.len() > run.start;
+            let start = run.start;
             let none_yet = run.ledger.lock().map(|l| l.count() == 0).unwrap_or(true);
+            let held = session.pcm.len();
+            super::trim_to_speech(session, start);
+            let until = session.speech_until;
+            let open_audio = until.map_or(session.pcm.len() > start, |until| until > start);
+            let openai = session.route == TranscriptionRoute::Realtime
+                && session.config.record.provider == "openai";
             if open_audio || none_yet {
-                end_chunk(session, true);
+                end_chunk(session, true, until);
             } else {
-                // The open chunk has no audio: its socket closes with no request.
-                session.live = None;
+                // VOP-FR-CWWL: the open chunk holds no speech, so it sends no
+                // request. VOP-FR-IXDV: an `openai` session still answers the
+                // commits of the earlier chunks. A session of another dialect
+                // holds the open chunk alone, and it closes.
+                let live = session.live.take();
+                if let (true, Some(live)) = (openai, live) {
+                    close_live(&live, until);
+                }
+                session.sink.live_step(
+                    "voice last chunk held no speech",
+                    &[("samples", held.saturating_sub(start))],
+                    false,
+                );
             }
             let Some(run) = session.chunks.as_mut() else { return Err(ERR_SESSION_LOST.into()) };
             (std::mem::take(&mut run.tasks), run.ledger.clone())

@@ -2,7 +2,7 @@
 //! count of frames, so no test waits.
 
 use crate::global_settings::VoiceVadSensitivity;
-use crate::voice_ai::activity::detector::{Action, Conditions, Detector, Settings};
+use crate::voice_ai::activity::detector::{Action, Conditions, Detector, Settings, SilenceEdge};
 
 const SPEECH: f32 = 0.9;
 const QUIET: f32 = 0.05;
@@ -330,4 +330,34 @@ fn an_utterance_keeps_the_settings_it_started_with() {
         assert_eq!(detector.step(QUIET, long, IDLE), None);
     }
     assert_eq!(detector.step(QUIET, long, IDLE), Some(Action::SpeechEnd));
+}
+
+// VOP-FR-HSJU, VOP-FR-OFDY: the silence starts at the first frame under the end
+// threshold. A frame between the two thresholds does not move it, and only
+// speech clears it.
+#[test]
+fn the_silence_edge_starts_at_the_first_quiet_frame_and_noise_does_not_move_it() {
+    let mut edge = SilenceEdge::after_speech(settings());
+    assert_eq!(edge.silence_from(), None, "in speech");
+    edge.step(QUIET, 0);
+    assert_eq!(edge.silence_from(), Some(0));
+    edge.step(0.4, 512);
+    assert_eq!(edge.silence_from(), Some(0), "noise between the thresholds");
+    edge.step(SPEECH, 1024);
+    assert_eq!(edge.silence_from(), None, "speech clears the silence");
+    edge.step(0.4, 1536);
+    assert_eq!(edge.silence_from(), None, "noise does not start a silence");
+    edge.step(QUIET, 2048);
+    assert_eq!(edge.silence_from(), Some(2048));
+}
+
+// VOP-FR-HSJU: before speech, a capture has no speech end.
+#[test]
+fn the_silence_edge_has_no_end_before_speech() {
+    let mut edge = SilenceEdge::new(settings());
+    edge.step(QUIET, 0);
+    assert_eq!(edge.silence_from(), None);
+    edge.step(SPEECH, 512);
+    edge.step(QUIET, 1024);
+    assert_eq!(edge.silence_from(), Some(1024));
 }

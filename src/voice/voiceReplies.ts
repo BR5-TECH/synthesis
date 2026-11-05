@@ -10,8 +10,15 @@ import { logDebug } from "../logging";
 import { getVoiceState, patchVoiceState } from "../state/voiceSession";
 import type { Discussion, PendingQuestion, Participant } from "../types";
 import { pausePlayback, resumePlayback } from "./playback";
-import { handleOf } from "./voiceHandles";
-import { commentSpeech, dropReply, resetVoiceSpeechForTest, speak, type Speech } from "./voiceSpeech";
+import { cancelFiller, resetVoiceFillerForTest, tryFiller } from "./voiceFiller";
+import {
+  commentSpeech,
+  dropReply,
+  fillerSounds,
+  resetVoiceSpeechForTest,
+  speakAs,
+  type Speech,
+} from "./voiceSpeech";
 import { questionSetOf } from "../state/questionSets";
 import { questionSpeech, type AnswerTarget } from "./voiceQuestions";
 import { hasUnsettledUtterance } from "./voiceUtterances";
@@ -47,18 +54,11 @@ export function forgetSpokenQuestion(): void {
   spokenQuestion = null;
 }
 
-/** VOM-FR-QDWW: silence at once, and no reply is left to speak. */
+/** VOM-FR-QDWW, VOM-FR-POBZ: silence at once, and no reply or filler is left to speak. */
 export function stopSpeech(): void {
   pendingReply = null;
+  cancelFiller("stop");
   dropReply();
-}
-
-/** Speak with the voice that the handle of the discussion knows for the agent. */
-function speakAs(speech: Speech, key: string | null): Promise<void> {
-  const { agentId } = speech;
-  if (agentId === null) return speak(speech, null);
-  const handle = handleOf(key);
-  return speak(speech, handle?.voiceOf(agentId) ?? null, handle?.voiceOptionsOf?.(agentId) ?? null);
 }
 
 /** VOM-FR-ZPOD: speech that comes while the author speaks waits for them. */
@@ -85,6 +85,8 @@ export function noteDiscussionChanged(discussion: Discussion): void {
   latest = discussion;
   const fresh = discussion.comments.filter((c) => !baseline.has(c.id));
   fresh.forEach((c) => baseline.add(c.id));
+  // VOM-FR-POBZ: a filler never speaks after the reply arrived.
+  if (fresh.some((c) => c.author.kind === "agent")) cancelFiller("reply");
   if (state.responseMode !== "voice") return;
   const newest = fresh.map(commentSpeech).filter((s) => s !== null).pop();
   if (!newest) return;
@@ -111,6 +113,8 @@ export function noteQuestionShown(
   const same = known && spokenQuestion?.position === question.position;
   spokenQuestion = { setId, position: question.position };
   if (same || (known && arrived)) return;
+  // VOM-FR-POBZ: a new question cancels the filler.
+  cancelFiller("question");
   queueMicrotask(() => {
     const state = getVoiceState();
     if (spokenQuestion?.setId !== setId || spokenQuestion.position !== question.position) return;
@@ -128,6 +132,11 @@ export function noteQuestionShown(
 
 /** VOM-FR-FVRS: the author started to speak while a reply plays. */
 export function bargeIn(): void {
+  // VOM-FR-UCQN: a barge-in drops a filler, and it never resumes.
+  if (fillerSounds()) {
+    dropReply();
+    return;
+  }
   const state = getVoiceState();
   if (state.playing && !state.playbackPaused) {
     pausePlayback();
@@ -164,6 +173,8 @@ export function afterSettle(): void {
       patchVoiceState({ playbackPaused: false });
     }
   }
+  // VOM-FR-LKXN: a due filler waits until nothing is left to settle.
+  tryFiller();
 }
 
 export function resetVoiceRepliesForTest(): void {
@@ -173,4 +184,5 @@ export function resetVoiceRepliesForTest(): void {
   answeredSincePause = false;
   latest = null;
   resetVoiceSpeechForTest();
+  resetVoiceFillerForTest();
 }

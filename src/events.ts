@@ -531,10 +531,11 @@ export const onSearchEnded = (
   listen<SearchEndedPayload>(SEARCH_ENDED, (ev) => handler(ev.payload));
 
 /**
- * AGC-FR-21: a turn was registered, or reached a terminal state. Exactly two
- * events per turn — the registration and the terminal state — and no event
- * carries a turn's id after it, so a consumer watching only events converges on
- * the same in-flight set `listAgentTurns` would return, without polling.
+ * AGC-FR-21, AGC-FR-34: a turn changed. An event comes at the registration, at
+ * the call slot, at each tool call that starts or ends, at each change of the
+ * context figures, of the steering, of `speechId`, and of `replyHeld`, and at
+ * the terminal state. Each event carries the whole turn, and no event carries a
+ * turn's id after its terminal state.
  */
 export const onAgentTurnStateChanged = (
   handler: (turn: AgentTurn) => void,

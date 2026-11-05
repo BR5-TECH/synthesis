@@ -306,6 +306,10 @@ pub struct AgentTurn {
     /// (CVL-FR-SZKK).
     #[serde(default)]
     pub reply_held: bool,
+    /// AGC-FR-MECW: the English name of the language of the `<spoken>` part,
+    /// set when the turn is registered.
+    #[serde(default)]
+    pub spoken_language: Option<String>,
 }
 
 /// AGC-FR-HMUV / CVL-FR-SKSE: how far a tool call has come.

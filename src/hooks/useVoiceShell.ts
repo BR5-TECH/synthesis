@@ -7,6 +7,7 @@ import { useEffect } from "react";
 
 import * as api from "../api";
 import {
+  onAgentTurnStateChanged,
   onAppPreferencesChanged,
   onDiscussionChanged,
   onVoiceActivityChanged,
@@ -23,6 +24,7 @@ import { DEFAULT_VOICE_HOTKEY, chordOf, mainKeyOf, matchesHotkey } from "../voic
 import { errorCode } from "../voice/voiceMessages";
 import {
   noteActivity,
+  noteAgentTurn,
   noteChunk,
   noteDiscussionChanged,
   noteProvider,
@@ -85,6 +87,8 @@ export function useVoiceShell(): void {
     // VOM-FR-NZXN, VOP-FR-DSSU.
     void onVoiceChunkChanged(noteChunk).then(keep);
     void onDiscussionChanged(noteDiscussionChanged).then(keep);
+    // VOM-FR-VTNW: the tool calls of a turn can make a filler due.
+    void onAgentTurnStateChanged(noteAgentTurn).then(keep);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!matchesHotkey(event, hotkey) || !voiceComposerMounted()) return;

@@ -1,7 +1,7 @@
 //! The document language and the spoken language: the prompt rules, the
 //! translation of a voice transcript, and the transcript a turn never reads
 //! (CVL-FR-FQMM, AGC-FR-LDTX, AGC-FR-QEOF, AGC-FR-WSKP, AGC-FR-SBGB,
-//! AGC-FR-JRXG).
+//! AGC-FR-JRXG, AGC-FR-MECW).
 
 use super::*;
 use crate::global_settings::AppPreferences;
@@ -151,6 +151,29 @@ fn a_turn_carries_the_rules_of_its_document() {
     h.settle();
     let (request, _) = &h.seam.requests()[1];
     assert!(request.instructions.contains("in Polish.\nThe author speaks German."));
+}
+
+// AGC-FR-MECW, CVL-FR-FQMM: a turn carries the language of its spoken part
+// from its registration: the document language with no spoken language, the
+// spoken language of the table, and a free name as it stands.
+#[test]
+fn a_turn_carries_the_language_of_its_spoken_part() {
+    let h = Harness::new(vec![Ok(said("Fine.")), Ok(said("Fine.")), Ok(said("Fine."))]);
+    h.create_agent("arch", "");
+    let thread = h.seed_artifact_thread("spec.md", POLISH);
+    let origin = ConversationOrigin::of(&thread);
+    let comment = thread.comments[0].id.clone();
+    let turn = h.dispatch("arch", origin.clone(), &comment).expect("dispatch");
+    assert_eq!(turn.spoken_language.as_deref(), Some("Polish"));
+    h.settle();
+    speak_language(&h, "de");
+    let turn = h.dispatch("arch", origin.clone(), &comment).expect("dispatch");
+    assert_eq!(turn.spoken_language.as_deref(), Some("German"));
+    h.settle();
+    speak_language(&h, "Basque");
+    let turn = h.dispatch("arch", origin, &comment).expect("dispatch");
+    assert_eq!(turn.spoken_language.as_deref(), Some("Basque"));
+    h.settle();
 }
 
 // AGC-FR-JRXG: the transcript of a translated comment never reaches the input

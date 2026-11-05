@@ -309,6 +309,59 @@ impl PauseTracker {
     }
 }
 
+/// VOP-FR-HSJU: the samples at `rate` of the audio that a capture keeps after
+/// the first frame of its silence.
+pub(crate) fn tail_samples(rate: u32) -> u64 {
+    u64::from(rate) * u64::from(TAIL_MS) / 1000
+}
+
+/// VOP-FR-HSJU: finds where the current silence of a capture starts, after
+/// speech.
+///
+/// The silence count works as in [`PauseTracker`]: a frame under the end
+/// threshold starts it, and only a frame at or above the start threshold clears
+/// it. A chunk end does not reset it, so a pause that ends a chunk and then
+/// continues to the end of the capture keeps its start.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SilenceEdge {
+    start: f32,
+    end: f32,
+    heard: bool,
+    since: Option<u64>,
+}
+
+impl SilenceEdge {
+    /// An edge for a capture that has heard no speech yet.
+    pub(crate) fn new(settings: Settings) -> Self {
+        Self { start: settings.start(), end: settings.end(), heard: false, since: None }
+    }
+
+    /// An edge for a capture that opens from confirmed speech (VOP-FR-GZPY).
+    pub(crate) fn after_speech(settings: Settings) -> Self {
+        Self { heard: true, ..Self::new(settings) }
+    }
+
+    /// Takes the probability of the frame that starts at `position`.
+    pub(crate) fn step(&mut self, probability: f32, position: u64) {
+        if probability >= self.start {
+            self.heard = true;
+            self.since = None;
+        } else if self.since.is_none() && probability < self.end {
+            self.since = Some(position);
+        }
+    }
+
+    /// The position of the first frame of the current silence that follows
+    /// speech. `None` while the capture is in speech, or before speech.
+    pub(crate) fn silence_from(&self) -> Option<u64> {
+        if self.heard {
+            self.since
+        } else {
+            None
+        }
+    }
+}
+
 /// VOP-FR-KIMU: the detector frames under the end threshold that make a word
 /// gap.
 pub(crate) const WORD_GAP_FRAMES: u32 = 3;

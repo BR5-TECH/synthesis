@@ -288,8 +288,8 @@ pub trait VoiceSink: Send + Sync {
     /// A failure that the typed code does not explain. `detail` is a kind, a
     /// status, or a server code, and never a URL, a key, or text.
     fn diagnostic(&self, stage: &str, detail: &str);
-    /// A step of a live session (VOP-FR-KIMU). `counts` hold counts and group
-    /// indexes alone, and never text. `warn` gives the `WARN` level, and
+    /// A step of a capture (VOP-FR-KIMU, VOP-FR-HSJU). `counts` hold counts and
+    /// group indexes alone, and never text. `warn` gives the `WARN` level, and
     /// otherwise the level is `DEBUG`.
     fn live_step(&self, _message: &str, _counts: &[(&str, usize)], _warn: bool) {}
 }

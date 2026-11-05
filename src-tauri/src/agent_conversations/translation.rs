@@ -41,6 +41,15 @@ pub fn language_rules(store: &GlobalSettingsStore, document: &str) -> String {
     }
 }
 
+/// AGC-FR-MECW, CVL-FR-FQMM: the English name of the language of the
+/// `<spoken>` part of a turn whose target has the document language `document`.
+pub fn spoken_part_language(store: &GlobalSettingsStore, document: &str) -> String {
+    match preferred_spoken_language(store) {
+        Some(language) => language.name.to_string(),
+        None => document.to_string(),
+    }
+}
+
 /// AGC-FR-WSKP: the transcript needs no model call, because it is already in
 /// the document language.
 pub(crate) fn already_in(spoken: Option<&SpokenLanguage>, text: &str, document: &str) -> bool {

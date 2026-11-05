@@ -21,7 +21,10 @@ pub(crate) mod detector;
 pub(crate) mod ring;
 pub(crate) mod silero;
 
-use detector::{Action, Conditions, Detector, GapTracker, PauseTracker, Settings, FRAME_SAMPLES};
+use detector::{
+    tail_samples, Action, Conditions, Detector, GapTracker, PauseTracker, Settings, SilenceEdge,
+    FRAME_SAMPLES,
+};
 use ring::AudioRing;
 use silero::SpeechModel;
 
@@ -121,12 +124,13 @@ pub(crate) trait ActivityHost: Send {
     ) -> Result<VoiceCaptureStart, String>;
     fn append_capture(&self, capture_id: &str, samples: Vec<i16>) -> Result<(), String>;
     /// VOP-FR-JRVF: a short pause in a chunked capture. Gives whether a chunk
-    /// ended.
-    fn chunk_pause(&self, capture_id: &str) -> bool;
+    /// ended. `speech_until` is the speech end in the held audio (VOP-FR-HSJU).
+    fn chunk_pause(&self, capture_id: &str, speech_until: Option<usize>) -> bool;
     /// VOP-FR-KIMU: a word gap in a capture, where an interim commit can go.
     fn word_gap(&self, capture_id: &str);
-    /// VOP-FR-WCSB: the utterance of the capture ended.
-    fn end_capture(&self, capture_id: &str);
+    /// VOP-FR-WCSB: the utterance of the capture ended. `speech_until` is the
+    /// speech end in the held audio (VOP-FR-HSJU).
+    fn end_capture(&self, capture_id: &str, speech_until: Option<usize>);
     /// Whether the capture still exists, so that it has not settled.
     fn capture_alive(&self, capture_id: &str) -> bool;
     fn cancel_capture(&self, capture_id: &str);
@@ -165,6 +169,10 @@ pub(crate) struct Worker<H: ActivityHost> {
     gaps: Option<GapTracker>,
     /// VOP-FR-KIMU: a word gap that the frames of this slice found.
     gap_found: bool,
+    /// VOP-FR-HSJU: the start of the silence of the capture in progress.
+    edge: Option<SilenceEdge>,
+    /// VOP-FR-HSJU: the position of the first sample that the capture holds.
+    capture_base: u64,
     /// The captures that have `speech_end` and have not settled, oldest first
     /// (VOP-FR-WCSB, VOP-FR-FAAB).
     settling: Vec<String>,
@@ -202,6 +210,8 @@ impl<H: ActivityHost> Worker<H> {
             pauses: None,
             gaps: None,
             gap_found: false,
+            edge: None,
+            capture_base: 0,
             settling: Vec::new(),
             ended: false,
         })
@@ -322,13 +332,22 @@ impl<H: ActivityHost> Worker<H> {
     /// VOP-FR-JRVF, VOP-FR-YDVH: the session's detector finds the short pauses
     /// of a chunked capture, after the audio of the slice reached it.
     fn check_pause(&mut self) {
+        let until = self.speech_until();
         let (Some(capture_id), Some(pauses)) = (self.capture.as_deref(), self.pauses.as_mut())
         else {
             return;
         };
-        if pauses.paused() && self.host.chunk_pause(capture_id) {
+        if pauses.paused() && self.host.chunk_pause(capture_id, until) {
             pauses.chunk_ended();
         }
+    }
+
+    /// VOP-FR-HSJU: the speech end of the capture in progress, as a position in
+    /// the audio that the capture holds.
+    fn speech_until(&self) -> Option<usize> {
+        let from = self.edge.as_ref()?.silence_from()?;
+        let end = from + tail_samples(self.capture_rate);
+        Some(end.saturating_sub(self.capture_base) as usize)
     }
 
     fn fatal_detector_failure(&mut self, detail: &str) {
@@ -349,6 +368,9 @@ impl<H: ActivityHost> Worker<H> {
         }
         if let Some(gaps) = self.gaps.as_mut() {
             self.gap_found |= gaps.step(probability);
+        }
+        if let Some(edge) = self.edge.as_mut() {
+            edge.step(probability, position);
         }
         match self.detector.step(probability, self.settings, self.conditions) {
             Some(Action::SpeechStart) => {
@@ -372,7 +394,11 @@ impl<H: ActivityHost> Worker<H> {
             Ok(start) => {
                 self.pauses = self.chunked.then(|| PauseTracker::after_speech(self.settings));
                 self.gaps = Some(GapTracker::after_speech(self.settings));
+                self.edge = Some(SilenceEdge::after_speech(self.settings));
                 self.cursor = self.start_position.saturating_sub(self.pre_roll_samples());
+                // The ring can hold less than the pre-roll, so the capture
+                // starts at the oldest sample that the ring still holds.
+                self.capture_base = self.cursor.max(self.ring.oldest());
                 let change = ActivityChange {
                     capture_id: Some(start.session_id.clone()),
                     live: Some(start.live),
@@ -406,6 +432,7 @@ impl<H: ActivityHost> Worker<H> {
             self.capture = None;
             self.pauses = None;
             self.gaps = None;
+            self.edge = None;
             self.detector.rearm();
             self.fail(ERR_SESSION_LOST, &detail, false);
         }
@@ -416,10 +443,13 @@ impl<H: ActivityHost> Worker<H> {
         self.send_audio();
         // The last audio can fail, and that failure ended the utterance.
         let Some(capture_id) = self.capture.take() else { return };
+        let until = self.speech_until();
         self.pauses = None;
         self.gaps = None;
-        // VOP-FR-WCSB: the capture finishes, and the next utterance can open one.
-        self.host.end_capture(&capture_id);
+        self.edge = None;
+        // VOP-FR-WCSB, VOP-FR-HSJU: the capture finishes at its speech end, and
+        // the next utterance can open one.
+        self.host.end_capture(&capture_id, until);
         let host = &self.host;
         self.settling.retain(|id| host.capture_alive(id));
         self.settling.push(capture_id.clone());
@@ -444,6 +474,7 @@ impl<H: ActivityHost> Worker<H> {
     fn cancel_all(&mut self) {
         self.pauses = None;
         self.gaps = None;
+        self.edge = None;
         let open: Vec<String> =
             self.capture.take().into_iter().chain(self.settling.drain(..)).collect();
         for capture_id in open {

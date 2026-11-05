@@ -32,11 +32,15 @@ impl AudioRing {
         self.written
     }
 
+    /// The position of the oldest sample that the ring holds.
+    pub(crate) fn oldest(&self) -> u64 {
+        self.written - self.samples.len() as u64
+    }
+
     /// The audio from `position` to the newest sample. A position that left the
     /// ring gives what the ring still holds.
     pub(crate) fn since(&self, position: u64) -> Vec<i16> {
-        let oldest = self.written - self.samples.len() as u64;
-        let skip = position.saturating_sub(oldest) as usize;
+        let skip = position.saturating_sub(self.oldest()) as usize;
         self.samples.iter().skip(skip).copied().collect()
     }
 }

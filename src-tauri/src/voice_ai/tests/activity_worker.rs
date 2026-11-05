@@ -41,6 +41,10 @@ struct Calls {
     gaps: Vec<String>,
     /// The captures whose utterance ended (VOP-FR-WCSB).
     ended: Vec<String>,
+    /// VOP-FR-HSJU: the speech end of each reported pause, in order.
+    pause_untils: Vec<Option<usize>>,
+    /// VOP-FR-HSJU: the speech end of each ended utterance, in order.
+    end_untils: Vec<Option<usize>>,
     /// The captures that settled.
     gone: Vec<String>,
     appended: Vec<(String, Vec<i16>)>,
@@ -90,10 +94,11 @@ impl ActivityHost for Host {
         Ok(())
     }
 
-    fn chunk_pause(&self, capture_id: &str) -> bool {
+    fn chunk_pause(&self, capture_id: &str, speech_until: Option<usize>) -> bool {
         let mut calls = self.0.lock().unwrap();
         calls.order.push("pause".to_string());
         calls.pauses.push(capture_id.to_string());
+        calls.pause_untils.push(speech_until);
         calls.pause_ends_chunk
     }
 
@@ -103,8 +108,10 @@ impl ActivityHost for Host {
         calls.gaps.push(capture_id.to_string());
     }
 
-    fn end_capture(&self, capture_id: &str) {
-        self.0.lock().unwrap().ended.push(capture_id.to_string());
+    fn end_capture(&self, capture_id: &str, speech_until: Option<usize>) {
+        let mut calls = self.0.lock().unwrap();
+        calls.ended.push(capture_id.to_string());
+        calls.end_untils.push(speech_until);
     }
 
     fn capture_alive(&self, capture_id: &str) -> bool {
@@ -771,4 +778,78 @@ fn the_session_detector_reports_each_word_gap_after_the_audio() {
     session.feed(&[SPEECH; 2]);
     session.feed(&[QUIET; 3]);
     assert_eq!(session.host.0.lock().unwrap().gaps.len(), 2);
+}
+
+// VOP-FR-HSJU, VOP-FR-OFDY: at `speech_end`, the capture ends 200 ms after the
+// first quiet frame of the silence, as a position in the audio it holds.
+#[test]
+fn speech_end_gives_the_end_of_speech_with_the_tail() {
+    let mut session = Session::new();
+    session.confirm();
+    session.end();
+    let calls = session.host.0.lock().unwrap();
+    // The speech is frames 20 to 30, and the capture starts at the pre-roll.
+    let keep = 31 * FRAME + 3_200 - (20 * FRAME - PRE_ROLL);
+    assert_eq!(calls.end_untils, vec![Some(keep)]);
+    let audio: Vec<i16> = calls.appended.iter().flat_map(|(_, s)| s.clone()).collect();
+    assert_eq!(audio[keep - 1], (31 * FRAME + 3_200 - 1) as i16);
+}
+
+// VOP-FR-HSJU, VOP-FR-ZIHM: a short pause gives the speech end before it, and
+// the next pause gives the speech end of the new speech.
+#[test]
+fn a_chunk_pause_gives_the_end_of_speech_before_the_pause() {
+    let mut session = Session::new();
+    session.gate(|g| g.chunked = true);
+    session.host.set(|c| c.pause_ends_chunk = true);
+    session.confirm();
+    session.feed(&[QUIET; 8]);
+    session.feed(&[SPEECH; 3]);
+    session.feed(&[QUIET; 8]);
+    session.end();
+    let base = 20 * FRAME - PRE_ROLL;
+    let calls = session.host.0.lock().unwrap();
+    assert_eq!(
+        calls.pause_untils,
+        vec![Some(31 * FRAME + 3_200 - base), Some(42 * FRAME + 3_200 - base)]
+    );
+    assert_eq!(calls.end_untils, vec![Some(42 * FRAME + 3_200 - base)]);
+}
+
+// VOP-FR-HSJU, VOP-FR-GZPY, VOP-FR-FAQA: while a reply plays, the confirmation
+// takes 20 frames, and the ring no longer holds all of the pre-roll. The speech
+// end counts from the first sample that the capture got.
+#[test]
+fn the_speech_end_counts_from_the_audio_that_the_ring_still_held() {
+    let mut session = Session::new();
+    session.gate(|g| g.playing = true);
+    session.feed(&[QUIET; 20]);
+    session.feed(&[SPEECH; 25]);
+    session.end();
+    let calls = session.host.0.lock().unwrap();
+    let audio: Vec<i16> = calls.appended.iter().flat_map(|(_, s)| s.clone()).collect();
+    assert!(audio[0] as usize > 20 * FRAME - PRE_ROLL, "the ring lost part of the pre-roll");
+    let keep = calls.end_untils[0].expect("a speech end");
+    assert_eq!(audio[keep - 1], (45 * FRAME + 3_200 - 1) as i16);
+}
+
+// VOP-FR-HSJU, VOP-FR-GZOC: at a capture rate of 48 kHz, the speech end counts
+// in samples of the capture rate, with a tail of 200 ms at that rate.
+#[test]
+fn the_speech_end_counts_at_the_capture_rate() {
+    const FRAME_48K: usize = FRAME * 3;
+    let mut session = Session::at_rate(48_000);
+    let mut script = vec![QUIET; 20];
+    script.extend([SPEECH; 11]);
+    script.extend([QUIET; 22]);
+    session.script.queue(&script);
+    let count = 60 * FRAME_48K;
+    let samples: Vec<i16> = (0..count).map(|i| (i % 30_000) as i16).collect();
+    let (done, _) = oneshot::channel();
+    session.worker.handle(Message::Feed(samples, done));
+
+    let calls = session.host.0.lock().unwrap();
+    let base = 20 * FRAME_48K - 15_360;
+    let keep = 31 * FRAME_48K + 9_600 - base;
+    assert_eq!(calls.end_untils, vec![Some(keep)]);
 }

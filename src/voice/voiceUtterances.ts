@@ -31,6 +31,7 @@ import type { VoiceChunkChange } from "../types";
 import { postingHandleOf, type PostOutcome } from "./voiceHandles";
 import { canRetry, errorCode } from "./voiceMessages";
 import { questionBlockOf, type AnswerTarget } from "./voiceQuestions";
+import { noteFillerSettled } from "./voiceFiller";
 import { afterSettle, latestVoiceDiscussion, noteAnswered } from "./voiceReplies";
 import { translateSpoken } from "./voiceTranslation";
 
@@ -365,6 +366,7 @@ export function settleUtterance(u: Utterance, delivery: Delivery | null): void {
   endSpeech(u, delivery?.commentId ?? null);
   dropLivePart(u.captureId);
   if (delivery?.answered) noteAnswered();
+  noteFillerSettled(u.captureId, delivery?.answered === true);
   u.done();
   syncTranscribing();
   afterSettle();

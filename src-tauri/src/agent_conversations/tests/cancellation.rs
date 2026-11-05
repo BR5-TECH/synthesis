@@ -92,6 +92,7 @@ fn a_cancel_that_arrives_after_the_delivery_claim_cannot_take_the_turn() {
         Some("c1"),
         PROJECT_KEY,
         None,
+        None,
     );
 
     // Before the claim, a cancellation takes the turn.
@@ -126,6 +127,7 @@ fn a_cancel_before_the_claim_stops_the_delivery() {
         ConversationOrigin::stub_artifact("t1", "a.md", true),
         Some("c1"),
         PROJECT_KEY,
+        None,
         None,
     );
     cancelled.store(true, Ordering::SeqCst);

@@ -493,6 +493,8 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
         // AGC-FR-QYNZ: carried, and false and null on an ended turn.
         "speechId",
         "replyHeld",
+        // AGC-FR-MECW: the language of the spoken part.
+        "spokenLanguage",
     ];
     expected.sort_unstable();
     assert_eq!(keys, expected, "the entry is the turn and nothing beside it");

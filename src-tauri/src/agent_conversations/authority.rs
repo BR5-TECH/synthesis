@@ -235,7 +235,7 @@ pub(crate) mod authority_for_test {
         speech: Option<&str>,
     ) -> String {
         let agent = crate::agents::Agent::default();
-        registry(app).register(&agent, origin, trigger, "test-project", speech).0.id
+        registry(app).register(&agent, origin, trigger, "test-project", speech, None).0.id
     }
 
     /// AGC-FR-ISKZ: the turn takes `comment_id` as a steering message.

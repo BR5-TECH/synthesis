@@ -247,7 +247,7 @@ async fn a_chunk_end_after_an_interim_commit_sends_no_commit() {
     voice.append_capture(id, speech(4.0)).unwrap();
     sink.wait_for(has_transcript("Hello there.")).await;
     assert!(sink.chunks.lock().unwrap().is_empty(), "no chunk event before the chunk end");
-    assert!(voice.chunk_pause(id).unwrap(), "the live text ends a sentence");
+    assert!(voice.chunk_pause(id, None).unwrap(), "the live text ends a sentence");
     sink.wait_for(|s| s.chunks.lock().unwrap().len() == 2).await;
     let chunks: Vec<(usize, ChunkState, Option<String>)> =
         sink.chunks.lock().unwrap().iter().map(|c| (c.index, c.state, c.text.clone())).collect();
@@ -272,9 +272,9 @@ impl SpeechModel for Loudness {
     }
 }
 
-// VOP-FR-KIMU: a live `openai` Push-to-Talk capture that is not chunked runs
-// the local detector for its word gaps, and a gap after 1 s sends an interim
-// commit.
+// VOP-FR-KIMU, VOP-FR-IXDV: a live `openai` Push-to-Talk capture that is not
+// chunked runs the local detector for its word gaps, and a gap after 1 s sends
+// an interim commit. Speech after that commit still gets the final commit.
 #[tokio::test]
 async fn a_push_to_talk_capture_commits_at_the_word_gap_of_its_own_detector() {
     let bench = Bench::new();
@@ -300,6 +300,42 @@ async fn a_push_to_talk_capture_commits_at_the_word_gap_of_its_own_detector() {
     voice.append_and_detect(id, speech(0.5)).await.unwrap();
     assert_eq!(voice.finish_capture(id).await.unwrap(), "Hello there.");
     assert_eq!(report.commits().await.len(), 2);
+}
+
+// VOP-FR-IXDV, VOP-FR-HSJU, VOP-FR-QQYG: when the detector heard no speech
+// after the interim commit, the finish sends no final commit for the silence,
+// and the transcript is the text of the interim item.
+#[tokio::test]
+async fn a_finish_with_no_speech_after_the_interim_commit_sends_no_final_commit() {
+    let bench = Bench::new();
+    let (server, report) = openai_server(&[("a", "Hello"), ("b", "Thank you.")]).await;
+    let sink = Arc::new(RecordingSink::default());
+    let voice = &bench.voice;
+    let start = voice
+        .start_chunked_capture(
+            config("openai", &format!("{}/v1", server.url)),
+            RATE as u32,
+            vec![],
+            Chunking::Gaps {
+                settings: Settings::new(1500, VoiceVadSensitivity::Medium),
+                load: Box::new(|| Ok(Box::new(Loudness) as Box<dyn SpeechModel>)),
+            },
+            sink.clone(),
+        )
+        .unwrap();
+    let id = &start.session_id;
+    voice.append_and_detect(id, speech(1.2)).await.unwrap();
+    // The silence comes in frames of 32 ms, as a microphone gives it, so the word
+    // gap commits about 100 ms into the silence, before the speech end.
+    for _ in 0..10 {
+        voice.append_and_detect(id, vec![0; 512]).await.unwrap();
+    }
+    sink.wait_for(has_transcript("Hello")).await;
+    for _ in 0..45 {
+        voice.append_and_detect(id, vec![0; 512]).await.unwrap();
+    }
+    assert_eq!(voice.finish_capture(id).await.unwrap(), "Hello");
+    assert_eq!(report.commits().await.len(), 1, "no commit for the silence");
 }
 
 /// A server of the `llamacpp` or the `vllm` dialect. It reports each commit

@@ -94,6 +94,11 @@ export interface AgentTurn {
   speechId?: string | null;
   /** AGC-FR-QYNZ: the loop holds a reply until the speech ends. */
   replyHeld?: boolean;
+  /**
+   * AGC-FR-MECW: the English name of the language of the `<spoken>` part, set
+   * when the turn is registered.
+   */
+  spokenLanguage?: string | null;
   state: AgentTurnState;
   failure: AgentTurnFailure | null;
   /**

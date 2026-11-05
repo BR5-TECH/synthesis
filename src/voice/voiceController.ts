@@ -30,6 +30,7 @@ import {
 import type { AppPreferences, Discussion, DiscussionTarget, VoiceHotkeyBehaviour } from "../types";
 import { ChunkPump, MicrophoneError, openMicrophone, type Microphone } from "./capture";
 import { prepareAudio } from "./playback";
+import { armFiller, cancelFiller } from "./voiceFiller";
 import {
   addHandle,
   forgetRetained,
@@ -87,6 +88,7 @@ import {
 export { noteChunk } from "./voiceUtterances";
 export { noteActivity, openVadSession, setVadMuted } from "./voiceVad";
 export { noteQuestionShown, stopSpeech } from "./voiceReplies";
+export { noteAgentTurn } from "./voiceFiller";
 export type { PostOutcome, VoiceComposerHandle } from "./voiceHandles";
 export { TAIL_MS };
 
@@ -238,6 +240,8 @@ function endCapture(kind: "keep" | "discard"): void {
 }
 
 function closeVoiceState(): void {
+  // VOM-FR-POBZ: the end of voice mode cancels the filler.
+  cancelFiller("voice mode ended");
   forgetRetained();
   forgetRetainedQuestions();
   forgetSpokenQuestion();
@@ -345,6 +349,8 @@ async function completeRecording(active: Capture): Promise<void> {
     if (liveSession === u.captureId) liveSession = null;
     return;
   }
+  // VOM-FR-YGAR: the end of the recording arms its filler.
+  armFiller(u.captureId);
   await finishUtterance(u, finishVoiceCapture(u.captureId));
   if (liveSession === u.captureId) liveSession = null;
 }

@@ -504,6 +504,7 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
         deadline_at: None,
         speech_id: None,
         reply_held: false,
+        spoken_language: None,
     };
 
     turns.record_image_notice(&entry("turn-1", &origin, true), PROJECT_KEY);

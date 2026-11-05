@@ -14,4 +14,5 @@ mod provider_override;
 mod speech;
 mod speech_options;
 mod support;
+mod trailing_silence;
 mod verify;

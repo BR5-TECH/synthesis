@@ -29,11 +29,23 @@ pub(crate) type Reply = oneshot::Sender<Result<String, String>>;
 
 pub(crate) enum LiveCommand {
     Audio(Vec<i16>),
-    /// VOP-FR-GLRN: the end of one chunk in a session that continues.
-    Commit(Reply),
+    /// VOP-FR-GLRN: the end of one chunk in a session that continues, with the
+    /// speech end before it (VOP-FR-IXDV).
+    Commit(Reply, Option<usize>),
     /// VOP-FR-KIMU: a word gap, where an interim commit can go.
     Gap,
-    Finish(Reply),
+    /// The end of input, with the speech end of the capture (VOP-FR-IXDV).
+    Finish(Reply, Option<usize>),
+}
+
+/// VOP-FR-IXDV: the detector heard no speech after the last commit. The
+/// silence starts one tail before the speech end, so a commit at a word gap in
+/// that silence holds all of the speech. The audio counts at the capture rate
+/// from the start of the session.
+fn no_speech_since(speech_until: Option<usize>, committed_through: usize, rate: u32) -> bool {
+    let tail = super::activity::detector::tail_samples(rate) as usize;
+    committed_through > 0
+        && speech_until.is_some_and(|until| until.saturating_sub(tail) <= committed_through)
 }
 
 /// A socket that failed at open or in the session. What the failure means for
@@ -92,10 +104,10 @@ async fn drain_until_finish(
     while let Some(command) = commands.recv().await {
         match command {
             LiveCommand::Audio(_) | LiveCommand::Gap => {}
-            LiveCommand::Commit(reply) => {
+            LiveCommand::Commit(reply, _) => {
                 let _ = reply.send(Err(failure.0.to_string()));
             }
-            LiveCommand::Finish(reply) => {
+            LiveCommand::Finish(reply, _) => {
                 let _ = reply.send(Err(failure.0.to_string()));
                 return;
             }
@@ -215,6 +227,10 @@ async fn run_live(
     let mut shown = Shown { text: String::new() };
     // VOP-FR-KIMU: the samples at the capture rate that no commit holds.
     let mut uncommitted: usize = 0;
+    // VOP-FR-IXDV: the samples at the capture rate that the session received,
+    // and how many of them the last commit holds.
+    let mut received: usize = 0;
+    let mut committed_through: usize = 0;
     let mut finish: Option<Reply> = None;
     let mut deadline = None::<tokio::time::Instant>;
     let mut failure: Option<LiveFailure> = None;
@@ -255,6 +271,7 @@ async fn run_live(
                         break;
                     }
                     uncommitted += count;
+                    received += count;
                     if interims && interim_due(uncommitted, config.capture_rate, false) {
                         if realtime::commit_input(&mut socket).await.is_err() {
                             failure = Some(LiveFailure(ERR_SESSION_LOST));
@@ -263,6 +280,7 @@ async fn run_live(
                         note_interim(&sink, &ledger, uncommitted, false);
                         ledger.sent();
                         uncommitted = 0;
+                        committed_through = received;
                     }
                 }
                 Some(LiveCommand::Gap) => {
@@ -274,12 +292,13 @@ async fn run_live(
                         note_interim(&sink, &ledger, uncommitted, true);
                         ledger.sent();
                         uncommitted = 0;
+                        committed_through = received;
                     }
                 }
-                Some(LiveCommand::Commit(reply)) => {
-                    // VOP-FR-TWEZ: a chunk end with no audio after the last
-                    // commit sends no commit.
-                    if uncommitted > 0 {
+                Some(LiveCommand::Commit(reply, until)) => {
+                    // VOP-FR-TWEZ, VOP-FR-IXDV: a chunk end with no audio or no
+                    // speech after the last commit sends no commit.
+                    if uncommitted > 0 && !no_speech_since(until, committed_through, config.capture_rate) {
                         if realtime::commit_input(&mut socket).await.is_err() {
                             let _ = reply.send(Err(ERR_SESSION_LOST.to_string()));
                             failure = Some(LiveFailure(ERR_SESSION_LOST));
@@ -287,6 +306,7 @@ async fn run_live(
                         }
                         ledger.sent();
                         uncommitted = 0;
+                        committed_through = received;
                     }
                     sink.live_step(
                         "voice chunk sealed",
@@ -298,15 +318,18 @@ async fn run_live(
                     // The live text of the next chunk starts now.
                     shown.update(&config, &sink, shown_text(&config, &transcript, &ledger));
                 }
-                Some(LiveCommand::Finish(reply)) => {
+                Some(LiveCommand::Finish(reply, until)) => {
                     let ended = match resampler.finish() {
                         Ok(out) => {
                             // VOP-FR-QQYG: after an interim commit, the final
                             // commit goes only for audio that no commit holds.
                             // The drained filter tail is not such audio: it
                             // is a few milliseconds of the audio that the last
-                            // commit cut.
-                            let skip = interims && ledger.any_sent() && uncommitted == 0;
+                            // commit cut. VOP-FR-IXDV: nor is audio with no
+                            // speech after the last commit.
+                            let skip = interims
+                                && ledger.any_sent()
+                                && (uncommitted == 0 || no_speech_since(until, committed_through, config.capture_rate));
                             match realtime::send_audio(&mut socket, &out).await {
                                 Ok(()) if skip => {
                                     sink.live_step(
@@ -472,10 +495,23 @@ async fn ask(
     answer.await.map_err(|_| ERR_SESSION_LOST.to_string())?
 }
 
+/// The end of input, and the wait for the final text. `speech_until` is the
+/// speech end of the capture (VOP-FR-IXDV).
 pub(crate) async fn finish_live(
     live: mpsc::UnboundedSender<LiveCommand>,
+    speech_until: Option<usize>,
 ) -> Result<String, String> {
-    ask(&live, LiveCommand::Finish).await
+    ask(&live, |reply| LiveCommand::Finish(reply, speech_until)).await
+}
+
+/// VOP-FR-CWWL, VOP-FR-IXDV: the end of input of a session whose open chunk
+/// holds no speech. Nothing waits for its final text, but the session still
+/// answers the commits of the earlier chunks before it closes.
+pub(crate) fn close_live(live: &mpsc::UnboundedSender<LiveCommand>, speech_until: Option<usize>) {
+    let (reply, _) = oneshot::channel();
+    // A closed channel means that the socket failed, and the earlier chunks
+    // report that failure.
+    let _ = live.send(LiveCommand::Finish(reply, speech_until));
 }
 
 /// VOP-FR-KIMU: a word gap of the capture.
@@ -488,9 +524,10 @@ pub(crate) fn gap_live(live: &mpsc::UnboundedSender<LiveCommand>) {
 /// goes out now, so that it stays in order with the audio.
 pub(crate) fn commit_live(
     live: &mpsc::UnboundedSender<LiveCommand>,
+    speech_until: Option<usize>,
 ) -> oneshot::Receiver<Result<String, String>> {
     let (reply, answer) = oneshot::channel();
     // A closed channel drops the reply, and the wait then fails.
-    let _ = live.send(LiveCommand::Commit(reply));
+    let _ = live.send(LiveCommand::Commit(reply, speech_until));
     answer
 }

@@ -381,6 +381,8 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "retryPermitted",
                 // AGC-FR-QYNZ: the open speech the turn is bound to.
                 "speechId",
+                // AGC-FR-MECW: the language of the spoken part.
+                "spokenLanguage",
                 "startedAt",
                 "state",
                 // AGC-FR-RWPT: null except on a refused certificate.
@@ -562,7 +564,7 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
     let agent = h.create_agent("arch", "");
     let origin = ConversationOrigin::stub_artifact("t1", "a.md", true);
     let (turn, _cancelled) =
-        h.turns().register(&agent, origin.clone(), Some("c1"), PROJECT_KEY, None);
+        h.turns().register(&agent, origin.clone(), Some("c1"), PROJECT_KEY, None, None);
 
     let (tx, rx) = mpsc::channel::<AgentTurn>();
     h.app.listen(AGENT_TURN_STATE_CHANGED, move |event| {
@@ -695,7 +697,7 @@ fn a_turn_cancelled_with_calls_active_leaves_none_behind() {
     let agent = h.create_agent("arch", "");
     let origin = ConversationOrigin::stub_artifact("t1", "a.md", true);
     let (turn, _cancelled) =
-        h.turns().register(&agent, origin.clone(), Some("c1"), PROJECT_KEY, None);
+        h.turns().register(&agent, origin.clone(), Some("c1"), PROJECT_KEY, None, None);
 
     let (tx, rx) = mpsc::channel::<AgentTurn>();
     h.app.listen(AGENT_TURN_STATE_CHANGED, move |event| {

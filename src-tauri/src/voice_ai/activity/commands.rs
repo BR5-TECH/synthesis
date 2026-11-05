@@ -50,16 +50,16 @@ impl ActivityHost for AppHost {
         self.app.state::<VoiceAi>().append_capture(capture_id, samples)
     }
 
-    fn chunk_pause(&self, capture_id: &str) -> bool {
-        self.app.state::<VoiceAi>().chunk_pause(capture_id).unwrap_or(false)
+    fn chunk_pause(&self, capture_id: &str, speech_until: Option<usize>) -> bool {
+        self.app.state::<VoiceAi>().chunk_pause(capture_id, speech_until).unwrap_or(false)
     }
 
     fn word_gap(&self, capture_id: &str) {
         self.app.state::<VoiceAi>().word_gap(capture_id);
     }
 
-    fn end_capture(&self, capture_id: &str) {
-        let _ = self.app.state::<VoiceAi>().end_capture_input(capture_id);
+    fn end_capture(&self, capture_id: &str, speech_until: Option<usize>) {
+        let _ = self.app.state::<VoiceAi>().end_capture_input(capture_id, speech_until);
     }
 
     fn capture_alive(&self, capture_id: &str) -> bool {

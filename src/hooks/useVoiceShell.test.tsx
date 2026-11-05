@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 const controller = vi.hoisted(() => ({
   noteActivity: vi.fn(),
+  noteAgentTurn: vi.fn(),
   noteChunk: vi.fn(),
   noteDiscussionChanged: vi.fn(),
   noteProvider: vi.fn(),
@@ -22,6 +23,7 @@ const handlers = vi.hoisted(() => ({
   preferences: null as null | (() => void),
   voice: null as null | ((list: unknown) => void),
   discussion: null as null | ((d: unknown) => void),
+  turn: null as null | ((t: unknown) => void),
   transcript: null as null | ((change: { sessionId: string; text: string }) => void),
   activity: null as null | ((change: unknown) => void),
   chunk: null as null | ((change: unknown) => void),
@@ -38,6 +40,10 @@ vi.mock("../events", () => ({
   }),
   onDiscussionChanged: vi.fn(async (handler: (d: unknown) => void) => {
     handlers.discussion = handler;
+    return () => undefined;
+  }),
+  onAgentTurnStateChanged: vi.fn(async (handler: (t: unknown) => void) => {
+    handlers.turn = handler;
     return () => undefined;
   }),
   onVoiceAiChanged: vi.fn(async (handler: (list: unknown) => void) => {
@@ -90,6 +96,7 @@ beforeEach(() => {
     preferences: null,
     voice: null,
     discussion: null,
+    turn: null,
     transcript: null,
     activity: null,
   });
@@ -202,6 +209,14 @@ describe("the events of the shell", () => {
     const thread = { id: "d1" };
     handlers.discussion?.(thread);
     expect(controller.noteDiscussionChanged).toHaveBeenCalledWith(thread);
+  });
+
+  it("VOM-FR-VTNW: a turn change reaches the controller", async () => {
+    await mount();
+    await waitFor(() => expect(handlers.turn).not.toBeNull());
+    const turn = { id: "turn-1" };
+    handlers.turn?.(turn);
+    expect(controller.noteAgentTurn).toHaveBeenCalledWith(turn);
   });
 
   it("VOM-FR-HUXY: a transcript change reaches the controller", async () => {

@@ -17,11 +17,11 @@ use crate::voice_ai::chunks::{
 };
 use crate::voice_ai::*;
 
-const RATE: usize = 16_000;
+pub(super) const RATE: usize = 16_000;
 
 /// Speech is loud, and a pause is silent.
-struct Loudness {
-    threads: Arc<Mutex<Vec<String>>>,
+pub(super) struct Loudness {
+    pub(super) threads: Arc<Mutex<Vec<String>>>,
 }
 
 impl SpeechModel for Loudness {
@@ -33,7 +33,7 @@ impl SpeechModel for Loudness {
     }
 }
 
-fn own_detector(threads: &Arc<Mutex<Vec<String>>>) -> Chunking {
+pub(super) fn own_detector(threads: &Arc<Mutex<Vec<String>>>) -> Chunking {
     let threads = threads.clone();
     Chunking::Own {
         settings: Settings::new(1500, VoiceVadSensitivity::Medium),
@@ -41,17 +41,17 @@ fn own_detector(threads: &Arc<Mutex<Vec<String>>>) -> Chunking {
     }
 }
 
-fn speech(seconds: f32) -> Vec<i16> {
+pub(super) fn speech(seconds: f32) -> Vec<i16> {
     vec![10_000; (RATE as f32 * seconds) as usize]
 }
 
 /// 500 ms: longer than the short pause of 400 ms, and shorter than the silence
 /// timeout.
-fn pause() -> Vec<i16> {
+pub(super) fn pause() -> Vec<i16> {
     vec![0; RATE / 2]
 }
 
-fn config(provider: &str, base_url: &str, route: TranscriptionRoute) -> ActiveVoice {
+pub(super) fn config(provider: &str, base_url: &str, route: TranscriptionRoute) -> ActiveVoice {
     let mut record = VoiceAiRecord::seeded(descriptor(provider).unwrap());
     record.base_url = base_url.to_string();
     record.stt_model = "stt".to_string();
@@ -65,7 +65,9 @@ fn config(provider: &str, base_url: &str, route: TranscriptionRoute) -> ActiveVo
     ActiveVoice { record, key: Some("k".to_string()), language: None }
 }
 
-fn events(sink: &RecordingSink) -> Vec<(usize, ChunkState, Option<String>, Option<String>)> {
+pub(super) fn events(
+    sink: &RecordingSink,
+) -> Vec<(usize, ChunkState, Option<String>, Option<String>)> {
     sink.chunks
         .lock()
         .unwrap()
@@ -74,11 +76,14 @@ fn events(sink: &RecordingSink) -> Vec<(usize, ChunkState, Option<String>, Optio
         .collect()
 }
 
-fn transcript(index: usize, text: &str) -> (usize, ChunkState, Option<String>, Option<String>) {
+pub(super) fn transcript(
+    index: usize,
+    text: &str,
+) -> (usize, ChunkState, Option<String>, Option<String>) {
     (index, ChunkState::Transcript, Some(text.to_string()), None)
 }
 
-fn end(index: usize) -> (usize, ChunkState, Option<String>, Option<String>) {
+pub(super) fn end(index: usize) -> (usize, ChunkState, Option<String>, Option<String>) {
     (index, ChunkState::End, None, None)
 }
 
@@ -96,7 +101,7 @@ async fn until(mut done: impl FnMut() -> bool) {
 
 /// An HTTP server that answers by the size of the WAV: a chunk of 3 s is
 /// "One.", and a shorter one is "Two.".
-async fn by_length(fail_long: bool, fail_short: bool) -> Fake {
+pub(super) async fn by_length(fail_long: bool, fail_short: bool) -> Fake {
     fake(
         move |path, body| {
             if !path.ends_with("/audio/transcriptions") {
@@ -455,7 +460,7 @@ async fn an_ended_session_does_not_block_the_next_start() {
     let sink = || -> Arc<dyn VoiceSink> { Arc::new(RecordingSink::default()) };
     let first = bench.voice.start_capture(active(), 16_000, vec![], sink()).unwrap();
     bench.voice.append_capture(&first.session_id, speech(1.0)).unwrap();
-    bench.voice.end_capture_input(&first.session_id).unwrap();
+    bench.voice.end_capture_input(&first.session_id, None).unwrap();
     let second = bench.voice.start_capture(active(), 16_000, vec![], sink()).unwrap();
     assert_eq!(
         bench.voice.start_capture(active(), 16_000, vec![], sink()).unwrap_err(),

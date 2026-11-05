@@ -85,7 +85,7 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 45. **VOP-FR-IRZC** The language table holds these codes and English names: `es` Spanish, `fr` French, `de` German, `it` Italian, `pt` Portuguese, `ru` Russian, `uk` Ukrainian, `pl` Polish, `nl` Dutch, `tr` Turkish, `ar` Arabic, `hi` Hindi, `zh` Chinese, `ja` Japanese, `ko` Korean.
 45. **VOP-FR-TSUS** A spoken language from the table goes to transcription as a hint: `language` on the HTTP route of `openai` and `custom`, and `transcription.language` on the `openai` Realtime route. A free name, `openrouter`, and the `llamacpp` and `vllm` dialects get no hint. On `custom`, a 400 for a request with `language` repeats once without it.
 46. **VOP-FR-YEFK** A session holds its PCM in memory until a success, the next start, or a cancel. Audio and transcripts are never written to disk, and they never appear in a log. Detector audio stays in memory on the same terms.
-47. **VOP-FR-IAFL** "retry voice capture" sends the held PCM again on the same route. When a Realtime socket failed and the capabilities hold the HTTP route, it uses the HTTP route.
+47. **VOP-FR-IAFL** "retry voice capture" sends the held PCM again on the same route, so a retry holds no audio after the speech end (VOP-FR-HSJU). When a Realtime socket failed and the capabilities hold the HTTP route, it uses the HTTP route.
 48. **VOP-FR-UOYP** A failed capture returns one of `provider_unreachable`, `provider_rejected`, `transcription_failed`, or `voice_session_lost`. The session stays open for "retry voice capture".
 49. **VOP-FR-BSNY** An unfinished capture session that receives no audio for 30 s is cancelled, and its socket closes. A VAD session opens a capture only from confirmed speech, so a session that only listens meets no such limit.
     - *Why:* a reloaded webview cannot end its own session, and an open socket can cost money.
@@ -96,13 +96,16 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 49. **VOP-FR-ERDS** "start voice capture" takes `chunked: bool`. "set voice activity gate" carries `chunked`, and a VAD capture opens chunked when the last applied gate says so. A chunked capture splits its audio into chunks (VOP-FR-JRVF). A capture that is not chunked gives one transcript, as VOP-FR-VZDI states.
 49. **VOP-FR-JRVF** A chunk ends at a **short pause** that follows a sentence end (VOP-FR-WNQW). The short pause is 400 ms of frames under the end threshold, or half of the VAD silence timeout when that is less. The silence timeout still ends the utterance (VOP-FR-OFDY).
     - *Why:* the short pause is always shorter than the silence timeout, so a chunk ends before the utterance does.
-49. **VOP-FR-WNQW** On a live route, a sentence end is live text of the chunk that ends with `.`, `?`, `!`, or `…`, with closing quotes and brackets ignored. On a route with no live text, a short pause after at least 2 s of chunk audio counts as a sentence end.
+49. **VOP-FR-WNQW** On a live route, a sentence end is live text of the chunk that ends with `.`, `?`, `!`, or `…`, with closing quotes and brackets ignored. On a route with no live text, a short pause after at least 2 s of chunk audio up to the speech end (VOP-FR-HSJU) counts as a sentence end.
 49. **VOP-FR-YDVH** In a Push-to-Talk capture, the capture runs the local detector of VOP-FR-SMSX over its own audio to find the short pauses. In a VAD session, the session's detector finds them. Neither makes a provider call for the detection.
 49. **VOP-FR-VOZD** Each chunk is transcribed on its own, on the route of the capture, when it ends, in the background. The capture keeps receiving audio for the next chunk while earlier chunks transcribe.
 49. **VOP-FR-GLRN** On a Realtime route, a chunk end commits the input buffer. The chunk transcript joins the texts of the items of that chunk's commits, interim commits included, in commit order with one space. A dialect whose session ends at a commit opens a new session for each chunk. On the HTTP route, each chunk is one request.
+49. **VOP-FR-ZIHM** On the HTTP route, the audio of a chunk ends at the speech end of its short pause (VOP-FR-HSJU). The audio after that speech end starts the next chunk.
 49. **VOP-FR-TWEZ** An interim commit ends no chunk and emits no `voice-chunk-changed` event. Its item belongs to the open chunk, and its text is part of the live text of that chunk (VOP-FR-JAOB, VOP-FR-WNQW). A chunk end with no audio after the last interim commit sends no commit.
+49. **VOP-FR-IXDV** On the `openai` dialect, a chunk end and the end of input send no commit when the detector heard no speech after the last commit. The session then ends when the items of the earlier commits are completed (VOP-FR-QQYG), and their texts stay part of the transcript.
 49. **VOP-FR-DSSU** A chunked capture emits `voice-chunk-changed`: `chunk_end` at the end of each chunk, `chunk_transcript` with the trimmed text of the chunk, which can be empty, and `chunk_failed` with a failure code of VOP-FR-UOYP. The events of one capture come in index order.
 49. **VOP-FR-GLDR** "finish voice capture" on a chunked capture ends the last chunk and emits its events, waits until every chunk has a transcript or failed, and returns the chunk texts that succeeded, in order, joined by one space. When no chunk succeeded, it fails with the code of the last failure.
+49. **VOP-FR-CWWL** After an earlier chunk, a last chunk with no audio up to the speech end (VOP-FR-HSJU) is not a chunk: it sends no request and emits no event.
 49. **VOP-FR-SIKM** "retry voice capture" on a chunked capture sends all held PCM of the capture again as one request, as VOP-FR-IAFL states, and emits no chunk event.
 
 ### Voice activity
@@ -125,6 +128,8 @@ The backend home for the speech endpoints that Synthesis calls. It holds one rec
 49. **VOP-FR-FAQA** The capture receives the audio from 320 ms before `speech_start`, then the live audio, in order and at the capture rate, as "append voice capture" does.
 49. **VOP-FR-OFDY** In a capture, a frame under the end threshold starts the silence count. Only a frame at or above the start threshold clears it. At the silence timeout plus 200 ms, the session emits `speech_end`.
     - *Why:* a noise floor between the two thresholds must not hold an utterance open.
+49. **VOP-FR-HSJU** The **speech end** of a capture is the first frame of its current silence count (VOP-FR-OFDY), plus 200 ms. At `speech_end`, and at the end of input of a capture that runs a detector, the held PCM ends at the speech end. A capture with no detector, or with no silence after speech at that time, keeps all its audio.
+    - *Why:* a speech-to-text model can write a stock phrase, such as "Thank you.", for silence.
 49. **VOP-FR-GWZP** An utterance emits `speech_end` at 10 minutes, and the session stays open.
 49. **VOP-FR-FMRV** After `speech_end`, the next utterance can start at once. It does not wait for the capture of the last utterance to return (VOP-FR-WCSB).
 49. **VOP-FR-DAZW** After a failed capture open, no `speech_start` comes until a frame under the end threshold.
@@ -273,6 +278,7 @@ VoiceChunkChanged {
 | Frames to a misfire | 3 in a row, 96 ms |
 | Frames with no start after a misfire during playback | 16, about 500 ms, doubling to 256, about 8 s |
 | Tail after the silence timeout | 200 ms |
+| Audio kept after the speech end | 200 ms |
 | Longest utterance | 10 minutes |
 | Short pause that ends a chunk | 400 ms, or half of the silence timeout when that is less |
 | Chunk audio that stands for a sentence end with no live text | 2 s |

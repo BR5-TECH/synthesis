@@ -92,8 +92,10 @@ AgentTurn {
                              //   while the turn waits for a slot (AGC-FR-URXV)
   speech_id: string | null,  // the open speech the turn is bound to; null when it is
                              //   bound to none (AGC-FR-QYNZ)
-  reply_held                 // bool; true while the loop holds a reply until the
+  reply_held,                // bool; true while the loop holds a reply until the
                              //   speech ends (AGC-FR-QYNZ, per CVL-FR-SZKK)
+  spoken_language            // string; the English name of the language of the
+                             //   <spoken> part (AGC-FR-MECW)
 }
 ```
 
@@ -270,6 +272,7 @@ ModelDowngrade {
 31. **AGC-FR-JRXG** The input of a turn never carries the `spoken_original` of a comment (per `CMS-comments-storage.md` CMS-FR-UYVK). A turn reads the body of a comment alone.
 31. **AGC-FR-LDTX** The **document language** of a target is detected from its text by a detector that runs in the application, with no model call. The text is the file of an `artifact` target, the prompt of a `draft` target (for a fragment discussion, the draft file of the fragment), and the body of a `note` target, up to its first 20 000 characters. Fenced code, inline code, and URLs are not part of it. A text that cannot be read, that holds fewer than 40 letters, or that the detector does not detect reliably has the document language English. The document language is the English name of the detected language.
     - *Why:* The document decides the language of what is written about it. An author can talk in one language and keep a Polish document and its log in Polish.
+31. **AGC-FR-MECW** A turn carries `spoken_language`, the English name of the language of its `<spoken>` part (per `../ai/CVL-conversation-loop.md` CVL-FR-FQMM): the spoken language when one is set (`GSS-global-settings-storage.md` GSS-FR-DNAW), and otherwise the document language of its target (AGC-FR-LDTX). The value is set when the turn is registered, and it does not change.
 31. **AGC-FR-QEOF** "translate voice transcript" makes one model call with no tools, on the provider that the open project resolves to and its selected model, under a fixed prompt compiled into the binary. The prompt asks for the text in the document language of `target` (AGC-FR-LDTX), with the given nicknames and each `@` tag kept as they are. The call has a limit of 30 seconds. The answer is the trimmed reply text, and an empty reply is `translation_failed`.
 31. **AGC-FR-WSKP** "translate voice transcript" makes no model call and answers `text` as it is when the spoken language (`GSS-global-settings-storage.md` GSS-FR-DNAW) is the document language. With no spoken language, it does the same when the detector of AGC-FR-LDTX detects `text` reliably in the document language. In each other case it makes the call of AGC-FR-QEOF.
 31. **AGC-FR-SBGB** A record of "translate voice transcript" holds the provider, the model, the document language, whether the call was made, the character counts, and the duration. It holds no text of the transcript or of the translation.

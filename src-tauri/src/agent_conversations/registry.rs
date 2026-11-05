@@ -273,6 +273,7 @@ impl TurnRegistry {
         trigger_comment_id: Option<&str>,
         project_key: &str,
         speech_id: Option<&str>,
+        spoken_language: Option<String>,
     ) -> (AgentTurn, Arc<AtomicBool>) {
         let mut inner = self.lock();
         let turn = AgentTurn {
@@ -305,6 +306,7 @@ impl TurnRegistry {
             deadline_at: None,
             speech_id: speech_id.map(str::to_string),
             reply_held: false,
+            spoken_language,
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         inner.live.insert(

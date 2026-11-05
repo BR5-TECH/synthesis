@@ -21,6 +21,10 @@ mod chunked;
 
 use chunked::ChunkRun;
 
+/// What the end of input of a capture needs: the route, the live session, and
+/// the speech end (VOP-FR-HSJU).
+type Finishing = (TranscriptionRoute, Option<mpsc::UnboundedSender<LiveCommand>>, Option<usize>);
+
 /// VOP-FR-BSNY.
 pub(crate) const WATCHDOG_LIMIT: Duration = Duration::from_secs(30);
 pub(crate) const WATCHDOG_TICK: Duration = Duration::from_secs(5);
@@ -61,7 +65,28 @@ pub(crate) struct CaptureSession {
     gaps: Option<std::sync::mpsc::Sender<chunks::DetectorMessage>>,
     /// VOP-FR-IAFL: the code of the last failure.
     failure: Option<String>,
+    /// VOP-FR-HSJU: the speech end in `pcm`, when the detector of the capture
+    /// found the capture in a silence after speech.
+    speech_until: Option<usize>,
     sink: SharedSink,
+}
+
+/// VOP-FR-HSJU: the held audio ends at the speech end. `floor` is the first
+/// sample that must stay, the start of the open chunk.
+fn trim_to_speech(session: &mut CaptureSession, floor: usize) {
+    let Some(until) = session.speech_until else { return };
+    let keep = until.max(floor);
+    if keep >= session.pcm.len() {
+        return;
+    }
+    let cut = session.pcm.len() - keep;
+    session.pcm.truncate(keep);
+    // VOP-FR-YEFK: counts only.
+    session.sink.live_step(
+        "voice capture trimmed at the speech end",
+        &[("keptSamples", keep), ("cutSamples", cut)],
+        false,
+    );
 }
 
 /// VOP-FR-INCC: a nickname that holds one of these characters is refused by a
@@ -201,6 +226,7 @@ impl VoiceAi {
             chunks,
             gaps,
             failure: None,
+            speech_until: None,
             sink,
         });
         Ok(VoiceCaptureStart { session_id: id, route, live: is_live })
@@ -247,25 +273,44 @@ impl VoiceAi {
         samples: Vec<i16>,
     ) -> Result<(), String> {
         let Some(detection) = self.append_inner(session_id, samples)? else { return Ok(()) };
-        let answer = detection.await.unwrap_or_default();
+        // A detector that went keeps the last speech end that it found.
+        let Ok(answer) = detection.await else { return Ok(()) };
+        self.note_speech_until(session_id, answer.speech_until)?;
         if answer.gap {
             self.word_gap(session_id);
         }
         if answer.paused {
-            self.chunk_pause(session_id)?;
+            self.chunk_pause(session_id, answer.speech_until)?;
         }
         Ok(())
     }
 
-    /// VOP-FR-WCSB: the utterance of a VAD session ended, and the session no
-    /// longer counts as open.
-    pub(crate) fn end_capture_input(&self, session_id: &str) -> Result<(), String> {
+    /// VOP-FR-HSJU: the latest speech end that the own detector of a capture
+    /// found.
+    fn note_speech_until(&self, session_id: &str, until: Option<usize>) -> Result<(), String> {
+        let mut slot = self.session_guard()?;
+        if let Some(session) =
+            slot.iter_mut().find(|s| s.id == session_id && s.phase == Phase::Recording)
+        {
+            session.speech_until = until;
+        }
+        Ok(())
+    }
+
+    /// VOP-FR-WCSB, VOP-FR-HSJU: the utterance of a VAD session ended at
+    /// `speech_until`, and the session no longer counts as open.
+    pub(crate) fn end_capture_input(
+        &self,
+        session_id: &str,
+        speech_until: Option<usize>,
+    ) -> Result<(), String> {
         let mut slot = self.session_guard()?;
         if let Some(session) =
             slot.iter_mut().find(|s| s.id == session_id && s.phase == Phase::Recording)
         {
             session.phase = Phase::Ended;
             session.gaps = None;
+            session.speech_until = speech_until;
         }
         Ok(())
     }
@@ -275,12 +320,9 @@ impl VoiceAi {
         self.session_guard().is_ok_and(|slot| slot.iter().any(|s| s.id == session_id))
     }
 
-    /// Mark the session as finishing, and give what the end of input needs.
-    fn begin_finish(
-        &self,
-        session_id: &str,
-        from: &[Phase],
-    ) -> Result<(TranscriptionRoute, Option<mpsc::UnboundedSender<LiveCommand>>), String> {
+    /// Mark the session as finishing, and give what the end of input needs:
+    /// the route, the live session, and the speech end (VOP-FR-HSJU).
+    fn begin_finish(&self, session_id: &str, from: &[Phase]) -> Result<Finishing, String> {
         let mut slot = self.session_guard()?;
         let session = slot
             .iter_mut()
@@ -289,7 +331,8 @@ impl VoiceAi {
         session.phase = Phase::Finishing;
         // The detector thread ends with its sender.
         session.gaps = None;
-        Ok((session.route, session.live.take()))
+        trim_to_speech(session, 0);
+        Ok((session.route, session.live.take(), session.speech_until))
     }
 
     fn settle(&self, session_id: &str, result: &Result<String, String>) {
@@ -321,9 +364,10 @@ impl VoiceAi {
         if self.is_chunked(session_id) {
             return self.finish_chunked(session_id).await;
         }
-        let (route, live) = self.begin_finish(session_id, &[Phase::Recording, Phase::Ended])?;
+        let (route, live, until) =
+            self.begin_finish(session_id, &[Phase::Recording, Phase::Ended])?;
         let result = match (route, live) {
-            (TranscriptionRoute::Realtime, Some(live)) => finish_live(live).await,
+            (TranscriptionRoute::Realtime, Some(live)) => finish_live(live, until).await,
             _ => self.transcribe_held(session_id).await,
         };
         self.settle(session_id, &result);
@@ -367,7 +411,8 @@ impl VoiceAi {
             }
         };
         let result = match replay {
-            Some(live) => finish_live(live).await,
+            // The held audio is already trimmed, so no commit is skipped.
+            Some(live) => finish_live(live, None).await,
             None => self.transcribe_held(session_id).await,
         };
         self.settle(session_id, &result);

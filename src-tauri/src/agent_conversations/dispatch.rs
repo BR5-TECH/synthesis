@@ -289,12 +289,22 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         return Ok(steered);
     }
 
+    // AGC-FR-LDTX: the language of what the discussion is about. AGC-FR-MECW:
+    // it is read before the registration, so every payload of the turn carries
+    // the language of its spoken part.
+    let language = document_language::document_language(
+        roots,
+        &origin.target,
+        origin.fragment_target.as_ref(),
+    );
+    let spoken_language = spoken_part_language(&store, language.name);
     let (turn, cancelled) = turns.register(
         &agent,
         origin.clone(),
         trigger.comment_id(),
         project_key,
         trigger.speech_id(),
+        Some(spoken_language),
     );
     publish(app, &turn);
     logging::log_info(
@@ -372,12 +382,6 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     );
     // Read before the origin is moved into the plan below.
     let origin_kind = origin.kind();
-    // AGC-FR-LDTX: the language of what the discussion is about.
-    let language = document_language::document_language(
-        roots,
-        &origin.target,
-        origin.fragment_target.as_ref(),
-    );
     document_language::log_document_language(app, turns.buffer(), "turn", &origin.target, language);
     // AGC-FR-16: the participant an agent contributes as, whether it is
     // answering or asking. Composed here so the two paths cannot disagree about

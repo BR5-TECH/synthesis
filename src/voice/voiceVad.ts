@@ -17,6 +17,7 @@ import { MicrophoneError } from "./capture";
 import { handleOf } from "./voiceHandles";
 import { errorCode } from "./voiceMessages";
 import { answerTargetOf } from "./voiceQuestions";
+import { armFiller, cancelFiller } from "./voiceFiller";
 import { afterSettle, bargeIn, stopSpeech } from "./voiceReplies";
 import {
   answerTaken,
@@ -148,6 +149,8 @@ async function openVad(nicknames: string[]): Promise<void> {
 function finishSpoken(u: Utterance): void {
   if (speaking === u) speaking = null;
   patchVoiceState({ phase: "idle", hearing: false, recordingSince: null });
+  // VOM-FR-YGAR: the end of the utterance arms its filler.
+  armFiller(u.captureId);
   void finishUtterance(u, finishVoiceCapture(u.captureId));
 }
 
@@ -228,6 +231,8 @@ function utteranceConfirmed(change: VoiceActivityChange): void {
   if (change.captureId === null || key === null) return;
   dropHeldRecording();
   clearFeedback();
+  // VOM-FR-POBZ: a new utterance cancels a filler that did not speak.
+  cancelFiller("new utterance");
   const answers = answerTargetOf(key, answerTaken);
   speaking = beginUtterance(key, change.captureId, chunkedFor(key, answers), answers);
   patchVoiceState({

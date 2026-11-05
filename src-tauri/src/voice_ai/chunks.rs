@@ -11,7 +11,9 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::oneshot;
 
-use super::activity::detector::{GapTracker, PauseTracker, Settings, FRAME_SAMPLES};
+use super::activity::detector::{
+    tail_samples, GapTracker, PauseTracker, Settings, SilenceEdge, FRAME_SAMPLES,
+};
 use super::activity::silero::SpeechModel;
 use super::pcm::StreamResampler;
 use super::{SharedSink, ERR_SESSION_LOST};
@@ -208,6 +210,9 @@ pub(crate) struct DetectorAnswer {
     pub(crate) paused: bool,
     /// VOP-FR-KIMU: the audio holds a word gap.
     pub(crate) gap: bool,
+    /// VOP-FR-HSJU: the speech end in the held audio, when the capture is in a
+    /// silence after speech.
+    pub(crate) speech_until: Option<usize>,
 }
 
 pub(crate) enum DetectorMessage {
@@ -258,6 +263,10 @@ fn run_detector(
     };
     let mut tracker = PauseTracker::new(settings);
     let mut gaps = GapTracker::new(settings);
+    let mut edge = SilenceEdge::new(settings);
+    // The frames that the model took. A frame position comes from this total,
+    // so no rounding adds up.
+    let mut frames: u64 = 0;
     let mut pending: Vec<i16> = Vec::new();
     let mut broken = false;
     for message in messages {
@@ -282,6 +291,8 @@ fn run_detector(
                         Ok(probability) => {
                             tracker.step(probability);
                             gap |= gaps.step(probability);
+                            edge.step(probability, frame_position(frames, capture_rate));
+                            frames += 1;
                         }
                         Err(_) => {
                             sink.diagnostic("chunk_detector", "model_failed");
@@ -290,8 +301,23 @@ fn run_detector(
                     }
                 }
                 pending.drain(..at.min(pending.len()));
-                let _ = reply.send(DetectorAnswer { paused: !broken && tracker.paused(), gap });
+                let speech_until = (!broken)
+                    .then(|| edge.silence_from())
+                    .flatten()
+                    .map(|from| (from + tail_samples(capture_rate)) as usize);
+                let _ = reply.send(DetectorAnswer {
+                    paused: !broken && tracker.paused(),
+                    gap,
+                    speech_until,
+                });
             }
         }
     }
+}
+
+/// VOP-FR-HSJU: the position at `capture_rate` of the first sample of a frame.
+/// The resampler drops its filter delay, so the frames line up with the held
+/// audio.
+pub(crate) fn frame_position(frame: u64, capture_rate: u32) -> u64 {
+    frame * u64::from(capture_rate) * FRAME_SAMPLES as u64 / u64::from(DETECTOR_RATE)
 }

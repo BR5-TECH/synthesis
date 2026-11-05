@@ -377,7 +377,13 @@ pub async fn speak_voice_segment(
     // VOP-FR-DWSB: registered first, so that a cancel during the read of the key
     // is not lost.
     let mut cancel = voice.register_speech(&speech_id);
+    // VOP non-functional: the counts of the log, to compare with the playback
+    // log of the WebView (`VOM-voice-mode.md` VOM-FR-EPBL).
+    let mut frames: u64 = 0;
+    let mut bytes_sent: u64 = 0;
     let mut emit = |bytes: Vec<u8>| {
+        frames += 1;
+        bytes_sent += bytes.len() as u64;
         let _ = on_frame.send(InvokeResponseBody::Raw(bytes));
     };
     let chars = text.chars().count() as u64;
@@ -409,7 +415,7 @@ pub async fn speak_voice_segment(
             &logging::BUFFER,
             SPEECH_DOMAINS,
             "voice segment spoken",
-            log_fields! { "chars" => chars },
+            log_fields! { "chars" => chars, "frames" => frames, "bytes" => bytes_sent },
         ),
         Err(code) => log_failure(&app, "voice speech failed", code),
     }

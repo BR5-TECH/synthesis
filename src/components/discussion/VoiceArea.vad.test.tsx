@@ -20,10 +20,13 @@ const api = vi.hoisted(() => ({
   speakVoiceSegment: vi.fn(async () => undefined),
 }));
 const mic = vi.hoisted(() => ({ stop: vi.fn() }));
+/** The record that `load_app_preferences` answers, where a test sets one. */
+const stored = vi.hoisted(() => ({ prefs: null as null | Record<string, unknown> }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string) => {
     if (cmd === "append_log_records") return undefined;
+    if (cmd === "load_app_preferences" && stored.prefs) return stored.prefs;
     throw new Error(`unexpected command: ${cmd}`);
   }),
 }));
@@ -46,6 +49,10 @@ vi.mock("../../voice/playback", () => ({
   prepareAudio: vi.fn(),
   resumePlayback: vi.fn(),
   setDrainedListener: vi.fn(),
+  setPlaybackFailureListener: vi.fn(),
+  beginSegment: vi.fn(),
+  endSegmentInput: vi.fn(),
+  notePlaybackEntry: vi.fn(),
   stopPlayback: vi.fn(),
 }));
 
@@ -69,6 +76,7 @@ import {
   noteTranscript,
 } from "../../voice/voiceController";
 import { voiceMessage } from "../../voice/voiceMessages";
+import { loadAppPreferences } from "../../state/appPreferences";
 import { DiscussionComposer } from "./DiscussionComposer";
 import { VoiceSessionBar } from "./VoiceSessionBar";
 import { registerQuestionBlock } from "../../voice/voiceQuestions";
@@ -161,6 +169,7 @@ function lastGate() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  stored.prefs = null;
   resetVoiceStateForTest();
   resetVoiceControllerForTest();
   clearAllDiscussionSessions();
@@ -245,6 +254,19 @@ describe("the VAD controls", () => {
     expect(mute()).toBeInTheDocument();
     expect(screen.getByTestId("voice-waveform")).toBeInTheDocument();
     expect(api.openVoiceActivitySession).toHaveBeenCalledTimes(1);
+  });
+
+  it("VOM-FR-WFHN, VOM-FR-VQIU: the waveform stands after the status and fills the free width, and a transcript takes the width", async () => {
+    render(reply());
+    await openSession();
+    const wave = screen.getByTestId("voice-waveform");
+    expect(wave).toHaveClass("voice-waveform--fill");
+    expect(wave.previousElementSibling).toBe(screen.getByTestId("voice-transcript"));
+    const area = screen.getByTestId("voice-area");
+    expect(area).toHaveAttribute("data-vad", "true");
+    expect(area).toHaveAttribute("data-transcript", "false");
+    act(() => patchVoiceState({ transcript: "the second paragraph" }));
+    expect(area).toHaveAttribute("data-transcript", "true");
   });
 
   it("VOM-FR-HSKZ: Push-to-Talk has a record control with no VAD state", () => {
@@ -465,6 +487,15 @@ describe("the toggles", () => {
     expect(hint).toHaveAttribute("title", hint.getAttribute("aria-label"));
     expect(hint).toHaveAttribute("tabindex", "0");
     expect(screen.getByTestId("voice-area")).not.toHaveTextContent(/lower/);
+  });
+
+  it("VOM-FR-RTSU, VOM-FR-OGFM: with echo cancellation off, macOS shows no hint", async () => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+    stored.prefs = { theme: "system", voiceEchoCancellation: false };
+    await loadAppPreferences();
+    render(reply());
+    enterVad();
+    expect(screen.queryByTestId("voice-vad-hint")).toBeNull();
   });
 
   it("VOM-FR-RTSU: another platform shows no hint", () => {

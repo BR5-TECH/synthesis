@@ -18,7 +18,10 @@ export type VoiceNote =
   /** VOM-FR-QWMK. */
   | "translating"
   /** VOM-FR-DLPA. */
-  | "not_translated";
+  | "not_translated"
+  /** VOM-FR-GIES. */
+  | "microphone_fallback"
+  | "speaker_fallback";
 /** VOM-FR-IKIK. */
 export type VoiceInputMode = "ptt" | "vad";
 

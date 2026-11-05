@@ -106,15 +106,26 @@ export const speakVoiceSegment = (
   speechId: string,
   text: string,
   voiceName: string | null,
-  onFrame: (frame: ArrayBuffer) => void,
+  onFrame: (frame: ArrayBuffer | number[]) => void,
   options?: VoiceOptions | null,
   provider?: VoiceProviderId,
 ) =>
   new Promise<void>((resolve, reject) => {
-    const channel = new Channel<ArrayBuffer>();
+    // VOM-FR-DYTO: after one failed IPC fetch, a large frame comes as a byte
+    // array and not as an `ArrayBuffer`.
+    const channel = new Channel<ArrayBuffer | number[]>();
+    let failed = false;
     channel.onmessage = (frame) => {
-      if (new Uint8Array(frame)[0] === FRAME_END) resolve();
-      else onFrame(frame);
+      if (failed) return;
+      // VOM-FR-VGQF: a throw here would stop the channel, and each later frame
+      // and the end frame would never come.
+      try {
+        if (new Uint8Array(frame)[0] === FRAME_END) resolve();
+        else onFrame(frame);
+      } catch {
+        failed = true;
+        reject("playback_failed");
+      }
     };
     invoke<void>("speak_voice_segment", {
       speechId,

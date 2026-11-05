@@ -69,6 +69,7 @@ vi.mock("../events", () => ({
 import { resetAppPreferencesCache } from "../state/appPreferences";
 import { patchVoiceState, resetVoiceStateForTest } from "../state/voiceSession";
 import { applyIntegrations, useVoiceShell } from "./useVoiceShell";
+import { audioSettings } from "../voice/audioDevices";
 
 const buttonKey = vi.hoisted(() => vi.fn());
 
@@ -199,6 +200,26 @@ describe("the hotkey", () => {
     await waitFor(() => expect(controller.setVoiceBehaviour).toHaveBeenCalledWith("toggle"));
     fireEvent.keyDown(window, { code: "KeyB", ctrlKey: true, altKey: true });
     expect(controller.pressRecord).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a device change from the Settings window", () => {
+  it("VAI-FR-AVBR, VOM-FR-OGFM: a device and echo cancellation saved in Settings reach the record of this window", async () => {
+    await mount();
+    backend.loadAppPreferences.mockResolvedValue({
+      theme: "system",
+      voiceInputDevice: { id: "in-2", label: "USB Mic" },
+      voiceOutputDevice: { id: "out-2", label: "Headset" },
+      voiceEchoCancellation: false,
+    });
+    handlers.preferences?.();
+    await waitFor(() =>
+      expect(audioSettings()).toEqual({
+        input: { id: "in-2", label: "USB Mic" },
+        output: { id: "out-2", label: "Headset" },
+        echoCancellation: false,
+      }),
+    );
   });
 });
 

@@ -18,10 +18,13 @@ import { logInfo, logWarn } from "../logging";
 import type { VoiceOptions, VoiceProviderId } from "../types";
 import { ChunkPump, MicrophoneError, openMicrophone, type Microphone } from "./capture";
 import {
+  beginSegment,
+  endSegmentInput,
   isPlaybackIdle,
   playFrame,
   prepareAudio,
   setDrainedListener,
+  setPlaybackFailureListener,
   stopPlayback,
 } from "./playback";
 import { errorCode } from "./voiceMessages";
@@ -99,6 +102,7 @@ export function createVoiceTest(
       void cancelVoiceSpeech(id).catch(() => undefined);
     }
     setDrainedListener(null);
+    setPlaybackFailureListener(null);
     stopPlayback();
   };
 
@@ -134,6 +138,7 @@ export function createVoiceTest(
     const done = () => {
       speech = null;
       setDrainedListener(null);
+      setPlaybackFailureListener(null);
       set({ phase: "idle" });
     };
     // VAI-FR-ZCMB: playback drains also on a rate frame and between two
@@ -143,12 +148,19 @@ export function createVoiceTest(
     setDrainedListener(() => {
       if (sent && live()) done();
     });
+    // VOM-FR-VGQF: a frame that cannot play fails the test.
+    setPlaybackFailureListener((code) => {
+      if (live()) fail(current, code);
+    });
+    // VAI-FR-NLYF: the test logs its playback as voice mode does.
+    beginSegment("test");
     // VAI-FR-YBQE, VAI-FR-NWRL: a frame that is still in the channel after a
     // new press or a cancel does not play.
-    const onFrame = (frame: ArrayBuffer) => {
+    const onFrame = (frame: ArrayBuffer | number[]) => {
       if (live()) playFrame(frame);
     };
     await speakVoiceSegment(id, text.slice(0, SEGMENT_CHARS), name, onFrame, options, provider);
+    if (live()) endSegmentInput();
     sent = true;
     // A segment with no audio, or audio that already played, gets no later event.
     if (live() && isPlaybackIdle()) done();

@@ -41,6 +41,10 @@ vi.mock("../../voice/playback", () => ({
   playFrame: vi.fn(),
   prepareAudio: vi.fn(),
   setDrainedListener: vi.fn(),
+  setPlaybackFailureListener: vi.fn(),
+  beginSegment: vi.fn(),
+  endSegmentInput: vi.fn(),
+  notePlaybackEntry: vi.fn(),
   stopPlayback: vi.fn(),
 }));
 
@@ -321,6 +325,29 @@ describe("the voice area", () => {
     expect(screen.getByTestId("voice-note")).toHaveTextContent(
       "Not translated. The original text was posted.",
     );
+  });
+
+  it("VOM-FR-GIES: a device that is not connected says that the system default is used", () => {
+    renderReply();
+    enterVoice();
+    act(() => patchVoiceState({ note: "microphone_fallback" }));
+    expect(screen.getByTestId("voice-note")).toHaveTextContent(
+      "The chosen microphone is not connected. The system default is used.",
+    );
+    act(() => patchVoiceState({ note: "speaker_fallback" }));
+    expect(screen.getByTestId("voice-note")).toHaveTextContent(
+      "The chosen speaker is not connected. The system default is used.",
+    );
+  });
+
+  it("VOM-FR-VGQF, VOM-FR-QPFQ: a reply that could not play says so, with no Retry", () => {
+    renderReply();
+    enterVoice();
+    act(() => patchVoiceState({ error: "playback_failed", canRetry: false }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The reply could not play. See the log for details.",
+    );
+    expect(screen.queryByTestId("voice-retry")).not.toBeInTheDocument();
   });
 });
 

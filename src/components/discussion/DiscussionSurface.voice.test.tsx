@@ -35,6 +35,10 @@ vi.mock("../../voice/playback", () => ({
   prepareAudio: vi.fn(),
   resumePlayback: vi.fn(),
   setDrainedListener: vi.fn(),
+  setPlaybackFailureListener: vi.fn(),
+  beginSegment: vi.fn(),
+  endSegmentInput: vi.fn(),
+  notePlaybackEntry: vi.fn(),
   stopPlayback: vi.fn(),
 }));
 

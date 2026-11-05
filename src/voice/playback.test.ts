@@ -33,13 +33,23 @@ let context: FakeContext;
 class FakeContext {
   currentTime = 1;
   destination = {};
+  state = "running";
+  sampleRate = 48_000;
+  onstatechange: (() => void) | null = null;
   constructor() {
     contexts += 1;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     context = this;
   }
-  resume = vi.fn(async () => undefined);
-  suspend = vi.fn(async () => undefined);
+  resume = vi.fn(async () => {
+    this.state = "running";
+  });
+  suspend = vi.fn(async () => {
+    this.state = "suspended";
+  });
+  close = vi.fn(async () => {
+    this.state = "closed";
+  });
   createBuffer(_: number, length: number, rate: number) {
     return { duration: length / rate, getChannelData: () => new Float32Array(length) };
   }
@@ -119,8 +129,10 @@ describe("playback", () => {
     playFrame(fileFrame(1));
     stopPlayback();
     expect(sources[0].stopped).toBe(true);
-    await vi.waitFor(() => expect(decoded).toHaveLength(1));
-    expect(sources).toHaveLength(1);
+    // A frame after the stop plays, and the frame in flight before it does not.
+    playFrame(pcmFrame(10));
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    expect(decoded).toHaveLength(0);
   });
 
   it("VOM-FR-QDWW: tells when all audio has played", async () => {

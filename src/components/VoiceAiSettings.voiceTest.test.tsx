@@ -42,7 +42,12 @@ vi.mock("../voice/playback", () => ({
   playFrame: vi.fn(),
   prepareAudio: vi.fn(),
   setDrainedListener: vi.fn(),
+  setPlaybackFailureListener: vi.fn(),
+  beginSegment: vi.fn(),
+  endSegmentInput: vi.fn(),
+  notePlaybackEntry: vi.fn(),
   stopPlayback: vi.fn(),
+  playTestTone: vi.fn(async () => undefined),
 }));
 
 import { resetAppPreferencesCache } from "../state/appPreferences";

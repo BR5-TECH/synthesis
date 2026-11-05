@@ -12,6 +12,10 @@ const audio = vi.hoisted(() => ({
   isPlaybackIdle: vi.fn(() => true),
   playFrame: vi.fn(),
   setDrainedListener: vi.fn(),
+  setPlaybackFailureListener: vi.fn(),
+  beginSegment: vi.fn(),
+  endSegmentInput: vi.fn(),
+  notePlaybackEntry: vi.fn(),
   stopPlayback: vi.fn(),
 }));
 vi.mock("../api", () => api);

@@ -316,7 +316,7 @@ VoiceChunkChanged {
 
 ## Non-functional requirements
 - No command that waits on the network runs on the main thread.
-- A log line names the provider, the route, and a loggable base URL. It holds no key, no audio, and no transcript.
+- A log line names the provider, the route, and a loggable base URL. It holds no key, no audio, and no transcript. The log of a spoken segment names its count of frames and of bytes, so it can be compared with the playback log of `../ui/VOM-voice-mode.md` VOM-FR-EPBL.
 - This module opens no socket and sends no request while voice mode is on but idle, or while a VAD session only listens.
 - The detector does not run on the main thread or on an async worker. The transcription of a chunk does not delay the receipt of later audio. Application exit ends a VAD session.
 - A speech provider receives the transcript audio and the reply text. It receives nothing else from the project.

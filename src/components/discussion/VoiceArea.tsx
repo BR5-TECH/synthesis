@@ -15,6 +15,7 @@ import {
   type VoiceResponseMode,
   type VoiceState,
 } from "../../state/voiceSession";
+import { audioSettings } from "../../voice/audioDevices";
 import { voiceMessage } from "../../voice/voiceMessages";
 import {
   pressRecord,
@@ -25,7 +26,13 @@ import {
   stopSpeech,
 } from "../../voice/voiceController";
 import { Icon } from "../icons";
-import { VadControls, transcribing, vadIndicator, type VadIndicator } from "./VadControls";
+import {
+  VadControls,
+  VoiceWaveform,
+  transcribing,
+  vadIndicator,
+  type VadIndicator,
+} from "./VadControls";
 
 export { transcribing, vadIndicator } from "./VadControls";
 
@@ -35,6 +42,8 @@ const NOTES: Record<VoiceNote, string> = {
   kept_in_body: "The transcript was kept as unsent text.",
   translating: "Translating…",
   not_translated: "Not translated. The original text was posted.",
+  microphone_fallback: "The chosen microphone is not connected. The system default is used.",
+  speaker_fallback: "The chosen speaker is not connected. The system default is used.",
 };
 
 function elapsed(since: number, now: number): string {
@@ -165,10 +174,23 @@ export function VoiceRecordControl({ disabled }: { disabled: boolean }) {
   );
 }
 
-/** VOM-FR-TISN, VOM-FR-VGLT: the record control, or the controls of VAD mode. */
-export function VoiceInputControls({ disabled }: { disabled: boolean }) {
+/**
+ * VOM-FR-TISN, VOM-FR-VGLT: the record control, or the controls of VAD mode.
+ * `waveform` false leaves the waveform to the caller (VOM-FR-WFHN).
+ */
+export function VoiceInputControls({
+  disabled,
+  waveform = true,
+}: {
+  disabled: boolean;
+  waveform?: boolean;
+}) {
   const state = useVoiceState();
-  return state.inputMode === "vad" ? <VadControls /> : <VoiceRecordControl disabled={disabled} />;
+  return state.inputMode === "vad" ? (
+    <VadControls waveform={waveform} />
+  ) : (
+    <VoiceRecordControl disabled={disabled} />
+  );
 }
 
 /** VOM-FR-QDWW. */
@@ -254,14 +276,21 @@ export function VoiceArea({ disabled }: { disabled: boolean }) {
   }, [status]);
 
   return (
-    <div className="voice-area" data-testid="voice-area">
-      <VoiceInputControls disabled={disabled} />
+    <div
+      className="voice-area"
+      data-testid="voice-area"
+      data-vad={state.inputMode === "vad"}
+      data-transcript={state.transcript !== ""}
+    >
+      <VoiceInputControls disabled={disabled} waveform={false} />
       <div ref={transcriptRef} className="voice-area__transcript" data-testid="voice-transcript">
         {status}
       </div>
+      {/* VOM-FR-WFHN, VOM-FR-VQIU: after the status, in the free width. */}
+      {state.inputMode === "vad" && <VoiceWaveform fill />}
       <VoiceStopControl />
       <div className="voice-area__toggles">
-        {state.inputMode === "vad" && isMacPlatform() && (
+        {state.inputMode === "vad" && isMacPlatform() && audioSettings().echoCancellation && (
           <span
             className="voice-area__info"
             role="img"

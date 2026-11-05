@@ -3,7 +3,7 @@
 **Spec code:** `VAI`
 
 ## Intent
-Voice AI is the section of the Settings window where the author chooses the speech provider, the Push-to-Talk key, and how VAD hears them. A person who wants to talk with an agent must tell Synthesis which service turns speech into text and text into speech. That service is separate from the AI that answers. So the section has its own keys, and it is not a third level of `AII-ai-integrations.md`. Verification tells the author what a server can do, because two servers with the same address format can offer very different routes. Out of scope: voice activity detection on a server or a provider, an OS-wide hotkey, and the voice of an agent, which the persona editor holds (`AGT-agents.md` AGT-FR-DIVM).
+Voice AI is the section of the Settings window where the author chooses the speech provider, the Push-to-Talk key, how VAD hears them, and the microphone and speaker that voice uses. A person who wants to talk with an agent must tell Synthesis which service turns speech into text and text into speech. That service is separate from the AI that answers. So the section has its own keys, and it is not a third level of `AII-ai-integrations.md`. Verification tells the author what a server can do, because two servers with the same address format can offer very different routes. A test sound and a microphone level let the author check the devices with no provider, so a device fault and a provider fault look different. Out of scope: voice activity detection on a server or a provider, an OS-wide hotkey, and the voice of an agent, which the persona editor holds (`AGT-agents.md` AGT-FR-DIVM).
 
 ## Functional requirements
 
@@ -63,7 +63,7 @@ Voice AI is the section of the Settings window where the author chooses the spee
 29. **VAI-FR-BGBL** The control refuses a chord the application already binds, on Ctrl or Cmd: Z, Shift+Z, X, C, V, A, S, F, R, Q, J, K, Backslash, Enter; and Alt+Up, Alt+Down. It names the reason inline.
 30. **VAI-FR-WOCD** With Hold behaviour, the control refuses a chord that holds Cmd. Choosing Hold while the stored chord holds Cmd restores the default hotkey and states this inline.
     - *Why:* macOS does not report `keyup` of a key released while Cmd is held, so a held recording never ends.
-31. **VAI-FR-AVBR** A change of behaviour or hotkey reaches the main window through the app-preferences change event, with no restart. A change of a VAD setting reaches an open session from its next utterance, with no restart.
+31. **VAI-FR-AVBR** A change of behaviour or hotkey reaches the main window through the app-preferences change event, with no restart. A change of a VAD setting reaches an open session from its next utterance, with no restart. A change of a device or of echo cancellation reaches the main window through the same event (`VOM-voice-mode.md` VOM-FR-OGFM).
 
 ### VAD
 
@@ -77,6 +77,18 @@ Voice AI is the section of the Settings window where the author chooses the spee
 
 37. **VAI-FR-RGPV** The section holds a **Spoken language** control with `Auto`, the languages of the table by English name (`../core/VOP-voice-ai-providers.md` VOP-FR-IRZC), and `Other…`. `Other…` shows a text field of at most 40 characters. The control saves `voice_spoken_language` through `patchAppPreferences`.
 38. **VAI-FR-JPZK** The control states: `Your speech is translated into the language of the document before it posts.` With a spoken language set, it also states: `Agents speak to you in this language.`
+
+### Audio devices
+
+39. **VAI-FR-WNCL** The section holds an **Audio devices** group with a Microphone selector, a Test microphone control, a Speaker selector, a Play test sound control, and an Echo cancellation toggle. The group applies to voice mode and to Hold to test, and it needs no verified provider.
+40. **VAI-FR-XADO** The Microphone selector offers `System default` and each audio input of `enumerateDevices`, by label. A change saves `voice_input_device` through `patchAppPreferences` at once. The list reads again on `devicechange`. A saved device that is not present shows selected as `<label> (not connected)`.
+41. **VAI-FR-XOOE** When the device list gives no labels, the group shows an **Allow microphone access** action. It opens the microphone one time, closes it, and reads the list again.
+    - *Why:* the WebView gives device labels only after the microphone is allowed.
+42. **VAI-FR-ZIFX** The Test microphone control is a toggle. While it is on, it opens the selected microphone with the saved echo cancellation and shows a live level meter. It turns off on a second press, on a change of the microphone, and when the section closes, and then the microphone closes.
+43. **VAI-FR-YTLU** Where the WebView has `AudioContext.setSinkId`, the Speaker selector offers `System default` and each audio output, by label, and a change saves `voice_output_device` at once. Otherwise it shows `System default`, disabled, with the line `Voice plays through the system output. Change it in the system sound settings.`
+44. **VAI-FR-BPUR** **Play test sound** plays a tone of about 1 second through the playback of voice mode and the selected speaker (`VOM-voice-mode.md` VOM-FR-KKNN). It calls no provider. It states `Playing…` while the tone plays, and a failure states `The test sound could not play. See the log for details.`
+45. **VAI-FR-KXFA** The Echo cancellation toggle saves `voice_echo_cancellation` through `patchAppPreferences` at once, and it is on by default. It states `Turn off when you use headphones and the agent's voice is too quiet. With speakers, the agent can hear itself.`
+46. **VAI-FR-NLYF** Hold to test uses the saved microphone, the saved speaker, and the saved echo cancellation (`VOM-voice-mode.md` VOM-FR-EQQV, VOM-FR-KKNN, VOM-FR-OGFM). The test and Play test sound log as voice mode playback does (`VOM-voice-mode.md` VOM-FR-EPBL).
 
 ## Wireframes
 
@@ -105,6 +117,11 @@ Hotkey     [ Ctrl+Shift+Space ]  [ Restore default ]
 VAD
 Silence timeout  ---o-------  1.5 s
 Sensitivity      ( ) Low  ( ) Medium  ( ) High
+
+Audio devices
+Microphone  [ MacBook Pro Microphone          v ]  [ Test microphone ]  |||||||....
+Speaker     [ System default                  v ]  [ Play test sound ]
+Echo cancellation  [x]  Turn off when you use headphones and the agent's voice is too quiet.
 ```
 
 ## UI contract boundary

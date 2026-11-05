@@ -26,7 +26,7 @@ import {
 } from "./DiagramEditor/DiagramViewer";
 import { sendHistoryKey } from "./DiagramEditor/fence";
 import { resetDiagramEditorForTest } from "./DiagramEditor/store";
-import { MAX_ZOOM, MIN_ZOOM } from "./DiagramEditor/viewerGeometry";
+import { MAX_ZOOM, MIN_ZOOM, wheelFactor } from "./DiagramEditor/viewerGeometry";
 import { EditSessionStore } from "../state/editSessions";
 import { resetLogBufferForTest } from "../logging";
 import { holdNextRender, resetMermaidMock } from "../test/mermaidMock";
@@ -360,6 +360,77 @@ describe("the diagram viewer overlay", () => {
     expect(placed().x).toBeCloseTo(fitted.x);
   });
 
+  it("EDT-FR-LJAP: a diagram tall for the area shows at not more than 100%, starts at the top, and Fit returns there", async () => {
+    // Diagram 200 x 100 in an area 1000 x 60: a whole fit needs (60 - 32) / 100 = 28%.
+    areaSize = { width: 1000, height: 60 };
+    await mount();
+    await openViewer();
+    const start = { scale: 1, x: (1000 - 200) / 2, y: 16 };
+    await waitFor(() => expect(placed()).toEqual(start));
+    expect(screen.getByTestId("diagram-viewer-zoom").textContent).toBe("100%");
+
+    fireEvent.wheel(area(), { deltaY: 30 });
+    expect(placed()).toEqual({ ...start, y: start.y - 30 });
+    fireEvent.click(within(viewer()).getByRole("button", { name: FIT_LABEL }));
+    expect(placed()).toEqual(start);
+    fireEvent.keyDown(area(), { key: "+" });
+    fireEvent.keyDown(area(), { key: "0" });
+    expect(placed()).toEqual(start);
+  });
+
+  it("EDT-FR-LJAP: a diagram tall for an area narrower than it fills the width below 100%", async () => {
+    // Area 150 x 40, room 118 x 8: a whole fit needs 8%; across it needs 118 / 200 = 59%.
+    areaSize = { width: 150, height: 40 };
+    await mount();
+    await openViewer();
+    await waitFor(() => expect(placed().scale).toBeCloseTo(118 / 200));
+    expect(placed().x).toBeCloseTo(16);
+    expect(placed().y).toBe(16);
+    expect(screen.getByTestId("diagram-viewer-zoom").textContent).toBe("59%");
+  });
+
+  it("EDT-FR-LJAP, EDT-FR-JJDP: a diagram wide for the area shows at not more than 100% and starts at the left; while fitted, a resize applies the rule again", async () => {
+    // Diagram 200 x 100 in an area 100 x 1000: a whole fit needs (100 - 32) / 200 = 34%.
+    areaSize = { width: 100, height: 1000 };
+    await mount();
+    await openViewer();
+    await waitFor(() => expect(placed()).toEqual({ scale: 1, x: 16, y: (1000 - 100) / 2 }));
+
+    // While fitted, a larger area fits all of the diagram at 80% or more.
+    areaSize = { width: 400, height: 1000 };
+    act(() => observers.forEach((notify) => notify()));
+    const scale = (400 - 32) / 200;
+    expect(placed().scale).toBeCloseTo(scale);
+    expect(placed().x).toBeCloseTo((400 - 200 * scale) / 2);
+    expect(placed().y).toBeCloseTo((1000 - 100 * scale) / 2);
+    expect(area()).toHaveAttribute("data-fitted", "true");
+
+    // A smaller area again needs a fit in one direction.
+    areaSize = { width: 100, height: 1000 };
+    act(() => observers.forEach((notify) => notify()));
+    expect(placed()).toEqual({ scale: 1, x: 16, y: (1000 - 100) / 2 });
+  });
+
+  it("EDT-FR-PDBC, EDT-FR-JJDP: a wheel pan ends the fit, a wheel with no delta keeps it, and the page does not scroll", async () => {
+    await mount();
+    await openViewer();
+    await waitFor(() => expect(placed().scale).toBeCloseTo(4.68));
+    const fitted = placed();
+
+    expect(fireEvent.wheel(area(), { deltaY: 0 })).toBe(false);
+    expect(fireEvent.wheel(area(), { deltaX: 20, ctrlKey: true })).toBe(false);
+    expect(area()).toHaveAttribute("data-fitted", "true");
+    expect(placed()).toEqual(fitted);
+
+    expect(fireEvent.wheel(area(), { deltaY: 40 })).toBe(false);
+    expect(area()).not.toHaveAttribute("data-fitted");
+    const panned = placed();
+    expect(panned).toEqual({ ...fitted, y: fitted.y - 40 });
+    areaSize = { width: 600, height: 300 };
+    act(() => observers.forEach((notify) => notify()));
+    expect(placed()).toEqual(panned);
+  });
+
   it("EDT-FR-CCZU: the zoom readout shows the current size in percent, at each zoom and each fit", async () => {
     await mount();
     await openViewer();
@@ -373,7 +444,7 @@ describe("the diagram viewer overlay", () => {
     expect(readout().textContent).toBe("468%");
   });
 
-  it("EDT-FR-MZIF: the wheel zooms about the pointer, and + and - about the centre, inside the limits", async () => {
+  it("EDT-FR-MZIF: Cmd + wheel and a pinch zoom about the pointer, and + and - about the centre, inside the limits", async () => {
     await mount();
     await openViewer();
     await waitFor(() => expect(placed().scale).toBeGreaterThan(1));
@@ -382,9 +453,25 @@ describe("the diagram viewer overlay", () => {
     const px = 300;
     const py = 200;
     const diagramX = (px - before.x) / before.scale;
-    fireEvent.wheel(area(), { deltaY: -100, clientX: px, clientY: py });
+    expect(fireEvent.wheel(area(), { deltaY: -100, metaKey: true, clientX: px, clientY: py })).toBe(
+      false,
+    );
+    const zoomedIn = placed();
+    expect(zoomedIn.scale).toBeCloseTo(before.scale * wheelFactor(-100, 0));
+    expect((px - zoomedIn.x) / zoomedIn.scale).toBeCloseTo(diagramX);
+    expect(area()).not.toHaveAttribute("data-fitted");
+
+    // A trackpad pinch arrives as a wheel event with Ctrl held, at the pinch rate.
+    fireEvent.wheel(area(), { deltaY: 10, ctrlKey: true, clientX: px, clientY: py });
+    const pinched = placed();
+    expect(pinched.scale).toBeCloseTo(zoomedIn.scale * wheelFactor(10, 0, true));
+    expect(pinched.scale).not.toBeCloseTo(zoomedIn.scale * wheelFactor(10, 0));
+    expect((px - pinched.x) / pinched.scale).toBeCloseTo(diagramX);
+
+    // Ctrl with Shift zooms too: it does not pan.
+    fireEvent.wheel(area(), { deltaY: -10, ctrlKey: true, shiftKey: true, clientX: px, clientY: py });
     const after = placed();
-    expect(after.scale).toBeGreaterThan(before.scale);
+    expect(after.scale).toBeCloseTo(pinched.scale * wheelFactor(-10, 0, true));
     expect((px - after.x) / after.scale).toBeCloseTo(diagramX);
 
     fireEvent.keyDown(area(), { key: "-" });
@@ -399,7 +486,7 @@ describe("the diagram viewer overlay", () => {
     expect(screen.getByTestId("diagram-viewer-zoom").textContent).toBe("10%");
   });
 
-  it("EDT-FR-PDBC: a drag and the arrow keys pan the diagram", async () => {
+  it("EDT-FR-PDBC: a drag, the wheel, and the arrow keys pan the diagram", async () => {
     await mount();
     await openViewer();
     await waitFor(() => expect(placed().scale).toBeGreaterThan(1));
@@ -416,6 +503,13 @@ describe("the diagram viewer overlay", () => {
     expect(placed().x).toBeGreaterThan(dragged.x);
     fireEvent.keyDown(area(), { key: "ArrowUp" });
     expect(placed().y).toBeLessThan(dragged.y);
+
+    // The wheel moves the diagram as a page moves when it scrolls, and keeps the zoom.
+    const keyed = placed();
+    fireEvent.wheel(area(), { deltaX: 15, deltaY: 40 });
+    expect(placed()).toEqual({ scale: keyed.scale, x: keyed.x - 15, y: keyed.y - 40 });
+    fireEvent.wheel(area(), { deltaY: 25, shiftKey: true });
+    expect(placed()).toEqual({ scale: keyed.scale, x: keyed.x - 40, y: keyed.y - 40 });
   });
 
   it("EDT-FR-JJDP: a fitted diagram fits again after a resize; a zoomed one keeps its zoom", async () => {
@@ -532,7 +626,8 @@ describe("the diagram viewer overlay", () => {
   it("EDT-FR-EAOC: opening, zooming, panning, fitting, moving, resizing, and closing change nothing in the buffer", async () => {
     const { backend } = await mount();
     const modal = await openViewer();
-    fireEvent.wheel(area(), { deltaY: -100, clientX: 10, clientY: 10 });
+    fireEvent.wheel(area(), { deltaY: -100, ctrlKey: true, clientX: 10, clientY: 10 });
+    fireEvent.wheel(area(), { deltaY: 40 });
     fireEvent.keyDown(area(), { key: "+" });
     fireEvent.keyDown(area(), { key: "ArrowDown" });
     fireEvent.pointerDown(area(), { button: 0, clientX: 0, clientY: 0, pointerId: 1 });

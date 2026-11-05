@@ -17,7 +17,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { logDebug } from "../../logging";
+import { logDebug, logWarn } from "../../logging";
 import { Icon } from "../icons";
 import { diagramElement } from "../markdownMermaidRender";
 import { OverlayFrame } from "./OverlayFrame";
@@ -31,6 +31,7 @@ import {
   naturalSize,
   panBy,
   wheelFactor,
+  wheelPan,
   zoomAt,
   type Size,
   type ViewTransform,
@@ -47,6 +48,21 @@ const sizeOf = (el: HTMLElement | null): Size =>
 
 const sameSize = (a: Size | null, b: Size | null) =>
   a === b || (a !== null && b !== null && a.width === b.width && a.height === b.height);
+
+/** EDT-FR-LJAP: the fit of the diagram, and a log of its result. Numbers only. */
+function fitAndLog(area: Size, natural: Size, reason: string): ViewTransform {
+  const t = fitTransform(area, natural);
+  logDebug(["frontend"], "the diagram viewer fits the diagram", {
+    reason,
+    areaWidth: area.width,
+    areaHeight: area.height,
+    diagramWidth: natural.width,
+    diagramHeight: natural.height,
+    scale: t.scale,
+    whole: natural.width * t.scale <= area.width && natural.height * t.scale <= area.height,
+  });
+  return t;
+}
 
 export function DiagramViewerOverlay({ request }: { request: DiagramEditorRequest }) {
   const areaRef = useRef<HTMLDivElement>(null);
@@ -90,6 +106,7 @@ export function DiagramViewerOverlay({ request }: { request: DiagramEditorReques
         node.setAttribute("height", String(size.height));
       }
       (node as SVGElement).style.removeProperty("max-width");
+      if (!size) logWarn(["frontend"], "the diagram viewer cannot find the size of the diagram");
     }
     stage.replaceChildren(...(node ? [node] : []));
     setNatural((last) => (sameSize(last, size) ? last : size));
@@ -113,8 +130,16 @@ export function DiagramViewerOverlay({ request }: { request: DiagramEditorReques
 
   // EDT-FR-LJAP, EDT-FR-JJDP: while fitted, a new size or a new render fits
   // the diagram again.
+  // A new drawing is logged once; a change of size is not, so that a resize
+  // by drag does not fill the log.
+  const loggedFit = useRef<Size | null>(null);
   useLayoutEffect(() => {
     if (!fitted || !natural) return;
+    if (loggedFit.current !== natural && area.width > 0 && area.height > 0) {
+      loggedFit.current = natural;
+      setTransform(fitAndLog(area, natural, "render"));
+      return;
+    }
     setTransform(fitTransform(area, natural));
   }, [fitted, area, natural, shown]);
 
@@ -126,7 +151,7 @@ export function DiagramViewerOverlay({ request }: { request: DiagramEditorReques
   /** EDT-FR-LJAP: the Fit control and the key `0`. */
   const fit = useCallback(() => {
     setFitted(true);
-    if (natural) setTransform(fitTransform(sizeOf(areaRef.current), natural));
+    if (natural) setTransform(fitAndLog(sizeOf(areaRef.current), natural, "fit control"));
   }, [natural]);
 
   /** EDT-FR-MZIF, EDT-FR-PDBC: a zoom or a pan ends the fit. */
@@ -135,16 +160,24 @@ export function DiagramViewerOverlay({ request }: { request: DiagramEditorReques
     setTransform(next);
   }, []);
 
-  // EDT-FR-MZIF: the wheel zooms about the pointer. A native listener, because
+  // EDT-FR-MZIF, EDT-FR-PDBC: a pinch, or the wheel with Ctrl or Cmd held,
+  // zooms about the pointer. The wheel alone pans. A native listener, because
   // the listener that React adds for the wheel cannot stop the page scroll.
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const box = el.getBoundingClientRect();
-      const factor = wheelFactor(e.deltaY, e.deltaMode);
-      change((t) => zoomAt(t, factor, e.clientX - box.left, e.clientY - box.top));
+      if (e.ctrlKey || e.metaKey) {
+        // An event with no vertical delta does not zoom, so it keeps the fit.
+        if (e.deltaY === 0) return;
+        const box = el.getBoundingClientRect();
+        const factor = wheelFactor(e.deltaY, e.deltaMode, e.ctrlKey);
+        change((t) => zoomAt(t, factor, e.clientX - box.left, e.clientY - box.top));
+        return;
+      }
+      const { dx, dy } = wheelPan(e.deltaX, e.deltaY, e.deltaMode, e.shiftKey);
+      if (dx !== 0 || dy !== 0) change((t) => panBy(t, dx, dy));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);

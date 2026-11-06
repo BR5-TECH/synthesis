@@ -103,6 +103,9 @@ impl LoopSettings {
     pub fn pass_limit_from(&self, run: &GraduationRun, floor: u32) -> u32 {
         if run.is_merge() {
             floor.max(1).saturating_add(crate::graduation::MERGE_PASS_BUDGET.max(1) - 1)
+        } else if run.is_pr_summary() {
+            // GRL-FR-UNKD: a PR summary run has one turn and no pass budget.
+            floor.max(1)
         } else {
             self.pass_limit(floor)
         }

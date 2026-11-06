@@ -307,7 +307,12 @@ export function gitPanelInvoke(cmd: string, a: Record<string, any>): unknown {
       const failure = prError();
       if (failure) throw failure; // eslint-disable-line no-throw-literal
       if (a.state === "closed") return CLOSED_PRS;
-      return flag("noPrs") ? [] : OPEN_PRS;
+      if (flag("noPrs")) return [];
+      // CPR-FR-IPKX: `?stackedPr` adds an open pull request whose head is
+      // `feature/new-artifact-window`, so a PR with that base is stacked.
+      return flag("stackedPr")
+        ? [...OPEN_PRS, { ...OPEN_PRS[0], number: 150, title: "New artifact window", headBranch: "feature/new-artifact-window" }]
+        : OPEN_PRS;
     }
     case "get_pull_request_detail": {
       const failure = prError();

@@ -32,7 +32,7 @@ pub const ERR_PULL_REQUEST_REJECTED: &str = "pull_request_rejected";
 const ALREADY_EXISTS: &str = "pull request already exists";
 
 /// GTC-FR-YQAE: the typed error of a failed write.
-fn write_error(failure: GithubWriteFailure) -> String {
+pub(super) fn write_error(failure: GithubWriteFailure) -> String {
     match failure {
         GithubWriteFailure::NotFound | GithubWriteFailure::Rejected => {
             ERR_GITHUB_TOKEN_REJECTED.to_string()

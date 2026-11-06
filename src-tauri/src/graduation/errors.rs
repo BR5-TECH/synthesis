@@ -44,3 +44,8 @@ pub const ERR_DIRECT_WORKTREE_MISSING: &str = "direct_worktree_missing";
 pub const ERR_DIRECT_TARGET_CHANGED: &str = "direct_target_changed";
 /// GSU-FR-SZTZ: the project is in no Git repository, so it has no worktree.
 pub const ERR_NOT_A_GIT_REPOSITORY: &str = "not_a_git_repository";
+/// GRD-FR-JAUJ: the queue `pr:<head>` holds a PR summary run that is not
+/// terminal. The refusal carries the run id: `pr_summary_active: <run-id>`.
+pub const ERR_PR_SUMMARY_ACTIVE: &str = "pr_summary_active";
+/// GRD-FR-MACY: a `combine` request found no run summary to combine.
+pub const ERR_NO_RUN_SUMMARIES: &str = "no_run_summaries";

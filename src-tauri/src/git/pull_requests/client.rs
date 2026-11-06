@@ -78,6 +78,18 @@ pub(crate) trait GithubPullRequests: Send + Sync {
         Err(GithubWriteFailure::Unreachable)
     }
 
+    /// PATCH `body` as JSON to `path` (starting with `/`) and return the JSON
+    /// body of a successful answer (GTC-FR-ZHVO). An implementation that cannot
+    /// write answers `Unreachable`.
+    fn patch_json(
+        &self,
+        _secret: &str,
+        _path: &str,
+        _body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        Err(GithubWriteFailure::Unreachable)
+    }
+
     /// A client for the API of `host` (normalized), or `None` where this client
     /// serves every host itself, as a test double does.
     fn for_host(&self, _host: &str) -> Option<Box<dyn GithubPullRequests>> {
@@ -144,7 +156,16 @@ impl GithubPullRequests for HttpGithubPullRequests {
         path: &str,
         body: &Value,
     ) -> Result<Value, GithubWriteFailure> {
-        post_at(API, secret, path, body)
+        write_at(API, WriteMethod::Post, secret, path, body)
+    }
+
+    fn patch_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        write_at(API, WriteMethod::Patch, secret, path, body)
     }
 
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
@@ -165,7 +186,16 @@ impl GithubPullRequests for HostedGithubPullRequests {
         path: &str,
         body: &Value,
     ) -> Result<Value, GithubWriteFailure> {
-        post_at(&self.api, secret, path, body)
+        write_at(&self.api, WriteMethod::Post, secret, path, body)
+    }
+
+    fn patch_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        write_at(&self.api, WriteMethod::Patch, secret, path, body)
     }
 
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
@@ -173,14 +203,31 @@ impl GithubPullRequests for HostedGithubPullRequests {
     }
 }
 
-fn post_at(api: &str, secret: &str, path: &str, body: &Value) -> Result<Value, GithubWriteFailure> {
+/// The HTTP method of one write.
+#[derive(Clone, Copy)]
+enum WriteMethod {
+    Post,
+    Patch,
+}
+
+fn write_at(
+    api: &str,
+    method: WriteMethod,
+    secret: &str,
+    path: &str,
+    body: &Value,
+) -> Result<Value, GithubWriteFailure> {
     if !path.starts_with('/') {
         return Err(GithubWriteFailure::Unreachable);
     }
     let url = format!("{api}{path}");
     let payload = serde_json::to_string(body).map_err(|_| GithubWriteFailure::Unreachable)?;
-    let mut response = write_agent()
-        .post(&url)
+    let agent = write_agent();
+    let request = match method {
+        WriteMethod::Post => agent.post(&url),
+        WriteMethod::Patch => agent.patch(&url),
+    };
+    let mut response = request
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")

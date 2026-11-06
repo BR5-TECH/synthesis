@@ -49,6 +49,7 @@ pub mod push;
 pub mod rollback;
 pub mod status;
 pub mod telemetry;
+pub mod write_guard;
 
 // Re-exported flat, so every import site keeps naming `crate::git::X`. Each
 // item keeps the visibility it had before the split — the helpers that were
@@ -66,6 +67,9 @@ pub use pull_requests::*;
 pub use push::*;
 pub use rollback::*;
 pub use status::*;
+pub use write_guard::{
+    BranchWriteGuard, ERR_MAIN_BRANCH_PROTECTED, ERR_MAIN_BRANCH_WRITE_UNCONFIRMED,
+};
 // Every record helper is this crate's alone; nothing outside reports git.
 pub(crate) use telemetry::*;
 
@@ -322,42 +326,51 @@ pub fn branches_reported<S: LogSink + Clone + Send + 'static>(
 /// GTC-FR-19 / GTC-FR-20: commit exactly the named paths. The commit the
 /// application makes, invoked by `../ui/CMW-commit-message.md`.
 #[tauri::command]
-pub fn commit_paths(
+pub async fn commit_paths<R: tauri::Runtime>(
     message: String,
     paths: Vec<String>,
     expected_worktree: Option<String>,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<CommitOutcome, String> {
-    let root = project.require_root()?;
-    let outcome = commit_paths_reported(
-        &app,
-        &logging::BUFFER,
-        &root,
-        &message,
-        &paths,
-        expected_worktree.as_deref(),
-    )?;
-    // CHC-FR-16: the change set the commit just emptied is reloaded by every
-    // surface that follows the event (`../ui/CHG-changes.md` CHG-FR-41). Emitted
-    // here rather than left to the watcher, which does not watch `.git`.
-    if let Err(e) = app.emit(
-        changes::CHANGES_UPDATED,
-        changes::ChangesUpdatedPayload { change_count: paths.len() },
-    ) {
-        // The commit is made; an undelivered announcement must not undo it. It
-        // is still worth a record: every surface following the event is now
-        // showing a change set the commit already emptied, and nothing else
-        // explains why.
-        logging::log_warn(
+    app: tauri::AppHandle<R>,
+) -> Result<CommitOutcome, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    // The check can read GitHub, so the command runs off the main thread.
+    write_guard::off_main::run_write(app, "commit_paths", move |app| {
+        let root = write_guard::off_main::project_root(&app)?;
+        // GTC-FR-EMLM: the main branch write check, before anything is written.
+        write_guard::commands::require_active_branch_write(&app, &root, "commit_paths")?;
+        let _sequence = write_guard::off_main::in_sequence();
+        let outcome = commit_paths_reported(
             &app,
             &logging::BUFFER,
-            LOCAL,
-            "commit made but the changes-updated event was not delivered",
-            log_fields! { "event" => changes::CHANGES_UPDATED, "error" => e.to_string() },
-        );
-    }
-    Ok(outcome)
+            &root,
+            &message,
+            &paths,
+            expected_worktree.as_deref(),
+        )?;
+        // CHC-FR-16: the change set the commit just emptied is reloaded by every
+        // surface that follows the event (`../ui/CHG-changes.md` CHG-FR-41). Emitted
+        // here rather than left to the watcher, which does not watch `.git`.
+        if let Err(e) = app.emit(
+            changes::CHANGES_UPDATED,
+            changes::ChangesUpdatedPayload { change_count: paths.len() },
+        ) {
+            // The commit is made; an undelivered announcement must not undo it. It
+            // is still worth a record: every surface following the event is now
+            // showing a change set the commit already emptied, and nothing else
+            // explains why.
+            logging::log_warn(
+                &app,
+                &logging::BUFFER,
+                LOCAL,
+                "commit made but the changes-updated event was not delivered",
+                log_fields! { "event" => changes::CHANGES_UPDATED, "error" => e.to_string() },
+            );
+        }
+        Ok(outcome)
+    })
+    .await
 }
 
 /// GTC-FR-29 … GTC-FR-32: the active worktree's complete uncommitted state.
@@ -417,6 +430,8 @@ pub async fn push_current_branch(
     // parameters: a `State<'_, T>` borrows the invoke context and cannot cross
     // onto another thread, while the `AppHandle` can and reaches the same values.
     tauri::async_runtime::spawn_blocking(move || {
+        // GTC-FR-EMLM: the main branch write check, before anything is written.
+        write_guard::commands::require_active_branch_write(&app, &root, "push_current_branch")?;
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let registry = app.state::<ProgressRegistry>();
@@ -449,6 +464,8 @@ pub async fn push_branch(
     let project_key = project.slot_key();
 
     tauri::async_runtime::spawn_blocking(move || {
+        // GTC-FR-EMLM: the main branch write check, before anything is written.
+        write_guard::commands::require_branch_write(&app, &root, Some(&branch), "push_branch")?;
         let checkout = push_checkout(&app, &root, &branch);
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();

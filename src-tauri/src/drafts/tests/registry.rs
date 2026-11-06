@@ -13,11 +13,11 @@ fn draft_command_functions_are_in_scope() {
     let _ = create_draft::<tauri::Wry>;
     let _ = search_drafts;
     let _ = open_draft;
-    let _ = rename_draft;
-    let _ = set_draft_status;
-    let _ = delete_draft;
+    let _ = rename_draft::<tauri::Wry>;
+    let _ = set_draft_status::<tauri::Wry>;
+    let _ = delete_draft::<tauri::Wry>;
     let _ = load_draft_file_contents;
-    let _ = save_draft_file_contents;
+    let _ = save_draft_file_contents::<tauri::Wry>;
 }
 
 /// DRS-FR-12 / DRS-FR-13: there is no command that lists a draft's files,

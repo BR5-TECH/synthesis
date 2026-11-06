@@ -51,7 +51,7 @@ pub(crate) fn create<R: tauri::Runtime>(
     // asking for the name again, or Git refuses the registration.
     release(app, run, worktree)?;
     if let Some(parent) = target.parent() {
-        if !parent.is_dir() {
+        if !crate::graduation::is_directory(&fs, parent) {
             fs.create_dir(parent).map_err(|e| e.to_string())?;
         }
     }

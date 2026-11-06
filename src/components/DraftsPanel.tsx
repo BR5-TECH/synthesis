@@ -57,7 +57,8 @@ import {
   type MenuAnchor,
   type TreeItem,
 } from "./draftsTree";
-import { createDraftActions } from "./draftsActions";
+import { changeDrafts, createDraftActions } from "./draftsActions";
+import { WRITE_CANCELLED } from "../state/mainBranchWrite";
 import { DraftsPanelView } from "./DraftsPanelView";
 import {
   makeRowRenderers,
@@ -715,11 +716,17 @@ export function DraftsPanel({
   const commitMove = async (item: TreeItem, destination: string) => {
     const key = itemKey(item);
     const label = item.kind === "draft" ? item.name : folderName(item.path);
+    let landed = false;
     const ok = await run(key, async () => {
-      if (item.kind === "draft") await api.moveDraftToFolder(item.id, destination);
-      else await api.moveDraftsFolder(item.path, destination);
+      // DRS-FR-TMZX: a move writes into the active worktree (per `changeDrafts`).
+      const result = await changeDrafts<unknown>(() =>
+        item.kind === "draft"
+          ? api.moveDraftToFolder(item.id, destination)
+          : api.moveDraftsFolder(item.path, destination),
+      );
+      landed = result !== WRITE_CANCELLED;
     });
-    if (!ok) return;
+    if (!ok || !landed) return;
     const arrived =
       item.kind === "folder"
         ? folderJoin(destination, folderName(item.path))

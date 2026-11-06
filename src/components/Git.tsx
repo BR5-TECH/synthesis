@@ -235,7 +235,7 @@ export function Git({
     void transfer.pushBranch().then((outcome) => {
       // The terminal event already appends the failure to the transcript; this
       // is the note beside the controls, in the panel's own vocabulary.
-      if (outcome.ok || outcome.cause === "busy") return;
+      if (outcome.ok || outcome.cause === "busy" || outcome.cause === "cancelled") return;
       setAuthNote(`Push failed: ${tokenErrorMessage(outcome.error)}`);
     });
   };

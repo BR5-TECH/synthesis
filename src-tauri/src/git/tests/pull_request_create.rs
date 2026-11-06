@@ -517,6 +517,27 @@ fn a_failed_creation_logs_the_error_code_and_still_no_secret() {
     assert!(!text.contains("secret title"));
 }
 
+// GTC-FR-YQAE, GTC-FR-DWVY: the reasons of a 422 can quote the description,
+// so the record holds the code of the rejection and none of its words.
+#[test]
+fn a_rejection_is_logged_by_its_code_without_the_reasons_of_github() {
+    let f = repo_with_origin(PLATFORM);
+    let github = FakeGithub::new();
+    github.answer_post(Err(GithubWriteFailure::Invalid(
+        "Validation Failed; body quotes the private description".into(),
+    )));
+    let buffer = own_buffer();
+    let error =
+        create(&f, &github, &super::pull_requests::token_ready(), buffer, "t", false).unwrap_err();
+    assert!(error.contains("private description"), "the caller still gets the reasons");
+    let failed = records_for(buffer, "pull request read failed");
+    assert_eq!(failed.len(), 1);
+    assert_eq!(failed[0].fields.get("error"), Some(&json!(ERR_PULL_REQUEST_REJECTED)));
+    let text = buffer_text(buffer);
+    assert!(!text.contains("private description"), "the log holds the reasons: {text}");
+    assert!(!text.contains("Validation Failed"), "the log holds the reasons: {text}");
+}
+
 // GTC-FR-YQAE
 #[test]
 fn a_reason_that_does_not_name_an_existing_pull_request_is_a_rejection() {

@@ -18,6 +18,12 @@ import {
   closeDiagramEditor,
   setDiagramEditorOpening,
 } from "../components/DiagramEditor/store";
+import {
+  dismissMainBranchWrite,
+  runMainBranchWrite,
+  setMainBranchWriteOpening,
+  WRITE_CANCELLED,
+} from "../state/mainBranchWrite";
 import { useSettingsWindows } from "./useSettingsWindows";
 import { usePullRequestWindow } from "./usePullRequestWindow";
 import type { useShellSession } from "./useShellSession";
@@ -321,7 +327,9 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    */
   const pushAfterGraduationCommit = async (retried = false): Promise<void> => {
     try {
-      await api.pushCurrentBranch();
+      // CHG-FR-ATLJ: the push reads the branch write guard first.
+      const pushed = await runMainBranchWrite("push", () => api.pushCurrentBranch());
+      if (pushed === WRITE_CANCELLED) return;
       showPushSucceeded();
     } catch (e) {
       const raw = String(e);
@@ -516,6 +524,8 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     dismissTabMenu();
     dismissGraduationOverlays();
     pullRequest.dismissPullRequestWindow();
+    // MBW-FR-GYVD: the main branch write confirmation is an overlay too.
+    dismissMainBranchWrite();
   };
 
   /**
@@ -598,7 +608,12 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   openingDiagramEditor.current = closeAllOverlays;
   useEffect(() => {
     setDiagramEditorOpening(() => openingDiagramEditor.current());
-    return () => setDiagramEditorOpening(null);
+    // MBW-FR-GYVD / SNV-FR-56: the confirmation closes every other overlay.
+    setMainBranchWriteOpening(() => openingDiagramEditor.current());
+    return () => {
+      setDiagramEditorOpening(null);
+      setMainBranchWriteOpening(null);
+    };
   }, []);
 
   const openCommitWindow = (files: CommitFile[], hidden: CommitFile[]) =>

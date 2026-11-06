@@ -54,6 +54,8 @@ export function isArchived(run: GraduationRun): boolean {
  * (GRD-FR-BNTC).
  */
 export function holdsAStream(run: GraduationRun): boolean {
+  // GRD-FR-CCHK: a `failed` PR summary run holds its queue no more.
+  if (run.prSummary && run.state === "failed") return false;
   return holdsQueue(run.state) || (run.state === "queued" && Boolean(run.dispatched));
 }
 

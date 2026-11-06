@@ -29,3 +29,23 @@
   gap: var(--sp-2);
   min-width: 0;
 }
+
+/* ---------- PR summary run result (GRU-graduation-runs.md GRU-FR-DQSA) ----------
+   The title on one line and the description as Markdown beneath it, held to
+   the tokens the section already uses. A long title wraps rather than scrolls
+   sideways. */
+.graduation__pr-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.graduation__pr-summary-title {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.graduation__pr-summary-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

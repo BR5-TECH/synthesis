@@ -16,6 +16,7 @@ import type {
   GraduationLogPageEntry,
   GraduationLogStream,
   GraduationMergeData,
+  PrSummaryData,
   GraduationQueue,
   GraduationRun,
   GraduationRunState,
@@ -358,4 +359,45 @@ export function makeMergeRun(
     ...rest,
   });
   return { ...run, merge: makeMergeData(merge) };
+}
+
+/**
+ * GRD-FR-KAKU: one PR summary run, whole. It has no draft and no stream: its
+ * draft id, draft name and stream are empty, and its title is
+ * `prSummary.name`.
+ */
+export function makePrSummaryRun(
+  id: string,
+  state: GraduationRunState = "working",
+  over: Omit<RunOverrides, "prSummary"> & { prSummary?: Partial<PrSummaryData> } = {},
+): GraduationRun {
+  const { prSummary, ...rest } = over;
+  const run = makeRun(id, state, {
+    streamId: "",
+    streamName: "",
+    standingWork: "keep",
+    baseCommit: null,
+    input: {
+      draftId: "",
+      draftName: "",
+      prompt: "",
+      promptChecksum: "",
+      capturedAt: "2026-09-06T09:00:00Z",
+    },
+    ...rest,
+  });
+  return {
+    ...run,
+    prSummary: {
+      name: "Summarize feature/panel",
+      head: "feature/panel",
+      base: "main",
+      mode: "diff",
+      headTip: "e".repeat(40),
+      mergeBase: "a".repeat(40),
+      inputs: [],
+      result: null,
+      ...prSummary,
+    },
+  };
 }

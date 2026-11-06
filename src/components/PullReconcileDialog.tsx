@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { useGitTransfer } from "../hooks/useGitTransfer";
 import { logInfo, logWarn } from "../logging";
 import { reconcileText } from "../state/pullText";
+import { useInlineWriteGuard } from "./MainBranchWrite";
 import type { PullOutcome, PullReconcileOutcome, PullStrategy } from "../types";
 
 export interface PullReconcileDialogProps {
@@ -47,6 +48,14 @@ export function PullReconcileDialog({
   const running = phase.kind === "running";
   const branch = outcome.branch ?? "";
   const upstream = outcome.upstream ?? "";
+  // MBW-FR-DBGA / MBW-FR-URIL: a pull reconcile writes the branch, so the
+  // dialog reads its guard when it opens and shows the inline section.
+  const writeGuard = useInlineWriteGuard({
+    write: "pull_reconcile",
+    branch: outcome.branch ?? null,
+    onCancel: onClose,
+  });
+  const chooseRef = useRef<(strategy: PullStrategy) => Promise<void>>(async () => {});
 
   // Focus lands on Cancel, so a reflexive Enter on a dialog the author did not
   // expect changes no history. On close it goes back to where it was, where
@@ -95,6 +104,12 @@ export function PullReconcileDialog({
       setPhase({ kind: "done", result: call.outcome });
       return;
     }
+    // MBW-FR-YSMC: a refusal of the check shows the section, and a confirm
+    // runs the same reconcile once more.
+    if (call.cause === "failed" && writeGuard.adoptRefusal(call.error, () => void chooseRef.current(strategy))) {
+      setPhase({ kind: "choose" });
+      return;
+    }
     const message =
       call.cause === "busy"
         ? "A push or a pull is already running. Wait for it to end, then try again."
@@ -104,6 +119,8 @@ export function PullReconcileDialog({
     });
     setPhase({ kind: "failed", message });
   };
+
+  chooseRef.current = choose;
 
   const result = phase.kind === "done" ? phase.result : null;
   const runId = result?.state === "handed_to_run" ? result.runId : undefined;
@@ -167,6 +184,7 @@ export function PullReconcileDialog({
             </p>
           )}
         </div>
+        {phase.kind === "choose" && writeGuard.section}
         <div className="modal__actions">
           {phase.kind === "choose" || running ? (
             <>
@@ -180,7 +198,8 @@ export function PullReconcileDialog({
               </button>
               <button
                 className="btn btn--sm btn--default"
-                disabled={running || transfer.running}
+                disabled={running || transfer.running || writeGuard.blocked}
+                aria-describedby={writeGuard.describedBy}
                 data-testid="pull-reconcile-rebase"
                 onClick={() => void choose("rebase")}
               >
@@ -188,7 +207,8 @@ export function PullReconcileDialog({
               </button>
               <button
                 className="btn btn--sm btn--primary"
-                disabled={running || transfer.running}
+                disabled={running || transfer.running || writeGuard.blocked}
+                aria-describedby={writeGuard.describedBy}
                 data-testid="pull-reconcile-merge"
                 onClick={() => void choose("merge")}
               >

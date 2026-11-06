@@ -1,5 +1,6 @@
 import { onArtifactChangedExternally } from "../../events";
 import { logDebug, logError, logWarn } from "../../logging";
+import { mainBranchSaveRefusal } from "../mainBranchWrite/editGate";
 import { artifactTransport, type DocumentTransport } from "../documentTransport";
 import type { ArtifactChangedPayload } from "../../types";
 import { createHistory, hasEdits } from "../editHistory";
@@ -765,17 +766,27 @@ export class EditSessionStore {
       // EDT-FR-71: the buffer, the history, and the dirty indicator are left
       // exactly as they were, and nothing is retried on a timer — the next edit
       // schedules the next write and Save retries on demand.
-      s.error = String(e);
+      // MBW-FR-YSMC: a refusal of the main branch write check reads as words,
+      // and the next change of the author asks for the confirmation.
+      const refused = mainBranchSaveRefusal(e);
+      s.error = refused ?? String(e);
       s.heldWrite = false;
       this.notify();
       // The write is the one operation here the user did not ask for by name,
       // so a failure they later report is a failure nobody watched happen. The
       // reason is the transport's own message; the buffer it could not write is
       // the user's content and stays out of the record.
-      logError(["frontend"], "artifact write failed", {
-        artifact: artifactId,
-        reason: String(e),
-      });
+      if (refused) {
+        logWarn(["frontend"], "artifact write refused on a main branch", {
+          artifact: artifactId,
+          code: String(e).split(":")[0],
+        });
+      } else {
+        logError(["frontend"], "artifact write failed", {
+          artifact: artifactId,
+          reason: String(e),
+        });
+      }
       // EDT-FR-81: a write that was in flight when the quiesce began and failed
       // as it settled. Collected rather than merely left on the record, because
       // the surface that asked for the quiesce reports it (CHG-FR-61) and a

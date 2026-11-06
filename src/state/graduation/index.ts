@@ -11,6 +11,7 @@
 
 export * from "./runState";
 export * from "./merge";
+export * from "./prSummary";
 export * from "./blockers";
 export * from "./escalations";
 export * from "./messages";

@@ -152,7 +152,7 @@ fn a_push_with_no_remote_is_the_typed_error_and_still_announces_its_end() {
 fn new_command_functions_are_in_scope() {
     // Renaming or dropping one of these fails to compile here, before it
     // can silently regress at `invoke` time.
-    let _a = commit_paths;
+    let _a = commit_paths::<tauri::Wry>;
     let _b = get_upstream_sync_state;
     let _c = push_current_branch;
 }

@@ -135,6 +135,35 @@ export interface CreatedPullRequest {
   url: string;
 }
 
+/** GTC-FR-QJFC: one issue a pull request resolves. */
+export interface PullRequestIssueRef {
+  /** The repository that holds the issue. */
+  owner: string;
+  repository: string;
+  number: number;
+}
+
+/** GTC-FR-WJUG: one issue the pull request is linked to, and how. */
+export interface LinkedPullRequestIssue {
+  issue: PullRequestIssueRef;
+  way: "closing_keyword";
+}
+
+/** GTC-FR-WJUG: one issue the pull request could not be linked to. */
+export interface FailedPullRequestIssue {
+  issue: PullRequestIssueRef;
+  /** The typed cause. */
+  error: string;
+}
+
+/** GTC-FR-ZHVO: what the link operation did. */
+export interface PullRequestLinkOutcome {
+  linked: LinkedPullRequestIssue[];
+  failed: FailedPullRequestIssue[];
+  /** GTC-FR-GNKQ: true when the base is the default branch GitHub reports. */
+  closesOnMerge: boolean;
+}
+
 /** GTC-FR-NEIW, GTC-FR-YWCP: what stands between a branch and a pull request. */
 export interface PullRequestHeadState {
   head: string;

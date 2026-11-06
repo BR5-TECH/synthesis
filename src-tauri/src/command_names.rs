@@ -174,6 +174,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "get_work_stream_uncommitted_paths",
     "start_graduation",
     "start_direct_graduation",
+    "start_pull_request_summary",
+    "list_branch_completed_runs",
     "preflight_direct_graduation",
     "list_graduation_queue",
     "get_graduation_run",
@@ -292,7 +294,12 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "delete_branch",
     "list_pull_requests",
     "create_pull_request",
+    // GTC-git.md GTC-FR-ZHVO.
+    "link_pull_request_issues",
     "get_pull_request_head_state",
+    // GTC-git.md GTC-FR-TTSV / GTC-FR-YWRZ.
+    "get_branch_write_guard",
+    "confirm_main_branch_write",
     "get_pull_request_detail",
     "list_pull_request_timeline",
     // The single working-tree status primitive, which the graduation start

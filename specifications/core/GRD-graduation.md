@@ -3,7 +3,7 @@
 **Spec code:** `GRD`
 
 ## Intent
-The backend module that turns a finished draft prompt into committed work. A draft is refined in conversation until its author judges the prompt ready (per `../ui/NAW-new-artifact.md`); **graduation** is what happens next. The prompt is captured, an execution agent is driven against a work stream's working copy until it reports the work finished, a fresh agent session reviews what it did, and the application commits the result onto the stream's branch. The same state machine also carries the **merge of a work stream into its base branch** when Git cannot settle that merge alone: a **merge run** drives an agent to resolve the conflicts, a fresh session reviews the result, and the application applies it to the base branch only after a `ready` review. The application enforces no shape on the work itself: what a change must contain is what the project's own instructions and skills say, read by the agent in the repository it stands in. A run works in one of three places: a work stream's working copy; for a **direct run**, the worktree that was active when the author confirmed, on the branch it held then; or, for a **merge run**, an isolated worktree the run owns, so that no live branch and no live worktree is written before the merge is approved. This module owns the run's state machine, its durable checkpoint, the queues that decide which run writes a working copy and that stay held by a run that stopped before it completed, the durable history of every run the project has made, and the archive classification that history is filed under. Out of scope: the stream itself, and the Git merge that runs before any merge run exists and hands a conflict to one, which are `WKS-work-streams.md`'s; the reconciliation of a stream update, which is `GRB-graduation-rebase.md`'s; and the loop that drives the agent turns, which is `../ai/GRL-graduation-loop.md`'s.
+The backend module that turns a finished draft prompt into committed work. A draft is refined in conversation until its author judges the prompt ready (per `../ui/NAW-new-artifact.md`); **graduation** is what happens next. The prompt is captured, an execution agent is driven against a work stream's working copy until it reports the work finished, a fresh agent session reviews what it did, and the application commits the result onto the stream's branch. The same state machine also carries the **merge of a work stream into its base branch** when Git cannot settle that merge alone: a **merge run** drives an agent to resolve the conflicts, a fresh session reviews the result, and the application applies it to the base branch only after a `ready` review. The application enforces no shape on the work itself: what a change must contain is what the project's own instructions and skills say, read by the agent in the repository it stands in. The same machine also carries a **PR summary run**: one agent turn that reads the change of a head branch and returns a title and a description for its pull request, without a draft, without a stream, and without changing a file. A draft run that completes keeps the reviewer's **run summary** of its work, and every completed run keeps the **landings** of its work on branches, so that a pull request can be described and linked from the runs that built it. A run works in one of three places: a work stream's working copy; for a **direct run**, the worktree that was active when the author confirmed, on the branch it held then; or, for a **merge run**, an isolated worktree the run owns, so that no live branch and no live worktree is written before the merge is approved. This module owns the run's state machine, its durable checkpoint, the queues that decide which run writes a working copy and that stay held by a run that stopped before it completed, the durable history of every run the project has made, and the archive classification that history is filed under. Out of scope: the stream itself, and the Git merge that runs before any merge run exists and hands a conflict to one, which are `WKS-work-streams.md`'s; the reconciliation of a stream update, which is `GRB-graduation-rebase.md`'s; and the loop that drives the agent turns, which is `../ai/GRL-graduation-loop.md`'s.
 
 ## Functional requirements
 1. **GRD-FR-QJHM** A run stands in exactly one state: `queued`, `working`, `reviewing`, `awaiting_author`, `blocked`, `interrupted`, `completed`, `discarded`, or `failed`. The last three are terminal.
@@ -36,7 +36,7 @@ The backend module that turns a finished draft prompt into committed work. A dra
 22. **GRD-FR-BLCR** `revert_graduation_run(run_id)` reverts the commits one run made, as new commits on the target's branch, and rewrites no history. It is refused with `run_state_not_permitted` for a queued run and while the run is doing agent work (`working` or `reviewing`), and with `run_not_revertable` where the run made none and for every merge run. Reverting a `blocked`, `interrupted` or `awaiting_author` run moves it to `discarded` and removes the runs queued behind it (GRD-FR-QCZF).
 23. **GRD-FR-EWTN** `discard_graduation_run(run_id)` is accepted from every state but `completed` and `discarded`, a `failed` run included. It cancels any turn in flight, moves the run to `discarded`, releases the queue and the project slot it held, removes the runs queued behind it (GRD-FR-QCZF), and unlocks the draft. The cancelled turn commits nothing, and its work stays uncommitted in the working copy. It reverts no commit and removes no branch or working copy of a stream or of the author. A merge run that is discarded writes no branch and no live worktree, and reclaims what the run itself owns (GRD-FR-KZPT).
     - *Why:* A run nobody can discard is a captured prompt nobody can run again, and a failure is the case that most needs a second attempt.
-24. **GRD-FR-RKWQ** A `failed` run holds its queue until the author discards it, and it holds no project slot. Every run behind it stays `queued`. `restart_graduation_run` against it is refused with `run_state_not_permitted`. The discard of a `failed` run ends it as `discarded` and removes the runs behind it (GRD-FR-QCZF).
+24. **GRD-FR-RKWQ** A `failed` run, a PR summary run excepted (GRD-FR-CCHK), holds its queue until the author discards it, and it holds no project slot. Every run behind it stays `queued`. `restart_graduation_run` against it is refused with `run_state_not_permitted`. The discard of a `failed` run ends it as `discarded` and removes the runs behind it (GRD-FR-QCZF).
 24. **GRD-FR-QCZF** When a run that held its queue ends `discarded` — by `discard_graduation_run`, by `revert_graduation_run`, or by the discard of a `failed` run — every run queued behind it in that queue is removed (GRD-FR-EPWW), whatever its auto-start and kind. Runs ahead of it stay. The discard of a run that never held its queue removes no other run.
 24. **GRD-FR-EPWW** A **removed** run is deleted from the run history and the run order. It does not become `discarded`, is not archived, and offers no Restart. Its draft is an active draft again. Removal and discard are one step under the store hold of GRD-FR-WSXA. Then `"graduation queue changed"` is emitted and no notification is raised.
 24. **GRD-FR-BSWV** A hold is read from the stored run, so it survives an application relaunch. A run the store holds in a state that holds its queue (GRD-FR-BNTC) still holds its queue and its project slot after the relaunch, whether or not a loop stands behind it.
@@ -68,7 +68,7 @@ The backend module that turns a finished draft prompt into committed work. A dra
 44. **GRD-FR-IJKV** A limit lowered below the number of held slots stops no run and is refused by no operation. The scheduler starts no run until the held slots are fewer than the limit. A limit raised offers every queue a dispatch at once.
 45. **GRD-FR-KPET** Under `unlimited` the scheduler starts every eligible run whose own queue is free. The rule of one holding run for each queue (GRD-FR-BNTC) still holds, so two runs never write to one stream or one worktree at the same time.
 46. **GRD-FR-GRHC** `get_graduation_capacity()` reports the limit, the number of held slots, and the ids of the queued runs that wait for a slot alone. A run waits for a slot alone when it is the earliest eligible member of its queue, no run holds that queue, and the limit is full. The report holds no run that waits for its own queue.
-47. **GRD-FR-ZHNV** A run that is executing is reported through `PRG-progress-reporting.md` as one in-flight operation of kind `graduation`. The operation's activation destination is `{ type: "graduation_run", runId }` with the run's id (per PRG-FR-KXQW). Its label is supplied by this module and names the run's title, the draft's name for a draft run and `Merge <stream>` for a merge run.
+47. **GRD-FR-ZHNV** A run that is executing is reported through `PRG-progress-reporting.md` as one in-flight operation of kind `graduation`. The operation's activation destination is `{ type: "graduation_run", runId }` with the run's id (per PRG-FR-KXQW). Its label is supplied by this module and names the run's title, the draft's name for a draft run, `Merge <stream>` for a merge run, and `Summarize <head>` for a PR summary run.
     - A run is executing from the moment it enters `working` or `reviewing`, and the operation is registered at that moment. A run that enters `working` or `reviewing` while it has an operation registers no second one.
     - The operation ends when the run enters any other state, `queued`, `awaiting_author`, `blocked`, `interrupted`, `completed`, `discarded`, or `failed` among them, and it ends as `finished` when the run enters `completed`, as `failed` when the run enters `failed`, and as `cancelled` in every other state the run leaves execution for.
     - A run in `queued` is waiting and a run in `awaiting_author` or `blocked` is waiting on the author or on a condition, so none of the three is reported as work in flight. The loop ending for any reason ends the run's operation, so no run's operation outlives its loop.
@@ -88,6 +88,22 @@ The backend module that turns a finished draft prompt into committed work. A dra
 54. **GRD-FR-YTCR** `restart_graduation_run` against a merge run is refused with `run_state_not_permitted`, and `revert_graduation_run` against a merge run is refused with `run_not_revertable`. A merge run holds no draft and no standing work, so neither operation has anything to act on. Discard, cancellation by pause, failure, and a review that is not `ready` leave the stream branch, the base branch, the stream's working copy and the base worktree unchanged.
 55. **GRD-FR-PFMD** A merge run exists only from the moment the stream merge handoff makes it durable. A restart of the application before that moment leaves no run and no record, and the author starts the merge again. After that moment, a merge run the store holds in `working` or `reviewing` with no loop behind it moves to `interrupted` with the reason `execution_abandoned` on the first queue read (GRD-FR-XVUD), and Continue resumes it. On that same first queue read, every merge run that has ended has its merge worktree, its registration, its scratch branch and its private ref removed, and a removal that fails is logged and does not stop the read.
 56. **GRD-FR-BHCS** The title of a merge run, `Merge <stream name>`, is the name every listing of runs carries for it. `list_graduation_queue` and `get_graduation_run` answer for a merge run with its `merge` data, its pass history, its findings and its logs, as for every run (GRD-FR-LGDV). A merge run's `merge.result` is present from the moment it is `completed` and absent before.
+57. **GRD-FR-KAKU** A run is a **PR summary run** when its record carries `pr_summary` data. It has no draft and no stream. It takes no draft lock, has no standing work, writes no statistics line, makes no commit, and makes no landing.
+58. **GRD-FR-HMDW** `start_pull_request_summary(head, base, mode)` enqueues a PR summary run in `queued` in the queue `pr:<head>` and offers the project a dispatch. `mode` is `diff` or `combine`. A `head` or `base` that is not a branch returns `"unknown branch"`, and nothing is enqueued.
+59. **GRD-FR-JAUJ** `start_pull_request_summary` is refused with `pr_summary_active`, carrying the run id, while the queue `pr:<head>` holds a run that is not terminal. A PR summary run holds its queue and one project slot on the terms of every run (GRD-FR-BNTC, GRD-FR-KKKN). Its title is `Summarize <head>`, recorded as `pr_summary.name`.
+60. **GRD-FR-TYVT** At its first dispatch, a PR summary run pins the head tip and the merge base of the head and the base. Its turn stands in a disposable checkout at `short_data_dir()/g/<run-id>/ps/`, detached at the pinned head tip. The run removes the checkout and its registration when it is terminal. It changes no branch and no worktree of the author.
+61. **GRD-FR-MACY** A `combine` run captures, at enqueue, the run summaries of `list_branch_completed_runs(head)` in landing order, skipping each run with no summary. A `combine` request when no run has a summary is refused with `no_run_summaries`, and nothing is enqueued.
+62. **GRD-FR-SWHW** A turn that returns a valid `PullRequestSummary` (per `../ai/GRL-graduation-loop.md` GRL-FR-UNKD) completes the run and records the answer in `pr_summary.result`. Every other end of the turn ends the run `failed` with its typed cause, and no result is recorded.
+63. **GRD-FR-CCHK** A `failed` PR summary run holds neither its queue nor a project slot, so a new one for the same head can start at once. A cancelled turn rests the run `interrupted`, and Continue dispatches the turn again from the start.
+64. **GRD-FR-CQGB** Pause, Continue, discard, auto-start, reorder, and archive apply to a PR summary run as to every run. `restart_graduation_run` against it is refused with `run_state_not_permitted`, and `revert_graduation_run` with `run_not_revertable`.
+65. **GRD-FR-UUGP** A draft run that is not a direct run records the **run summary** of its `ready` review in `run_summary` when it completes (per `../ai/GRL-graduation-loop.md` GRL-FR-FRNJ). A review with no valid summary leaves `run_summary` empty and changes nothing else. Merge, pull, direct and PR summary runs record no run summary.
+66. **GRD-FR-PXQN** A **landing** records that the work of a completed run is on a branch: the branch, a commit, and the time. A direct run records one when it completes, on its pinned branch, with its last commit. A run that made no commit records none.
+67. **GRD-FR-UXXF** When a stream merges into its base branch, through Git (per `WKS-work-streams.md` WKS-FR-TVBM) or through the apply of a merge run, each completed draft run of the stream with no landing on that base branch records one. The commit is the merge commit, or the base tip at the merge for an `uncommitted` publication.
+68. **GRD-FR-BHFP** `list_branch_completed_runs(branch)` returns each completed run with a landing on the branch whose commit the branch tip reaches, oldest landing first. A run with a revert whose commit the branch tip reaches is left out, because its work is not on the branch. It reads local objects alone and writes nothing. A branch that does not exist returns `"unknown branch"`.
+68. **GRD-FR-RVXK** `revert_graduation_run` (per GRD-FR-BLCR) records a **revert** in the run's `reverts`: the branch of the revert, its last revert commit, and the time. A stream merge carries that commit into the base branch, so the run also leaves the list of the base branch.
+69. **GRD-FR-WJLO** `start_graduation`, `restart_graduation_run`, and `start_direct_graduation` run the main branch write check of `GTC-git.md` GTC-FR-JWOL before they enqueue anything: on the branch of the active worktree, which takes the draft storage commit, and on the pinned branch of a direct run.
+70. **GRD-FR-MOWZ** A run that started past the check of GRD-FR-WJLO makes its later commits, its revert (GRD-FR-BLCR), and a merge run its apply, with no further check, also after an application relaunch. The check covers the start, which is the moment the author decides.
+
 
 ## Contract surface
 
@@ -100,6 +116,7 @@ short_data_dir()/g/<run-id>/run.toml       the run record
 short_data_dir()/g/<run-id>/logs/          activity.jsonl, structured.jsonl
 short_data_dir()/g/<run-id>/rv/            the review turn's throwaway checkout
 short_data_dir()/g/<run-id>/mw/            a merge run's merge worktree (GRD-FR-KZPT)
+short_data_dir()/g/<run-id>/ps/            a PR summary run's disposable checkout (GRD-FR-TYVT)
 short_data_dir()/w/<stream-id>/            the stream's working copy (WKS)
 ```
 
@@ -126,6 +143,8 @@ A merge run also owns, in the repository, the scratch branch `synthesis/merge-ru
 - `discard_graduation_run(run_id)` → `GraduationRun`
 - `restart_graduation_run(run_id, stream_id, standing_work, standing_work_message)` → `GraduationRun`
 - `archive_graduation_run(run_id)` / `unarchive_graduation_run(run_id)` → `GraduationRun`
+- `start_pull_request_summary(head, base, mode)` → `GraduationRun` (GRD-FR-HMDW)
+- `list_branch_completed_runs(branch)` → `[BranchCompletedRun]` (GRD-FR-BHFP)
 
 ### Events (Tauri event bus)
 - `"graduation queue changed"` — `{ project_key, stream_id, worktree_path }`
@@ -216,7 +235,39 @@ GraduationRun {
   blocker?,                      // what blocks it and the act that clears it
   interruption?,                 // GraduationInterruption; why it stopped
   restarted_from_run_id?,
-  failure?                       // { code, message, retryable }
+  failure?,                      // { code, message, retryable }
+  pr_summary?,                   // PrSummaryData; present on a PR summary run alone (GRD-FR-KAKU)
+  run_summary?,                  // RunSummary; a completed draft run only (GRD-FR-UUGP)
+  landings,                      // [Landing]; empty until the run's work is on a branch (GRD-FR-PXQN)
+  reverts                        // [Landing]; one per revert of the run (GRD-FR-RVXK)
+}
+
+RunSummary {
+  title,                         // one line, never blank
+  description                    // Markdown, never blank
+}
+
+Landing {
+  branch,
+  commit,                        // the full object id the branch must reach
+  at                             // RFC 3339 UTC
+}
+
+PrSummaryData {
+  name,                          // "Summarize <head>"; the run's title (GRD-FR-JAUJ)
+  head, base,
+  mode,                          // "diff" | "combine"
+  headTip?, mergeBase?,          // pinned at the first dispatch (GRD-FR-TYVT)
+  inputs,                        // [{ runId, title, description }]; combine mode only (GRD-FR-MACY)
+  result?                        // RunSummary; written when the run completes (GRD-FR-SWHW)
+}
+
+BranchCompletedRun {
+  run_id, title,
+  draft_id, draft_name,
+  kind,                          // "draft" | "direct"
+  landing,                       // Landing
+  run_summary?                   // RunSummary
 }
 
 GraduationMergeData {
@@ -247,7 +298,8 @@ QueueIndexEntry {
   run_id, stream_id, draft_id, state,
   worktree_path,                 // GRD-FR-OYPY
   dispatched_direct,             // GRD-FR-OYPY
-  merge                          // true on a merge run (GRD-FR-OYPY)
+  merge,                         // true on a merge run (GRD-FR-OYPY)
+  pr_summary                     // true on a PR summary run (GRD-FR-KAKU)
 }
 
 GraduationQueue {
@@ -262,7 +314,9 @@ GraduationCapacity {
 }
 ```
 
-The fields of `GraduationMergeData` and `GraduationMergeResult` are camelCase on the wire and in `run.toml`.
+The fields of `GraduationMergeData`, `GraduationMergeResult`, and `PrSummaryData` are camelCase on the wire and in `run.toml`.
+
+A PR summary run's errors are `pr_summary_active` and `no_run_summaries` (GRD-FR-JAUJ, GRD-FR-MACY). The run-start operations also return `main_branch_write_unconfirmed` and `main_branch_protected` (GRD-FR-WJLO).
 
 A merge run's failure code is `merge_branch_moved` (GRD-FR-XHSE). Its blocker codes are `merge_dirty_side`, `merge_guard_held` and `merge_apply_failed` (GRD-FR-JSBE).
 

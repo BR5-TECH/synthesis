@@ -43,7 +43,13 @@ pub(super) fn stop_sandbox_if_idle<R: tauri::Runtime>(
         &project_key,
         &crate::tools::agent_exec::sandbox::SandboxScope { queue_key: key.clone() },
     );
-    let scope_kind = if is_worktree_queue_key(&key) { "worktree" } else { "stream" };
+    let scope_kind = if is_worktree_queue_key(&key) {
+        "worktree"
+    } else if is_pr_queue_key(&key) {
+        "pull_request"
+    } else {
+        "stream"
+    };
     if !idle_now(app, &project_key, &key) {
         logging::log_debug(
             app,

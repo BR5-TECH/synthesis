@@ -6,6 +6,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BranchCompletedRun,
   RemovedStreamNotice,
   AgentActivityPage,
   WorkStream,
@@ -19,6 +20,7 @@ import type {
   GraduationCapacity,
   GraduationQueue,
   GraduationRun,
+  PrSummaryMode,
   StandingWork,
   GraduationLogCursor,
   GraduationLogPage,
@@ -182,6 +184,26 @@ export const startGraduation = (
     standingWork,
     standingWorkMessage,
   });
+
+/**
+ * GRD-FR-HMDW: enqueue a PR summary run for the pull request from `head` into
+ * `base`. A `combine` run is made from the run summaries of the runs whose work
+ * is on `head` (GRD-FR-MACY). The typed refusals are `"unknown branch"`,
+ * `pr_summary_active: <run-id>` (GRD-FR-JAUJ) and `no_run_summaries`.
+ */
+export const startPullRequestSummary = (
+  head: string,
+  base: string,
+  mode: PrSummaryMode,
+) => invoke<GraduationRun>("start_pull_request_summary", { head, base, mode });
+
+/**
+ * GRD-FR-BHFP: each completed run with a landing on `branch` whose commit the
+ * branch tip reaches, oldest landing first. It writes nothing. A branch that
+ * does not exist is refused with `"unknown branch"`.
+ */
+export const listBranchCompletedRuns = (branch: string) =>
+  invoke<BranchCompletedRun[]>("list_branch_completed_runs", { branch });
 
 /**
  * GSU-FR-PVFP: capture the draft's prompt and enqueue a direct run on the

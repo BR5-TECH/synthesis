@@ -179,7 +179,7 @@ describe("the Agentic level", () => {
     // names — so a backend configured one way for everything reads as the two
     // defaults and one closed line (AII-FR-PMZK).
     const summary = await agenticLevel().findByTestId("agentic-per-task-summary");
-    expect(summary).toHaveTextContent("3 follow the defaults");
+    expect(summary).toHaveTextContent("4 follow the defaults");
     await user.click(summary);
 
     await user.selectOptions(agenticLevel().getByLabelText("Review effort"), "low");
@@ -193,7 +193,7 @@ describe("the Agentic level", () => {
     await waitFor(() => {
       expect(
         agenticLevel().getByTestId("agentic-per-task-summary"),
-      ).toHaveTextContent("1 of 3 differs from the defaults");
+      ).toHaveTextContent("1 of 4 differs from the defaults");
     });
     // Every other row still follows the effort default above it, and still does
     // after the tab is left and re-entered — the rows read the record rather
@@ -220,7 +220,7 @@ describe("the Agentic level", () => {
     await waitFor(() => {
       expect(
         agenticLevel().getByTestId("agentic-per-task-summary"),
-      ).toHaveTextContent("3 follow the defaults");
+      ).toHaveTextContent("4 follow the defaults");
     });
   });
 
@@ -322,7 +322,7 @@ describe("the Agentic level", () => {
     const section = await agenticLevel().findByTestId("agentic-per-task");
     expect(section).not.toHaveAttribute("open");
     const summary = agenticLevel().getByTestId("agentic-per-task-summary");
-    expect(summary).toHaveTextContent("Per task · 3 follow the defaults");
+    expect(summary).toHaveTextContent("Per task · 4 follow the defaults");
     await user.click(summary);
     // The rows live inside the disclosure rather than beside it, so the click
     // is what reveals them. jsdom queries a closed `<details>` as readily as an
@@ -349,7 +349,7 @@ describe("the Agentic level", () => {
     await waitFor(() => {
       expect(
         agenticLevel().getByTestId("agentic-per-task-summary"),
-      ).toHaveTextContent("1 of 3 differs from the defaults");
+      ).toHaveTextContent("1 of 4 differs from the defaults");
     });
     // Every other row still follows the model default, and still does after the
     // tab is left and re-entered — the rows read the record rather than any
@@ -386,7 +386,7 @@ describe("the Agentic level", () => {
     await waitFor(() => {
       expect(
         agenticLevel().getByTestId("agentic-per-task-summary"),
-      ).toHaveTextContent("3 follow the defaults");
+      ).toHaveTextContent("4 follow the defaults");
     });
   });
 
@@ -406,7 +406,7 @@ describe("the Agentic level", () => {
 
     await user.click(await agenticLevel().findByTestId("agentic-per-task-summary"));
 
-    // The section holds the three rows in the order a run reaches them, and each
+    // The section holds the four rows in their order, and each
     // row is that kind's model selector and effort selector side by side — so
     // reading down the comboboxes walks a row at a time rather than a column.
     expect(
@@ -420,6 +420,8 @@ describe("the Agentic level", () => {
       "Review effort",
       "Reconciliation model",
       "Reconciliation effort",
+      "PR maintenance model",
+      "PR maintenance effort",
     ]);
 
     await chooseTaskModel(user, "Reconciliation", "Sonnet");
@@ -455,7 +457,7 @@ describe("the Agentic level", () => {
     expect(agenticLevel().getByLabelText("Reconciliation effort")).toHaveValue("low");
     expect(
       agenticLevel().getByTestId("agentic-per-task-summary"),
-    ).toHaveTextContent("1 of 3 differs from the defaults");
+    ).toHaveTextContent("1 of 4 differs from the defaults");
 
     // Set back to "same as default", each operation names the same kind with no
     // value and both selectors read "same as default" again.
@@ -486,6 +488,56 @@ describe("the Agentic level", () => {
     expect(agenticLevel().getByLabelText("Reconciliation effort")).toHaveValue("");
   });
 
+  it("AII-FR-QDLW, AII-FR-PMZK: the PR maintenance row is the fourth and names `pr_maintenance`", async () => {
+    // AII-FR-QDLW: the fourth row reads as PR maintenance, both of its
+    // selectors name the canonical kind `pr_maintenance`, and the summary
+    // counts the row once out of four (AII-FR-PMZK).
+    const current = overridingBackend([
+      cliVerified("claude_code", "/usr/bin/claude", {
+        selectedModel: "opus",
+        selectedEffort: "high",
+      }),
+      ...AGENTIC_ALL.slice(1).map((v) => agenticIntegration(v)),
+    ]);
+    render(<BothLevels />);
+    const user = userEvent.setup();
+    await user.click(await agenticLevel().findByTestId("agentic-per-task-summary"));
+    const tasks = Array.from(
+      agenticLevel()
+        .getByTestId("agentic-per-task")
+        .querySelectorAll(".agentic-per-task__task"),
+    ).map((cell) => cell.textContent);
+    expect(tasks).toEqual(["Work", "Review", "Reconciliation", "PR maintenance"]);
+
+    await chooseTaskModel(user, "PR maintenance", "Sonnet");
+    await waitFor(() => {
+      expect(argsOf("set_agentic_integration_model")).toEqual({
+        vendor: "claude_code",
+        turnKind: "pr_maintenance",
+        modelId: "sonnet",
+      });
+    });
+    await user.selectOptions(
+      agenticLevel().getByLabelText("PR maintenance effort"),
+      "low",
+    );
+    await waitFor(() => {
+      expect(argsOf("set_agentic_integration_effort")).toEqual({
+        vendor: "claude_code",
+        turnKind: "pr_maintenance",
+        effortId: "low",
+      });
+    });
+    await waitFor(() => {
+      expect(current()[0].modelOverrides).toEqual({ pr_maintenance: "sonnet" });
+    });
+    await waitFor(() =>
+      expect(
+        agenticLevel().getByTestId("agentic-per-task-summary"),
+      ).toHaveTextContent("1 of 4 differs from the defaults"),
+    );
+  });
+
   it("gives a row's two selectors no shared state (AII-FR-QDLW, AII-FR-PMZK)", async () => {
     // AII-FR-QDLW: a row's model selector and effort selector are independent
     // of each other and of every other row, so returning one to "same as
@@ -512,7 +564,7 @@ describe("the Agentic level", () => {
     // Two kinds of work are configured apart — Work in both dimensions and
     // Review in its effort alone — and the summary counts kinds of work rather
     // than selectors touched.
-    expect(summary()).toHaveTextContent("2 of 3 differ from the defaults");
+    expect(summary()).toHaveTextContent("2 of 4 differ from the defaults");
     await user.click(summary());
 
     // A row overriding one dimension leaves the other reading the default
@@ -545,7 +597,7 @@ describe("the Agentic level", () => {
       expect(modelOf("Work")).toHaveTextContent("Same as default");
     });
     expect(effortOf("Work")).toHaveValue("low");
-    expect(summary()).toHaveTextContent("2 of 3 differ from the defaults");
+    expect(summary()).toHaveTextContent("2 of 4 differ from the defaults");
 
     // The effort selector of that same row set back too returns the kind of
     // work to both defaults, and only then does the count fall. Independence
@@ -569,7 +621,7 @@ describe("the Agentic level", () => {
     // operation that just ran.
     expect(modelOf("Work")).toHaveTextContent("Same as default");
     await waitFor(() => {
-      expect(summary()).toHaveTextContent("1 of 3 differs from the defaults");
+      expect(summary()).toHaveTextContent("1 of 4 differs from the defaults");
     });
 
     // Left and re-entered, the section counts the record rather than any state
@@ -577,12 +629,12 @@ describe("the Agentic level", () => {
     await user.click(agenticLevel().getByRole("tab", { name: /Codex/ }));
     await user.click(agenticLevel().getByRole("tab", { name: /Claude Code/ }));
     await agenticLevel().findByTestId("agentic-per-task");
-    expect(summary()).toHaveTextContent("1 of 3 differs from the defaults");
+    expect(summary()).toHaveTextContent("1 of 4 differs from the defaults");
   });
 
   it("gives every agentic vendor one per-task section and only some an effort column (AII-FR-23, AII-FR-24, AII-FR-QDLW, AII-FR-PMZK)", async () => {
     // AII-FR-23 / AII-FR-24 / AII-FR-QDLW / AII-FR-PMZK: every agentic tab
-    // renders one per-task section of three rows; a vendor that declares no
+    // renders one per-task section of four rows; a vendor that declares no
     // effort levels renders neither the effort default nor the effort column,
     // while its model column renders as in every other tab.
     backend({
@@ -607,14 +659,14 @@ describe("the Agentic level", () => {
       await agenticLevel().findByTestId(`agentic-panel-${vendor}`);
 
       // One section, in every tab, below the defaults above it. Its summary
-      // reads out of five whichever vendor the tab is for.
+      // reads out of four whichever vendor the tab is for.
       const modelDefault = agenticLevel().getByRole("combobox", {
         name: "Model",
       });
       const section = agenticLevel().getByTestId("agentic-per-task");
       expect(
         agenticLevel().getByTestId("agentic-per-task-summary"),
-      ).toHaveTextContent("3 follow the defaults");
+      ).toHaveTextContent("4 follow the defaults");
       // Below both defaults rather than under either one of them — the whole
       // point of the merge, and the one thing a row-level assertion cannot see.
       expect(
@@ -647,6 +699,7 @@ describe("the Agentic level", () => {
           "Work model",
           "Review model",
           "Reconciliation model",
+          "PR maintenance model",
         ]);
         continue;
       }
@@ -665,6 +718,8 @@ describe("the Agentic level", () => {
         "Review effort",
         "Reconciliation model",
         "Reconciliation effort",
+        "PR maintenance model",
+        "PR maintenance effort",
       ]);
     }
   });
@@ -696,7 +751,7 @@ describe("the Agentic level", () => {
 
     // The hidden override moves neither the summary nor the row it belongs to.
     const summary = () => agenticLevel().getByTestId("agentic-per-task-summary");
-    expect(summary()).toHaveTextContent("3 follow the defaults");
+    expect(summary()).toHaveTextContent("4 follow the defaults");
     await user.click(summary());
     expect(
       agenticLevel().queryByLabelText("Reasoning effort"),
@@ -725,7 +780,7 @@ describe("the Agentic level", () => {
     // rendered — so the count reads out of four and reports what is on screen.
     await chooseTaskModel(user, "Review", "Sonnet");
     await waitFor(() => {
-      expect(summary()).toHaveTextContent("1 of 3 differs from the defaults");
+      expect(summary()).toHaveTextContent("1 of 4 differs from the defaults");
     });
     expect(
       agenticLevel().getByRole("combobox", { name: "Review model" }),
@@ -770,7 +825,7 @@ describe("the Agentic level", () => {
     ).toHaveTextContent("Same as default");
     expect(
       agenticLevel().getByTestId("agentic-per-task-summary"),
-    ).toHaveTextContent("3 follow the defaults");
+    ).toHaveTextContent("4 follow the defaults");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -808,7 +863,7 @@ describe("the Agentic level", () => {
     expect(agenticLevel().getByLabelText("Review effort")).toHaveValue("");
     expect(
       agenticLevel().getByTestId("agentic-per-task-summary"),
-    ).toHaveTextContent("3 follow the defaults");
+    ).toHaveTextContent("4 follow the defaults");
     // Inline beside the row rather than anywhere that takes the screen.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

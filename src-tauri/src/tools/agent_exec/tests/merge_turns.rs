@@ -5,24 +5,28 @@
 use super::super::TurnKind;
 use super::*;
 
-const ALL: [TurnKind; 5] = [
+const ALL: [TurnKind; 6] = [
     TurnKind::Work,
     TurnKind::Review,
     TurnKind::SemanticRebase,
     TurnKind::MergeWork,
     TurnKind::MergeReview,
+    TurnKind::PrMaintenance,
 ];
 
-/// EAC-FR-IRRD, EAC-FR-02: the turn kinds are a closed set of five names, and the
+/// EAC-FR-IRRD, EAC-FR-02: the turn kinds are a closed set of six names, and the
 /// two merge kinds are `merge_work` and `merge_review` in every record.
 #[test]
-fn the_turn_kinds_are_five_names_and_the_merge_kinds_are_named_as_such() {
+fn the_turn_kinds_are_six_names_and_the_merge_kinds_are_named_as_such() {
     let names: Vec<&str> = ALL.iter().map(|kind| kind.as_str()).collect();
-    assert_eq!(names, vec!["work", "review", "semantic_rebase", "merge_work", "merge_review"]);
+    assert_eq!(
+        names,
+        vec!["work", "review", "semantic_rebase", "merge_work", "merge_review", "pr_maintenance"]
+    );
     let mut distinct = names.clone();
     distinct.sort();
     distinct.dedup();
-    assert_eq!(distinct.len(), 5, "no two kinds share a name");
+    assert_eq!(distinct.len(), 6, "no two kinds share a name");
 }
 
 /// EAC-FR-IRRD: a merge kind has no selection of its own: `merge_work` reads the
@@ -166,7 +170,15 @@ fn a_merge_turn_is_not_masked_and_reaches_its_repository_read_only() {
     let granted = |argv: &[String]| argv.iter().any(|a| a.starts_with("GIT_OPTIONAL_LOCKS"));
     let rebase_mount = |argv: &[String]| argv.iter().any(|a| a.contains("target=/rebase"));
 
-    for kind in [TurnKind::Work, TurnKind::Review, TurnKind::MergeWork, TurnKind::MergeReview] {
+    // EAC-FR-IRRD: a `pr_maintenance` turn reads the repository like every kind
+    // but `semantic_rebase`.
+    for kind in [
+        TurnKind::Work,
+        TurnKind::Review,
+        TurnKind::MergeWork,
+        TurnKind::MergeReview,
+        TurnKind::PrMaintenance,
+    ] {
         let argv = argv_for(kind);
         assert!(granted(&argv), "{kind:?} reaches its repository: {argv:?}");
         assert!(!masked(&argv), "{kind:?} is not masked: {argv:?}");

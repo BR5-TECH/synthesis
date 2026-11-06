@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import type { FlushResult } from "./editSessions";
 import { WriteSchedule } from "./writeSchedule";
+import { holdEdit, mainBranchSaveRefusal } from "./mainBranchWrite";
 import {
   parseFlowDocument,
   serializeFlowDocument,
@@ -361,6 +362,9 @@ export class FlowSessionStore {
   ): void {
     const s = this.ensure(flowId);
     if (!s.doc) return;
+    // EDT-FR-UPNU: the canvas saves through "save artifact contents", so its
+    // first change on an unconfirmed main branch is held too.
+    if (holdEdit()) return;
     const next = edit(s.doc);
     // An edit that produced the very same document changed nothing, and every
     // mutator returns a new object when it changes anything — so this is a
@@ -459,12 +463,22 @@ export class FlowSessionStore {
       this.notify();
       return { ok: true };
     } catch (e) {
-      s.error = String(e);
+      // MBW-FR-YSMC: a refusal of the main branch write check reads as words,
+      // and the next change of the author asks for the confirmation.
+      const refused = mainBranchSaveRefusal(e);
+      s.error = refused ?? String(e);
       this.notify();
-      logError(["frontend"], "flow write failed", {
-        artifact: flowId,
-        reason: String(e),
-      });
+      if (refused) {
+        logWarn(["frontend"], "flow write refused on a main branch", {
+          artifact: flowId,
+          code: String(e).split(":")[0],
+        });
+      } else {
+        logError(["frontend"], "flow write failed", {
+          artifact: flowId,
+          reason: String(e),
+        });
+      }
       return { ok: false, blocked: "error", artifactId: flowId };
     }
   }

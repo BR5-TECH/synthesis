@@ -8,6 +8,16 @@ import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { clearToasts } from "./state/toasts";
 import { resetLogBufferForTest } from "./logging";
+import {
+  branchRun,
+  pullRequestWindowRead,
+  resetCreatePullRequestStores,
+} from "./test/createPullRequestFixtures";
+import {
+  getPullRequestSession,
+  openPullRequestSession,
+  updatePullRequestSession,
+} from "./state/pullRequestSessions";
 
 /**
  * App-level wiring for the Create a PR window
@@ -154,12 +164,13 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
     case "append_log_records":
       return undefined;
     default:
-      return undefined;
+      return pullRequestWindowRead(cmd, args)?.answer;
   }
 }
 
 beforeEach(() => {
   clearToasts();
+  resetCreatePullRequestStores();
   resetLogBufferForTest();
   createResult = () => CREATED;
   invokeMock.mockReset();
@@ -391,5 +402,56 @@ describe("the Create a PR window at the App seam", () => {
     expect(screen.getByTestId("create-pr-global-settings")).toBeInTheDocument();
     expect(screen.queryByTestId("github-token-picker")).toBeNull();
     expect(screen.getByTestId("create-pr-window")).toBeInTheDocument();
+  });
+
+  it("CPR-FR-SSQI: Cancel keeps what the author typed, and the next opening from any surface restores it", async () => {
+    render(<App />);
+    await enterIde();
+    await openFromChanges();
+    await userEvent.type(screen.getByLabelText("Description"), "kept words");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByTestId("create-pr-window")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: "Git" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "PRs" }));
+    const button = await screen.findByTestId("git-create-pr");
+    await waitFor(() => expect(button).toHaveAttribute("data-state", "available"));
+    await userEvent.click(button);
+    await screen.findByTestId("create-pr-window");
+    expect(screen.getByLabelText("Description")).toHaveValue("kept words");
+  });
+
+  it("CPR-FR-ESXZ: opening a project clears every saved state, so the window starts from the source", async () => {
+    openPullRequestSession({ head: "feature", base: "main", title: "feature" });
+    updatePullRequestSession("feature", { title: "From another project", body: "stale" });
+    render(<App />);
+    await enterIde();
+    await openFromChanges();
+    expect(screen.getByLabelText("Title")).toHaveValue("feature");
+    expect(screen.getByLabelText("Description")).toHaveValue("");
+  });
+
+  it("CPR-FR-ESXZ, CPR-FR-UXXF: a created pull request clears the saved state, and the toast names the linked issues", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "list_branch_completed_runs") {
+        return [branchRun("r1", { draftId: "d1", draftName: "Task one" })];
+      }
+      if (cmd === "get_draft_publication") {
+        return {
+          current: { repositoryOwner: "acme", repositoryName: "platform", issueNumber: 31 },
+          history: [],
+          attempt: null,
+        };
+      }
+      return defaultInvoke(cmd, args);
+    });
+    render(<App />);
+    await enterIde();
+    await openFromChanges();
+    await userEvent.type(screen.getByLabelText("Description"), "words");
+    await waitFor(() => expect(submit()).toBeEnabled());
+    await userEvent.click(submit());
+    const toast = await findCreatedToast();
+    expect(toast).toHaveTextContent("Pull request #42 is created. Linked by closing keyword: #31.");
+    expect(getPullRequestSession("feature")).toBeNull();
   });
 });

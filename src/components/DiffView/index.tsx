@@ -59,6 +59,7 @@ import type {
 import { useSettledText } from "./settle";
 import { diagramEditorRequest, subscribeDiagramEditor } from "../DiagramEditor/store";
 import { DiffComparisonBody, DiffModeToolbar } from "./comparison";
+import { holdEdit } from "../../state/mainBranchWrite";
 
 export { DERIVE_SETTLE_MS } from "./settle";
 export { DiffComparisonBody, DiffModeToolbar } from "./comparison";
@@ -503,7 +504,9 @@ function DiffTargetView({
       disabled: doc.conflict,
       replaceLines: (from, to, replacement) => {
         const next = replaceLineRange(session.buffer, from, to, replacement);
-        if (next === session.buffer) return;
+        // EDT-FR-UPNU: the editable target saves through "save artifact
+        // contents", so its first change on an unconfirmed main branch is held.
+        if (next === session.buffer || holdEdit()) return;
         session.buffer = next;
         setEditEpoch((n) => n + 1);
         // EDT-FR-22: one history for the artifact, whichever surface produced

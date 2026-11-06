@@ -9,6 +9,9 @@
   Each obligation is stated once. The version before this one stated the coverage rule three
   times in three vocabularies, which is length rather than emphasis.
 
+  The run summary a `ready` verdict carries is written from GRL-FR-FRNJ. Its shape is the one
+  `pr-summary.md` asks for, so a pull request can reuse it.
+
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
 -->
 
@@ -103,6 +106,29 @@ Return a single JSON object as your `result`, holding exactly these fields:
 - `correction` says what the next implementation turn is to do, and must be **directly actionable** — something that turn can perform without guessing what you meant.
 
 Return the findings ordered by severity from highest to lowest — `critical`, then `major`, then `minor` — then by their first affected path in ascending order, with a finding that has no affected path before those that do, and then by description. A set returned in another order is refused whole rather than tidied up, and nothing is recorded from a refused set.
+
+## The run summary of a `ready` verdict
+
+A `ready` verdict also carries a `summary` of the work: the title and the description a pull request can reuse to describe what this run delivered. A `revise` verdict carries **no** summary.
+
+```json
+{
+  "verdict": "ready",
+  "rationale": "Every requirement of the prompt is delivered and the project's checks pass.",
+  "findings": [],
+  "summary": {
+    "title": "Show an empty state in the queue panel",
+    "description": "## Summary\n\nThe queue panel now says that nothing is queued while the queue is empty."
+  }
+}
+```
+
+- `title` is **one line**, never blank: what the work delivers, for a reader of the repository's history.
+- `description` is Markdown, never blank: what the work delivers and why, written from the change set and `input.prompt`.
+- Write both by the repository's own rules for a pull request. Read its pull request template where it has one, such as `.github/PULL_REQUEST_TEMPLATE.md`, and follow its sections and its order. Follow its skills and its agent instructions where they say how a pull request or a commit is described.
+- Name no secret, no credential, and nothing the change set does not hold.
+
+The summary changes nothing about the verdict. A summary that is not of this shape is dropped, and the verdict stands.
 
 ## Where only the author can decide
 

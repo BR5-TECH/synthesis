@@ -72,7 +72,7 @@ describe("opening and closing", () => {
     expect(result.current.pullRequestWindow).toBeNull();
   });
 
-  it("CPR-FR-SSQI: closing discards the window, so opening again starts from the source", () => {
+  it("CPR-FR-SSQI: closing takes the window down, and opening again mounts it anew", () => {
     const { result } = setup();
     act(() => result.current.openPullRequestWindow(SOURCE));
     const first = result.current.pullRequestWindow!.nonce;
@@ -246,6 +246,43 @@ describe("the toast of a created pull request (CPR-FR-ITWJ, CPR-FR-RDJP)", () =>
     act(() => result.current.dismissPullRequestWindow());
     expect(result.current.pullRequestWindow).toBeNull();
     expect(created()).toBeDefined();
+  });
+
+  it("CPR-FR-UXXF: the toast names each linked issue and its way, each failed link, and that the issues stay open", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.pullRequestCreated(
+        { number: 42, url: "https://github.com/acme/platform/pull/42" },
+        {
+          linked: [
+            { owner: "acme", repository: "platform", number: 12 },
+            { owner: "other", repository: "tracker", number: 31 },
+          ],
+          failed: [{ owner: "acme", repository: "platform", number: 5 }],
+          closesOnMerge: false,
+        },
+      ),
+    );
+    expect(created()?.body).toBe(
+      "Pull request #42 is created. Linked by closing keyword: #12, other/tracker#31. Not linked: #5. The issues stay open when the pull request merges, because it does not merge into the default branch.",
+    );
+  });
+
+  it("CPR-FR-UXXF: a pull request into the default branch does not say that the issues stay open", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.pullRequestCreated(
+        { number: 42, url: "https://github.com/acme/platform/pull/42" },
+        {
+          linked: [{ owner: "acme", repository: "platform", number: 12 }],
+          failed: [],
+          closesOnMerge: true,
+        },
+      ),
+    );
+    expect(created()?.body).toBe(
+      "Pull request #42 is created. Linked by closing keyword: #12.",
+    );
   });
 
   it("NTF-FR-PRCK: a second pull request replaces the toast of the first", () => {

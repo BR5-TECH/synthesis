@@ -10,6 +10,7 @@
  */
 
 import type { StreamMergePublication, WorkStreamSummary } from "../../types";
+import { useInlineWriteGuard } from "../MainBranchWrite";
 
 export function MergeConfirm({
   summary,
@@ -18,6 +19,7 @@ export function MergeConfirm({
   onStart,
   onStartWithMessage,
   onOpenChanges,
+  onCreatePullRequest,
 }: {
   summary: WorkStreamSummary;
   /** WSS-FR-OMAP: the complete path set a dirty side was refused with. */
@@ -30,8 +32,20 @@ export function MergeConfirm({
   /** WSS-FR-TQBN: the route that takes a message before it starts. */
   onStartWithMessage: (summary: WorkStreamSummary) => void;
   onOpenChanges: () => void;
+  /** WSS-FR-DBGA: the hard block points to **Create a PR** of the same row. */
+  onCreatePullRequest?: () => void;
 }) {
   const { stream, aheadOfBase } = summary;
+  // WSS-FR-DBGA: the guard of the base branch, read when the confirmation opens.
+  const writeGuard = useInlineWriteGuard({
+    write: "merge_stream",
+    branch: stream.baseBranch,
+    enabled: !dirty,
+    onCancel,
+    blockAction: onCreatePullRequest
+      ? { label: "Create a PR", run: onCreatePullRequest }
+      : undefined,
+  });
 
   if (dirty) {
     return (
@@ -68,6 +82,7 @@ export function MergeConfirm({
         control it. Neither branch changes until a review of the reconciled
         result has judged it ready.
       </p>
+      {writeGuard.section}
       {/* WSS-FR-TQBN: neither action waits for the merge. The confirmation
           closes as the merge starts, and the row carries it from there. */}
       <div className="modal__actions">
@@ -76,12 +91,16 @@ export function MergeConfirm({
         </button>
         <button
           className="btn btn--default btn--sm"
+          disabled={writeGuard.blocked}
+          aria-describedby={writeGuard.describedBy}
           onClick={() => onStart(summary, { kind: "uncommitted" })}
         >
           Leave uncommitted
         </button>
         <button
           className="btn btn--primary btn--sm"
+          disabled={writeGuard.blocked}
+          aria-describedby={writeGuard.describedBy}
           onClick={() => onStartWithMessage(summary)}
         >
           Commit…

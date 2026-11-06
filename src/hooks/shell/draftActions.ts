@@ -8,6 +8,7 @@
  */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as api from "../../api";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 import { logWarn } from "../../logging";
 import { showDraftCreateFailed, showDraftOpenFailed } from "../../state/shellToasts";
 import type { DraftSessionStore } from "../../state/draftSessions";
@@ -120,7 +121,10 @@ export function createDraftTabActions(
     failureMessage?: string,
   ): Promise<{ id: string; name: string } | null> => {
     try {
-      const created = await api.createDraft({
+      // DRP-FR-MKCP / MBW-FR-RMCO: the branch write guard is read first, and a
+      // draft on a main branch waits for the author's confirmation.
+      const created = await runMainBranchWrite("create_draft", () =>
+        api.createDraft({
         // DRS-FR-07: where the draft is *filed*, and the only thing a creation
         // says about where anything goes. Where its specification lands is the
         // graduation agent's choice from the captured prompt (NAW-FR-19), so no
@@ -128,7 +132,9 @@ export function createDraftTabActions(
         // supplies a folder; every other entry point supplies none and the
         // draft is created at the drafts root.
         folder: seed.folder ?? null,
-      });
+        }),
+      );
+      if (created === WRITE_CANCELLED) return null;
       // NAW-FR-06 / DRS-FR-06: a draft is created holding one Markdown file, and
       // the tab opens on it — so the selection is recorded before the workspace
       // mounts rather than being rediscovered from a tree it has yet to load.

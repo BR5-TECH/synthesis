@@ -13,6 +13,8 @@ const LOGS_DIR: &str = "logs";
 const REVIEW_DIR: &str = "rv";
 /// GRD-FR-KZPT: a merge run's own worktree.
 const MERGE_DIR: &str = "mw";
+/// GRD-FR-TYVT: a PR summary run's disposable checkout.
+const PR_SUMMARY_DIR: &str = "ps";
 
 /// The persisted index of a project's run order.
 ///
@@ -55,12 +57,21 @@ pub struct QueueIndexEntry {
     /// its queue and its project slot.
     #[serde(default)]
     pub dispatched: bool,
+    /// GRD-FR-KAKU: a PR summary run.
+    #[serde(default)]
+    pub pr_summary: bool,
+    /// GRD-FR-HMDW: the head branch of a PR summary run, which names its queue.
+    /// Empty on every other run.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pr_head: String,
 }
 
 impl QueueIndexEntry {
     /// GRD-FR-ZVNO: the key of the queue this run belongs to.
     pub fn queue_key(&self) -> String {
-        if self.stream_id.is_empty() && !self.worktree_path.is_empty() {
+        if self.pr_summary {
+            pr_queue_key(&self.pr_head)
+        } else if self.stream_id.is_empty() && !self.worktree_path.is_empty() {
             worktree_queue_key(&self.worktree_path)
         } else {
             self.stream_id.clone()
@@ -70,12 +81,12 @@ impl QueueIndexEntry {
     /// GRD-FR-BNTC: whether this run holds its queue (see
     /// `GraduationRun::holds_queue`).
     pub fn holds_queue(&self) -> bool {
-        self.state.holds_queue() || (self.state == GraduationRunState::Queued && self.dispatched)
+        holds_queue_in(self.state, self.dispatched, self.pr_summary)
     }
 
     /// GRD-FR-KKKN: whether this run holds a project slot.
     pub fn holds_slot(&self) -> bool {
-        self.state.holds_slot() || (self.state == GraduationRunState::Queued && self.dispatched)
+        holds_slot_in(self.state, self.dispatched, self.pr_summary)
     }
 }
 
@@ -127,6 +138,12 @@ impl StoreBase {
     /// the merge is applied.
     pub fn merge_worktree(&self, run_id: &str) -> PathBuf {
         self.home(run_id).join(MERGE_DIR)
+    }
+
+    /// GRD-FR-TYVT: the disposable checkout a PR summary turn stands in,
+    /// detached at the run's pinned head tip.
+    pub fn pr_summary_checkout(&self, run_id: &str) -> PathBuf {
+        self.home(run_id).join(PR_SUMMARY_DIR)
     }
 }
 
@@ -230,6 +247,14 @@ pub fn store_fs<R: tauri::Runtime>(
     app.try_state::<fsa::FsAccessState>()
         .and_then(|state| state.get())
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())
+}
+
+/// Whether a directory stands at `path`, read through the guarded instance.
+///
+/// The entry itself is read and no link is followed, so a link to a directory
+/// is not a directory here. A path the instance cannot read is not one either.
+pub fn is_directory(fs: &fsa::FsAccess, path: &Path) -> bool {
+    fs.file_info(path).is_ok_and(|info| info.kind == fsa::EntryKind::Dir)
 }
 
 /// The store root: `short_data_dir()`, or whatever root the managed state names.

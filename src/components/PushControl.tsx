@@ -77,6 +77,8 @@ export function PushControl({
       showPushSucceeded();
       return;
     }
+    // CHG-FR-ATLJ: the author cancelled the confirmation, so nothing is said.
+    if (outcome.cause === "cancelled") return;
     if (outcome.cause === "busy") {
       // Another control began a push while the picker was open. A first
       // activation never gets here: the control is unavailable while one runs.

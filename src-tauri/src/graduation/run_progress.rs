@@ -19,8 +19,12 @@ use super::{GraduationRun, GraduationRunState, GraduationState};
 pub const PROGRESS_KIND_GRADUATION: &str = "graduation";
 
 /// GRD-FR-ZHNV: the label names the run's title — the draft's name for a draft
-/// run and `Merge <stream>` for a merge run.
+/// run, `Merge <stream>` for a merge run, and `Summarize <head>` for a PR
+/// summary run.
 pub(super) fn label_of(run: &GraduationRun) -> String {
+    if let Some(data) = run.pr_summary.as_ref() {
+        return format!("{}…", data.name);
+    }
     match run.merge.as_ref() {
         Some(merge) => format!("{}…", merge.name),
         None => format!("Graduating {}…", run.input.draft_name),

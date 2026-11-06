@@ -20,7 +20,17 @@ fn prompt_sources() -> Vec<(&'static str, &'static str)> {
             "merge-review.md",
             include_str!("../../../../resources/prompts/graduation/merge-review.md"),
         ),
+        ("pr-summary.md", include_str!("../../../../resources/prompts/graduation/pr-summary.md")),
     ]
+}
+
+/// GRL-FR-SNHR: every field the task input of a PR summary turn carries, with
+/// the optional ones set.
+fn pr_summary_input_fields() -> Vec<String> {
+    let run = super::pr_summary_turn::pr_summary_run("feature/panel", PrSummaryMode::Combine);
+    let mut input = driver::compose_pr_summary_input(&run).expect("a PR summary run");
+    input.correction = Some("send this instead".into());
+    input.to_map().keys().cloned().collect()
 }
 
 /// Every `input.<name>` a document names.
@@ -99,6 +109,10 @@ fn graduation_input_fields(part: &str) -> Vec<String> {
         restarted_from_run_id: None,
         failure: None,
         merge: None,
+        pr_summary: None,
+        run_summary: None,
+        landings: Vec::new(),
+        reverts: Vec::new(),
         created_at: "t0".into(),
         updated_at: "t0".into(),
     };
@@ -134,6 +148,7 @@ fn every_input_field_a_prompt_names_exists() {
     let merge = crate::streams::merge_input_field_names();
     let merge_work = merge_input_fields(driver::PART_WORK);
     let merge_review = merge_input_fields(driver::PART_REVIEW);
+    let pr_summary = pr_summary_input_fields();
 
     for (name, source) in prompt_sources() {
         // The semantic merge turn carries its own input, composed by the merge
@@ -145,6 +160,8 @@ fn every_input_field_a_prompt_names_exists() {
             // given the merge context and are held to their own input.
             "merge-work.md" => &merge_work,
             "merge-review.md" => &merge_review,
+            // GRL-FR-SNHR: the PR summary turn is held to its own input.
+            "pr-summary.md" => &pr_summary,
             _ => &work,
         };
         for field in fields_named(source) {
@@ -333,7 +350,51 @@ fn every_instruction_tells_a_turn_to_act_on_a_correction() {
         ("merge-work.md", driver::MERGE_WORK_PROMPT.as_str()),
         ("review.md", driver::REVIEW_PROMPT.as_str()),
         ("merge-review.md", driver::MERGE_REVIEW_PROMPT.as_str()),
+        ("pr-summary.md", driver::PR_SUMMARY_PROMPT.as_str()),
     ] {
         assert!(text.contains("`input.correction`"), "{name} names `input.correction`");
+    }
+}
+
+// GRL-FR-TZKR: `pr-summary.md` directs the turn to the repository's pull
+// request template, skills and agent instructions, says that it changes no
+// file, and holds one task for each mode.
+#[test]
+fn the_pr_summary_prompt_names_the_template_both_modes_and_no_change() {
+    let text = driver::PR_SUMMARY_PROMPT.as_str();
+    for required in [
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        "skills",
+        "agent instructions",
+        "change no file",
+        "## When the mode is `diff`",
+        "## When the mode is `combine`",
+        "`input.pr_summary.merge_base`",
+        "`input.pr_summary.head_tip`",
+        "`input.pr_summary.inputs`",
+        "\"title\"",
+        "\"description\"",
+    ] {
+        assert!(text.contains(required), "pr-summary.md does not say `{required}`");
+    }
+    // GRL-FR-UNKD: the turn has no answer to a question, so it asks none.
+    assert!(!text.contains("escalate_to_user"), "pr-summary.md offers no escalation");
+}
+
+// GRL-FR-FRNJ: `review.md` asks a `ready` verdict for the run summary, and
+// directs the turn to the repository's template, skills and agent
+// instructions for its shape.
+#[test]
+fn the_review_prompt_asks_a_ready_verdict_for_a_run_summary() {
+    let text = driver::REVIEW_PROMPT.as_str();
+    for required in [
+        "\"summary\"",
+        "A `revise` verdict carries **no** summary",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        "skills",
+        "agent instructions",
+        "**one line**",
+    ] {
+        assert!(text.contains(required), "review.md does not say `{required}`");
     }
 }

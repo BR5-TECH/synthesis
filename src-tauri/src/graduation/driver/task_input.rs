@@ -46,6 +46,30 @@ pub struct MergeTaskContext {
     pub reconciled_paths: Option<Vec<String>>,
 }
 
+/// GRL-FR-SNHR: one captured run summary a `combine` turn is told about.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PrSummaryTaskInput {
+    pub title: String,
+    pub description: String,
+}
+
+/// GRL-FR-SNHR: what the turn of a PR summary run is told about the pull
+/// request.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PrSummaryTaskContext {
+    /// `diff` or `combine`.
+    pub mode: String,
+    pub head: String,
+    pub base: String,
+    pub head_tip: String,
+    pub merge_base: String,
+    /// The captured run summaries in landing order; `combine` mode only.
+    #[serde(default)]
+    pub inputs: Vec<PrSummaryTaskInput>,
+}
+
 /// GRL contract surface: the input object every turn carries.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,6 +106,9 @@ pub struct GraduationTaskInput {
     /// GRL-FR-TXEB: the merge a turn of a merge run reconciles or reviews.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge: Option<MergeTaskContext>,
+    /// GRL-FR-SNHR: the pull request the turn of a PR summary run describes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_summary: Option<PrSummaryTaskContext>,
     /// GRL-FR-DNKA: the work turn's own account of what it did and did not do,
     /// carried to the review that judges what it wrote.
     ///
@@ -108,7 +135,13 @@ impl GraduationTaskInput {
         if self.run_id.is_empty() {
             return Err("graduation input names no run".to_string());
         }
-        if self.prompt.trim().is_empty() {
+        // GRL-FR-SNHR: the turn of a PR summary run carries its context and no
+        // prompt; every other turn carries a prompt and no such context.
+        let pr_part = self.part == phases::PART_PR_SUMMARY;
+        if pr_part != self.pr_summary.is_some() {
+            return Err(format!("the PR summary context does not match the part {:?}", self.part));
+        }
+        if !pr_part && self.prompt.trim().is_empty() {
             return Err("graduation input carries no prompt".to_string());
         }
         if !matches!(
@@ -118,6 +151,7 @@ impl GraduationTaskInput {
                 | phases::PART_SEMANTIC_MERGE
                 | phases::PART_MERGE_WORK
                 | phases::PART_MERGE_REVIEW
+                | phases::PART_PR_SUMMARY
         ) {
             return Err(format!("unknown graduation part {:?}", self.part));
         }
@@ -174,6 +208,10 @@ pub(crate) fn turn_kind_for_run(
     part: &str,
 ) -> crate::tools::agent_exec::TurnKind {
     use crate::tools::agent_exec::TurnKind;
+    // GRL-FR-UNKD / GXD-FR-XQJR: the one turn of a PR summary run.
+    if run.is_pr_summary() {
+        return TurnKind::PrMaintenance;
+    }
     if run.is_merge() {
         // EAC-FR-IRRD: the review part under either of its names.
         return match part {
@@ -227,6 +265,7 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
     };
     GraduationTaskInput {
         merge,
+        pr_summary: None,
         graduation_input_version: GRADUATION_INPUT_VERSION,
         run_id: run.id.clone(),
         part: input_part.to_string(),
@@ -256,4 +295,41 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
         escalation_context: run.escalation.as_ref().map(|e| e.reason.clone()),
         escalation_answers: run.checkpoint.pending_escalation_answers.clone(),
     }
+}
+
+/// GRL-FR-SNHR: the input the turn of a PR summary run carries.
+///
+/// It carries the mode, the head and the base, the pinned head tip and merge
+/// base, and in `combine` mode the captured run summaries in landing order. Its
+/// `draft_name`, `prompt` and `stream_name` are empty. `None` where the run is
+/// not a PR summary run.
+pub fn compose_pr_summary_input(run: &GraduationRun) -> Option<GraduationTaskInput> {
+    let data = run.pr_summary.as_ref()?;
+    let inputs = match data.mode {
+        crate::graduation::PrSummaryMode::Combine => data
+            .inputs
+            .iter()
+            .map(|input| PrSummaryTaskInput {
+                title: input.title.clone(),
+                description: input.description.clone(),
+            })
+            .collect(),
+        crate::graduation::PrSummaryMode::Diff => Vec::new(),
+    };
+    Some(GraduationTaskInput {
+        graduation_input_version: GRADUATION_INPUT_VERSION,
+        run_id: run.id.clone(),
+        part: phases::PART_PR_SUMMARY.to_string(),
+        purpose: PURPOSE_GENERATE.to_string(),
+        pass: 1,
+        pr_summary: Some(PrSummaryTaskContext {
+            mode: data.mode.as_str().to_string(),
+            head: data.head.clone(),
+            base: data.base.clone(),
+            head_tip: data.head_tip.clone().unwrap_or_default(),
+            merge_base: data.merge_base.clone().unwrap_or_default(),
+            inputs,
+        }),
+        ..GraduationTaskInput::default()
+    })
 }

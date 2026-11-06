@@ -16,6 +16,7 @@ import { getMarkdown, markdownExtensions } from "../markdownFidelity";
 import { CommentHighlight } from "../commentHighlight";
 import { FindHighlight } from "../findHighlight";
 import { HunkDecorations } from "../DraftDiscussion";
+import { MainBranchEditGate } from "./mainBranchEditGate";
 import { useHostImageDecorations } from "./useHostImageDecorations";
 import { useHostImageResolution } from "./useHostImageResolution";
 import {
@@ -183,6 +184,8 @@ export function useEditorSurface(deps: EditorSurfaceDeps) {
       // they change. A fourth independent decoration — a find match inside a
       // proposed deletion marks both.
       HunkDecorations,
+      // EDT-FR-QXEK: the first change on an unconfirmed main branch is held.
+      MainBranchEditGate,
     ]),
     // The ProseMirror node carries the `doc` class so the existing document
     // typography (.doc h1/p/ul/blockquote/code…) styles the WYSIWYG content.

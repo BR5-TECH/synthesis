@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "../api";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../state/mainBranchWrite";
 import { onWorkStreamUpdateProgress, onWorkStreamsChanged } from "../events";
 import { logError, logInfo, logWarn } from "../logging";
 import type {
@@ -156,6 +157,7 @@ export function WorkStreamSelector({
   /** WSS-FR-NPXC: a refusal of a resolution action, in the window it was made from. */
   const [resolveError, setResolveError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   /** Whether this surface is still mounted, for the merges it is waiting on. */
   const mounted = useRef(true);
   useEffect(() => {
@@ -397,11 +399,15 @@ export function WorkStreamSelector({
       streamId: id,
       publication: publication.kind,
     });
-    api
-      .mergeWorkStream(id, publication)
+    // WSS-FR-DBGA / MBW-FR-YSMC: the base branch's guard, and a refusal of the
+    // backend answered with the confirmation.
+    runMainBranchWrite("merge_stream", () => api.mergeWorkStream(id, publication), {
+      branch: summary.stream.baseBranch,
+    })
       .then((result) => {
         if (!mounted.current) return;
         settleMerge(id);
+        if (result === WRITE_CANCELLED) return;
         acceptMergeResult(id, result);
         if (summary.stream.temporary) {
           afterTemporaryMerge(summary, result, publication);
@@ -715,6 +721,7 @@ export function WorkStreamSelector({
   return (
     <div className="stream-select" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="stream-select__control"
         aria-haspopup="menu"
@@ -835,6 +842,9 @@ export function WorkStreamSelector({
                 // commit message window, so it does not paint over the scrim.
                 onCreatePullRequest={(row) => {
                   close();
+                  // CPR-FR-IWDK: the row goes with the dropdown, so the window
+                  // gives focus back to the Work streams control.
+                  triggerRef.current?.focus();
                   onCreatePullRequest?.({
                     head: row.stream.branch,
                     base: row.stream.baseBranch,

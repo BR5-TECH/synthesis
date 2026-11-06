@@ -384,3 +384,26 @@ fn a_changed_drafts_root_ignore_file_does_not_refuse_the_merge() {
 
     merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect("merged");
 }
+
+// WKS-FR-WUUH: a merge into an unconfirmed main branch is refused before it
+// writes or builds anything, and creates no run. A confirmation of the base
+// branch lets the merge through.
+#[test]
+fn a_merge_into_an_unconfirmed_main_branch_is_refused() {
+    let fx = Fixture::new();
+    fx.app.manage(crate::git::write_guard::commands::WriteGuardState::offline());
+    fx.app.manage(crate::global_settings::GlobalSettingsStore::in_memory());
+    fx.app.manage(crate::github_tokens::GithubTokens::default());
+    let stream = stream_ahead(&fx, "guarded");
+    assert_refused_and_unchanged(
+        &fx,
+        &stream,
+        StreamMergePublication::Uncommitted,
+        crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED,
+    );
+    assert_no_run_anywhere(&fx);
+
+    let session = fx.app.state::<crate::git::write_guard::commands::WriteGuardState>().session();
+    crate::git::write_guard::confirm_for_test(&session, &fx.root(), &stream.base_branch);
+    assert!(merge(&fx, &stream.id, StreamMergePublication::Uncommitted).is_ok());
+}

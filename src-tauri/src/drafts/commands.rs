@@ -2,6 +2,7 @@
 //! (`DRS-draft-storage.md`).
 
 use super::*;
+use crate::git::write_guard::off_main::{in_sequence, project_root, project_store, run_write};
 
 #[tauri::command]
 pub fn list_drafts(
@@ -59,28 +60,33 @@ pub fn list_drafts(
 }
 
 #[tauri::command]
-pub fn create_draft<R: tauri::Runtime>(
+pub async fn create_draft<R: tauri::Runtime>(
     name: Option<String>,
     folder: Option<String>,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
 ) -> Result<DraftCreated, String>
 where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
 {
-    let root = project.require_root()?;
-    let created = create_draft_impl(&root, name.as_deref(), folder.as_deref())?;
-    // PST-FR-KGRW: the committer records what it did through the application's
-    // one sink, and the creation event is raised from a path that holds none.
-    // Offered here, from a command that does hold one, so a session spent
-    // entirely in the New Artifact tab still reports why a commit was skipped
-    // or dropped.
-    crate::storage_floor::commit::offer_sink(&app);
-    announce(&app, DraftChange::to(&created.draft.id, vec![created.file.clone()]));
-    // DHS-FR-22 is deliberately silent here: creating a draft settles no version
-    // (DHS-FR-07), so there is no entry for a surface to hear about and an event
-    // saying otherwise would have every open rail re-read for nothing.
-    Ok(created)
+    run_write(app, "create_draft", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "create_draft")?;
+        let _sequence = in_sequence();
+        let created = create_draft_impl(&root, name.as_deref(), folder.as_deref())?;
+        // PST-FR-KGRW: the committer records what it did through the application's
+        // one sink, and the creation event is raised from a path that holds none.
+        // Offered here, from a command that does hold one, so a session spent
+        // entirely in the New Artifact tab still reports why a commit was skipped
+        // or dropped.
+        crate::storage_floor::commit::offer_sink(&app);
+        announce(&app, DraftChange::to(&created.draft.id, vec![created.file.clone()]));
+        // DHS-FR-22 is deliberately silent here: creating a draft settles no version
+        // (DHS-FR-07), so there is no entry for a surface to hear about and an event
+        // saying otherwise would have every open rail re-read for nothing.
+        Ok(created)
+    })
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -102,128 +108,168 @@ pub(super) fn announce_organisation<R: tauri::Runtime>(app: &tauri::AppHandle<R>
 }
 
 #[tauri::command]
-pub fn create_drafts_folder(
+pub async fn create_drafts_folder<R: tauri::Runtime>(
     parent: String,
     name: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftFolder, String> {
-    let root = project.require_root()?;
-    let folder = create_drafts_folder_impl(&root, &parent, &name)?;
-    crate::logging::log_info(
-        &app,
-        &crate::logging::BUFFER,
-        &[crate::logging::Domain::Backend],
-        "drafts folder created",
-        crate::log_fields! { "path" => folder.path.clone() },
-    );
-    announce_organisation(&app);
-    Ok(folder)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftFolder, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "create_drafts_folder", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "create_drafts_folder")?;
+        let _sequence = in_sequence();
+        let folder = create_drafts_folder_impl(&root, &parent, &name)?;
+        crate::logging::log_info(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "drafts folder created",
+            crate::log_fields! { "path" => folder.path.clone() },
+        );
+        announce_organisation(&app);
+        Ok(folder)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn rename_drafts_folder(
+pub async fn rename_drafts_folder<R: tauri::Runtime>(
     path: String,
     name: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftFolder, String> {
-    let root = project.require_root()?;
-    let folder = rename_drafts_folder_impl(&root, &path, &name)?;
-    crate::logging::log_info(
-        &app,
-        &crate::logging::BUFFER,
-        &[crate::logging::Domain::Backend],
-        "drafts folder renamed",
-        crate::log_fields! { "from" => path, "to" => folder.path.clone() },
-    );
-    announce_organisation(&app);
-    Ok(folder)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftFolder, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "rename_drafts_folder", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "rename_drafts_folder")?;
+        let _sequence = in_sequence();
+        let folder = rename_drafts_folder_impl(&root, &path, &name)?;
+        crate::logging::log_info(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "drafts folder renamed",
+            crate::log_fields! { "from" => path, "to" => folder.path.clone() },
+        );
+        announce_organisation(&app);
+        Ok(folder)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_drafts_folder(
+pub async fn delete_drafts_folder<R: tauri::Runtime>(
     path: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<(), String> {
-    let root = project.require_root()?;
-    // DRS-FR-22: a command that fails emits nothing, so the event never
-    // announces a change that did not land. The partial result DRS-FR-31 leaves
-    // possible on an I/O failure is not lost by that: the Drafts panel re-lists
-    // after a failed operation as surely as after a successful one
-    // (`../../specifications/ui/DRP-drafts-panel.md` DRP-FR-32), so the tree it
-    // shows is what is on disk rather than what was attempted.
-    match delete_drafts_folder_impl(&root, &path) {
-        Ok(()) => {
-            crate::logging::log_info(
-                &app,
-                &crate::logging::BUFFER,
-                &[crate::logging::Domain::Backend],
-                "drafts folder deleted, children reparented",
-                crate::log_fields! { "path" => path },
-            );
-            announce_organisation(&app);
-            Ok(())
+    app: tauri::AppHandle<R>,
+) -> Result<(), String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "delete_drafts_folder", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "delete_drafts_folder")?;
+        let _sequence = in_sequence();
+        // DRS-FR-22: a command that fails emits nothing, so the event never
+        // announces a change that did not land. The partial result DRS-FR-31 leaves
+        // possible on an I/O failure is not lost by that: the Drafts panel re-lists
+        // after a failed operation as surely as after a successful one
+        // (`../../specifications/ui/DRP-drafts-panel.md` DRP-FR-32), so the tree it
+        // shows is what is on disk rather than what was attempted.
+        match delete_drafts_folder_impl(&root, &path) {
+            Ok(()) => {
+                crate::logging::log_info(
+                    &app,
+                    &crate::logging::BUFFER,
+                    &[crate::logging::Domain::Backend],
+                    "drafts folder deleted, children reparented",
+                    crate::log_fields! { "path" => path },
+                );
+                announce_organisation(&app);
+                Ok(())
+            }
+            Err(e) => {
+                crate::logging::log_warn(
+                    &app,
+                    &crate::logging::BUFFER,
+                    &[crate::logging::Domain::Backend],
+                    "drafts folder could not be deleted",
+                    crate::log_fields! { "path" => path, "reason" => e.clone() },
+                );
+                Err(e)
+            }
         }
-        Err(e) => {
-            crate::logging::log_warn(
-                &app,
-                &crate::logging::BUFFER,
-                &[crate::logging::Domain::Backend],
-                "drafts folder could not be deleted",
-                crate::log_fields! { "path" => path, "reason" => e.clone() },
-            );
-            Err(e)
-        }
-    }
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn move_draft_to_folder(
+pub async fn move_draft_to_folder<R: tauri::Runtime>(
     draft_id: String,
     folder: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftSummary, String> {
-    let root = project.require_root()?;
-    // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
-    // reason, whatever its status — so this guard runs before the lock.
-    require_not_github_shadow(&root, &draft_id)?;
-    // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
-    // graduated, changes in no way — not the record, not the prompt, not a byte
-    // under its folder — and nothing is emitted for a call that landed nowhere.
-    crate::graduation::require_unlocked_draft(&app, &draft_id)?;
-    let summary = move_draft_to_folder_impl(&root, &draft_id, &folder)?;
-    crate::logging::log_info(
-        &app,
-        &crate::logging::BUFFER,
-        &[crate::logging::Domain::Backend],
-        "draft filed in another folder",
-        crate::log_fields! { "draft_id" => draft_id, "folder" => folder },
-    );
-    announce_organisation(&app);
-    Ok(summary)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftSummary, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "move_draft_to_folder", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "move_draft_to_folder")?;
+        let _sequence = in_sequence();
+        // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
+        // reason, whatever its status — so this guard runs before the lock.
+        require_not_github_shadow(&root, &draft_id)?;
+        // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
+        // graduated, changes in no way — not the record, not the prompt, not a byte
+        // under its folder — and nothing is emitted for a call that landed nowhere.
+        crate::graduation::require_unlocked_draft(&app, &draft_id)?;
+        let summary = move_draft_to_folder_impl(&root, &draft_id, &folder)?;
+        crate::logging::log_info(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "draft filed in another folder",
+            crate::log_fields! { "draft_id" => draft_id, "folder" => folder },
+        );
+        announce_organisation(&app);
+        Ok(summary)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn move_drafts_folder(
+pub async fn move_drafts_folder<R: tauri::Runtime>(
     path: String,
     destination: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftFolder, String> {
-    let root = project.require_root()?;
-    let folder = move_drafts_folder_impl(&root, &path, &destination)?;
-    crate::logging::log_info(
-        &app,
-        &crate::logging::BUFFER,
-        &[crate::logging::Domain::Backend],
-        "drafts folder moved",
-        crate::log_fields! { "from" => path, "to" => folder.path.clone() },
-    );
-    announce_organisation(&app);
-    Ok(folder)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftFolder, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "move_drafts_folder", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "move_drafts_folder")?;
+        let _sequence = in_sequence();
+        let folder = move_drafts_folder_impl(&root, &path, &destination)?;
+        crate::logging::log_info(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "drafts folder moved",
+            crate::log_fields! { "from" => path, "to" => folder.path.clone() },
+        );
+        announce_organisation(&app);
+        Ok(folder)
+    })
+    .await
 }
 
 /// DRS-FR-17: the panel's text filter, which is the one operation it makes that
@@ -470,75 +516,99 @@ pub fn read_draft_prompt(root: &fs::RootFs, id: &str) -> Result<DraftPrompt, Str
 }
 
 #[tauri::command]
-pub fn rename_draft(
+pub async fn rename_draft<R: tauri::Runtime>(
     id: String,
     name: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftRecord, String> {
-    let root = project.require_root()?;
-    // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
-    // reason, whatever its status — so this guard runs before the lock.
-    require_not_github_shadow(&root, &id)?;
-    // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
-    // graduated, changes in no way — not the record, not the prompt, not a byte
-    // under its folder — and nothing is emitted for a call that landed nowhere.
-    crate::graduation::require_unlocked_draft(&app, &id)?;
-    let record = rename_draft_impl(&root, &id, &name)?;
-    // DRS-FR-09: a rename moves the primary file, so the file the draft is now
-    // bound to is what changed on disk.
-    announce(&app, DraftChange::to(&id, record.prompt_path.clone().into_iter().collect()));
-    Ok(record)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftRecord, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "rename_draft", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "rename_draft")?;
+        let _sequence = in_sequence();
+        // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
+        // reason, whatever its status — so this guard runs before the lock.
+        require_not_github_shadow(&root, &id)?;
+        // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
+        // graduated, changes in no way — not the record, not the prompt, not a byte
+        // under its folder — and nothing is emitted for a call that landed nowhere.
+        crate::graduation::require_unlocked_draft(&app, &id)?;
+        let record = rename_draft_impl(&root, &id, &name)?;
+        // DRS-FR-09: a rename moves the primary file, so the file the draft is now
+        // bound to is what changed on disk.
+        announce(&app, DraftChange::to(&id, record.prompt_path.clone().into_iter().collect()));
+        Ok(record)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn set_draft_status(
+pub async fn set_draft_status<R: tauri::Runtime>(
     id: String,
     status: DraftStatus,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftRecord, String> {
-    let root = project.require_root()?;
-    // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
-    // reason, whatever its status — so this guard runs before the lock.
-    require_not_github_shadow(&root, &id)?;
-    // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
-    // graduated, changes in no way — not the record, not the prompt, not a byte
-    // under its folder — and nothing is emitted for a call that landed nowhere.
-    crate::graduation::require_unlocked_draft(&app, &id)?;
-    let record = set_draft_status_impl(&root, &id, status)?;
-    // DRS-FR-10: archiving moves not one file, so the change is to the record
-    // alone and names no path.
-    announce(&app, DraftChange::record_of(&id));
-    Ok(record)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftRecord, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "set_draft_status", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "set_draft_status")?;
+        let _sequence = in_sequence();
+        // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
+        // reason, whatever its status — so this guard runs before the lock.
+        require_not_github_shadow(&root, &id)?;
+        // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
+        // graduated, changes in no way — not the record, not the prompt, not a byte
+        // under its folder — and nothing is emitted for a call that landed nowhere.
+        crate::graduation::require_unlocked_draft(&app, &id)?;
+        let record = set_draft_status_impl(&root, &id, status)?;
+        // DRS-FR-10: archiving moves not one file, so the change is to the record
+        // alone and names no path.
+        announce(&app, DraftChange::record_of(&id));
+        Ok(record)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_draft(
+pub async fn delete_draft<R: tauri::Runtime>(
     id: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<(), String> {
-    let root = project.require_root()?;
-    // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
-    // reason, whatever its status — so this guard runs before the lock.
-    require_not_github_shadow(&root, &id)?;
-    // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
-    // graduated, changes in no way — not the record, not the prompt, not a byte
-    // under its folder — and nothing is emitted for a call that landed nowhere.
-    crate::graduation::require_unlocked_draft(&app, &id)?;
-    let store = project.require_store()?;
-    delete_draft_impl(&root, &store, &id)?;
-    // PST-FR-KGRW: `delete_draft_impl` raised the deletion event, and is reached
-    // by callers that hold no sink, so the sink is offered here. The statistics
-    // log and the conversations went too, and neither is in a commit: both
-    // stand outside every worktree (`RMS-repository-machine-storage.md`
-    // RMS-FR-HDNZ).
-    crate::storage_floor::commit::offer_sink(&app);
-    // The whole draft went, files and all, so there is no surviving path to
-    // name.
-    announce(&app, DraftChange::record_of(&id));
-    Ok(())
+    app: tauri::AppHandle<R>,
+) -> Result<(), String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "delete_draft", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "delete_draft")?;
+        let _sequence = in_sequence();
+        // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
+        // reason, whatever its status — so this guard runs before the lock.
+        require_not_github_shadow(&root, &id)?;
+        // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
+        // graduated, changes in no way — not the record, not the prompt, not a byte
+        // under its folder — and nothing is emitted for a call that landed nowhere.
+        crate::graduation::require_unlocked_draft(&app, &id)?;
+        let store = project_store(&app)?;
+        delete_draft_impl(&root, &store, &id)?;
+        // PST-FR-KGRW: `delete_draft_impl` raised the deletion event, and is reached
+        // by callers that hold no sink, so the sink is offered here. The statistics
+        // log and the conversations went too, and neither is in a commit: both
+        // stand outside every worktree (`RMS-repository-machine-storage.md`
+        // RMS-FR-HDNZ).
+        crate::storage_floor::commit::offer_sink(&app);
+        // The whole draft went, files and all, so there is no surviving path to
+        // name.
+        announce(&app, DraftChange::record_of(&id));
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -552,33 +622,54 @@ pub fn load_draft_file_contents(
 }
 
 #[tauri::command]
-pub fn save_draft_file_contents(
+pub async fn save_draft_file_contents<R: tauri::Runtime>(
     id: String,
     path: String,
     body: String,
-    app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-) -> Result<DraftSaveResult, String> {
-    let root = project.require_root()?;
-    // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
-    // reason, whatever its status — so this guard runs before the lock.
-    require_not_github_shadow(&root, &id)?;
-    // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
-    // graduated, changes in no way — not the record, not the prompt, not a byte
-    // under its folder — and nothing is emitted for a call that landed nowhere.
-    crate::graduation::require_unlocked_draft(&app, &id)?;
-    let saved = save_draft_file_impl(&root, &id, &path, &body)?;
-    // PST-FR-DQZT: a save is no draft event, so it commits nothing.
-    // `DAS-draft-assets.md` DAS-FR-14: an asset this session stored is held
-    // until the insertion that asked for it settles, and a write of the prompt
-    // is what settles it — from here on the saved prompt is what protects an
-    // asset from housekeeping (DAS-FR-13). Released after the write has landed,
-    // so a pass running in the instant before it still finds the hold.
-    if let Some(sweeper) = app.try_state::<crate::draft_assets::DraftAssetSweeper>() {
-        sweeper.release_draft(&id);
-    }
-    // DRS-FR-22: a write refreshes the draft's last-activity instant, so the
-    // panel's relative timestamps and its ordering follow the author's typing.
-    announce(&app, DraftChange::to(&id, vec![path]));
-    Ok(saved)
+    app: tauri::AppHandle<R>,
+) -> Result<DraftSaveResult, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    run_write(app, "save_draft_file_contents", move |app| {
+        let root = project_root(&app)?;
+        // DRS-FR-TMZX: the main branch write check, before anything is written.
+        require_draft_write(&app, &root, "save_draft_file_contents")?;
+        let _sequence = in_sequence();
+        // DRS-FR-QPSC: a GitHub-shadow draft refuses every write with its own
+        // reason, whatever its status — so this guard runs before the lock.
+        require_not_github_shadow(&root, &id)?;
+        // DRS-FR-19 / DRS-FR-20: a draft a graduation holds, or has already
+        // graduated, changes in no way — not the record, not the prompt, not a byte
+        // under its folder — and nothing is emitted for a call that landed nowhere.
+        crate::graduation::require_unlocked_draft(&app, &id)?;
+        let saved = save_draft_file_impl(&root, &id, &path, &body)?;
+        // PST-FR-DQZT: a save is no draft event, so it commits nothing.
+        // `DAS-draft-assets.md` DAS-FR-14: an asset this session stored is held
+        // until the insertion that asked for it settles, and a write of the prompt
+        // is what settles it — from here on the saved prompt is what protects an
+        // asset from housekeeping (DAS-FR-13). Released after the write has landed,
+        // so a pass running in the instant before it still finds the hold.
+        if let Some(sweeper) = app.try_state::<crate::draft_assets::DraftAssetSweeper>() {
+            sweeper.release_draft(&id);
+        }
+        // DRS-FR-22: a write refreshes the draft's last-activity instant, so the
+        // panel's relative timestamps and its ordering follow the author's typing.
+        announce(&app, DraftChange::to(&id, vec![path]));
+        Ok(saved)
+    })
+    .await
+}
+
+/// DRS-FR-TMZX: the main branch write check of a draft write, on the branch of
+/// the active worktree.
+fn require_draft_write<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &std::path::Path,
+    operation: &str,
+) -> Result<(), String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    crate::git::write_guard::commands::require_active_branch_write(app, root, operation)
 }

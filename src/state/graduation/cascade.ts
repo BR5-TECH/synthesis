@@ -11,8 +11,13 @@ import type { GraduationQueue, GraduationRun } from "../../types/graduation";
 import { runTitle } from "./merge";
 import { holdsQueue, runQueueKey } from "./runState";
 
-/** GRD-FR-BNTC: whether this run holds its queue, at rest or at work. */
+/**
+ * GRD-FR-BNTC: whether this run holds its queue, at rest or at work.
+ *
+ * GRD-FR-CCHK: a `failed` PR summary run holds its queue no more.
+ */
 export function holdsItsQueue(run: GraduationRun): boolean {
+  if (run.prSummary && run.state === "failed") return false;
   return holdsQueue(run.state) || (run.state === "queued" && Boolean(run.dispatched));
 }
 

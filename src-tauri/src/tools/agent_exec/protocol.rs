@@ -354,6 +354,10 @@ pub enum ResultContract {
     /// and `ReviewVerdict` carry the same finding shape and stay two schemas
     /// (GRL-FR-OTRH), so neither is read where the other is expected.
     GraduationVerdict,
+    /// EAC-FR-43 / EAC-FR-ESXZ: the `PullRequestSummary` of
+    /// `../ai/GRL-graduation-loop.md` GRL-FR-ZZGO that a PR summary run answers
+    /// with.
+    PullRequestSummary,
 }
 
 impl ResultContract {
@@ -361,6 +365,7 @@ impl ResultContract {
         match self {
             ResultContract::ReviewVerdict => "review_verdict",
             ResultContract::GraduationVerdict => "graduation_verdict",
+            ResultContract::PullRequestSummary => "pull_request_summary",
         }
     }
 
@@ -369,6 +374,7 @@ impl ResultContract {
         match self {
             ResultContract::ReviewVerdict => REVIEW_VERDICT_SCHEMA,
             ResultContract::GraduationVerdict => GRADUATION_VERDICT_SCHEMA,
+            ResultContract::PullRequestSummary => PULL_REQUEST_SUMMARY_SCHEMA,
         }
     }
 
@@ -378,6 +384,7 @@ impl ResultContract {
         match self {
             ResultContract::ReviewVerdict => &REVIEW_VERDICT_SCHEMA_VALUE,
             ResultContract::GraduationVerdict => &GRADUATION_VERDICT_SCHEMA_VALUE,
+            ResultContract::PullRequestSummary => &PULL_REQUEST_SUMMARY_SCHEMA_VALUE,
         }
     }
 }
@@ -411,7 +418,14 @@ pub const REVIEW_VERDICT_SCHEMA: &str = concat!(
     r#"{"oneOf":[{"type":"object","additionalProperties":false,"properties":{"#,
     r#""verdict":{"type":"string","enum":["ready"]},"#,
     r#""rationale":{"type":"string","minLength":1,"pattern":"\\S"},"#,
-    r#""findings":{"type":"array","maxItems":0}},"#,
+    r#""findings":{"type":"array","maxItems":0},"#,
+    // EAC-FR-ZWYE: the optional run summary of GRL-FR-FRNJ, on a `ready`
+    // verdict alone, with a closed field set. The caller drops a summary that
+    // breaks the rules and keeps the verdict (GRL-FR-ECES).
+    r#""summary":{"type":"object","additionalProperties":false,"properties":{"#,
+    r#""title":{"type":"string","minLength":1,"pattern":"\\S"},"#,
+    r#""description":{"type":"string","minLength":1,"pattern":"\\S"}},"#,
+    r#""required":["title","description"]}},"#,
     r#""required":["verdict","rationale","findings"]},"#,
     r#"{"type":"object","additionalProperties":false,"properties":{"#,
     r#""verdict":{"type":"string","enum":["revise"]},"#,
@@ -500,6 +514,25 @@ pub const GRADUATION_VERDICT_SCHEMA: &str = concat!(
 /// [`REVIEW_VERDICT_SCHEMA_VALUE`] is parsed under.
 static GRADUATION_VERDICT_SCHEMA_VALUE: LazyLock<Value> =
     LazyLock::new(|| serde_json::from_str(GRADUATION_VERDICT_SCHEMA).unwrap_or(Value::Null));
+
+/// EAC-FR-ESXZ: the `pull_request_summary` document (GRL-FR-ZZGO).
+///
+/// It admits exactly one object: a non-blank `title` and a non-blank
+/// `description`, with a closed field set. It has **no `escalate_to_user`
+/// branch**, because a PR summary run has no answer to an escalation
+/// (GRL-FR-UNKD). The rule that the title is one line stays with the
+/// application, which trims it and refuses a title that holds a line break.
+pub const PULL_REQUEST_SUMMARY_SCHEMA: &str = concat!(
+    r#"{"type":"object","additionalProperties":false,"properties":{"#,
+    r#""title":{"type":"string","minLength":1,"pattern":"\\S"},"#,
+    r#""description":{"type":"string","minLength":1,"pattern":"\\S"}},"#,
+    r#""required":["title","description"]}"#,
+);
+
+/// [`PULL_REQUEST_SUMMARY_SCHEMA`] parsed once, on the terms
+/// [`REVIEW_VERDICT_SCHEMA_VALUE`] is parsed under.
+static PULL_REQUEST_SUMMARY_SCHEMA_VALUE: LazyLock<Value> =
+    LazyLock::new(|| serde_json::from_str(PULL_REQUEST_SUMMARY_SCHEMA).unwrap_or(Value::Null));
 
 /// EAC-FR-35: the shape of an answer, in words, for every vendor and every
 /// caller.

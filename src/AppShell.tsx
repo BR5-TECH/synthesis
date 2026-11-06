@@ -56,6 +56,7 @@ import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
 import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
 import { PullReconcileDialog } from "./components/PullReconcileDialog";
+import { MainBranchWriteHost } from "./components/MainBranchWrite";
 import { WorktreeGoneGate } from "./components/WorktreeGoneDialog";
 import { leaveGoneWorktree } from "./api";
 import { rootIsGoneNow } from "./state/activeRootHealth";
@@ -722,6 +723,7 @@ export function AppShell(props: AppShellProps) {
       {/* ABT-about-panel.md: the About panel, mounted only while open. One of
           the floating overlays of SNV-FR-56 (ABT-FR-GCPK). */}
       {overlays.aboutOpen && <AboutPanel onClose={overlays.closeAbout} />}
+      <MainBranchWriteHost />
 
       {/* EDT-FR-SJGJ / EDT-FR-TOVY: the diagram editor overlay, mounted only
           while open. One of the floating overlays of SNV-FR-56. */}
@@ -835,9 +837,10 @@ export function AppShell(props: AppShellProps) {
       )}
 
       {/* CPR-create-pull-request.md: the Create a PR window, mounted only while
-          one is open so it starts from its source each time (CPR-FR-SSQI). It
-          is keyed on the opening, so coming back from the token picker mounts
-          it anew with what the author typed (CPR-FR-VZUZ). */}
+          one is open. What the author did is kept per head branch outside it,
+          so a new opening restores it (CPR-FR-SSQI). It is keyed on the
+          opening, so coming back from the token picker mounts it anew with
+          what the author typed (CPR-FR-VZUZ). */}
       {pullRequestWindow && (
         <CreatePullRequestWindow
           key={pullRequestWindow.nonce}

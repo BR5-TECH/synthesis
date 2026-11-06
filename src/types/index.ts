@@ -35,3 +35,4 @@ export * from "./remoteConnectivity";
 export * from "./githubPolling";
 export * from "./documents";
 export * from "./modelDowngrades";
+export * from "./mainBranchWrite";

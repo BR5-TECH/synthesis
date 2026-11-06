@@ -8,6 +8,10 @@
  */
 import { openUrl } from "@tauri-apps/plugin-opener";
 
+import {
+  linkSentences,
+  type PullRequestLinkResult,
+} from "../components/CreatePullRequest/linking";
 import { logWarn } from "../logging";
 import type { CreatedPullRequest } from "../types";
 import { showToast } from "./toasts";
@@ -15,14 +19,21 @@ import { showToast } from "./toasts";
 /** NTF-FR-PRCK: the key of the toast. A second one replaces the first. */
 export const PULL_REQUEST_CREATED_KEY = "pull-request-created";
 
-/** NTF-FR-PRCK: an Info toast with a link to the page of the pull request. */
-export function showPullRequestCreated(pr: CreatedPullRequest): void {
+/**
+ * NTF-FR-PRCK: an Info toast with a link to the page of the pull request.
+ * CPR-FR-UXXF: it also names the issues the pull request is linked to, and
+ * how, and each issue whose link failed.
+ */
+export function showPullRequestCreated(
+  pr: CreatedPullRequest,
+  link: PullRequestLinkResult | null = null,
+): void {
   showToast(
     {
       key: PULL_REQUEST_CREATED_KEY,
       level: "Info",
       title: "Pull request created",
-      body: `Pull request #${pr.number} is created.`,
+      body: [`Pull request #${pr.number} is created.`, ...linkSentences(link, pr.url)].join(" "),
       address: null,
       link: {
         label: `Open pull request #${pr.number}`,

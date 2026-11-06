@@ -371,6 +371,7 @@ export function StreamRow({
           onStart={onStartMerge}
           onStartWithMessage={onStartMergeWithMessage}
           onOpenChanges={onOpenChanges}
+          onCreatePullRequest={() => onCreatePullRequest(summary)}
         />
       )}
       {!update && surface.kind === "update" && surface.streamId === stream.id && (

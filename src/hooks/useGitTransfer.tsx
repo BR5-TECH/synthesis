@@ -26,6 +26,11 @@ import {
 
 import * as api from "../api";
 import {
+  ensureMainBranchWrite,
+  runMainBranchWrite,
+  WRITE_CANCELLED,
+} from "../state/mainBranchWrite";
+import {
   onChangesUpdated,
   onGitOperationFinished,
   onGitOutputLine,
@@ -48,6 +53,8 @@ export type PushFailure =
   | { ok: false; cause: "selection_required"; error: string }
   /** GTC-FR-10: no token is stored at all. */
   | { ok: false; cause: "token_missing"; error: string }
+  /** CHG-FR-ATLJ: the author did not confirm a push to a main branch. */
+  | { ok: false; cause: "cancelled"; error: string }
   | { ok: false; cause: "failed"; error: string };
 
 export type PushOutcome = { ok: true } | PushFailure;
@@ -146,6 +153,8 @@ export function useGitTransferState({
   // The ref is the gate and the state is what renders: two activations in one
   // tick both see the state as idle, and only the ref tells the second one.
   const runningRef = useRef(false);
+  /** CHG-FR-ATLJ: a push waits for the branch write guard. */
+  const askingRef = useRef(false);
 
   const setRunningNow = useCallback(
     (next: boolean, which: TransferOperation = "push") => {
@@ -242,10 +251,25 @@ export function useGitTransferState({
   }, [enabled, refreshSync, setRunningNow]);
 
   const pushBranch = useCallback(async (): Promise<PushOutcome> => {
-    if (runningRef.current) return { ok: false, cause: "busy" };
+    if (runningRef.current || askingRef.current) return { ok: false, cause: "busy" };
+    // CHG-FR-ATLJ / MBW-FR-RMCO: the guard is read, and a confirmation taken,
+    // before the transfer shows as running. A second push while it is asked
+    // for is busy, as one while a push runs is.
+    askingRef.current = true;
+    let allowed = false;
+    try {
+      allowed = await ensureMainBranchWrite("push");
+    } finally {
+      askingRef.current = false;
+    }
+    if (!allowed) return { ok: false, cause: "cancelled", error: "main_branch_write_cancelled" };
     setRunningNow(true);
     try {
-      await api.pushCurrentBranch();
+      const pushed = await runMainBranchWrite("push", () => api.pushCurrentBranch(), {
+        ensured: true,
+      });
+      if (pushed === WRITE_CANCELLED)
+        return { ok: false, cause: "cancelled", error: "main_branch_write_cancelled" };
       return { ok: true };
     } catch (e) {
       const raw = rejection(e);

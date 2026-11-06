@@ -5,7 +5,7 @@ use super::dispatch::TurnRequest;
 use super::stops::Stop;
 use super::turns::*;
 use super::*;
-use crate::graduation::is_worktree_queue_key;
+use crate::graduation::is_streamless_queue_key;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
 use std::path::PathBuf;
 
@@ -46,7 +46,7 @@ fn intercepted<R: tauri::Runtime>(
         let unclaimed = app
             .try_state::<GraduationState>()
             .is_some_and(|state| state.holder_of(stream_id).is_none());
-        let unmarked = is_worktree_queue_key(stream_id)
+        let unmarked = is_streamless_queue_key(stream_id)
             || crate::streams::stream_of(app, stream_id)
                 .is_some_and(|stream| stream.busy_run_id.is_none());
         let unreconciled = app.try_state::<crate::streams::StreamState>().is_none_or(|state| {
@@ -148,7 +148,8 @@ fn claim<R: tauri::Runtime>(
     }
     // GRD-FR-ZVNO: an ordinary worktree has no stream record to mark busy; its
     // lock is the claim above and the index entry of a dispatched direct run.
-    let marked = if is_worktree_queue_key(stream_id) {
+    // GRD-FR-KAKU: a PR summary run has no stream either.
+    let marked = if is_streamless_queue_key(stream_id) {
         Ok(())
     } else {
         crate::streams::claim_stream(app, stream_id, run_id)
@@ -224,6 +225,8 @@ fn drive_blocking<R: tauri::Runtime>(
     crate::graduation::end_run_progress(app, run_id);
     if let Ok(run) = crate::graduation::load_run(app, run_id) {
         crate::graduation::reclaim_ended_merge_run(app, &run);
+        // GRD-FR-TYVT: the same for the checkout of an ended PR summary run.
+        crate::graduation::reclaim_ended_pr_summary_run(app, &run);
     }
 }
 
@@ -257,7 +260,7 @@ fn release_and_advance<R: tauri::Runtime>(
             "graduation left a queue held by a run at rest",
             log_fields! { "run_id" => run_id.to_string(), "stream_id" => stream_id.to_string() },
         );
-    } else if !is_worktree_queue_key(stream_id) {
+    } else if !is_streamless_queue_key(stream_id) {
         let _ = crate::streams::release_stream(app, stream_id, run_id);
     }
     // A `failed` run frees its project slot, and a finished run frees its queue
@@ -295,6 +298,11 @@ async fn drive<R: tauri::Runtime>(
     let Ok(mut run) = crate::graduation::load_run(app, run_id) else {
         return;
     };
+    // GRL-FR-UNKD: a PR summary run is one turn, with no pass and no review.
+    if run.is_pr_summary() {
+        pr_summary_drive::drive(app, &mut run, &cancellation, dispatch).await;
+        return;
+    }
     // GRD-FR-KZPT / GRD-FR-XHSE: a merge run stands in a worktree of its own and
     // is measured from its merge snapshot. It checks its pinned tips before it
     // does anything else, and the stream's working copy is not read at all.
@@ -630,7 +638,7 @@ async fn review_turn<R: tauri::Runtime>(
     // than falling out to a further work turn: the work has not changed, so a
     // work turn would spend a container and a pass re-deciding work nobody
     // reported a problem with.
-    let verdict = loop {
+    let (verdict, summary) = loop {
         let settings = settings_for_dispatch(app, run, phases::PART_REVIEW);
         // A budget the author lowered while the work turn ran rests the run,
         // exactly as it does before a work turn. The review's own bound below
@@ -742,8 +750,11 @@ async fn review_turn<R: tauri::Runtime>(
             Some(execution) => execution,
             None => return Step::Stop,
         };
+        // GRL-FR-ECES: the verdict is read without the summary, and the summary
+        // on its own after it, so a bad summary never refuses a verdict.
         if let Some(verdict) = read_verdict(&execution) {
-            break verdict;
+            let summary = read_run_summary(app, run, &verdict, &execution);
+            break (verdict, summary);
         }
         run.checkpoint.verdict_refusals += 1;
         if !logs::emit(
@@ -822,7 +833,11 @@ async fn review_turn<R: tauri::Runtime>(
         if run.is_merge() {
             return merge_drive::finish_merge(app, run, worktree);
         }
-        finish(app, run, worktree);
+        // GRD-FR-UUGP: a draft run that is not a direct run keeps the run
+        // summary of its `ready` review. An advisory end is a `revise` verdict,
+        // which carries none.
+        let summary = summary.filter(|_| !run.is_direct() && !run.is_pr_summary());
+        finish(app, run, worktree, summary);
         return Step::Stop;
     }
     revise_or_rest(app, run, &verdict)

@@ -31,8 +31,13 @@ pub(super) async fn execute<R: tauri::Runtime>(
         protocol_version: PROTOCOL_VERSION,
         instruction: prompts::instruction_for_run(run, part).to_string(),
         input: Some(input.to_map()),
-        // GRL-FR-VIAT: the review names the shape its own answer must take.
-        result_contract: (part == phases::PART_REVIEW).then_some(ResultContract::ReviewVerdict),
+        // GRL-FR-VIAT / GRL-FR-UNKD: the review and the PR summary turn name the
+        // shape their own answer must take.
+        result_contract: match part {
+            phases::PART_REVIEW => Some(ResultContract::ReviewVerdict),
+            phases::PART_PR_SUMMARY => Some(ResultContract::PullRequestSummary),
+            _ => None,
+        },
         resume: resume.or_else(|| resume_for(run, part)),
         // GXD-FR-MTVR: the controls are composed from the settings read for
         // this dispatch, and nothing of an earlier turn's controls is reused.

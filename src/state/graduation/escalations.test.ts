@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { QuestionDraftAnswer } from "../questionAnswerDrafts";
-import { makeEscalation } from "../../test/graduationFixtures";
+import { makeEscalation, makePrSummaryRun, makeRun } from "../../test/graduationFixtures";
+import { markPullRequestWindowOpen } from "../pullRequestSessions";
 import type { GraduationEscalation } from "../../types";
-import { composeEscalationAnswers } from "./escalations";
+import {
+  composeEscalationAnswers,
+  raisesForRun,
+  shownInOpenPullRequestWindow,
+} from "./escalations";
 
 // GEA-graduation-escalation-answering.md: the entry each answer sends.
 
@@ -96,5 +101,25 @@ describe("composeEscalationAnswers", () => {
 
   it("GEA-FR-VBUG: a selection naming an option a re-read no longer records is no answer", () => {
     expect(compose(threeOptions(), { 4: { selected: 4 } })).toBeNull();
+  });
+});
+
+describe("the completion of a PR summary run under its open window (CPR-FR-VOEB)", () => {
+  it("CPR-FR-VOEB, GRU-FR-BLSS: a completed PR summary run whose head has its window open raises nothing; with the window closed, or for another head, it raises", () => {
+    const done = makePrSummaryRun("g-ps", "completed");
+    expect(raisesForRun(done)).toBe(true);
+    expect(shownInOpenPullRequestWindow(done)).toBe(false);
+
+    const close = markPullRequestWindowOpen("feature/panel");
+    expect(shownInOpenPullRequestWindow(done)).toBe(true);
+    expect(shownInOpenPullRequestWindow(makePrSummaryRun("g-other", "completed", {
+      prSummary: { head: "feature/other" },
+    }))).toBe(false);
+    // A run that failed is news even under the window.
+    expect(shownInOpenPullRequestWindow(makePrSummaryRun("g-ps", "failed"))).toBe(false);
+    // A draft run is never held back.
+    expect(shownInOpenPullRequestWindow(makeRun("g-draft", "completed"))).toBe(false);
+    close();
+    expect(shownInOpenPullRequestWindow(done)).toBe(false);
   });
 });

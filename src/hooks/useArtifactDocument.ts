@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EditSession, EditSessionStore } from "../state/editSessions";
+import { primeEditGate } from "../state/mainBranchWrite";
 
 /**
  * The Editor's live document lifecycle for one artifact (`EXC-editor-external-change.md`,
@@ -67,6 +68,9 @@ export function useArtifactDocument(
   // First load, or the revalidating load of a reopen (EDT-FR-29). An artifact
   // whose session is already live (a tab switch) is resumed without a reload at
   // all (EDT-FR-30).
+  // EDT-FR-QXEK: the guard of the file's branch is read when the file opens.
+  useEffect(() => primeEditGate(), [artifactId]);
+
   useEffect(() => {
     const s = sessions.ensure(artifactId);
     if (s.loaded && !s.revalidate) return;

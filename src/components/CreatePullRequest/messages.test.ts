@@ -9,6 +9,11 @@ import {
   pushFailureMessage,
 } from "./messages";
 import type { PullRequestHeadState } from "../../types";
+import {
+  mainGuard,
+  protectedRefusal,
+  unconfirmedRefusal,
+} from "../../test/mainBranchWriteFixtures";
 
 const STATE: PullRequestHeadState = {
   head: "feature",
@@ -67,6 +72,21 @@ describe("the words of the Create a PR window", () => {
     expect(pushFailureMessage("cannot push non-fastforwardable reference", "feature")).toBe(
       "The remote refused the push of feature: cannot push non-fastforwardable reference",
     );
+  });
+
+  it("CPR-FR-VZNE, MBW-FR-YSMC: a refusal of the main branch write check reads as a sentence and never shows the guard it carries", () => {
+    const unconfirmed = pushFailureMessage(unconfirmedRefusal(mainGuard()), "main");
+    expect(unconfirmed).toBe(
+      "main is a main branch, and the write to it is not confirmed, so it was not pushed.",
+    );
+    const blocked = pushFailureMessage(protectedRefusal(), "main");
+    expect(blocked).toBe(
+      "GitHub protects main, so it was not pushed. Work reaches it through a pull request.",
+    );
+    for (const text of [unconfirmed, blocked]) {
+      expect(text).not.toMatch(/[{}"]/);
+      expect(text).not.toContain("isMain");
+    }
   });
 
   it("CPR-FR-VZNE: a failure reads as a sentence, and an unknown reason is shown whole", () => {

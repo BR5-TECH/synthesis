@@ -29,6 +29,9 @@ const now = "2026-07-28T11:24:00Z";
  * that empties them, so without a flag the states are unreachable in the harness
  * and can only be checked in jsdom.
  */
+/** GTC-FR-YWRZ: the branches confirmed in this harness session. */
+const confirmedMainWrites = new Set<string>();
+
 function harnessFlag(name: string): boolean {
   return new URLSearchParams(location.search).has(name);
 }
@@ -3285,7 +3288,9 @@ function liveOf(draftId: string) {
   };
 }
 
-let nextDraftId = 8;
+// Above every seeded draft id (the highest is `d-40`), so a created draft
+// never takes the id of a seeded one.
+let nextDraftId = 100;
 
 /**
  * DRP-FR-14: the panel state the store hands back, mutated by every save so a
@@ -7034,6 +7039,57 @@ graduationRuns.push(
   }),
 );
 
+/**
+ * GRD-FR-KAKU: a PR summary run. It has no draft and no stream, and its title
+ * is `prSummary.name`.
+ */
+function makePrSummarySeed(id: string, state: string, head: string, base: string, mode: string) {
+  return makeStreamRun({
+    id,
+    streamId: "",
+    streamName: "",
+    standingWork: "keep",
+    baseCommit: null,
+    state,
+    workTurns: state === "queued" ? 0 : 1,
+    input: {
+      draftId: "",
+      draftName: "",
+      prompt: "",
+      promptChecksum: "",
+      capturedAt: "2026-09-06T09:00:00Z",
+    },
+    observability: {
+      observabilityVersion: 1,
+      currentStage: state === "completed" ? "done" : state === "queued" ? "queued" : "working",
+      stageCondition: state === "completed" ? "complete" : "active",
+      stageHistory: [],
+      passes: [],
+    },
+    prSummary: {
+      name: `Summarize ${head}`,
+      head,
+      base,
+      mode,
+      headTip: "e".repeat(40),
+      mergeBase: "a".repeat(40),
+      inputs: [],
+      result:
+        state === "completed"
+          ? { title: `Summarize ${head}`, description: "The pull request **summary**." }
+          : null,
+    },
+  });
+}
+
+// GRU-FR-WEBM: a PR summary run in the queue: http://localhost:5199/?prSummaryRun
+if (harnessFlag("prSummaryRun")) {
+  graduationRuns.push(
+    makePrSummarySeed("g-prs-seed", "working", "feature/panel", "main", "diff"),
+    makePrSummarySeed("g-prs-done", "completed", "feature/toolbar", "main", "diff"),
+  );
+}
+
 /** WKS-FR-KHJS: the stream's newest live merge run, from the queue alone. */
 function mergeRunOf(streamId: string) {
   const runs = graduationRuns.filter(
@@ -9899,6 +9955,30 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
     case "get_default_branch":
       return "main";
+    // GTC-FR-TTSV / GTC-FR-YWRZ: the demo project's branch is `main`, the
+    // default branch, unprotected, so the confirmation of
+    // MBW-main-branch-write.md shows. `?mainProtected` shows the hard block.
+    // `?activeBranch=<name>` makes the active branch (a `null` branch) that
+    // branch, so a surface on a branch that is not a main branch is reachable.
+    case "get_branch_write_guard": {
+      const branch = (a.branch as string | null) || harnessValue("activeBranch") || "main";
+      const isDefault = branch === "main";
+      const protection = harnessFlag("mainProtected") && isDefault ? "protected" : "unprotected";
+      return {
+        branch,
+        isDefault,
+        protection,
+        isMain: isDefault || protection === "protected",
+        confirmed: confirmedMainWrites.has(branch),
+      };
+    }
+    case "confirm_main_branch_write": {
+      const branch = a.branch as string;
+      if (harnessFlag("mainProtected") && branch === "main")
+        throw `main_branch_protected: ${JSON.stringify({ branch, isDefault: true, protection: "protected", isMain: true, confirmed: false })}`;
+      confirmedMainWrites.add(branch);
+      return { branch, isDefault: branch === "main", protection: "unprotected", isMain: branch === "main", confirmed: true };
+    }
     case "list_comparison_branches":
       return [
         { name: "main", isCurrent: false, isDefault: true },
@@ -10052,6 +10132,81 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "create_pull_request":
       await new Promise((resolve) => setTimeout(resolve, 1200));
       return { number: 7, url: "https://github.com/acme/platform/pull/7" };
+    // GRD-FR-BHFP / CHG-FR-QLZO: seven completed runs of the branch, so the
+    // Changes list scrolls after five. d-1 is published (issue 418), so the
+    // Create a PR window lists one task (CPR-FR-IDRP). `?noCompletedRuns`
+    // empties the list.
+    case "list_branch_completed_runs": {
+      if (harnessFlag("noCompletedRuns")) return [];
+      const titles = [
+        "Keep the editor scroll position",
+        "Tab strip overflow menu",
+        "Explain worktrees in the docs",
+        "Bound the graduation loop by turns",
+        "Show the pull request base",
+        "Hold the first edit on main",
+        "Fourth per-task row for PR maintenance",
+      ];
+      return titles.map((title, i) => ({
+        runId: `g-done-${i + 1}`,
+        title,
+        draftId: i === 0 ? "d-1" : i === 1 ? "d-2" : "",
+        draftName: i === 0 ? "Editor scroll" : i === 1 ? "Tab strip" : "",
+        kind: i < 2 ? "draft" : "direct",
+        landing: {
+          branch: String(a.branch ?? "main"),
+          commit: String(i + 1).repeat(40).slice(0, 40),
+          at: `2026-09-0${i + 1}T10:00:00Z`,
+        },
+        runSummary: {
+          title,
+          description: `The run **${title.toLowerCase()}**.\n\n- One change\n- Another change`,
+        },
+      }));
+    }
+    // GRD-FR-KAKU: a PR summary run. It is queued, works for 2 s and
+    // completes 6 s after the start, with a `graduation-run-changed` event at
+    // each step, so the Create a PR window shows its progress (CPR-FR-VOEB).
+    case "start_pull_request_summary": {
+      const head = String(a.head ?? "main");
+      const base = String(a.base ?? "main");
+      const mode = (a.mode as string) === "combine" ? "combine" : "diff";
+      const run = makePrSummarySeed(`g-prs-${Date.now()}`, "queued", head, base, mode);
+      graduationRuns.push(run);
+      const fire = (state: string) =>
+        (
+          (globalThis as Record<string, unknown>).__fireBusEvent as
+            | ((n: string, p?: unknown) => void)
+            | undefined
+        )?.("graduation-run-changed", { runId: run.id, state });
+      setTimeout(() => {
+        run.state = "working";
+        run.observability.currentStage = "working";
+        fire("working");
+      }, 1500);
+      setTimeout(() => {
+        run.state = "completed";
+        run.observability.currentStage = "done";
+        run.observability.stageCondition = "complete";
+        run.prSummary.result = {
+          title: `Summarize ${head}`,
+          description:
+            "## What changes\n\n- The **Create a PR** window writes the description.\n- The `main` branch asks before a write.",
+        };
+        fire("completed");
+      }, 6000);
+      return { ...run };
+    }
+    // GTC-FR-ZHVO: every issue is linked by a closing keyword.
+    case "link_pull_request_issues":
+      return {
+        linked: ((a.issues as unknown[] | undefined) ?? []).map((issue) => ({
+          issue,
+          way: "closing_keyword",
+        })),
+        failed: [],
+        closesOnMerge: a.number !== undefined,
+      };
 
     // ---- worktrees -------------------------------------------------------
     case "list_worktrees_and_branches":
@@ -11185,6 +11340,18 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return publicationView(String(a.draftId ?? a.id ?? "d-1"));
     case "list_publication_remotes":
       return publicationRemotes;
+    /* GHP-FR-FTMC / CPR-FR-GDDO: the remote the Features selector of the
+       Create a PR window reads the parent issues of. */
+    case "get_note_publication_availability":
+      return {
+        available: true,
+        reasonCode: null,
+        reason: null,
+        remoteName: "origin",
+        repositoryHost: "github.com",
+        repositoryOwner: "acme",
+        repositoryName: "acme-app",
+      };
     /* GHP-FR-MDLD: the chooser's read. `?publicationParentsFail`,
        `?publicationTypesFail`, and `?publicationMilestonesEmpty` force the
        failed and empty states of NAW-FR-WMEP. `?publicationManyParents` adds

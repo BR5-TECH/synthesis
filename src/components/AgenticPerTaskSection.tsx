@@ -21,9 +21,10 @@ import { AGENTIC_TURN_KINDS } from "../types";
  * "how many kinds of work are configured apart?" rather than "how many controls
  * were touched?".
  *
- * The rows are in the order a run reaches them and are labelled for the author
- * rather than by the identifier each carries — the last of them is the
- * semantic-rebase turn under the name the rest of the application gives it.
+ * The four rows are labelled for the author rather than by the identifier each
+ * carries: Reconciliation is the semantic-rebase turn under the name the rest
+ * of the application gives it, and PR maintenance is the turn that writes pull
+ * request text. The summary reads out of four (AII-FR-PMZK).
  */
 export function PerTaskSection({
   modelOverrides,

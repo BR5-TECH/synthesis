@@ -14,6 +14,7 @@
 import type { MutableRefObject } from "react";
 
 import * as api from "../api";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../state/mainBranchWrite";
 import {
   ancestorsOf,
   folderJoin,
@@ -53,6 +54,14 @@ export interface DraftActionDeps {
   onDraftChanged: () => void;
 }
 
+/**
+ * DRS-FR-TMZX / MBW-FR-YSMC: a change of the drafts root writes into the
+ * active worktree, so it reads the branch write guard first and answers a
+ * refusal of the backend with the confirmation.
+ */
+export const changeDrafts = <T,>(invoke: () => Promise<T>) =>
+  runMainBranchWrite("change_drafts", invoke);
+
 export function createDraftActions(deps: DraftActionDeps) {
   const {
     panel,
@@ -83,11 +92,16 @@ export function createDraftActions(deps: DraftActionDeps) {
 
   const doDeleteDraft = async (draft: DraftSummary) => {
     setOverlay(null);
+    let deleted = false;
     const ok = await run(`draft:${draft.id}`, async () => {
-      await api.deleteDraft(draft.id);
+      // DRP-FR-MKCP: the guard is read first, and nothing is deleted until the
+      // author confirms a write to a main branch.
+      const result = await runMainBranchWrite("delete_draft", () => api.deleteDraft(draft.id));
+      if (result === WRITE_CANCELLED) return;
+      deleted = true;
       onDraftDeleted(draft.id);
     });
-    if (ok) setAnnouncement(`${draft.name} deleted.`);
+    if (ok && deleted) setAnnouncement(`${draft.name} deleted.`);
   };
 
   /**
@@ -98,14 +112,16 @@ export function createDraftActions(deps: DraftActionDeps) {
    */
   const toggleArchived = async (draft: DraftSummary) => {
     setOverlay(null);
+    let changed = false;
     const ok = await run(`draft:${draft.id}`, async () => {
-      await api.setDraftStatus(
-        draft.id,
-        draft.status === "archived" ? "active" : "archived",
+      const result = await changeDrafts(() =>
+        api.setDraftStatus(draft.id, draft.status === "archived" ? "active" : "archived"),
       );
+      if (result === WRITE_CANCELLED) return;
+      changed = true;
       onDraftChanged();
     });
-    if (ok)
+    if (ok && changed)
       setAnnouncement(
         `${draft.name} ${draft.status === "archived" ? "restored" : "archived"}.`,
       );
@@ -124,7 +140,8 @@ export function createDraftActions(deps: DraftActionDeps) {
         return;
       }
       try {
-        const updated = await api.renameDraft(inline.id, value);
+        const updated = await changeDrafts(() => api.renameDraft(inline.id, value));
+        if (updated === WRITE_CANCELLED) return;
         closeInline();
         onDraftRenamed(inline.id, updated.name);
         setSelected(`draft:${inline.id}`);
@@ -151,7 +168,8 @@ export function createDraftActions(deps: DraftActionDeps) {
         return;
       }
       try {
-        const renamed = await api.renameDraftsFolder(inline.path, value);
+        const renamed = await changeDrafts(() => api.renameDraftsFolder(inline.path, value));
+        if (renamed === WRITE_CANCELLED) return;
         closeInline();
         // DRP-FR-24: a rename moves nothing — the folder keeps its parent, its
         // subtree and its expansion. Expansion is keyed by path, so it has to
@@ -168,7 +186,8 @@ export function createDraftActions(deps: DraftActionDeps) {
     }
 
     try {
-      const created = await api.createDraftsFolder(inline.parent, value);
+      const created = await changeDrafts(() => api.createDraftsFolder(inline.parent, value));
+      if (created === WRITE_CANCELLED) return;
       closeInline();
       // DRP-FR-23: a committed folder is revealed in the tree, expanded and
       // empty, and becomes the selection.
@@ -187,10 +206,11 @@ export function createDraftActions(deps: DraftActionDeps) {
     const childDrafts = drafts.filter((d) => (d.folder ?? ROOT) === path);
     const childDirs = childFolders.get(path) ?? [];
     const parent = folderParent(path);
+    let removed = false;
     const ok = await run(`folder:${path}`, async () => {
-      await api.deleteDraftsFolder(path);
+      removed = (await changeDrafts(() => api.deleteDraftsFolder(path))) !== WRITE_CANCELLED;
     });
-    if (!ok) return;
+    if (!ok || !removed) return;
     // DRP-FR-30 / DRP-FR-25: every direct child moved up to `parent`, so the
     // expansion of each — and of everything beneath it — has to move with it,
     // for the reason a rename's does: expansion is keyed by path.

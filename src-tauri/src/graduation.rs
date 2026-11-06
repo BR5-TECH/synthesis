@@ -54,8 +54,11 @@ mod direct;
 mod errors;
 mod events;
 mod idle_sandbox;
+mod landings;
 mod merge_run;
+mod pr_summary;
 mod queue;
+mod read_failure;
 mod record;
 mod run_progress;
 mod runs;
@@ -65,6 +68,7 @@ mod standing;
 mod state;
 mod store;
 mod transitions;
+mod write_check;
 
 pub use arrangement::*;
 pub use commands::*;
@@ -74,6 +78,7 @@ pub use errors::*;
 pub use events::{
     GRADUATION_LOG_RECORDS_APPENDED, GRADUATION_QUEUE_CHANGED, GRADUATION_RUN_CHANGED,
 };
+pub use landings::*;
 pub use logs::{GraduationLogIndexes, GraduationLogStream};
 pub use merge_run::{
     enqueue_merge_run, merge_title, pull_title, reclaim_ended_merge_run, GraduationMergeData,
@@ -84,6 +89,7 @@ pub use observability::{
     GraduationObservability, GraduationStageCondition, GraduationVisualStage, PassRecord,
     PassStatus, StageReason, StageTransition,
 };
+pub use pr_summary::*;
 pub use queue::{
     draft_graduation, draft_graduation_stands, holder_of_queue, latest_run_for,
     live_run_on_worktree, load_queue, merge_runs_by_stream, next_eligible, position_in_queue,
@@ -98,8 +104,8 @@ pub use runs::{
 pub use scheduler::*;
 pub use state::GraduationState;
 pub use store::{
-    new_run_id, read_queue_index, store_base, store_fs, try_read_queue_index, write_queue_index,
-    QueueIndex, QueueIndexEntry, StoreBase,
+    is_directory, new_run_id, read_queue_index, store_base, store_fs, try_read_queue_index,
+    write_queue_index, QueueIndex, QueueIndexEntry, StoreBase,
 };
 /// The sync of a run's progress operation, for a test that holds a stale copy.
 #[cfg(test)]
@@ -185,6 +191,9 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
         if run.is_merge() && run.state.is_terminal() && driver::merge_workspace::stands(app, run) {
             reclaim_ended_merge_run(app, run);
         }
+        // GRD-FR-TYVT: the disposable checkout of an ended PR summary run goes
+        // on the same terms.
+        reclaim_ended_pr_summary_run(app, run);
     }
     for summary in &queue.runs {
         // GRD-FR-XVUD: `working` and `reviewing` alone. A `blocked` run also

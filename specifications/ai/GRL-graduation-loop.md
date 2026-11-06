@@ -3,11 +3,11 @@
 **Spec code:** `GRL`
 
 ## Intent
-The agent loop a graduation run is driven by. It holds two phases and no more: a **work** turn that drives an execution agent against the run's work stream until the agent reports the task finished, and a **review** turn that judges what the work turn wrote. A **merge run** (per `../core/GRD-graduation.md` GRD-FR-MRNQ) drives the same two phases under its own instructions: a **merge work** turn that resolves a merge Git could not settle in an isolated merge worktree, and a fresh **merge review** turn that judges the result against both branches and the repository's specifications. The loop enforces no shape on the work. It tells the agent what was asked for and where to find the project's own instructions; what a change must contain is the project's rule, not this module's. A review that answers `ready` ends the run; one that asks for revision starts one further work turn while the project's pass budget holds one, and a review that still asks for revision when the budget is spent stops the run for the author. A merge run has a pass budget of its own. Each turn is bounded by the project's stage time limit, and the whole run by its total time limit, so an author can give a long run more room or stop a run that costs too much. Out of scope: the container the turn runs in, which is `../tools/EAC-execute-agent-cli.md`'s; the dispatch seam, which is `../core/GXD-graduation-execution.md`'s; and the run's states and queues, which are `../core/GRD-graduation.md`'s.
+The agent loop a graduation run is driven by. It holds two phases and no more: a **work** turn that drives an execution agent against the run's work stream until the agent reports the task finished, and a **review** turn that judges what the work turn wrote. A `ready` review also gives the **run summary** of the work, a title and a description that a pull request can reuse, and a **PR summary run** (per `../core/GRD-graduation.md` GRD-FR-KAKU) is one turn that writes such a title and description for a whole head branch. Both follow the repository's own pull request template, skills and agent instructions, because the shape of a pull request is the project's decision. A **merge run** (per `../core/GRD-graduation.md` GRD-FR-MRNQ) drives the same two phases under its own instructions: a **merge work** turn that resolves a merge Git could not settle in an isolated merge worktree, and a fresh **merge review** turn that judges the result against both branches and the repository's specifications. The loop enforces no shape on the work. It tells the agent what was asked for and where to find the project's own instructions; what a change must contain is the project's rule, not this module's. A review that answers `ready` ends the run; one that asks for revision starts one further work turn while the project's pass budget holds one, and a review that still asks for revision when the budget is spent stops the run for the author. A merge run has a pass budget of its own. Each turn is bounded by the project's stage time limit, and the whole run by its total time limit, so an author can give a long run more room or stop a run that costs too much. Out of scope: the container the turn runs in, which is `../tools/EAC-execute-agent-cli.md`'s; the dispatch seam, which is `../core/GXD-graduation-execution.md`'s; and the run's states and queues, which are `../core/GRD-graduation.md`'s.
 
 ## Functional requirements
 1. **GRL-FR-EKXT** This loop is composed and driven through the `rig` framework, separate from `CVL-conversation-loop.md` in prompt, tool set, state and lifecycle. One instance runs per work stream at a time (per `../core/WKS-work-streams.md` WKS-FR-NDSV).
-2. **GRL-FR-GADT** Every instruction this loop uses is a file under `resources/prompts/graduation/`, compiled into the binary at build time: `work.md`, `review.md`, `rebase.md`, `refusals.md`, `merge-work.md`, and `merge-review.md`. `refusals.md` holds every correction text. `rebase.md` serves the semantic rebase turn of a stream update alone. A merge run compiles `merge-work.md` and `merge-review.md`, and compiles none of `work.md`, `review.md` and `rebase.md`. No run reads one from disk, and no operation accepts, returns or overrides one.
+2. **GRL-FR-GADT** Every instruction this loop uses is a file under `resources/prompts/graduation/`, compiled into the binary at build time: `work.md`, `review.md`, `rebase.md`, `refusals.md`, `merge-work.md`, `merge-review.md`, and `pr-summary.md`. `refusals.md` holds every correction text. `rebase.md` serves the semantic rebase turn of a stream update alone. A merge run compiles `merge-work.md` and `merge-review.md`, and compiles none of `work.md`, `review.md` and `rebase.md`. A PR summary run compiles `pr-summary.md` alone. No run reads one from disk, and no operation accepts, returns or overrides one.
 3. **GRL-FR-YIJG** A prompt file's instruction text is its content with every authoring comment removed. The files carry comments naming the requirements they satisfy; an agent never sees them.
 4. **GRL-FR-VYNX** One **pass** of a draft run is a work turn followed by a review turn. The loop dispatches the work turn through `../core/GXD-graduation-execution.md`'s `dispatch_graduation_turn`, and on a completed execution dispatches the review turn over what the working copy then holds.
 5. **GRL-FR-ARPX** A run that is not a merge run takes at most the project's **pass budget** of passes, which is two where the project configures none (per `../core/PSS-project-settings-storage.md` PSS-FR-QBNE). A review that answers `ready` on any pass ends the loop. A review that answers `revise` starts the next pass while the budget holds one, and rests the run in `awaiting_author` carrying the findings where it does not.
@@ -23,8 +23,10 @@ The agent loop a graduation run is driven by. It holds two phases and no more: a
 11. **GRL-FR-XNQU** The tree the review turn stands in is the tree a `ready` verdict commits. It is derived once, and both use that one derivation.
     - *Why:* Two derivations let a reviewer judge one tree while another lands, and nothing downstream can detect that.
 12. **GRL-FR-VIAT** The review returns a `ReviewVerdict`: `verdict` of exactly `ready` or `revise`, a non-empty `rationale`, and `findings`. A `ready` verdict carries no finding and a `revise` verdict carries at least one.
+12. **GRL-FR-FRNJ** A `ready` verdict carries an optional `summary`, the run summary: a `title` of one non-blank line and a non-blank Markdown `description` of the run's work. `review.md` asks for it and directs the agent to the repository's pull request template, skills, and agent instructions for its shape. A `revise` verdict carries no summary.
+12. **GRL-FR-ECES** The loop reads the verdict without the summary and then reads the summary on its own. A summary that is absent, blank in a field, or of another shape is dropped, and the verdict, its correction count, and the run's next step do not change.
 13. **GRL-FR-TVXI** A verdict the application cannot read is refused whole, and a further **review** turn is asked **once**, carrying the `review_result` correction of `refusals.md`. No work turn is composed. A second consecutive unreadable verdict rests the run `blocked` with the code `review_verdict_invalid`, and the author's Continue resets the count.
-13. **GRL-FR-QKDC** A work, review, `merge_work`, or `merge_review` turn that ends in `invalid_structured_output` with a correctable refusal and a reported session, on a vendor that resumes, is asked **once** more in that session and execution directory, carrying the `refusals.md` correction for that refusal. The first turn is not settled.
+13. **GRL-FR-QKDC** A work, review, `merge_work`, `merge_review`, or `pr_summary` turn that ends in `invalid_structured_output` with a correctable refusal and a reported session, on a vendor that resumes, is asked **once** more in that session and execution directory, carrying the `refusals.md` correction for that refusal. The first turn is not settled.
     - *Why:* The agent finished its work and only the answer failed, so the run must not stop on a fault the agent can repair.
 13. **GRL-FR-MZHT** The correctable refusals, each with its `refusals.md` section, are `not_found` (`answer_missing`), `malformed` and `protocol_version` (`answer_malformed`), `multiple_documents` (`answer_several`), `summary_empty` (`answer_summary_empty`), `exclusivity` (`answer_outcome_mismatch`), `escalation_shape` (`answer_escalation_shape`), and `too_large` (`answer_too_large`). No other refusal is correctable.
 13. **GRL-FR-XSFA** A correction says that the work stands, that the turn changes no file, and that the turn sends its answer again. It states the rules of its refusal class and never names which value of the answer failed, and it holds no agent text. `work.md`, `review.md`, `merge-work.md`, and `merge-review.md` each tell a turn to act on `correction`.
@@ -58,6 +60,10 @@ The agent loop a graduation run is driven by. It holds two phases and no more: a
 27. **GRL-FR-QZFB** A second consecutive blocker with the same code rests the run `awaiting_author` and keeps the blocker on the run. A blocker with a different code rests the run `blocked` and starts the count again. Continue from `blocked` keeps the count; Continue from `awaiting_author` starts it again.
     - *Why:* Continue from `blocked` is the retry the count counts, so a reset there would make the bound unreachable and leave the run continuing into the same fault for ever.
 
+27. **GRL-FR-UNKD** A PR summary run has one turn of part `pr_summary` and turn kind `pr_maintenance`, dispatched through `../core/GXD-graduation-execution.md`'s `dispatch_graduation_turn` with the result contract `pull_request_summary`. It has no review, no pass budget, and no escalation answer. It reads the two time limits alone, on the terms of a merge run turn (GRL-FR-KWNP).
+27. **GRL-FR-ZZGO** The answer of a `pr_summary` turn is a `PullRequestSummary`: a `title` of one non-blank line and a non-blank Markdown `description`. An unreadable answer is corrected once (GRL-FR-QKDC). A second unreadable answer, a failure, or an escalation ends the turn without a result (per `../core/GRD-graduation.md` GRD-FR-SWHW).
+27. **GRL-FR-TZKR** `pr-summary.md` directs the agent to the repository's pull request template, skills, and agent instructions for the title and the description, and states that the turn changes no file. In `diff` mode the task is the change from the merge base to the head tip. In `combine` mode the task is one description made from the run summaries the input holds.
+27. **GRL-FR-SNHR** The task input of a `pr_summary` turn carries `pr_summary` with the mode, the head and the base, the pinned head tip and merge base, and, in `combine` mode, the captured run summaries in landing order. Its `draft_name`, `prompt`, and `stream_name` are empty.
 28. **GRL-FR-MWPQ** One **merge pass** is a `merge_work` turn followed by a fresh `merge_review` turn. The loop dispatches each through `../core/GXD-graduation-execution.md`'s `dispatch_graduation_turn` with turn kinds `merge_work` and `merge_review`, and dispatches the review turn on a completed work turn over what the merge worktree then holds. A `ready` merge review ends the loop and hands the run to the apply of `../core/GRD-graduation.md` GRD-FR-AQNW. A `revise` merge review starts the next merge pass while the budget holds one (GRL-FR-CZBT). A merge turn that escalates ends the turn without a review, and the answers go into the phase that asked (GRL-FR-VBCL). A merge run composes no `work` turn, no `review` turn and no `semantic_rebase` turn. The rules of GRL-FR-VIAT, GRL-FR-TVXI, GRL-FR-GQAB, GRL-FR-NVBZ, GRL-FR-ZDKP and GRL-FR-BRJO hold for merge turns, with the merge review as the review turn and the merge work turn as the work turn.
 29. **GRL-FR-SLQF** `merge-work.md` is the instruction every `merge_work` turn carries, whole and unaltered, identical for every merge run and every project. It names the unresolved paths and the conflicts of the task's `merge` context as the task, directs the agent to read both pinned branch versions and the repository's own instructions and specifications, and permits the agent to change any other path that the reconciliation of the merge needs. It requires that no conflict marker stand in a resolved path. It states that the review findings of the earlier pass arrive in the task's `loop_instruction`.
 30. **GRL-FR-MRVK** `merge-review.md` is the instruction every `merge_review` turn carries. The turn is dispatched into a **fresh agent session every time**, a correction turn of GRL-FR-QKDC excepted, and stands in a throwaway review checkout (per GRL-FR-YKRI) derived from the merge worktree, with the merge snapshot commit as its base commit. The merge review judges the final result against both pinned branch versions and against the repository's specifications, for every path in `changed_paths` of the merge context, Git-clean paths included, and for every path in `reconciled_paths`. It runs the project-defined build and test commands, `task specs` and `task tests` among them, and invents none. It changes nothing except the output that those commands write in its disposable checkout. It answers `ready` only when its merge-intent checks and its specification checks pass and the required commands pass. It answers `revise`, with actionable findings, otherwise. The advisory-minor rule of GRL-FR-UQNV does not apply to it: every `revise` verdict of a merge review starts another merge pass or rests the run for the author.
@@ -81,6 +87,12 @@ A merge run holds two further phases in its own pass (GRL-FR-MWPQ):
 2  merge_review   execution agent   merge-review.md   → ReviewVerdict | escalation
 ```
 
+A PR summary run holds one phase and no pass (GRL-FR-UNKD):
+
+```text
+1  pr_summary     execution agent   pr-summary.md     → PullRequestSummary
+```
+
 A turn exists outside both passes, at stream update alone: the **semantic rebase** turn under `rebase.md`, dispatched by `../core/GRB-graduation-rebase.md` for a conflict Git cannot settle.
 
 ### The task input
@@ -96,7 +108,7 @@ GraduationTaskInput {
   stream_name,
   pass,                       // 1 .. the pass limit of the run's budget window
   part,                       // "work" | "review" | "semantic_merge"
-                              //   | "merge_work" | "merge_review"
+                              //   | "merge_work" | "merge_review" | "pr_summary"
   loop_instruction?,          // the review findings a revise pass carries
   changed_paths?,             // what the working copy holds against the base commit
   hidden_paths,               // what the ignore rules kept out of those paths; an
@@ -105,6 +117,7 @@ GraduationTaskInput {
   hidden_paths_omitted,       // how many more there were than the input names
   correction?,                // GRL-FR-TVXI, GRL-FR-QKDC: what a turn asked again is to send
   merge?,                     // MergeTaskContext; on every turn of a merge run (GRL-FR-TXEB)
+  pr_summary?,                // PrSummaryTaskContext; on the turn of a PR summary run (GRL-FR-SNHR)
   agent_account?,             // GRL-FR-DNKA: the work turn's own account of
                               //   what it did and did not do, carried to the
                               //   review that judges what it wrote. A claim
@@ -127,12 +140,27 @@ MergeTaskContext {
 }
 ```
 
+```
+PrSummaryTaskContext {
+  mode,                       // "diff" | "combine"
+  head, base,
+  head_tip, merge_base,
+  inputs                      // [{ title, description }]; combine mode only
+}
+```
+
 ### Result shapes
 ```
 ReviewVerdict {
   verdict,                    // "ready" | "revise"
   rationale,                  // never blank
-  findings: [ReviewFinding]
+  findings: [ReviewFinding],
+  summary?                    // RunSummary { title, description }; a ready verdict only (GRL-FR-FRNJ)
+}
+
+PullRequestSummary {
+  title,                      // one line, never blank
+  description                 // Markdown, never blank
 }
 
 ReviewFinding {

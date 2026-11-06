@@ -1,21 +1,106 @@
 /* The Create a PR window and the pull request notice
    (CPR-create-pull-request.md). The window reuses the modal frame, the field
    styling and the action row every other modal of the application has. */
+
+/* CPR-FR-DWGS: 880 px wide, at most the main window less 32 px each way. The
+   flex column is what keeps the action row in view: max-height alone clips
+   it away (the `.modal--wide` arrangement). */
 .modal.create-pr {
-  width: 520px;
+  /* The border is inside the 880 px, so the window is 880 px wide and never
+     wider than the cap. */
+  box-sizing: border-box;
+  width: 880px;
   max-width: calc(100vw - 32px);
-  max-height: min(80vh, 720px);
+  max-height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
 }
 .modal.create-pr > * { flex: none; }
 /* The body alone takes the slack and scrolls, so a long block never pushes the
-   action row out of the window (CPR-FR-DWGS). */
+   action row out of the window (CPR-FR-DWGS, CPR-FR-ODBY). It is a column, so
+   the description can take the height the other controls leave. */
 .modal.create-pr > .create-pr__body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
+.create-pr__body > * { flex: none; }
+
+/* CPR-FR-ODBY: the description takes the free height, and at least twelve
+   lines of it. */
+.create-pr__body > .create-pr__description {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+.create-pr__description-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--ctl-h-sm);
+}
+.create-pr__generate { margin-left: auto; }
+.create-pr__panel {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.create-pr__panel[hidden] { display: none; }
+.create-pr__textarea {
+  flex: 1 0 auto;
+  min-height: calc(12 * 1.5 * var(--fs-ui-md) + 2 * var(--sp-2) + 2px);
+  resize: none;
+}
+.create-pr__preview {
+  min-height: calc(12 * 1.5 * var(--fs-ui-md) + 2 * var(--sp-2) + 2px);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  overflow-wrap: anywhere;
+}
+/* The rendered Markdown starts at the top edge of the frame. */
+.create-pr__preview-body > :first-child { margin-top: 0; }
+.create-pr__preview:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+/* CPR-FR-ILFN: Write and Preview, a small segmented pair on the label row. */
+.create-pr__tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+}
+.create-pr__tab {
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-xs);
+  padding: 2px var(--sp-2-5);
+  cursor: pointer;
+}
+.create-pr__tab:hover { color: var(--fg-1); }
+.create-pr__tab[aria-selected="true"] {
+  color: var(--fg-1);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-1);
+}
+.create-pr__tab:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+.create-pr__line { margin: 0; font-size: var(--fs-ui-sm); }
+.create-pr__generation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+}
+.create-pr__description > .create-pr__line { margin-top: var(--sp-2); }
+
 .create-pr__branches {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -31,6 +116,7 @@
   text-align: left;
   padding: 6px 0;
 }
+.create-pr__stacked { margin: 0 0 var(--sp-2); font-size: var(--fs-ui-sm); }
 .create-pr__draft {
   display: inline-flex;
   align-items: center;
@@ -38,6 +124,50 @@
   font-size: var(--fs-ui-sm);
   margin-bottom: var(--sp-2);
 }
+
+/* Features and tasks: the issues the pull request is linked to. */
+.create-pr__links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-3);
+}
+/* A column of the pair never grows past its track. */
+.create-pr__features,
+.create-pr__tasks { min-width: 0; }
+.create-pr__chips,
+.create-pr__task-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.create-pr__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 0 0 0 var(--sp-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--bg-sunken);
+  font-size: var(--fs-ui-sm);
+}
+.create-pr__chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.create-pr__task {
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+.create-pr__task + .create-pr__task::before { content: "· "; color: var(--fg-3); }
+.create-pr__task-ref { color: var(--fg-1); font-weight: var(--fw-medium); }
+.create-pr__task-name { overflow-wrap: anywhere; }
+
 .create-pr__state { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .create-pr__state p { margin: 0; font-size: var(--fs-ui-sm); }
 .create-pr__block { color: var(--warn, var(--fg-1)); }
@@ -61,4 +191,10 @@
 .create-pr-button[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* A narrow main window stacks each pair, so no field is squeezed. */
+@media (max-width: 640px) {
+  .create-pr__branches,
+  .create-pr__links { grid-template-columns: minmax(0, 1fr); }
 }

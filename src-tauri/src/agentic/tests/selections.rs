@@ -432,3 +432,40 @@ fn aic_ts12_a_refresh_prunes_the_default_and_every_override_it_dropped() {
     assert_eq!(rec.selected_effort.as_deref(), Some("high"));
     assert_eq!(rec.effort_overrides.get("review").map(String::as_str), Some("low"),);
 }
+
+/// AIC-FR-TGJV (AIC-FR-10): `pr_maintenance` is a kind a selection may name.
+/// With no override it follows the default model and the default effort, and
+/// an override of it moves no other kind.
+#[test]
+fn a_pr_maintenance_selection_follows_the_defaults_until_it_is_overridden() {
+    let h = claude_harness();
+    verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(SAMPLE_TOKEN)))
+        .unwrap();
+    set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
+    let resolve = |kind: &str| -> (Option<String>, Option<String>) {
+        match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", Some(kind)).unwrap() {
+            AgenticInvocation::Cli { model_id, effort_id, .. } => (model_id, effort_id),
+            other => panic!("a CLI vendor resolved to {other:?}"),
+        }
+    };
+    assert!(TURN_KINDS.contains(&"pr_maintenance"), "the kind is in the closed set");
+
+    set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
+    set_effort_impl(&h.store, &h.ai, "claude_code", None, Some("high")).unwrap();
+    assert_eq!(resolve("pr_maintenance"), (Some("opus".into()), Some("high".into())));
+
+    let record =
+        set_model_impl(&h.store, &h.ai, "claude_code", Some("pr_maintenance"), Some("sonnet"))
+            .unwrap();
+    assert_eq!(record.model_overrides.get("pr_maintenance").map(String::as_str), Some("sonnet"));
+    set_effort_impl(&h.store, &h.ai, "claude_code", Some("pr_maintenance"), Some("low")).unwrap();
+    assert_eq!(resolve("pr_maintenance"), (Some("sonnet".into()), Some("low".into())));
+    for kind in ["work", "review", "semantic_rebase"] {
+        assert_eq!(resolve(kind), (Some("opus".into()), Some("high".into())), "untouched: {kind}");
+    }
+
+    // A kind outside the set is still refused.
+    assert!(
+        set_model_impl(&h.store, &h.ai, "claude_code", Some("pr_review"), Some("opus")).is_err()
+    );
+}

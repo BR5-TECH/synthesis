@@ -43,6 +43,7 @@ import { ActionCluster } from "./toolbar";
 import { insertDiagramFence, type DiagramTemplate } from "./diagramTemplates";
 import type { DocumentOutline } from "./useDocumentOutline";
 import { logDebug, logWarn } from "../../logging";
+import { holdEdit } from "../../state/mainBranchWrite";
 import type { CommentSelection, PendingSelection } from "./selection";
 import type { LayerAnchor } from "./highlight";
 import type { EditorProps } from "./props";
@@ -320,6 +321,7 @@ export function EditorView(props: EditorViewProps) {
         // de-indentation is not something EDT-FR-38 asks for.
         if (e.shiftKey) return;
         e.preventDefault();
+        if (holdEdit()) return;
         const el = e.currentTarget;
         const unit = indentUnit(session.indentation);
         const { selectionStart, selectionEnd, value } = el;
@@ -344,6 +346,8 @@ export function EditorView(props: EditorViewProps) {
         if (takeSourceImage(e.dataTransfer, e.currentTarget)) e.preventDefault();
       }}
       onChange={(e) => {
+        // EDT-FR-QXEK: a held change is not applied; the value stays as it was.
+        if (holdEdit()) return;
         applySourceText(e.target.value);
         // EDT-FR-22: source edits share the artifact's single history.
         noteEdit(e.target.value, "text", "source");
@@ -379,6 +383,7 @@ export function EditorView(props: EditorViewProps) {
           onExpand={() => setExpandOverride(true)}
           onMinimize={() => setExpandOverride(false)}
           onChange={(v) => {
+            if (holdEdit()) return;
             applyFm(v);
             // EDT-FR-22: frontmatter edits share the artifact's single history.
             noteEdit(

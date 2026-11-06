@@ -198,6 +198,30 @@ pub trait DockerRuntime: Send + Sync {
     /// take the container with it, so removal is asked for explicitly and
     /// waited on.
     fn remove_container<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<(), RuntimeError>>;
+
+    /// EAC-FR-GKSW: the group the Docker socket has in a container of the
+    /// launch image. A seam that runs no helper container reads none, and the
+    /// launch then uses the group of the host file (EAC-FR-QWNT). The helper
+    /// stops when the launch is cancelled.
+    fn socket_group<'a>(
+        &'a self,
+        probe: &'a SocketGroupProbe,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<u32, String>> {
+        let _ = (probe, cancel);
+        Box::pin(async move { Err("this runtime runs no helper container".to_string()) })
+    }
+}
+
+/// EAC-FR-GKSW: what the helper container that reads the socket group needs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SocketGroupProbe {
+    /// The image of the launch, already present.
+    pub image: String,
+    /// The host path the socket is mounted from.
+    pub socket_source: String,
+    pub host_uid: u32,
+    pub host_gid: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -341,6 +365,15 @@ impl HostDockerCli {
 impl DockerRuntime for HostDockerCli {
     fn resolved_program(&self) -> Option<String> {
         self.resolved.get().cloned()
+    }
+
+    /// EAC-FR-GKSW: the helper container through the same CLI.
+    fn socket_group<'a>(
+        &'a self,
+        probe: &'a SocketGroupProbe,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<u32, String>> {
+        Box::pin(super::docker_in_docker::read_socket_group(self, probe, cancel))
     }
 
     fn ensure_available(&self) -> BoxFuture<'_, Result<(), RuntimeError>> {
@@ -563,7 +596,7 @@ pub(crate) fn engine_config(
 
     let host_config = bollard::models::HostConfig {
         mounts: Some(mounts),
-        network_mode: Some(super::descriptor::NETWORK.to_string()),
+        network_mode: Some(spec.network.to_string()),
         cap_drop: Some(spec.dropped_capabilities()),
         security_opt: Some(spec.security_options()),
         // EAC-FR-DKRS: the same supplementary groups and host mappings the CLI
@@ -579,6 +612,7 @@ pub(crate) fn engine_config(
     bollard::models::ContainerCreateBody {
         image: Some(spec.image.clone()),
         cmd: Some(spec.vendor_args.clone()),
+        entrypoint: spec.entrypoint.clone().map(|program| vec![program]),
         env: Some(env),
         user: Some(spec.user()),
         // EAC-FR-ZKMR: the same directory the CLI backend names, so which
@@ -638,6 +672,15 @@ impl BollardDocker {
 
 #[cfg(not(test))]
 impl DockerRuntime for BollardDocker {
+    /// EAC-FR-GKSW: the helper container through the same Engine connection.
+    fn socket_group<'a>(
+        &'a self,
+        probe: &'a SocketGroupProbe,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<u32, String>> {
+        Box::pin(super::docker_in_docker::read_socket_group(self, probe, cancel))
+    }
+
     /// EAC-FR-17: a backend that will not answer is `RuntimeUnavailable`. The
     /// endpoint is not re-verified here — this is the daemon failing to answer
     /// a launch, which is a different thing from a selection that never proved

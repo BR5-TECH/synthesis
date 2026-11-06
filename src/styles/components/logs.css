@@ -614,3 +614,20 @@
 .docker-in-docker__choice-label {
   display: block;
 }
+/* SET-FR-HVDC: what the project's image must hold, with one example line. */
+.docker-in-docker__image {
+  margin-bottom: var(--sp-3);
+}
+.docker-in-docker__dockerfile {
+  display: block;
+  max-width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

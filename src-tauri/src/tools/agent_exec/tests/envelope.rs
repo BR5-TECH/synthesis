@@ -368,6 +368,9 @@ fn unparseable_output_is_invalid_and_the_bytes_are_preserved() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
     assert_eq!(
         run(&harness, raw, task("go")).expect("ran").process_outcome,

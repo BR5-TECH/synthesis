@@ -60,6 +60,9 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
     let executor = Arc::new(
         AgentCliExecutor::new(shared.clone()).with_session_state_root(claude.sessions_root()),
@@ -245,6 +248,9 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
     let mut refused_task = task("go");
     refused_task.resume =

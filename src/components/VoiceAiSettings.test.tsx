@@ -556,6 +556,25 @@ describe("Push-to-Talk", () => {
     expect(screen.getByTestId("voice-hotkey")).toHaveTextContent("Ctrl+Shift+Space");
   });
 
+  it("VAI-FR-RASA: a chord captured before the stored values arrive stays on the screen", async () => {
+    let release: (prefs: Record<string, unknown>) => void = () => {};
+    api.loadAppPreferences.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    await open();
+    await capture({ code: "KeyB", ctrlKey: true, altKey: true });
+    expect(screen.getByTestId("voice-hotkey")).toHaveTextContent("Ctrl+Alt+B");
+    release({ theme: "system", voiceHotkey: "Ctrl+Shift+Space" });
+    await waitFor(() =>
+      expect(api.saveAppPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ voiceHotkey: "Ctrl+Alt+B" }),
+      ),
+    );
+    expect(screen.getByTestId("voice-hotkey")).toHaveTextContent("Ctrl+Alt+B");
+  });
+
   it("VAI-FR-FRJY: refuses a key with no modifier, and says so", async () => {
     await open();
     await capture({ code: "KeyB" });

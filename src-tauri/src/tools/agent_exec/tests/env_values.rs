@@ -61,6 +61,8 @@ fn the_engine_backend_sends_each_name_with_its_value() {
         env_names: vec!["CLAUDE_CODE_USE_BEDROCK".into(), "ANTHROPIC_AUTH_TOKEN".into()],
         env_literals: vec![("CLAUDE_CONFIG_DIR".into(), "/session".into())],
         vendor_args: vec!["-p".to_string()],
+        entrypoint: None,
+        network: descriptor::NETWORK,
     };
     let env = secret_env(&[
         ("ANTHROPIC_AUTH_TOKEN", "gw-FAKE-TEST-TOKEN-NOT-A-CREDENTIAL-k2Qz"),
@@ -96,6 +98,8 @@ fn the_engine_backend_sends_only_named_variables_that_have_a_value() {
         env_names: vec!["NAMED_WITHOUT_VALUE".into(), "NAMED".into()],
         env_literals: vec![],
         vendor_args: vec![],
+        entrypoint: None,
+        network: descriptor::NETWORK,
     };
     let env = secret_env(&[("NAMED", "yes"), ("NOT_NAMED", "no")]);
     assert_eq!(super::super::runtime::engine_env(&spec, &env), vec!["NAMED=yes".to_string()]);

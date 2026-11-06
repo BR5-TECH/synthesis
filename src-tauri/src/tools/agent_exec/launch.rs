@@ -367,7 +367,7 @@ impl AgentCliExecutor {
                 dind_settings.enabled,
                 dind_settings.under_microsandbox,
             );
-        let dind = if masked || sandboxed.is_some() {
+        let mut dind = if masked || sandboxed.is_some() {
             docker_in_docker::DockerInDockerAdditions::default()
         } else {
             docker_in_docker::additions(&context.docker_in_docker)?
@@ -439,6 +439,27 @@ impl AgentCliExecutor {
         // --- 7. The invocation ------------------------------------------------
         let (host_uid, host_gid) = descriptor::host_ids();
 
+        // EAC-FR-GKSW / EAC-FR-QWNT: the socket group as a container of this
+        // image sees it, read now that the image is present.
+        if let (Some(runtime), Some(source)) = (&runtime, dind.socket_source.clone()) {
+            let probe = SocketGroupProbe {
+                image: image.clone(),
+                socket_source: source,
+                host_uid,
+                host_gid,
+            };
+            let host_group = dind.groups.first().copied().unwrap_or(host_gid);
+            let group = docker_in_docker::container_socket_group(
+                sink,
+                runtime.as_ref(),
+                &probe,
+                host_group,
+                request.cancellation.clone(),
+            )
+            .await;
+            dind.groups = vec![group];
+        }
+
         // EAC-FR-21: a vendor that lets the executor name the session is given
         // one before it runs, so the turn's identity is known rather than
         // recovered afterwards. A vendor that only reports its own gets none,
@@ -485,6 +506,8 @@ impl AgentCliExecutor {
             env_names: env_names.clone(),
             env_literals: env_literals.clone(),
             vendor_args: vendor_args.clone(),
+            entrypoint: None,
+            network: descriptor::NETWORK,
         };
         // EAC-FR-DWBS: the VM of this launch's scope, named from the project
         // and the queue.

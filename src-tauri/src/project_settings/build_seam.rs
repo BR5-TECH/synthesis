@@ -1,4 +1,5 @@
-//! The builder seam and the Tauri event sink of the image build (PSS-FR-26..PSS-FR-29).
+//! The builder seam, the Tauri event sink, and the preparation of the image
+//! build (PSS-FR-26..PSS-FR-29).
 
 use super::{image_builder, images};
 
@@ -29,4 +30,34 @@ impl<R: tauri::Runtime> images::BuildEvents for AppBuildEvents<R> {
         use tauri::Emitter;
         let _ = self.0.emit(images::PROJECT_IMAGE_BUILD_FINISHED, payload);
     }
+}
+
+/// PSS-FR-26 / PSS-FR-BCTX: prepare the build of `vendor`'s configured image in
+/// the project at `root`, through the verified backend of `store`. The root is
+/// the active worktree root, and the context is the folder the entry names, or
+/// that root by default. The command and the Docker-in-Docker acceptance test
+/// (`../tools/EAC-execute-agent-cli.md` EAC-FR-UDQN) both prepare a build here.
+pub fn prepare_project_vendor_image_build(
+    root: &crate::fs::RootFs,
+    store: &crate::global_settings::GlobalSettingsStore,
+    vendor: &str,
+    operation_id: &str,
+    registry: &images::ImageBuildRegistry,
+) -> Result<images::PreparedBuild, String> {
+    let table = super::load_public(root)?;
+    let entries = images::read_entries(&table);
+    let project_root = root.path().to_path_buf();
+    let context_root = match entries.get(vendor).and_then(|entry| entry.build_context.as_deref()) {
+        Some(context) => images::validate_build_context(root, context),
+        None => Ok(project_root.clone()),
+    };
+    images::prepare_build(
+        entries.get(vendor),
+        crate::docker::resolve_docker_backend(store),
+        project_root,
+        context_root,
+        vendor,
+        operation_id,
+        registry,
+    )
 }

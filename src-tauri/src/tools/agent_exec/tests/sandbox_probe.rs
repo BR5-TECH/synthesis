@@ -738,5 +738,7 @@ fn sandbox_real_a_pinned_gateway_is_reached_and_other_hosts_are_denied() {
     assert_eq!(field(&first, "boot_id"), field(&second, "boot_id"), "the VM is reused");
 }
 
+#[path = "dind_uat.rs"]
+mod dind_uat;
 #[path = "sandbox_probe_docker.rs"]
 mod docker;

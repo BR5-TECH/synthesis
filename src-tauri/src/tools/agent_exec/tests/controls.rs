@@ -588,6 +588,8 @@ fn the_mock_docker_scenario_matches_what_production_generates() {
             None,
             None,
         ),
+        entrypoint: None,
+        network: descriptor::NETWORK,
     }
     .docker_run_args();
 

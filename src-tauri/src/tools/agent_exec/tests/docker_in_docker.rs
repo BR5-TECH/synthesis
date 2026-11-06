@@ -46,16 +46,17 @@ fn a_launch_without_docker_in_docker_adds_nothing() {
     assert!(container.extra_hosts.is_empty());
 }
 
-/// EAC-FR-DKRS, EAC-FR-13, EAC-FR-14: the enabled launch mounts the socket at
-/// its fixed target, adds the socket's group, and changes nothing about the user,
-/// the privileges or the security options.
+/// EAC-FR-DKRS, EAC-FR-13, EAC-FR-14, EAC-FR-GKSW: the enabled launch mounts the
+/// socket at its fixed target, adds the group the socket has in a container, and
+/// changes nothing about the user, the privileges or the security options.
 #[cfg(unix)]
 #[test]
 fn an_enabled_launch_adds_the_socket_and_its_group_only() {
-    use std::os::unix::fs::MetadataExt;
-
     let (harness, _listener, _dir, socket) = enabled_harness(false);
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    // EAC-FR-GKSW: Docker Desktop shows the socket as owned by group 0 in a
+    // container. Group 0 is a group like any other here.
+    runtime.answer_socket_group(Ok(0));
     run(&harness, runtime.clone(), task("go")).expect("runs");
     let recorded = runtime.only_run();
 
@@ -67,8 +68,7 @@ fn an_enabled_launch_adds_the_socket_and_its_group_only() {
     // The workspace, the session directory and the socket.
     assert_eq!(mounts.len(), 3, "{mounts:?}");
 
-    let gid = std::fs::metadata(&socket).unwrap().gid();
-    assert_eq!(flag_values(&recorded.argv, "--group-add"), vec![gid.to_string()]);
+    assert_eq!(flag_values(&recorded.argv, "--group-add"), vec!["0".to_string()]);
     assert!(flag_values(&recorded.argv, "--add-host").is_empty());
     assert!(!recorded.argv.iter().any(|a| a.contains("TESTCONTAINERS_HOST_OVERRIDE")));
 
@@ -250,4 +250,207 @@ fn a_masked_turn_gets_none_of_the_additions() {
     assert!(flag_values(&recorded.argv, "--add-host").is_empty());
     assert!(!recorded.argv.iter().any(|a| a.contains("docker.sock")));
     assert!(!recorded.argv.iter().any(|a| a.contains("TESTCONTAINERS_HOST_OVERRIDE")));
+}
+
+/// EAC-FR-GKSW, EAC-FR-DKRS: the launch adds the group that the socket has in a
+/// container of the launch image, read with the image and the socket path of
+/// the launch, and not the group of the host file.
+#[cfg(unix)]
+#[test]
+fn the_launch_adds_the_group_a_container_sees() {
+    let (harness, _listener, _dir, socket) = enabled_harness(false);
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Ok(4242));
+    run(&harness, runtime.clone(), task("go")).expect("runs");
+    let recorded = runtime.only_run();
+
+    assert_eq!(flag_values(&recorded.argv, "--group-add"), vec!["4242".to_string()]);
+    assert_eq!(recorded.container.expect("the specification").groups, vec![4242]);
+    let probes = runtime.socket_probes();
+    assert_eq!(probes.len(), 1, "one helper read for one launch");
+    let (uid, gid) = descriptor::host_ids();
+    assert_eq!(probes[0].socket_source, socket);
+    assert_eq!(probes[0].image, test_image_reference("claude_code"));
+    assert_eq!((probes[0].host_uid, probes[0].host_gid), (uid, gid));
+}
+
+/// EAC-FR-QWNT: where the helper gives no group, the launch adds the group of
+/// the host socket file and still runs.
+#[cfg(unix)]
+#[test]
+fn a_failed_helper_falls_back_to_the_host_group() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (harness, _listener, _dir, socket) = enabled_harness(false);
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Err("stat: not found".to_string()));
+    run(&harness, runtime.clone(), task("go")).expect("runs");
+
+    let gid = std::fs::metadata(&socket).unwrap().gid();
+    assert_eq!(flag_values(&runtime.only_run().argv, "--group-add"), vec![gid.to_string()]);
+}
+
+/// EAC-FR-GKSW: no helper runs where Docker-in-Docker is off or the turn is
+/// masked.
+#[test]
+fn no_helper_runs_without_the_socket() {
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Ok(1));
+    run(&harness, runtime.clone(), task("go")).expect("runs");
+    assert!(runtime.socket_probes().is_empty());
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut masked = harness_for("claude_code");
+    masked.docker_in_docker = DockerInDockerLaunch {
+        enabled: true,
+        socket_path: dir.path().join("gone.sock").to_str().unwrap().to_string(),
+        ..Default::default()
+    };
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Ok(1));
+    run_as(&masked, runtime.clone(), None, None, super::super::TurnKind::SemanticRebase)
+        .expect("runs");
+    assert!(runtime.socket_probes().is_empty());
+}
+
+/// EAC-FR-GKSW, EAC-FR-39: the Engine backend creates the same helper
+/// container the CLI backend renders: `stat` as the program, no network, the
+/// socket at its fixed target, and the security options of EAC-FR-13.
+#[test]
+fn both_backends_render_the_same_helper_container() {
+    let probe = SocketGroupProbe {
+        image: "example/agent:1".to_string(),
+        socket_source: "/var/run/docker.sock".to_string(),
+        host_uid: 501,
+        host_gid: 20,
+    };
+    let spec = super::super::docker_in_docker::socket_group_spec(&probe);
+    let argv = spec.docker_run_args();
+
+    assert_eq!(flag_values(&argv, "--network"), vec!["none".to_string()]);
+    assert_eq!(flag_values(&argv, "--entrypoint"), vec!["stat".to_string()]);
+    assert_eq!(flag_values(&argv, "--user"), vec!["501:20".to_string()]);
+    assert_eq!(
+        flag_values(&argv, "--mount"),
+        vec!["type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock".to_string()]
+    );
+    assert_eq!(flag_values(&argv, "--cap-drop"), vec!["ALL".to_string()]);
+    assert_eq!(flag_values(&argv, "--security-opt"), vec!["no-new-privileges".to_string()]);
+    assert!(argv.iter().any(|a| a == "--rm"));
+    assert!(flag_values(&argv, "--env").is_empty(), "no variable reaches the helper");
+    assert!(flag_values(&argv, "--add-host").is_empty());
+    assert!(flag_values(&argv, "--group-add").is_empty());
+    assert!(!argv.iter().any(|a| a == "--privileged" || a == "--cap-add"));
+    let image_at = argv.iter().position(|a| a == "example/agent:1").expect("the image");
+    assert!(argv.iter().position(|a| a == "--entrypoint").unwrap() < image_at);
+    assert_eq!(&argv[image_at + 1..], ["-c", "%g", "/var/run/docker.sock"]);
+
+    let config = super::super::runtime::engine_config(&spec, vec![]);
+    assert_eq!(config.entrypoint, Some(vec!["stat".to_string()]));
+    assert_eq!(config.cmd, Some(vec!["-c".into(), "%g".into(), "/var/run/docker.sock".into()]));
+    let host = config.host_config.expect("host config");
+    assert_eq!(host.network_mode.as_deref(), Some("none"));
+    assert_eq!(host.security_opt, Some(spec.security_options()));
+    assert_eq!(host.auto_remove, Some(true));
+    assert_eq!(host.extra_hosts, None);
+    assert_eq!(host.cap_drop, Some(vec!["ALL".to_string()]));
+    assert_eq!(host.group_add, None);
+    assert_eq!(config.user.as_deref(), Some("501:20"));
+}
+
+/// EAC-FR-13, EAC-FR-GKSW: an agent launch keeps the bridge network and runs
+/// the entrypoint of its image.
+#[test]
+fn an_agent_launch_keeps_its_network_and_its_entrypoint() {
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    run(&harness_for("claude_code"), runtime.clone(), task("go")).expect("runs");
+    let recorded = runtime.only_run();
+    assert_eq!(flag_values(&recorded.argv, "--network"), vec!["bridge".to_string()]);
+    assert!(flag_values(&recorded.argv, "--entrypoint").is_empty());
+    let config = super::super::runtime::engine_config(&recorded.container.unwrap(), vec![]);
+    assert_eq!(config.entrypoint, None);
+}
+
+/// EAC-FR-QWNT: a failed helper emits a WARN that names its cause and the host
+/// group, and a helper that answers emits the group it read.
+#[cfg(unix)]
+#[test]
+fn the_helper_outcome_is_logged_with_its_cause() {
+    use std::os::unix::fs::MetadataExt;
+
+    let marker = format!("MARKER-QWNT-{}", descriptor::unique_container_name());
+    let (harness, _listener, _dir, socket) = enabled_harness(false);
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Err(marker.clone()));
+    run(&harness, runtime.clone(), task("go")).expect("runs");
+
+    let gid = std::fs::metadata(&socket).unwrap().gid();
+    let page = super::super::log_buffer()
+        .query(&crate::logging::LogFilter::default(), None, 50_000)
+        .expect("query");
+    let records = serde_json::to_value(&page).expect("serialise");
+    let warned = records["records"]
+        .as_array()
+        .expect("records")
+        .iter()
+        .find(|record| record.to_string().contains(&marker))
+        .expect("a record names the cause");
+    assert_eq!(warned["level"], "WARN", "{warned}");
+    assert!(warned.to_string().contains(&format!("\"host_group\":{gid}")), "{warned}");
+}
+
+/// EAC-FR-GKSW, EAC-FR-HWQN, EAC-FR-38: the helper runs only once the socket
+/// check passed, the runtime answered, and the image is present.
+#[cfg(unix)]
+#[test]
+fn no_helper_runs_before_the_socket_the_runtime_and_the_image() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut missing = harness_for("claude_code");
+    missing.docker_in_docker = DockerInDockerLaunch {
+        enabled: true,
+        socket_path: dir.path().join("gone.sock").to_str().unwrap().to_string(),
+        ..Default::default()
+    };
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Ok(1));
+    assert!(run(&missing, runtime.clone(), task("go")).is_err());
+    assert!(runtime.socket_probes().is_empty(), "no helper before the socket check");
+
+    let (harness, _listener, _dir, _socket) = enabled_harness(false);
+    for runtime in
+        [RecordingRuntime::broken(false, true, None), RecordingRuntime::broken(true, false, None)]
+    {
+        runtime.answer_socket_group(Ok(1));
+        assert!(run(&harness, runtime.clone(), task("go")).is_err());
+        assert!(runtime.socket_probes().is_empty(), "no helper before the image is present");
+    }
+}
+
+/// EAC-FR-GKSW: the helper runs under the token of the launch.
+#[cfg(unix)]
+#[test]
+fn the_helper_runs_under_the_launch_token() {
+    let (harness, _listener, _dir, _socket) = enabled_harness(false);
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    runtime.answer_socket_group(Ok(0));
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let _ = run_with_cancel(&harness, runtime.clone(), task("go"), cancel);
+    assert_eq!(runtime.socket_cancels(), vec![true]);
+}
+
+/// EAC-FR-DKRS, EAC-FR-GKSW: the group is read at each launch and never stored,
+/// so each launch adds the group its own read gave.
+#[cfg(unix)]
+#[test]
+fn each_launch_reads_its_own_group() {
+    let (harness, _listener, _dir, _socket) = enabled_harness(false);
+    for group in [1001, 1002] {
+        let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+        runtime.answer_socket_group(Ok(group));
+        run(&harness, runtime.clone(), task("go")).expect("runs");
+        assert_eq!(runtime.only_run().container.unwrap().groups, vec![group]);
+        assert_eq!(runtime.socket_probes().len(), 1);
+    }
 }

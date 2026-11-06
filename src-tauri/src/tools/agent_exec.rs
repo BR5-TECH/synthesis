@@ -72,7 +72,7 @@ use descriptor::{BindMount, WORKSPACE_TARGET};
 use protocol::{AgentResponseEnvelope, AgentTaskRequest, EnvelopeInvalid, LimitName, TaskInvalid};
 use runtime::{
     CancellationToken, CapturedStream, DockerRuntime, HostDockerCli, RunEnd, RunRequest,
-    RuntimeError,
+    RuntimeError, SocketGroupProbe,
 };
 
 /// EAC-FR-31: the subdirectory of `app_data_dir()` agent session state lives
@@ -510,6 +510,17 @@ impl From<crate::project_settings::EffectiveDockerInDocker> for DockerInDockerLa
             under_microsandbox: read.under_microsandbox,
         }
     }
+}
+
+/// EAC-FR-DKRS / EAC-FR-38: what a launch reads from the project at `root`:
+/// its Docker-in-Docker settings from the project-local store, and its image
+/// source from the committed configuration. A graduation launch reads them at
+/// each launch, and so does the acceptance test of EAC-FR-UDQN.
+pub fn project_launch_inputs(
+    root: crate::fs::RootFs,
+) -> (DockerInDockerLaunch, ProjectVendorImages) {
+    let docker_in_docker = crate::project_settings::read_docker_in_docker_settings(&root).into();
+    (docker_in_docker, ProjectVendorImages::new(root))
 }
 
 /// EAC-FR-38: the image the open project commits for a vendor.

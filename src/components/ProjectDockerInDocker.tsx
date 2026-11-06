@@ -1,6 +1,6 @@
 /**
  * Project settings → Docker → **Docker-in-Docker** (SET-FR-21, SET-FR-NXDV,
- * SET-FR-JMHE, SET-FR-PQLA, SET-FR-PMHB).
+ * SET-FR-JMHE, SET-FR-PQLA, SET-FR-PMHB, SET-FR-HVDC).
  *
  * One checkbox above the vendor tabs, because the setting belongs to the whole
  * project and not to one vendor. Under Microsandbox, a selector follows it that
@@ -50,6 +50,23 @@ export const UNDER_MICROSANDBOX_CHOICES: [UnderMicrosandbox, string, string][] =
     "Gives up the isolation for the graduation runs of this project. Their agents run in a Docker container with the host Docker socket, as with Isolation None.",
   ],
 ];
+
+/**
+ * SET-FR-HVDC: what the project's image must hold for each way the agent gets
+ * Docker, with one example Dockerfile line (EAC-FR-MRTJ). The host socket
+ * shape needs the Docker CLI and `stat`. The VM daemon shape needs `dockerd`,
+ * `iptables` and the Docker CLI.
+ */
+export const IMAGE_REQUIREMENTS: Record<"host_socket" | "vm_daemon", [string, string]> = {
+  host_socket: [
+    "The project's image must hold the Docker CLI (docker) and stat. Without the Docker CLI, the agent finds no docker command. For example, add this line to the Dockerfile:",
+    "COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker",
+  ],
+  vm_daemon: [
+    "The project's image must hold dockerd, iptables and the Docker CLI (docker). On Debian 13, the Docker CLI is the package docker-cli, which docker.io does not install alone. For example, add this line to the Dockerfile:",
+    "RUN apt-get update && apt-get install -y --no-install-recommends docker.io docker-cli iptables",
+  ],
+};
 
 /** The code of a refusal alone: the path a refusal carries is the author's own. */
 function refusalCode(error: unknown): string {
@@ -242,9 +259,10 @@ export function ProjectDockerInDocker() {
       )}
       {state.support === "best_effort" && (
         <p className="docker-state docker-in-docker__note" data-platform="best-effort">
-          On macOS, access is best effort. The group of the socket may not give
-          the agent access to the daemon. If it does not, a run stops with a
-          message that names the socket path.
+          On macOS, access is best effort. The agent gets the group that the
+          socket has in a container. The application reads that group with stat
+          in the image, so an image with no stat may give the agent no access to
+          the daemon.
         </p>
       )}
 
@@ -276,6 +294,20 @@ export function ProjectDockerInDocker() {
             </label>
           ))}
         </fieldset>
+      )}
+
+      {active && (
+        <div
+          className="docker-in-docker__image"
+          data-shape={hostSocket ? "host-socket" : "vm-daemon"}
+        >
+          <p className="docker-state docker-in-docker__note">
+            {IMAGE_REQUIREMENTS[hostSocket ? "host_socket" : "vm_daemon"][0]}
+          </p>
+          <code className="docker-in-docker__dockerfile">
+            {IMAGE_REQUIREMENTS[hostSocket ? "host_socket" : "vm_daemon"][1]}
+          </code>
+        </div>
       )}
 
       {active && hostSocket && (

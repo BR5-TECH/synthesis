@@ -662,6 +662,9 @@ fn a_run_that_times_out_ends_with_a_line_naming_the_limit_it_reached() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
     let sink = Arc::new(CollectedActivity::default());
     let mut request = task("go");

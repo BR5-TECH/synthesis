@@ -1,0 +1,12 @@
+[package]
+name = "dind-uat-testapp"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "EAC-FR-UDQN: the test application of the Docker-in-Docker acceptance test. Used only by tests."
+
+[dependencies]
+
+[dev-dependencies]
+postgres = "0.19.14"
+testcontainers-modules = { version = "0.15.0", features = ["postgres", "blocking"] }

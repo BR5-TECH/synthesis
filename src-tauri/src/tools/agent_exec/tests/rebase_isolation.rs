@@ -26,6 +26,8 @@ fn eac_ts51_both_backends_render_one_specification() {
         env_names: vec![],
         env_literals: vec![],
         vendor_args: vec!["-p".to_string()],
+        entrypoint: None,
+        network: descriptor::NETWORK,
     };
     let config = super::super::runtime::engine_config(&spec, vec![]);
 

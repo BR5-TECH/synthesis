@@ -7572,8 +7572,9 @@ function graduationChanged(run: any): any {
  */
 /** SET-FR-NXDV: the Docker-in-Docker settings the Docker section reads and writes. */
 // GSS-FR-YDKS: the stored isolation record of the harness machine.
+// `?isolation=microsandbox` starts the harness machine under Microsandbox.
 let mockIsolation = {
-  mode: "none" as "none" | "microsandbox",
+  mode: (harnessValue("isolation") === "microsandbox" ? "microsandbox" : "none") as "none" | "microsandbox",
   cpus: null as number | null,
   memoryGib: null as number | null,
   diskGib: null as number | null,
@@ -7590,12 +7591,25 @@ function mockIsolationState() {
     effectiveDiskGib: Math.min(Math.max(mockIsolation.diskGib ?? 64, 8), host.diskGib),
   };
 }
+/**
+ * SET-FR-PQLA / SET-FR-HVDC: URL knobs for the shapes a fixed seed cannot reach.
+ *
+ *   http://localhost:5199/?dind=1                    // checkbox starts selected
+ *   http://localhost:5199/?dindUnder=host_socket     // Microsandbox choice
+ *   http://localhost:5199/?dindSupport=best_effort   // macOS note (or "unsupported")
+ */
 const mockDockerInDocker: { enabled: boolean; socketPath: string; hostGateway: boolean; underMicrosandbox: "vm_daemon" | "host_socket" } = {
-  enabled: false,
+  enabled: harnessFlag("dind"),
   socketPath: "",
   hostGateway: false,
-  underMicrosandbox: "vm_daemon",
+  underMicrosandbox: harnessValue("dindUnder") === "host_socket" ? "host_socket" : "vm_daemon",
 };
+const mockDockerInDockerSupport: "supported" | "best_effort" | "unsupported" =
+  harnessValue("dindSupport") === "best_effort"
+    ? "best_effort"
+    : harnessValue("dindSupport") === "unsupported"
+      ? "unsupported"
+      : "supported";
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
   {
@@ -10822,7 +10836,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         hostGateway: mockDockerInDocker.hostGateway,
         underMicrosandbox: mockDockerInDocker.underMicrosandbox,
         defaultSocketPath: "/var/run/docker.sock",
-        support: "supported",
+        support: mockDockerInDockerSupport,
       };
     case "save_docker_in_docker_settings": {
       const next: any = a.settings ?? {};

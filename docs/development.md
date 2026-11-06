@@ -15,7 +15,7 @@ Specification:
 [`specifications/infra/TSK-taskfile.md`](../specifications/infra/TSK-taskfile.md).
 
 Install the [Task](https://taskfile.dev) runner, then run `task --list` to see
-the twelve tasks:
+the thirteen tasks:
 
 ```bash
 task build            # bundle the desktop application for this host
@@ -30,9 +30,10 @@ task lint:server      # check the server crate alone
 task specs            # check the specification corpus for broken references
 task tests            # run every verification lane the pipeline runs
 task tests:backend    # run the application backend lane alone
+task uat:dind         # run the Docker-in-Docker acceptance test on this machine
 ```
 
-There are twelve tasks and no others. Every task names the directory its commands
+There are thirteen tasks and no others. Every task names the directory its commands
 run in, so a task gives the same result whatever directory `task` was started
 from. Every task runs without a prompt, reads no interactive input, and reports
 its outcome as its exit status: zero when every command it ran succeeded,
@@ -319,6 +320,30 @@ silently. It is read-only and writes nothing. See
 | Supported hosts | any host that builds the application backend |
 | Prerequisites | the pinned Rust toolchain, and the system packages the crate links against |
 | Failure | non-zero. A command exiting non-zero fails the task at once, and the commands after it do not run |
+
+### `task uat:dind`
+
+| Property | Value |
+| --- | --- |
+| Commands | `TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture dind_uat` |
+| Working directory | `src-tauri/` |
+| Output | one line for each launch shape: `PASS shape N`, `SKIP shape N: <reason>`, or `FAIL shape N: <step>: <cause>` |
+| Supported hosts | macOS and Linux |
+| Prerequisites | a `docker` executable on `PATH`, a Docker daemon that answers, and access to the public registry. Shape 3 also needs Microsandbox: Linux with `/dev/kvm`, or Apple Silicon |
+| Failure | non-zero when a shape fails. A missing `docker` executable or a daemon that does not answer stops the task before any test runs, and the message names which one |
+
+The Docker-in-Docker acceptance test runs the production launch with real
+Docker in the three launch shapes: isolation None, Microsandbox with the host
+socket, and Microsandbox with a Docker daemon in the VM. Each shape builds its
+own image from a dedicated Dockerfile under
+[`tests/dind-uat/`](../tests/dind-uat/), as the project's own image, and runs one
+Rust test that starts Postgres through Testcontainers. The settings of each shape
+are written to the stored project and global settings, and the application reads
+them as a graduation launch does. A shape that needs Microsandbox on a host that
+cannot run it prints a skip. `task tests` does not run this task, and no pipeline
+lane runs it. See
+[`specifications/tools/EAC-execute-agent-cli.md`](../specifications/tools/EAC-execute-agent-cli.md)
+EAC-FR-UDQN.
 
 ## Development
 

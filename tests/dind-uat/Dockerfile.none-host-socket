@@ -1,0 +1,54 @@
+# EAC-FR-UDQN: shape 1 of the Docker-in-Docker acceptance test. Isolation None,
+# Docker-in-Docker on: a Docker launch with the host socket (EAC-FR-DKRS).
+#
+# The acceptance test copies this folder, a scenario template, and the
+# `agentic-cli-mock` crate (as `agentic-cli-mock/`) into a temporary build
+# context. The image is built through the project image build (PSS-FR-26), as
+# the project's own image for Claude Code. It is not a shipped vendor image.
+
+FROM rust:1.95-slim-trixie AS mock
+WORKDIR /build
+COPY agentic-cli-mock/Cargo.toml agentic-cli-mock/Cargo.lock ./
+COPY agentic-cli-mock/src ./src
+RUN cargo build --release --locked
+
+FROM rust:1.95-slim-trixie
+
+# The headless browser of the browser check, at a path every user can read.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates nodejs npm \
+    && npm install -g playwright@1.62.1 \
+    && playwright install --with-deps chromium \
+    && chmod -R a+rX /opt/ms-playwright \
+    && rm -rf /var/lib/apt/lists/*
+
+# The test application, built here so the turn runs it offline. The target
+# directory and the Cargo home are writable by every user, because the launch
+# runs as the host UID.
+COPY testapp /opt/uat/testapp
+ENV CARGO_TARGET_DIR=/opt/uat/target
+RUN cd /opt/uat/testapp \
+    && cargo test --no-run --locked \
+    && chmod -R a+rwX /opt/uat /usr/local/cargo
+
+COPY --from=mock /build/target/release/agentic-cli-mock /opt/uat/agentic-cli-mock
+COPY uat-agent.sh /opt/uat/uat-agent.sh
+COPY scenario.template.json /opt/uat/scenario.template.json
+RUN chmod a+rx /opt/uat/uat-agent.sh /opt/uat/agentic-cli-mock
+
+# EAC-FR-MRTJ: what this path needs of the image, and nothing more: the Docker
+# CLI. `stat` is in the base image. This is the line that Project settings
+# shows (SET-FR-HVDC). No `dockerd`: the host daemon answers on the socket.
+COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker
+
+# A non-root user and a home every UID can write (AVI-FR-03, AVI-FR-18).
+RUN groupadd --gid 10001 agent \
+    && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/agent agent \
+    && chmod -R a+rwX /home/agent \
+    && mkdir -p /workspace && chown 10001:10001 /workspace
+
+ENV HOME=/home/agent
+USER 10001:10001
+WORKDIR /workspace
+ENTRYPOINT ["/opt/uat/uat-agent.sh"]

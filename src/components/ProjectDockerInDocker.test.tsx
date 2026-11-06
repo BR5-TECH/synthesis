@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,7 +12,11 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-import { ProjectDockerInDocker, dockerInDockerRefusalMessage } from "./ProjectDockerInDocker";
+import {
+  IMAGE_REQUIREMENTS,
+  ProjectDockerInDocker,
+  dockerInDockerRefusalMessage,
+} from "./ProjectDockerInDocker";
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
@@ -347,6 +353,11 @@ describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-
     const box = await checkbox();
     expect(box).toBeEnabled();
     expect(screen.getByText(/access is best effort/)).toBeInTheDocument();
+    expect(screen.getByText(/group that the\s+socket has in a container/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/an image with no stat may give the agent no access to\s+the daemon/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/a run stops/)).not.toBeInTheDocument();
     await user.click(box);
     await waitFor(() => expect(stored.enabled).toBe(true));
   });
@@ -356,6 +367,78 @@ describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-
     await checkbox();
     expect(screen.queryByText(/best effort/)).not.toBeInTheDocument();
     expect(screen.queryByText(/named pipe/)).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-HVDC: under None with the checkbox on, the section says the image must hold the Docker CLI and shows its Dockerfile line", async () => {
+    stored = state({ enabled: true });
+    render(<ProjectDockerInDocker />);
+    await checkbox();
+    expect(screen.getByText(/must hold the Docker CLI \(docker\) and stat/)).toBeInTheDocument();
+    expect(
+      screen.getByText("COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/must hold dockerd/)).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-HVDC: under Microsandbox with the daemon in the VM, the section says the image must hold dockerd, iptables and the Docker CLI", async () => {
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true, underMicrosandbox: "vm_daemon" });
+    render(<ProjectDockerInDocker />);
+    expect(await screen.findByText(/must hold dockerd, iptables and the Docker CLI/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/apt-get install -y --no-install-recommends docker.io docker-cli iptables/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/docker:29-cli/)).not.toBeInTheDocument();
+  });
+
+  it("SET-FR-HVDC: under Microsandbox with the host socket, the section shows the Docker CLI line, and changing the choice changes the line", async () => {
+    const user = userEvent.setup();
+    isolationMode = "microsandbox";
+    stored = state({ enabled: true, underMicrosandbox: "host_socket" });
+    render(<ProjectDockerInDocker />);
+    // The isolation mode lands first, so the line below is the one of the
+    // stored choice and not of the state before the mode is known.
+    expect(
+      await screen.findByRole("radio", { name: /No isolation: use the host Docker socket/ }),
+    ).toBeChecked();
+    expect(screen.getByText(/docker:29-cli/)).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Docker daemon in the VM/ }));
+    expect(await screen.findByText(/must hold dockerd, iptables/)).toBeInTheDocument();
+    expect(screen.queryByText(/docker:29-cli/)).not.toBeInTheDocument();
+    await waitFor(() => expect(stored.underMicrosandbox).toBe("vm_daemon"));
+  });
+
+  it("SET-FR-HVDC: selecting the checkbox shows the image requirement, and clearing it hides it", async () => {
+    const user = userEvent.setup();
+    render(<ProjectDockerInDocker />);
+    const box = await checkbox();
+    expect(screen.queryByText(/project's image must hold/)).not.toBeInTheDocument();
+    await user.click(box);
+    expect(await screen.findByText(/must hold the Docker CLI/)).toBeInTheDocument();
+    await user.click(box);
+    await waitFor(() => expect(screen.queryByText(/project's image must hold/)).not.toBeInTheDocument());
+    await waitFor(() => expect(stored.enabled).toBe(false));
+  });
+
+  it("SET-FR-HVDC, EAC-FR-MRTJ, EAC-FR-UDQN: each example line is the line the acceptance test proves in its Dockerfile", () => {
+    const dockerfile = (name: string) =>
+      readFileSync(resolve(__dirname, "../../tests/dind-uat", `Dockerfile.${name}`), "utf8").split("\n");
+    for (const name of ["none-host-socket", "microsandbox-host-socket"]) {
+      expect(dockerfile(name)).toContain(IMAGE_REQUIREMENTS.host_socket[1]);
+    }
+    const daemonLine = IMAGE_REQUIREMENTS.vm_daemon[1];
+    expect(dockerfile("microsandbox-vm-daemon").some((line) => line.startsWith(daemonLine))).toBe(true);
+  });
+
+  it("SET-FR-HVDC: with the checkbox off, and on Windows, the section states no image requirement", async () => {
+    render(<ProjectDockerInDocker />);
+    await checkbox();
+    expect(screen.queryByText(/project's image must hold/)).not.toBeInTheDocument();
+    cleanup();
+    stored = state({ enabled: true, support: "unsupported", defaultSocketPath: "" });
+    render(<ProjectDockerInDocker />);
+    await checkbox();
+    expect(screen.queryByText(/project's image must hold/)).not.toBeInTheDocument();
   });
 
   it("SET-FR-NXDV: settings that cannot be read are stated and nothing is shown to change", async () => {

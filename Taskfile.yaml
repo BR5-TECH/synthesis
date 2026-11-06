@@ -2,7 +2,7 @@
 #
 # Specification: specifications/infra/TSK-taskfile.md
 #
-# It defines twelve tasks and no other task. Every command it holds belongs to
+# It defines thirteen tasks and no other task. Every command it holds belongs to
 # another specification, and this file restates that command byte for byte
 # rather than changing it:
 #
@@ -11,6 +11,7 @@
 #                                 specifications/server/BMS-backend-microservice.md
 #   the verification lanes        specifications/infra/CIP-ci-pipeline.md
 #   the Rust lint commands        specifications/infra/CIP-ci-pipeline.md
+#   the Docker-in-Docker test     specifications/infra/TSK-taskfile.md
 #
 # The file installs nothing and provisions nothing. A prerequisite that is
 # missing is reported, not repaired. No task publishes anything, reads a
@@ -272,3 +273,19 @@ tasks:
       - task: lint:backend
       - cargo check
       - cargo test
+
+  uat:dind:
+    desc: 'Run the Docker-in-Docker acceptance test on this machine: one result for each launch shape. It needs a Docker daemon and is not part of tests.'
+    dir: '{{.ROOT_DIR}}/src-tauri'
+    preconditions:
+      - sh: command -v docker
+        msg: 'task uat:dind: the container runtime is missing. No "docker" executable is on PATH. No test ran.'
+      - sh: docker info
+        msg: 'task uat:dind: the container runtime is not available. The "docker" executable is on PATH, but no daemon answered it. No test ran.'
+    cmds:
+      # TSK-FR-WQPB: the ignored acceptance test of EAC-FR-UDQN, one shape
+      # after another. A short TMPDIR, because the sandbox runtime puts its
+      # sockets under the temporary directory.
+      - cmd: |
+          trap 'echo "task uat:dind: a Docker-in-Docker launch shape failed." >&2' ERR
+          TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture dind_uat

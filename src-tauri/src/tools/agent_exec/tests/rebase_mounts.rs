@@ -547,6 +547,8 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
         env_names: vec![],
         env_literals: vec![],
         vendor_args: vec![],
+        entrypoint: None,
+        network: descriptor::NETWORK,
     };
     let rendered = spec.docker_run_args();
     let at = |target: &str| {

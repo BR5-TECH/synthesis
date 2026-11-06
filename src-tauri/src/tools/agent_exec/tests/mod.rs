@@ -189,9 +189,20 @@ struct RecordingRuntime {
     runs: StdMutex<Vec<Recorded>>,
     removed: StdMutex<Vec<String>>,
     images_asked: StdMutex<Vec<String>>,
+    /// EAC-FR-GKSW: what the helper container answers. `None` answers as a
+    /// seam that runs no helper.
+    socket_group: StdMutex<Option<Result<u32, String>>>,
+    socket_probes: StdMutex<Vec<SocketGroupProbe>>,
+    socket_cancels_seen: StdMutex<Vec<bool>>,
 }
 
 impl RecordingRuntime {
+    /// EAC-FR-GKSW: whether the launch token was cancelled when each helper
+    /// read began.
+    fn socket_cancels(&self) -> Vec<bool> {
+        self.socket_cancels_seen.lock().unwrap().clone()
+    }
+
     fn replying(stdout: &str) -> Arc<Self> {
         Arc::new(RecordingRuntime {
             script: Script::Reply {
@@ -206,6 +217,9 @@ impl RecordingRuntime {
             runs: StdMutex::new(Vec::new()),
             removed: StdMutex::new(Vec::new()),
             images_asked: StdMutex::new(Vec::new()),
+            socket_group: StdMutex::new(None),
+            socket_probes: StdMutex::new(Vec::new()),
+            socket_cancels_seen: StdMutex::new(Vec::new()),
         })
     }
 
@@ -225,6 +239,9 @@ impl RecordingRuntime {
             runs: StdMutex::new(Vec::new()),
             removed: StdMutex::new(Vec::new()),
             images_asked: StdMutex::new(Vec::new()),
+            socket_group: StdMutex::new(None),
+            socket_probes: StdMutex::new(Vec::new()),
+            socket_cancels_seen: StdMutex::new(Vec::new()),
         })
     }
 
@@ -243,6 +260,9 @@ impl RecordingRuntime {
             runs: StdMutex::new(Vec::new()),
             removed: StdMutex::new(Vec::new()),
             images_asked: StdMutex::new(Vec::new()),
+            socket_group: StdMutex::new(None),
+            socket_probes: StdMutex::new(Vec::new()),
+            socket_cancels_seen: StdMutex::new(Vec::new()),
         })
     }
 
@@ -256,6 +276,9 @@ impl RecordingRuntime {
             runs: StdMutex::new(Vec::new()),
             removed: StdMutex::new(Vec::new()),
             images_asked: StdMutex::new(Vec::new()),
+            socket_group: StdMutex::new(None),
+            socket_probes: StdMutex::new(Vec::new()),
+            socket_cancels_seen: StdMutex::new(Vec::new()),
         })
     }
 
@@ -268,9 +291,33 @@ impl RecordingRuntime {
     fn launched(&self) -> usize {
         self.runs.lock().unwrap().len()
     }
+
+    /// EAC-FR-GKSW: the helper container answers `answer` from now on.
+    fn answer_socket_group(&self, answer: Result<u32, String>) {
+        *self.socket_group.lock().unwrap() = Some(answer);
+    }
+
+    fn socket_probes(&self) -> Vec<SocketGroupProbe> {
+        self.socket_probes.lock().unwrap().clone()
+    }
 }
 
 impl DockerRuntime for RecordingRuntime {
+    fn socket_group<'a>(
+        &'a self,
+        probe: &'a SocketGroupProbe,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<u32, String>> {
+        Box::pin(async move {
+            self.socket_probes.lock().unwrap().push(probe.clone());
+            self.socket_cancels_seen.lock().unwrap().push(cancel.is_cancelled());
+            match self.socket_group.lock().unwrap().clone() {
+                Some(answer) => answer,
+                None => Err("the recording runtime runs no helper container".to_string()),
+            }
+        })
+    }
+
     fn ensure_available(&self) -> BoxFuture<'_, Result<(), RuntimeError>> {
         Box::pin(async move {
             if self.available {

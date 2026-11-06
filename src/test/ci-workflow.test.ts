@@ -26,6 +26,7 @@ import {
   cacheStepOf,
   commandsOf,
   crateDirs,
+  FIXTURE_CRATE_DIRS,
   firstToolchainStep,
   gateGuard,
   invokesToolchain,
@@ -313,6 +314,22 @@ describe("CIP-FR-10 toolchain resolution", () => {
    */
   it("finds the crates the repository holds", () => {
     expect(CRATE_DIRS.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("EAC-FR-PZKC: the test application of the Docker-in-Docker acceptance test is a fixture that no lane builds", () => {
+    const fixtures = [...FIXTURE_CRATE_DIRS];
+    expect(crateDirs(".", 3)).toEqual(expect.arrayContaining(fixtures));
+    for (const fixture of fixtures) {
+      expect(CRATE_DIRS).not.toContain(fixture);
+      expect(RUST_LANES.filter((lane) => isInside(fixture, workingDirOf(lane)))).toHaveLength(0);
+    }
+  });
+
+  it("EAC-FR-PZKC: no workflow runs the ignored Docker-in-Docker acceptance test", () => {
+    for (const file of WORKFLOW_FILES) {
+      const text = readFileSync(resolve(WORKFLOW_DIR, file), "utf8");
+      expect(text, file).not.toMatch(/--ignored|--include-ignored|dind_uat|uat:dind/);
+    }
   });
 
   it.each(CRATE_DIRS)("a Rust lane verifies %s", (crate) => {

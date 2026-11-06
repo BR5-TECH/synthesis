@@ -59,6 +59,9 @@ fn a_non_zero_exit_preserves_stderr_and_parses_no_envelope() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
 
     let outcome = run(&harness, runtime, task("go")).expect("ran");
@@ -126,6 +129,9 @@ fn an_invalid_envelope_record_carries_both_the_reason_and_the_excerpt() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
 
     let outcome = run(&harness, runtime.clone(), task("go")).expect("ran");
@@ -317,6 +323,9 @@ fn a_codex_failure_excerpt_carries_no_credential_path() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
 
     let outcome = run(&harness, runtime.clone(), task("go")).expect("ran");
@@ -353,6 +362,9 @@ fn streams_are_bounded_separate_and_a_truncated_stdout_is_not_parsed() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
     let outcome = run(&harness, flooded_out, task("go")).expect("ran");
     assert!(outcome.stdout.truncated);
@@ -373,6 +385,9 @@ fn streams_are_bounded_separate_and_a_truncated_stdout_is_not_parsed() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
     let outcome = run(&harness, flooded_err, task("go")).expect("ran");
     assert!(outcome.stderr.truncated);
@@ -498,6 +513,9 @@ fn a_complete_envelope_before_a_timeout_is_still_a_timeout() {
         runs: StdMutex::new(Vec::new()),
         removed: StdMutex::new(Vec::new()),
         images_asked: StdMutex::new(Vec::new()),
+        socket_group: StdMutex::new(None),
+        socket_probes: StdMutex::new(Vec::new()),
+        socket_cancels_seen: StdMutex::new(Vec::new()),
     });
 
     let outcome = run(&harness, runtime, task("go")).expect("ran");
@@ -532,6 +550,9 @@ fn every_path_out_removes_its_container_under_a_fresh_name() {
             runs: StdMutex::new(Vec::new()),
             removed: StdMutex::new(Vec::new()),
             images_asked: StdMutex::new(Vec::new()),
+            socket_group: StdMutex::new(None),
+            socket_probes: StdMutex::new(Vec::new()),
+            socket_cancels_seen: StdMutex::new(Vec::new()),
         });
         run(&harness, runtime.clone(), task("go")).expect("ran");
 

@@ -103,9 +103,8 @@ impl<R: tauri::Runtime> GraduationDispatch<R> for AgentCliDispatch {
             // EAC-FR-DKRS: read from the project-local store at every launch, so
             // Continue uses the settings and the socket that stand now. The
             // application reads them; the model has no route to them.
-            let docker_in_docker: crate::tools::agent_exec::DockerInDockerLaunch =
-                crate::project_settings::read_docker_in_docker_settings(&project_root).into();
-            let images = crate::tools::agent_exec::ProjectVendorImages::new(project_root);
+            let (docker_in_docker, images) =
+                crate::tools::agent_exec::project_launch_inputs(project_root);
             let context = LaunchContext {
                 store: &store,
                 integrations: &integrations,

@@ -185,6 +185,14 @@ pub const SECURITY_OPTS: &[&str] = &["--cap-drop", "ALL", "--security-opt", "no-
 /// EAC-FR-DKRS: where a container sees the host Docker socket, whatever its
 /// host path is.
 pub const DOCKER_SOCKET_TARGET: &str = "/var/run/docker.sock";
+/// EAC-FR-GKSW: the network of the helper container that reads the socket
+/// group. It reads a file and needs no network.
+pub const HELPER_NETWORK: &str = "none";
+/// EAC-FR-GKSW: the program the helper runs in place of the image entrypoint.
+pub const SOCKET_GROUP_ENTRYPOINT: &str = "stat";
+/// EAC-FR-GKSW: the arguments of [`SOCKET_GROUP_ENTRYPOINT`]: print the numeric
+/// group of the socket at its container path.
+pub const SOCKET_GROUP_ARGS: [&str; 3] = ["-c", "%g", DOCKER_SOCKET_TARGET];
 /// EAC-FR-DKRS: the host mapping of the host gateway toggle.
 pub const DOCKER_HOST_GATEWAY_MAPPING: &str = "host.docker.internal:host-gateway";
 /// EAC-FR-DKRS: the variable Testcontainers reads to reach the host, set where
@@ -639,6 +647,12 @@ pub struct ContainerSpec {
     /// or a host name this application chose rather than a secret.
     pub env_literals: Vec<(String, String)>,
     pub vendor_args: Vec<String>,
+    /// EAC-FR-GKSW: the program that replaces the image entrypoint. `None` for
+    /// every agent launch, which runs the entrypoint of the image.
+    pub entrypoint: Option<String>,
+    /// EAC-FR-13: [`NETWORK`] for every agent launch, and [`HELPER_NETWORK`]
+    /// for the helper of EAC-FR-GKSW.
+    pub network: &'static str,
 }
 
 impl ContainerSpec {
@@ -671,7 +685,7 @@ impl ContainerSpec {
             "--name".into(),
             self.name.clone(),
             "--network".into(),
-            NETWORK.into(),
+            self.network.into(),
             // EAC-FR-14: the container's non-root user is mapped to the host user,
             // so a file the agent creates in the mount belongs to whoever launched
             // it rather than to a uid that exists only inside the container.
@@ -706,6 +720,10 @@ impl ContainerSpec {
             args.push(format!("{name}={value}"));
         }
 
+        if let Some(entrypoint) = &self.entrypoint {
+            args.push("--entrypoint".into());
+            args.push(entrypoint.clone());
+        }
         args.push(self.image.clone());
         args.extend(self.vendor_args.iter().cloned());
         args

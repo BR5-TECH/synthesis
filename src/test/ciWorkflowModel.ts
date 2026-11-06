@@ -272,5 +272,14 @@ export const crateDirs = (dir: string, depth: number): string[] => {
   ];
 };
 
+/**
+ * Test fixtures that are Rust crates but no lane builds: the test application of
+ * the Docker-in-Docker acceptance test, which no pipeline lane runs
+ * (EAC-FR-PZKC). It is built only in the images of that test.
+ */
+export const FIXTURE_CRATE_DIRS: ReadonlySet<string> = new Set(["tests/dind-uat/testapp"]);
+
 /** Crates sit at most a couple of directories down; `tools/<crate>` is the deepest. */
-export const CRATE_DIRS: string[] = crateDirs(".", 3);
+export const CRATE_DIRS: string[] = crateDirs(".", 3).filter(
+  (dir) => !FIXTURE_CRATE_DIRS.has(dir),
+);

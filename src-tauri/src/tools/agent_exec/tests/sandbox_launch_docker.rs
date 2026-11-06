@@ -93,10 +93,13 @@ fn the_host_socket_choice_is_a_docker_launch_with_the_socket() {
     let mut harness = harness_for("claude_code");
     harness.docker_in_docker = dind(path.to_str().unwrap(), UnderMicrosandbox::HostSocket);
     let docker = RecordingRuntime::replying(&valid_claude_stdout());
+    // EAC-FR-GKSW: the Docker launch reads the group a container sees.
+    docker.answer_socket_group(Ok(4242));
     let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
     work(&harness, docker.clone(), sandbox.clone()).expect("runs");
 
     assert!(sandbox.boots.lock().unwrap().is_empty());
+    assert_eq!(docker.socket_probes().len(), 1);
     let recorded = docker.only_run();
     assert!(
         recorded.argv.iter().any(|a| a.contains("/var/run/docker.sock")),
@@ -104,7 +107,7 @@ fn the_host_socket_choice_is_a_docker_launch_with_the_socket() {
         recorded.argv
     );
     let container = recorded.container.expect("the specification");
-    assert_eq!(container.groups.len(), 1);
+    assert_eq!(container.groups, vec![4242]);
     assert_eq!(container.extra_hosts, vec![descriptor::DOCKER_HOST_GATEWAY_MAPPING.to_string()]);
     assert!(!recorded.argv.iter().any(|a| a.contains(descriptor::DOCKER_HOST_ENV)));
 }
@@ -159,9 +162,9 @@ fn a_masked_turn_under_the_host_socket_choice_gets_no_socket() {
     assert!(recorded.container.expect("the specification").groups.is_empty());
 }
 
-/// EAC-FR-DKRS, PSS-FR-MTJE, EAC-FR-SNMS: the choice stored in `local.toml`
-/// reaches the launch with the other values, so the host socket choice is not
-/// lost between the store and the executor.
+/// EAC-FR-DKRS, PSS-FR-MTJE, EAC-FR-SNMS, EAC-FR-38: the choice stored in
+/// `local.toml` reaches the launch with the other values, through the reader a
+/// graduation launch uses, and the image source gives the committed image.
 #[test]
 fn the_stored_choice_reaches_the_launch() {
     let dir = tempfile::tempdir().unwrap();
@@ -176,9 +179,21 @@ fn the_stored_choice_reaches_the_launch() {
         },
     )
     .unwrap();
-    let launch: DockerInDockerLaunch =
-        crate::project_settings::read_docker_in_docker_settings(&root).into();
+    std::fs::write(dir.path().join("Dockerfile"), "FROM scratch\n").unwrap();
+    crate::project_settings::save_project_vendor_image_to(
+        &root,
+        "claude_code",
+        &crate::project_settings::images::ProjectVendorImage {
+            image_name: "example/agent".to_string(),
+            tag: Some("7".to_string()),
+            dockerfile: Some("Dockerfile".to_string()),
+            build_context: None,
+        },
+    )
+    .unwrap();
+    let (launch, images) = project_launch_inputs(root);
     assert_eq!(launch, dind("/x/d.sock", UnderMicrosandbox::HostSocket));
+    assert_eq!(images.image_for("claude_code"), Ok("example/agent:7".to_string()));
 }
 
 /// EAC-FR-OWPP, EAC-FR-QMRW: the launch environment cannot name `DOCKER_HOST`,
@@ -200,7 +215,10 @@ fn the_launch_environment_cannot_override_docker_host_in_the_vm() {
     assert_eq!(refused.unwrap_err(), "env_var_reserved:DOCKER_HOST");
     harness.docker_in_docker = dind("", UnderMicrosandbox::VmDaemon);
     let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
-    work(&harness, RecordingRuntime::replying(""), sandbox.clone()).expect("runs");
+    let docker = RecordingRuntime::replying("");
+    work(&harness, docker.clone(), sandbox.clone()).expect("runs");
+    // EAC-FR-GKSW, EAC-FR-DARS: a sandbox launch reads no socket group.
+    assert!(docker.socket_probes().is_empty());
     assert_eq!(
         sandbox.only_process().env.get(descriptor::DOCKER_HOST_ENV).map(String::as_str),
         Some(descriptor::VM_DOCKER_HOST_VALUE)

@@ -563,8 +563,6 @@ pub fn build_project_vendor_image(
     registry: State<'_, images::ImageBuildRegistry>,
 ) -> Result<images::StartedImageBuild, String> {
     let root = project.require_root()?;
-    let table = load_public(&root)?;
-    let entries = images::read_entries(&table);
     // Unique for the lifetime of the running application and never reused, so a
     // surface keying a build by its id never confuses one with a later one
     // (PSS-FR-27). A monotonic counter rather than a clock: two builds a
@@ -573,18 +571,10 @@ pub fn build_project_vendor_image(
     let sequence = NEXT_BUILD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let operation_id = format!("image-build-{vendor}-{sequence}");
 
-    // PSS-FR-26 / PSS-FR-BCTX: the root is the active worktree root now, and
-    // the context is the folder the entry names, or that root by default.
-    let project_root = root.path().to_path_buf();
-    let context_root = match entries.get(&vendor).and_then(|entry| entry.build_context.as_deref()) {
-        Some(context) => images::validate_build_context(&root, context),
-        None => Ok(project_root.clone()),
-    };
-    let prepared = images::prepare_build(
-        entries.get(&vendor),
-        crate::docker::resolve_docker_backend(&store),
-        project_root,
-        context_root,
+    let entries = images::read_entries(&load_public(&root)?);
+    let prepared = build_seam::prepare_project_vendor_image_build(
+        &root,
+        &store,
         &vendor,
         &operation_id,
         &registry,

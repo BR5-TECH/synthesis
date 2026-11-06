@@ -129,6 +129,13 @@ fn a_second_pass_gets_its_own_review_checkout() {
     assert_eq!(run.review_turns, 2);
     assert!(run.blocker.is_none(), "no checkout failed: {:?}", run.blocker);
     let review = dispatch.of_part("review");
+    // GRL-FR-BIQX: each pass stands at a path of its own, and neither is left.
+    assert_ne!(review[0].directory, review[1].directory);
+    for seen in &review {
+        assert!(checkout_paths::is_nonced_checkout_of(&fx.app, &run.id, "rv", &seen.directory));
+        assert!(!seen.directory.exists());
+    }
+    assert!(checkout_paths::checkouts_left(&fx.app, &run.id, "rv").is_empty());
     assert_eq!(
         review[1].tree.get("src/panel.ts").map(String::as_str),
         Some("2\n"),
@@ -162,8 +169,12 @@ fn a_review_checkout_leaves_no_worktree_and_no_branch() {
         .filter_map(|n| n.ok().flatten().map(str::to_string))
         .collect();
     assert!(
-        !registered.iter().any(|name| name.ends_with("-rv")),
+        checkout_paths::registrations_left(&repo, &run.id, "rv").is_empty(),
         "no review registration is left: {registered:?}"
+    );
+    assert!(
+        checkout_paths::checkouts_left(&fx.app, &run.id, "rv").is_empty(),
+        "no review checkout directory is left"
     );
     let branches: Vec<String> = repo
         .branches(Some(git2::BranchType::Local))
@@ -318,8 +329,9 @@ fn a_stranded_review_checkout_is_reclaimed_at_the_next_queue_read() {
 
     assert!(!checkout.exists(), "the stranded checkout is gone");
     let repo = fx.repo();
-    assert!(
-        !crate::streams::registers_worktree(&repo, &format!("{}-rv", run.id)),
+    assert_eq!(
+        checkout_paths::registrations_left(&repo, &run.id, "rv"),
+        Vec::<String>::new(),
         "and so is its registration"
     );
     assert!(
@@ -360,7 +372,7 @@ fn a_checkout_of_a_reviewing_run_is_left_alone() {
     crate::graduation::driver::review_checkout::sweep_stranded(&fx.app, &queue);
 
     assert!(checkout.is_dir(), "the live checkout stands");
-    assert!(crate::streams::registers_worktree(&fx.repo(), &format!("{}-rv", run.id)));
+    assert_eq!(checkout_paths::registrations_left(&fx.repo(), &run.id, "rv").len(), 1);
 }
 
 /// GRL-FR-XNQU: the tree the review stands in is the tree the commit holds, for
@@ -491,16 +503,18 @@ fn a_review_that_installed_symlinks_is_still_reclaimed() {
     let run = fx.drive(&run, dispatch.clone());
 
     assert_eq!(run.state, GraduationRunState::Completed);
-    let checkout =
-        crate::graduation::store_base(&fx.app).expect("the store").review_checkout(&run.id);
+    let checkout = dispatch.of_part("review")[0].directory.clone();
+    assert!(checkout_paths::is_nonced_checkout_of(&fx.app, &run.id, "rv", &checkout));
     assert!(!checkout.exists(), "the checkout was left standing at {}", checkout.display());
+    assert!(checkout_paths::checkouts_left(&fx.app, &run.id, "rv").is_empty());
 }
 
-/// GRL-FR-YKRI: the reclaim at the head of `create` takes what an earlier turn
-/// left, so a second review turn of the same run gets its checkout.
+/// GRL-FR-BIQX, GRL-FR-PQLM: a second review turn of a run stands at a path of
+/// its own, also where the first one installed links, and no checkout of the
+/// two is left when the run ends.
 ///
-/// The latch this stands against: the first release failed silently and the
-/// second turn died on what it left, so a run could never review again.
+/// The latch this stands against: a first checkout that could not be reclaimed
+/// stopped the second turn from having one, so a run could never review again.
 #[cfg(unix)]
 #[test]
 fn a_second_review_turn_reclaims_what_the_first_left() {
@@ -524,4 +538,8 @@ fn a_second_review_turn_reclaims_what_the_first_left() {
     );
     assert_eq!(run.state, GraduationRunState::Completed);
     assert!(run.blocker.is_none(), "blocker: {:?}", run.blocker);
+    let review = dispatch.of_part("review");
+    assert_ne!(review[0].directory, review[1].directory);
+    assert!(checkout_paths::checkouts_left(&fx.app, &run.id, "rv").is_empty());
+    assert!(checkout_paths::registrations_left(&fx.repo(), &run.id, "rv").is_empty());
 }

@@ -25,6 +25,7 @@ use crate::tools::agent_exec::{
 
 mod activity_stream;
 mod blocking;
+mod checkout_paths;
 mod collaborators;
 mod commit_retitle;
 mod direct;

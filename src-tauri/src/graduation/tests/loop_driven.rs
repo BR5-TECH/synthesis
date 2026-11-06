@@ -679,7 +679,7 @@ fn a_review_turn_stopped_mid_way_keeps_the_work_and_reclaims_its_checkout() {
     assert_eq!(run.commits.len(), 1, "what the work turn wrote is kept");
     let checkout = dispatch.of_part("review")[0].directory.clone();
     assert!(!checkout.exists(), "the checkout goes even on a stop");
-    assert!(!crate::streams::registers_worktree(&fx.repo(), &format!("{}-rv", run.id)));
+    assert!(checkout_paths::registrations_left(&fx.repo(), &run.id, "rv").is_empty());
 }
 
 /// GRD-FR-EGWS, GRL-FR-BRJO: a run writes into its stream's working copy and

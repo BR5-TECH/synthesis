@@ -91,7 +91,8 @@ The backend module that turns a finished draft prompt into committed work. A dra
 57. **GRD-FR-KAKU** A run is a **PR summary run** when its record carries `pr_summary` data. It has no draft and no stream. It takes no draft lock, has no standing work, writes no statistics line, makes no commit, and makes no landing.
 58. **GRD-FR-HMDW** `start_pull_request_summary(head, base, mode)` enqueues a PR summary run in `queued` in the queue `pr:<head>` and offers the project a dispatch. `mode` is `diff` or `combine`. A `head` or `base` that is not a branch returns `"unknown branch"`, and nothing is enqueued.
 59. **GRD-FR-JAUJ** `start_pull_request_summary` is refused with `pr_summary_active`, carrying the run id, while the queue `pr:<head>` holds a run that is not terminal. A PR summary run holds its queue and one project slot on the terms of every run (GRD-FR-BNTC, GRD-FR-KKKN). Its title is `Summarize <head>`, recorded as `pr_summary.name`.
-60. **GRD-FR-TYVT** At its first dispatch, a PR summary run pins the head tip and the merge base of the head and the base. Its turn stands in a disposable checkout at `short_data_dir()/g/<run-id>/ps/`, detached at the pinned head tip. The run removes the checkout and its registration when it is terminal. It changes no branch and no worktree of the author.
+60. **GRD-FR-TYVT** At its first dispatch, a PR summary run pins the head tip and the merge base of the head and the base. Each turn stands in a disposable checkout at `short_data_dir()/g/<run-id>/ps-<nonce>/`, detached at the pinned head tip. The run removes the checkout and its registration when it is terminal. It changes no branch and no worktree of the author.
+60. **GRD-FR-XKGC** A PR summary checkout follows `../ai/GRL-graduation-loop.md` GRL-FR-BIQX, GRL-FR-PQLM and GRL-FR-LYXG, with the directory `ps-<nonce>`, the earlier directory name `ps`, the registration `<run-id>-ps-<nonce>` or `<run-id>-ps`, and the scratch branch `synthesis/pr-summary/<run-id>`.
 61. **GRD-FR-MACY** A `combine` run captures, at enqueue, the run summaries of `list_branch_completed_runs(head)` in landing order, skipping each run with no summary. A `combine` request when no run has a summary is refused with `no_run_summaries`, and nothing is enqueued.
 62. **GRD-FR-SWHW** A turn that returns a valid `PullRequestSummary` (per `../ai/GRL-graduation-loop.md` GRL-FR-UNKD) completes the run and records the answer in `pr_summary.result`. Every other end of the turn ends the run `failed` with its typed cause, and no result is recorded.
 63. **GRD-FR-CCHK** A `failed` PR summary run holds neither its queue nor a project slot, so a new one for the same head can start at once. A cancelled turn rests the run `interrupted`, and Continue dispatches the turn again from the start.
@@ -114,13 +115,15 @@ Everything one run owns stands under `FSA-filesystem-access.md`'s `short_data_di
 short_data_dir()/q/<project-key>.toml      the project's one run order
 short_data_dir()/g/<run-id>/run.toml       the run record
 short_data_dir()/g/<run-id>/logs/          activity.jsonl, structured.jsonl
-short_data_dir()/g/<run-id>/rv/            the review turn's throwaway checkout
+short_data_dir()/g/<run-id>/rv-<nonce>/    a review turn's throwaway checkout
 short_data_dir()/g/<run-id>/mw/            a merge run's merge worktree (GRD-FR-KZPT)
-short_data_dir()/g/<run-id>/ps/            a PR summary run's disposable checkout (GRD-FR-TYVT)
+short_data_dir()/g/<run-id>/ps-<nonce>/    a PR summary turn's disposable checkout (GRD-FR-TYVT)
 short_data_dir()/w/<stream-id>/            the stream's working copy (WKS)
 ```
 
 A direct run's working copy is the author's own worktree and stands wherever that worktree does.
+
+Each review and PR summary turn has its own `<nonce>` (`../ai/GRL-graduation-loop.md` GRL-FR-BIQX). A review checkout is registered as `<run-id>-rv-<nonce>` on the scratch branch `synthesis/review/<run-id>`. A PR summary checkout is registered as `<run-id>-ps-<nonce>` on the scratch branch `synthesis/pr-summary/<run-id>`.
 
 A merge run also owns, in the repository, the scratch branch `synthesis/merge-run/<run-id>`, the worktree registration `<run-id>-mw`, and the private ref `refs/synthesis/merge/<run-id>` that keeps its merge snapshot reachable. Nothing of the three outlives the run (GRD-FR-KZPT).
 

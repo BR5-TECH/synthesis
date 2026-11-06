@@ -218,7 +218,7 @@ impl Outcome {
     pub(crate) fn expect_review_checkout_reclaimed(self) -> Self {
         let repo = self.fx.repo();
         assert!(
-            !crate::streams::registers_worktree(&repo, &format!("{}-rv", self.run.id)),
+            super::super::checkout_paths::registrations_left(&repo, &self.run.id, "rv").is_empty(),
             "[{}] no review checkout is registered",
             self.name
         );
@@ -228,16 +228,8 @@ impl Outcome {
             "[{}] no review scratch branch is left",
             self.name
         );
-        let checkout = crate::graduation::store_base(&self.fx.app)
-            .expect("the run store")
-            .review_checkout(&self.run.id);
-        assert!(
-            guard(checkout.parent().expect("the run's own directory"))
-                .file_info(&checkout)
-                .is_err(),
-            "[{}] no review checkout directory is left",
-            self.name
-        );
+        let left = super::super::checkout_paths::checkouts_left(&self.fx.app, &self.run.id, "rv");
+        assert!(left.is_empty(), "[{}] no review checkout directory is left: {left:?}", self.name);
         self
     }
 

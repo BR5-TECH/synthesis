@@ -104,11 +104,15 @@ fn a_refused_review_answer_is_corrected_in_the_review_session() {
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run();
     let checkout = outcome.dispatches()[1].directory.clone();
+    let home = outcome.run_home_path();
     outcome
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_count(3)
+        .expect_dispatch(1, |d| d.directory_is_review_checkout_under(&home))
         .expect_dispatch(2, |d| {
             d.part("review")
+                // GRL-FR-QEUP: within one dispatch, the checkout of the turn it
+                // corrects.
                 .directory(&checkout)
                 .resumes_session("s1")
                 .field_contains("correction", "required shape")
@@ -334,4 +338,48 @@ fn a_refused_merge_review_answer_is_corrected() {
                 .field_contains("correction", "No answer was found")
         },
     );
+}
+
+// GRL-FR-QEUP, GRL-FR-HWLD, GRL-FR-BIQX: a review correction that is pending
+// across Continue is sent in the refused turn's session, and stands in a new
+// review checkout rather than in the refused turn's.
+#[test]
+fn a_review_correction_after_continue_stands_in_a_new_checkout() {
+    let rested = Scenario::named("review correction after continue")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(Script::answers_refused(EnvelopeInvalid::Malformed))
+        .review_turn(Script::is_cancelled().pausing_the_run())
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("author_pause");
+    let home = rested.run_home_path();
+    let refused_in = rested.dispatches()[1].directory.clone();
+    assert!(!refused_in.exists(), "the refused turn's checkout went");
+    rested
+        .continued(vec![Script::answers_ready("The work answers the prompt.")])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch(0, |d| {
+            d.part("review")
+                .resumes_session("s1")
+                .field_contains("correction", "required shape")
+                .directory_is_review_checkout_under(&home)
+                .directory_is_not(&refused_in)
+        })
+        .expect_review_checkout_reclaimed();
+}
+
+// GRL-FR-QEUP, GRL-FR-PTCE: where the vendor does not honour the resume of a
+// review correction sent after Continue, the refused turn settles as it ended.
+#[test]
+fn a_review_correction_after_continue_that_cannot_resume_settles_the_refused_turn() {
+    Scenario::named("review correction after continue, not resumed")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(Script::answers_refused(EnvelopeInvalid::Malformed))
+        .review_turn(Script::is_cancelled().pausing_the_run())
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .continued(vec![Script::cannot_resume()])
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("unreadable_answer")
+        .expect_no_pending_correction();
 }

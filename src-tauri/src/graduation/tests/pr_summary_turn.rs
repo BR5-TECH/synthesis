@@ -146,8 +146,8 @@ fn a_pr_summary_run_is_one_turn_in_a_disposable_checkout_of_the_head_tip() {
     }
     // GRD-FR-TYVT: the turn stood in the run's own checkout, detached at the
     // pinned head tip, holding the head branch's tree.
-    let checkout = store_base(&fx.app).unwrap().pr_summary_checkout(&run.id);
-    assert_eq!(canonical(&turn.directory), canonical(&checkout));
+    let checkout = turn.directory.clone();
+    assert!(checkout_paths::is_nonced_checkout_of(&fx.app, &run.id, "ps", &checkout));
     assert_eq!(turn.head.as_deref(), Some(tip.to_string().as_str()));
     assert!(turn.tree.contains_key("panel.ts"), "the head branch's tree: {:?}", turn.tree);
 
@@ -167,7 +167,7 @@ fn a_pr_summary_run_is_one_turn_in_a_disposable_checkout_of_the_head_tip() {
     // the author's moved.
     assert!(!checkout.exists(), "the checkout is removed");
     let repo = fx.repo();
-    assert!(repo.find_worktree(&format!("{}-ps", run.id)).is_err(), "no registration");
+    assert!(checkout_paths::registrations_left(&repo, &run.id, "ps").is_empty(), "no registration");
     assert!(
         repo.find_branch(&format!("synthesis/pr-summary/{}", run.id), git2::BranchType::Local)
             .is_err(),
@@ -277,8 +277,10 @@ fn every_other_end_of_the_turn_fails_the_run_with_its_cause() {
         assert_eq!(done.failure.as_ref().map(|f| f.code.as_str()), Some(code));
         assert!(done.pr_summary.as_ref().unwrap().result.is_none());
         assert!(done.escalation.is_none(), "no escalation is recorded");
-        let checkout = store_base(&fx.app).unwrap().pr_summary_checkout(&run.id);
-        assert!(!checkout.exists(), "{code}: the checkout is removed");
+        assert!(
+            checkout_paths::checkouts_left(&fx.app, &run.id, "ps").is_empty(),
+            "{code}: the checkout is removed"
+        );
     }
 }
 
@@ -332,15 +334,19 @@ fn a_paused_turn_rests_the_run_and_continue_starts_the_turn_again() {
         crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
     });
 
-    let rested = fx.drive(&run, ScriptedDispatch::new(vec![paused]));
+    let first = ScriptedDispatch::new(vec![paused]);
+    let rested = fx.drive(&run, first.clone());
     assert_eq!(rested.state, GraduationRunState::Interrupted);
     assert_eq!(
         rested.interruption.as_ref().map(|i| i.reason),
         Some(GraduationInterruptionReason::AuthorPause)
     );
     assert!(rested.holds_queue() && rested.holds_slot(), "an interrupted run holds both");
-    let checkout = store_base(&fx.app).unwrap().pr_summary_checkout(&run.id);
-    assert!(!checkout.exists(), "the checkout is removed when the turn ends");
+    assert!(
+        checkout_paths::checkouts_left(&fx.app, &run.id, "ps").is_empty(),
+        "the checkout is removed when the turn ends"
+    );
+    let paused_in = first.seen()[0].directory.clone();
 
     let continued = fx.continue_run(&rested);
     assert_eq!(continued.state, GraduationRunState::Queued);
@@ -348,6 +354,10 @@ fn a_paused_turn_rests_the_run_and_continue_starts_the_turn_again() {
     let done = fx.drive(&continued, dispatch.clone());
 
     let again = &dispatch.seen()[0];
+    // GRD-FR-XKGC: the turn after Continue stands at a path of its own.
+    assert!(checkout_paths::is_nonced_checkout_of(&fx.app, &run.id, "ps", &again.directory));
+    assert!(checkout_paths::is_nonced_checkout_of(&fx.app, &run.id, "ps", &paused_in));
+    assert_ne!(again.directory, paused_in, "a new checkout after Continue");
     assert_eq!(again.purpose, "generate", "the turn starts again");
     assert_eq!(again.resume_session, None, "no session of the paused turn is resumed");
     assert_eq!(again.head.as_deref(), Some(tip.to_string().as_str()), "the pinned tip");
@@ -480,7 +490,7 @@ fn a_cancelled_turn_rests_the_run_interrupted() {
         Some(GraduationInterruptionReason::RetryableFailure)
     );
     assert!(done.holds_queue() && done.holds_slot());
-    assert!(!store_base(&fx.app).unwrap().pr_summary_checkout(&run.id).exists());
+    assert!(checkout_paths::checkouts_left(&fx.app, &run.id, "ps").is_empty());
 }
 
 // GRD-FR-TYVT: a checkout a stopped run left standing is removed with its
@@ -508,7 +518,7 @@ fn the_checkout_goes_when_the_run_is_terminal() {
 
     assert!(!checkout.exists(), "the checkout is removed");
     let repo = fx.repo();
-    assert!(repo.find_worktree(&format!("{}-ps", run.id)).is_err());
+    assert!(checkout_paths::registrations_left(&repo, &run.id, "ps").is_empty());
     assert!(repo
         .find_branch(&format!("synthesis/pr-summary/{}", run.id), git2::BranchType::Local)
         .is_err());
@@ -552,7 +562,7 @@ fn the_other_typed_causes_fail_the_run() {
     let done = fx.drive(&run, dispatch.clone());
     assert_eq!(dispatch.turns_taken(), 0);
     assert_eq!(done.failure.as_ref().unwrap().code, "total_time_limit");
-    assert!(!store_base(&fx.app).unwrap().pr_summary_checkout(&run.id).exists());
+    assert!(checkout_paths::checkouts_left(&fx.app, &run.id, "ps").is_empty());
 
     // The activity of the turn could not be kept.
     let fx = Fixture::new();
@@ -603,4 +613,89 @@ fn a_pr_summary_run_into_an_unconfirmed_main_branch_is_not_refused() {
 
     assert_eq!(done.state, GraduationRunState::Completed, "{done:?}");
     assert_eq!(done.pr_summary.unwrap().result.unwrap().title, "Panel");
+}
+
+// GRD-FR-XKGC, GRL-FR-LYXG: an earlier checkout that cannot be removed is
+// reported, and the PR summary turn still runs, in a new checkout.
+#[cfg(unix)]
+#[test]
+fn a_summary_runs_when_an_earlier_checkout_cannot_be_removed() {
+    if crate::fs::permission_probe::skip_without_enforcement(
+        "a_summary_runs_when_an_earlier_checkout_cannot_be_removed",
+        crate::fs::permission_probe::Injection::Write,
+    ) {
+        return;
+    }
+    let fx = Fixture::new();
+    let (run, _, _) = summary_run(&fx, PrSummaryMode::Diff);
+    let home = store_base(&fx.app).unwrap().home(&run.id);
+    let stuck = home.join("ps-0123abcd");
+    std::fs::create_dir_all(stuck.join("locked")).unwrap();
+    std::fs::write(stuck.join("locked/f.txt"), "x\n").unwrap();
+    let guard = checkout_paths::ReadOnly::new(&stuck.join("locked"));
+
+    let dispatch = ScriptedDispatch::new(vec![summary_answer("Add the panel", "Adds it.")]);
+    let done = fx.drive(&run, dispatch.clone());
+
+    assert_eq!(done.state, GraduationRunState::Completed, "failure: {:?}", done.failure);
+    let seen = &dispatch.seen()[0];
+    assert!(checkout_paths::is_nonced_checkout_of(&fx.app, &run.id, "ps", &seen.directory));
+    assert_ne!(canonical(&seen.directory), canonical(&stuck));
+    assert!(stuck.join("locked/f.txt").is_file(), "the stuck checkout stays");
+    let warned = checkout_paths::warnings(
+        &run.id,
+        "graduation could not remove an earlier checkout of a PR summary run",
+    );
+    assert!(!warned.is_empty(), "the stuck checkout is reported");
+    drop(guard);
+}
+
+// GRD-FR-TYVT: a checkout that cannot be made fails the run with
+// `pr_summary_checkout_failed`, before any turn.
+#[test]
+fn a_checkout_that_cannot_be_made_fails_the_run() {
+    let fx = Fixture::new();
+    let (run, _, _) = summary_run(&fx, PrSummaryMode::Diff);
+    // A branch `synthesis/pr-summary` makes the scratch branch
+    // `synthesis/pr-summary/<run-id>` impossible to create.
+    let repo = fx.repo();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.branch("synthesis/pr-summary", &head, true).unwrap();
+
+    let dispatch = ScriptedDispatch::new(Vec::new());
+    let done = fx.drive(&run, dispatch.clone());
+
+    assert_eq!(dispatch.turns_taken(), 0, "no turn is dispatched");
+    assert_eq!(done.state, GraduationRunState::Failed);
+    assert_eq!(done.failure.as_ref().map(|f| f.code.as_str()), Some("pr_summary_checkout_failed"));
+    assert!(checkout_paths::checkouts_left(&fx.app, &run.id, "ps").is_empty());
+    assert!(checkout_paths::registrations_left(&fx.repo(), &run.id, "ps").is_empty());
+}
+
+// GRD-FR-XKGC, GRD-FR-TYVT: a checkout of the name without a nonce, as an
+// earlier version of the application left it, goes at the queue read once the
+// run is terminal, with its registration and scratch branch.
+#[test]
+fn a_checkout_of_the_earlier_name_goes_when_the_run_is_terminal() {
+    let fx = Fixture::new();
+    let (run, tip, _) = summary_run(&fx, PrSummaryMode::Diff);
+    let done = fx.drive(&run, ScriptedDispatch::new(vec![summary_answer("Add", "Adds it.")]));
+    assert_eq!(done.state, GraduationRunState::Completed);
+    let repo = fx.repo();
+    let home = store_base(&fx.app).unwrap().home(&run.id);
+    let branch = format!("synthesis/pr-summary/{}", run.id);
+    repo.branch(&branch, &repo.find_commit(tip).unwrap(), true).unwrap();
+    let reference = repo.find_branch(&branch, git2::BranchType::Local).unwrap().into_reference();
+    let mut opts = git2::WorktreeAddOptions::new();
+    opts.reference(Some(&reference));
+    repo.worktree(&format!("{}-ps", run.id), &home.join("ps"), Some(&opts)).unwrap();
+    git2::Repository::open(home.join("ps")).unwrap().set_head_detached(tip).unwrap();
+
+    let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
+    crate::graduation::sweep_abandoned_runs(&fx.app, &queue);
+
+    assert!(!home.join("ps").exists());
+    let repo = fx.repo();
+    assert!(checkout_paths::registrations_left(&repo, &run.id, "ps").is_empty());
+    assert!(repo.find_branch(&branch, git2::BranchType::Local).is_err());
 }

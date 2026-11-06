@@ -55,6 +55,8 @@ import { NewStreamFields } from "./GraduationStart/newStream";
 import { useGraduationQueueRuns } from "./GraduationStart/queue";
 import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
 import { reportDockerSocketRefusal } from "../state/dockerSocketRefusal";
+import { useInlineWriteGuard } from "./MainBranchWrite";
+import { parseMainBranchRefusal } from "../state/mainBranchWrite";
 
 /** The refusals of a direct start that the preflight must be read again for. */
 const DIRECT_REFUSALS = [
@@ -305,6 +307,7 @@ export function GraduationStart({
     setNewName("");
   };
 
+  const startRef = useRef<() => Promise<void>>(async () => {});
   const start = async () => {
     // GSD-FR-BFOU: one start at a time.
     if (busy) return;
@@ -376,6 +379,14 @@ export function GraduationStart({
     } catch (reason) {
       // GSD-FR-JYRP: the refusal is rendered here, every answer is left as the
       // author set it, and nothing about the draft changed.
+      // MBW-FR-YSMC: a refusal of the main branch write check shows the
+      // section with the guard it carries, and a confirm starts once more.
+      if (parseMainBranchRefusal(reason)) {
+        // GSD-FR-TZGT: a stream the dialog made is kept, so the retry uses it.
+        if (createdStream) await adoptStream(createdStream);
+        writeGuard.adoptRefusal(reason, () => void startRef.current());
+        return;
+      }
       const text = String(reason);
       const [code, detail] = splitTyped(text);
       setError(graduationErrorMessage(text));
@@ -400,6 +411,8 @@ export function GraduationStart({
     }
   };
 
+  startRef.current = start;
+
   const chosen = streams?.find((s) => s.stream.id === streamId);
   // GSD-FR-WQPD: a stream that dispatches at once makes the question one the
   // author can answer by looking, so it is not asked. What the run carries
@@ -417,8 +430,15 @@ export function GraduationStart({
   const temporaryStreamIds = new Set(
     (streams ?? []).filter((s) => s.stream.temporary).map((s) => s.stream.id),
   );
+  // GSD-FR-YSMC: every start commits draft storage on the active worktree's
+  // branch, so its guard is read when the dialog opens.
+  const writeGuard = useInlineWriteGuard({
+    write: destination === "direct" ? "start_direct_run" : "start_graduation",
+    onCancel: onClose,
+  });
   const canStart =
     !busy &&
+    !writeGuard.blocked &&
     (destination === "stream"
       ? Boolean(streamId)
       : destination === "new"
@@ -638,6 +658,7 @@ export function GraduationStart({
           )}
         </div>
 
+        {writeGuard.section}
         <div className="modal__actions">
           <button
             type="button"
@@ -652,6 +673,7 @@ export function GraduationStart({
             className="btn btn--primary"
             onClick={start}
             disabled={!canStart}
+            aria-describedby={writeGuard.describedBy}
             data-testid="graduation-start-confirm"
           >
             {busy

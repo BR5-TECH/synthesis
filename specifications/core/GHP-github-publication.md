@@ -289,7 +289,7 @@ Every command except `take_publication_metadata_startup_failure` errors with `no
 
 ### Events
 - `"draft publication changed"` — emitted whenever a draft's publication store changes. Payload: `{ draft_id }`. Consumed by `../ui/NAW-new-artifact.md`, `../ui/DFI-draft-information.md`, and `../ui/DRP-drafts-panel.md`.
-- `"publication metadata changed"` — emitted when a refresh changes the metadata cache or the cache is emptied (GHP-FR-JIAU). Payload: `PublicationMetadataCacheChanged`. Consumed by `../ui/NAW-new-artifact.md` and `../ui/NIP-note-issue-publication.md`.
+- `"publication metadata changed"` — emitted when a refresh changes the metadata cache or the cache is emptied (GHP-FR-JIAU). Payload: `PublicationMetadataCacheChanged`. Consumed by `../ui/NAW-new-artifact.md`, `../ui/NIP-note-issue-publication.md`, and `../ui/CPR-create-pull-request.md`.
 - `"publication metadata startup failed"` — emitted once when the startup refresh fails (GHP-FR-ISJI). Payload: `{ error_code, error }`. Consumed by the main window, which then takes the kept failure (GHP-FR-KPXF) and raises the toast of `../ui/NTF-notifications.md` NTF-FR-POEW.
 
 ### Internal (Rust API, not registered as Tauri commands)

@@ -9,6 +9,7 @@ import type { CommitFile } from "../components/CommitMessageModal";
 import type { RollbackFile } from "../components/RollbackConfirm";
 import type { RollbackResult } from "../types";
 import type {
+  BranchCompletedRun,
   BranchOption,
   ChangeEntry,
   ChangeSet,
@@ -84,6 +85,13 @@ export interface Backend {
   prefs?: Record<string, unknown>;
   /** Command name -> error message, for the inline-state tests. */
   fail?: Record<string, string>;
+  /**
+   * CHG-FR-QLZO: the completed runs of a branch. Absent answers none, so a test
+   * that is not about the list renders no list.
+   */
+  completedRuns?:
+    | BranchCompletedRun[]
+    | ((branch: string) => BranchCompletedRun[] | Promise<BranchCompletedRun[]>);
   /** CHG-FR-UCRL: the active worktree's branch and its head state. */
   pullRequest?: {
     branch?: string | null;
@@ -178,6 +186,10 @@ export function makeBackend(invokeMock: Mock) {
             head: String(args?.head ?? HEAD_STATE.head),
             ...(config.pullRequest?.headState ?? {}),
           };
+        case "list_branch_completed_runs":
+          return typeof config.completedRuns === "function"
+            ? config.completedRuns(String(args?.branch ?? ""))
+            : (config.completedRuns ?? []);
         case "list_branch_changes":
           return typeof config.branchChanges === "function"
             ? config.branchChanges()
@@ -187,6 +199,27 @@ export function makeBackend(invokeMock: Mock) {
           return undefined;
       }
     });
+  };
+}
+
+/** GRD-FR-BHFP: one completed run of a branch, landed `hoursAgo` hours ago. */
+export function completedRun(
+  runId: string,
+  over: Partial<BranchCompletedRun> & { hoursAgo?: number } = {},
+): BranchCompletedRun {
+  const { hoursAgo = 2, ...rest } = over;
+  return {
+    runId,
+    title: `Run ${runId}`,
+    draftId: `d-${runId}`,
+    draftName: `Run ${runId}`,
+    kind: "draft",
+    landing: {
+      branch: "feature/x",
+      commit: "c0ffee".padEnd(40, "0"),
+      at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+    },
+    ...rest,
   };
 }
 

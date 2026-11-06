@@ -2,7 +2,9 @@
  * The shell's half of the Create a PR window
  * (`../../specifications/ui/CPR-create-pull-request.md`): which source it is
  * open for, and what the author typed while the token picker stood in its
- * place. A created pull request shows a toast (CPR-FR-ITWJ).
+ * place. A created pull request shows a toast (CPR-FR-ITWJ). What the author
+ * typed is kept per head branch in `state/pullRequestSessions`, so closing the
+ * window does not discard it (CPR-FR-SSQI).
  *
  * The window is a floating overlay of the main window, so opening it closes the
  * others (CPR-FR-IWDK) and every other opener closes it through `dismiss`. That
@@ -18,11 +20,13 @@ import type {
 } from "../components/CreatePullRequest/types";
 import { logInfo } from "../logging";
 import { showPullRequestCreated } from "../state/pullRequestToast";
+import type { PullRequestLinkResult } from "../components/CreatePullRequest/linking";
 import type { CreatedPullRequest } from "../types";
 
 interface PullRequestWindowState {
   source: PullRequestSource;
-  /** A counter, so two openings never share a key. */
+  /** A counter, so two openings never share a key. Each opening mounts the
+   *  window anew; the saved state of the head branch is what survives. */
   nonce: number;
   /** CPR-FR-IWDK: the control that opened the window, which gets focus back. */
   opener: HTMLElement | null;
@@ -73,7 +77,7 @@ export function usePullRequestWindow(deps: PullRequestWindowDeps) {
     });
   };
 
-  /** CPR-FR-SSQI: close the window; its input is discarded. */
+  /** CPR-FR-SSQI: close the window; its saved state is kept. */
   const close = () => {
     if (submittingRef.current) return;
     put(null);
@@ -117,11 +121,11 @@ export function usePullRequestWindow(deps: PullRequestWindowDeps) {
     });
   };
 
-  /** CPR-FR-ITWJ: the pull request exists. */
-  const created = (pr: CreatedPullRequest) => {
+  /** CPR-FR-ITWJ / CPR-FR-UXXF: the pull request exists, linked as `link` says. */
+  const created = (pr: CreatedPullRequest, link: PullRequestLinkResult | null = null) => {
     submittingRef.current = false;
     put(null);
-    showPullRequestCreated(pr);
+    showPullRequestCreated(pr, link);
   };
 
   // A change of the project closes the window. The toast of a created pull

@@ -137,9 +137,12 @@ fn creating_a_draft_settles_no_version_and_announces_none() {
         }
     });
 
-    let created =
-        create_draft(Some("spec".into()), None, app.handle().clone(), app.state::<ProjectState>())
-            .expect("created");
+    let created = tauri::async_runtime::block_on(create_draft(
+        Some("spec".into()),
+        None,
+        app.handle().clone(),
+    ))
+    .expect("created");
 
     let events = seen.lock().unwrap_or_else(|e| e.into_inner()).clone();
     assert_eq!(
@@ -574,4 +577,49 @@ fn the_prompt_path_survives_a_round_trip_through_the_record() {
     );
     std::fs::write(draft_dir(root, &id).unwrap().join(RECORD_FILE), legacy).unwrap();
     assert_eq!(read_record(root, &id).unwrap().prompt_path, None);
+}
+
+// DRS-FR-TMZX: a draft command that would write into an unconfirmed main
+// branch is refused with the typed refusal and writes nothing. A confirmation
+// of the branch lets it through.
+#[test]
+fn creating_a_draft_on_an_unconfirmed_main_branch_writes_nothing() {
+    use tauri::Manager;
+    let dir = project();
+    let repo = git2::Repository::init(dir.path()).unwrap();
+    {
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+    }
+    std::fs::write(dir.path().join("README.md"), "seed\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("README.md")).unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+    let signature = repo.signature().unwrap();
+    repo.commit(Some("HEAD"), &signature, &signature, "seed", &tree, &[]).unwrap();
+
+    let app = crate::tools::tests::mock_app();
+    app.manage(ProjectState::default());
+    app.manage(crate::git::write_guard::commands::WriteGuardState::offline());
+    app.manage(crate::global_settings::GlobalSettingsStore::in_memory());
+    app.manage(crate::github_tokens::GithubTokens::default());
+    app.state::<ProjectState>().set_root(dir.path().to_path_buf());
+    let create = || {
+        tauri::async_runtime::block_on(create_draft(
+            Some("spec".into()),
+            None,
+            app.handle().clone(),
+        ))
+    };
+
+    let refused = create().unwrap_err();
+    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(!dir.path().join(DRAFTS_REL).exists(), "nothing is written");
+
+    let session = app.state::<crate::git::write_guard::commands::WriteGuardState>().session();
+    let branch = crate::git::write_guard::branch_at(dir.path()).expect("a branch");
+    crate::git::write_guard::confirm_for_test(&session, dir.path(), &branch);
+    assert!(create().is_ok(), "the confirmed branch takes the draft");
 }

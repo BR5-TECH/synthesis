@@ -17,6 +17,8 @@ import { endVoiceForTeardown } from "../../voice/voiceController";
 import { flushDraftTemplate } from "../../state/draftTemplate";
 import { resetPanelReveals } from "../../state/panelReveal";
 import { clearAllComposers } from "../../state/discussionComposers";
+import { clearAllPullRequestSessions } from "../../state/pullRequestSessions";
+import { dismissMainBranchWrite } from "../../state/mainBranchWrite";
 import { clearAllDiscussionSessions } from "../../state/discussionSession";
 import { resetDiscussionFocus } from "../../state/discussionFocus";
 import { resetOwnerAvailability } from "../../state/ownerAvailability";
@@ -186,6 +188,9 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
    * nothing dropped here was unsaved.
    */
   const resetViewport = () => {
+    // MBW-FR-GYVD: a confirmation that waits names a branch of the outgoing
+    // content root, so it is answered as cancelled and its write never runs.
+    dismissMainBranchWrite();
     setTabs([DASHBOARD_TAB]);
     /**
      * TAB-FR-35: nothing about a pinned tab survives a project switch or the
@@ -284,6 +289,10 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
     // WTS-FR-BTMD: the shell that reads this unmounts with the project, and the
     // menu above it reads the state too (WTS-FR-ZHLG).
     clearActiveRootState();
+    // CPR-FR-ESXZ: the saved state of the Create a PR window names branches of
+    // the outgoing project, so a change of the project clears all of it. A
+    // worktree switch keeps it: the branches are the same.
+    clearAllPullRequestSessions();
     setProjectName("");
     setProjectPath("");
     setActiveWorktree(null);

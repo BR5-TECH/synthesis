@@ -46,6 +46,8 @@ pub fn save_run<R: tauri::Runtime>(
         merge: run.merge.is_some(),
         archived: run.archived,
         dispatched: run.dispatched,
+        pr_summary: run.is_pr_summary(),
+        pr_head: run.pr_summary.as_ref().map(|data| data.head.clone()).unwrap_or_default(),
     };
     match index.runs.iter_mut().find(|e| e.run_id == run.id) {
         Some(existing) => *existing = entry,

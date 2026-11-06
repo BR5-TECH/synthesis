@@ -11,6 +11,7 @@ import type {
 import { passBoundOf } from "../../types/graduation";
 import { blockerSentence } from "./blockers";
 import { failureStatement, isMergeRun } from "./merge";
+import { isPrSummaryRun, PR_SUMMARY_STAGES } from "./prSummary";
 import { totalTimeLimitHeadline, totalTimeLimitRestOf } from "./rest";
 import { SLOT_WAIT_HEADLINE } from "./slotWait";
 import type {
@@ -93,6 +94,8 @@ export const MERGE_STAGES_NOT_MERGED: ProgressStage[] = MERGE_STAGES.map((stage)
 
 /** GRU-FR-ZBMU / GRU-FR-YSTV: the stage descriptors this run's row reads. */
 export function stageDescriptorsFor(run: GraduationRun): ProgressStage[] {
+  // GRU-FR-AQKZ: a PR summary run has three stages and no review.
+  if (isPrSummaryRun(run)) return PR_SUMMARY_STAGES;
   if (!isMergeRun(run)) return GRADUATION_STAGES;
   const ended =
     hasReadableProgress(run.observability) &&
@@ -122,6 +125,8 @@ export function conditionOf(run: GraduationRun): StageCondition {
 
 /** GRU-FR-HKBD: what a run's own queue is called. */
 function queueWord(run: GraduationRun): string {
+  // GRU-FR-WEBM: a PR summary run waits in the queue of its head branch.
+  if (isPrSummaryRun(run)) return "head branch's queue";
   return run.directTarget && !run.streamId ? "worktree's queue" : "stream";
 }
 
@@ -150,14 +155,18 @@ export function conditionSentence(
             ? `Next in the ${queueWord(run)}`
             : typeof queuePosition === "number"
               ? `${queuePosition} ahead of it in the ${queueWord(run)}`
-              : run.directTarget
-                ? "Waiting for the worktree"
-                : "Waiting for the work stream";
+              : isPrSummaryRun(run)
+                ? "Waiting to start"
+                : run.directTarget
+                  ? "Waiting for the worktree"
+                  : "Waiting for the work stream";
         return run.autoStart
           ? place
           : `${place} · auto-start off, so it will not start on its own`;
       }
     case "working":
+      // GRU-FR-AQKZ: a PR summary run has one turn and shows no pass.
+      if (isPrSummaryRun(run)) return "Summarizing";
       // GRU-FR-YSTV: a merge run reconciles where a draft run works.
       return `${isMergeRun(run) ? "Reconciling" : "Working"} · pass ${passOf(run)} of ${passBoundOf(run)}`;
     case "reviewing":
@@ -298,6 +307,8 @@ export function passBudgetOf(run: GraduationRun): number | null {
 /** RPV-FR-09: the label the condition line carries. */
 export function iterationLabel(run: GraduationRun): string | null {
   if (!hasReadableProgress(run.observability)) return null;
+  // GRU-FR-AQKZ: a PR summary run shows no pass.
+  if (isPrSummaryRun(run)) return null;
   const pass = passOf(run);
   return pass > 1 ? `pass ${pass} of ${passBoundOf(run)}` : null;
 }
@@ -333,6 +344,20 @@ export function stageHistory(run: GraduationRun): ProgressTransition[] {
 
 /** RPV-FR-12: the one line a run that has ended carries. */
 export function outcomeStatement(run: GraduationRun): string | null {
+  // GRU-FR-DQSA: a PR summary run commits nothing; it ends with its result or
+  // its typed failure.
+  if (isPrSummaryRun(run)) {
+    switch (run.state) {
+      case "completed":
+        return "Wrote the title and the description of the pull request.";
+      case "discarded":
+        return "Discarded. Nothing was written.";
+      case "failed":
+        return run.failure?.message ?? "The run failed.";
+      default:
+        return null;
+    }
+  }
   if (run.merge) {
     switch (run.state) {
       case "completed":

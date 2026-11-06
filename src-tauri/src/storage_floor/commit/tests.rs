@@ -529,3 +529,49 @@ fn a_creation_records_no_deletion_it_is_paired_with() {
     assert!(f.head_holds("docs/plan.md"), "the author's deletion is theirs to commit");
     assert!(f.dirty().contains(&"docs/plan.md".to_string()), "and it still stands uncommitted");
 }
+
+// DRS-FR-MIYJ: a draft-event commit that would land on an unconfirmed main
+// branch is skipped with a warning, and the draft's files stay uncommitted. A
+// confirmation of the branch lets the next event commit.
+#[test]
+fn an_event_on_an_unconfirmed_main_branch_is_skipped_and_logged() {
+    let f = Fixture::new();
+    f.write(&format!(".synthesis/drafts/{ID}/draft.toml"), "id = \"one\"\n");
+    f.write(&format!(".synthesis/drafts/{ID}/files/Prompt.md"), "the prompt\n");
+    let session = crate::git::write_guard::WriteGuardSession::default();
+    let before = f.head_message();
+
+    let (reason, records) = commit_once_guarded(&f.root, ID, DraftEvent::Created, &session);
+    assert_eq!(reason, Some(Skip::MainBranchUnconfirmed.reason()));
+    assert_eq!(f.head_message(), before, "no commit is taken");
+    assert!(!f.dirty().is_empty(), "the draft's files stay as written");
+    let (level, message, fields) = records.first().expect("a record");
+    assert_eq!(*level, logging::LogLevel::Warn);
+    assert_eq!(message, "draft event commit skipped");
+    assert_eq!(fields["reason"], "main_branch_unconfirmed");
+
+    let branch = crate::git::write_guard::branch_at(f.root.path()).expect("a branch");
+    crate::git::write_guard::confirm_for_test(&session, f.root.path(), &branch);
+    let (reason, _) = commit_once_guarded(&f.root, ID, DraftEvent::Created, &session);
+    assert_eq!(reason, None, "the confirmed branch takes the commit");
+}
+
+// DRS-FR-MIYJ: a draft-event commit that would land on a branch GitHub
+// protects is skipped with a warning too.
+#[test]
+fn an_event_on_a_protected_branch_is_skipped_and_logged() {
+    let f = Fixture::new();
+    f.write(&format!(".synthesis/drafts/{ID}/draft.toml"), "id = \"one\"\n");
+    let session = crate::git::write_guard::WriteGuardSession::default();
+    let branch = crate::git::write_guard::branch_at(f.root.path()).expect("a branch");
+    crate::git::write_guard::confirm_for_test(&session, f.root.path(), &branch);
+    crate::git::write_guard::protect_for_test(&session, f.root.path(), &branch);
+    let before = f.head_message();
+
+    let (reason, records) = commit_once_guarded(&f.root, ID, DraftEvent::Created, &session);
+    assert_eq!(reason, Some(Skip::MainBranchProtected.reason()));
+    assert_eq!(f.head_message(), before);
+    let (level, _, fields) = records.first().expect("a record");
+    assert_eq!(*level, logging::LogLevel::Warn);
+    assert_eq!(fields["reason"], "main_branch_protected");
+}

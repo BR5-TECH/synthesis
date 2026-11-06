@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { Icon } from "./icons";
 import { worktreeIdentityChanged } from "../state/graduation";
+import { useInlineWriteGuard } from "./MainBranchWrite";
 import type { CommitOutcome } from "../types";
 
 /** One entry of the commit set, as the Changes panel hands it over. */
@@ -226,7 +227,18 @@ export function CommitMessageModal({
 
   // CMW-FR-05: the window's only client-side validation. Whether the commit can
   // actually be created is the backend's decision (GTC-FR-20).
-  const canCommit = message.trim() !== "" && !committing;
+  // CMW-FR-RMCO: the guard of the active worktree's branch is read when the
+  // window opens. A merge message writes nothing here, so it reads none.
+  const writeGuard = useInlineWriteGuard({
+    write: "commit",
+    enabled: !streamMerge,
+    onCancel: onClose,
+    // MBW-FR-WCBQ: the confirm button goes with the section, so the field the
+    // author writes in takes focus.
+    onConfirmed: () => editorRef.current?.focus(),
+  });
+  const submitRef = useRef<() => Promise<void>>(async () => {});
+  const canCommit = message.trim() !== "" && !committing && !writeGuard.blocked;
 
   const submit = async () => {
     if (message.trim() === "" || committing) return;
@@ -250,6 +262,12 @@ export function CommitMessageModal({
       // The parent unmounts the window on success, so nothing here restores it.
       onCommitted(outcome);
     } catch (e) {
+      // MBW-FR-YSMC: a refusal of the main branch write check shows the section
+      // with the guard it carries, and a confirm commits once more.
+      if (writeGuard.adoptRefusal(e, () => void submitRef.current())) {
+        setCommitting(false);
+        return;
+      }
       // CMW-FR-08: the window stays open with the message intact and the file
       // set unchanged, so the author fixes the cause and retries. A merge never
       // reaches here — its refusal is the opening surface's (WSS-FR-NPXC).
@@ -262,6 +280,8 @@ export function CommitMessageModal({
       editorRef.current?.focus();
     }
   };
+
+  submitRef.current = submit;
 
   const untrackedCount = committing_set.filter((f) => f.untracked).length;
   const hiddenTracked = hidden.filter((f) => !f.untracked).length;
@@ -429,6 +449,8 @@ export function CommitMessageModal({
             </button>
           </div>
         ) : (
+        <>
+        {writeGuard.section}
         <div className="modal__actions">
           <button className="btn btn--ghost" disabled={committing} onClick={onClose}>
             Cancel
@@ -436,12 +458,14 @@ export function CommitMessageModal({
           <button
             className="btn btn--primary"
             disabled={!canCommit}
+            aria-describedby={writeGuard.describedBy}
             onClick={() => void submit()}
           >
             <Icon.Commit size={12} />{" "}
             {streamMerge ? "Merge" : committing ? "Committing…" : "Commit"}
           </button>
         </div>
+        </>
         )}
       </div>
     </div>

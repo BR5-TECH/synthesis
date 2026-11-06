@@ -12,6 +12,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 
 import { CreatePullRequestWindow } from "./CreatePullRequestWindow";
+import type { PullRequestLinkResult } from "./CreatePullRequest/linking";
 import type {
   PullRequestInput,
   PullRequestResume,
@@ -19,6 +20,10 @@ import type {
 } from "./CreatePullRequest/types";
 import type { CreatedPullRequest, GitBranch, PullRequestHeadState } from "../types";
 import { resetLogBufferForTest } from "../logging";
+import {
+  pullRequestWindowRead,
+  resetCreatePullRequestStores,
+} from "../test/createPullRequestFixtures";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -56,6 +61,7 @@ const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd)
 
 beforeEach(() => {
   resetLogBufferForTest();
+  resetCreatePullRequestStores();
   headState = async () => READY;
   create = async () => ({ number: 42, url: "https://github.com/acme/platform/pull/42" });
   invokeMock.mockReset();
@@ -69,8 +75,11 @@ beforeEach(() => {
         return create(args);
       case "append_log_records":
         return undefined;
-      default:
+      default: {
+        const read = pullRequestWindowRead(cmd);
+        if (read) return read.answer;
         return Promise.reject(new Error(`unexpected command ${cmd}`));
+      }
     }
   });
 });
@@ -79,7 +88,7 @@ afterEach(cleanup);
 
 interface Handlers {
   onClose: Mock<() => void>;
-  onCreated: Mock<(created: CreatedPullRequest) => void>;
+  onCreated: Mock<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>;
   onRequestToken: Mock<(input: PullRequestInput) => void>;
   onOpenGlobalSettings: Mock<() => void>;
   onSubmittingChange: Mock<(submitting: boolean) => void>;
@@ -88,7 +97,7 @@ interface Handlers {
 function mount(resume: PullRequestResume | null = null, source = SOURCE): Handlers {
   const handlers: Handlers = {
     onClose: vi.fn<() => void>(),
-    onCreated: vi.fn<(created: CreatedPullRequest) => void>(),
+    onCreated: vi.fn<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>(),
     onRequestToken: vi.fn<(input: PullRequestInput) => void>(),
     onOpenGlobalSettings: vi.fn<() => void>(),
     onSubmittingChange: vi.fn<(submitting: boolean) => void>(),
@@ -102,6 +111,9 @@ const submit = () => screen.getByTestId("create-pr-submit");
 const ready = async () => {
   await waitFor(() => expect(screen.queryByTestId("create-pr-loading")).toBeNull());
   await screen.findByRole("option", { name: "develop" });
+  await waitFor(() =>
+    expect(screen.getByTestId("create-pr-tasks")).not.toHaveTextContent("Reading the tasks"),
+  );
 };
 
 describe("the window's contents (CPR-FR-JOIG, CPR-FR-QVYZ, CPR-FR-FZHF)", () => {
@@ -264,7 +276,7 @@ describe("submitting (CPR-FR-KMHY, CPR-FR-XMRL, CPR-FR-ITWJ)", () => {
     await waitFor(() => expect(h.onCreated).toHaveBeenCalledWith({
       number: 42,
       url: "https://github.com/acme/platform/pull/42",
-    }));
+    }, null));
     expect(calls("create_pull_request")[0][1]).toEqual({
       title: "Fix the scroll",
       body: "Why and how",
@@ -501,7 +513,9 @@ describe("focus (CPR-FR-IWDK)", () => {
     onSubmittingChange.mockClear();
     await act(async () => {
       release({ number: 1, url: "https://github.com/a/b/pull/1" });
-      await Promise.resolve();
+      // One macrotask runs after every continuation the creation queued, so
+      // the window has done all it will do. This waits for an order, not a time.
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(onCreated).not.toHaveBeenCalled();
     expect(onSubmittingChange).not.toHaveBeenCalled();

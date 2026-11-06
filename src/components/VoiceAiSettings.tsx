@@ -104,11 +104,14 @@ function PushToTalkSettings() {
   const [hotkey, setHotkey] = useState(DEFAULT_VOICE_HOTKEY);
   const [capturing, setCapturing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // A change that the author makes before the stored values arrive wins: the
+  // late read must not put the old values back on the screen.
+  const changed = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     void loadAppPreferences().then((prefs) => {
-      if (cancelled) return;
+      if (cancelled || changed.current) return;
       setBehaviour(prefs.voiceHotkeyBehaviour ?? "hold");
       setHotkey(prefs.voiceHotkey ?? DEFAULT_VOICE_HOTKEY);
     });
@@ -118,11 +121,13 @@ function PushToTalkSettings() {
   }, []);
 
   const saveHotkey = (next: string) => {
+    changed.current = true;
     setHotkey(next);
     void patchAppPreferences({ voiceHotkey: next });
   };
 
   const chooseBehaviour = (next: VoiceHotkeyBehaviour) => {
+    changed.current = true;
     setBehaviour(next);
     // VAI-FR-WOCD: a stored chord that holds Cmd cannot serve Hold.
     if (hotkeyProblem(hotkey, next) === "holds_cmd") {

@@ -8,6 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ActiveRootState,
+  BranchWriteGuard,
   CommitOutcome,
   RollbackOutcome,
   BranchOption,
@@ -26,6 +27,8 @@ import type {
   CreatedPullRequest,
   PullRequestDetail,
   PullRequestHeadState,
+  PullRequestIssueRef,
+  PullRequestLinkOutcome,
   PullRequestListState,
   PullRequestSummary,
   PullRequestTimeline,
@@ -178,6 +181,14 @@ export const createPullRequest = (
     head,
     draft,
   });
+
+/**
+ * GTC-FR-ZHVO: link pull request `number` to each of `issues` by a closing
+ * keyword in its description. A failed update is an outcome with every issue
+ * in `failed`, not a rejection.
+ */
+export const linkPullRequestIssues = (number: number, issues: PullRequestIssueRef[]) =>
+  invoke<PullRequestLinkOutcome>("link_pull_request_issues", { number, issues });
 
 /**
  * GTC-FR-NEIW: what stands between a local branch and a pull request for it.
@@ -355,3 +366,16 @@ export const createWorktree = (branch: string, path: string) =>
  */
 export const refreshWorktreesAndBranches = () =>
   invoke<RefreshOutcome>("refresh_worktrees_and_branches");
+
+// --- Main branch write guard (git/write_guard.rs) -------------------------
+
+/**
+ * GTC-FR-TTSV: whether `branch` is a main branch and whether the author
+ * confirmed a write to it. `null` reads the branch of the active worktree.
+ */
+export const getBranchWriteGuard = (branch: string | null, refresh: boolean) =>
+  invoke<BranchWriteGuard>("get_branch_write_guard", { branch, refresh });
+
+/** GTC-FR-YWRZ: record the author's confirmation for the session. */
+export const confirmMainBranchWrite = (branch: string) =>
+  invoke<BranchWriteGuard>("confirm_main_branch_write", { branch });

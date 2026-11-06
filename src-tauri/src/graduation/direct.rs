@@ -52,13 +52,18 @@ pub fn preflight_direct_graduation<R: tauri::Runtime>(
 }
 
 /// GSU-FR-PVFP: start a direct run, or start nothing.
-#[tauri::command]
+// GRD-FR-WJLO: the guard read can reach GitHub, so not on the main thread.
+#[tauri::command(async)]
 pub fn start_direct_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
     expected_worktree: String,
     expected_branch: String,
 ) -> Result<GraduationRun, String> {
+    // GRD-FR-WJLO: the guard reads can reach GitHub, so they run before the
+    // write lock.
+    let pinned = Some((expected_worktree.as_str(), expected_branch.as_str()));
+    super::write_check::prime_start_write(&app, &queue::project_key(&app), pinned);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
@@ -96,6 +101,20 @@ pub fn start_direct_graduation<R: tauri::Runtime>(
     let preflight = read_preflight(&app).map_err(&refuse)?;
     check_preflight(&preflight, &expected_worktree, &expected_branch).map_err(&refuse)?;
     let branch = preflight.branch.clone().unwrap_or_default();
+    // GRD-FR-WJLO: the active branch and the pinned branch, before anything is
+    // created.
+    let pinned = DirectTarget {
+        worktree_path: preflight.worktree_path.clone(),
+        worktree_name: preflight.worktree_name.clone(),
+        branch: branch.clone(),
+    };
+    super::write_check::require_start_write(
+        &app,
+        &project_key,
+        Some(&pinned),
+        "start_direct_graduation",
+    )
+    .map_err(&refuse)?;
 
     image_preflight(&app).map_err(&refuse)?;
 
@@ -106,11 +125,7 @@ pub fn start_direct_graduation<R: tauri::Runtime>(
         prompt_checksum: crate::fs::sha256_bytes(record.content.as_bytes()),
         captured_at: crate::notes::now_rfc3339(),
     };
-    let target = DirectTarget {
-        worktree_path: preflight.worktree_path.clone(),
-        worktree_name: preflight.worktree_name.clone(),
-        branch,
-    };
+    let target = pinned;
     let (stream_id, stream_name) = preflight
         .stream
         .as_ref()

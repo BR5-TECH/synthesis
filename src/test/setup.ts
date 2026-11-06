@@ -174,6 +174,11 @@ beforeEach(async () => {
   resetLiveBubbleForTest();
   resetSpeechPostsForTest();
   resetAppPreferencesCache();
+  // MBW-main-branch-write.md: every guard read answers a branch that is not a
+  // main branch, so a test that is not about the confirmation never sees one.
+  // A test of the confirmation installs reads of its own.
+  const { resetMainBranchWriteForTest } = await import("../state/mainBranchWrite");
+  resetMainBranchWriteForTest();
 });
 
 /**

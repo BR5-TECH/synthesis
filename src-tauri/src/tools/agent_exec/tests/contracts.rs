@@ -659,3 +659,69 @@ fn eac_ts53_a_bundle_under_either_root_is_accepted_and_one_outside_both_is_not()
         std::fs::remove_dir_all(&inside).ok();
     }
 }
+
+/// EAC-FR-ZWYE: the `review_verdict` document admits the optional run summary
+/// on a `ready` verdict alone, with a closed field set of a non-blank title and
+/// a non-blank description.
+#[test]
+fn the_review_document_admits_a_run_summary_on_a_ready_verdict_alone() {
+    let review = ResultContract::ReviewVerdict.schema_value();
+    let ready = |summary: serde_json::Value| json!({ "verdict": "ready", "rationale": "done", "findings": [], "summary": summary });
+    let summary = json!({ "title": "Add the panel", "description": "## What\n\nThe panel." });
+    assert!(schema_admits(review, &ready(summary.clone())), "a ready verdict with a summary");
+    assert!(
+        schema_admits(review, &json!({ "verdict": "ready", "rationale": "r", "findings": [] })),
+        "the summary is optional",
+    );
+    let revise = json!({ "verdict": "revise", "rationale": "r", "summary": summary,
+        "findings": [{ "severity": "major", "description": "d", "correction": "c" }] });
+    assert!(!schema_admits(review, &revise), "a revise verdict carries no summary");
+    for (case, value) in [
+        ("a blank title", json!({ "title": " ", "description": "d" })),
+        ("a blank description", json!({ "title": "t", "description": "\n" })),
+        ("no title", json!({ "description": "d" })),
+        ("no description", json!({ "title": "t" })),
+        (
+            "a key the summary does not define",
+            json!({ "title": "t", "description": "d", "body": "b" }),
+        ),
+        ("a summary that is text", json!("t")),
+    ] {
+        assert!(
+            !schema_admits(review, &ready(value.clone())),
+            "review_verdict refuses {case}: {value}"
+        );
+    }
+    // The validation turn's document is unchanged: it defines no summary.
+    let graduation = ResultContract::GraduationVerdict.schema_value();
+    assert!(!schema_admits(graduation, &ready(summary)), "graduation_verdict defines no summary");
+}
+
+/// EAC-FR-43, EAC-FR-ESXZ: `pull_request_summary` is a member of the closed
+/// set, and its document admits exactly one object of a non-blank title and a
+/// non-blank description, with a closed field set and no escalation.
+#[test]
+fn the_pull_request_summary_document_admits_one_title_and_one_description() {
+    let named: ResultContract = serde_json::from_str("\"pull_request_summary\"").expect("decodes");
+    assert_eq!(named, ResultContract::PullRequestSummary);
+    assert_eq!(named.as_str(), "pull_request_summary");
+    let schema = named.schema_value();
+    assert!(schema.is_object(), "the document parses");
+    assert_eq!(
+        schema,
+        &serde_json::from_str::<serde_json::Value>(protocol::PULL_REQUEST_SUMMARY_SCHEMA).unwrap(),
+    );
+    assert!(schema_admits(schema, &json!({ "title": "Add the panel", "description": "Adds it." })));
+    let request =
+        json!({ "escalate_to_user": { "reason": "r", "questions": [{ "question": "q" }] } });
+    for (case, value) in [
+        ("a blank title", json!({ "title": "", "description": "d" })),
+        ("a blank description", json!({ "title": "t", "description": "  " })),
+        ("no description", json!({ "title": "t" })),
+        ("a key it does not define", json!({ "title": "t", "description": "d", "summary": "s" })),
+        ("an escalation", request),
+        ("a list", json!([{ "title": "t", "description": "d" }])),
+    ] {
+        assert!(!schema_admits(schema, &value), "pull_request_summary refuses {case}: {value}");
+    }
+}

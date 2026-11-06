@@ -308,6 +308,64 @@
 }
 .changes-note[data-tone="error"] { color: var(--danger); }
 
+/* CHG-FR-QLZO / CHG-FR-KIPM: the read-only Completed runs list below the
+   footer. It never grows past five rows: the rows have one fixed height, so
+   "five rows" is a length, and the list scrolls inside itself. The tree above
+   keeps its height. No row is a control, so a row shows no pointer and no
+   hover. */
+.changes-completed {
+  flex: none;
+  border-top: 1px solid var(--border-1);
+  padding: var(--sp-1) 0 var(--sp-2);
+  --changes-completed-row-h: 22px;
+}
+.changes-completed__heading {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-3);
+}
+.changes-completed__count { font-variant-numeric: tabular-nums; }
+.changes-completed__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: calc(5 * var(--changes-completed-row-h));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.changes-completed__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+  height: var(--changes-completed-row-h);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  cursor: default;
+}
+.changes-completed__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-1);
+}
+.changes-completed__meta {
+  flex: none;
+  white-space: nowrap;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.changes-completed__error {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  color: var(--danger);
+}
+
 /* ---------- COMMIT MESSAGE WINDOW (CMW-commit-message.md) ---------- */
 /* CMW-FR-06: the read-only file set. Scrolls inside its own frame so a commit
    of several hundred files never grows the window past the screen. */

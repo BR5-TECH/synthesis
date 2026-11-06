@@ -33,6 +33,8 @@ pub(super) struct FakeGithub {
     requests: Mutex<Vec<(String, String)>>,
     posts: Mutex<Vec<(String, String, Value)>>,
     post_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
+    patches: Mutex<Vec<(String, String, Value)>>,
+    patch_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
 }
 
 impl FakeGithub {
@@ -67,6 +69,16 @@ impl FakeGithub {
         self.posts.lock().unwrap().clone()
     }
 
+    /// Answer the next updates with `answer`.
+    pub(super) fn answer_patch(&self, answer: Result<Value, GithubWriteFailure>) {
+        *self.patch_answer.lock().unwrap() = Some(answer);
+    }
+
+    /// Every `(secret, path, body)` this fake was asked to update, in order.
+    pub(super) fn patches(&self) -> Vec<(String, String, Value)> {
+        self.patches.lock().unwrap().clone()
+    }
+
     pub(super) fn paths(&self) -> Vec<String> {
         self.requests().into_iter().map(|(_, path)| path).collect()
     }
@@ -81,6 +93,16 @@ impl GithubPullRequests for FakeGithub {
     ) -> Result<Value, GithubWriteFailure> {
         self.posts.lock().unwrap().push((secret.to_string(), path.to_string(), body.clone()));
         self.post_answer.lock().unwrap().clone().unwrap_or(Err(GithubWriteFailure::Unreachable))
+    }
+
+    fn patch_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        self.patches.lock().unwrap().push((secret.to_string(), path.to_string(), body.clone()));
+        self.patch_answer.lock().unwrap().clone().unwrap_or(Err(GithubWriteFailure::Unreachable))
     }
 
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {

@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::fs;
 use crate::project::ProjectState;
@@ -197,18 +197,46 @@ pub fn load_artifact_contents_by_id(
 /// (PST-FR-31), which is also why a save that fails moves nothing: it changed no
 /// file.
 #[tauri::command]
-pub fn save_artifact_contents(
-    app: tauri::AppHandle,
+pub async fn save_artifact_contents<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     id: String,
     body: String,
-    project: State<'_, ProjectState>,
-    tracker: State<'_, ContentTracker>,
-) -> Result<SaveResult, String> {
-    let root = project.require_root()?;
+) -> Result<SaveResult, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    // The check can read GitHub, so the command runs off the main thread.
+    crate::git::write_guard::off_main::run_write(app, "save_artifact_contents", move |app| {
+        save_artifact_contents_blocking(&app, &id, &body)
+    })
+    .await
+}
+
+/// The save of `save_artifact_contents`, on the calling thread.
+fn save_artifact_contents_blocking<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    id: &str,
+    body: &str,
+) -> Result<SaveResult, String>
+where
+    tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
+{
+    let root = crate::git::write_guard::off_main::project_root(app)?;
+    let tracker = app
+        .try_state::<ContentTracker>()
+        .ok_or_else(|| "content tracker unavailable".to_string())?;
     // PST-FR-26 / PST-FR-27, as in the load above. Checked before the write so
     // a refusal leaves the file and any link at that path untouched.
-    crate::library::ensure_inside_root(&app, &root, "save_artifact_contents", &id)?;
-    let outcome = save_validated_artifact(&root, &id, &body, &tracker);
+    crate::library::ensure_inside_root(app, &root, "save_artifact_contents", id)?;
+    // PST-FR-ZHVE: the main branch write check, before the write.
+    // The check logs its refusal at WARN, as an expected outcome.
+    crate::git::write_guard::commands::require_active_branch_write(
+        app,
+        &root,
+        "save_artifact_contents",
+    )?;
+    let _sequence = crate::git::write_guard::off_main::in_sequence();
+    let outcome = save_validated_artifact(&root, id, body, &tracker);
     if let Err(reason) = &outcome {
         // A refused write is the one thing about a save a reader will come to
         // the Logs panel for, and the PST-FR-28 refusal is invisible otherwise:
@@ -216,12 +244,12 @@ pub fn save_artifact_contents(
         // path and the refusal's summary line are structural — neither carries
         // the body, which is user content.
         crate::logging::log_error(
-            &app,
+            app,
             &crate::logging::BUFFER,
             &[crate::logging::Domain::Backend],
             "artifact save refused",
             crate::log_fields! {
-                "artifact" => id.clone(),
+                "artifact" => id.to_string(),
                 "reason" => reason.lines().next().unwrap_or("").to_string(),
             },
         );
@@ -460,7 +488,7 @@ mod tests {
         // Compile-time guard: renaming/removing either command without updating
         // `generate_handler!` / `COMMAND_NAMES` fails to compile here.
         let _ = load_artifact_contents_by_id;
-        let _ = save_artifact_contents;
+        let _ = save_artifact_contents::<tauri::Wry>;
     }
 
     /// PST-FR-17 / PSS-FR-12: several saves leave the project-local store

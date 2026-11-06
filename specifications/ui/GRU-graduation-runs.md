@@ -82,6 +82,10 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 47. **GRU-FR-CLFA** **Discard run** and **Revert** ask a confirmation first where runs are queued behind the run. It names each of those runs, and states that the operation removes them and that their drafts return to the active drafts, not graduated. Where no run is queued behind the run, the operation is invoked at once.
 48. **GRU-FR-CASZ** The rail, the selected-run region and the draft tabs render from the backend after `"graduation queue changed"`. A removed run leaves the rail and raises no notification. Where the author had it selected, the region shows its empty state. An open tab of its draft loses the run-state tag and is editable.
 
+49. **GRU-FR-WEBM** A PR summary run (per `../core/GRD-graduation.md` GRD-FR-KAKU) is listed in the rail with every other run, under its title `Summarize <head>`. Its provenance line names the head branch, the base branch, and the mode, `from the diff` or `from run summaries`.
+50. **GRU-FR-AQKZ** The stage row of a PR summary run holds three stages: Queued, Summarizing, and Done. It shows no pass, no loop, and no change set.
+51. **GRU-FR-DQSA** A PR summary run in `completed` renders its result from `pr_summary.result`: the title on one line and the description rendered as Markdown with inert links. A PR summary run in `failed` states the typed failure. It renders no result in any other state.
+52. **GRU-FR-LJUY** A PR summary run offers **Pause**, **Continue**, **Discard run**, and **Archive** on the terms of every run. It offers no **Restart** and no **Revert**, and no control that applies its result to a pull request, which the Create a PR window does (per `CPR-create-pull-request.md` CPR-FR-GYVD).
 ## Wireframes
 
 ```

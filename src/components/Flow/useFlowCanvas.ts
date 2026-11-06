@@ -51,6 +51,7 @@ import {
   type Resize,
   type View } from "./geometry";
 import { createFrames } from "./frames";
+import { primeEditGate } from "../../state/mainBranchWrite";
 
 export interface FlowCanvasProps {
   /**
@@ -81,6 +82,8 @@ export function useFlowCanvas({
   onOpenArtifact }: FlowCanvasProps) {
   useSyncExternalStore(flows.subscribe, flows.getVersion);
   const { artifacts, referenceable, loaded: treeLoaded } = useProjectArtifacts();
+  // EDT-FR-UPNU: the guard of the file's branch is read when the flow opens.
+  useEffect(() => primeEditGate(), [flowId]);
 
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);

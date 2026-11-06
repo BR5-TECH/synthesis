@@ -16,6 +16,8 @@ import { DraftSessionStore } from "../state/draftSessions";
 import { followTargetForTab } from "../state/selectionFollowsTab";
 import { resetPanelReveals } from "../state/panelReveal";
 import { makeStore } from "../test/specMapRender";
+import { currentMainBranchWrite, requestMainBranchWrite } from "../state/mainBranchWrite";
+import { mainGuard } from "../test/mainBranchWriteFixtures";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -191,6 +193,30 @@ describe("the map session's lifetime (SMP)", () => {
     createLifecycleActions(deps).resetViewport();
     expect(store.snapshot().status).toBe("idle");
     expect(store.snapshot().index).toBeNull();
+  });
+});
+
+describe("a confirmation that waits over a switch (MBW-FR-GYVD)", () => {
+  it("MBW-FR-GYVD, MBW-FR-XBJS: the viewport reset of a project or worktree switch answers a waiting confirmation as cancelled", async () => {
+    const answer = requestMainBranchWrite({
+      write: "commit",
+      branch: null,
+      guard: mainGuard(),
+      readError: null,
+    });
+    const real: Record<string, unknown> = {
+      specMap: makeStore().store,
+      searches: new SearchSessionStore(),
+      sessions: new EditSessionStore(),
+      flows: new FlowSessionStore(),
+      drafts: new DraftSessionStore(),
+    };
+    const deps = new Proxy(real, {
+      get: (target, key: string) => (key in target ? target[key] : vi.fn()),
+    }) as unknown as LifecycleDeps;
+    createLifecycleActions(deps).resetViewport();
+    await expect(answer).resolves.toBe(false);
+    expect(currentMainBranchWrite()).toBeNull();
   });
 });
 

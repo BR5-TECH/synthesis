@@ -86,6 +86,14 @@ pub fn catalog_guard_main() -> Option<i32> {
     tools::agent_exec::sandbox::catalog_guard::main_from_args()
 }
 
+/// GTC-FR-YWRZ / DRS-FR-MIYJ: the managed write guard, with its session
+/// installed for the background writers.
+fn main_branch_write_guard() -> git::write_guard::commands::WriteGuardState {
+    let state = git::write_guard::commands::WriteGuardState::default();
+    git::write_guard::install(state.session());
+    state
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // EMB-FR-KUFM: before any other thread starts.
@@ -103,6 +111,10 @@ pub fn run() {
         // The registry of descriptions is NOT here — it lives in the
         // user-global store above (GSS-FR-22).
         .manage(github_tokens::GithubTokens::default())
+        // GTC-FR-TTSV / GTC-FR-YWRZ: the session memory of the main branch
+        // write guard. The background draft-event committer reads the same
+        // memory (DRS-FR-MIYJ).
+        .manage(main_branch_write_guard())
         // AIC-FR-03 / AIC-FR-04: the filesystem probe detection and
         // verification use, and the bounded child-process runner that asks a
         // binary what it is. The registry is NOT here — it lives in the
@@ -418,6 +430,8 @@ pub fn run() {
             streams::get_work_stream_uncommitted_paths,
             graduation::start_graduation,
             graduation::start_direct_graduation,
+            graduation::start_pull_request_summary,
+            graduation::list_branch_completed_runs,
             graduation::preflight_direct_graduation,
             graduation::list_graduation_queue,
             graduation::get_graduation_run,
@@ -515,7 +529,10 @@ pub fn run() {
             git::delete_branch,
             git::list_pull_requests,
             git::create_pull_request,
+            git::link_pull_request_issues,
             git::get_pull_request_head_state,
+            git::write_guard::commands::get_branch_write_guard,
+            git::write_guard::commands::confirm_main_branch_write,
             git::get_pull_request_detail,
             git::list_pull_request_timeline,
             git::get_working_tree_status,

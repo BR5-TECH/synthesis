@@ -645,12 +645,47 @@ pub struct GraduationRun {
     /// alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge: Option<GraduationMergeData>,
+    /// GRD-FR-KAKU: what a PR summary run asks for and records. Present on a
+    /// PR summary run alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_summary: Option<PrSummaryData>,
+    /// GRD-FR-UUGP: the run summary of the `ready` review a completed draft run
+    /// ended on. Absent on every other run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_summary: Option<RunSummary>,
+    /// GRD-FR-PXQN: where the work of this completed run stands on a branch.
+    /// Empty until the run's work is on one.
+    #[serde(default)]
+    pub landings: Vec<Landing>,
+    /// GRD-FR-RVXK: one entry per revert of this run, with the last revert
+    /// commit on the branch of the revert.
+    #[serde(default)]
+    pub reverts: Vec<Landing>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 fn yes() -> bool {
     true
+}
+
+/// GRD-FR-BNTC / GRD-FR-CCHK: whether a run in `state` holds its queue.
+///
+/// A `queued` run holds it when it was dispatched before. A `failed` PR summary
+/// run holds it no more, so a new one for the same head can start at once.
+pub fn holds_queue_in(state: GraduationRunState, dispatched: bool, pr_summary: bool) -> bool {
+    if pr_summary && state == GraduationRunState::Failed {
+        return false;
+    }
+    state.holds_queue() || (state == GraduationRunState::Queued && dispatched)
+}
+
+/// GRD-FR-KKKN / GRD-FR-CCHK: whether a run in `state` holds a project slot.
+pub fn holds_slot_in(state: GraduationRunState, dispatched: bool, pr_summary: bool) -> bool {
+    if pr_summary && state == GraduationRunState::Failed {
+        return false;
+    }
+    state.holds_slot() || (state == GraduationRunState::Queued && dispatched)
 }
 
 /// GRD-FR-ZVNO: the queue key for a stream id and a direct target.
@@ -769,6 +804,10 @@ impl GraduationRun {
             restarted_from_run_id: None,
             failure: None,
             merge: None,
+            pr_summary: None,
+            run_summary: None,
+            landings: Vec::new(),
+            reverts: Vec::new(),
             created_at: updated_at.to_string(),
             updated_at: updated_at.to_string(),
         }
@@ -778,13 +817,16 @@ impl GraduationRun {
     ///
     /// A `queued` run holds it when it was dispatched before and waits to be
     /// dispatched again, which is what Continue and an answer leave it as.
+    ///
+    /// GRD-FR-CCHK: a `failed` PR summary run holds neither its queue nor a
+    /// project slot.
     pub fn holds_queue(&self) -> bool {
-        self.state.holds_queue() || (self.state == GraduationRunState::Queued && self.dispatched)
+        holds_queue_in(self.state, self.dispatched, self.is_pr_summary())
     }
 
     /// GRD-FR-KKKN: whether this run is holding a project slot right now.
     pub fn holds_slot(&self) -> bool {
-        self.state.holds_slot() || (self.state == GraduationRunState::Queued && self.dispatched)
+        holds_slot_in(self.state, self.dispatched, self.is_pr_summary())
     }
 
     /// GRD-FR-BSNI: whether this run works directly in a worktree.
@@ -794,8 +836,13 @@ impl GraduationRun {
 
     /// GRD-FR-ZVNO: the key of the queue this run waits in and the lock it
     /// takes: the stream's id where it has a stream, else its worktree's.
+    ///
+    /// GRD-FR-HMDW: a PR summary run waits in the queue `pr:<head>`.
     pub fn queue_key(&self) -> String {
-        queue_key_of(&self.stream_id, self.direct_target.as_ref())
+        match self.pr_summary.as_ref() {
+            Some(data) => pr_queue_key(&data.head),
+            None => queue_key_of(&self.stream_id, self.direct_target.as_ref()),
+        }
     }
 
     /// GRD-FR-OYPY: whether this is a direct run that was dispatched and has

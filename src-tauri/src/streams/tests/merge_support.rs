@@ -312,6 +312,10 @@ pub(super) fn save_plain_run(
         restarted_from_run_id: None,
         failure: None,
         merge: None,
+        pr_summary: None,
+        run_summary: None,
+        landings: Vec::new(),
+        reverts: Vec::new(),
         created_at: "t0".into(),
         updated_at: "t0".into(),
     };

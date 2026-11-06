@@ -1,0 +1,43 @@
+/* MBW-main-branch-write.md: the confirmation, the hard block, and the inline
+   section that stands above an overlay's action row and reads as a warning. */
+.main-branch-write { width: min(520px, calc(100vw - 32px)); }
+.main-branch-write__branch {
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+}
+.main-branch-write__text { margin: 0 0 8px; }
+.main-branch-write__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--log-warn);
+}
+.main-branch-write__notice > span { flex: 1; min-width: 0; }
+.main-branch-write__error { color: var(--danger); margin: 8px 0 0; }
+.main-branch-write-section {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+}
+.main-branch-write-section .main-branch-write__notice {
+  border: none;
+  padding: 0;
+  background: none;
+}
+.main-branch-write-section__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+/* MBW-FR-URIL: a section that stands between the body and the action row of a
+   modal is inset as the content of the body is. */
+.modal > .main-branch-write-section { margin: 0 18px 14px; }

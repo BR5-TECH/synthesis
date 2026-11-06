@@ -79,18 +79,18 @@ pub struct CliConfigMount {
     pub container_target: &'static str,
 }
 
-/// AIC-FR-10: the closed set of turn kinds an override may be held against.
+/// AIC-FR-10 / AIC-FR-TGJV: the closed set of turn kinds an override may be
+/// held against: `work`, `review`, `semantic_rebase` and `pr_maintenance`.
 ///
-/// The same four identifiers `crate::tools::agent_exec::TurnKind` names, which
+/// They are the selection keys of `crate::tools::agent_exec::TurnKind`, which
 /// is where a turn's kind is decided; this module only holds a selection against
 /// one.
-/// AIC-FR-10: the closed set an override may be held against.
 ///
 /// AIC-FR-QVWX: an override stored under a kind outside this set is dropped on
 /// read, exactly as AIC-FR-11 drops a model the refreshed list no longer
 /// offers, so a record written by an older build falls back rather than
 /// resolving a kind this build cannot dispatch.
-pub(super) const TURN_KINDS: &[&str] = &["work", "review", "semantic_rebase"];
+pub(super) const TURN_KINDS: &[&str] = &["work", "review", "semantic_rebase", "pr_maintenance"];
 
 /// AIC-FR-QVWX: the overrides whose turn kind this build still offers.
 pub(super) fn offered_kinds_only(

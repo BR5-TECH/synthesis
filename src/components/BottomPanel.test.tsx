@@ -14,6 +14,9 @@ import { listen } from "@tauri-apps/api/event";
 
 import { BottomPanel } from "./BottomPanel";
 import { COALESCE_MS } from "../state/graduation";
+import { makePrSummaryRun, makeQueue, makeRun } from "../test/graduationFixtures";
+import { otherCommand } from "../test/invokeMocks";
+import { resetLogBufferForTest } from "../logging";
 
 // The History surface scopes to the active artifact entity (distinct from the
 // Notes panel's override), and SNV-FR-47: the panel names where it is and
@@ -429,6 +432,54 @@ describe("the graduation section's count (RUN-FR-10)", () => {
         within(control).getByRole("tab", { name: /Graduation/ }).textContent,
       ).toBe("Graduation · 2"),
     );
+  });
+});
+
+describe("a PR summary run in the Runs panel (RUN-FR-UPNU)", () => {
+  const runsProps = {
+    surface: "runs" as const,
+    onHide: () => {},
+    activeEntity: null,
+    onSwitchWorktree: async () => ({ ok: true }) as const,
+    canCheckOutBranches: true,
+  };
+
+  beforeEach(() => {
+    resetLogBufferForTest();
+  });
+
+  afterEach(() => {
+    // The next describe reads the queue through the default mock.
+    vi.mocked(invoke).mockImplementation(async () => undefined);
+  });
+
+  it("RUN-FR-UPNU: a PR summary run is counted once, and the agent output follows its one turn", async () => {
+    const summary = makePrSummaryRun("p1", "working", { updatedAt: "2026-09-06T09:30:00Z" });
+    const draftRun = makeRun("r1", "queued", { workTurns: 0 });
+    // Routed by command: the log flush is answered, and any other command
+    // rejects rather than throws (per `src/test/invokeMocks.ts`).
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_graduation_queue") return Promise.resolve(makeQueue([draftRun, summary]));
+      if (cmd === "read_agent_activity")
+        return Promise.resolve({ records: [], dropped: 0, latestSeq: 0, total: 0, state: "running" });
+      return otherCommand(cmd);
+    });
+    render(<BottomPanel {...runsProps} />);
+
+    const control = await screen.findByRole("tablist", { name: "Runs sections" });
+    await waitFor(() =>
+      expect(
+        within(control).getByRole("tab", { name: /Graduation/ }).textContent,
+      ).toBe("Graduation · 2"),
+    );
+    await userEvent.click(within(control).getByRole("tab", { name: /Agent output/ }));
+    await waitFor(() => {
+      const reads = vi
+        .mocked(invoke)
+        .mock.calls.filter(([name]) => name === "read_agent_activity")
+        .map(([, args]) => (args as { runId: string }).runId);
+      expect(reads).toContain("p1");
+    });
   });
 });
 

@@ -199,12 +199,13 @@ export interface AgenticIntegration {
 }
 
 /**
- * AIC-FR-10 / EAC-FR-IRRD: the kinds of work a run hands to an agent backend,
- * each able to carry a model and a reasoning effort of its own.
+ * AIC-FR-10 / AIC-FR-TGJV / EAC-FR-IRRD: the kinds of work a run hands to an
+ * agent backend, each able to carry a model and a reasoning effort of its own.
  *
  * The `id` is the canonical task kind the backend is keyed by; the label is what
  * the author reads. `semantic_rebase` is labelled Reconciliation, which is the
- * name the rest of the application gives that turn (AII-FR-23, AII-FR-24).
+ * name the rest of the application gives that turn (AII-FR-23, AII-FR-24), and
+ * `pr_maintenance` is the turn that writes pull request text (AII-FR-QDLW).
  *
  * An override the store holds against a kind outside this set is dropped when
  * the record is read (AIC-FR-QVWX), so a selection made by an older build
@@ -214,6 +215,7 @@ export const AGENTIC_TURN_KINDS = [
   { id: "work", label: "Work" },
   { id: "review", label: "Review" },
   { id: "semantic_rebase", label: "Reconciliation" },
+  { id: "pr_maintenance", label: "PR maintenance" },
 ] as const;
 
 export type AgenticTurnKind = (typeof AGENTIC_TURN_KINDS)[number]["id"];

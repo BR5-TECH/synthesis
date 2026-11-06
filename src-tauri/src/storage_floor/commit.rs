@@ -87,6 +87,10 @@ enum Skip {
     IndexHeld,
     NothingToCommit,
     StatusUnreadable,
+    /// `DRS-draft-storage.md` DRS-FR-MIYJ: the commit would land on a main
+    /// branch the author has not confirmed, or on a protected one.
+    MainBranchUnconfirmed,
+    MainBranchProtected,
 }
 
 impl Skip {
@@ -102,6 +106,8 @@ impl Skip {
             Self::IndexHeld => "index_held",
             Self::NothingToCommit => "nothing_to_commit",
             Self::StatusUnreadable => "status_unreadable",
+            Self::MainBranchUnconfirmed => "main_branch_unconfirmed",
+            Self::MainBranchProtected => "main_branch_protected",
         }
     }
 
@@ -109,7 +115,9 @@ impl Skip {
     /// so it is named at `WARN` where every other skip is named at `DEBUG`.
     fn level(self) -> logging::LogLevel {
         match self {
-            Self::StatusUnreadable => logging::LogLevel::Warn,
+            Self::StatusUnreadable | Self::MainBranchUnconfirmed | Self::MainBranchProtected => {
+                logging::LogLevel::Warn
+            }
             _ => logging::LogLevel::Debug,
         }
     }
@@ -285,7 +293,7 @@ pub fn wait_for_committer(root: &RootFs) {
             let last_reason = state.last_reason.get(root.path()).copied();
             (job, last_reason)
         };
-        let (reason, records) = commit_now(&job, last_reason);
+        let (reason, records) = commit_now(&job, last_reason, None);
         let mut state = committer.state.lock().unwrap_or_else(|e| e.into_inner());
         remember_reason(&mut state, job.root.path(), reason);
         if let Some(emit) = state.emit.as_ref() {
@@ -334,7 +342,7 @@ fn run() {
         // later event would then never be committed for the rest of the
         // session, silently.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            commit_now(&job, last_reason)
+            commit_now(&job, last_reason, crate::git::write_guard::installed().as_deref())
         }));
         let (reason, records) = outcome.unwrap_or_else(|_| {
             (
@@ -387,7 +395,24 @@ fn commit_once_recording(
         event,
         message: message(event, "A draft"),
     };
-    commit_now(&job, last_reason)
+    commit_now(&job, last_reason, None)
+}
+
+/// [`commit_once`] with the main branch write guard of `session` (DRS-FR-MIYJ).
+#[cfg(test)]
+fn commit_once_guarded(
+    root: &RootFs,
+    draft_id: &str,
+    event: DraftEvent,
+    session: &crate::git::write_guard::WriteGuardSession,
+) -> (Option<&'static str>, Vec<Record>) {
+    let job = Job {
+        root: root.clone(),
+        draft_id: draft_id.to_string(),
+        event,
+        message: message(event, "A draft"),
+    };
+    commit_now(&job, None, Some(session))
 }
 
 /// One record the commit wants written, held until the sink is reachable.
@@ -399,7 +424,11 @@ type Record = (logging::LogLevel, String, Fields);
 /// `None` is a commit that was taken. Anything else is the token that says why
 /// it was not — a skip's or a failure's, on one vocabulary, so PST-FR-KGRW's
 /// once-per-reason rule covers both.
-fn commit_now(job: &Job, last_reason: Option<&'static str>) -> (Option<&'static str>, Vec<Record>) {
+fn commit_now(
+    job: &Job,
+    last_reason: Option<&'static str>,
+    guard: Option<&crate::git::write_guard::WriteGuardSession>,
+) -> (Option<&'static str>, Vec<Record>) {
     let mut records: Vec<Record> = Vec::new();
     let event = job.event.token();
     // PST-FR-KGRW: a reason equal to the last one reported for this root is not
@@ -452,6 +481,18 @@ fn commit_now(job: &Job, last_reason: Option<&'static str>) -> (Option<&'static 
     }
 
     if let Some(skip) = repository_unready(&repo) {
+        return report(skip, paths.len());
+    }
+    // DRS-FR-MIYJ: a commit that would land on a main branch the author has not
+    // confirmed is skipped. The files stay as written, uncommitted.
+    if let Some(code) =
+        guard.and_then(|guard| crate::git::write_guard::background_refusal(guard, job.root.path()))
+    {
+        let skip = if code == crate::git::ERR_MAIN_BRANCH_PROTECTED {
+            Skip::MainBranchProtected
+        } else {
+            Skip::MainBranchUnconfirmed
+        };
         return report(skip, paths.len());
     }
 

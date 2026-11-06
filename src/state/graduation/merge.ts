@@ -28,13 +28,14 @@ export function isPullRun(run: GraduationRun): boolean {
 }
 
 /**
- * GRU-FR-HDPQ: the title of a run.
+ * GRU-FR-HDPQ / GRU-FR-WEBM: the title of a run.
  *
- * A merge run's title is `merge.name`. A draft run's is its draft's name. The
- * two are never mixed: a merge run names no draft.
+ * A merge run's title is `merge.name`, and a PR summary run's is
+ * `prSummary.name` (`Summarize <head>`). A draft run's is its draft's name.
+ * They are never mixed: neither a merge run nor a PR summary run names a draft.
  */
 export function runTitle(run: GraduationRun): string {
-  return run.merge?.name ?? run.input?.draftName ?? "";
+  return run.prSummary?.name ?? run.merge?.name ?? run.input?.draftName ?? "";
 }
 
 /**

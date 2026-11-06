@@ -56,6 +56,7 @@ import {
   raiseLevel,
   raiseStatement,
   raisesForRun,
+  shownInOpenPullRequestWindow,
   raiseTitle,
   stateLabelOf,
 } from "../state/graduation";
@@ -698,7 +699,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         .then((run) => {
           // GRU-FR-BLSS: `interrupted` is the one state the run itself has to be
           // read to decide — a stop the author caused is not news to them.
-          if (!raisesForRun(run)) return;
+          if (!raisesForRun(run) || shownInOpenPullRequestWindow(run)) return;
           void raiseNotification({
             key: raiseKey(run),
             // GRU-FR-BLSS: Warn, Info, or Error by the state the run rests in.

@@ -140,11 +140,12 @@ value of its own:
 │             from the installed CLI
 │   Effort   [ high                                     ▾]
 │
-│  ▾ per task · 2 of 3 differ from the defaults
+│  ▾ per task · 2 of 4 differ from the defaults
 │                       Model                  Effort
 │    Work            [ Sonnet 5         ▾]  [ same as default  ▾]
 │    Review          [ same as default  ▾]  [ medium           ▾]
 │    Reconciliation  [ same as default  ▾]  [ same as default  ▾]
+│    PR maintenance  [ same as default  ▾]  [ same as default  ▾]
 └─────────────────────────────────────────────────────────────
 ```
 
@@ -156,11 +157,12 @@ rows close up rather than carrying a control that can hold nothing:
 │   Model    [ Opus 5                                   ▾]
 │             from the installed CLI
 │
-│  ▾ per task · 3 follow the defaults
+│  ▾ per task · 4 follow the defaults
 │                       Model
 │    Work            [ same as default  ▾]
 │    Review          [ same as default  ▾]
 │    Reconciliation  [ same as default  ▾]
+│    PR maintenance  [ same as default  ▾]
 └─────────────────────────────────────────────────────────────
 ```
 
@@ -177,7 +179,7 @@ Layout notes:
   changed.
 - A row is one task label followed by that task's two selectors on one line,
   in the order the defaults above them are in: model first, effort second. The
-  columns are aligned across the three rows and headed by the name of the
+  columns are aligned across the four rows and headed by the name of the
   default each follows, so a column reads down as one dimension and a row
   reads across as one kind of work.
 - Each selector's first entry is "same as default", which is what a selector
@@ -189,10 +191,10 @@ Layout notes:
   selector nor the effort column, and no disabled or empty control stands in
   their place. Every agentic tab renders the Model default selector and the
   per-task section's model column.
-- The three rows are in the order a run reaches them and are labelled for the
-  author rather than by the identifier each carries: Work, Review, and
-  Reconciliation, the last of which is the semantic-rebase turn under the name
-  the rest of the application gives it.
+- The four rows are labelled for the author rather than by the identifier each
+  carries: Work, Review, Reconciliation, and PR maintenance. Reconciliation is
+  the semantic-rebase turn under the name the rest of the application gives it,
+  and PR maintenance is the turn that writes pull request text.
 
 The Claude Code tab with nothing stored and a value that is not a token, which
 is the one CLI tab carrying a credential:
@@ -342,10 +344,10 @@ Layout notes:
     The **model selector of a per-task row** (AII-FR-QDLW) selects the model that row's kind of work uses. It offers a "same as default" entry first, followed by the same options the default selector offers, in the same filterable panel; choosing an option invokes "set agentic integration model" naming that row's canonical task kind, and choosing "same as default" invokes it naming that same kind with no model, which returns the row to the default. Every agentic tab renders the default selector and the per-task section's model column, whichever vendor the tab is for.
 24. **AII-FR-24** An agentic tab's reasoning-effort selector offers the vendor's declared effort levels, preceded by the same backend-default entry, and choosing one invokes "set agentic integration effort" at once with no task named, which is what sets the backend's default effort. A vendor that declares no effort levels renders no effort selector at all.
     The **effort selector of a per-task row** (AII-FR-QDLW) selects the effort that row's kind of work uses. It offers a "same as default" entry first, followed by the same levels the default selector offers; choosing a level invokes "set agentic integration effort" naming that row's canonical task kind, and choosing "same as default" invokes it naming that same kind with no effort, which returns the row to the default. A vendor that renders no effort selector renders no effort column in the per-task section either, and no disabled control stands in its place.
-25. **AII-FR-QDLW** An agentic tab holds **one per-task section**, a single disclosure sitting below both default selectors and holding one row for each kind of work a run hands to this backend — Work, Review, and Reconciliation, in that order. A row is that kind's label followed by its own model selector and its own effort selector on one line, aligned into a model column and an effort column headed by the name of the default each follows. Each selector's accessible name carries both the row's task label and the dimension it selects, so the two are told apart by anybody who cannot see which column they stand in. The two selectors of a row are independent of each other and of every other row: a kind of work may take a model of its own and the default effort, an effort of its own and the default model, both, or neither, and returning one selector to "same as default" returns that kind to one default and never to two. The section holds one open state, so the author opens the three kinds of work once and sees every selection a run resolves in a single reading.
-    **A row is labelled for the author and identified by its canonical task kind**, and the two are fixed against each other: the Work row is `work`, the Review row is `review`, and the **Reconciliation row is `semantic_rebase`** — the three kinds of turn the execution boundary accepts (per `../tools/EAC-execute-agent-cli.md` EAC-FR-IRRD), the label being what the run surfaces of this application already call that work, and the canonical kind being the one the backend holds its selections under (per `../core/AIC-agentic-integrations.md` AIC-FR-10). The section sends the canonical kind and never the label: every "set agentic integration model" and "set agentic integration effort" a row invokes names that row's canonical kind, and each of a row's two selectors reads its own value from the record's entry under that same kind. What a row shows is therefore what a turn of that kind resolves when the run reaches it (per `../core/AIC-agentic-integrations.md` AIC-FR-19), and the Reconciliation row is what a semantic-rebase turn runs on.
+25. **AII-FR-QDLW** An agentic tab holds **one per-task section**, a single disclosure sitting below both default selectors and holding one row for each kind of work a run hands to this backend — Work, Review, Reconciliation, and PR maintenance, in that order. A row is that kind's label followed by its own model selector and its own effort selector on one line, aligned into a model column and an effort column headed by the name of the default each follows. Each selector's accessible name carries both the row's task label and the dimension it selects, so the two are told apart by anybody who cannot see which column they stand in. The two selectors of a row are independent of each other and of every other row: a kind of work may take a model of its own and the default effort, an effort of its own and the default model, both, or neither, and returning one selector to "same as default" returns that kind to one default and never to two. The section holds one open state, so the author opens the three kinds of work once and sees every selection a run resolves in a single reading.
+    **A row is labelled for the author and identified by its canonical task kind**, and the two are fixed against each other: the Work row is `work`, the Review row is `review`, the **Reconciliation row is `semantic_rebase`**, and the **PR maintenance row is `pr_maintenance`** — the four kinds the execution boundary resolves selections for (per `../tools/EAC-execute-agent-cli.md` EAC-FR-IRRD), the label being what the run surfaces of this application already call that work, and the canonical kind being the one the backend holds its selections under (per `../core/AIC-agentic-integrations.md` AIC-FR-10). The section sends the canonical kind and never the label: every "set agentic integration model" and "set agentic integration effort" a row invokes names that row's canonical kind, and each of a row's two selectors reads its own value from the record's entry under that same kind. What a row shows is therefore what a turn of that kind resolves when the run reaches it (per `../core/AIC-agentic-integrations.md` AIC-FR-19), and the Reconciliation row is what a semantic-rebase turn runs on.
 26. **AII-FR-25** An agentic tab's activation control is enabled only while that integration is verified. Activating it invokes "set active agentic integration" for that vendor; on success that tab renders the active marker and every other tab in the level renders its activation control again. The marker follows the `active` flag of each record, so the sole verified backend on a machine renders as active without ever having been activated (per `../core/AIC-agentic-integrations.md` AIC-FR-13).
-27. **AII-FR-PMZK** The per-task section is closed until the author opens it, and its summary counts the rows that differ from the defaults rather than naming them. A row counts once whether it overrides its model, its effort, or both, so the summary is a count of the kinds of work configured apart from the defaults and never of the selectors changed, and it reads out of three whichever vendor the tab is for. A tab whose backend is configured one way for everything therefore reads as the two default selectors and one closed line.
+27. **AII-FR-PMZK** The per-task section is closed until the author opens it, and its summary counts the rows that differ from the defaults rather than naming them. A row counts once whether it overrides its model, its effort, or both, so the summary is a count of the kinds of work configured apart from the defaults and never of the selectors changed, and it reads out of four whichever vendor the tab is for. A tab whose backend is configured one way for everything therefore reads as the two default selectors and one closed line.
     **The summary counts what the section renders**, so it and the rows beneath it always agree. A record can hold an override in a dimension the tab has no column for — the backend keys its two maps on the turn kind alone and keeps a stored selection through a degradation (per `../core/AIC-agentic-integrations.md` AIC-FR-10, and AII-FR-27) — and an override the author is shown no selector for is counted by neither the summary nor the row. It is held, not lost: the section neither clears it nor writes on its account, and it is the value the row reads again if the vendor comes to declare that dimension. What the summary therefore reports is the number of kinds of work the author can see configured apart, which is the number they can act on.
 28. **AII-FR-26** Clear in an agentic tab invokes "clear agentic integration" for that vendor, returning it to its unconfigured presentation: no path or base URL, no stored credential and no masked hint (for Claude Code, no gateway field and no environment variable, with its Subscription sub-tab open), no version, no selections, and no activation. Detection does not re-run for the rest of that visit to the section, because refilling the field the author just emptied would undo the action they took. Leaving the section ends that suppression: on a later visit the tab renders with no stored path like any other, so AII-FR-17 applies again and a detected path is offered afresh — an offer, never a stored value, and identical to what the tab shows after a relaunch.
 28. **AII-FR-27** An agentic integration the backend reports as degraded renders as such in its status line and keeps its stored configuration and selections — a tab whose binary no longer exists on disk, and a tab whose stored credential can no longer be read, which the Claude Code tab can report as readily as an API-kind one. None is cleared nor silently re-detected, and none can be activated until it verifies again.

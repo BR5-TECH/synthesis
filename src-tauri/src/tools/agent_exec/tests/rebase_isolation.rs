@@ -372,10 +372,13 @@ fn eac_ts_tuaa_an_ordinary_checkout_is_pinned_in_place() {
 fn eac_ts_xbkr_the_turn_kind_selects_the_model_and_the_effort_and_nothing_else() {
     use super::super::TurnKind;
     let harness = harness_for("claude_code");
-    const KINDS: [(TurnKind, &str, &str, &str); 3] = [
+    // EAC-FR-IRRD: a `pr_maintenance` turn resolves the author's own
+    // `pr_maintenance` selections.
+    const KINDS: [(TurnKind, &str, &str, &str); 4] = [
         (TurnKind::Work, "work", "opus", "low"),
         (TurnKind::Review, "review", "haiku", "high"),
         (TurnKind::SemanticRebase, "semantic_rebase", "opus", "xhigh"),
+        (TurnKind::PrMaintenance, "pr_maintenance", "sonnet", "medium"),
     ];
     for (_, kind, model, effort) in KINDS {
         agentic::set_model_impl(
@@ -664,4 +667,33 @@ fn records_for_container(container: &str) -> Vec<crate::logging::LogRecord> {
                 .is_some_and(|name| name == container)
         })
         .collect()
+}
+
+/// EAC-FR-02, EAC-FR-IRRD: the turn kind is a closed set of six names, each the
+/// identifier its log records carry, and each resolves to the selection key of
+/// the author's own selections. `pr_maintenance` is resolved with its own
+/// selections, and the two merge kinds with the work and review selections.
+#[test]
+fn the_turn_kind_is_a_closed_set_of_six_with_their_selection_keys() {
+    use super::super::TurnKind;
+    // An exhaustive match, so a seventh kind cannot be added without a
+    // decision here.
+    let key_of = |kind: TurnKind| match kind {
+        TurnKind::Work | TurnKind::MergeWork => "work",
+        TurnKind::Review | TurnKind::MergeReview => "review",
+        TurnKind::SemanticRebase => "semantic_rebase",
+        TurnKind::PrMaintenance => "pr_maintenance",
+    };
+    let all = [
+        (TurnKind::Work, "work"),
+        (TurnKind::Review, "review"),
+        (TurnKind::SemanticRebase, "semantic_rebase"),
+        (TurnKind::MergeWork, "merge_work"),
+        (TurnKind::MergeReview, "merge_review"),
+        (TurnKind::PrMaintenance, "pr_maintenance"),
+    ];
+    for (kind, name) in all {
+        assert_eq!(kind.as_str(), name);
+        assert_eq!(kind.selection_key(), key_of(kind), "{name}");
+    }
 }

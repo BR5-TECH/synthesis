@@ -241,6 +241,10 @@ pub enum TurnKind {
     /// The turn of a merge run that judges the reconciled merge. It resolves the
     /// author's `review` selections and is not masked.
     MergeReview,
+    /// EAC-FR-IRRD / AIC-FR-TGJV: a turn that writes pull request text, such as
+    /// the one turn of a PR summary run. It resolves the author's
+    /// `pr_maintenance` selections and is not masked.
+    PrMaintenance,
 }
 
 impl TurnKind {
@@ -253,6 +257,7 @@ impl TurnKind {
             Self::SemanticRebase => "semantic_rebase",
             Self::MergeWork => "merge_work",
             Self::MergeReview => "merge_review",
+            Self::PrMaintenance => "pr_maintenance",
         }
     }
 
@@ -267,6 +272,7 @@ impl TurnKind {
             Self::Work | Self::MergeWork => "work",
             Self::Review | Self::MergeReview => "review",
             Self::SemanticRebase => "semantic_rebase",
+            Self::PrMaintenance => "pr_maintenance",
         }
     }
 }

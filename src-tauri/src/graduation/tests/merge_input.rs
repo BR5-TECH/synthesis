@@ -65,6 +65,10 @@ pub(super) fn bare_merge_run() -> GraduationRun {
             result: None,
             pull: None,
         }),
+        pr_summary: None,
+        run_summary: None,
+        landings: Vec::new(),
+        reverts: Vec::new(),
         created_at: "t0".into(),
         updated_at: "t0".into(),
     }

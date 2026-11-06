@@ -85,6 +85,11 @@ pub fn transition<R: tauri::Runtime>(
             crate::graduation::reclaim_ended_merge_run(app, run);
         }
     }
+    // GRD-FR-TYVT: a PR summary run that ended and is not driven by this
+    // process has its disposable checkout removed now.
+    if run.is_pr_summary() && next.is_terminal() {
+        crate::graduation::reclaim_ended_pr_summary_run(app, run);
+    }
     Ok(())
 }
 

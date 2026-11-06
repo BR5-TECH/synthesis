@@ -2,8 +2,9 @@
 
 use super::*;
 
-/// GSU-FR-ELZO: start a run, or start nothing.
-#[tauri::command]
+/// GSU-FR-ELZO: start a run, or start nothing. Off the main thread, because
+/// the guard read can reach GitHub (GRD-FR-WJLO).
+#[tauri::command(async)]
 pub fn start_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -11,6 +12,7 @@ pub fn start_graduation<R: tauri::Runtime>(
     standing_work: StandingWork,
     standing_work_message: Option<String>,
 ) -> Result<GraduationRun, String> {
+    write_check::prime_start_write(&app, &queue::project_key(&app), None);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
@@ -34,6 +36,7 @@ pub fn start_graduation<R: tauri::Runtime>(
         .try_state::<ProjectState>()
         .and_then(|state| state.require_root().ok())
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    write_check::require_start_write(&app, &project_key, None, "start_graduation")?;
     let record = crate::drafts::read_draft_prompt(&root, &draft_id).map_err(|reason| {
         if reason == crate::drafts::ERR_NOT_SINGLE_FILE {
             ERR_DRAFT_NOT_SINGLE_FILE.to_string()
@@ -320,6 +323,9 @@ fn set_archived<R: tauri::Runtime>(
     run_id: &str,
     archived: bool,
 ) -> Result<GraduationRun, String> {
+    // GRD-FR-WSXA: a landing recorded at the same time is not lost.
+    let state = app.try_state::<GraduationState>();
+    let _write = state.as_ref().map(|state| state.write_guard());
     let mut run = runs::load_run(app, run_id)?;
     // Idempotent: archiving an archived run writes nothing and emits nothing.
     if run.archived == archived {
@@ -420,7 +426,8 @@ pub fn revert_graduation_run<R: tauri::Runtime>(
     let mut run = runs::load_run(&app, &run_id)?;
     // GRD-FR-YTCR: a merge run holds a merge, and a merge commit is not undone
     // by replaying commits in reverse.
-    if run.is_merge() {
+    // GRD-FR-CQGB: a PR summary run makes no commit.
+    if run.is_merge() || run.is_pr_summary() {
         return Err(ERR_RUN_NOT_REVERTABLE.to_string());
     }
     // A run still doing agent work has a working copy that holds uncommitted
@@ -446,6 +453,7 @@ pub fn revert_graduation_run<R: tauri::Runtime>(
         return Err(ERR_DIRECT_TARGET_CHANGED.to_string());
     }
     commit::revert_run_commits(&worktree, &run.commits)?;
+    landings::record_revert(&app, &mut run, &worktree);
     logging::log_info(
         &app,
         &BUFFER,
@@ -523,8 +531,9 @@ fn end_discarded<R: tauri::Runtime>(
     Ok(())
 }
 
-/// GRD-FR-ZAMI: a new run over a discarded run's captured prompt.
-#[tauri::command]
+/// GRD-FR-ZAMI: a new run over a discarded run's captured prompt. Off the main
+/// thread, because the guard read can reach GitHub (GRD-FR-WJLO).
+#[tauri::command(async)]
 pub fn restart_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -532,6 +541,7 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
     standing_work: StandingWork,
     standing_work_message: Option<String>,
 ) -> Result<GraduationRun, String> {
+    write_check::prime_restart_write(&app, &run_id);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
@@ -540,10 +550,15 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
     if discarded.is_merge() {
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: a merge run is not restarted"));
     }
+    // GRD-FR-CQGB: a PR summary run has no draft input to run again either.
+    if discarded.is_pr_summary() {
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: a PR summary run is not restarted"));
+    }
     if discarded.state != GraduationRunState::Discarded {
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", discarded.state.as_str()));
     }
     queue::require_unlocked_draft(&app, &discarded.input.draft_id)?;
+    write_check::require_restart_write(&app, &discarded)?;
     // GSU-FR-NPFB / GRD-FR-PNMU: a discarded direct run restarts on the worktree
     // and branch it pinned. The stream, the standing-work choice and the message
     // the caller names belong to a stream run and are not read.
@@ -756,6 +771,10 @@ pub(crate) fn build_run(
         restarted_from_run_id: None,
         failure: None,
         merge: None,
+        pr_summary: None,
+        run_summary: None,
+        landings: Vec::new(),
+        reverts: Vec::new(),
         created_at: now.clone(),
         updated_at: now,
     }
@@ -924,59 +943,6 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
             },
         );
     }
-    record_read_failure(&app, &run_id, selected, met);
+    read_failure::record_read_failure(&app, &run_id, selected, met);
     Ok(page)
-}
-
-/// Whether two read failures name the same damage.
-///
-/// Compared on what the damage **is** rather than on the whole record: a
-/// failure carries the instant it was met, so two reads of one damaged file are
-/// never equal and comparing them whole would rewrite the run record once per
-/// scroll.
-fn same_damage(held: &logs::GraduationLogFailure, met: &logs::GraduationLogFailure) -> bool {
-    held.code == met.code
-        && held.stream == met.stream
-        && held.stopped_sequence == met.stopped_sequence
-        && held.byte_offset == met.byte_offset
-}
-
-/// GRS-FR-EYNU: keep the damage a read met on the run record, and clear it once
-/// a later read of that stream succeeds.
-///
-/// The run record is written only where the value actually changes, and under
-/// the same write guard the run's own operations take, so a read never overtakes
-/// the thread driving the run.
-fn record_read_failure<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run_id: &str,
-    stream: GraduationLogStream,
-    met: Option<logs::GraduationLogFailure>,
-) {
-    let state = app.try_state::<GraduationState>();
-    let _write = state.as_ref().map(|state| state.write_guard());
-    // Read the record back inside the guard: the copy this command read before
-    // the file may be behind what the run's own thread has since written.
-    let Ok(mut run) = runs::load_run(app, run_id) else {
-        return;
-    };
-    let held = run.logs.last_read_failure.clone();
-    let settled = match (&held, &met) {
-        (Some(held), Some(met)) if same_damage(held, met) => return,
-        (None, None) => return,
-        // A read of this stream that met nothing clears a failure of this
-        // stream alone, and leaves one the other stream is still damaged by.
-        (Some(held), None) if held.stream != stream => return,
-        (_, met) => met.clone(),
-    };
-    run.logs.last_read_failure = settled;
-    if let Err(reason) = runs::save_run(app, &mut run) {
-        logging::log_warn(
-            app,
-            &BUFFER,
-            &[Domain::Backend],
-            "graduation could not record what a run log read met",
-            log_fields! { "run_id" => run_id.to_string(), "reason" => reason },
-        );
-    }
 }

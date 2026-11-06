@@ -9,12 +9,17 @@
 //! request is made, and reads the API of the host of the remote through the
 //! `GithubPullRequests` trait. None of them writes anything, and none of them keeps the token.
 //!
+//! Two write operations use the same path: `create` opens a pull request, and
+//! `link` adds closing keywords to the description of one (GTC-FR-ZHVO).
+//!
 //! The commands are `async` and run their blocking reads on a worker thread, so
 //! a slow GitHub never holds the thread that serves `invoke` calls.
 
 pub(crate) mod client;
 pub(crate) mod create;
+pub(crate) mod link;
 mod model;
+pub(crate) mod protection;
 mod timeline;
 
 use std::time::Instant;
@@ -34,6 +39,9 @@ use client::{read_pages, GithubFailure, GithubPullRequests, HttpGithubPullReques
 pub use create::{
     PullRequestHeadState, ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED,
     ERR_PULL_REQUEST_TITLE_REQUIRED,
+};
+pub use link::{
+    FailedPullRequestIssue, LinkedPullRequestIssue, PullRequestIssueRef, PullRequestLinkOutcome,
 };
 pub use model::{
     CreatedPullRequest, PullRequestDetail, PullRequestSummary, PullRequestTimeline,
@@ -165,12 +173,19 @@ where
             logging::log(sink, buffer, LogLevel::Info, TRANSFER, MSG_READ_DONE, fields);
         }
         Err(error) => {
-            fields.insert("error".to_string(), serde_json::json!(error));
+            // The code alone. The words after it can quote what GitHub refused,
+            // the title or the description of a pull request among them.
+            fields.insert("error".to_string(), serde_json::json!(error_code(error)));
             let level = if is_refusal(error) { LogLevel::Warn } else { LogLevel::Error };
             logging::log(sink, buffer, level, TRANSFER, MSG_READ_FAILED, fields);
         }
     }
     result
+}
+
+/// The typed code of `error`: the text before its first `:`.
+pub(crate) fn error_code(error: &str) -> &str {
+    error.split(':').next().unwrap_or(error).trim()
 }
 
 /// GTC-FR-GXUB: the pull requests of `state`, newest update first.
@@ -422,6 +437,35 @@ pub async fn create_pull_request(
         let request =
             create::NewPullRequest { title: &title, body: &body, base: &base, head: &head, draft };
         create::create_pull_request_reported(&app, &logging::BUFFER, &access, &request)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-ZHVO: link a pull request to the issues it resolves by closing
+/// keywords in its description.
+#[tauri::command]
+pub async fn link_pull_request_issues(
+    number: u64,
+    issues: Vec<PullRequestIssueRef>,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<PullRequestLinkOutcome, String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = app.state::<GlobalSettingsStore>();
+        let tokens = app.state::<GithubTokens>();
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        link::link_pull_request_issues_reported(&app, &logging::BUFFER, &access, number, &issues)
     })
     .await
     .map_err(join_error)?

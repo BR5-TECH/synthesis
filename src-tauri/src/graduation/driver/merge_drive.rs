@@ -128,6 +128,9 @@ pub(super) fn prepare<R: tauri::Runtime>(
     // applied is a completed run, whatever stopped the loop before the state
     // moved. Applying it again would find its own result in the base worktree.
     if run.merge.as_ref().is_some_and(|data| data.result.is_some()) {
+        // GRD-FR-UXXF: a loop that stopped between the apply and the landings
+        // records them now. A run that has its landing keeps it.
+        record_merge_landings(app, run);
         let _ = transitions::enter_stage(
             app,
             run,
@@ -180,6 +183,24 @@ pub(super) fn prepare<R: tauri::Runtime>(
         let _ = crate::graduation::save_run(app, run);
     }
     Some(worktree)
+}
+
+/// GRD-FR-UXXF: the landings of a stream merge that a merge run applied.
+///
+/// The commit is the merge commit, or the pinned base tip for an `uncommitted`
+/// publication. A pull run is not the merge of a stream, so it records none.
+fn record_merge_landings<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
+    let Some(data) = run.merge.as_ref() else {
+        return;
+    };
+    let Some(result) = data.result.as_ref() else {
+        return;
+    };
+    if data.pull.is_some() {
+        return;
+    }
+    let commit = result.commit.clone().unwrap_or_else(|| data.base_tip.clone());
+    crate::graduation::record_stream_landings(app, &run.stream_id, &data.base_branch, &commit);
 }
 
 /// GRD-FR-JSBE: the apply, resumed alone.
@@ -265,6 +286,9 @@ pub(super) fn finish_merge<R: tauri::Runtime>(
             // the merge has reached the base branch, and a loop that stopped now
             // completes the run rather than applying the merge a second time.
             let _ = crate::graduation::save_run(app, run);
+            // GRD-FR-UXXF: the stream's completed draft runs land on the base
+            // branch in the operation that applied the merge.
+            record_merge_landings(app, run);
             let _ = transitions::enter_stage(
                 app,
                 run,

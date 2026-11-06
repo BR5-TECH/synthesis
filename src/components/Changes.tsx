@@ -741,6 +741,7 @@ export function Changes({
       setNoteRoutesToSettings(false);
       const outcome = await transfer.pushBranch();
       if (outcome.ok) return true;
+      if (outcome.cause === "cancelled") return setNote(null), false;
       // GIT-FR-QMYB: a push is running, so none starts here and the panel says why.
       if (outcome.cause === "busy") {
         setNote({ tone: "error", text: runningReason(transferOperation) });

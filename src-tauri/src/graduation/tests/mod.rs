@@ -34,6 +34,7 @@ mod e2e;
 mod github_shadow;
 mod hold;
 mod idle_sandbox;
+mod landings;
 mod live_index;
 mod log_read_command;
 mod log_reads;
@@ -47,13 +48,17 @@ mod merge_passes;
 mod merge_prompts;
 mod merge_records;
 mod merge_run;
+mod pr_summary;
+mod pr_summary_turn;
 mod prompts;
 mod review_checkout;
 mod run_progress;
+mod run_summary;
 mod scheduler;
 mod standing_work;
 mod state_machine;
 mod stream_hold;
+mod write_check;
 
 use collaborators::{EveryKeyIsThere, EverythingIsThere, NoCli, NoEndpoint};
 
@@ -559,6 +564,8 @@ struct Seen {
     sandbox_scope: Option<String>,
     /// EAC-FR-DWBS: the project key the dispatch named its VM with.
     project_key: String,
+    /// EAC-FR-43: the result contract the task named.
+    result_contract: Option<crate::tools::agent_exec::protocol::ResultContract>,
 }
 
 impl Seen {
@@ -719,6 +726,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
             semantic_mount: request.supplementary_mount.is_some(),
             sandbox_scope: request.sandbox_scope.as_ref().map(|scope| scope.queue_key.clone()),
             project_key: project_key.to_string(),
+            result_contract: request.task.result_contract,
         });
 
         let mut turn = self.turns.lock().unwrap().pop_front().unwrap_or_else(|| {

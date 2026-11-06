@@ -70,6 +70,17 @@ describe("Create a PR on a stream row", () => {
     expect(labels).toEqual(["Merge stream", "Create a PR", "Update stream", "Delete stream"]);
   });
 
+  it("CPR-FR-IWDK: the row goes with the dropdown, so the window opens from the Work streams control and gives focus back to it", async () => {
+    let focusedAtOpen: Element | null = null;
+    onCreatePullRequest.mockImplementation(() => {
+      focusedAtOpen = document.activeElement;
+    });
+    const row = await openRow([summary({}, { aheadOfBase: 2 })]);
+    await userEvent.click(within(row).getByTestId("stream-create-pr-w1"));
+    expect(onCreatePullRequest).toHaveBeenCalledTimes(1);
+    expect(focusedAtOpen).toBe(screen.getByTestId("stream-selector"));
+  });
+
   it("WSS-FR-KHGP, WSS-FR-XZRD: opens the window with the stream's branch, its base branch and its name, and closes the dropdown first", async () => {
     const row = await openRow([summary({}, { aheadOfBase: 2 })]);
     await userEvent.click(within(row).getByTestId("stream-create-pr-w1"));

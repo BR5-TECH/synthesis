@@ -77,6 +77,16 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
         ));
     }
 
+    // WKS-FR-WUUH: the main branch write check of the base branch, before
+    // anything is written or built.
+    crate::git::write_guard::commands::require_branch_write(
+        app,
+        &project_root(app)?,
+        Some(&stream.base_branch),
+        "merge_work_stream",
+    )
+    .map_err(|reason| refuse(app, "work stream merge refused", stream_id, reason))?;
+
     // A test stands another request between the check above and the guard below.
     #[cfg(test)]
     before_guard::run();
@@ -164,6 +174,11 @@ fn check<R: tauri::Runtime>(
 
     if prepared.conflicted_paths.is_empty() {
         let commit = merge::apply(&main, base_repo.as_ref(), stream, &mut prepared, publication)?;
+        // WKS-FR-JXPV / GRD-FR-UXXF: the stream's completed draft runs land on
+        // the base branch in the operation that applied the result. The commit
+        // is the merge commit, or the base tip for an `uncommitted` result.
+        let landed = commit.clone().unwrap_or_else(|| prepared.base_oid.to_string());
+        crate::graduation::record_stream_landings(app, &stream.id, &stream.base_branch, &landed);
         logging::log_info(
             app,
             buffer,

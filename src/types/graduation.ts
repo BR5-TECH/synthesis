@@ -404,6 +404,66 @@ export interface GraduationPullSubject {
   strategy: "merge" | "rebase";
 }
 
+/**
+ * GRD-FR-UUGP / GRL-FR-FRNJ: a title and a description a pull request can
+ * reuse.
+ */
+export interface RunSummary {
+  /** One line, never blank. */
+  title: string;
+  /** Markdown, never blank. */
+  description: string;
+}
+
+/** GRD-FR-HMDW: what a PR summary run describes. */
+export type PrSummaryMode = "diff" | "combine";
+
+/** GRD-FR-MACY: one run summary a `combine` run captured at enqueue. */
+export interface PrSummaryInput {
+  runId: string;
+  title: string;
+  description: string;
+}
+
+/** GRD-FR-KAKU: what makes a run a PR summary run, and what it records. */
+export interface PrSummaryData {
+  /** `Summarize <head>`: the run's title (GRD-FR-JAUJ). */
+  name: string;
+  head: string;
+  base: string;
+  mode: PrSummaryMode;
+  /** GRD-FR-TYVT: pinned at the first dispatch. */
+  headTip?: string | null;
+  mergeBase?: string | null;
+  /** GRD-FR-MACY: in landing order; `combine` mode only. */
+  inputs: PrSummaryInput[];
+  /** GRD-FR-SWHW: written when the run completes. */
+  result?: RunSummary | null;
+}
+
+/** GRD-FR-PXQN: the work of a completed run is on a branch. */
+export interface Landing {
+  branch: string;
+  /** The full object id the branch must reach. */
+  commit: string;
+  /** RFC 3339 UTC. */
+  at: string;
+}
+
+/** GRD-FR-BHFP: the kind of a completed run of a branch. */
+export type CompletedRunKind = "draft" | "direct";
+
+/** GRD-FR-BHFP: one completed run whose work is on a branch. */
+export interface BranchCompletedRun {
+  runId: string;
+  title: string;
+  draftId: string;
+  draftName: string;
+  kind: CompletedRunKind;
+  landing: Landing;
+  runSummary?: RunSummary | null;
+}
+
 export interface GraduationRun {
   id: string;
   /**
@@ -440,6 +500,14 @@ export interface GraduationRun {
   archivedAt?: string | null;
   /** GRD-FR-MRNQ: present on a merge run alone. */
   merge?: GraduationMergeData | null;
+  /** GRD-FR-KAKU: present on a PR summary run alone. */
+  prSummary?: PrSummaryData | null;
+  /** GRD-FR-UUGP: the run summary of a completed draft run's `ready` review. */
+  runSummary?: RunSummary | null;
+  /** GRD-FR-PXQN: empty until the run's work is on a branch. */
+  landings?: Landing[];
+  /** GRD-FR-RVXK: one entry per revert of the run. */
+  reverts?: Landing[];
   workTurns: number;
   reviewTurns: number;
   checkpoint: GraduationCheckpoint;

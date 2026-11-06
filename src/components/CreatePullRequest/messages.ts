@@ -8,6 +8,7 @@
  * window (per `GTC-git.md` GTC-FR-11).
  */
 import type { PullRequestHeadState } from "../../types";
+import { ERR_PROTECTED, parseMainBranchRefusal } from "../../state/mainBranchWrite/flow";
 import { GIT_ERRORS, parseRejection, rejectionMessage } from "../Git/errors";
 
 /** The rejection codes this window gives wording of its own. */
@@ -73,6 +74,15 @@ const PUSH_CAUSES_IN_WORDS: ReadonlySet<string> = new Set([
 
 /** CPR-FR-ODTB / CPR-FR-VZNE: a failure of the push before the creation. */
 export function pushFailureMessage(error: unknown, head: string): string {
+  // MBW-FR-YSMC: a refusal of the main branch write check carries the guard as
+  // data. The words say what happened, and never show that data.
+  const refusal = parseMainBranchRefusal(error);
+  if (refusal?.code === ERR_PROTECTED) {
+    return `GitHub protects ${head}, so it was not pushed. Work reaches it through a pull request.`;
+  }
+  if (refusal) {
+    return `${head} is a main branch, and the write to it is not confirmed, so it was not pushed.`;
+  }
   const { code } = parseRejection(error);
   if (code === PR_ERRORS.unknownBranch) {
     return `This repository holds no branch ${head}, so it was not pushed.`;
@@ -150,4 +160,28 @@ export function pullRequestBlocks(state: PullRequestHeadState): PullRequestBlock
     });
   }
   return blocks;
+}
+
+/** CPR-FR-UNAN: a refusal of `start_pull_request_summary`, in words. */
+export function summaryStartMessage(error: unknown): string {
+  const { code } = parseRejection(error);
+  switch (code) {
+    case "pr_summary_active":
+      return "A PR summary run for this head branch is already running.";
+    case PR_ERRORS.unknownBranch:
+      return "This repository holds no such head branch or base branch.";
+    case "no_run_summaries":
+      return "No run on this branch holds a run summary.";
+    default:
+      return rejectionMessage(error);
+  }
+}
+
+/** CPR-FR-URIL: why a PR summary run did not complete, in words. */
+export function summaryEndMessage(
+  state: "failed" | "discarded",
+  failure: { code: string; message: string } | null | undefined,
+): string {
+  if (state === "discarded") return "The run was discarded.";
+  return failure?.message || failure?.code || "The run failed.";
 }

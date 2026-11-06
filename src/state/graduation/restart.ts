@@ -8,8 +8,9 @@ import { isMergeRun } from "./merge";
 
 /** GRT-FR-CTNO: Restart is offered for a discarded run and no other state. */
 export function canRestart(run: GraduationRun): boolean {
-  // GRU-FR-WDWB: a merge run has no captured draft to restart over.
-  return run.state === "discarded" && !isMergeRun(run);
+  // GRU-FR-WDWB / GRU-FR-LJUY: a merge run and a PR summary run have no
+  // captured draft to restart over.
+  return run.state === "discarded" && !isMergeRun(run) && !run.prSummary;
 }
 
 /**

@@ -21,6 +21,7 @@ import { onProjectTreeChanged } from "../events";
 import { logDebug, logWarn } from "../logging";
 import { formatSectionAddress } from "../settingsWindow";
 import { noteSettingsInvoker } from "../state/settingsInvoker";
+import { noteEditContext } from "../state/mainBranchWrite";
 import type {
   NewFileSeed,
   NewFolderSeed,
@@ -361,6 +362,11 @@ export function useShellSession(stores: ShellSessionStores = {}) {
 
   // WTS-FR-25 / WTS-FR-32: keep the chrome control's worktree label current.
   useActiveWorktreeTracking(setActiveWorktree);
+  // EDT-FR-QXEK: a new branch under the open files is read by the edit gate.
+  const editContext = activeWorktree ? `${activeWorktree.path}::${activeWorktree.branch ?? ""}` : null;
+  useEffect(() => {
+    if (editContext !== null) noteEditContext(editContext);
+  }, [editContext]);
 
   // Cmd/Ctrl+K toggles the search overlay. Opening it closes the New Artifact and
   // New Folder modals so at most one overlay is mounted (single-overlay

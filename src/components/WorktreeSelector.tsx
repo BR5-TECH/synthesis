@@ -8,6 +8,7 @@ import { pullErrorText } from "../state/pullText";
 import { showPullFailure, showPullOutcome } from "../state/pullToast";
 import { normalizeBranchInput } from "../state/worktreeBranchName";
 import { Icon } from "./icons";
+import { onNewWorktreeRequested } from "../state/newWorktreeRequests";
 import {
   GITHUB_TOKEN_ERRORS,
   type BranchEntry,
@@ -171,6 +172,7 @@ export function WorktreeSelector({
   const [busy, setBusy] = useState(false);
   // WTS-FR-16 / WTS-FR-17: the New worktree dialog, or null while closed.
   const [draft, setDraft] = useState<NewWorktreeDraft | null>(null);
+  const openDialogRef = useRef<(branch: string) => void>(() => {});
   const [dialogError, setDialogError] = useState("");
   /**
    * WTS-FR-31: a refresh is in flight, so the control is busy and not
@@ -335,6 +337,9 @@ export function WorktreeSelector({
   }, [draft?.branch]);
 
   // WTS-FR-02: no repository, no selector — anywhere in the top chrome.
+  // MBW-FR-JZME: the hard block of a protected branch opens the New worktree
+  // dialog. Subscribed before the early return, so the hooks keep their order.
+  useEffect(() => onNewWorktreeRequested(() => openDialogRef.current("")), []);
   if (!active) return null;
 
   /** Run a switching operation and keep the dropdown open on a typed refusal. */
@@ -479,6 +484,8 @@ export function WorktreeSelector({
       setDialogError(errorMessage(e));
     }
   };
+
+  openDialogRef.current = (branch) => void openDialog(branch);
 
   /**
    * WTS-FR-19: while the user has not taken the location over, editing the

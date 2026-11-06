@@ -51,10 +51,11 @@ pub(crate) fn ensure<R: tauri::Runtime>(
     let main = primary(app)?;
     let name = registration(&run.id);
 
-    if target.is_dir() && crate::streams::registers_worktree(&main, &name) {
+    let stands = crate::graduation::is_directory(&fs, &target);
+    if stands && crate::streams::registers_worktree(&main, &name) {
         return Ok(target);
     }
-    if crate::streams::registers_worktree(&main, &name) || target.is_dir() {
+    if crate::streams::registers_worktree(&main, &name) || stands {
         logging::log_warn(
             app,
             &crate::logging::BUFFER,
@@ -71,7 +72,7 @@ pub(crate) fn ensure<R: tauri::Runtime>(
         )?;
     }
     if let Some(parent) = target.parent() {
-        if !parent.is_dir() {
+        if !crate::graduation::is_directory(&fs, parent) {
             fs.create_dir(parent).map_err(|e| e.to_string())?;
         }
     }
@@ -135,7 +136,10 @@ pub(crate) fn stands<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &Graduat
     let Ok(base) = crate::graduation::store_base(app) else {
         return false;
     };
-    if base.merge_worktree(&run.id).is_dir() {
+    let worktree = base.merge_worktree(&run.id);
+    if crate::graduation::store_fs(app)
+        .is_ok_and(|fs| crate::graduation::is_directory(&fs, &worktree))
+    {
         return true;
     }
     let Ok(main) = primary(app) else {

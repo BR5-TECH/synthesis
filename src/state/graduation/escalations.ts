@@ -4,6 +4,7 @@
  */
 
 import { runTitle } from "./merge";
+import { isPullRequestWindowOpenFor } from "../pullRequestSessions";
 import type {
   EscalationAnswerInput,
   GraduationEscalation,
@@ -76,6 +77,16 @@ export function raisesForRun(run: GraduationRun): boolean {
     run.state === "discarded" ||
     run.state === "failed"
   );
+}
+
+/**
+ * CPR-FR-VOEB: a completed PR summary run whose head has its Create a PR window
+ * open raises nothing. The window already shows the result, and a toast there
+ * would cover the window's own controls. With the window closed, it raises.
+ */
+export function shownInOpenPullRequestWindow(run: GraduationRun): boolean {
+  const head = run.prSummary?.head;
+  return run.state === "completed" && !!head && isPullRequestWindowOpenFor(head);
 }
 
 /**
@@ -168,6 +179,8 @@ export function raiseStatement(run: GraduationRun): string {
     case "blocked":
       return `“${title}” is blocked.`;
     case "completed":
+      // GRU-FR-DQSA: a PR summary run commits nothing; it writes its result.
+      if (run.prSummary) return `“${title}” wrote the pull request summary.`;
       return `“${title}” is committed on ${run.directTarget ? run.directTarget.branch : run.streamName}.`;
     case "discarded":
       return `“${title}” was discarded.`;

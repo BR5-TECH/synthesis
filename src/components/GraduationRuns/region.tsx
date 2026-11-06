@@ -31,6 +31,7 @@ import {
   FAILED_HOLD_STATEMENT,
   runsRemovedByDiscard,
   hasReadableProgress,
+  isPrSummaryRun,
   iterationLabel,
   retryStatement,
   outcomeStatement,
@@ -60,6 +61,7 @@ import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
 import { RunEscalationForm } from "./escalation";
 import { RunColumns } from "./columns";
 import { MergePaths, MergePublication, MergeResult } from "./merge";
+import { PrSummaryResult } from "./prSummary";
 
 /**
  * GRU-FR-CKOB: the states whose own paragraph already says what the run is
@@ -297,8 +299,9 @@ export function RunRegion({
       )}
 
       {/* GRU-FR-MCYF: what the run changed and how it got there, side by side
-          where the region is wide enough and stacked where not. */}
-      <RunColumns run={run} />
+          where the region is wide enough and stacked where not.
+          GRU-FR-AQKZ: a PR summary run shows no change set and no pass. */}
+      {!isPrSummaryRun(run) && <RunColumns run={run} />}
 
       {/* GRU-FR-QYEE / GRU-FR-QMWX: a failed run states the typed failure. It
           is read from the run rather than from the stage row, so a record this
@@ -324,6 +327,9 @@ export function RunRegion({
 
       {/* GRU-FR-JRMA: what a merge run landed. */}
       <MergeResult run={run} />
+
+      {/* GRU-FR-DQSA: what a completed PR summary run wrote. */}
+      <PrSummaryResult run={run} />
 
       {restartedFromStatement(run) && (
         <p className="t-meta" data-testid="graduation-restarted-from">

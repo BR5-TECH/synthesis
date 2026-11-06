@@ -6,6 +6,7 @@
 import type { GraduationRun, GraduationRunState } from "../../types/graduation";
 import { holdsQueue, isAgentWork, isTerminalRun } from "../../types/graduation";
 import { isMergeRun, mergeProvenanceLine } from "./merge";
+import { isPrSummaryRun, prSummaryProvenanceLine } from "./prSummary";
 
 export { holdsQueue, isAgentWork, isTerminalRun };
 
@@ -85,7 +86,11 @@ const ACTION_ORDER: RunAction[] = [
 export function actionsFor(run: GraduationRun): RunAction[] {
   // GRU-FR-ELFZ: a merge run has no draft, so it offers no way to open one.
   const merge = isMergeRun(run);
-  const offered = new Set<RunAction>(merge ? [] : ["open-draft"]);
+  // GRU-FR-LJUY: a PR summary run has no draft either, and offers no Restart
+  // and no Revert.
+  const prSummary = isPrSummaryRun(run);
+  const draftless = merge || prSummary;
+  const offered = new Set<RunAction>(draftless ? [] : ["open-draft"]);
   switch (run.state) {
     case "queued":
       // GRU-FR-PFBY: a held direct run offers Continue, which offers it a
@@ -110,8 +115,9 @@ export function actionsFor(run: GraduationRun): RunAction[] {
     case "completed":
       break;
     case "discarded":
-      // GRU-FR-WDWB: a discarded merge run offers no Restart.
-      if (!merge) offered.add("restart");
+      // GRU-FR-WDWB / GRU-FR-LJUY: a discarded merge run or PR summary run
+      // offers no Restart.
+      if (!draftless) offered.add("restart");
       break;
     case "failed":
       offered.add("discard");
@@ -124,7 +130,7 @@ export function actionsFor(run: GraduationRun): RunAction[] {
   // no commits made none.
   // GRU-FR-DVWY: a merge run offers none, whatever it published.
   if (
-    !merge &&
+    !draftless &&
     (run.commits ?? []).length > 0 &&
     run.state !== "working" &&
     run.state !== "reviewing" &&
@@ -145,12 +151,16 @@ export function isDirectRun(run: GraduationRun): boolean {
  * run has a stream, else its worktree's path.
  */
 export function runQueueKey(run: GraduationRun): string {
+  // GRD-FR-HMDW: a PR summary run waits in the queue `pr:<head>`.
+  if (run.prSummary) return `pr:${run.prSummary.head}`;
   if (run.streamId) return run.streamId;
   return run.directTarget ? `worktree:${run.directTarget.worktreePath}` : "";
 }
 
 /** GRU-FR-LORX: what the rail and the region name as the run's place. */
 export function targetName(run: GraduationRun): string {
+  // GRU-FR-WEBM: a PR summary run names its head branch.
+  if (run.prSummary) return run.prSummary.head;
   return run.directTarget ? run.directTarget.worktreeName : run.streamName;
 }
 
@@ -158,6 +168,8 @@ export function targetName(run: GraduationRun): string {
 export function provenanceLine(run: GraduationRun, streamExists: boolean): string {
   // GRU-FR-NWEC: a merge run names the stream, its branch and the base branch.
   if (run.merge) return mergeProvenanceLine(run);
+  // GRU-FR-WEBM: a PR summary run names the head, the base and the mode.
+  if (run.prSummary) return prSummaryProvenanceLine(run);
   const target = run.directTarget;
   if (target) {
     // GRU-FR-LORX: a direct run on an ordinary worktree names no stream.

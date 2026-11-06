@@ -12,6 +12,8 @@ pub const PART_MERGE_REVIEW: &str = "merge_review";
 /// GXD-FR-GMDI: the phase a merge run resumes at when its apply was blocked.
 /// No turn is dispatched and no pass is spent at this phase.
 pub const PART_APPLY: &str = "apply";
+/// GRL-FR-UNKD: the one turn of a PR summary run.
+pub const PART_PR_SUMMARY: &str = "pr_summary";
 
 /// GRL-FR-ARPX: how many passes a run takes where the project configures no
 /// budget of its own (`PSS-project-settings-storage.md` PSS-FR-QBNE).

@@ -101,3 +101,21 @@ fn a_ready_merge_review_applies_the_merge_as_one_commit() {
     assert_eq!(done.commits.len(), 1);
     assert!(done.merge.as_ref().unwrap().result.is_some());
 }
+
+// GRD-FR-UUGP: a merge run records no run summary, whatever its `ready` review
+// carries.
+#[test]
+fn a_merge_run_records_no_run_summary() {
+    let fx = Fixture::new();
+    fx.allow_execution();
+    let stream = conflicted_stream(&fx);
+    let run_id = hand_off(&fx, &stream, StreamMergePublication::Uncommitted);
+    let run = fx.reload(&run_id);
+    let dispatch = ScriptedDispatch::new(vec![
+        Turn::work().writing("README.md", "both sides\n"),
+        super::run_summary::ready_with(serde_json::json!({ "title": "t", "description": "d" })),
+    ]);
+    let done = fx.drive(&run, dispatch);
+    assert_eq!(done.state, GraduationRunState::Completed, "{done:?}");
+    assert!(done.run_summary.is_none());
+}

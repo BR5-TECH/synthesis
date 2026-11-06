@@ -271,10 +271,14 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
 }
 
 /// GRD-FR-ARLT: a review that let the work through commits it onto the stream.
+///
+/// GRD-FR-UUGP: `summary` is recorded as the run's `run_summary` in the write
+/// that completes the run, and nowhere earlier.
 pub(super) fn finish<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
     worktree: &Path,
+    summary: Option<crate::graduation::RunSummary>,
 ) {
     // GRD-FR-VAUE: a direct run commits only on the branch it pinned, in the
     // worktree it pinned. Anything else commits nothing and rests the run.
@@ -360,6 +364,10 @@ pub(super) fn finish<R: tauri::Runtime>(
         observability::GraduationVisualStage::Done,
         observability::StageReason::Finished,
     );
+    run.run_summary = summary;
+    // GRD-FR-PXQN: a direct run records its landing in the write that completes
+    // it.
+    crate::graduation::landings::record_direct_landing(run);
     let _ = transitions::transition(app, run, GraduationRunState::Completed);
 }
 
@@ -779,6 +787,35 @@ pub(super) fn read_verdict(execution: &AgentExecution) -> Option<ReviewVerdict> 
         ReviewOutcome::Revise if verdict.findings.is_empty() => None,
         _ => Some(verdict),
     }
+}
+
+/// GRL-FR-FRNJ / GRL-FR-ECES: the run summary a `ready` verdict carries, read
+/// on its own after the verdict.
+///
+/// A summary that is absent, blank in a field, or of another shape is dropped.
+/// The verdict, its correction count and the run's next step do not change. A
+/// `revise` verdict carries no summary.
+pub(super) fn read_run_summary<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+    verdict: &ReviewVerdict,
+    execution: &AgentExecution,
+) -> Option<crate::graduation::RunSummary> {
+    if verdict.verdict != ReviewOutcome::Ready {
+        return None;
+    }
+    let raw = execution.response.as_ref()?.result.as_ref()?.get("summary")?;
+    let summary = crate::graduation::RunSummary::read(raw);
+    if summary.is_none() {
+        logging::log_info(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Ai, Domain::Backend],
+            "graduation dropped a run summary it could not read",
+            log_fields! { "run_id" => run.id.clone() },
+        );
+    }
+    summary
 }
 
 /// GRL-FR-GQAB: the findings, in the order the review returned them.

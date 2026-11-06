@@ -20,6 +20,9 @@ static MERGE_WORK_SOURCE: &str =
 /// GRL-FR-MRVK: the instruction every merge review turn carries.
 static MERGE_REVIEW_SOURCE: &str =
     include_str!("../../../../resources/prompts/graduation/merge-review.md");
+/// GRL-FR-TZKR: the instruction the one turn of a PR summary run carries.
+static PR_SUMMARY_SOURCE: &str =
+    include_str!("../../../../resources/prompts/graduation/pr-summary.md");
 /// What an undispatchable tool call is answered with.
 static REFUSALS_SOURCE: &str = include_str!("../../../../resources/prompts/graduation/refusals.md");
 
@@ -36,6 +39,8 @@ pub static MERGE_WORK_PROMPT: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(MERGE_WORK_SOURCE));
 pub static MERGE_REVIEW_PROMPT: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(MERGE_REVIEW_SOURCE));
+pub static PR_SUMMARY_PROMPT: LazyLock<String> =
+    LazyLock::new(|| crate::prompts::instruction_text(PR_SUMMARY_SOURCE));
 pub static REFUSALS: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(REFUSALS_SOURCE));
 
@@ -57,6 +62,10 @@ pub fn instruction_for(part: &str) -> &'static str {
 /// A merge run never compiles `work.md`, `review.md` or `rebase.md`: its two
 /// phases have instructions of their own.
 pub fn instruction_for_run(run: &crate::graduation::GraduationRun, part: &str) -> &'static str {
+    // GRL-FR-GADT: a PR summary run compiles `pr-summary.md` alone.
+    if run.is_pr_summary() {
+        return &PR_SUMMARY_PROMPT;
+    }
     if run.is_merge() {
         // GRL-FR-GADT, GRL-FR-MRVK: the review part under either of its names.
         return match part {

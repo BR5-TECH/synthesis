@@ -35,6 +35,7 @@ mod history;
 mod log_records;
 mod pull;
 mod pull_request_create;
+mod pull_request_link;
 mod pull_request_timeline;
 mod pull_requests;
 mod push;
@@ -43,6 +44,9 @@ mod rollback;
 mod upstream;
 mod wire_shape;
 mod working_tree;
+mod write_guard;
+mod write_guard_refusals;
+mod write_guard_wiring;
 
 /// A `LogSink` that publishes nowhere: no Tauri runtime is running to
 /// deliver an event, and the records themselves reach the buffer regardless.

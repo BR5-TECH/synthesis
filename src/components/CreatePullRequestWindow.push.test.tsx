@@ -13,6 +13,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { CreatePullRequestWindow } from "./CreatePullRequestWindow";
+import type { PullRequestLinkResult } from "./CreatePullRequest/linking";
 import type {
   PullRequestInput,
   PullRequestResume,
@@ -20,6 +21,17 @@ import type {
 } from "./CreatePullRequest/types";
 import type { CreatedPullRequest, GitBranch, PullRequestHeadState } from "../types";
 import { resetLogBufferForTest } from "../logging";
+import { isPullRequestWindowOpenFor } from "../state/pullRequestSessions";
+import {
+  pullRequestWindowRead,
+  resetCreatePullRequestStores,
+} from "../test/createPullRequestFixtures";
+import {
+  mainGuard,
+  protectedRefusal,
+  scriptedReads,
+  unconfirmedRefusal,
+} from "../test/mainBranchWriteFixtures";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -66,6 +78,7 @@ const writes = () =>
 
 beforeEach(() => {
   resetLogBufferForTest();
+  resetCreatePullRequestStores();
   headState = async () => NOT_PUSHED;
   push = async () => {
     // The remote holds the branch from now on.
@@ -85,8 +98,11 @@ beforeEach(() => {
         return create();
       case "append_log_records":
         return undefined;
-      default:
+      default: {
+        const read = pullRequestWindowRead(cmd);
+        if (read) return read.answer;
         return Promise.reject(new Error(`unexpected command ${cmd}`));
+      }
     }
   });
 });
@@ -95,7 +111,7 @@ afterEach(cleanup);
 
 interface Handlers {
   onClose: Mock<() => void>;
-  onCreated: Mock<(created: CreatedPullRequest) => void>;
+  onCreated: Mock<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>;
   onRequestToken: Mock<(input: PullRequestInput) => void>;
   onOpenGlobalSettings: Mock<() => void>;
   onSubmittingChange: Mock<(submitting: boolean) => void>;
@@ -104,7 +120,7 @@ interface Handlers {
 function mount(resume: PullRequestResume | null = null): Handlers {
   const handlers: Handlers = {
     onClose: vi.fn<() => void>(),
-    onCreated: vi.fn<(created: CreatedPullRequest) => void>(),
+    onCreated: vi.fn<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>(),
     onRequestToken: vi.fn<(input: PullRequestInput) => void>(),
     onOpenGlobalSettings: vi.fn<() => void>(),
     onSubmittingChange: vi.fn<(submitting: boolean) => void>(),
@@ -117,6 +133,9 @@ const submit = () => screen.getByTestId("create-pr-submit");
 const ready = async () => {
   await waitFor(() => expect(screen.queryByTestId("create-pr-loading")).toBeNull());
   await screen.findByRole("option", { name: "main" });
+  await waitFor(() =>
+    expect(screen.getByTestId("create-pr-tasks")).not.toHaveTextContent("Reading the tasks"),
+  );
 };
 
 describe("the push notice (CPR-FR-PLWK)", () => {
@@ -164,7 +183,7 @@ describe("Submit pushes, then creates (CPR-FR-ODTB, CPR-FR-KMHY, CPR-FR-XMRL)", 
     await waitFor(() => expect(h.onCreated).toHaveBeenCalledWith({
       number: 7,
       url: "https://github.com/acme/platform/pull/7",
-    }));
+    }, null));
     expect(writes()).toEqual(["push_branch", "create_pull_request"]);
     expect(calls("push_branch")[0][1]).toEqual({ branch: SOURCE.head });
     expect(calls("create_pull_request")[0][1]).toMatchObject({ head: SOURCE.head, base: "main" });
@@ -400,5 +419,91 @@ describe("a window that is gone or blocked (CPR-FR-XMRL, CPR-FR-HGXL, CPR-FR-VZU
 
     releaseCreate({ number: 7, url: "https://github.com/acme/platform/pull/7" });
     await waitFor(() => expect(h.onCreated).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("a push to a main branch (MBW-FR-URIL, MBW-FR-YSMC, MBW-FR-JZME)", () => {
+  const headGuard = (protection: "unprotected" | "protected" = "unprotected") =>
+    mainGuard({ branch: SOURCE.head, isDefault: protection !== "protected", protection });
+  const section = () => screen.queryByTestId("main-branch-write-section");
+
+  it("MBW-FR-RMCO, MBW-FR-URIL, MBW-FR-IOGF, MBW-FR-WCBQ: a due push reads the guard of the head branch; on an unconfirmed main the section shows, Submit waits for the confirm, and focus stays in the window", async () => {
+    const reads = scriptedReads(headGuard());
+    const h = mount();
+    expect(await screen.findByTestId("main-branch-write-section")).toBeInTheDocument();
+    expect(reads.reads[0]).toEqual({ branch: SOURCE.head, refresh: false });
+    await ready();
+    expect(submit()).toBeDisabled();
+    expect(submit().getAttribute("aria-describedby")).toContain(section()!.id);
+
+    await userEvent.click(screen.getByTestId("main-branch-write-section-confirm"));
+
+    await waitFor(() => expect(submit()).toBeEnabled());
+    expect(section()).toBeNull();
+    expect(reads.confirms).toEqual([SOURCE.head]);
+    expect(document.activeElement).toBe(submit());
+    expect(writes()).toEqual([]);
+    await userEvent.click(submit());
+    await waitFor(() => expect(h.onCreated).toHaveBeenCalledTimes(1));
+    expect(writes()).toEqual(["push_branch", "create_pull_request"]);
+  });
+
+  it("MBW-FR-YSMC, CPR-FR-ODTB: a refusal with main_branch_write_unconfirmed creates no pull request and shows the section with the guard it carries; a confirm pushes once more", async () => {
+    const reads = scriptedReads(mainGuard({ branch: SOURCE.head, isMain: false, isDefault: false }));
+    let refusals = 1;
+    push = async () => {
+      if (refusals-- > 0) throw unconfirmedRefusal(headGuard());
+      headState = async () => PUSHED;
+    };
+    const h = mount();
+    await ready();
+    await waitFor(() => expect(submit()).toBeEnabled());
+
+    await userEvent.click(submit());
+
+    expect(await screen.findByTestId("main-branch-write-section")).toHaveTextContent(
+      `${SOURCE.head} is the default branch of this repository.`,
+    );
+    expect(calls("create_pull_request")).toHaveLength(0);
+    expect(screen.queryByTestId("create-pr-failure")).toBeNull();
+    expect(submit()).toBeDisabled();
+    expect(calls("push_branch")).toHaveLength(1);
+
+    await userEvent.click(screen.getByTestId("main-branch-write-section-confirm"));
+
+    await waitFor(() => expect(h.onCreated).toHaveBeenCalledTimes(1));
+    expect(reads.confirms).toEqual([SOURCE.head]);
+    expect(writes()).toEqual(["push_branch", "push_branch", "create_pull_request"]);
+  });
+
+  it("MBW-FR-YSMC, MBW-FR-JZME: a refusal with main_branch_protected shows the hard block, offers no confirm, and pushes nothing more", async () => {
+    push = async () => {
+      throw protectedRefusal(headGuard("protected"));
+    };
+    const h = mount();
+    await ready();
+    await waitFor(() => expect(submit()).toBeEnabled());
+
+    await userEvent.click(submit());
+
+    const block = await screen.findByTestId("main-branch-write-section");
+    expect(block).toHaveTextContent("Work reaches it through a pull request.");
+    expect(screen.queryByTestId("main-branch-write-section-confirm")).toBeNull();
+    expect(screen.getByRole("button", { name: "New worktree" })).toBeInTheDocument();
+    expect(screen.queryByTestId("create-pr-failure")).toBeNull();
+    expect(submit()).toBeDisabled();
+    expect(writes()).toEqual(["push_branch"]);
+    expect(h.onCreated).not.toHaveBeenCalled();
+  });
+});
+
+describe("the window and the completion of its PR summary run (CPR-FR-VOEB)", () => {
+  it("CPR-FR-VOEB: while the window is open its head is marked open, so a completed PR summary run raises no toast over it; a closed window clears the mark", async () => {
+    mount();
+    await ready();
+    expect(isPullRequestWindowOpenFor(SOURCE.head)).toBe(true);
+    expect(isPullRequestWindowOpenFor("feature/other")).toBe(false);
+    cleanup();
+    expect(isPullRequestWindowOpenFor(SOURCE.head)).toBe(false);
   });
 });

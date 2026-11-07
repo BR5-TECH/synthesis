@@ -1,5 +1,5 @@
 //! What the two merge instructions say (`GRL-graduation-loop.md` GRL-FR-GADT,
-//! GRL-FR-SLQF, GRL-FR-MRVK, GRL-FR-YIJG, GRL-FR-TXEB).
+//! GRL-FR-SLQF, GRL-FR-MRVK, GRL-FR-YIJG, GRL-FR-TXEB, GRL-FR-RTNC).
 //!
 //! These read the prompt files themselves. The failure they catch is silent: an
 //! instruction that names a field the turn is not given, or that leaves out the
@@ -140,23 +140,26 @@ fn the_merge_instructions_do_not_use_the_update_frame() {
     }
 }
 
-// GRL-FR-MRVK, GRB-FR-YCMH: the review runs the project's own build and test
-// commands, names `task specs` and `task tests`, and invents none.
+// GRL-FR-MRVK, GRL-FR-RTNC, GRL-FR-PNLQ, GRL-FR-LKLE: the merge review runs no
+// check, reads the record of the merge work turn, and names no command of one
+// project.
 #[test]
-fn the_merge_review_names_the_project_commands_and_invents_none() {
+fn the_merge_review_reads_the_check_record_and_runs_nothing() {
     let text = instruction(MERGE_REVIEW);
-    assert!(text.contains("`task specs`"), "the review names task specs");
-    assert!(text.contains("`task tests`"), "the review names task tests");
-    assert!(text.contains("invent none"), "the review invents no command");
-    let lower = text.to_lowercase();
-    assert!(lower.contains("build and test commands"));
+    assert!(text.contains("**You run no check command.**"));
+    assert!(text.contains("`input.checks`"), "the review is told where the record is");
+    assert!(text.contains(".synthesis-checks/report.md"));
+    assert!(text.contains("Where `input.checks` is `missing`, return `revise`"));
     assert!(
-        lower.contains(
-            "never return `ready` over a merge whose required commands you could not run"
-        ),
-        "a command that cannot run is never a pass"
+        text.contains("Never return `ready` over a merge whose record does not show every required check passed"),
+        "a merge with no passing record is never ready"
     );
-    assert!(MERGE_WORK.contains("invent none"), "the work turn invents none either");
+    for named in ["`task specs`", "`task tests`", "task specs", "task tests"] {
+        assert!(!text.contains(named), "the merge review names `{named}`");
+    }
+    assert!(!text.contains("You do run the project's own build"));
+    assert!(MERGE_WORK.contains("invent none"), "the work turn invents no command");
+    assert!(MERGE_WORK.contains(".synthesis-checks/report.md"), "the work turn writes the record");
 }
 
 // GRL-FR-MRVK, GRB-FR-YCMH, GRL-FR-UQNV: the review judges every changed path

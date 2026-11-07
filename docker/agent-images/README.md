@@ -72,8 +72,8 @@ application's, performed on the host where the whole repository is reachable.
   executor generates are the CLI's own and nothing wraps or rewrites them.
 - **Browser** — Chromium at a pinned Playwright version (AVI-FR-16), at
   `/opt/ms-playwright`. See below.
-- **Toolchains** — Rust, pnpm, and the TypeScript compiler, each at a pinned
-  version (AVI-FR-17). See below.
+- **Toolchains** — Rust, pnpm, the TypeScript compiler, and the `task` runner,
+  each at a pinned version (AVI-FR-17, AVI-FR-NEGK). See below.
 
 ### The toolchains
 
@@ -86,6 +86,10 @@ describe an edit, which is the same gap the missing browser was.
 | Rust — `rustc`, `cargo`, `rustfmt`, `clippy` | `ARG RUST_VERSION`, installed by `rustup` at `ARG RUSTUP_VERSION` | `/usr/local/rustup`, `/usr/local/cargo` |
 | pnpm | `ARG PNPM_VERSION` | npm global |
 | TypeScript — `tsc` | `ARG TYPESCRIPT_VERSION` | npm global |
+| go-task — `task` (AVI-FR-NEGK) | `ARG TASK_VERSION` | `/usr/local/bin/task` |
+
+The go-task release archive is checked against the SHA-256 that the release
+publishes, per architecture, on the same terms as `rustup-init`.
 
 `rustup-init` is the one part of an image that arrives over the network without
 a digest of its own, so it is fetched by version from the release archive and
@@ -123,6 +127,11 @@ that is not a boundary being crossed.
 
 `$PNPM_HOME/bin` is on `PATH` next to `/usr/local/cargo/bin` — pnpm refuses a
 global install when its bin directory is not on the path.
+
+The Claude Code image also sets `BASH_DEFAULT_TIMEOUT_MS` and
+`BASH_MAX_TIMEOUT_MS` to `1800000` (AVI-FR-WWVY). A full check suite runs longer
+than the CLI's default limit of ten minutes, and an agent that hits the limit
+starts a background job and polls it.
 
 ### The browser
 
@@ -284,7 +293,7 @@ That last sentence holds only once a digest has been recorded. While an entry
 in `manifest.toml` carries the all-zero sentinel, there is no digest to pin to,
 so the executor addresses that image by its `image_ref` — repository **and
 tag** — and the tag it names is the CLI version with a build revision after it
-(`2.1.233-4`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
+(`2.1.233-5`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
 the application launches.
 
 So on a machine running an unpublished image, the tag the executor asks for is

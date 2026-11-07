@@ -700,6 +700,8 @@ pub(super) fn hidden_paths(worktree: &PathBuf, run: &GraduationRun) -> (Vec<Stri
             paths.push(path.to_string_lossy().into_owned());
         }
     }
+    // GRL-FR-DCKG: the check folder is not authored work, so it is not named.
+    paths.retain(|path| !super::checks_folder::is_check_path(path));
     paths.sort();
     paths.dedup();
     let omitted = paths.len().saturating_sub(BOUND) as u32;
@@ -734,6 +736,8 @@ pub(super) fn changed_paths(worktree: &PathBuf, run: &GraduationRun) -> Vec<Stri
             }
         }
     }
+    // GRL-FR-DCKG: the check folder is never part of the change set.
+    paths.retain(|path| !super::checks_folder::is_check_path(path));
     paths.sort();
     paths.dedup();
     paths

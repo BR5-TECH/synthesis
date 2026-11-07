@@ -155,6 +155,14 @@ pub(super) async fn execute_with_correction<R: tauri::Runtime>(
     Corrected::Settle(Box::new(end_correction(app, run, &pending, second_outcome)), second_bound)
 }
 
+/// GRL-FR-HWLD / GRL-FR-KYYW: whether the next turn of `part` is a saved
+/// correction that will be sent, by the rule of [`pending_for`].
+pub(super) fn will_correct(run: &GraduationRun, part: &str) -> bool {
+    run.checkpoint.answer_correction.as_ref().is_some_and(|pending| {
+        pending.part == part && correction_section(&pending.reason).is_some()
+    })
+}
+
 /// GRL-FR-HWLD: the correction saved for this part, if any. A work turn that
 /// runs first drops a pending review correction.
 fn pending_for(run: &mut GraduationRun, part: &str) -> Option<GraduationAnswerCorrection> {

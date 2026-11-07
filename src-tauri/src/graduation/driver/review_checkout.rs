@@ -1,9 +1,13 @@
 //! The throwaway checkout a review turn stands in (GRL-FR-YKRI).
 //!
-//! The review must run the project's own build and test commands, and those
-//! commands write files. A reviewer that shared the stream's working copy could
-//! not be told apart from one that tampered with it, so the turn is given a
-//! checkout of its own that is removed when the turn ends.
+//! The review runs no check (GRL-FR-RTNC), but it can still write files. A
+//! reviewer that shared the stream's working copy could change it, and that
+//! change could not be told apart from the work it judges. So the turn is given
+//! a checkout of its own that is removed when the turn ends.
+//!
+//! The checkout also receives the check folder of the working copy
+//! (GRL-FR-AMQE), which is where the review reads the results of the checks the
+//! work turn ran.
 //!
 //! What the checkout holds is the run's **change set**, standing on the run's
 //! base commit as uncommitted work. That is the same tree the commit of a
@@ -63,6 +67,54 @@ pub(crate) fn create<R: tauri::Runtime>(
         builder.force().remove_untracked(true).update_index(false);
         checkout.checkout_tree(tree.as_object(), Some(&mut builder)).map_err(|e| e.to_string())?;
     }
+    // GRL-FR-LXWU: the checkout shares the repository's `info/exclude`, so the
+    // copied folder reads back as ignored rather than as an untracked change.
+    if let Err(reason) = super::checks_folder::ensure_excluded(worktree).map(|added| {
+        if added {
+            logging::log_debug(
+                app,
+                &crate::logging::BUFFER,
+                &[Domain::Backend],
+                "graduation hid the check folder in the repository exclude file",
+                log_fields! { "run_id" => run.id.clone() },
+            );
+        }
+    }) {
+        logging::log_warn(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation could not hide the check folder",
+            log_fields! { "run_id" => run.id.clone(), "reason" => reason },
+        );
+    }
+    // GRL-FR-AMQE: the results of the work turn's checks go with the change
+    // set. A copy that fails leaves the report missing, which the review reports
+    // as a finding (GRL-FR-NTFD).
+    let copied = match super::checks_folder::copy_into(worktree, &target) {
+        Ok(copied) => {
+            if copied.skipped > 0 {
+                logging::log_warn(
+                    app,
+                    &crate::logging::BUFFER,
+                    &[Domain::Backend],
+                    "graduation left links out of the copied check folder",
+                    log_fields! { "run_id" => run.id.clone(), "skipped" => copied.skipped as u64 },
+                );
+            }
+            copied.found
+        }
+        Err(reason) => {
+            logging::log_warn(
+                app,
+                &crate::logging::BUFFER,
+                &[Domain::Backend],
+                "graduation could not copy the check folder into the review checkout",
+                log_fields! { "run_id" => run.id.clone(), "reason" => reason },
+            );
+            false
+        }
+    };
     logging::log_debug(
         app,
         &crate::logging::BUFFER,
@@ -71,6 +123,7 @@ pub(crate) fn create<R: tauri::Runtime>(
         log_fields! {
             "run_id" => run.id.clone(),
             "checkout" => target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            "check_folder" => copied,
         },
     );
     Ok(target)

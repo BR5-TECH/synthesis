@@ -162,6 +162,30 @@ fn a_paused_correction_is_sent_after_continue() {
         .expect_dispatch(1, |d| d.part("review").has_no_field("correction"));
 }
 
+// GRL-FR-KYYW, GRL-FR-HWLD: a saved correction only sends its answer again, so
+// the check record of the turn it corrects is kept for the review.
+#[test]
+fn a_paused_correction_keeps_the_check_record_for_the_review() {
+    Scenario::named("correction keeps the record")
+        .work_turn(
+            Script::answers_refused(EnvelopeInvalid::SummaryEmpty)
+                .writes("src/panel.ts", "1\n")
+                .writes(".synthesis-checks/report.md", "| cargo test | 0 |\n"),
+        )
+        .work_turn(Script::is_cancelled().pausing_the_run())
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .continued(vec![
+            Script::reports_success(),
+            Script::answers_ready("The work answers the prompt."),
+        ])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch(0, |d| d.part("work").field_contains("correction", "`summary`"))
+        .expect_dispatch(1, |d| {
+            d.part("review").field_contains("checks", ".synthesis-checks/report.md")
+        });
+}
+
 // GRL-FR-HWLD: a correction that could not launch stays saved, and Continue
 // sends it.
 #[test]

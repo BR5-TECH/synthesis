@@ -149,6 +149,10 @@ pub struct GraduationTaskInput {
     /// GRL-FR-SNHR: the pull request the turn of a PR summary run describes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_summary: Option<PrSummaryTaskContext>,
+    /// GRL-FR-FESZ: where a `review` or `merge_review` turn finds the check
+    /// report the work turn wrote, or `missing`. No other turn carries it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<String>,
     /// GRL-FR-DNKA: the work turn's own account of what it did and did not do,
     /// carried to the review that judges what it wrote.
     ///
@@ -201,6 +205,12 @@ impl GraduationTaskInput {
             matches!(self.part.as_str(), phases::PART_MERGE_WORK | phases::PART_MERGE_REVIEW);
         if merge_part != self.merge.is_some() {
             return Err(format!("the merge context does not match the part {:?}", self.part));
+        }
+        // GRL-FR-FESZ: only a review part carries `checks`.
+        let review_part =
+            matches!(self.part.as_str(), phases::PART_REVIEW | phases::PART_MERGE_REVIEW);
+        if self.checks.is_some() && !review_part {
+            return Err(format!("the check report does not match the part {:?}", self.part));
         }
         if !matches!(
             self.purpose.as_str(),
@@ -320,6 +330,8 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
         decisions: run.checkpoint.decisions.clone(),
         // Set by the caller alone, and only where a turn is asked again.
         correction: None,
+        // GRL-FR-FESZ: set by the review alone, once its checkout stands.
+        checks: None,
         // GRL-FR-DNKA: carried to **the review that judges what it wrote**, and
         // to no other turn. A work turn is never given it: `work.md` names no
         // such field, so an account reaching one would be an input nothing

@@ -82,6 +82,11 @@ fn merge_input_fields(part: &str) -> Vec<String> {
     });
     let mut input = driver::compose_input(&run, part, driver::PURPOSE_GENERATE);
     input.correction = Some("send this instead".into());
+    // GRL-FR-FESZ: the review sets `checks` once its checkout stands, as it
+    // sets `correction`, so the review part is given it here.
+    if part == driver::PART_REVIEW {
+        input.checks = Some(driver::checks_folder::REPORT_PATH.into());
+    }
     input.to_map().keys().cloned().collect()
 }
 
@@ -150,6 +155,11 @@ fn graduation_input_fields(part: &str) -> Vec<String> {
     });
     let mut input = driver::compose_input(&run, part, driver::PURPOSE_GENERATE);
     input.correction = Some("send this instead".into());
+    // GRL-FR-FESZ: the review sets `checks` once its checkout stands, as it
+    // sets `correction`, so the review part is given it here.
+    if part == driver::PART_REVIEW {
+        input.checks = Some(driver::checks_folder::REPORT_PATH.into());
+    }
     input.to_map().keys().cloned().collect()
 }
 
@@ -416,4 +426,91 @@ fn the_review_prompt_asks_a_ready_verdict_for_a_run_summary() {
     ] {
         assert!(text.contains(required), "review.md does not say `{required}`");
     }
+}
+
+// GRL-FR-VDCP, GRL-FR-MQFB: the two work instructions run narrow checks while
+// working, the full checks once at the end, record them in the check folder,
+// and run a long command in the foreground.
+#[test]
+fn the_work_instructions_record_the_full_checks_once() {
+    for (name, source) in prompt_sources() {
+        if !matches!(name, "work.md" | "merge-work.md") {
+            continue;
+        }
+        let text = crate::prompts::instruction_text(source);
+        for needed in [
+            "run the narrow checks",
+            "run the project's **full** checks **once**",
+            ".synthesis-checks/logs/<name>.log",
+            ".synthesis-checks/report.md",
+            "its exit status, its start and end time, and its summary line",
+            "**Run a long command in the foreground**",
+            "Never start a background job and wait for it with a sleep loop",
+            "After your last edit",
+            "one entry for each check: the command, its exit status",
+            "invent none",
+        ] {
+            assert!(text.contains(needed), "{name} does not say `{needed}`");
+        }
+    }
+}
+
+// GRL-FR-RTNC, GRL-FR-PNLQ: both review instructions run no check and verify the
+// record the work turn wrote.
+#[test]
+fn the_review_instructions_verify_the_record_and_run_no_check() {
+    for (name, source) in prompt_sources() {
+        if !matches!(name, "review.md" | "merge-review.md") {
+            continue;
+        }
+        let text = crate::prompts::instruction_text(source);
+        for needed in [
+            "**You run no check command.**",
+            "`input.checks`",
+            "Where `input.checks` is `missing`, return `revise`",
+            "A required check that the record does not hold is a finding",
+            "A check that failed, timed out or did not run is a finding",
+            "A record that does not agree with its logs is a finding",
+            "is not a finding by itself",
+        ] {
+            assert!(text.contains(needed), "{name} does not say `{needed}`");
+        }
+        assert!(!text.contains("You may run the project's own build"), "{name}");
+    }
+}
+
+// GRL-FR-LKLE: no instruction names a command of one project.
+#[test]
+fn no_instruction_names_a_command_of_one_project() {
+    for (name, source) in prompt_sources() {
+        let text = crate::prompts::instruction_text(source);
+        for command in [
+            "task specs",
+            "task tests",
+            "task lint",
+            "pnpm",
+            "cargo",
+            "vitest",
+            "npm run",
+            "npm test",
+            "go test",
+            "pytest",
+        ] {
+            assert!(!text.contains(command), "{name} names `{command}`");
+        }
+    }
+}
+
+// GRL-FR-CKBL: the review's checks decision reads the record and runs nothing.
+#[test]
+fn the_review_decides_on_the_checks_by_reading_the_record() {
+    let (_, source) = prompt_sources()
+        .into_iter()
+        .find(|(name, _)| *name == "review.md")
+        .expect("the review instruction");
+    let text = crate::prompts::instruction_text(source);
+    assert!(text.contains(
+        "- **Checks.** Whether the check record shows that every check the project requires passed"
+    ));
+    assert!(text.contains("and not by running anything"));
 }

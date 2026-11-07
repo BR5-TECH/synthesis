@@ -34,6 +34,7 @@ use super::{
     ReviewVerdict,
 };
 
+pub mod checks_folder;
 pub mod corrections;
 mod dispatch;
 pub mod drive;

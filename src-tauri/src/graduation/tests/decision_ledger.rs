@@ -156,10 +156,9 @@ fn the_instructions_state_the_binding_decisions_and_the_review_rules() {
         assert!(!text.contains("input.review_history"), "{name} names no review history");
     }
     assert!(rebase.contains("binding"));
-    assert!(review.contains("You run no test command") || review.contains("run no test command"));
+    // GRL-FR-RTNC: no review runs a check.
+    for (name, text) in [("review", review), ("merge-review", merge_review)] {
+        assert!(text.contains("**You run no check command.**"), "{name}");
+    }
     assert!(!review.contains("definition of done"));
-    assert!(
-        merge_review.contains("test commands") || merge_review.contains("`task tests`"),
-        "the merge review keeps its commands"
-    );
 }

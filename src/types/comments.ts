@@ -5,6 +5,7 @@
 // resolves to the same set and no import site moved.
 
 import type { NewDraftProposalReference, NewDraftSubjectReference } from "./newDraftProposals";
+import type { ExportRequestReference } from "./documentExport";
 import { GITHUB_TOKEN_ERRORS } from "./github";
 
 // --- Comments (CMS-comments-storage.md / CMT-comments.md) -----------------
@@ -188,7 +189,9 @@ export type Attachment =
   | ProposalHunkReference
   /** CMS-FR-YKGI / CMS-FR-KAXQ: the two new-draft references. */
   | NewDraftProposalReference
-  | NewDraftSubjectReference;
+  | NewDraftSubjectReference
+  /** CMS-FR-OKDW: an export an agent asked the author for. */
+  | ExportRequestReference;
 
 /**
  * CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
@@ -257,6 +260,7 @@ export interface AttachmentContent {
 export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
   if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
+  if (a.kind === "exportRequest") return a.path;
   if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
     return a.path;
   }
@@ -272,7 +276,8 @@ export function isImageAttachment(a: Attachment): boolean {
     a.kind === "promptProposal" ||
     a.kind === "proposalHunk" ||
     a.kind === "newDraftProposal" ||
-    a.kind === "newDraftSubject"
+    a.kind === "newDraftSubject" ||
+    a.kind === "exportRequest"
   ) {
     return false;
   }

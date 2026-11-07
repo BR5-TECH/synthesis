@@ -25,6 +25,7 @@ import { ReviewOverlay } from "./ReviewOverlay";
 import { SourceReview } from "./SourceReview";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
 import { ActionControl } from "../ActionControl";
+import { openExportDialog } from "../../state/exportDialog";
 import { EditSessionStore } from "../../state/editSessions";
 import type { EditSession } from "../../state/editSessions/types";
 import { sealBurst, type EditMode, type EditSurface } from "../../state/editHistory";
@@ -744,6 +745,23 @@ export function EditorView(props: EditorViewProps) {
         /* ACT-FR-04: Discuss on everything the Editor opens, and Implement in
            addition on an artifact whose type is `spec`. */
         artifactType={artifactType === "spec" ? "spec" : undefined}
+        /* ACT-FR-04 / EXD-FR-UQNO: Export to... on a Markdown file whose
+           resolved artifact type is `doc`, and on no other file. */
+        exportTo={
+          isMarkdown && artifactType === "doc"
+            ? {
+                label: "Export to...",
+                title: "Export this document to PDF or DOCX",
+                onActivate: () => {
+                  // EXD-FR-CDYS: the buffer reaches disk before the dialog opens.
+                  void openExportDialog(artifactId, {
+                    sessions,
+                    opener: document.activeElement as HTMLElement | null,
+                  });
+                },
+              }
+            : undefined
+        }
         /* ACT-FR-19: the discussions are read in the column, so no floating
            panel is rendered. */
         discussionsInRail={showComments}

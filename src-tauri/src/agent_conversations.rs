@@ -543,6 +543,16 @@ fn conversation_tools<R: tauri::Runtime>(
             author.clone(),
             Arc::clone(asked),
         )),
+        // CVL-FR-08 / RDX-FR-DFXB: every turn can ask the author to export a
+        // document. A posted request asks the author for something, so it ends
+        // the turn on the flag a posted question sets (CVL-FR-15).
+        erase_tool(crate::tools::request_document_export::RequestDocumentExportTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(asked),
+        )),
     ];
     // CVL-FR-08: a discussion origin is attached `ask_discussion_questions`
     // beside the nine, and an anchored comment origin is attached none — a

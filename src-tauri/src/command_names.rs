@@ -439,6 +439,10 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "remove_document_source",
     "read_document",
     "read_document_pdf",
+    "export_document",
+    // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
+    "get_export_request",
+    "resolve_export_request",
     // Embeddings index (EMB-embeddings-index.md).
     "load_embeddings_settings",
     "save_embeddings_settings",

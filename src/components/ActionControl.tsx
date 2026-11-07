@@ -99,6 +99,11 @@ export interface ActionControlProps {
    * disabled, there being nothing left to discuss or to hand over.
    */
   missing?: boolean;
+  /**
+   * ACT-FR-04 / ACT-FR-05 / EXD-FR-UQNO: **Export to...**, directly after
+   * Discuss. Only a Markdown Editor tab of a DOC artifact contributes it.
+   */
+  exportTo?: HostAction;
   /** ACT-FR-04/05: the draft's own three entries, in their fixed slots. */
   graduate?: HostAction;
   /**
@@ -197,6 +202,7 @@ export function ActionControl({
   readOnly = false,
   canDiscuss = true,
   missing = false,
+  exportTo,
   graduate,
   copySource,
   publish,
@@ -617,6 +623,28 @@ export function ActionControl({
           >
             <Icon.Comment size={13} /> Discuss
           </button>
+          {/* ACT-FR-05 / EXD-FR-UQNO: Export to... comes directly after
+              Discuss. A read-only tab never affords it (ACT-FR-04). */}
+          {exportTo && !readOnly && (
+            <button
+              role="menuitem"
+              className="draft-actions__item"
+              disabled={exportTo.disabled || missing || blocked}
+              title={
+                missing
+                  ? "This file no longer exists in the project"
+                  : blocked
+                    ? "Finish what is open over this tab first"
+                    : exportTo.title
+              }
+              onClick={() => {
+                setFloating("none");
+                exportTo.onActivate();
+              }}
+            >
+              <Icon.PullDown size={13} /> {exportTo.label}
+            </button>
+          )}
           {/* ACT-FR-04: a read-only tab affords Discuss alone whatever its
               item's type, so the entries that change the item are dropped here
               rather than trusted to every host to withhold. */}

@@ -7,6 +7,7 @@ import {
 } from "react";
 import * as api from "./../api";
 import { EditSessionStore } from "../state/editSessions";
+import { setExportSessions } from "../state/exportDialog";
 import { DraftSessionStore } from "../state/draftSessions";
 import { FlowSessionStore } from "../state/flowSessions";
 import { SearchSessionStore } from "../state/searchSessions";
@@ -91,6 +92,11 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   // (EDT-FR-29/EDT-FR-30) and so the shell can flush it before a teardown
   // (EDT-FR-33). Never persisted; cleared when the project closes.
   const [sessions] = useState(() => new EditSessionStore());
+  // EXD-FR-UDHD: a card writes the file's pending edit before its dialog opens.
+  useEffect(() => {
+    setExportSessions(sessions);
+    return () => setExportSessions(null);
+  }, [sessions]);
   // FLO-FR-26..FLO-FR-31: the graph and unsaved state of every Flow open on a
   // Flow canvas. Separate from `sessions` because a Flow's editing state belongs
   // to its tab and is dropped when that tab closes (FLO-FR-28), where an

@@ -54,6 +54,8 @@ pub(crate) enum GithubWriteFailure {
     Rejected,
     /// HTTP 422: GitHub refused the content. Carries the reasons GitHub gave.
     Invalid(String),
+    /// HTTP 409: another request changes the same resource (GTC-FR-KQVA).
+    Conflict,
     /// Anything else.
     Unreachable,
     /// The TLS check refused GitHub's certificate (AAP-FR-HZTB).
@@ -230,7 +232,7 @@ fn write_at(
     let mut response = request
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
         .header("User-Agent", "synthesis")
         .header("Content-Type", "application/json")
         .send(payload)
@@ -244,6 +246,7 @@ fn write_at(
         200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
         401 | 403 => Err(GithubWriteFailure::Rejected),
         404 | 410 => Err(GithubWriteFailure::NotFound),
+        409 => Err(GithubWriteFailure::Conflict),
         422 => Err(GithubWriteFailure::Invalid(invalid_reason(&text))),
         _ => Err(GithubWriteFailure::Unreachable),
     }
@@ -260,7 +263,7 @@ fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, GithubFailure> {
         .get(&url)
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
         // GitHub rejects a request with no User-Agent, which would
         // otherwise read as a bad token.
         .header("User-Agent", "synthesis")

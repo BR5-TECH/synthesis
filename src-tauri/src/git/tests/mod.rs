@@ -36,6 +36,8 @@ mod log_records;
 mod pull;
 mod pull_request_create;
 mod pull_request_link;
+mod pull_request_stack;
+mod pull_request_stack_model;
 mod pull_request_timeline;
 mod pull_requests;
 mod push;

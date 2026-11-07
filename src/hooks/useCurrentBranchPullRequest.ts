@@ -9,6 +9,11 @@
  * `"changes updated"` fires, so the button follows a commit as soon as it
  * lands. The two surfaces read it the same way, so one cannot offer what the
  * other refuses.
+ *
+ * It also reads the GitHub stack of the branch when the branch changes, so the
+ * source starts from the parent branch in the stack (CHG-FR-JQSD,
+ * CPR-FR-MBTA). That read reaches GitHub, so it does not run on every
+ * `"changes updated"`.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,7 +22,8 @@ import type { PullRequestSource } from "../components/CreatePullRequest/types";
 import { parseRejection } from "../components/Git/errors";
 import { onChangesUpdated } from "../events";
 import { logWarn } from "../logging";
-import type { PullRequestHeadState } from "../types";
+import { openPullRequestReason } from "../state/openPullRequests";
+import type { BranchStack, PullRequestHeadState, PullRequestSummary } from "../types";
 
 export type CurrentBranchPullRequest =
   | { status: "reading" }
@@ -37,6 +43,7 @@ export type CurrentBranchPullRequest =
  */
 export function createPullRequestAvailability(
   current: CurrentBranchPullRequest,
+  openPullRequest: PullRequestSummary | null = null,
 ): { available: boolean; reason: string | null } {
   switch (current.status) {
     case "reading":
@@ -49,21 +56,40 @@ export function createPullRequestAvailability(
     case "failed":
       return { available: false, reason: "The branch could not be read." };
     case "ready":
+      // CHG-FR-NKGY / CPR-FR-RWOE: a branch with an open pull request needs no
+      // second one.
+      if (openPullRequest) return { available: false, reason: openPullRequestReason(openPullRequest) };
       return current.state.aheadOfBase > 0
         ? { available: true, reason: null }
         : { available: false, reason: "This branch has no commit of its own yet." };
   }
 }
 
-/** CHG-FR-UPFP: the source the window opens with, for the current branch. */
+/**
+ * CPR-FR-MBTA: the parent branch an answer gives, when it is available and
+ * names one for `head`. Null for every other answer.
+ */
+export function stackParentOf(stack: BranchStack | null, head: string): string | null {
+  if (!stack || stack.branch !== head || !stack.available || !stack.inStack) return null;
+  return stack.parent ?? null;
+}
+
+/**
+ * CHG-FR-UPFP / CHG-FR-JQSD: the source the window opens with, for the
+ * current branch. The parent branch in the stack takes the place of the
+ * default branch.
+ */
 export function currentBranchSource(
   current: CurrentBranchPullRequest,
+  stack: BranchStack | null = null,
 ): PullRequestSource | null {
   if (current.status !== "ready") return null;
+  const parent = stackParentOf(stack, current.head);
   return {
     head: current.head,
-    base: current.state.base,
+    base: parent ?? current.state.base,
     title: current.streamName ?? current.head,
+    ...(parent ? { stackParent: parent } : {}),
   };
 }
 
@@ -72,6 +98,27 @@ export function useCurrentBranchPullRequest(enabled = true) {
     status: "reading",
   });
   const seq = useRef(0);
+  const [stack, setStack] = useState<BranchStack | null>(null);
+  /** The branch of the last stack read, so a read runs once per branch. */
+  const stackHead = useRef<string | null>(null);
+
+  const readStack = useCallback((head: string) => {
+    if (stackHead.current === head) return;
+    stackHead.current = head;
+    setStack(null);
+    api
+      .getBranchStack(head)
+      .then((answer) => {
+        if (stackHead.current === head) setStack(answer ?? null);
+      })
+      .catch((error: unknown) => {
+        // CHG-FR-JQSD: a failed read keeps the default branch.
+        logWarn(["frontend", "remote"], "current branch stack read failed", {
+          head,
+          error: parseRejection(error).code,
+        });
+      });
+  }, []);
 
   const read = useCallback(async () => {
     const mine = ++seq.current;
@@ -84,6 +131,7 @@ export function useCurrentBranchPullRequest(enabled = true) {
         if (mine === seq.current) setCurrent({ status: "detached" });
         return;
       }
+      if (mine === seq.current) readStack(active.branch);
       const state = await api.getPullRequestHeadState(active.branch, null);
       if (!state) throw new Error("no head state");
       if (mine === seq.current)
@@ -99,7 +147,7 @@ export function useCurrentBranchPullRequest(enabled = true) {
       });
       if (mine === seq.current) setCurrent({ status: "failed" });
     }
-  }, []);
+  }, [readStack]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -113,9 +161,10 @@ export function useCurrentBranchPullRequest(enabled = true) {
     return () => {
       cancelled = true;
       seq.current += 1;
+      stackHead.current = null;
       unlisten?.();
     };
   }, [enabled, read]);
 
-  return { current, refresh: read };
+  return { current, stack, refresh: read };
 }

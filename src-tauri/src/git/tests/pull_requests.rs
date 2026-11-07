@@ -33,6 +33,7 @@ pub(super) struct FakeGithub {
     requests: Mutex<Vec<(String, String)>>,
     posts: Mutex<Vec<(String, String, Value)>>,
     post_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
+    post_queue: Mutex<std::collections::VecDeque<Result<Value, GithubWriteFailure>>>,
     patches: Mutex<Vec<(String, String, Value)>>,
     patch_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
 }
@@ -64,6 +65,12 @@ impl FakeGithub {
         *self.post_answer.lock().unwrap() = Some(answer);
     }
 
+    /// Answer the next write with `answer`, before the answer of `answer_post`.
+    /// Each queued answer serves one write, in order.
+    pub(super) fn queue_post(&self, answer: Result<Value, GithubWriteFailure>) {
+        self.post_queue.lock().unwrap().push_back(answer);
+    }
+
     /// Every `(secret, path, body)` this fake was asked to write, in order.
     pub(super) fn posts(&self) -> Vec<(String, String, Value)> {
         self.posts.lock().unwrap().clone()
@@ -92,6 +99,9 @@ impl GithubPullRequests for FakeGithub {
         body: &Value,
     ) -> Result<Value, GithubWriteFailure> {
         self.posts.lock().unwrap().push((secret.to_string(), path.to_string(), body.clone()));
+        if let Some(queued) = self.post_queue.lock().unwrap().pop_front() {
+            return queued;
+        }
         self.post_answer.lock().unwrap().clone().unwrap_or(Err(GithubWriteFailure::Unreachable))
     }
 

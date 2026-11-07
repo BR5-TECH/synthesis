@@ -92,6 +92,10 @@ pub fn is_github_family_host(host: &str) -> bool {
     host == DEFAULT_HOST || ghe_subdomain(host).is_some()
 }
 
+/// GTS-FR-NWVR: the REST API version every request to GitHub sends in its
+/// `X-GitHub-Api-Version` header. The stacks endpoints exist in this version.
+pub const GITHUB_API_VERSION: &str = "2026-03-10";
+
 /// GTS-FR-PDWB: the REST API base of `host`, without a trailing slash.
 pub fn github_api_base(host: &str) -> String {
     if host == DEFAULT_HOST {

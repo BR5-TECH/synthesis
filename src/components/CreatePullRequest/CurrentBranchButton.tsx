@@ -14,6 +14,7 @@ import {
   currentBranchSource,
   useCurrentBranchPullRequest,
 } from "../../hooks/useCurrentBranchPullRequest";
+import { openPullRequestFor, useOpenPullRequestList } from "../../state/openPullRequests";
 import { Icon } from "../icons";
 import type { PullRequestSource } from "./types";
 
@@ -33,9 +34,12 @@ export function CurrentBranchButton({
   testId: string;
   onCreatePullRequest?: (source: PullRequestSource) => void;
 }) {
-  const { current } = useCurrentBranchPullRequest();
+  const { current, stack } = useCurrentBranchPullRequest();
+  const head = current.status === "ready" ? current.head : null;
+  // CHG-FR-NKGY / GIT-FR-HMRW: read on mount and when the branch changes.
+  const openPulls = useOpenPullRequestList(head, head !== null);
   const reasonId = useId();
-  const availability = createPullRequestAvailability(current);
+  const availability = createPullRequestAvailability(current, openPullRequestFor(openPulls, head));
   const reason = extraReason ?? availability.reason;
   const available = reason === null && availability.available;
 
@@ -53,7 +57,7 @@ export function CurrentBranchButton({
         title={reason ?? undefined}
         onClick={() => {
           if (!available) return;
-          const source = currentBranchSource(current);
+          const source = currentBranchSource(current, stack);
           if (source) onCreatePullRequest?.(source);
         }}
       >

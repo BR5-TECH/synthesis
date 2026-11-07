@@ -12,6 +12,12 @@ export interface PullRequestSource {
   base: string;
   /** The title the window starts with. */
   title: string;
+  /**
+   * CPR-FR-MBTA: the parent branch of the head in its stack, when the head is
+   * in one. With this base, Submit adds the pull request to the stack
+   * (CPR-FR-QXTB).
+   */
+  stackParent?: string;
 }
 
 /** CPR-FR-VZUZ: what the author typed, held while the token picker is open. */

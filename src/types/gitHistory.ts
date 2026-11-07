@@ -135,6 +135,36 @@ export interface CreatedPullRequest {
   url: string;
 }
 
+/** GTC-FR-TBQW: the stack of one branch. */
+export interface BranchStack {
+  branch: string;
+  /** GTC-FR-JMVC: GitHub answered the stack reads. */
+  available: boolean;
+  unavailableCause?: string;
+  inStack: boolean;
+  source?: "github" | "local_record" | "pull_request_chain";
+  stackNumber?: number;
+  /** GTC-FR-XCMQ: the branch below, or the base branch of the stack. */
+  parent?: string;
+  /** GTC-FR-ZPUA: the branch at the top of the stack. */
+  top?: string;
+  isTop: boolean;
+  /** The open pull request whose head is the branch. */
+  pullRequest?: { number: number; title: string };
+}
+
+/** GTC-FR-HEXN / GTC-FR-KQVA: what the stack step of a submission did. */
+export interface StackStep {
+  state: "added" | "created" | "not_added";
+  stackNumber?: number;
+  error?: string;
+}
+
+/** GTC-FR-UYGD: the pull request a submission to a stack created. */
+export interface StackedPullRequest extends CreatedPullRequest {
+  stack: StackStep;
+}
+
 /** GTC-FR-QJFC: one issue a pull request resolves. */
 export interface PullRequestIssueRef {
   /** The repository that holds the issue. */

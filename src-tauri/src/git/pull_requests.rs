@@ -11,6 +11,8 @@
 //!
 //! Two write operations use the same path: `create` opens a pull request, and
 //! `link` adds closing keywords to the description of one (GTC-FR-ZHVO).
+//! `stack` reads the GitHub stack of a branch, records a branch on top of a
+//! stack, and adds a created pull request to its stack (GTC-FR-SKDF).
 //!
 //! The commands are `async` and run their blocking reads on a worker thread, so
 //! a slow GitHub never holds the thread that serves `invoke` calls.
@@ -20,6 +22,9 @@ pub(crate) mod create;
 pub(crate) mod link;
 mod model;
 pub(crate) mod protection;
+pub(crate) mod stack;
+pub(crate) mod stack_model;
+pub(crate) mod stack_record;
 mod timeline;
 
 use std::time::Instant;
@@ -43,6 +48,8 @@ pub use create::{
 pub use link::{
     FailedPullRequestIssue, LinkedPullRequestIssue, PullRequestIssueRef, PullRequestLinkOutcome,
 };
+pub use stack::{StackStep, StackedPullRequest};
+pub use stack_model::{BranchStack, StackPullRequest};
 pub use model::{
     CreatedPullRequest, PullRequestDetail, PullRequestSummary, PullRequestTimeline,
     PullRequestTimelineItem,
@@ -482,6 +489,111 @@ pub async fn get_pull_request_head_state(
     let root = project.require_root()?;
     tauri::async_runtime::spawn_blocking(move || {
         create::head_state_reported(&app, &logging::BUFFER, &root, &head, base.as_deref())
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// The managed state a stack command reads with, resolved on the worker thread.
+fn with_access<T>(
+    app: &tauri::AppHandle,
+    root: &std::path::Path,
+    project_key: &str,
+    work: impl FnOnce(&PullRequestAccess<'_>) -> T,
+) -> T {
+    let store = app.state::<GlobalSettingsStore>();
+    let tokens = app.state::<GithubTokens>();
+    let access = PullRequestAccess {
+        project: GithubAccess { root, store: &store, tokens: &tokens, project_key },
+        client: &HttpGithubPullRequests,
+    };
+    work(&access)
+}
+
+/// GTC-FR-TBQW: the stack of a branch.
+#[tauri::command]
+pub async fn get_branch_stack(
+    branch: String,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<BranchStack, String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+    // GTC-FR-RNXK: a store that cannot be resolved is an empty record.
+    let machine = project.require_store().ok();
+    tauri::async_runtime::spawn_blocking(move || {
+        with_access(&app, &root, &project_key, |access| {
+            stack::get_branch_stack_reported(
+                &app,
+                &logging::BUFFER,
+                access,
+                machine.as_ref(),
+                &branch,
+            )
+        })
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-LCYE / GTC-FR-OIMF: record a branch on top of a stack.
+#[tauri::command]
+pub async fn add_branch_to_stack(
+    branch: String,
+    parent: String,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<BranchStack, String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+    let machine = project.require_store().ok();
+    tauri::async_runtime::spawn_blocking(move || {
+        with_access(&app, &root, &project_key, |access| {
+            stack::add_branch_to_stack_reported(
+                &app,
+                &logging::BUFFER,
+                access,
+                machine.as_ref(),
+                &branch,
+                &parent,
+            )
+        })
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-UYGD: create a pull request, then add it to the stack of its base.
+#[tauri::command]
+pub async fn submit_pull_request_to_stack(
+    title: String,
+    body: String,
+    base: String,
+    head: String,
+    draft: bool,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<StackedPullRequest, String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+    let machine = project.require_store().ok();
+    tauri::async_runtime::spawn_blocking(move || {
+        with_access(&app, &root, &project_key, |access| {
+            let request = create::NewPullRequest {
+                title: &title,
+                body: &body,
+                base: &base,
+                head: &head,
+                draft,
+            };
+            stack::submit_pull_request_to_stack_reported(
+                &app,
+                &logging::BUFFER,
+                access,
+                machine.as_ref(),
+                &request,
+            )
+        })
     })
     .await
     .map_err(join_error)?

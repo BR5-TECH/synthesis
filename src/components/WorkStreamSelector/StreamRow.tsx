@@ -13,7 +13,8 @@
  * this stream (WSS-FR-XRHT).
  */
 
-import type { StreamMergePublication, WorkStreamSummary } from "../../types";
+import { openPullRequestReason } from "../../state/openPullRequests";
+import type { PullRequestSummary, StreamMergePublication, WorkStreamSummary } from "../../types";
 import { canUpdateStream, mergeRunBlocksStream } from "../../types";
 import { updateStateSentence } from "../StreamUpdateResolution";
 import { DeleteConfirm } from "./DeleteConfirm";
@@ -69,6 +70,10 @@ export interface StreamRowProps {
   onOpenChanges: () => void;
   /** WSS-FR-KHGP: open the Create a PR window for this stream. */
   onCreatePullRequest: (summary: WorkStreamSummary) => void;
+  /** WSS-FR-OBZK: the open pull request whose head is the stream's branch. */
+  openPullRequest?: PullRequestSummary | null;
+  /** WSS-FR-ALEU: the stack of the stream's branch is being read. */
+  readingStack?: boolean;
 }
 
 export function StreamRow({
@@ -95,6 +100,8 @@ export function StreamRow({
   onResolveUpdate,
   onOpenChanges,
   onCreatePullRequest,
+  openPullRequest = null,
+  readingStack = false,
 }: StreamRowProps) {
   const { stream, aheadOfBase, behindBase, queuedRunCount } = summary;
   const held = Boolean(stream.busyRunId);
@@ -128,7 +135,8 @@ export function StreamRow({
   // merge call or update holding the stream, and a stream that is not missing.
   // A busy, missing or updating row keeps the button, disabled, beside its status
   // (WSS-FR-PSXK, WSS-FR-OQYG, WSS-FR-BDMU).
-  const proposable = aheadOfBase > 0 && !running && !blocked;
+  // WSS-FR-OBZK: and no open pull request with the stream's branch as its head.
+  const proposable = aheadOfBase > 0 && !running && !blocked && !openPullRequest;
   const createPrReason = proposable
     ? undefined
     : createPullRequestDisabledReason(summary, {
@@ -136,6 +144,7 @@ export function StreamRow({
         held,
         merging,
         updating,
+        openPullRequest,
       });
   const createPrButton = (
     <button
@@ -148,9 +157,14 @@ export function StreamRow({
       }
       data-testid={`stream-create-pr-${stream.id}`}
       title={createPrReason}
-      onClick={() => onCreatePullRequest(summary)}
+      aria-busy={readingStack || undefined}
+      onClick={() => {
+        // WSS-FR-ALEU: a second activation while the stack is read starts nothing.
+        if (readingStack) return;
+        onCreatePullRequest(summary);
+      }}
     >
-      Create a PR
+      {readingStack ? "Reading the stack…" : "Create a PR"}
     </button>
   );
   // WSS-FR-EPCH: where the button stands, its reason stands in words beside it.
@@ -460,6 +474,7 @@ function createPullRequestDisabledReason(
     held: boolean;
     merging: boolean;
     updating: boolean;
+    openPullRequest: PullRequestSummary | null;
   },
 ): string {
   if (state.missing) return `${summary.stream.name} is missing.`;
@@ -469,5 +484,6 @@ function createPullRequestDisabledReason(
   if (mergeRunBlocksStream(summary.mergeRun)) {
     return `${summary.mergeRun!.name} holds this stream. Open it in Runs.`;
   }
+  if (state.openPullRequest) return openPullRequestReason(state.openPullRequest);
   return `Nothing to propose: this stream holds no commit that ${summary.stream.baseBranch} lacks.`;
 }

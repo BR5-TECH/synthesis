@@ -24,7 +24,9 @@ import type {
   BranchInformation,
   CommitFile,
   CommitHistory,
+  BranchStack,
   CreatedPullRequest,
+  StackedPullRequest,
   PullRequestDetail,
   PullRequestHeadState,
   PullRequestIssueRef,
@@ -181,6 +183,39 @@ export const createPullRequest = (
     head,
     draft,
   });
+
+/**
+ * GTC-FR-UYGD: open a pull request as `createPullRequest` does, then add it to
+ * the stack of `base`. A failed stack step is in `stack`, not a rejection.
+ */
+export const submitPullRequestToStack = (
+  title: string,
+  body: string,
+  base: string,
+  head: string,
+  draft: boolean,
+) =>
+  invoke<StackedPullRequest>("submit_pull_request_to_stack", {
+    title,
+    body,
+    base,
+    head,
+    draft,
+  });
+
+/**
+ * GTC-FR-TBQW: the GitHub stack of `branch`. A stack GitHub cannot read
+ * answers `available: false`, not a rejection (GTC-FR-JMVC).
+ */
+export const getBranchStack = (branch: string) =>
+  invoke<BranchStack>("get_branch_stack", { branch });
+
+/**
+ * GTC-FR-LCYE: record that `branch` stands on top of the stack whose top is
+ * `parent`.
+ */
+export const addBranchToStack = (branch: string, parent: string) =>
+  invoke<BranchStack>("add_branch_to_stack", { branch, parent });
 
 /**
  * GTC-FR-ZHVO: link pull request `number` to each of `issues` by a closing

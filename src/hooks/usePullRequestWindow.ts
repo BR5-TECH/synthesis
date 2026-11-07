@@ -21,7 +21,8 @@ import type {
 import { logInfo } from "../logging";
 import { showPullRequestCreated } from "../state/pullRequestToast";
 import type { PullRequestLinkResult } from "../components/CreatePullRequest/linking";
-import type { CreatedPullRequest } from "../types";
+import { clearOpenPullRequests, refreshOpenPullRequests } from "../state/openPullRequests";
+import type { CreatedPullRequest, StackStep } from "../types";
 
 interface PullRequestWindowState {
   source: PullRequestSource;
@@ -121,11 +122,20 @@ export function usePullRequestWindow(deps: PullRequestWindowDeps) {
     });
   };
 
-  /** CPR-FR-ITWJ / CPR-FR-UXXF: the pull request exists, linked as `link` says. */
-  const created = (pr: CreatedPullRequest, link: PullRequestLinkResult | null = null) => {
+  /**
+   * CPR-FR-ITWJ / CPR-FR-UXXF / CPR-FR-YDLV: the pull request exists, linked
+   * as `link` says, and added to its stack as `stack` says. CPR-FR-TJYF: the
+   * openers read the open pull requests again.
+   */
+  const created = (
+    pr: CreatedPullRequest,
+    link: PullRequestLinkResult | null = null,
+    stack: StackStep | null = null,
+  ) => {
     submittingRef.current = false;
     put(null);
-    showPullRequestCreated(pr, link);
+    showPullRequestCreated(pr, link, stack);
+    void refreshOpenPullRequests(true);
   };
 
   // A change of the project closes the window. The toast of a created pull
@@ -133,6 +143,7 @@ export function usePullRequestWindow(deps: PullRequestWindowDeps) {
   useEffect(() => {
     submittingRef.current = false;
     put(null);
+    clearOpenPullRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deps.projectPath]);
 

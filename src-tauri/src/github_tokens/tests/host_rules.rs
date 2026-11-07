@@ -342,3 +342,19 @@ fn a_host_that_only_a_stored_token_names_is_a_github_host() {
         None
     );
 }
+
+// GTS-FR-NWVR: every REST client of GitHub sends the one API version, and no
+// client names another.
+#[test]
+fn every_github_rest_client_sends_api_version_2026_03_10() {
+    assert_eq!(crate::github_tokens::GITHUB_API_VERSION, "2026-03-10");
+    let sources = [
+        include_str!("../verifier.rs"),
+        include_str!("../../github_publication/client.rs"),
+        include_str!("../../git/pull_requests/client.rs"),
+    ];
+    for source in sources {
+        assert!(source.contains("crate::github_tokens::GITHUB_API_VERSION"));
+        assert!(!source.contains("\"2022-11-28\""));
+    }
+}

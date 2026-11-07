@@ -41,6 +41,7 @@ use discussion_identity::emit_tokens_changed;
 pub use discussion_identity::{resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED};
 pub use host::{
     default_host, github_api_base, github_api_host, github_graphql_url, github_web_base,
+    GITHUB_API_VERSION,
     normalize_host, token_creation_url, DEFAULT_HOST, ERR_HOST_MISMATCH, ERR_INVALID_HOST,
 };
 pub use verifier::{

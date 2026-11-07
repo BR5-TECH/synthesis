@@ -404,8 +404,22 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
             "run_id" => run.id.clone(),
             "answers" => answers.len() as i64,
             "notes" => answers.iter().filter(|a| a.note.is_some()).count() as i64,
+            "decisions" => (run.checkpoint.decisions.len() + answers.len()) as i64,
         },
     );
+    // GXD-FR-NWSL: one ledger entry for each answered question, in the order of
+    // the positions. The answers were checked above to cover every question.
+    let turn = escalation.origin.decision_turn(run.is_merge());
+    let pass = run.pass();
+    let entries: Vec<GraduationDecision> = escalation
+        .questions
+        .iter()
+        .filter_map(|question| {
+            let answer = answers.iter().find(|a| a.position == question.position)?;
+            Some(GraduationDecision::from_answer(question, answer, turn, pass))
+        })
+        .collect();
+    run.checkpoint.decisions.extend(entries);
     run.checkpoint.pending_escalation_answers = answers;
     run.checkpoint.resume = escalation.resume.clone();
     run.escalation = None;

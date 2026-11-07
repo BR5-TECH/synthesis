@@ -8,6 +8,8 @@
   repository's specifications, not a prompt. It names the commands the project defines and
   tells the turn to invent none (GRL-FR-MRVK).
 
+  GRL-FR-BNDD: the recorded decisions are binding. The commands rule above is unchanged.
+
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
 -->
 
@@ -43,6 +45,7 @@ Two rules follow, because a review that gets either wrong is worse than no revie
 - `input.pass` — the number of this attempt. A number above the first means an earlier review asked for changes.
 - `input.loop_instruction` — present after such a review: what it asked for. Check that each of those corrections landed.
 - `input.agent_account` — the work turn's **own account** of what it did and did not do, in its words. It is a claim rather than evidence: the working copy is what says whether it is true. Present where the turn said anything about its own work.
+- `input.decisions` — the author's recorded decisions: every question the author answered during this run, with the answer, any note, the turn that asked and the pass, in the order they were given. They are **binding**. Do not contradict one, and do not ask the author again about a decision recorded here. Judge the merge against them.
 - `input.correction` — present only where your own answer could not be read last time. It says what to send instead.
 
 ## One pass, and it covers every path of the merge

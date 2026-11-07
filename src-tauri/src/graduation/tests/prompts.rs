@@ -33,6 +33,21 @@ fn pr_summary_input_fields() -> Vec<String> {
     input.to_map().keys().cloned().collect()
 }
 
+/// GRL-FR-VHIS: a review history that has an earlier pass in it, so that the
+/// optional field of a work turn is present.
+fn earlier_findings() -> Vec<ReviewHistoryEntry> {
+    let finding = |description: &str| ReviewFinding {
+        severity: ReviewSeverity::Major,
+        description: description.into(),
+        affected_files: Vec::new(),
+        correction: "Fix it.".into(),
+    };
+    vec![
+        ReviewHistoryEntry { pass: 1, finding: finding("earlier") },
+        ReviewHistoryEntry { pass: 2, finding: finding("latest") },
+    ]
+}
+
 /// Every `input.<name>` a document names.
 fn fields_named(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -55,6 +70,7 @@ fn merge_input_fields(part: &str) -> Vec<String> {
     let mut run = super::merge_input::bare_merge_run();
     run.checkpoint.pass = 1;
     run.checkpoint.loop_instruction = Some("findings".into());
+    run.checkpoint.review_history = earlier_findings();
     run.checkpoint.agent_account = Some("what the work turn said".into());
     run.checkpoint.changed_paths = vec!["src/call.rs".into()];
     run.escalation = Some(GraduationEscalation {
@@ -118,6 +134,9 @@ fn graduation_input_fields(part: &str) -> Vec<String> {
     };
     run.checkpoint.pass = 1;
     run.checkpoint.loop_instruction = Some("findings".into());
+    // GRL-FR-VHIS: the history is skipped when it is empty, so one earlier
+    // finding stands here and the work part names it.
+    run.checkpoint.review_history = earlier_findings();
     // GRL-FR-DNKA: an optional field is skipped when it is absent, so every one
     // a prompt may name is filled here — otherwise the check below reads a
     // field a turn is genuinely given as one that does not exist.

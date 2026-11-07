@@ -126,6 +126,32 @@ impl Outcome {
         self
     }
 
+    /// GXD-FR-NWSL: the run's decision ledger, as `(question, answer, turn, pass)`
+    /// in order.
+    pub(crate) fn expect_ledger(self, expected: &[(&str, &str, &str, u32)]) -> Self {
+        let held: Vec<(String, String, String, u32)> = self
+            .run
+            .checkpoint
+            .decisions
+            .iter()
+            .map(|d| (d.question.clone(), d.answer.clone(), d.turn.clone(), d.pass))
+            .collect();
+        let expected: Vec<(String, String, String, u32)> = expected
+            .iter()
+            .map(|(q, a, t, p)| (q.to_string(), a.to_string(), t.to_string(), *p))
+            .collect();
+        assert_eq!(held, expected, "[{}] the run's decision ledger", self.name);
+        self
+    }
+
+    /// GXD-FR-WRVH: the passes of the findings in the run's review history.
+    pub(crate) fn expect_review_history_passes(self, passes: &[u32]) -> Self {
+        let held: Vec<u32> =
+            self.run.checkpoint.review_history.iter().map(|entry| entry.pass).collect();
+        assert_eq!(held, passes, "[{}] the run's review history", self.name);
+        self
+    }
+
     pub(crate) fn expect_no_escalation(self) -> Self {
         assert!(self.run.escalation.is_none(), "[{}] the run holds no escalation", self.name);
         self

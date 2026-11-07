@@ -59,6 +59,7 @@ import type {
 import { RunProgress } from "../RunProgress";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
 import { RunEscalationForm } from "./escalation";
+import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
 import { MergePaths, MergePublication, MergeResult } from "./merge";
 import { PrSummaryResult } from "./prSummary";
@@ -297,6 +298,11 @@ export function RunRegion({
           onAnswered={onAnswered}
         />
       )}
+
+      {/* GRU-FR-NQLG: the decisions the author made during this run, once,
+          read-only and collapsed. It is keyed by run, so another run starts
+          collapsed. */}
+      <EscalationsLog key={run.id} run={run} />
 
       {/* GRU-FR-MCYF: what the run changed and how it got there, side by side
           where the region is wide enough and stacked where not.

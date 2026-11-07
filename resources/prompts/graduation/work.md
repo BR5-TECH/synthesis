@@ -7,6 +7,9 @@
   own work through its own instructions and a loop that imposed a shape would
   override the rule the project already states (GRL-FR-DAIB).
 
+  GRL-FR-BNDD and GRL-FR-VHIS: the recorded decisions are binding, and the findings of
+  earlier passes are probably fixed already.
+
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
 -->
 
@@ -27,6 +30,8 @@ Where the project says nothing at all, follow what the code around you already d
 - `input.prompt` — the task, whole. This is what the work is for.
 - `input.purpose` — why this turn is running: `generate` for the first attempt, `revise` when a review asked for changes, `resume` when an earlier turn stopped part-way, `escalation_answer` when the author has answered your question.
 - `input.loop_instruction` — present on a `revise` turn: the review's findings, in the order they were returned. Act on all of them.
+- `input.decisions` — the author's recorded decisions: every question the author answered during this run, with the answer, any note, the turn that asked and the pass, in the order they were given. They are **binding**. Do not contradict one, and do not ask the author again about a decision recorded here.
+- `input.review_history` — present from the second pass on: the findings of the reviews before the latest one, each with the pass it came from. They are **probably already fixed**. They are context and not new work: do not redo such a fix, and do not undo it. The latest findings are in `input.loop_instruction`.
 - `input.changed_paths` — what the working copy already holds against the commit this run started from. On a `revise` or `resume` turn this is your own earlier work.
 - `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position. An answer can carry a `note`: the author's own words beside the response they chose. Read it as part of that answer.
 - `input.correction` — present only where your answer last time could not be read. Your work stands: change no file, and send your answer again in the shape it says.

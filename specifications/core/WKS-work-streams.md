@@ -54,6 +54,7 @@ A work stream is a named branch and working copy that the application owns and t
 37. **WKS-FR-TSOA** `merge_work_stream` and `update_work_stream` both take the repository update guard, so one of them runs in a repository at a time. A request made while the guard is held is refused with `merge_in_progress` or `update_in_progress`, whichever operation holds it, and changes nothing. The apply step of a merge run takes it too (per `GRB-graduation-rebase.md` GRB-FR-CWLD).
 38. **WKS-FR-MJEB** `update_work_stream` starts the update and returns the stream's update record at once, in the `running` state. The update runs to rest whether or not a surface watches it, and what it settled is read from the record rather than from the call.
 39. **WKS-FR-ZKUP** Each stream holds one **update record**, at `short_data_dir()/wu/<stream-id>.toml`. It holds what the most recent update of that stream did, and a new update of the stream replaces it.
+40. **WKS-FR-LDRQ** The update record holds the update's **decision ledger** (per `GXD-graduation-execution.md` GXD-FR-NWSL) in `decisions`: every answer of the author to an escalation of the update, in order, each with the turn `semantic_rebase` and the pass `1`. It is append-only and ends when the update settles as `updated` or `nothing_to_update` or when the record is cleared. The update window shows no ledger.
 40. **WKS-FR-AMWE** An update record holds the strategy the author chose, the recorded `base_branch`, the pinned `base_revision` the request carried, and the commits the stream was missing. It keeps that revision for as long as the record exists, and a retry and an answer each run on it.
 41. **WKS-FR-VQRD** An update record stands in one of seven states: `running`, `updated`, `nothing_to_update`, `conflicted`, `escalated`, `cancelled` and `failed`. An `escalated` update waits for the author. A `conflicted`, `cancelled` or `failed` update rests and permits a new one. The other states are settled.
 42. **WKS-FR-GYHF** `get_work_stream_update(stream_id)` returns the stream's update record, or nothing where no update of that stream has run. It returns the typed `unknown_stream` for a stream the project does not hold.
@@ -188,7 +189,10 @@ StreamMergeDecision {
   position,                             // the question's recorded position
   question,                             // the question, whole
   answer,                               // what the author answered
-  summary                               // the proposed response's summary, or empty
+  summary,                              // the proposed response's summary, or empty
+  note,                                 // the author's note, where there is one
+  turn,                                 // "semantic_rebase"
+  pass                                  // 1: an update has one pass
 }
 
 StreamUpdateStrategy =
@@ -221,7 +225,7 @@ StreamUpdateRecord {                    // WKS-FR-ZKUP, one per stream
                                         //   origin = semantic_merge, or null
   conflicts,                            // [StreamMergeConflict], where conflicted
   updated_paths,                        // project-relative, where updated
-  decisions                             // [StreamMergeDecision] the author gave
+  decisions                             // [StreamMergeDecision] the update's decision ledger
 }
 ```
 

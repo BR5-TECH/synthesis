@@ -2,6 +2,9 @@
 
 use super::*;
 
+mod ledger;
+pub use ledger::*;
+
 // ---------------------------------------------------------------------------
 // The state machine (GRD-FR-QJHM)
 // ---------------------------------------------------------------------------
@@ -448,6 +451,18 @@ pub struct GraduationCheckpoint {
     /// Answers waiting to be delivered into the turn that asked.
     #[serde(default)]
     pub pending_escalation_answers: Vec<GraduationEscalationAnswer>,
+    /// GXD-FR-NWSL: the run's decision ledger, in the order the author gave
+    /// the answers.
+    ///
+    /// Append-only (GXD-FR-HRDM), and carried by every turn of the run
+    /// (GXD-FR-BTIN). `default` so a record written before this field existed
+    /// reads as an empty ledger.
+    #[serde(default)]
+    pub decisions: Vec<GraduationDecision>,
+    /// GXD-FR-WRVH: the findings of every review verdict that asked for
+    /// revision, in order, each with its pass. Append-only.
+    #[serde(default)]
+    pub review_history: Vec<ReviewHistoryEntry>,
     /// GRL-FR-TVXI: consecutive unreadable verdicts.
     #[serde(default)]
     pub verdict_refusals: u32,

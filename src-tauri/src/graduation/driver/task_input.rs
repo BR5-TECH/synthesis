@@ -70,6 +70,38 @@ pub struct PrSummaryTaskContext {
     pub inputs: Vec<PrSummaryTaskInput>,
 }
 
+/// GXD-FR-WRVH: one finding of the review history a work turn is told about.
+///
+/// A flat shape with the snake_case names of the rest of the task input.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ReviewHistoryTaskEntry {
+    pub pass: u32,
+    pub severity: String,
+    pub description: String,
+    pub affected_files: Vec<String>,
+    pub correction: String,
+}
+
+/// GXD-FR-QPFT: the findings of the passes before the latest review, for a work
+/// turn alone.
+fn review_history_for(run: &GraduationRun, part: &str) -> Vec<ReviewHistoryTaskEntry> {
+    if part != phases::PART_WORK {
+        return Vec::new();
+    }
+    run.checkpoint
+        .earlier_findings()
+        .into_iter()
+        .map(|entry| ReviewHistoryTaskEntry {
+            pass: entry.pass,
+            severity: entry.finding.severity.as_str().to_string(),
+            description: entry.finding.description.clone(),
+            affected_files: entry.finding.affected_files.clone(),
+            correction: entry.finding.correction.clone(),
+        })
+        .collect()
+}
+
 /// GRL contract surface: the input object every turn carries.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -90,6 +122,14 @@ pub struct GraduationTaskInput {
     /// GRL-FR-GQAB: the review findings a revise pass carries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loop_instruction: Option<String>,
+    /// GRL-FR-VHIS: the findings of the passes before the latest review, for a
+    /// work turn alone. They are probably fixed already.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review_history: Vec<ReviewHistoryTaskEntry>,
+    /// GRL-FR-BNDD: the run's whole decision ledger, in order. It is empty
+    /// before the first answer, and it is present on every turn all the same.
+    #[serde(default)]
+    pub decisions: Vec<GraduationDecision>,
     /// What the working copy holds against the base commit.
     #[serde(default)]
     pub changed_paths: Vec<String>,
@@ -276,6 +316,8 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
         stream_name: run.target_label(),
         pass: run.pass(),
         loop_instruction: run.checkpoint.loop_instruction.clone(),
+        review_history: review_history_for(run, part),
+        decisions: run.checkpoint.decisions.clone(),
         // Set by the caller alone, and only where a turn is asked again.
         correction: None,
         // GRL-FR-DNKA: carried to **the review that judges what it wrote**, and

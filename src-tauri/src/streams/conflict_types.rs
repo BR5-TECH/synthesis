@@ -37,4 +37,21 @@ pub struct StreamMergeDecision {
     /// WKS-FR-CBXW: the author's note beside a chosen response, where one was written.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// GXD-FR-NWSL: the turn that asked, always `semantic_rebase` for an update.
+    #[serde(default = "semantic_rebase_turn")]
+    pub turn: String,
+    /// GXD-FR-NWSL: an update has one pass.
+    #[serde(default = "first_pass")]
+    pub pass: u32,
+}
+
+/// The turn every ledger entry of an update names.
+pub const SEMANTIC_REBASE_TURN: &str = "semantic_rebase";
+
+fn semantic_rebase_turn() -> String {
+    SEMANTIC_REBASE_TURN.to_string()
+}
+
+fn first_pass() -> u32 {
+    1
 }

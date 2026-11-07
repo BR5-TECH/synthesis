@@ -210,6 +210,18 @@ export function passBoundOf(run: GraduationRun): number {
   return limit > 0 ? limit : DEFAULT_PASS_BUDGET;
 }
 
+/** GXD-FR-NWSL: one entry of a run's decision ledger. */
+export interface GraduationDecision {
+  question: string;
+  answer: string;
+  summary: string;
+  note?: string | null;
+  /** `work`, `review`, `merge_work`, `merge_review` or `semantic_rebase`. */
+  turn: string;
+  /** The pass the turn asked in. */
+  pass: number;
+}
+
 export interface GraduationCheckpoint {
   /** The pass the run stands at, counted from one. */
   pass: number;
@@ -234,6 +246,11 @@ export interface GraduationCheckpoint {
   /** GRL-FR-GQAB: what the next work turn is to act on. */
   loopInstruction?: string | null;
   pendingEscalationAnswers: EscalationAnswerInput[];
+  /**
+   * GXD-FR-NWSL: the run's decision ledger, in the order the author gave the
+   * answers. Absent on a record written before the ledger existed.
+   */
+  decisions?: GraduationDecision[];
   verdictRefusals: number;
   /** GXD-FR-TJRV: the phase the run resumes at. */
   resumePart?: "work" | "review" | null;

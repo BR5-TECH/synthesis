@@ -29,8 +29,9 @@ const LINE_COLOR: &str = "D0D0D0";
 const MUTED_COLOR: &str = "666666";
 /// The fill of a code block, a code span, and a table header.
 const SUNKEN_FILL: &str = "F3F3F3";
-/// The text width of the default page, in EMU (6 inches).
-const TEXT_WIDTH_EMU: u32 = 5_486_400;
+/// The text width of the default `docx-rs` page, in EMU: an A4 page of 11906
+/// twips with side margins of 1701 twips, so 8504 twips of text.
+const TEXT_WIDTH_EMU: u32 = 8_504 * 635;
 /// EMU per pixel at 96 dpi.
 const EMU_PER_PX: u32 = 9_525;
 const INDENT_TWIPS: i32 = 360;
@@ -231,7 +232,9 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
             },
             None => vec![code_box(source, align)],
         },
-        Block::List { start, items } => list_parts(*start, items, align, depth, assets),
+        Block::List { start, items } => {
+            list_parts(*start, items, align, depth, list_end_space(depth), assets)
+        }
         Block::Quote(inner) => inner
             .iter()
             .flat_map(|b| block_parts(b, align, depth + 1, assets))
@@ -277,14 +280,31 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
     }
 }
 
+/// DXP-FR-RBAQ: the space after the last item of a list. A list at the top
+/// level ends with the space after a block. A nested list continues its parent
+/// list, so it ends with the gap between items.
+fn list_end_space(depth: i32) -> f32 {
+    if depth == 0 {
+        ty::BLOCK_AFTER_PT
+    } else {
+        ty::LIST_ITEM_GAP_PT
+    }
+}
+
+/// The paragraphs of a list. Each item paragraph has the gap between items
+/// after it, and the last one `end_after` (DXP-FR-RBAQ). Other blocks of an
+/// item keep their own spacing.
 fn list_parts(
     start: Option<u64>,
     items: &[ListItem],
     align: Align,
     depth: i32,
+    end_after: f32,
     assets: &Assets,
 ) -> Vec<Part> {
     let mut parts = Vec::new();
+    let item_spacing = |after: f32| spacing(0.0, after, ty::BODY_LINE_HEIGHT);
+    let indent = Some((depth + 1) * INDENT_TWIPS);
     for (i, item) in items.iter().enumerate() {
         let marker = match (item.task, start) {
             (Some(true), _) => "☑ ".to_string(),
@@ -292,41 +312,32 @@ fn list_parts(
             (None, Some(n)) => format!("{}. ", n + i as u64),
             (None, None) => "• ".to_string(),
         };
-        let mut first = true;
-        for block in &item.blocks {
+        let last_item = i + 1 == items.len();
+        for (b, block) in item.blocks.iter().enumerate() {
+            let last_block = last_item && b + 1 == item.blocks.len();
+            let after = if last_block { end_after } else { ty::LIST_ITEM_GAP_PT };
             match block {
-                Block::Paragraph(inlines) if first => {
+                Block::Paragraph(inlines) if b == 0 => {
                     let p = Paragraph::new().add_run(body_run(&marker));
-                    let p = add_inlines(p, inlines, RunStyle::default(), assets).indent(
-                        Some((depth + 1) * INDENT_TWIPS),
-                        None,
-                        None,
-                        None,
-                    );
+                    let p = add_inlines(p, inlines, RunStyle::default(), assets)
+                        .indent(indent, None, None, None)
+                        .line_spacing(item_spacing(after));
                     parts.push(para(aligned(p, align)));
+                }
+                Block::List { start, items } => {
+                    let end = if last_block { end_after } else { ty::LIST_ITEM_GAP_PT };
+                    parts.extend(list_parts(*start, items, align, depth + 1, end, assets));
                 }
                 other => parts.extend(block_parts(other, align, depth + 1, assets)),
             }
-            first = false;
         }
         if item.blocks.is_empty() {
-            let p = Paragraph::new().add_run(body_run(&marker));
-            parts.push(para(p.indent(Some((depth + 1) * INDENT_TWIPS), None, None, None)));
-        }
-    }
-    // DXP-FR-RBAQ: the gap between items, and the space after the list. A
-    // nested list ends with the gap of an item, as it continues its parent.
-    let last = parts.iter().rposition(|p| matches!(p, Part::Paragraph(_)));
-    for (i, part) in parts.iter_mut().enumerate() {
-        if let Part::Paragraph(p) = part {
-            let after = if Some(i) == last && depth == 0 {
-                ty::BLOCK_AFTER_PT
-            } else {
-                ty::LIST_ITEM_GAP_PT
-            };
-            let spaced =
-                std::mem::take(p.as_mut()).line_spacing(spacing(0.0, after, ty::BODY_LINE_HEIGHT));
-            **p = spaced;
+            let after = if last_item { end_after } else { ty::LIST_ITEM_GAP_PT };
+            let p = Paragraph::new()
+                .add_run(body_run(&marker))
+                .indent(indent, None, None, None)
+                .line_spacing(item_spacing(after));
+            parts.push(para(p));
         }
     }
     parts

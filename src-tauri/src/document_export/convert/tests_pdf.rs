@@ -200,10 +200,7 @@ fn a_metadata_list_value_is_one_row_per_line() {
 #[test]
 fn the_pdf_is_pinned_to_the_bundled_fonts() {
     let dir = tempfile::tempdir().unwrap();
-    let write_file = |name: &str, bytes: &[u8]| {
-        let path = dir.path().join(name);
-        std::fs::write(&path, bytes).ok().map(|_| path)
-    };
+    let write_file = super::tests::dir_writer(dir.path());
     let config = super::pdf::font_config(&write_file);
     let body = dir.path().join(pdf_lines::SANS_REGULAR_FILE);
     let code = dir.path().join(pdf_lines::MONO_REGULAR_FILE);
@@ -216,7 +213,7 @@ fn the_pdf_is_pinned_to_the_bundled_fonts() {
         "{config:?}"
     );
     for (name, bytes) in pdf_lines::FONT_FILES {
-        assert_eq!(std::fs::read(dir.path().join(name)).unwrap(), bytes, "{name} is written");
+        assert_eq!(super::tests::read_file(&dir.path().join(name)), bytes, "{name} is written");
     }
     let style = export_style(std::path::Path::new("."));
     assert!(style.fallback_fonts.is_empty(), "no fallback font of the host");
@@ -248,6 +245,20 @@ fn the_pdf_is_pinned_to_the_bundled_fonts() {
 fn a_font_file_that_does_not_write_leaves_the_bundled_regular_faces() {
     let write_file = |_: &str, _: &[u8]| None;
     let config = super::pdf::font_config(&write_file);
+    assert!(!super::pdf::has_font_files(&config));
+
+    // One file that does not write is enough: the faces stay together.
+    let dir = tempfile::tempdir().unwrap();
+    let writer = super::tests::dir_writer(dir.path());
+    let no_bold = |name: &str, bytes: &[u8]| {
+        if name == "LiberationSans-Bold.ttf" {
+            None
+        } else {
+            writer(name, bytes)
+        }
+    };
+    let config = super::pdf::font_config(&no_bold);
+    assert!(!super::pdf::has_font_files(&config), "{config:?}");
     assert!(matches!(
         config.default_font_source,
         Some(markdown2pdf::fonts::FontSource::Bytes(b)) if b == pdf_lines::SANS_REGULAR
@@ -286,7 +297,7 @@ const ALIGNED: &str = "<!-- center -->
 This is a centred paragraph with `inline code` and a good number of words so that it wraps across several lines of the page body width, and **bold start** more words here to fill the third line as well so we see it all, wow.
 
 <!-- right -->
-**Bold start** of a right aligned paragraph that is long enough to wrap onto a second and a third line of the page for testing the pads here and there and also a fourth line please, thank you very much indeed.
+**Bold start** of a right aligned paragraph that is *long enough to wrap onto* a second and a third line of the page for ***testing the pads*** here and there and also a fourth line please, thank you very much indeed.
 
 <!-- center -->
 # A centred heading that is long enough to wrap onto a second line of the page, which it does
@@ -316,8 +327,9 @@ fn without_marker(line: &str) -> String {
     }
 }
 
-// DXP-FR-ERZY, DXP-FR-FNTP: every line of an aligned paragraph, heading, list,
-// and quote breaks in the PDF where the export broke it. The renderer wraps no
+// DXP-FR-ERZY, DXP-FR-FNTP, DXP-FR-RBAQ: every line of an aligned paragraph,
+// heading, list, and quote breaks in the PDF where the export broke it. Inline
+// code is measured at the size of the text around it, as the PDF sets it. The renderer wraps no
 // line that the export did not plan, and none of them loses its words.
 #[test]
 fn aligned_lines_break_in_the_pdf_where_the_export_broke_them() {

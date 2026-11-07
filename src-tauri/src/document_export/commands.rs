@@ -227,6 +227,17 @@ fn export<S: LogSink + Clone + Send + 'static>(
     }
     let converted = converted.map_err(|_| ERR_CONVERSION_FAILED)?;
     *diagram_count = converted.diagram_count;
+    if converted.regular_faces_only {
+        // DXP-FR-FNTP: a font file did not write, so the PDF has no bold or
+        // italic face of its own. The export stands.
+        logging::log_warn(
+            sink,
+            buffer,
+            &[Domain::Backend],
+            "a document export was set in the regular font faces alone",
+            log_fields! { "format" => job.format.as_str() },
+        );
+    }
     progress(Stage::Writing, 0, 0);
     access.write_bytes_at_user_choice(&chosen, &converted.bytes).map_err(|_| ERR_WRITE_FAILED)?;
     let warnings = converted

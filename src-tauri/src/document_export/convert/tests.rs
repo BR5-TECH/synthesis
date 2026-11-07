@@ -27,6 +27,20 @@ fn no_image(_: &str) -> Option<Vec<u8>> {
     None
 }
 
+/// A file writer into `dir`, as the export command gives the converter.
+pub(crate) fn dir_writer(dir: &Path) -> impl Fn(&str, &[u8]) -> Option<PathBuf> + '_ {
+    move |name, bytes| {
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).ok()?;
+        Some(path)
+    }
+}
+
+/// The bytes of the file at `path`.
+pub(crate) fn read_file(path: &Path) -> Vec<u8> {
+    std::fs::read(path).expect("the file reads")
+}
+
 /// Convert `text` with the given renderer, writing pictures into `dir`.
 pub(crate) fn run(
     text: &str,

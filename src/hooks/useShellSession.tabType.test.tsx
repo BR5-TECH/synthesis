@@ -13,9 +13,12 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-const { logWarnMock } = vi.hoisted(() => ({ logWarnMock: vi.fn() }));
+const { logWarnMock, logDebugMock } = vi.hoisted(() => ({
+  logWarnMock: vi.fn(),
+  logDebugMock: vi.fn(),
+}));
 vi.mock("../logging", () => ({
-  logDebug: vi.fn(),
+  logDebug: logDebugMock,
   logInfo: vi.fn(),
   logWarn: logWarnMock,
   logError: vi.fn(),
@@ -46,6 +49,7 @@ beforeEach(() => {
   resetViewStateForTest();
   invokeMock.mockReset();
   logWarnMock.mockReset();
+  logDebugMock.mockReset();
   openAnswer = (id) => Promise.resolve({ key: id, kind: "markdown", artifactType: "doc" });
   // The shell's background commands answer with nothing. Any other command
   // this file does not expect is refused, never thrown.
@@ -59,6 +63,17 @@ afterEach(cleanup);
 
 const typeReads = () => invokeMock.mock.calls.filter(([cmd]) => cmd === "open_artifact_by_id");
 const tab = (tabs: Tab[]) => tabs.find((t) => t.id === TAB);
+
+/** Wait until the shell has handled a type answer (TAB-FR-SZGD). */
+async function answerHandled() {
+  await waitFor(() =>
+    expect(logDebugMock).toHaveBeenCalledWith(
+      ["frontend"],
+      "tab type resolved",
+      expect.objectContaining({ rule: "TAB-FR-SZGD" }),
+    ),
+  );
+}
 
 /** A promise and the function that settles it. */
 function held<T>() {
@@ -108,6 +123,7 @@ describe("TAB-FR-SZGD: an Editor tab carries the type of its file", () => {
       answered.resolve({ key: "guides/intro.md", kind: "text" });
       await answered.promise;
     });
+    await answerHandled();
 
     expect(tab(result.current.tabs)?.type).toBeUndefined();
     expect(tab(result.current.tabs)?.chip).toBeUndefined();
@@ -128,6 +144,21 @@ describe("TAB-FR-SZGD: an Editor tab carries the type of its file", () => {
     expect(typeReads()).toHaveLength(0);
   });
 
+  it("TAB-FR-SZGD: a second open while the read is pending reads nothing more", async () => {
+    const answered = held<OpenedArtifact>();
+    openAnswer = () => answered.promise;
+    const { result } = renderHook(() => useShellSession());
+    act(() => result.current.openDocument(doc));
+    act(() => result.current.openDocument(doc));
+    expect(typeReads()).toHaveLength(1);
+    await act(async () => {
+      answered.resolve({ key: "guides/intro.md", kind: "markdown", artifactType: "doc" });
+      await answered.promise;
+    });
+    await waitFor(() => expect(tab(result.current.tabs)).toMatchObject({ type: "doc" }));
+    expect(result.current.tabs.filter((t) => t.id === TAB)).toHaveLength(1);
+  });
+
   it("TAB-FR-SZGD: an answer for a tab that closed changes no tab", async () => {
     const answered = held<OpenedArtifact>();
     openAnswer = () => answered.promise;
@@ -143,6 +174,7 @@ describe("TAB-FR-SZGD: an Editor tab carries the type of its file", () => {
       answered.resolve({ key: "guides/intro.md", kind: "markdown", artifactType: "doc" });
       await answered.promise;
     });
+    await answerHandled();
     expect(tab(result.current.tabs)).toBeUndefined();
     expect(result.current.tabs).toEqual(before);
   });
@@ -168,6 +200,7 @@ describe("TAB-FR-SZGD: an Editor tab carries the type of its file", () => {
       answered.resolve({ key: "guides/intro.md", kind: "markdown", artifactType: "doc" });
       await answered.promise;
     });
+    await answerHandled();
     expect(tab(result.current.tabs)).toMatchObject({ type: "spec", chip: typeChip("spec") });
   });
 });

@@ -125,7 +125,9 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     void api
       .openArtifactById(path)
       .then((opened) => {
-        const type = opened?.artifactType;
+        if (!opened) return;
+        const type = opened.artifactType;
+        logDebug(["frontend"], "tab type resolved", { type: type ?? "none", rule: "TAB-FR-SZGD" });
         if (!type) return;
         setTabs((ts) =>
           ts.map((t) =>
@@ -134,7 +136,6 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
               : t,
           ),
         );
-        logDebug(["frontend"], "tab type resolved", { type, rule: "TAB-FR-SZGD" });
       })
       .catch((e) => {
         logWarn(["frontend"], "tab type could not be resolved", {

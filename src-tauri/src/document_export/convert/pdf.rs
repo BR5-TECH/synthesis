@@ -252,18 +252,31 @@ pub fn write(
     assets: &Assets,
     folder: &Path,
     write_file: FileWriter<'_>,
-) -> Result<Vec<u8>, String> {
+) -> Result<Written, String> {
     let style = export_style(folder);
     let tokens = tokens(doc, assets, &style, write_file);
     let config = font_config(write_file);
+    let regular_faces_only = !has_font_files(&config);
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         markdown2pdf::render::render_to_bytes(tokens, style, Some(&config))
     }));
     match outcome {
-        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Ok(bytes)) => Ok(Written { bytes, regular_faces_only }),
         Ok(Err(e)) => Err(e.to_string()),
         Err(_) => Err("the PDF renderer stopped".to_string()),
     }
+}
+
+/// The bytes of a PDF, and whether it is set in the regular faces alone
+/// because a font file did not write (DXP-FR-FNTP).
+pub struct Written {
+    pub bytes: Vec<u8>,
+    pub regular_faces_only: bool,
+}
+
+/// Whether `config` sets the PDF in the font files of the export folder.
+pub(super) fn has_font_files(config: &FontConfig) -> bool {
+    matches!(config.default_font_source, Some(FontSource::File(_)))
 }
 
 /// DXP-FR-FNTP: the body is set in the bundled Liberation Sans and code in the

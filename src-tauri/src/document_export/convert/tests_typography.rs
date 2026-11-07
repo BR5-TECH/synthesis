@@ -6,7 +6,6 @@ use std::io::Read;
 
 use super::pdf::export_style;
 use super::tests::{document_xml, render_ok, run};
-use super::typography as ty;
 use super::Format;
 
 const SAMPLE: &str = "# Title
@@ -75,6 +74,28 @@ fn docx_defaults_are_arial_at_the_body_size_and_spacing() {
     assert!(!styles.contains("Times New Roman"));
 }
 
+// DXP-FR-OSRE: the DOCX names its fonts and embeds no font file.
+#[test]
+fn docx_embeds_no_font_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (converted, _) = run(SAMPLE, Format::Docx, false, &render_ok, dir.path());
+    let archive = zip::ZipArchive::new(std::io::Cursor::new(&converted.bytes[..])).expect("a zip");
+    let names: Vec<&str> = archive.file_names().collect();
+    assert!(!names.iter().any(|n| n.starts_with("word/fonts/")), "{names:?}");
+    let font_table = docx_part(SAMPLE, "word/fontTable.xml");
+    assert!(!font_table.contains("w:embed"), "{font_table}");
+    let document = docx_part(SAMPLE, "word/document.xml");
+    let block = paragraph_with(&document, "let x = 1;");
+    for attr in [
+        r#"w:ascii="Courier New""#,
+        r#"w:hAnsi="Courier New""#,
+        r#"w:cs="Courier New""#,
+        r#"w:eastAsia="Courier New""#,
+    ] {
+        assert!(block.contains(attr), "{attr} in {block}");
+    }
+}
+
 // DXP-FR-ODVI: each heading level has its size, its space before and after,
 // and bold.
 #[test]
@@ -89,6 +110,13 @@ fn docx_headings_have_their_size_and_space() {
     }
     let fourth = paragraph_with(&document, "Fourth");
     assert!(fourth.contains(r#"<w:sz w:val="24" />"#), "{fourth}");
+    let small = docx_part("##### Fifth\n\n###### Sixth\n", "word/document.xml");
+    for text in ["Fifth", "Sixth"] {
+        let p = paragraph_with(&small, text);
+        assert!(p.contains(r#"<w:sz w:val="22" />"#) && p.contains("<w:b />"), "{text}: {p}");
+    }
+    let body = paragraph_with(&document, "After.");
+    assert!(body.contains(r#"w:after="180" w:line="360""#), "a body paragraph: {body}");
 }
 
 // DXP-FR-RBAQ: 3 pt between list items and 9 pt after the list.
@@ -107,6 +135,11 @@ fn docx_a_nested_list_keeps_the_item_gap() {
     assert!(paragraph_with(&document, "outer").contains(r#"w:after="60""#));
     assert!(paragraph_with(&document, "inner").contains(r#"w:after="60""#));
     assert!(paragraph_with(&document, "last").contains(r#"w:after="180""#));
+
+    // A nested list that ends the outer list ends it with the space after.
+    let document = docx_part("- outer\n  - inner\n", "word/document.xml");
+    assert!(paragraph_with(&document, "outer").contains(r#"w:after="60""#));
+    assert!(paragraph_with(&document, "inner").contains(r#"w:after="180""#));
 }
 
 // DXP-FR-OSRE, DXP-FR-RBAQ: code block text is Courier New at 10 pt with a
@@ -143,14 +176,15 @@ fn docx_blocks_have_their_space_after() {
     assert!(quote.contains("<w:left"), "a quote has its bar: {quote}");
     assert!(!quote.contains("<w:top"), "a quote has no box: {quote}");
     assert!(quote.contains("<w:i />"), "quoted text is italic: {quote}");
+    assert!(quote.contains(r#"w:after="180""#), "9 pt after a quote: {quote}");
 }
 
 // DXP-FR-ODVI, DXP-FR-RBAQ: the PDF style carries the same sizes and spaces.
 #[test]
 fn pdf_style_has_the_export_typography() {
     let style = export_style(std::path::Path::new("."));
-    assert_eq!(style.paragraph.font_size_pt, ty::BODY_PT);
-    assert_eq!(style.paragraph.line_height, ty::BODY_LINE_HEIGHT);
+    assert_eq!(style.paragraph.font_size_pt, 11.0);
+    assert_eq!(style.paragraph.line_height, 1.5);
     assert_eq!(style.paragraph.margin_after_pt, 9.0);
     let sizes: Vec<_> = style.headings.iter().map(|h| h.font_size_pt).collect();
     assert_eq!(sizes, vec![20.5, 16.0, 13.0, 12.0, 11.0, 11.0]);
@@ -193,6 +227,15 @@ fn pdf_embeds_the_bold_italic_and_code_faces() {
     let fonts = embedded_fonts(&converted.bytes);
     assert!(fonts.len() >= 4, "regular, bold, italic, and code faces: {fonts:?}");
 
+    // The bold and italic faces come from the bundled files. With no file
+    // written, only the regular body face and the code face are embedded.
+    let doc = super::model::parse(text);
+    let assets = super::Assets::default();
+    let no_file = |_: &str, _: &[u8]| None;
+    let regular = super::pdf::write(&doc, &assets, dir.path(), &no_file).unwrap();
+    assert!(regular.regular_faces_only);
+    assert_eq!(embedded_fonts(&regular.bytes).len(), 2, "the regular faces alone");
+
     let (plain, _) = run("Plain text.\n", Format::Pdf, false, &render_ok, dir.path());
     assert_eq!(embedded_fonts(&plain.bytes).len(), 1, "a plain paragraph needs one face");
 }
@@ -214,9 +257,13 @@ fn pdf_code_shows_non_ascii_characters() {
 fn docx_tables_span_the_text_width() {
     let document =
         docx_part("| a | b |\n|---|---|\n| 1 | 2 |\n\n```\ncode\n```\n", "word/document.xml");
-    let widths: Vec<&str> = document.matches(r#"<w:tblW w:w="8640" w:type="dxa" />"#).collect();
+    let widths: Vec<&str> = document.matches(r#"<w:tblW w:w="8504" w:type="dxa" />"#).collect();
     assert_eq!(widths.len(), 2, "{document}");
-    assert_eq!(document.matches(r#"<w:gridCol w:w="4320" w:type="dxa" />"#).count(), 2);
-    assert_eq!(document.matches(r#"<w:gridCol w:w="8640" w:type="dxa" />"#).count(), 1);
+    assert_eq!(document.matches(r#"<w:gridCol w:w="4252" w:type="dxa" />"#).count(), 2);
+    assert_eq!(document.matches(r#"<w:gridCol w:w="8504" w:type="dxa" />"#).count(), 1);
     assert!(!document.contains(r#"w:color="000000""#), "borders are light: {document}");
+    for tbl in document.split("<w:tblBorders>").skip(1) {
+        let borders = &tbl[..tbl.find("</w:tblBorders>").unwrap()];
+        assert_eq!(borders.matches(r#"w:color="D0D0D0""#).count(), 6, "{borders}");
+    }
 }

@@ -292,7 +292,7 @@ describe("useShellSession teardown flush (EDT-FR-33)", () => {
 
     expect(savedIds()).toEqual(["a.md", "b.md"]);
     // The backend teardown runs only after the writes (a closed project cannot
-    // be saved to). Three commands are filtered out because none is part of
+    // be saved to). Four commands are filtered out because none is part of
     // the write-then-tear-down ordering: `set_save_menu_state`, pushed whenever
     // the Save enablement changes (SNV-FR-28 / SNV-FR-30), which a flush does;
     // `set_find_menu_state`, pushed whenever the active tab's type changes

@@ -891,6 +891,28 @@ mod tests {
         assert_eq!(plain.kind, ArtifactKind::Text);
         let json = serde_json::to_value(&plain).unwrap();
         assert!(json.get("artifactType").is_none(), "no type gives no field");
+
+        // Each of the nine types answers its lowercase name.
+        use scanning::ArtifactType as T;
+        let names = [
+            (T::Skill, "skill"),
+            (T::Agent, "agent"),
+            (T::Prompt, "prompt"),
+            (T::Spec, "spec"),
+            (T::Flow, "flow"),
+            (T::Instructions, "instructions"),
+            (T::Scenario, "scenario"),
+            (T::Scratchpad, "scratchpad"),
+            (T::Doc, "doc"),
+        ];
+        for (n, (artifact_type, name)) in names.into_iter().enumerate() {
+            let file = format!("typed-{n}.md");
+            std::fs::write(root.join(&file), b"body\n").unwrap();
+            scanning::assign(root, &file, artifact_type, scanning::Scope::File).unwrap();
+            let opened = open_artifact_by_id_impl(root, &file).unwrap();
+            let json = serde_json::to_value(&opened).unwrap();
+            assert_eq!(json.get("artifactType").unwrap(), name);
+        }
     }
 
     #[test]

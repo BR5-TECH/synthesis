@@ -110,6 +110,9 @@ pub struct Converted {
     /// DXP-FR-IOFM: the diagrams that stayed as code, counted from 1.
     pub failed_diagrams: Vec<diagrams::FailedDiagram>,
     pub diagram_count: usize,
+    /// DXP-FR-FNTP: a PDF set in the regular faces alone, because a font file
+    /// did not write. The export stands, and the command logs it.
+    pub regular_faces_only: bool,
 }
 
 /// Read `text` into the block model, with the frontmatter split off and
@@ -144,11 +147,14 @@ pub fn convert(
     });
     progress(Stage::Converting, 0, 0);
     let assets = load_assets(&doc, input.load_image);
-    let bytes = match input.format {
-        Format::Docx => docx::write(&doc, &assets)?,
-        Format::Pdf => pdf::write(&doc, &assets, input.pictures_dir, input.write_file)?,
+    let (bytes, regular_faces_only) = match input.format {
+        Format::Docx => (docx::write(&doc, &assets)?, false),
+        Format::Pdf => {
+            let written = pdf::write(&doc, &assets, input.pictures_dir, input.write_file)?;
+            (written.bytes, written.regular_faces_only)
+        }
     };
-    Ok(Converted { bytes, failed_diagrams: failed, diagram_count: total })
+    Ok(Converted { bytes, failed_diagrams: failed, diagram_count: total, regular_faces_only })
 }
 
 /// DXP-FR-JYHX: decode each image the document names once.

@@ -9,12 +9,14 @@ const RUNS_DIR: &str = "g";
 const RUN_FILE: &str = "run.toml";
 /// GRD storage: the run's two persisted log streams.
 const LOGS_DIR: &str = "logs";
-/// GRL-FR-YKRI: the review turn's throwaway checkout.
-const REVIEW_DIR: &str = "rv";
+/// GRL-FR-YKRI: the name stem of a review turn's throwaway checkout.
+pub(crate) const REVIEW_DIR: &str = "rv";
 /// GRD-FR-KZPT: a merge run's own worktree.
 const MERGE_DIR: &str = "mw";
-/// GRD-FR-TYVT: a PR summary run's disposable checkout.
-const PR_SUMMARY_DIR: &str = "ps";
+/// GRD-FR-TYVT: the name stem of a PR summary turn's disposable checkout.
+pub(crate) const PR_SUMMARY_DIR: &str = "ps";
+/// GRL-FR-BIQX: the number of hexadecimal digits in a checkout nonce.
+const CHECKOUT_NONCE_LEN: usize = 8;
 
 /// The persisted index of a project's run order.
 ///
@@ -122,13 +124,14 @@ impl StoreBase {
         self.home(run_id).join(LOGS_DIR)
     }
 
-    /// GRL-FR-YKRI: the throwaway checkout a review turn stands in.
+    /// GRL-FR-YKRI / GRL-FR-BIQX: the throwaway checkout one review turn
+    /// stands in, named by that turn's own nonce.
     ///
     /// A checkout of the stream's revision that is removed when the turn ends,
     /// so the reviewer runs the project's own build and test commands without
     /// reaching the stream at all.
-    pub fn review_checkout(&self, run_id: &str) -> PathBuf {
-        self.home(run_id).join(REVIEW_DIR)
+    pub fn review_checkout(&self, run_id: &str, nonce: &str) -> PathBuf {
+        self.home(run_id).join(format!("{REVIEW_DIR}-{nonce}"))
     }
 
     /// GRD-FR-KZPT: the worktree a merge run reconciles its merge in.
@@ -140,11 +143,68 @@ impl StoreBase {
         self.home(run_id).join(MERGE_DIR)
     }
 
-    /// GRD-FR-TYVT: the disposable checkout a PR summary turn stands in,
-    /// detached at the run's pinned head tip.
-    pub fn pr_summary_checkout(&self, run_id: &str) -> PathBuf {
-        self.home(run_id).join(PR_SUMMARY_DIR)
+    /// GRD-FR-TYVT / GRD-FR-XKGC: the disposable checkout one PR summary turn
+    /// stands in, named by that turn's own nonce and detached at the run's
+    /// pinned head tip.
+    pub fn pr_summary_checkout(&self, run_id: &str, nonce: &str) -> PathBuf {
+        self.home(run_id).join(format!("{PR_SUMMARY_DIR}-{nonce}"))
     }
+
+    /// GRL-FR-PQLM: every directory under the run home that has the name of a
+    /// checkout with the stem `stem`, the name without a nonce included.
+    ///
+    /// Only directories count, read through the guarded instance, so a link or
+    /// a file of that name is never taken for a checkout. A run home that does
+    /// not stand holds none.
+    pub fn checkouts_under(&self, fs: &fsa::FsAccess, run_id: &str, stem: &str) -> Vec<PathBuf> {
+        let home = self.home(run_id);
+        let Ok(entries) = fs.list_dir(&home) else {
+            return Vec::new();
+        };
+        entries
+            .into_iter()
+            .filter(|entry| {
+                entry.kind == fsa::EntryKind::Dir && is_checkout_name(stem, &entry.name)
+            })
+            .map(|entry| home.join(entry.name))
+            .collect()
+    }
+}
+
+/// GRL-FR-BIQX: a new checkout nonce, 8 lowercase hexadecimal digits.
+///
+/// The digits come from a hasher with random keys, mixed with the clock, the
+/// process, and a counter, so two draws in one process differ too.
+pub fn new_checkout_nonce() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(nanos);
+    hasher.write_u32(std::process::id());
+    hasher.write_u64(COUNTER.fetch_add(1, Ordering::Relaxed));
+    let digits = format!("{:016x}", hasher.finish());
+    digits[..CHECKOUT_NONCE_LEN].to_string()
+}
+
+/// GRL-FR-PQLM: whether `name` is the name of a checkout with the stem `stem`:
+/// the stem alone, or the stem, a dash, and a nonce of GRL-FR-BIQX.
+pub fn is_checkout_name(stem: &str, name: &str) -> bool {
+    let Some(rest) = name.strip_prefix(stem) else {
+        return false;
+    };
+    if rest.is_empty() {
+        return true;
+    }
+    rest.strip_prefix('-').is_some_and(|nonce| {
+        nonce.len() == CHECKOUT_NONCE_LEN
+            && nonce.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+    })
 }
 
 /// A project key reduced to one path-safe segment.
@@ -264,3 +324,6 @@ pub fn store_base<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<StoreB
     }
     fsa::short_data_dir().map(StoreBase::new).map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests;

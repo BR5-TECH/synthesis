@@ -30,11 +30,8 @@ fn a_ready_merge_review_applies_the_merge_after_one_pass_and_no_further_turn() {
             Script::answers_ready("Both intents stand.").checking_the_live_trees_stand(),
         )
         .run();
-    let (worktree, checkout, stream_worktree) = (
-        outcome.merge_worktree_path(),
-        outcome.review_checkout_path(),
-        outcome.worktree().to_path_buf(),
-    );
+    let (worktree, home, stream_worktree) =
+        (outcome.merge_worktree_path(), outcome.run_home_path(), outcome.worktree().to_path_buf());
     let data = outcome.merge_data();
     outcome
         .expect_state(GraduationRunState::Completed)
@@ -67,7 +64,7 @@ fn a_ready_merge_review_applies_the_merge_after_one_pass_and_no_further_turn() {
                 .purpose("generate")
                 .pass(1)
                 .turn_kind(crate::tools::agent_exec::TurnKind::MergeReview)
-                .directory(&checkout)
+                .directory_is_review_checkout_under(&home)
                 .directory_is_not(&worktree)
                 .directory_is_not(&stream_worktree)
                 .merge_review_instruction()

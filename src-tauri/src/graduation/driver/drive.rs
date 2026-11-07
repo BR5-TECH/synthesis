@@ -692,6 +692,13 @@ async fn review_turn<R: tauri::Runtime>(
         let checkout = match review_checkout::create(app, run, worktree) {
             Ok(path) => path,
             Err(reason) => {
+                logging::log_error(
+                    app,
+                    &crate::logging::BUFFER,
+                    &[Domain::Ai, Domain::Backend],
+                    "graduation could not make a review checkout",
+                    log_fields! { "run_id" => run.id.clone(), "reason" => reason.clone() },
+                );
                 note_blocked(app, run, "review_checkout_failed");
                 let _ = transitions::block(
                     app,

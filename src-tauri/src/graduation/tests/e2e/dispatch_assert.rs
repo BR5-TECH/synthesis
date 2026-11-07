@@ -68,15 +68,33 @@ impl DispatchAssert {
         self
     }
 
-    /// GRL-FR-YKRI: the turn stood somewhere other than the stream's working
-    /// copy — which is the whole of what makes a review a review.
+    /// GRL-FR-YKRI / GRL-FR-BIQX: the turn stood in a review checkout of its
+    /// own, `rv-<nonce>` directly under the run home `home`.
+    pub(crate) fn directory_is_review_checkout_under(self, home: &Path) -> Self {
+        let name = self.seen.directory.file_name().map(|n| n.to_string_lossy().into_owned());
+        assert!(
+            self.seen.directory.parent().map(super::super::canonical)
+                == Some(super::super::canonical(home))
+                && name.is_some_and(|n| super::super::checkout_paths::is_nonced_name("rv", &n)),
+            "[{}] dispatch {} stood in a review checkout under {}: {}",
+            self.scenario,
+            self.index,
+            home.display(),
+            self.seen.directory.display()
+        );
+        self
+    }
+
+    /// GRL-FR-YKRI: the turn stood somewhere other than `directory`: the
+    /// stream's working copy for a review, or an earlier turn's checkout.
     pub(crate) fn directory_is_not(self, directory: &Path) -> Self {
         assert_ne!(
             self.seen.directory.as_path(),
             directory,
-            "[{}] dispatch {} stood outside the stream",
+            "[{}] dispatch {} stood elsewhere than {}",
             self.scenario,
-            self.index
+            self.index,
+            directory.display()
         );
         self
     }

@@ -529,11 +529,10 @@ impl Outcome {
             .merge_worktree(&self.run.id)
     }
 
-    /// The directory the review turn stands in.
-    pub(crate) fn review_checkout_path(&self) -> std::path::PathBuf {
-        crate::graduation::store_base(&self.fx.app)
-            .expect("the run store")
-            .review_checkout(&self.run.id)
+    /// The run's own directory, which every review checkout stands directly
+    /// under (GRL-FR-YKRI).
+    pub(crate) fn run_home_path(&self) -> std::path::PathBuf {
+        crate::graduation::store_base(&self.fx.app).expect("the run store").home(&self.run.id)
     }
 
     /// A file of the merge worktree, where one stands.

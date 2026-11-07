@@ -104,9 +104,10 @@ pub use runs::{
 pub use scheduler::*;
 pub use state::GraduationState;
 pub use store::{
-    is_directory, new_run_id, read_queue_index, store_base, store_fs, try_read_queue_index,
-    write_queue_index, QueueIndex, QueueIndexEntry, StoreBase,
+    is_checkout_name, is_directory, new_checkout_nonce, new_run_id, read_queue_index, store_base,
+    store_fs, try_read_queue_index, write_queue_index, QueueIndex, QueueIndexEntry, StoreBase,
 };
+pub(crate) use store::{PR_SUMMARY_DIR, REVIEW_DIR};
 /// The sync of a run's progress operation, for a test that holds a stale copy.
 #[cfg(test)]
 pub(crate) fn run_progress_sync_for_test<R: tauri::Runtime>(

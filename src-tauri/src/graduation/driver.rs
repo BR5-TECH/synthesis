@@ -47,6 +47,7 @@ pub mod seams;
 pub mod settings;
 pub mod stops;
 pub mod task_input;
+mod throwaway_checkout;
 pub mod time_budget;
 pub mod turns;
 

@@ -200,21 +200,8 @@ fn a_metadata_list_value_is_one_row_per_line() {
 #[test]
 fn the_pdf_is_pinned_to_the_bundled_fonts() {
     let dir = tempfile::tempdir().unwrap();
-<<<<<<< the base branch
-    let write_file = super::tests::dir_writer(dir.path());
-||||||| what both started from
-    let write_file = |name: &str, bytes: &[u8]| {
-        let path = dir.path().join(name);
-        std::fs::write(&path, bytes).ok().map(|_| path)
-    };
-=======
     let root = dir.path().to_path_buf();
-    let access = crate::fs::FsAccess::builder().allow_root(&root).build().unwrap();
-    let write_file = |name: &str, bytes: &[u8]| {
-        let path = root.join(name);
-        access.write_bytes_atomic(&path, bytes).ok().map(|_| path)
-    };
->>>>>>> the stream
+    let write_file = super::tests::dir_writer(&root);
     let config = super::pdf::font_config(&write_file);
     let body = root.join(pdf_lines::SANS_REGULAR_FILE);
     let code = root.join(pdf_lines::MONO_REGULAR_FILE);
@@ -227,13 +214,7 @@ fn the_pdf_is_pinned_to_the_bundled_fonts() {
         "{config:?}"
     );
     for (name, bytes) in pdf_lines::FONT_FILES {
-<<<<<<< the base branch
-        assert_eq!(super::tests::read_file(&dir.path().join(name)), bytes, "{name} is written");
-||||||| what both started from
-        assert_eq!(std::fs::read(dir.path().join(name)).unwrap(), bytes, "{name} is written");
-=======
-        assert_eq!(access.read_bytes(root.join(name)).unwrap(), bytes, "{name} is written");
->>>>>>> the stream
+        assert_eq!(super::tests::read_file(&root.join(name)), bytes, "{name} is written");
     }
     let style = export_style(std::path::Path::new("."));
     assert!(style.fallback_fonts.is_empty(), "no fallback font of the host");

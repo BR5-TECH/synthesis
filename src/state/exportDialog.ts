@@ -40,7 +40,8 @@ export type ExportCloseReason = "done" | "cancel" | "other-overlay" | "window";
 
 let current: ExportDialogRequest | null = null;
 let nextId = 1;
-let running = false;
+/** EXD-FR-DHAN / EXD-FR-OOTQ: what the mounted dialog does when another surface closes it. */
+let closeHandler: { id: number; handle: () => void } | null = null;
 let opening: (() => void) | null = null;
 let shellSessions: ExportSessions | null = null;
 const listeners = new Set<() => void>();
@@ -75,9 +76,16 @@ export function setExportSessions(next: ExportSessions | null): void {
   shellSessions = next;
 }
 
-/** EXD-FR-ESQB: the dialog reports whether an export runs now. */
-export function setExportRunning(next: boolean): void {
-  running = next;
+/**
+ * EXD-FR-DHAN / EXD-FR-OOTQ: the mounted dialog of opening `id` sets what it
+ * does when another overlay or the window closes it, and clears it with `null`.
+ *
+ * The store calls it from the close path, and not the dialog from an effect
+ * cleanup, because React can run a cleanup on a dialog that stays mounted.
+ */
+export function setExportDialogCloseHandler(id: number, handle: (() => void) | null): void {
+  if (handle !== null) closeHandler = { id, handle };
+  else if (closeHandler?.id === id) closeHandler = null;
 }
 
 /** The reason a write that failed gives the author (EXD-FR-CBIW). */
@@ -130,6 +138,8 @@ export async function openExportDialog(
   }
   // SNV-FR-56: the dialog is one of the window's mutually exclusive overlays.
   opening?.();
+  // EXD-FR-DHAN: a dialog that is still open ends its request before the new one.
+  if (current !== null) closeExportDialog("other-overlay");
   current = {
     id: nextId++,
     path,
@@ -137,7 +147,6 @@ export async function openExportDialog(
     request: options.request ?? null,
     opener: options.opener ?? null,
   };
-  running = false;
   logInfo(["frontend"], "export dialog opened", {
     fromRequest: options.request != null,
   });
@@ -146,15 +155,17 @@ export async function openExportDialog(
 }
 
 /**
- * Close the dialog. EXD-FR-ESQB: while an export runs, only the dialog itself
- * ends it, so another overlay does not take it down mid-way.
+ * Close the dialog. EXD-FR-OOTQ: another overlay and the window close it also
+ * while an export runs. The export continues, and the dialog's close handler
+ * ends a request when the export ends (EXD-FR-DHAN).
  */
 export function closeExportDialog(reason: ExportCloseReason): void {
   if (current === null) return;
-  if (running && (reason === "other-overlay" || reason === "window")) return;
   const opener = current.opener;
+  const handler = closeHandler?.id === current.id ? closeHandler : null;
   current = null;
-  running = false;
+  if (handler !== null) closeHandler = null;
+  if (reason === "other-overlay" || reason === "window") handler?.handle();
   emit();
   if (reason === "done" || reason === "cancel") opener?.focus?.();
 }
@@ -162,7 +173,7 @@ export function closeExportDialog(reason: ExportCloseReason): void {
 /** Test support: forget every opening and every registration. */
 export function resetExportDialogForTest(): void {
   current = null;
-  running = false;
+  closeHandler = null;
   opening = null;
   shellSessions = null;
   nextId = 1;

@@ -18,8 +18,9 @@ The tool an agent uses when the author asks it to export a document, for example
 10. **RDX-FR-TMYF** A call that passes every check records one export request through `../core/DXP-document-export.md` DXP-FR-XZVZ, with the resolved path, the format in lowercase, and the message. The comment body is the `message` less its citation markers (per `../ai/CVL-conversation-loop.md` CVL-FR-VSSU).
 11. **RDX-FR-IDWS** A failure to record the request or to append its comment is the **could not record** refusal: `Other`, retryable. Nothing is recorded.
 12. **RDX-FR-PZGN** A successful call returns `{ requested: true }` and **ends the turn** (per `../ai/CVL-conversation-loop.md` CVL-FR-15). It returns at once. It holds no timer, waits for no outcome, and exports nothing.
-13. **RDX-FR-IEQA** Each call logs under the `ai` and `backend` domains (per TLC-FR-14): one `INFO` record when a request is recorded, with the tool, the discussion id, and the format; and one `WARN` record when it refuses, with the tool and the reason. No record carries the document path, the id the agent gave, or the message.
-14. **RDX-FR-LNCQ** The tool reaches no network and writes no file but the request record and the comment. It commits nothing.
+13. **RDX-FR-DMLK** A reply that asks for two calls of this tool dispatches the first. Each other call of the tool in that reply is not dispatched and gets the **one at a time** refusal (per `../ai/CVL-conversation-loop.md` CVL-FR-15). One turn records at most one export request.
+14. **RDX-FR-IEQA** Each call logs under the `ai` and `backend` domains (per TLC-FR-14): one `INFO` record when a request is recorded, with the tool, the discussion id, and the format; and one `WARN` record when it refuses, with the tool and the reason. No record carries the document path, the id the agent gave, or the message.
+15. **RDX-FR-LNCQ** The tool reaches no network and writes no file but the request record and the comment. It commits nothing.
 
 ## Contract surface
 One tool, conforming to `TLC-tool-conventions.md` in full. It is attached by `../ai/CVL-conversation-loop.md` (CVL-FR-08), and has no Tauri command, event, or frontend reach of its own.
@@ -65,6 +66,7 @@ The `message`, its spoken part hidden (per `../ui/CMT-comments.md` CMT-FR-BMCI).
 - **no spoken part** — kind `InvalidArgs`, retryable: *"The message has no spoken part. Put one short sentence in one `<spoken>…</spoken>` tag in `message`."*
 - **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further comments, so nothing was requested. Answer with what you already have; asking again will not succeed."*
 - **could not record** — kind `Other`, retryable: *"The export request could not be recorded."*
+- **one at a time** — the result of a call that is not dispatched (RDX-FR-DMLK): *"Only one export request can be posted in a reply, so this one was not recorded. Ask for the next export after the author answered this one."*
 
 ### Side effects
 Declared in full (per TLC-FR-17). A successful call produces **exactly one export request** and **exactly one comment**, through `../core/DXP-document-export.md` DXP-FR-XZVZ. It exports nothing, writes no file of the project, and changes no repository state.

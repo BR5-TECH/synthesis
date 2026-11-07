@@ -89,6 +89,50 @@ pub struct ExportResolution {
     pub request: ExportRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment_id: Option<String>,
+    /// DXP-FR-UOFT: the outcome comment was not appended, so the conversation
+    /// was not told.
+    pub comment_failed: bool,
+}
+
+/// One comment this module appends: the agent's request (DXP-FR-XZVZ) or the
+/// author's outcome (DXP-FR-VFFP).
+pub(crate) struct CommentWrite<'a> {
+    pub discussion: &'a comments::Discussion,
+    pub comment_id: String,
+    pub body: String,
+    pub attachments: Vec<Attachment>,
+    pub by: &'a Participant,
+    pub at: &'a str,
+}
+
+/// The writer of one comment. The tests give one that fails.
+pub(crate) type Appender<'a> =
+    &'a dyn Fn(&fs::RootFs, CommentWrite<'_>) -> Result<comments::Discussion, String>;
+
+/// DXP-FR-XZVZ: the agent comment that carries the request.
+fn append_agent(store: &fs::RootFs, w: CommentWrite<'_>) -> Result<comments::Discussion, String> {
+    comments::append_agent_comment_with(
+        store,
+        w.discussion.log_ref(),
+        &w.discussion.id,
+        w.comment_id,
+        w.body,
+        w.attachments,
+        comments::Stamp { by: w.by, at: w.at },
+    )
+}
+
+/// DXP-FR-VFFP: the author comment that states the outcome.
+fn append_author(store: &fs::RootFs, w: CommentWrite<'_>) -> Result<comments::Discussion, String> {
+    comments::add_comment_with_id(
+        store,
+        w.discussion.log_ref(),
+        &w.discussion.id,
+        w.comment_id,
+        w.body,
+        w.by,
+        w.at,
+    )
 }
 
 /// What `record_export_request` needs (DXP-FR-XZVZ).
@@ -242,6 +286,20 @@ pub(crate) fn record_with<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    record_using(app, buffer, store, input, &append_agent)
+}
+
+/// `record_with`, with the comment written by `append`.
+pub(crate) fn record_using<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    buffer: &'static LogBuffer,
+    store: &fs::RootFs,
+    input: ExportRequestInput<'_>,
+    append: Appender<'_>,
+) -> Result<ExportRequest, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
     let origin = input.origin;
     let discussion = comments::locate_discussion_of(store, &origin.target, origin.discussion_id())
         .ok_or_else(|| ERR_WRITE_FAILED.to_string())?;
@@ -268,19 +326,25 @@ where
         path: request.path.clone(),
         format: request.format.clone(),
     };
-    let appended = comments::append_agent_comment_with(
+    let appended = append(
         store,
-        discussion.log_ref(),
-        &request.discussion_id,
-        new_note_id(),
-        input.message.to_string(),
-        vec![attachment],
-        comments::Stamp { by: input.agent, at: &now },
+        CommentWrite {
+            discussion: &discussion,
+            comment_id: new_note_id(),
+            body: input.message.to_string(),
+            attachments: vec![attachment],
+            by: input.agent,
+            at: &now,
+        },
     );
     let thread = match appended {
         Ok(thread) => thread,
         Err(reason) => {
-            let _ = store.delete_under(store.path(), &path, false);
+            // DXP-FR-XZVZ: neither the record nor the comment remains.
+            if store.delete_under(store.path(), &path, false).is_err() {
+                log_refusal(app, buffer, "record", &request.id, "record_not_removed");
+            }
+            log_refusal(app, buffer, "record", &request.id, append_failure(&reason));
             if reason == comments::ERR_DISCUSSION_RESOLVED {
                 return Err(ERR_DISCUSSION_RESOLVED.to_string());
             }
@@ -319,11 +383,41 @@ pub fn resolve_export_request_impl<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    resolve_using(app, buffer, store, request_id, outcome, by, &append_author)
+}
+
+/// `resolve_export_request_impl`, with the comment written by `append`.
+pub(crate) fn resolve_using<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    buffer: &'static LogBuffer,
+    store: &fs::RootFs,
+    request_id: &str,
+    outcome: ExportOutcome,
+    by: &Participant,
+    append: Appender<'_>,
+) -> Result<ExportResolution, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
     let guard = RESOLVE_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-    let outcome = resolve_locked(store, request_id, outcome, by);
+    let outcome = resolve_locked(store, request_id, outcome, by, append);
     drop(guard);
     match outcome {
-        Ok((resolution, thread)) => {
+        Ok((resolution, thread, append_error)) => {
+            if let Some(reason) = append_error {
+                // DXP-FR-UOFT: the state landed, and the conversation was not
+                // told. The request id and the typed code alone.
+                logging::log_warn(
+                    app,
+                    buffer,
+                    &[Domain::Backend],
+                    "the outcome comment of an export request was not appended",
+                    log_fields! {
+                        "requestId" => &resolution.request.id,
+                        "error" => append_failure(&reason),
+                    },
+                );
+            }
             if let Some(thread) = &thread {
                 crate::agent_conversations::retire_recoverable_for_human_comment(app, &thread.id);
                 comments::emit_discussion_changed(app, thread);
@@ -339,12 +433,25 @@ where
     }
 }
 
+/// The typed code of a failed append, for the log. Any other text is a
+/// message of the file system, which can carry a path.
+fn append_failure(reason: &str) -> &'static str {
+    if reason == comments::ERR_DISCUSSION_RESOLVED {
+        comments::ERR_DISCUSSION_RESOLVED
+    } else {
+        ERR_WRITE_FAILED
+    }
+}
+
+type Resolved = (ExportResolution, Option<comments::Discussion>, Option<String>);
+
 fn resolve_locked(
     store: &fs::RootFs,
     request_id: &str,
     outcome: ExportOutcome,
     by: &Participant,
-) -> Result<(ExportResolution, Option<comments::Discussion>), String> {
+    append: Appender<'_>,
+) -> Result<Resolved, String> {
     let mut request = get_export_request_impl(store, request_id)?;
     if request.state != ExportRequestState::Pending {
         return Err(ERR_ALREADY_RESOLVED.to_string());
@@ -362,27 +469,44 @@ fn resolve_locked(
         .map_err(|_| ERR_WRITE_FAILED.to_string())?;
     // DXP-FR-FVTK: a discussion that is gone or resolved takes no comment, and
     // the state lands all the same.
-    let thread = comments::locate_discussion_of(store, &request.target, &request.discussion_id)
-        .filter(|d| !d.resolved)
-        .and_then(|discussion| {
-            let comment_id = new_note_id();
-            comments::add_comment_with_id(
-                store,
-                discussion.log_ref(),
-                &request.discussion_id,
-                comment_id.clone(),
-                outcome_body(&request.path, &outcome),
-                by,
-                &now,
-            )
-            .ok()
-            .map(|thread| (comment_id, thread))
-        });
-    let (comment_id, thread) = match thread {
-        Some((id, thread)) => (Some(id), Some(thread)),
-        None => (None, None),
+    let Some(discussion) =
+        comments::locate_discussion_of(store, &request.target, &request.discussion_id)
+            .filter(|d| !d.resolved)
+    else {
+        let resolution = ExportResolution { request, comment_id: None, comment_failed: false };
+        return Ok((resolution, None, None));
     };
-    Ok((ExportResolution { request, comment_id }, thread))
+    let comment_id = new_note_id();
+    let appended = append(
+        store,
+        CommentWrite {
+            discussion: &discussion,
+            comment_id: comment_id.clone(),
+            body: outcome_body(&request.path, &outcome),
+            attachments: Vec::new(),
+            by,
+            at: &now,
+        },
+    );
+    Ok(match appended {
+        Ok(thread) => (
+            ExportResolution { request, comment_id: Some(comment_id), comment_failed: false },
+            Some(thread),
+            None,
+        ),
+        // DXP-FR-FVTK: the discussion was resolved after the check above. It
+        // takes no comment, as a discussion that was resolved before does not.
+        Err(reason) if reason == comments::ERR_DISCUSSION_RESOLVED => {
+            (ExportResolution { request, comment_id: None, comment_failed: false }, None, None)
+        }
+        // DXP-FR-UOFT: the state stands, and the caller learns that the
+        // conversation was not told.
+        Err(reason) => (
+            ExportResolution { request, comment_id: None, comment_failed: true },
+            None,
+            Some(reason),
+        ),
+    })
 }
 
 /// DXP contract surface: `"get export request (id)"`.

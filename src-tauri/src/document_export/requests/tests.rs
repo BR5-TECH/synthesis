@@ -284,3 +284,130 @@ fn the_log_carries_ids_and_kinds_only() {
     assert!(!text.contains("/secret"));
     assert!(!text.contains("Export the guide"));
 }
+
+fn failing_append(_: &fs::RootFs, _: CommentWrite<'_>) -> Result<comments::Discussion, String> {
+    Err("io error: disk full at /secret/path".to_string())
+}
+
+fn records_of(buffer: &LogBuffer) -> Vec<crate::logging::LogRecord> {
+    let filter = LogFilter {
+        min_level: LogLevel::Debug,
+        domains: vec![Domain::Backend],
+        ..LogFilter::default()
+    };
+    buffer.query(&filter, None, 1000).unwrap().records
+}
+
+// DXP-FR-XZVZ: a failed append of the request comment removes the record, so
+// neither remains, and the failure is logged with its typed code alone.
+#[test]
+fn a_failed_append_removes_the_record() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let f = Fixture::new();
+    let events = f.listen();
+    let before = f.thread().comments.len();
+    let origin = f.origin();
+    let refused = record_using(
+        &f.open.handle(),
+        &BUFFER,
+        &f.root(),
+        ExportRequestInput {
+            path: "docs/guide.md",
+            format: None,
+            message: MESSAGE,
+            agent: &agent(),
+            origin: &origin,
+        },
+        &failing_append,
+    )
+    .unwrap_err();
+    assert_eq!(refused, ERR_WRITE_FAILED);
+    let dir = f.path.join(REQUESTS_DIR);
+    let left = std::fs::read_dir(&dir).map(|d| d.count()).unwrap_or(0);
+    assert_eq!(left, 0, "no record remains");
+    assert_eq!(f.thread().comments.len(), before, "no comment remains");
+    assert!(events.lock().unwrap().is_empty(), "nothing is announced");
+    let records = records_of(&BUFFER);
+    let warn = records.iter().find(|r| r.message == "export request refused").expect("logged");
+    assert_eq!(warn.level, LogLevel::Warn);
+    let text = serde_json::to_string(&records).unwrap();
+    assert!(text.contains(ERR_WRITE_FAILED));
+    assert!(!text.contains("/secret"), "no file system message: {text}");
+}
+
+// DXP-FR-UOFT: a failed append of the outcome comment still changes the
+// state, returns `commentFailed`, and logs a warning with the id and the code.
+#[test]
+fn a_failed_append_on_resolve_keeps_the_state_and_says_so() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let f = Fixture::new();
+    let request = f.record(&BUFFER);
+    let before = f.thread().comments.len();
+    let resolution = resolve_using(
+        &f.open.handle(),
+        &BUFFER,
+        &f.root(),
+        &request.id,
+        ExportOutcome::Cancelled,
+        &human(),
+        &failing_append,
+    )
+    .expect("the state lands");
+    assert_eq!(resolution.request.state, ExportRequestState::Cancelled);
+    assert_eq!(resolution.comment_id, None);
+    assert!(resolution.comment_failed);
+    assert_eq!(f.thread().comments.len(), before);
+    let stored = get_export_request_impl(&f.root(), &request.id).unwrap();
+    assert_eq!(stored.state, ExportRequestState::Cancelled);
+    let wire = serde_json::to_value(&resolution).unwrap();
+    assert_eq!(wire["commentFailed"], true);
+    assert!(wire.get("commentId").is_none());
+    let records = records_of(&BUFFER);
+    let warn = records
+        .iter()
+        .find(|r| r.message == "the outcome comment of an export request was not appended")
+        .expect("logged");
+    assert_eq!(warn.level, LogLevel::Warn);
+    let text = serde_json::to_string(warn).unwrap();
+    assert!(text.contains(&request.id));
+    assert!(text.contains(ERR_WRITE_FAILED));
+    assert!(!text.contains("/secret"));
+}
+
+// DXP-FR-UOFT, DXP-FR-FVTK: a resolution that appends its comment, or whose
+// discussion takes none, reports no failed comment.
+#[test]
+fn a_resolution_with_no_append_failure_reports_none() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let f = Fixture::new();
+    let request = f.record(&BUFFER);
+    let resolution = f.resolve(&BUFFER, &request.id, ExportOutcome::Cancelled).unwrap();
+    assert!(!resolution.comment_failed);
+    assert_eq!(serde_json::to_value(&resolution).unwrap()["commentFailed"], false);
+}
+
+// DXP-FR-FVTK: a discussion resolved between the check and the append takes
+// no comment, and that is not a failed append.
+#[test]
+fn a_discussion_resolved_during_the_append_is_not_a_failure() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let f = Fixture::new();
+    let request = f.record(&BUFFER);
+    let resolved_now =
+        |_: &fs::RootFs, _: CommentWrite<'_>| -> Result<comments::Discussion, String> {
+            Err(comments::ERR_DISCUSSION_RESOLVED.to_string())
+        };
+    let resolution = resolve_using(
+        &f.open.handle(),
+        &BUFFER,
+        &f.root(),
+        &request.id,
+        ExportOutcome::Cancelled,
+        &human(),
+        &resolved_now,
+    )
+    .expect("the state lands");
+    assert_eq!(resolution.request.state, ExportRequestState::Cancelled);
+    assert_eq!(resolution.comment_id, None);
+    assert!(!resolution.comment_failed);
+}

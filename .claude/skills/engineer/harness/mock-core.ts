@@ -8298,7 +8298,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
       exportRequests[id] = next;
       fireBus("export-request-changed", next);
-      return { request: next };
+      return { request: next, commentFailed: false };
     }
     case "assign_artifact_type":
       assignedTypes[String(a.path)] = { type: String(a.artifactType), scope: a.scope };

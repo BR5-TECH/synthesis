@@ -17,9 +17,11 @@ pub mod source;
 // DXP contract surface, "Typed errors".
 pub const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 pub const ERR_NOT_FOUND: &str = "not_found";
+pub const ERR_READ_FAILED: &str = "read_failed";
 pub const ERR_NOT_DOC_ARTIFACT: &str = "not_doc_artifact";
 pub const ERR_NOT_MARKDOWN: &str = "not_markdown";
 pub const ERR_OUTSIDE_PROJECT: &str = "outside_project";
+pub const ERR_INVALID_FORMAT: &str = "invalid_format";
 pub const ERR_INVALID_DESTINATION: &str = "invalid_destination";
 pub const ERR_CONVERSION_FAILED: &str = "conversion_failed";
 pub const ERR_WRITE_FAILED: &str = "write_failed";

@@ -151,7 +151,9 @@ pub fn classify_marker_line(line: &str) -> Option<Marker> {
     }
 }
 
-/// DXP-FR-ANXU: `text` with every complete HTML comment removed.
+/// DXP-FR-ANXU: `text` with every complete HTML comment removed. An `<!--`
+/// with no `-->` after it opens no comment, so the text from it onward stays
+/// (DXP-FR-BXIO).
 pub fn strip_comments(text: &str) -> String {
     let mut out = String::new();
     let mut rest = text;
@@ -159,11 +161,31 @@ pub fn strip_comments(text: &str) -> String {
         out.push_str(&rest[..start]);
         match rest[start + 4..].find("-->") {
             Some(end) => rest = &rest[start + 4 + end + 3..],
-            None => return out,
+            None => {
+                rest = &rest[start..];
+                break;
+            }
         }
     }
     out.push_str(rest);
     out
+}
+
+/// DXP-FR-DJZM: the blocks of an HTML block whose comments are stripped. Text
+/// that is still HTML stays raw HTML (DXP-FR-YRVE). Other text, such as the
+/// text after a comment on its line, is read again as Markdown.
+fn html_remainder(text: &str) -> Vec<Block> {
+    let kept = strip_comments(text);
+    let trimmed = kept.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    if trimmed.starts_with('<') {
+        return vec![Block::Html(kept.trim_end().to_string())];
+    }
+    // The text holds one comment less than `text`, and an HTML block always
+    // starts with `<`, so this reads no HTML block again and ends.
+    parse(trimmed).blocks.into_iter().map(|top| top.block).collect()
 }
 
 type Item<'a> = (Event<'a>, Range<usize>);
@@ -175,7 +197,7 @@ pub fn parse(body: &str) -> Document {
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
     let events: Vec<Item> = Parser::new_ext(body, options).into_offset_iter().collect();
-    let mut reader = Reader { events, pos: 0, diagrams: 0, in_comment: false };
+    let mut reader = Reader { events, pos: 0, diagrams: 0, in_comment: None };
     let mut doc = Document::default();
     // DXP-FR-ERZY: an alignment waits for the block that starts on the very
     // next line, and is dropped otherwise.
@@ -194,9 +216,7 @@ pub fn parse(body: &str) -> Document {
                 Some(Marker::Align(align)) => pending = Some((align, range.start)),
                 None => {
                     pending = None;
-                    let kept = strip_comments(&text);
-                    if !kept.trim().is_empty() {
-                        let block = Block::Html(kept.trim_end().to_string());
+                    for block in html_remainder(&text) {
                         doc.blocks.push(TopBlock { block, align: Align::Left });
                     }
                 }
@@ -207,7 +227,7 @@ pub fn parse(body: &str) -> Document {
             Some((align, at)) if newlines(&body[at..range.start.max(at)]) == 1 => align,
             _ => Align::Left,
         };
-        if let Some(block) = reader.block() {
+        for block in reader.block() {
             doc.blocks.push(TopBlock { block, align });
         }
     }
@@ -228,8 +248,9 @@ struct Reader<'a> {
     events: Vec<Item<'a>>,
     pos: usize,
     diagrams: usize,
-    /// DXP-FR-ANXU: inside an inline comment that spans several events.
-    in_comment: bool,
+    /// DXP-FR-SRHN: the raw text of an inline comment that spans several
+    /// events, while it is not closed yet.
+    in_comment: Option<String>,
 }
 
 impl<'a> Reader<'a> {
@@ -253,10 +274,22 @@ impl<'a> Reader<'a> {
         text
     }
 
-    /// The block that starts at the current event, or `None` for an event
-    /// that makes no block.
-    fn block(&mut self) -> Option<Block> {
-        let event = self.next()?;
+    /// The blocks that start at the current event: none for an event that
+    /// makes no block, and more than one for an HTML block whose text after a
+    /// comment is Markdown (DXP-FR-DJZM).
+    fn block(&mut self) -> Vec<Block> {
+        let Some(event) = self.next() else {
+            return Vec::new();
+        };
+        if let Event::Start(Tag::HtmlBlock) = event {
+            self.pos -= 1;
+            let text = self.html_block();
+            return html_remainder(&text);
+        }
+        self.single_block(event).into_iter().collect()
+    }
+
+    fn single_block(&mut self, event: Event<'a>) -> Option<Block> {
         match event {
             Event::Start(Tag::Paragraph) => Some(Block::Paragraph(self.inlines(TagEnd::Paragraph))),
             Event::Start(Tag::Heading { level, .. }) => {
@@ -269,11 +302,6 @@ impl<'a> Reader<'a> {
             }
             Event::Start(Tag::List(start)) => Some(self.list(start)),
             Event::Start(Tag::Table(aligns)) => Some(self.table(aligns)),
-            Event::Start(Tag::HtmlBlock) => {
-                self.pos -= 1;
-                let kept = strip_comments(&self.html_block());
-                (!kept.trim().is_empty()).then(|| Block::Html(kept.trim_end().to_string()))
-            }
             Event::Rule => Some(Block::Rule),
             Event::Start(tag) => {
                 // A construct the export does not model: keep its text.
@@ -293,9 +321,7 @@ impl<'a> Reader<'a> {
                     break;
                 }
             }
-            if let Some(block) = self.block() {
-                blocks.push(block);
-            }
+            blocks.extend(self.block());
         }
         blocks
     }
@@ -343,6 +369,7 @@ impl<'a> Reader<'a> {
             match event {
                 Event::End(TagEnd::Item) => {
                     self.pos += 1;
+                    self.end_open_comment(&mut loose);
                     break;
                 }
                 Event::TaskListMarker(checked) => {
@@ -357,12 +384,11 @@ impl<'a> Reader<'a> {
                 | Event::Start(Tag::Table(_))
                 | Event::Start(Tag::HtmlBlock)
                 | Event::Rule => {
+                    self.end_open_comment(&mut loose);
                     if !loose.is_empty() {
                         blocks.push(Block::Paragraph(std::mem::take(&mut loose)));
                     }
-                    if let Some(block) = self.block() {
-                        blocks.push(block);
-                    }
+                    blocks.extend(self.block());
                 }
                 _ => {
                     self.pos += 1;
@@ -417,20 +443,40 @@ impl<'a> Reader<'a> {
             }
             self.inline_event(event, &mut out);
         }
+        // DXP-FR-SRHN: a comment ends at the latest with the paragraph,
+        // heading, or table cell that holds it.
+        if matches!(end, TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::TableCell) {
+            self.end_open_comment(&mut out);
+        }
         out
     }
 
+    /// DXP-FR-BXIO: a comment that the block ends before its `-->` was no
+    /// comment, so its text goes back into the output.
+    fn end_open_comment(&mut self, out: &mut Vec<Inline>) {
+        if let Some(raw) = self.in_comment.take() {
+            push_text(out, &raw);
+        }
+    }
+
     fn inline_event(&mut self, event: Event<'a>, out: &mut Vec<Inline>) {
-        if self.in_comment {
-            // DXP-FR-ANXU: the rest of a comment that spans several events.
-            if let Event::InlineHtml(t) | Event::Text(t) | Event::Html(t) = &event {
-                if let Some(end) = t.find("-->") {
-                    self.in_comment = false;
-                    let rest = &t[end + 3..];
-                    if !rest.is_empty() {
-                        push_text(out, rest);
-                    }
+        if let Some(raw) = self.in_comment.as_mut() {
+            // DXP-FR-SRHN: the rest of a comment that spans several events.
+            let piece = match &event {
+                Event::InlineHtml(t) | Event::Text(t) | Event::Html(t) | Event::Code(t) => {
+                    t.to_string()
                 }
+                Event::SoftBreak | Event::HardBreak => "\n".to_string(),
+                _ => String::new(),
+            };
+            if let Some(end) = piece.find("-->") {
+                self.in_comment = None;
+                let rest = &piece[end + 3..];
+                if !rest.is_empty() {
+                    push_text(out, rest);
+                }
+            } else {
+                raw.push_str(&piece);
             }
             return;
         }
@@ -441,11 +487,15 @@ impl<'a> Reader<'a> {
             Event::HardBreak => out.push(Inline::HardBreak),
             Event::InlineHtml(t) | Event::Html(t) => {
                 if t.trim_start().starts_with("<!--") {
-                    // DXP-FR-ANXU: a comment is dropped.
-                    self.in_comment = !t.contains("-->");
-                    let kept = strip_comments(&t);
-                    if !kept.is_empty() && !self.in_comment {
-                        push_text(out, &kept);
+                    // DXP-FR-ANXU: a comment is dropped. One that does not
+                    // close in this event continues in the next ones.
+                    if t.contains("-->") {
+                        let kept = strip_comments(&t);
+                        if !kept.is_empty() {
+                            push_text(out, &kept);
+                        }
+                    } else {
+                        self.in_comment = Some(t.to_string());
                     }
                 } else {
                     push_text(out, &t);

@@ -175,6 +175,11 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # DXP-FR-CPPT: the `pdf` export of a DOC artifact. Its lexer and its renderer
 # take a token stream that the export builds itself (DXP-FR-ERZY, DXP-FR-YVIV).
 markdown2pdf = "1.6.2"
+# DXP-FR-FNTP / DXP-FR-ERZY: the widths of the bundled PDF font, so the PDF
+# writer breaks an aligned line where the renderer does. The crate is already
+# in the tree under `markdown2pdf`, at this version, so nothing is added to
+# the build.
+ttf-parser = "0.25"
 # DXP-FR-RKJC: a diagram fence is rendered to a PNG image in the backend, with
 # no webview. Only the SVG path, the Cytoscape layout, and the PNG export are on;
 # `system-fonts` lets the PNG raster draw label text with the fonts of the host.

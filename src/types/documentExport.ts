@@ -56,6 +56,8 @@ export interface ExportRequest {
 export interface ExportResolution {
   request: ExportRequest;
   commentId?: string;
+  /** DXP-FR-UOFT: the request is resolved, and its outcome comment was not appended. */
+  commentFailed: boolean;
 }
 
 /** CMS-FR-OKDW: the `export_request` attachment of an agent's comment. */

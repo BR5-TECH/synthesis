@@ -176,7 +176,7 @@ describe("the dialog", () => {
     // The log flush can call `append_log_records` at any moment, so the
     // browse calls are read by their command name rather than by order.
     const browses = invokeMock.mock.calls.filter(([cmd]) => cmd === "browse_for_save_path");
-    expect(browses.at(-1)).toEqual(["browse_for_save_path", { defaultName: "guide.docx" }]);
+    expect(browses[browses.length - 1]).toEqual(["browse_for_save_path", { defaultName: "guide.docx" }]);
   });
 
   it("EXD-FR-ESQB, EXD-FR-QWZO: Export runs the conversion, disables every control, ignores Escape, and shows its own progress", async () => {
@@ -300,23 +300,11 @@ describe("the dialog", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("EXD-FR-XNLZ: opening closes the window's other overlays, and another overlay closes an idle dialog but not a running one", async () => {
+  it("EXD-FR-XNLZ: opening closes the window's other overlays, and another overlay closes the dialog", async () => {
     const closeOthers = vi.fn();
     setExportDialogOpening(closeOthers);
-    const pending = deferred<unknown>();
-    handlers.export_document = () => pending.promise;
     await openDialog();
     expect(closeOthers).toHaveBeenCalledTimes(1);
-    await chooseDestination();
-    fireEvent.click(exportButton());
-    await screen.findByText("Starting the export…");
-    act(() => closeExportDialog("other-overlay"));
-    expect(screen.getByRole("dialog", { name: "Export document" })).toBeInTheDocument();
-    await act(async () => {
-      pending.reject("write_failed");
-      await pending.promise.catch(() => {});
-    });
-    await screen.findByRole("alert");
     act(() => closeExportDialog("other-overlay"));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
@@ -476,12 +464,14 @@ describe("a dialog opened from a request", () => {
   });
 
   it("EXD-FR-DHAN: a dialog that closes after a success with warnings resolves the request as exported", async () => {
+    // The request asks for `docx`, so the destination carries that extension.
+    const docxDest = "/Users/me/Desktop/guide.docx";
     handlers.export_document = () => ({
-      destination: DEST,
+      destination: docxDest,
       warnings: [{ kind: "diagram_failed", index: 1 }],
     });
     await openFromRequest();
-    await chooseDestination();
+    await chooseDestination(docxDest);
     fireEvent.click(exportButton());
     await screen.findByRole("button", { name: "Close" });
     act(() => closeExportDialog("window"));
@@ -489,7 +479,7 @@ describe("a dialog opened from a request", () => {
       expect(invokeMock).toHaveBeenCalledWith("resolve_export_request", {
         requestId: "req-1",
         outcome: "exported",
-        destination: DEST,
+        destination: docxDest,
       }),
     );
     const resolutions = invokeMock.mock.calls.filter(([cmd]) => cmd === "resolve_export_request");

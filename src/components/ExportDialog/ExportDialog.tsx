@@ -14,7 +14,7 @@ import { logInfo, logWarn } from "../../logging";
 import { showToast } from "../../state/toasts";
 import {
   closeExportDialog,
-  setExportRunning,
+  setExportDialogCloseHandler,
   type ExportDialogRequest,
 } from "../../state/exportDialog";
 import { dispatchDecision } from "../DraftDiscussion/decisionDispatch";
@@ -57,12 +57,16 @@ export function exportErrorText(code: string): string {
       return "No project is open.";
     case "not_found":
       return "The file is not in the project any more.";
+    case "read_failed":
+      return "The file could not be read.";
     case "not_doc_artifact":
       return "The file is not a document of the Documents type, so it can not be exported.";
     case "not_markdown":
       return "The file is not a Markdown file, so it can not be exported.";
     case "outside_project":
       return "The file is not in the project.";
+    case "invalid_format":
+      return "The format is not .pdf or .docx.";
     case "invalid_destination":
       return "The destination is not valid. Choose it again.";
     case "conversion_failed":
@@ -82,9 +86,11 @@ function codeOf(error: unknown): string {
 const KNOWN_CODES = new Set([
   "no_project_open",
   "not_found",
+  "read_failed",
   "not_doc_artifact",
   "not_markdown",
   "outside_project",
+  "invalid_format",
   "invalid_destination",
   "conversion_failed",
   "write_failed",
@@ -131,6 +137,15 @@ async function resolveRequest(
       outcome,
       comment: resolved.commentId !== undefined,
     });
+    if (resolved.commentFailed) {
+      // EXD-FR-VFFP: the request is resolved, and its conversation did not get the outcome.
+      logWarn(["frontend"], "export outcome was not posted in the conversation", {
+        requestId: request.id,
+        outcome,
+      });
+      showNotToldToast(request.id, "The conversation was not told what happened.");
+      return;
+    }
     await dispatchDecision(
       { id: request.id, threadId: request.discussionId, target: request.target },
       { commentId: resolved.commentId },
@@ -145,20 +160,43 @@ async function resolveRequest(
       outcome,
       failure: code === "already_resolved" || code === "request_not_found" ? code : "other",
     });
-    showToast(
-      {
-        key: `export-request-${request.id}`,
-        level: "Error",
-        title: "Could not record the export outcome",
-        body:
-          code === "already_resolved"
-            ? "This export request is already resolved."
-            : "The conversation was not told what happened.",
-        address: null,
-      },
-      { priority: true },
+    showNotToldToast(
+      request.id,
+      code === "already_resolved"
+        ? "This export request is already resolved."
+        : "The conversation was not told what happened.",
     );
   }
+}
+
+/** EXD-FR-VFFP: the error toast of a resolution that did not reach the conversation. */
+function showNotToldToast(requestId: string, body: string): void {
+  showToast(
+    {
+      key: `export-request-${requestId}`,
+      level: "Error",
+      title: "Could not record the export outcome",
+      body,
+      address: null,
+    },
+    { priority: true },
+  );
+}
+
+/** EXD-FR-YTQG / EXD-FR-OOTQ: the toast of an export that wrote its file. */
+function showExportedToast(exportId: string, destination: string, warnings: number): void {
+  showToast({
+    key: `document-export-${exportId}`,
+    level: warnings === 0 ? "Info" : "Warn",
+    title: "Document exported",
+    body:
+      warnings === 0
+        ? `${baseName(destination)} was written.`
+        : `${baseName(destination)} was written. ${
+            warnings === 1 ? "One diagram" : `${warnings} diagrams`
+          } stayed as code.`,
+    address: null,
+  });
 }
 
 type Phase = "idle" | "running" | "warnings";
@@ -177,10 +215,11 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
   const lastError = useRef<string | null>(null);
   const exportId = useRef<string | null>(null);
   const finished = useRef(false);
-  /** EXD-FR-DHAN: what an unmount owes the request, read after the render. */
+  /** EXD-FR-DHAN: what a close by another surface owes the request. */
   const writtenRef = useRef<string | null>(null);
   const runningRef = useRef(false);
-  const mounted = useRef(true);
+  /** EXD-FR-OOTQ: another surface closed the dialog, so a running export reports by toast. */
+  const detached = useRef(false);
   const running = phase === "running";
 
   // EXD-FR-QWZO: the progress of this dialog's own export alone.
@@ -202,8 +241,6 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
     };
   }, []);
 
-  useEffect(() => () => setExportRunning(false), []);
-
   /** EXD-FR-DHAN: end a request with its outcome, once. */
   const settle = useCallback(
     (outcome: ExportOutcome, detail: { destination?: string; error?: string }) => {
@@ -223,18 +260,24 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
     [settle],
   );
 
-  // EXD-FR-DHAN: a dialog that another overlay or a project change closes
-  // still ends its request. An export that still runs ends it when it settles.
+  // EXD-FR-DHAN / EXD-FR-OOTQ: a dialog that another overlay or a project
+  // change closes still ends its request. An export that still runs ends it
+  // when it settles. The store calls this from its close path, so a cleanup
+  // that React runs on a dialog that stays mounted ends nothing.
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
+    detached.current = false;
+    setExportDialogCloseHandler(opening.id, () => {
+      detached.current = true;
       if (runningRef.current) return;
       if (writtenRef.current !== null) settle("exported", { destination: writtenRef.current });
       else if (lastError.current !== null) settle("failed", { error: lastError.current });
       else settle("cancelled", {});
-    };
-  }, [settle]);
+    });
+    // The handler stays registered after an unmount. A project that closes
+    // takes the whole shell down before the window closes the dialog, and the
+    // close path still owes the request its outcome. The store forgets the
+    // handler when it closes the dialog of `opening.id`.
+  }, [opening.id, settle]);
 
   /** EXD-FR-SVLO: Cancel and Escape, while no export runs. */
   const cancel = useCallback(() => {
@@ -288,7 +331,6 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
     setError(null);
     setPhase("running");
     runningRef.current = true;
-    setExportRunning(true);
     const started = Date.now();
     logInfo(["frontend"], "document export started", {
       format,
@@ -305,27 +347,21 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
       });
       runningRef.current = false;
       writtenRef.current = result.destination;
-      setExportRunning(false);
       lastError.current = null;
       logInfo(["frontend"], "document export finished", {
         format,
         warnings: result.warnings.length,
         durationMs: Date.now() - started,
       });
-      if (!mounted.current) {
-        // EXD-FR-DHAN: the dialog closed while the export ran.
+      if (detached.current) {
+        // EXD-FR-OOTQ / EXD-FR-DHAN: the dialog closed while the export ran.
+        showExportedToast(id, result.destination, result.warnings.length);
         settle("exported", { destination: result.destination });
         return;
       }
       if (result.warnings.length === 0) {
         // EXD-FR-YTQG.
-        showToast({
-          key: `document-export-${id}`,
-          level: "Info",
-          title: "Document exported",
-          body: `${baseName(result.destination)} was written.`,
-          address: null,
-        });
+        showExportedToast(id, result.destination, 0);
         finish("exported", { destination: result.destination });
         return;
       }
@@ -336,18 +372,28 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
     } catch (e) {
       // EXD-FR-RNJL.
       runningRef.current = false;
-      setExportRunning(false);
       const code = codeOf(e);
       const text = exportErrorText(code);
       lastError.current = text;
-      if (!mounted.current) {
-        settle("failed", { error: text });
-        return;
-      }
       logWarn(["frontend"], "document export failed", {
         format,
         failure: KNOWN_CODES.has(code) ? code : "other",
       });
+      if (detached.current) {
+        // EXD-FR-OOTQ / EXD-FR-DHAN: the dialog closed while the export ran.
+        showToast(
+          {
+            key: `document-export-${id}`,
+            level: "Error",
+            title: "Could not export the document",
+            body: text,
+            address: null,
+          },
+          { priority: true },
+        );
+        settle("failed", { error: text });
+        return;
+      }
       setError(text);
       setPhase("idle");
     }

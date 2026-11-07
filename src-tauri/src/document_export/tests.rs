@@ -49,8 +49,8 @@ impl Project {
     }
 }
 
-fn no_diagram(_: &str) -> Option<Vec<u8>> {
-    None
+fn no_diagram(_: &str) -> Result<Vec<u8>, convert::diagrams::DiagramFailure> {
+    Err(convert::diagrams::DiagramFailure::Invalid)
 }
 
 fn run(
@@ -168,4 +168,119 @@ fn an_export_of_another_file_writes_nothing() {
     let (outcome, _) = run(&BUFFER, Some(&p.root), &p.job("notes/plain.md", destination.clone()));
     assert_eq!(outcome, Err(ERR_NOT_DOC_ARTIFACT));
     assert!(!std::path::Path::new(&destination).exists());
+}
+
+// DXP-FR-PKDB: the `doc-…` id that a real Documents collection gives a DOC
+// artifact of the project resolves to its project-relative path.
+#[test]
+fn a_documents_id_of_the_collection_resolves_to_its_project_path() {
+    use crate::documents::{normalise_path, SourceKind, StoredSource, TypeSources};
+    use tauri::Manager;
+    let f = crate::tools::tests::document_fixture::DocFixture::new();
+    let path = crate::changes::canonicalize_lenient(f.fixture._dir.path());
+    let root = RootFs::for_root(&path);
+    root.write_text_atomic("docs/guide.md", "# Guide\n").unwrap();
+    scanning::assign(&root, "docs", ArtifactType::Doc, Scope::Folder).unwrap();
+    let base = normalise_path(&path.to_string_lossy());
+    let docs = normalise_path(&path.join("docs").to_string_lossy());
+    let read_typed = move || TypeSources {
+        sources: vec![StoredSource { kind: SourceKind::Folder, path: docs.clone() }],
+        worktree_root: Some(base.clone()),
+        is_doc: Box::new(|_| true),
+    };
+    let fs = f.fixture.app.state::<crate::fs::FsAccessState>();
+    f.collection().refresh_with(&fs, &f.fixture.handle(), &read_typed, &|_| {});
+    let snapshot = f.collection().snapshot().expect("a snapshot");
+    let id = crate::documents::document_id(&normalise_path(
+        &path.join("docs").join("guide.md").to_string_lossy(),
+    ));
+    assert!(id.starts_with("doc-") && id.len() == 36, "{id}");
+    let entry = snapshot.documents.iter().find(|d| d.id == id).expect("the collection holds it");
+    assert_eq!(entry.project_path.as_deref(), Some("docs/guide.md"));
+    assert_eq!(resolve_identifier(&root, &id, Some(&snapshot)), Ok("docs/guide.md".into()));
+}
+
+/// A PNG of `width` × `height` pixels.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let image = image::RgbaImage::new(width, height);
+    let mut out = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut out, image::ImageFormat::Png).unwrap();
+    out.into_inner()
+}
+
+// DXP-FR-JYHX: a local image of the project, relative to the file, reaches
+// both formats. A remote image and one outside the project show their alt text.
+#[test]
+fn a_local_image_reaches_both_formats() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let p = Project::new();
+    p.root.write_bytes_atomic("docs/img/shot.png", &png(30, 20)).unwrap();
+    p.root
+        .write_text_atomic(
+            "docs/pictures.md",
+            "# Pictures\n\n![a shot](img/shot.png)\n\n![remote one](https://example.test/x.png)\n\n![outside one](../../x.png)\n",
+        )
+        .unwrap();
+
+    let docx = p.destination("pictures.docx");
+    let (outcome, _) = run(&BUFFER, Some(&p.root), &p.job("docs/pictures.md", docx.clone()));
+    outcome.expect("exported");
+    let bytes = std::fs::read(&docx).unwrap();
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let media: Vec<String> = (0..archive.len())
+        .map(|i| archive.by_index(i).unwrap().name().to_string())
+        .filter(|name| name.starts_with("word/media/") && !name.ends_with('/'))
+        .collect();
+    assert_eq!(media.len(), 1, "only the local image is embedded: {media:?}");
+    let xml = super::convert::tests::document_xml(&std::fs::read(&docx).unwrap());
+    assert!(xml.contains("remote one"), "a remote image shows its alt text");
+    assert!(xml.contains("outside one"), "an image outside the project shows its alt text");
+
+    let mut job = p.job("docs/pictures.md", p.destination("pictures.pdf"));
+    job.format = Format::Pdf;
+    let (outcome, _) = run(&BUFFER, Some(&p.root), &job);
+    outcome.expect("exported");
+    let pdf = std::fs::read(p.destination("pictures.pdf")).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    assert!(
+        pdf.windows(b"/Subtype /Image".len()).any(|w| w == b"/Subtype /Image")
+            || pdf.windows(b"/Subtype/Image".len()).any(|w| w == b"/Subtype/Image"),
+        "the PDF holds an image object"
+    );
+    let text = pdf_extract::extract_text_from_mem(&pdf).unwrap_or_default();
+    assert!(text.contains("remote one"), "{text}");
+}
+
+// DXP-FR-LNCQ: a source that exists and does not read is `read_failed`, not
+// `not_found`, and the export writes nothing.
+#[test]
+fn a_source_that_does_not_read_is_read_failed() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let p = Project::new();
+    p.root.write_bytes_atomic("docs/broken.md", &[0xff, 0xfe, 0x00, 0xc3]).unwrap();
+    let destination = p.destination("broken.docx");
+    let (outcome, _) = run(&BUFFER, Some(&p.root), &p.job("docs/broken.md", destination.clone()));
+    assert_eq!(outcome, Err(ERR_READ_FAILED));
+    assert!(!std::path::Path::new(&destination).exists());
+}
+
+// DXP-FR-LHEV, DXP-FR-NGUG: a format that is not `pdf` or `docx` is
+// `invalid_format`, and the command converts and writes nothing.
+#[test]
+fn an_unknown_format_is_invalid_format() {
+    let p = Project::new();
+    let app = tauri::test::mock_app();
+    let destination = p.destination("guide.html");
+    let outcome = tauri::async_runtime::block_on(commands::export_document(
+        app.handle().clone(),
+        "docs/guide.md".into(),
+        "html".into(),
+        false,
+        destination.clone(),
+        "e-1".into(),
+    ));
+    assert_eq!(outcome.unwrap_err(), ERR_INVALID_FORMAT);
+    assert!(!std::path::Path::new(&destination).exists());
+    assert_eq!(Format::parse("PDF"), Some(Format::Pdf));
+    assert_eq!(Format::parse("Docx"), Some(Format::Docx));
 }

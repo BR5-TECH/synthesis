@@ -4,18 +4,23 @@ use std::cell::RefCell;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use super::diagrams::{DiagramFailure, FailedDiagram};
 use super::model::{classify_marker_line, parse, Align, Block, Inline, Marker};
 use super::*;
 
-fn render_ok(_: &str) -> Option<Vec<u8>> {
+pub(crate) fn render_ok(_: &str) -> Result<Vec<u8>, DiagramFailure> {
     let image = image::RgbaImage::new(40, 20);
     let mut out = std::io::Cursor::new(Vec::new());
-    image.write_to(&mut out, image::ImageFormat::Png).ok()?;
-    Some(out.into_inner())
+    image.write_to(&mut out, image::ImageFormat::Png).map_err(|_| DiagramFailure::Invalid)?;
+    Ok(out.into_inner())
 }
 
-fn render_fail(_: &str) -> Option<Vec<u8>> {
-    None
+fn render_fail(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+    Err(DiagramFailure::Invalid)
+}
+
+fn render_past_deadline(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+    Err(DiagramFailure::Deadline)
 }
 
 fn no_image(_: &str) -> Option<Vec<u8>> {
@@ -23,11 +28,11 @@ fn no_image(_: &str) -> Option<Vec<u8>> {
 }
 
 /// Convert `text` with the given renderer, writing pictures into `dir`.
-fn run(
+pub(crate) fn run(
     text: &str,
     format: Format,
     frontmatter: bool,
-    render: &dyn Fn(&str) -> Option<Vec<u8>>,
+    render: diagrams::DiagramRenderer<'_>,
     dir: &Path,
 ) -> (Converted, Vec<(Stage, usize, usize)>) {
     let write_file = |name: &str, bytes: &[u8]| -> Option<PathBuf> {
@@ -51,7 +56,7 @@ fn run(
 }
 
 /// The `word/document.xml` of a `.docx`.
-fn document_xml(bytes: &[u8]) -> String {
+pub(crate) fn document_xml(bytes: &[u8]) -> String {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("a zip");
     let mut file = archive.by_name("word/document.xml").expect("document.xml");
     let mut xml = String::new();
@@ -150,8 +155,39 @@ fn a_failed_diagram_stays_as_code_with_a_warning() {
     let dir = tempfile::tempdir().unwrap();
     let text = "```mermaid\nnot a diagram\n```\n";
     let (converted, _) = run(text, Format::Docx, false, &render_fail, dir.path());
-    assert_eq!(converted.failed_diagrams, vec![1]);
+    assert_eq!(
+        converted.failed_diagrams,
+        vec![FailedDiagram { index: 1, reason: DiagramFailure::Invalid }]
+    );
     assert!(document_xml(&converted.bytes).contains("not a diagram"));
+}
+
+// DXP-FR-QCEB, DXP-FR-IOFM: a diagram whose render passes its deadline stays
+// as code, and the export reports it and goes on to the next diagram.
+#[test]
+fn a_diagram_past_its_deadline_stays_as_code_with_a_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let text = "```mermaid\ngraph TD; slow-->never\n```\n\nAfter the diagram.\n";
+    let (converted, events) = run(text, Format::Docx, false, &render_past_deadline, dir.path());
+    assert_eq!(
+        converted.failed_diagrams,
+        vec![FailedDiagram { index: 1, reason: DiagramFailure::Deadline }]
+    );
+    assert!(events.contains(&(Stage::Diagrams, 1, 1)), "the diagram counts as processed");
+    let xml = document_xml(&converted.bytes);
+    assert!(xml.contains("slow--&gt;never"), "the source stays as code");
+    assert!(xml.contains("After the diagram."));
+}
+
+// DXP-FR-QCEB: the real renderer stops at its deadline and reports it.
+#[test]
+fn merman_stops_at_the_deadline() {
+    let source = "flowchart TD\n  A[Start] --> B[Done]";
+    assert_eq!(
+        diagrams::render_png_within(source, std::time::Duration::ZERO),
+        Err(DiagramFailure::Deadline)
+    );
+    assert_eq!(diagrams::RENDER_DEADLINE, std::time::Duration::from_secs(20));
 }
 
 // DXP-FR-RKJC: merman renders a real flowchart to a PNG, in the backend.
@@ -159,7 +195,7 @@ fn a_failed_diagram_stays_as_code_with_a_warning() {
 fn merman_renders_a_flowchart_to_png() {
     let png = diagrams::render_png("flowchart TD\n  A[Start] --> B[Done]").expect("renders");
     assert!(diagrams::png_size(&png).is_some());
-    assert!(diagrams::render_png("   ").is_none());
+    assert_eq!(diagrams::render_png("   "), Err(DiagramFailure::Invalid));
 }
 
 // DXP-FR-ERZY, DXP-FR-YVIV, DXP-FR-CPPT: a DOCX carries the alignment and the

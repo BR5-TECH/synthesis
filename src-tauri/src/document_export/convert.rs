@@ -14,9 +14,16 @@ pub mod docx;
 pub mod frontmatter;
 pub mod model;
 pub mod pdf;
+pub mod pdf_lines;
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
+#[cfg(test)]
+mod tests_comments;
+#[cfg(test)]
+mod tests_formats;
+#[cfg(test)]
+mod tests_pdf;
 
 use model::{Block, Document, Inline, TopBlock};
 
@@ -86,8 +93,8 @@ pub struct Input<'a> {
     /// DXP-FR-JYHX: the bytes of a local image by its URL, or `None` for one
     /// that is remote, outside the project, or missing.
     pub load_image: &'a dyn Fn(&str) -> Option<Vec<u8>>,
-    /// DXP-FR-RKJC: the PNG of one diagram, or `None` when it fails.
-    pub render_diagram: &'a dyn Fn(&str) -> Option<Vec<u8>>,
+    /// DXP-FR-RKJC: the PNG of one diagram, or why it fails.
+    pub render_diagram: diagrams::DiagramRenderer<'a>,
     /// The folder the PDF pictures are written to, and the writer of one file.
     pub pictures_dir: &'a Path,
     pub write_file: pdf::FileWriter<'a>,
@@ -98,7 +105,7 @@ pub struct Input<'a> {
 pub struct Converted {
     pub bytes: Vec<u8>,
     /// DXP-FR-IOFM: the diagrams that stayed as code, counted from 1.
-    pub failed_diagrams: Vec<usize>,
+    pub failed_diagrams: Vec<diagrams::FailedDiagram>,
     pub diagram_count: usize,
 }
 

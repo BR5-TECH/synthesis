@@ -10,10 +10,12 @@ use std::time::Instant;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
+use super::convert::diagrams::DiagramRenderer;
 use super::convert::{self, Format, Input, Stage};
 use super::source::check_doc_artifact;
 use super::{
-    ERR_CONVERSION_FAILED, ERR_INVALID_DESTINATION, ERR_NO_PROJECT_OPEN, ERR_WRITE_FAILED,
+    ERR_CONVERSION_FAILED, ERR_INVALID_DESTINATION, ERR_INVALID_FORMAT, ERR_NOT_FOUND,
+    ERR_NO_PROJECT_OPEN, ERR_READ_FAILED, ERR_WRITE_FAILED,
 };
 use crate::fs::{self, RootFs, UserChosenPath};
 use crate::log_fields;
@@ -41,6 +43,9 @@ pub struct ExportProgress {
 pub struct ExportWarning {
     pub kind: &'static str,
     pub index: usize,
+    /// For the log alone (DXP-FR-NGUG). The contract shape has no reason.
+    #[serde(skip)]
+    pub reason: &'static str,
 }
 
 /// DXP contract surface: what `export_document` returns.
@@ -72,13 +77,21 @@ pub async fn export_document<R: tauri::Runtime>(
     export_id: String,
 ) -> Result<ExportResult, String> {
     let Some(format) = Format::parse(&format) else {
-        return Err(ERR_CONVERSION_FAILED.to_string());
+        // DXP-FR-LHEV / DXP-FR-NGUG: the typed error alone, not the text given.
+        logging::log_error(
+            &app,
+            &BUFFER,
+            &[Domain::Backend],
+            "document export failed",
+            log_fields! { "error" => ERR_INVALID_FORMAT },
+        );
+        return Err(ERR_INVALID_FORMAT.to_string());
     };
     let job = ExportJob { path, format, include_frontmatter, destination, export_id };
     // DXP-FR-WLGE: the managed state is read on the worker thread too, because
     // a `State` can not cross onto it and the `AppHandle` can.
     let worker = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let joined = tauri::async_runtime::spawn_blocking(move || {
         let root =
             worker.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
         let emitter = worker.clone();
@@ -87,9 +100,22 @@ pub async fn export_document<R: tauri::Runtime>(
         };
         run_export(&worker, &BUFFER, root.as_ref(), &job, &convert::diagrams::render_png, &emit)
     })
-    .await
-    .map_err(|_| ERR_CONVERSION_FAILED.to_string())?
-    .map_err(str::to_string)
+    .await;
+    match joined {
+        Ok(outcome) => outcome.map_err(str::to_string),
+        Err(_) => {
+            // DXP-FR-NGUG: the worker ended with no result, for example by a
+            // panic outside the conversion.
+            logging::log_error(
+                &app,
+                &BUFFER,
+                &[Domain::Backend],
+                "document export failed: the worker thread did not finish",
+                log_fields! { "error" => ERR_CONVERSION_FAILED },
+            );
+            Err(ERR_CONVERSION_FAILED.to_string())
+        }
+    }
 }
 
 /// The whole export with its logging (DXP-FR-NGUG). `root` is `None` with no
@@ -99,7 +125,7 @@ pub fn run_export<S: LogSink + Clone + Send + 'static>(
     buffer: &'static LogBuffer,
     root: Option<&RootFs>,
     job: &ExportJob,
-    render_diagram: &dyn Fn(&str) -> Option<Vec<u8>>,
+    render_diagram: DiagramRenderer<'_>,
     emit: &dyn Fn(ExportProgress),
 ) -> Result<ExportResult, &'static str> {
     let started = Instant::now();
@@ -109,7 +135,7 @@ pub fn run_export<S: LogSink + Clone + Send + 'static>(
     };
     logging::log_info(sink, buffer, &[Domain::Backend], "document export started", base.clone());
     let mut diagram_count = 0;
-    let outcome = export(root, job, render_diagram, emit, &mut diagram_count);
+    let outcome = export(sink, buffer, root, job, render_diagram, emit, &mut diagram_count);
     let mut fields = base;
     fields.insert("diagrams".into(), serde_json::json!(diagram_count));
     fields.insert("durationMs".into(), serde_json::json!(started.elapsed().as_millis() as u64));
@@ -121,7 +147,7 @@ pub fn run_export<S: LogSink + Clone + Send + 'static>(
                     buffer,
                     &[Domain::Backend],
                     "a diagram stayed as code in a document export",
-                    log_fields! { "index" => warning.index },
+                    log_fields! { "index" => warning.index, "reason" => warning.reason },
                 );
             }
             fields.insert("warnings".into(), serde_json::json!(result.warnings.len()));
@@ -135,10 +161,12 @@ pub fn run_export<S: LogSink + Clone + Send + 'static>(
     outcome
 }
 
-fn export(
+fn export<S: LogSink + Clone + Send + 'static>(
+    sink: &S,
+    buffer: &'static LogBuffer,
     root: Option<&RootFs>,
     job: &ExportJob,
-    render_diagram: &dyn Fn(&str) -> Option<Vec<u8>>,
+    render_diagram: DiagramRenderer<'_>,
     emit: &dyn Fn(ExportProgress),
     diagram_count: &mut usize,
 ) -> Result<ExportResult, &'static str> {
@@ -158,7 +186,10 @@ fn export(
     progress(Stage::Reading, 0, 0);
     let rel = check_doc_artifact(root, &job.path)?;
     // DXP-FR-IEQA: the file on disk, never an editor buffer.
-    let text = root.read_text(&rel).map_err(|_| super::ERR_NOT_FOUND)?;
+    let text = root.read_text(&rel).map_err(|error| match error {
+        fs::FsError::NotFound { .. } => ERR_NOT_FOUND,
+        _ => ERR_READ_FAILED,
+    })?;
     let pictures = pictures_dir(root, &job.export_id)?;
     let file_dir = Path::new(&rel).parent().map(Path::to_path_buf).unwrap_or_default();
     let load_image = |url: &str| load_project_image(root, &file_dir, url);
@@ -183,7 +214,17 @@ fn export(
         convert::convert(&input, &mut report)
     }))
     .unwrap_or_else(|_| Err("the conversion panicked".to_string()));
-    let _ = access.delete_path(&pictures, true);
+    if access.delete_path(&pictures, true).is_err() {
+        // DXP-FR-NGUG: the export result stands. The folder is in a temporary
+        // place, and its name carries no file name of the project.
+        logging::log_warn(
+            sink,
+            buffer,
+            &[Domain::Backend],
+            "the temporary pictures folder of a document export was not removed",
+            log_fields! { "format" => job.format.as_str() },
+        );
+    }
     let converted = converted.map_err(|_| ERR_CONVERSION_FAILED)?;
     *diagram_count = converted.diagram_count;
     progress(Stage::Writing, 0, 0);
@@ -191,7 +232,11 @@ fn export(
     let warnings = converted
         .failed_diagrams
         .iter()
-        .map(|&index| ExportWarning { kind: "diagram_failed", index })
+        .map(|failed| ExportWarning {
+            kind: "diagram_failed",
+            index: failed.index,
+            reason: failed.reason.as_str(),
+        })
         .collect();
     Ok(ExportResult { destination: job.destination.clone(), warnings })
 }

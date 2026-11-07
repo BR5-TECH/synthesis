@@ -26,6 +26,8 @@ import type {
   PendingQuestionSet,
   DashboardRefreshFailedPayload,
   DocumentsSnapshot,
+  ExportProgress,
+  ExportRequest,
   EmbeddingsStatus,
   DraftPromptChangedPayload,
   DraftStatisticsChangedPayload,
@@ -207,6 +209,10 @@ export const AGENT_ACTIVITY_APPENDED = "agent-activity-appended";
 
 /** DCL-FR-PTRP: the Documents collection's snapshot changed. */
 export const DOCUMENTS_CHANGED = "documents-changed";
+/** DXP-FR-LSYA: one progress step of one document export. */
+export const DOCUMENT_EXPORT_PROGRESS = "document-export-progress";
+/** DXP-FR-FVTK: an export request changed. */
+export const EXPORT_REQUEST_CHANGED = "export-request-changed";
 
 /**
  * DCL-FR-PTRP: the Documents collection changed. The payload is the whole
@@ -875,3 +881,15 @@ export const emitAppPreferencesChanged = (): Promise<void> =>
 export const emitLineEndingsChanged = (value: "lf" | "crlf"): Promise<void> =>
   announce(LINE_ENDINGS_CHANGED, { value });
 export * from "./newDraftEvents";
+
+/** DXP-FR-LSYA: subscribe to [`DOCUMENT_EXPORT_PROGRESS`]. */
+export const onDocumentExportProgress = (
+  handler: (progress: ExportProgress) => void,
+): Promise<UnlistenFn> =>
+  listen<ExportProgress>(DOCUMENT_EXPORT_PROGRESS, (ev) => handler(ev.payload));
+
+/** DXP-FR-FVTK: subscribe to [`EXPORT_REQUEST_CHANGED`]. */
+export const onExportRequestChanged = (
+  handler: (request: ExportRequest) => void,
+): Promise<UnlistenFn> =>
+  listen<ExportRequest>(EXPORT_REQUEST_CHANGED, (ev) => handler(ev.payload));

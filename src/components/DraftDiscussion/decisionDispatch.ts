@@ -30,6 +30,8 @@ import type {
 export type DispatchableProposal = { id: string; threadId: string } & (
   | { draftId: string }
   | { artifactId: string }
+  /** EXD-FR-VFFP: an export request names its conversation's target itself. */
+  | { target: DiscussionTarget }
 );
 
 /** What a dispatch reads of a decision's outcome. */
@@ -38,6 +40,7 @@ export interface DispatchableOutcome {
 }
 
 function targetOf(proposal: DispatchableProposal): DiscussionTarget {
+  if ("target" in proposal) return proposal.target;
   return "draftId" in proposal
     ? { kind: "draft", draftId: proposal.draftId }
     : { kind: "artifact", artifactId: proposal.artifactId };

@@ -1,3 +1,4 @@
+@import "./components/export-dialog.css";
 @import "./components/notification-toasts.css";
 @import "./components/create-pull-request.css";
 @import "./components/about-panel.css";

@@ -16,6 +16,7 @@
  * preload on the rail: a review carrying dozens of screenshots costs nothing for
  * the threads the author is not looking at.
  */
+import { ExportRequestCard } from "./ExportDialog/ExportRequestCard";
 import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
@@ -740,7 +741,10 @@ function AttachmentView({
 }: {
   threadId: string;
   draftId?: string;
-  attachment: Exclude<Attachment, { kind: "newDraftProposal" | "newDraftSubject" }>;
+  attachment: Exclude<
+    Attachment,
+    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" }
+  >;
 }) {
   const name = attachmentName(attachment);
   const [stored, loadStored] = useBlobSource(threadId, draftId, attachment);
@@ -880,7 +884,10 @@ export function CommentAttachmentList({
         ) : a.kind === "newDraftProposal" ? (
           // CMT-FR-MPKL: a reference control that shows the card.
           <NewDraftReferenceControl key={i} attachment={a} />
-        ) : a.kind === "newDraftSubject" ? null : (
+        ) : a.kind === "newDraftSubject" ? null : a.kind === "exportRequest" ? (
+          // CMT-FR-HFXL / EXD-FR-UQUD: the export request card.
+          <ExportRequestCard key={i} attachment={a} />
+        ) : (
           <AttachmentView
             key={i}
             threadId={threadId}

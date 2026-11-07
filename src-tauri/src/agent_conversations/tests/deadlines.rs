@@ -307,8 +307,8 @@ fn an_openrouter_conversation_carries_the_search_entry_and_withholds_the_fetch()
                 let portable: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
                 assert_eq!(
                     portable.len(),
-                    14,
-                    "the twelve, one proposal tool, and one decision tool"
+                    15,
+                    "the twelve, the export request tool, one proposal tool, and one decision tool"
                 );
                 assert!(
                     !portable
@@ -376,7 +376,7 @@ fn a_conversation_on_another_provider_carries_neither_entry() {
         assert_eq!(require(&calling, "nativeTools"), "0");
         assert_eq!(require(&calling, "nativeToolTypes"), "");
         let portable: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(portable.len(), 14, "the same portable set as anywhere else");
+        assert_eq!(portable.len(), 15, "the same portable set as anywhere else");
         assert!(
             !portable.iter().any(|name| name.contains("web_search") || name.contains("web_fetch")),
             "and nothing local stands in for the absent capability",

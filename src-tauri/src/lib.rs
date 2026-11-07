@@ -23,6 +23,7 @@ pub mod comments;
 pub mod dashboard;
 pub mod dialog;
 pub mod docker;
+pub mod document_export;
 pub mod documents;
 pub mod draft_assets;
 pub mod draft_history;
@@ -632,6 +633,10 @@ pub fn run() {
             documents::commands::remove_document_source,
             documents::commands::read_document,
             documents::commands::read_document_pdf,
+            document_export::commands::export_document,
+            // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
+            document_export::requests::get_export_request,
+            document_export::requests::resolve_export_request,
             // Embeddings index (EMB-embeddings-index.md).
             embeddings::load_embeddings_settings,
             embeddings::save_embeddings_settings,

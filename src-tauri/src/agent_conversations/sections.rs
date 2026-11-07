@@ -184,6 +184,12 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         | comments::Attachment::NewDraftSubject { .. } => {
             new_draft_line(attachment, &reads.new_drafts)
         }
+        // CMS-FR-OKDW: an export request names the document it asked the author
+        // to export. Its outcome comes back as a comment of its own (DXP-FR-VFFP).
+        comments::Attachment::ExportRequest { path, format, .. } => match format {
+            Some(format) => format!("[asked the author to export {path} to {format}]"),
+            None => format!("[asked the author to export {path}]"),
+        },
     }
 }
 

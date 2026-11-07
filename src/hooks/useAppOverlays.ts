@@ -12,6 +12,7 @@
  * surface that asked awaits it, and a caller left unsettled is a promise
  * nothing will ever resolve.
  */
+import { closeExportDialog, setExportDialogOpening } from "../state/exportDialog";
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import {
@@ -116,6 +117,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   useEffect(() => {
     setAboutOpen(false);
     closeDiagramEditor("window");
+    closeExportDialog("window");
   }, [s.screen, s.projectPath]);
 
   /**
@@ -173,6 +175,8 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     setAboutOpen(false);
     // EDT-FR-TOVY: and the diagram editor overlay, for the same reason.
     closeDiagramEditor("other-overlay");
+    // EXD-FR-XNLZ: and the Export dialog.
+    closeExportDialog("other-overlay");
   };
 
 
@@ -608,10 +612,13 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   openingDiagramEditor.current = closeAllOverlays;
   useEffect(() => {
     setDiagramEditorOpening(() => openingDiagramEditor.current());
+    // EXD-FR-XNLZ / SNV-FR-56: the Export dialog closes every other overlay.
+    setExportDialogOpening(() => openingDiagramEditor.current());
     // MBW-FR-GYVD / SNV-FR-56: the confirmation closes every other overlay.
     setMainBranchWriteOpening(() => openingDiagramEditor.current());
     return () => {
       setDiagramEditorOpening(null);
+      setExportDialogOpening(null);
       setMainBranchWriteOpening(null);
     };
   }, []);

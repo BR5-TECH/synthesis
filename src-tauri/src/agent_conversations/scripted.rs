@@ -434,6 +434,8 @@ impl CompletionSeam for ScriptedCompletion {
             crate::tools::skill_load::NAME,
             crate::tools::measure_document::NAME,
             crate::tools::ask_user_comment::NAME,
+            // CVL-FR-08 / RDX-FR-DFXB: attached to every turn beside the twelve.
+            crate::tools::request_document_export::NAME,
         ];
         // CVL-FR-08: a discussion origin gets `ask_discussion_questions` beside
         // the nine, and an anchored comment origin gets none of it. Which of the

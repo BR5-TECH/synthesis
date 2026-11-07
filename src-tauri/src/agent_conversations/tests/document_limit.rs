@@ -446,7 +446,7 @@ fn a_failed_attempt_reports_no_context() {
         vec![Err(FAIL_UNREACHABLE), Ok(ScriptedReply::answer("Done."))],
         // The window keeps the tool definitions below the compaction budget
         // (CVL-FR-EBJG).
-        Some(12_000),
+        Some(13_000),
         30,
     );
     let (terminal, _) = run_one(&h, "arch");
@@ -481,7 +481,7 @@ fn a_note_turn_has_no_document_and_the_default_window() {
 // nowhere.
 #[test]
 fn the_context_figures_are_numbers_and_never_reach_disk() {
-    let h = window_harness(vec![Ok(ScriptedReply::answer("Done."))], Some(12_000), 30);
+    let h = window_harness(vec![Ok(ScriptedReply::answer("Done."))], Some(13_000), 30);
     let (terminal, _) = run_one(&h, "arch");
     let json = serde_json::to_value(terminal.context.unwrap()).unwrap();
     fn leaves_are_numbers(value: &serde_json::Value) -> bool {

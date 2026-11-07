@@ -155,6 +155,7 @@ A discussion card, expanded, mid-conversation, as the shared surface renders it 
 73. **CMT-FR-RPLC** A discussion whose fragment cannot be restored — its quote is found nowhere (CMT-FR-18), or its owner file is unavailable — renders in the orphaned or unavailable state (CMT-FR-19) and is kept. It stays readable, answerable while it is not resolved, and listed in the Comments panel. It is never discarded and never converted to a whole-target discussion.
 
 75. **CMT-FR-MPKL** A `new_draft_proposal` attachment (per `../core/CMS-comments-storage.md` CMS-FR-YKGI) renders outside the discussion stream as a reference control naming `Part N of M` and the proposed name. Activating it opens or focuses the original draft's tab and shows that proposal's card in the discussion column (per `DCR-draft-change-review.md` DCR-FR-RDLK). A `new_draft_subject` attachment renders no control.
+75. **CMT-FR-HFXL** An `export_request` attachment (per `../core/CMS-comments-storage.md` CMS-FR-OKDW) renders below the comment body as the export request card of `EXD-export-dialog.md` (EXD-FR-UQUD), in every surface that renders the comment. It renders no chip and no thumbnail.
 
 ## Non-functional requirements
 - A proposal control costs the column one reading per target — one per draft, one per artifact — rather than one per control, and a control whose proposal has resolved asks for nothing further: the healing ask of `CTA-comment-agent-turns.md` CTA-FR-LOOE is bounded per reference and never a poll.

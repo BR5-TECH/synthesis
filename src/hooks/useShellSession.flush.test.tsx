@@ -297,14 +297,17 @@ describe("useShellSession teardown flush (EDT-FR-33)", () => {
     // the Save enablement changes (SNV-FR-28 / SNV-FR-30), which a flush does;
     // `set_find_menu_state`, pushed whenever the active tab's type changes
     // (SNV-FR-43); and `get_active_worktree`, the one-shot label fetch the
-    // chrome's worktree selector makes when a project opens (WTS-FR-03).
+    // chrome's worktree selector makes when a project opens (WTS-FR-03); and
+    // `open_artifact_by_id`, the type read of a tab opened with no type
+    // (TAB-FR-SZGD).
     const order = invokeMock.mock.calls
       .map((c) => c[0])
       .filter(
         (cmd) =>
           cmd !== "set_save_menu_state" &&
           cmd !== "set_find_menu_state" &&
-          cmd !== "get_active_worktree",
+          cmd !== "get_active_worktree" &&
+          cmd !== "open_artifact_by_id",
       );
     expect(order).toEqual([
       "save_artifact_contents",

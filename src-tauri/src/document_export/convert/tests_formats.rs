@@ -55,15 +55,15 @@ fn frontmatter_is_absent_when_not_included() {
     assert!(!docx_xml(FRONTMATTER, false).contains("alpha"));
 }
 
-// DXP-FR-YVIV: each break level has its own height in the DOCX: 12, 8, 5,
-// and 3 body lines.
+// DXP-FR-YVIV, DXP-FR-ODVI: each break level has its own height in the DOCX:
+// 12, 8, 5, and 3 body lines of 11 pt × 1.5.
 #[test]
 fn docx_spacers_have_the_height_of_each_level() {
     let xml = docx_xml(
         "a\n\n<!-- % -->\nb\n\n<!-- %% -->\nc\n\n<!-- %%% -->\nd\n\n<!-- %%%% -->\ne\n",
         false,
     );
-    for twips in [3036, 2024, 1265, 759] {
+    for twips in [3960, 2640, 1650, 990] {
         assert!(xml.contains(&format!(r#"w:line="{twips}""#)), "no spacer of {twips}: {xml}");
     }
 }

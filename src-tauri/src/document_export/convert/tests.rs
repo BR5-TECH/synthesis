@@ -211,7 +211,7 @@ fn docx_carries_alignment_and_spacers() {
         xml.contains(r#"<w:jc w:val="center" />"#) || xml.contains(r#"<w:jc w:val="center"/>"#)
     );
     assert!(xml.contains(r#"w:val="right""#));
-    assert!(xml.contains(r#"w:line="3036""#), "a V1 break is 12 body lines");
+    assert!(xml.contains(r#"w:line="3960""#), "a V1 break is 12 body lines");
 }
 
 // DXP-FR-YRVE: the constructs of the body reach the DOCX.

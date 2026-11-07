@@ -81,6 +81,23 @@ describe("Export to... on the Editor tab", () => {
     },
   );
 
+  it("EXD-FR-UQNO, TAB-FR-SZGD: Export to... appears when the type of an open tab arrives", async () => {
+    // A tab that a surface opened with no type gets it from the shell later.
+    // The Editor stays mounted, so the type reaches it as a new prop.
+    const sessions = new EditSessionStore();
+    const backend: Backend = { load: { body: BODY, checksum: "ck1" }, threads: [], calls: [] };
+    wireBackend(invokeMock, backend);
+    const props = { artifactId: "docs/guide.md", artifactName: "guide.md", sessions };
+    const { rerender } = render(<Editor {...props} artifactType={undefined} />);
+    await screen.findByLabelText("artifact body");
+    expect(entries()).toEqual(["Discuss"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    rerender(<Editor {...props} artifactType="doc" />);
+    expect(entries()).toEqual(["Discuss", "Export to..."]);
+  });
+
   it("EXD-FR-CDYS: Export to... writes the file before the dialog opens on it", async () => {
     const sessions = await mount("docs/guide.md", "doc");
     const flush = vi.spyOn(sessions, "flush");

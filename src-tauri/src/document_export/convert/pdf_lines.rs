@@ -1,8 +1,8 @@
 //! The lines of an aligned block in a PDF (DXP-FR-ERZY, DXP-FR-FNTP).
 //!
 //! `markdown2pdf` has no alignment for one block. This module breaks the text
-//! into lines itself, with the widths of the one font file that the PDF is set
-//! in (`BODY_FONT`). It puts no-break spaces in front of a line to move it to
+//! into lines itself, with the widths of the font files that the PDF is set in
+//! (`FONT_FILES`). It puts no-break spaces in front of a line to move it to
 //! the centre or to the right, and after a line to fill it, so the next word
 //! starts a new line. `markdown2pdf` keeps a no-break space inside its word
 //! and measures it as a space, so it breaks the lines at the same places.
@@ -15,9 +15,31 @@ use markdown2pdf::markdown::Token;
 
 use super::model::{Align, Inline};
 
-/// DXP-FR-FNTP: the font file of every PDF. Bold and italic text is drawn from
-/// this one regular face, so it has the same widths.
-pub const BODY_FONT: &[u8] = include_bytes!("../../../fonts/LiberationSans-Regular.ttf");
+/// DXP-FR-FNTP: the body faces, Liberation Sans, which has the widths of Arial.
+pub const SANS_REGULAR: &[u8] = include_bytes!("../../../fonts/LiberationSans-Regular.ttf");
+pub const SANS_BOLD: &[u8] = include_bytes!("../../../fonts/LiberationSans-Bold.ttf");
+pub const SANS_ITALIC: &[u8] = include_bytes!("../../../fonts/LiberationSans-Italic.ttf");
+pub const SANS_BOLD_ITALIC: &[u8] = include_bytes!("../../../fonts/LiberationSans-BoldItalic.ttf");
+/// DXP-FR-FNTP: the code faces, Liberation Mono, which has the widths of
+/// Courier New.
+pub const MONO_REGULAR: &[u8] = include_bytes!("../../../fonts/LiberationMono-Regular.ttf");
+pub const MONO_BOLD: &[u8] = include_bytes!("../../../fonts/LiberationMono-Bold.ttf");
+
+/// The file name of the regular body face. `markdown2pdf` finds the bold and
+/// italic faces by the names of the files beside it.
+pub const SANS_REGULAR_FILE: &str = "LiberationSans-Regular.ttf";
+/// The file name of the regular code face.
+pub const MONO_REGULAR_FILE: &str = "LiberationMono-Regular.ttf";
+
+/// Every font file of a PDF export, with the name it is written under.
+pub const FONT_FILES: [(&str, &[u8]); 6] = [
+    (SANS_REGULAR_FILE, SANS_REGULAR),
+    ("LiberationSans-Bold.ttf", SANS_BOLD),
+    ("LiberationSans-Italic.ttf", SANS_ITALIC),
+    ("LiberationSans-BoldItalic.ttf", SANS_BOLD_ITALIC),
+    (MONO_REGULAR_FILE, MONO_REGULAR),
+    ("LiberationMono-Bold.ttf", MONO_BOLD),
+];
 
 /// The no-break space that pads a line.
 const NBSP: char = '\u{00A0}';
@@ -29,9 +51,6 @@ const GUARD: char = '\u{200B}';
 /// difference never makes a padded line one word too long.
 const SAFETY_PT: f32 = 0.5;
 
-/// The width of a Courier character, in 1/1000 em.
-const COURIER_WIDTH: f32 = 600.0;
-
 /// The look of a run of text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Face {
@@ -40,32 +59,27 @@ pub struct Face {
     pub mono: bool,
 }
 
-/// The widths of the body font, and the rule for the built-in Courier.
-pub struct Fonts {
+/// The widths of one font file.
+struct Metrics {
     face: ttf_parser::Face<'static>,
     /// The width of a character the font has no glyph for. `markdown2pdf`
     /// uses the mean width of the glyphs it embeds.
     fallback: u16,
 }
 
-impl Fonts {
-    pub fn load() -> Fonts {
-        let face = ttf_parser::Face::parse(BODY_FONT, 0).expect("the bundled font parses");
+impl Metrics {
+    fn parse(bytes: &'static [u8]) -> Metrics {
+        let face = ttf_parser::Face::parse(bytes, 0).expect("the bundled font parses");
         let widths: Vec<u16> = (0x21u8..0x7F)
             .filter_map(|c| face.glyph_index(char::from(c)))
             .filter_map(|g| face.glyph_hor_advance(g))
             .collect();
         let sum: u64 = widths.iter().map(|w| u64::from(*w)).sum();
         let fallback = sum.checked_div(widths.len() as u64).map_or(500, |v| v as u16);
-        Fonts { face, fallback }
+        Metrics { face, fallback }
     }
 
-    /// The advance width of `text` in `face` at `size`, in points.
-    pub fn measure(&self, face: Face, text: &str, size: f32) -> f32 {
-        if face.mono {
-            let chars: usize = text.chars().map(courier_chars).sum();
-            return chars as f32 * COURIER_WIDTH * size / 1000.0;
-        }
+    fn measure(&self, text: &str, size: f32) -> f32 {
         let units: u64 = text
             .chars()
             .map(|c| {
@@ -80,13 +94,40 @@ impl Fonts {
     }
 }
 
-/// How many characters the built-in Courier writes for `c`: it writes a few
-/// punctuation marks as several ASCII characters and any other character as `?`.
-fn courier_chars(c: char) -> usize {
-    match c as u32 {
-        0x2014 | 0x00A9 | 0x00AE | 0x2026 => 3 - usize::from(c == '\u{2014}'),
-        0x2122 => 4,
-        _ => 1,
+/// The widths of the bundled faces (DXP-FR-FNTP).
+pub struct Fonts {
+    regular: Metrics,
+    bold: Metrics,
+    italic: Metrics,
+    bold_italic: Metrics,
+    mono: Metrics,
+    mono_bold: Metrics,
+}
+
+impl Fonts {
+    pub fn load() -> Fonts {
+        Fonts {
+            regular: Metrics::parse(SANS_REGULAR),
+            bold: Metrics::parse(SANS_BOLD),
+            italic: Metrics::parse(SANS_ITALIC),
+            bold_italic: Metrics::parse(SANS_BOLD_ITALIC),
+            mono: Metrics::parse(MONO_REGULAR),
+            mono_bold: Metrics::parse(MONO_BOLD),
+        }
+    }
+
+    /// The advance width of `text` in `face` at `size`, in points. Italic
+    /// code has no face of its own and takes the widths of the upright one.
+    pub fn measure(&self, face: Face, text: &str, size: f32) -> f32 {
+        let metrics = match (face.mono, face.bold, face.italic) {
+            (true, true, _) => &self.mono_bold,
+            (true, false, _) => &self.mono,
+            (false, true, true) => &self.bold_italic,
+            (false, true, false) => &self.bold,
+            (false, false, true) => &self.italic,
+            (false, false, false) => &self.regular,
+        };
+        metrics.measure(text, size)
     }
 }
 

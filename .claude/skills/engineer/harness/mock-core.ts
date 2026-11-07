@@ -8416,7 +8416,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         checksum: "sha-1",
       };
     }
-    case "open_artifact_by_id":
+    case "open_artifact_by_id": {
+      // PST-FR-QQAE: the answer carries the resolved type of the file, which
+      // includes this session's assignments (TAB-FR-SZGD reads it from here).
+      const artifactType = findIn(tree(), String(a.id))?.artifactType;
       return {
         key: a.id,
         kind: String(a.id).endsWith(".flow.md")
@@ -8424,7 +8427,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           : String(a.id).endsWith(".md")
             ? "markdown"
             : "text",
+        ...(artifactType ? { artifactType } : {}),
       };
+    }
     case "save_artifact_contents":
       return { checksum: "sha-2" };
     /**

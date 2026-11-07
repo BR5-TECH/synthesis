@@ -15,6 +15,7 @@ pub mod frontmatter;
 pub mod model;
 pub mod pdf;
 pub mod pdf_lines;
+pub mod typography;
 
 #[cfg(test)]
 pub(super) mod tests;
@@ -24,6 +25,8 @@ mod tests_comments;
 mod tests_formats;
 #[cfg(test)]
 mod tests_pdf;
+#[cfg(test)]
+mod tests_typography;
 
 use model::{Block, Document, Inline, TopBlock};
 

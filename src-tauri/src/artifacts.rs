@@ -337,6 +337,10 @@ pub struct OpenedArtifact {
     /// The stable, path-derived key (ASC-FR-13) — the same id that was asked for.
     pub key: String,
     pub kind: ArtifactKind,
+    /// PST-FR-QQAE: the resolved artifact type of the file. A file with no
+    /// type (PST-FR-23) has none, and the field is then absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact_type: Option<scanning::ArtifactType>,
 }
 
 /// PST-FR-08 / PST-FR-24 core: resolve `id`'s classification into the routing
@@ -352,9 +356,11 @@ fn open_artifact_by_id_impl(root: &fs::RootFs, id: &str) -> Result<OpenedArtifac
     if !root.file_info(&path).is_ok_and(|i| i.kind == fs::EntryKind::File) {
         return Err(format!("not a file: {id}"));
     }
+    let artifact_type = resolved_type(root, id);
     Ok(OpenedArtifact {
         key: id.to_string(),
-        kind: ArtifactKind::from_resolved(resolved_type(root, id)),
+        kind: ArtifactKind::from_resolved(artifact_type),
+        artifact_type,
     })
 }
 
@@ -859,6 +865,32 @@ mod tests {
             open_artifact_by_id_impl(root, "review.flow").unwrap().kind,
             ArtifactKind::Markdown
         );
+    }
+
+    // PST-FR-QQAE: the answer carries the resolved artifact type, in the
+    // lowercase name the tree nodes use, and omits it for a file with no type.
+    #[test]
+    fn open_artifact_by_id_answers_the_resolved_artifact_type() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = &crate::fs::RootFs::for_root(dir.path());
+        std::fs::create_dir_all(root.join(".synthesis")).unwrap();
+        std::fs::create_dir_all(root.join("docs")).unwrap();
+        std::fs::write(root.join("docs/guide.md"), b"# Guide\n").unwrap();
+        std::fs::write(root.join("notes.txt"), b"plain\n").unwrap();
+        scanning::assign(root, "docs", scanning::ArtifactType::Doc, scanning::Scope::Folder)
+            .unwrap();
+
+        let doc = open_artifact_by_id_impl(root, "docs/guide.md").unwrap();
+        assert_eq!(doc.artifact_type, Some(scanning::ArtifactType::Doc));
+        assert_eq!(doc.kind, ArtifactKind::Markdown);
+        let json = serde_json::to_value(&doc).unwrap();
+        assert_eq!(json.get("artifactType").unwrap(), "doc");
+
+        let plain = open_artifact_by_id_impl(root, "notes.txt").unwrap();
+        assert_eq!(plain.artifact_type, None);
+        assert_eq!(plain.kind, ArtifactKind::Text);
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("artifactType").is_none(), "no type gives no field");
     }
 
     #[test]

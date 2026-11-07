@@ -6,6 +6,8 @@ The intent is: if some decision was made by User - it must be respected through 
 
 The same applies to review findings: what a review found in an earlier pass (and the worker fixed) must stay in the context of later work turns of the same run.
 
+A second goal of this draft: a `review` turn must not run the project's tests. The work turn follows the project's own rules, tests included, so a test run in review repeats the work turn. The review judges the working copy by reading it and may run build and lint commands. The `merge_review` turn is not part of this goal and does not change.
+
 ## User journey
 
 1. An agent turn of a graduation run stops and asks the author questions. The run rests, waiting for the author.
@@ -37,6 +39,12 @@ The same applies to review findings: what a review found in an earlier pass (and
 - The history is stored durably with the run's checkpoint, survives restart, interruption, resume and Continue, and ends with the ledger. It is never truncated, summarised or reordered. No new size limit is added, and the bound of the turn input (EAC-FR-08) is unchanged.
 - The Escalations log does not show the review history. The UI has no new element for it.
 
+**Review turn commands (backend only)**
+- A `review` turn runs **no test command**. It must not run the project's tests, test suites or test runners. It may run build and lint commands.
+- The instruction of the `review` turn says this. It is an instruction only: the application does not inspect or refuse the commands the agent runs.
+- A build or lint command that cannot run, fails, times out or gives an unstable result is still a finding, as before. A test that is absent or not run is not a finding by itself; the review judges test coverage by reading the change set.
+- The `merge_review` turn is unchanged: its instruction and its commands stay as they are.
+
 **Escalations log (UI)**
 - The run region of the graduation section of the Runs panel shows one read-only list called **Escalations log**. It is not repeated inside the pass entries.
 - The list is collapsible and expandable with a control on its header. It is collapsed by default. The header shows the number of decisions.
@@ -45,8 +53,8 @@ The same applies to review findings: what a review found in an earlier pass (and
 - The ledger of a stream update is backend only. The update window shows no log.
 
 **Out of scope**
-- Withdrawing or editing a decision; truncating the ledger; the application refusing a repeated question; showing decisions inside pass entries (a possible later way to pass information); showing the review history in the UI; giving the review history to review turns or to stream update turns.
+- Withdrawing or editing a decision; truncating the ledger; the application refusing a repeated question; showing decisions inside pass entries (a possible later way to pass information); showing the review history in the UI; giving the review history to review turns or to stream update turns; enforcing the review rule on test commands in the application; any change to the `merge_review` turn or its instruction.
 
 ## Specification impact
 
-Update: `core/GXD-graduation-execution.md` (checkpoint holds the ledger and the review history; every turn input carries the ledger, work turns also the review history), `core/GRD-graduation.md` (record the answered set into the ledger; ledger lifetime; the run record read by the UI), `ai/GRL-graduation-loop.md` (GRL-FR-VBCL and the turn composition for every turn kind; a review history field in `GraduationTaskInput` for work turns, next to `loop_instruction`), `core/GRB-graduation-rebase.md` and `core/WKS-work-streams.md` (update record holds the ledger; semantic turns receive it), `tools/ESU-escalate-to-user-tool.md` (ESU-FR-13: answers also stay in the ledger), `tools/EAC-execute-agent-cli.md` (EAC-FR-08: the ledger counts in the bounded input; no change to the bound), the graduation turn instructions in `resources/prompts/graduation/` (binding decisions for every turn kind; earlier findings are probably fixed, for work turns), and `ui/GRU-graduation-runs.md` (Escalations log in the run region). `ui/GEA-graduation-escalation-answering.md` is not changed: the answer submission stays as it is.
+Update: `core/GXD-graduation-execution.md` (checkpoint holds the ledger and the review history; every turn input carries the ledger, work turns also the review history), `core/GRD-graduation.md` (record the answered set into the ledger; ledger lifetime; the run record read by the UI), `ai/GRL-graduation-loop.md` (GRL-FR-VBCL and the turn composition for every turn kind; a review history field in `GraduationTaskInput` for work turns, next to `loop_instruction`; GRL-FR-CKBL, and the *Why* line of GRL-FR-QEUP, which say that the review runs the project's own build and test commands: the `review` turn runs no tests, and may run build and lint commands; the `merge_review` turn is not changed), `core/GRB-graduation-rebase.md` and `core/WKS-work-streams.md` (update record holds the ledger; semantic turns receive it), `tools/ESU-escalate-to-user-tool.md` (ESU-FR-13: answers also stay in the ledger), `tools/EAC-execute-agent-cli.md` (EAC-FR-08: the ledger counts in the bounded input; no change to the bound), the graduation turn instructions in `resources/prompts/graduation/` (binding decisions for every turn kind; earlier findings are probably fixed, for work turns; `review.md`: no test commands, optional build and lint, and the removal of the rule that a check which could not run is a finding where the check is a test command; the `merge_review` instruction is not changed), and `ui/GRU-graduation-runs.md` (Escalations log in the run region). `ui/GEA-graduation-escalation-answering.md` is not changed: the answer submission stays as it is.

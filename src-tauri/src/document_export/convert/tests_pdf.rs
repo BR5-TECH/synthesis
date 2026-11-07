@@ -194,25 +194,68 @@ fn a_metadata_list_value_is_one_row_per_line() {
     );
 }
 
-// DXP-FR-FNTP: the PDF names the bundled file as its body font, and the
-// built-in Courier as its code font. It looks up no font of the host.
+// DXP-FR-FNTP: the PDF is set in the bundled Liberation Sans and Liberation
+// Mono files, written beside each other in the export folder so the renderer
+// finds the bold and italic faces. It looks up no font of the host.
 #[test]
-fn the_pdf_is_pinned_to_the_bundled_font() {
-    let config = super::pdf::font_config();
+fn the_pdf_is_pinned_to_the_bundled_fonts() {
+    let dir = tempfile::tempdir().unwrap();
+    let write_file = |name: &str, bytes: &[u8]| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).ok().map(|_| path)
+    };
+    let config = super::pdf::font_config(&write_file);
+    let body = dir.path().join(pdf_lines::SANS_REGULAR_FILE);
+    let code = dir.path().join(pdf_lines::MONO_REGULAR_FILE);
     assert!(
-        matches!(config.default_font_source, Some(markdown2pdf::fonts::FontSource::Bytes(b)) if b == pdf_lines::BODY_FONT),
+        matches!(&config.default_font_source, Some(markdown2pdf::fonts::FontSource::File(p)) if *p == body),
         "{config:?}"
     );
-    assert!(matches!(
-        config.code_font_source,
-        Some(markdown2pdf::fonts::FontSource::Builtin("Courier"))
-    ));
+    assert!(
+        matches!(&config.code_font_source, Some(markdown2pdf::fonts::FontSource::File(p)) if *p == code),
+        "{config:?}"
+    );
+    for (name, bytes) in pdf_lines::FONT_FILES {
+        assert_eq!(std::fs::read(dir.path().join(name)).unwrap(), bytes, "{name} is written");
+    }
     let style = export_style(std::path::Path::new("."));
     assert!(style.fallback_fonts.is_empty(), "no fallback font of the host");
-    let face = ttf_parser::Face::parse(pdf_lines::BODY_FONT, 0).expect("the bundled font parses");
-    for c in ['\u{00A0}', '\u{200B}', '\u{2022}', ' '] {
-        assert!(face.glyph_index(c).is_some(), "the font has a glyph for {c:?}");
+    // The body faces carry the padding characters of DXP-FR-ERZY, and every
+    // face carries the non-ASCII text a document can hold.
+    let sans = [
+        pdf_lines::SANS_REGULAR,
+        pdf_lines::SANS_BOLD,
+        pdf_lines::SANS_ITALIC,
+        pdf_lines::SANS_BOLD_ITALIC,
+    ];
+    for bytes in sans {
+        let face = ttf_parser::Face::parse(bytes, 0).expect("the bundled font parses");
+        for c in ['\u{00A0}', '\u{200B}', '\u{2022}', ' ', '→', 'ü'] {
+            assert!(face.glyph_index(c).is_some(), "the body font has a glyph for {c:?}");
+        }
     }
+    for bytes in [pdf_lines::MONO_REGULAR, pdf_lines::MONO_BOLD] {
+        let face = ttf_parser::Face::parse(bytes, 0).expect("the bundled font parses");
+        for c in [' ', '→', 'ü', '{'] {
+            assert!(face.glyph_index(c).is_some(), "the code font has a glyph for {c:?}");
+        }
+    }
+}
+
+// DXP-FR-FNTP: where a font file does not write, the PDF is still set in the
+// bundled regular faces, from memory.
+#[test]
+fn a_font_file_that_does_not_write_leaves_the_bundled_regular_faces() {
+    let write_file = |_: &str, _: &[u8]| None;
+    let config = super::pdf::font_config(&write_file);
+    assert!(matches!(
+        config.default_font_source,
+        Some(markdown2pdf::fonts::FontSource::Bytes(b)) if b == pdf_lines::SANS_REGULAR
+    ));
+    assert!(matches!(
+        config.code_font_source,
+        Some(markdown2pdf::fonts::FontSource::Bytes(b)) if b == pdf_lines::MONO_REGULAR
+    ));
 }
 
 /// The text of a token stream, a break at each line.

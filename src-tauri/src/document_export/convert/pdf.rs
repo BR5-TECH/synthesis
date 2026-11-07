@@ -4,8 +4,9 @@
 //! and renders it with the crate's own renderer, so the marker rules the model
 //! applied reach the PDF unchanged.
 //!
-//! The PDF is set in one bundled font file, and the export measures with the
-//! same file (DXP-FR-FNTP).
+//! The PDF is set in the bundled font files, and the export measures with the
+//! same files (DXP-FR-FNTP). The sizes and the spaces come from
+//! `super::typography` (DXP-FR-ODVI, DXP-FR-RBAQ).
 //!
 //! `markdown2pdf` has no alignment of its own for one block. The text of a
 //! centred or right-aligned paragraph, heading, list, or quote is therefore
@@ -18,11 +19,13 @@ use std::path::{Path, PathBuf};
 use markdown2pdf::fonts::{FontConfig, FontSource};
 use markdown2pdf::markdown::{TableAlignment, TableCell, Token};
 use markdown2pdf::styling::{
-    Orientation, PageSize, ResolvedBlock, ResolvedList, ResolvedStyle, Sides, TextAlignment,
+    FontWeight, Orientation, PageSize, ResolvedBlock, ResolvedList, ResolvedStyle, Sides,
+    TextAlignment,
 };
 
 use super::model::{Align, Block, Document, Inline, ListItem};
 use super::pdf_lines::{self, Face, Fonts, Frame};
+use super::typography as ty;
 use super::Assets;
 
 /// One millimetre in points.
@@ -76,7 +79,9 @@ impl Layout {
         let frame = |block: &ResolvedBlock, width: f32| Frame {
             width,
             size: block.font_size_pt,
-            code_size: code.font_size_pt,
+            // DXP-FR-RBAQ: `markdown2pdf` sets inline code at the size of
+            // its block, so the lines are measured at that size too.
+            code_size: block.font_size_pt,
             code_pad: (code.padding.left + code.padding.right) / 2.0,
             base: Face { bold: block.is_bold(), italic: block.is_italic(), mono: false },
         };
@@ -173,7 +178,48 @@ pub(crate) fn export_style(folder: &Path) -> ResolvedStyle {
     for heading in &mut style.headings {
         heading.text_align = TextAlignment::Left;
     }
+    apply_typography(&mut style);
     style
+}
+
+/// DXP-FR-ODVI / DXP-FR-RBAQ: the sizes and the spaces of the export.
+fn apply_typography(style: &mut ResolvedStyle) {
+    let body = |block: &mut ResolvedBlock| {
+        block.font_size_pt = ty::BODY_PT;
+        block.line_height = ty::BODY_LINE_HEIGHT;
+    };
+    body(&mut style.paragraph);
+    style.paragraph.margin_before_pt = 0.0;
+    style.paragraph.margin_after_pt = ty::PARAGRAPH_AFTER_PT;
+    for (level, heading) in style.headings.iter_mut().enumerate() {
+        let look = ty::HEADINGS[level];
+        heading.font_size_pt = look.size_pt;
+        heading.line_height = ty::HEADING_LINE_HEIGHT;
+        heading.font_weight = FontWeight::Bold;
+        heading.margin_before_pt = look.before_pt;
+        heading.margin_after_pt = look.after_pt;
+    }
+    for list in [&mut style.list_ordered, &mut style.list_unordered, &mut style.list_task] {
+        body(&mut list.block);
+        list.block.margin_before_pt = 0.0;
+        list.block.margin_after_pt = ty::BLOCK_AFTER_PT;
+        list.item_spacing_tight_pt = ty::LIST_ITEM_GAP_PT;
+        list.item_spacing_loose_pt = ty::LIST_ITEM_GAP_PT;
+    }
+    body(&mut style.blockquote);
+    style.blockquote.margin_before_pt = 0.0;
+    style.blockquote.margin_after_pt = ty::BLOCK_AFTER_PT;
+    style.code_block.font_size_pt = ty::CODE_PT;
+    style.code_block.line_height = ty::CODE_LINE_HEIGHT;
+    style.code_block.margin_before_pt = 0.0;
+    style.code_block.margin_after_pt = ty::BLOCK_AFTER_PT;
+    for cell in [&mut style.table.header, &mut style.table.cell] {
+        body(cell);
+    }
+    style.table.margin_before_pt = 0.0;
+    style.table.margin_after_pt = ty::BLOCK_AFTER_PT;
+    style.horizontal_rule.margin_before_pt = ty::RULE_SPACE_PT;
+    style.horizontal_rule.margin_after_pt = ty::RULE_SPACE_PT;
 }
 
 /// The token stream of `doc` for `style`.
@@ -209,8 +255,9 @@ pub fn write(
 ) -> Result<Vec<u8>, String> {
     let style = export_style(folder);
     let tokens = tokens(doc, assets, &style, write_file);
+    let config = font_config(write_file);
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        markdown2pdf::render::render_to_bytes(tokens, style, Some(&font_config()))
+        markdown2pdf::render::render_to_bytes(tokens, style, Some(&config))
     }));
     match outcome {
         Ok(Ok(bytes)) => Ok(bytes),
@@ -219,12 +266,31 @@ pub fn write(
     }
 }
 
-/// DXP-FR-FNTP: the body font is the bundled file, and code is set in the
-/// built-in Courier. No font of the host is looked up.
-pub(super) fn font_config() -> FontConfig {
-    FontConfig::new()
-        .with_default_font_source(FontSource::bytes(pdf_lines::BODY_FONT))
-        .with_code_font_source(FontSource::Builtin("Courier"))
+/// DXP-FR-FNTP: the body is set in the bundled Liberation Sans and code in the
+/// bundled Liberation Mono. No font of the host is looked up.
+///
+/// `markdown2pdf` finds the bold and italic faces only beside a font file, so
+/// the files are written into the folder of the export first. Where a file
+/// does not write, the PDF is set in the regular faces alone.
+pub(super) fn font_config(write_file: FileWriter<'_>) -> FontConfig {
+    let mut written = None;
+    let mut mono = None;
+    let mut all = true;
+    for (name, bytes) in pdf_lines::FONT_FILES {
+        match write_file(name, bytes) {
+            Some(path) if name == pdf_lines::SANS_REGULAR_FILE => written = Some(path),
+            Some(path) if name == pdf_lines::MONO_REGULAR_FILE => mono = Some(path),
+            Some(_) => {}
+            None => all = false,
+        }
+    }
+    let (body, code) = match (all, written, mono) {
+        (true, Some(body), Some(code)) => (FontSource::File(body), FontSource::File(code)),
+        _ => {
+            (FontSource::bytes(pdf_lines::SANS_REGULAR), FontSource::bytes(pdf_lines::MONO_REGULAR))
+        }
+    };
+    FontConfig::new().with_default_font_source(body).with_code_font_source(code)
 }
 
 struct Writer<'a> {

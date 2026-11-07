@@ -12,8 +12,8 @@
 use docx_rs::{
     AlignmentType, BorderType, Docx, Hyperlink, HyperlinkType, LineSpacing, LineSpacingType,
     Paragraph, ParagraphBorder, ParagraphBorderPosition, ParagraphBorders, ParagraphChild, Pic,
-    Run, RunFonts, Shading, Table, TableAlignmentType, TableBorder, TableBorderPosition, TableCell,
-    TableCellMargins, TableRow, WidthType,
+    Run, RunFonts, Shading, Style, StyleType, Table, TableAlignmentType, TableBorder,
+    TableBorderPosition, TableCell, TableCellMargins, TableRow, WidthType,
 };
 
 use super::model::{plain_text, Align, Block, Document, Inline, ListItem};
@@ -141,10 +141,38 @@ fn quoted(mut p: Paragraph) -> Paragraph {
 /// in Arial at the body size, with the body line height and the space after a
 /// paragraph, unless it states its own spacing.
 fn new_document() -> Docx {
-    Docx::new()
+    let docx = Docx::new()
         .default_fonts(fonts(BODY_FONT))
         .default_size(body_half_points())
-        .default_line_spacing(spacing(0.0, ty::PARAGRAPH_AFTER_PT, ty::BODY_LINE_HEIGHT))
+        .default_line_spacing(spacing(0.0, ty::PARAGRAPH_AFTER_PT, ty::BODY_LINE_HEIGHT));
+    (1..=6u8).fold(docx, |docx, level| docx.add_style(heading_style(level)))
+}
+
+/// DXP-FR-YXBY: the id of the Word heading style of `level`.
+fn heading_style_id(level: u8) -> String {
+    format!("Heading{}", level.clamp(1, 6))
+}
+
+/// DXP-FR-YXBY: the outline level of a heading of `level`, from 0 for H1.
+fn outline_level(level: u8) -> usize {
+    usize::from(level.clamp(1, 6)) - 1
+}
+
+/// DXP-FR-YXBY: the Word heading style of `level`, with the look of its
+/// level (DXP-FR-ODVI) and its outline level, so Word lists the heading in
+/// its navigation pane and in a table of contents.
+fn heading_style(level: u8) -> Style {
+    let look = ty::heading(level);
+    Style::new(heading_style_id(level), StyleType::Paragraph)
+        .name(format!("heading {level}"))
+        .based_on("Normal")
+        .next("Normal")
+        .q_format(true)
+        .fonts(fonts(BODY_FONT))
+        .size(ty::half_points(look.size_pt))
+        .bold()
+        .line_spacing(spacing(look.before_pt, look.after_pt, ty::HEADING_LINE_HEIGHT))
+        .outline_lvl(outline_level(level))
 }
 
 /// DXP-FR-CPPT: the bytes of the `.docx` file of `doc`.
@@ -204,11 +232,13 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
             let look = ty::heading(*level);
             let size = ty::half_points(look.size_pt);
             let style = RunStyle { bold: true, size: Some(size), ..RunStyle::default() };
-            let p = Paragraph::new().keep_next(true).line_spacing(spacing(
-                look.before_pt,
-                look.after_pt,
-                ty::HEADING_LINE_HEIGHT,
-            ));
+            // DXP-FR-YXBY: the paragraph is a Word heading. Its runs also
+            // carry the look, for readers that ignore styles.
+            let p = Paragraph::new()
+                .style(&heading_style_id(*level))
+                .outline_lvl(outline_level(*level))
+                .keep_next(true)
+                .line_spacing(spacing(look.before_pt, look.after_pt, ty::HEADING_LINE_HEIGHT));
             let p = add_inlines(p, inlines, style, assets);
             vec![para(indent(aligned(p, align)))]
         }

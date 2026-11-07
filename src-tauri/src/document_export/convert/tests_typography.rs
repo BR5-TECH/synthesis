@@ -119,6 +119,68 @@ fn docx_headings_have_their_size_and_space() {
     assert!(body.contains(r#"w:after="180" w:line="360""#), "a body paragraph: {body}");
 }
 
+// DXP-FR-YXBY: each heading is a paragraph of the Word heading style of its
+// level, with its outline level, and the document defines the six styles with
+// the look of each level.
+#[test]
+fn docx_headings_are_word_headings() {
+    let text = "# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six\n\nBody.\n";
+    let document = docx_part(text, "word/document.xml");
+    for (n, text) in ["One", "Two", "Three", "Four", "Five", "Six"].into_iter().enumerate() {
+        let p = paragraph_with(&document, text);
+        assert!(p.contains(&format!(r#"<w:pStyle w:val="Heading{}" />"#, n + 1)), "{text}: {p}");
+        assert!(p.contains(&format!(r#"<w:outlineLvl w:val="{n}" />"#)), "{text}: {p}");
+    }
+    let body = paragraph_with(&document, "Body.");
+    assert!(!body.contains("w:pStyle") && !body.contains("w:outlineLvl"), "{body}");
+
+    let styles = docx_part(text, "word/styles.xml");
+    let looks = [
+        (41, 0, 240),
+        (32, 360, 180),
+        (26, 300, 120),
+        (24, 240, 120),
+        (22, 240, 120),
+        (22, 240, 120),
+    ];
+    for (n, (size, before, after)) in looks.into_iter().enumerate() {
+        let level = n + 1;
+        let open = format!(r#"w:styleId="Heading{level}""#);
+        assert_eq!(styles.matches(&open).count(), 1, "one {open}");
+        let at = styles.find(&open).unwrap_or_else(|| panic!("no style {open}"));
+        let style = &styles[at..at + styles[at..].find("</w:style>").unwrap()];
+        assert!(style.contains(&format!(r#"<w:name w:val="heading {level}" />"#)), "{style}");
+        assert!(style.contains(&format!(r#"<w:outlineLvl w:val="{n}" />"#)), "{style}");
+        assert!(style.contains(&format!(r#"<w:sz w:val="{size}" />"#)), "{style}");
+        assert!(style.contains("<w:b />"), "{style}");
+        for attr in ["w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"] {
+            assert!(style.contains(&format!(r#"{attr}="Arial""#)), "{attr} in {style}");
+        }
+        let space = format!(r#"w:before="{before}" w:after="{after}" w:line="288""#);
+        assert!(style.contains(&space), "{space} in {style}");
+        assert!(style.contains(r#"<w:basedOn w:val="Normal" />"#), "{style}");
+    }
+}
+
+// DXP-FR-YXBY, DXP-FR-ERZY: a heading stays a Word heading when it is
+// aligned, quoted, or holds inline formatting.
+#[test]
+fn docx_headings_stay_word_headings_in_context() {
+    let text = "<!-- center -->\n## Centred\n\n> ### Quoted\n\n# A **bold** `code` word\n";
+    let document = docx_part(text, "word/document.xml");
+    let centred = paragraph_with(&document, "Centred");
+    assert!(centred.contains(r#"<w:pStyle w:val="Heading2" />"#), "{centred}");
+    assert!(centred.contains(r#"w:val="center""#), "{centred}");
+    let quoted = paragraph_with(&document, "Quoted");
+    assert!(quoted.contains(r#"<w:pStyle w:val="Heading3" />"#), "{quoted}");
+    assert!(quoted.contains(r#"<w:outlineLvl w:val="2" />"#), "{quoted}");
+    let mixed = paragraph_with(&document, "code");
+    assert!(mixed.contains(r#"<w:pStyle w:val="Heading1" />"#), "{mixed}");
+    let code = &mixed[mixed.find(">code<").map(|i| mixed[..i].rfind("<w:r>").unwrap()).unwrap()..];
+    assert!(code.contains(r#"w:ascii="Courier New""#), "{code}");
+    assert!(code.contains(r#"<w:sz w:val="41" />"#), "code keeps the heading size: {code}");
+}
+
 // DXP-FR-RBAQ: 3 pt between list items and 9 pt after the list.
 #[test]
 fn docx_lists_have_a_gap_between_items_and_space_after() {

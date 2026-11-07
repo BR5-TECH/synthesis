@@ -20,6 +20,8 @@ struct RecordedProcess {
     user: String,
     env: BTreeMap<String, String>,
     stdin: Vec<u8>,
+    /// EAC-FR-HZIE: the final-event rule the launch handed the process.
+    final_event: Option<super::super::final_event::FinalEventRule>,
 }
 
 /// A sandbox runtime that records each boot and each process, and replies with
@@ -125,6 +127,7 @@ impl SandboxRuntime for RecordingSandbox {
                     .map(|(name, value)| (name.clone(), value.expose().to_string()))
                     .collect(),
                 stdin: process.stdin.to_vec(),
+                final_event: process.final_event,
             });
             Ok(RuntimeOutcome {
                 end: RunEnd::Exited,
@@ -210,6 +213,27 @@ fn launch(
             supplementary_mount: None,
         },
     ))
+}
+
+/// EAC-FR-ZIYG, EAC-FR-HZIE: a sandbox launch of Claude Code hands its process
+/// the final event of the descriptor and the grace of 30 seconds.
+#[test]
+fn a_sandbox_launch_hands_its_process_the_final_event_rule() {
+    let harness = harness_for("claude_code");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    launch(
+        &harness,
+        RecordingRuntime::replying(""),
+        sandbox.clone(),
+        microsandbox(),
+        scope(),
+        TurnKind::Work,
+    )
+    .expect("runs");
+    let rule = sandbox.only_process().final_event.expect("the process has a final-event rule");
+    assert_eq!(rule.grace, Duration::from_secs(30));
+    assert!((rule.is_final)(br#"{"type":"result"}"#));
+    assert!(!(rule.is_final)(br#"{"type":"assistant"}"#));
 }
 
 /// EAC-FR-SNMS, EAC-FR-ZIYG, EAC-FR-PZNB: under Microsandbox a graduation turn

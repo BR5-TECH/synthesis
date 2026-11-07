@@ -31,6 +31,8 @@ pub(super) struct SandboxRun<'a> {
     pub timeout: Duration,
     pub cancel: runtime::CancellationToken,
     pub observer: &'a dyn runtime::StreamObserver,
+    /// EAC-FR-HZIE: the vendor's final event and its grace.
+    pub final_event: Option<super::final_event::FinalEventRule>,
 }
 
 /// EAC-FR-BZPC / EAC-FR-WTFH: what the Custom Gateway of a launch adds to it.
@@ -208,6 +210,7 @@ impl AgentCliExecutor {
             stdout_limit: protocol::LIMIT_STDOUT,
             stderr_limit: protocol::LIMIT_STDERR,
             observer: Some(run.observer),
+            final_event: run.final_event,
         };
         logging::log_info(
             sink,

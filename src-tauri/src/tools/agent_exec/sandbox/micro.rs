@@ -10,6 +10,8 @@ use std::time::Duration;
 use microsandbox::sandbox::{PullPolicy, StatVirtualization};
 use microsandbox::{ExecEvent, Image, MicrosandboxError, Sandbox};
 
+use super::super::final_event::{observer_of, FinalEventWatch};
+
 use super::super::runtime::{
     BoxFuture, RunEnd, RuntimeError, RuntimeOutcome, StreamCapture, StreamChannel,
 };
@@ -515,9 +517,17 @@ impl SandboxRuntime for MicrosandboxRuntime {
             let deadline = tokio::time::Instant::now() + process.timeout;
             let mut end = RunEnd::Exited;
             let mut exit_code = None;
+            // EAC-FR-HZIE: the watch sees every line before the observer does.
+            let watch =
+                process.final_event.map(|rule| FinalEventWatch::new(rule, process.observer));
+            let observer = observer_of(&watch, process.observer);
             loop {
                 if process.cancel.is_cancelled() {
                     end = RunEnd::Cancelled;
+                    break;
+                }
+                if watch.as_ref().is_some_and(FinalEventWatch::grace_over) {
+                    end = RunEnd::EndedAfterFinalEvent;
                     break;
                 }
                 let next = tokio::time::timeout_at(
@@ -536,8 +546,8 @@ impl SandboxRuntime for MicrosandboxRuntime {
                         break;
                     }
                     Ok(Some(event)) => match event {
-                        ExecEvent::Stdout(data) => stdout.push(&data, process.observer),
-                        ExecEvent::Stderr(data) => stderr.push(&data, process.observer),
+                        ExecEvent::Stdout(data) => stdout.push(&data, observer),
+                        ExecEvent::Stderr(data) => stderr.push(&data, observer),
                         ExecEvent::Exited { code } => {
                             exit_code = Some(code);
                             break;
@@ -549,7 +559,7 @@ impl SandboxRuntime for MicrosandboxRuntime {
                     },
                 }
             }
-            if matches!(end, RunEnd::TimedOut | RunEnd::Cancelled) {
+            if matches!(end, RunEnd::TimedOut | RunEnd::Cancelled | RunEnd::EndedAfterFinalEvent) {
                 // EAC-FR-ZIYG: the process is killed, and its end is waited for.
                 let _ = handle.kill().await;
                 let _ = tokio::time::timeout(KILL_GRACE, async {
@@ -564,8 +574,8 @@ impl SandboxRuntime for MicrosandboxRuntime {
             Ok(RuntimeOutcome {
                 end,
                 exit_code,
-                stdout: stdout.finish(process.observer),
-                stderr: stderr.finish(process.observer),
+                stdout: stdout.finish(observer),
+                stderr: stderr.finish(observer),
             })
         })
     }

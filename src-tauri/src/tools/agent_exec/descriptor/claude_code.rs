@@ -242,6 +242,15 @@ const KEY_STRUCTURED_OUTPUT: &str = "structured_output";
 const KEY_RESULT: &str = "result";
 const SUBTYPE_SUCCESS: &str = "success";
 
+/// CCP-FR-RGVA: the final event of this CLI is a stdout line whose `type` is
+/// `result`. A line that is not a JSON object is not one.
+pub fn is_final_event(line: &[u8]) -> bool {
+    let Ok(Value::Object(event)) = serde_json::from_slice::<Value>(line.trim_ascii()) else {
+        return false;
+    };
+    event.get(KEY_TYPE).and_then(Value::as_str) == Some(EVENT_RESULT)
+}
+
 pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvalid> {
     // CCP-FR-13: stdout is one JSON object per line, and exactly one of them is
     // the result document. Every other line is progress — what the agent said,

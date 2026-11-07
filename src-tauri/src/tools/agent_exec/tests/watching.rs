@@ -182,6 +182,7 @@ fn watching_a_run_does_not_change_what_the_capture_holds() {
             stdout_limit: 4096,
             stderr_limit: 4096,
             observer,
+            final_event: None,
         }))
         .expect("the child ran")
     };

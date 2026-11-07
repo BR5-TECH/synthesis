@@ -414,6 +414,7 @@ fn bounded_capture_drains_past_its_limit_over_a_real_pipe() {
             stdout_limit: 1000,
             stderr_limit: 100,
             observer: None,
+            final_event: None,
         })
         .await
     })
@@ -458,6 +459,7 @@ fn a_hanging_child_is_killed_by_the_deadline_and_by_cancellation() {
             stdout_limit: 1024,
             stderr_limit: 1024,
             observer: None,
+            final_event: None,
         })
         .await
     })
@@ -488,6 +490,7 @@ fn a_hanging_child_is_killed_by_the_deadline_and_by_cancellation() {
             stdout_limit: 1024,
             stderr_limit: 1024,
             observer: None,
+            final_event: None,
         })
         .await
     })

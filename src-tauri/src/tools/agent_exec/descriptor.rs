@@ -426,6 +426,10 @@ pub struct VendorExecutionDescriptor {
     pub session_source: SessionSource,
     pub session_state: SessionStateMount,
     pub credential_form: CredentialForm,
+    /// EAC-FR-HZIE: the stdout line that ends this vendor's turn. `None` for a
+    /// vendor that declares none, whose run ends only by exit, cancellation, or
+    /// the deadline (EAC-FR-QHAY).
+    pub final_event: Option<super::final_event::FinalEvent>,
 }
 
 impl std::fmt::Debug for VendorExecutionDescriptor {
@@ -437,6 +441,7 @@ impl std::fmt::Debug for VendorExecutionDescriptor {
             .field("session_source", &self.session_source)
             .field("session_state", &self.session_state)
             .field("credential_form", &self.credential_form)
+            .field("final_event", &self.final_event.is_some())
             .finish()
     }
 }
@@ -463,6 +468,8 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
         target: claude_code::SESSION_STATE_TARGET,
     },
     credential_form: CredentialForm::EnvironmentVariable(CLAUDE_TOKEN_ENV),
+    // CCP-FR-RGVA: the `result` line.
+    final_event: Some(claude_code::is_final_event),
 };
 
 /// EAC-FR-12: Codex's descriptor, transcribing `CDX`.
@@ -499,6 +506,8 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     // CDX-FR-23: login directory and session directory are the same directory.
     session_state: SessionStateMount::SharedWithCredentialMount { env: codex::SESSION_STATE_ENV },
     credential_form: CredentialForm::Mount,
+    // EAC-FR-QHAY: this vendor declares no final event.
+    final_event: None,
 };
 
 pub fn descriptor_for(vendor: &str) -> Option<&'static VendorExecutionDescriptor> {

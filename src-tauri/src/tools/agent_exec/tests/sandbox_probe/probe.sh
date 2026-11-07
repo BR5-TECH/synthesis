@@ -155,4 +155,11 @@ if [ -d .probe ]; then
     sed "s/{{SESSION_ID}}/$session/g" /opt/probe/scenario.template.json > .probe/scenario.json
     scenario=.probe/scenario.json
 fi
+# EAC-FR-HZIE: where the working copy holds `probe-linger`, the process stays
+# alive after the mock answered, as a CLI does while a background task that the
+# agent started still runs.
+if [ -f probe-linger ]; then
+    /opt/probe/agentic-cli-mock --tool claude --scenario "$scenario" -- "$@"
+    exec sleep 600
+fi
 exec /opt/probe/agentic-cli-mock --tool claude --scenario "$scenario" -- "$@"

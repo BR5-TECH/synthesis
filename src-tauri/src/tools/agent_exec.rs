@@ -43,6 +43,7 @@ use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink, BUFFER};
 
 pub mod descriptor;
+pub mod final_event;
 pub mod finish;
 pub mod protocol;
 pub mod runtime;

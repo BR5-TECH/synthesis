@@ -86,6 +86,9 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 50. **GRU-FR-AQKZ** The stage row of a PR summary run holds three stages: Queued, Summarizing, and Done. It shows no pass, no loop, and no change set.
 51. **GRU-FR-DQSA** A PR summary run in `completed` renders its result from `pr_summary.result`: the title on one line and the description rendered as Markdown with inert links. A PR summary run in `failed` states the typed failure. It renders no result in any other state.
 52. **GRU-FR-LJUY** A PR summary run offers **Pause**, **Continue**, **Discard run**, and **Archive** on the terms of every run. It offers no **Restart** and no **Revert**, and no control that applies its result to a pull request, which the Create a PR window does (per `CPR-create-pull-request.md` CPR-FR-GYVD).
+53. **GRU-FR-NQLG** The run region shows one read-only list called **Escalations log** when the run's decision ledger (per `../core/GXD-graduation-execution.md` GXD-FR-NWSL) is not empty, and shows nothing when it is empty. It stands once in the region, below the escalation and above the change set and the pass history, and no pass entry repeats it.
+54. **GRU-FR-WMTH** The header of the Escalations log is a control that expands and collapses the list. The list is collapsed by default, and the header shows the number of decisions. The control exposes its expanded state in accessible semantics, and the section keeps the open state per run for as long as the run stays selected.
+55. **GRU-FR-DRPW** Each row of an expanded Escalations log shows the question, the answer, the note where there is one, the turn that asked and the pass, as plain text, in the order of the ledger. A question answered twice shows both rows. The list has no control that changes a decision, and it updates when the run state is published.
 ## Wireframes
 
 ```
@@ -133,7 +136,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 
 ## UI contract boundary
 
-**Owned by the UI**: which run is selected, the rail's filter and ordering view, which pass rows are open, which path lists and which of their folders are open, the bounds and the keyboard steps of the paths column's width, the wording of every state, condition and blocking sentence, the stage labels of a merge run, the rendering of a merge run's paths and result, button enablement, and the escaped rendering of agent text.
+**Owned by the UI**: which run is selected, the rail's filter and ordering view, which pass rows are open, whether the Escalations log is expanded, which path lists and which of their folders are open, the bounds and the keyboard steps of the paths column's width, the wording of every state, condition and blocking sentence, the stage labels of a merge run, the rendering of a merge run's paths and result, button enablement, and the escaped rendering of agent text.
 
 **Delegated to backend (abstract)**:
 - `load_app_preferences`

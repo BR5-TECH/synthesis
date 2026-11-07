@@ -28,6 +28,7 @@ mod blocking;
 mod checkout_paths;
 mod collaborators;
 mod commit_retitle;
+mod decision_ledger;
 mod direct;
 mod direct_message;
 mod docker_socket;

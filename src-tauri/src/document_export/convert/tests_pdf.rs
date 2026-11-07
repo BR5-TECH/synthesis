@@ -200,13 +200,15 @@ fn a_metadata_list_value_is_one_row_per_line() {
 #[test]
 fn the_pdf_is_pinned_to_the_bundled_fonts() {
     let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let access = crate::fs::FsAccess::builder().allow_root(&root).build().unwrap();
     let write_file = |name: &str, bytes: &[u8]| {
-        let path = dir.path().join(name);
-        std::fs::write(&path, bytes).ok().map(|_| path)
+        let path = root.join(name);
+        access.write_bytes_atomic(&path, bytes).ok().map(|_| path)
     };
     let config = super::pdf::font_config(&write_file);
-    let body = dir.path().join(pdf_lines::SANS_REGULAR_FILE);
-    let code = dir.path().join(pdf_lines::MONO_REGULAR_FILE);
+    let body = root.join(pdf_lines::SANS_REGULAR_FILE);
+    let code = root.join(pdf_lines::MONO_REGULAR_FILE);
     assert!(
         matches!(&config.default_font_source, Some(markdown2pdf::fonts::FontSource::File(p)) if *p == body),
         "{config:?}"
@@ -216,7 +218,7 @@ fn the_pdf_is_pinned_to_the_bundled_fonts() {
         "{config:?}"
     );
     for (name, bytes) in pdf_lines::FONT_FILES {
-        assert_eq!(std::fs::read(dir.path().join(name)).unwrap(), bytes, "{name} is written");
+        assert_eq!(access.read_bytes(root.join(name)).unwrap(), bytes, "{name} is written");
     }
     let style = export_style(std::path::Path::new("."));
     assert!(style.fallback_fonts.is_empty(), "no fallback font of the host");

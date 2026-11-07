@@ -286,6 +286,72 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
     assert_eq!(started.base_revision, pinned.to_string());
 }
 
+// WKS-FR-LDRQ, GRB-FR-LDGQ, GXD-FR-NWSL, GXD-FR-HRDM: a later escalation of the
+// same update adds its answers to the update's ledger after the earlier ones and
+// replaces none. Each entry names the turn `semantic_rebase` and the pass 1.
+#[test]
+fn a_later_escalation_of_an_update_adds_to_its_ledger() {
+    let fx = Fixture::new();
+    let stream = conflicting_stream(&fx);
+    let pinned = tip_of(&fx.repo(), &stream.base_branch).to_string();
+    let earlier = crate::streams::StreamMergeDecision {
+        position: 1,
+        question: "Which limit stands?".to_string(),
+        answer: "The base limit.".to_string(),
+        summary: "Base".to_string(),
+        note: None,
+        turn: "semantic_rebase".to_string(),
+        pass: 1,
+    };
+
+    let record = update_job_scripted(
+        &fx,
+        &stream,
+        StreamUpdateStrategy::MergeSource,
+        &pinned,
+        vec![earlier.clone()],
+        ScriptedDispatch::new(vec![Script::Escalate]),
+    )
+    .expect("started");
+    assert_eq!(record.state, StreamUpdateState::Escalated, "{record:?}");
+    assert_eq!(record.decisions, vec![earlier.clone()], "the record keeps the ledger");
+    let question = record.escalation.as_ref().expect("an escalation").questions[0].clone();
+
+    let started = update_commands::answer_work_stream_update_escalation(
+        fx.app.clone(),
+        stream.id.clone(),
+        vec![crate::graduation::GraduationEscalationAnswer {
+            position: question.position,
+            answer: "The stream limit.".to_string(),
+            summary: String::new(),
+            note: None,
+        }],
+    )
+    .expect("accepted");
+    assert_eq!(started.decisions.len(), 2);
+    assert_eq!(started.decisions[0], earlier, "the earlier entry stays first and unchanged");
+    assert_eq!(started.decisions[1].question, question.question);
+    assert_eq!(started.decisions[1].answer, "The stream limit.");
+    assert_eq!(started.decisions[1].turn, "semantic_rebase");
+    assert_eq!(started.decisions[1].pass, 1);
+}
+
+// GXD-FR-BTIN, GRB-FR-KMXT: a ledger entry tells a semantic turn its summary,
+// the turn that asked and the pass, and an entry written before they existed
+// reads as an update entry of the first pass.
+#[test]
+fn a_semantic_turn_is_told_the_turn_and_the_pass_of_each_decision() {
+    let read: crate::streams::StreamMergeDecision =
+        serde_json::from_str(r#"{"position":1,"question":"Q?","answer":"A.","summary":"S"}"#)
+            .expect("reads");
+    assert_eq!((read.turn.as_str(), read.pass), ("semantic_rebase", 1));
+    let told = serde_json::to_value(crate::streams::semantic_turn::author_decisions(&[read]))
+        .expect("serializes");
+    assert_eq!(told[0]["summary"], "S");
+    assert_eq!(told[0]["turn"], "semantic_rebase");
+    assert_eq!(told[0]["pass"], 1);
+}
+
 // WKS-FR-ZKUP / WKS-FR-AMWE: the update record stands apart from the merge
 // record, and keeps the strategy and the pinned revision.
 #[test]
@@ -812,6 +878,8 @@ fn a_decision_reaches_the_semantic_turn_with_its_note() {
         answer: "The base limit.".to_string(),
         summary: "Base".to_string(),
         note: note.map(str::to_string),
+        turn: "semantic_rebase".to_string(),
+        pass: 1,
     };
     let told = serde_json::to_value(crate::streams::semantic_turn::author_decisions(&[
         decision(Some("the stream value was a test")),

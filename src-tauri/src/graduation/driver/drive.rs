@@ -864,6 +864,15 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
     // GRL-FR-GQAB: the findings travel whole into the next work turn, in the
     // order the review returned them.
     let instruction = compose_instruction(verdict);
+    // GXD-FR-WRVH: the findings join the run's review history, with the pass of
+    // the review that found them.
+    let pass = run.pass();
+    run.checkpoint.review_history.extend(
+        verdict
+            .findings
+            .iter()
+            .map(|finding| ReviewHistoryEntry { pass, finding: finding.clone() }),
+    );
     run.observability.settle_pass(verdict, Some(instruction.clone()), crate::notes::now_rfc3339());
     run.checkpoint.loop_instruction = Some(instruction);
 

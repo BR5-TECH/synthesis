@@ -195,6 +195,70 @@ impl DispatchAssert {
         self
     }
 
+    /// GXD-FR-BTIN: the decision ledger this turn carries, as
+    /// `(question, answer, turn, pass)` in order. `key` is `decisions`, or
+    /// `author_decisions` for a semantic turn.
+    pub(crate) fn decisions(self, expected: &[(&str, &str, &str, u32)]) -> Self {
+        let key = if self.seen.input.contains_key("author_decisions") {
+            "author_decisions"
+        } else {
+            "decisions"
+        };
+        let text = |entry: &serde_json::Value, name: &str| {
+            entry.get(name).and_then(|v| v.as_str()).unwrap_or_default().to_string()
+        };
+        let held: Vec<(String, String, String, u32)> = self
+            .seen
+            .input
+            .get(key)
+            .and_then(|v| v.as_array())
+            .map(|list| {
+                list.iter()
+                    .map(|entry| {
+                        (
+                            text(entry, "question"),
+                            text(entry, "answer"),
+                            text(entry, "turn"),
+                            entry.get("pass").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let expected: Vec<(String, String, String, u32)> = expected
+            .iter()
+            .map(|(q, a, t, p)| (q.to_string(), a.to_string(), t.to_string(), *p))
+            .collect();
+        assert_eq!(
+            held, expected,
+            "[{}] dispatch {} carries the decision ledger in order",
+            self.scenario, self.index
+        );
+        self
+    }
+
+    /// GXD-FR-WRVH: the passes of the findings in this turn's review history,
+    /// in order, one per finding.
+    pub(crate) fn review_history_passes(self, passes: &[u32]) -> Self {
+        let held: Vec<u32> = self
+            .seen
+            .input
+            .get("review_history")
+            .and_then(|v| v.as_array())
+            .map(|list| {
+                list.iter()
+                    .map(|entry| entry.get("pass").and_then(|v| v.as_u64()).unwrap_or(0) as u32)
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(
+            held, passes,
+            "[{}] dispatch {} carries the review history",
+            self.scenario, self.index
+        );
+        self
+    }
+
     /// GXD-FR-MTVR: the execution timeout this dispatch was composed under.
     pub(crate) fn execution_timeout_ms(self, expected: u64) -> Self {
         assert_eq!(

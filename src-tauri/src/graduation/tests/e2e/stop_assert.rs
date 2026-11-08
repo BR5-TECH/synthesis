@@ -186,8 +186,59 @@ impl Outcome {
             .clone()
             .unwrap_or_else(|| panic!("[{}] the run rests on its total time limit", self.name));
         assert_eq!(rest.reason, "total_time_limit", "[{}] the rest reason", self.name);
-        assert_eq!(rest.limit_ms, limit_ms, "[{}] the limit the run rested under", self.name);
-        assert_eq!(rest.used_ms, self.run.turn_time_used_ms, "[{}] the time used", self.name);
+        assert_eq!(rest.limit_ms, Some(limit_ms), "[{}] the limit the run rested under", self.name);
+        assert_eq!(rest.used_ms, Some(self.run.turn_time_used_ms), "[{}] the time used", self.name);
+        self
+    }
+
+    /// GRD-FR-PYJN: the run rests on `checks_not_passed` with `cause`, and
+    /// names each check that did not pass as `(name, finished, exit_status)`.
+    pub(crate) fn expect_checks_rest(
+        self,
+        cause: &str,
+        checks: &[(&str, bool, Option<i64>)],
+    ) -> Self {
+        let rest = self
+            .run
+            .rest
+            .clone()
+            .unwrap_or_else(|| panic!("[{}] the run rests on checks_not_passed", self.name));
+        assert_eq!(rest.reason, "checks_not_passed", "[{}] the rest reason", self.name);
+        assert!(!rest.at.trim().is_empty(), "[{}] the rest names when it was made", self.name);
+        assert_eq!(rest.cause.map(|c| c.as_str()), Some(cause), "[{}] the cause", self.name);
+        assert_eq!((rest.limit_ms, rest.used_ms), (None, None), "[{}] no time", self.name);
+        let held: Vec<(String, bool, Option<i64>)> = rest
+            .checks
+            .unwrap_or_default()
+            .into_iter()
+            .map(|check| (check.name, check.finished, check.exit_status))
+            .collect();
+        let expected: Vec<(String, bool, Option<i64>)> = checks
+            .iter()
+            .map(|(name, finished, status)| (name.to_string(), *finished, *status))
+            .collect();
+        assert_eq!(held, expected, "[{}] the checks of the rest", self.name);
+        self
+    }
+
+    /// GRL-FR-BVTS: the open check gate the checkpoint holds, as
+    /// `(cause, step)`, or none.
+    pub(crate) fn expect_check_gate(self, expected: Option<(&str, &str)>) -> Self {
+        let held = self
+            .run
+            .checkpoint
+            .check_gate
+            .as_ref()
+            .map(|gate| (gate.cause.as_str(), gate.step.as_str()));
+        assert_eq!(held, expected, "[{}] the open check gate", self.name);
+        self
+    }
+
+    /// GRD-FR-OERK: the cause whose check correction the turn after Continue
+    /// from `checks_not_passed` carries, or none.
+    pub(crate) fn expect_continued_check_correction(self, expected: Option<&str>) -> Self {
+        let held = self.run.checkpoint.continue_check_correction.map(|cause| cause.as_str());
+        assert_eq!(held, expected, "[{}] the continued check correction", self.name);
         self
     }
 

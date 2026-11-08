@@ -53,6 +53,7 @@ pub mod sandbox;
 // item they carry is named through this module, exactly as before.
 mod docker_in_docker;
 mod launch;
+mod launch_env;
 mod milestone;
 mod observer;
 mod repository;

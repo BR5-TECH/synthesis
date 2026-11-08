@@ -24,6 +24,7 @@ The backend end-to-end suite for graduation, and the scenario language it is wri
 16. **GTE-FR-RSQD** The suite is **deterministic**. It takes no sleep, asserts no wall-clock duration, and reaches no network, no provider credential and no container runtime. A timeout and a cancellation are each produced by a bounded control of the harness rather than by waiting.
 17. **GTE-FR-KAZX** The harness sets the project settings each scenario runs under. A scenario may set the graduation pass budget, stage time limit, total time limit and concurrency limit to any valid value (per `../core/PSS-project-settings-storage.md` PSS-FR-QBNE, PSS-FR-HVSM, PSS-FR-RKTW, PSS-FR-JRWC). A scenario that stores the shared execution timeout and retry budget proves no graduation turn reads them.
 17. **GTE-FR-ZTLC** A scenario proves the **total time limit**. A turn stopped by the total time rests the run `awaiting_author` with `total_time_limit`, its work committed, the stream and the slot held. Continue resets the used total time alone and repeats no completed pass. A run with no remaining total time before a dispatch rests on the same reason and dispatches no turn.
+17. **GTE-FR-QMVR** A scenario proves the **check gate**. A work turn whose answer holds a red, unfinished or missing check record gets one check correction in its session and one escalate correction, and the run then rests `awaiting_author` with `checks_not_passed`, unreviewed and uncommitted. A red check whose `waived_by` names a recorded decision passes, and Continue starts a new gate episode.
 18. **GTE-FR-VNOU** A scenario proves that the settings are read **before every dispatch**, the semantic rebase turn included, by changing a value between two turns of one run and asserting the second turn carried the new value (per `../ai/GRL-graduation-loop.md` GRL-FR-KWNP).
 19. **GTE-FR-GBLI** A scenario proves that a resumed run uses the values active at each resumed dispatch, by changing a setting while the run rests and asserting the resumed turn carried the changed value.
 20. **GTE-FR-WUAP** The suite covers the journeys of the coverage matrix, one scenario each at least. A journey with no scenario is a gap the matrix names.
@@ -82,8 +83,9 @@ What one scripted turn does, and what it then answers:
 
 ```text
 Script
-  answer:  reports_success
-         | reports_failure(message)                 // GRL-FR-DNKA
+  answer:  reports_success                          // with a passing check record (GRL-FR-IJTT)
+         | reports_checks(records)                  // GRL-FR-CPXI
+         | reports_failure(message)                 // GRL-FR-TYRV
          | answers_ready(rationale) | answers_ready_with(findings)
          | answers_revise(severity, description) | answers_revise_with(findings)
          | answers_revise_without_findings | answers_with_blank_rationale
@@ -138,7 +140,7 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
  2  revise then ready         findings reach the second work turn, ready ends the run
  3  two revise reviews        awaiting_author with the findings, no third pass
  4  advisory ready            revise of at most two minor findings completes, no further work turn
- 5  agent-reported failure    review still runs and carries the failure, its verdict decides
+ 5  agent-reported failure    gated as work_failed: no review, a check correction, then an escalate correction
  6  escalation and answer     ordered questions persisted, stream and slot held, same pass continues
  7  invalid verdict twice     one corrected review, then blocked with review_verdict_invalid
  8  interruption              cancel, execution_timeout and launch_failed each rest interrupted with its reason;
@@ -177,6 +179,7 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 40  failed run                the failed run holds the queue and no slot, runs behind stay queued, no restart, discard removes them
 41  total time limit          awaiting_author with total_time_limit, work committed, stream and slot held, Continue resets the used time alone
 43  answer corrections        a refused answer is corrected once in its session, a second refusal rests the run, an uncorrectable refusal stops at once, a restart keeps the correction
+44  check gate                a red, unfinished or missing check record gets one check correction and one escalate correction, then checks_not_passed; a waiver passes
 ```
 
 ## Non-functional requirements

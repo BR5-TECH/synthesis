@@ -6862,6 +6862,36 @@ graduationRuns.push(
       capturedAt: "2026-09-05T16:00:00Z",
     },
   }),
+  // GRU-FR-WVDV / GRU-FR-TOKG: a run at rest because its required checks did
+  // not pass. One check is red, one did not finish, and one has a long name so
+  // the list must wrap in a narrow region. It offers Continue and Discard run.
+  makeStreamRun({
+    id: "g-29",
+    draftId: "d-29",
+    state: "awaiting_author",
+    rest: {
+      reason: "checks_not_passed",
+      at: "2026-09-06T12:30:00Z",
+      cause: "checks_red",
+      checks: [
+        { name: "cargo test", finished: true, exitStatus: 101 },
+        { name: "pnpm test", finished: false, exitStatus: null },
+        {
+          name:
+            "cargo clippy --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings -W clippy::pedantic_but_very_long_lint_name_for_wrapping",
+          finished: true,
+          exitStatus: 1,
+        },
+      ],
+    },
+    input: {
+      draftId: "d-29",
+      draftName: "Checks did not pass",
+      prompt: "Move the settings parser into its own module.",
+      promptChecksum: "sha-p29",
+      capturedAt: "2026-09-05T16:30:00Z",
+    },
+  }),
   // GEA-FR-QBWN / GEA-FR-SXXB / GEA-FR-KMVR: a work run at rest on a
   // two-question escalation, current shape. The reason is long so the closed
   // "Why the run stopped" disclosure has something to hold; the second question

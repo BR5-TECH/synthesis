@@ -26,6 +26,8 @@ use crate::tools::agent_exec::{
 mod activity_stream;
 mod blocking;
 mod check_folder;
+mod check_gate_continue;
+mod check_gate_contract;
 mod checkout_paths;
 mod collaborators;
 mod commit_retitle;
@@ -60,12 +62,14 @@ mod review_checkout;
 mod run_progress;
 mod run_summary;
 mod scheduler;
+mod scripted_turn;
 mod standing_work;
 mod state_machine;
 mod stream_hold;
 mod write_check;
 
 use collaborators::{EveryKeyIsThere, EverythingIsThere, NoCli, NoEndpoint};
+use scripted_turn::{Answer, Turn};
 
 type Runtime = tauri::test::MockRuntime;
 
@@ -370,160 +374,6 @@ fn init_repo(root: &Path) -> git2::Repository {
 // ---------------------------------------------------------------------------
 // The scripted agent
 // ---------------------------------------------------------------------------
-
-/// What one scripted turn answers with.
-enum Answer {
-    /// The agent reported the work finished.
-    Success,
-    /// A review turn's verdict.
-    Verdict(ReviewVerdict),
-    /// A `result` object of any shape, for the verdicts the loop refuses.
-    RawResult(serde_json::Value),
-    /// The agent stopped to ask the author something.
-    Escalate(Vec<String>),
-    /// The same, under a reason the test names, so an escalation outside the
-    /// rules of ESU-FR-19 can be composed.
-    EscalateBecause { reason: String, questions: Vec<String> },
-    /// GXD-FR-LBYG: an envelope that claims a change set of its own, so a loop
-    /// that believed one would be caught.
-    ClaimingPaths(Vec<String>),
-    /// GRL-FR-DNKA: the agent reported it could not do the work, and said what
-    /// stopped it.
-    ReportedFailure(String),
-    /// GRL-FR-DNKA: the agent reported a failure whose message says nothing, so
-    /// its summary is the only account there is.
-    ReportedFailureWithoutMessage(String),
-    /// GRL-FR-DNKA: the agent reported the work finished and said something
-    /// about it in its summary — the case that carries an account the review
-    /// most needs, because a turn that left part of the work undone reports
-    /// success and says the rest here.
-    SucceedingWith(String),
-    /// The process did not complete.
-    Process(ProcessOutcome),
-    /// GRL-FR-QKDC: the turn ended, and its answer was refused for this reason.
-    Refused(crate::tools::agent_exec::protocol::EnvelopeInvalid),
-    /// GRL-FR-PTCE: the vendor did not resume the session it was asked to.
-    ResumeUnavailable,
-    /// GRL-FR-PTCE: the vendor started a new session in place of the one it
-    /// was asked to resume, and reported success there.
-    FromAFreshSession,
-    /// Nothing was launched at all.
-    Unlaunchable(AgentExecutionError),
-}
-
-/// One scripted turn: what it writes, what it then answers.
-struct Turn {
-    writes: Vec<(String, String)>,
-    /// Symbolic links the turn installs, as a dependency install does.
-    links: Vec<(String, String)>,
-    deletes: Vec<String>,
-    removed_dirs: Vec<String>,
-    answer: Answer,
-    /// Something to do inside the turn — cancel the run, move a branch.
-    side_effect: Option<Box<dyn Fn() + Send + Sync>>,
-    /// Something to do once the verdict of this review is durable.
-    after_verdict: Option<Box<dyn Fn() + Send + Sync>>,
-    /// Whether the answer carries a resumable vendor session.
-    session: bool,
-    /// Whether the turn answers as scripted even where the run was stopped
-    /// while it ran, as an agent that finished at the same moment does.
-    ignores_cancellation: bool,
-}
-
-impl Turn {
-    fn answering(answer: Answer) -> Self {
-        Self {
-            writes: Vec::new(),
-            links: Vec::new(),
-            deletes: Vec::new(),
-            removed_dirs: Vec::new(),
-            answer,
-            side_effect: None,
-            after_verdict: None,
-            session: false,
-            ignores_cancellation: false,
-        }
-    }
-
-    fn ignoring_cancellation(mut self) -> Self {
-        self.ignores_cancellation = true;
-        self
-    }
-
-    /// A work turn that reports the work finished.
-    fn work() -> Self {
-        Self::answering(Answer::Success)
-    }
-
-    /// A work turn that reports the work finished and says something about it.
-    fn work_saying(summary: &str) -> Self {
-        Self::answering(Answer::SucceedingWith(summary.to_string()))
-    }
-
-    /// A review turn that lets the work through.
-    fn ready() -> Self {
-        Self::answering(Answer::Verdict(ReviewVerdict {
-            verdict: ReviewOutcome::Ready,
-            rationale: "The work answers the prompt.".to_string(),
-            findings: Vec::new(),
-        }))
-    }
-
-    /// A review turn that asks for one change of the named severity.
-    fn revise(severity: ReviewSeverity, description: &str) -> Self {
-        Self::answering(Answer::Verdict(ReviewVerdict {
-            verdict: ReviewOutcome::Revise,
-            rationale: "One thing is not delivered.".to_string(),
-            findings: vec![ReviewFinding {
-                severity,
-                description: description.to_string(),
-                affected_files: vec!["src/panel.ts".to_string()],
-                correction: "Write the empty state.".to_string(),
-            }],
-        }))
-    }
-
-    fn writing(mut self, path: &str, content: &str) -> Self {
-        self.writes.push((path.to_string(), content.to_string()));
-        self
-    }
-
-    fn deleting(mut self, path: &str) -> Self {
-        self.deletes.push(path.to_string());
-        self
-    }
-
-    /// A symbolic link the turn installs, relative to the directory it runs in.
-    ///
-    /// This is what a project's own dependency install writes, and what the
-    /// application must still be able to reclaim afterwards (FSA-FR-ZUCF).
-    #[cfg(unix)]
-    fn linking(mut self, path: &str, target: &str) -> Self {
-        self.links.push((path.to_string(), target.to_string()));
-        self
-    }
-
-    /// Remove a whole directory, as a turn that reorganizes a module does.
-    fn removing_dir(mut self, path: &str) -> Self {
-        self.removed_dirs.push(path.to_string());
-        self
-    }
-
-    fn with_session(mut self) -> Self {
-        self.session = true;
-        self
-    }
-
-    fn doing(mut self, side_effect: impl Fn() + Send + Sync + 'static) -> Self {
-        self.side_effect = Some(Box::new(side_effect));
-        self
-    }
-
-    fn after_the_verdict(mut self, act: impl Fn() + Send + Sync + 'static) -> Self {
-        self.after_verdict = Some(Box::new(act));
-        self
-    }
-}
 
 /// What a scripted turn reports while it runs: two activities the durable
 /// stream excludes and two it keeps.
@@ -862,13 +712,16 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                         )
                     })
                 }
-                Answer::Success => (AgentOutcome::Success, None, None),
-                Answer::SucceedingWith(_) => (AgentOutcome::Success, None, None),
-                Answer::ClaimingPaths(claimed) => (
-                    AgentOutcome::Success,
-                    object_of(serde_json::json!({ "changed_paths": claimed.clone() })),
-                    None,
-                ),
+                // GRL-FR-IJTT: a scripted success carries a passing check
+                // record, so it passes the check gate as a real one does.
+                Answer::Success => (AgentOutcome::Success, object_of(passing_record()), None),
+                Answer::SucceedingWith(_) => {
+                    (AgentOutcome::Success, object_of(passing_record()), None)
+                }
+                // GXD-FR-LBYG: the claim is in the summary the turn reports.
+                Answer::ClaimingPaths(_) => {
+                    (AgentOutcome::Success, object_of(passing_record()), None)
+                }
                 Answer::ReportedFailureWithoutMessage(_) => {
                     reported = Some(crate::tools::agent_exec::protocol::AgentFailure {
                         code: "could_not_finish".to_string(),
@@ -919,7 +772,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     }),
                 ),
             };
-            Ok(execution(
+            let mut completed = execution(
                 ProcessOutcome::Completed,
                 Some(AgentResponseEnvelope {
                     protocol_version: PROTOCOL_VERSION,
@@ -935,9 +788,24 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     metadata: None,
                 }),
                 turn.session,
-            ))
+            );
+            completed.duration_ms = turn.duration_ms;
+            Ok(completed)
         })
     }
+}
+
+/// GRL-FR-IJTT: the check record of a scripted success: one full check that
+/// finished with exit status 0.
+pub(super) fn passing_record() -> serde_json::Value {
+    serde_json::json!({
+        "checks": [{
+            "name": "tests",
+            "command": "run the project's tests",
+            "finished": true,
+            "exit_status": 0
+        }]
+    })
 }
 
 fn object_of(value: serde_json::Value) -> Option<serde_json::Map<String, serde_json::Value>> {

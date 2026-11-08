@@ -49,6 +49,7 @@ import {
   totalTimeLimitDetail,
   totalTimeLimitHeadline,
   totalTimeLimitRestOf,
+  checksNotPassedRestOf,
 } from "../../state/graduation";
 import { stagesWithLogAccess } from "../../state/graduation/logScopes";
 import type {
@@ -58,6 +59,7 @@ import type {
 } from "../../types";
 import { RunProgress } from "../RunProgress";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
+import { ChecksNotPassedRest } from "./checksRest";
 import { RunEscalationForm } from "./escalation";
 import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
@@ -74,11 +76,16 @@ import { PrSummaryResult } from "./prSummary";
 const SAYS_ITSELF = ["blocked", "interrupted", "failed", "discarded"];
 
 /**
- * GRU-FR-CKOB / GRU-FR-WKTL: whether the run's own paragraph says what it is
- * doing. A run at rest on the total time limit has one too.
+ * GRU-FR-CKOB / GRU-FR-WKTL / GRU-FR-WVDV: whether the run's own paragraph
+ * says what it is doing. A run at rest on the total time limit or on checks
+ * that did not pass has one too.
  */
 function saysItself(run: GraduationRun): boolean {
-  return SAYS_ITSELF.includes(run.state) || totalTimeLimitRestOf(run) !== null;
+  return (
+    SAYS_ITSELF.includes(run.state) ||
+    totalTimeLimitRestOf(run) !== null ||
+    checksNotPassedRestOf(run) !== null
+  );
 }
 
 export interface RunRegionProps {
@@ -288,6 +295,11 @@ export function RunRegion({
           the limit, so the author can raise it before Continue. It spent no
           pass budget, so it says none. */}
       <TotalTimeLimitRest run={run} onOpenSettings={onOpenSettings} />
+
+      {/* GRU-FR-WVDV: a run whose required checks did not pass says why, names
+          each check that did not pass, and says that nothing went to review
+          and nothing was committed. */}
+      <ChecksNotPassedRest run={run} />
 
       {/* GRU-FR-TFEZ: a push the remote did not take, said once. */}
       {pushRefusalStatement(run) && (

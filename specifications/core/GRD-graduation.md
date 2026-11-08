@@ -51,11 +51,13 @@ The backend module that turns a finished draft prompt into committed work. A dra
 31. **GRD-FR-EFAU** `"graduation queue changed"` carrying `{ project_key, stream_id, worktree_path }` follows every durable change to a queue. `stream_id` is empty for the queue of an ordinary worktree, and `worktree_path` is empty for a stream run. `"graduation run changed"` carrying `{ run_id, state }` follows every state change. Nothing is emitted before the change is durable.
 32. **GRD-FR-TWMA** A project change and an application shutdown stop every running turn. The interruption each records carries `project_changed` or `application_shutdown` after the stopped turn returns. **A change of active worktree stops nothing**: a run works in its target's working copy. A dispatched direct run also prevents the change (`WTC-worktree-context.md` WTC-FR-FBJQ).
 33. **GRD-FR-KVNZ** Every behaviour of this module is exercisable on a machine with no container runtime, no agentic CLI, no provider credential and no network. The state machine, the queues, the ordering rules, the refusals and the record are reached through the dispatch seam of `GXD-graduation-execution.md` alone.
-34. **GRD-FR-WKMD** A run rests `awaiting_author` on an escalation, on a review that did not settle, on a spent pass budget (per `../ai/GRL-graduation-loop.md` GRL-FR-XBUE), on a spent total time (GRD-FR-SKLO), or on a blocker that repeated (per `../ai/GRL-graduation-loop.md` GRL-FR-QZFB). A run resting on a blocker, a spent budget or a spent total time keeps its reason and holds no escalation. Every run in `awaiting_author` keeps its queue and its project slot (GRD-FR-BNTC).
+34. **GRD-FR-WKMD** A run rests `awaiting_author` on an escalation, a review that did not settle, a spent pass budget (per `../ai/GRL-graduation-loop.md` GRL-FR-XBUE), a spent total time (GRD-FR-SKLO), checks that did not pass (GRD-FR-PYJN), or a repeated blocker (per `../ai/GRL-graduation-loop.md` GRL-FR-QZFB). Each rest but an escalation keeps its reason and holds no escalation. Every such run keeps its queue and project slot (GRD-FR-BNTC).
 35. **GRD-FR-KQLD** `answer_graduation_escalation` appends the accepted answers to the run's decision ledger (per `GXD-graduation-execution.md` GXD-FR-NWSL). The ledger is part of the run record that every run read returns, survives a relaunch, an interruption, a resume and a Continue, and ends when the run completes or is discarded.
 
 34. **GRD-FR-UTTX** A run records its **used total time**: the sum, in milliseconds, of the execution time of every turn it dispatched. Time the run spends `queued`, `awaiting_author`, `blocked` or `interrupted` is not added. A turn stopped at its effective timeout adds at least that timeout. The run record stores the value, so it survives an application restart.
 34. **GRD-FR-SKLO** A run at rest on the total time limit records a **rest**: the reason `total_time_limit`, when it rested, the limit, and the used total time. `continue_graduation_run` against it clears the rest, resets the used total time alone, and resumes from the checkpoint (per `../ai/GRL-graduation-loop.md` GRL-FR-SPRE). A run with a rest is not a run whose pass budget is spent.
+34. **GRD-FR-PYJN** A run whose check gate is spent (per `../ai/GRL-graduation-loop.md` GRL-FR-FGWT) records a **rest**: the reason `checks_not_passed`, when it rested, the cause, and each check that did not pass, with its name, whether it finished, and its exit status. Nothing goes to review and nothing is committed. The run keeps its queue, its project slot and its checkpoint.
+34. **GRD-FR-OERK** `continue_graduation_run` against a run at rest on `checks_not_passed` clears the rest and the checkpoint's `check_gate`. It dispatches a fresh turn of the refused part in the same pass, which carries the check correction of the rest's cause and starts a new gate episode (per `../ai/GRL-graduation-loop.md` GRL-FR-LAVF). It resets neither the used total time nor the pass budget.
 34. **GRD-FR-ZJHD** `continue_graduation_run` against a run in `awaiting_author` that holds an escalation is refused with `run_state_not_permitted` and changes nothing. Such a run moves on only by an answer (per `GXD-graduation-execution.md` GXD-FR-BJYT) or by `discard_graduation_run`. Against a run in another state that has not ended, Continue drops an escalation the record still holds and continues as for that state.
    - *Why:* a Continue without the answers runs the turn that asked again, which asks the same question again, but questions that no surface offers must not block a run.
 
@@ -203,11 +205,15 @@ GraduationInterruptionReason =   // GRD-FR-PUXO
   | "unreadable_answer" | "launch_failed"
   | "retryable_failure"          // the cause was not recorded
 
-GraduationRest {                 // GRD-FR-SKLO
-  reason,                        // "total_time_limit"
+GraduationRest {                 // GRD-FR-SKLO, GRD-FR-PYJN
+  reason,                        // "total_time_limit" | "checks_not_passed"
   at,                            // RFC 3339 UTC
-  limit_ms,                      // the total time limit the run rested under
-  used_ms                        // the used total time when it rested
+  limit_ms?,                     // total_time_limit: the total time limit the run rested under
+  used_ms?,                      // total_time_limit: the used total time when it rested
+  cause?,                        // checks_not_passed: "record_missing" | "checks_unfinished"
+                                 //   | "checks_red" | "work_failed"
+  checks?                        // checks_not_passed: [{ name, finished, exit_status }], each check
+                                 //   that did not pass; empty where the answer held no record
 }
 
 GraduationInterruption {
@@ -234,8 +240,9 @@ GraduationRun {
   archived, archived_at,
   work_turns, review_turns,      // spent against the bounds of GRL
   turn_time_used_ms,             // GRD-FR-UTTX; the used total time, 0 for a new run
-  rest?,                         // GraduationRest; GRD-FR-SKLO
-  checkpoint,                    // GraduationCheckpoint; holds the optional answer_correction { part, reason, resume } of GRL-FR-HWLD
+  rest?,                         // GraduationRest; GRD-FR-SKLO, GRD-FR-PYJN
+  checkpoint,                    // GraduationCheckpoint; holds the optional answer_correction { part, reason, resume } of GRL-FR-HWLD,
+                                 //   the optional check_gate { cause, step, resume } of GRL-FR-BVTS,
                                  //   and the run's decisions (GraduationDecision[], GXD-FR-NWSL) and
                                  //   review_history (ReviewHistoryEntry[], GXD-FR-WRVH), both append-only
   observability,                 // per GOB-graduation-observability.md

@@ -47,10 +47,28 @@ impl TurnScript {
         Self::of(Answer::Success)
     }
 
-    /// GRL-FR-DNKA: a work turn that reports what it could not do. The turn
-    /// completed, so the run still goes to review.
+    /// GRL-FR-TYRV: a work turn that reports what it could not do. The check
+    /// gate refuses it as `work_failed`, so it goes to no review.
     pub(crate) fn reports_failure(message: &str) -> Self {
         Self::of(Answer::ReportedFailure(message.to_string()))
+    }
+
+    /// GRL-FR-CPXI: a work turn that reports success with the check record the
+    /// scenario composed (see [`check_passed`] and its siblings).
+    pub(crate) fn reports_checks(records: Vec<serde_json::Value>) -> Self {
+        Self::of(Answer::RawResult(serde_json::json!({ "checks": records })))
+    }
+
+    /// GRL-FR-CPXI: a work turn that reports success with a `result` of any
+    /// shape, valid or not.
+    pub(crate) fn reports_result(result: serde_json::Value) -> Self {
+        Self::of(Answer::RawResult(result))
+    }
+
+    /// GRD-FR-UTTX: the turn completes after `ms` of execution time.
+    pub(crate) fn taking(mut self, ms: u64) -> Self {
+        self.inner = self.inner.taking(ms);
+        self
     }
 
     /// A review turn that lets the work through.
@@ -302,4 +320,35 @@ pub(crate) fn finding(severity: ReviewSeverity, description: &str) -> ReviewFind
         affected_files: vec!["src/panel.ts".to_string()],
         correction: "Write the empty state.".to_string(),
     }
+}
+
+/// GRL-FR-IJTT: a check record that finished with exit status 0.
+pub(crate) fn check_passed(name: &str) -> serde_json::Value {
+    check_record(name, true, serde_json::json!(0))
+}
+
+/// GRL-FR-IJTT: a check record that finished with `status`.
+pub(crate) fn check_failed(name: &str, status: i64) -> serde_json::Value {
+    check_record(name, true, serde_json::json!(status))
+}
+
+/// GRL-FR-IJTT: a check record that did not finish.
+pub(crate) fn check_unfinished(name: &str) -> serde_json::Value {
+    check_record(name, false, serde_json::Value::Null)
+}
+
+/// GRL-FR-HLNB: a red check record that cites the decision at `position`.
+pub(crate) fn check_waived(name: &str, status: i64, position: u64) -> serde_json::Value {
+    let mut record = check_failed(name, status);
+    record["waived_by"] = serde_json::json!(position);
+    record
+}
+
+fn check_record(name: &str, finished: bool, exit_status: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "name": name,
+        "command": format!("run the {name}"),
+        "finished": finished,
+        "exit_status": exit_status,
+    })
 }

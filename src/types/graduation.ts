@@ -164,20 +164,54 @@ export interface GraduationBlocker {
 }
 
 /**
- * GRD-FR-SKLO: why a run in `awaiting_author` is at rest without an escalation
- * or a blocker. A run with a rest is not a run whose pass budget is spent.
+ * GRD-FR-SKLO / GRD-FR-PYJN: why a run in `awaiting_author` is at rest without
+ * an escalation or a blocker. A run with a rest is not a run whose pass budget
+ * is spent.
  */
-export type GraduationRestReason = "total_time_limit";
+export type GraduationRestReason = "total_time_limit" | "checks_not_passed";
 
-/** GRD-FR-SKLO: the record of a rest on the total time limit. */
+/** GRL-FR-CPXI / GRL-FR-TYRV: why the check gate refused a work answer. */
+export type GraduationCheckCause =
+  | "record_missing"
+  | "checks_unfinished"
+  | "checks_red"
+  | "work_failed";
+
+/** GRD-FR-PYJN: one check that did not pass, as the rest names it. */
+export interface GraduationRestCheck {
+  name: string;
+  finished: boolean;
+  /** Null where the check did not end. */
+  exitStatus: number | null;
+}
+
+/** GRD-FR-SKLO / GRD-FR-PYJN: the record of a rest for the author. */
 export interface GraduationRest {
   reason: GraduationRestReason;
   /** When the run came to rest. */
   at: string;
-  /** The total time limit the run rested under, in milliseconds. */
+  /** `total_time_limit`: the total time limit the run rested under, in milliseconds. */
+  limitMs?: number;
+  /** `total_time_limit`: the used total time when the run came to rest, in milliseconds. */
+  usedMs?: number;
+  /** `checks_not_passed`: the cause of the last refusal of the check gate. */
+  cause?: GraduationCheckCause;
+  /** `checks_not_passed`: each check that did not pass; empty where the answer held no record. */
+  checks?: GraduationRestCheck[];
+}
+
+/** GRD-FR-SKLO: a rest on the total time limit, with its two times. */
+export interface TotalTimeLimitRest extends GraduationRest {
+  reason: "total_time_limit";
   limitMs: number;
-  /** The used total time when the run came to rest, in milliseconds. */
   usedMs: number;
+}
+
+/** GRD-FR-PYJN: a rest on checks that did not pass, with its cause and checks. */
+export interface ChecksNotPassedRest extends GraduationRest {
+  reason: "checks_not_passed";
+  cause: GraduationCheckCause;
+  checks: GraduationRestCheck[];
 }
 
 /** A run that ended on a failure. */

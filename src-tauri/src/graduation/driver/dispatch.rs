@@ -36,11 +36,13 @@ pub(super) async fn execute<R: tauri::Runtime>(
             prompts::instruction_for_run(run, part).to_string()
         },
         input: Some(input.to_map()),
-        // GRL-FR-VIAT / GRL-FR-UNKD: the review and the PR summary turn name the
-        // shape their own answer must take.
+        // GRL-FR-VIAT / GRL-FR-UNKD / GRL-FR-IJTT: every turn of the loop
+        // names the shape its own answer must take. The work part is a
+        // `merge_work` turn in a merge run.
         result_contract: match part {
             phases::PART_REVIEW => Some(ResultContract::ReviewVerdict),
             phases::PART_PR_SUMMARY => Some(ResultContract::PullRequestSummary),
+            phases::PART_WORK => Some(ResultContract::WorkResult),
             _ => None,
         },
         resume: resume.or_else(|| resume_for(run, part)),

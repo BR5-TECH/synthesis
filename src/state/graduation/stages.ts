@@ -12,7 +12,12 @@ import { passBoundOf } from "../../types/graduation";
 import { blockerSentence } from "./blockers";
 import { failureStatement, isMergeRun } from "./merge";
 import { isPrSummaryRun, PR_SUMMARY_STAGES } from "./prSummary";
-import { totalTimeLimitHeadline, totalTimeLimitRestOf } from "./rest";
+import {
+  CHECKS_NOT_PASSED_HEADLINE,
+  checksNotPassedRestOf,
+  totalTimeLimitHeadline,
+  totalTimeLimitRestOf,
+} from "./rest";
 import { SLOT_WAIT_HEADLINE } from "./slotWait";
 import type {
   GraduationObservability,
@@ -172,9 +177,10 @@ export function conditionSentence(
     case "reviewing":
       return `${isMergeRun(run) ? "Reviewing" : "Review"} · pass ${passOf(run)} of ${passBoundOf(run)}`;
     case "awaiting_author":
-      // GRU-FR-FZCN / GRU-FR-WKTL: four shapes rest a run for the author — an
-      // escalation it asked, a review that did not settle, a blocker that
-      // repeated, and a spent total time limit.
+      // GRU-FR-FZCN / GRU-FR-WKTL / GRU-FR-WVDV: five shapes rest a run for
+      // the author — an escalation it asked, a review that did not settle, a
+      // blocker that repeated, a spent total time limit, and checks that did
+      // not pass.
       if (run.escalation) return "Waiting for your answer";
       // What stopped it is stated whole in the blocker beneath, so the line
       // says the shape rather than repeating a code in it.
@@ -185,6 +191,9 @@ export function conditionSentence(
         const rest = totalTimeLimitRestOf(run);
         if (rest) return totalTimeLimitHeadline(rest);
       }
+      // GRU-FR-WVDV: a run whose required checks did not pass says so. It
+      // spent no pass budget either.
+      if (checksNotPassedRestOf(run)) return CHECKS_NOT_PASSED_HEADLINE;
       // GRU-FR-FZCN: a review that did not settle before the budget was spent
       // says what it spent, so the author reads a bound rather than a run that
       // stopped for no stated reason. The findings themselves stand in the pass

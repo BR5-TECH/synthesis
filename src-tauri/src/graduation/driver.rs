@@ -34,6 +34,7 @@ use super::{
     ReviewVerdict,
 };
 
+pub mod check_gate;
 pub mod checks_folder;
 pub mod corrections;
 mod dispatch;
@@ -52,6 +53,7 @@ pub mod task_input;
 mod throwaway_checkout;
 pub mod time_budget;
 pub mod turns;
+mod work_turn;
 
 #[cfg(test)]
 pub(crate) use drive::drive_for_test;

@@ -104,12 +104,11 @@ fn an_accepted_answer_gives_the_next_turn_the_whole_total_time() {
     let fx = Fixture::new();
     let mut run = escalated(&fx);
     run.turn_time_used_ms = 17_910_000;
-    run.rest = Some(crate::graduation::GraduationRest {
-        reason: "total_time_limit".to_string(),
-        at: crate::notes::now_rfc3339(),
-        limit_ms: 18_000_000,
-        used_ms: 17_910_000,
-    });
+    run.rest = Some(crate::graduation::GraduationRest::total_time_limit(
+        crate::notes::now_rfc3339(),
+        18_000_000,
+        17_910_000,
+    ));
     // A pass above the window's floor, so a reset budget would show.
     run.checkpoint.pass = 3;
     run.checkpoint.pass_floor = 1;

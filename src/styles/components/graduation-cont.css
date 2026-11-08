@@ -55,6 +55,23 @@
   font-size: var(--fs-ui-xs);
   line-height: 1.5;
 }
+/* GRU-FR-WVDV: the rest of a run whose checks did not pass is one block of
+   paragraphs and a list of the checks, spaced like the outcome list below. */
+.graduation__warning > p {
+  margin: 0;
+}
+.graduation__warning > p + p,
+.graduation__checks + p {
+  margin-top: 4px;
+}
+.graduation__checks {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  min-width: 0;
+}
+/* GRU-FR-WVDV: a check name is project text, and one long token (a path, a
+   lint name) breaks inside the box rather than scrolling the region. */
+.graduation__checks code { overflow-wrap: anywhere; }
 .graduation__outcome ul {
   margin: 4px 0 0;
   padding-left: 16px;

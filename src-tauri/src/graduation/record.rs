@@ -3,7 +3,9 @@
 use super::*;
 
 mod ledger;
+mod rest;
 pub use ledger::*;
+pub use rest::*;
 
 // ---------------------------------------------------------------------------
 // The state machine (GRD-FR-QJHM)
@@ -334,22 +336,6 @@ impl GraduationInterruptionReason {
     }
 }
 
-/// GRD-FR-SKLO: the reason a run rests on its total time limit.
-pub const REST_TOTAL_TIME_LIMIT: &str = "total_time_limit";
-
-/// GRD-FR-SKLO: a run at rest on its total time limit, with the limit it
-/// rested under and the time it used.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraduationRest {
-    /// `total_time_limit`.
-    pub reason: String,
-    /// RFC 3339 UTC.
-    pub at: String,
-    pub limit_ms: u64,
-    pub used_ms: u64,
-}
-
 /// GRD-FR-XVUD: why an interrupted run stopped and what it waits for.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -505,6 +491,14 @@ pub struct GraduationCheckpoint {
     /// correction turn is dispatched, and cleared when that turn has ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer_correction: Option<GraduationAnswerCorrection>,
+    /// GRL-FR-BVTS / GXD-FR-UREF: the open check gate, saved before the step it
+    /// names is dispatched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_gate: Option<GraduationCheckGate>,
+    /// GRD-FR-OERK: the cause whose check correction the turn after Continue
+    /// from `checks_not_passed` carries. Cleared once that turn has answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continue_check_correction: Option<GraduationCheckCause>,
 }
 
 /// GRL-FR-QKDC / GRL-FR-HWLD: one refused answer that is asked again.

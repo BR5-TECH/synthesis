@@ -143,6 +143,11 @@ pub struct GraduationTaskInput {
     /// send instead. Present only on a turn that is being asked again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub correction: Option<String>,
+    /// GRL-FR-CHDT: the `refusals.md` text of the check gate's cause, on a
+    /// `work` or `merge_work` turn the gate asked for. Unlike `correction`, it
+    /// lets the turn change files. Never beside `correction` (GRL-FR-IPNO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_correction: Option<String>,
     /// GRL-FR-TXEB: the merge a turn of a merge run reconciles or reviews.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge: Option<MergeTaskContext>,
@@ -211,6 +216,19 @@ impl GraduationTaskInput {
             matches!(self.part.as_str(), phases::PART_REVIEW | phases::PART_MERGE_REVIEW);
         if self.checks.is_some() && !review_part {
             return Err(format!("the check report does not match the part {:?}", self.part));
+        }
+        // GRL-FR-IPNO: `check_correction` travels with a work part alone, and
+        // never beside `correction`.
+        if self.check_correction.is_some() {
+            if !matches!(self.part.as_str(), phases::PART_WORK | phases::PART_MERGE_WORK) {
+                return Err(format!(
+                    "the check correction does not match the part {:?}",
+                    self.part
+                ));
+            }
+            if self.correction.is_some() {
+                return Err("a turn carries a check correction beside a correction".to_string());
+            }
         }
         if !matches!(
             self.purpose.as_str(),
@@ -330,6 +348,8 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
         decisions: run.checkpoint.decisions.clone(),
         // Set by the caller alone, and only where a turn is asked again.
         correction: None,
+        // GRL-FR-CHDT: set by the check gate alone.
+        check_correction: None,
         // GRL-FR-FESZ: set by the review alone, once its checkout stands.
         checks: None,
         // GRL-FR-DNKA: carried to **the review that judges what it wrote**, and

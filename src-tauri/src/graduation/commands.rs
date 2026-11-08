@@ -212,56 +212,16 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
         && run.blocker.is_none()
         && run.rest.is_none()
         && run.pass_budget_spent(window);
-    // GRL-FR-SPRE: Continue from `total_time_limit` resets the used total time
-    // alone. The pass budget and the checkpoint are carried through untouched,
-    // so no completed pass is made again. A rest is cleared by every Continue,
-    // so no rest outlives the stop it was recorded for.
-    if let Some(rest) = run.rest.take() {
-        if run.state == GraduationRunState::AwaitingAuthor {
-            crate::logging::log_info(
-                &app,
-                &crate::logging::BUFFER,
-                &[crate::logging::Domain::Ai, crate::logging::Domain::Backend],
-                "graduation reset a spent total time",
-                crate::log_fields! {
-                    "run_id" => run.id.clone(),
-                    "limit_ms" => rest.limit_ms as i64,
-                    "used_ms" => run.turn_time_used_ms as i64,
-                },
-            );
-            run.turn_time_used_ms = 0;
-        }
-    }
+    // GRL-FR-SPRE / GRD-FR-OERK: a rest is cleared by every Continue, and
+    // what that Continue resets depends on the rest's reason.
+    continue_rest::clear_rest(&app, &mut run);
     run.blocker = None;
     // GRL-FR-TVXI: the author's Continue resets the refusal count, so a run
     // blocked on two unreadable verdicts gets the whole bound again.
     run.checkpoint.verdict_refusals = 0;
-    // GRD-FR-CYIB / GRL-FR-XBUE: Continue against a run whose pass budget is
-    // spent resets **that budget alone**. The window's floor moves to the next
-    // pass and the run stands at that pass, so the passes it already made are
-    // not made again and the findings it holds reach the next work turn. Every
-    // other checkpoint value — the change set, the instruction, the phase to
-    // resume at — is carried through untouched.
+    // GRD-FR-CYIB / GRL-FR-XBUE: a spent pass budget is reset alone.
     if budget_spent {
-        let next = run.pass().saturating_add(1);
-        run.checkpoint.pass = next;
-        run.checkpoint.pass_floor = next;
-        // Written now rather than left at nothing, so a run that waits in its
-        // stream's queue between Continue and its next dispatch still reads
-        // back as a run with a bound. The next dispatch recomputes it from the
-        // settings then held (GRL-FR-KWNP).
-        run.checkpoint.pass_limit = settings.pass_limit_from(&run, next);
-        crate::logging::log_info(
-            &app,
-            &crate::logging::BUFFER,
-            &[crate::logging::Domain::Ai, crate::logging::Domain::Backend],
-            "graduation reset a spent pass budget",
-            crate::log_fields! {
-                "run_id" => run.id.clone(),
-                "pass" => next as i64,
-                "pass_budget" => if run.is_merge() { MERGE_PASS_BUDGET as i64 } else { settings.pass_budget as i64 },
-            },
-        );
+        continue_rest::reset_spent_budget(&app, &mut run, &settings);
     }
     transitions::transition(&mut_app(&app), &mut run, GraduationRunState::Queued)?;
     dispatch_pending(&app);
@@ -461,6 +421,8 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
     run.checkpoint.pending_escalation_answers = answers;
     run.checkpoint.resume = escalation.resume.clone();
     run.escalation = None;
+    // GRL-FR-LNIZ: the answers close an open check gate.
+    continue_rest::close_gate_for_answers(&app, &mut run);
     // GRL-FR-NVGQ: the turn that takes the answers gets the whole total time
     // limit. The pass budget stays as it is.
     if run.turn_time_used_ms > 0 || run.rest.is_some() {

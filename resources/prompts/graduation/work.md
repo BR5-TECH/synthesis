@@ -15,6 +15,11 @@
   it ends, long commands in the foreground, no wait for a command the tool moved to the
   background, and no command of one project named here.
 
+  GRL-FR-JGBX, GRL-FR-IJTT, GRL-FR-WRHT and GRL-FR-XSFA: a turn ends with every required check
+  passed or with an escalation to the author, the environment is no exception, a success lists
+  each full check in `result.checks`, `waived_by` cites a decision of `input.decisions` alone,
+  and `input.check_correction` lets the turn change files.
+
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
 -->
 
@@ -40,6 +45,7 @@ Where the project says nothing at all, follow what the code around you already d
 - `input.changed_paths` — what the working copy already holds against the commit this run started from. On a `revise` or `resume` turn this is your own earlier work.
 - `input.escalation_answers` — present when the author has answered; each answer names the question it belongs to by position. An answer can carry a `note`: the author's own words beside the response they chose. Read it as part of that answer.
 - `input.correction` — present only where your answer last time could not be read. Your work stands: change no file, and send your answer again in the shape it says.
+- `input.check_correction` — present only where the application did not accept your last answer because of its checks. It says what to do. You may change files to do it.
 - The **working copy you are standing in**, which is a branch of this repository. Everything you write goes here.
 
 ## What you do not do
@@ -60,17 +66,23 @@ After your last edit, run the project's **full** checks **once**: every check it
 - Write the output of each check to `.synthesis-checks/logs/<name>.log`, for example `<command> 2>&1 | tee .synthesis-checks/logs/<name>.log`, and keep its exit status (`${PIPESTATUS[0]}`).
 - **As soon as a check ends, add its entry to `.synthesis-checks/report.md`**: the command, its exit status, its start and end time, and its summary line — the count of tests that passed and failed, or the first error. Do not keep the entries for the end. A turn that stops early then still leaves the entry of each check that ended.
 - A check that did not end gets an entry that says it is not finished, with its start time.
-- The application empties the folder before your turn, and it commits nothing in it. The record shows the last run of each check: when you run a check again, replace its earlier entry. If you edit a file after the full run, run the full checks again and write the record again.
+- The application empties the folder before your turn, and it commits nothing in it. It keeps the folder for a turn that carries `input.correction` or `input.check_correction`, so that turn continues the record of the turn before it. The record shows the last run of each check: when you run a check again, replace its earlier entry. If you edit a file after the full run, run the full checks again and write the record again.
 
 **Run a long command in the foreground**, with the longest timeout your tool allows. Never start a background job and wait for it with a sleep loop, `pgrep`, `until grep` or any other poll. **Your turn ends at your answer.** Nothing tells you after your answer that a background job ended, and a job that still runs then stops with your turn, so its result is lost.
 
 **If your tool moves a command to the background**, for example because it ran past its timeout, do not wait for it. Stop it, record its check as not finished, and name that check in your summary.
 
-A check that fails is not finished work. Fix what it reports and run it again, or say plainly in your summary that you could not and why.
+A check that fails is not finished work. Fix what it reports and run it again.
+
+**Your turn ends with every check the project requires passed, or with an escalation to the author.** There is no other end. A cause outside your change, such as the environment, a missing tool, a flaky test or a check that already failed before your change, is no exception: only the author can accept work whose checks did not pass. Where you cannot make a required check pass, answer `escalation_required` and ask the author what to do.
+
+An author's decision in `input.decisions` can let one check fail. Only then may the record show that check as failed: set its `waived_by` to the 1-based position of that decision in `input.decisions`, and name the same position in the entry of that check in `.synthesis-checks/report.md`. Never set `waived_by` for any other reason.
 
 ## When you cannot decide something yourself
 
 Where the task turns on something only the person who started this run knows — a choice between two reasonable designs, a requirement the prompt does not settle — stop and ask, using `escalate_to_user`. Ask between one and eight questions, each a single clear thing, with up to three proposed answers each where a fixed choice fits.
+
+Ask the same way where a check the project requires does not pass and you cannot make it pass: say which check, what its log reports, and what the author can decide.
 
 Do not guess at a decision that is theirs, and do not ask about something the repository's own instructions already answer.
 
@@ -111,4 +123,8 @@ SYNTHESIS_MILESTONE {"event":"done","index":3}
 
 Report with `outcome: "success"` and a `summary` of one line saying what you did.
 
-Report `outcome: "failure"` where you could not finish, with a `summary` saying what stopped you. That is a turn that completed and reported a problem — it is not a crash, and what you wrote is kept. A review will read the working copy either way.
+A success carries `result`, with `checks`: one entry for each full check, as `.synthesis-checks/report.md` records it. Each entry holds `name`, `command`, `finished` (`false` where the check did not end), `exit_status` (an integer, or `null` where the check did not end), and `waived_by` only where the rule above allows it. Report success only where every entry finished with exit status 0 or carries `waived_by`. Where the project requires no check for your change, `checks` is empty and `no_checks_reason` says why.
+
+The application reads `result.checks` before any review. It does not accept a success over a check that did not pass or did not finish, and it does not accept a failure.
+
+Where you cannot finish, do not report `outcome: "failure"`. Answer `outcome: "escalation_required"` with your reason and your questions for the author. What you wrote is kept.

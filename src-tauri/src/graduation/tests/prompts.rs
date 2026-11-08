@@ -82,6 +82,10 @@ fn merge_input_fields(part: &str) -> Vec<String> {
     });
     let mut input = driver::compose_input(&run, part, driver::PURPOSE_GENERATE);
     input.correction = Some("send this instead".into());
+    // GRL-FR-CHDT: the gate sets `check_correction` on a work part alone.
+    if part == driver::PART_WORK {
+        input.check_correction = Some("fix the checks".into());
+    }
     // GRL-FR-FESZ: the review sets `checks` once its checkout stands, as it
     // sets `correction`, so the review part is given it here.
     if part == driver::PART_REVIEW {
@@ -155,6 +159,10 @@ fn graduation_input_fields(part: &str) -> Vec<String> {
     });
     let mut input = driver::compose_input(&run, part, driver::PURPOSE_GENERATE);
     input.correction = Some("send this instead".into());
+    // GRL-FR-CHDT: the gate sets `check_correction` on a work part alone.
+    if part == driver::PART_WORK {
+        input.check_correction = Some("fix the checks".into());
+    }
     // GRL-FR-FESZ: the review sets `checks` once its checkout stands, as it
     // sets `correction`, so the review part is given it here.
     if part == driver::PART_REVIEW {

@@ -17,7 +17,7 @@ import { CommentAttachmentList } from "../CommentAttachments";
 import { CommentMarkdown } from "../CommentMarkdown";
 import { formatRelative } from "../ProjectPicker";
 import { activityStatus } from "../../state/agentActivity";
-import { ToolDisclosure } from "./ToolActivity";
+import { SavedActivityRow, ToolDisclosure } from "./ToolActivity";
 import { splitAroundBubble } from "./LiveBubble";
 import type { AgentRoster } from "../agentTags";
 import {
@@ -253,6 +253,14 @@ export function DiscussionMessages({
                 attachments={comment.attachments}
               />
             </div>
+          )}
+          {/* CTA-FR-RFQB / CVP-FR-NMVH: the saved activity row follows the
+              comment and its Advisors list, on the side of the comment. */}
+          {index >= visibleFrom && (
+            <SavedActivityRow
+              comment={comment}
+              own={embedded && isOwnComment(comment.author, identity)}
+            />
           )}
         </Fragment>
       ))}

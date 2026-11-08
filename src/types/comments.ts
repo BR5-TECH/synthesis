@@ -700,7 +700,24 @@ export interface Comment {
   optionDescriptions?: string[];
   /** CMS-FR-UYVK: the transcript of a comment that posted as a translation. */
   spokenOriginal?: string | null;
+  /**
+   * CMS-FR-HRDN: the tool list of the turn that delivered an agent's answer.
+   * Empty or absent on every other comment, and on one written before the
+   * field existed. It is no part of the comment's text.
+   */
+  toolCalls?: SavedToolCall[];
   createdAt: string;
+}
+
+/** CMS-FR-HRDN: one call in the saved tool list of a delivered answer. */
+export interface SavedToolCall {
+  tool: string;
+  /** Plain text, at most 200 characters. */
+  keyInput: string | null;
+  /** A saved call is never running. */
+  state: "done" | "failed";
+  /** The advisor that made the call; absent for the answering agent's own call. */
+  advisor?: string | null;
 }
 
 /**

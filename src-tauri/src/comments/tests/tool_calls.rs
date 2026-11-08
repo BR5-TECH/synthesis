@@ -35,6 +35,8 @@ fn a_tool_list_is_written_with_the_comment_and_folds_back() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let t = open(root, "specs/a.md", anchor(0, 3, "abc"), "@arch look", "2026-01-01T00:00:00Z");
+    let lines_before =
+        std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap().lines().count();
     let mut advised = call("search_drafts", Some("query"), SavedToolState::Failed);
     advised.advisor = Some("sec".into());
     let updated = answer(
@@ -50,7 +52,7 @@ fn a_tool_list_is_written_with_the_comment_and_folds_back() {
     assert_eq!(saved[1], advised);
 
     let raw = std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap();
-    assert_eq!(raw.lines().count(), 2, "the comment and its list are one line");
+    assert_eq!(raw.lines().count(), lines_before + 1, "the comment and its list are one line");
     let line: serde_json::Value = serde_json::from_str(raw.lines().last().unwrap()).unwrap();
     assert_eq!(line["toolCalls"][1]["advisor"], "sec");
     assert_eq!(line["toolCalls"][0]["state"], "done");
@@ -79,8 +81,12 @@ fn a_saved_key_input_is_cut_at_two_hundred_characters() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let t = open(root, "specs/a.md", anchor(0, 3, "abc"), "@arch look", "2026-01-01T00:00:00Z");
     let long = "é".repeat(300);
-    let updated =
-        answer(root, &t.id, "c-answer", vec![call("web_search", Some(&long), SavedToolState::Done)]);
+    let updated = answer(
+        root,
+        &t.id,
+        "c-answer",
+        vec![call("web_search", Some(&long), SavedToolState::Done)],
+    );
     let input = updated.comments[1].tool_calls[0].key_input.clone().unwrap();
     assert_eq!(input.chars().count(), SAVED_KEY_INPUT_LIMIT);
 }

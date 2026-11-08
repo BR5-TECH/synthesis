@@ -12,10 +12,11 @@ import { useId, useState, type ReactNode } from "react";
 import { Icon } from "../icons";
 import {
   activityRowLabel,
+  savedActivityRowOf,
   toolCallStateLabel,
   type ActivityRow,
 } from "../../state/turnActivity";
-import type { TurnToolCall } from "../../types";
+import type { Comment, TurnToolCall } from "../../types";
 
 export interface ToolCallListProps {
   calls: readonly TurnToolCall[];
@@ -129,5 +130,38 @@ export function ActivityRows({ rows, variant = "card" }: ActivityRowsProps) {
         </div>
       ))}
     </>
+  );
+}
+
+export interface SavedActivityRowProps {
+  comment: Comment;
+  /** `stream` for the draft discussion column, which draws its own rows. */
+  variant?: "card" | "stream";
+  /** CVP-FR-NMVH: the side of the comment the row follows. */
+  own?: boolean;
+}
+
+/**
+ * CTA-FR-RFQB / CTA-FR-KDTM: the saved activity row of a comment, directly
+ * after it. Collapsed when it first renders. It is no comment: no author line,
+ * no timestamp, no Quote action, no cancel control, and no Retry.
+ */
+export function SavedActivityRow({ comment, variant = "card", own }: SavedActivityRowProps) {
+  const row = savedActivityRowOf(comment);
+  if (!row) return null;
+  const rowClass = variant === "stream" ? "dds-activity" : "comment comment--activity";
+  return (
+    <div
+      className={rowClass}
+      data-testid="saved-activity-row"
+      data-comment-id={comment.id}
+      data-own={variant === "card" ? own : undefined}
+    >
+      <ToolDisclosure
+        label={activityRowLabel(row)}
+        calls={row.calls}
+        testId="saved-activity-row-toggle"
+      />
+    </div>
   );
 }

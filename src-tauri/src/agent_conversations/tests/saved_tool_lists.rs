@@ -60,10 +60,7 @@ fn a_delivered_answer_carries_the_tool_list_of_its_turn() {
     assert_eq!(answer.tool_calls[0].tool, "read_file");
     assert_eq!(answer.tool_calls[0].state, comments::SavedToolState::Done);
     assert_eq!(answer.tool_calls[0].advisor, None);
-    assert!(
-        folded.comments[0].tool_calls.is_empty(),
-        "the author's comment carries no tool list",
-    );
+    assert!(folded.comments[0].tool_calls.is_empty(), "the author's comment carries no tool list",);
 }
 
 // AGC-FR-WNQE: a turn with no tool call writes no list.

@@ -86,7 +86,7 @@ function running(id: string, nickname: string, over: Partial<AgentTurn> = {}): A
   };
 }
 
-function ended(t: AgentTurn, state: AgentTurn["state"] = "delivered"): AgentTurn {
+function ended(t: AgentTurn, state: AgentTurn["state"] = "awaiting_reply"): AgentTurn {
   return { ...t, state, endedAt: "2026-02-01T00:01:00Z", activeToolCalls: [] };
 }
 

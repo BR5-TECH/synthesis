@@ -12,6 +12,7 @@
  * paragraph that follows another does not repeat a name the reader just read.
  */
 import { SynthesisLabel } from "../../discussion/GroupMarks";
+import { SavedActivityRow } from "../../discussion/ToolActivity";
 import { useState } from "react";
 
 import { CommentMarkdown } from "../../CommentMarkdown";
@@ -195,6 +196,8 @@ export function MessageBlock({
                 a.kind !== "newDraftSubject",
             )}
           />
+          {/* CTA-FR-RFQB: the saved activity row follows its comment. */}
+          <SavedActivityRow comment={comment} variant="stream" />
         </div>
       ))}
     </div>

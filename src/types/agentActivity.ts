@@ -40,6 +40,7 @@ export type AgentActivityKind =
   | "started"
   | "reasoning"
   | "message"
+  | "milestone"
   | "tool_call"
   | "tool_result"
   | "command"

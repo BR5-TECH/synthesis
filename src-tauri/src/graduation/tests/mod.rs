@@ -51,6 +51,7 @@ mod merge_passes;
 mod merge_prompts;
 mod merge_records;
 mod merge_run;
+mod milestone_prompts;
 mod pr_summary;
 mod pr_summary_turn;
 mod prompts;

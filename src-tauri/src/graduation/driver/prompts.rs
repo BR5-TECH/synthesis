@@ -76,6 +76,28 @@ pub fn instruction_for_run(run: &crate::graduation::GraduationRun, part: &str) -
     instruction_for(part)
 }
 
+/// The heading of the milestone block of GRL-FR-KWPT.
+const MILESTONES_HEADING: &str = "## Milestones";
+
+/// GRL-FR-LCSB: an instruction without its milestone block, which is what a
+/// correction turn carries. The block is the section from its heading to the
+/// next `## ` heading, or to the end of the text.
+pub fn without_milestones(instruction: &str) -> String {
+    let Some(start) = instruction.find(MILESTONES_HEADING) else {
+        return instruction.to_string();
+    };
+    let rest = &instruction[start + MILESTONES_HEADING.len()..];
+    let end = rest.find("\n## ").map(|at| start + MILESTONES_HEADING.len() + at + 1);
+    let mut kept = instruction[..start].to_string();
+    if let Some(end) = end {
+        kept.push_str(&instruction[end..]);
+    } else {
+        kept = kept.trim_end().to_string();
+        kept.push('\n');
+    }
+    kept
+}
+
 /// The `## key` section of a document that holds several.
 pub fn prompt_section(text: &str, key: &str) -> Option<String> {
     let head = format!("## {key}");

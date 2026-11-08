@@ -53,6 +53,7 @@ pub mod sandbox;
 // item they carry is named through this module, exactly as before.
 mod docker_in_docker;
 mod launch;
+mod milestone;
 mod observer;
 mod repository;
 mod sandbox_launch;
@@ -163,6 +164,7 @@ pub fn is_safe_kind(kind: &str) -> bool {
         kind,
         "started"
             | "message"
+            | "milestone"
             | "tool_call"
             | "tool_result"
             | "command"
@@ -249,6 +251,12 @@ pub enum TurnKind {
 }
 
 impl TurnKind {
+    /// EAC-FR-HRTK: whether the agent text of this kind of turn is scanned for
+    /// milestone markers.
+    pub fn announces_milestones(self) -> bool {
+        matches!(self, Self::Work | Self::Review | Self::MergeWork | Self::MergeReview)
+    }
+
     /// The identifier `../core/AIC-agentic-integrations.md` holds an effort
     /// against, and the one a log record names.
     pub fn as_str(self) -> &'static str {

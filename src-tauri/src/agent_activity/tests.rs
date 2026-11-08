@@ -594,3 +594,18 @@ fn a_sink_whose_run_was_discarded_records_and_writes_nothing_further() {
     assert_eq!(written.len(), 1);
     assert_eq!(written[0]["summary"], "before");
 }
+
+/// AGV-FR-MKLB: a `milestone` record is kept and served as any other record, with its own
+/// kind and the marker as its summary.
+#[test]
+fn a_milestone_record_is_kept_with_its_own_kind() {
+    let store = ActivityStore::new();
+    let marker = r#"{"event":"start","index":1}"#;
+    store.append("run", event("message", "one")).expect("recorded");
+    store.append("run", event("milestone", marker)).expect("recorded");
+
+    let page = store.read("run", None, None);
+    assert_eq!(page.records.len(), 2);
+    assert_eq!(page.records[1].kind, "milestone");
+    assert_eq!(page.records[1].summary, marker);
+}

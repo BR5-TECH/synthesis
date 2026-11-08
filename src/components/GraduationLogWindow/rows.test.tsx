@@ -67,6 +67,20 @@ describe("a row of the graduation log window", () => {
     expect(row.querySelector(".runs-line__lvl")).toHaveAttribute("data-level", level);
   });
 
+  it("GLW-FR-KHGP, RUN-FR-YQAE: a milestone row has its own label and shows its summary as written", async () => {
+    const marker = '{"event":"plan","milestones":["Read","Write"]}';
+    backend.answer = () =>
+      makeLogPage({
+        status: "available",
+        entries: [makeActivityEntry(1, marker, { kind: "milestone", at: AT })],
+      });
+    draw();
+    const row = await screen.findByTestId("glw-row");
+    expect(row.querySelector(".runs-line__lvl")).toHaveTextContent("milestone");
+    expect(row.querySelector(".runs-line__lvl")).toHaveAttribute("data-level", "step");
+    expect(row.querySelector(".runs-line__msg")).toHaveTextContent(marker);
+  });
+
   it("GLW-FR-JOIG: a row has no expansion and no control, and activating it reveals nothing", async () => {
     backend.answer = () =>
       makeLogPage({

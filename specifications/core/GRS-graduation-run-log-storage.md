@@ -148,7 +148,7 @@ GraduationLogFailure {
 ### The read
 
 ```
-read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query) -> GraduationLogPage
+read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query, kinds) -> GraduationLogPage
 
 GraduationLogCursor {
   run_id,
@@ -209,7 +209,7 @@ Two run-scoped sinks, constructed against one run identifier and the scope its r
 
 ### Tauri commands
 
-- `"read graduation logs (run id, phase id, pass, stream, cursor, limit, query)"` → `read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query)` → one `GraduationLogPage`. `pass` is the `GraduationLogPassScope` above. Read-only, and it writes nothing to either file.
+- `"read graduation logs (run id, phase id, pass, stream, cursor, limit, query, kinds)"` → `read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query, kinds)` → one `GraduationLogPage`. `pass` is the `GraduationLogPassScope` above. `kinds` is a list of activity kinds or null (GRS-FR-RNKT). Read-only, and it writes nothing to either file.
 
 ### Events (Tauri event bus)
 
@@ -224,7 +224,7 @@ Two run-scoped sinks, constructed against one run identifier and the scope its r
 
 ### Typed errors
 
-`read_graduation_logs` returns `no_project_open`, `run_not_found`, `unknown_phase` naming the value it was given, `unknown_stream` naming the value it was given, `unknown_scope` naming a pass scope kind it does not hold, and `cursor_not_for_this_scope` where a cursor names another run or another stream. It returns no error for a scope that holds no record and none for a query that matches none: each is a status of the page.
+`read_graduation_logs` returns `no_project_open`, `run_not_found`, `unknown_phase` naming the value it was given, `unknown_stream` naming the value it was given, `unknown_scope` naming a pass scope kind it does not hold, `kinds_not_for_stream` where a read of the structured stream names `kinds`, and `cursor_not_for_this_scope` where a cursor names another run or another stream. It returns no error for a scope that holds no record and none for a query that matches none: each is a status of the page.
 
 Both append operations return one `GraduationLogFailure`.
 
@@ -238,7 +238,7 @@ This module owns the storage, and the behaviour around it is settled across the 
 - **Attribution: phase, pass, origin, and producer** — GRS-FR-KJVN, GRS-FR-ZQEM, GRS-FR-XUOA, GRS-FR-HBQT, GRS-FR-WNRC, GRS-FR-URSZ, GRS-FR-NUXT, GRS-FR-GBLC; `../ai/GLG-graduation-loop-logging.md` GLG-FR-FZHN, GLG-FR-FBKP.
 - **Phase visibility, and the phase a transition record carries** — GRS-FR-BSJQ, GRS-FR-EPPM.
 - **The run-level scope, and the records whose `pass` is null** — GRS-FR-JXRV, GRS-FR-NKZP, GRS-FR-TQAO, GRS-FR-BWQK, GRS-FR-HVUJ, GRS-FR-EMTV, and `../ui/GLW-graduation-log-window.md` GLW-FR-CQXJ, GLW-FR-DDXJ, GLW-FR-DKWB.
-- **Reads, cursors, paging, statuses, and search** — GRS-FR-PQVK, GRS-FR-RZXA, GRS-FR-UEIL, GRS-FR-GSUY, GRS-FR-DYPS, GRS-FR-OWDT, GRS-FR-CTQI, GRS-FR-IQUA, GRS-FR-NSGX, GRS-FR-THZA, GRS-FR-OYIC, GRS-FR-WRAS.
+- **Reads, cursors, paging, statuses, and search** — GRS-FR-PQVK, GRS-FR-RZXA, GRS-FR-UEIL, GRS-FR-GSUY, GRS-FR-DYPS, GRS-FR-OWDT, GRS-FR-CTQI, GRS-FR-IQUA, GRS-FR-NSGX, GRS-FR-THZA, GRS-FR-OYIC, GRS-FR-WRAS, GRS-FR-RNKT.
 - **Durability, backpressure, recovery, idempotency, and corruption** — GRS-FR-RGPN, GRS-FR-CYAP, GRS-FR-KQHY, GRS-FR-MXDJ, GRS-FR-MQEQ, GRS-FR-KYWE, GRS-FR-EYNU.
 - **Mandatory persistence, the interruption it causes, and the same-pass Continue** — GRS-FR-EIXS, GRS-FR-DDSB, GRS-FR-OVCO, GRS-FR-ITWJ, and `GRD-graduation.md` GRD-FR-IKVE.
 - **Retention, and the exclusion of the bounds that govern other records** — GRS-FR-JQOO, GRS-FR-FORV, GRS-FR-NFLO; `GRD-graduation.md` GRD-FR-OSCG; `AGV-agent-activity.md` AGV-FR-XLZI, AGV-FR-EFNP, AGV-FR-VZBU; `../ui/RUN-runs.md` RUN-FR-DTJO, RUN-FR-GTEU, RUN-FR-MVTX.
@@ -257,7 +257,7 @@ This module owns the storage, and the behaviour around it is settled across the 
 5. **GRS-FR-MEPZ** Every record of either stream carries `schema_version`, `record_id`, `sequence`, `at`, `run_id`, `phase_id`, `pass`, `origin`, and `producer`. `phase_id` is exactly one of the four progress-bar ids of `GOB-graduation-observability.md`: `queued`, `working`, `review`, and `done`.
 6. **GRS-FR-JAPO** An **activity** record additionally carries `channel`, `kind`, and `summary`. `channel` is `stdout`, `stderr`, or `executor`. `kind` is one of the safe kinds of GRS-FR-WJIA. `summary` is one masked line.
 7. **GRS-FR-SQGZ** An activity record holds **no other field** than the attribution of GRS-FR-MEPZ and the three fields of GRS-FR-JAPO. It holds no payload, no task input, no reasoning text, no invocation text, no raw CLI output, and no full tool argument or result.
-8. **GRS-FR-WJIA** The activity stream accepts a record of these **safe kinds** alone: `started`, `message`, `tool_call`, `tool_result`, `command`, `file_change`, `retry`, `usage`, `finished`, `error`, and `diagnostic`. A record of any other kind is refused before it reaches the file.
+8. **GRS-FR-WJIA** The activity stream accepts a record of these **safe kinds** alone: `started`, `message`, `milestone`, `tool_call`, `tool_result`, `command`, `file_change`, `retry`, `usage`, `finished`, `error`, and `diagnostic`. A record of any other kind is refused before it reaches the file. A `milestone` record's summary is one compact JSON marker, written by the executor (per `../tools/EAC-execute-agent-cli.md` EAC-FR-ZNBD).
 9. **GRS-FR-VZUZ** The kinds `invocation`, `task`, `reasoning`, and `unrecognized` are **excluded kinds**. An excluded kind is never persisted and never rendered, because it carries task input, invocation contents, internal reasoning, or an unread raw protocol line. Excluding it leaves the live Agent Output stream of `AGV-agent-activity.md` unchanged.
 10. **GRS-FR-RDJP** Only an agent turn writes an activity record. A work turn, a review turn, a clarification judgement, and a semantic merge turn produce activity, attributed by the producer table above. A queue wait, a commit, and a stage transition produce none.
 9. **GRS-FR-NPIB** A **structured** record additionally carries `level`, `event`, and `fields`. `fields` is a flat map holding the structured values a surface renders, and the order of the stream is the append order of the stream.
@@ -293,7 +293,7 @@ This module owns the storage, and the behaviour around it is settled across the 
 34. **GRS-FR-NFLO** The rule that a discarded run is **forgotten** by `AGV-agent-activity.md` AGV-FR-12 governs that module's own in-memory stream alone and reaches neither file here: a discarded run's logs are read exactly as a completed run's are.
 35. **GRS-FR-YXVY** Activity passes the **existing credential and session-identity masking** of `../tools/EAC-execute-agent-cli.md` EAC-FR-29 **before it reaches** `activity.jsonl`. This module applies **no second masking rule of its own** and inspects, masks, and rewrites nothing.
 36. **GRS-FR-JWBW** It nevertheless **never writes an unredacted credential, session identity, login directory, or model transcript**: it accepts activity from the executor's masked durable delivery path and from no other, and it reads no vendor session-state directory (per `../tools/EAC-execute-agent-cli.md` EAC-FR-31). It refuses an excluded kind (GRS-FR-VZUZ) as a second defence.
-37. **GRS-FR-PQVK** The module provides **four typed operations and no other route to either stream**: `read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query)`, `append_graduation_activity_record(record)`, `append_graduation_structured_record(record)`, and the event `"graduation log records appended"` carrying `{ run_id, stream, latest_sequence }` and no record content. **Every read, every append, every change event, and every search request names `run_id` and `stream`**, and a read additionally names the selected `phase_id` and the pass scope. Nothing writes either file by another path, and no operation anywhere reads one without naming both.
+37. **GRS-FR-PQVK** The module provides **four typed operations and no other route to either stream**: `read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query, kinds)`, `append_graduation_activity_record(record)`, `append_graduation_structured_record(record)`, and the event `"graduation log records appended"` carrying `{ run_id, stream, latest_sequence }` and no record content. **Every read, every append, every change event, and every search request names `run_id` and `stream`**, and a read additionally names the selected `phase_id` and the pass scope. Nothing writes either file by another path, and no operation anywhere reads one without naming both.
 38. **GRS-FR-JXRV** **A record's scope is its persisted `pass` and nothing else.** A record whose `pass` is a number belongs to that pass. A record whose `pass` is `null` belongs to the **run-level scope**. This module assigns no run-level record to a pass, reads no phase-entry interval to place one, and returns no pass a record was not written with.
 39. **GRS-FR-NKZP** **A read whose scope names one pass returns that pass's own records alone** — every record whose persisted `pass` is that number. **A read whose scope is `{ kind: "run_level" }` returns the run-level records alone** — every record whose persisted `pass` is `null`. Neither scope returns a record of the other.
 40. **GRS-FR-TQAO** **Authoritative phase visibility narrows every scope alike.** A record is returned only where its persisted `phase_id` equals the phase the read names (GRS-FR-BSJQ). A run-level record of another phase is absent from the run-level scope of the phase being read, and a pass that never entered that phase holds no record there.
@@ -320,6 +320,9 @@ This module owns the storage, and the behaviour around it is settled across the 
 61. **GRS-FR-JUFY** **A read rewrites nothing it returns.** Naming a record run-level (per `../ui/GLW-graduation-log-window.md` GLW-FR-CQXJ) rewrites no `pass`, `origin`, `producer`, or `phase_id` this module holds, and a re-read returns the record exactly as it was written.
 62. **GRS-FR-HBQT** A turn of a **merge run** is attributed as a turn of any run, by the producer table and by no other rule. A `merge_work` turn is a `work_turn` producer: every record it produces, activity and structured alike, carries `phase_id = working` and the number of the pass it belongs to. A `merge_review` turn is a `review_turn` producer: every record it produces carries `phase_id = review` and the number of its pass. The turn kind is not a producer, no producer named for a merge exists, and a clarification judgement taken over the questions of a merge turn is a `clarification_judgement` producer on the same terms. Pass numbers of a merge run ascend across a Continue and are never reused.
 63. **GRS-FR-WNRC** The apply step of a merge run is a `commit` producer. It writes one structured record with the event `merge_applied` when the merge result reaches the base branch, and that record carries `phase_id = done` and `pass = null`, with `origin = application`. A refused or failed apply writes no `merge_applied` record, and the record holds the paths it names as project-relative paths and no file content.
+63. **GRS-FR-RNKT** `read_graduation_logs` takes `kinds`, a list of activity kinds or null. A read of the activity stream that names kinds returns only the records of those kinds. The kinds narrow the scope as the phase does (GRS-FR-TQAO): the status, `matched_total`, the cursors, and the paging read the narrowed set.
+   - *Why:* A search matches summary text, so a search for `milestone` also finds a message that says the word.
+63. **GRS-FR-XWHD** A null or empty `kinds` narrows nothing. A read of the structured stream that names `kinds` is refused with `kinds_not_for_stream`.
 
 ## Non-functional requirements
 - A read resolves its scope through the index segments, so opening a phase and a pass of a run that has written a million lines costs the page rather than the file.

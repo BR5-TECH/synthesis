@@ -56,6 +56,7 @@ mod final_event_launch;
 mod final_event_runs;
 mod gateway_env;
 mod merge_turns;
+mod milestones;
 mod observers;
 mod rebase_isolation;
 mod rebase_mounts;

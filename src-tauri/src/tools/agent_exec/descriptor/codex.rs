@@ -9,7 +9,7 @@
 
 use serde_json::{Map, Value};
 
-use super::{ActivityKind, ExtractContext, Extracted, VendorActivity};
+use super::{ActivityKind, ExtractContext, Extracted, TextFilter, VendorActivity};
 use crate::tools::agent_exec::protocol::{decode_envelope, EnvelopeInvalid};
 
 /// The specification this module transcribes (EAC-FR-10's `protocol_spec`).
@@ -236,6 +236,12 @@ const ITEM_ERROR: &str = "error";
 
 /// CDX-FR-28: one line of the event stream, read as an activity.
 pub fn activity(line: &str) -> VendorActivity {
+    activity_filtered(line, &|text| text.to_string())
+}
+
+/// CDX-FR-28: the same reading, with the text of a completed agent message
+/// passed through `filter` first (EAC-FR-HTSN).
+pub fn activity_filtered(line: &str, filter: TextFilter<'_>) -> VendorActivity {
     let Ok(Value::Object(event)) = serde_json::from_str::<Value>(line.trim()) else {
         return unrecognized(line);
     };
@@ -266,14 +272,18 @@ pub fn activity(line: &str) -> VendorActivity {
             summary: error_message(&event),
         },
         EVENT_ITEM_STARTED | EVENT_ITEM_UPDATED | EVENT_ITEM_COMPLETED => {
-            item_activity(&event, event_type)
+            item_activity(&event, event_type, filter)
         }
         _ => unrecognized(line),
     }
 }
 
 /// An item event, read through the item it carries.
-fn item_activity(event: &Map<String, Value>, event_type: &str) -> VendorActivity {
+fn item_activity(
+    event: &Map<String, Value>,
+    event_type: &str,
+    filter: TextFilter<'_>,
+) -> VendorActivity {
     let Some(item) = event.get(KEY_ITEM).and_then(Value::as_object) else {
         return VendorActivity {
             kind: ActivityKind::Unrecognized,
@@ -287,6 +297,13 @@ fn item_activity(event: &Map<String, Value>, event_type: &str) -> VendorActivity
     let text = |key: &str| item.get(key).and_then(Value::as_str).map(one_line);
 
     let (kind, body) = match item_type {
+        // Only the completed item holds the whole message, so only it is read
+        // for milestone markers (EAC-FR-HRTK).
+        ITEM_AGENT_MESSAGE if event_type == EVENT_ITEM_COMPLETED => {
+            let body =
+                item.get(KEY_ITEM_TEXT).and_then(Value::as_str).map(|raw| one_line(&filter(raw)));
+            (ActivityKind::Message, body.unwrap_or_default())
+        }
         ITEM_AGENT_MESSAGE => (ActivityKind::Message, text(KEY_ITEM_TEXT).unwrap_or_default()),
         ITEM_REASONING => (ActivityKind::Reasoning, text(KEY_ITEM_TEXT).unwrap_or_default()),
         ITEM_COMMAND_EXECUTION => {

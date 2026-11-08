@@ -29,6 +29,7 @@ fn command(
         None,
         Some(1000),
         None,
+        None,
     )
 }
 
@@ -198,4 +199,69 @@ fn every_stream_announces_that_it_grew_and_carries_no_record() {
         .max()
         .expect("a structured event");
     assert_eq!(newest, run.logs.structured.latest_sequence);
+}
+
+/// Call `read_graduation_logs` with a kind list.
+fn command_of_kinds(
+    fx: &Fixture,
+    run_id: &str,
+    stream: &str,
+    kinds: Option<Vec<String>>,
+) -> Result<GraduationLogPage, String> {
+    crate::graduation::read_graduation_logs(
+        fx.app.clone(),
+        run_id.to_string(),
+        "working".to_string(),
+        serde_json::json!({ "kind": "pass", "pass": 1 }),
+        stream.to_string(),
+        None,
+        Some(1000),
+        None,
+        kinds,
+    )
+}
+
+/// GRS-FR-RNKT, GRS-FR-XWHD: a kind list keeps the records of those kinds alone and narrows the
+/// status and the count with them. A null or empty list narrows nothing.
+#[test]
+fn a_kind_list_narrows_the_activity_scope_to_those_kinds() {
+    let fx = Fixture::new();
+    let run = driven(&fx);
+    let all = command_of_kinds(&fx, &run.id, "activity", None).expect("a page");
+    let kinds = |page: &GraduationLogPage| -> Vec<String> {
+        page.entries
+            .iter()
+            .filter_map(|entry| entry.record["kind"].as_str().map(str::to_string))
+            .collect()
+    };
+    assert!(kinds(&all).contains(&"message".to_string()));
+    assert!(kinds(&all).contains(&"finished".to_string()));
+
+    let only = command_of_kinds(&fx, &run.id, "activity", Some(vec!["finished".to_string()]))
+        .expect("a page");
+    assert!(!only.entries.is_empty());
+    assert!(kinds(&only).iter().all(|kind| kind == "finished"));
+    assert_eq!(only.matched_total, only.entries.len() as u64);
+    assert!(only.matched_total < all.matched_total);
+
+    let none = command_of_kinds(&fx, &run.id, "activity", Some(vec!["milestone".to_string()]))
+        .expect("a page");
+    assert!(none.entries.is_empty());
+    assert_eq!(none.status, logs::read::STATUS_EMPTY);
+
+    let empty_list = command_of_kinds(&fx, &run.id, "activity", Some(Vec::new())).expect("a page");
+    assert_eq!(empty_list.matched_total, all.matched_total);
+}
+
+/// GRS-FR-XWHD: a read of the structured stream that names kinds is refused.
+#[test]
+fn a_kind_list_on_the_structured_stream_is_refused() {
+    let fx = Fixture::new();
+    let run = driven(&fx);
+    assert_eq!(
+        command_of_kinds(&fx, &run.id, "structured", Some(vec!["message".to_string()]))
+            .expect_err("kinds on the structured stream"),
+        logs::read::ERR_KINDS_NOT_FOR_STREAM
+    );
+    assert!(command_of_kinds(&fx, &run.id, "structured", Some(Vec::new())).is_ok());
 }

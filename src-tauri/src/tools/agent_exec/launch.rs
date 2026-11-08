@@ -593,6 +593,10 @@ impl AgentCliExecutor {
             durable_failure: std::sync::Mutex::new(None),
             log: sink.clone(),
             logs_activity: request.supplementary_mount.is_none(),
+            milestones: request
+                .turn_kind
+                .announces_milestones()
+                .then(|| std::sync::Mutex::new(milestone::MilestoneState::default())),
             vendor: vendor.clone(),
             container: container_name.clone(),
             carry: std::sync::Mutex::new((Vec::new(), Vec::new())),

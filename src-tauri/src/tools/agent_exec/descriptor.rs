@@ -272,6 +272,9 @@ pub enum ActivityKind {
     Reasoning,
     /// Prose the agent wrote.
     Message,
+    /// One valid milestone marker the agent wrote in its prose (EAC-FR-ZNBD).
+    /// The executor makes it from a message line. A vendor reader never does.
+    Milestone,
     /// The agent asked for a tool.
     ToolCall,
     /// A tool answered.
@@ -303,6 +306,7 @@ impl ActivityKind {
             ActivityKind::Started => "started",
             ActivityKind::Reasoning => "reasoning",
             ActivityKind::Message => "message",
+            ActivityKind::Milestone => "milestone",
             ActivityKind::ToolCall => "tool_call",
             ActivityKind::ToolResult => "tool_result",
             ActivityKind::Command => "command",
@@ -421,7 +425,11 @@ type ResumeArgv = fn(
 type Extractor = fn(&ExtractContext<'_>) -> Result<Extracted, EnvelopeInvalid>;
 type EffortSupported = fn(&str) -> bool;
 /// One line of this vendor's stdout, read as an activity (EAC-FR-33).
-type ActivityReader = fn(&str) -> VendorActivity;
+type ActivityReader = fn(&str, TextFilter<'_>) -> VendorActivity;
+
+/// What a reader does to each agent text block before it composes a summary
+/// from it. The identity filter reads the line as it came (EAC-FR-HTSN).
+pub type TextFilter<'a> = &'a dyn Fn(&str) -> String;
 
 /// Everything one vendor's invocation needs, as immutable application data
 /// transcribed from that vendor's own protocol specification (EAC-FR-10).
@@ -473,7 +481,7 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     effort_supported: Some(claude_code::effort_supported),
     extractor: claude_code::extract,
     session_reader: claude_code::reported_session,
-    activity: claude_code::activity,
+    activity: claude_code::activity_filtered,
     // CCP-FR-09: the schema-validated object first, the text form second.
     response_sources: &[
         ResponseSource::JsonObjectField { key: "structured_output" },
@@ -509,7 +517,7 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     effort_supported: Some(codex::effort_supported),
     extractor: codex::extract,
     session_reader: codex::reported_session,
-    activity: codex::activity,
+    activity: codex::activity_filtered,
     // CDX-FR-12: exactly one position.
     response_sources: &[ResponseSource::JsonlLastItem {
         event_type: "item.completed",
@@ -614,7 +622,14 @@ impl VendorExecutionDescriptor {
     /// one carrying an event this build has never heard of. A vendor that adds
     /// an event must not make a run go quiet.
     pub fn activity(&self, line: &str) -> VendorActivity {
-        (self.activity)(line)
+        (self.activity)(line, &|text| text.to_string())
+    }
+
+    /// EAC-FR-HTSN: the same reading, with each agent text block passed through
+    /// `filter` before it reaches the summary. The filter is called once for
+    /// each text block, in the order the vendor wrote them.
+    pub fn activity_filtered(&self, line: &str, filter: TextFilter<'_>) -> VendorActivity {
+        (self.activity)(line, filter)
     }
 }
 

@@ -912,6 +912,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
     cursor: Option<logs::GraduationLogCursor>,
     limit: Option<u32>,
     query: Option<String>,
+    kinds: Option<Vec<String>>,
 ) -> Result<logs::GraduationLogPage, String> {
     // Every refusal is reported, so a window that says it could not read the
     // log is answerable from the Logs panel. The values named here are the
@@ -970,6 +971,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
             cursor,
             limit,
             query,
+            kinds,
         },
     )
     .inspect_err(|reason| {

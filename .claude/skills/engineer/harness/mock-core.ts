@@ -7418,6 +7418,9 @@ function readGraduationActivity(a: any) {
           ? r.pass === null
           : true),
   );
+  // GRS-FR-RNKT: a kind list keeps the records of those kinds alone.
+  if (Array.isArray(a.kinds) && a.kinds.length > 0)
+    inScope = inScope.filter((r) => a.kinds.includes(r.kind));
   if (query)
     inScope = inScope.filter((r) =>
       `${r.kind} ${r.summary}`.toLowerCase().includes(query),

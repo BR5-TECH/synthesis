@@ -38,6 +38,7 @@ fn command(
         cursor,
         Some(1000),
         None,
+        None,
     )
     .expect("a page")
 }
@@ -56,6 +57,7 @@ fn only_a_safe_kind_of_an_agent_turn_becomes_a_record() {
     for kind in [
         "started",
         "message",
+        "milestone",
         "tool_call",
         "tool_result",
         "command",
@@ -285,6 +287,7 @@ fn the_read_refuses_the_source_stream() {
         "working".to_string(),
         serde_json::json!({ "kind": "phase" }),
         "source".to_string(),
+        None,
         None,
         None,
         None,

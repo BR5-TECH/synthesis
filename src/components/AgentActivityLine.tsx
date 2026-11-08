@@ -25,6 +25,7 @@ const LEVEL: Record<string, ActivityLevel> = {
   started: "step",
   reasoning: "info",
   message: "info",
+  milestone: "step",
   tool_call: "step",
   tool_result: "info",
   command: "step",

@@ -62,6 +62,7 @@ import { RunEscalationForm } from "./escalation";
 import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
 import { MergePaths, MergePublication, MergeResult } from "./merge";
+import { MilestoneList } from "./milestones";
 import { PrSummaryResult } from "./prSummary";
 
 /**
@@ -217,6 +218,11 @@ export function RunRegion({
           </p>
         )
       )}
+
+      {/* GRU-FR-WQHM: the milestones of the run's current turn, under the stage
+          row and above everything that follows it. Keyed by run, so another run
+          starts with an empty list. */}
+      <MilestoneList key={run.id} run={run} />
 
       {/* GRU-FR-LBPR / GRU-FR-FZCN / GRU-FR-DBUS: a run resting on a blocker
           states it in either state that carries one. */}

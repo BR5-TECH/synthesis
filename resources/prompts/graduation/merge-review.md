@@ -121,6 +121,28 @@ Return a single JSON object as your `result`, holding exactly these fields:
 
 Return the findings ordered by severity from highest to lowest — `critical`, then `major`, then `minor` — then by their first affected path in ascending order, with a finding that has no affected path before those that do, and then by description. A set returned in another order is refused whole rather than tidied up, and nothing is recorded from a refused set.
 
+<!--
+  GRL-FR-KWPT, GRL-FR-BZMH, GRL-FR-DJPE and GRL-FR-NDRY: the milestone block. It names
+  no deliverable (GRL-FR-DAIB). A correction turn carries this file without this section
+  (GRL-FR-LCSB).
+-->
+
+## Milestones
+
+The author watches your turn on a screen. Milestone markers tell the screen where you are. Markers are for display only. The application ignores a marker it cannot read, and a missing marker is never a failure. A marker changes no state, no stage, and no verdict.
+
+Before any other work, write a plan of 3 to 5 high-level milestones. When you begin a milestone, write a start marker. When you finish a milestone, write a done marker.
+
+Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. This is the whole format:
+
+```
+SYNTHESIS_MILESTONE {"event":"plan","milestones":["Read the instructions","Make the change","Run the checks"]}
+SYNTHESIS_MILESTONE {"event":"start","index":1}
+SYNTHESIS_MILESTONE {"event":"done","index":1}
+```
+
+`index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
+
 ## Where only the author can decide
 
 Where the decision turns on something only the person who started this merge knows — two requirements that contradict each other and nothing in the repository says which one stands — return an `escalate_to_user` request **in place of** the verdict rather than guessing:

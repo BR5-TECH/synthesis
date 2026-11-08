@@ -521,6 +521,71 @@ describe("CIP-FR-13 and CIP-FR-20 Rust lane caching", () => {
   });
 });
 
+describe("CIP-FR-MRCZ microsandbox runtime cache", () => {
+  const steps = stepsOf("backend");
+  const runtimeCache = steps.findIndex((step) => /^actions\/cache@/.test(step.uses ?? ""));
+  const versionStep = steps.findIndex((step) => step.id === "microsandbox");
+  const cacheStep = () => steps[runtimeCache];
+  const key = () => String(cacheStep().with?.key);
+
+  // The full action, not `actions/cache/restore`, which never saves.
+  it("restores and saves the folder the build script keeps the runtime archive in", () => {
+    expect(runtimeCache).toBeGreaterThanOrEqual(0);
+    expect(String(cacheStep().with?.path)).toBe(
+      "src-tauri/target/debug/.microsandbox-runtime-cache",
+    );
+  });
+
+  it("never fails the lane on a miss, and always restores", () => {
+    expect(cacheStep().with?.["fail-on-cache-miss"]).not.toBe(true);
+    expect(cacheStep().with?.["lookup-only"]).not.toBe(true);
+    expect(cacheStep().if).toBeUndefined();
+  });
+
+  it("restores the archive before the first cargo command", () => {
+    const firstCargo = steps.findIndex((step) => commandsOf(step.run ?? "").includes("cargo"));
+    expect(firstCargo).toBeGreaterThan(runtimeCache);
+  });
+
+  it("keys the cache on the version that src-tauri/Cargo.lock pins", () => {
+    expect(versionStep).toBeGreaterThanOrEqual(0);
+    expect(versionStep).toBeLessThan(runtimeCache);
+    const step = steps[versionStep];
+    expect(resolveFrom(stepDirOf("backend", step), "Cargo.lock")).toBe("src-tauri/Cargo.lock");
+    expect(String(step.run)).toContain("Cargo.lock");
+    expect(String(step.run)).toMatch(/echo "version=\$version" >> "\$GITHUB_OUTPUT"/);
+    expect(key()).toContain("${{ steps.microsandbox.outputs.version }}");
+  });
+
+  // Its own key: a toolchain bump does not drop the archive, and the key can
+  // never be the one of the build cache.
+  it("has a key of its own that names the runner platform", () => {
+    expect(key().startsWith("microsandbox-runtime-")).toBe(true);
+    expect(key()).not.toContain(PIN);
+    expect(key()).not.toContain("hashFiles(");
+    expect(key()).toContain("${{ runner.os }}");
+    expect(key()).toContain("${{ runner.arch }}");
+  });
+
+  // The version step reads the line after the package name, so the lock file
+  // must hold one package of that exact name with its version on the next line.
+  it("finds one microsandbox package with its version in Cargo.lock", () => {
+    const lock = readFileSync(resolve(ROOT, "src-tauri/Cargo.lock"), "utf8").split("\n");
+    const at = lock.flatMap((line, index) => (line === 'name = "microsandbox"' ? [index] : []));
+    expect(at).toHaveLength(1);
+    expect(lock[at[0] + 1]).toMatch(/^version = "[^"]+"$/);
+  });
+
+  // The post steps of a job run in the reverse order of the steps, so a cache
+  // after rust-cache saves the archive before rust-cache cleans the target
+  // folder.
+  it("comes after the build cache", () => {
+    const buildCache = steps.findIndex((step) => step.uses?.startsWith("Swatinem/rust-cache"));
+    expect(buildCache).toBeGreaterThanOrEqual(0);
+    expect(runtimeCache).toBeGreaterThan(buildCache);
+  });
+});
+
 describe("CIP-FR-19 mock lane checks", () => {
   it("runs cargo check then cargo test from the mock crate", () => {
     const script = runScripts("mock");

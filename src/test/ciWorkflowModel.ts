@@ -80,6 +80,7 @@ export const LANES: string[] = Object.keys(workflow.jobs).filter((id) => id !== 
 export const ALL_JOBS: string[] = Object.keys(workflow.jobs);
 
 export type Step = {
+  id?: string;
   uses?: string;
   run?: string;
   if?: string;

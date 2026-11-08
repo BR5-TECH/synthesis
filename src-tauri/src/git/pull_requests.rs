@@ -48,12 +48,12 @@ pub use create::{
 pub use link::{
     FailedPullRequestIssue, LinkedPullRequestIssue, PullRequestIssueRef, PullRequestLinkOutcome,
 };
-pub use stack::{StackStep, StackedPullRequest};
-pub use stack_model::{BranchStack, StackPullRequest};
 pub use model::{
     CreatedPullRequest, PullRequestDetail, PullRequestSummary, PullRequestTimeline,
     PullRequestTimelineItem,
 };
+pub use stack::{StackStep, StackedPullRequest};
+pub use stack_model::{BranchStack, StackPullRequest};
 
 /// The remote is not on a GitHub host, so there are no pull requests to read.
 pub const ERR_NOT_A_GITHUB_REMOTE: &str = "not_a_github_remote";
@@ -123,7 +123,9 @@ fn failure_error(failure: GithubFailure, missing: &str) -> String {
     match failure {
         GithubFailure::NotFound => missing.to_string(),
         GithubFailure::Rejected => ERR_GITHUB_TOKEN_REJECTED.to_string(),
-        GithubFailure::Unreachable => github_tokens::ERR_GITHUB_UNREACHABLE.to_string(),
+        GithubFailure::Unreachable | GithubFailure::Unsupported => {
+            github_tokens::ERR_GITHUB_UNREACHABLE.to_string()
+        }
         GithubFailure::TlsUntrusted(failure) => failure.wire(),
     }
 }

@@ -149,6 +149,8 @@ export interface BranchStack {
   /** GTC-FR-ZPUA: the branch at the top of the stack. */
   top?: string;
   isTop: boolean;
+  /** GTC-FR-ZPUA: an open pull request has the top as its head. */
+  topHasPullRequest: boolean;
   /** The open pull request whose head is the branch. */
   pullRequest?: { number: number; title: string };
 }

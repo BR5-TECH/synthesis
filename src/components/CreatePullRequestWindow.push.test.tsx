@@ -19,7 +19,7 @@ import type {
   PullRequestResume,
   PullRequestSource,
 } from "./CreatePullRequest/types";
-import type { CreatedPullRequest, GitBranch, PullRequestHeadState } from "../types";
+import type { StackStep, CreatedPullRequest, GitBranch, PullRequestHeadState } from "../types";
 import { resetLogBufferForTest } from "../logging";
 import { isPullRequestWindowOpenFor } from "../state/pullRequestSessions";
 import {
@@ -109,9 +109,15 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+type OnCreated = (
+  created: CreatedPullRequest,
+  link: PullRequestLinkResult | null,
+  stack?: StackStep | null,
+) => void;
+
 interface Handlers {
   onClose: Mock<() => void>;
-  onCreated: Mock<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>;
+  onCreated: Mock<OnCreated>;
   onRequestToken: Mock<(input: PullRequestInput) => void>;
   onOpenGlobalSettings: Mock<() => void>;
   onSubmittingChange: Mock<(submitting: boolean) => void>;
@@ -120,7 +126,7 @@ interface Handlers {
 function mount(resume: PullRequestResume | null = null): Handlers {
   const handlers: Handlers = {
     onClose: vi.fn<() => void>(),
-    onCreated: vi.fn<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>(),
+    onCreated: vi.fn<OnCreated>(),
     onRequestToken: vi.fn<(input: PullRequestInput) => void>(),
     onOpenGlobalSettings: vi.fn<() => void>(),
     onSubmittingChange: vi.fn<(submitting: boolean) => void>(),
@@ -183,7 +189,7 @@ describe("Submit pushes, then creates (CPR-FR-ODTB, CPR-FR-KMHY, CPR-FR-XMRL)", 
     await waitFor(() => expect(h.onCreated).toHaveBeenCalledWith({
       number: 7,
       url: "https://github.com/acme/platform/pull/7",
-    }, null));
+    }, null, null));
     expect(writes()).toEqual(["push_branch", "create_pull_request"]);
     expect(calls("push_branch")[0][1]).toEqual({ branch: SOURCE.head });
     expect(calls("create_pull_request")[0][1]).toMatchObject({ head: SOURCE.head, base: "main" });

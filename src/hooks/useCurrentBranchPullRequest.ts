@@ -93,32 +93,63 @@ export function currentBranchSource(
   };
 }
 
+/** CHG-FR-JQSD: the state of the stack read of the current branch. */
+export type StackReadStatus = "idle" | "reading" | "ready" | "failed";
+
+type StackRead = {
+  head: string;
+  /** The read has an answer or has failed. */
+  settled: boolean;
+  promise: Promise<BranchStack | null>;
+};
+
 export function useCurrentBranchPullRequest(enabled = true) {
   const [current, setCurrent] = useState<CurrentBranchPullRequest>({
     status: "reading",
   });
   const seq = useRef(0);
   const [stack, setStack] = useState<BranchStack | null>(null);
-  /** The branch of the last stack read, so a read runs once per branch. */
-  const stackHead = useRef<string | null>(null);
+  const [stackStatus, setStackStatus] = useState<StackReadStatus>("idle");
+  /** The last stack read, so a read runs once per branch. */
+  const stackRead = useRef<StackRead | null>(null);
 
-  const readStack = useCallback((head: string) => {
-    if (stackHead.current === head) return;
-    stackHead.current = head;
+  /**
+   * CHG-FR-JQSD: the answer of the stack read of `head`. A read of the same
+   * branch that still runs is shared. When `fresh` is set, a read that has
+   * ended runs again, so a click never builds on an old answer.
+   */
+  const readStack = useCallback((head: string, fresh: boolean): Promise<BranchStack | null> => {
+    const last = stackRead.current;
+    if (last && last.head === head && !(fresh && last.settled)) return last.promise;
     setStack(null);
-    api
+    setStackStatus("reading");
+    const entry: StackRead = { head, settled: false, promise: Promise.resolve(null) };
+    entry.promise = api
       .getBranchStack(head)
       .then((answer) => {
-        if (stackHead.current === head) setStack(answer ?? null);
+        entry.settled = true;
+        if (stackRead.current === entry) {
+          setStack(answer ?? null);
+          setStackStatus("ready");
+        }
+        return answer ?? null;
       })
       .catch((error: unknown) => {
         // CHG-FR-JQSD: a failed read keeps the default branch.
+        entry.settled = true;
         logWarn(["frontend", "remote"], "current branch stack read failed", {
           head,
           error: parseRejection(error).code,
         });
+        if (stackRead.current === entry) setStackStatus("failed");
+        return null;
       });
+    stackRead.current = entry;
+    return entry.promise;
   }, []);
+
+  /** CHG-FR-JQSD: the stack answer of `head` for a click: a running read, or a new one. */
+  const stackFor = useCallback((head: string) => readStack(head, true), [readStack]);
 
   const read = useCallback(async () => {
     const mine = ++seq.current;
@@ -131,7 +162,7 @@ export function useCurrentBranchPullRequest(enabled = true) {
         if (mine === seq.current) setCurrent({ status: "detached" });
         return;
       }
-      if (mine === seq.current) readStack(active.branch);
+      if (mine === seq.current) void readStack(active.branch, false);
       const state = await api.getPullRequestHeadState(active.branch, null);
       if (!state) throw new Error("no head state");
       if (mine === seq.current)
@@ -161,10 +192,10 @@ export function useCurrentBranchPullRequest(enabled = true) {
     return () => {
       cancelled = true;
       seq.current += 1;
-      stackHead.current = null;
+      stackRead.current = null;
       unlisten?.();
     };
   }, [enabled, read]);
 
-  return { current, stack, refresh: read };
+  return { current, stack, stackStatus, stackFor, refresh: read };
 }

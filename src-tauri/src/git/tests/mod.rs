@@ -34,6 +34,7 @@ mod github_hosts;
 mod history;
 mod log_records;
 mod pull;
+mod pull_request_api_version;
 mod pull_request_create;
 mod pull_request_link;
 mod pull_request_stack;

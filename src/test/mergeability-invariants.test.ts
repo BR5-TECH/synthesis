@@ -38,6 +38,7 @@ const SKIP = new Set([
   "dist",
   "coverage",
   ".vite",
+  ".pnpm-store",
 ]);
 
 /**

@@ -2,7 +2,8 @@
  * The shell's half of the Create a PR window
  * (`../../specifications/ui/CPR-create-pull-request.md` CPR-FR-IWDK,
  * CPR-FR-XMRL, CPR-FR-VZUZ, CPR-FR-ITWJ, CPR-FR-RDJP,
- * `SNV-shell-navigation.md` SNV-FR-56).
+ * CPR-FR-YDLV, CPR-FR-TJYF, `SNV-shell-navigation.md` SNV-FR-56,
+ * `NTF-notifications.md` NTF-FR-SXLR).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
@@ -10,6 +11,7 @@ import { act, renderHook } from "@testing-library/react";
 import { usePullRequestWindow } from "./usePullRequestWindow";
 import type { PullRequestSource } from "../components/CreatePullRequest/types";
 import { resetLogBufferForTest } from "../logging";
+import { resetOpenPullRequestsForTest } from "../state/openPullRequests";
 import { clearToasts, visibleToasts } from "../state/toasts";
 
 const invokeMock = vi.fn();
@@ -33,13 +35,18 @@ const INPUT = { title: "T", body: "B", base: "main", draft: false };
 
 beforeEach(() => {
   clearToasts();
+  resetOpenPullRequestsForTest();
   openUrlMock.mockClear();
   logWarnMock.mockClear();
   resetLogBufferForTest();
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) =>
-    cmd === "append_log_records" ? undefined : Promise.reject(new Error(`unexpected ${cmd}`)),
-  );
+  // CPR-FR-TJYF: each created pull request reads the open pull requests
+  // again, so the default answers that read and logs no warning later.
+  invokeMock.mockImplementation(async (cmd: string) => {
+    if (cmd === "list_pull_requests") return [];
+    if (cmd === "append_log_records") return undefined;
+    return Promise.reject(new Error(`unexpected ${cmd}`));
+  });
 });
 
 function setup() {
@@ -313,5 +320,66 @@ describe("the toast of a created pull request (CPR-FR-ITWJ, CPR-FR-RDJP)", () =>
       ),
     );
     expect(created()).toBeDefined();
+  });
+});
+
+describe("a pull request submitted to a stack (CPR-FR-YDLV, NTF-FR-SXLR, CPR-FR-TJYF)", () => {
+  const created = () => visibleToasts().find((t) => t.key === "pull-request-created");
+  const pr = { number: 51, url: "https://github.com/a/b/pull/51" };
+
+  it("NTF-FR-SXLR, CPR-FR-YDLV: the toast says the pull request was added to its stack", () => {
+    const { result } = setup();
+    act(() => result.current.openPullRequestWindow(SOURCE));
+    act(() => result.current.pullRequestCreated(pr, null, { state: "added", stackNumber: 3 }));
+    expect(result.current.pullRequestWindow).toBeNull();
+    expect(created()).toMatchObject({
+      level: "Info",
+      body: "Pull request #51 is created. It is added to stack #3.",
+    });
+  });
+
+  it("NTF-FR-SXLR: a stack that the submission created is named by its number", () => {
+    const { result } = setup();
+    act(() => result.current.pullRequestCreated(pr, null, { state: "created", stackNumber: 9 }));
+    expect(created()?.body).toBe("Pull request #51 is created. It is added to stack #9.");
+  });
+
+  it("NTF-FR-SXLR, CPR-FR-YDLV: a pull request not added to its stack still shows an Info toast, with the cause in words", () => {
+    const { result } = setup();
+    act(() => result.current.openPullRequestWindow(SOURCE));
+    act(() =>
+      result.current.pullRequestCreated(pr, null, { state: "not_added", error: "stack_busy" }),
+    );
+    expect(result.current.pullRequestWindow).toBeNull();
+    expect(created()).toMatchObject({
+      level: "Info",
+      body: "Pull request #51 is created. It is not added to the stack, because another change to the stack was in progress.",
+    });
+  });
+
+  it("NTF-FR-SXLR: a refusal of GitHub gives its reason", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.pullRequestCreated(pr, null, {
+        state: "not_added",
+        error: "stack_rejected: base does not match",
+      }),
+    );
+    expect(created()?.body).toBe(
+      "Pull request #51 is created. It is not added to the stack, because GitHub refused the change of the stack: base does not match.",
+    );
+  });
+
+  it("CPR-FR-TJYF: the openers read the open pull requests again after a creation", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_pull_requests") return [];
+      if (cmd === "append_log_records") return undefined;
+      return Promise.reject(new Error(`unexpected ${cmd}`));
+    });
+    const { result } = setup();
+    act(() => result.current.pullRequestCreated(pr));
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("list_pull_requests", { state: "open" }),
+    );
   });
 });

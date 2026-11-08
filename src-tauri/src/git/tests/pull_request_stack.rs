@@ -11,10 +11,10 @@ use super::*;
 use crate::git::pull_requests::client::{GithubFailure, GithubWriteFailure};
 use crate::git::pull_requests::create::NewPullRequest;
 use crate::git::pull_requests::stack::{
-    add_branch_to_stack_reported, get_branch_stack_reported,
-    submit_pull_request_to_stack_reported, ERR_STACKS_NOT_ENABLED, ERR_STACK_BUSY,
-    ERR_STACK_PARENT_HAS_NO_PULL_REQUEST, ERR_STACK_PARENT_NOT_IN_STACK, ERR_STACK_PARENT_NOT_TOP,
-    ERR_STACK_RECORD_MISSING, ERR_STACK_REJECTED, ERR_STACK_UNAVAILABLE,
+    add_branch_to_stack_reported, get_branch_stack_reported, submit_pull_request_to_stack_reported,
+    ERR_STACKS_NOT_ENABLED, ERR_STACK_BUSY, ERR_STACK_PARENT_HAS_NO_PULL_REQUEST,
+    ERR_STACK_PARENT_NOT_IN_STACK, ERR_STACK_PARENT_NOT_TOP, ERR_STACK_RECORD_MISSING,
+    ERR_STACK_REJECTED, ERR_STACK_UNAVAILABLE,
 };
 use crate::git::pull_requests::stack_record::{self, StackRecordEntry, STACKS_FILE};
 use serde_json::{json, Value};
@@ -80,7 +80,12 @@ fn access<'a>(
     github: &'a FakeGithub,
 ) -> PullRequestAccess<'a> {
     PullRequestAccess {
-        project: GithubAccess { root, store: &tokens.0, tokens: &tokens.1, project_key: "/dev/acme" },
+        project: GithubAccess {
+            root,
+            store: &tokens.0,
+            tokens: &tokens.1,
+            project_key: "/dev/acme",
+        },
         client: github,
     }
 }
@@ -93,8 +98,14 @@ fn read(
     branch: &str,
 ) -> crate::git::BranchStack {
     let root = f.root();
-    get_branch_stack_reported(&NullSink, own_buffer(), &access(&root, tokens, github), machine, branch)
-        .unwrap()
+    get_branch_stack_reported(
+        &NullSink,
+        own_buffer(),
+        &access(&root, tokens, github),
+        machine,
+        branch,
+    )
+    .unwrap()
 }
 
 // GTC-FR-TBQW, GTC-FR-WHEO
@@ -103,7 +114,8 @@ fn a_branch_with_an_open_pull_request_reads_the_github_stack_that_holds_it() {
     let f = fixture(&["a", "b"]);
     let github = FakeGithub::new();
     open_pulls(&github, vec![open_row(1, "a", "main"), open_row(2, "b", "a")]);
-    github.answer(&format!("{REPO}/stacks?pull_request=2"), Ok(json!([stack_json(7, &["a", "b"])])));
+    github
+        .answer(&format!("{REPO}/stacks?pull_request=2"), Ok(json!([stack_json(7, &["a", "b"])])));
     let machine = Machine::new();
 
     let stack = read(&f, &github, &token_ready(), Some(&machine.root()), "b");
@@ -203,6 +215,26 @@ fn a_failed_read_of_the_open_pull_requests_is_unavailable() {
     assert!(!stack.available && stack.pull_request.is_none());
 }
 
+// GTC-FR-JMVC: a list of open pull requests that stops at the page limit is
+// partial, so no stack is resolved from it and no stack read is sent.
+#[test]
+fn a_truncated_list_of_open_pull_requests_is_unavailable() {
+    use crate::git::pull_requests::client::{MAX_PAGES, PAGE_SIZE};
+    let f = fixture(&["b"]);
+    let github = FakeGithub::new();
+    let full: Vec<Value> =
+        (0..PAGE_SIZE as u64).map(|i| open_row(100 + i, &format!("x{i}"), "main")).collect();
+    let mut pages = vec![full; MAX_PAGES];
+    pages.push(vec![open_row(2, "b", "a")]);
+    github.pages(&list_path("open"), pages);
+
+    let stack = read(&f, &github, &token_ready(), None, "b");
+    assert!(!stack.available && !stack.in_stack);
+    assert_eq!(stack.unavailable_cause.as_deref(), Some(ERR_STACK_UNAVAILABLE));
+    assert!(stack.pull_request.is_none());
+    assert!(!github.paths().iter().any(|p| p.contains("/stacks")));
+}
+
 // GTC-FR-TBQW: a pull request from a fork is not a layer of a stack.
 #[test]
 fn a_pull_request_from_a_fork_is_left_out() {
@@ -223,9 +255,14 @@ fn an_empty_branch_is_unknown() {
     let github = FakeGithub::new();
     let root = f.root();
     let tokens = token_ready();
-    let error =
-        get_branch_stack_reported(&NullSink, own_buffer(), &access(&root, &tokens, &github), None, " ")
-            .unwrap_err();
+    let error = get_branch_stack_reported(
+        &NullSink,
+        own_buffer(),
+        &access(&root, &tokens, &github),
+        None,
+        " ",
+    )
+    .unwrap_err();
     assert_eq!(error, ERR_UNKNOWN_BRANCH);
 }
 
@@ -252,8 +289,10 @@ fn add(
 fn stacked_github() -> FakeGithub {
     let github = FakeGithub::new();
     open_pulls(&github, vec![open_row(1, "a", "main"), open_row(2, "b", "a")]);
-    github.answer(&format!("{REPO}/stacks?pull_request=2"), Ok(json!([stack_json(7, &["a", "b"])])));
-    github.answer(&format!("{REPO}/stacks?pull_request=1"), Ok(json!([stack_json(7, &["a", "b"])])));
+    github
+        .answer(&format!("{REPO}/stacks?pull_request=2"), Ok(json!([stack_json(7, &["a", "b"])])));
+    github
+        .answer(&format!("{REPO}/stacks?pull_request=1"), Ok(json!([stack_json(7, &["a", "b"])])));
     github
 }
 
@@ -266,15 +305,15 @@ fn a_new_branch_on_the_top_of_a_stack_is_recorded_with_its_parent_and_stack() {
 
     let stack = add(&f, &github, Some(&machine.root()), "c", "b").unwrap();
 
-    assert_eq!(machine.entries(), vec![StackRecordEntry {
-        branch: "c".into(),
-        parent: "b".into(),
-        stack: Some(7)
-    }]);
+    assert_eq!(
+        machine.entries(),
+        vec![StackRecordEntry { branch: "c".into(), parent: "b".into(), stack: Some(7) }]
+    );
     assert!(machine.dir.path().join(STACKS_FILE).exists());
     assert_eq!(stack.source.as_deref(), Some("local_record"));
     assert_eq!(stack.top.as_deref(), Some("c"));
     assert!(stack.is_top && stack.in_stack);
+    assert!(!stack.top_has_pull_request, "the recorded branch has no pull request");
     assert!(github.posts().is_empty(), "GitHub receives no write");
 
     // A second write of the same branch replaces its entry.
@@ -289,8 +328,14 @@ fn a_parent_that_cannot_carry_the_branch_is_refused_and_nothing_is_written() {
     let machine = Machine::new();
 
     let github = stacked_github();
-    assert_eq!(add(&f, &github, Some(&machine.root()), "c", "a").unwrap_err(), ERR_STACK_PARENT_NOT_TOP);
-    assert_eq!(add(&f, &github, Some(&machine.root()), "nope", "b").unwrap_err(), ERR_UNKNOWN_BRANCH);
+    assert_eq!(
+        add(&f, &github, Some(&machine.root()), "c", "a").unwrap_err(),
+        ERR_STACK_PARENT_NOT_TOP
+    );
+    assert_eq!(
+        add(&f, &github, Some(&machine.root()), "nope", "b").unwrap_err(),
+        ERR_UNKNOWN_BRANCH
+    );
 
     let github = FakeGithub::new();
     open_pulls(&github, vec![open_row(5, "solo", "main")]);
@@ -301,7 +346,10 @@ fn a_parent_that_cannot_carry_the_branch_is_refused_and_nothing_is_written() {
     );
 
     let github = FakeGithub::new();
-    assert_eq!(add(&f, &github, Some(&machine.root()), "c", "b").unwrap_err(), ERR_STACK_UNAVAILABLE);
+    assert_eq!(
+        add(&f, &github, Some(&machine.root()), "c", "b").unwrap_err(),
+        ERR_STACK_UNAVAILABLE
+    );
 
     // A recorded parent with no pull request yet.
     let github = FakeGithub::new();
@@ -444,7 +492,10 @@ fn a_stack_step_that_fails_answers_not_added_and_keeps_the_record() {
     .unwrap();
     for (failure, expected) in [
         (GithubWriteFailure::Conflict, ERR_STACK_BUSY.to_string()),
-        (GithubWriteFailure::Invalid("cannot append".into()), format!("{ERR_STACK_REJECTED}: cannot append")),
+        (
+            GithubWriteFailure::Invalid("cannot append".into()),
+            format!("{ERR_STACK_REJECTED}: cannot append"),
+        ),
         (GithubWriteFailure::Rejected, "github_token_rejected".to_string()),
         (GithubWriteFailure::Unreachable, github_tokens::ERR_GITHUB_UNREACHABLE.to_string()),
     ] {
@@ -499,4 +550,109 @@ fn a_failed_creation_returns_its_error_and_sends_no_stack_request() {
     assert_eq!(error, crate::git::ERR_PULL_REQUEST_EXISTS);
     assert_eq!(github.posts().len(), 1);
     assert_eq!(machine.entries().len(), 1);
+}
+
+/// A record of `c` on `b`, with no stack number.
+fn record_c_on_b(machine: &Machine) {
+    stack_record::put_entry(
+        &machine.root(),
+        StackRecordEntry { branch: "c".into(), parent: "b".into(), stack: None },
+    )
+    .unwrap();
+}
+
+// GTC-FR-HEXN, GTC-FR-AEBW: a stack that GitHub created is `created` also
+// when its answer names no number, and the record entry goes away.
+#[test]
+fn a_created_stack_with_an_answer_that_names_no_number_is_created() {
+    let f = fixture(&["a", "b", "c"]);
+    let github = FakeGithub::new();
+    open_pulls(&github, vec![open_row(1, "a", "main"), open_row(2, "b", "a")]);
+    github.answer(&format!("{REPO}/stacks?pull_request=2"), Ok(json!([])));
+    let machine = Machine::new();
+    record_c_on_b(&machine);
+    github.queue_post(Ok(created_json(3)));
+    github.queue_post(Ok(json!({})));
+
+    let created = submit(&f, &github, &machine, "c", "b", own_buffer()).unwrap();
+
+    assert_eq!(created.stack.state, "created");
+    assert_eq!(created.stack.stack_number, None);
+    assert!(created.stack.error.is_none());
+    assert!(machine.entries().is_empty(), "the GitHub stack now holds the branch");
+}
+
+// GTC-FR-KQVA, GTC-FR-GJFM: a stack read that fails in the stack step is
+// `stack_unavailable`, and its own cause is logged with the repository.
+#[test]
+fn a_failed_stack_read_in_the_stack_step_is_unavailable_and_logs_its_cause() {
+    let f = fixture(&["a", "b", "c"]);
+    let github = FakeGithub::new();
+    open_pulls(&github, vec![open_row(1, "a", "main"), open_row(2, "b", "a")]);
+    github.answer(&format!("{REPO}/stacks?pull_request=2"), Err(GithubFailure::NotFound));
+    let machine = Machine::new();
+    record_c_on_b(&machine);
+    github.queue_post(Ok(created_json(3)));
+    let buffer = own_buffer();
+
+    let created = submit(&f, &github, &machine, "c", "b", buffer).unwrap();
+
+    assert_eq!(created.stack.state, "not_added");
+    assert_eq!(created.stack.error.as_deref(), Some(ERR_STACK_UNAVAILABLE));
+    assert_eq!(github.posts().len(), 1, "only the creation was sent");
+    assert_eq!(machine.entries().len(), 1, "the record stays after not_added");
+    let failed = record_for(buffer, "stack read for the stack step failed");
+    assert_eq!(failed.fields.get("owner"), Some(&json!("acme")));
+    assert_eq!(failed.fields.get("repo"), Some(&json!("platform")));
+    assert_eq!(failed.fields.get("cause"), Some(&json!(ERR_STACKS_NOT_ENABLED)));
+    let write = record_for(buffer, "stack write");
+    assert_eq!(write.fields.get("write"), Some(&json!("read")));
+    assert_eq!(write.fields.get("error"), Some(&json!(ERR_STACK_UNAVAILABLE)));
+}
+
+// GTC-FR-RNXK, GTC-FR-KQVA: a stack record that cannot be read is empty in
+// the stack step, and the module logs it at WARN.
+#[test]
+fn a_stack_record_that_cannot_be_read_is_logged_and_is_no_record() {
+    let f = fixture(&["a", "b", "c"]);
+    let github = stacked_github();
+    let machine = Machine::new();
+    std::fs::write(machine.dir.path().join(STACKS_FILE), "this is [not toml").unwrap();
+    github.queue_post(Ok(created_json(3)));
+    let buffer = own_buffer();
+
+    let created = submit(&f, &github, &machine, "c", "b", buffer).unwrap();
+
+    assert_eq!(created.stack.error.as_deref(), Some(ERR_STACK_RECORD_MISSING));
+    let failed = record_for(buffer, "stack record read failed");
+    assert_eq!(failed.level, crate::logging::LogLevel::Warn);
+}
+
+// GTC-FR-SKDF, GTC-FR-GJFM: every request of the stack operations goes to the
+// REST client of the repository, and each stack write is logged with the
+// owner, the repository and its kind.
+#[test]
+fn the_stack_operations_reach_github_only_through_its_rest_endpoints() {
+    let f = fixture(&["a", "b", "c"]);
+    let github = stacked_github();
+    let machine = Machine::new();
+    add(&f, &github, Some(&machine.root()), "c", "b").unwrap();
+    github.queue_post(Ok(created_json(3)));
+    github.queue_post(Ok(stack_json(7, &["a", "b", "c"])));
+    let buffer = own_buffer();
+
+    submit(&f, &github, &machine, "c", "b", buffer).unwrap();
+
+    let reached: Vec<String> = github
+        .paths()
+        .into_iter()
+        .chain(github.posts().into_iter().map(|(_, path, _)| path))
+        .collect();
+    assert!(!reached.is_empty());
+    assert!(reached.iter().all(|path| path.starts_with(&format!("{REPO}/"))), "{reached:?}");
+    let write = record_for(buffer, "stack write");
+    assert_eq!(write.fields.get("owner"), Some(&json!("acme")));
+    assert_eq!(write.fields.get("repo"), Some(&json!("platform")));
+    assert_eq!(write.fields.get("write"), Some(&json!("add")));
+    assert_eq!(write.fields.get("state"), Some(&json!("added")));
 }

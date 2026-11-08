@@ -383,9 +383,15 @@ export const checkOutBranchInActiveWorktree = (branch: string) =>
 export const proposeWorktreePath = (branch: string) =>
   invoke<string>("propose_worktree_path", { branch });
 
-/** WTC-FR-14: create a worktree for `branch` at `path` and root the project on it. */
-export const createWorktree = (branch: string, path: string) =>
-  invoke<WorktreeContext>("create_worktree", { branch, path });
+/**
+ * WTC-FR-14 / WTC-FR-NQZE: create a worktree for `branch` at `path` and root
+ * the project on it. A new branch starts at the tip of `start` when given.
+ */
+export const createWorktree = (branch: string, path: string, start?: string) =>
+  invoke<WorktreeContext>(
+    "create_worktree",
+    start === undefined ? { branch, path } : { branch, path, start },
+  );
 
 /**
  * WTC-FR-22 / WTC-FR-23: fetch from the project's primary remote, then

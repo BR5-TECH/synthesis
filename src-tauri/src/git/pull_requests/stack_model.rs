@@ -50,6 +50,8 @@ pub struct BranchStack {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top: Option<String>,
     pub is_top: bool,
+    /// GTC-FR-ZPUA: an open pull request has the top as its head.
+    pub top_has_pull_request: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pull_request: Option<StackPullRequest>,
 }
@@ -116,8 +118,7 @@ pub(crate) fn resolve_branch_stack(branch: &str, inputs: &StackInputs<'_>) -> Br
     let mut answer = BranchStack {
         branch: branch.to_string(),
         available: true,
-        pull_request: own
-            .map(|pr| StackPullRequest { number: pr.number, title: pr.title.clone() }),
+        pull_request: own.map(|pr| StackPullRequest { number: pr.number, title: pr.title.clone() }),
         ..BranchStack::default()
     };
     let github = inputs.github.filter(|stack| stack.heads.iter().any(|head| head == branch));
@@ -141,6 +142,7 @@ pub(crate) fn resolve_branch_stack(branch: &str, inputs: &StackInputs<'_>) -> Br
     answer.in_stack = true;
     let top = top_of(branch, github, inputs);
     answer.is_top = top == branch;
+    answer.top_has_pull_request = open_pull_request_of(inputs.open, &top).is_some();
     answer.top = Some(top);
     answer
 }
@@ -148,9 +150,8 @@ pub(crate) fn resolve_branch_stack(branch: &str, inputs: &StackInputs<'_>) -> Br
 /// GTC-FR-WHEO: the base of `pr` is the head of another open pull request, or
 /// another open pull request has its head as its base.
 fn in_chain(open: &[OpenPullRequest], pr: &OpenPullRequest) -> bool {
-    open.iter().any(|other| {
-        other.number != pr.number && (other.head == pr.base || other.base == pr.head)
-    })
+    open.iter()
+        .any(|other| other.number != pr.number && (other.head == pr.base || other.base == pr.head))
 }
 
 /// GTC-FR-ZPUA: go up from `branch` until no branch stands on the current one.
@@ -167,7 +168,11 @@ fn top_of(branch: &str, github: Option<&GithubStack>, inputs: &StackInputs<'_>) 
     current
 }
 
-fn next_up(current: &str, github: Option<&GithubStack>, inputs: &StackInputs<'_>) -> Option<String> {
+fn next_up(
+    current: &str,
+    github: Option<&GithubStack>,
+    inputs: &StackInputs<'_>,
+) -> Option<String> {
     if let Some(stack) = github {
         if let Some(at) = stack.heads.iter().position(|head| head == current) {
             if let Some(above) = stack.heads.get(at + 1) {
@@ -175,8 +180,7 @@ fn next_up(current: &str, github: Option<&GithubStack>, inputs: &StackInputs<'_>
             }
         }
     }
-    if let Some(pr) =
-        inputs.open.iter().filter(|pr| pr.base == current).min_by_key(|pr| pr.number)
+    if let Some(pr) = inputs.open.iter().filter(|pr| pr.base == current).min_by_key(|pr| pr.number)
     {
         return Some(pr.head.clone());
     }

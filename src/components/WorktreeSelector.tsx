@@ -8,7 +8,14 @@ import { pullErrorText } from "../state/pullText";
 import { showPullFailure, showPullOutcome } from "../state/pullToast";
 import { normalizeBranchInput } from "../state/worktreeBranchName";
 import { Icon } from "./icons";
+import { logInfo } from "../logging";
 import { onNewWorktreeRequested } from "../state/newWorktreeRequests";
+import {
+  newWorktreeStackBlock,
+  planCreate,
+  stackCreatedBranch,
+  useNewWorktreeStack,
+} from "./WorktreeSelector/newWorktreeStack";
 import {
   GITHUB_TOKEN_ERRORS,
   type BranchEntry,
@@ -174,6 +181,13 @@ export function WorktreeSelector({
   const [draft, setDraft] = useState<NewWorktreeDraft | null>(null);
   const openDialogRef = useRef<(branch: string) => void>(() => {});
   const [dialogError, setDialogError] = useState("");
+  // WTS-FR-HUQW: the stack of the active branch, read while the dialog is
+  // open. A detached `HEAD` reads none.
+  const stackBranch = active && !active.isDetached ? (active.branch ?? null) : null;
+  const newWorktreeStack = useNewWorktreeStack(stackBranch, draft !== null);
+  /** WTS-FR-XQOB: Create waits for the stack read of the opening. */
+  const [preparing, setPreparing] = useState(false);
+  const preparingRef = useRef(false);
   /**
    * WTS-FR-31: a refresh is in flight, so the control is busy and not
    * re-activatable — a second refresh cannot be stacked on the first.
@@ -524,8 +538,50 @@ export function WorktreeSelector({
     }
   };
 
+  // WTS-FR-GDKX: a new branch on a layer of a stack that has no open pull
+  // request is refused.
+  const stackBlock = draft ? newWorktreeStackBlock(newWorktreeStack.state, draft.branch) : null;
   const createEnabled =
-    !!draft && draft.branch.trim() !== "" && draft.location.trim() !== "";
+    !!draft && draft.branch.trim() !== "" && draft.location.trim() !== "" && !stackBlock;
+
+  /**
+   * WTS-FR-21 / WTS-FR-XQOB / WTS-FR-KVPA: wait for the stack read of the
+   * opening, create the worktree (a new branch on a stack starts at the stack
+   * top), then add its new branch on top of the stack. The stack step does not
+   * change the outcome of the creation (WTS-FR-DXCE).
+   */
+  const onCreate = async (branch: string, location: string) => {
+    if (preparingRef.current) return;
+    setDialogError("");
+    const reads = newWorktreeStack.pending.current;
+    let plan = null;
+    if (reads) {
+      preparingRef.current = true;
+      setPreparing(true);
+      try {
+        plan = await planCreate(reads, branch);
+      } finally {
+        preparingRef.current = false;
+        setPreparing(false);
+      }
+      // The dialog closed or opened again while the reads ran, or (WTS-FR-GDKX)
+      // the answer that arrived blocks and its reason now shows.
+      const abandoned = newWorktreeStack.pending.current !== reads;
+      if (abandoned || plan.block) {
+        logInfo(["frontend"], "new worktree creation not started", {
+          reason: abandoned ? "dialog closed" : "stack block",
+        });
+        return;
+      }
+    }
+    const stackPlan = plan?.stack ?? null;
+    const made: { context?: WorktreeContext } = {};
+    const ok = await runSwitch(async () => {
+      made.context = await api.createWorktree(branch, location, stackPlan?.start);
+      return made.context;
+    });
+    if (ok && stackPlan && made.context) await stackCreatedBranch(stackPlan, branch, made.context);
+  };
 
   return (
     <div className="wt-select" ref={rootRef}>
@@ -782,6 +838,9 @@ export function WorktreeSelector({
                   aria-label="Branch"
                   autoFocus
                   ref={branchRef}
+                  // WTS-FR-XQOB: Create uses the values of its click, so they
+                  // do not change while it waits for the stack read.
+                  readOnly={preparing}
                   value={draft.branch}
                   onChange={(e) => {
                     const { value, selectionStart } = e.target;
@@ -800,6 +859,7 @@ export function WorktreeSelector({
                     id="nw-location"
                     className="input input--mono"
                     aria-label="Location"
+                    readOnly={preparing}
                     value={draft.location}
                     onChange={(e) =>
                       setDraft((d) =>
@@ -816,12 +876,25 @@ export function WorktreeSelector({
                   <button
                     type="button"
                     className="btn btn--default btn--sm"
+                    disabled={preparing}
                     onClick={() => void onBrowse()}
                   >
                     Browse…
                   </button>
                 </div>
               </div>
+              {/* WTS-FR-BMQI: the reason is text, not an input, and it is the
+                  accessible description of Create. */}
+              {stackBlock && (
+                <p
+                  className="wt-select__stack-reason"
+                  id="new-worktree-stack-reason"
+                  data-testid="worktree-stack-reason"
+                >
+                  <Icon.Info size={12} aria-hidden="true" />
+                  <span>{stackBlock}</span>
+                </p>
+              )}
               {dialogError && (
                 <div
                   className="wt-select__error"
@@ -842,13 +915,10 @@ export function WorktreeSelector({
               <button
                 type="button"
                 className="btn btn--primary btn--sm"
-                disabled={!createEnabled || busy}
-                onClick={() => {
-                  setDialogError("");
-                  void runSwitch(() =>
-                    api.createWorktree(draft.branch, draft.location),
-                  );
-                }}
+                disabled={!createEnabled || busy || preparing}
+                aria-busy={preparing || undefined}
+                aria-describedby={stackBlock ? "new-worktree-stack-reason" : undefined}
+                onClick={() => void onCreate(draft.branch, draft.location)}
               >
                 Create
               </button>

@@ -179,6 +179,10 @@ beforeEach(async () => {
   // A test of the confirmation installs reads of its own.
   const { resetMainBranchWriteForTest } = await import("../state/mainBranchWrite");
   resetMainBranchWriteForTest();
+  // CPR-FR-RWOE: the open pull requests are one store for every opener, so a
+  // read that runs or answers late in one test must not reach the next one.
+  const { resetOpenPullRequestsForTest } = await import("../state/openPullRequests");
+  resetOpenPullRequestsForTest();
 });
 
 /**

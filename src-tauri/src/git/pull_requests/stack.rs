@@ -93,6 +93,7 @@ fn unavailable(branch: &str, cause: &str, own: Option<&OpenPullRequest>) -> Bran
 fn stacks_read_error(failure: GithubFailure) -> String {
     match failure {
         GithubFailure::NotFound => ERR_STACKS_NOT_ENABLED.to_string(),
+        GithubFailure::Unsupported => ERR_STACK_UNAVAILABLE.to_string(),
         GithubFailure::Rejected => ERR_GITHUB_TOKEN_REJECTED.to_string(),
         GithubFailure::Unreachable => github_tokens::ERR_GITHUB_UNREACHABLE.to_string(),
         GithubFailure::TlsUntrusted(failure) => failure.wire(),
@@ -115,7 +116,9 @@ fn stack_write_error(failure: GithubWriteFailure) -> String {
 }
 
 /// GTC-FR-TBQW: the open pull requests of the repository. A pull request from a
-/// fork is left out: a stack holds the branches of one repository.
+/// fork is left out: a stack holds the branches of one repository. A list that
+/// stops at the page limit is `stack_unavailable` (GTC-FR-JMVC): a partial list
+/// can miss the pull request of the branch, and then the stack is wrong.
 fn read_open(
     client: &dyn GithubPullRequests,
     target: &Target,
@@ -125,6 +128,9 @@ fn read_open(
         target.owner, target.repo
     );
     let pages = read_pages(client, &target.secret, &path).map_err(stacks_read_error)?;
+    if pages.truncated {
+        return Err(ERR_STACK_UNAVAILABLE.to_string());
+    }
     Ok(pages.items.iter().filter(|row| !is_from_fork(row)).filter_map(open_from_json).collect())
 }
 
@@ -160,26 +166,35 @@ fn read_records<S>(
 where
     S: LogSink + Clone + Send + 'static,
 {
-    let read = machine
-        .ok_or_else(|| ERR_STORE_UNAVAILABLE.to_string())
-        .and_then(stack_record::read_entries);
-    let entries = match read {
-        Ok(entries) => entries,
-        Err(error) => {
-            logging::log_warn(
-                sink,
-                buffer,
-                TRANSFER,
-                "stack record read failed",
-                log_fields! { "error" => error },
-            );
-            return Vec::new();
-        }
-    };
-    entries
+    record_entries(sink, buffer, machine)
         .into_iter()
         .filter(|entry| repo.find_branch(&entry.branch, git2::BranchType::Local).is_ok())
         .collect()
+}
+
+/// GTC-FR-RNXK: every entry of the stack record. A record that cannot be read
+/// is empty, and the cause is logged at `WARN`.
+fn record_entries<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    machine: Option<&fs::RootFs>,
+) -> Vec<StackRecordEntry>
+where
+    S: LogSink + Clone + Send + 'static,
+{
+    let read = machine
+        .ok_or_else(|| ERR_STORE_UNAVAILABLE.to_string())
+        .and_then(stack_record::read_entries);
+    read.unwrap_or_else(|error| {
+        logging::log_warn(
+            sink,
+            buffer,
+            TRANSFER,
+            "stack record read failed",
+            log_fields! { "error" => error },
+        );
+        Vec::new()
+    })
 }
 
 /// GTC-FR-TBQW: the stack of `branch` against an already resolved target.
@@ -214,34 +229,52 @@ fn stack_for(
     resolve_branch_stack(branch, &StackInputs { open: &open, github: github.as_ref(), records })
 }
 
-/// The stack of `branch`, without the record of the operation.
+/// The stack of `branch`, logged for `operation` (GTC-FR-GJFM). The record
+/// entry of `replaced`, when given, is left out, because the caller writes a
+/// new entry in its place (GTC-FR-OIMF).
+#[allow(clippy::too_many_arguments)] // The two log targets and the inputs of one read.
 fn compute_branch_stack<S>(
     sink: &S,
     buffer: &'static LogBuffer,
+    operation: &str,
     access: &PullRequestAccess<'_>,
     machine: Option<&fs::RootFs>,
     repo: &git2::Repository,
     branch: &str,
+    replaced: Option<&str>,
 ) -> BranchStack
 where
     S: LogSink + Clone + Send + 'static,
 {
-    match resolve_target(access.project) {
-        Err(cause) => unavailable(branch, &cause, None),
+    let (stack, target) = match resolve_target(access.project) {
+        Err(cause) => (unavailable(branch, &cause, None), None),
         Ok(target) => {
-            let records = read_records(sink, buffer, machine, repo);
+            let mut records = read_records(sink, buffer, machine, repo);
+            if let Some(replaced) = replaced {
+                records.retain(|entry| entry.branch != replaced);
+            }
             let scoped = access.client.for_host(&target.host);
-            stack_for(scoped.as_deref().unwrap_or(access.client), &target, &records, branch)
+            let client = scoped.as_deref().unwrap_or(access.client);
+            (stack_for(client, &target, &records, branch), Some(target))
         }
-    }
+    };
+    log_stack(sink, buffer, operation, &stack, target.as_ref());
+    stack
 }
 
-fn log_stack<S>(sink: &S, buffer: &'static LogBuffer, operation: &str, stack: &BranchStack)
-where
+fn log_stack<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    operation: &str,
+    stack: &BranchStack,
+    target: Option<&Target>,
+) where
     S: LogSink + Clone + Send + 'static,
 {
     let fields = log_fields! {
         "operation" => operation,
+        "owner" => target.map(|t| t.owner.as_str()),
+        "repo" => target.map(|t| t.repo.as_str()),
         "branch" => stack.branch,
         "available" => stack.available,
         "cause" => stack.unavailable_cause,
@@ -260,7 +293,13 @@ where
     }
 }
 
-fn refuse<S>(sink: &S, buffer: &'static LogBuffer, operation: &str, branch: &str, error: &str) -> String
+fn refuse<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    operation: &str,
+    branch: &str,
+    error: &str,
+) -> String
 where
     S: LogSink + Clone + Send + 'static,
 {
@@ -291,9 +330,7 @@ where
     }
     let repo = changes::open_repo(access.project.root)
         .map_err(|error| refuse(sink, buffer, "get_branch_stack", branch, &error))?;
-    let stack = compute_branch_stack(sink, buffer, access, machine, &repo, branch);
-    log_stack(sink, buffer, "get_branch_stack", &stack);
-    Ok(stack)
+    Ok(compute_branch_stack(sink, buffer, "get_branch_stack", access, machine, &repo, branch, None))
 }
 
 /// GTC-FR-LCYE / GTC-FR-OIMF: `add_branch_to_stack(branch, parent)`.
@@ -315,8 +352,10 @@ where
     if branch.is_empty() || repo.find_branch(branch, git2::BranchType::Local).is_err() {
         return Err(refuse(sink, buffer, OPERATION, branch, ERR_UNKNOWN_BRANCH));
     }
-    let below = compute_branch_stack(sink, buffer, access, machine, &repo, parent);
-    log_stack(sink, buffer, OPERATION, &below);
+    // GTC-FR-OIMF: an earlier entry of `branch` is replaced, so it does not
+    // stand on `parent` while the parent is checked.
+    let below =
+        compute_branch_stack(sink, buffer, OPERATION, access, machine, &repo, parent, Some(branch));
     let refusal = if !below.available {
         Some(ERR_STACK_UNAVAILABLE)
     } else if !below.in_stack {
@@ -408,11 +447,10 @@ fn stack_step<S>(
 where
     S: LogSink + Clone + Send + 'static,
 {
-    let entry = machine
-        .and_then(|machine| stack_record::read_entries(machine).ok())
-        .and_then(|entries| {
-            entries.into_iter().find(|entry| entry.branch == head && entry.parent == base)
-        });
+    // GTC-FR-RNXK: a record that cannot be read is empty, and is logged.
+    let entry = record_entries(sink, buffer, machine)
+        .into_iter()
+        .find(|entry| entry.branch == head && entry.parent == base);
     let Some(entry) = entry else {
         return StackStep::not_added(ERR_STACK_RECORD_MISSING);
     };
@@ -422,10 +460,28 @@ where
     };
     let scoped = access.client.for_host(&target.host);
     let client = scoped.as_deref().unwrap_or(access.client);
-    let step = match entry.stack {
-        Some(stack) => add_to(client, &target, stack, number),
-        None => add_to_stack_of_base(client, &target, base, number),
+    let (write, step) = match entry.stack {
+        Some(stack) => ("add", add_to(client, &target, stack, number)),
+        None => add_to_stack_of_base(sink, buffer, client, &target, base, number),
     };
+    // GTC-FR-GJFM: each stack write, with its kind and its typed cause.
+    logging::log_info(
+        sink,
+        buffer,
+        TRANSFER,
+        "stack write",
+        log_fields! {
+            "owner" => target.owner,
+            "repo" => target.repo,
+            "write" => write,
+            "head" => head,
+            "base" => base,
+            "number" => number,
+            "state" => step.state,
+            "stackNumber" => step.stack_number,
+            "error" => step.error.as_deref().map(error_code),
+        },
+    );
     if step.error.is_none() {
         if let Some(machine) = machine {
             if let Err(error) = stack_record::remove_entry(machine, head) {
@@ -455,36 +511,61 @@ fn add_to(client: &dyn GithubPullRequests, target: &Target, stack: u64, number: 
 }
 
 /// GTC-FR-HEXN: read the stack of `base`, then add to it, or create a stack of
-/// the chain below `base` and the new pull request.
-fn add_to_stack_of_base(
+/// the chain below `base` and the new pull request. Gives the kind of the
+/// write with the step.
+fn add_to_stack_of_base<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
     client: &dyn GithubPullRequests,
     target: &Target,
     base: &str,
     number: u64,
-) -> StackStep {
-    let Ok(open) = read_open(client, target) else {
-        return StackStep::not_added(ERR_STACK_UNAVAILABLE);
+) -> (&'static str, StackStep)
+where
+    S: LogSink + Clone + Send + 'static,
+{
+    // GTC-FR-KQVA: a failed read is `stack_unavailable`; its own cause is logged.
+    let unavailable = |cause: &str| {
+        logging::log_warn(
+            sink,
+            buffer,
+            TRANSFER,
+            "stack read for the stack step failed",
+            log_fields! { "owner" => target.owner, "repo" => target.repo, "base" => base, "cause" => cause },
+        );
+        ("read", StackStep::not_added(ERR_STACK_UNAVAILABLE))
+    };
+    let open = match read_open(client, target) {
+        Ok(open) => open,
+        Err(cause) => return unavailable(&cause),
     };
     let Some(below) = open_pull_request_of(&open, base) else {
-        return StackStep::not_added(ERR_STACK_PARENT_HAS_NO_PULL_REQUEST);
+        return ("read", StackStep::not_added(ERR_STACK_PARENT_HAS_NO_PULL_REQUEST));
     };
     let path =
         format!("/repos/{}/{}/stacks?pull_request={}", target.owner, target.repo, below.number);
-    let existing = match client.get_json(&target.secret, &path).map(|answer| first_stack(&answer)) {
-        Ok(Ok(existing)) => existing,
-        _ => return StackStep::not_added(ERR_STACK_UNAVAILABLE),
+    let existing = match client.get_json(&target.secret, &path) {
+        Ok(answer) => match first_stack(&answer) {
+            Ok(existing) => existing,
+            Err(()) => return unavailable(github_tokens::ERR_GITHUB_UNREACHABLE),
+        },
+        Err(failure) => return unavailable(&stacks_read_error(failure)),
     };
     if let Some(stack) = existing {
-        return add_to(client, target, stack.number, number);
+        return ("add", add_to(client, target, stack.number, number));
     }
     let mut pull_requests = chain_up_to(&open, base);
     pull_requests.push(number);
     let path = format!("/repos/{}/{}/stacks", target.owner, target.repo);
-    match client.post_json(&target.secret, &path, &json!({ "pull_requests": pull_requests })) {
-        Ok(answer) => match stack_from_json(&answer) {
-            Some(stack) => StackStep::done("created", stack.number),
-            None => StackStep::not_added(github_tokens::ERR_GITHUB_UNREACHABLE),
-        },
-        Err(failure) => StackStep::not_added(stack_write_error(failure)),
-    }
+    let step =
+        match client.post_json(&target.secret, &path, &json!({ "pull_requests": pull_requests })) {
+            // GitHub created the stack also when its answer names no number.
+            Ok(answer) => StackStep {
+                state: "created".to_string(),
+                stack_number: stack_from_json(&answer).map(|stack| stack.number),
+                error: None,
+            },
+            Err(failure) => StackStep::not_added(stack_write_error(failure)),
+        };
+    ("create", step)
 }

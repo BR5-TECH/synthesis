@@ -9,7 +9,12 @@ use crate::git::pull_requests::stack_record::StackRecordEntry;
 use serde_json::json;
 
 fn pr(number: u64, head: &str, base: &str) -> OpenPullRequest {
-    OpenPullRequest { number, title: format!("Change {number}"), head: head.into(), base: base.into() }
+    OpenPullRequest {
+        number,
+        title: format!("Change {number}"),
+        head: head.into(),
+        base: base.into(),
+    }
 }
 
 fn entry(branch: &str, parent: &str, stack: Option<u64>) -> StackRecordEntry {
@@ -34,6 +39,7 @@ fn a_branch_in_a_github_stack_has_the_branch_below_as_its_parent_and_the_last_as
     assert_eq!(middle.parent.as_deref(), Some("a"));
     assert_eq!(middle.top.as_deref(), Some("c"));
     assert!(!middle.is_top);
+    assert!(middle.top_has_pull_request, "the top c has an open pull request");
     assert_eq!(middle.pull_request.as_ref().map(|p| p.number), Some(2));
 
     let bottom = resolve_branch_stack("a", &inputs);
@@ -62,6 +68,25 @@ fn a_recorded_branch_is_in_the_stack_of_its_record_and_raises_the_top_above_its_
     assert_eq!(c.stack_number, Some(7));
     assert!(c.is_top);
     assert!(c.pull_request.is_none());
+    assert!(!c.top_has_pull_request);
+}
+
+// GTC-FR-ZPUA
+#[test]
+fn a_stack_top_with_no_open_pull_request_is_reported_from_every_layer() {
+    let open = [pr(1, "a", "main"), pr(2, "b", "a")];
+    let github = stack(7, "main", &["a", "b"]);
+    let records = [entry("c", "b", Some(7))];
+    let inputs = StackInputs { open: &open, github: Some(&github), records: &records };
+
+    for layer in ["a", "b"] {
+        let answer = resolve_branch_stack(layer, &inputs);
+        assert_eq!(answer.top.as_deref(), Some("c"), "layer {layer}");
+        assert!(answer.pull_request.is_some(), "layer {layer} has a pull request");
+        assert!(!answer.top_has_pull_request, "layer {layer}");
+    }
+    let none = resolve_branch_stack("zzz", &inputs);
+    assert!(!none.in_stack && !none.top_has_pull_request);
 }
 
 // GTC-FR-WHEO, GTC-FR-XCMQ

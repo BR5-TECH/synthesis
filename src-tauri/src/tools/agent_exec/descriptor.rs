@@ -208,6 +208,24 @@ pub const DOCKER_HOST_ENV: &str = "DOCKER_HOST";
 pub const VM_DOCKER_HOST_VALUE: &str = "unix:///var/run/docker.sock";
 /// The environment variable Claude Code reads its OAuth token from (EAC-FR-15).
 pub const CLAUDE_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
+/// EAC-FR-WQNH: the two Bash timeouts of the Claude Code CLI.
+pub const BASH_TIMEOUT_ENVS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
+/// EAC-FR-WQNH: the value of each of [`BASH_TIMEOUT_ENVS`], 30 minutes.
+pub const BASH_TIMEOUT_MS: &str = "1800000";
+
+/// EAC-FR-WQNH: the Bash timeouts the executor sets on a launch of `vendor`.
+/// A Claude Code launch gets both, except a variable that the launch
+/// environment names: the author's value then stands. Other vendors get none.
+pub fn bash_timeouts(vendor: &str, env_names: &[String]) -> Vec<(String, String)> {
+    if vendor != CLAUDE_CODE.vendor {
+        return Vec::new();
+    }
+    BASH_TIMEOUT_ENVS
+        .iter()
+        .filter(|name| !env_names.iter().any(|named| named == *name))
+        .map(|name| (name.to_string(), BASH_TIMEOUT_MS.to_string()))
+        .collect()
+}
 
 // ---------------------------------------------------------------------------
 // Vendor descriptors

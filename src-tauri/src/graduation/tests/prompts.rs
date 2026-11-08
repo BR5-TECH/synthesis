@@ -429,8 +429,8 @@ fn the_review_prompt_asks_a_ready_verdict_for_a_run_summary() {
 }
 
 // GRL-FR-VDCP, GRL-FR-MQFB: the two work instructions run narrow checks while
-// working, the full checks once at the end, record them in the check folder,
-// and run a long command in the foreground.
+// working, the full checks once at the end, each as a command of its own,
+// record them in the check folder, and run a long command in the foreground.
 #[test]
 fn the_work_instructions_record_the_full_checks_once() {
     for (name, source) in prompt_sources() {
@@ -443,15 +443,85 @@ fn the_work_instructions_record_the_full_checks_once() {
             "run the project's **full** checks **once**",
             ".synthesis-checks/logs/<name>.log",
             ".synthesis-checks/report.md",
-            "its exit status, its start and end time, and its summary line",
+            "the command, its exit status, its start and end time, and its summary line",
             "**Run a long command in the foreground**",
             "Never start a background job and wait for it with a sleep loop",
             "After your last edit",
-            "one entry for each check: the command, its exit status",
+            "Run each full check as a command of its own",
             "invent none",
         ] {
             assert!(text.contains(needed), "{name} does not say `{needed}`");
         }
+    }
+}
+
+// GRL-FR-CNMP: the two work instructions add the entry of each check as soon as
+// it ends, record a check that did not end as not finished, and keep one entry
+// for each check.
+#[test]
+fn the_work_instructions_record_each_check_as_it_ends() {
+    for (name, source) in prompt_sources() {
+        if !matches!(name, "work.md" | "merge-work.md") {
+            continue;
+        }
+        let text = crate::prompts::instruction_text(source);
+        for needed in [
+            "**As soon as a check ends, add its entry to `.synthesis-checks/report.md`**",
+            "Do not keep the entries for the end.",
+            "A check that did not end gets an entry that says it is not finished, with its start time.",
+            "when you run a check again, replace its earlier entry",
+        ] {
+            assert!(text.contains(needed), "{name} does not say `{needed}`");
+        }
+        assert!(!text.contains("Write `.synthesis-checks/report.md` with one entry"), "{name}");
+    }
+}
+
+// GRL-FR-MQFB, GRL-FR-ZHHX: the two work instructions ask for the longest
+// timeout, say that the turn ends at the answer, and say that a command the tool
+// moved to the background is stopped, recorded as not finished and named.
+#[test]
+fn the_work_instructions_wait_for_no_command_in_the_background() {
+    for (name, source) in prompt_sources() {
+        if !matches!(name, "work.md" | "merge-work.md") {
+            continue;
+        }
+        let text = crate::prompts::instruction_text(source);
+        for needed in [
+            "with the longest timeout your tool allows",
+            "**Your turn ends at your answer.**",
+            "Nothing tells you after your answer that a background job ended",
+            "**If your tool moves a command to the background**",
+            "do not wait for it. Stop it, record its check as not finished, and name that check in your summary.",
+        ] {
+            assert!(text.contains(needed), "{name} does not say `{needed}`");
+        }
+        // The old reason said that a background job outlives the answer, which
+        // the turn-ends rule now contradicts.
+        for gone in
+            ["with a timeout long enough for it", "keeps your session open after your answer"]
+        {
+            assert!(!text.contains(gone), "{name} still says `{gone}`");
+        }
+    }
+}
+
+// GRL-FR-QEOT: both review instructions ask a correction about a check for a
+// foreground run, and no review instruction offers a background run.
+#[test]
+fn a_review_correction_asks_for_a_foreground_run() {
+    for (name, source) in prompt_sources() {
+        if !matches!(name, "review.md" | "merge-review.md") {
+            continue;
+        }
+        let text = crate::prompts::instruction_text(source);
+        assert!(
+            text.contains("A `correction` about a check asks for that check to run in the foreground. It never asks the work turn to run a check in the background or to wait for a background job."),
+            "{name} does not ask for a foreground run"
+        );
+        // The one sentence above is the only place a review instruction speaks
+        // of the background, so no other text can offer a background run.
+        assert_eq!(text.matches("background").count(), 2, "{name}");
     }
 }
 
@@ -469,7 +539,7 @@ fn the_review_instructions_verify_the_record_and_run_no_check() {
             "`input.checks`",
             "Where `input.checks` is `missing`, return `revise`",
             "A required check that the record does not hold is a finding",
-            "A check that failed, timed out or did not run is a finding",
+            "A check that failed, timed out, did not run or is recorded as not finished is a finding",
             "A record that does not agree with its logs is a finding",
             "is not a finding by itself",
         ] {
@@ -495,6 +565,9 @@ fn no_instruction_names_a_command_of_one_project() {
             "npm test",
             "go test",
             "pytest",
+            "BASH_",
+            "run_in_background",
+            "BashOutput",
         ] {
             assert!(!text.contains(command), "{name} names `{command}`");
         }

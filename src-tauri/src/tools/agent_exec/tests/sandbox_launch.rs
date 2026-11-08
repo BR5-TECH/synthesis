@@ -377,6 +377,41 @@ fn the_vm_reaches_the_repository_through_a_generated_store() {
     assert_eq!(env.get("GIT_OPTIONAL_LOCKS").map(String::as_str), Some("0"));
 }
 
+// EAC-FR-WQNH, EAC-FR-PWLA: the process in the VM gets both Bash timeouts of a
+// Claude Code launch, as a container does.
+#[test]
+fn a_sandbox_process_gets_the_bash_timeouts() {
+    let harness = harness_for("claude_code");
+    let docker = RecordingRuntime::replying("");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    launch(&harness, docker, sandbox.clone(), microsandbox(), scope(), TurnKind::Work)
+        .expect("runs");
+
+    let env = sandbox.only_process().env;
+    for name in descriptor::BASH_TIMEOUT_ENVS {
+        assert_eq!(env.get(name).map(String::as_str), Some("1800000"), "{name}");
+    }
+}
+
+// EAC-FR-WQNH, EAC-FR-OWPP: in the VM too, a timeout that the author's entry
+// names keeps the author's value, and the executor sets the other one.
+#[test]
+fn a_sandbox_process_keeps_a_timeout_the_author_names() {
+    let harness = harness_for("claude_code");
+    let (mut records, active) = harness.store.load_agentic_registry().expect("registry");
+    let record = records.iter_mut().find(|r| r.vendor == "claude_code").unwrap();
+    record.env_vars = vec!["BASH_MAX_TIMEOUT_MS=3600000".to_string()];
+    harness.store.save_agentic_registry(records, active).expect("saved");
+    let docker = RecordingRuntime::replying("");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    launch(&harness, docker, sandbox.clone(), microsandbox(), scope(), TurnKind::Work)
+        .expect("runs");
+
+    let env = sandbox.only_process().env;
+    assert_eq!(env.get("BASH_MAX_TIMEOUT_MS").map(String::as_str), Some("3600000"));
+    assert_eq!(env.get("BASH_DEFAULT_TIMEOUT_MS").map(String::as_str), Some("1800000"));
+}
+
 // EAC-FR-WBDE, EAC-FR-HXDN: a later launch removes what a turn added to the
 // generated store and empties its `config` again. It keeps the directory and
 // its mount points, so a reused VM still holds them.

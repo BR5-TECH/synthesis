@@ -43,6 +43,7 @@ use support::*;
 #[path = "../mock_tests/mod.rs"]
 mod mock_tests;
 
+mod bash_timeouts;
 mod capture;
 mod concurrency;
 mod contracts;

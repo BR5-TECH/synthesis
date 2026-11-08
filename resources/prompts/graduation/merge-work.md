@@ -12,9 +12,10 @@
   GRL-FR-BNDD and GRL-FR-VHIS: the recorded decisions are binding, and the findings of
   earlier passes are probably fixed already.
 
-  GRL-FR-VDCP, GRL-FR-MQFB and GRL-FR-LKLE: narrow checks while working, the full checks
-  once at the end and recorded in the check folder, long commands in the foreground, and no
-  command of one project named here.
+  GRL-FR-VDCP, GRL-FR-CNMP, GRL-FR-MQFB, GRL-FR-ZHHX and GRL-FR-LKLE: narrow checks while
+  working, the full checks once at the end, each one recorded in the check folder as soon as
+  it ends, long commands in the foreground, no wait for a command the tool moved to the
+  background, and no command of one project named here.
 
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
 -->
@@ -83,11 +84,15 @@ After your last edit, run the project's **full** checks **once**: every check it
 
 **Record each full check in `.synthesis-checks/`** at the root of the working copy. The review after you runs no check. It reads this record, so a check you did not record is a check the review counts as not run.
 
+- Run each full check as a command of its own, not several checks in one command.
 - Write the output of each check to `.synthesis-checks/logs/<name>.log`, for example `<command> 2>&1 | tee .synthesis-checks/logs/<name>.log`, and keep its exit status (`${PIPESTATUS[0]}`).
-- Write `.synthesis-checks/report.md` with one entry for each check: the command, its exit status, its start and end time, and its summary line — the count of tests that passed and failed, or the first error.
-- The application empties the folder before your turn, and it commits nothing in it. The record shows the last run of each check. If you edit a file after the full run, run the full checks again and write the record again.
+- **As soon as a check ends, add its entry to `.synthesis-checks/report.md`**: the command, its exit status, its start and end time, and its summary line — the count of tests that passed and failed, or the first error. Do not keep the entries for the end. A turn that stops early then still leaves the entry of each check that ended.
+- A check that did not end gets an entry that says it is not finished, with its start time.
+- The application empties the folder before your turn, and it commits nothing in it. The record shows the last run of each check: when you run a check again, replace its earlier entry. If you edit a file after the full run, run the full checks again and write the record again.
 
-**Run a long command in the foreground**, with a timeout long enough for it. Never start a background job and wait for it with a sleep loop, `pgrep`, `until grep` or any other poll. A background job keeps your session open after your answer, and a poll spends the turn on waiting.
+**Run a long command in the foreground**, with the longest timeout your tool allows. Never start a background job and wait for it with a sleep loop, `pgrep`, `until grep` or any other poll. **Your turn ends at your answer.** Nothing tells you after your answer that a background job ended, and a job that still runs then stops with your turn, so its result is lost.
+
+**If your tool moves a command to the background**, for example because it ran past its timeout, do not wait for it. Stop it, record its check as not finished, and name that check in your summary.
 
 A check that fails is not finished work. Fix what it reports and run it again, or say plainly in your summary that you could not and why.
 

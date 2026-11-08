@@ -718,7 +718,7 @@ export function GraduationRuns({
         // GRU-FR-FZCN: while the run waits on the author, the question is what
         // the region is for, so the layout gives it the room rather than the
         // account of how the run got here.
-        data-awaiting={run?.escalation ? "true" : undefined}
+        data-awaiting={run?.escalation && run.state === "awaiting_author" ? "true" : undefined}
       >
         {error && (
           <p

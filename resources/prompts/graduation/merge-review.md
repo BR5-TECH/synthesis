@@ -7,7 +7,8 @@
   different from `review.md`: the standard is the two pinned branch versions and the
   repository's specifications, not a prompt.
 
-  GRL-FR-RTNC, GRL-FR-NTFD, GRL-FR-PNLQ and GRL-FR-LKLE: the turn runs no check. It reads the
+  GRL-FR-RTNC, GRL-FR-NTFD, GRL-FR-PNLQ, GRL-FR-QEOT and GRL-FR-LKLE: the turn runs no
+  check, and a correction asks for a foreground run. It reads the
   check record of the merge work turn, and it names no command of one project.
 
   GRL-FR-BNDD: the recorded decisions are binding.
@@ -29,7 +30,7 @@ The working copy you are standing in is a checkout of the merge as reconciled, m
 
 - **A record that is missing is a finding.** Where `input.checks` is `missing`, return `revise` with a finding that tells the next work turn to run the project's full checks and record them.
 - **A required check that the record does not hold is a finding.** Name the check. A check the project defines as one task can be recorded as that task or as the commands the task runs: either one is the check.
-- **A check that failed, timed out or did not run is a finding.** Report the command and what its log says, exactly as recorded. Do not mask or downgrade it.
+- **A check that failed, timed out, did not run or is recorded as not finished is a finding.** Report the command and what its log says, exactly as recorded. Do not mask or downgrade it.
 - **A record that does not agree with its logs is a finding**: an exit status or a summary line that the log does not bear out, or a log that is absent.
 
 The folder `.synthesis-checks/` is not part of the merge. It is not a change to report.
@@ -116,6 +117,7 @@ Return a single JSON object as your `result`, holding exactly these fields:
 - `description` states **one problem, once**. Two problems are two findings.
 - `affected_files` names project-relative paths inside the working copy you are standing in. It **may name a path that does not exist yet**. It may not name an absolute path or one outside that copy; such a path is dropped from the finding, and a finding left with none is dropped whole. Leave it empty **only** for a finding about the repository as a whole.
 - `correction` says what the next work turn is to do, and must be **directly actionable** — something that turn can perform without guessing what you meant.
+- A `correction` about a check asks for that check to run in the foreground. It never asks the work turn to run a check in the background or to wait for a background job.
 
 Return the findings ordered by severity from highest to lowest — `critical`, then `major`, then `minor` — then by their first affected path in ascending order, with a finding that has no affected path before those that do, and then by description. A set returned in another order is refused whole rather than tidied up, and nothing is recorded from a refused set.
 

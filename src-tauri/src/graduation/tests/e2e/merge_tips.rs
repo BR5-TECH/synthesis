@@ -57,10 +57,12 @@ fn a_stream_tip_that_moved_before_the_first_dispatch_fails_the_run() {
         .expect_merge_workspace_reclaimed();
 }
 
-// GTE-FR-KBVN, GTE-FR-RZKC, GTE-FR-HWQM / GRD-FR-XHSE, GRD-FR-CYIB,
-// GXD-FR-BJYT: Continue and an escalation answer on a resting run
-// are refused with `merge_branch_moved` and change nothing, whichever tip moved.
-// The run keeps its merge worktree, and the author's discard reclaims it.
+// GTE-FR-KBVN, GTE-FR-RZKC, GTE-FR-HWQM / GRD-FR-XHSE, GXD-FR-BJYT,
+// GRD-FR-ZJHD: an escalation answer on a resting run is refused with
+// `merge_branch_moved` and changes nothing, whichever tip moved. Continue on
+// that run is refused before the tips are read, because a run that waits on its
+// questions moves on only by the answers or by a discard. The run keeps its
+// merge worktree, and the author's discard reclaims it.
 #[test]
 fn continue_and_an_answer_are_refused_when_a_tip_moved() {
     conflicted_merge("refusals after a moved tip")
@@ -72,7 +74,7 @@ fn continue_and_an_answer_are_refused_when_a_tip_moved() {
         .refusing_answers(&["The base limit stands."], "merge_branch_moved")
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_escalation_questions(&["Which limit stands?"])
-        .refusing_continue("merge_branch_moved")
+        .refusing_continue("run_state_not_permitted")
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_merge_workspace_standing()
         .expect_base_branch_unchanged()

@@ -290,8 +290,10 @@ export function RunRegion({
 
       {/* GRU-FR-FZCN: an escalation, and the answers it is waiting for. The
           questions and the fields are one surface: questions the author cannot
-          answer are a run nothing can release. */}
-      {run.escalation && (
+          answer are a run nothing can release. GRU-FR-XKCB: only while the
+          run waits on the author, so a record that still names questions
+          while a turn runs offers no answer to them. */}
+      {run.escalation && run.state === "awaiting_author" && (
         <RunEscalationForm
           run={run}
           busy={busy}

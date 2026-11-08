@@ -387,6 +387,8 @@ impl AgentCliExecutor {
         }
         mounts.extend(dind.mounts);
         env_literals.extend(dind.env_literals);
+        // EAC-FR-WQNH: a long check runs to its end, whatever the image and the project set.
+        env_literals.extend(descriptor::bash_timeouts(descriptor.vendor, &env_names));
         if vm_daemon {
             env_literals.push((
                 descriptor::DOCKER_HOST_ENV.to_string(),

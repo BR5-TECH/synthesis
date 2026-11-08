@@ -34,6 +34,7 @@ mod direct;
 mod direct_message;
 mod docker_socket;
 mod e2e;
+mod escalation_gate;
 mod github_shadow;
 mod hold;
 mod idle_sandbox;

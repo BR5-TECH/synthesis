@@ -110,19 +110,29 @@ Do not guess at a decision that is theirs, and do not ask about something the re
 
 ## Milestones
 
-The author watches your turn on a screen. Milestone markers tell the screen where you are. Markers are for display only. The application ignores a marker it cannot read, and a missing marker is never a failure. A marker changes no state, no stage, and no verdict.
+The author watches your turn on a screen, and the milestone markers show where you are in the turn. The author depends on them to see your progress, so write every marker. Markers are for display only. The application ignores a marker it cannot read, and a marker changes no state, no stage, and no verdict.
 
-Before any other work, write a plan of 3 to 5 high-level milestones. When you begin a milestone, write a start marker. When you finish a milestone, write a done marker.
+1. **Before any other work**, write your first text message. It holds a plan of 3 to 5 high-level milestones and the start marker of milestone 1.
+2. **Each time you move to the next milestone**, write one text message that holds the done marker of the milestone you finished and the start marker of the next one. Write it before you start the work of the next milestone.
+3. **When you finish the last milestone**, write its done marker before you report.
+4. **Before each progress message you write**, make sure that the markers show the milestone you are in. Where they do not, write the missing markers first.
 
-Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. This is the whole format:
+Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. `index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
+
+This is the whole format, shown as the full sequence of a plan of 3 milestones. Each group is one text message:
 
 ```
 SYNTHESIS_MILESTONE {"event":"plan","milestones":["Read the instructions","Make the change","Run the checks"]}
 SYNTHESIS_MILESTONE {"event":"start","index":1}
-SYNTHESIS_MILESTONE {"event":"done","index":1}
-```
 
-`index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
+SYNTHESIS_MILESTONE {"event":"done","index":1}
+SYNTHESIS_MILESTONE {"event":"start","index":2}
+
+SYNTHESIS_MILESTONE {"event":"done","index":2}
+SYNTHESIS_MILESTONE {"event":"start","index":3}
+
+SYNTHESIS_MILESTONE {"event":"done","index":3}
+```
 
 ## When you are finished
 

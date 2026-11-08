@@ -43,7 +43,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 25. **GRU-FR-ZPTE** The author drags the column divider to set the paths column's width. On the divider, Left and Right move the width by one percentage point, Home sets the lower bound and End the upper bound. The divider is a separator that states its name and its width as a percentage. A drag end or a key press stores the width.
 19. **GRU-FR-MRPE** Every text this section renders that an agent or a model produced is treated as untrusted: it is rendered as escaped plain text, with no Markdown and no embedded markup.
 20. **GRU-FR-ZVTC** The rail and the run region render from what the backend reports rather than from what the surface attempted. Every `"graduation queue changed"` and `"graduation run changed"` event reloads the listing it names.
-20. **GRU-FR-QKSY** A `"graduation log records appended"` event reloads the listing only where it names a listed, non-terminal run whose progress and log indexes this build reads, and whose log indexes hold no segment naming the run's current stage with the current pass or with `pass = null`. An event of the `activity` stream that names the selected, non-terminal run also refreshes that run's milestone list (GRU-FR-JHVX), without a reload of the listing. Any other append event reloads nothing.
+20. **GRU-FR-QKSY** A `"graduation log records appended"` event reloads the listing only where it names a listed, non-terminal run whose progress and log indexes this build reads, and whose log indexes hold no segment naming the run's current stage with the current pass or with `pass = null`. An event of the `activity` stream that names the selected, non-terminal run also refreshes that run's milestone list (GRU-FR-JHVX) and its progress line (GRU-FR-YMMF), without a reload of the listing. Any other append event reloads nothing.
     - *Why:* a turn appends many records, only the first of a stage makes it activatable, and some stages hold only `pass = null` records.
 21. **GRU-FR-BLSS** A run entering `awaiting_author`, `blocked`, or a terminal state raises for the author's attention (per `NTF-notifications.md`), addressed to that run. The raise carries a level: Warn for `awaiting_author` and `blocked`; Info for `completed` and `discarded`; Error for `failed` and for `interrupted` on a failure reason. A run entering `interrupted` raises for every reason except `author_pause`, `application_shutdown` and `project_changed`. Progress alone raises nothing.
 21. **GRU-FR-HMPM** A model downgrade of a run (per `../ai/GRL-graduation-loop.md` GRL-FR-OPRK) raises at the level Warn, addressed to that run, on the terms of `NTF-notifications.md` NTF-FR-AGTB. A click on its toast or its OS notification opens the run. It changes no state of the run.
@@ -105,6 +105,9 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 61. **GRU-FR-AFSW** When the selection moves to another run, nothing that the region drew for the run before stays in the region. The region shows one milestone list at most, it is the list of the selected run, and a run with no current turn shows none, however often the selection moves and however many records the activity stream appends.
     - *Why:* a list that stays from an earlier selection shows one run's milestones under another run, and lists that stay from several selections show one list many times.
 61. **GRU-FR-LMTX** Every milestone title is rendered as escaped plain text (GRU-FR-MRPE). The list renders in plan order and adds no control, and activating a milestone opens nothing.
+62. **GRU-FR-NPQY** While the current turn of the selected run has not ended (GRU-FR-FHLE), the region shows a **progress line** under the milestone list. The line holds the `summary` of the newest `message` record of the current phase and pass. It shows also where no plan stands. It shows nothing when the turn has ended or holds no `message` record.
+62. **GRU-FR-YMMF** The progress line reads through `read_graduation_logs` with `kinds` set to `message` and `limit` set to 1. It reads again at the moments of GRU-FR-ZCTP. A read that returns the summary the line already holds changes nothing on screen. A read that fails leaves the line as it was. A new turn starts with no line.
+62. **GRU-FR-SOIJ** The progress line shows a muted label "Now" and the summary on one line, with an ellipsis where it is too long, and the full summary as its tooltip. The summary is escaped plain text (GRU-FR-MRPE), and the line adds no control. The region shows one progress line at most, and it is the line of the selected run.
 
 ## Wireframes
 
@@ -117,7 +120,8 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 │ ▸ empty state    │ queued   working  review   done                        │
 │   Queued  #1     │ Working · pass 1 of 2                                  │
 │ ▸ tab close      │ ✓ Read the spec  ● Write the code  ○ Run the checks    │
-│   Completed      │ ▾ Changed · 181   ┃ Passes                   2 passes  │
+│   Completed      │ Now  Running the unit tests of the parser…             │
+│                  │ ▾ Changed · 181   ┃ Passes                   2 passes  │
 │                  │ ┌───────────────┐ ┃ ▸ First pass  The review asked …   │
 │                  │ │ ▾ specs     24│ ┃ ▾ Pass 2      Working              │
 │                  │ │   ▸ core     4│ ┃   What this pass was asked to do   │
@@ -153,7 +157,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 
 ## UI contract boundary
 
-**Owned by the UI**: which run is selected, the rail's filter and ordering view, which pass rows are open, whether the Escalations log is expanded, the milestone list and the state each of its milestones shows, which path lists and which of their folders are open, the bounds and the keyboard steps of the paths column's width, the wording of every state, condition and blocking sentence, the stage labels of a merge run, the rendering of a merge run's paths and result, button enablement, and the escaped rendering of agent text.
+**Owned by the UI**: which run is selected, the rail's filter and ordering view, which pass rows are open, whether the Escalations log is expanded, the milestone list and the state each of its milestones shows, the progress line and the cut of its summary, which path lists and which of their folders are open, the bounds and the keyboard steps of the paths column's width, the wording of every state, condition and blocking sentence, the stage labels of a merge run, the rendering of a merge run's paths and result, button enablement, and the escaped rendering of agent text.
 
 **Delegated to backend (abstract)**:
 - `load_app_preferences`

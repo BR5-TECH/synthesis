@@ -1,5 +1,6 @@
 //! The milestone block of the four graduation instructions
-//! (`GRL-graduation-loop.md` GRL-FR-KWPT, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY, GRL-FR-LCSB).
+//! (`GRL-graduation-loop.md` GRL-FR-KWPT, GRL-FR-LCBJ, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY,
+//! GRL-FR-LCSB).
 
 use super::*;
 
@@ -19,9 +20,9 @@ fn instruction(source: &str) -> String {
     crate::prompts::instruction_text(source)
 }
 
-/// GRL-FR-KWPT, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY — each of the four instructions carries the
-/// block: the three events, the format with its example, the display-only statement, and no
-/// deliverable.
+/// GRL-FR-KWPT, GRL-FR-LCBJ, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY — each of the four
+/// instructions carries the block: the first message, the move to the next milestone, the last
+/// done marker, the format with its full example, the display-only statement, and no deliverable.
 #[test]
 fn each_of_the_four_instructions_carries_the_milestone_block() {
     for (name, source) in sources() {
@@ -33,12 +34,24 @@ fn each_of_the_four_instructions_carries_the_milestone_block() {
             r#"{"event":"plan","milestones":["#,
             r#"{"event":"start","index":1}"#,
             r#"{"event":"done","index":1}"#,
+            r#"{"event":"start","index":2}"#,
+            r#"{"event":"done","index":3}"#,
             "3 to 5",
             "Before any other work",
+            "first text message",
+            "the start marker of milestone 1",
+            "move to the next milestone",
+            "the done marker of the milestone you finished and the start marker of the next one",
+            "before you start the work of the next milestone",
+            "before you report",
+            "Before each progress message",
             "on its own line",
             "final result document",
             "for display only",
-            "never a failure",
+            "ignores a marker it cannot read",
+            "depends on them",
+            "write every marker",
+            "changes no state, no stage, and no verdict",
             "50 characters",
         ] {
             assert!(block.contains(needed), "{name} block lacks `{needed}`");
@@ -46,6 +59,7 @@ fn each_of_the_four_instructions_carries_the_milestone_block() {
         for deliverable in ["specification", "write a test", "implementation"] {
             assert!(!block.contains(deliverable), "{name} block names a deliverable");
         }
+        assert!(!block.contains("never a failure"), "{name} block makes markers optional");
         assert!(
             !text.contains("<!--"),
             "{name}: authoring comments are removed before the agent reads the file"

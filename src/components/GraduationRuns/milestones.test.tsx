@@ -311,8 +311,12 @@ function mountSection(runs: ReturnType<typeof makeRun>[], byRun: Record<string, 
         return { graduationRailWidthFraction: 0.2 };
       case "list_work_streams":
         return [];
-      case "read_graduation_logs":
-        return pageOf(byRun[String((args as { runId?: string } | undefined)?.runId)] ?? stored);
+      case "read_graduation_logs": {
+        const request = (args ?? {}) as { runId?: string; kinds?: string[] };
+        // The progress line reads `message` records, and this file holds none.
+        if (request.kinds?.[0] === "message") return pageOf([]);
+        return pageOf(byRun[String(request.runId)] ?? stored);
+      }
       default:
         return undefined;
     }
@@ -367,7 +371,7 @@ describe("the milestone list in the run region", () => {
         logs: makeLogs({ activity: [{ phaseId: "working", pass: 1 }] }),
       }),
     ]);
-    invoked.mockImplementation(async (command: string) => {
+    invoked.mockImplementation(async (command: string, args?: unknown) => {
       switch (command) {
         case "list_graduation_queue":
           return queue;
@@ -376,7 +380,10 @@ describe("the milestone list in the run region", () => {
         case "list_work_streams":
           return [];
         case "read_graduation_logs":
-          return pageOf(stored);
+          // The progress line reads `message` records, and this file holds none.
+          return (args as { kinds?: string[] } | undefined)?.kinds?.[0] === "message"
+            ? pageOf([])
+            : pageOf(stored);
         default:
           return undefined;
       }

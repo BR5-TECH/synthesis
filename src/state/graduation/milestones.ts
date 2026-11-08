@@ -29,6 +29,9 @@ export interface CurrentTurn {
 /** GRU-FR-JHVX: the one kind the list reads. */
 export const MILESTONE_KIND = "milestone";
 
+/** GRU-FR-YMMF: the one kind the progress line reads. */
+export const MESSAGE_KIND = "message";
+
 /** GRU-FR-WQHM: the largest plan the executor delivers (EAC-FR-VCBJ). */
 const MAX_TITLES = 5;
 

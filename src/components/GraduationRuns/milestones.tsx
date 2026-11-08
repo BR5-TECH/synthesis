@@ -8,21 +8,18 @@
  * record and no `message` summary, and it adds no control.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { readGraduationLogs } from "../../api/streams";
-import { onGraduationLogRecordsAppended } from "../../events";
-import { logDebug } from "../../logging";
 import {
   MILESTONE_KIND,
-  currentTurnOf,
   isPrSummaryRun,
   milestoneStateLabel,
   milestonesFrom,
   turnHasEnded,
 } from "../../state/graduation";
 import type { GraduationLogCursor, GraduationRun } from "../../types";
-import { TERMINAL_RUN_STATES as TERMINAL } from "../../types";
+import { TurnReadUnavailable, useTurnRead } from "./useTurnRead";
 
 /** The records one page of the read holds. */
 const PAGE_LIMIT = 200;
@@ -46,7 +43,7 @@ async function readSummaries(runId: string, phaseId: string, pass: number): Prom
     // GRU-FR-ELDK: a page that says the stream could not be read is a failed
     // read, so the list stays as it was rather than going empty.
     if (page.status === "unavailable" || page.status === "persistence_failed") {
-      throw new Error(`the activity stream answered ${page.status}`);
+      throw new TurnReadUnavailable(page.status);
     }
     pages.unshift(
       page.entries
@@ -63,79 +60,9 @@ function sameSummaries(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((summary, at) => summary === b[at]);
 }
 
-/**
- * GRU-FR-JHVX / GRU-FR-ZCTP: the summaries of the run's current turn.
- *
- * Read when the run is selected, when its state, phase or pass changes, and on
- * an append of the activity stream while the run is not terminal. A read that
- * fails leaves the list as it was (GRU-FR-ELDK). One read runs at a time, and an
- * append that arrives during it asks for one more.
- */
-function useMilestoneSummaries(run: GraduationRun): string[] | null {
-  const turn = currentTurnOf(run);
-  const runId = run.id;
-  const phaseId = turn?.phaseId ?? null;
-  const pass = turn?.pass ?? null;
-  const terminal = (TERMINAL as readonly string[]).includes(run.state);
-  const [held, setHeld] = useState<{ key: string; summaries: string[] } | null>(null);
-  const key = `${runId}|${phaseId}|${pass}`;
-
-  useEffect(() => {
-    if (phaseId === null || pass === null) return undefined;
-    let cancelled = false;
-    let running = false;
-    let again = false;
-    const read = () => {
-      if (running) {
-        again = true;
-        return;
-      }
-      running = true;
-      void readSummaries(runId, phaseId, pass)
-        .then((summaries) => {
-          if (cancelled) return;
-          // GRU-FR-ZCTP: a read that returns what the list holds changes nothing
-          // on screen. An agent that streams appends many records each second.
-          setHeld((prev) =>
-            prev !== null && prev.key === key && sameSummaries(prev.summaries, summaries)
-              ? prev
-              : { key, summaries },
-          );
-        })
-        .catch(() => {
-          logDebug(["frontend"], "a run's milestones could not be read", { runId, phaseId });
-        })
-        .finally(() => {
-          running = false;
-          if (again && !cancelled) {
-            again = false;
-            read();
-          }
-        });
-    };
-    read();
-    let unlisten: (() => void) | null = null;
-    if (!terminal) {
-      void onGraduationLogRecordsAppended((payload) => {
-        if (payload.runId === runId && payload.stream === "activity") read();
-      }).then((off) => {
-        if (cancelled) off();
-        else unlisten = off;
-      });
-    }
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [runId, phaseId, pass, run.state, terminal, key]);
-
-  // GRU-FR-TBNE: a new turn starts with an empty list, so what was read for
-  // another turn is never shown.
-  return held && held.key === key ? held.summaries : null;
-}
-
 export function MilestoneList({ run }: { run: GraduationRun }) {
-  const summaries = useMilestoneSummaries(run);
+  // GRU-FR-JHVX / GRU-FR-ZCTP: the summaries of the run's current turn.
+  const summaries = useTurnRead(run, readSummaries, sameSummaries, "milestones");
   const ended = turnHasEnded(run);
   const milestones = useMemo(
     () => (summaries === null ? null : milestonesFrom(summaries, ended)),

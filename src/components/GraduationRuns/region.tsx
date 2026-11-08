@@ -63,6 +63,7 @@ import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
 import { MergePaths, MergePublication, MergeResult } from "./merge";
 import { MilestoneList } from "./milestones";
+import { ProgressLine } from "./progressLine";
 import { PrSummaryResult } from "./prSummary";
 
 /**
@@ -225,6 +226,9 @@ export function RunRegion({
           because a sibling keyed by the run id alone would share it, and React
           then keeps one run's list in another run's region. */}
       <MilestoneList key={`milestones:${run.id}`} run={run} />
+      {/* GRU-FR-NPQY: the agent's newest progress sentence, under the list.
+          GRU-FR-SOIJ: keyed by run and by name, as the list is (GRU-FR-AFSW). */}
+      <ProgressLine key={`progress:${run.id}`} run={run} />
 
       {/* GRU-FR-LBPR / GRU-FR-FZCN / GRU-FR-DBUS: a run resting on a blocker
           states it in either state that carries one. */}

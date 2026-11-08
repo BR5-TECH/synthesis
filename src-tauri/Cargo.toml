@@ -58,7 +58,7 @@ keyring = { version = "4", features = ["v1"] }
 # against api.github.com, and AAP-FR-05 / AIC-FR-22 verify an AI endpoint by
 # asking it for its model list. Every one of those calls is bounded by a global
 # timeout, because the UI has no way to cancel an in-flight `invoke`.
-ureq = "3"
+ureq = "3.5"
 # AAP-FR-23: the `openrouter` provider is reached through this SDK, which is
 # what its verification, its model probe, and the reasoning parameter of every
 # call it carries go through. It is the only provider that depends on it — the

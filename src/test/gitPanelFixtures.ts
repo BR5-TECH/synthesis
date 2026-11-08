@@ -108,6 +108,7 @@ export function pullRequest(
     author: `dev${n}`,
     headBranch: `topic-${n}`,
     baseBranch: "main",
+    headIsFork: false,
     createdAt: "2026-09-01T10:00:00Z",
     updatedAt: "2026-09-02T10:00:00Z",
     ...over,

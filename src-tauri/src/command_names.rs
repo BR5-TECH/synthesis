@@ -297,6 +297,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // GTC-git.md GTC-FR-ZHVO.
     "link_pull_request_issues",
     "get_pull_request_head_state",
+    "get_branch_stack",
+    "add_branch_to_stack",
+    "submit_pull_request_to_stack",
     // GTC-git.md GTC-FR-TTSV / GTC-FR-YWRZ.
     "get_branch_write_guard",
     "confirm_main_branch_write",

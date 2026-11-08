@@ -1,5 +1,6 @@
 //! Proposing and creating a worktree
-//! (`WTC-worktree-context.md` WTC-FR-13, WTC-FR-14, WTC-FR-15, WTC-FR-QVNL).
+//! (`WTC-worktree-context.md` WTC-FR-13, WTC-FR-14, WTC-FR-15, WTC-FR-QVNL,
+//! WTC-FR-NQZE).
 //!
 //! Split out of `worktree.rs` so that file holds the enumeration, the
 //! re-rooting and the commands, and this one holds the two additive acts a new
@@ -84,12 +85,14 @@ pub(crate) fn create_worktree_in<R: tauri::Runtime>(
     store: &GlobalSettingsStore,
     branch: &str,
     path: &str,
+    start: Option<&str>,
 ) -> Result<WorktreeContext, String> {
     let root = project.require_root()?;
     // WTC-FR-FBJQ: creating a worktree makes it the content root.
     crate::graduation::require_no_dispatched_direct_run(app)?;
     let offset = root_offset(&open_repo(&root)?, &root);
-    let created = match create_worktree_at(&root, branch, path) {
+    let start = start.filter(|start| !start.trim().is_empty());
+    let created = match create_worktree_seamed(&root, branch, path, start, &NoCreateSeam) {
         Ok(created) => created,
         Err(reason) => {
             crate::logging::log_warn(
@@ -97,7 +100,7 @@ pub(crate) fn create_worktree_in<R: tauri::Runtime>(
                 &crate::logging::BUFFER,
                 &[crate::logging::Domain::Backend],
                 "worktree creation refused or failed",
-                crate::log_fields! { "requested_branch" => branch, "path" => path, "reason" => reason.clone() },
+                crate::log_fields! { "requested_branch" => branch, "path" => path, "start" => start.unwrap_or_default(), "reason" => reason.clone() },
             );
             return Err(reason);
         }
@@ -125,7 +128,7 @@ pub(crate) fn create_worktree_in<R: tauri::Runtime>(
         &crate::logging::BUFFER,
         &[crate::logging::Domain::Backend],
         "worktree created",
-        crate::log_fields! { "requested_branch" => branch, "branch" => checked_out, "path" => created_path },
+        crate::log_fields! { "requested_branch" => branch, "branch" => checked_out, "path" => created_path, "start" => start.unwrap_or_default() },
     );
     Ok(context)
 }
@@ -146,13 +149,25 @@ impl CreateSeam for NoCreateSeam {}
 /// branch from the active worktree's `HEAD` when it does not exist. Returns the
 /// canonical path of the new worktree.
 pub fn create_worktree_at(active_root: &Path, branch: &str, path: &str) -> Result<PathBuf, String> {
-    create_worktree_seamed(active_root, branch, path, &NoCreateSeam)
+    create_worktree_seamed(active_root, branch, path, None, &NoCreateSeam)
+}
+
+/// WTC-FR-NQZE: as [`create_worktree_at`], but a branch that the creation
+/// makes starts at the tip of the branch `start` (GTC-FR-FWYK).
+pub fn create_worktree_from(
+    active_root: &Path,
+    branch: &str,
+    path: &str,
+    start: &str,
+) -> Result<PathBuf, String> {
+    create_worktree_seamed(active_root, branch, path, Some(start), &NoCreateSeam)
 }
 
 pub(super) fn create_worktree_seamed(
     active_root: &Path,
     branch: &str,
     path: &str,
+    start: Option<&str>,
     seam: &dyn CreateSeam,
 ) -> Result<PathBuf, String> {
     let repo = open_repo(active_root)?;
@@ -185,14 +200,21 @@ pub(super) fn create_worktree_seamed(
 
     let mut created_branch = false;
     if main.find_branch(branch, BranchType::Local).is_err() {
-        // WTC-FR-14: created from the active worktree's HEAD.
-        let head = repo
-            .head()
-            .and_then(|h| h.peel_to_commit())
-            .map_err(|e| format!("failed to resolve HEAD: {e}"))?;
-        let head =
-            main.find_commit(head.id()).map_err(|e| format!("failed to resolve HEAD: {e}"))?;
-        main.branch(branch, &head, false).map_err(|e| format!("failed to create branch: {e}"))?;
+        // WTC-FR-NQZE: created at the tip of `start` when it is given, else
+        // (WTC-FR-14) from the active worktree's HEAD. An existing branch
+        // ignores `start`.
+        let start_commit = match start.map(str::trim).filter(|start| !start.is_empty()) {
+            Some(start) => crate::git::objects::branch_tip(&main, start)?,
+            None => repo
+                .head()
+                .and_then(|h| h.peel_to_commit())
+                .map(|c| c.id())
+                .map_err(|e| format!("failed to resolve HEAD: {e}"))?,
+        };
+        let start_commit =
+            main.find_commit(start_commit).map_err(|e| format!("failed to resolve HEAD: {e}"))?;
+        main.branch(branch, &start_commit, false)
+            .map_err(|e| format!("failed to create branch: {e}"))?;
         created_branch = true;
     }
 

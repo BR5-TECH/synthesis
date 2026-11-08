@@ -926,12 +926,13 @@ pub async fn refresh_worktrees_and_branches(
 pub fn create_worktree(
     branch: String,
     path: String,
+    start: Option<String>,
     app: tauri::AppHandle,
     project: State<'_, ProjectState>,
     watcher: State<'_, ProjectWatcher>,
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<WorktreeContext, String> {
-    create_worktree_in(&app, &project, &watcher, &store, &branch, &path)
+    create_worktree_in(&app, &project, &watcher, &store, &branch, &path, start.as_deref())
 }
 
 mod creation;

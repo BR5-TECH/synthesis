@@ -95,6 +95,8 @@ import { useRemovedNotices } from "./WorkStreamSelector/removedNotices";
 import { useMenuInWindow } from "./WorkStreamSelector/menuInWindow";
 import { useTemporaryStreams } from "./WorkStreamSelector/temporary";
 import type { PullRequestSource } from "./CreatePullRequest/types";
+import { streamPullRequestSource } from "./WorkStreamSelector/pullRequestSource";
+import { openPullRequestFor, useOpenPullRequestList } from "../state/openPullRequests";
 import type {
   MergeOutcome,
   RowSurface,
@@ -116,6 +118,12 @@ export function WorkStreamSelector({
   onCreatePullRequest,
 }: WorkStreamSelectorProps) {
   const [open, setOpen] = useState(false);
+  // WSS-FR-OBZK: the open pull requests, read when the dropdown opens.
+  const openPulls = useOpenPullRequestList(open ? "open" : null, open);
+  /** WSS-FR-ALEU: the stream whose branch stack is being read. */
+  const [readingStack, setReadingStack] = useState<string | null>(null);
+  const openRef = useRef(false);
+  openRef.current = open;
   const [streams, setStreams] = useState<WorkStreamSummary[] | null>(null);
   const [surface, setSurface] = useState<RowSurface>({ kind: "none" });
   const [creating, setCreating] = useState(false);
@@ -840,15 +848,21 @@ export function WorkStreamSelector({
                 }}
                 // WSS-FR-KHGP: the dropdown closes first, as it does for the
                 // commit message window, so it does not paint over the scrim.
+                openPullRequest={openPullRequestFor(openPulls, summary.stream.branch)}
+                readingStack={readingStack === summary.stream.id}
                 onCreatePullRequest={(row) => {
-                  close();
-                  // CPR-FR-IWDK: the row goes with the dropdown, so the window
-                  // gives focus back to the Work streams control.
-                  triggerRef.current?.focus();
-                  onCreatePullRequest?.({
-                    head: row.stream.branch,
-                    base: row.stream.baseBranch,
-                    title: row.stream.name,
+                  if (readingStack !== null) return;
+                  setReadingStack(row.stream.id);
+                  // WSS-FR-ALEU: the stack of the branch gives the base.
+                  void streamPullRequestSource(row).then((source) => {
+                    setReadingStack(null);
+                    // The author closed the dropdown while the read ran.
+                    if (!openRef.current) return;
+                    close();
+                    // CPR-FR-IWDK: the row goes with the dropdown, so the
+                    // window gives focus back to the Work streams control.
+                    triggerRef.current?.focus();
+                    onCreatePullRequest?.(source);
                   });
                 }}
               />

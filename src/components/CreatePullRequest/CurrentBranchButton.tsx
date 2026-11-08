@@ -5,15 +5,18 @@
  *
  * The Changes panel's footer and the Git panel's PRs rail both render it, so
  * the two offer a pull request on the same terms. It starts nothing itself: it
- * opens the shared window with the current branch as its source.
+ * opens the shared window with the current branch as its source. A click waits
+ * for the stack answer of the branch before it builds the source, and the
+ * button is busy while it waits (CHG-FR-JQSD).
  */
-import { useId } from "react";
+import { useId, useRef, useState } from "react";
 
 import {
   createPullRequestAvailability,
   currentBranchSource,
   useCurrentBranchPullRequest,
 } from "../../hooks/useCurrentBranchPullRequest";
+import { openPullRequestFor, useOpenPullRequestList } from "../../state/openPullRequests";
 import { Icon } from "../icons";
 import type { PullRequestSource } from "./types";
 
@@ -33,9 +36,14 @@ export function CurrentBranchButton({
   testId: string;
   onCreatePullRequest?: (source: PullRequestSource) => void;
 }) {
-  const { current } = useCurrentBranchPullRequest();
+  const { current, stackFor } = useCurrentBranchPullRequest();
+  const [opening, setOpening] = useState(false);
+  const openingRef = useRef(false);
+  const head = current.status === "ready" ? current.head : null;
+  // CHG-FR-NKGY / GIT-FR-HMRW: read on mount and when the branch changes.
+  const openPulls = useOpenPullRequestList(head, head !== null);
   const reasonId = useId();
-  const availability = createPullRequestAvailability(current);
+  const availability = createPullRequestAvailability(current, openPullRequestFor(openPulls, head));
   const reason = extraReason ?? availability.reason;
   const available = reason === null && availability.available;
 
@@ -50,11 +58,20 @@ export function CurrentBranchButton({
         // starts nothing, so it is not `disabled`.
         aria-disabled={!available}
         aria-describedby={reason ? reasonId : undefined}
+        aria-busy={opening || undefined}
         title={reason ?? undefined}
         onClick={() => {
-          if (!available) return;
-          const source = currentBranchSource(current);
-          if (source) onCreatePullRequest?.(source);
+          if (!available || openingRef.current || current.status !== "ready") return;
+          // CHG-FR-JQSD: build the source from the stack answer, not from a
+          // read that still runs.
+          openingRef.current = true;
+          setOpening(true);
+          void stackFor(current.head).then((stack) => {
+            openingRef.current = false;
+            setOpening(false);
+            const source = currentBranchSource(current, stack);
+            if (source) onCreatePullRequest?.(source);
+          });
         }}
       >
         {withIcon && <Icon.GitPull size={12} />} {label}

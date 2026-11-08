@@ -40,8 +40,9 @@ mod verifier;
 use discussion_identity::emit_tokens_changed;
 pub use discussion_identity::{resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED};
 pub use host::{
-    default_host, github_api_base, github_api_host, github_graphql_url, github_web_base,
-    normalize_host, token_creation_url, DEFAULT_HOST, ERR_HOST_MISMATCH, ERR_INVALID_HOST,
+    api_version_for_path, default_host, github_api_base, github_api_host, github_graphql_url,
+    github_web_base, is_stacks_path, normalize_host, token_creation_url, DEFAULT_HOST,
+    ERR_HOST_MISMATCH, ERR_INVALID_HOST, GITHUB_API_VERSION, GITHUB_STACKS_API_VERSION,
 };
 pub use verifier::{
     account_from_user_payload, login_from_user_payload, parse_scopes, verify_failure_for_status,

@@ -342,3 +342,19 @@ fn a_host_that_only_a_stored_token_names_is_a_github_host() {
         None
     );
 }
+
+// GTS-FR-NWVR: the modules that send no stacks request name the one default
+// API version, and no module names the stacks version outside the host rules.
+#[test]
+fn the_default_rest_clients_send_api_version_2022_11_28() {
+    assert_eq!(crate::github_tokens::GITHUB_API_VERSION, "2022-11-28");
+    assert_eq!(crate::github_tokens::GITHUB_STACKS_API_VERSION, "2026-03-10");
+    let sources =
+        [include_str!("../verifier.rs"), include_str!("../../github_publication/client.rs")];
+    for source in sources {
+        assert!(source.contains("crate::github_tokens::GITHUB_API_VERSION"));
+        assert!(!source.contains("2026-03-10"));
+    }
+    assert!(include_str!("../../git/pull_requests/client.rs")
+        .contains("crate::github_tokens::api_version_for_path(path)"));
+}

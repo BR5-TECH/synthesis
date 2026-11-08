@@ -8,10 +8,12 @@
  * is about something else answers those reads with these neutral answers, so
  * no read is rejected for a reason the test does not state.
  */
+import { resetOpenPullRequestsForTest } from "../state/openPullRequests";
 import { clearAllPullRequestSessions } from "../state/pullRequestSessions";
 import { resetPullRequestSummariesForTest } from "../state/pullRequestSummaries";
 import type {
   BranchCompletedRun,
+  BranchStack,
   NotePublicationAvailability,
   PullRequestIssueRef,
   PullRequestLinkOutcome,
@@ -39,6 +41,41 @@ export const PUBLICATION_AVAILABLE: NotePublicationAvailability = {
   repositoryName: "platform",
 };
 
+/**
+ * GTC-FR-JMVC: the answer for a branch whose stacks GitHub cannot read. Every
+ * opener keeps its own base with it (CPR-FR-MBTA).
+ */
+export function stackUnavailable(branch: string): BranchStack {
+  return {
+    branch,
+    available: false,
+    unavailableCause: "stacks_not_enabled",
+    inStack: false,
+    isTop: false,
+    topHasPullRequest: false,
+  };
+}
+
+/** GTC-FR-WHEO: `branch` is in a stack on `parent`, at the top unless told. */
+export function stackOn(
+  branch: string,
+  parent: string,
+  over: Partial<BranchStack> = {},
+): BranchStack {
+  return {
+    branch,
+    available: true,
+    inStack: true,
+    source: "local_record",
+    stackNumber: 3,
+    parent,
+    top: branch,
+    isTop: true,
+    topHasPullRequest: over.pullRequest !== undefined,
+    ...over,
+  };
+}
+
 /** GTC-FR-WJUG: every issue linked by a closing keyword. */
 export function linkedAll(
   issues: PullRequestIssueRef[],
@@ -64,6 +101,8 @@ export function pullRequestWindowRead(
       return { answer: [] as BranchCompletedRun[] };
     case "list_pull_requests":
       return { answer: [] };
+    case "get_branch_stack":
+      return { answer: stackUnavailable((args?.branch as string) ?? "") };
     case "get_project_agentic_integration":
       return {
         answer: { vendor: "claude_code", resolution: "inherited", overrideVendor: null },
@@ -83,6 +122,7 @@ export function pullRequestWindowRead(
 export function resetCreatePullRequestStores(): void {
   clearAllPullRequestSessions();
   resetPullRequestSummariesForTest();
+  resetOpenPullRequestsForTest();
 }
 
 /** GRD-FR-BHFP: one completed run of a branch, with a run summary when given. */

@@ -243,7 +243,7 @@ fn get(secret: &str, url: &str) -> Result<ureq::http::Response<ureq::Body>, ureq
         .get(url)
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
         .header("User-Agent", "synthesis")
         .call()
 }
@@ -260,7 +260,7 @@ fn send_json(
             .header("Authorization", &format!("Bearer {secret}"))
             .header("Accept", "application/vnd.github+json")
             .header("Content-Type", "application/json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
             .header("User-Agent", "synthesis")
     };
     let request = match method {

@@ -10,6 +10,7 @@ import type { RollbackFile } from "../components/RollbackConfirm";
 import type { RollbackResult } from "../types";
 import type {
   BranchCompletedRun,
+  BranchStack,
   BranchOption,
   ChangeEntry,
   ChangeSet,
@@ -18,6 +19,7 @@ import type {
   DiffTarget,
   PanelRevealRequest,
   PullRequestHeadState,
+  PullRequestSummary,
   UpstreamSyncState,
 } from "../types";
 import type { PullRequestSource } from "../components/CreatePullRequest/types";
@@ -92,6 +94,10 @@ export interface Backend {
   completedRuns?:
     | BranchCompletedRun[]
     | ((branch: string) => BranchCompletedRun[] | Promise<BranchCompletedRun[]>);
+  /** CHG-FR-NKGY: the open pull requests of the repository. */
+  openPulls?: PullRequestSummary[] | (() => Promise<PullRequestSummary[]>);
+  /** CHG-FR-JQSD: the stack of the current branch. Absent answers nothing. */
+  stack?: BranchStack | (() => Promise<BranchStack>);
   /** CHG-FR-UCRL: the active worktree's branch and its head state. */
   pullRequest?: {
     branch?: string | null;
@@ -186,6 +192,12 @@ export function makeBackend(invokeMock: Mock) {
             head: String(args?.head ?? HEAD_STATE.head),
             ...(config.pullRequest?.headState ?? {}),
           };
+        case "list_pull_requests":
+          return typeof config.openPulls === "function"
+            ? config.openPulls()
+            : (config.openPulls ?? []);
+        case "get_branch_stack":
+          return typeof config.stack === "function" ? config.stack() : config.stack;
         case "list_branch_completed_runs":
           return typeof config.completedRuns === "function"
             ? config.completedRuns(String(args?.branch ?? ""))

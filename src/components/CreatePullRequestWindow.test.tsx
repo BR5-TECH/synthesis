@@ -18,7 +18,7 @@ import type {
   PullRequestResume,
   PullRequestSource,
 } from "./CreatePullRequest/types";
-import type { CreatedPullRequest, GitBranch, PullRequestHeadState } from "../types";
+import type { StackStep, CreatedPullRequest, GitBranch, PullRequestHeadState } from "../types";
 import { resetLogBufferForTest } from "../logging";
 import {
   pullRequestWindowRead,
@@ -86,9 +86,15 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+type OnCreated = (
+  created: CreatedPullRequest,
+  link: PullRequestLinkResult | null,
+  stack?: StackStep | null,
+) => void;
+
 interface Handlers {
   onClose: Mock<() => void>;
-  onCreated: Mock<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>;
+  onCreated: Mock<OnCreated>;
   onRequestToken: Mock<(input: PullRequestInput) => void>;
   onOpenGlobalSettings: Mock<() => void>;
   onSubmittingChange: Mock<(submitting: boolean) => void>;
@@ -97,7 +103,7 @@ interface Handlers {
 function mount(resume: PullRequestResume | null = null, source = SOURCE): Handlers {
   const handlers: Handlers = {
     onClose: vi.fn<() => void>(),
-    onCreated: vi.fn<(created: CreatedPullRequest, link: PullRequestLinkResult | null) => void>(),
+    onCreated: vi.fn<OnCreated>(),
     onRequestToken: vi.fn<(input: PullRequestInput) => void>(),
     onOpenGlobalSettings: vi.fn<() => void>(),
     onSubmittingChange: vi.fn<(submitting: boolean) => void>(),
@@ -276,7 +282,7 @@ describe("submitting (CPR-FR-KMHY, CPR-FR-XMRL, CPR-FR-ITWJ)", () => {
     await waitFor(() => expect(h.onCreated).toHaveBeenCalledWith({
       number: 42,
       url: "https://github.com/acme/platform/pull/42",
-    }, null));
+    }, null, null));
     expect(calls("create_pull_request")[0][1]).toEqual({
       title: "Fix the scroll",
       body: "Why and how",

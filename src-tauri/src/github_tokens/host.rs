@@ -92,6 +92,34 @@ pub fn is_github_family_host(host: &str) -> bool {
     host == DEFAULT_HOST || ghe_subdomain(host).is_some()
 }
 
+/// GTS-FR-NWVR: the REST API version of every request except a stacks request.
+/// A GitHub Enterprise Server host older than 3.21 supports only this one.
+pub const GITHUB_API_VERSION: &str = "2022-11-28";
+
+/// GTS-FR-NWVR: the REST API version of a request under
+/// `/repos/{owner}/{repo}/stacks`. The stacks endpoints exist in this version.
+pub const GITHUB_STACKS_API_VERSION: &str = "2026-03-10";
+
+/// GTS-FR-NWVR: whether `path` (starting with `/`, query allowed) is under
+/// `/repos/{owner}/{repo}/stacks`.
+pub fn is_stacks_path(path: &str) -> bool {
+    let path = path.split(['?', '#']).next().unwrap_or("");
+    let mut parts = path.trim_start_matches('/').split('/');
+    matches!(
+        (parts.next(), parts.next(), parts.next(), parts.next()),
+        (Some("repos"), Some(owner), Some(repo), Some("stacks")) if !owner.is_empty() && !repo.is_empty()
+    )
+}
+
+/// GTS-FR-NWVR: the `X-GitHub-Api-Version` value of a request to `path`.
+pub fn api_version_for_path(path: &str) -> &'static str {
+    if is_stacks_path(path) {
+        GITHUB_STACKS_API_VERSION
+    } else {
+        GITHUB_API_VERSION
+    }
+}
+
 /// GTS-FR-PDWB: the REST API base of `host`, without a trailing slash.
 pub fn github_api_base(host: &str) -> String {
     if host == DEFAULT_HOST {

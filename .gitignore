@@ -44,10 +44,8 @@ __pycache__/
 # that made them.
 /coverage/
 
-# Rust build output and tool files. `target/` matches the Cargo build folder of
-# every crate. `debug` stays anchored for the same reason as `/logs/`: an
-# unanchored `debug` also matches a source directory of that name.
-/debug/
+# Rust build output and tool files, in every folder of the repository.
+debug/
 target/
 **/*.rs.bk
 *.pdb

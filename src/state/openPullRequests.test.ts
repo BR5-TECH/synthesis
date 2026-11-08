@@ -63,6 +63,13 @@ describe("the open pull requests of the openers (CPR-FR-RWOE, CPR-FR-TJYF)", () 
     expect(openPullRequestFor(rows, "feature")).toBeNull();
   });
 
+  it("CPR-FR-RWOE: an open pull request from a fork with the same branch name names nothing", () => {
+    const rows = [pullRequest(3, { headBranch: "fix-typo", headIsFork: true })];
+    expect(openPullRequestFor(rows, "fix-typo")).toBeNull();
+    const both = [...rows, pullRequest(5, { headBranch: "fix-typo" })];
+    expect(openPullRequestFor(both, "fix-typo")?.number).toBe(5);
+  });
+
   it("CPR-FR-RWOE: a failed read names nothing", async () => {
     const { result } = renderHook(() => useOpenPullRequestList("feature"));
     await act(async () => reads[0].reject("github_unreachable"));

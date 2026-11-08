@@ -220,6 +220,15 @@ describe("Create a PR in the Changes footer with an open pull request (CHG-FR-NK
     await available();
   });
 
+  it("CPR-FR-RWOE: an open pull request from a fork with the same branch name blocks nothing", async () => {
+    backend({ openPulls: [pullRequest(12, { headBranch: "feature/x", headIsFork: true })] });
+    renderPanel();
+    await waitFor(() => expect(calls("list_pull_requests")).toHaveLength(1));
+    // The shared read has answered, and its answer is in the panel.
+    await act(() => refreshOpenPullRequests());
+    await available();
+  });
+
   it("CPR-FR-RWOE: a closed or merged pull request of the branch blocks nothing", async () => {
     backend({
       openPulls: [

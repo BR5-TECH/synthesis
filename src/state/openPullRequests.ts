@@ -87,13 +87,18 @@ function subscribe(listener: () => void) {
   };
 }
 
-/** The open pull request whose head is `head`, or null. */
+/**
+ * The open pull request whose head is `head` in the repository itself, or
+ * null. A pull request from a fork does not count (CPR-FR-RWOE).
+ */
 export function openPullRequestFor(
   rows: PullRequestSummary[] | null,
   head: string | null,
 ): PullRequestSummary | null {
   if (!rows || !head) return null;
-  return rows.find((pr) => pr.headBranch === head && pr.state === "open") ?? null;
+  return (
+    rows.find((pr) => pr.headBranch === head && pr.state === "open" && !pr.headIsFork) ?? null
+  );
 }
 
 /** CPR-FR-RWOE: the reason a branch with an open pull request states. */

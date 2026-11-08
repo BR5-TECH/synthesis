@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 
 use super::client::{read_pages, GithubFailure, GithubPullRequests, GithubWriteFailure};
 use super::create::{create_pull_request_reported, NewPullRequest};
+use super::model::is_from_fork;
 use super::stack_model::{
     chain_up_to, first_stack, open_pull_request_of, resolve_branch_stack, stack_from_json,
     BranchStack, OpenPullRequest, StackInputs, SOURCE_LOCAL_RECORD,
@@ -132,17 +133,6 @@ fn read_open(
         return Err(ERR_STACK_UNAVAILABLE.to_string());
     }
     Ok(pages.items.iter().filter(|row| !is_from_fork(row)).filter_map(open_from_json).collect())
-}
-
-fn repo_name(row: &Value, side: &str) -> Option<String> {
-    row.get(side)?.get("repo")?.get("full_name")?.as_str().map(str::to_lowercase)
-}
-
-fn is_from_fork(row: &Value) -> bool {
-    match (repo_name(row, "head"), repo_name(row, "base")) {
-        (Some(head), Some(base)) => head != base,
-        _ => false,
-    }
 }
 
 fn open_from_json(row: &Value) -> Option<OpenPullRequest> {

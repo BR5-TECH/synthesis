@@ -124,6 +124,8 @@ export interface PullRequestSummary {
   author: string;
   headBranch: string;
   baseBranch: string;
+  /** True when the head repository is a fork of the base repository. */
+  headIsFork: boolean;
   createdAt: string;
   updatedAt: string;
 }

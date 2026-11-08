@@ -295,6 +295,26 @@ fn listing_open_pull_requests_asks_for_the_open_state_newest_update_first() {
 
 // GTC-FR-GXUB
 #[test]
+fn a_list_row_tells_whether_its_head_repository_is_a_fork() {
+    let f = repo_with_origin(PLATFORM);
+    let github = FakeGithub::new();
+    let side = |name: &str| json!({ "ref": "feature", "repo": { "full_name": name } });
+    let mut own = pr_json(1, "open", None, "2024-03-01T00:00:00Z");
+    own["head"] = side("Acme/Platform");
+    own["base"] = side("acme/platform");
+    let mut fork = pr_json(2, "open", None, "2024-02-01T00:00:00Z");
+    fork["head"] = side("dev/platform");
+    fork["base"] = side("acme/platform");
+    let bare = pr_json(3, "open", None, "2024-01-01T00:00:00Z");
+    github.pages(&list_path("open"), vec![vec![own, fork, bare]]);
+
+    let rows = list(&f, &github, &token_ready(), own_buffer(), "open").unwrap();
+
+    assert_eq!(rows.iter().map(|r| r.head_is_fork).collect::<Vec<_>>(), vec![false, true, false]);
+}
+
+// GTC-FR-GXUB
+#[test]
 fn a_list_row_serialises_to_the_camel_case_contract() {
     let f = repo_with_origin(PLATFORM);
     let github = FakeGithub::new();
@@ -313,6 +333,7 @@ fn a_list_row_serialises_to_the_camel_case_contract() {
             "author": "alice",
             "headBranch": "feature",
             "baseBranch": "main",
+            "headIsFork": false,
             "createdAt": "2024-01-01T00:00:00Z",
             "updatedAt": "2024-03-01T00:00:00Z",
         }])

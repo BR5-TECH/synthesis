@@ -164,6 +164,7 @@ PullRequestSummary {
   number, title,
   state,                     // "open" | "closed" | "merged"
   is_draft, author, head_branch, base_branch,
+  head_is_fork,              // true when the head repository is not the base repository
   created_at, updated_at     // RFC 3339
 }
 
@@ -343,7 +344,7 @@ Typed errors of the history and branch operations: `"not a git repository"`, `"u
 48. **GTC-FR-JOWX** `inspect_branch_deletion` returns the `stream` of a work stream's branch with its working copy's uncommitted paths, its worktree, and `ahead_of_base` counted as WKS-FR-EIBC counts it, and `delete_branch` refuses that branch with `branch_belongs_to_work_stream` naming the stream id. Only `WKS-work-streams.md` WKS-FR-EIBC removes a stream, so no stream check is bypassed.
 49. **GTC-FR-NPCT** A `delete_branch` that removes at least a branch emits `"branches changed"` once (per `WTC-worktree-context.md` WTC-FR-25), including when the remote part failed. It emits nothing on refusal. Every inspection, refusal, and result is logged, with counts and branch names but no path content and no secret.
 50. **GTC-FR-JUZP** The inspection and deletion records carry `worktreeLocked` as a boolean. No record carries the lock reason.
-51. **GTC-FR-GXUB** `list_pull_requests(state)` resolves the host, the owner, and the repository of the primary remote when it is a GitHub remote, and returns every PR of that state, newest update first, following GitHub's pages up to 1000 PRs. `"closed"` includes merged PRs, flagged `merged` in `state`. Any other `state` returns a typed error. A remote that is not a GitHub remote returns `not_a_github_remote`.
+51. **GTC-FR-GXUB** `list_pull_requests(state)` resolves the host, the owner, and the repository of the primary remote when it is a GitHub remote, and returns every PR of that state, newest update first, following GitHub's pages up to 1000 PRs. `"closed"` includes merged PRs, flagged `merged` in `state`. Each row carries `head_is_fork`: true when the full name of the head repository differs from the full name of the base repository (compared without regard to case), and false when either name is absent. Any other `state` returns a typed error. A remote that is not a GitHub remote returns `not_a_github_remote`.
 52. **GTC-FR-ZIHE** `get_pull_request_detail(id)` returns the PR's header fields and its description as written, including an empty one. An unknown number returns `pull_request_not_found`. A token GitHub refuses returns `github_token_rejected`, and an unreachable GitHub returns `github_unreachable`. No request is made while the project resolves no token (GTC-FR-10).
 53. **GTC-FR-CKTM** `list_pull_request_timeline(id)` returns, oldest first, every comment, review, review comment, commit, and other activity event GitHub reports for the PR, reading every page up to 1000 items. Each item carries its actor, time, and body when it has one. When GitHub holds more, `truncated` is true. Secrets never appear in any item.
 54. **GTC-FR-DWVY** The pull request operations send the token only to the API base that `GTS-github-token-storage.md` GTS-FR-PDWB resolves from the host of the remote, bound the time of every request, never cache the token, and write no token in a log or return value (GTC-FR-11). A failed page after the first returns an error rather than a partial list reported as complete.

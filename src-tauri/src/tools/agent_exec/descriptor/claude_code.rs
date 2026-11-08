@@ -223,6 +223,34 @@ pub fn resume_argv(
     args
 }
 
+/// CCP-FR-WZJS: the text the milestone reminder hook gives the agent after
+/// each tool call. Fixed, and it holds no single quote, so the hook command can
+/// quote it whole.
+pub const MILESTONE_REMINDER: &str = "Milestone reminder: if you are now in a different milestone, \
+write its start marker in your next text message. A start marker marks every earlier milestone done.";
+
+/// CCP-FR-WZJS / EAC-FR-WBIF: `--settings` with one `PostToolUse` hook for every
+/// tool, whose command prints the fixed `additionalContext` object.
+pub fn milestone_reminder_args() -> Vec<String> {
+    let output = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": MILESTONE_REMINDER,
+        }
+    })
+    .to_string();
+    let settings = serde_json::json!({
+        "hooks": {
+            "PostToolUse": [{
+                "matcher": "*",
+                "hooks": [{ "type": "command", "command": format!("printf '%s\\n' '{output}'") }],
+            }]
+        }
+    })
+    .to_string();
+    vec!["--settings".into(), settings]
+}
+
 /// CCP-FR-05: an effort the pinned CLI would reject, refused before launch.
 pub fn effort_supported(effort_id: &str) -> bool {
     EFFORT_LEVELS.contains(&effort_id)

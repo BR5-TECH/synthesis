@@ -243,3 +243,157 @@ fn a_launch_scans_the_four_kinds_of_turn_and_no_other() {
         assert_eq!(milestones, usize::from(scanned), "{kind:?}");
     }
 }
+
+/// One launch of `kind` with `instruction`, and the argument vector it ran.
+fn argv_of(vendor: &str, kind: TurnKind, instruction: &str) -> Vec<String> {
+    let harness = harness_for(vendor);
+    let stdout = match vendor {
+        "codex" => codex_stdout(&envelope_json("success")),
+        _ => valid_claude_stdout(),
+    };
+    let runtime = RecordingRuntime::replying(&stdout);
+    let mount =
+        (kind == TurnKind::SemanticRebase).then(|| SupplementaryMount::SemanticRebaseArtifact {
+            host_path: rebase_bundle(&harness.sessions_root(), "reminder-bundle"),
+        });
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
+    block_on(executor.execute_agent_cli(
+        &Silent,
+        &harness.context(),
+        AgentExecutionRequest {
+            sandbox_scope: None,
+            turn_kind: kind,
+            execution_directory: harness.workspace(),
+            task: task(instruction),
+            cancellation: CancellationToken::new(),
+            activity: None,
+            durable_output: None,
+            supplementary_mount: mount,
+        },
+    ))
+    .expect("the launch runs");
+    runtime.only_run().argv
+}
+
+const WITH_BLOCK: &str =
+    "Do the work.\n\n## Milestones\n\nSYNTHESIS_MILESTONE {\"event\":\"start\",\"index\":1}\n";
+
+/// EAC-FR-WBIF, CCP-FR-WZJS — a Claude Code launch of a scanned kind whose instruction holds the
+/// block ends its vector with `--settings` and the reminder hook, and no other launch carries it.
+#[test]
+fn only_a_scanned_turn_with_the_block_carries_the_reminder() {
+    let reminder = descriptor::claude_code::milestone_reminder_args();
+    for kind in [TurnKind::Work, TurnKind::Review, TurnKind::MergeWork, TurnKind::MergeReview] {
+        let argv = argv_of("claude_code", kind, WITH_BLOCK);
+        assert_eq!(argv[argv.len() - 2..], reminder[..], "{kind:?}");
+        assert_eq!(argv.iter().filter(|a| *a == "--settings").count(), 1, "{kind:?}");
+    }
+    // GRL-FR-LCSB: a correction turn's instruction has no block, which
+    // `graduation::tests::milestone_prompts::a_correction_turn_carries_no_milestone_block`
+    // shows for the real instruction.
+    let argv = argv_of("claude_code", TurnKind::Review, "Correct the verdict.");
+    assert!(!argv.iter().any(|a| a == "--settings"), "{argv:?}");
+    for kind in [TurnKind::SemanticRebase, TurnKind::PrMaintenance] {
+        let argv = argv_of("claude_code", kind, WITH_BLOCK);
+        assert!(!argv.iter().any(|a| a == "--settings"), "{kind:?}");
+    }
+    // A vendor with no reminder mechanism gets none.
+    let argv = argv_of("codex", TurnKind::Work, WITH_BLOCK);
+    assert!(!argv.iter().any(|a| a == "--settings" || a.contains("PostToolUse")), "{argv:?}");
+}
+
+/// CCP-FR-WZJS — the settings object holds one `PostToolUse` hook for every tool, and its command
+/// prints the one fixed `additionalContext` object, which holds the reminder and no task input.
+#[test]
+fn the_reminder_hook_prints_the_fixed_context() {
+    let args = descriptor::claude_code::milestone_reminder_args();
+    assert_eq!(args[0], "--settings");
+    let settings: serde_json::Value = serde_json::from_str(&args[1]).expect("settings are JSON");
+    let hooks = settings["hooks"]["PostToolUse"].as_array().expect("one PostToolUse list");
+    assert_eq!(hooks.len(), 1);
+    assert_eq!(hooks[0]["matcher"], "*");
+    let inner = hooks[0]["hooks"].as_array().expect("hook list");
+    assert_eq!(inner.len(), 1);
+    assert_eq!(inner[0]["type"], "command");
+    let command = inner[0]["command"].as_str().expect("a command");
+
+    // The command is `printf '%s\n' '<object>'`: one single-quoted word, so the
+    // shell prints the object as it stands.
+    let printed = command
+        .strip_prefix("printf '%s\\n' '")
+        .and_then(|rest| rest.strip_suffix('\''))
+        .expect("printf of one quoted word");
+    assert!(!printed.contains('\''), "the object holds no single quote");
+    let output: serde_json::Value = serde_json::from_str(printed).expect("the output is JSON");
+    assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
+    assert_eq!(
+        output["hookSpecificOutput"]["additionalContext"],
+        descriptor::claude_code::MILESTONE_REMINDER
+    );
+    // The text of the contract surface of `CCP-claude-code-cli-protocol.md`.
+    assert_eq!(
+        output,
+        json!({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext":
+            "Milestone reminder: if you are now in a different milestone, write its start marker \
+             in your next text message. A start marker marks every earlier milestone done."}})
+    );
+    assert_eq!(
+        settings,
+        json!({"hooks": {"PostToolUse": [{"matcher": "*", "hooks": [
+            {"type": "command", "command": command}
+        ]}]}})
+    );
+}
+
+/// CCP-FR-WZJS — a shell runs the hook command, and it prints the one object as one line and
+/// does nothing else.
+#[cfg(unix)]
+#[test]
+fn the_reminder_hook_command_prints_one_line_in_a_shell() {
+    let args = descriptor::claude_code::milestone_reminder_args();
+    let settings: serde_json::Value = serde_json::from_str(&args[1]).expect("settings are JSON");
+    let command = settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .expect("a command")
+        .to_string();
+    let ran = std::process::Command::new("sh").arg("-c").arg(&command).output().expect("sh runs");
+    assert!(ran.status.success(), "{:?}", ran.status);
+    assert!(ran.stderr.is_empty(), "{}", String::from_utf8_lossy(&ran.stderr));
+    let stdout = String::from_utf8(ran.stdout).expect("UTF-8");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "{stdout:?}");
+    let output: serde_json::Value = serde_json::from_str(lines[0]).expect("one JSON object");
+    assert_eq!(
+        output["hookSpecificOutput"]["additionalContext"],
+        descriptor::claude_code::MILESTONE_REMINDER
+    );
+}
+
+/// CCP-FR-WZJS, EAC-FR-WBIF — a resumed turn carries the reminder at the end of its vector too,
+/// once, and the reminder holds nothing of the task.
+#[test]
+fn a_resumed_turn_carries_the_reminder_and_no_task_input() {
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    run(&harness, runtime.clone(), task(WITH_BLOCK)).expect("the fresh turn runs");
+    let assigned = assigned_session_id(&runtime.only_run().argv).expect("--session-id");
+
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    let instruction = format!("{WITH_BLOCK}SYNTHESIS_MILESTONE instruction-canary\n");
+    let mut resumed = task(&instruction);
+    resumed.input = Some(
+        [("draft".to_string(), json!("SYNTHESIS_MILESTONE input-canary"))].into_iter().collect(),
+    );
+    resumed.resume = Some(SessionRef { session_id: Some(assigned), continuation_token: None });
+    run(&harness, runtime.clone(), resumed).expect("the resumed turn runs");
+    let argv = runtime.only_run().argv;
+
+    let reminder = descriptor::claude_code::milestone_reminder_args();
+    assert!(argv.iter().any(|a| a == "--resume"), "{argv:?}");
+    assert_eq!(argv[argv.len() - 2..], reminder[..]);
+    assert_eq!(argv.iter().filter(|a| *a == "--settings").count(), 1);
+    for canary in ["instruction-canary", "input-canary"] {
+        assert!(!argv.iter().any(|a| a.contains(canary)), "{canary} reached the argv");
+    }
+}

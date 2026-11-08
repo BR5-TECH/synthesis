@@ -1,7 +1,7 @@
 /**
  * The milestone list of a run's current turn
  * (`../../../specifications/ui/GRU-graduation-runs.md` GRU-FR-WQHM,
- * GRU-FR-TBNE, GRU-FR-CYDK, GRU-FR-PZGA).
+ * GRU-FR-TBNE, GRU-FR-CYDK, GRU-FR-JDZX, GRU-FR-PZGA).
  *
  * Pure functions of a run and of the `summary` of its `milestone` records. The
  * executor wrote each summary as one marker
@@ -126,8 +126,11 @@ export function milestonesFrom(summaries: string[], ended: boolean): Milestone[]
       continue;
     }
     if (titles === null || marker.index > titles.length || done[marker.index - 1]) continue;
-    if (marker.event === "start") started[marker.index - 1] = true;
-    else done[marker.index - 1] = true;
+    if (marker.event === "start") {
+      started[marker.index - 1] = true;
+      // GRU-FR-JDZX: a start marker makes each earlier milestone done.
+      for (let earlier = 0; earlier < marker.index - 1; earlier += 1) done[earlier] = true;
+    } else done[marker.index - 1] = true;
   }
   if (titles === null) return null;
   return titles.map((title, at) => {

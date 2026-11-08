@@ -10,6 +10,12 @@ use serde::Deserialize;
 
 /// EAC-FR-PQLW: what starts a marker line.
 const PREFIX: &str = "SYNTHESIS_MILESTONE ";
+
+/// EAC-FR-WBIF: whether a task instruction holds the milestone block, which is
+/// where the marker prefix stands. A correction turn's instruction has none.
+pub(super) fn instruction_holds_block(instruction: &str) -> bool {
+    instruction.contains(PREFIX.trim_end())
+}
 /// EAC-FR-VCBJ: the most titles a plan holds.
 pub(super) const MAX_TITLES: usize = 5;
 /// EAC-FR-VCBJ: the most characters a title holds.

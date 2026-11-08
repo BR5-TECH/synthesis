@@ -135,6 +135,7 @@ The author watches your turn on a screen, and the milestone markers show where y
 2. **Each time you move to the next milestone**, write one text message that holds the done marker of the milestone you finished and the start marker of the next one. Write it before you start the work of the next milestone.
 3. **When you finish the last milestone**, write its done marker before you report.
 4. **Before each progress message you write**, make sure that the markers show the milestone you are in. Where they do not, write the missing markers first.
+5. **A start marker marks every earlier milestone done.** Where earlier work is already done, for example by an earlier call of this pass, write the start marker of the milestone you are in.
 
 Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. `index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
 

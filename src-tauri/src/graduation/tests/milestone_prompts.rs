@@ -1,5 +1,5 @@
 //! The milestone block of the four graduation instructions
-//! (`GRL-graduation-loop.md` GRL-FR-KWPT, GRL-FR-LCBJ, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY,
+//! (`GRL-graduation-loop.md` GRL-FR-KWPT, GRL-FR-LCBJ, GRL-FR-PCRD, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY,
 //! GRL-FR-LCSB).
 
 use super::*;
@@ -20,7 +20,7 @@ fn instruction(source: &str) -> String {
     crate::prompts::instruction_text(source)
 }
 
-/// GRL-FR-KWPT, GRL-FR-LCBJ, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY — each of the four
+/// GRL-FR-KWPT, GRL-FR-LCBJ, GRL-FR-PCRD, GRL-FR-BZMH, GRL-FR-DJPE, GRL-FR-NDRY — each of the four
 /// instructions carries the block: the first message, the move to the next milestone, the last
 /// done marker, the format with its full example, the display-only statement, and no deliverable.
 #[test]
@@ -45,6 +45,9 @@ fn each_of_the_four_instructions_carries_the_milestone_block() {
             "before you start the work of the next milestone",
             "before you report",
             "Before each progress message",
+            "A start marker marks every earlier milestone done",
+            "an earlier call of this pass",
+            "write the start marker of the milestone you are in",
             "on its own line",
             "final result document",
             "for display only",

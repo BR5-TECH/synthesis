@@ -469,7 +469,7 @@ impl AgentCliExecutor {
         // and the value below is never placed in its vector.
         let assigned_session_id = descriptor::new_session_id();
 
-        let vendor_args = descriptor.vendor_args(
+        let mut vendor_args = descriptor.vendor_args(
             model_id.as_deref(),
             effort_id.as_deref(),
             &assigned_session_id,
@@ -478,6 +478,14 @@ impl AgentCliExecutor {
             // the vendor enforces where its CLI can.
             request.task.result_contract,
         );
+        // EAC-FR-WBIF: a scanned turn whose instruction holds the milestone
+        // block carries the vendor's reminder, at the end of its vector
+        // (CCP-FR-WZJS).
+        if request.turn_kind.announces_milestones()
+            && milestone::instruction_holds_block(&request.task.instruction)
+        {
+            vendor_args.extend(descriptor.milestone_reminder_args());
+        }
         // EAC-FR-OWPP: a variable the executor sets itself is not overridden by
         // one of the launch environment. The name is logged and the value is not.
         let dropped =

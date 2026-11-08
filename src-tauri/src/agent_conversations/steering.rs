@@ -102,6 +102,23 @@ impl TurnRegistry {
         deadline
     }
 
+    /// AGC-FR-WBZN: restart the whole-turn deadline in full, where the turn holds
+    /// one. A call of the advisors tool does not run against it.
+    pub(super) fn restart_deadline<R: tauri::Runtime>(
+        &self,
+        app: &tauri::AppHandle<R>,
+        turn_id: &str,
+    ) {
+        let mut inner = self.lock();
+        if let Some(live) = inner.live.get_mut(turn_id) {
+            if let Some((timeout, _)) = live.deadline {
+                live.deadline = Some((timeout, std::time::Instant::now() + timeout));
+                stamp_deadline(&mut live.turn, timeout);
+                publish(app, &live.turn.clone());
+            }
+        }
+    }
+
     /// CVL-FR-SZDM: the instant the turn's whole-turn deadline expires now, or
     /// `fallback` where the turn is not live or has no deadline.
     pub(super) fn deadline_of(

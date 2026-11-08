@@ -161,6 +161,8 @@ pub struct TurnRegistry {
     /// The bound the permits were built with, kept so a turn waiting on one can
     /// say what it is waiting behind.
     pub(super) concurrency: usize,
+    /// AGC-FR-25: the slot that each running turn holds, or released for a wait.
+    pub(super) held_slots: Mutex<HashMap<String, Option<PermitGuard>>>,
     pub(super) timeout: Duration,
     /// CVL-FR-19: where a backoff delay's jitter comes from. A collaborator like
     /// the seam beside it, so a test asserts a schedule exactly rather than
@@ -210,6 +212,7 @@ impl TurnRegistry {
             seam,
             permits: Arc::new((Mutex::new(concurrency.max(1)), Condvar::new())),
             concurrency: concurrency.max(1),
+            held_slots: Mutex::new(HashMap::new()),
             timeout,
             jitter: Box::new(SystemJitter),
             retry: RetryPolicy::default(),
@@ -929,35 +932,6 @@ impl TurnRegistry {
             }
         }
     }
-
-    /// How many of the AGC-FR-25 slots are free right now.
-    ///
-    /// A hint rather than a reservation — it is read to explain a wait in the
-    /// log, never to decide one, which is [`acquire`](Self::acquire)'s business
-    /// under the condvar.
-    pub(super) fn permits_available(&self) -> usize {
-        let (lock, _) = &*self.permits;
-        *lock.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    /// The AGC-FR-25 bound this registry was built with, for the record that
-    /// reports a turn waiting on it.
-    pub(super) fn concurrency(&self) -> usize {
-        self.concurrency
-    }
-
-    /// Take one of the AGC-FR-25 slots, blocking until one frees. The turn is
-    /// already registered and already reported by the time this is reached, so
-    /// waiting here delays a call and never refuses a dispatch.
-    pub(super) fn acquire(&self) -> PermitGuard {
-        let (lock, cvar) = &*self.permits;
-        let mut available = lock.lock().unwrap_or_else(|e| e.into_inner());
-        while *available == 0 {
-            available = cvar.wait(available).unwrap_or_else(|e| e.into_inner());
-        }
-        *available -= 1;
-        PermitGuard { permits: self.permits.clone() }
-    }
 }
 
 /// How many terminated turns are remembered for AGC-FR-20's idempotent cancel.
@@ -979,20 +953,6 @@ impl Inner {
 
 pub(super) fn ordinal(turn_id: &str) -> u64 {
     turn_id.rsplit('-').next().and_then(|n| n.parse().ok()).unwrap_or(0)
-}
-
-pub(super) struct PermitGuard {
-    pub(super) permits: Arc<(Mutex<usize>, Condvar)>,
-}
-
-impl Drop for PermitGuard {
-    fn drop(&mut self) {
-        let (lock, cvar) = &*self.permits;
-        if let Ok(mut available) = lock.lock() {
-            *available += 1;
-            cvar.notify_one();
-        }
-    }
 }
 
 #[cfg(test)]

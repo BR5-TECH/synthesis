@@ -680,6 +680,7 @@ mod support;
 // than that.
 use support::*;
 
+mod advisors_tool;
 mod agent_group_delivery;
 mod agent_groups;
 mod anthropic_carrier;
@@ -704,6 +705,7 @@ mod new_draft_turns;
 mod note_discussions;
 mod openrouter;
 mod origin_contract;
+mod progress_update;
 mod project_bounds;
 mod proposal_history;
 mod proposal_hunk_input;

@@ -524,10 +524,29 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
             None => base,
         }
     };
+    // AGC-FR-HVQD: the advisors tool of a Meta turn. It is bound to this turn and
+    // to its conversation, and the model gives only its own question.
+    let advisor_calls = setup.as_ref().and_then(|s| s.advisors.as_ref()).map(|_| Arc::default());
+    if let (Some(advisors), Some(calls)) =
+        (setup.as_ref().and_then(|s| s.advisors.clone()), advisor_calls.as_ref())
+    {
+        tools.push(advisors_tool(AdvisorsBinding {
+            app: app.clone(),
+            roots: roots.owned(),
+            project_key: project_key.to_string(),
+            origin: origin.clone(),
+            meta_turn_id: turn.id.clone(),
+            meta_nickname: agent.nickname.clone(),
+            author: author.clone(),
+            cancelled: Arc::clone(&cancelled),
+            setup: advisors,
+            calls: Arc::clone(calls),
+        }));
+    }
     let group = setup.as_ref().map(|s| GroupBinding {
         state: Arc::clone(&s.state),
         role: s.role,
-        wait_for_join: s.wait_for_join,
+        advisor_calls: advisor_calls.clone(),
     });
     let attachments = match setup.as_ref().map(|s| s.role) {
         Some(GroupRole::Synthesis) => vec![comments::Attachment::Synthesis],
@@ -631,7 +650,7 @@ pub(super) fn resolved_during_turn(plan: &TurnPlan) -> bool {
 }
 
 /// The whole life of one turn after dispatch has returned.
-pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, mut plan: TurnPlan) {
+pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnPlan) {
     use tauri::Manager;
     // CVL-FR-28: the whole turn's elapsed time, measured from where its work
     // begins rather than from where it was registered — a turn that waited on a
@@ -667,9 +686,6 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, mut plan: T
     // guard is the difference between a defect that is reported and one that
     // silently strands a conversation.
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // AGC-FR-MWYP: a Meta turn waits for its advisors before it asks for a
-        // slot, so the wait is spent neither on a slot nor on the turn deadline.
-        wait_for_advisors(app, &mut plan)?;
         run_turn_body(app, &store, &ai, &turns, &plan)
     }));
 

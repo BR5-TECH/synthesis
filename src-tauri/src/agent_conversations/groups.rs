@@ -6,18 +6,18 @@
 
 use super::*;
 use crate::agent_groups::{
-    self, parse_advice, parse_driver, plan_mode, ready_nicknames, render_advisors_section,
-    GroupMode, GroupState, JoinOutcome, MemberStatus, PlannedMode,
+    self, parse_advice, parse_driver, plan_mode, ready_nicknames, GroupMode, GroupState,
+    JoinOutcome, MemberStatus, PlannedMode,
 };
 use crate::agents::Agent;
 
 /// CVL-FR-VUDT: the fixed prompt of the classifier.
 const CLASSIFIER_PROMPT: &str = include_str!("../../../resources/prompts/group-classifier.md");
 /// CVL-FR-OGXZ: the advisor prompt.
-const ADVISOR_PROMPT: &str = include_str!("../../../resources/prompts/group-advisor.md");
+pub(super) const ADVISOR_PROMPT: &str = include_str!("../../../resources/prompts/group-advisor.md");
 /// CVL-FR-XIBC: the synthesis prompt.
 const SYNTHESIS_PROMPT: &str = include_str!("../../../resources/prompts/group-synthesis.md");
-/// AGC-FR-MWYP: the note a Meta turn receives with the advice.
+/// CVL-FR-RBQV: the note a Meta turn receives about the advisors tool.
 const META_PROMPT: &str = include_str!("../../../resources/prompts/group-meta.md");
 
 /// AGC-FR-WPCZ: the limit of the classifier call.
@@ -45,8 +45,8 @@ static NEXT_GROUP: AtomicU64 = AtomicU64::new(1);
 pub(super) struct GroupBinding {
     pub(super) state: Arc<GroupState>,
     pub(super) role: GroupRole,
-    /// AGC-FR-MWYP: whether the turn waits for the join before its first call.
-    pub(super) wait_for_join: bool,
+    /// AGC-FR-VDOO: the calls that a Meta turn made to the advisors tool.
+    pub(super) advisor_calls: Option<Arc<AdvisorCalls>>,
 }
 
 /// What a dispatch needs to register a turn in a group.
@@ -57,7 +57,8 @@ pub(super) struct GroupSetup {
     pub(super) meta_turn_id: Option<String>,
     pub(super) extra_sections: Vec<InputSection>,
     pub(super) instructions_suffix: Option<String>,
-    pub(super) wait_for_join: bool,
+    /// AGC-FR-HVQD: the advisors tool of a Meta turn.
+    pub(super) advisors: Option<AdvisorsSetup>,
 }
 
 /// What `dispatch_agent_group` answers (AGC-FR-KOHJ).
@@ -92,7 +93,7 @@ fn section(tag: &str, body: String) -> InputSection {
     }
 }
 
-fn new_group_id() -> String {
+pub(super) fn new_group_id() -> String {
     format!("group-{}", NEXT_GROUP.fetch_add(1, Ordering::Relaxed))
 }
 
@@ -106,7 +107,7 @@ fn distinct(nicknames: &[String]) -> Vec<String> {
     out
 }
 
-fn same(a: &str, b: &str) -> bool {
+pub(super) fn same(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
 }
 
@@ -152,20 +153,15 @@ pub fn dispatch_group_impl<R: tauri::Runtime>(
         PlannedMode::Regular => {
             dispatch_regular(app, roots, project_key, &nicknames, origin, trigger_comment_id)
         }
-        PlannedMode::Advisor => {
-            let others: Vec<String> =
-                ready.iter().filter(|r| !same(r, &addressed_ready[0])).cloned().collect();
-            dispatch_advisor(
-                app,
-                roots,
-                project_key,
-                &addressed_ready[0],
-                &others,
-                origin,
-                trigger_comment_id,
-                timeout,
-            )
-        }
+        PlannedMode::Advisor => dispatch_advisor(
+            app,
+            roots,
+            project_key,
+            &addressed_ready[0],
+            origin,
+            trigger_comment_id,
+            timeout,
+        ),
         PlannedMode::Synthesis => {
             let candidates: Vec<Agent> = roster
                 .iter()
@@ -219,37 +215,69 @@ fn dispatch_regular<R: tauri::Runtime>(
     })
 }
 
-/// AGC-FR-GNMP, AGC-FR-MWYP: the addressed agent becomes Meta and every other
-/// ready agent advises.
-#[allow(clippy::too_many_arguments)]
+/// AGC-FR-MWYP: the setup of a Meta turn. It starts no advisor. It has the
+/// advisors tool (AGC-FR-HVQD) and the Meta prompt (CVL-FR-RBQV).
+pub(super) fn meta_setup(timeout: Duration) -> GroupSetup {
+    GroupSetup {
+        state: Arc::new(GroupState::new(new_group_id(), GroupMode::Advisor)),
+        role: GroupRole::Meta,
+        meta_turn_id: None,
+        extra_sections: Vec::new(),
+        instructions_suffix: Some(META_PROMPT.to_string()),
+        advisors: Some(AdvisorsSetup { timeout }),
+    }
+}
+
+/// AGC-FR-DLXE: the setup of the Meta turn that a speech registers for the one
+/// agent `nickname`, or `None` where the turn is a regular one.
+pub(super) fn speech_meta_setup<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    roots: Roots<'_>,
+    project_key: &str,
+    nickname: &str,
+) -> Option<GroupSetup> {
+    use tauri::Manager;
+    let store = app.state::<GlobalSettingsStore>();
+    let settings = store.load_agent_group_settings(project_key).unwrap_or_default();
+    if !settings.enabled {
+        return None;
+    }
+    let roster =
+        agents::list_project_agents_impl(&store, project_key, roots.worktree).unwrap_or_default();
+    let ready = ready_nicknames(&roster);
+    let addressed_ready = usize::from(ready.iter().any(|r| same(r, nickname)));
+    let other_ready = ready.iter().filter(|r| !same(r, nickname)).count();
+    match plan_mode(true, 1, addressed_ready, other_ready) {
+        PlannedMode::Advisor => {
+            Some(meta_setup(Duration::from_secs(u64::from(settings.join_timeout_secs))))
+        }
+        _ => None,
+    }
+}
+
+/// AGC-FR-MWYP: the addressed agent becomes Meta. No advisor starts here: Meta
+/// asks for advice with the advisors tool (AGC-FR-HVQD).
 fn dispatch_advisor<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     roots: Roots<'_>,
     project_key: &str,
     meta: &str,
-    advisors: &[String],
     origin: ConversationOrigin,
     trigger_comment_id: &str,
     timeout: Duration,
 ) -> Result<AgentGroup, String> {
     use tauri::Manager;
     let turns = app.state::<TurnRegistry>();
-    let state = Arc::new(GroupState::new(new_group_id(), GroupMode::Advisor));
+    let setup = meta_setup(timeout);
+    let state = Arc::clone(&setup.state);
     let meta_turn = dispatch_grouped(
         app,
         roots,
         project_key,
         meta,
-        origin.clone(),
+        origin,
         Trigger::Comment(trigger_comment_id),
-        Some(GroupSetup {
-            state: Arc::clone(&state),
-            role: GroupRole::Meta,
-            meta_turn_id: None,
-            extra_sections: Vec::new(),
-            instructions_suffix: None,
-            wait_for_join: true,
-        }),
+        Some(setup),
     )?;
     // AGC-FR-ISKZ: a turn that took the comment as a steering message is a
     // running turn of a conversation that is already under way. It has no group.
@@ -262,48 +290,18 @@ fn dispatch_advisor<R: tauri::Runtime>(
             refusals: Vec::new(),
         });
     }
-    let mut registered = vec![meta_turn.clone()];
-    for advisor in advisors {
-        match dispatch_grouped(
-            app,
-            roots,
-            project_key,
-            advisor,
-            origin.clone(),
-            Trigger::Comment(trigger_comment_id),
-            Some(GroupSetup {
-                state: Arc::clone(&state),
-                role: GroupRole::Advisor,
-                meta_turn_id: Some(meta_turn.id.clone()),
-                extra_sections: Vec::new(),
-                instructions_suffix: Some(ADVISOR_PROMPT.to_string()),
-                wait_for_join: false,
-            }),
-        ) {
-            Ok(turn) => registered.push(turn),
-            Err(refusal) => logging::log_warn(
-                app,
-                turns.buffer(),
-                &[Domain::Ai],
-                "an advisor could not be dispatched",
-                log_fields! { "refusal" => refusal, "groupId" => &state.id },
-            ),
-        }
-    }
-    // The Meta turn waits for this seal, so it is reached on every path.
-    state.seal(timeout, std::time::Instant::now());
     logging::log_info(
         app,
         turns.buffer(),
         &[Domain::Ai],
-        "advisor group dispatched",
-        log_fields! { "groupId" => &state.id, "advisors" => state.member_count() },
+        "meta turn dispatched",
+        log_fields! { "groupId" => &state.id },
     );
     Ok(AgentGroup {
         mode: "advisor".into(),
         group_id: Some(state.id.clone()),
         driver: Some(meta.to_string()),
-        turns: registered,
+        turns: vec![meta_turn],
         refusals: Vec::new(),
     })
 }
@@ -361,7 +359,7 @@ fn dispatch_synthesis<R: tauri::Runtime>(
                 meta_turn_id: None,
                 extra_sections: Vec::new(),
                 instructions_suffix: None,
-                wait_for_join: false,
+                advisors: None,
             }),
         ) {
             Ok(turn) => registered.push(turn),
@@ -496,7 +494,7 @@ fn run_synthesis_monitor<R: tauri::Runtime>(
         meta_turn_id: None,
         extra_sections: synthesis_sections(&state, &origin),
         instructions_suffix: Some(SYNTHESIS_PROMPT.to_string()),
-        wait_for_join: false,
+        advisors: None,
     };
     if let Err(refusal) = dispatch_grouped(
         app,
@@ -567,66 +565,17 @@ fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<In
     sections
 }
 
-/// AGC-FR-MWYP: a Meta turn waits for the join, then takes the advice of the
-/// advisors that finished. Returns `Err` where the turn was cancelled.
-pub(super) fn wait_for_advisors<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    plan: &mut TurnPlan,
-) -> Result<(), TurnEnd> {
-    let Some(binding) = plan.group.as_ref() else { return Ok(()) };
-    if !binding.wait_for_join {
-        return Ok(());
-    }
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
-    let state = Arc::clone(&binding.state);
-    match state.wait_join(&plan.cancelled) {
-        JoinOutcome::Cancelled => {
-            // AGC-FR-ANSK: an advisor has no pending row and no Cancel of its
-            // own, so the cancelled Meta turn ends the advisors that still run.
-            let pending = state.skip_pending(SkipReason::Cancelled);
-            skip_pending(app, &pending, SkipReason::Cancelled);
-            return Err(TurnEnd::Cancelled);
-        }
-        JoinOutcome::Over { pending, timed_out } => {
-            skip_pending(app, &pending, SkipReason::TimedOut);
-            logging::log_info(
-                app,
-                turns.buffer(),
-                &[Domain::Ai],
-                "advisor group joined",
-                log_fields! {
-                    "turnId" => &plan.turn_id,
-                    "groupId" => &state.id,
-                    "finished" => state.finished_count(),
-                    "advisors" => state.member_count(),
-                    "timedOut" => timed_out,
-                },
-            );
-        }
-    }
-    check_cancelled(plan)?;
-    let entries = state.advice_entries();
-    if !entries.is_empty() {
-        plan.request.input.push(section("advisors", render_advisors_section(&entries)));
-        plan.request.instructions = format!("{}\n\n{}", plan.request.instructions, META_PROMPT);
-    }
-    let statuses = state.statuses();
-    if !statuses.is_empty() {
-        let advisors = statuses
-            .into_iter()
-            .map(|(handle, status)| advisor_entry(&state, &entries, handle, status))
-            .collect();
-        plan.attachments.push(comments::Attachment::Advisors { advisors });
-        // AGC-FR-VDOO: the comment of a question or a proposal that a tool of
-        // this turn appends carries the list too.
-        comments::set_turn_marks(
-            plan.origin.discussion_id(),
-            &plan.author,
-            plan.attachments.clone(),
-        );
-    }
-    Ok(())
+/// AGC-FR-VDOO: the attachments of the reply of a turn. A Meta turn adds the
+/// `advisors` attachment of its calls of the advisors tool.
+pub(super) fn reply_attachments(plan: &TurnPlan) -> Vec<comments::Attachment> {
+    let mut attachments = plan.attachments.clone();
+    let advisors = plan
+        .group
+        .as_ref()
+        .and_then(|binding| binding.advisor_calls.as_ref())
+        .and_then(|calls| calls.attachment());
+    attachments.extend(advisors);
+    attachments
 }
 
 /// AGC-FR-VDOO: the marks of a Meta turn end with the turn.
@@ -679,7 +628,7 @@ pub(super) fn post_synthesis_after_contribution<R: tauri::Runtime>(
     }
 }
 
-fn advisor_entry(
+pub(super) fn advisor_entry(
     _state: &GroupState,
     entries: &[agent_groups::AdviceEntry],
     handle: String,

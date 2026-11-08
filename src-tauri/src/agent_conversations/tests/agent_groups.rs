@@ -17,6 +17,8 @@ pub(super) type Route =
 pub(super) struct RoutedSeam {
     route: Box<Route>,
     requests: Mutex<Vec<AgentRequest>>,
+    /// The exchange of each call as text, in the order of the calls.
+    exchanges: Mutex<Vec<String>>,
 }
 
 pub(super) fn text_reply(text: String) -> ModelReply {
@@ -56,11 +58,19 @@ impl RoutedSeam {
     pub(super) fn replying(
         route: impl Fn(&AgentRequest, usize) -> Result<ModelReply, &'static str> + Send + Sync + 'static,
     ) -> Arc<Self> {
-        Arc::new(Self { route: Box::new(route), requests: Mutex::new(Vec::new()) })
+        Arc::new(Self {
+            route: Box::new(route),
+            requests: Mutex::new(Vec::new()),
+            exchanges: Mutex::new(Vec::new()),
+        })
     }
 
     pub(super) fn requests(&self) -> Vec<AgentRequest> {
         self.requests.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    pub(super) fn exchanges(&self) -> Vec<String> {
+        self.exchanges.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
@@ -73,6 +83,7 @@ impl CompletionSeam for RoutedSeam {
         _timeout: Duration,
     ) -> Result<ModelReply, CallFailure> {
         self.requests.lock().unwrap_or_else(|e| e.into_inner()).push(request.clone());
+        self.exchanges.lock().unwrap_or_else(|e| e.into_inner()).push(format!("{exchange:?}"));
         (self.route)(request, exchange.len())
             .map_err(|class| CallFailure::new(FAIL_UNREACHABLE, class))
     }
@@ -102,6 +113,21 @@ impl Latch {
 pub(super) const ADVISOR_MARK: &str = "For this message you are an advisor";
 pub(super) const SYNTHESIS_MARK: &str = "You write the Synthesis of these replies";
 pub(super) const CLASSIFIER_MARK: &str = "You choose the one agent that must lead";
+
+/// The reply of a Meta turn: its first call asks the advisors (AGC-FR-HVQD), and
+/// each later call gives `then`. An advisor and a classifier get `other`.
+pub(super) fn meta_asks_advisors(
+    request: &AgentRequest,
+    exchange: usize,
+    question: &str,
+    then: ModelReply,
+) -> ModelReply {
+    if exchange <= 1 && request.tools.iter().any(|t| t.name.as_str() == "ask_advisors") {
+        tool_reply("ask_advisors", serde_json::json!({ "question": question }))
+    } else {
+        then
+    }
+}
 
 pub(super) fn persona_of(request: &AgentRequest) -> &'static str {
     ["ARCH", "SEC", "OPS"]
@@ -197,15 +223,15 @@ fn one_dispatched_agent_is_a_regular_turn() {
     assert!(comments[0].2.is_empty());
 }
 
-// AGC-FR-YVNC: a shadowed agent is not ready, so a nickname that a Project agent
-// shadows advises once and not twice.
+// AGC-FR-YVNC, AGC-FR-HVQD: a shadowed agent is not ready, so a nickname that a
+// Project agent shadows advises once and not twice.
 #[test]
 fn a_shadowed_agent_is_not_an_advisor() {
-    let seam = RoutedSeam::new(|r| {
+    let seam = RoutedSeam::replying(|r, exchange| {
         if r.instructions.contains(ADVISOR_MARK) {
-            Ok(said("Important points:\n- p\nKey questions:\n- q"))
+            Ok(text_reply(said("Important points:\n- p\nKey questions:\n- q")))
         } else {
-            Ok(said("answer"))
+            Ok(meta_asks_advisors(r, exchange, "What matters?", text_reply(said("answer"))))
         }
     });
     let h = Harness::with_patient_seam(Box::new(seam.clone()));
@@ -218,25 +244,25 @@ fn a_shadowed_agent_is_not_an_advisor() {
     let group = dispatch_group(&h, &["arch"], &thread).expect("dispatch");
     h.settle();
     assert_eq!(group.mode, "advisor");
-    let advisors: Vec<_> = group
-        .turns
-        .iter()
-        .filter(|t| t.group.as_ref().is_some_and(|g| g.role == GroupRole::Advisor))
-        .collect();
-    assert_eq!(advisors.len(), 1);
-    assert_eq!(advisors[0].nickname, "sec");
+    let advisor_calls =
+        seam.requests().iter().filter(|r| r.instructions.contains(ADVISOR_MARK)).count();
+    assert_eq!(advisor_calls, 1);
+    assert_eq!(terminal_of(&h, "sec").len(), 1);
 }
 
-// AGC-FR-GNMP, AGC-FR-UFAY, AGC-FR-MWYP, AGC-FR-VDOO, AGC-FR-BIPE: one tagged
-// agent is Meta, the other ready agents advise, and Meta's reply carries the list.
+// AGC-FR-GNMP, AGC-FR-UFAY, AGC-FR-MWYP, AGC-FR-HVQD, CVL-FR-RBQV, AGC-FR-VDOO, AGC-FR-BIPE:
+// one tagged agent is Meta and starts no advisor at dispatch. Its call of the
+// advisors tool starts the other ready agents, and its reply carries the list.
 #[test]
-fn a_single_tag_makes_the_agent_meta_and_the_others_advisors() {
-    let seam = RoutedSeam::new(|r| {
+fn a_single_tag_makes_the_agent_meta_and_its_call_starts_the_advisors() {
+    let seam = RoutedSeam::replying(|r, exchange| {
         if r.instructions.contains(ADVISOR_MARK) {
             let who = persona_of(r).to_lowercase();
-            Ok(said(format!("Important points:\n- {who} point\nKey questions:\n- {who} question")))
+            Ok(text_reply(said(format!(
+                "Important points:\n- {who} point\nKey questions:\n- {who} question"
+            ))))
         } else {
-            Ok(said("Meta answer."))
+            Ok(meta_asks_advisors(r, exchange, "Is it safe?", text_reply(said("Meta answer."))))
         }
     });
     let (h, thread) = group_harness(seam.clone());
@@ -246,13 +272,9 @@ fn a_single_tag_makes_the_agent_meta_and_the_others_advisors() {
 
     assert_eq!(group.mode, "advisor");
     assert_eq!(group.driver.as_deref(), Some("arch"));
-    let roles: Vec<(String, GroupRole)> = group
-        .turns
-        .iter()
-        .map(|t| (t.nickname.clone(), t.group.as_ref().expect("group").role))
-        .collect();
-    assert_eq!(roles[0], ("arch".to_string(), GroupRole::Meta));
-    assert_eq!(roles.len(), 3);
+    // Only the Meta turn is registered at dispatch.
+    assert_eq!(group.turns.len(), 1);
+    assert_eq!(group.turns[0].group.as_ref().expect("group").role, GroupRole::Meta);
 
     // One comment: Meta's, with the Advisors list.
     let comments = agent_comments(&h);
@@ -272,13 +294,20 @@ fn a_single_tag_makes_the_agent_meta_and_the_others_advisors() {
     assert_eq!(sec.points, vec!["sec point".to_string()]);
     assert_eq!(sec.questions, vec!["sec question".to_string()]);
 
-    // Meta's request holds the advice; an advisor's request holds none of the
-    // tools that end a turn on a contribution.
+    // Meta has the tool and the Meta prompt from its first call. Its second call
+    // reads the advice as the result of the tool. An advisor's request holds the
+    // question of Meta and none of the tools that end a turn on a contribution.
     let requests = seam.requests();
-    let meta = requests.iter().find(|r| persona_of(r) == "ARCH").expect("meta request");
-    assert!(meta.input.iter().any(|s| s.tag == "advisors" && s.body.contains("@sec")));
+    let meta: Vec<_> = requests.iter().filter(|r| persona_of(r) == "ARCH").collect();
+    assert_eq!(meta.len(), 2);
+    assert!(meta[0].tools.iter().any(|t| t.name.as_str() == "ask_advisors"));
+    assert!(meta[0].instructions.contains("ask_advisors"));
+    assert!(meta.iter().all(|r| r.input.iter().all(|s| s.tag != "advisors")));
+    let exchanges = seam.exchanges();
+    assert!(exchanges.iter().any(|e| e.contains("@sec") && e.contains("sec point")));
     let advisor = requests.iter().find(|r| r.instructions.contains(ADVISOR_MARK)).expect("advisor");
     assert!(advisor.tools.iter().all(|t| !ADVISOR_WITHHELD_TOOLS.contains(&t.name.as_str())));
+    assert!(advisor.tools.iter().all(|t| t.name.as_str() != "ask_advisors"));
     assert!(!advisor.tools.is_empty());
 
     // The advisor turns ended delivered and appended no comment.
@@ -286,6 +315,7 @@ fn a_single_tag_makes_the_agent_meta_and_the_others_advisors() {
         let ended = terminal_of(&h, nickname);
         assert_eq!(ended.len(), 1);
         assert_eq!(ended[0].state, AgentTurnState::Delivered);
+        assert_eq!(ended[0].group.as_ref().map(|g| g.role), Some(GroupRole::Advisor));
     }
 }
 
@@ -296,14 +326,14 @@ fn a_single_tag_makes_the_agent_meta_and_the_others_advisors() {
 fn the_timeout_skips_an_advisor_that_has_not_finished() {
     let hold = Arc::new(Latch::default());
     let held = hold.clone();
-    let seam = RoutedSeam::new(move |r| {
+    let seam = RoutedSeam::replying(move |r, exchange| {
         if r.instructions.contains(ADVISOR_MARK) {
             if persona_of(r) == "OPS" {
                 held.wait();
             }
-            Ok(said("Important points:\n- a point"))
+            Ok(text_reply(said("Important points:\n- a point")))
         } else {
-            Ok(said("Meta answer."))
+            Ok(meta_asks_advisors(r, exchange, "Any risk?", text_reply(said("Meta answer."))))
         }
     });
     let h = Harness::with_patient_seam(Box::new(seam.clone()));
@@ -315,7 +345,7 @@ fn the_timeout_skips_an_advisor_that_has_not_finished() {
     // Three advisors: the quorum is two. Zero seconds: the join ends at the quorum.
     switch(&h, true, 0);
     let group = dispatch_group(&h, &["arch"], &thread).expect("dispatch");
-    // The Meta turn answers after the join, while `ops` is still held.
+    // The Meta turn answers after the call joined, while `ops` is still held.
     let meta_id = group.turns[0].id.clone();
     let ended = loop {
         if let Some(t) = h.turns().terminated(&meta_id) {
@@ -343,15 +373,15 @@ fn the_timeout_skips_an_advisor_that_has_not_finished() {
     h.settle();
 }
 
-// AGC-FR-ANSK, AGC-FR-ZOCI: a failed advisor is skipped and Meta answers with the
-// advice that remains; with no advice at all Meta answers alone.
+// AGC-FR-ANSK, AGC-FR-ZOCI, AGC-FR-HVQD: a failed advisor is skipped, and with no
+// advice at all the call returns a result that says so and Meta answers alone.
 #[test]
 fn failed_advisors_are_skipped_and_meta_answers_alone() {
-    let seam = RoutedSeam::new(|r| {
+    let seam = RoutedSeam::replying(|r, exchange| {
         if r.instructions.contains(ADVISOR_MARK) {
             Err("unreachable")
         } else {
-            Ok(said("Meta answer."))
+            Ok(meta_asks_advisors(r, exchange, "Any risk?", text_reply(said("Meta answer."))))
         }
     });
     let (h, thread) = group_harness(seam.clone());
@@ -369,9 +399,7 @@ fn failed_advisors_are_skipped_and_meta_answers_alone() {
         })
         .expect("advisors");
     assert!(advisors.iter().all(|a| a.state == "skipped" && a.reason.as_deref() == Some("failed")));
-    let meta = seam.requests().into_iter().find(|r| persona_of(r) == "ARCH").expect("meta");
-    assert!(meta.input.iter().all(|s| s.tag != "advisors"));
-    assert!(!meta.instructions.contains("Other agents advised you"));
+    assert!(seam.exchanges().iter().any(|e| e.contains("No advice came")));
 }
 
 // AGC-FR-WPCZ, AGC-FR-ZOCI, AGC-FR-CZCU, AGC-FR-WZUL, CTA-FR-JPKE: the classifier picks the

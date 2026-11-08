@@ -15,11 +15,16 @@ fn advisors_of(attachments: &[comments::Attachment]) -> Option<Vec<comments::Adv
     })
 }
 
-fn advice_or(r: &AgentRequest, meta: ModelReply) -> Result<ModelReply, &'static str> {
+fn advice_or(
+    r: &AgentRequest,
+    exchange: usize,
+    meta: ModelReply,
+) -> Result<ModelReply, &'static str> {
     if r.instructions.contains(ADVISOR_MARK) {
         Ok(text_reply(said("Important points:\n- a point\nKey questions:\n- a question")))
     } else {
-        Ok(meta)
+        // AGC-FR-HVQD: Meta asks the advisors first, and then contributes.
+        Ok(meta_asks_advisors(r, exchange, "What matters?", meta))
     }
 }
 
@@ -27,9 +32,10 @@ fn advice_or(r: &AgentRequest, meta: ModelReply) -> Result<ModelReply, &'static 
 // the comment that the question is.
 #[test]
 fn a_meta_turn_that_asks_the_author_carries_the_advisors_list() {
-    let seam = RoutedSeam::replying(|r, _| {
+    let seam = RoutedSeam::replying(|r, exchange| {
         advice_or(
             r,
+            exchange,
             tool_reply(
                 crate::tools::ask_user_comment::NAME,
                 serde_json::json!({ "question": said("Which reading?") }),
@@ -54,9 +60,10 @@ fn a_meta_turn_that_asks_the_author_carries_the_advisors_list() {
 // Advisors list on the comment that announces the proposal.
 #[test]
 fn a_meta_turn_that_proposes_a_change_carries_the_advisors_list() {
-    let seam = RoutedSeam::replying(|r, _| {
+    let seam = RoutedSeam::replying(|r, exchange| {
         advice_or(
             r,
+            exchange,
             tool_reply(crate::tools::propose_draft_changes::NAME, proposal_args("Meta rewrite.")),
         )
     });
@@ -221,27 +228,34 @@ fn the_join_ends_the_calls_of_an_advisor_it_cancels() {
     assert_eq!(ended.group.as_ref().and_then(|g| g.skipped), Some(SkipReason::TimedOut));
 }
 
-// AGC-FR-ANSK: cancelling a Meta turn ends the advisors that still run, as
-// skipped for `cancelled`.
+// AGC-FR-ANSK, AGC-FR-HVQD: cancelling a Meta turn during its call of the
+// advisors tool ends the advisors that still run, as skipped for `cancelled`.
 #[test]
 fn cancelling_the_meta_turn_cancels_its_advisors() {
     let hold = Arc::new(Latch::default());
     let held = hold.clone();
-    let seam = RoutedSeam::new(move |r| {
+    let seam = RoutedSeam::replying(move |r, exchange| {
         if r.instructions.contains(ADVISOR_MARK) {
             if persona_of(r) == "SEC" {
                 held.wait();
             }
-            Ok(said("Important points:\n- a point"))
+            Ok(text_reply(said("Important points:\n- a point")))
         } else {
-            Ok(said("Meta answer."))
+            Ok(meta_asks_advisors(r, exchange, "Any risk?", text_reply(said("Meta answer."))))
         }
     });
     let (h, thread) = group_harness(seam);
     switch(&h, true, 60);
     let group = dispatch_group(&h, &["arch"], &thread).expect("dispatch");
     let meta_id = group.turns[0].id.clone();
-    let sec_id = group.turns.iter().find(|t| t.nickname == "sec").expect("sec").id.clone();
+    // The advisors start when Meta calls the tool, so `sec` registers later.
+    let sec_id = loop {
+        let found = h.turns().in_flight(None).into_iter().find(|t| t.nickname == "sec");
+        if let Some(turn) = found {
+            break turn.id;
+        }
+        std::thread::yield_now();
+    };
 
     let handle = h.app.handle().clone();
     let progress = h.app.state::<ProgressRegistry>();

@@ -18,6 +18,7 @@ import { handleOf } from "./voiceHandles";
 import { errorCode } from "./voiceMessages";
 import { answerTargetOf } from "./voiceQuestions";
 import { armFiller, cancelFiller } from "./voiceFiller";
+import { armProgress, cancelProgress } from "./voiceProgress";
 import { afterSettle, bargeIn, stopSpeech } from "./voiceReplies";
 import {
   answerTaken,
@@ -149,8 +150,10 @@ async function openVad(nicknames: string[]): Promise<void> {
 function finishSpoken(u: Utterance): void {
   if (speaking === u) speaking = null;
   patchVoiceState({ phase: "idle", hearing: false, recordingSince: null });
-  // VOM-FR-YGAR: the end of the utterance arms its filler.
+  // VOM-FR-YGAR, VOM-FR-JTWB: the end of the utterance arms its filler and its
+  // progress stream.
   armFiller(u.captureId);
+  armProgress(u.captureId);
   void finishUtterance(u, finishVoiceCapture(u.captureId));
 }
 
@@ -231,8 +234,10 @@ function utteranceConfirmed(change: VoiceActivityChange): void {
   if (change.captureId === null || key === null) return;
   dropHeldRecording();
   clearFeedback();
-  // VOM-FR-POBZ: a new utterance cancels a filler that did not speak.
+  // VOM-FR-POBZ, VOM-FR-LQYS: a new utterance cancels a filler that did not
+  // speak and the progress stream.
   cancelFiller("new utterance");
+  cancelProgress("new utterance");
   const answers = answerTargetOf(key, answerTaken);
   speaking = beginUtterance(key, change.captureId, chunkedFor(key, answers), answers);
   patchVoiceState({

@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { dispatchAgentGroup, dispatchAgentTurn, loadAgentGroupSettings } from "../api";
 import { logDebug } from "../logging";
 import type { AgentTurn, ConversationOrigin } from "../types";
+import { noteGroupDispatched } from "./groupSpeech";
 
 let enabled = false;
 
@@ -81,6 +82,8 @@ export function dispatchComment(
   if (agentGroupSwitchOn()) {
     void dispatchAgentGroup({ nicknames: [...nicknames], origin, triggerCommentId })
       .then((group) => {
+        // VOM-FR-QMBN, VOM-FR-ZAHM: voice mode reads the mode and the driver.
+        noteGroupDispatched(origin.discussionId, triggerCommentId, group);
         group.turns.forEach(handlers.onTurn);
         group.refusals.forEach((r) => handlers.onError(r.failure, r.nickname));
       })

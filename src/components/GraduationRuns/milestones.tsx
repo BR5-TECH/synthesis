@@ -59,6 +59,10 @@ async function readSummaries(runId: string, phaseId: string, pass: number): Prom
   return pages.flat();
 }
 
+function sameSummaries(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((summary, at) => summary === b[at]);
+}
+
 /**
  * GRU-FR-JHVX / GRU-FR-ZCTP: the summaries of the run's current turn.
  *
@@ -89,7 +93,14 @@ function useMilestoneSummaries(run: GraduationRun): string[] | null {
       running = true;
       void readSummaries(runId, phaseId, pass)
         .then((summaries) => {
-          if (!cancelled) setHeld({ key, summaries });
+          if (cancelled) return;
+          // GRU-FR-ZCTP: a read that returns what the list holds changes nothing
+          // on screen. An agent that streams appends many records each second.
+          setHeld((prev) =>
+            prev !== null && prev.key === key && sameSummaries(prev.summaries, summaries)
+              ? prev
+              : { key, summaries },
+          );
         })
         .catch(() => {
           logDebug(["frontend"], "a run's milestones could not be read", { runId, phaseId });

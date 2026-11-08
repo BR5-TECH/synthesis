@@ -98,10 +98,12 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 58. **GRU-FR-CYDK** Each milestone shows one state in words and in accessible semantics: **pending** with no marker, **active** after a start marker with no done marker, **done** after a done marker, or **unknown**. A done marker without a start marker makes the milestone done.
 58. **GRU-FR-FHLE** A run in any state but `working` or `reviewing` has ended its turn. Each milestone of such a run that is not done shows as unknown.
 59. **GRU-FR-JHVX** The milestone list reads the `milestone` records of the run's persisted activity stream for the current phase and pass, through `read_graduation_logs` with `kinds` set to `milestone` (per `../core/GRS-graduation-run-log-storage.md` GRS-FR-RNKT). It reads every page of that scope. It reads no observability record and parses no `message` summary.
-59. **GRU-FR-ZCTP** The milestone list reads again when the run is selected, when the run's state, phase, or pass changes, and on an append event of GRU-FR-QKSY.
+59. **GRU-FR-ZCTP** The milestone list reads again when the run is selected, when the run's state, phase, or pass changes, and on an append event of GRU-FR-QKSY. A read that returns the summaries the list already holds changes nothing on screen.
 60. **GRU-FR-PZGA** The milestone list reads each record's `summary` as one marker and applies the records in the order of their `sequence`. A plan marker replaces the plan before it and sets every milestone to pending. A later plan comes from a later call of the same phase and pass, because each call delivers one plan.
 60. **GRU-FR-BXMS** A start or done marker is ignored before a plan, with an `index` outside the plan, or for a milestone that is already done.
 60. **GRU-FR-ELDK** A record that does not read as a marker is ignored and never an error. A read that fails leaves the list as it was.
+61. **GRU-FR-AFSW** When the selection moves to another run, nothing that the region drew for the run before stays in the region. The region shows one milestone list at most, it is the list of the selected run, and a run with no current turn shows none, however often the selection moves and however many records the activity stream appends.
+    - *Why:* a list that stays from an earlier selection shows one run's milestones under another run, and lists that stay from several selections show one list many times.
 61. **GRU-FR-LMTX** Every milestone title is rendered as escaped plain text (GRU-FR-MRPE). The list renders in plan order and adds no control, and activating a milestone opens nothing.
 
 ## Wireframes

@@ -41,6 +41,11 @@ export interface DiscussionSession {
   atTail: boolean;
   /** CVP-FR-TWRL: messages that arrived while the author was reading back. */
   unreadCount: number;
+  /**
+   * CVP-FR-CUKV: how many times the author posted in this session. A mounted
+   * list goes to its foot each time the number grows.
+   */
+  footRequest: number;
   /** The first of them, which the unread divider is drawn above. */
   firstUnreadId: string | null;
   /**
@@ -78,6 +83,7 @@ const EMPTY: DiscussionSession = Object.freeze({
   scrollTop: 0,
   atTail: true,
   unreadCount: 0,
+  footRequest: 0,
   firstUnreadId: null,
   seenIds: null,
   turns: Object.freeze([]) as readonly AgentTurn[],
@@ -96,7 +102,8 @@ function emit(): void {
   listeners.forEach((l) => l());
 }
 
-function subscribe(listener: () => void): () => void {
+/** Subscribe to every change of every session, for `useSyncExternalStore`. */
+export function subscribeDiscussionSessions(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -218,6 +225,27 @@ export function noteDiscussionArrivals(key: string, ids: readonly string[]): voi
   patchDiscussionSession(key, {
     unreadCount: held.unreadCount + ids.length,
     firstUnreadId: held.firstUnreadId ?? ids[0],
+  });
+}
+
+/**
+ * CVP-FR-CUKV: the author posted in this discussion. The list follows again and
+ * the unread state clears. A mounted list goes to its foot when it reads the new
+ * request; a list that mounts later opens at its foot because it is at the tail.
+ */
+export function requestDiscussionFoot(key: string): void {
+  if (key === "") return;
+  const held = getDiscussionSession(key);
+  logDebug(["frontend"], "the author posted, so the discussion follows again", {
+    discussionId: key,
+    unread: held.unreadCount,
+    footRequest: held.footRequest + 1,
+  });
+  patchDiscussionSession(key, {
+    atTail: true,
+    unreadCount: 0,
+    firstUnreadId: null,
+    footRequest: held.footRequest + 1,
   });
 }
 
@@ -403,7 +431,7 @@ export function clearAllDiscussionSessions(): void {
 /** One discussion's session, in React. */
 export function useDiscussionSession(key: string): DiscussionSession {
   return useSyncExternalStore(
-    subscribe,
+    subscribeDiscussionSessions,
     () => getDiscussionSession(key),
     () => getDiscussionSession(key),
   );

@@ -157,3 +157,54 @@ describe("a change that draws nothing (DCR-FR-07, DCR-FR-OZVU)", () => {
     expect(dom.textContent).not.toContain("h2 text");
   });
 });
+
+describe("a change of syntax alone (DCR-FR-MAHJ)", () => {
+  it("DCR-FR-MAHJ, DCR-FR-12: a deletion of no width strikes nothing and still holds its chip's space open", () => {
+    const editor = prompt("## User journey\n\n- \n\n## Requirements");
+    // The end of the heading's text.
+    const end = 1 + "User journey".length;
+    push(editor, {
+      hunks: [insertion({ kind: "del", from: end, to: end, after: null })],
+      focused: "h1",
+    });
+    const dom = editor.view.dom;
+    expect(dom.querySelector(".hunk--del")).toBeNull();
+    const foot = dom.querySelector(".hunk--del-foot");
+    expect(foot).not.toBeNull();
+    // Between the blocks, under the heading, not inside it.
+    expect(foot!.closest("h2")).toBeNull();
+    expect(foot!.previousElementSibling?.tagName).toBe("H2");
+  });
+
+  it("DCR-FR-MAHJ, DCR-FR-09: a replacement of no width strikes nothing and draws its proposed text as a block", () => {
+    const editor = prompt("## User journey\n\n- \n\n## Requirements");
+    const end = 1 + "User journey".length;
+    push(editor, {
+      hunks: [insertion({ kind: "replace", from: end, to: end, after: "- Filled." })],
+      focused: "h1",
+    });
+    const dom = editor.view.dom;
+    expect(dom.querySelector(".hunk--del")).toBeNull();
+    const block = dom.querySelector('.hunk--add[data-hunk="h1"]');
+    expect(block).not.toBeNull();
+    expect(block!.closest("h2")).toBeNull();
+    expect(block!.previousElementSibling?.tagName).toBe("H2");
+  });
+
+  it("DCR-FR-MAHJ: a deletion placed at the head of its trail draws its foot above the trail's block", () => {
+    const editor = prompt("## User journey\n\n- \n\n## Requirements");
+    let head = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === "heading" && node.textContent === "Requirements") head = pos + 1;
+    });
+    expect(head).toBeGreaterThan(0);
+    push(editor, {
+      hunks: [insertion({ kind: "del", from: head, to: head, after: null })],
+      focused: "h1",
+    });
+    const foot = editor.view.dom.querySelector(".hunk--del-foot");
+    expect(foot).not.toBeNull();
+    expect(foot!.closest("h2")).toBeNull();
+    expect(foot!.nextElementSibling?.textContent).toBe("Requirements");
+  });
+});

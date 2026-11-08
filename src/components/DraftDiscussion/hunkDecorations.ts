@@ -268,18 +268,19 @@ export function buildDecorations(
           "data-focused": String(focused),
         }),
       );
-      // DCR-FR-12: a deletion has no proposed text to hold the chip's space
-      // open, so it holds it open itself.
-      if (hunk.kind === "del") {
-        decos.push(
-          Decoration.widget(boundary, () => removalFootNode(hunk), {
-            side: 1,
-            ignoreSelection: true,
-            stopEvent: () => true,
-            key: `${hunk.id}:foot:${focused}`,
-          }),
-        );
-      }
+    }
+    // DCR-FR-12: a deletion has no proposed text to hold the chip's space open,
+    // so it holds it open itself. DCR-FR-MAHJ: a deletion of syntax alone has
+    // no text to strike, and this is the whole of what it draws.
+    if (hunk.kind === "del") {
+      decos.push(
+        Decoration.widget(boundary, () => removalFootNode(hunk), {
+          side: 1,
+          ignoreSelection: true,
+          stopEvent: () => true,
+          key: `${hunk.id}:foot:${focused}`,
+        }),
+      );
     }
     // DCR-FR-09: what the change proposes, immediately after what it replaces,
     // so a replacement reads as the removal above its insertion.

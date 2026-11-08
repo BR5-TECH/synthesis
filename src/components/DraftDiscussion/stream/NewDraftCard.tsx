@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 
 import * as api from "../../../api";
 import { logInfo, logWarn } from "../../../logging";
+import { requestDiscussionFoot } from "../../../state/discussionSession";
 import {
   clearRevealedCard,
   discussNewDraft,
@@ -159,6 +160,9 @@ export function NewDraftCard({
           cause: "decided",
         });
         dispatchAfterDecision(outcome.proposal, outcome.commentId, sent);
+        // CVP-FR-CUKV: the decision is a post of the author, so the
+        // discussion follows again.
+        requestDiscussionFoot(outcome.proposal.threadId);
         // DCR-FR-FKNQ: the pressed control is gone, so focus stays on the card.
         focusCard();
       },

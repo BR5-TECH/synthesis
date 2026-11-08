@@ -221,8 +221,10 @@ export function RunRegion({
 
       {/* GRU-FR-WQHM: the milestones of the run's current turn, under the stage
           row and above everything that follows it. Keyed by run, so another run
-          starts with an empty list. */}
-      <MilestoneList key={run.id} run={run} />
+          starts with an empty list. GRU-FR-AFSW: the key names the list too,
+          because a sibling keyed by the run id alone would share it, and React
+          then keeps one run's list in another run's region. */}
+      <MilestoneList key={`milestones:${run.id}`} run={run} />
 
       {/* GRU-FR-LBPR / GRU-FR-FZCN / GRU-FR-DBUS: a run resting on a blocker
           states it in either state that carries one. */}
@@ -310,7 +312,7 @@ export function RunRegion({
       {/* GRU-FR-NQLG: the decisions the author made during this run, once,
           read-only and collapsed. It is keyed by run, so another run starts
           collapsed. */}
-      <EscalationsLog key={run.id} run={run} />
+      <EscalationsLog key={`escalations:${run.id}`} run={run} />
 
       {/* GRU-FR-MCYF: what the run changed and how it got there, side by side
           where the region is wide enough and stacked where not.

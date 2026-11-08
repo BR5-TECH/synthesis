@@ -109,6 +109,7 @@ export function useHunkPlacement(
         before: render(hunk.before),
         lead: render(hunk.lead),
         leadTail: render(leadTail(hunk.lead)),
+        trail: render(hunk.trail ?? null),
       };
       const range = placeHunk(index, reducedDoc, hunk, needles);
       if (range === null) continue;

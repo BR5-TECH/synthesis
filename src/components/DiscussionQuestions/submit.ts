@@ -28,7 +28,7 @@ import {
 import { logInfo, logWarn } from "../../logging";
 import { publishThread } from "../../state/conversationThreads";
 import { publishSet } from "../../state/questionSets";
-import { setDiscussionTurnFailure } from "../../state/discussionSession";
+import { requestDiscussionFoot, setDiscussionTurnFailure } from "../../state/discussionSession";
 import { loggableTurnFailure } from "../discussion/messages";
 import { activeAgents } from "../../state/activeAgents";
 import { agentRoster } from "../agentTags";
@@ -57,6 +57,10 @@ export async function submitQuestionAnswers(
     setId,
     answers,
   });
+
+  // CVP-FR-CUKV / DQA-FR-HMTR: an accepted submission is a post of the author,
+  // so the list follows again before the answer comments arrive in it.
+  requestDiscussionFoot(threadId);
 
   // DQA-FR-NKAX: the appended comments are ordinary comments of the conversation
   // from this moment. Published rather than waited for: the command's response

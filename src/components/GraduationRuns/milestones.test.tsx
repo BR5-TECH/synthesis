@@ -8,7 +8,9 @@
  * renders.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Profiler } from "react";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -27,6 +29,7 @@ import { forgetEveryDraft } from "../../state/escalationDrafts";
 import { forgetEverything } from "../../state/graduationSelection";
 import { makeObservability, makeQueue } from "../../test/graduationFixtures";
 import { MilestoneList } from "./milestones";
+import { resetLogBufferForTest } from "../../logging";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
@@ -55,6 +58,7 @@ function pageOf(summaries: string[], first = 1): GraduationLogPage {
 }
 
 beforeEach(() => {
+  resetLogBufferForTest();
   stored = [];
   failing = false;
   pages = null;
@@ -247,7 +251,110 @@ describe("the milestone list", () => {
   });
 });
 
+describe("a read that changes nothing (GRU-FR-ZCTP)", () => {
+  it("GRU-FR-ZCTP: a read that returns the summaries the list holds changes nothing on screen", async () => {
+    stored = [plan("A", "B"), start(1)];
+    let commits = 0;
+    render(
+      <Profiler id="milestones" onRender={() => (commits += 1)}>
+        <MilestoneList run={makeRun("r1", "working")} />
+      </Profiler>,
+    );
+    const list = await screen.findByTestId("graduation-milestones");
+    const settled = commits;
+    for (let at = 0; at < 20; at += 1) await append("r1");
+    await waitFor(() => expect(reads()).toHaveLength(21));
+    await act(async () => {});
+    // React can render once more before it sees that the state did not change,
+    // and then bails out. A list that took each read's new array would commit
+    // once for each of the twenty reads.
+    expect(commits - settled).toBeLessThanOrEqual(1);
+    expect(screen.getByTestId("graduation-milestones")).toBe(list);
+
+    // A read that does change the list still shows the change.
+    stored = [plan("A", "B"), done(1), start(2)];
+    await append("r1");
+    await waitFor(() => expect(states()).toEqual(["done", "active"]));
+    expect(commits).toBeGreaterThan(settled);
+  });
+});
+
+describe("a new turn whose plan is the same (GRU-FR-TBNE, GRU-FR-ZCTP)", () => {
+  it("GRU-FR-TBNE, GRU-FR-ZCTP: a new pass that reads the same summaries still shows its list", async () => {
+    stored = [plan("A", "B"), start(1)];
+    const view = render(
+      <MilestoneList run={makeRun("r1", "working", { checkpoint: { pass: 1 } as never })} />,
+    );
+    await screen.findByTestId("graduation-milestones");
+    view.rerender(
+      <MilestoneList run={makeRun("r1", "working", { checkpoint: { pass: 2 } as never })} />,
+    );
+    await waitFor(() =>
+      expect(reads().some((r) => (r.pass as { pass: number }).pass === 2)).toBe(true),
+    );
+    expect(await screen.findByTestId("graduation-milestones")).toBeInTheDocument();
+    expect(states()).toEqual(["active", "pending"]);
+  });
+});
+
+/**
+ * The whole section over `runs`. A run named in `byRun` reads its own milestone
+ * records; any other run reads those of `stored`.
+ */
+function mountSection(runs: ReturnType<typeof makeRun>[], byRun: Record<string, string[]> = {}) {
+  const queue = makeQueue(runs);
+  invoked.mockImplementation(async (command: string, args?: unknown) => {
+    switch (command) {
+      case "list_graduation_queue":
+        return queue;
+      case "load_app_preferences":
+        return { graduationRailWidthFraction: 0.2 };
+      case "list_work_streams":
+        return [];
+      case "read_graduation_logs":
+        return pageOf(byRun[String((args as { runId?: string } | undefined)?.runId)] ?? stored);
+      default:
+        return undefined;
+    }
+  });
+  resetAppPreferencesCache();
+  forgetEverything();
+  forgetEveryDraft();
+  render(<GraduationRuns />);
+}
+
 describe("the milestone list in the run region", () => {
+  it("GRU-FR-AFSW, GRU-FR-NKDU: the region shows one list at most, and none for a queued run on the same stream", async () => {
+    stored = [plan("Read instructions and specs", "Update specifications"), start(1)];
+    mountSection([
+      makeRun("r1", "working", { logs: makeLogs({ activity: [{ phaseId: "working", pass: 1 }] }) }),
+      makeRun("r2", "queued"),
+    ]);
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    await waitFor(() => expect(region.dataset.run).toBe("r1"));
+    await screen.findByTestId("graduation-milestones");
+    for (let at = 0; at < 10; at += 1) await append("r1");
+    expect(screen.getAllByTestId("graduation-milestones")).toHaveLength(1);
+
+    const row = (id: string) =>
+      screen
+        .getAllByTestId("graduation-row")
+        .find((r) => r.getAttribute("aria-label")?.endsWith(id))!;
+    for (let round = 0; round < 3; round += 1) {
+      await userEvent.click(row("r2"));
+      await waitFor(() => expect(region.dataset.run).toBe("r2"));
+      await append("r1");
+      expect(screen.queryAllByTestId("graduation-milestones")).toHaveLength(0);
+      expect(screen.queryByText("Read instructions and specs")).toBeNull();
+
+      await userEvent.click(row("r1"));
+      await waitFor(() => expect(region.dataset.run).toBe("r1"));
+      await screen.findByTestId("graduation-milestones");
+      expect(screen.getAllByTestId("graduation-milestones")).toHaveLength(1);
+    }
+  });
+
+
   it("GRU-FR-WQHM: it stands under the stage row and above the change set and the pass history", async () => {
     stored = [plan("Read the spec", "Write the code"), start(1)];
     const queue = makeQueue([
@@ -286,5 +393,31 @@ describe("the milestone list in the run region", () => {
     const columns = document.querySelector(".graduation__columns");
     expect(columns).not.toBeNull();
     expect(follows(list, columns as Node)).toBe(true);
+  });
+
+  it("GRU-FR-AFSW: moving between two working runs shows only the list of the run selected", async () => {
+    const turn = { logs: makeLogs({ activity: [{ phaseId: "working", pass: 1 }] }) };
+    mountSection([makeRun("r1", "working", turn), makeRun("r2", "working", turn)], {
+      r1: [plan("First run step"), start(1)],
+      r2: [plan("Second run step")],
+    });
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    const row = (id: string) =>
+      screen
+        .getAllByTestId("graduation-row")
+        .find((r) => r.getAttribute("aria-label")?.endsWith(id))!;
+    for (const [id, title, other] of [
+      ["r2", "Second run step", "First run step"],
+      ["r1", "First run step", "Second run step"],
+      ["r2", "Second run step", "First run step"],
+    ]) {
+      await userEvent.click(row(id));
+      await waitFor(() => expect(region.dataset.run).toBe(id));
+      expect(await screen.findByText(title)).toBeInTheDocument();
+      await append("r1");
+      await append("r2");
+      expect(screen.getAllByTestId("graduation-milestones")).toHaveLength(1);
+      expect(screen.queryByText(other)).toBeNull();
+    }
   });
 });

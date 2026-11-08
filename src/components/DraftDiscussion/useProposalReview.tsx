@@ -32,10 +32,13 @@ import {
   visitedHunks,
 } from "../../state/draftProposals";
 import { rereadHunks, useProposalHunks, type HunkSource } from "../../state/proposalHunks";
+import { requestDiscussionFoot } from "../../state/discussionSession";
 
 /** DCR-FR-GNRL: what the review reads of a proposal, of either kind. */
 export interface ReviewableProposal {
   id: string;
+  /** The discussion the proposal was made in (CVP-FR-CUKV). */
+  threadId: string;
   agent: Participant;
   hunkCount: number;
   counts: HunkCounts;
@@ -127,6 +130,7 @@ export function useProposalReview<P extends ReviewableProposal>({
       before: hunk.before ?? "",
       after: hunk.after ?? "",
       lead: hunk.anchor.lead,
+      trail: hunk.anchor.trail,
       hint: hunk.anchor.hint_start,
       lost,
       position: at + 1,
@@ -189,6 +193,9 @@ export function useProposalReview<P extends ReviewableProposal>({
           return false;
         }
         if (!(await kind.decide(pendingProposal, hunkId, how))) return false;
+        // CVP-FR-CUKV / DCR-FR-15: a decision is a post of the author, so the
+        // proposal's discussion follows again.
+        requestDiscussionFoot(pendingProposal.threadId);
         // DCR-FR-25: the change is decided, so there is nothing left to edit.
         buffers.drop(key);
         // DCR-FR-12: the review moves to the **next** undecided change, chosen
@@ -246,6 +253,7 @@ export function useProposalReview<P extends ReviewableProposal>({
     setDecisionError(null);
     try {
       await kind.decline(pendingProposal);
+      requestDiscussionFoot(pendingProposal.threadId);
       rereadHunks(pendingProposal.id, source);
     } catch (e) {
       setDecisionError(kind.message(String(e)));

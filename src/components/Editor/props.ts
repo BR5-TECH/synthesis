@@ -37,6 +37,8 @@ export interface ReviewHunk {
   after: string;
   /** The text immediately before the change, which is what places an insertion. */
   lead: string;
+  /** DCR-FR-MAHJ: the text immediately after the change. */
+  trail?: string;
   /** Where the change was when the proposal was recorded. Only a hint. */
   hint: number;
   /** DCP-FR-BMLX: the prompt no longer holds the text this change names. */

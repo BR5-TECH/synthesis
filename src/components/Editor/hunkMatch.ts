@@ -231,6 +231,11 @@ export interface PlaceableHunk {
   before: string;
   /** The exact prompt text the change follows. Empty at the head of the prompt. */
   lead: string;
+  /**
+   * DCR-FR-MAHJ: the exact prompt text that follows the change. It places only
+   * a change whose `before` renders to no text and whose `lead` places nothing.
+   */
+  trail?: string;
   hint: number;
 }
 
@@ -244,6 +249,8 @@ export interface RenderedNeedles {
   lead: string | null;
   /** The lead without its first line (`leadTail`), or null where none is left. */
   leadTail: string | null;
+  /** DCR-FR-MAHJ: the trail, rendered. Absent where the change has none. */
+  trail?: string | null;
 }
 
 /**
@@ -274,6 +281,28 @@ function findLeadSuffix(
   for (let drop = 1; words.length - drop >= MIN_LEAD_WORDS; drop += 1) {
     const range = findReduced(index, reducedDoc, words.slice(drop).join(" "), hint);
     if (range !== null) return { from: range.to, to: range.to };
+  }
+  return null;
+}
+
+/**
+ * DCR-FR-MAHJ: the place a trail starts, found with as much of the trail's
+ * start as the document holds.
+ *
+ * The backend cuts a trail at a fixed length, so its end can stop inside a link
+ * or a code span. Words come off the end one at a time, and the first remainder
+ * found wins. A remainder keeps as many words as a shortened lead does.
+ */
+function findTrailPrefix(
+  index: DocText,
+  reducedDoc: Reduced,
+  trail: string,
+  hint: number,
+): PosRange | null {
+  const words = reduce(trail).text.split(" ");
+  for (let keep = words.length; keep >= MIN_LEAD_WORDS; keep -= 1) {
+    const range = findReduced(index, reducedDoc, words.slice(0, keep).join(" "), hint);
+    if (range !== null) return { from: range.from, to: range.from };
   }
   return null;
 }
@@ -315,21 +344,7 @@ export function placeHunk(
     // An insertion names no text of its own, so it is placed at the end of the
     // text it follows — or at the head of a prompt that holds none.
     if (hunk.lead === "") return { from: 1, to: 1 };
-    // DCR-FR-TSNW: a tail is a shortened lead, so it keeps as many words.
-    const tail = rendered?.leadTail ?? null;
-    const usableTail =
-      tail !== null && wordCount(tail) >= MIN_LEAD_WORDS ? tail : null;
-    const found = firstFound(
-      (lead) => findAfter(index, reducedDoc, lead, hunk.hint),
-      [rendered?.lead ?? null, usableTail, hunk.lead],
-    );
-    if (found !== null) return found;
-    // DCR-FR-TSNW: only the end of a lead must match. A tail that renders to
-    // nothing (a rule, an image) holds no words, so the next text is tried.
-    return firstFound(
-      (lead) => findLeadSuffix(index, reducedDoc, lead, hunk.hint),
-      [rendered?.leadTail ?? null, rendered?.lead ?? null, hunk.lead],
-    );
+    return placeAfterLead(index, reducedDoc, hunk, rendered);
   }
   if (hunk.before === "") {
     // DCR-FR-KDSV: a legacy proposal is one replacement covering the whole
@@ -337,8 +352,77 @@ export function placeHunk(
     // no text to strike and one place its proposed text can go.
     return reducedDoc.text === "" ? { from: 1, to: 1 } : null;
   }
+  if (rendersToNoText(hunk.before, rendered?.before ?? null)) {
+    // DCR-FR-MAHJ: the change names syntax alone, such as an empty bullet, so
+    // there is nothing to strike. It is drawn where that syntax stands: after
+    // its lead, or else before its trail.
+    const afterLead =
+      hunk.lead === "" ? null : placeAfterLead(index, reducedDoc, hunk, rendered);
+    return afterLead ?? placeBeforeTrail(index, reducedDoc, hunk, rendered);
+  }
   return firstFound(
     (before) => findRange(index, reducedDoc, before, hunk.hint),
     [rendered?.before ?? null, hunk.before],
+  );
+}
+
+/**
+ * DCR-FR-MAHJ: a `before` that the document can show no text of. The rendered
+ * text decides where there is one (DCR-FR-LGHZ): `-` alone renders to an empty
+ * list item, though it is a character of its source.
+ */
+function rendersToNoText(before: string, rendered: string | null): boolean {
+  return reduce(rendered ?? before).text === "";
+}
+
+/**
+ * DCR-FR-TSNW: the end of a change's `lead`, as a place of no width. Null where
+ * no part of the lead is found.
+ */
+function placeAfterLead(
+  index: DocText,
+  reducedDoc: Reduced,
+  hunk: PlaceableHunk,
+  rendered?: RenderedNeedles,
+): PosRange | null {
+  // DCR-FR-TSNW: a tail is a shortened lead, so it keeps as many words.
+  const tail = rendered?.leadTail ?? null;
+  const usableTail = tail !== null && wordCount(tail) >= MIN_LEAD_WORDS ? tail : null;
+  const found = firstFound(
+    (lead) => findAfter(index, reducedDoc, lead, hunk.hint),
+    [rendered?.lead ?? null, usableTail, hunk.lead],
+  );
+  if (found !== null) return found;
+  // DCR-FR-TSNW: only the end of a lead must match. A tail that renders to
+  // nothing (a rule, an image) holds no words, so the next text is tried.
+  return firstFound(
+    (lead) => findLeadSuffix(index, reducedDoc, lead, hunk.hint),
+    [rendered?.leadTail ?? null, rendered?.lead ?? null, hunk.lead],
+  );
+}
+
+/**
+ * DCR-FR-MAHJ: the start of a change's `trail`, as a place of no width. Null
+ * where the change has no trail or no part of it is found.
+ */
+function placeBeforeTrail(
+  index: DocText,
+  reducedDoc: Reduced,
+  hunk: PlaceableHunk,
+  rendered?: RenderedNeedles,
+): PosRange | null {
+  const trail = hunk.trail ?? "";
+  if (trail === "") return null;
+  const found = firstFound(
+    (text) => {
+      const range = findRange(index, reducedDoc, text, hunk.hint);
+      return range === null ? null : { from: range.from, to: range.from };
+    },
+    [rendered?.trail ?? null, trail],
+  );
+  if (found !== null) return found;
+  return firstFound(
+    (text) => findTrailPrefix(index, reducedDoc, text, hunk.hint),
+    [rendered?.trail ?? null, trail],
   );
 }

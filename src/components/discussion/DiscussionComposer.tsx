@@ -57,6 +57,7 @@ import { VoiceArea, VoiceFeedback } from "./VoiceArea";
 import {
   clearComposer,
   clearSentComposer,
+  requestDiscussionFoot,
   getDiscussionSession,
   setComposerAttachments,
   setComposerBody,
@@ -275,6 +276,10 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
     // Only a post that landed clears the composer, and only of what it sent.
     clearSentComposer(key, sent);
     setDiscussionError(key, undefined);
+    // CVP-FR-CUKV: a reply returns its discussion to the foot. An opening post
+    // creates a discussion whose list opens at its foot.
+    if (current.mode === "reply") requestDiscussionFoot(current.discussion.id);
+    else if (bound) requestDiscussionFoot(bound.id);
     if (created && getVoiceState().activeKey === sessionKey) {
       bindVoiceToDiscussion(sessionKey, created);
     }
@@ -325,6 +330,8 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
           });
           return "failed";
         }
+        // CVP-FR-CUKV: a spoken answer is a post of the author.
+        requestDiscussionFoot(current.discussion.id);
         const comments = (threadById(current.discussion.id) ?? current.discussion).comments;
         const reached = dispatchTargets({ comments }, text, rosterRef.current);
         return reached.length > 0 ? "posted" : "reached_nobody";

@@ -58,6 +58,7 @@ beforeEach(() => {
         groupId: "group-1",
         driver: "arch",
         turns: (args?.nicknames ?? []).map((n) => turn({ id: `turn-${n}`, nickname: n })),
+        refusals: [],
       };
       return Promise.resolve(group);
     }
@@ -119,6 +120,32 @@ describe("the agent group switch", () => {
       { onTurn: () => {}, onError: (e, nickname) => errors.push([e, nickname]) },
     );
     await vi.waitFor(() => expect(errors).toEqual([["agent_unavailable", null]]));
+  });
+});
+
+describe("the refusals of an agent group", () => {
+  it("CTA-FR-UGBA: a group answer that names a refused agent reports that refusal beside the turns", async () => {
+    enabled = true;
+    await refreshAgentGroupSwitch();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "dispatch_agent_group"
+        ? Promise.resolve({
+            mode: "synthesis",
+            groupId: "group-1",
+            driver: "arch",
+            turns: [turn({ id: "turn-arch", nickname: "arch" })],
+            refusals: [{ nickname: "ghost", failure: "agent_unavailable" }],
+          } satisfies AgentGroup)
+        : otherCommand(cmd),
+    );
+    const seen: string[] = [];
+    const errors: Array<[unknown, string | null]> = [];
+    dispatchComment(
+      { nicknames: ["arch", "ghost"], origin, triggerCommentId: "c1" },
+      { onTurn: (t) => seen.push(t.nickname), onError: (e, n) => errors.push([e, n]) },
+    );
+    await vi.waitFor(() => expect(errors).toEqual([["agent_unavailable", "ghost"]]));
+    expect(seen).toEqual(["arch"]);
   });
 });
 

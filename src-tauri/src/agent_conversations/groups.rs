@@ -69,6 +69,17 @@ pub struct AgentGroup {
     pub group_id: Option<String>,
     pub driver: Option<String>,
     pub turns: Vec<AgentTurn>,
+    /// The addressed agents that got no turn while other turns were registered.
+    pub refusals: Vec<GroupRefusal>,
+}
+
+/// AGC-FR-KOHJ: an addressed agent that the dispatch refused, with the typed
+/// refusal of a regular dispatch.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupRefusal {
+    pub nickname: String,
+    pub failure: String,
 }
 
 fn section(tag: &str, body: String) -> InputSection {
@@ -177,8 +188,9 @@ pub fn dispatch_group_impl<R: tauri::Runtime>(
 }
 
 /// AGC-FR-MRAR, AGC-FR-LJVM: one dispatch per distinct nickname, as AGC-FR-04
-/// states. A nickname that the dispatch refuses is logged by the dispatch; the
-/// call refuses as a whole only where it registered no turn.
+/// states. A nickname that the dispatch refuses is logged by the dispatch and
+/// listed in `refusals`; the call refuses as a whole only where it registered no
+/// turn.
 fn dispatch_regular<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     roots: Roots<'_>,
@@ -188,24 +200,23 @@ fn dispatch_regular<R: tauri::Runtime>(
     trigger_comment_id: &str,
 ) -> Result<AgentGroup, String> {
     let mut registered = Vec::new();
-    let mut first_refusal = None;
+    let mut refusals = Vec::new();
     for nickname in nicknames {
         match dispatch_impl(app, roots, project_key, nickname, origin.clone(), trigger_comment_id) {
             Ok(turn) => registered.push(turn),
-            Err(refusal) => {
-                first_refusal.get_or_insert(refusal);
-            }
+            Err(failure) => refusals.push(GroupRefusal { nickname: nickname.clone(), failure }),
         }
     }
-    match (registered.is_empty(), first_refusal) {
-        (true, Some(refusal)) => Err(refusal),
-        _ => Ok(AgentGroup {
-            mode: "regular".into(),
-            group_id: None,
-            driver: None,
-            turns: registered,
-        }),
+    if let (true, Some(first)) = (registered.is_empty(), refusals.first()) {
+        return Err(first.failure.clone());
     }
+    Ok(AgentGroup {
+        mode: "regular".into(),
+        group_id: None,
+        driver: None,
+        turns: registered,
+        refusals,
+    })
 }
 
 /// AGC-FR-GNMP, AGC-FR-MWYP: the addressed agent becomes Meta and every other
@@ -248,6 +259,7 @@ fn dispatch_advisor<R: tauri::Runtime>(
             group_id: None,
             driver: None,
             turns: vec![meta_turn],
+            refusals: Vec::new(),
         });
     }
     let mut registered = vec![meta_turn.clone()];
@@ -292,6 +304,7 @@ fn dispatch_advisor<R: tauri::Runtime>(
         group_id: Some(state.id.clone()),
         driver: Some(meta.to_string()),
         turns: registered,
+        refusals: Vec::new(),
     })
 }
 
@@ -365,17 +378,16 @@ fn dispatch_synthesis<R: tauri::Runtime>(
     // It is dispatched on its own, so it gets the refusal that a regular dispatch
     // gives it.
     let group_members = registered.len();
-    let mut first_refusal = None;
+    let mut refusals = Vec::new();
     for nickname in nicknames.iter().filter(|n| !candidates.iter().any(|c| same(&c.nickname, n))) {
         match dispatch_impl(app, roots, project_key, nickname, origin.clone(), trigger_comment_id) {
             Ok(turn) => registered.push(turn),
-            Err(refusal) => {
-                first_refusal.get_or_insert(refusal);
-            }
+            Err(failure) => refusals.push(GroupRefusal { nickname: nickname.clone(), failure }),
         }
     }
     if registered.is_empty() {
-        return Err(first_refusal.unwrap_or_else(|| agents::ERR_AGENT_UNAVAILABLE.to_string()));
+        let first = refusals.first().map(|r| r.failure.clone());
+        return Err(first.unwrap_or_else(|| agents::ERR_AGENT_UNAVAILABLE.to_string()));
     }
     if group_members == 0 {
         return Ok(AgentGroup {
@@ -383,6 +395,7 @@ fn dispatch_synthesis<R: tauri::Runtime>(
             group_id: None,
             driver: None,
             turns: registered,
+            refusals,
         });
     }
     state.seal(timeout, std::time::Instant::now());
@@ -411,6 +424,7 @@ fn dispatch_synthesis<R: tauri::Runtime>(
         group_id: Some(state.id.clone()),
         driver: Some(driver),
         turns: registered,
+        refusals,
     })
 }
 
@@ -480,7 +494,7 @@ fn run_synthesis_monitor<R: tauri::Runtime>(
         state: Arc::clone(&state),
         role: GroupRole::Synthesis,
         meta_turn_id: None,
-        extra_sections: synthesis_sections(&state),
+        extra_sections: synthesis_sections(&state, &origin),
         instructions_suffix: Some(SYNTHESIS_PROMPT.to_string()),
         wait_for_join: false,
     };
@@ -504,7 +518,7 @@ fn run_synthesis_monitor<R: tauri::Runtime>(
 }
 
 /// AGC-FR-CZCU, AGC-FR-DIZM: the sections of a synthesis turn.
-fn synthesis_sections(state: &GroupState) -> Vec<InputSection> {
+fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<InputSection> {
     let replies = state.replies();
     let mut body = String::new();
     for (nickname, status) in state.statuses() {
@@ -536,11 +550,18 @@ fn synthesis_sections(state: &GroupState) -> Vec<InputSection> {
     }
     let held_proposals = state.held_proposals();
     if !held_proposals.is_empty() {
-        let body = held_proposals
+        let offers = held_proposals
             .iter()
             .map(|h| format!("@{}\n{}", h.nickname, h.text))
             .collect::<Vec<_>>()
             .join("\n\n");
+        // CVL-FR-08: a draft turn has `propose_draft_changes` and an artifact
+        // turn has `propose_prompt_changes`. The turn is told the one it has.
+        let tool = match origin.target {
+            DiscussionTarget::Artifact { .. } => crate::tools::propose_prompt_changes::NAME,
+            _ => crate::tools::propose_draft_changes::NAME,
+        };
+        let body = format!("Propose the merged change with `{tool}`.\n\n{offers}");
         sections.push(section("group_proposals", body));
     }
     sections

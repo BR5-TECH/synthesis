@@ -125,6 +125,58 @@ fn a_synthesis_call_without_text_is_not_carried_out() {
     assert_eq!(synthesis, 1);
 }
 
+// AGC-FR-DIZM, CVL-FR-08: a synthesis turn on an artifact origin gets the
+// prompt proposal that an agent held, and the section names the proposal tool
+// that an artifact turn has.
+#[test]
+fn a_synthesis_turn_on_an_artifact_is_told_the_prompt_proposal_tool() {
+    let seam = RoutedSeam::replying(|r, exchange| {
+        if r.instructions.contains(CLASSIFIER_MARK) {
+            Ok(text_reply("sec".into()))
+        } else if r.instructions.contains(SYNTHESIS_MARK) {
+            Ok(text_reply(said("The synthesis.")))
+        } else if persona_of(r) == "ARCH" && exchange <= 1 {
+            Ok(tool_reply(
+                crate::tools::propose_prompt_changes::NAME,
+                proposal_args("Arch rewrite."),
+            ))
+        } else {
+            Ok(text_reply(said(format!("reply of {}", persona_of(r)))))
+        }
+    });
+    let (h, thread) = group_harness(Arc::clone(&seam));
+    switch(&h, true, 60);
+    dispatch_group(&h, &["arch", "sec"], &thread).expect("dispatch");
+    h.join_turns();
+
+    let requests = seam.requests();
+    let synthesis = requests
+        .iter()
+        .find(|r| r.instructions.contains(SYNTHESIS_MARK))
+        .expect("a synthesis turn ran");
+    let held = synthesis
+        .input
+        .iter()
+        .find(|s| s.tag == "group_proposals")
+        .expect("the held proposal reaches the synthesis turn");
+    assert!(held.body.contains("Arch rewrite."), "{}", held.body);
+    assert!(
+        held.body.contains(&format!("`{}`", crate::tools::propose_prompt_changes::NAME)),
+        "the section names the prompt proposal tool: {}",
+        held.body
+    );
+    assert!(
+        !held.body.contains(crate::tools::propose_draft_changes::NAME),
+        "an artifact turn has no draft proposal tool: {}",
+        held.body
+    );
+    let offered: Vec<String> = synthesis.tools.iter().map(|t| t.name.to_string()).collect();
+    assert!(
+        offered.iter().any(|n| n == crate::tools::propose_prompt_changes::NAME),
+        "the tool that the section names is the tool that the turn has: {offered:?}"
+    );
+}
+
 fn agent(nickname: &str) -> agents::Agent {
     agents::Agent { id: nickname.into(), nickname: nickname.into(), ..Default::default() }
 }
@@ -259,6 +311,9 @@ fn a_tag_that_is_not_ready_is_refused_beside_the_group() {
     assert_eq!(group.mode, "synthesis");
     assert_eq!(group.turns.len(), 2);
     assert!(group.turns.iter().all(|t| t.nickname != "ghost"));
+    assert_eq!(group.refusals.len(), 1);
+    assert_eq!(group.refusals[0].nickname, "ghost");
+    assert_eq!(group.refusals[0].failure, FAIL_AGENT_UNAVAILABLE);
     let refused = find(&records_where("discussionId", &thread.id), "agent turn refused");
     assert_eq!(require(&refused, "agent"), "ghost");
     assert_eq!(require(&refused, "failure"), FAIL_AGENT_UNAVAILABLE);

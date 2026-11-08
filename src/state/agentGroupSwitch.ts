@@ -60,7 +60,7 @@ export function useAgentGroupSwitch(projectOpen: boolean): void {
 export interface DispatchHandlers {
   /** A turn the backend registered, or the running turn that took the comment. */
   onTurn: (turn: AgentTurn) => void;
-  /** A refusal. `nickname` is null for a group call, which names no one agent. */
+  /** A refusal. `nickname` is null where a group call as a whole is refused. */
   onError: (error: unknown, nickname: string | null) => void;
 }
 
@@ -80,7 +80,10 @@ export function dispatchComment(
   const { nicknames, origin, triggerCommentId } = args;
   if (agentGroupSwitchOn()) {
     void dispatchAgentGroup({ nicknames: [...nicknames], origin, triggerCommentId })
-      .then((group) => group.turns.forEach(handlers.onTurn))
+      .then((group) => {
+        group.turns.forEach(handlers.onTurn);
+        group.refusals.forEach((r) => handlers.onError(r.failure, r.nickname));
+      })
       .catch((e: unknown) => handlers.onError(e, null));
     return;
   }

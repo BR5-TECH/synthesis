@@ -190,6 +190,14 @@ export interface AgentGroup {
   groupId: string | null;
   driver: string | null;
   turns: AgentTurn[];
+  /** The addressed agents that got no turn while other turns were registered. */
+  refusals: AgentGroupRefusal[];
+}
+
+/** AGC-FR-KOHJ: an addressed agent that the dispatch refused, with the typed refusal. */
+export interface AgentGroupRefusal {
+  nickname: string;
+  failure: string;
 }
 
 /** PSS-FR-CQML: the switch and the join timeout of the project's agent groups. */

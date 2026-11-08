@@ -65,6 +65,8 @@ pub mod owned_tree;
 pub mod permission_probe;
 pub mod socket_probe;
 pub mod volume_probe;
+#[cfg(test)]
+pub(crate) mod write_log;
 
 pub use access::{
     CreateMode, DirEntry, EntryKind, FileHandle, FileInfo, FsAccess, FsAccessBuilder,
@@ -132,6 +134,8 @@ fn read_bytes_at(path: &Path) -> FsResult<Vec<u8>> {
 /// The atomic-write mechanics alone, with no symlink check of their own — the
 /// companion of `read_bytes_at`, called by `FsAccess` once its gate has run.
 fn write_bytes_at(target: &Path, bytes: &[u8]) -> FsResult<()> {
+    #[cfg(test)]
+    write_log::note(target);
     let parent = target.parent().ok_or_else(|| {
         FsError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -196,6 +200,8 @@ fn append_lines_at(target: &Path, lines: &[String]) -> FsResult<()> {
     if lines.is_empty() {
         return Ok(());
     }
+    #[cfg(test)]
+    write_log::note(target);
     if let Some(parent) = target.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
             fs::create_dir_all(parent).map_err(FsError::Io)?;

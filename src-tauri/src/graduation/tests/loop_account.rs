@@ -4,13 +4,12 @@
 use super::*;
 
 /// GRL-FR-DNKA: a work turn that reported **success** carries its account to
-/// the review on exactly the terms a failed one does.
+/// the review.
 ///
 /// This is the case the requirement exists for. A turn that wrote real work and
 /// knows it left some of what was asked undone reports success — the only
 /// outcome that does not misdescribe what it wrote — and says the rest in its
-/// summary. Carried only from a failed turn, that account is withheld from the
-/// one turn whose delivery decision it settles.
+/// summary.
 #[test]
 fn a_successful_work_turn_carries_its_own_account_to_the_review() {
     let fx = Fixture::new();
@@ -134,14 +133,11 @@ fn a_turn_that_says_nothing_clears_the_account_before_it() {
     );
 }
 
-/// GRL-FR-DNKA: a failure whose message says nothing falls back to the turn's
-/// summary, which is then the only account there is.
-///
-/// The fallback turns on the message being **empty** rather than on the failure
-/// being absent: an envelope carrying `failure` with a blank message and a
-/// useful summary would otherwise reach the review with no account at all.
+// GRL-FR-DNKA, GRL-FR-XWNQ: the account reaches the review only from a turn
+// the check gate accepts. A refused turn's account is replaced by the account
+// of the check correction the gate accepts.
 #[test]
-fn a_failure_with_no_message_carries_the_turns_summary() {
+fn only_the_account_of_an_accepted_turn_reaches_the_review() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Add the empty state to the panel.");
@@ -151,6 +147,7 @@ fn a_failure_with_no_message_carries_the_turns_summary() {
             "I could not finish; the panel is half written.".to_string(),
         ))
         .writing("src/panel.ts", "half\n"),
+        Turn::work_saying("I finished the panel.").writing("src/panel.ts", "whole\n"),
         Turn::ready(),
     ]);
     fx.drive(&run, dispatch.clone());
@@ -158,8 +155,21 @@ fn a_failure_with_no_message_carries_the_turns_summary() {
     let review = dispatch.of_part("review");
     assert_eq!(
         review[0].instruction_field("agent_account").as_deref(),
-        Some("I could not finish; the panel is half written."),
+        Some("I finished the panel."),
     );
+    // No turn after the refused one is given its words: not the check
+    // correction, and not the review.
+    let seen = dispatch.seen();
+    assert_eq!(seen.len(), 3);
+    for (index, turn) in seen.iter().enumerate().skip(1) {
+        let input = serde_json::Value::Object(turn.input.clone()).to_string();
+        assert!(
+            !input.contains("half written") && !turn.instruction.contains("half written"),
+            "dispatch {index} ({}) carries the refused turn's account",
+            turn.part,
+        );
+    }
+    assert!(seen[1].instruction_field("agent_account").is_none());
 }
 
 /// GRL-FR-NVBZ: the account is a **claim** the review checks, never evidence

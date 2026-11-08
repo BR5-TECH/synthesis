@@ -115,6 +115,10 @@ Drafts panel (per `../ui/DRP-drafts-panel.md`; project-local scope):
 - `"load drafts panel state"` → `load_drafts_panel_state`
 - `"save drafts panel state"` → `save_drafts_panel_state`
 
+Agent group settings (per `../ui/SET-project-settings.md` SET-FR-WOSJ, SET-FR-AGRZ; stored in the user-global per-project slot, PSS-FR-PARJ):
+- `"load agent group settings"` → `load_agent_group_settings` → `AgentGroupSettings`, with the switch off and the timeout 60 when nothing was written
+- `"save agent group settings"` → `save_agent_group_settings(settings)` → `AgentGroupSettings`, or the typed error `join_timeout_out_of_range` (PSS-FR-CQML)
+
 Docker-in-Docker (per `../ui/SET-project-settings.md` SET-FR-21; project-local scope):
 - `"load docker in docker settings"` → `load_docker_in_docker_settings`
 - `"save docker in docker settings"` → `save_docker_in_docker_settings`
@@ -215,6 +219,8 @@ The registry reads `list_installed_plugins` and `list_agent_adapters` are owned 
 58. **PSS-FR-QWTN** `save_docker_in_docker_settings(settings)` writes the four values whole, as one record, and leaves every other section of `local.toml` unchanged. `load_docker_in_docker_settings()` returns the four stored values and two values the application reads from the platform: `default_socket_path` and `support`. `default_socket_path` is `/var/run/docker.sock` on Linux and on macOS, and empty on Windows. `support` is `supported` on Linux, `best_effort` on macOS and `unsupported` on Windows. When nothing is stored, or no project is open, the load returns the defaults. Each stored value is read on its own, so one damaged value costs only itself and reads as its default.
 59. **PSS-FR-VRHC** The save trims the socket path. A non-empty path must be absolute and must hold no comma and no line break. A path that breaks this rule is refused with `docker_socket_path_invalid` and nothing is written. A save that sets `enabled` on a platform whose `support` is `unsupported` is refused with `docker_in_docker_unsupported` and nothing is written. A save whose `under_microsandbox` is not `vm_daemon` or `host_socket` is refused and nothing is written. The save never checks that the socket exists, because the author may start Docker after the save. The check belongs to the start of a run (per `GSU-graduation-start.md` GSU-FR-RQDS) and to the launch (per `../tools/EAC-execute-agent-cli.md` EAC-FR-HWQN).
 60. **PSS-FR-MTJE** The application reads the Docker-in-Docker settings through one internal function that returns the stored values and the effective socket path: the stored path, or `default_socket_path` when the stored path is empty. `GSU-graduation-start.md` (GSU-FR-RQDS) and the graduation driver, which hands the settings to the executor (per `../tools/EAC-execute-agent-cli.md` EAC-FR-DKRS), are its callers. The function is not a Tauri command. The model, a task field and an agent output have no route to it.
+61. **PSS-FR-CQML** The project has **agent group settings**: a switch, off by default, and a join timeout in seconds, 60 by default. "load agent group settings" and "save agent group settings" read and write them. A save refuses a timeout below 5 or above 600.
+62. **PSS-FR-PARJ** Agent group settings are stored in the user-global per-project slot (per `GSS-global-settings-storage.md` GSS-FR-ARIP) and never in a file of the project. A project that is cloned to another machine starts with the switch off.
 
 ## Non-functional requirements
 - All project settings load on project open without network access.

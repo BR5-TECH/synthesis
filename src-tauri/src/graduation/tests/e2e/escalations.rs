@@ -151,9 +151,11 @@ fn a_review_escalation_answered_into_an_unreadable_verdict_keeps_the_answers() {
         .expect_commits(1);
 }
 
-// GTE-FR-ZPNC / GRL-FR-VBCL, GRL-FR-TVXI: an escalation outside the rules is
-// recorded nowhere. A work turn's goes on to its review; a review turn's is a
-// result the application could not read, and the review is asked again.
+// GTE-FR-ZPNC / GRL-FR-VBCL, GRL-FR-TVXI, GRL-FR-XWNQ: an escalation outside
+// the rules is recorded nowhere. A work turn's is refused by the check gate as
+// `record_missing`, and its check correction goes on to the review; a review
+// turn's is a result the application could not read, and the review is asked
+// again.
 #[test]
 fn an_escalation_outside_the_rules_is_not_recorded() {
     Scenario::named("blank reason on a work turn")
@@ -161,11 +163,13 @@ fn an_escalation_outside_the_rules_is_not_recorded() {
             Script::escalates_because("   ", &["Which panel is meant?"])
                 .writes("src/panel.ts", "1\n"),
         )
+        .work_turn(Script::reports_success())
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run()
         .expect_state(GraduationRunState::Completed)
         .expect_no_escalation()
-        .expect_dispatch_order(&["work", "review"])
+        .expect_dispatch_order(&["work", "work", "review"])
+        .expect_dispatch(1, |d| d.field_contains("check_correction", "no valid check record"))
         .expect_commits(1)
         .expect_committed_paths(&["src/panel.ts"]);
 

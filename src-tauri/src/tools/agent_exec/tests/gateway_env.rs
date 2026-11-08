@@ -132,7 +132,7 @@ fn an_author_variable_cannot_replace_one_the_executor_sets() {
     let mut masked: BTreeSet<String> = ["GIT_OPTIONAL_LOCKS".to_string()].into();
     let literals = vec![("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string())];
 
-    let dropped = super::super::launch::drop_executor_set_variables(
+    let dropped = super::super::launch_env::drop_executor_set_variables(
         &mut env_names,
         &mut env,
         &mut masked,

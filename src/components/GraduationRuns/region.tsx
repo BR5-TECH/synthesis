@@ -49,6 +49,7 @@ import {
   totalTimeLimitDetail,
   totalTimeLimitHeadline,
   totalTimeLimitRestOf,
+  checksNotPassedRestOf,
 } from "../../state/graduation";
 import { stagesWithLogAccess } from "../../state/graduation/logScopes";
 import type {
@@ -58,11 +59,13 @@ import type {
 } from "../../types";
 import { RunProgress } from "../RunProgress";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
+import { ChecksNotPassedRest } from "./checksRest";
 import { RunEscalationForm } from "./escalation";
 import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
 import { MergePaths, MergePublication, MergeResult } from "./merge";
 import { MilestoneList } from "./milestones";
+import { ProgressLine } from "./progressLine";
 import { PrSummaryResult } from "./prSummary";
 
 /**
@@ -73,11 +76,16 @@ import { PrSummaryResult } from "./prSummary";
 const SAYS_ITSELF = ["blocked", "interrupted", "failed", "discarded"];
 
 /**
- * GRU-FR-CKOB / GRU-FR-WKTL: whether the run's own paragraph says what it is
- * doing. A run at rest on the total time limit has one too.
+ * GRU-FR-CKOB / GRU-FR-WKTL / GRU-FR-WVDV: whether the run's own paragraph
+ * says what it is doing. A run at rest on the total time limit or on checks
+ * that did not pass has one too.
  */
 function saysItself(run: GraduationRun): boolean {
-  return SAYS_ITSELF.includes(run.state) || totalTimeLimitRestOf(run) !== null;
+  return (
+    SAYS_ITSELF.includes(run.state) ||
+    totalTimeLimitRestOf(run) !== null ||
+    checksNotPassedRestOf(run) !== null
+  );
 }
 
 export interface RunRegionProps {
@@ -221,8 +229,13 @@ export function RunRegion({
 
       {/* GRU-FR-WQHM: the milestones of the run's current turn, under the stage
           row and above everything that follows it. Keyed by run, so another run
-          starts with an empty list. */}
-      <MilestoneList key={run.id} run={run} />
+          starts with an empty list. GRU-FR-AFSW: the key names the list too,
+          because a sibling keyed by the run id alone would share it, and React
+          then keeps one run's list in another run's region. */}
+      <MilestoneList key={`milestones:${run.id}`} run={run} />
+      {/* GRU-FR-NPQY: the agent's newest progress sentence, under the list.
+          GRU-FR-SOIJ: keyed by run and by name, as the list is (GRU-FR-AFSW). */}
+      <ProgressLine key={`progress:${run.id}`} run={run} />
 
       {/* GRU-FR-LBPR / GRU-FR-FZCN / GRU-FR-DBUS: a run resting on a blocker
           states it in either state that carries one. */}
@@ -283,6 +296,11 @@ export function RunRegion({
           pass budget, so it says none. */}
       <TotalTimeLimitRest run={run} onOpenSettings={onOpenSettings} />
 
+      {/* GRU-FR-WVDV: a run whose required checks did not pass says why, names
+          each check that did not pass, and says that nothing went to review
+          and nothing was committed. */}
+      <ChecksNotPassedRest run={run} />
+
       {/* GRU-FR-TFEZ: a push the remote did not take, said once. */}
       {pushRefusalStatement(run) && (
         <p className="graduation__warning" data-testid="graduation-push-refused">
@@ -310,7 +328,7 @@ export function RunRegion({
       {/* GRU-FR-NQLG: the decisions the author made during this run, once,
           read-only and collapsed. It is keyed by run, so another run starts
           collapsed. */}
-      <EscalationsLog key={run.id} run={run} />
+      <EscalationsLog key={`escalations:${run.id}`} run={run} />
 
       {/* GRU-FR-MCYF: what the run changed and how it got there, side by side
           where the region is wide enough and stacked where not.

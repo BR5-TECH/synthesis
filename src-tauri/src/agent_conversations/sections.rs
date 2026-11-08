@@ -190,6 +190,15 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
             Some(format) => format!("[asked the author to export {path} to {format}]"),
             None => format!("[asked the author to export {path}]"),
         },
+        // CMS-FR-TUHL, CMS-FR-KVDV: the group marks name who took part and show
+        // none of what the advisors said, which the reply already used.
+        comments::Attachment::Synthesis => {
+            "[this comment is the synthesis of the replies of several agents]".to_string()
+        }
+        comments::Attachment::Advisors { advisors } => {
+            let handles: Vec<&str> = advisors.iter().map(|a| a.handle.as_str()).collect();
+            format!("[advisors consulted: {}]", handles.join(", "))
+        }
     }
 }
 

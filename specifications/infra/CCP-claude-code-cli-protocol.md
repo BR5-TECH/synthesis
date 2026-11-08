@@ -34,6 +34,7 @@ Every requirement below traces to one of these, all accessed **2026-08-16** exce
 | Manage sessions | `https://code.claude.com/docs/en/sessions` |
 | Connect Claude Code to an LLM gateway | `https://code.claude.com/docs/en/llm-gateway-connect` |
 | Get structured output from agents | `https://code.claude.com/docs/en/agent-sdk/structured-outputs` |
+| Hooks reference | `https://code.claude.com/docs/en/hooks` (accessed **2026-11-08**) |
 | `claude --help` at `2.1.233` | the installed binary |
 | Direct observation at `2.1.233` | two probe runs, recorded in CCP-FR-06 and CCP-FR-11 |
 
@@ -51,6 +52,7 @@ Generated in this exact order. No element is ever omitted except where marked co
 --effort <effort_id>                   # only when an effort resolved
 --session-id <uuid>                    # fresh turn only
 --resume <session_id>                  # resumed turn only
+--settings <milestone-reminder>        # only when the launch carries the milestone reminder
 ```
 
 `--session-id` and `--resume` are mutually exclusive: a turn carries exactly one of them. No positional prompt argument is ever generated, in either form.
@@ -58,6 +60,18 @@ Generated in this exact order. No element is ever omitted except where marked co
 `<envelope-schema>` is the `AgentResponseEnvelope` JSON Schema as a single inline argument. It is fixed text compiled into the binary — it carries no task data, no project material, and no credential — which is what makes putting it on the argument vector compatible with `../tools/EAC-execute-agent-cli.md` EAC-FR-09.
 
 `<effort_id>` is one of `low`, `medium`, `high`, `xhigh`, `max`.
+
+`<milestone-reminder>` is one inline JSON settings object, fixed text compiled into the binary:
+
+```
+{"hooks":{"PostToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"<print-reminder>"}]}]}}
+```
+
+`<print-reminder>` is a shell command that prints this one JSON object to stdout and does nothing else:
+
+```
+{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"Milestone reminder: if you are now in a different milestone, write its start marker in your next text message. A start marker marks every earlier milestone done."}}
+```
 
 ### The stdin payload
 
@@ -167,6 +181,8 @@ Nothing else is required. This CLI needs no configuration file mount and no logi
 26. **CCP-FR-26** `--verbose` is always present, the pinned CLI refusing `--print` together with `--output-format stream-json` without it. Verified directly at `2.1.233`: the same invocation without the flag answers `When using --print, --output-format=stream-json requires --verbose` and exits without running. It is a precondition of the format rather than a request for more output.
 27. **CCP-FR-27** Each line of the event stream is readable as one thing the agent did, for a reader watching the turn (`../tools/EAC-execute-agent-cli.md` EAC-FR-33). The vocabulary this protocol reads for that purpose is: `system`/`init` as the turn starting, naming the model and how many tools it can reach; `system`/`api_retry` as a retry, naming the attempt, the ceiling, the status, and the error — the single most useful line this CLI writes when a run is going nowhere, because a wrong or expired credential is a series of these and then a failure, and without them the whole delay looks like thinking; an `assistant` or `user` event read through its content blocks, where `text` is what the agent wrote, `thinking` is its reasoning, `tool_use` is a tool call naming the tool and what it is about, and `tool_result` is what came back and whether it failed; and the `result` event as the turn ending, carrying its subtype, its turn count, and its duration, and read as a failure where `is_error` is true. Nothing in this reading decides an outcome — extraction is CCP-FR-09's and is not affected by it — and an event outside this vocabulary is reported as unread rather than dropped.
 28. **CCP-FR-28** Where the task names a result contract, that contract's schema document stands at the envelope schema's `result` position beside the null that position already admits, and nothing else about the envelope schema changes. The null stays because it is the **envelope's** rule rather than the contract's — an outcome other than `success` carries no result — and a position that dropped it would refuse a correctly reported failure inside the run, leaving the agent no shape to move to but an invented verdict. The CLI then validates the whole answer — the envelope and the result body together — and re-prompts the agent on a mismatch, so an answer written to the wrong shape is corrected **inside** the turn rather than refused by the caller after the turn is paid for. This is what the position is for: the agent works with a tool set of its own, and where one of those tools takes findings of its own shape, an unenforced `result` invites an answer written in that tool's field names — a whole turn's work refused for a renamed field the agent was never told about. The rule of CCP-FR-07 holds at this position exactly as it holds above it: the document states no constraint the caller's own validation does not enforce and none more freely than it does, and a rule the document cannot express faithfully stays with the caller (per `../tools/EAC-execute-agent-cli.md` EAC-FR-44) rather than being approximated here. Where the task names no contract the position holds a free-form object, and the schema is the envelope's alone.
+28. **CCP-FR-WZJS** A launch that carries the milestone reminder (`../tools/EAC-execute-agent-cli.md` EAC-FR-WBIF) ends its argument vector with `--settings <milestone-reminder>`, in a fresh turn and in a resumed turn. The settings object holds one `PostToolUse` hook for every tool, and its command prints the one fixed `additionalContext` object of the contract surface. A launch without the reminder carries no `--settings`.
+    - *Why:* the Hooks reference states that a `PostToolUse` hook's `additionalContext` reaches the model after the tool call, so the reminder arrives next to the agent's newest work.
 29. **CCP-FR-RGVA** The descriptor's final event is a stdout line whose `type` is `result`.
 
 ## Non-functional requirements

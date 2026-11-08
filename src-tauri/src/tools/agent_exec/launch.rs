@@ -469,7 +469,7 @@ impl AgentCliExecutor {
         // and the value below is never placed in its vector.
         let assigned_session_id = descriptor::new_session_id();
 
-        let vendor_args = descriptor.vendor_args(
+        let mut vendor_args = descriptor.vendor_args(
             model_id.as_deref(),
             effort_id.as_deref(),
             &assigned_session_id,
@@ -478,10 +478,22 @@ impl AgentCliExecutor {
             // the vendor enforces where its CLI can.
             request.task.result_contract,
         );
+        // EAC-FR-WBIF: a scanned turn whose instruction holds the milestone
+        // block carries the vendor's reminder, at the end of its vector
+        // (CCP-FR-WZJS).
+        if request.turn_kind.announces_milestones()
+            && milestone::instruction_holds_block(&request.task.instruction)
+        {
+            vendor_args.extend(descriptor.milestone_reminder_args());
+        }
         // EAC-FR-OWPP: a variable the executor sets itself is not overridden by
         // one of the launch environment. The name is logged and the value is not.
-        let dropped =
-            drop_executor_set_variables(&mut env_names, &mut env, &mut masked_env, &env_literals);
+        let dropped = launch_env::drop_executor_set_variables(
+            &mut env_names,
+            &mut env,
+            &mut masked_env,
+            &env_literals,
+        );
         if !dropped.is_empty() {
             logging::log_warn(
                 sink,
@@ -974,29 +986,4 @@ impl AgentCliExecutor {
             }
         }
     }
-}
-
-/// EAC-FR-OWPP: remove from the launch environment every variable whose name an
-/// executor-set variable already uses, and return those names.
-///
-/// Pure so the rule is testable without a launch: the executor-set names that
-/// can collide with an author's entry are the repository variables, which exist
-/// only for a directory inside a Git repository.
-pub(super) fn drop_executor_set_variables(
-    env_names: &mut Vec<String>,
-    env: &mut BTreeMap<String, SecretString>,
-    masked_env: &mut std::collections::BTreeSet<String>,
-    env_literals: &[(String, String)],
-) -> Vec<String> {
-    let dropped: Vec<String> = env_names
-        .iter()
-        .filter(|name| env_literals.iter().any(|(set, _)| set == *name))
-        .cloned()
-        .collect();
-    env_names.retain(|name| !dropped.contains(name));
-    for name in &dropped {
-        env.remove(name);
-        masked_env.remove(name);
-    }
-    dropped
 }

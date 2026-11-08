@@ -370,6 +370,8 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "deadlineStartedAt",
                 "endedAt",
                 "failure",
+                // AGC-FR-AIQM: null for a turn outside a group.
+                "group",
                 "id",
                 // AGC-FR-37: whether the turn sent metadata in place of its
                 // pictures. A boolean about the request's shape, and nothing of

@@ -20,7 +20,7 @@ server/.gitignore          /target/ and the runner-local Rust pin copy
 ```
 
 - **Build** — `cargo build --locked`, from `server/`.
-- **Test** — `cargo test --locked`, from `server/`.
+- **Test** — `cargo nextest run --locked`, from `server/`.
 - **Lint** — `cargo fmt --check`, then `cargo clippy --locked --all-targets -- -D warnings`, from `server/`.
 - **Run** — `cargo run --locked`, from `server/`.
 - **Binary** — `server/target/debug/synthesis-server` (`target/release/…` for a release build), plus the platform's executable suffix.

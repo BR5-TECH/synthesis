@@ -152,6 +152,16 @@ pub struct ProjectSlot {
     /// scalar, so it stays before the arrays and tables below.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings_mode: Option<crate::embeddings::ProjectEmbeddingsMode>,
+    /// GSS-FR-ARIP: whether the project's messages are answered as agent groups
+    /// (advisors and Synthesis). Unset reads as off. User-global because the
+    /// project's committed files never hold it. A scalar, so it stays before the
+    /// arrays and tables below.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_group_enabled: Option<bool>,
+    /// GSS-FR-ARIP: the join timeout of the project's agent groups, in seconds.
+    /// Unset reads as 60.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_group_join_timeout_secs: Option<u32>,
     /// GSS-FR-CDYK: the reference documents this project selects — an ordered
     /// list of `{ kind, path }`, empty until a source is added. References only:
     /// never a document's content, its extracted text, or an index.
@@ -308,8 +318,10 @@ pub struct PersistedState {
     pub default_project: ProjectSlot,
 }
 
+mod agent_group;
 mod document_limit;
 mod embeddings;
+mod legacy;
 mod model_downgrades;
 pub use model_downgrades::LoadedSuppressions;
 mod recents;
@@ -396,7 +408,7 @@ impl GlobalSettingsStore {
         // earlier enrolment loses it and the store is written once without it.
         // Every agent stays in the registry as a Personal agent, and none is
         // copied into a project. A store without the key is not written.
-        let migrated = drop_legacy_enrolment(&mut state);
+        let migrated = legacy::drop_legacy_enrolment(&mut state);
         let store = Self {
             state: Mutex::new(state),
             open_project_enabled_plugins: Mutex::new(HashSet::new()),
@@ -965,21 +977,6 @@ impl GlobalSettingsStore {
     pub fn replace_recents(&self, entries: Vec<RecentProjectEntry>) {
         self.state.lock().unwrap().recent_projects = entries;
     }
-}
-
-/// GSS-FR-31: clear the earlier agent enrolment from every project slot.
-/// Returns whether anything was cleared, which is what decides if the store is
-/// written.
-fn drop_legacy_enrolment(state: &mut PersistedState) -> bool {
-    let mut found = false;
-    let slots = state.projects.values_mut().chain(std::iter::once(&mut state.default_project));
-    for slot in slots {
-        if !slot.legacy_enrolled_agents.is_empty() {
-            slot.legacy_enrolled_agents.clear();
-            found = true;
-        }
-    }
-    found
 }
 
 /// Read `synthesis.toml` into a `PersistedState`, or return defaults when the

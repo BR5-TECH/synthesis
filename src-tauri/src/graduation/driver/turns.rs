@@ -7,7 +7,6 @@
 //! unchanged by the move: the module root re-exports nothing, and every name
 //! here is reached from `drive` alone.
 
-use super::drive::Step;
 use super::settings::TurnBound;
 use super::stops::{self, Stop};
 use super::*;
@@ -15,42 +14,33 @@ use crate::graduation::commit;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
 use std::path::{Path, PathBuf};
 
-/// What a completed turn means for the run.
-pub(super) fn settle_turn<R: tauri::Runtime>(
+/// GXD-FR-LBYG / GXD-FR-XPUR: what a completed work turn leaves on the run.
+pub(super) fn record_turn_end<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
     worktree: &PathBuf,
-    outcome: Result<AgentExecution, AgentExecutionError>,
-    origin: GraduationEscalationOrigin,
-    bound: TurnBound,
-) -> Step {
-    match settle_execution(app, run, worktree, outcome, origin, bound) {
-        Some(_) => {
-            // GXD-FR-LBYG: what changed is read from the working copy, never
-            // from what the agent said it did.
-            run.checkpoint.changed_paths = changed_paths(worktree, run);
-            let (hidden, omitted) = hidden_paths(worktree, run);
-            run.checkpoint.hidden_paths = hidden;
-            run.checkpoint.hidden_paths_omitted = omitted;
-            // GXD-FR-XPUR: the answers were delivered into the turn that asked,
-            // and that turn has now ended. Left standing they would be sent
-            // again by every later turn of the run, which would also keep
-            // resuming the session of the turn that asked — and would make the
-            // revise purpose unreachable for the rest of the run.
-            run.checkpoint.pending_escalation_answers.clear();
-            run.checkpoint.resume = None;
-            // GRL-FR-QZFB: the turn ran, so whatever blocked the run before it
-            // is behind the run rather than in front of it.
-            transitions::clear_block_count(run);
-            // The turn's own output went to the source stream from the thread
-            // that read it, so the record is brought up to what both threads
-            // wrote before it is saved.
-            logs::refresh(app, run);
-            let _ = crate::graduation::save_run(app, run);
-            Step::Continue
-        }
-        None => Step::Stop,
-    }
+) {
+    // GXD-FR-LBYG: what changed is read from the working copy, never from what
+    // the agent said it did.
+    run.checkpoint.changed_paths = changed_paths(worktree, run);
+    let (hidden, omitted) = hidden_paths(worktree, run);
+    run.checkpoint.hidden_paths = hidden;
+    run.checkpoint.hidden_paths_omitted = omitted;
+    // GXD-FR-XPUR: the answers were delivered into the turn that asked, and
+    // that turn has now ended. Left standing they would be sent again by every
+    // later turn of the run, which would also keep resuming the session of the
+    // turn that asked — and would make the revise purpose unreachable for the
+    // rest of the run.
+    run.checkpoint.pending_escalation_answers.clear();
+    run.checkpoint.resume = None;
+    // GRL-FR-QZFB: the turn ran, so whatever blocked the run before it is
+    // behind the run rather than in front of it.
+    transitions::clear_block_count(run);
+    // The turn's own output went to the source stream from the thread that
+    // read it, so the record is brought up to what both threads wrote before
+    // it is saved.
+    logs::refresh(app, run);
+    let _ = crate::graduation::save_run(app, run);
 }
 
 /// The outcomes every turn shares, and what each rests the run on.
@@ -139,41 +129,8 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
                         return None;
                     }
                 }
-                // GRL-FR-DNKA: the work turn's own account of what it did and
-                // did not do, carried to the review that judges what it wrote —
-                // on **every** turn that completed, whichever outcome it
-                // reported.
-                //
-                // Not gated on the outcome, because the account the review most
-                // needs comes from a turn that reported **success**: one that
-                // wrote real work and knows it left some of what was asked
-                // undone reports success, that being the only outcome that does
-                // not misdescribe what it wrote, and says the rest in its
-                // summary. Gated on failure, that account is dropped and the
-                // review judges the change set with no knowledge that its author
-                // said it was incomplete.
-                //
-                // A failed turn's account is its failure message where it gave
-                // one, and its summary otherwise; a successful turn's is its
-                // summary. A blank account is none at all, so an agent that
-                // reported nothing adds no empty line to the review's input.
-                if origin == GraduationEscalationOrigin::Work {
-                    run.checkpoint.agent_account = response
-                        .map(|r| {
-                            // The failure's message where it says something, and
-                            // the summary otherwise. A `Failure` carrying a blank
-                            // message still has a summary worth reading, so the
-                            // fallback turns on the message being **empty**
-                            // rather than on the failure being absent.
-                            r.failure
-                                .as_ref()
-                                .map(|failure| failure.message.trim())
-                                .filter(|message| !message.is_empty())
-                                .map(str::to_string)
-                                .unwrap_or_else(|| r.summary.clone())
-                        })
-                        .filter(|account| !account.trim().is_empty());
-                }
+                // GRL-FR-DNKA: the account of a work turn is read where the
+                // check gate accepts its answer (`work_turn`).
                 Some(execution)
             }
             // GRD-FR-SWOJ: a turn that stopped without a review has whatever it

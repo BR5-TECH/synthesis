@@ -1541,6 +1541,21 @@ function discussion(id: string, draftId: string, over: Record<string, unknown> =
     draftId,
     anchor: null,
     comments: [
+      // CVP-FR-CUKV: `?longDiscussion` makes `disc-1` longer than its column, so
+      // a browser check can scroll away from the foot and then post.
+      ...(id === "disc-1" && harnessFlag("longDiscussion")
+        ? Array.from({ length: 12 }, (_, i) => ({
+            id: `${id}-long${i}`,
+            author: i % 2 === 0 ? human : agent,
+            body:
+              i % 2 === 0
+                ? `Early question ${i + 1}: what does the command do with a worktree that has a detached head?`
+                : `Early answer ${i + 1}: it keeps it, because a detached head has no branch to be gone.`,
+            quotes: [],
+            attachments: [],
+            createdAt: `2026-07-28T09:${String(10 + i).padStart(2, "0")}:00Z`,
+          }))
+        : []),
       // The comment `prop-0` names as its own (`commentId: "disc-1-c0"`). Without
       // it the already-accepted proposal has no route into the review modal at
       // all — DCR-FR-02 opens it only from a comment's control, the tab's pending
@@ -1763,6 +1778,30 @@ const proposalsByDraft: Record<string, any[]> = {
       decidedAt: "2026-07-28T09:58:00Z",
     },
   ],
+  // DCR-FR-MAHJ: two replacements of an empty bullet (`before: "- "`) in the
+  // default template body. The `before` renders to no text, so each is drawn as
+  // a change of no width at its lead or its trail.
+  "d-41": [
+    {
+      id: "prop-mahj",
+      draftId: "d-41",
+      path: "Empty bullets.md",
+      agent,
+      rationale: "Filled the two empty bullets of the template.",
+      threadId: "disc-1",
+      commentId: "disc-1-c3",
+      state: "pending",
+      candidateEdited: false,
+      legacy: false,
+      hunkCount: 2,
+      counts: { pending: 2, accepted: 0, rejected: 0, discussing: 0, withdrawn: 0 },
+      ledger: [
+        { id: "h-mahj-1", kind: "replace", state: "pending", edited: false, revision: 0 },
+        { id: "h-mahj-2", kind: "replace", state: "pending", edited: false, revision: 0 },
+      ],
+      createdAt: "2026-08-28T10:00:00Z",
+    },
+  ],
   // DCR-FR-LGHZ / DCR-FR-TSNW: three insertions whose `lead` quotes Markdown
   // links and an escape, the last one starting inside a link destination and
   // ending at the end of the prompt.
@@ -1800,6 +1839,10 @@ function findProposalRow(id: string): any {
 /** DCR-FR-LGHZ: the prompt `d-18`'s proposal is anchored in. */
 const MIRROR_PROMPT =
   "## Purpose\n\nThe tool should talk to every mirror.\n\n## Steps\n\n- User types a mirror, with a placeholder of [mirror.org](http://mirror.org) \n\n## Rules\n\n- [mirror.org](http://mirror.org) stays the default. Hosts like \\*.mirror.net are an option.\n- Saved mirrors keep working since [mirror.org](http://mirror.org) is a default.";
+
+/** DCR-FR-MAHJ: the default template body, with both bullets still empty. */
+const EMPTY_BULLETS_PROMPT =
+  "## Intent\n\nSome text.\n\n## User journey\n\n- \n\n## Requirements\n\n- ";
 
 /** An insertion after `lead`, hinted at the end of `lead` in `MIRROR_PROMPT`. */
 function mirrorInsertion(id: string, lead: string, after: string): any {
@@ -1931,6 +1974,34 @@ const proposalHunks: Record<string, any[]> = {
       after:
         "Only worktrees this project created. A worktree made by hand is left alone.",
       anchor: { lead: "## Scope\n\n", trail: "\n", hint_start: 210, hint_end: 241 },
+    },
+  ],
+  "prop-mahj": [
+    {
+      id: "h-mahj-1",
+      kind: "replace",
+      revision: 0,
+      before: "- ",
+      after: "- The author opens the draft and reads its intent first.",
+      anchor: {
+        lead: "\n\n",
+        trail: "\n\n## Requirements\n\n",
+        hint_start: EMPTY_BULLETS_PROMPT.indexOf("- \n\n## Requirements"),
+        hint_end: EMPTY_BULLETS_PROMPT.indexOf("- \n\n## Requirements") + 2,
+      },
+    },
+    {
+      id: "h-mahj-2",
+      kind: "replace",
+      revision: 0,
+      before: "- ",
+      after: "- Each bullet holds one requirement.",
+      anchor: {
+        lead: "## Requirements\n\n",
+        trail: "",
+        hint_start: EMPTY_BULLETS_PROMPT.length - 2,
+        hint_end: EMPTY_BULLETS_PROMPT.length,
+      },
     },
   ],
   "prop-3": [
@@ -2689,6 +2760,15 @@ const drafts = [
     updatedAt: "2026-08-27T10:00:00Z",
     hasPendingProposal: true,
   },
+  /** DCR-FR-MAHJ: the template draft whose proposal fills two empty bullets. */
+  {
+    id: "d-41",
+    name: "Empty bullets",
+    status: "active",
+    folder: "UI",
+    updatedAt: "2026-08-28T10:00:00Z",
+    hasPendingProposal: true,
+  },
   /**
    * GPP-FR-XPUO / DRP-FR-ZRJJ: a draft a claim of a GitHub Task created. It sits
    * at the drafts root and is read-only for its whole life.
@@ -2864,6 +2944,14 @@ const draftRecords: Record<string, Record<string, unknown>> = {
     status: "active",
     createdAt: "2026-08-27T09:00:00Z",
     updatedAt: "2026-08-27T10:00:00Z",
+  },
+  "d-41": {
+    id: "d-41",
+    name: "Empty bullets",
+    promptPath: "Empty bullets.md",
+    status: "active",
+    createdAt: "2026-08-28T09:00:00Z",
+    updatedAt: "2026-08-28T10:00:00Z",
   },
   /** GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft. */
   "gh-1": {
@@ -3049,6 +3137,7 @@ const draftBodies: Record<string, string> = {
     ).join("\n\n") +
     "\n\n## Scope\n\nWorktrees this project created.\n",
   "Mirror selection.md": MIRROR_PROMPT,
+  "Empty bullets.md": EMPTY_BULLETS_PROMPT,
   "Icon button sizing.md": `# Icon button sizing
 
 The sizing table, drawn inline: ![the sizing table](../assets/8f3a91c2.png) and
@@ -3095,6 +3184,7 @@ const draftFiles: Record<string, string[]> = {
   "d-12": ["Attachment thumbnails.md"],
   "d-13": ["Log rotation.md"],
   "d-18": ["Mirror selection.md"],
+  "d-41": ["Empty bullets.md"],
   // GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft.
   "gh-1": ["Cache invalidation.md"],
   ...Object.fromEntries(DECOMPOSITION_ROWS.map((r) => [r.id, [`${r.name}.md`]])),
@@ -6772,6 +6862,36 @@ graduationRuns.push(
       capturedAt: "2026-09-05T16:00:00Z",
     },
   }),
+  // GRU-FR-WVDV / GRU-FR-TOKG: a run at rest because its required checks did
+  // not pass. One check is red, one did not finish, and one has a long name so
+  // the list must wrap in a narrow region. It offers Continue and Discard run.
+  makeStreamRun({
+    id: "g-29",
+    draftId: "d-29",
+    state: "awaiting_author",
+    rest: {
+      reason: "checks_not_passed",
+      at: "2026-09-06T12:30:00Z",
+      cause: "checks_red",
+      checks: [
+        { name: "cargo test", finished: true, exitStatus: 101 },
+        { name: "pnpm test", finished: false, exitStatus: null },
+        {
+          name:
+            "cargo clippy --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings -W clippy::pedantic_but_very_long_lint_name_for_wrapping",
+          finished: true,
+          exitStatus: 1,
+        },
+      ],
+    },
+    input: {
+      draftId: "d-29",
+      draftName: "Checks did not pass",
+      prompt: "Move the settings parser into its own module.",
+      promptChecksum: "sha-p29",
+      capturedAt: "2026-09-05T16:30:00Z",
+    },
+  }),
   // GEA-FR-QBWN / GEA-FR-SXXB / GEA-FR-KMVR: a work run at rest on a
   // two-question escalation, current shape. The reason is long so the closed
   // "Why the run stopped" disclosure has something to hold; the second question
@@ -7377,6 +7497,70 @@ graduationRuns.push(
   }),
 );
 (graduationRuns[graduationRuns.length - 1] as any).logs.activity = graduationActivityIndex("g-40");
+
+/*
+ * GRU-FR-WQHM / GRU-FR-AFSW: the milestones of `g-40`'s current turn (working,
+ * pass 2), and `g-41`, a run queued behind it on the same stream that has
+ * dispatched no turn. A browser check switches between the two while it appends
+ * records, and counts the milestone lists in the region:
+ *
+ *   window.__appendGraduationActivity("g-40", "working", 2, "milestone",
+ *     JSON.stringify({ event: "done", index: 2 }))
+ */
+(function seedGraduationMilestones() {
+  const records = graduationActivity["g-40"];
+  const base = Date.parse("2026-09-06T09:09:00Z");
+  for (const marker of [
+    { event: "plan", milestones: ["Read the editor's scroll code", "Keep the position per tab", "Test a reopened tab"] },
+    { event: "start", index: 1 },
+    { event: "done", index: 1 },
+    { event: "start", index: 2 },
+  ]) {
+    const sequence = records.length + 1;
+    records.push({
+      sequence,
+      at: new Date(base + sequence * 1000).toISOString(),
+      phaseId: "working",
+      pass: 2,
+      kind: "milestone",
+      summary: JSON.stringify(marker),
+    });
+  }
+  (graduationRuns.find((r) => r.id === "g-40") as any).logs.activity = graduationActivityIndex("g-40");
+})();
+
+graduationRuns.push(
+  makeStreamRun({
+    id: "g-41",
+    draftId: "d-13",
+    state: "queued",
+    workTurns: 0,
+    input: {
+      draftId: "d-13",
+      draftName: "Rotate logs by size",
+      prompt: "Rotate the app log by size.",
+      promptChecksum: "sha-p41",
+      capturedAt: "2026-09-06T09:10:00Z",
+    },
+    logs: {
+      logStorageVersion: 1,
+      activity: streamIndex("activity"),
+      structured: streamIndex("structured"),
+      persistence: { status: "healthy", pendingCount: 0, updatedAt: "2026-09-06T09:10:00Z" },
+    },
+    observability: {
+      observabilityVersion: 1,
+      currentStage: "queued",
+      stageCondition: "active",
+      queue: { waitReason: "run_ahead", leftQueuedAt: null },
+      stageHistory: [],
+      revisionHistory: [],
+      passes: [],
+    },
+    enqueuedAt: "2026-09-06T09:10:00Z",
+    updatedAt: "2026-09-06T09:10:00Z",
+  }),
+);
 
 function syncGraduationLogIndex(runId: string) {
   const run: any = graduationRuns.find((r) => r.id === runId);

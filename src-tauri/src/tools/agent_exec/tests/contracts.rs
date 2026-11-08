@@ -231,6 +231,7 @@ const KNOWN_KEYWORDS: &[&str] = &[
     "minLength",
     "maxLength",
     "pattern",
+    "minimum",
 ];
 
 /// Assert that a whole schema is written in keywords [`schema_admits`] reads,
@@ -311,6 +312,13 @@ fn schema_admits(schema: &serde_json::Value, value: &serde_json::Value) -> bool 
         }
     }
     match value {
+        serde_json::Value::Number(number) => {
+            if let Some(min) = schema.get("minimum").and_then(|m| m.as_i64()) {
+                if number.as_i64().is_none_or(|n| n < min) {
+                    return false;
+                }
+            }
+        }
         serde_json::Value::String(text) => {
             if let Some(min) = schema.get("minLength").and_then(|m| m.as_u64()) {
                 if (text.chars().count() as u64) < min {
@@ -723,5 +731,92 @@ fn the_pull_request_summary_document_admits_one_title_and_one_description() {
         ("a list", json!([{ "title": "t", "description": "d" }])),
     ] {
         assert!(!schema_admits(schema, &value), "pull_request_summary refuses {case}: {value}");
+    }
+}
+
+/// EAC-FR-43, EAC-FR-OFIV, EAC-FR-UEFX: `work_result` is a member of the closed
+/// set. Its document admits one `WorkResult` with closed field sets and the
+/// bounds of GRL-FR-IJTT, and states the shape alone: every integer exit
+/// status, an unfinished check and an empty record pass it, and no escalation
+/// does.
+#[test]
+fn the_work_result_document_states_the_shape_alone() {
+    let named: ResultContract = serde_json::from_str("\"work_result\"").expect("decodes");
+    assert_eq!(named, ResultContract::WorkResult);
+    assert_eq!(named.as_str(), "work_result");
+    let schema = named.schema_value();
+    assert_eq!(
+        schema,
+        &serde_json::from_str::<serde_json::Value>(protocol::WORK_RESULT_SCHEMA).unwrap(),
+    );
+    let check = |exit: serde_json::Value| json!({ "name": "tests", "command": "run the tests", "finished": true, "exit_status": exit });
+    // EAC-FR-UEFX: the gate's rules are not the schema's.
+    for (case, value) in [
+        ("a green record", json!({ "checks": [check(json!(0))] })),
+        ("a red exit status", json!({ "checks": [check(json!(101))] })),
+        ("a negative exit status", json!({ "checks": [check(json!(-9))] })),
+        (
+            "an unfinished check",
+            json!({ "checks": [{ "name": "t", "command": "c", "finished": false, "exit_status": null }] }),
+        ),
+        ("an empty record without a reason", json!({ "checks": [] })),
+        ("an empty record with a reason", json!({ "checks": [], "no_checks_reason": "No code." })),
+        (
+            "a waiver",
+            json!({ "checks": [{ "name": "t", "command": "c", "finished": true, "exit_status": 1, "waived_by": 1 }] }),
+        ),
+        (
+            "a name at its limit",
+            json!({ "checks": [{ "name": "n".repeat(128), "command": "c", "finished": true, "exit_status": 0 }] }),
+        ),
+        ("64 checks", json!({ "checks": vec![check(json!(0)); 64] })),
+        (
+            "a command at its limit",
+            json!({ "checks": [{ "name": "t", "command": "c".repeat(1024), "finished": true, "exit_status": 0 }] }),
+        ),
+    ] {
+        assert!(schema_admits(schema, &value), "work_result admits {case}: {value}");
+    }
+    let request =
+        json!({ "escalate_to_user": { "reason": "r", "questions": [{ "question": "q" }] } });
+    for (case, value) in [
+        ("no checks", json!({ "no_checks_reason": "No code." })),
+        ("a key it does not define", json!({ "checks": [], "changed_paths": [] })),
+        (
+            "a check key it does not define",
+            json!({ "checks": [{ "name": "t", "command": "c", "finished": true, "exit_status": 0, "log": "l" }] }),
+        ),
+        (
+            "no exit status",
+            json!({ "checks": [{ "name": "t", "command": "c", "finished": true }] }),
+        ),
+        ("a fractional exit status", json!({ "checks": [check(json!(1.5))] })),
+        ("a string exit status", json!({ "checks": [check(json!("0"))] })),
+        (
+            "a blank name",
+            json!({ "checks": [{ "name": " ", "command": "c", "finished": true, "exit_status": 0 }] }),
+        ),
+        (
+            "a name over its limit",
+            json!({ "checks": [{ "name": "n".repeat(129), "command": "c", "finished": true, "exit_status": 0 }] }),
+        ),
+        (
+            "a blank command",
+            json!({ "checks": [{ "name": "t", "command": "  ", "finished": true, "exit_status": 0 }] }),
+        ),
+        (
+            "a command over its limit",
+            json!({ "checks": [{ "name": "t", "command": "c".repeat(1025), "finished": true, "exit_status": 0 }] }),
+        ),
+        ("65 checks", json!({ "checks": vec![check(json!(0)); 65] })),
+        (
+            "a waiver of zero",
+            json!({ "checks": [{ "name": "t", "command": "c", "finished": true, "exit_status": 1, "waived_by": 0 }] }),
+        ),
+        ("a blank reason", json!({ "checks": [], "no_checks_reason": "  " })),
+        ("a reason over its limit", json!({ "checks": [], "no_checks_reason": "r".repeat(1025) })),
+        ("an escalation", request),
+    ] {
+        assert!(!schema_admits(schema, &value), "work_result refuses {case}: {value}");
     }
 }

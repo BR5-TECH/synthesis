@@ -466,4 +466,28 @@ impl DispatchAssert {
         );
         self
     }
+
+    /// GRL-FR-KYYW: the execution directory held nothing at one path when this
+    /// turn started.
+    pub(crate) fn directory_lacks(self, path: &str) -> Self {
+        assert!(
+            !self.seen.tree.contains_key(path),
+            "[{}] dispatch {} found no {path} in its execution directory",
+            self.scenario,
+            self.index
+        );
+        self
+    }
+
+    /// GRL-FR-LCSB: a fragment the instruction this turn was handed does not
+    /// hold.
+    pub(crate) fn instruction_lacks(self, fragment: &str) -> Self {
+        assert!(
+            !self.seen.instruction.contains(fragment),
+            "[{}] dispatch {} was handed an instruction without {fragment:?}",
+            self.scenario,
+            self.index
+        );
+        self
+    }
 }

@@ -31,6 +31,7 @@ import {
 import { useImageNotices } from "./useImageNotices";
 import { useRecoverableFailures } from "./useRecoverableFailures";
 import type { AgentTurn } from "../types";
+import { isQuietGroupTurn } from "../state/turnActivity";
 
 export interface DiscussionRuntime {
   /** CTA-FR-ZOLW: the turns still running. They draw as pending placeholders. */
@@ -99,7 +100,12 @@ export function useDiscussionRuntime(
       mergeDiscussionTurn(discussionId, turn);
       // CTA-FR-QTNB: a recoverable failure draws as a failed contribution with
       // Retry, so only a failure that cannot be retried is an inline error.
-      if (turn.state === "failed" && turn.failure && !turn.retryPermitted) {
+      if (
+        turn.state === "failed" &&
+        turn.failure &&
+        !turn.retryPermitted &&
+        !isQuietGroupTurn(turn)
+      ) {
         setDiscussionTurnFailure(discussionId, turn.failure);
       }
     })

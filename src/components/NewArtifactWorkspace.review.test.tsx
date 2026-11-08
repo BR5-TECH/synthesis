@@ -87,8 +87,13 @@ import {
   setFocusedHunk,
 } from "../state/draftDiscussion";
 import { resetProposalHunks } from "../state/proposalHunks";
-import { clearAllDiscussionSessions } from "../state/discussionSession";
+import {
+  clearAllDiscussionSessions,
+  getDiscussionSession,
+  setDiscussionScroll,
+} from "../state/discussionSession";
 import { resetDiscussionFocus } from "../state/discussionFocus";
+import { resetLogBufferForTest } from "../logging";
 
 const { stub } = makeStubs(invokeMock);
 
@@ -203,6 +208,7 @@ function backend(opts: {
 }
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   listeners.clear();
   hunkCandidateBuffers.clear();
@@ -367,6 +373,92 @@ describe("the whole-proposal actions (DCR-FR-CXZG)", () => {
       proposalId: "p1",
     });
     expect(callsTo("reject_draft_change_hunk")).toHaveLength(0);
+  });
+});
+
+describe("the discussion after a decision (DCR-FR-15, CVP-FR-CUKV)", () => {
+  it("DCR-FR-15, CVP-FR-CUKV: an accepted change makes the proposal's discussion follow again", async () => {
+    backend();
+    renderWorkspace();
+    await reviewing();
+    setDiscussionScroll("t1", 100, false);
+
+    await onChip("Accept");
+
+    await waitFor(() => expect(getDiscussionSession("t1").footRequest).toBe(1));
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: true, unreadCount: 0 });
+  });
+
+  it("DCR-FR-15, CVP-FR-CUKV: Reject all makes the proposal's discussion follow again", async () => {
+    backend();
+    renderWorkspace();
+    const bar = await reviewing();
+    setDiscussionScroll("t1", 100, false);
+
+    await userEvent.click(within(bar).getByRole("button", { name: "Reject all" }));
+
+    await waitFor(() => expect(getDiscussionSession("t1").footRequest).toBe(1));
+    expect(getDiscussionSession("t1").atTail).toBe(true);
+  });
+
+  it("DCR-FR-15, CVP-FR-CUKV: a rejected change makes the proposal's discussion follow again", async () => {
+    backend();
+    renderWorkspace();
+    await reviewing();
+    setDiscussionScroll("t1", 100, false);
+
+    await onChip("Reject");
+
+    await waitFor(() => expect(getDiscussionSession("t1").footRequest).toBe(1));
+    expect(getDiscussionSession("t1").atTail).toBe(true);
+  });
+
+  it("DCR-FR-CXZG, CVP-FR-CUKV: Accept all asks once for each decision that landed, and not for the refused one", async () => {
+    backend({
+      onDecide: (cmd, args) => {
+        if (cmd === "accept_draft_change_hunk" && args.hunkId === "h2") throw "anchor_lost";
+      },
+    });
+    renderWorkspace();
+    const bar = await reviewing();
+    setDiscussionScroll("t1", 100, false);
+
+    await userEvent.click(within(bar).getByRole("button", { name: "Accept all" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no longer in the prompt/i);
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: true, footRequest: 1 });
+  });
+
+  it("CVP-FR-CUKV: a refused Reject all leaves the discussion where the author left it", async () => {
+    backend({
+      onDecide: (cmd) => {
+        if (cmd === "decline_draft_change_proposal") throw "write_failed";
+      },
+    });
+    renderWorkspace();
+    const bar = await reviewing();
+    setDiscussionScroll("t1", 100, false);
+
+    await userEvent.click(within(bar).getByRole("button", { name: "Reject all" }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: false, footRequest: 0 });
+  });
+
+  it("CVP-FR-CUKV: a refused decision leaves the discussion where the author left it", async () => {
+    backend({
+      onDecide: (cmd) => {
+        if (cmd === "accept_draft_change_hunk") throw "write_failed";
+      },
+    });
+    renderWorkspace();
+    await reviewing();
+    setDiscussionScroll("t1", 100, false);
+
+    await onChip("Accept");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Nothing was changed/i);
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: false, footRequest: 0 });
   });
 });
 

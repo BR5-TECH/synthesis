@@ -358,6 +358,10 @@ pub enum ResultContract {
     /// `../ai/GRL-graduation-loop.md` GRL-FR-ZZGO that a PR summary run answers
     /// with.
     PullRequestSummary,
+    /// EAC-FR-43 / EAC-FR-OFIV: the `WorkResult` of
+    /// `../ai/GRL-graduation-loop.md` GRL-FR-IJTT that a `work` and a
+    /// `merge_work` turn answer success with.
+    WorkResult,
 }
 
 impl ResultContract {
@@ -366,6 +370,7 @@ impl ResultContract {
             ResultContract::ReviewVerdict => "review_verdict",
             ResultContract::GraduationVerdict => "graduation_verdict",
             ResultContract::PullRequestSummary => "pull_request_summary",
+            ResultContract::WorkResult => "work_result",
         }
     }
 
@@ -375,6 +380,7 @@ impl ResultContract {
             ResultContract::ReviewVerdict => REVIEW_VERDICT_SCHEMA,
             ResultContract::GraduationVerdict => GRADUATION_VERDICT_SCHEMA,
             ResultContract::PullRequestSummary => PULL_REQUEST_SUMMARY_SCHEMA,
+            ResultContract::WorkResult => WORK_RESULT_SCHEMA,
         }
     }
 
@@ -385,6 +391,7 @@ impl ResultContract {
             ResultContract::ReviewVerdict => &REVIEW_VERDICT_SCHEMA_VALUE,
             ResultContract::GraduationVerdict => &GRADUATION_VERDICT_SCHEMA_VALUE,
             ResultContract::PullRequestSummary => &PULL_REQUEST_SUMMARY_SCHEMA_VALUE,
+            ResultContract::WorkResult => &WORK_RESULT_SCHEMA_VALUE,
         }
     }
 }
@@ -533,6 +540,37 @@ pub const PULL_REQUEST_SUMMARY_SCHEMA: &str = concat!(
 /// [`REVIEW_VERDICT_SCHEMA_VALUE`] is parsed under.
 static PULL_REQUEST_SUMMARY_SCHEMA_VALUE: LazyLock<Value> =
     LazyLock::new(|| serde_json::from_str(PULL_REQUEST_SUMMARY_SCHEMA).unwrap_or(Value::Null));
+
+/// EAC-FR-OFIV / EAC-FR-UEFX: the `work_result` document (GRL-FR-IJTT).
+///
+/// It admits exactly one `WorkResult`, with closed field sets: `checks`, at
+/// most 64 records, and an optional non-blank `no_checks_reason`.
+///
+/// **It states the shape alone.** It admits every integer `exit_status`, a
+/// `finished` of `false`, and an empty `checks` without `no_checks_reason`. A
+/// CLI that validates the result prompts the agent again on a mismatch, so a
+/// document that required exit status 0 would push an honest non-zero status
+/// to a false 0. The rules of the check gate (GRL-FR-CPXI) stay with the
+/// caller, which applies them after the turn ends. It has no `escalate_to_user`
+/// branch: a work turn asks by answering `escalation_required`.
+pub const WORK_RESULT_SCHEMA: &str = concat!(
+    r#"{"type":"object","additionalProperties":false,"properties":{"#,
+    r#""checks":{"type":"array","maxItems":64,"items":{"#,
+    r#""type":"object","additionalProperties":false,"properties":{"#,
+    r#""name":{"type":"string","minLength":1,"maxLength":128,"pattern":"\\S"},"#,
+    r#""command":{"type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"},"#,
+    r#""finished":{"type":"boolean"},"#,
+    r#""exit_status":{"type":["integer","null"]},"#,
+    r#""waived_by":{"type":"integer","minimum":1}},"#,
+    r#""required":["name","command","finished","exit_status"]}},"#,
+    r#""no_checks_reason":{"type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"}},"#,
+    r#""required":["checks"]}"#,
+);
+
+/// [`WORK_RESULT_SCHEMA`] parsed once, on the terms
+/// [`REVIEW_VERDICT_SCHEMA_VALUE`] is parsed under.
+static WORK_RESULT_SCHEMA_VALUE: LazyLock<Value> =
+    LazyLock::new(|| serde_json::from_str(WORK_RESULT_SCHEMA).unwrap_or(Value::Null));
 
 /// EAC-FR-35: the shape of an answer, in words, for every vendor and every
 /// caller.

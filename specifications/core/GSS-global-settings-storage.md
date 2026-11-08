@@ -141,6 +141,7 @@ Per-project slot (no UI consumer; read and written by other core modules):
 - `load_agentic_override(project_key)` / `save_agentic_override(project_key, vendor)` — read and written by `AIC-agentic-integrations.md` (AIC-FR-18).
 - `load_ai_api_override(project_key)` / `save_ai_api_override(project_key, provider)` — read and written by `AAP-ai-api-integrations.md` (AAP-FR-18).
 - `load_document_sources(project_key)` / `save_document_sources(project_key, sources)` — the source references of GSS-FR-CDYK, read and written by `DCL-documents-collection.md` (DCL-FR-HNRM).
+- `load_agent_group_settings(project_key)` / `save_agent_group_settings(project_key, settings)` — the agent group switch and join timeout of GSS-FR-ARIP, read and written by `PSS-project-settings-storage.md` (PSS-FR-CQML).
 - `load_embeddings_mode(project_key)` / `save_embeddings_mode(project_key, mode)` — the embeddings mode of GSS-FR-DSUG, read and written by `EMB-embeddings-index.md` (EMB-FR-DWJB).
 
 Model downgrade suppressions (per `../ui/NTF-notifications.md` NTF-FR-CYTU and NTF-FR-LHVU):
@@ -248,6 +249,7 @@ The MRU append on project open/create is performed by `PST-project-storage.md` (
 60. **GSS-FR-HECI** A rule covers exactly its own pair. The two ids are stored as given and compared as exact strings, with no normalisation of case, of a prefix, or of a version.
 60. **GSS-FR-PCPW** `load_model_downgrade_suppressions` returns the rules whose `expires_at` is null or later than the current time. In the same call it removes every expired rule from the store. It writes the store only when it removed a rule.
 60. **GSS-FR-UUET** `save_model_downgrade_suppression` sets `expires_at` to now plus 1 hour, 1 day, or 7 days for `hour`, `day`, or `week`, and to null for `forever`. It replaces a rule of the same pair. A blank model id is refused with `invalid_model_id`, and nothing is written. No command removes a rule: a rule ends only by expiry.
+61. **GSS-FR-ARIP** The per-project slot records the project's **agent group settings**: the switch (`agent_group_enabled`) and the join timeout in seconds (`agent_group_join_timeout_secs`). They are unset until written, and unset reads as off and 60. They are user-global because the project's committed files never hold them.
 
 ## Non-functional requirements
 - All user-global settings load on app start without network access.

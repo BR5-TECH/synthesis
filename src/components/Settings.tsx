@@ -4,6 +4,7 @@ import { Icon } from "./icons";
 import { TokenIdentityLine, tokenErrorMessage } from "./GithubTokens";
 import { ProjectAiIntegrations } from "./AiIntegrations";
 import { ProjectAgents, type AgentEditorRequest } from "./Agents";
+import { ProjectAgentGroupSettings } from "./ProjectAgentGroupSettings";
 import { DraftTemplateSection } from "./DraftTemplateSection";
 import { GithubPollingSection } from "./GithubPollingSection";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
@@ -395,10 +396,15 @@ export function Settings({
           this section holds no dirty state and never contributes to the tab's
           save-before-close sweep (SET-FR-08, SWN-FR-08). */}
       {section === "agents" && (
-        <ProjectAgents
-          editorRequest={agentEditorRequest}
-          onEditorRequestHandled={onAgentEditorRequestHandled}
-        />
+        <>
+          {/* SET-FR-WOSJ, SET-FR-AGRZ, SET-FR-VUHW: the agent group switch and
+              the join timeout. They persist at once like everything else here. */}
+          <ProjectAgentGroupSettings />
+          <ProjectAgents
+            editorRequest={agentEditorRequest}
+            onEditorRequestHandled={onAgentEditorRequestHandled}
+          />
+        </>
       )}
 
       {/* SET-FR-21 through SET-FR-27, SET-FR-KDRP, SET-FR-FPCX, SET-FR-HYTR: the Docker section. Every field in it

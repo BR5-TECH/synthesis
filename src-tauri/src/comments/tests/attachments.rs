@@ -677,6 +677,7 @@ fn a_crafted_stored_digest_cannot_climb_out_of_the_attachments_folder() {
                 }],
                 option_descriptions: Vec::new(),
                 spoken_original: None,
+                tool_calls: Vec::new(),
             },
         )],
     )

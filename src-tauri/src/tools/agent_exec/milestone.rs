@@ -10,6 +10,12 @@ use serde::Deserialize;
 
 /// EAC-FR-PQLW: what starts a marker line.
 const PREFIX: &str = "SYNTHESIS_MILESTONE ";
+
+/// EAC-FR-WBIF: whether a task instruction holds the milestone block, which is
+/// where the marker prefix stands. A correction turn's instruction has none.
+pub(super) fn instruction_holds_block(instruction: &str) -> bool {
+    instruction.contains(PREFIX.trim_end())
+}
 /// EAC-FR-VCBJ: the most titles a plan holds.
 pub(super) const MAX_TITLES: usize = 5;
 /// EAC-FR-VCBJ: the most characters a title holds.
@@ -231,7 +237,9 @@ mod tests {
         assert!(rest.contains("\"milestones\":[\"C\"]"), "a later plan stays in the message");
     }
 
-    // GRL-FR-DJPE, EAC-FR-PQLW: the example lines of the four instructions are valid markers.
+    // GRL-FR-DJPE, GRL-FR-KWPT, GRL-FR-LCBJ, EAC-FR-PQLW, EAC-FR-QLMD: the example of each
+    // instruction is the full sequence of a plan of 3 milestones, and the scan delivers each
+    // of its markers.
     #[test]
     fn the_example_of_each_instruction_is_valid() {
         for source in [
@@ -241,10 +249,38 @@ mod tests {
             include_str!("../../../../resources/prompts/graduation/merge-review.md"),
         ] {
             let markers: Vec<Marker> = source.lines().filter_map(parse_line).collect();
-            assert_eq!(markers.len(), 3);
+            assert_eq!(markers.len(), 7);
             assert!(matches!(markers[0], Marker::Plan(ref titles) if titles.len() == 3));
-            assert_eq!(markers[1], Marker::Start(1));
-            assert_eq!(markers[2], Marker::Done(1));
+            assert_eq!(
+                markers[1..],
+                [
+                    Marker::Start(1),
+                    Marker::Done(1),
+                    Marker::Start(2),
+                    Marker::Done(2),
+                    Marker::Start(3),
+                    Marker::Done(3),
+                ]
+            );
+            // GRL-FR-KWPT, GRL-FR-LCBJ: each group of the example is one text
+            // message, and one call's state delivers each marker of each group.
+            let block = &source[source.find("## Milestones").expect("the block")..];
+            let fence = block.split("```").nth(1).expect("the block has an example");
+            let groups: Vec<&str> =
+                fence.split("\n\n").map(str::trim).filter(|g| !g.is_empty()).collect();
+            let mut state = MilestoneState::default();
+            let delivered: Vec<Vec<Marker>> =
+                groups.iter().map(|group| state.scan(group).0).collect();
+            assert_eq!(
+                delivered,
+                vec![
+                    vec![markers[0].clone(), Marker::Start(1)],
+                    vec![Marker::Done(1), Marker::Start(2)],
+                    vec![Marker::Done(2), Marker::Start(3)],
+                    vec![Marker::Done(3)],
+                ],
+                "the first message holds the plan and start 1, and each move is done then start"
+            );
         }
     }
 }

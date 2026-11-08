@@ -71,6 +71,9 @@ beforeEach(() => {
         return [];
       case "read_graduation_logs": {
         const request = (args ?? {}) as Record<string, unknown>;
+        // The milestone list and the progress line read by kind. This file
+        // tests the log window, so a read by kind finds nothing.
+        if (request.kinds !== undefined) return makeLogPage({ status: "empty", entries: [] });
         return pageForRead(
           request,
           makeLogPage({

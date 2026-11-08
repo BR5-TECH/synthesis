@@ -310,6 +310,54 @@ pub struct AgentTurn {
     /// set when the turn is registered.
     #[serde(default)]
     pub spoken_language: Option<String>,
+    /// AGC-FR-AIQM: the agent group the turn belongs to. `None` for a turn
+    /// outside a group.
+    #[serde(default)]
+    pub group: Option<TurnGroup>,
+}
+
+/// AGC-FR-AIQM: the part a turn plays in an agent group.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupRole {
+    /// An addressed agent of a `synthesis` group.
+    Participant,
+    /// The addressed agent of an `advisor` group.
+    Meta,
+    /// An agent that advises a Meta turn.
+    Advisor,
+    /// The driver's turn that combines the replies of a `synthesis` group.
+    Synthesis,
+}
+
+/// AGC-FR-ANSK: why the join skipped a turn.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkipReason {
+    TimedOut,
+    Failed,
+    Cancelled,
+}
+
+impl SkipReason {
+    pub fn label(self) -> &'static str {
+        match self {
+            SkipReason::TimedOut => "timed_out",
+            SkipReason::Failed => "failed",
+            SkipReason::Cancelled => "cancelled",
+        }
+    }
+}
+
+/// AGC-FR-AIQM: the group fields of a turn.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnGroup {
+    pub group_id: String,
+    pub role: GroupRole,
+    /// AGC-FR-ANSK: set when the join skipped the turn.
+    #[serde(default)]
+    pub skipped: Option<SkipReason>,
 }
 
 /// AGC-FR-HMUV / CVL-FR-SKSE: how far a tool call has come.
@@ -337,6 +385,10 @@ pub struct TurnToolCall {
     /// The one argument that identifies the call, at most 200 characters
     /// (CVL-FR-IQZS). `None` where the tool has none.
     pub key_input: Option<String>,
+    /// AGC-FR-BIPE: the nickname of the advisor that made the call on a Meta
+    /// turn. `None` for a call the turn made itself, and then not serialised.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisor: Option<String>,
 }
 
 /// AGC-FR-33: one tool call the loop has begun and has not yet finished.
@@ -358,6 +410,9 @@ pub struct ActiveToolCall {
     /// An integer ascending with activation, unique within the turn, never
     /// reused.
     pub activation_seq: u64,
+    /// AGC-FR-BIPE: the advisor that made the call on a Meta turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisor: Option<String>,
 }
 
 /// AGC-FR-06: the three tags every builder emits, in the order they are

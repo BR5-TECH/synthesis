@@ -89,6 +89,10 @@ pub(super) struct TurnPlan {
     pub(super) document: Option<DocumentSize>,
     /// AGC-FR-UVKF: the model downgrade pairs this turn has emitted.
     pub(super) reported_downgrades: ReportedDowngrades,
+    /// AGC-FR-AIQM: the group the turn belongs to, if any.
+    pub(super) group: Option<GroupBinding>,
+    /// AGC-FR-VDOO, AGC-FR-CZCU: the attachments the turn's comment carries.
+    pub(super) attachments: Vec<comments::Attachment>,
 }
 
 /// AGC-FR-24: `@<nickname> is thinking about <draft name>…` for a draft,
@@ -182,7 +186,27 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     origin: ConversationOrigin,
     trigger: Trigger<'_>,
 ) -> Result<AgentTurn, String> {
+    dispatch_grouped(app, roots, project_key, nickname, origin, trigger, None)
+}
+
+/// [`dispatch_with`] for a turn that may belong to an agent group (AGC-FR-KOHJ).
+/// With no `setup` it is the dispatch of AGC-FR-02, unchanged.
+pub(super) fn dispatch_grouped<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    roots: Roots<'_>,
+    project_key: &str,
+    nickname: &str,
+    origin: ConversationOrigin,
+    trigger: Trigger<'_>,
+    setup: Option<GroupSetup>,
+) -> Result<AgentTurn, String> {
     use tauri::Manager;
+    // AGC-FR-GNMP, AGC-FR-CZCU: an advisor turn and a synthesis turn are turns of
+    // their own. They take no steering message and retire no wait, so a running
+    // turn of the same agent in the conversation is never given a message that
+    // was meant for the group.
+    let joins_conversation =
+        setup.as_ref().is_none_or(|s| matches!(s.role, GroupRole::Participant | GroupRole::Meta));
     let store = app.state::<GlobalSettingsStore>();
     let turns = app.state::<TurnRegistry>();
 
@@ -247,7 +271,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     // outstanding. Nothing of it carries over into the turn below, which
     // assembles its input from the conversation as it now stands (AGC-FR-13) and
     // so reads the question and the answer as its last two comments.
-    let retired = turns.retire_awaiting(&agent.id, &origin);
+    let retired = if joins_conversation { turns.retire_awaiting(&agent.id, &origin) } else { 0 };
     if retired > 0 {
         logging::log_info(
             app,
@@ -268,8 +292,17 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     // comment as a steering message, and no new turn is registered for it.
     // AGC-FR-SJQP: the first chunk of a speech goes to it on the same terms,
     // and binds it to the speech.
-    if let Some(steered) =
-        turns.offer_steering(app, &agent.id, &origin, trigger.steering_item(), trigger.speech_id())
+    if let Some(steered) = joins_conversation
+        .then(|| {
+            turns.offer_steering(
+                app,
+                &agent.id,
+                &origin,
+                trigger.steering_item(),
+                trigger.speech_id(),
+            )
+        })
+        .flatten()
     {
         logging::log_info(
             app,
@@ -306,6 +339,22 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         trigger.speech_id(),
         Some(spoken_language),
     );
+    // AGC-FR-AIQM: the turn joins its group before anyone can see it, so its
+    // registration event already carries the role.
+    let turn = match &setup {
+        Some(setup) => {
+            if matches!(setup.role, GroupRole::Participant | GroupRole::Advisor) {
+                setup.state.add_member(&turn.id, &agent.nickname);
+            }
+            let mirror = (setup.role == GroupRole::Advisor)
+                .then(|| setup.meta_turn_id.clone().map(|id| (id, agent.nickname.clone())))
+                .flatten();
+            turns
+                .attach_group(&turn.id, Arc::clone(&setup.state), setup.role, mirror)
+                .unwrap_or(turn)
+        }
+        None => turn,
+    };
     publish(app, &turn);
     logging::log_info(
         app,
@@ -338,7 +387,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     // AGC-FR-13: input is assembled at dispatch, so a turn answers the
     // conversation as it stood when the agent was addressed.
     // AGC-FR-SJQP: a speech turn's `current_comment` holds the first chunk.
-    let BuiltInput { sections: input, document, question_set_unreadable } = match trigger {
+    let BuiltInput { sections: mut input, document, question_set_unreadable } = match trigger {
         Trigger::Comment(id) => build_input_within(roots, &origin, id, &document_budget),
         Trigger::Speech { text, speaker, .. } => {
             speech_input(roots, &origin, text, speaker, &document_budget)
@@ -380,6 +429,11 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
             "aboveLimit" => above_limit(document.as_ref(), document_budget.limit_tokens()),
         },
     );
+    // AGC-FR-CZCU: the sections a synthesis turn receives besides the
+    // conversation.
+    if let Some(setup) = &setup {
+        input.extend(setup.extra_sections.iter().cloned());
+    }
     // Read before the origin is moved into the plan below.
     let origin_kind = origin.kind();
     document_language::log_document_language(app, turns.buffer(), "turn", &origin.target, language);
@@ -430,7 +484,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
             "disabledSkills" => skill_filter.disabled_path_count(),
         },
     );
-    let tools = conversation_tools(
+    let mut tools = conversation_tools(
         app,
         &turn.id,
         roots,
@@ -441,6 +495,44 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         // CVL-FR-VZZR / AGR-FR-LAQP: the selection as it stands at dispatch.
         &skill_filter,
     );
+    // CVL-FR-HNGB: an advisor offers advice and contributes nothing, so the tools
+    // that end a turn on a contribution, and the tools that decide a proposal,
+    // are not among its tools.
+    if setup.as_ref().is_some_and(|s| s.role == GroupRole::Advisor) {
+        tools.retain(|tool| !ADVISOR_WITHHELD_TOOLS.contains(&tool.definition().name.as_str()));
+    }
+    // AGC-FR-DIZM: an addressed agent of a synthesis group offers its questions and
+    // its proposals to the group instead of recording them.
+    if let Some(setup) = setup.as_ref().filter(|s| s.role == GroupRole::Participant) {
+        tools = capture_contributions(
+            tools,
+            &setup.state,
+            &agent.nickname,
+            &asked_questions,
+            &proposed,
+        );
+    }
+    let instructions = {
+        let base = compile_prompt_spoken(
+            origin_kind,
+            &agent.instructions,
+            &agent.title,
+            &language_rules(&app.state::<GlobalSettingsStore>(), language.name),
+        );
+        match setup.as_ref().and_then(|s| s.instructions_suffix.as_deref()) {
+            Some(suffix) => format!("{base}\n\n{suffix}"),
+            None => base,
+        }
+    };
+    let group = setup.as_ref().map(|s| GroupBinding {
+        state: Arc::clone(&s.state),
+        role: s.role,
+        wait_for_join: s.wait_for_join,
+    });
+    let attachments = match setup.as_ref().map(|s| s.role) {
+        Some(GroupRole::Synthesis) => vec![comments::Attachment::Synthesis],
+        _ => Vec::new(),
+    };
     let plan = TurnPlan {
         turn_id: turn.id.clone(),
         project_key: project_key.to_string(),
@@ -456,12 +548,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
             // is the persona and the material, never the shape of the request.
             // CVL-FR-FQMM: the rules of the document language and of the
             // author's spoken language.
-            instructions: compile_prompt_spoken(
-                origin_kind,
-                &agent.instructions,
-                &agent.title,
-                &language_rules(&app.state::<GlobalSettingsStore>(), language.name),
-            ),
+            instructions,
             // CVL-FR-39: the material under discussion leads, and the discussion
             // itself follows it (CVL-FR-06), so the head is the run of sections
             // before the first one the conversation grows.
@@ -490,6 +577,8 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         document_budget,
         document,
         reported_downgrades: ReportedDowngrades::default(),
+        group,
+        attachments,
     };
 
     let app = app.clone();
@@ -542,7 +631,7 @@ pub(super) fn resolved_during_turn(plan: &TurnPlan) -> bool {
 }
 
 /// The whole life of one turn after dispatch has returned.
-pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnPlan) {
+pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, mut plan: TurnPlan) {
     use tauri::Manager;
     // CVL-FR-28: the whole turn's elapsed time, measured from where its work
     // begins rather than from where it was registered — a turn that waited on a
@@ -578,6 +667,9 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
     // guard is the difference between a defect that is reported and one that
     // silently strands a conversation.
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // AGC-FR-MWYP: a Meta turn waits for its advisors before it asks for a
+        // slot, so the wait is spent neither on a slot nor on the turn deadline.
+        wait_for_advisors(app, &mut plan)?;
         run_turn_body(app, &store, &ai, &turns, &plan)
     }));
 
@@ -643,6 +735,8 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
         Err(TurnEnd::Asked) | Err(TurnEnd::AskedQuestions) | Err(TurnEnd::Proposed) => {
             (AgentTurnState::AwaitingReply, None, false)
         }
+        // AGC-FR-GNMP: the advice went to the group, and nothing was appended.
+        Err(TurnEnd::Advised) => (AgentTurnState::Delivered, None, false),
         Err(TurnEnd::Failed(reason)) => {
             (AgentTurnState::Failed, Some(reason), is_recoverable(reason))
         }
@@ -653,6 +747,10 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
             (AgentTurnState::Failed, Some(FAIL_TLS_UNTRUSTED), true)
         }
     };
+    clear_marks(&plan);
+    // AGC-FR-GNMP: an advisor's failure is shown in the Advisors list of the reply
+    // it advised, so it offers no retry of its own.
+    let recoverable = recoverable && role_of(&plan) != Some(GroupRole::Advisor);
     finish(
         app,
         &turns,

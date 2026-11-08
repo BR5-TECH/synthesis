@@ -13,7 +13,7 @@
  * draft, so the scroll position and the unread state survive a change of owner
  * surface (CVP-FR-47).
  */
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 import {
   clearDiscussionUnread,
@@ -21,6 +21,7 @@ import {
   noteDiscussionArrivals,
   setDiscussionScroll,
   setDiscussionSeen,
+  subscribeDiscussionSessions,
 } from "../../state/discussionSession";
 
 /**
@@ -168,6 +169,28 @@ export function useDiscussionFollow({
     setDiscussionSeen(discussionId, growthIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discussionId, enabled, countedKey, growthKey]);
+
+  // CVP-FR-CUKV: the author posted, so the list goes to its foot. A request
+  // made before this surface mounted is not acted on: a list that mounts at the
+  // tail opens at its foot anyway (CVP-FR-TWRL), and a list the author scrolled
+  // away from after that request comes back where they left it (CVP-FR-47).
+  const footRequest = useSyncExternalStore(
+    subscribeDiscussionSessions,
+    () => getDiscussionSession(discussionId).footRequest,
+    () => getDiscussionSession(discussionId).footRequest,
+  );
+  const handledFoot = useRef<{ id: string; request: number } | null>(null);
+  useLayoutEffect(() => {
+    const held = handledFoot.current;
+    handledFoot.current = { id: discussionId, request: footRequest };
+    // Only a request that grew the count is acted on. A session that was
+    // cleared starts its count again at zero, and that is no post.
+    if (held === null || held.id !== discussionId || footRequest <= held.request) return;
+    const el = ref.current;
+    if (!enabled || !el) return;
+    pin(el);
+    setDiscussionScroll(discussionId, el.scrollTop, true);
+  }, [discussionId, enabled, footRequest, pin]);
 
   // CVP-FR-MPDK: content that grows with no new id (a status, a tool list, an
   // image that loads) and a list box that becomes smaller keep a list at its

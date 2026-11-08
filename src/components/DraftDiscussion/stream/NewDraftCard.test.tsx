@@ -18,6 +18,11 @@ import {
   showNewDraftCard,
 } from "../../../state/decompositionRoutes";
 import { resetLogBufferForTest } from "../../../logging";
+import {
+  clearAllDiscussionSessions,
+  getDiscussionSession,
+  setDiscussionScroll,
+} from "../../../state/discussionSession";
 import { otherCommand } from "../../../test/invokeMocks";
 import type {
   AgentTurn,
@@ -87,6 +92,7 @@ function renderCard(
 }
 
 beforeEach(() => {
+  clearAllDiscussionSessions();
   summary = {};
   listed = [proposal()];
   invokeMock.mockReset();
@@ -213,6 +219,28 @@ describe("the new-draft card", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("discussion_resolved");
     expect(field).toHaveValue("Keep.");
     expect(screen.getByTestId("new-draft-card")).toHaveTextContent("Waiting for you");
+  });
+
+  it("CVP-FR-CUKV: a decision on a proposed draft makes its discussion follow again", async () => {
+    setDiscussionScroll("t1", 100, false);
+    renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(getDiscussionSession("t1").footRequest).toBe(1));
+    expect(getDiscussionSession("t1").atTail).toBe(true);
+  });
+
+  it("CVP-FR-CUKV: a refused decision on a proposed draft leaves its discussion where it is", async () => {
+    setDiscussionScroll("t1", 100, false);
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_new_draft_proposals") return Promise.resolve(listed);
+      if (cmd === "accept_new_draft_proposal") return Promise.reject("discussion_resolved");
+      if (cmd === "read_discussion" || cmd === "list_project_agents") return new Promise(() => {});
+      return otherCommand(cmd);
+    });
+    renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("discussion_resolved");
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: false, footRequest: 0 });
   });
 
   it("DCR-FR-PBDD: an archived original disables Accept and Reject with the reason, and keeps Discuss and Preview", async () => {

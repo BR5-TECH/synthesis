@@ -104,13 +104,14 @@ Rules:
 - **`invoke` mocks answer background commands and reject the others.** A strict mock that routes by command name must answer `append_log_records` (`Promise.resolve()`). For a command it does not expect, it returns `Promise.reject(new Error(...))`. A synchronous `throw` escapes any `.catch` that the caller attaches, and from a timer callback it is an uncaught exception that no test owns. A mock that answers every command with one shared promise (for example `() => new Promise((res) => (release = res))`) depends on the order of the calls. Route it by command name.
 - **An unhandled error fails the lane.** Vitest exits 1 on an unhandled error or rejection, also when every test passes. It names "the latest test", which is often not the test that caused the error.
 - **Run the area as CI does.** When a change adds a timer, a debounce, a background call, or a log emit on an async path, run the tests of the changed files with one worker, once, after the full run: `pnpm exec vitest related <changed source files> --project "<area>" --maxWorkers=1 --run`, with the **one** area that holds that code. `related` selects the test files that import the changed files, so a timer of the change that outlives its test runs beside the next test of the same worker. Do not run a whole area or loop over every area: a one-worker area takes ten minutes or more, and a test the change does not reach shows nothing new. To find a timing defect, make each test slower in a temporary copy (for example an `afterEach` that waits 40 ms). Do not commit that change.
-- **Rust has the same problem.** A test result must not depend on the speed of the machine or on the length of a temporary path. Run `TMPDIR=/tmp cargo test` when a result can depend on where text falls against a length limit.
+- **Rust has the same problem.** A test result must not depend on the speed of the machine or on the length of a temporary path. Run `TMPDIR=/tmp cargo nextest run` when a result can depend on where text falls against a length limit.
+- **Every test has a time limit.** Vitest stops a test after 5 s and a hook after 10 s (`vitest.config.ts`, CIP-FR-EEVU). nextest stops a Rust test after 60 s (`.config/nextest.toml`, CIP-FR-VITB). Run Rust tests with `cargo nextest run`, never with `cargo test`, which waits for ever on a test that does not end. A test that needs more time names a longer limit of its own, and never removes the limit.
 
 ## Build / test — definition of done
 
 Run the checks that match what you touched, and get them green before declaring done. Never declare done on red, and never retry silently past a real failure — surface it.
 
-While you work, run narrow checks (one test file, one `cargo test` filter, `cargo check`). Run the full list below **once** at the end, and once more after the review fixes, and record the results in a file the review agents read. **A review agent runs none of these commands**: it reads the results file and the code.
+While you work, run narrow checks (one test file, one `cargo nextest run <filter>`, `cargo check`). Run the full list below **once** at the end, and once more after the review fixes, and record the results in a file the review agents read. **A review agent runs none of these commands**: it reads the results file and the code.
 
 **Frontend changes** (anything under `src/**`, `index.html`, Vite/TS config):
 1. `pnpm test` — Vitest (jsdom). UI tests mock `invoke`; they must not need the Tauri runtime.
@@ -120,6 +121,6 @@ While you work, run narrow checks (one test file, one `cargo test` filter, `carg
 Step 3 is not optional: `pnpm build` excludes test files from typechecking, so type errors in tests (missing jest-dom matchers, wrong mock signatures, undeclared globals) slip past steps 1–2. This third check is the only thing that catches them, and the repo's definition-of-done lists all three.
 
 **Backend changes** (anything under `src-tauri/**`), from `src-tauri/`:
-1. `cargo test` — colocated `#[cfg(test)] mod tests`. For `#[tauri::command]` fns that need the runtime, factor logic into a pure helper and test that.
+1. `cargo nextest run` — colocated `#[cfg(test)] mod tests`. For `#[tauri::command]` fns that need the runtime, factor logic into a pure helper and test that.
 2. `cargo check` — clean.
 3. `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` — both clean, as CI runs them (`task lint` checks all three Rust crates). A Clippy finding that the code cannot avoid gets `#[allow(clippy::<lint>)]` on the smallest item, with a comment that gives the reason.

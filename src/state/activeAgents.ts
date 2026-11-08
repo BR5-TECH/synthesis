@@ -238,6 +238,9 @@ export function pendingContributionsOf(
   >();
   for (const turn of turns) {
     if (turn.state !== "running") continue;
+    // CTA-FR-QXXR: an advisor turn has no pending contribution of its own; its
+    // tool calls show on the row of the agent it advises.
+    if (turn.group?.role === "advisor") continue;
     const key = `${turn.origin.discussionId}\u0000${turn.agentId}`;
     const held = groups.get(key);
     if (!held) {

@@ -254,55 +254,8 @@ fn three_minor_findings_are_a_revision_rather_than_a_remark() {
 }
 
 // ---------------------------------------------------------------------------
-// 5 — a work turn that reports a failure
+// 5 — a work turn that reports a failure: `check_gate.rs`, beside journey 44
 // ---------------------------------------------------------------------------
-
-// GTE-FR-XKGB / GRL-FR-DNKA: an agent-reported failure is material rather than
-// an outcome. The turn completed, so the run reaches review with the failure as
-// context, and the review's verdict decides what happens next.
-#[test]
-fn an_agent_reported_failure_reaches_the_review_that_judges_what_it_wrote() {
-    Scenario::named("agent failure, review says revise")
-        .work_turn(
-            Script::reports_failure("The panel module does not exist to add a state to.")
-                .writes("src/notes.md", "what I found\n"),
-        )
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Critical,
-            "Create the panel module first.",
-        ))
-        .work_turn(Script::reports_success().writes("src/panel.ts", "export const panel = 1;\n"))
-        .review_turn(Script::answers_ready("The module is there now."))
-        .run()
-        .expect_state(GraduationRunState::Completed)
-        .expect_turns(2, 2)
-        .expect_committed_paths(&["src/notes.md", "src/panel.ts"])
-        .expect_dispatch(1, |d| {
-            d.part("review")
-                .field_contains(
-                    "agent_account",
-                    "The panel module does not exist to add a state to.",
-                )
-                .changed_paths(&["src/notes.md"]);
-        });
-}
-
-// GTE-FR-TCUW / GRL-FR-DNKA: the review's verdict is what decides the next state, so the same
-// reported failure under a `ready` verdict completes the run.
-#[test]
-fn an_agent_reported_failure_the_review_passes_still_completes_the_run() {
-    Scenario::named("agent failure, review says ready")
-        .work_turn(
-            Script::reports_failure("The formatter would not run, so the file is unformatted.")
-                .writes("src/panel.ts", "export const panel=1;\n"),
-        )
-        .review_turn(Script::answers_ready("The work answers the prompt."))
-        .run()
-        .expect_state(GraduationRunState::Completed)
-        .expect_agent_report_contains("The formatter would not run")
-        .expect_commits(1)
-        .expect_stream_released();
-}
 
 // ---------------------------------------------------------------------------
 // 6 — an escalation, and the answer that continues it

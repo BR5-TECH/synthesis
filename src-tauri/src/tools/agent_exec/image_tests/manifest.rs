@@ -384,6 +384,7 @@ fn the_readme_documents_everything_avi_requires() {
         ("the pnpm pin", "ARG PNPM_VERSION"),
         ("the TypeScript pin", "ARG TYPESCRIPT_VERSION"),
         ("the task runner pin", "ARG TASK_VERSION"),
+        ("the cargo-nextest pin", "ARG NEXTEST_VERSION"),
         ("the Bash timeouts", "BASH_MAX_TIMEOUT_MS"),
         ("the rule for upgrading a toolchain", "both Dockerfiles"),
         ("the home directory the image names", "HOME=/home/agent"),

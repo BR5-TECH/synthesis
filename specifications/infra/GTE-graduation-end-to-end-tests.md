@@ -24,11 +24,12 @@ The backend end-to-end suite for graduation, and the scenario language it is wri
 16. **GTE-FR-RSQD** The suite is **deterministic**. It takes no sleep, asserts no wall-clock duration, and reaches no network, no provider credential and no container runtime. A timeout and a cancellation are each produced by a bounded control of the harness rather than by waiting.
 17. **GTE-FR-KAZX** The harness sets the project settings each scenario runs under. A scenario may set the graduation pass budget, stage time limit, total time limit and concurrency limit to any valid value (per `../core/PSS-project-settings-storage.md` PSS-FR-QBNE, PSS-FR-HVSM, PSS-FR-RKTW, PSS-FR-JRWC). A scenario that stores the shared execution timeout and retry budget proves no graduation turn reads them.
 17. **GTE-FR-ZTLC** A scenario proves the **total time limit**. A turn stopped by the total time rests the run `awaiting_author` with `total_time_limit`, its work committed, the stream and the slot held. Continue resets the used total time alone and repeats no completed pass. A run with no remaining total time before a dispatch rests on the same reason and dispatches no turn.
+17. **GTE-FR-QMVR** A scenario proves the **check gate**. A work turn whose answer holds a red, unfinished or missing check record gets one check correction in its session and one escalate correction, and the run then rests `awaiting_author` with `checks_not_passed`, unreviewed and uncommitted. A red check whose `waived_by` names a recorded decision passes, and Continue starts a new gate episode.
 18. **GTE-FR-VNOU** A scenario proves that the settings are read **before every dispatch**, the semantic rebase turn included, by changing a value between two turns of one run and asserting the second turn carried the new value (per `../ai/GRL-graduation-loop.md` GRL-FR-KWNP).
 19. **GTE-FR-GBLI** A scenario proves that a resumed run uses the values active at each resumed dispatch, by changing a setting while the run rests and asserting the resumed turn carried the changed value.
 20. **GTE-FR-WUAP** The suite covers the journeys of the coverage matrix, one scenario each at least. A journey with no scenario is a gap the matrix names.
 21. **GTE-FR-DKMF** One scenario launches the `../infra/ACM-agentic-cli-mock.md` executable through the production executor. It proves the mock refuses an invalid argument vector and invalid stdin, and that a valid protocol response is replayed and read, so the integration uses the declared protocol rather than a test-only shortcut.
-22. **GTE-FR-OYTZ** The suite runs in isolation by its own module filter and as part of the backend `cargo test` lane, and it needs nothing the lane does not already install.
+22. **GTE-FR-OYTZ** The suite runs in isolation by its own module filter and as part of the backend lane's `cargo nextest run`, and it needs nothing the lane does not already install.
 23. **GTE-FR-CSEH** `src-tauri/src/graduation/tests/e2e/README.md` documents the scenario language, the harness boundary, how a scenario is added, and the coverage matrix. A journey added to the matrix without a scenario, or a scenario naming no journey, is a fault the suite reports.
 24. **GTE-FR-TNZF** A scenario starts a merge as the author does, through `merge_work_stream` with a publication choice, and asserts the `StreamMergeResult` it returns. A clean merge returns `merged`, and `nothing_to_merge` is returned where the stream holds nothing the base does not. Both leave **no merge run** in the run store and in the queue index, hold no stream claim and no project slot afterwards, and write the base branch only as the publication choice says. A merge refused with `stream_busy`, `stream_dirty`, `base_dirty`, `base_not_checked_out`, `merge_in_progress`, `update_in_progress`, `unknown_stream` or `not_a_git_repository` writes nothing and leaves both branches, both working copies and the run store unchanged (per GTE-FR-RZKC).
 25. **GTE-FR-LMXV** A scenario with a merge Git cannot resolve asserts the **handoff**: the result is `conflicted` and names the run id and the conflicted paths, the run exists in state `queued`, it is named `Merge <stream name>`, it carries `merge` data with both pinned tips, the merge base, the snapshot commit, the changed paths, the unresolved paths and the recorded publication, and it holds no draft. The scenario also asserts that both branch heads, the base working copy and the stream working copy hold exactly what they held before the merge started. A refused image preflight (`vendor_image_unconfigured`, `vendor_image_invalid`, `vendor_execution_unsupported`, `docker_backend_unverified`, `docker_socket_unavailable`) creates no run and writes nothing. The dispatch the production queue is offered at the handoff is held by the harness, and the scenario drives the run itself through the scripted seam (per GTE-FR-YAEB).
@@ -82,8 +83,9 @@ What one scripted turn does, and what it then answers:
 
 ```text
 Script
-  answer:  reports_success
-         | reports_failure(message)                 // GRL-FR-DNKA
+  answer:  reports_success                          // with a passing check record (GRL-FR-IJTT)
+         | reports_checks(records)                  // GRL-FR-CPXI
+         | reports_failure(message)                 // GRL-FR-TYRV
          | answers_ready(rationale) | answers_ready_with(findings)
          | answers_revise(severity, description) | answers_revise_with(findings)
          | answers_revise_without_findings | answers_with_blank_rationale
@@ -138,7 +140,7 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
  2  revise then ready         findings reach the second work turn, ready ends the run
  3  two revise reviews        awaiting_author with the findings, no third pass
  4  advisory ready            revise of at most two minor findings completes, no further work turn
- 5  agent-reported failure    review still runs and carries the failure, its verdict decides
+ 5  agent-reported failure    gated as work_failed: no review, a check correction, then an escalate correction
  6  escalation and answer     ordered questions persisted, stream and slot held, same pass continues
  7  invalid verdict twice     one corrected review, then blocked with review_verdict_invalid
  8  interruption              cancel, execution_timeout and launch_failed each rest interrupted with its reason;
@@ -177,6 +179,7 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 40  failed run                the failed run holds the queue and no slot, runs behind stay queued, no restart, discard removes them
 41  total time limit          awaiting_author with total_time_limit, work committed, stream and slot held, Continue resets the used time alone
 43  answer corrections        a refused answer is corrected once in its session, a second refusal rests the run, an uncorrectable refusal stops at once, a restart keeps the correction
+44  check gate                a red, unfinished or missing check record gets one check correction and one escalate correction, then checks_not_passed; a waiver passes
 ```
 
 ## Non-functional requirements

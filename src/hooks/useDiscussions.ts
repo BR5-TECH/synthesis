@@ -25,7 +25,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addComment as addCommentApi,
   cancelAgentTurn,
-  dispatchAgentTurn,
   listAgentTurns,
   listDiscussions,
   listProjectAgents,
@@ -52,6 +51,7 @@ import {
   hasTurnEnded,
   upsertDiscussionTurn,
 } from "../state/discussionSession";
+import { dispatchComment } from "../state/agentGroupSwitch";
 import { publishThread, publishThreads } from "../state/conversationThreads";
 import { useAgentRegistryRevision } from "../state/agentRegistry";
 import { useRecoverableFailures } from "./useRecoverableFailures";
@@ -76,6 +76,7 @@ import {
   type Participant,
   type ProjectAgent,
 } from "../types";
+import { isQuietGroupTurn } from "../state/turnActivity";
 
 function errorText(e: unknown): string {
   return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
@@ -416,7 +417,12 @@ export function useDiscussions(
       // CTA-FR-QTNB: a **recoverable** failure renders as a failed contribution
       // carrying Retry (CTA-FR-MGVJ) rather than as an inline typed error, so it
       // is `useRecoverableFailures`' to hold and not this map's.
-      if (turn.state === "failed" && turn.failure && !turn.retryPermitted) {
+      if (
+        turn.state === "failed" &&
+        turn.failure &&
+        !turn.retryPermitted &&
+        !isQuietGroupTurn(turn)
+      ) {
         setTurnFailures((prev) => ({
           ...prev,
           [turn.origin.discussionId]: turn.failure as string,
@@ -492,17 +498,14 @@ export function useDiscussions(
       });
       setDiscussionTurnFailure(thread.id, undefined);
       const origin = originFor(thread);
-      for (const nickname of targets) {
-        void dispatchAgentTurn({
-          nickname,
-          origin,
-          triggerCommentId,
-        })
-          .then((turn) => {
+      dispatchComment(
+        { nicknames: targets, origin, triggerCommentId },
+        {
+          onTurn: (turn) => {
             // Upsert rather than append: the backend publishes the registration
-            // event before `dispatch_agent_turn` resolves, and there is no
-            // ordering between the two. CVP-FR-HWTN: a turn that already ended
-            // is not added again.
+            // event before the dispatch resolves, and there is no ordering
+            // between the two. CVP-FR-HWTN: a turn that already ended is not
+            // added again.
             if (!hasTurnEnded(turn.id)) {
               setKnownTurns((prev) => [
                 ...prev.filter((t) => t.id !== turn.id),
@@ -512,8 +515,8 @@ export function useDiscussions(
             // CVP-FR-47: the shared surface reads the turns from the session
             // store, so a placeholder stands whichever owner shows the discussion.
             upsertDiscussionTurn(thread.id, turn);
-          })
-          .catch((e) => {
+          },
+          onError: (e, nickname) => {
             setTurnFailures((prev) => ({ ...prev, [thread.id]: errorText(e) }));
             // CTA-FR-UUXA: the shared surface reads the refusal from the session
             // store, so it renders at the foot of the discussion whichever owner
@@ -523,11 +526,12 @@ export function useDiscussions(
             // argument it refused (see `loggableTurnFailure`).
             logWarn(["ai", "frontend"], "an agent turn could not be dispatched", {
               threadId: thread.id,
-              nickname,
+              nickname: nickname ?? targets.join(" "),
               failure: loggableTurnFailure(errorText(e)),
             });
-          });
-      }
+          },
+        },
+      );
     },
     [],
   );

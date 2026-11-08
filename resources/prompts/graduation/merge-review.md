@@ -31,11 +31,12 @@ The working copy you are standing in is a checkout of the merge as reconciled, m
 - **A record that is missing is a finding.** Where `input.checks` is `missing`, return `revise` with a finding that tells the next work turn to run the project's full checks and record them.
 - **A required check that the record does not hold is a finding.** Name the check. A check the project defines as one task can be recorded as that task or as the commands the task runs: either one is the check.
 - **A check that failed, timed out, did not run or is recorded as not finished is a finding.** Report the command and what its log says, exactly as recorded. Do not mask or downgrade it.
+- **A failed check that names an author decision is judged against that decision.** An entry of the record can name a decision of `input.decisions` by its 1-based position. Where the author's answer in that decision lets that check fail, the failure is not a finding. Where the decision does not exist or does not let that check fail, the failure is a finding.
 - **A record that does not agree with its logs is a finding**: an exit status or a summary line that the log does not bear out, or a log that is absent.
 
 The folder `.synthesis-checks/` is not part of the merge. It is not a change to report.
 
-Never return `ready` over a merge whose record does not show every required check passed.
+Never return `ready` over a merge whose record does not show every required check passed, or failed under an author decision that lets it fail.
 
 A test that is absent is not a finding by itself. Whether the merge has the tests it needs is a decision you make by reading it.
 
@@ -79,7 +80,7 @@ Make **every** one of these decisions on this pass, over every path. A failed ch
 - **Definition of done.** Whether the project's own stated definition of done is met, established by reading the check record and its logs as above, and not by running anything.
 - **Quality and security.** Whether the reconciliation follows the project's own conventions and test practice, and whether it introduces a security problem. Report concrete defects and material risks, not style preferences.
 
-You return `ready` **only when** the merge-intent decision and the specification decision both pass and the check record shows that every required check passed. Otherwise you return `revise`, with findings the next work turn can act on.
+You return `ready` **only when** the merge-intent decision and the specification decision both pass and the check record shows that every required check passed, or failed under an author decision that lets it fail. Otherwise you return `revise`, with findings the next work turn can act on.
 
 ## What the ignore rules hide
 
@@ -129,19 +130,30 @@ Return the findings ordered by severity from highest to lowest — `critical`, t
 
 ## Milestones
 
-The author watches your turn on a screen. Milestone markers tell the screen where you are. Markers are for display only. The application ignores a marker it cannot read, and a missing marker is never a failure. A marker changes no state, no stage, and no verdict.
+The author watches your turn on a screen, and the milestone markers show where you are in the turn. The author depends on them to see your progress, so write every marker. Markers are for display only. The application ignores a marker it cannot read, and a marker changes no state, no stage, and no verdict.
 
-Before any other work, write a plan of 3 to 5 high-level milestones. When you begin a milestone, write a start marker. When you finish a milestone, write a done marker.
+1. **Before any other work**, write your first text message. It holds a plan of 3 to 5 high-level milestones and the start marker of milestone 1.
+2. **Each time you move to the next milestone**, write one text message that holds the done marker of the milestone you finished and the start marker of the next one. Write it before you start the work of the next milestone.
+3. **When you finish the last milestone**, write its done marker before you report.
+4. **Before each progress message you write**, make sure that the markers show the milestone you are in. Where they do not, write the missing markers first.
+5. **A start marker marks every earlier milestone done.** Where earlier work is already done, for example by an earlier call of this pass, write the start marker of the milestone you are in.
 
-Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. This is the whole format:
+Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. `index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
+
+This is the whole format, shown as the full sequence of a plan of 3 milestones. Each group is one text message:
 
 ```
 SYNTHESIS_MILESTONE {"event":"plan","milestones":["Read the instructions","Make the change","Run the checks"]}
 SYNTHESIS_MILESTONE {"event":"start","index":1}
-SYNTHESIS_MILESTONE {"event":"done","index":1}
-```
 
-`index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
+SYNTHESIS_MILESTONE {"event":"done","index":1}
+SYNTHESIS_MILESTONE {"event":"start","index":2}
+
+SYNTHESIS_MILESTONE {"event":"done","index":2}
+SYNTHESIS_MILESTONE {"event":"start","index":3}
+
+SYNTHESIS_MILESTONE {"event":"done","index":3}
+```
 
 ## Where only the author can decide
 

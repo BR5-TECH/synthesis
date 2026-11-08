@@ -19,6 +19,8 @@ pub fn cancel_impl<R: tauri::Runtime>(
         return turns.terminated(turn_id).ok_or_else(|| ERR_TURN_NOT_FOUND.to_string());
     };
     flag.store(true, Ordering::SeqCst);
+    // AGC-FR-BIPE: the calls of an advisor that its Meta turn mirrors end with it.
+    turns.end_mirrored_calls(app, turn_id);
     let Some((turn, operation, _project_key, reached_model)) =
         turns.terminate(turn_id, AgentTurnState::Cancelled, None)
     else {

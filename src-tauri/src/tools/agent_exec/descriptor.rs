@@ -210,8 +210,8 @@ pub const VM_DOCKER_HOST_VALUE: &str = "unix:///var/run/docker.sock";
 pub const CLAUDE_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 /// EAC-FR-WQNH: the two Bash timeouts of the Claude Code CLI.
 pub const BASH_TIMEOUT_ENVS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
-/// EAC-FR-WQNH: the value of each of [`BASH_TIMEOUT_ENVS`], 30 minutes.
-pub const BASH_TIMEOUT_MS: &str = "1800000";
+/// EAC-FR-WQNH: the value of each of [`BASH_TIMEOUT_ENVS`], 15 minutes.
+pub const BASH_TIMEOUT_MS: &str = "900000";
 
 /// EAC-FR-WQNH: the Bash timeouts the executor sets on a launch of `vendor`.
 /// A Claude Code launch gets both, except a variable that the launch
@@ -442,6 +442,9 @@ pub struct VendorExecutionDescriptor {
     fresh_argv: FreshArgv,
     resume_argv: Option<ResumeArgv>,
     effort_supported: Option<EffortSupported>,
+    /// EAC-FR-WBIF: the arguments that carry this vendor's milestone reminder,
+    /// or `None` for a vendor that has no reminder.
+    milestone_reminder: Option<fn() -> Vec<String>>,
     extractor: Extractor,
     /// EAC-FR-21: the session the stream reports, at the position
     /// `session_source` names.
@@ -479,6 +482,8 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     fresh_argv: claude_code::fresh_argv,
     resume_argv: Some(claude_code::resume_argv),
     effort_supported: Some(claude_code::effort_supported),
+    // CCP-FR-WZJS: a `PostToolUse` hook through `--settings`.
+    milestone_reminder: Some(claude_code::milestone_reminder_args),
     extractor: claude_code::extract,
     session_reader: claude_code::reported_session,
     activity: claude_code::activity_filtered,
@@ -515,6 +520,8 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     // value can be carried inside a quoted config override without changing what
     // the override means.
     effort_supported: Some(codex::effort_supported),
+    // EAC-FR-WBIF: the pinned Codex CLI has no reminder mechanism.
+    milestone_reminder: None,
     extractor: codex::extract,
     session_reader: codex::reported_session,
     activity: codex::activity_filtered,
@@ -571,6 +578,12 @@ impl VendorExecutionDescriptor {
             },
             None => (self.fresh_argv)(model_id, effort_id, assigned_session_id, result_contract),
         }
+    }
+
+    /// EAC-FR-WBIF: the arguments that carry the milestone reminder, appended
+    /// to the vector of a launch that carries it. Empty for a vendor with none.
+    pub fn milestone_reminder_args(&self) -> Vec<String> {
+        self.milestone_reminder.map(|build| build()).unwrap_or_default()
     }
 
     /// Whether the pinned CLI can resume a session at all (EAC-FR-30).

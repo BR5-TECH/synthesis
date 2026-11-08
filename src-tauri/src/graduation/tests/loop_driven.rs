@@ -252,10 +252,11 @@ fn a_turn_that_could_not_be_launched_rests_the_run() {
     assert!(!run.state.is_terminal(), "a run that could not start is not failed");
 }
 
-/// GRL-FR-DNKA: an agent-reported failure is material rather than an outcome.
-/// The turn completed, so the run goes to review like any other.
+// GRL-FR-TYRV, GRL-FR-CHDT, GRL-FR-SMQK, GRL-FR-DNKA: an agent-reported
+// failure goes to no review. The check correction resumes its session, and the
+// review reads the account of the corrected turn rather than the failure.
 #[test]
-fn an_agent_reported_failure_still_reaches_a_review() {
+fn an_agent_reported_failure_gets_a_check_correction_before_any_review() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Add the empty state to the panel.");
@@ -264,29 +265,26 @@ fn an_agent_reported_failure_still_reaches_a_review() {
         Turn::answering(Answer::ReportedFailure(
             "The test runner is not installed here.".to_string(),
         ))
-        .writing("src/panel.ts", "half\n"),
-        Turn::revise(ReviewSeverity::Critical, "Only half is written."),
+        .writing("src/panel.ts", "half\n")
+        .with_session(),
         Turn::work_saying("The second turn finished it.").writing("src/panel.ts", "whole\n"),
         Turn::ready(),
     ]);
     let run = fx.drive(&run, dispatch.clone());
 
+    let work = dispatch.of_part("work");
+    assert_eq!(work.len(), 2);
+    assert_eq!(work[1].resume_session.as_deref(), Some("s1"));
+    assert!(work[1].instruction_field("check_correction").is_some());
     let review = dispatch.of_part("review");
-    assert_eq!(review.len(), 2);
-    // GRL-FR-DNKA: what the agent said it could not do is context the review is
-    // given, rather than something the loop keeps to itself.
+    assert_eq!(review.len(), 1);
     assert_eq!(
         review[0].instruction_field("agent_account").as_deref(),
-        Some("The test runner is not installed here.")
-    );
-    assert_eq!(run.state, GraduationRunState::Completed);
-    // GRL-FR-DNKA: and the turn after it carries its **own** account rather
-    // than the one before it, so a review never reads a stale account as if it
-    // described the change set in front of it.
-    assert_eq!(
-        review[1].instruction_field("agent_account").as_deref(),
         Some("The second turn finished it."),
     );
+    assert_eq!(run.state, GraduationRunState::Completed);
+    assert_eq!(run.work_turns, 2);
+    assert_eq!(run.pass(), 1);
 }
 
 /// GRD-FR-SWOJ: a turn that stopped without a review has whatever it wrote
@@ -523,7 +521,7 @@ fn what_the_agent_claims_it_wrote_is_not_what_the_run_records() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
-    // The turn writes one path and reports three, in its result and its summary.
+    // The turn writes one path and reports three in its summary.
     let dispatch = ScriptedDispatch::new(vec![
         Turn::answering(Answer::ClaimingPaths(vec![
             "src/invented.ts".to_string(),

@@ -13,6 +13,7 @@ vi.mock("../../api", () => ({
 
 const logWarn = vi.fn();
 vi.mock("../../logging", () => ({
+  logDebug: vi.fn(),
   logInfo: vi.fn(),
   logWarn: (...a: unknown[]) => logWarn(...a),
 }));
@@ -21,6 +22,7 @@ import { submitQuestionAnswers } from "./submit";
 import {
   clearAllDiscussionSessions,
   getDiscussionSession,
+  setDiscussionScroll,
 } from "../../state/discussionSession";
 import { publishSet, questionSetOf, clearQuestionSets } from "../../state/questionSets";
 import { threadById, clearConversationThreads } from "../../state/conversationThreads";
@@ -293,6 +295,29 @@ describe("submitting a set of answers", () => {
     // The set still stands and nothing was dispatched.
     expect(questionSetOf("t1")).toEqual(standing);
     expect(dispatchAgentTurn).not.toHaveBeenCalled();
+  });
+
+  it("DQA-FR-HMTR, CVP-FR-CUKV: an accepted submission makes a discussion read back follow again", async () => {
+    setDiscussionScroll("t1", 100, false);
+    submitDiscussionQuestionAnswers.mockResolvedValue({
+      discussion: thread([comment("c0", human, "thoughts?")]),
+      finalAnswerCommentId: "s1:01-2a",
+    });
+
+    await submitQuestionAnswers("t1", "s1", answers);
+
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: true, footRequest: 1 });
+  });
+
+  it("CVP-FR-CUKV: a refused submission leaves a discussion read back where it is", async () => {
+    setDiscussionScroll("t1", 100, false);
+    submitDiscussionQuestionAnswers.mockRejectedValue("question_answers_incomplete");
+
+    await expect(submitQuestionAnswers("t1", "s1", answers)).rejects.toBe(
+      "question_answers_incomplete",
+    );
+
+    expect(getDiscussionSession("t1")).toMatchObject({ atTail: false, footRequest: 0 });
   });
 
   it("a submission nobody is addressed in dispatches nothing", async () => {

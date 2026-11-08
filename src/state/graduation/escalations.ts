@@ -11,7 +11,7 @@ import type {
   GraduationRun,
 } from "../../types/graduation";
 import { interruptionCause, isFailureStop } from "./stages";
-import { totalTimeLimitRestOf } from "./rest";
+import { checksNotPassedRestOf, totalTimeLimitRestOf } from "./rest";
 import type { NotificationLevel } from "../toasts";
 import type { QuestionDraftAnswer } from "../questionAnswerDrafts";
 
@@ -148,6 +148,8 @@ function interruptedStatement(run: GraduationRun, title: string): string {
 function awaitingStatement(run: GraduationRun, title: string): string {
   if (run.escalation) return `“${title}” is waiting for your answer.`;
   if (totalTimeLimitRestOf(run)) return `“${title}” stopped at its total time limit.`;
+  // GRU-FR-WVDV: a run whose required checks did not pass says so.
+  if (checksNotPassedRestOf(run)) return `“${title}” stopped: its required checks did not pass.`;
   return `“${title}” is waiting for your decision.`;
 }
 

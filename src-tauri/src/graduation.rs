@@ -50,6 +50,7 @@ mod arrangement;
 mod cascade;
 mod commands;
 mod commit;
+mod continue_rest;
 mod direct;
 mod errors;
 mod events;

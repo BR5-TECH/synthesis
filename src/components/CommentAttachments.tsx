@@ -16,6 +16,7 @@
  * preload on the rail: a review carrying dozens of screenshots costs nothing for
  * the threads the author is not looking at.
  */
+import { AdvisorsListView } from "./discussion/GroupMarks";
 import { ExportRequestCard } from "./ExportDialog/ExportRequestCard";
 import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
@@ -743,7 +744,7 @@ function AttachmentView({
   draftId?: string;
   attachment: Exclude<
     Attachment,
-    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" }
+    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" | "synthesis" | "advisors" }
   >;
 }) {
   const name = attachmentName(attachment);
@@ -884,7 +885,10 @@ export function CommentAttachmentList({
         ) : a.kind === "newDraftProposal" ? (
           // CMT-FR-MPKL: a reference control that shows the card.
           <NewDraftReferenceControl key={i} attachment={a} />
-        ) : a.kind === "newDraftSubject" ? null : a.kind === "exportRequest" ? (
+        ) : a.kind === "newDraftSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
+          // CVP-FR-HRGH: the collapsed Advisors list of a Meta reply.
+          <AdvisorsListView key={i} attachment={a} />
+        ) : a.kind === "exportRequest" ? (
           // CMT-FR-HFXL / EXD-FR-UQUD: the export request card.
           <ExportRequestCard key={i} attachment={a} />
         ) : (

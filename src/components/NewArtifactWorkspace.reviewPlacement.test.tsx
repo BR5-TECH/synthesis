@@ -94,7 +94,7 @@ const ABSENT = {
   anchor: { lead: "A sentence the prompt never held.", trail: "", hint_start: 0, hint_end: 0 },
 };
 
-function backend(hunks: { id: string }[]) {
+function backend(hunks: { id: string }[], body = BODY) {
   const proposal = {
     id: "p1",
     draftId: "d1",
@@ -124,7 +124,7 @@ function backend(hunks: { id: string }[]) {
       case "list_draft_history":
         return freshHistory();
       case "load_draft_file_contents":
-        return { body: BODY, checksum: "c1" };
+        return { body, checksum: "c1" };
       case "save_draft_file_contents":
         return { checksum: "c2" };
       case "list_draft_change_proposals":
@@ -186,5 +186,69 @@ describe("a proposal whose changes quote Markdown (DCR-FR-LGHZ, DCR-FR-TSNW)", (
     expect(await screen.findByText(/not shown in the document/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /accept all/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /reject all/i })).toBeEnabled();
+  });
+});
+
+/** The default draft template, with one sentence of intent and two empty bullets. */
+const TEMPLATE = [
+  "## Intent",
+  "",
+  "Create PR must respect stacks.",
+  "",
+  "## User journey",
+  "",
+  "- ",
+  "",
+  "## Requirements",
+  "",
+  "- ",
+].join("\n");
+
+/** A replacement of an empty bullet, as an agent fills one. */
+function bulletFill(id: string, lead: string, trail: string) {
+  return {
+    id,
+    kind: "replace",
+    revision: 0,
+    before: "- ",
+    after: `- Filled by ${id}.`,
+    anchor: { lead, trail, hint_start: 0, hint_end: 0 },
+  };
+}
+
+describe("a change that fills an empty bullet (DCR-FR-MAHJ)", () => {
+  // The first is placed by its trail: its lead holds no text, as when the
+  // change before it ends just above it. The second is placed by its lead.
+  const FILLS = [
+    bulletFill("h1", "\n\n", "\n\n## Requirements\n\n"),
+    bulletFill("h2", "## Requirements\n\n", ""),
+  ];
+
+  it("DCR-FR-MAHJ, DCR-FR-31: both changes are drawn, and neither is reported as not shown", async () => {
+    backend(FILLS, TEMPLATE);
+    renderWorkspace();
+    await drawn(["h1", "h2"]);
+    for (const id of ["h1", "h2"]) {
+      act(() => setFocusedHunk("d1", id));
+      await screen.findByText(new RegExp(`reviewing change ${id.slice(1)} of 2`, "i"));
+      expect(screen.queryByText(/not shown in the document/i)).toBeNull();
+    }
+  });
+
+  it("DCR-FR-MAHJ: each proposed text stands where its bullet is, and nothing is struck", async () => {
+    backend(FILLS, TEMPLATE);
+    renderWorkspace();
+    await drawn(["h1", "h2"]);
+    const heading = (text: string) =>
+      Array.from(document.querySelectorAll("h2")).find((h) => h.textContent === text)!;
+    const block = (id: string) => document.querySelector(`.hunk--add[data-hunk="${id}"]`)!;
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    // h1: under "User journey" and above "Requirements".
+    expect(follows(heading("User journey"), block("h1"))).toBe(true);
+    expect(follows(block("h1"), heading("Requirements"))).toBe(true);
+    // h2: under "Requirements".
+    expect(follows(heading("Requirements"), block("h2"))).toBe(true);
+    expect(document.querySelector(".hunk--del")).toBeNull();
   });
 });

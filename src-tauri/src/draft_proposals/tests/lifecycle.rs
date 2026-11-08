@@ -111,6 +111,7 @@ fn a_proposal_reaches_an_anchored_draft_thread_too() {
                     attachments: Vec::new(),
                     option_descriptions: Vec::new(),
                     spoken_original: None,
+                    tool_calls: Vec::new(),
                 },
             ),
         ],

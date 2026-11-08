@@ -472,10 +472,10 @@ describe("CIP-FR-11 ambient git config independence", () => {
 });
 
 describe("CIP-FR-12 backend lane checks", () => {
-  it("runs cargo check then cargo test", () => {
+  it("runs cargo check then cargo nextest run", () => {
     const script = runScripts("backend");
     expect(script.indexOf("cargo check")).toBeGreaterThanOrEqual(0);
-    expect(script.indexOf("cargo test")).toBeGreaterThan(
+    expect(script.indexOf("cargo nextest run")).toBeGreaterThan(
       script.indexOf("cargo check"),
     );
   });
@@ -609,10 +609,10 @@ describe("CIP-FR-MRCZ microsandbox runtime cache", () => {
 });
 
 describe("CIP-FR-19 mock lane checks", () => {
-  it("runs cargo check then cargo test from the mock crate", () => {
+  it("runs cargo check then cargo nextest run from the mock crate", () => {
     const script = runScripts("mock");
     expect(script.indexOf("cargo check")).toBeGreaterThanOrEqual(0);
-    expect(script.indexOf("cargo test")).toBeGreaterThan(
+    expect(script.indexOf("cargo nextest run")).toBeGreaterThan(
       script.indexOf("cargo check"),
     );
     expect(workingDirOf("mock")).toBe("tools/agentic-cli-mock");
@@ -621,7 +621,7 @@ describe("CIP-FR-19 mock lane checks", () => {
   // The committed lock file is the sole source of dependency versions; without
   // --locked a lock that disagrees with Cargo.toml is regenerated on the runner
   // instead of failing the lane.
-  it.each(["cargo check", "cargo test"])("passes --locked to %s", (command) => {
+  it.each(["cargo check", "cargo nextest run"])("passes --locked to %s", (command) => {
     expect(runScripts("mock")).toContain(`${command} --locked`);
   });
 
@@ -640,10 +640,10 @@ describe("CIP-FR-19 mock lane checks", () => {
 });
 
 describe("CIP-FR-21 server lane checks", () => {
-  it("runs cargo build then cargo test from the server crate", () => {
+  it("runs cargo build then cargo nextest run from the server crate", () => {
     const script = runScripts("server");
     expect(script.indexOf("cargo build")).toBeGreaterThanOrEqual(0);
-    expect(script.indexOf("cargo test")).toBeGreaterThan(
+    expect(script.indexOf("cargo nextest run")).toBeGreaterThan(
       script.indexOf("cargo build"),
     );
     expect(workingDirOf("server")).toBe("server");
@@ -660,7 +660,7 @@ describe("CIP-FR-21 server lane checks", () => {
   // The committed lock file is the sole source of dependency versions; without
   // --locked a lock that disagrees with Cargo.toml is regenerated on the runner
   // instead of failing the lane (CIP-FR-21, CIP-FR-22).
-  it.each(["cargo build", "cargo test"])("passes --locked to %s", (command) => {
+  it.each(["cargo build", "cargo nextest run"])("passes --locked to %s", (command) => {
     expect(runScripts("server")).toContain(`${command} --locked`);
   });
 

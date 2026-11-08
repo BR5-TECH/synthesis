@@ -405,7 +405,9 @@ async fn drive<R: tauri::Runtime>(
             }
         }
         if !resume_at_review {
-            match work_turn(app, &mut run, &worktree, &cancellation, dispatch).await {
+            match super::work_turn::work_turn(app, &mut run, &worktree, &cancellation, dispatch)
+                .await
+            {
                 Step::Stop => return,
                 Step::Continue => {}
             }
@@ -497,153 +499,8 @@ fn refresh_window<R: tauri::Runtime>(
     settings
 }
 
-/// GRL-FR-DXLU: the turn that does the work.
-async fn work_turn<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run: &mut GraduationRun,
-    worktree: &PathBuf,
-    cancellation: &CancellationToken,
-    dispatch: &dyn seams::GraduationDispatch<R>,
-) -> Step {
-    // GRD-FR-XHSE: a merge run checks its pinned tips before every dispatch.
-    if merge_drive::moved(app, run) {
-        return Step::Stop;
-    }
-    let settings = settings_for_dispatch(app, run, phases::PART_WORK);
-    // GRL-FR-ARPX / GRL-FR-XBUE: the window was just recomputed from the
-    // settings as they stand, so a budget the author lowered rests the run here
-    // rather than reaching the task validation below as a fault.
-    if run.pass_beyond_window() {
-        rest_for_author(app, run);
-        return Step::Stop;
-    }
-    // GRL-FR-WOBK: a run with no total time left dispatches no turn.
-    if time_budget::rest_if_spent(app, run, &settings, phases::PART_WORK) {
-        return Step::Stop;
-    }
-    let purpose = purpose_for(run);
-    let input = task_input::compose_input(run, phases::PART_WORK, purpose);
-    if let Err(reason) = input.validate(run.checkpoint.pass_limit) {
-        note_blocked(app, run, "task_invalid");
-        let _ = transitions::block(
-            app,
-            run,
-            "task_invalid",
-            reason,
-            "Continue the run.",
-            phases::PART_WORK,
-        );
-        return Step::Stop;
-    }
-    // GRL-FR-ISIL: a resumed turn continues the pass it was in, so a pass
-    // already open is kept rather than opened again.
-    run.observability.open_pass(run.pass(), pass_task(run), crate::notes::now_rfc3339());
-    let _ = transitions::enter_stage(
-        app,
-        run,
-        observability::GraduationVisualStage::Working,
-        observability::StageReason::WorkStarted,
-    );
-    if transitions::transition(app, run, GraduationRunState::Working).is_err() {
-        return Step::Stop;
-    }
-    run.work_turns += 1;
-    if !logs::emit(
-        app,
-        run,
-        StructuredEvent::new(GraduationLogProducer::WorkTurn, "work turn started")
-            .with("purpose", purpose)
-            .with("turn", run.work_turns)
-            .with("corrected", pending_correction(run, phases::PART_WORK)),
-    ) {
-        return Step::Stop;
-    }
-
-    prepare_check_folder(app, run, worktree);
-
-    // GRL-FR-EFTM: the turn runs under the smaller of the stage time limit and
-    // the remaining total time.
-    let bound = settings.turn_bound(run.turn_time_used_ms);
-    let turn = TurnRequest {
-        execution_directory: worktree,
-        part: phases::PART_WORK,
-        input,
-        bound,
-        resume: None,
-    };
-    // GRL-FR-QKDC: a refused answer is asked again once, in the same session.
-    let (outcome, bound) =
-        match corrections::execute_with_correction(app, run, turn, cancellation, dispatch).await {
-            Corrected::Settle(outcome, bound) => (*outcome, bound),
-            Corrected::Stopped => return Step::Stop,
-        };
-    let step = settle_turn(app, run, worktree, outcome, GraduationEscalationOrigin::Work, bound);
-    if matches!(step, Step::Continue)
-        && !logs::emit(
-            app,
-            run,
-            StructuredEvent::new(GraduationLogProducer::WorkTurn, "work turn ended")
-                .with("changed_paths", run.checkpoint.changed_paths.len() as u64)
-                .with("hidden_paths", run.checkpoint.hidden_paths.len() as u64),
-        )
-    {
-        return Step::Stop;
-    }
-    step
-}
-
-/// GRL-FR-LXWU / GRL-FR-KYYW: before a `work` or `merge_work` turn, the
-/// repository hides the check folder and the folder holds no earlier result.
-///
-/// A saved correction (GRL-FR-HWLD) only sends its answer again, so it keeps the
-/// results the turn it corrects wrote. A step that fails is reported and the
-/// turn runs all the same: the review then finds the report wrong or missing,
-/// which is a finding (GRL-FR-NTFD) rather than a stop.
-fn prepare_check_folder<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run: &GraduationRun,
-    worktree: &std::path::Path,
-) {
-    match checks_folder::ensure_excluded(worktree) {
-        Ok(true) => logging::log_debug(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation hid the check folder in the repository exclude file",
-            log_fields! { "run_id" => run.id.clone() },
-        ),
-        Ok(false) => {}
-        Err(reason) => logging::log_warn(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation could not hide the check folder",
-            log_fields! { "run_id" => run.id.clone(), "reason" => reason },
-        ),
-    }
-    if corrections::will_correct(run, phases::PART_WORK) {
-        return;
-    }
-    match checks_folder::clear(worktree) {
-        Ok(removed) => logging::log_debug(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation emptied the check folder",
-            log_fields! { "run_id" => run.id.clone(), "removed" => removed },
-        ),
-        Err(reason) => logging::log_warn(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation could not empty the check folder",
-            log_fields! { "run_id" => run.id.clone(), "reason" => reason },
-        ),
-    }
-}
-
 /// GLG-FR-ZJTP: whether the turn about to start is a saved correction.
-fn pending_correction(run: &GraduationRun, part: &str) -> bool {
+pub(super) fn pending_correction(run: &GraduationRun, part: &str) -> bool {
     run.checkpoint.answer_correction.as_ref().is_some_and(|pending| pending.part == part)
 }
 
@@ -653,7 +510,7 @@ fn pending_correction(run: &GraduationRun, part: &str) -> bool {
 /// later one. What the pass record must not hold is `work.md`: that instruction
 /// is identical for every run and every project (GRL-FR-DXLU), so a record
 /// carrying it would say nothing about this pass.
-fn pass_task(run: &GraduationRun) -> String {
+pub(super) fn pass_task(run: &GraduationRun) -> String {
     run.checkpoint.loop_instruction.clone().unwrap_or_else(|| run.input.prompt.clone())
 }
 

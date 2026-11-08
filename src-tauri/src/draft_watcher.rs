@@ -369,6 +369,19 @@ mod tests {
     // DRS-FR-42 — the watch itself, end to end
     // ------------------------------------------------------------------
 
+    /// Give a draft's prompt a modification time long before any write of the
+    /// test. The watch is seeded from that time, so a write that the test makes
+    /// afterwards always carries a different one — whatever the resolution of
+    /// the file times of the filesystem, and however quickly the draft was made.
+    fn age_prompt(root: &crate::fs::RootFs, draft_id: &str, file: &str) {
+        let path = crate::drafts::draft_dir(root, draft_id)
+            .unwrap()
+            .join(crate::drafts::FILES_DIR)
+            .join(file);
+        let long_ago = std::time::SystemTime::now() - Duration::from_secs(3600);
+        std::fs::File::options().write(true).open(path).unwrap().set_modified(long_ago).unwrap();
+    }
+
     /// Every `"draft prompt changed"` this app handle sees, as `(id, instant)`.
     fn collect_prompt_events(
         app: &tauri::App<tauri::test::MockRuntime>,
@@ -421,6 +434,8 @@ mod tests {
 
         let one = crate::drafts::create_draft_impl(&root, Some("first"), None).unwrap();
         let two = crate::drafts::create_draft_impl(&root, Some("second"), None).unwrap();
+        age_prompt(&root, &one.draft.id, &one.file);
+        age_prompt(&root, &two.draft.id, &two.file);
 
         let app = tauri::test::mock_app();
         app.manage(DraftsWatcher::default());
@@ -486,6 +501,8 @@ mod tests {
         let one = crate::drafts::create_draft_impl(&root, Some("first"), None).unwrap();
         let two = crate::drafts::create_draft_impl(&root, Some("second"), None).unwrap();
         let one_dir = root_path.join(".synthesis/drafts").join(&one.draft.id);
+        age_prompt(&root, &one.draft.id, &one.file);
+        age_prompt(&root, &two.draft.id, &two.file);
 
         let app = tauri::test::mock_app();
         app.manage(DraftsWatcher::default());

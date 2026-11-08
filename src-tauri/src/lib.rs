@@ -11,6 +11,7 @@ use tauri::Manager;
 
 pub mod agent_activity;
 pub mod agent_conversations;
+pub mod agent_groups;
 pub mod agentic;
 pub mod agents;
 pub mod ai_api;
@@ -621,6 +622,9 @@ pub fn run() {
             agents::update_agent,
             agents::delete_agent,
             agent_conversations::dispatch_agent_turn,
+            agent_conversations::dispatch_agent_group,
+            agent_groups::load_agent_group_settings,
+            agent_groups::save_agent_group_settings,
             agent_conversations::dispatch_speech_turn,
             agent_conversations::steer_speech_turn,
             agent_conversations::end_speech_turn,

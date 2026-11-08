@@ -122,12 +122,11 @@ fn rest<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut GraduationRun, l
     if !logs::emit(app, run, event) {
         return;
     }
-    run.rest = Some(crate::graduation::GraduationRest {
-        reason: crate::graduation::REST_TOTAL_TIME_LIMIT.to_string(),
-        at: crate::notes::now_rfc3339(),
+    run.rest = Some(crate::graduation::GraduationRest::total_time_limit(
+        crate::notes::now_rfc3339(),
         limit_ms,
-        used_ms: run.turn_time_used_ms,
-    });
+        run.turn_time_used_ms,
+    ));
     let _ = transitions::transition(app, run, GraduationRunState::AwaitingAuthor);
 }
 
@@ -180,12 +179,11 @@ mod tests {
     fn the_used_time_and_the_rest_round_trip_through_the_record() {
         let mut run = GraduationRun::new_for_test("g1", "d1", "2026-10-14T09:00:00Z");
         run.turn_time_used_ms = 42;
-        run.rest = Some(crate::graduation::GraduationRest {
-            reason: "total_time_limit".to_string(),
-            at: "2026-10-14T09:00:00Z".to_string(),
-            limit_ms: 1_800_000,
-            used_ms: 42,
-        });
+        run.rest = Some(crate::graduation::GraduationRest::total_time_limit(
+            "2026-10-14T09:00:00Z".to_string(),
+            1_800_000,
+            42,
+        ));
         let value = serde_json::to_value(&run).unwrap();
         assert_eq!(value["turnTimeUsedMs"], 42);
         assert_eq!(value["rest"]["reason"], "total_time_limit");

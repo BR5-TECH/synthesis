@@ -190,6 +190,29 @@ RUN set -eux; \
     rm /tmp/task.tar.gz; \
     /usr/local/bin/task --version
 
+# AVI-FR-PBVT: `cargo-nextest`, because the repository runs its Rust tests with
+# `cargo nextest run`, which stops a test that runs past its limit. It is
+# fetched by version from the release archive and checked against the SHA-256
+# the release publishes, on the terms of the go-task runner above.
+ARG NEXTEST_VERSION=0.9.150
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+        amd64) target='x86_64-unknown-linux-gnu'; \
+            sha256='b0959bc64232974224cf9fb22c915845398c0e8668fa7831eb5b43fb1eef781f' ;; \
+        arm64) target='aarch64-unknown-linux-gnu'; \
+            sha256='9164568e9840c6509177086828ac7d3178c2d8feb0658b4d2bff62fa620e98c8' ;; \
+        *) echo "no cargo-nextest checksum recorded for architecture $arch" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --silent --show-error --location \
+        --output /tmp/cargo-nextest.tar.gz \
+        "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/cargo-nextest-${NEXTEST_VERSION}-${target}.tar.gz"; \
+    echo "${sha256}  /tmp/cargo-nextest.tar.gz" | sha256sum --check --strict -; \
+    tar -xzf /tmp/cargo-nextest.tar.gz -C /usr/local/bin cargo-nextest; \
+    chmod 0755 /usr/local/bin/cargo-nextest; \
+    rm /tmp/cargo-nextest.tar.gz; \
+    /usr/local/bin/cargo-nextest nextest --version
+
 # AVI-FR-17: pnpm because it is the package manager the work uses, and the
 # TypeScript compiler because a change to a typed module is unchecked until
 # `tsc` has read it. Both are installed globally by npm, which the base image
@@ -263,10 +286,11 @@ ENV HOME=/home/agent \
     PATH=/usr/local/cargo/bin:/home/agent/.local/share/pnpm/bin:$PATH
 
 # AVI-FR-WWVY: a full check suite runs longer than the CLI's default Bash limit
-# of ten minutes. An agent that hits the limit starts a background job and polls
-# it, and a background job keeps the CLI alive after its answer.
-ENV BASH_DEFAULT_TIMEOUT_MS=1800000 \
-    BASH_MAX_TIMEOUT_MS=1800000
+# of ten minutes, and a command that stops making progress must give the turn
+# back within 15 minutes. An agent that hits the limit starts a background job
+# and polls it, and a background job keeps the CLI alive after its answer.
+ENV BASH_DEFAULT_TIMEOUT_MS=900000 \
+    BASH_MAX_TIMEOUT_MS=900000
 
 # AVI-FR-03: a non-root user at the fixed UID/GID `manifest.toml` records. The
 # executor maps the host user onto these (EAC-FR-14), which is what keeps a file

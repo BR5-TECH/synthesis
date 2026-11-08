@@ -58,6 +58,19 @@ describe("the graduation run region's layout", () => {
     expect(decl(name, "white-space")).toBe("nowrap");
   });
 
+  it("GRU-FR-SOIJ: the progress line is one line with an ellipsis, under a muted label", () => {
+    const css = sheet("components.css");
+    const [text] = blocksFor(css, ".graduation__progress-text");
+    expect(text, "no rule for .graduation__progress-text").toBeDefined();
+    expect(decl(text, "white-space")).toBe("nowrap");
+    expect(decl(text, "overflow")).toBe("hidden");
+    expect(decl(text, "text-overflow")).toBe("ellipsis");
+    expect(decl(text, "min-width")).toBe("0");
+    const [label] = blocksFor(css, ".graduation__progress-label");
+    expect(label, "no rule for .graduation__progress-label").toBeDefined();
+    expect(decl(label, "color")).toBe("var(--fg-3)");
+  });
+
   it("GRU-FR-VDSK: the open pass row stays at the top edge of the run region", () => {
     const css = sheet("components.css");
     const [row] = blocksFor(

@@ -13,6 +13,7 @@ vi.mock("../logging", () => ({
 }));
 
 import { dispatchTurnsFor, postReply } from "./useConversationSession";
+import { refreshAgentGroupSwitch, resetAgentGroupSwitch } from "../state/agentGroupSwitch";
 import { beginSpeechPost, finishSpeechPost, resetSpeechPostsForTest } from "../state/speechPosts";
 import {
   clearAllDiscussionSessions,
@@ -79,6 +80,7 @@ beforeEach(() => {
   logWarn.mockReset();
   clearAllDiscussionSessions();
   resetSpeechPostsForTest();
+  resetAgentGroupSwitch();
 });
 
 describe("the comment that ends a speech", () => {
@@ -154,6 +156,46 @@ describe("dispatching from the shared surface (CTA-FR-QUXJ, CTA-FR-UUXA)", () =>
     serve(new Set());
     dispatchTurnsFor(discussion("@sec only"), "@sec only", AGENTS);
     expect(getDiscussionSession("d1").turnFailure).toBeUndefined();
+  });
+
+  it("CTA-FR-UGBA, CTA-FR-UUXA: a group answer with a refusal shows the refusal at the foot of the discussion", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "load_agent_group_settings") return { enabled: true, joinTimeoutSecs: 60 };
+      if (cmd !== "dispatch_agent_group") return undefined;
+      const { origin, triggerCommentId } = args as { origin: unknown; triggerCommentId: string };
+      return {
+        mode: "synthesis",
+        groupId: "group-1",
+        driver: "arch",
+        turns: [
+          {
+            id: "turn-arch",
+            agentId: "arch",
+            nickname: "arch",
+            origin: expectBackendOrigin(origin),
+            triggerCommentId,
+            state: "running",
+            failure: null,
+            retryPermitted: false,
+            activeToolCalls: [],
+            startedAt: "2026-02-01T00:00:00Z",
+            endedAt: null,
+          },
+        ],
+        refusals: [{ nickname: "ghost", failure: "agent_unavailable" }],
+      };
+    });
+    await refreshAgentGroupSwitch();
+    dispatchTurnsFor(discussion("@arch @ghost ?"), "@arch @ghost ?", [...AGENTS, enrolled("ghost")]);
+    await vi.waitFor(() =>
+      expect(getDiscussionSession("d1").turnFailure).toBe("agent_unavailable"),
+    );
+    expect(getDiscussionSession("d1").turns.map((t) => t.id)).toEqual(["turn-arch"]);
+    expect(logWarn).toHaveBeenCalledWith(
+      ["ai", "frontend"],
+      "an agent turn could not be dispatched",
+      { threadId: "d1", nickname: "ghost", failure: "agent_unavailable" },
+    );
   });
 
   it("CTA-FR-UUXA: an argument error is shown but logged as unexpected", async () => {

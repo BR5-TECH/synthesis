@@ -36,21 +36,15 @@ fn the_journal_is_gone_once_the_transaction_completes() {
 fn the_transaction_writes_in_the_one_order_that_makes_it_recoverable() {
     // DHS-FR-14, DHS-FR-15 (DHS-FR-13, FR-14, FR-15). The whole crash/recovery matrix rests
     // on this order, and every end-state assertion elsewhere stays green if two
-    // of the steps are transposed — so the order is observed directly, by
-    // watching the modification times of the files each step writes.
+    // of the steps are transposed — so the order is observed directly.
     //
-    // Times rather than a recording hook, because the steps are made by four
-    // different modules through the shared filesystem primitives, and a hook
-    // threaded through all four would be a second implementation of the order
-    // rather than an observation of it.
-    //
-    // The steps are inside one call, so nothing can be slept between them: what
-    // makes the stamps distinguishable is the filesystem's own resolution. The
-    // assertion below therefore proves it CAN distinguish them before it
-    // asserts the order — on a filesystem stamping whole seconds every `<=`
-    // here would hold whatever order the writes were made in, and this test
-    // would pass by observing nothing.
-    use std::time::SystemTime;
+    // The steps are made by four different modules, all through the shared
+    // filesystem primitives, and those primitives keep a record of the paths
+    // they write (`fs::write_log`, test builds only). The order of that record
+    // is the order of the writes. File times are not used: a filesystem
+    // stamps them in coarse steps, so two writes of one call can carry the
+    // same time and prove nothing.
+    use crate::fs::write_log;
 
     let f = Fixture::new();
     f.write_prompt(ORIGINAL_TEXT);
@@ -59,51 +53,53 @@ fn the_transaction_writes_in_the_one_order_that_makes_it_recoverable() {
     let hist = f.hist();
     let proposals = drafts::draft_proposals_dir(&f.root, &f.draft_id).expect("proposals");
 
-    // The journal is removed by the time the call returns, so the two files that
-    // only exist mid-transaction are watched by *creation* rather than by
-    // survival: a `prepared` journal is staged, its stamps read, and the
-    // transaction then resumed. What the ordering below asserts is the part that
-    // outlives the call — payload before manifest, both before the prompt, the
-    // prompt before the proposal record, and the decision comment after all of
-    // them.
-    let outcome = f.accept(&proposal).expect("accepted");
+    write_log::start();
+    let outcome = f.accept(&proposal);
+    let writes = write_log::finish();
+    let outcome = outcome.expect("accepted");
     let entry = outcome.entry.expect("an entry");
-
-    let at = |path: std::path::PathBuf| -> SystemTime {
-        std::fs::metadata(&path)
-            .unwrap_or_else(|e| panic!("{path:?}: {e}"))
-            .modified()
-            .expect("mtime")
-    };
     let original = outcome.original.expect("the Original it settled");
-    let original_payload = at(snapshot_path(&hist, &original.id));
-    let original_manifest = at(manifest_path(&hist, &original.id));
-    let payload = at(snapshot_path(&hist, &entry.id));
-    let manifest = at(manifest_path(&hist, &entry.id));
-    let prompt = at(dir.join(drafts::FILES_DIR).join(FILE));
-    let record = at(proposals.join(format!("{}.toml", proposal.id)));
+
+    let resolved = |path: std::path::PathBuf| -> std::path::PathBuf {
+        std::fs::canonicalize(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"))
+    };
+    let writes: Vec<std::path::PathBuf> =
+        writes.into_iter().filter_map(|p| std::fs::canonicalize(p).ok()).collect();
+    // The journal is rewritten along the way, so the files below are located by
+    // their own paths. Each is written once; the first write is the one that
+    // counts if a path ever appears twice.
+    let position = |label: &str, path: std::path::PathBuf| -> usize {
+        let path = resolved(path);
+        writes
+            .iter()
+            .position(|written| *written == path)
+            .unwrap_or_else(|| panic!("{label} was not written through the primitives: {writes:?}"))
+    };
+    let original_payload = position("the Original's payload", snapshot_path(&hist, &original.id));
+    let original_manifest = position("the Original's manifest", manifest_path(&hist, &original.id));
+    let payload = position("the payload", snapshot_path(&hist, &entry.id));
+    let manifest = position("the manifest", manifest_path(&hist, &entry.id));
+    let prompt = position("the prompt", dir.join(drafts::FILES_DIR).join(FILE));
+    let record = position("the proposal record", proposals.join(format!("{}.toml", proposal.id)));
     // CMS-FR-37: the decision comment lands in the store, under the draft's
     // stable id, rather than inside the draft's own folder.
-    let conversation =
-        at(f.root.path().join(format!("drafts/{}/comments/discussion.jsonl", f.draft_id)));
+    let conversation = position(
+        "the decision comment",
+        f.root.path().join(format!("drafts/{}/comments/discussion.jsonl", f.draft_id)),
+    );
 
     assert!(
-        payload > original_payload || conversation > payload,
-        "this filesystem stamps too coarsely to observe the order at all — \
-         every assertion below would hold whatever order the writes were made in",
-    );
-    assert!(
-        original_payload <= original_manifest,
+        original_payload < original_manifest,
         "the Original's payload is written before its manifest",
     );
     assert!(
-        original_manifest <= payload,
+        original_manifest < payload,
         "the superseded version is settled before the one that supersedes it",
     );
-    assert!(payload <= manifest, "the payload is written before its manifest");
-    assert!(manifest <= prompt, "the entry is written before the prompt");
-    assert!(prompt <= record, "the prompt is written before the proposal record");
-    assert!(record <= conversation, "the decision comment is appended after the record moved",);
+    assert!(payload < manifest, "the payload is written before its manifest");
+    assert!(manifest < prompt, "the entry is written before the prompt");
+    assert!(prompt < record, "the prompt is written before the proposal record");
+    assert!(record < conversation, "the decision comment is appended after the record moved");
 
     // And the journal is gone, which is only true of an operation that reached
     // `complete` (DHS-FR-14).

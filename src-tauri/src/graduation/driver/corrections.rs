@@ -204,6 +204,9 @@ fn correctable(
 fn apply(turn: &mut TurnRequest<'_>, pending: &GraduationAnswerCorrection) {
     turn.input.correction = correction_section(&pending.reason)
         .and_then(|section| prompts::prompt_section(&prompts::REFUSALS, section));
+    // GRL-FR-IPNO: an answer correction changes no file, so it never carries a
+    // check correction beside it.
+    turn.input.check_correction = None;
     turn.resume = Some(SessionRef {
         session_id: pending.resume.session_id.clone(),
         continuation_token: pending.resume.continuation_token.clone(),

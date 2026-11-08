@@ -277,6 +277,7 @@ fn a_quote_that_resolves_to_nobody_keeps_its_excerpt_and_loses_only_the_handle()
         created_at: "2026-01-01T00:00:02Z".into(),
         option_descriptions: Vec::new(),
         spoken_original: None,
+        tool_calls: Vec::new(),
     };
     let rendered = comment_text(&orphaned, &handles);
     assert!(
@@ -605,6 +606,7 @@ fn the_draft_builder_names_attachments_on_the_same_terms() {
                 }],
                 option_descriptions: Vec::new(),
                 spoken_original: None,
+                tool_calls: Vec::new(),
             },
         )],
     )

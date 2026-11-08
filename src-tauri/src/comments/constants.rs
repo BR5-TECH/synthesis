@@ -195,3 +195,6 @@ mod store_error_tests {
         assert_eq!(super::ERR_STORE_UNAVAILABLE, crate::repository_store::ERR_STORE_UNAVAILABLE,);
     }
 }
+
+/// CMS-FR-HRDN: the most characters of a key input that a saved tool call holds.
+pub const SAVED_KEY_INPUT_LIMIT: usize = 200;

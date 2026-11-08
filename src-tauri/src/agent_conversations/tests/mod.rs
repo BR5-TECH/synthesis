@@ -716,6 +716,7 @@ mod request_history;
 mod request_shape;
 mod responses_repair;
 mod retries;
+mod saved_tool_lists;
 mod rig_replies;
 mod session_log;
 mod skill_turns;

@@ -611,13 +611,13 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         Err(comments::ERR_DISCUSSION_RESOLVED.to_string())
     } else {
         let kept = (role_of(plan) == Some(GroupRole::Participant)).then(|| answer.clone());
-        let appended = deliver_with(
-            plan.roots.borrowed(),
-            &plan.origin,
-            &plan.author,
-            answer,
-            plan.attachments.clone(),
-        );
+        // AGC-FR-WNQE: the tool list of this turn goes in the append of the answer.
+        let content = comments::AnswerContent {
+            body: answer,
+            attachments: plan.attachments.clone(),
+            tool_calls: saved_tool_calls(&turns.tool_calls_of(&plan.turn_id)),
+        };
+        let appended = deliver_with(plan.roots.borrowed(), &plan.origin, &plan.author, content);
         // AGC-FR-CZCU: the group keeps what the member said, for the synthesis.
         if let (Ok(_), Some(reply)) = (&appended, kept) {
             record_reply(plan, &reply);

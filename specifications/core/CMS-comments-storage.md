@@ -108,7 +108,17 @@ Comment {
   option_descriptions: string[], // a question comment's option descriptions, in
                              //   option order; empty on every other comment (CMS-FR-QAHZ)
   spoken_original: string | null, // the transcript of a translated voice comment (CMS-FR-UYVK)
+  tool_calls: SavedToolCall[], // the tool list of the turn that delivered an agent's answer;
+                             //   empty on every other comment (CMS-FR-HRDN)
   created_at                 // RFC 3339 UTC
+}
+
+SavedToolCall {              // CMS-FR-HRDN
+  tool,                      // the tool name
+  key_input: string | null,  // plain text, at most 200 characters
+  state: "done" | "failed",
+  advisor?: string           // the nickname of the advisor that made the call; absent for
+                             //   a call that the answering agent made itself
 }
 
 Discussion {
@@ -301,6 +311,7 @@ Errors are typed: `no_project_open`, `store_unavailable`, `discussion_not_found`
 71. **CMS-FR-VRZA** The **human write commands** are `add_comment`, `open_discussion`, `get_or_create_note_discussion`, and `submit_discussion_question_answers`. Each gives the id of each human comment it appends to `AGC-agent-conversations.md`'s `note_author_comment` (AGC-FR-TFEN). No other path gives an id to it, so a decision comment and a confirmation comment are not author comments. The log stores nothing new.
 87. **CMS-FR-TUHL** An attachment of kind `synthesis` holds no content. It marks the comment as the Synthesis of an agent group. An agent turn appends it with the comment, and no `AttachmentInput` produces it.
 88. **CMS-FR-KVDV** An attachment of kind `advisors` holds a list. Each entry holds the advisor's handle, a state of `finished` or `skipped`, the reason of a skipped entry, and, for a finished entry, its important points and its key questions. It is stored with the comment and no `AttachmentInput` produces it. An agent write path adds it to the question or the proposal comment that a Meta turn appends, and to its answer.
+89. **CMS-FR-HRDN** A comment carries `tool_calls`: the tool list of the agent turn that delivered it as its answer (per `AGC-agent-conversations.md` AGC-FR-WNQE). Each entry holds the tool name, the key input or null, a state of `done` or `failed`, and, for a call that an advisor made, the advisor's nickname in `advisor`. An entry holds no result, no result title, and no text that the model wrote. The field is separate from the attachments: it is not an attachment, and it is not merged with the `advisors` list or with the `synthesis` mark. A `comment_added` event carries the field only where the list is not empty, in the same line as the comment and its other fields. The fold reads a line without the field as an empty list, so a comment written before the field existed, and a comment of any other kind, folds with no tool list. The field is written with the comment and never later, and it is never changed (CMS-FR-04). It reaches a comment through an agent turn's append alone: no Tauri command accepts it and no `AttachmentInput` produces it. The field is no part of the comment's text: no reader of a conversation's text, no unread count, no routing of a reply, and no resolve rule reads it.
 
 ## Non-functional requirements
 - Reading one discussion by its id costs the fold of the one log holding it rather than of the project, so a conversation tab whose owner surface is gone is no more expensive to render than one that still has it.

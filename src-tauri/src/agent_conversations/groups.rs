@@ -659,13 +659,14 @@ pub(super) fn post_synthesis_after_contribution<R: tauri::Runtime>(
     if role_of(plan) != Some(GroupRole::Synthesis) {
         return;
     }
-    let posted = deliver_with(
-        plan.roots.borrowed(),
-        &plan.origin,
-        &plan.author,
-        reply_text.trim().to_string(),
-        plan.attachments.clone(),
-    );
+    // AGC-FR-YBJC: the turn ended on a question, a question set, or a proposal,
+    // so the Synthesis comment carries no tool list.
+    let content = comments::AnswerContent {
+        body: reply_text.trim().to_string(),
+        attachments: plan.attachments.clone(),
+        tool_calls: Vec::new(),
+    };
+    let posted = deliver_with(plan.roots.borrowed(), &plan.origin, &plan.author, content);
     match posted {
         Ok(thread) => comments::emit_discussion_changed(app, &thread),
         Err(error) => logging::log_warn(

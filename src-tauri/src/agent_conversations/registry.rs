@@ -540,6 +540,12 @@ impl TurnRegistry {
         true
     }
 
+    /// AGC-FR-WNQE: the tool calls of a live turn as they now stand, for the
+    /// tool list its answer saves. Empty where the turn is not live.
+    pub(super) fn tool_calls_of(&self, turn_id: &str) -> Vec<TurnToolCall> {
+        self.lock().live.get(turn_id).map(|live| live.turn.tool_calls.clone()).unwrap_or_default()
+    }
+
     /// A turn that has already terminated, for a cancellation that arrived late.
     ///
     /// An `awaiting_reply` turn answers here too: it has terminated, so

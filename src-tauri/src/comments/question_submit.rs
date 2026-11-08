@@ -216,6 +216,7 @@ fn submission_events(
                 attachments: Vec::new(),
                 option_descriptions: option_descriptions(question),
                 spoken_original: None,
+                tool_calls: Vec::new(),
             },
         ));
         events.push((
@@ -229,6 +230,7 @@ fn submission_events(
                 attachments: Vec::new(),
                 option_descriptions: Vec::new(),
                 spoken_original: None,
+                tool_calls: Vec::new(),
             },
         ));
     }

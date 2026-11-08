@@ -345,7 +345,37 @@ pub struct Comment {
     /// never reads it (AGC-FR-JRXG).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spoken_original: Option<String>,
+    /// CMS-FR-HRDN: the tool list of the turn that delivered an agent's answer.
+    /// Empty on every other comment and on a line written without the field.
+    /// It is not part of the body, so a later agent turn never reads it
+    /// (AGC-FR-YBJC).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<SavedToolCall>,
     pub created_at: String,
+}
+
+/// CMS-FR-HRDN: how a saved tool call ended. A call is never saved as running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SavedToolState {
+    Done,
+    Failed,
+}
+
+/// CMS-FR-HRDN: one tool call in the tool list of a delivered answer.
+///
+/// Holds no result, no result title, and no model text. `advisor` names the
+/// advisor that made the call on a Meta turn, and is absent for a call that the
+/// answering agent made itself (AGC-FR-PXLV).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedToolCall {
+    pub tool: String,
+    /// Plain text, at most [`SAVED_KEY_INPUT_LIMIT`] characters.
+    pub key_input: Option<String>,
+    pub state: SavedToolState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisor: Option<String>,
 }
 
 /// What `read_comment_attachment` serves back (CMS-FR-48).
@@ -558,6 +588,10 @@ pub enum EventBody {
         /// to `None`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         spoken_original: Option<String>,
+        /// CMS-FR-HRDN: written only where not empty, by the append of a
+        /// delivered agent answer. A line without it folds to an empty list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tool_calls: Vec<SavedToolCall>,
     },
     /// Legacy. Read as a resolution (CMS-FR-WKZR). This build never writes it.
     ThreadLocked,

@@ -61,6 +61,7 @@ pub fn add_comment_with_id(
                 attachments: Vec::new(),
                 option_descriptions: Vec::new(),
                 spoken_original: None,
+                tool_calls: Vec::new(),
             },
         )],
     )?;
@@ -115,6 +116,7 @@ pub fn append_decision_comment_event(
             attachments: Vec::new(),
             option_descriptions: Vec::new(),
             spoken_original: None,
+            tool_calls: Vec::new(),
         },
     };
     let line = serde_json::to_string(&event).map_err(|e| format!("could not encode event: {e}"))?;
@@ -188,6 +190,7 @@ pub fn add_comment_reporting_id(
                 option_descriptions: Vec::new(),
                 // CMS-FR-UYVK: only a transcript that is not empty is written.
                 spoken_original: spoken_original.filter(|t| !t.trim().is_empty()),
+                tool_calls: Vec::new(),
             },
         )],
     )?;

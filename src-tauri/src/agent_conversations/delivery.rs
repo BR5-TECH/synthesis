@@ -17,40 +17,48 @@ pub(super) fn classify_endpoint_error(err: &str) -> &'static str {
 }
 
 /// Append an agent's answer, with the attachments of an agent group when it has
-/// any: the `synthesis` mark of AGC-FR-CZCU or the `advisors` list of
-/// AGC-FR-VDOO.
+/// any — the `synthesis` mark of AGC-FR-CZCU or the `advisors` list of
+/// AGC-FR-VDOO — and the tool list of the turn (AGC-FR-WNQE).
 pub(super) fn deliver_with(
     roots: Roots<'_>,
     origin: &ConversationOrigin,
     author: &Participant,
-    answer: String,
-    attachments: Vec<comments::Attachment>,
+    content: comments::AnswerContent,
 ) -> Result<comments::Discussion, String> {
     let at = now_rfc3339();
     let discussion = resolve_origin(roots, origin).ok_or(comments::ERR_DISCUSSION_NOT_FOUND)?;
     // CMS-FR-54 / AGC-FR-16: an agent writes into a discussion on exactly the
     // terms an author does, whatever its owner and whether or not it has a
     // fragment — the same append path, the same lock, the same event, stamped with
-    // an agent participant.
-    if attachments.is_empty() {
-        return comments::append_agent_comment_to(
-            roots.store,
-            discussion.log_ref(),
-            origin.discussion_id(),
-            answer,
-            author,
-            &at,
-        );
-    }
-    comments::append_agent_comment_with(
+    // an agent participant. The tool list goes in the same append (CMS-FR-HRDN).
+    comments::append_agent_answer_with(
         roots.store,
         discussion.log_ref(),
         origin.discussion_id(),
         crate::notes::new_note_id(),
-        answer,
-        attachments,
+        content,
         comments::Stamp { by: author, at: &at },
     )
+}
+
+/// AGC-FR-WNQE: the tool list that a delivered answer saves, from the calls of
+/// its turn in activation order. A call that has not finished is saved as
+/// failed, because the turn has ended when the comment is written.
+pub(super) fn saved_tool_calls(calls: &[TurnToolCall]) -> Vec<comments::SavedToolCall> {
+    let mut ordered: Vec<&TurnToolCall> = calls.iter().collect();
+    ordered.sort_by_key(|call| call.activation_seq);
+    ordered
+        .into_iter()
+        .map(|call| comments::SavedToolCall {
+            tool: call.tool.clone(),
+            key_input: call.key_input.clone(),
+            state: match call.state {
+                ToolCallState::Done => comments::SavedToolState::Done,
+                ToolCallState::Running | ToolCallState::Failed => comments::SavedToolState::Failed,
+            },
+            advisor: call.advisor.clone(),
+        })
+        .collect()
 }
 
 /// AGC-FR-21: one record per turn, wherever it terminated — the run's own exit

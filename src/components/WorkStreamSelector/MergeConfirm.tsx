@@ -32,7 +32,7 @@ export function MergeConfirm({
   /** WSS-FR-TQBN: the route that takes a message before it starts. */
   onStartWithMessage: (summary: WorkStreamSummary) => void;
   onOpenChanges: () => void;
-  /** WSS-FR-DBGA: the hard block points to **Create a PR** of the same row. */
+  /** WSS-FR-DBGA: a protected base branch points to **Create a PR** of the same row. */
   onCreatePullRequest?: () => void;
 }) {
   const { stream, aheadOfBase } = summary;
@@ -42,7 +42,7 @@ export function MergeConfirm({
     branch: stream.baseBranch,
     enabled: !dirty,
     onCancel,
-    blockAction: onCreatePullRequest
+    protectedAction: onCreatePullRequest
       ? { label: "Create a PR", run: onCreatePullRequest }
       : undefined,
   });

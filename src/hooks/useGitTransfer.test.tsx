@@ -4,6 +4,8 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useGitTransferState } from "./useGitTransfer";
 import { GIT_OPERATION_FINISHED, GIT_OUTPUT_LINE } from "../events";
 import { createEventBus } from "../test/searchEvents";
+import { mainGuard, scriptedReads } from "../test/mainBranchWriteFixtures";
+import { currentMainBranchWrite, settleMainBranchWrite } from "../state/mainBranchWrite";
 
 const bus = createEventBus();
 const invokeMock = vi.fn();
@@ -215,5 +217,46 @@ describe("the window's pull as one transfer (GIT-FR-QMYB, WTS-FR-31)", () => {
     });
     expect(call).toEqual({ ok: false, cause: "failed", error: "not a git repository" });
     expect(result.current.running).toBe(false);
+  });
+
+  it("MBW-FR-HXTE: a pull and a reconcile on an unconfirmed main branch read no guard and show no confirmation", async () => {
+    const reads = scriptedReads(mainGuard());
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "reconcile_pull"
+        ? Promise.resolve({ state: "merged", commit: "c", updatedPaths: [] })
+        : Promise.resolve({ state: "up_to_date" }),
+    );
+    const { result } = renderHook(() => useGitTransferState({ enabled: true }));
+    await act(async () => {
+      await result.current.pullBranch();
+      await result.current.reconcilePull("merge", "a", "b");
+    });
+    expect(reads.reads).toEqual([]);
+    expect(currentMainBranchWrite()).toBeNull();
+    expect(invokeMock.mock.calls.some((c) => c[0] === "reconcile_pull")).toBe(true);
+  });
+
+  it("MBW-FR-JZME, MBW-FR-ZLPC: a push to a protected branch asks once; after the confirm a push that GitHub refuses fails with the reason of GitHub", async () => {
+    const reads = scriptedReads(mainGuard({ protection: "protected" }));
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "push_current_branch"
+        ? Promise.reject("GH006: Protected branch update failed")
+        : Promise.resolve(undefined),
+    );
+    const { result } = renderHook(() => useGitTransferState({ enabled: true }));
+    let outcome: unknown;
+    await act(async () => {
+      const push = result.current.pushBranch();
+      await waitFor(() => expect(currentMainBranchWrite()?.write).toBe("push"));
+      expect(currentMainBranchWrite()?.guard?.protection).toBe("protected");
+      await reads.confirm("main");
+      settleMainBranchWrite(true);
+      outcome = await push;
+    });
+    expect(outcome).toEqual({
+      ok: false,
+      cause: "failed",
+      error: "GH006: Protected branch update failed",
+    });
   });
 });

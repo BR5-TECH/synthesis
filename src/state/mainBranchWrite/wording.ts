@@ -21,8 +21,16 @@ export function writeSentence(write: MainBranchWriteKind, branch: string): strin
       return `You asked to push ${branch}.`;
     case "merge_stream":
       return `You asked to merge a stream into ${branch}.`;
-    case "pull_reconcile":
-      return `You asked to join ${branch} with its upstream.`;
+    case "accept_change":
+      return `You asked to accept a change. The change is written to ${branch}.`;
+    case "create_artifact":
+      return `You asked to create an artifact. The artifact is written to ${branch}.`;
+    case "rename_item":
+      return `You asked to rename an item. The new name is written to ${branch}.`;
+    case "delete_artifact":
+      return `You asked to delete an artifact. The deletion is written to ${branch}.`;
+    case "paste_artifact":
+      return `You asked to paste an artifact. The copy is written to ${branch}.`;
     case "start_graduation":
       return `You asked to start a graduation. Its draft storage is committed to ${branch}.`;
     case "start_direct_run":
@@ -37,6 +45,11 @@ export function reasonSentence(guard: BranchWriteGuard): string {
     return `${guard.branch} is the default branch of this repository, and GitHub protects it.`;
   if (protectedByGithub) return `GitHub protects ${guard.branch}.`;
   return `${guard.branch} is the default branch of this repository.`;
+}
+
+/** MBW-FR-JZME: the line for a branch that GitHub protects. */
+export function protectedSentence(branch: string): string {
+  return `GitHub protects ${branch} and may refuse a push.`;
 }
 
 /** MBW-FR-UNAN: the cause of a protection that could not be read. */

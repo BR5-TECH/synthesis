@@ -11,7 +11,7 @@ use super::*;
 use crate::git::pull_requests::client::GithubFailure;
 use crate::git::write_guard::{
     background_refusal, check_write, confirm_write, guard_for, WriteGuardSession,
-    ERR_MAIN_BRANCH_PROTECTED, ERR_MAIN_BRANCH_WRITE_UNCONFIRMED,
+    ERR_MAIN_BRANCH_WRITE_UNCONFIRMED,
 };
 use serde_json::json;
 
@@ -254,10 +254,10 @@ fn the_default_branch_is_refused_until_the_author_confirms() {
     assert!(check(&f, &github, &tokens, &relaunched, Some(&branch), buffer).is_err());
 }
 
-// GTC-FR-JWOL / GTC-FR-YWRZ: a protected branch is refused always, and a
-// confirmation of it records nothing.
+// GTC-FR-JWOL / GTC-FR-YWRZ: a protected branch needs the confirmation like any
+// other main branch, and after it the guard reports it as confirmed.
 #[test]
-fn a_protected_branch_is_refused_and_cannot_be_confirmed() {
+fn a_protected_branch_needs_the_confirmation_and_then_passes() {
     let f = repo_with_origin(PLATFORM);
     let github = github_with_default("main");
     github.answer(&branch_path("main"), Ok(json!({ "protected": true })));
@@ -266,17 +266,22 @@ fn a_protected_branch_is_refused_and_cannot_be_confirmed() {
 
     let buffer = own_buffer();
     let refused = check(&f, &github, &tokens, &session, Some("main"), buffer).unwrap_err();
-    assert!(refused.starts_with(ERR_MAIN_BRANCH_PROTECTED), "{refused}");
+    assert!(refused.starts_with(ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(!refused.contains("main_branch_protected"), "{refused}");
     // The token was presented to GitHub, and no record or refusal holds it.
     assert!(github.requests().iter().any(|(secret, _)| secret == SECRET));
     assert!(!buffer_text(buffer).contains(SECRET));
     assert!(!refused.contains(SECRET));
-    assert_eq!(carried(&refused).branch, "main");
+    let carried_guard = carried(&refused);
+    assert_eq!(carried_guard.branch, "main");
+    assert_eq!(carried_guard.protection, "protected");
+    assert!(carried_guard.is_main);
 
-    let confirmation = confirm(&f, &github, &tokens, &session, "main").unwrap_err();
-    assert!(confirmation.starts_with(ERR_MAIN_BRANCH_PROTECTED));
-    assert!(!guard(&f, &github, &tokens, &session, "main", false).confirmed);
-    assert!(check(&f, &github, &tokens, &session, Some("main"), own_buffer()).is_err());
+    let confirmed = confirm(&f, &github, &tokens, &session, "main").unwrap();
+    assert!(confirmed.confirmed);
+    assert_eq!(confirmed.protection, "protected");
+    assert!(guard(&f, &github, &tokens, &session, "main", false).confirmed);
+    assert!(check(&f, &github, &tokens, &session, Some("main"), own_buffer()).is_ok());
 }
 
 // GTC-FR-JWOL: a write that names no branch passes, and a branch that is not a

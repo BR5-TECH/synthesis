@@ -8,7 +8,7 @@
  * window (per `GTC-git.md` GTC-FR-11).
  */
 import type { PullRequestHeadState } from "../../types";
-import { ERR_PROTECTED, parseMainBranchRefusal } from "../../state/mainBranchWrite/flow";
+import { parseMainBranchRefusal } from "../../state/mainBranchWrite/flow";
 import { GIT_ERRORS, parseRejection, rejectionMessage } from "../Git/errors";
 
 /** The rejection codes this window gives wording of its own. */
@@ -77,9 +77,6 @@ export function pushFailureMessage(error: unknown, head: string): string {
   // MBW-FR-YSMC: a refusal of the main branch write check carries the guard as
   // data. The words say what happened, and never show that data.
   const refusal = parseMainBranchRefusal(error);
-  if (refusal?.code === ERR_PROTECTED) {
-    return `GitHub protects ${head}, so it was not pushed. Work reaches it through a pull request.`;
-  }
   if (refusal) {
     return `${head} is a main branch, and the write to it is not confirmed, so it was not pushed.`;
   }

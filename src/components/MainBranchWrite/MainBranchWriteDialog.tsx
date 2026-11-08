@@ -1,5 +1,5 @@
 /**
- * The standalone confirmation of a write to a main branch, and its hard block
+ * The standalone confirmation of a write to a main branch
  * (`../../../specifications/ui/MBW-main-branch-write.md` MBW-FR-RXAR,
  * MBW-FR-XBJS, MBW-FR-JZME, MBW-FR-UNAN, MBW-FR-GYVD, MBW-FR-WCBQ).
  *
@@ -16,7 +16,7 @@ import {
   type MainBranchWriteRequest,
 } from "../../state/mainBranchWrite";
 import { requestNewWorktree } from "../../state/newWorktreeRequests";
-import { BranchName, MainBranchWriteText, isHardBlock } from "./Content";
+import { BranchName, MainBranchWriteText, isProtectedBranch } from "./Content";
 import { usePanelState } from "./usePanelState";
 
 export function MainBranchWriteDialog({ request }: { request: MainBranchWriteRequest }) {
@@ -33,12 +33,12 @@ export function MainBranchWriteDialog({ request }: { request: MainBranchWriteReq
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [opener] = useState(() => document.activeElement as HTMLElement | null);
   /**
-   * MBW-FR-JZME: **New worktree** closes the hard block to open the New
+   * MBW-FR-JZME: **New worktree** closes the confirmation to open the New
    * worktree dialog, which takes focus itself. Focus then does not go back to
    * the opener behind that dialog.
    */
   const handedOff = useRef(false);
-  const blocked = isHardBlock(state);
+  const protectedBranch = isProtectedBranch(state);
   const branch = guard?.branch ?? request.branch;
 
   const close = (confirmed: boolean) => settleMainBranchWrite(confirmed);
@@ -61,18 +61,17 @@ export function MainBranchWriteDialog({ request }: { request: MainBranchWriteReq
     if (guard && !needsConfirmation(guard)) close(true);
   }, [guard]);
 
-  // MBW-FR-PJTG: shown or blocked, once per guard it shows.
+  // MBW-FR-PJTG: shown, once per guard it shows.
   const logged = useRef<string | null>(null);
   useEffect(() => {
     if (!guard || !needsConfirmation(guard)) return;
     const key = `${guard.branch}:${guard.protection}`;
     if (logged.current === key) return;
     logged.current = key;
-    logConfirmation(blocked ? "blocked" : "shown", write, guard.branch, "dialog");
-  }, [guard, blocked, write]);
+    logConfirmation("shown", write, guard.branch, "dialog");
+  }, [guard, write]);
 
-  // MBW-FR-GYVD: focus on Cancel (Close on the hard block), kept inside, and
-  // given back to the opener.
+  // MBW-FR-GYVD: focus on Cancel, kept inside, and given back to the opener.
   useEffect(() => {
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -110,11 +109,7 @@ export function MainBranchWriteDialog({ request }: { request: MainBranchWriteReq
     if (await state.confirm()) close(true);
   };
 
-  const title = blocked ? (
-    <>
-      <BranchName name={guard?.branch ?? ""} /> is protected
-    </>
-  ) : (
+  const title = (
     <>Write to {branch ? <BranchName name={branch} /> : "the main branch"}?</>
   );
 
@@ -128,7 +123,7 @@ export function MainBranchWriteDialog({ request }: { request: MainBranchWriteReq
       <div
         ref={surfaceRef}
         className="modal main-branch-write"
-        role={blocked ? "alertdialog" : "dialog"}
+        role="dialog"
         aria-modal="true"
         aria-labelledby="main-branch-write-title"
         aria-describedby="main-branch-write-text"
@@ -143,18 +138,10 @@ export function MainBranchWriteDialog({ request }: { request: MainBranchWriteReq
           <MainBranchWriteText state={state} write={write} idPrefix="main-branch-write" />
         </div>
         <div className="modal__actions">
-          <button
-            ref={cancelRef}
-            type="button"
-            className="btn btn--ghost"
-            onClick={cancel}
-          >
-            {blocked ? "Close" : "Cancel"}
-          </button>
-          {blocked ? (
+          {protectedBranch && (
             <button
               type="button"
-              className="btn btn--primary"
+              className="btn btn--ghost"
               onClick={() => {
                 logConfirmation("cancelled", write, branch, "dialog");
                 handedOff.current = true;
@@ -164,17 +151,24 @@ export function MainBranchWriteDialog({ request }: { request: MainBranchWriteReq
             >
               New worktree
             </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--primary"
-              disabled={!guard || state.busy}
-              onClick={() => void confirm()}
-              data-testid="main-branch-write-confirm"
-            >
-              Confirm write to {guard ? <BranchName name={guard.branch} /> : "the branch"}
-            </button>
           )}
+          <button
+            ref={cancelRef}
+            type="button"
+            className="btn btn--ghost"
+            onClick={cancel}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={!guard || state.busy}
+            onClick={() => void confirm()}
+            data-testid="main-branch-write-confirm"
+          >
+            Confirm write to {guard ? <BranchName name={guard.branch} /> : "the branch"}
+          </button>
         </div>
       </div>
     </div>

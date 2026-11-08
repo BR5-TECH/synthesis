@@ -1,4 +1,4 @@
-/* MBW-main-branch-write.md: the confirmation, the hard block, and the inline
+/* MBW-main-branch-write.md: the confirmation, and the inline
    section that stands above an overlay's action row and reads as a warning. */
 .main-branch-write { width: min(520px, calc(100vw - 32px)); }
 .main-branch-write__branch {

@@ -11,7 +11,6 @@ import {
 import type { PullRequestHeadState } from "../../types";
 import {
   mainGuard,
-  protectedRefusal,
   unconfirmedRefusal,
 } from "../../test/mainBranchWriteFixtures";
 
@@ -79,11 +78,12 @@ describe("the words of the Create a PR window", () => {
     expect(unconfirmed).toBe(
       "main is a main branch, and the write to it is not confirmed, so it was not pushed.",
     );
-    const blocked = pushFailureMessage(protectedRefusal(), "main");
-    expect(blocked).toBe(
-      "GitHub protects main, so it was not pushed. Work reaches it through a pull request.",
+    const protectedBranch = pushFailureMessage(
+      unconfirmedRefusal(mainGuard({ protection: "protected" })),
+      "main",
     );
-    for (const text of [unconfirmed, blocked]) {
+    expect(protectedBranch).toBe(unconfirmed);
+    for (const text of [unconfirmed, protectedBranch]) {
       expect(text).not.toMatch(/[{}"]/);
       expect(text).not.toContain("isMain");
     }

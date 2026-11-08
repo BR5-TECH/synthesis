@@ -48,7 +48,7 @@ pub fn load_draft_change_proposal_hunks(
 }
 
 /// a turn (DCR-FR-15).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn accept_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -60,6 +60,11 @@ pub fn accept_draft_change_hunk<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    // DCP-FR-WGBN: the main branch write check, before the hunk is applied.
+    crate::git::write_guard::commands::require_project_branch_write(
+        &app,
+        "accept_draft_change_hunk",
+    )?;
     decide_hunk(app, proposal_id, Some(hunk_id), Decision::Accept, feedback, store, project)
 }
 

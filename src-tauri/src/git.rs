@@ -67,9 +67,7 @@ pub use pull_requests::*;
 pub use push::*;
 pub use rollback::*;
 pub use status::*;
-pub use write_guard::{
-    BranchWriteGuard, ERR_MAIN_BRANCH_PROTECTED, ERR_MAIN_BRANCH_WRITE_UNCONFIRMED,
-};
+pub use write_guard::{BranchWriteGuard, ERR_MAIN_BRANCH_WRITE_UNCONFIRMED};
 // Every record helper is this crate's alone; nothing outside reports git.
 pub(crate) use telemetry::*;
 

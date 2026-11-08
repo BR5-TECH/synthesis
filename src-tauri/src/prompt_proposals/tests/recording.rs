@@ -82,7 +82,7 @@ fn no_tauri_command_records_a_proposal() {
     );
     const MODULE: &str = include_str!("../commands.rs");
     let commands: Vec<&str> = MODULE
-        .split("#[tauri::command]")
+        .split("#[tauri::command")
         .skip(1)
         .filter_map(|tail| tail.split("pub fn ").nth(1))
         .filter_map(|tail| tail.split('<').next())

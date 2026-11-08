@@ -14,6 +14,7 @@
  */
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 import type { SubmitResult } from "../../components/NewFileModal";
 import type { NewFilePayload } from "../../components/NewFileModal";
 import type { NewFolderPayload } from "../../components/NewFolderModal";
@@ -112,10 +113,17 @@ export function createCreationActions(
     payload: NewFilePayload,
   ): Promise<SubmitResult> => {
     try {
-      const node = await api.createFile({
-        location: payload.location,
-        name: payload.name,
-      });
+      // MBW-FR-DBGA: a write to a main branch asks for the confirmation first.
+      const node = await runMainBranchWrite("create_artifact", () =>
+        api.createFile({
+          location: payload.location,
+          name: payload.name,
+        }),
+      );
+      if (node === WRITE_CANCELLED) {
+        setNewFileSeed(null);
+        return { ok: true };
+      }
       openArtifact({
         id: node.id,
         name: node.name,
@@ -170,11 +178,17 @@ export function createCreationActions(
     payload: NewTypedArtifactPayload,
   ): Promise<SubmitResult> => {
     try {
-      const node = await api.createTypedFile({
-        location: payload.location,
-        name: payload.name,
-        artifactType: payload.artifactType,
-      });
+      const node = await runMainBranchWrite("create_artifact", () =>
+        api.createTypedFile({
+          location: payload.location,
+          name: payload.name,
+          artifactType: payload.artifactType,
+        }),
+      );
+      if (node === WRITE_CANCELLED) {
+        setNewTypedArtifactSeed(null);
+        return { ok: true };
+      }
       logInfo(["frontend"], "typed artifact created", {
         // The path and the type — what routed the tab and what the panel is
         // about to reveal. The file is empty, so no content is described here.

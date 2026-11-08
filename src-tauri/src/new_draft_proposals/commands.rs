@@ -62,7 +62,7 @@ where
 }
 
 /// DCP-FR-KOOA: accept one new-draft proposal and create its draft.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn accept_new_draft_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -73,6 +73,11 @@ pub fn accept_new_draft_proposal<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    // DCP-FR-WGBN: the main branch write check, before the draft is created.
+    crate::git::write_guard::commands::require_project_branch_write(
+        &app,
+        "accept_new_draft_proposal",
+    )?;
     decide_command(app, proposal_id, NewDraftDecision::Accept, feedback, store, project)
 }
 

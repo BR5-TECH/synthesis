@@ -331,7 +331,7 @@ GraduationCapacity {
 
 The fields of `GraduationMergeData`, `GraduationMergeResult`, and `PrSummaryData` are camelCase on the wire and in `run.toml`.
 
-A PR summary run's errors are `pr_summary_active` and `no_run_summaries` (GRD-FR-JAUJ, GRD-FR-MACY). The run-start operations also return `main_branch_write_unconfirmed` and `main_branch_protected` (GRD-FR-WJLO).
+A PR summary run's errors are `pr_summary_active` and `no_run_summaries` (GRD-FR-JAUJ, GRD-FR-MACY). The run-start operations also return `main_branch_write_unconfirmed` (GRD-FR-WJLO).
 
 A merge run's failure code is `merge_branch_moved` (GRD-FR-XHSE). Its blocker codes are `merge_dirty_side`, `merge_guard_held` and `merge_apply_failed` (GRD-FR-JSBE).
 

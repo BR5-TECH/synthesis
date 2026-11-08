@@ -7,7 +7,7 @@ import {
   requestMainBranchWrite,
   setMainBranchWriteOpening,
 } from ".";
-import { mainGuard, protectedRefusal, unconfirmedRefusal } from "../../test/mainBranchWriteFixtures";
+import { mainGuard, unconfirmedRefusal } from "../../test/mainBranchWriteFixtures";
 
 describe("the standalone confirmation as an overlay (SNV-FR-56, MBW-FR-GYVD)", () => {
   it("SNV-FR-56, MBW-FR-GYVD: opening the confirmation closes every other overlay, and another overlay opening closes it with no write", async () => {
@@ -43,11 +43,14 @@ describe("the refusals of the check (MBW-FR-YSMC)", () => {
       code: "main_branch_write_unconfirmed",
       guard: mainGuard({ branch: "trunk" }),
     });
-    expect(parseMainBranchRefusal(new Error(protectedRefusal()))?.code).toBe("main_branch_protected");
-    expect(parseMainBranchRefusal("main_branch_protected")).toEqual({
-      code: "main_branch_protected",
+    expect(parseMainBranchRefusal(new Error(unconfirmedRefusal()))?.code).toBe(
+      "main_branch_write_unconfirmed",
+    );
+    expect(parseMainBranchRefusal("main_branch_write_unconfirmed")).toEqual({
+      code: "main_branch_write_unconfirmed",
       guard: null,
     });
+    expect(parseMainBranchRefusal("main_branch_protected: {}")).toBeNull();
     expect(parseMainBranchRefusal("worktree_dirty: a.md")).toBeNull();
   });
 });

@@ -88,9 +88,8 @@ enum Skip {
     NothingToCommit,
     StatusUnreadable,
     /// `DRS-draft-storage.md` DRS-FR-MIYJ: the commit would land on a main
-    /// branch the author has not confirmed, or on a protected one.
+    /// branch the author has not confirmed, a protected one included.
     MainBranchUnconfirmed,
-    MainBranchProtected,
 }
 
 impl Skip {
@@ -107,7 +106,6 @@ impl Skip {
             Self::NothingToCommit => "nothing_to_commit",
             Self::StatusUnreadable => "status_unreadable",
             Self::MainBranchUnconfirmed => "main_branch_unconfirmed",
-            Self::MainBranchProtected => "main_branch_protected",
         }
     }
 
@@ -115,9 +113,7 @@ impl Skip {
     /// so it is named at `WARN` where every other skip is named at `DEBUG`.
     fn level(self) -> logging::LogLevel {
         match self {
-            Self::StatusUnreadable | Self::MainBranchUnconfirmed | Self::MainBranchProtected => {
-                logging::LogLevel::Warn
-            }
+            Self::StatusUnreadable | Self::MainBranchUnconfirmed => logging::LogLevel::Warn,
             _ => logging::LogLevel::Debug,
         }
     }
@@ -485,15 +481,11 @@ fn commit_now(
     }
     // DRS-FR-MIYJ: a commit that would land on a main branch the author has not
     // confirmed is skipped. The files stay as written, uncommitted.
-    if let Some(code) =
-        guard.and_then(|guard| crate::git::write_guard::background_refusal(guard, job.root.path()))
+    if guard
+        .and_then(|guard| crate::git::write_guard::background_refusal(guard, job.root.path()))
+        .is_some()
     {
-        let skip = if code == crate::git::ERR_MAIN_BRANCH_PROTECTED {
-            Skip::MainBranchProtected
-        } else {
-            Skip::MainBranchUnconfirmed
-        };
-        return report(skip, paths.len());
+        return report(Skip::MainBranchUnconfirmed, paths.len());
     }
 
     // PST-FR-KGRW: the index is held for the write, which excludes a concurrent

@@ -16,11 +16,15 @@ pub(super) fn classify_endpoint_error(err: &str) -> &'static str {
     }
 }
 
-pub(super) fn deliver(
+/// Append an agent's answer, with the attachments of an agent group when it has
+/// any: the `synthesis` mark of AGC-FR-CZCU or the `advisors` list of
+/// AGC-FR-VDOO.
+pub(super) fn deliver_with(
     roots: Roots<'_>,
     origin: &ConversationOrigin,
     author: &Participant,
     answer: String,
+    attachments: Vec<comments::Attachment>,
 ) -> Result<comments::Discussion, String> {
     let at = now_rfc3339();
     let discussion = resolve_origin(roots, origin).ok_or(comments::ERR_DISCUSSION_NOT_FOUND)?;
@@ -28,13 +32,24 @@ pub(super) fn deliver(
     // terms an author does, whatever its owner and whether or not it has a
     // fragment — the same append path, the same lock, the same event, stamped with
     // an agent participant.
-    comments::append_agent_comment_to(
+    if attachments.is_empty() {
+        return comments::append_agent_comment_to(
+            roots.store,
+            discussion.log_ref(),
+            origin.discussion_id(),
+            answer,
+            author,
+            &at,
+        );
+    }
+    comments::append_agent_comment_with(
         roots.store,
         discussion.log_ref(),
         origin.discussion_id(),
+        crate::notes::new_note_id(),
         answer,
-        author,
-        &at,
+        attachments,
+        comments::Stamp { by: author, at: &at },
     )
 }
 
@@ -233,6 +248,8 @@ pub(super) fn finish<R: tauri::Runtime>(
     counts: TurnCounts,
 ) {
     let TurnEnding { state, failure, recoverable } = ending;
+    // AGC-FR-BIPE: the calls of an advisor that its Meta turn mirrors end with it.
+    turns.end_mirrored_calls(app, turn_id);
     let Some((mut turn, operation, project_key, reached_model)) =
         turns.terminate(turn_id, state, failure)
     else {

@@ -6,6 +6,8 @@
 
 use super::*;
 
+mod groups;
+
 // ---------------------------------------------------------------------------
 // The turn registry
 // ---------------------------------------------------------------------------
@@ -52,6 +54,14 @@ pub(super) struct Live {
     /// AGC-FR-URXV: the whole-turn timeout and the instant the current
     /// deadline expires. `None` while the turn waits for its slot.
     pub(super) deadline: Option<(Duration, std::time::Instant)>,
+    /// AGC-FR-KOHJ: the agent group the turn belongs to, if any.
+    pub(super) group: Option<Arc<crate::agent_groups::GroupState>>,
+    /// AGC-FR-BIPE: the Meta turn and the nickname this advisor turn reports its
+    /// tool calls to.
+    pub(super) mirror: Option<(String, String)>,
+    /// AGC-FR-BIPE: this advisor turn's call ids and the ids they have on the
+    /// Meta turn.
+    pub(super) mirrored: HashMap<String, String>,
 }
 
 /// AGC-FR-23: turn ids, unique for the lifetime of the running application.
@@ -307,6 +317,7 @@ impl TurnRegistry {
             speech_id: speech_id.map(str::to_string),
             reply_held: false,
             spoken_language,
+            group: None,
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         inner.live.insert(
@@ -324,6 +335,9 @@ impl TurnRegistry {
                 received: trigger_comment_id.map(str::to_string).into_iter().collect(),
                 steering_open: true,
                 deadline: None,
+                group: None,
+                mirror: None,
+                mirrored: HashMap::new(),
             },
         );
         (turn, cancelled)
@@ -369,6 +383,7 @@ impl TurnRegistry {
             id: id.clone(),
             tool: tool.to_string(),
             activation_seq,
+            advisor: None,
         });
         // AGC-FR-HMUV: the same call in the list that keeps finished calls.
         live.turn.tool_calls.push(TurnToolCall {
@@ -376,10 +391,18 @@ impl TurnRegistry {
             tool: tool.to_string(),
             activation_seq,
             state: ToolCallState::Running,
-            key_input,
+            key_input: key_input.clone(),
+            advisor: None,
         });
         let turn = live.turn.clone();
+        let mirror = live.mirror.clone();
         publish(app, &turn);
+        // AGC-FR-BIPE: an advisor's call is also recorded on its Meta turn,
+        // under the advisor's name, so the pending contribution of the Meta
+        // agent can show it. Under the same lock, for the reason above.
+        if let Some(mirror) = mirror {
+            groups::mirror_call_begin(&mut inner, app, turn_id, &id, mirror, tool, key_input);
+        }
         Some((id, turn))
     }
 
@@ -411,19 +434,14 @@ impl TurnRegistry {
             call.state = state;
         }
         let turn = live.turn.clone();
+        let mirror = live.mirror.clone();
+        let meta_call = live.mirrored.remove(call_id);
         publish(app, &turn);
+        // AGC-FR-BIPE: the advisor's call ends on its Meta turn the same way.
+        if let (Some((meta_id, _)), Some(meta_call)) = (mirror, meta_call) {
+            groups::mirror_call_end(&mut inner, app, &meta_id, &meta_call, state);
+        }
         Some(turn)
-    }
-
-    /// The tool calls active in a turn, for a test asserting what a surface
-    /// would read at this moment.
-    #[cfg(test)]
-    pub fn active_tool_calls(&self, turn_id: &str) -> Vec<ActiveToolCall> {
-        self.lock()
-            .live
-            .get(turn_id)
-            .map(|live| live.turn.active_tool_calls.clone())
-            .unwrap_or_default()
     }
 
     /// AGC-FR-24: record the progress operation of a turn that now holds a slot.
@@ -458,11 +476,12 @@ impl TurnRegistry {
         {
             return None;
         }
-        let live = inner.live.remove(turn_id)?;
+        let mut live = inner.live.remove(turn_id)?;
         // CVL-FR-SZKK: a turn that holds its reply stops waiting.
         self.speech_changed.notify_all();
         let project_key = live.project_key.clone();
         let reached_model = live.reached_model.load(Ordering::SeqCst);
+        groups::note_member_end(&mut live, turn_id, state);
         let mut turn = live.turn;
         turn.state = state;
         turn.failure = failure.map(str::to_string);
@@ -620,13 +639,6 @@ impl TurnRegistry {
         let count = inner.awaiting.len();
         inner.awaiting.clear();
         count
-    }
-
-    /// Whether a turn has committed to appending its answer. Exists so the race
-    /// of AGC-FR-20 can be driven deterministically rather than slept at.
-    #[cfg(test)]
-    pub fn is_delivering(&self, turn_id: &str) -> bool {
-        self.lock().live.get(turn_id).is_some_and(|l| l.delivering)
     }
 
     /// AGC-FR-22: the turns still **outstanding**, most recently started first
@@ -976,3 +988,6 @@ impl Drop for PermitGuard {
         }
     }
 }
+
+#[cfg(test)]
+mod probes;

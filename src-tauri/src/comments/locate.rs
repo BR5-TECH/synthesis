@@ -79,6 +79,8 @@ pub fn append_agent_comment_with(
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
     let Stamp { by, at } = stamp;
+    // AGC-FR-VDOO: the group marks of the agent's running turn.
+    let attachments = turn_marks::with_turn_marks(thread_id, by, attachments);
     let thread = target.find(root, thread_id)?;
     // CMS-FR-17 / CMS-FR-41: a resolution stops an agent exactly as it stops a
     // person.

@@ -240,6 +240,30 @@ pub enum Attachment {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         format: Option<String>,
     },
+    /// CMS-FR-TUHL: the comment is the Synthesis of an agent group
+    /// (`AGC-agent-conversations.md` AGC-FR-CZCU). Holds no content, and appears
+    /// through an agent turn's append alone.
+    Synthesis,
+    /// CMS-FR-KVDV: the advisors of a Meta reply (AGC-FR-VDOO). Appears through
+    /// an agent turn's append alone.
+    #[serde(rename_all = "camelCase")]
+    Advisors { advisors: Vec<AdvisorEntry> },
+}
+
+/// CMS-FR-KVDV: one advisor of a Meta reply, finished or skipped.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvisorEntry {
+    pub handle: String,
+    /// `finished` or `skipped`.
+    pub state: String,
+    /// `timed_out`, `failed`, or `cancelled`, on a skipped entry alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<String>,
 }
 
 /// CMS-FR-YKGI: what one update of a new-draft proposal did.

@@ -14,7 +14,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addComment as addCommentApi,
   cancelAgentTurn,
-  dispatchAgentTurn,
   listAgentTurns,
   listDiscussions,
   listProjectAgents,
@@ -38,6 +37,7 @@ import {
 import { addressesEveryone, agentRoster } from "../components/agentTags";
 import { logDebug, logWarn } from "../logging";
 import { hasTurnEnded } from "../state/discussionSession";
+import { dispatchComment } from "../state/agentGroupSwitch";
 import { useAgentRegistryRevision } from "../state/agentRegistry";
 import { loggableTurnFailure } from "../components/discussion/messages";
 import { publishThread, publishThreads } from "../state/conversationThreads";
@@ -62,6 +62,7 @@ import {
   type Participant,
   type ProjectAgent,
 } from "../types";
+import { isQuietGroupTurn } from "../state/turnActivity";
 
 /**
  * The key a draft card's error is filed under. A draft has no thread id yet, so
@@ -308,7 +309,8 @@ export function useComments(
         originKind(turn.origin) === "artifact_comment" &&
         turn.state === "failed" &&
         turn.failure &&
-        !turn.retryPermitted
+        !turn.retryPermitted &&
+        !isQuietGroupTurn(turn)
       ) {
         setTurnFailures((prev) => ({
           ...prev,
@@ -432,35 +434,33 @@ export function useComments(
         delete next[thread.id];
         return next;
       });
-      for (const nickname of nicknames) {
-        void dispatchAgentTurn({
-          nickname,
-          origin: originFor(thread),
-          triggerCommentId,
-        })
-          .then((turn) => {
+      dispatchComment(
+        { nicknames, origin: originFor(thread), triggerCommentId },
+        {
+          onTurn: (turn) => {
             // Upsert rather than append: the backend publishes the
-            // registration event before `dispatch_agent_turn` resolves, and
-            // there is no ordering between the two — a blind append renders the
-            // same outstanding turn as two pending contributions. CVP-FR-HWTN:
-            // a turn that already ended is not added again.
+            // registration event before the dispatch resolves, and there is no
+            // ordering between the two — a blind append renders the same
+            // outstanding turn as two pending contributions. CVP-FR-HWTN: a turn
+            // that already ended is not added again.
             if (hasTurnEnded(turn.id)) return;
             setKnownTurns((prev) => [
               ...prev.filter((t) => t.id !== turn.id),
               turn,
             ]);
-          })
-          .catch((e) => {
+          },
+          onError: (e, nickname) => {
             setTurnFailures((prev) => ({ ...prev, [thread.id]: errorText(e) }));
             // Never the raw error: it can quote the argument it refused (see
             // `loggableTurnFailure`).
             logWarn(["ai", "frontend"], "an agent turn could not be dispatched", {
               threadId: thread.id,
-              nickname,
+              nickname: nickname ?? nicknames.join(" "),
               failure: loggableTurnFailure(errorText(e)),
             });
-          });
-      }
+          },
+        },
+      );
     },
     [agents],
   );

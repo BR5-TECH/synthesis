@@ -93,7 +93,11 @@ export function activityStatus(
   turn: Pick<AgentTurn, "activeToolCalls" | "speechId">,
 ): string {
   const latest = latestActiveCall(turn.activeToolCalls);
-  if (latest) return toolActivityStatus(latest.tool);
+  // CTA-FR-QXXR: a call that an advisor requested names the advisor.
+  if (latest) {
+    const status = toolActivityStatus(latest.tool);
+    return latest.advisor ? `@${latest.advisor}: ${status}` : status;
+  }
   // CTA-FR-HPXE, CVP-FR-RNYK: the agent waits for the author to stop speaking.
   return turn.speechId ? WAITING_FOR_SPEECH : THINKING;
 }

@@ -21,7 +21,6 @@ import { useCallback, useMemo, useRef } from "react";
 
 import {
   addComment as addCommentApi,
-  dispatchAgentTurn,
   setDiscussionResolution,
 } from "../api";
 import { addressesEveryone, agentRoster } from "../components/agentTags";
@@ -36,6 +35,7 @@ import {
   publishThread,
   useConversationThread,
 } from "../state/conversationThreads";
+import { dispatchComment } from "../state/agentGroupSwitch";
 import { locatorOf, originFor } from "../state/discussionOrigin";
 import {
   getDiscussionSession,
@@ -112,25 +112,24 @@ export function dispatchTurnsFor(
   // CTA-FR-UUXA: a new message retires the refusal the last one met, once for
   // the whole batch, so one agent's acceptance does not hide another's refusal.
   setDiscussionTurnFailure(discussion.id, undefined);
-  for (const nickname of targets) {
-    void dispatchAgentTurn({ nickname, origin, triggerCommentId }).then(
-      (turn) => {
-        // Upsert: the backend publishes the registration event before the call
-        // resolves, with no ordering between the two.
-        upsertDiscussionTurn(discussion.id, turn);
-      },
-      (e: unknown) => {
+  dispatchComment(
+    { nicknames: targets, origin, triggerCommentId },
+    {
+      // Upsert: the backend publishes the registration event before the call
+      // resolves, with no ordering between the two.
+      onTurn: (turn) => upsertDiscussionTurn(discussion.id, turn),
+      onError: (e, nickname) => {
         // CTA-FR-UUXA: the refusal renders at the foot of the discussion. The
         // log carries the typed code only (see `loggableTurnFailure`).
         setDiscussionTurnFailure(discussion.id, errorText(e));
         logWarn(["ai", "frontend"], "an agent turn could not be dispatched", {
           threadId: discussion.id,
-          nickname,
+          nickname: nickname ?? targets.join(" "),
           failure: loggableTurnFailure(errorText(e)),
         });
       },
-    );
-  }
+    },
+  );
 }
 
 /**

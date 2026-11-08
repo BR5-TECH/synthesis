@@ -52,6 +52,9 @@
   font-family: var(--font-mono, monospace);
   color: var(--fg-1);
 }
+.tool-calls__advisor {
+  color: var(--fg-3);
+}
 .tool-calls__input {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -106,4 +109,37 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .timeout-bar__fill { transition: none; }
+}
+
+/* CVP-FR-OMAS: the Synthesis label stands beside the author's handle. */
+.comment__label {
+  display: inline-block;
+  margin-left: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+}
+
+/* CVP-FR-HRGH / CVP-FR-VPKO: the collapsed Advisors list of a Meta reply. */
+.advisors {
+  margin-top: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm, 12px);
+}
+.advisors__list {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.advisors__entry ul {
+  margin: 0;
+  padding-left: var(--sp-4, 16px);
+}
+.advisors__handle {
+  font-family: var(--font-mono, monospace);
+  color: var(--fg-1);
 }

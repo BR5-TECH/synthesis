@@ -504,8 +504,9 @@ export function AiApiIntegrations() {
           shown back to you.
         </p>
         <p className="t-p" style={{ margin: 0 }}>
-          The model and reasoning here are used only by the graduation loop. An
-          agent uses its own model and reasoning, set in the Agents section.
+          The model and reasoning here are used only by the graduation loop and
+          by the driver classifier of multi-persona conversations. An agent
+          uses its own model and reasoning, set in the Agents section.
         </p>
         <p className="t-p" style={{ margin: "8px 0 0" }}>
           Agents are served by the provider that is active for the project, so

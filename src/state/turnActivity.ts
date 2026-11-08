@@ -82,3 +82,16 @@ export function toolCallStateLabel(state: TurnToolCall["state"]): string {
       return "failed";
   }
 }
+
+/**
+ * CTA-FR-QXXR, CTA-FR-LZDE: whether a turn of an agent group ends without any
+ * failure of its own to show. An advisor turn ends in the Advisors list of the
+ * reply it advised, and a turn that the join skipped for time or by
+ * cancellation was ended by the group and not by a fault of its agent.
+ */
+export function isQuietGroupTurn(turn: AgentTurn): boolean {
+  const group = turn.group;
+  if (!group) return false;
+  if (group.role === "advisor") return true;
+  return group.skipped === "timed_out" || group.skipped === "cancelled";
+}

@@ -7,6 +7,10 @@
 import type { NewDraftProposalReference, NewDraftSubjectReference } from "./newDraftProposals";
 import type { ExportRequestReference } from "./documentExport";
 import { GITHUB_TOKEN_ERRORS } from "./github";
+import type { AdvisorsList, SynthesisMark } from "./groupAttachments";
+
+export type { AdvisorEntry, AdvisorsList, SynthesisMark } from "./groupAttachments";
+export { PROMPT_PROPOSAL_ERRORS } from "./promptProposalErrors";
 
 // --- Comments (CMS-comments-storage.md / CMT-comments.md) -----------------
 
@@ -191,7 +195,11 @@ export type Attachment =
   | NewDraftProposalReference
   | NewDraftSubjectReference
   /** CMS-FR-OKDW: an export an agent asked the author for. */
-  | ExportRequestReference;
+  | ExportRequestReference
+  /** CMS-FR-TUHL: the comment is the Synthesis of an agent group. */
+  | SynthesisMark
+  /** CMS-FR-KVDV: the advisors of a Meta reply. */
+  | AdvisorsList;
 
 /**
  * CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
@@ -261,6 +269,8 @@ export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
   if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
   if (a.kind === "exportRequest") return a.path;
+  if (a.kind === "synthesis") return "Synthesis";
+  if (a.kind === "advisors") return "Advisors";
   if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
     return a.path;
   }
@@ -277,7 +287,9 @@ export function isImageAttachment(a: Attachment): boolean {
     a.kind === "proposalHunk" ||
     a.kind === "newDraftProposal" ||
     a.kind === "newDraftSubject" ||
-    a.kind === "exportRequest"
+    a.kind === "exportRequest" ||
+    a.kind === "synthesis" ||
+    a.kind === "advisors"
   ) {
     return false;
   }
@@ -671,41 +683,6 @@ export interface PromptProposalsChangedPayload {
   /** PCP-FR-17: optional on this side, for an event from an older backend. */
   cause?: PromptProposalChangeCause;
 }
-
-/** PCP contract surface: the typed refusals its operations can return. */
-export const PROMPT_PROPOSAL_ERRORS = {
-  noProjectOpen: "no_project_open",
-  notFound: "proposal_not_found",
-  /** PCP-FR-19: the target no longer names a file the project holds. */
-  artifactNotFound: "artifact_not_found",
-  /** PCP-FR-19: the target's resolved artifact type is no longer `prompt`. */
-  notAPrompt: "not_a_prompt_artifact",
-  alreadyDecided: "already_decided",
-  /** PCP-FR-EDTW: the stored changes moved on since this surface read them. */
-  candidateStale: "candidate_stale",
-  discussionResolved: "discussion_resolved",
-  /**
-   * PCP-FR-14: a failure at or before the commit point. **The file has not
-   * changed** — the backend never wrote it on any failing path — and the
-   * proposal is still the author's to decide (PCR-FR-15).
-   */
-  writeFailed: "write_failed",
-  /**
-   * PCP-FR-14: the acceptance **landed** and its decision comment is still
-   * owed. Not a refusal, and never rendered as one (PCR-FR-15).
-   */
-  acceptanceIncomplete: "acceptance_incomplete",
-  /** PCP-FR-14: another acceptance of this proposal is in flight. */
-  acceptanceInProgress: "acceptance_in_progress",
-  /** PCP-FR-ZQAH: `hunkId` names no change of this proposal. */
-  hunkNotFound: "hunk_not_found",
-  /** PCP-FR-ZQAH: the change has already been accepted or rejected. */
-  hunkAlreadyDecided: "hunk_already_decided",
-  /** PCP-FR-ZQAH: the text this change names is no longer in the file. */
-  anchorLost: "anchor_lost",
-  /** PCP-FR-18: the agent withdrew the change (PCR-FR-QHZN, DCR-FR-NYDA). */
-  hunkWithdrawn: "hunk_withdrawn",
-} as const;
 
 export interface Comment {
   id: string;

@@ -680,6 +680,8 @@ mod support;
 // than that.
 use support::*;
 
+mod agent_group_delivery;
+mod agent_groups;
 mod anthropic_carrier;
 mod artifact_hunk_input;
 mod asking_author;

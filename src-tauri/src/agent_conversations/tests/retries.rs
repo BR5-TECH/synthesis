@@ -495,6 +495,8 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
         "replyHeld",
         // AGC-FR-MECW: the language of the spoken part.
         "spokenLanguage",
+        // AGC-FR-AIQM: carried, and null for a turn outside a group.
+        "group",
     ];
     expected.sort_unstable();
     assert_eq!(keys, expected, "the entry is the turn and nothing beside it");

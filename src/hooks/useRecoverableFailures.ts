@@ -4,6 +4,7 @@ import { listRecoverableAgentTurnFailures, retryAgentTurn } from "../api";
 import { onAgentTurnStateChanged, onDiscussionChanged } from "../events";
 import { logDebug, logWarn } from "../logging";
 import type { AgentTurn, Discussion } from "../types";
+import { isQuietGroupTurn } from "../state/turnActivity";
 
 /**
  * CTA-FR-RHPP: the conversation's **current** terminal retryable failure, and the
@@ -115,7 +116,7 @@ export function useRecoverableFailures(
       if (!isMineRef.current(turn)) return;
       const threadId = turn.origin.discussionId;
       setFailedTurns((prev) => {
-        if (turn.state === "failed" && turn.retryPermitted) {
+        if (turn.state === "failed" && turn.retryPermitted && !isQuietGroupTurn(turn)) {
           return { ...prev, [threadId]: turn };
         }
         // CTA-FR-RUVS / AGC-FR-RGIX: the same agent answered the comment

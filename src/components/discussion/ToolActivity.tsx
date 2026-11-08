@@ -32,7 +32,15 @@ export function ToolCallList({ calls }: ToolCallListProps) {
           data-testid="tool-call-entry"
           data-state={call.state}
         >
-          <span className="tool-calls__name">{call.tool}</span>
+          {/* CTA-FR-QXXR: a call an advisor requested names the advisor. */}
+          <span className="tool-calls__name">
+            {call.advisor && (
+              <span className="tool-calls__advisor" data-testid="tool-call-advisor">
+                @{call.advisor}{" "}
+              </span>
+            )}
+            {call.tool}
+          </span>
           {/* CTA-FR-FPNP: plain text, wrapped. React escapes it, and nothing
               here reads it as Markdown or HTML. */}
           {call.keyInput && (

@@ -163,6 +163,39 @@ export interface AgentTurn {
    */
   deadlineStartedAt?: string | null;
   deadlineAt?: string | null;
+  /**
+   * AGC-FR-AIQM: the agent group the turn belongs to, or null for a turn outside
+   * a group. Absent from an older payload.
+   */
+  group?: TurnGroup | null;
+}
+
+/** AGC-FR-AIQM: the part a turn plays in an agent group. */
+export type GroupRole = "participant" | "meta" | "advisor" | "synthesis";
+
+/** AGC-FR-ANSK: why the join skipped a turn. */
+export type SkipReason = "timed_out" | "failed" | "cancelled";
+
+/** AGC-FR-AIQM: the group fields of a turn. */
+export interface TurnGroup {
+  groupId: string;
+  role: GroupRole;
+  /** AGC-FR-ANSK: set when the join skipped the turn, or it failed or was cancelled in a group. */
+  skipped?: SkipReason | null;
+}
+
+/** AGC-FR-KOHJ: what `dispatch agent group` answers. */
+export interface AgentGroup {
+  mode: "regular" | "advisor" | "synthesis";
+  groupId: string | null;
+  driver: string | null;
+  turns: AgentTurn[];
+}
+
+/** PSS-FR-CQML: the switch and the join timeout of the project's agent groups. */
+export interface AgentGroupSettings {
+  enabled: boolean;
+  joinTimeoutSecs: number;
 }
 
 /** AGC-FR-HMUV / CVL-FR-SKSE: how far one tool call has come. */
@@ -179,6 +212,8 @@ export interface TurnToolCall {
   activationSeq: number;
   state: ToolCallState;
   keyInput: string | null;
+  /** AGC-FR-BIPE: the nickname of the advisor that made the call on a Meta turn. */
+  advisor?: string | null;
 }
 
 /**
@@ -247,6 +282,8 @@ export interface ActiveToolCall {
    * from the record rather than from the order events reached it (CTA-FR-KWOF).
    */
   activationSeq: number;
+  /** AGC-FR-BIPE: the advisor that made the call on a Meta turn. */
+  advisor?: string | null;
 }
 
 /**

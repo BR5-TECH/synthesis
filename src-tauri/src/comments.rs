@@ -61,6 +61,7 @@ mod question_submit;
 mod rename;
 mod scope;
 mod spoken_part;
+mod turn_marks;
 
 pub use attachment_store::*;
 pub use commands::*;
@@ -77,6 +78,7 @@ pub use question_submit::*;
 pub use rename::*;
 pub use scope::*;
 pub use spoken_part::{spoken_part, without_spoken_tags};
+pub use turn_marks::{clear_turn_marks, set_turn_marks};
 
 #[cfg(test)]
 mod tests;

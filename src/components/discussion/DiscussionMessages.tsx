@@ -9,6 +9,7 @@
  * Markdown body, the attachments, the Quote action, and the pending
  * contribution with its Cancel and its activity status.
  */
+import { SynthesisLabel } from "./GroupMarks";
 import { Fragment, useState } from "react";
 
 import { Icon } from "../icons";
@@ -219,6 +220,8 @@ export function DiscussionMessages({
               </div>
               {/* CTA-FR-YOGW: the role the agent answered under, from that
                   comment's own participant and from nowhere else. */}
+              {/* CVP-FR-OMAS: the Synthesis label of an agent group. */}
+              <SynthesisLabel attachments={comment.attachments} />
               {participantTitle(comment.author) && (
                 <div className="comment__title" data-testid="comment-agent-title">
                   {participantTitle(comment.author)}

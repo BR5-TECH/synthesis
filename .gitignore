@@ -44,10 +44,11 @@ __pycache__/
 # that made them.
 /coverage/
 
-# Rust build output and tool files. Anchored for the same reason as `/logs/`:
-# an unanchored `debug` or `target` also matches a source directory of that name.
+# Rust build output and tool files. `target/` matches the Cargo build folder of
+# every crate. `debug` stays anchored for the same reason as `/logs/`: an
+# unanchored `debug` also matches a source directory of that name.
 /debug/
-/target/
+target/
 **/*.rs.bk
 *.pdb
 **/mutants.out*/

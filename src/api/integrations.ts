@@ -7,6 +7,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ActiveAiApiCatalog,
+  AgentGroup,
+  AgentGroupSettings,
   AgenticIntegration,
   AgenticTurnKind,
   AgenticVendorId,
@@ -398,6 +400,28 @@ export const dispatchAgentTurn = (args: {
   origin: ConversationOrigin;
   triggerCommentId: string;
 }) => invoke<AgentTurn>("dispatch_agent_turn", args);
+
+/**
+ * AGC-FR-KOHJ: dispatch the agents one message addresses as an agent group.
+ * Returns the mode and the registered turns once they are registered. Rejects
+ * with the typed refusals of `dispatchAgentTurn` where no turn was registered.
+ */
+export const dispatchAgentGroup = (args: {
+  nicknames: string[];
+  origin: ConversationOrigin;
+  triggerCommentId: string;
+}) => invoke<AgentGroup>("dispatch_agent_group", args);
+
+/** PSS-FR-CQML: the agent group switch and join timeout of the open project. */
+export const loadAgentGroupSettings = () =>
+  invoke<AgentGroupSettings>("load_agent_group_settings");
+
+/**
+ * PSS-FR-CQML: save them. Rejects with `join_timeout_out_of_range` for a
+ * timeout outside 5 to 600 seconds.
+ */
+export const saveAgentGroupSettings = (settings: AgentGroupSettings) =>
+  invoke<AgentGroupSettings>("save_agent_group_settings", { settings });
 
 /**
  * AGC-FR-SJQP: give the first chunk of a speech to a running turn of the

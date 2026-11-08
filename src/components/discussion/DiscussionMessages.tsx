@@ -9,6 +9,7 @@
  * Markdown body, the attachments, the Quote action, and the pending
  * contribution with its Cancel and its activity status.
  */
+import { SynthesisLabel } from "./GroupMarks";
 import { Fragment, useState } from "react";
 
 import { Icon } from "../icons";
@@ -16,7 +17,7 @@ import { CommentAttachmentList } from "../CommentAttachments";
 import { CommentMarkdown } from "../CommentMarkdown";
 import { formatRelative } from "../ProjectPicker";
 import { activityStatus } from "../../state/agentActivity";
-import { ToolDisclosure } from "./ToolActivity";
+import { SavedActivityRow, ToolDisclosure } from "./ToolActivity";
 import { splitAroundBubble } from "./LiveBubble";
 import type { AgentRoster } from "../agentTags";
 import {
@@ -219,6 +220,8 @@ export function DiscussionMessages({
               </div>
               {/* CTA-FR-YOGW: the role the agent answered under, from that
                   comment's own participant and from nowhere else. */}
+              {/* CVP-FR-OMAS: the Synthesis label of an agent group. */}
+              <SynthesisLabel attachments={comment.attachments} />
               {participantTitle(comment.author) && (
                 <div className="comment__title" data-testid="comment-agent-title">
                   {participantTitle(comment.author)}
@@ -250,6 +253,14 @@ export function DiscussionMessages({
                 attachments={comment.attachments}
               />
             </div>
+          )}
+          {/* CTA-FR-RFQB / CVP-FR-NMVH: the saved activity row follows the
+              comment and its Advisors list, on the side of the comment. */}
+          {index >= visibleFrom && (
+            <SavedActivityRow
+              comment={comment}
+              own={embedded && isOwnComment(comment.author, identity)}
+            />
           )}
         </Fragment>
       ))}

@@ -11,6 +11,8 @@
  * (DDS-FR-QJFE): the block takes the whole run and stacks the bodies, so a
  * paragraph that follows another does not repeat a name the reader just read.
  */
+import { SynthesisLabel } from "../../discussion/GroupMarks";
+import { SavedActivityRow } from "../../discussion/ToolActivity";
 import { useState } from "react";
 
 import { CommentMarkdown } from "../../CommentMarkdown";
@@ -158,6 +160,8 @@ export function MessageBlock({
           key={comment.id}
           data-comment-id={comment.id}
         >
+          {/* CVP-FR-OMAS: the Synthesis label of an agent group. */}
+          <SynthesisLabel attachments={comment.attachments} />
           {/* CMT-FR-13: an earlier message this one quotes, as an attributed
               block above the body that quotes it. */}
           {comment.quotes.map((quote, at) => (
@@ -192,6 +196,8 @@ export function MessageBlock({
                 a.kind !== "newDraftSubject",
             )}
           />
+          {/* CTA-FR-RFQB: the saved activity row follows its comment. */}
+          <SavedActivityRow comment={comment} variant="stream" />
         </div>
       ))}
     </div>

@@ -89,6 +89,7 @@ The surface on which an author decides what to do with the changes an agent has 
 60. **DCR-FR-PBDD** While the original draft is archived, graduated, held by a graduation run, or a GitHub-shadow draft, the card's **Accept** and **Reject** and the row's **Confirm decomposition done** are disabled, each with the reason stated beside it.
 61. **DCR-FR-LFDJ** The new-draft card is drawn as the question card of the discussion stream is drawn: the same frame, type chip, author line, and time. Its type chip reads `NEW`.
 62. **DCR-FR-KYJS** A confirmation by tool reaches the discussion through `"new draft proposals changed"` with cause `confirmed` (DCP-FR-ZDSP). The What next? row then gives way to the statement `Decomposition confirmed`, which names the accepted drafts, as on the row's own confirmation (DCR-FR-BELO). A decision by tool on a new-draft proposal changes its card as the card's own decision does.
+63. **DCR-FR-LKGK** The author reviews the merged proposal of a group message as one proposal. It has one decision per hunk and one comment, on the same terms as any proposal. The proposal shows no mark of the agent that first offered a change.
 
 ## User stories
 - As an author whose draft grew too big, I want the agent to propose the new drafts one at a time, so that I decide each one with the earlier ones in mind.

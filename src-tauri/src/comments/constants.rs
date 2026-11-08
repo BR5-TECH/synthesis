@@ -187,6 +187,9 @@ pub(super) const SCHEMA_VERSION: u32 = 1;
 /// two spellings one value.
 pub const ERR_STORE_UNAVAILABLE: &str = "store_unavailable";
 
+/// CMS-FR-HRDN: the most characters of a key input that a saved tool call holds.
+pub const SAVED_KEY_INPUT_LIMIT: usize = 200;
+
 #[cfg(test)]
 mod store_error_tests {
     /// CMS-FR-YQND: one spelling, whichever module a caller reaches it through.

@@ -680,6 +680,8 @@ mod support;
 // than that.
 use support::*;
 
+mod agent_group_delivery;
+mod agent_groups;
 mod anthropic_carrier;
 mod artifact_hunk_input;
 mod asking_author;
@@ -715,6 +717,7 @@ mod request_shape;
 mod responses_repair;
 mod retries;
 mod rig_replies;
+mod saved_tool_lists;
 mod session_log;
 mod skill_turns;
 mod speech_placeholders;

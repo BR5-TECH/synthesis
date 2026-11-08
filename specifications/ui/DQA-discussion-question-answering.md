@@ -248,6 +248,7 @@ The same two entries in the draft's discussion column, each as one question card
     - *Why:* In Push-to-Talk, focus on the record control lets the next press answer the next question, and Space on an option row selects that option.
 53. **DQA-FR-YMGD** A spoken answer that leaves no question unanswered submits the set at once, with no confirmation, on the terms of DQA-FR-KDVU and DQA-FR-AYNP. An answer given by a click submits nothing and moves nothing.
 54. **DQA-FR-VICX** A submission that a spoken answer started and the backend refused follows DQA-FR-WKTP, and the block does not submit again on its own. Submit and a further spoken answer can each submit the set.
+55. **DQA-FR-WNCM** A discussion shows one pending question set for a group message, and the author answers it as one set. The set carries no mark of the agent that first offered a question.
 
 ## Non-functional requirements
 - The block holds no state that survives the application. What survives is the set itself, on its own persistence contract, so a relaunch loses only what was never sent.

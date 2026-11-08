@@ -56,6 +56,25 @@ pub(super) enum TurnEnd {
     /// ordinary conversation contribution (AGC-FR-VRHM). The durable pending set
     /// is the whole of the user-facing question state the turn leaves.
     AskedQuestions,
+    /// AGC-FR-GNMP: an advisor turn returned its advice to its group. Terminal
+    /// and `delivered`, and no comment was appended.
+    Advised,
+}
+
+/// CVL-FR-15: whether a tool ends the turn on its call — a posted question, a
+/// recorded question set, a proposal, a new draft, a prompt change, or an
+/// export request. The artifact origins' proposal tool is never attached with
+/// the two draft tools (CVL-FR-08).
+fn ends_turn(name: &str) -> bool {
+    [
+        crate::tools::ask_user_comment::NAME,
+        crate::tools::ask_discussion_questions::NAME,
+        crate::tools::propose_draft_changes::NAME,
+        crate::tools::propose_new_draft::NAME,
+        crate::tools::propose_prompt_changes::NAME,
+        crate::tools::request_document_export::NAME,
+    ]
+    .contains(&name)
 }
 
 /// Returns the thread the answer landed in, so the caller can announce it
@@ -392,25 +411,12 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // model like any other (CVL-FR-14) — which also keeps the exchange
         // well-formed, every tool call in it answered by a result before the
         // next model call carries it.
-        let ending_first = reply.tool_calls.iter().position(|call| {
-            call.function.name == crate::tools::ask_user_comment::NAME
-                // CVL-FR-15: a discussion turn's question set ends the turn on
-                // exactly the terms a posted question does, although it appends
-                // no comment at all (ADQ-FR-DHZK, ADQ-FR-FQPA).
-                || call.function.name == crate::tools::ask_discussion_questions::NAME
-                || call.function.name == crate::tools::propose_draft_changes::NAME
-                // CVL-FR-15 / PND-FR-KGRN: a recorded new draft ends the turn.
-                || call.function.name == crate::tools::propose_new_draft::NAME
-                // CVL-FR-15: the artifact origins' proposal tool ends a turn on
-                // exactly the terms the draft origins' do. It is never attached
-                // with the two draft tools (CVL-FR-08). Where a reply names more
-                // than one, the first is dispatched and the rest are told
-                // one-at-a-time below.
-                || call.function.name == crate::tools::propose_prompt_changes::NAME
-                // CVL-FR-15 / RDX-FR-PZGN: a recorded export request ends the
-                // turn. It sets the flag a posted question sets.
-                || call.function.name == crate::tools::request_document_export::NAME
-        });
+        let synthesis_needs_text = needs_synthesis_text(plan, &reply.text);
+        let ending_first = if synthesis_needs_text {
+            None
+        } else {
+            reply.tool_calls.iter().position(|call| ends_turn(&call.function.name))
+        };
         if let Some(index) = ending_first {
             // CVL-FR-33: a call abandoned by cancellation is reported finished
             // like any other, so the turn holds none of this round's calls
@@ -467,6 +473,8 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 // reply asked for is abandoned — reported finished rather than
                 // left active behind a turn that has stopped working on them.
                 activity.finish_all(app, turns, &plan.turn_id);
+                // AGC-FR-WZUL: a synthesis turn still posts its Synthesis.
+                post_synthesis_after_contribution(app, turns, plan, &reply.text);
                 return Err(end);
             }
             // CVL-FR-EKHH: every result carries the id of its call, unchanged,
@@ -491,7 +499,10 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             // two contributions (AGC-FR-01). The model is told so rather than
             // left with an unanswered call. This is also what a reply asking for
             // one of each reaches, the first having been dispatched above.
-            let one_at_a_time = if call.function.name == crate::tools::ask_user_comment::NAME {
+            let one_at_a_time = if synthesis_needs_text && ends_turn(&call.function.name) {
+                // AGC-FR-WZUL: the call waits for the text of the Synthesis.
+                Some(SYNTHESIS_NEEDS_TEXT)
+            } else if call.function.name == crate::tools::ask_user_comment::NAME {
                 Some(crate::tools::ask_user_comment::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::ask_discussion_questions::NAME {
                 Some(crate::tools::ask_discussion_questions::ONE_AT_A_TIME)
@@ -590,10 +601,28 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     // flight takes nothing from it, also where the author reopened it since. The
     // append path refuses only a conversation resolved *now*, so the resolution
     // that came and went is checked here and refused on the same terms.
+    // AGC-FR-GNMP: an advisor's reply is advice for its Meta turn. It is never a
+    // comment, so nothing is appended and the turn ends delivered.
+    if role_of(plan) == Some(GroupRole::Advisor) {
+        record_advice(plan, &answer);
+        return Err(TurnEnd::Advised);
+    }
     let delivered = if resolved_during_turn(plan) {
         Err(comments::ERR_DISCUSSION_RESOLVED.to_string())
     } else {
-        deliver(plan.roots.borrowed(), &plan.origin, &plan.author, answer)
+        let kept = (role_of(plan) == Some(GroupRole::Participant)).then(|| answer.clone());
+        // AGC-FR-WNQE: the tool list of this turn goes in the append of the answer.
+        let content = comments::AnswerContent {
+            body: answer,
+            attachments: plan.attachments.clone(),
+            tool_calls: saved_tool_calls(&turns.tool_calls_of(&plan.turn_id)),
+        };
+        let appended = deliver_with(plan.roots.borrowed(), &plan.origin, &plan.author, content);
+        // AGC-FR-CZCU: the group keeps what the member said, for the synthesis.
+        if let (Ok(_), Some(reply)) = (&appended, kept) {
+            record_reply(plan, &reply);
+        }
+        appended
     };
     delivered.map_err(|e| {
         let failure = if e == comments::ERR_DISCUSSION_RESOLVED {

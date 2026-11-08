@@ -78,7 +78,40 @@ pub fn append_agent_comment_with(
     attachments: Vec<Attachment>,
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
+    append_agent_answer_with(
+        root,
+        target,
+        thread_id,
+        comment_id,
+        AnswerContent { body, attachments, tool_calls: Vec::new() },
+        stamp,
+    )
+}
+
+/// What a delivered agent answer holds besides its author: the body, the
+/// attachments of an agent group, and the tool list of the turn (CMS-FR-HRDN).
+pub struct AnswerContent {
+    pub body: String,
+    pub attachments: Vec<Attachment>,
+    pub tool_calls: Vec<SavedToolCall>,
+}
+
+/// [`append_agent_comment_with`] carrying the tool list of the turn that
+/// delivered the answer. All fields of the comment go in one append, so the
+/// tool list is never written later and never changed (CMS-FR-04, CMS-FR-HRDN).
+pub fn append_agent_answer_with(
+    root: &crate::fs::RootFs,
+    target: ThreadRef<'_>,
+    thread_id: &str,
+    comment_id: String,
+    content: AnswerContent,
+    stamp: Stamp<'_>,
+) -> Result<Discussion, String> {
     let Stamp { by, at } = stamp;
+    let AnswerContent { body, attachments, tool_calls } = content;
+    let tool_calls = clip_key_inputs(tool_calls);
+    // AGC-FR-VDOO: the group marks of the agent's running turn.
+    let attachments = turn_marks::with_turn_marks(thread_id, by, attachments);
     let thread = target.find(root, thread_id)?;
     // CMS-FR-17 / CMS-FR-41: a resolution stops an agent exactly as it stops a
     // person.
@@ -100,10 +133,24 @@ pub fn append_agent_comment_with(
                 attachments,
                 option_descriptions: Vec::new(),
                 spoken_original: None,
+                tool_calls,
             },
         )],
     )?;
     target.find(root, thread_id)
+}
+
+/// CMS-FR-HRDN: a key input is plain text of at most [`SAVED_KEY_INPUT_LIMIT`]
+/// characters, whatever the caller supplied.
+fn clip_key_inputs(mut calls: Vec<SavedToolCall>) -> Vec<SavedToolCall> {
+    for call in &mut calls {
+        if let Some(input) = call.key_input.as_mut() {
+            if input.chars().count() > SAVED_KEY_INPUT_LIMIT {
+                *input = input.chars().take(SAVED_KEY_INPUT_LIMIT).collect();
+            }
+        }
+    }
+    calls
 }
 
 /// One discussion of a known owner, by id.

@@ -33,6 +33,7 @@ import {
   onDiscussionQuestionSetChanged,
 } from "./events";
 import { followAgentTurn } from "./state/discussionSession";
+import { useAgentGroupSwitch } from "./state/agentGroupSwitch";
 import { publishThread } from "./state/conversationThreads";
 import { publishSet } from "./state/questionSets";
 import { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
@@ -287,6 +288,9 @@ function App() {
       unlisten?.();
     };
   }, []);
+
+  // CTA-FR-UGBA: whether a posted comment is dispatched as an agent group.
+  useAgentGroupSwitch(s.screen === "ide" && Boolean(s.projectPath));
 
   /**
    * CVP-FR-HWTN: the outstanding turns of every discussion follow their events

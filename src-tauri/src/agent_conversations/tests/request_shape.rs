@@ -321,6 +321,13 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // AGC-FR-QEOF: the translation prompt of a voice transcript, compiled into
     // the translation module.
     expected.push("translate-transcript.md".to_string());
+    // AGC-FR-WPCZ, CVL-FR-OGXZ, CVL-FR-XIBC, AGC-FR-MWYP: the four prompts of an
+    // agent group, compiled into the group module on the same terms.
+    for group_prompt in
+        ["group-advisor.md", "group-classifier.md", "group-meta.md", "group-synthesis.md"]
+    {
+        expected.push(group_prompt.to_string());
+    }
     expected.sort();
     assert_eq!(on_disk, expected, "the prompts directory holds something else");
     let compaction = include_str!("../compaction.rs");

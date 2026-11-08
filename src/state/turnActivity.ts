@@ -7,7 +7,7 @@
  * in the discussion session store (CTA-FR-MNPS), which calls these functions.
  * Nothing here logs a tool list or a key input.
  */
-import type { AgentTurn, TurnToolCall } from "../types";
+import type { AgentTurn, Comment, TurnToolCall } from "../types";
 
 /** CTA-FR-ZBIB: the tool list of one ended turn, at the discussion foot. */
 export interface ActivityRow {
@@ -47,6 +47,9 @@ export function pendingToolCalls(
  * that made no tool call.
  */
 export function activityRowOf(turn: AgentTurn): ActivityRow | null {
+  // CTA-FR-ZBIB: a turn that delivered an answer saved its tool list with the
+  // comment (CTA-FR-RFQB), so it leaves no row at the foot.
+  if (turn.state === "delivered") return null;
   const calls = callsOf(turn);
   if (calls.length === 0) return null;
   return { turnId: turn.id, agentId: turn.agentId, nickname: turn.nickname, calls };
@@ -81,4 +84,41 @@ export function toolCallStateLabel(state: TurnToolCall["state"]): string {
     case "failed":
       return "failed";
   }
+}
+
+/**
+ * CTA-FR-QXXR, CTA-FR-LZDE: whether a turn of an agent group ends without any
+ * failure of its own to show. An advisor turn ends in the Advisors list of the
+ * reply it advised, and a turn that the join skipped for time or by
+ * cancellation was ended by the group and not by a fault of its agent.
+ */
+export function isQuietGroupTurn(turn: AgentTurn): boolean {
+  const group = turn.group;
+  if (!group) return false;
+  if (group.role === "advisor") return true;
+  return group.skipped === "timed_out" || group.skipped === "cancelled";
+}
+
+/**
+ * CTA-FR-RFQB: the saved activity row of a comment, read from the comment and
+ * from nothing else, or `null` where the comment carries no saved tool list.
+ * The ids and the sequence are positions in the saved list: a saved call holds
+ * neither (CMS-FR-HRDN).
+ */
+export function savedActivityRowOf(comment: Comment): ActivityRow | null {
+  const saved = comment.toolCalls ?? [];
+  if (saved.length === 0 || comment.author.kind !== "agent") return null;
+  return {
+    turnId: comment.id,
+    agentId: comment.author.agentId,
+    nickname: comment.author.handle,
+    calls: saved.map((call, at) => ({
+      id: `${comment.id}:${at}`,
+      tool: call.tool,
+      activationSeq: at,
+      state: call.state,
+      keyInput: call.keyInput,
+      advisor: call.advisor ?? null,
+    })),
+  };
 }

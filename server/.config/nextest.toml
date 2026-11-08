@@ -1,0 +1,7 @@
+# CIP-FR-VITB: every test runs under a time limit. nextest marks a test slow
+# after 30 s and stops it after 60 s. The stopped test fails under its own name,
+# and the other tests still run. An override may give one named test a longer
+# limit, and never removes the limit.
+[profile.default]
+slow-timeout = { period = "30s", terminate-after = 2 }
+fail-fast = false

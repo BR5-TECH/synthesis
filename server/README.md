@@ -32,7 +32,7 @@ than being regenerated.
 ```bash
 cd server
 cargo build --locked          # binary at target/debug/synthesis-server
-cargo test  --locked
+cargo nextest run --locked
 cargo run   --locked
 ```
 
@@ -386,7 +386,7 @@ is published.
 | --- | --- |
 | Trigger | `pull_request` (`opened`, `synchronize`, `reopened`), with no path filter and no `push` trigger |
 | Job | `server`, reported as the check `CI / server` |
-| Commands | `cargo build --locked` and `cargo test --locked`, from `server/` |
+| Commands | `cargo build --locked` and `cargo nextest run --locked`, from `server/` |
 | Toolchain | copied in from `src-tauri/rust-toolchain.toml`, the repository's single pin |
 | Permissions | `contents: read` at the workflow level, and nothing else. No job holds `packages: write` |
 | Credentials | none. The workflow reads no repository secret and logs in to no registry |

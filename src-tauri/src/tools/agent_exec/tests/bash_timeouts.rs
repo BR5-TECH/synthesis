@@ -9,7 +9,7 @@ fn timeout_literals(argv: &[String]) -> Vec<String> {
     argv.iter().filter(|a| a.starts_with("BASH_") && a.contains('=')).cloned().collect()
 }
 
-// EAC-FR-WQNH: a Claude Code container gets both timeouts at 30 minutes.
+// EAC-FR-WQNH: a Claude Code container gets both timeouts at 15 minutes.
 #[test]
 fn a_claude_code_launch_sets_both_bash_timeouts() {
     let harness = harness_for("claude_code");
@@ -19,8 +19,8 @@ fn a_claude_code_launch_sets_both_bash_timeouts() {
     assert_eq!(
         timeout_literals(&runtime.only_run().argv),
         vec![
-            "BASH_DEFAULT_TIMEOUT_MS=1800000".to_string(),
-            "BASH_MAX_TIMEOUT_MS=1800000".to_string(),
+            "BASH_DEFAULT_TIMEOUT_MS=900000".to_string(),
+            "BASH_MAX_TIMEOUT_MS=900000".to_string(),
         ]
     );
 }
@@ -57,7 +57,7 @@ fn a_timeout_the_launch_environment_names_keeps_its_value() {
     assert_eq!(recorded.env.get("BASH_MAX_TIMEOUT_MS").map(String::as_str), Some("3600000"));
     assert_eq!(
         timeout_literals(&recorded.argv),
-        vec!["BASH_DEFAULT_TIMEOUT_MS=1800000".to_string()],
+        vec!["BASH_DEFAULT_TIMEOUT_MS=900000".to_string()],
         "the executor sets only the timeout the author did not name"
     );
     assert_eq!(recorded.argv.iter().filter(|a| *a == "BASH_MAX_TIMEOUT_MS").count(), 1);
@@ -69,8 +69,8 @@ fn the_timeouts_depend_on_the_vendor_and_the_named_variables() {
     assert_eq!(
         descriptor::bash_timeouts("claude_code", &[]),
         vec![
-            ("BASH_DEFAULT_TIMEOUT_MS".to_string(), "1800000".to_string()),
-            ("BASH_MAX_TIMEOUT_MS".to_string(), "1800000".to_string()),
+            ("BASH_DEFAULT_TIMEOUT_MS".to_string(), "900000".to_string()),
+            ("BASH_MAX_TIMEOUT_MS".to_string(), "900000".to_string()),
         ]
     );
     assert!(descriptor::bash_timeouts("codex", &[]).is_empty());

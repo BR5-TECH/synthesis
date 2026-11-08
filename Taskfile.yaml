@@ -252,7 +252,7 @@ tasks:
           echo '==> task tests: the agentic CLI mock lane, from tools/agentic-cli-mock/'
           cd '{{.MOCK_LANE_DIR}}'
           cargo check
-          cargo test
+          cargo nextest run
       # The server lane, from server/ (CIP-FR-21). Its lint commands are
       # reached through lint:server (TSK-FR-26).
       - task: lint:server
@@ -261,10 +261,10 @@ tasks:
           echo '==> task tests: the server lane, from server/'
           cd '{{.SERVER_LANE_DIR}}'
           cargo build --locked
-          cargo test --locked
+          cargo nextest run --locked
 
   tests:backend:
-    desc: 'Run the application backend verification lane: lint:backend, cargo check, then cargo test, from src-tauri/.'
+    desc: 'Run the application backend verification lane: lint:backend, cargo check, then cargo nextest run, from src-tauri/.'
     dir: '{{.ROOT_DIR}}/src-tauri'
     cmds:
       # A command exiting non-zero fails the task at once, and the commands
@@ -272,7 +272,7 @@ tasks:
       # lint:backend and are not restated here.
       - task: lint:backend
       - cargo check
-      - cargo test
+      - cargo nextest run
 
   uat:dind:
     desc: 'Run the Docker-in-Docker acceptance test on this machine: one result for each launch shape. It needs a Docker daemon and is not part of tests.'

@@ -17,6 +17,12 @@ export default defineConfig({
     // not replace a global that already exists, so the tests do not get the
     // jsdom storage. This flag removes the Node storage from the test workers.
     execArgv: ["--no-experimental-webstorage"],
+    // CIP-FR-EEVU: every test and hook runs under a time limit, so one that
+    // stops making progress fails under its own name. A test may name a longer
+    // limit of its own, and never removes the limit.
+    testTimeout: 5_000,
+    hookTimeout: 10_000,
+    teardownTimeout: 10_000,
     // CIP-FR-RDCY: one project for each area of the suite. `pnpm test` runs
     // all of them; CI runs each one as its own check.
     projects: TEST_AREAS.map((area) => ({

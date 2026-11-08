@@ -509,8 +509,8 @@ Production binds it to the embedded microsandbox runtime (EAC-FR-HMBJ). A test b
 77. **EAC-FR-MNEH** One boot, from its first pull to a running VM, is bounded by 45 minutes, which is longer than the bound of one export. A boot that does not end in that time is abandoned, what it left of the VM is stopped, and the launch returns `SandboxLaunchFailed` with `boot_failed`. The `execution.timeout_ms` of EAC-FR-24 bounds the process from its start in the VM.
     - *Why:* An export of a large image can take many minutes, so the turn's own timeout does not bound a boot, and a daemon or a runtime that stops answering must still not hold a run for ever.
 78. **EAC-FR-HUXS** The process of EAC-FR-ZIYG runs the image's entrypoint with the vendor's argument vector after it, as `docker run` places them. A boot that cannot read the image's entrypoint, or that finds none, logs the cause, stops the VM, and returns `SandboxLaunchFailed` with `boot_failed`. A vendor argument is never run as the program.
-79. **EAC-FR-WQNH** A Claude Code launch, in a container and in a sandbox, sets `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to `1800000` as executor-set variables, except a variable that the launch environment of EAC-FR-15 names. A Codex launch sets neither. The values do not depend on the image or on the project.
-    - *Why:* the full checks of a project can run longer than the ten minutes the CLI allows by default, and a project must not need settings of its own for them to finish.
+79. **EAC-FR-WQNH** A Claude Code launch, in a container and in a sandbox, sets `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to `900000` as executor-set variables, except a variable that the launch environment of EAC-FR-15 names. A Codex launch sets neither. The values do not depend on the image or on the project.
+    - *Why:* the full checks of a project can run longer than the ten minutes the CLI allows by default, and a command that stops making progress must give the turn back within 15 minutes.
 
 ## Non-functional requirements
 

@@ -484,36 +484,59 @@ fn each_image_names_a_writable_home_for_the_uid_a_launch_supplies() {
     }
 }
 
-/// AVI-FR-NEGK — both images carry the `task` runner at one pinned version,
-/// fetched from the release archive and checked against a SHA-256 per
-/// architecture before it is unpacked.
-#[test]
-fn each_image_carries_a_checked_task_runner() {
+/// A release archive that both images fetch by a pinned version and check
+/// against one SHA-256 per architecture before they unpack it.
+struct CheckedRelease {
+    /// The tool, as an assertion message names it.
+    tool: &'static str,
+    /// The `ARG` line prefix that pins the version.
+    version_arg: &'static str,
+    /// A part of the download URL that finds the `RUN` block.
+    url_marker: &'static str,
+    /// The download URL as the block writes it, with the pinned version in it.
+    url: &'static str,
+    /// The archive path that the block checks and unpacks.
+    archive: &'static str,
+    /// The message of the block for an architecture with no checksum.
+    no_checksum: &'static str,
+    /// The `tar` arguments that put the tool on the `PATH`.
+    unpack_to: &'static str,
+    /// Each architecture of the `case`, with a text its arm must hold.
+    arch_arms: [(&'static str, &'static str); 2],
+}
+
+fn sha256_values(block: &str) -> Vec<String> {
+    block.split("sha256='").skip(1).filter_map(|r| r.split('\'').next()).map(String::from).collect()
+}
+
+/// Asserts that both images install `release` the same way: one exact pinned
+/// version, a check before the unpack, and one checksum per architecture.
+fn assert_checked_release(release: &CheckedRelease) {
+    let tool = release.tool;
     let mut versions: Vec<String> = Vec::new();
     let mut blocks: Vec<String> = Vec::new();
     for (vendor, dockerfile) in dockerfiles() {
         let version = directives(dockerfile)
             .into_iter()
-            .find_map(|line| line.strip_prefix("ARG TASK_VERSION="))
-            .unwrap_or_else(|| panic!("{vendor} does not pin the task runner"));
+            .find_map(|line| line.strip_prefix(release.version_arg))
+            .unwrap_or_else(|| panic!("{vendor} does not pin {tool}"));
         assert!(
             version.split('.').count() == 3 && version.split('.').all(|p| p.parse::<u32>().is_ok()),
-            "{vendor} pins the task runner to something other than an exact version: {version}"
+            "{vendor} pins {tool} to something other than an exact version: {version}"
         );
         versions.push(version.to_string());
 
-        let block = run_block(dockerfile, "go-task/task/releases/download");
+        let block = run_block(dockerfile, release.url_marker);
         assert!(block.starts_with("RUN set -eux;"), "{vendor}: a failed check must stop the build");
         let checked = block
             .find("sha256sum --check --strict")
-            .unwrap_or_else(|| panic!("{vendor} unpacks the task runner without checking it"));
+            .unwrap_or_else(|| panic!("{vendor} unpacks {tool} without checking it"));
         let unpacked = block
-            .find("tar -xzf /tmp/task.tar.gz")
+            .find(&format!("tar -xzf {}", release.archive))
             .unwrap_or_else(|| panic!("{vendor} does not unpack the archive it downloaded"));
-        assert!(checked < unpacked, "{vendor} unpacks the task runner before checking it");
+        assert!(checked < unpacked, "{vendor} unpacks {tool} before checking it");
 
-        let checksums: Vec<&str> =
-            block.split("sha256='").skip(1).filter_map(|rest| rest.split('\'').next()).collect();
+        let checksums = sha256_values(&block);
         assert_eq!(checksums.len(), 2, "{vendor} records one checksum per architecture");
         for checksum in &checksums {
             assert!(
@@ -527,46 +550,79 @@ fn each_image_carries_a_checked_task_runner() {
             "{vendor} shares one checksum between two architectures"
         );
         assert!(
-            block.contains("no go-task checksum recorded for architecture")
-                && block.contains("exit 1"),
+            block.contains(release.no_checksum) && block.contains("exit 1"),
             "{vendor} does not stop on an architecture it has no checksum for"
         );
-        assert!(block.contains("-C /usr/local/bin task"), "{vendor} puts `task` off the PATH");
+        assert!(block.contains(release.unpack_to), "{vendor} puts {tool} off the PATH");
         assert!(
-            block.contains("/releases/download/v${TASK_VERSION}/task_linux_${arch}.tar.gz"),
+            block.contains(release.url),
             "{vendor} downloads a release other than the one it pins"
         );
-        for arch in ["amd64) sha256='", "arm64) sha256='"] {
-            assert!(block.contains(arch), "{vendor} names no checksum for {arch}");
+        for (arch, expected) in release.arch_arms {
+            let arm = block
+                .split_once(&format!("{arch})"))
+                .and_then(|(_, rest)| rest.split(";;").next())
+                .unwrap_or_else(|| panic!("{vendor} names no case for {arch}"));
+            assert_eq!(arm.matches("sha256='").count(), 1, "{vendor}: {arch} has not one checksum");
+            assert!(arm.contains(expected), "{vendor}: the {arch} arm lacks {expected}: {arm}");
         }
         blocks.push(block);
     }
-    assert_eq!(versions[0], versions[1], "the two images pin different task runners");
-    let checksums = |block: &str| -> Vec<String> {
-        block
-            .split("sha256='")
-            .skip(1)
-            .filter_map(|r| r.split('\'').next())
-            .map(String::from)
-            .collect()
-    };
+    assert_eq!(versions[0], versions[1], "the two images pin different versions of {tool}");
     assert_eq!(
-        checksums(&blocks[0]),
-        checksums(&blocks[1]),
-        "the two images check different archives"
+        sha256_values(&blocks[0]),
+        sha256_values(&blocks[1]),
+        "the two images check different archives of {tool}"
     );
 }
 
-/// AVI-FR-WWVY — the Claude Code image sets both Bash timeouts to 30 minutes,
+/// AVI-FR-NEGK — both images carry the `task` runner at one pinned version,
+/// fetched from the release archive and checked against a SHA-256 per
+/// architecture before it is unpacked.
+#[test]
+fn each_image_carries_a_checked_task_runner() {
+    assert_checked_release(&CheckedRelease {
+        tool: "the task runner",
+        version_arg: "ARG TASK_VERSION=",
+        url_marker: "go-task/task/releases/download",
+        url: "/releases/download/v${TASK_VERSION}/task_linux_${arch}.tar.gz",
+        archive: "/tmp/task.tar.gz",
+        no_checksum: "no go-task checksum recorded for architecture",
+        unpack_to: "-C /usr/local/bin task",
+        arch_arms: [("amd64", "sha256='"), ("arm64", "sha256='")],
+    });
+}
+
+/// AVI-FR-PBVT — both images carry `cargo-nextest` at one pinned version,
+/// fetched from the release archive and checked against a SHA-256 per
+/// architecture before it is unpacked.
+#[test]
+fn each_image_carries_a_checked_cargo_nextest() {
+    assert_checked_release(&CheckedRelease {
+        tool: "cargo-nextest",
+        version_arg: "ARG NEXTEST_VERSION=",
+        url_marker: "nextest-rs/nextest/releases/download",
+        url: "/releases/download/cargo-nextest-${NEXTEST_VERSION}/cargo-nextest-${NEXTEST_VERSION}-${target}.tar.gz",
+        archive: "/tmp/cargo-nextest.tar.gz",
+        no_checksum: "no cargo-nextest checksum recorded for architecture",
+        unpack_to: "-C /usr/local/bin cargo-nextest",
+        arch_arms: [
+            ("amd64", "target='x86_64-unknown-linux-gnu'"),
+            ("arm64", "target='aarch64-unknown-linux-gnu'"),
+        ],
+    });
+}
+
+/// AVI-FR-WWVY — the Claude Code image sets both Bash timeouts to 15 minutes,
 /// and the Codex image, whose CLI reads neither, sets none.
 #[test]
 fn the_claude_code_image_sets_the_bash_timeouts() {
     for (vendor, dockerfile) in dockerfiles() {
         let assignments = env_assignments(dockerfile);
         for name in ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"] {
-            let set = assignments.iter().any(|a| a == &format!("{name}=1800000"));
+            let set = assignments.iter().any(|a| a == &format!("{name}=900000"));
             if vendor == "claude-code" {
-                assert!(set, "{vendor} does not set {name}=1800000: {assignments:?}");
+                assert!(set, "{vendor} does not set {name}=900000: {assignments:?}");
             } else {
                 assert!(!assignments.iter().any(|a| a.starts_with(name)), "{vendor} sets {name}");
             }

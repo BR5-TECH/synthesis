@@ -17,6 +17,10 @@ concurrency:
 permissions:
   contents: read
 
+# CIP-FR-IGUE: the one cargo-nextest version that every Rust lane installs.
+env:
+  CARGO_NEXTEST_VERSION: "0.9.150"
+
 jobs:
   # Verifies src/** — the unit tests of the frontend definition of done in
   # CLAUDE.md. The runner has 2 vCPUs, so Vitest runs 1 worker, and the full
@@ -88,7 +92,7 @@ jobs:
       - name: Typecheck test files
         run: pnpm exec tsc -p tsconfig.test.json --noEmit
 
-  # Verifies src-tauri/** — format check, Clippy, cargo check, then cargo test.
+  # Verifies src-tauri/** — format check, Clippy, cargo check, then cargo nextest.
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -186,11 +190,19 @@ jobs:
       - name: Cargo check
         run: cargo check
 
-      - name: Cargo test
-        run: cargo test
+      # CIP-FR-IGUE: the prebuilt cargo-nextest release at the version the
+      # workflow names. nextest stops a test that runs past its limit, so a
+      # test that never ends fails under its own name (CIP-FR-VITB).
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }}
+
+      - name: Cargo nextest
+        run: cargo nextest run
 
   # Verifies tools/agentic-cli-mock/** — format check, Clippy, cargo check,
-  # then cargo test.
+  # then cargo nextest.
   mock:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -254,11 +266,19 @@ jobs:
       - name: Cargo check
         run: cargo check --locked
 
-      - name: Cargo test
-        run: cargo test --locked
+      # CIP-FR-IGUE: the prebuilt cargo-nextest release at the version the
+      # workflow names. nextest stops a test that runs past its limit, so a
+      # test that never ends fails under its own name (CIP-FR-VITB).
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }}
+
+      - name: Cargo nextest
+        run: cargo nextest run --locked
 
 
-  # Verifies server/** — format check, Clippy, cargo build, then cargo test,
+  # Verifies server/** — format check, Clippy, cargo build, then cargo nextest,
   # the cargo commands with --locked.
   server:
     runs-on: ubuntu-latest
@@ -325,8 +345,16 @@ jobs:
       - name: Cargo build
         run: cargo build --locked
 
-      - name: Cargo test
-        run: cargo test --locked
+      # CIP-FR-IGUE: the prebuilt cargo-nextest release at the version the
+      # workflow names. nextest stops a test that runs past its limit, so a
+      # test that never ends fails under its own name (CIP-FR-VITB).
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }}
+
+      - name: Cargo nextest
+        run: cargo nextest run --locked
 
   # A lane of its own rather than a step of `ui`: the check needs neither Node
   # nor a Rust toolchain, so as a step of `ui` it would wait on a pnpm install

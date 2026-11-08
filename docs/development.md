@@ -229,7 +229,7 @@ a shipped image. A local build runs only when a project names it there.
 | Working directory | each lane's own directory |
 | Output | none. It verifies the working tree |
 | Supported hosts | any host that satisfies the lanes' own prerequisites |
-| Prerequisites | Node.js, pnpm and the installed dependencies, and the pinned Rust toolchain |
+| Prerequisites | Node.js, pnpm and the installed dependencies, the pinned Rust toolchain, and `cargo-nextest` |
 | Failure | non-zero, with output naming the lane that failed |
 
 `tests` runs every verification lane
@@ -243,8 +243,8 @@ theirs.
 | specification | `task specs` | see below |
 | frontend | `pnpm test`, `pnpm build`, `pnpm exec tsc -p tsconfig.test.json --noEmit` | the repository root |
 | application backend | `task tests:backend` | see below |
-| agentic CLI mock | `task lint:mock`, `cargo check`, `cargo test` | `tools/agentic-cli-mock/` |
-| server | `task lint:server`, `cargo build --locked`, `cargo test --locked` | `server/` |
+| agentic CLI mock | `task lint:mock`, `cargo check`, `cargo nextest run` | `tools/agentic-cli-mock/` |
+| server | `task lint:server`, `cargo build --locked`, `cargo nextest run --locked` | `server/` |
 
 The specification lane and the application backend lane are reached through
 `specs` and `tests:backend`, and the lint commands of the mock and server lanes
@@ -314,11 +314,11 @@ silently. It is read-only and writes nothing. See
 
 | Property | Value |
 | --- | --- |
-| Commands | `task lint:backend`, then `cargo check`, then `cargo test` |
+| Commands | `task lint:backend`, then `cargo check`, then `cargo nextest run` |
 | Working directory | `src-tauri/` |
 | Output | none. It verifies the crate |
 | Supported hosts | any host that builds the application backend |
-| Prerequisites | the pinned Rust toolchain, and the system packages the crate links against |
+| Prerequisites | the pinned Rust toolchain, `cargo-nextest`, and the system packages the crate links against |
 | Failure | non-zero. A command exiting non-zero fails the task at once, and the commands after it do not run |
 
 ### `task uat:dind`

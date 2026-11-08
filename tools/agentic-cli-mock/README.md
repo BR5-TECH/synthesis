@@ -34,7 +34,7 @@ system libraries the application links against.
 Its tests:
 
 ```sh
-cd tools/agentic-cli-mock && cargo check && cargo test
+cd tools/agentic-cli-mock && cargo check && cargo nextest run
 ```
 
 ## Invoke

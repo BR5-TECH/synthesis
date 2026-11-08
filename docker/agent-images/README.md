@@ -72,8 +72,9 @@ application's, performed on the host where the whole repository is reachable.
   executor generates are the CLI's own and nothing wraps or rewrites them.
 - **Browser** — Chromium at a pinned Playwright version (AVI-FR-16), at
   `/opt/ms-playwright`. See below.
-- **Toolchains** — Rust, pnpm, the TypeScript compiler, and the `task` runner,
-  each at a pinned version (AVI-FR-17, AVI-FR-NEGK). See below.
+- **Toolchains** — Rust, pnpm, the TypeScript compiler, the `task` runner, and
+  `cargo-nextest`, each at a pinned version (AVI-FR-17, AVI-FR-NEGK,
+  AVI-FR-PBVT). See below.
 
 ### The toolchains
 
@@ -87,8 +88,9 @@ describe an edit, which is the same gap the missing browser was.
 | pnpm | `ARG PNPM_VERSION` | npm global |
 | TypeScript — `tsc` | `ARG TYPESCRIPT_VERSION` | npm global |
 | go-task — `task` (AVI-FR-NEGK) | `ARG TASK_VERSION` | `/usr/local/bin/task` |
+| `cargo-nextest` (AVI-FR-PBVT) | `ARG NEXTEST_VERSION` | `/usr/local/bin/cargo-nextest` |
 
-The go-task release archive is checked against the SHA-256 that the release
+The go-task and `cargo-nextest` release archives are checked against the SHA-256 that the release
 publishes, per architecture, on the same terms as `rustup-init`.
 
 `rustup-init` is the one part of an image that arrives over the network without
@@ -129,9 +131,10 @@ that is not a boundary being crossed.
 global install when its bin directory is not on the path.
 
 The Claude Code image also sets `BASH_DEFAULT_TIMEOUT_MS` and
-`BASH_MAX_TIMEOUT_MS` to `1800000` (AVI-FR-WWVY). A full check suite runs longer
+`BASH_MAX_TIMEOUT_MS` to `900000` (AVI-FR-WWVY). A full check suite runs longer
 than the CLI's default limit of ten minutes, and an agent that hits the limit
-starts a background job and polls it.
+starts a background job and polls it. A command that stops making progress
+gives the turn back within 15 minutes.
 
 ### The browser
 

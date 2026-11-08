@@ -345,7 +345,7 @@ The dispatches: `expect_dispatch_order`, `expect_dispatch_count`, and
    the `GRL` / `GXD` / `GRD` requirements the journey proves.
 4. Assert the record **and** the repository. A journey that only asserts a state
    passes for a run that committed the wrong thing.
-5. `cargo test graduation::tests::e2e` runs the suite alone.
+5. `cargo nextest run graduation::tests::e2e` runs the suite alone.
 
 Do not add an assertion that reads a private field of the loop, and do not add a
 sleep. If a journey seems to need one, the harness is missing a control and the

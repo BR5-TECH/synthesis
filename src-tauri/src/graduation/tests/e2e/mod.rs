@@ -10,7 +10,7 @@
 //! GTE-FR-ZPNC: every scenario composes what it sends and reads what it gets
 //! back with the production types, and asserts no private field of the loop.
 //! GTE-FR-OYTZ: the suite runs in isolation under
-//! `cargo test graduation::tests::e2e` and as part of the backend lane, and it
+//! `cargo nextest run graduation::tests::e2e` and as part of the backend lane, and it
 //! needs nothing that lane does not already install.
 //!
 //! A scenario reads as one journey — arrange, script, act, assert — and the

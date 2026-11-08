@@ -389,7 +389,7 @@ fn a_sandbox_process_gets_the_bash_timeouts() {
 
     let env = sandbox.only_process().env;
     for name in descriptor::BASH_TIMEOUT_ENVS {
-        assert_eq!(env.get(name).map(String::as_str), Some("1800000"), "{name}");
+        assert_eq!(env.get(name).map(String::as_str), Some("900000"), "{name}");
     }
 }
 
@@ -409,7 +409,7 @@ fn a_sandbox_process_keeps_a_timeout_the_author_names() {
 
     let env = sandbox.only_process().env;
     assert_eq!(env.get("BASH_MAX_TIMEOUT_MS").map(String::as_str), Some("3600000"));
-    assert_eq!(env.get("BASH_DEFAULT_TIMEOUT_MS").map(String::as_str), Some("1800000"));
+    assert_eq!(env.get("BASH_DEFAULT_TIMEOUT_MS").map(String::as_str), Some("900000"));
 }
 
 // EAC-FR-WBDE, EAC-FR-HXDN: a later launch removes what a turn added to the

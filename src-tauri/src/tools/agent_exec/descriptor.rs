@@ -210,8 +210,8 @@ pub const VM_DOCKER_HOST_VALUE: &str = "unix:///var/run/docker.sock";
 pub const CLAUDE_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 /// EAC-FR-WQNH: the two Bash timeouts of the Claude Code CLI.
 pub const BASH_TIMEOUT_ENVS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
-/// EAC-FR-WQNH: the value of each of [`BASH_TIMEOUT_ENVS`], 30 minutes.
-pub const BASH_TIMEOUT_MS: &str = "1800000";
+/// EAC-FR-WQNH: the value of each of [`BASH_TIMEOUT_ENVS`], 15 minutes.
+pub const BASH_TIMEOUT_MS: &str = "900000";
 
 /// EAC-FR-WQNH: the Bash timeouts the executor sets on a launch of `vendor`.
 /// A Claude Code launch gets both, except a variable that the launch

@@ -108,9 +108,9 @@ fn claude_codes_generated_invocation_is_exactly_the_descriptor() {
             "CLAUDE_CONFIG_DIR=/home/agent/.claude".into(),
             // EAC-FR-WQNH: the CLI's two Bash timeouts.
             "--env".into(),
-            "BASH_DEFAULT_TIMEOUT_MS=1800000".into(),
+            "BASH_DEFAULT_TIMEOUT_MS=900000".into(),
             "--env".into(),
-            "BASH_MAX_TIMEOUT_MS=1800000".into(),
+            "BASH_MAX_TIMEOUT_MS=900000".into(),
             image,
             "-p".into(),
             "--output-format".into(),

@@ -85,3 +85,15 @@ fn the_checkouts_under_a_run_home_are_its_directories_with_a_checkout_name() {
     std::fs::write(base.home("g3"), "not a directory\n").unwrap();
     assert!(base.checkouts_under(&fs, "g3", "rv").is_empty());
 }
+
+// GRD-FR-VLFO: the run order holds every run, so no two runs share an id, also
+// where they are made in the same microsecond.
+#[test]
+fn runs_made_at_the_same_time_get_different_ids() {
+    let ids: Vec<String> = (0..1000).map(|_| new_run_id()).collect();
+    let distinct: std::collections::HashSet<&String> = ids.iter().collect();
+    assert_eq!(distinct.len(), ids.len());
+    assert!(ids
+        .iter()
+        .all(|id| id.starts_with('g') && id.chars().skip(1).all(|c| c.is_ascii_hexdigit())));
+}

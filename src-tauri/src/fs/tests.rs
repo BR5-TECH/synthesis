@@ -313,3 +313,18 @@ fn is_valid_basename_accepts_plain_and_rejects_paths() {
 // -----------------------------------------------------------------
 // FSA-FR-15: append_lines.
 // -----------------------------------------------------------------
+
+// -----------------------------------------------------------------
+// FSA-FR-QDSV: a test build makes no request to sync to the device.
+// -----------------------------------------------------------------
+
+// FSA-FR-QDSV: a pipe refuses a sync request, so a sync that answers `Ok` on
+// one made no request.
+#[cfg(unix)]
+#[test]
+fn a_test_build_makes_no_sync_request() {
+    let (_reader, writer) = std::io::pipe().expect("a pipe");
+    let pipe = std::fs::File::from(std::os::fd::OwnedFd::from(writer));
+    assert!(pipe.sync_data().is_err(), "the operating system refuses a sync of a pipe");
+    assert!(super::sync_to_device(&pipe).is_ok(), "the test build made no sync request");
+}

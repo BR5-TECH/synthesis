@@ -34,7 +34,7 @@ Package manager: **pnpm** (v10+). Install with `pnpm install`.
 - `task lint` — format check and Clippy for all three Rust crates (`src-tauri/`, `tools/agentic-cli-mock/`, `server/`).
 - `cd src-tauri && cargo build` — compile the Rust binary alone.
 
-Run narrow checks (one test file, one `cargo test` filter) while you work. Run the full definition of done once at the end and record the results in a file. A review sub-agent runs no check command: it reads that file. Run long commands in the foreground; never poll a background job with `sleep` loops.
+Run narrow checks while you work: one `cargo test` filter, or `pnpm exec vitest related <changed source files> --run`, which runs only the test files that import those files. Run the full definition of done once at the end and record the results in a file. A review sub-agent runs no check command: it reads that file. Run long commands in the foreground; never poll a background job with `sleep` loops.
 
 Definition-of-done for any frontend change: `pnpm test` green, `pnpm build` green, AND `pnpm exec tsc -p tsconfig.test.json --noEmit` clean. For any backend change: `cargo fmt --check` clean, `cargo clippy --all-targets -- -D warnings` clean, `cargo check` clean, and `cargo test` green.
 
@@ -46,7 +46,7 @@ CI is always slower than a local machine. It runs each Vitest area (`src/test/te
 - Do not let a timer, a promise, or module-level state go from one test to the next. Reset each module store that the code under test touches in `beforeEach` (for example `resetLogBufferForTest`, `resetProjectIdentity`).
 - An `invoke` mock must answer the commands that the app sends in the background (`append_log_records`). For a command that it does not expect, it must return a rejected promise. It must not throw synchronously.
 - An unhandled error fails the CI lane, also when every test passes.
-- When a change adds a timer, a debounce, a background call, or a log emit on an async path, run the one area that holds that code as CI does, once, after the full run: `pnpm exec vitest run --project "<area>" --maxWorkers=1`. Do not run every area that way.
+- When a change adds a timer, a debounce, a background call, or a log emit on an async path, run the tests of the changed files as CI does, once, after the full run: `pnpm exec vitest related <changed source files> --project "<area>" --maxWorkers=1 --run`, with the one area that holds that code. Do not run a whole area or every area that way: a one-worker area takes ten minutes or more.
 - For Rust tests, run `TMPDIR=/tmp cargo test` when a result can depend on the length of a temporary path.
 
 `.claude/skills/engineer/references/conventions.md` has the details.

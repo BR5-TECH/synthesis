@@ -6,8 +6,6 @@ use super::*;
 // LSK-FR-19 — logging (LSK-FR-19)
 // ---------------------------------------------------------------------------
 
-static LSK_BUFFER: LogBuffer = LogBuffer::new();
-
 #[test]
 fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
     // A multi-byte body, so `bytes` cannot be satisfied by a character count:
@@ -21,21 +19,21 @@ fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
     )
     .unwrap();
     let fixture = mounted(dir);
-    LSK_BUFFER.clear();
+    // Its own buffer: the other test of this file runs at the same time.
+    let buffer = LogBuffer::for_one_test();
 
-    let body =
-        block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
-            name: "analyst".to_string(),
-            ecosystem: Some("claude".to_string()),
-            file: None,
-        }))
-        .unwrap();
+    let body = block_on(SkillLoadTool::with_buffer(fixture.handle(), buffer).call(LoadSkillArgs {
+        name: "analyst".to_string(),
+        ecosystem: Some("claude".to_string()),
+        file: None,
+    }))
+    .unwrap();
     assert!(
         body.len() != body.chars().count(),
         "the fixture must distinguish bytes from characters",
     );
 
-    block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
+    block_on(SkillLoadTool::with_buffer(fixture.handle(), buffer).call(LoadSkillArgs {
         name: "a skill nobody wrote".to_string(),
         ecosystem: None,
         file: None,
@@ -43,7 +41,7 @@ fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
     .unwrap_err();
 
     let query = |domain| {
-        LSK_BUFFER
+        buffer
             .query(
                 &LogFilter {
                     min_level: LogLevel::Debug,
@@ -118,14 +116,14 @@ fn every_refusal_this_tool_can_produce_is_logged_under_its_own_reason() {
 
     // And the two this tool reaches through a real call carry the right one.
     let fixture = collision_project();
-    LSK_BUFFER.clear();
-    let _ =
-        block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
-            name: "review".to_string(),
-            ecosystem: None,
-            file: None,
-        }));
-    let records = LSK_BUFFER
+    // Its own buffer: the other test of this file runs at the same time.
+    let buffer = LogBuffer::for_one_test();
+    let _ = block_on(SkillLoadTool::with_buffer(fixture.handle(), buffer).call(LoadSkillArgs {
+        name: "review".to_string(),
+        ecosystem: None,
+        file: None,
+    }));
+    let records = buffer
         .query(
             &LogFilter {
                 min_level: LogLevel::Debug,

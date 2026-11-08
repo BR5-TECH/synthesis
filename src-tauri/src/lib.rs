@@ -63,6 +63,7 @@ pub mod secret_vault;
 pub mod settings;
 pub mod settings_window;
 pub mod skills;
+pub mod stamp;
 pub mod statistics;
 pub mod storage_floor;
 pub mod streams;

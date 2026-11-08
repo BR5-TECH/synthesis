@@ -777,6 +777,14 @@ impl LogBuffer {
     pub const fn new() -> Self {
         LogBuffer { inner: Mutex::new(Inner::new()), flush_scheduled: AtomicBool::new(false) }
     }
+
+    /// A new buffer that only the calling test writes to. Tests run in
+    /// parallel, so a `static` buffer that two tests clear and read gives
+    /// each one the records of the other, or none.
+    #[cfg(test)]
+    pub fn for_one_test() -> &'static LogBuffer {
+        Box::leak(Box::new(LogBuffer::new()))
+    }
 }
 
 impl Inner {

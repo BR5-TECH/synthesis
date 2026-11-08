@@ -161,8 +161,9 @@ fn write_bytes_at(target: &Path, bytes: &[u8]) -> FsResult<()> {
         // rename advertises them. Without this a crash between rename and
         // disk-flush could expose an empty file on some filesystems.
         f.flush().map_err(FsError::Io)?;
-        // sync_data is fine here — we don't care about file metadata.
-        let _ = f.sync_data();
+        // FSA-FR-QDSV. The data alone is enough; the file metadata is not
+        // needed.
+        let _ = sync_to_device(&f);
     }
 
     // Atomic same-directory rename.
@@ -176,17 +177,15 @@ fn write_bytes_at(target: &Path, bytes: &[u8]) -> FsResult<()> {
 
 /// Build a sibling temp-file path for a target. The path lives in the same
 /// parent directory as `target` so the subsequent rename is same-directory
-/// (atomic on POSIX & Windows).
+/// (atomic on POSIX & Windows). Two writes to one target in the same
+/// microsecond get different temp files (FSA-FR-04).
 fn sibling_tmp_path(target: &Path) -> PathBuf {
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
     let stem = target
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "synthesis".to_string());
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let nanos = crate::stamp::unique_nanos();
     let pid = std::process::id();
     parent.join(format!(".{stem}.tmp.{pid}.{nanos}"))
 }
@@ -211,12 +210,22 @@ fn append_lines_at(target: &Path, lines: &[String]) -> FsResult<()> {
         fs::OpenOptions::new().append(true).create(true).open(target).map_err(FsError::Io)?;
     file.write_all(buf.as_bytes()).map_err(FsError::Io)?;
     file.flush().map_err(FsError::Io)?;
-    // FSA-FR-15: the append answers only once the bytes are on the device. A
-    // caller that is told a line was appended may rely on it surviving an
-    // immediate loss of the process, so a sync that fails is a write that
-    // failed rather than something to pass over.
-    file.sync_data().map_err(FsError::Io)?;
+    // FSA-FR-15, FSA-FR-QDSV: the append answers only once the bytes are on the
+    // device. A caller that is told a line was appended may rely on it
+    // surviving an immediate loss of the process, so a sync that fails is a
+    // write that failed rather than something to pass over.
+    sync_to_device(&file).map_err(FsError::Io)?;
     Ok(())
+}
+
+/// FSA-FR-QDSV: ask the operating system to put the written bytes of `file` on
+/// stable storage. A test build does not make the request: on macOS it waits
+/// for the physical disk, and no test can see whether the bytes reached it.
+pub(super) fn sync_to_device(file: &fs::File) -> io::Result<()> {
+    if cfg!(test) {
+        return Ok(());
+    }
+    file.sync_data()
 }
 
 /// `read_text` without a symlink check of its own — called by

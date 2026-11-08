@@ -241,11 +241,8 @@ pub(super) fn is_attempt_id(name: &str) -> bool {
     }
 }
 
-/// GRB-FR-YPEX: an attempt id, unique on the machine.
+/// GRB-FR-YPEX: an attempt id, unique on the machine, also for two attempts
+/// made in the same microsecond.
 pub(super) fn new_attempt_id() -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    format!("m{nanos:x}{:x}", std::process::id())
+    format!("m{:x}{:x}", crate::stamp::unique_nanos(), std::process::id())
 }

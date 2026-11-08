@@ -124,6 +124,8 @@ export interface PullRequestSummary {
   author: string;
   headBranch: string;
   baseBranch: string;
+  /** True when the head repository is a fork of the base repository. */
+  headIsFork: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +135,38 @@ export interface CreatedPullRequest {
   number: number;
   /** The address of its page on the GitHub host of the repository. */
   url: string;
+}
+
+/** GTC-FR-TBQW: the stack of one branch. */
+export interface BranchStack {
+  branch: string;
+  /** GTC-FR-JMVC: GitHub answered the stack reads. */
+  available: boolean;
+  unavailableCause?: string;
+  inStack: boolean;
+  source?: "github" | "local_record" | "pull_request_chain";
+  stackNumber?: number;
+  /** GTC-FR-XCMQ: the branch below, or the base branch of the stack. */
+  parent?: string;
+  /** GTC-FR-ZPUA: the branch at the top of the stack. */
+  top?: string;
+  isTop: boolean;
+  /** GTC-FR-ZPUA: an open pull request has the top as its head. */
+  topHasPullRequest: boolean;
+  /** The open pull request whose head is the branch. */
+  pullRequest?: { number: number; title: string };
+}
+
+/** GTC-FR-HEXN / GTC-FR-KQVA: what the stack step of a submission did. */
+export interface StackStep {
+  state: "added" | "created" | "not_added";
+  stackNumber?: number;
+  error?: string;
+}
+
+/** GTC-FR-UYGD: the pull request a submission to a stack created. */
+export interface StackedPullRequest extends CreatedPullRequest {
+  stack: StackStep;
 }
 
 /** GTC-FR-QJFC: one issue a pull request resolves. */

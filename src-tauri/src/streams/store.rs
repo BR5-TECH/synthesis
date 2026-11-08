@@ -55,13 +55,10 @@ impl StreamStore {
 /// WKS-FR-QMTV: a stream id, unique across projects.
 ///
 /// Prefixed so a directory under the store root is recognisable as a stream's
-/// without opening it.
+/// without opening it. Two streams made in the same microsecond get different
+/// ids.
 pub(super) fn new_stream_id() -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    format!("w{nanos:x}{:x}", std::process::id())
+    format!("w{:x}{:x}", crate::stamp::unique_nanos(), std::process::id())
 }
 
 /// Whether a directory name under the store root is a stream's.

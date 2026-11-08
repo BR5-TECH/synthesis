@@ -11,7 +11,9 @@ use std::borrow::Cow;
 
 use serde_json::{Map, Value};
 
-use super::{summary_line as one_line, ActivityKind, ExtractContext, Extracted, VendorActivity};
+use super::{
+    summary_line as one_line, ActivityKind, ExtractContext, Extracted, TextFilter, VendorActivity,
+};
 use crate::tools::agent_exec::protocol::{decode_envelope, EnvelopeInvalid, ResultContract};
 
 /// The specification this module transcribes (EAC-FR-10's `protocol_spec`).
@@ -242,6 +244,15 @@ const KEY_STRUCTURED_OUTPUT: &str = "structured_output";
 const KEY_RESULT: &str = "result";
 const SUBTYPE_SUCCESS: &str = "success";
 
+/// CCP-FR-RGVA: the final event of this CLI is a stdout line whose `type` is
+/// `result`. A line that is not a JSON object is not one.
+pub fn is_final_event(line: &[u8]) -> bool {
+    let Ok(Value::Object(event)) = serde_json::from_slice::<Value>(line.trim_ascii()) else {
+        return false;
+    };
+    event.get(KEY_TYPE).and_then(Value::as_str) == Some(EVENT_RESULT)
+}
+
 pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvalid> {
     // CCP-FR-13: stdout is one JSON object per line, and exactly one of them is
     // the result document. Every other line is progress — what the agent said,
@@ -357,6 +368,12 @@ const BLOCK_TOOL_RESULT: &str = "tool_result";
 
 /// CCP-FR-27: one line of the event stream, read as an activity.
 pub fn activity(line: &str) -> VendorActivity {
+    activity_filtered(line, &|text| text.to_string())
+}
+
+/// CCP-FR-27: the same reading, with every text block of an assistant event
+/// passed through `filter` first (EAC-FR-HTSN).
+pub fn activity_filtered(line: &str, filter: TextFilter<'_>) -> VendorActivity {
     let Ok(Value::Object(event)) = serde_json::from_str::<Value>(line.trim()) else {
         return unrecognized(line);
     };
@@ -366,7 +383,7 @@ pub fn activity(line: &str) -> VendorActivity {
 
     match event_type {
         EVENT_SYSTEM => system_activity(&event),
-        EVENT_ASSISTANT | EVENT_USER => message_activity(&event, event_type),
+        EVENT_ASSISTANT | EVENT_USER => message_activity(&event, event_type, filter),
         EVENT_RESULT => result_activity(&event),
         _ => unrecognized(line),
     }
@@ -410,7 +427,11 @@ fn system_activity(event: &Map<String, Value>) -> VendorActivity {
 /// commonly — and the summary names each in order, because a turn where the
 /// agent explained itself *and* reached for a file is two different things a
 /// reader is watching for.
-fn message_activity(event: &Map<String, Value>, event_type: &str) -> VendorActivity {
+fn message_activity(
+    event: &Map<String, Value>,
+    event_type: &str,
+    filter: TextFilter<'_>,
+) -> VendorActivity {
     let blocks = event
         .get("message")
         .and_then(Value::as_object)
@@ -429,7 +450,13 @@ fn message_activity(event: &Map<String, Value>, event_type: &str) -> VendorActiv
         match block.get(KEY_TYPE).and_then(Value::as_str) {
             Some(BLOCK_TEXT) => {
                 if let Some(text) = block.get("text").and_then(Value::as_str) {
-                    parts.push(one_line(text));
+                    let filtered = filter(text);
+                    let line = one_line(&filtered);
+                    // EAC-FR-HTSN: a block the filter emptied leaves no part. A
+                    // block that was empty to begin with is read as it always was.
+                    if !(line.is_empty() && filtered != text) {
+                        parts.push(line);
+                    }
                 }
             }
             Some(BLOCK_THINKING) => {

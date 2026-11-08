@@ -46,6 +46,7 @@ pub(super) fn write_error(failure: GithubWriteFailure) -> String {
                 format!("{ERR_PULL_REQUEST_REJECTED}: {}", reason.trim())
             }
         }
+        GithubWriteFailure::Conflict => ERR_PULL_REQUEST_REJECTED.to_string(),
         GithubWriteFailure::Unreachable => github_tokens::ERR_GITHUB_UNREACHABLE.to_string(),
         GithubWriteFailure::TlsUntrusted(failure) => failure.wire(),
     }

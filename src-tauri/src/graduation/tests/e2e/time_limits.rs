@@ -242,3 +242,37 @@ fn a_run_with_no_time_left_for_the_review_rests_before_it() {
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"]);
 }
+
+// GTE-FR-ZTLC / GRL-FR-NVGQ, GRL-FR-EFTM: an answer to questions asked late in
+// the total time gives the turn that takes the answers the whole total again.
+// Without the reset it would run under the minute the run had left.
+#[test]
+fn an_answer_gives_the_turn_that_takes_it_the_whole_total_time() {
+    let outcome = Scenario::named("answer after most of the total")
+        .with_setting(Setting::StageTimeLimitMs, HALF_HOUR)
+        .with_setting(Setting::TotalTimeLimitMs, 2 * HOUR)
+        .work_turn(Script::times_out().writes("src/panel.ts", "1\n"))
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_time_used(HALF_HOUR, HALF_HOUR + 60_000)
+        .continued(vec![Script::escalates(&["Which limit stands?"])])
+        .expect_state(GraduationRunState::AwaitingAuthor)
+        .expect_escalation_questions(&["Which limit stands?"]);
+
+    // About a minute of the total is left when the author answers.
+    super::scenario::set_setting(outcome.fixture(), Setting::TotalTimeLimitMs, HALF_HOUR + 60_000);
+
+    outcome
+        .answered(
+            &["The base limit stands."],
+            vec![
+                Script::reports_success().writes("src/panel.ts", "2\n"),
+                Script::answers_ready("The panel is there."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_no_rest()
+        .expect_pass(1)
+        .expect_dispatch_order(&["work", "review"])
+        .expect_dispatch(0, |d| d.purpose("escalation_answer").execution_timeout_ms(HALF_HOUR));
+}

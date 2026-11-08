@@ -40,6 +40,7 @@ fn the_observer_is_handed_whole_lines_however_the_child_writes_them() {
         stdout_limit: 4096,
         stderr_limit: 4096,
         observer: Some(&observer),
+        final_event: None,
     }))
     .expect("the child ran");
     assert_eq!(outcome.exit_code, Some(0));
@@ -92,6 +93,7 @@ fn a_line_that_never_ends_is_delivered_at_the_bound() {
         stdout_limit: count * 2,
         stderr_limit: 4096,
         observer: Some(&observer),
+        final_event: None,
     }))
     .expect("the child ran");
 
@@ -402,6 +404,7 @@ fn a_line_reaches_a_watcher_while_the_run_is_still_going() {
                 stdout_limit: 4096,
                 stderr_limit: 4096,
                 observer: Some(&observer),
+                final_event: None,
             })
             .await
     };
@@ -460,6 +463,7 @@ fn a_watcher_keeps_hearing_after_the_capture_bound_is_reached() {
         stdout_limit: 14,
         stderr_limit: 4096,
         observer: Some(&observer),
+        final_event: None,
     }))
     .expect("the child ran");
 
@@ -505,6 +509,7 @@ fn the_end_of_a_stream_flushes_what_an_observer_was_holding() {
         stdout_limit: LIMIT_OBSERVED_LINE * 2,
         stderr_limit: 4096,
         observer: Some(&observer),
+        final_event: None,
     }))
     .expect("the child ran");
 

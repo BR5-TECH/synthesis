@@ -151,6 +151,8 @@ impl GraduationLogPage {
 pub const ERR_UNKNOWN_PHASE: &str = "unknown_phase";
 pub const ERR_UNKNOWN_SCOPE: &str = "unknown_scope";
 pub const ERR_CURSOR_NOT_FOR_THIS_SCOPE: &str = "cursor_not_for_this_scope";
+/// GRS-FR-XWHD: a read of the structured stream that names kinds.
+pub const ERR_KINDS_NOT_FOR_STREAM: &str = "kinds_not_for_stream";
 
 /// One decoded line of a stream, with what a read decides from it.
 struct Line {
@@ -307,6 +309,8 @@ pub struct PageRequest<'a> {
     pub cursor: Option<GraduationLogCursor>,
     pub limit: Option<u32>,
     pub query: Option<String>,
+    /// GRS-FR-RNKT: the activity kinds a read keeps, or `None` for every kind.
+    pub kinds: Option<Vec<String>>,
 }
 
 /// GRS-FR-RZXA: one page of one stream for one run, phase, and scope.
@@ -319,7 +323,12 @@ pub fn read_page(
     indexes: &GraduationLogIndexes,
     request: PageRequest<'_>,
 ) -> Result<GraduationLogPage, String> {
-    let PageRequest { run_id, phase_id, scope, stream, cursor, limit, query } = request;
+    let PageRequest { run_id, phase_id, scope, stream, cursor, limit, query, kinds } = request;
+    // GRS-FR-XWHD: a kind is a property of an activity record alone.
+    let kinds = kinds.filter(|kinds| !kinds.is_empty());
+    if kinds.is_some() && stream == GraduationLogStream::Structured {
+        return Err(ERR_KINDS_NOT_FOR_STREAM.to_string());
+    }
     // GRS-FR-UEIL: a cursor answers for the run and the stream it names.
     if let Some(cursor) = cursor.as_ref() {
         if cursor.run_id != run_id
@@ -425,7 +434,20 @@ pub fn read_page(
         return Ok(page);
     }
 
-    let scoped: Vec<&Line> = lines.iter().filter(|line| in_scope(line, phase_id, scope)).collect();
+    // GRS-FR-RNKT: the kinds narrow the scope as the phase does, so the status
+    // and every count below read the narrowed set.
+    let scoped: Vec<&Line> = lines
+        .iter()
+        .filter(|line| in_scope(line, phase_id, scope))
+        .filter(|line| {
+            kinds.as_ref().is_none_or(|kinds| {
+                line.value
+                    .get("kind")
+                    .and_then(|kind| kind.as_str())
+                    .is_some_and(|kind| kinds.iter().any(|wanted| wanted == kind))
+            })
+        })
+        .collect();
 
     // GRS-FR-NSGX: the scope's own records settle the status, and the query
     // carries its own result beside it.

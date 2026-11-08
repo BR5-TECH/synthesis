@@ -559,6 +559,8 @@ async fn work_turn<R: tauri::Runtime>(
         return Step::Stop;
     }
 
+    prepare_check_folder(app, run, worktree);
+
     // GRL-FR-EFTM: the turn runs under the smaller of the stage time limit and
     // the remaining total time.
     let bound = settings.turn_bound(run.turn_time_used_ms);
@@ -588,6 +590,56 @@ async fn work_turn<R: tauri::Runtime>(
         return Step::Stop;
     }
     step
+}
+
+/// GRL-FR-LXWU / GRL-FR-KYYW: before a `work` or `merge_work` turn, the
+/// repository hides the check folder and the folder holds no earlier result.
+///
+/// A saved correction (GRL-FR-HWLD) only sends its answer again, so it keeps the
+/// results the turn it corrects wrote. A step that fails is reported and the
+/// turn runs all the same: the review then finds the report wrong or missing,
+/// which is a finding (GRL-FR-NTFD) rather than a stop.
+fn prepare_check_folder<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+    worktree: &std::path::Path,
+) {
+    match checks_folder::ensure_excluded(worktree) {
+        Ok(true) => logging::log_debug(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation hid the check folder in the repository exclude file",
+            log_fields! { "run_id" => run.id.clone() },
+        ),
+        Ok(false) => {}
+        Err(reason) => logging::log_warn(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation could not hide the check folder",
+            log_fields! { "run_id" => run.id.clone(), "reason" => reason },
+        ),
+    }
+    if corrections::will_correct(run, phases::PART_WORK) {
+        return;
+    }
+    match checks_folder::clear(worktree) {
+        Ok(removed) => logging::log_debug(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation emptied the check folder",
+            log_fields! { "run_id" => run.id.clone(), "removed" => removed },
+        ),
+        Err(reason) => logging::log_warn(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation could not empty the check folder",
+            log_fields! { "run_id" => run.id.clone(), "reason" => reason },
+        ),
+    }
 }
 
 /// GLG-FR-ZJTP: whether the turn about to start is a saved correction.
@@ -686,9 +738,8 @@ async fn review_turn<R: tauri::Runtime>(
         }
 
         // GRL-FR-YKRI: the reviewer stands in a throwaway checkout holding the
-        // run's change set, removed when the turn ends. Nothing it writes
-        // reaches the stream, so it may run the project's own build and test
-        // commands freely.
+        // run's change set and the check folder, removed when the turn ends.
+        // Nothing it writes reaches the stream.
         let checkout = match review_checkout::create(app, run, worktree) {
             Ok(path) => path,
             Err(reason) => {
@@ -711,6 +762,19 @@ async fn review_turn<R: tauri::Runtime>(
                 return Step::Stop;
             }
         };
+        // GRL-FR-FESZ: the review is told where the check report is, or that
+        // there is none.
+        let checks = checks_folder::report_ref(&checkout);
+        if checks == checks_folder::MISSING {
+            logging::log_info(
+                app,
+                &crate::logging::BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "graduation review has no check report",
+                log_fields! { "run_id" => run.id.clone(), "part" => phases::PART_REVIEW },
+            );
+        }
+        input.checks = Some(checks);
         let bound = settings.turn_bound(run.turn_time_used_ms);
         let turn = TurnRequest {
             execution_directory: &checkout,
@@ -864,6 +928,15 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
     // GRL-FR-GQAB: the findings travel whole into the next work turn, in the
     // order the review returned them.
     let instruction = compose_instruction(verdict);
+    // GXD-FR-WRVH: the findings join the run's review history, with the pass of
+    // the review that found them.
+    let pass = run.pass();
+    run.checkpoint.review_history.extend(
+        verdict
+            .findings
+            .iter()
+            .map(|finding| ReviewHistoryEntry { pass, finding: finding.clone() }),
+    );
     run.observability.settle_pass(verdict, Some(instruction.clone()), crate::notes::now_rfc3339());
     run.checkpoint.loop_instruction = Some(instruction);
 

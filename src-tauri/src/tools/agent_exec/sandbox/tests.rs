@@ -315,6 +315,7 @@ fn process(args: &[String]) -> SandboxProcess<'_> {
         stdout_limit: 1024,
         stderr_limit: 1024,
         observer: None,
+        final_event: None,
     }
 }
 

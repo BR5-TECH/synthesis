@@ -624,6 +624,56 @@ describe("the run region", () => {
     expect(screen.queryByRole("button", { name: /^Answer/ })).toBeNull();
   });
 
+  it("GRU-FR-XKCB: a run that waits on its questions offers the answers and Discard run, and no Continue", async () => {
+    queue = makeQueue([
+      makeRun("r1", "awaiting_author", { escalation: makeEscalation(), commits: ["c0ffee1"] }),
+    ]);
+    await open();
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    expect(within(region).getByTestId("graduation-escalation")).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Discard run" })).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Revert" })).toBeInTheDocument();
+    expect(within(region).queryByRole("button", { name: /^(Continue|Resume)\b/ })).toBeNull();
+    cleanup();
+
+    // A run that rests for the author without questions still offers Continue.
+    queue = makeQueue([makeRun("r2", "awaiting_author")]);
+    await open();
+    const rested = await screen.findByRole("region", { name: "The selected run" });
+    expect(within(rested).getByRole("button", { name: "Continue" })).toBeInTheDocument();
+  });
+
+  it("GRU-FR-XKCB: questions a record still names while a turn runs are not offered for an answer", async () => {
+    // Each state with the control that proves its region rendered.
+    const anchors = [
+      ["queued", "Discard run"],
+      ["working", "Pause"],
+      ["reviewing", "Pause"],
+      ["interrupted", "Continue"],
+      ["blocked", "Continue"],
+    ] as const;
+    for (const [state, anchor] of anchors) {
+      invoked.mockClear();
+      forgetEverything();
+      queue = makeQueue([makeRun(`r-${state}`, state, { escalation: makeEscalation() })]);
+      await open();
+      const region = await screen.findByRole("region", { name: "The selected run" });
+      expect(region.getAttribute("data-run")).toBe(`r-${state}`);
+      expect(within(region).getByRole("button", { name: anchor })).toBeInTheDocument();
+      expect(region.getAttribute("data-awaiting")).toBeNull();
+      expect(within(region).queryByTestId("graduation-escalation")).toBeNull();
+      expect(screen.queryByTestId("discussion-questions-submit")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("GRU-FR-XKCB: the region gives the room to the questions only while the run waits on the author", async () => {
+    queue = makeQueue([makeRun("r1", "awaiting_author", { escalation: makeEscalation() })]);
+    await open();
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    expect(region.getAttribute("data-awaiting")).toBe("true");
+  });
+
   it("GRU-FR-YYXN: the pass history follows the run the author selects", async () => {
     queue = makeQueue([
       makeRun("r1", "working"),

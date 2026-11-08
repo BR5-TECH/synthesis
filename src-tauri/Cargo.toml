@@ -58,7 +58,7 @@ keyring = { version = "4", features = ["v1"] }
 # against api.github.com, and AAP-FR-05 / AIC-FR-22 verify an AI endpoint by
 # asking it for its model list. Every one of those calls is bounded by a global
 # timeout, because the UI has no way to cancel an in-flight `invoke`.
-ureq = "3"
+ureq = "3.5"
 # AAP-FR-23: the `openrouter` provider is reached through this SDK, which is
 # what its verification, its model probe, and the reasoning parameter of every
 # call it carries go through. It is the only provider that depends on it — the
@@ -166,6 +166,28 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # opens a path itself. It extracts embedded text only and does no OCR.
 pdf-extract = "0.12"
 
+# DXP-FR-CPPT: the `docx` export of a DOC artifact is written with this crate.
+docx-rs = "0.4.22"
+# DXP-FR-JYHX / DXP-FR-YVIV: decodes a project image before it reaches a writer,
+# and encodes the empty image a vertical break takes in a PDF. The version and
+# features `markdown2pdf` already brings, so nothing is added to the build.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# DXP-FR-CPPT: the `pdf` export of a DOC artifact. Its lexer and its renderer
+# take a token stream that the export builds itself (DXP-FR-ERZY, DXP-FR-YVIV).
+markdown2pdf = "1.6.2"
+# DXP-FR-FNTP / DXP-FR-ERZY: the widths of the bundled PDF font, so the PDF
+# writer breaks an aligned line where the renderer does. The crate is already
+# in the tree under `markdown2pdf`, at this version, so nothing is added to
+# the build.
+ttf-parser = "0.25"
+# DXP-FR-RKJC: a diagram fence is rendered to a PNG image in the backend, with
+# no webview. Only the SVG path, the Cytoscape layout, and the PNG export are on;
+# `system-fonts` lets the PNG raster draw label text with the fonts of the host.
+merman = { version = "=0.10.0-alpha.2", default-features = false, features = ["all-diagrams", "svg", "layout-cytoscape", "png", "system-fonts"] }
+# DXP-FR-RKJC: the raster options a PNG request of `merman` carries. The crate
+# is already in the tree under `merman`, which does not re-export the type.
+merman-export = { version = "=0.10.0-alpha.2", default-features = false }
+
 # EMB-FR-MHHY: the embeddings of the vector index. ONNX Runtime runs the
 # recommended models, and its binaries link statically (NLL-FR-VMBF). The
 # Candle features run the models that only Candle supports: the Qwen3 text
@@ -217,6 +239,9 @@ ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "
 
 [dev-dependencies]
 tempfile = "3"
+# DXP-FR-CPPT: the tests read the `word/document.xml` of an exported `.docx`.
+# The same version `docx-rs` writes with, so nothing is added to the build.
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
 # AAP-FR-HZTB: the TLS tests run a local HTTPS server under a certificate they
 # generate, so every cause code is produced by a real handshake.
 rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }

@@ -168,6 +168,28 @@ RUN set -eux; \
     /usr/local/cargo/bin/rustc --version; \
     /usr/local/cargo/bin/cargo --version
 
+# AVI-FR-NEGK: the `task` runner (go-task), because a repository can name its
+# checks as tasks, and a turn that cannot run them cannot run the checks as the
+# project defines them. It is fetched by version from the release archive and
+# checked against the SHA-256 the release publishes, on the terms of the Rust
+# installer above. An architecture with no recorded checksum stops the build.
+ARG TASK_VERSION=3.54.0
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+        amd64) sha256='680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb' ;; \
+        arm64) sha256='d7189d439d4a6058e39e1b2acd7c8b27acd4856691b408f23b242e4294e1df5b' ;; \
+        *) echo "no go-task checksum recorded for architecture $arch" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --silent --show-error --location \
+        --output /tmp/task.tar.gz \
+        "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_linux_${arch}.tar.gz"; \
+    echo "${sha256}  /tmp/task.tar.gz" | sha256sum --check --strict -; \
+    tar -xzf /tmp/task.tar.gz -C /usr/local/bin task; \
+    chmod 0755 /usr/local/bin/task; \
+    rm /tmp/task.tar.gz; \
+    /usr/local/bin/task --version
+
 # AVI-FR-17: pnpm because it is the package manager the work uses, and the
 # TypeScript compiler because a change to a typed module is unchecked until
 # `tsc` has read it. Both are installed globally by npm, which the base image
@@ -239,6 +261,12 @@ RUN npm install --global --no-fund --no-audit \
 ENV HOME=/home/agent \
     PNPM_HOME=/home/agent/.local/share/pnpm \
     PATH=/usr/local/cargo/bin:/home/agent/.local/share/pnpm/bin:$PATH
+
+# AVI-FR-WWVY: a full check suite runs longer than the CLI's default Bash limit
+# of ten minutes. An agent that hits the limit starts a background job and polls
+# it, and a background job keeps the CLI alive after its answer.
+ENV BASH_DEFAULT_TIMEOUT_MS=1800000 \
+    BASH_MAX_TIMEOUT_MS=1800000
 
 # AVI-FR-03: a non-root user at the fixed UID/GID `manifest.toml` records. The
 # executor maps the host user onto these (EAC-FR-14), which is what keeps a file

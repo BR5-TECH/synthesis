@@ -228,6 +228,18 @@ pub enum Attachment {
     /// CMS-FR-KAXQ: the comment is about one new-draft proposal.
     #[serde(rename_all = "camelCase")]
     NewDraftSubject { proposal_id: String, draft_id: String },
+    /// CMS-FR-OKDW: a reference to an export an agent asked the author for
+    /// (`DXP-document-export.md` DXP-FR-XZVZ). Identity alone, appended
+    /// through `append_as` alone; no [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    ExportRequest {
+        request_id: String,
+        /// Project-relative path of the DOC artifact.
+        path: String,
+        /// `pdf` or `docx`: the format the agent gave.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        format: Option<String>,
+    },
 }
 
 /// CMS-FR-YKGI: what one update of a new-draft proposal did.

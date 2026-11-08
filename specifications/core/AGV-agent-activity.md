@@ -20,7 +20,7 @@ ActivityRecord {
   seq:               integer,   // assigned here, ascending within a run
   at:                string,    // RFC 3339 UTC, when the line arrived
   channel:           "stdout" | "stderr" | "executor",
-  kind:              string,    // the executor's normalized kind (EAC-FR-33)
+  kind:              string,    // the executor's normalized kind (EAC-FR-33), `milestone` included (EAC-FR-ZNBD)
   summary:           string,    // one line, for a row
   payload:           string,    // the whole event, verbatim
   payloadTruncated:  boolean
@@ -67,6 +67,7 @@ A run-scoped sink, constructed against one run identifier and handed to `../tool
 15. **AGV-FR-EFNP** A **failed write is tolerable here because the record is elsewhere.** AGV-FR-08 stands unchanged for this module's own file, and it stands because that file is a convenience copy of something already in memory and already announced — a run's mandatory account is `GRS-graduation-run-log-storage.md`'s, where a failed write stops the run instead (GRS-FR-EIXS). A build in which this module's tolerance were read as the graduation streams' would be a build that lost an agent's output and said nothing.
 16. **AGV-FR-VZBU** This module is **not the source a graduation log surface reads**. `../ui/GLW-graduation-log-window.md` reads the persisted activity stream and invokes nothing here, and `read_agent_activity` answers for this module's stream alone whoever calls it.
 17. **AGV-FR-ZSRV** The activity this module holds is **unfiltered**: every kind the executor reports, the payload, and the excluded kinds of `GRS-graduation-run-log-storage.md` GRS-FR-VZUZ among them. A graduation turn reaches this module and the persisted activity stream through two separate sinks, and the safe-content boundary of the persisted stream changes nothing here.
+18. **AGV-FR-MKLB** A `milestone` record is kept and served as any other record. It carries its own kind, `milestone`, which surfaces label as itself (per `../ui/RUN-runs.md` RUN-FR-YQAE), and its summary is the compact JSON marker the executor wrote.
 
 ## Non-functional requirements
 

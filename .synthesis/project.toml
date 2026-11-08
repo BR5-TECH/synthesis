@@ -3,7 +3,13 @@ draftTemplate = """
 
 ## User journey
 
+- 
+
 ## Requirements
+
+- 
+
+## Expected deliverables
 
 - """
 graduationConcurrencyLimit = 2

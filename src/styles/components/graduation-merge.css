@@ -49,3 +49,67 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* GRU-FR-NQLG, GRU-FR-DRPW: the Escalations log reuses the path list's header.
+   Its rows are plain text, one block for each decision. */
+.graduation__escalations-log {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.graduation__escalations-rows {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.graduation__escalations-row {
+  min-width: 0;
+  padding: var(--sp-1) 0;
+  border-top: 1px solid var(--border-1);
+}
+.graduation__escalations-row p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.graduation__escalations-meta,
+.graduation__escalations-note { color: var(--fg-2); }
+.graduation__escalations-question { color: var(--fg-2); }
+.graduation__escalations-answer { color: var(--fg-1); }
+
+/* GRU-FR-WQHM: the milestone list of the current turn. The state is a word
+   first (GRU-FR-CYDK); the colour only agrees with it. */
+.graduation__milestones {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.graduation__milestones-head { margin: 0; }
+.graduation__milestones-rows {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.graduation__milestone {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--fg-2);
+}
+.graduation__milestone-state {
+  flex: none;
+  min-width: 6ch;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+.graduation__milestone-title { min-width: 0; overflow-wrap: anywhere; }
+.graduation__milestone[data-state="active"] { color: var(--fg-1); }
+.graduation__milestone[data-state="active"] .graduation__milestone-state { color: var(--accent); }
+.graduation__milestone[data-state="done"] .graduation__milestone-state { color: var(--ok); }
+.graduation__milestone[data-state="unknown"] .graduation__milestone-title { font-style: italic; }

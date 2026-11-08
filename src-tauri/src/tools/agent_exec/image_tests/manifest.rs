@@ -199,24 +199,40 @@ fn no_dockerfile_bakes_in_a_credential() {
         // The *values* are each owned by the requirement that introduces them
         // and asserted at that requirement's own test; what this owns is that
         // there is nothing else, in whatever order the file sets them.
+        //
+        // AVI-FR-WWVY: the Claude Code image also sets the CLI's two Bash
+        // timeouts, which hold a number of milliseconds rather than a path.
         const DEFINED: [&str; 6] =
             ["CARGO_HOME", "HOME", "PATH", "PLAYWRIGHT_BROWSERS_PATH", "PNPM_HOME", "RUSTUP_HOME"];
+        const TIMEOUTS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
         let mut names: Vec<String> = env_assignments(dockerfile)
             .iter()
             .map(|assignment| {
                 let (name, value) = assignment
                     .split_once('=')
                     .unwrap_or_else(|| panic!("{vendor} sets an ENV with no value: {assignment}"));
-                assert!(
-                    value.starts_with('/'),
-                    "{vendor} sets {name} to something other than a container path: {value}"
-                );
+                if vendor == "claude-code" && TIMEOUTS.contains(&name) {
+                    assert!(
+                        !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()),
+                        "{vendor} sets {name} to something other than a number: {value}"
+                    );
+                } else {
+                    assert!(
+                        value.starts_with('/'),
+                        "{vendor} sets {name} to something other than a container path: {value}"
+                    );
+                }
                 name.to_string()
             })
             .collect();
         names.sort();
+        let mut expected: Vec<&str> = DEFINED.to_vec();
+        if vendor == "claude-code" {
+            expected.extend(TIMEOUTS);
+        }
+        expected.sort();
         assert_eq!(
-            names, DEFINED,
+            names, expected,
             "{vendor} sets an environment variable AVI does not define, or omits one it does"
         );
     }
@@ -367,6 +383,8 @@ fn the_readme_documents_everything_avi_requires() {
         ("the Rust installer's pin", "ARG RUSTUP_VERSION"),
         ("the pnpm pin", "ARG PNPM_VERSION"),
         ("the TypeScript pin", "ARG TYPESCRIPT_VERSION"),
+        ("the task runner pin", "ARG TASK_VERSION"),
+        ("the Bash timeouts", "BASH_MAX_TIMEOUT_MS"),
         ("the rule for upgrading a toolchain", "both Dockerfiles"),
         ("the home directory the image names", "HOME=/home/agent"),
     ] {

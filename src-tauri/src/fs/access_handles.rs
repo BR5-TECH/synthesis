@@ -102,7 +102,7 @@ impl FileHandle<'_> {
     /// Flush and ask the OS to put the bytes on stable storage.
     pub fn sync(&mut self) -> FsResult<()> {
         self.flush()?;
-        self.file.sync_data().map_err(FsError::Io)
+        super::sync_to_device(&self.file).map_err(FsError::Io)
     }
 
     /// Seek within the file. Only meaningful for a readable handle; an

@@ -84,7 +84,7 @@ fn a_compaction_call_reports_no_context() {
             Ok(ScriptedReply::answer("The earlier rounds read hld.md.")),
             Ok(ScriptedReply::answer("Done.")),
         ],
-        Some(12_000),
+        Some(13_000),
         1,
     );
     // A fragment discussion opens its history with the fragment, which is the

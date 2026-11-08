@@ -33,6 +33,7 @@ fn the_cli_backend_gives_the_spawned_process_each_value() {
             stdout_limit: 4096,
             stderr_limit: 4096,
             observer: None,
+            final_event: None,
         })
         .await
     })

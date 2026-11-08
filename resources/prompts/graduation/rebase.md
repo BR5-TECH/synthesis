@@ -25,7 +25,7 @@ The structured input beside this instruction carries the merge. Read it before y
 
 - `input.merge_base_revision` — the revision both branches last shared.
 
-- `input.author_decisions` — **decisions the author has already made about this merge.** Each carries the `question` they were asked and the `answer` they gave, and can carry a `note`: the author's own words beside that answer. Read it as part of the answer. The list is empty where no question has been asked.
+- `input.author_decisions` — **decisions the author has already made about this merge.** Each carries the `question` they were asked, the `answer` they gave, its `summary`, the `turn` that asked and the `pass`, and can carry a `note`: the author's own words beside that answer. Read it as part of the answer. The list is empty where no question has been asked.
 
 **Work one question at a time.** Take a question, read its path's two sides, settle that path, then move to the next.
 
@@ -57,7 +57,7 @@ You answer a question by leaving that file holding one version that both sides' 
 
 ## Decisions the author has already made
 
-Where `input.author_decisions` holds an entry, a turn before yours could not choose between two contradictory requirements and asked the author. Each entry is settled. Apply it, and ask about it no more.
+Where `input.author_decisions` holds an entry, a turn before yours could not choose between two contradictory requirements and asked the author. Each entry is settled and **binding**. The list holds every decision the author made about this update, whichever turn asked. Apply each one, do not contradict one, and ask about it no more.
 
 **An answer states intent; it is not an edit.** It says which of two contradictory requirements stands. You write the code that makes it stand, in every question the same contradiction reaches, whether or not the answer names a path.
 

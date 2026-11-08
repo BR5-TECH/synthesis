@@ -173,6 +173,8 @@ pub struct SandboxProcess<'a> {
     pub stdout_limit: usize,
     pub stderr_limit: usize,
     pub observer: Option<&'a dyn StreamObserver>,
+    /// EAC-FR-HZIE: the vendor's final event and its grace.
+    pub final_event: Option<super::final_event::FinalEventRule>,
 }
 
 /// EAC-FR-PWLA: the environment of a sandbox process. The image's `Env` comes

@@ -72,7 +72,7 @@ impl GithubVerifier for HttpGithubVerifier {
             .get(&user_api)
             .header("Authorization", &format!("Bearer {secret}"))
             .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
             // GitHub rejects an API request with no User-Agent outright, which
             // would otherwise read as "the token is bad".
             .header("User-Agent", "synthesis")

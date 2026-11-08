@@ -108,11 +108,16 @@ async function open() {
   );
 }
 
-/** Every `read_graduation_logs` this test provoked. */
+/**
+ * Every `read_graduation_logs` of the log window this test provoked. The reads
+ * of the milestone list name `kinds` and are not the window's
+ * (GRU-FR-JHVX).
+ */
 function reads(): Array<Record<string, unknown>> {
   return invoked.mock.calls
     .filter(([command]) => command === "read_graduation_logs")
-    .map(([, args]) => args as Record<string, unknown>);
+    .map(([, args]) => args as Record<string, unknown>)
+    .filter((args) => args.kinds === undefined);
 }
 
 describe("the stage row's route into the log window", () => {

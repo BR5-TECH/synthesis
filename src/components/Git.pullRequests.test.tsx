@@ -26,6 +26,13 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({
   listen: () => Promise.resolve(() => {}),
 }));
+// These tests count the reads of the PRs section. The read of the open pull
+// requests that Create PR for current branch makes (GIT-FR-HMRW) is the same
+// command, so it is held out here and tested in Git.createPullRequest.test.tsx.
+vi.mock("../state/openPullRequests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../state/openPullRequests")>()),
+  useOpenPullRequestList: () => null,
+}));
 
 let listRead: (state: PullRequestListState) => Promise<PullRequestSummary[]>;
 let detailRead: (id: number) => Promise<PullRequestDetail>;

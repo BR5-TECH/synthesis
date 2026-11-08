@@ -256,6 +256,8 @@ export const readGraduationLogs = (request: {
   cursor?: GraduationLogCursor | null;
   limit?: number | null;
   query?: string | null;
+  /** GRS-FR-RNKT: the activity kinds to keep. Absent keeps every kind. */
+  kinds?: string[] | null;
 }) =>
   invoke<GraduationLogPage>("read_graduation_logs", {
     runId: request.runId,
@@ -265,6 +267,7 @@ export const readGraduationLogs = (request: {
     cursor: request.cursor ?? null,
     limit: request.limit ?? null,
     query: request.query ?? null,
+    ...(request.kinds ? { kinds: request.kinds } : {}),
   });
 
 /** DRS-FR-18: the run a draft's row names, if it has one. */

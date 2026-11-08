@@ -135,6 +135,40 @@ jobs:
           workspaces: src-tauri
           key: ${{ hashFiles('src-tauri/rust-toolchain.toml') }}
 
+      # CIP-FR-MRCZ: the build of `microsandbox` downloads its runtime archive
+      # from GitHub releases into the target profile folder, and that download
+      # fails at times. The archive has a cache of its own, keyed on the version
+      # that Cargo.lock pins. This step comes after rust-cache, so its save runs
+      # before rust-cache cleans the target folder at the end of the job.
+      - name: Read the microsandbox version
+        id: microsandbox
+        run: |
+          version=$(awk '/^name = "microsandbox"$/ { getline; print $3 }' Cargo.lock | tr -d '"')
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: microsandbox-cache
+        with:
+          path: src-tauri/target/debug/.microsandbox-runtime-cache
+          key: microsandbox-runtime-${{ runner.os }}-${{ runner.arch }}-${{ steps.microsandbox.outputs.version }}
+
+      # On a miss, the archive is downloaded here with retries. The build script
+      # reads a file at this path before it downloads, and its own download is
+      # one attempt. The file name is the one the build script uses on this
+      # runner: `microsandbox-runtime-<version>-<os>-<arch>.tar.gz`.
+      - name: Download the microsandbox runtime archive
+        if: steps.microsandbox-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        env:
+          VERSION: ${{ steps.microsandbox.outputs.version }}
+        run: |
+          mkdir -p target/debug/.microsandbox-runtime-cache
+          curl --fail --location --silent --show-error \
+            --retry 8 --retry-all-errors --retry-delay 20 --max-time 120 \
+            --output "target/debug/.microsandbox-runtime-cache/microsandbox-runtime-$VERSION-linux-x86_64.tar.gz" \
+            "https://github.com/superradcompany/microsandbox/releases/download/v$VERSION/microsandbox-linux-x86_64.tar.gz"
+
       # No global Git identity is configured here, deliberately. The suite's
       # fixtures set repository-local user.name/user.email, so a bare runner is
       # what proves no test leans on a developer's ambient Git config.

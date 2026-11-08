@@ -28,6 +28,7 @@ import { StatusBar } from "./components/StatusBar";
 import { NewFileModal } from "./components/NewFileModal";
 import { AboutPanel } from "./components/AboutPanel";
 import { DiagramEditorHost } from "./components/DiagramEditor";
+import { ExportDialogHost } from "./components/ExportDialog";
 import { NewFolderModal } from "./components/NewFolderModal";
 import { NewTypedArtifactModal } from "./components/NewTypedArtifactModal";
 import { GithubTokenPicker } from "./components/GithubTokenPicker";
@@ -728,6 +729,10 @@ export function AppShell(props: AppShellProps) {
       {/* EDT-FR-SJGJ / EDT-FR-TOVY: the diagram editor overlay, mounted only
           while open. One of the floating overlays of SNV-FR-56. */}
       <DiagramEditorHost />
+
+      {/* EXD-FR-XNLZ: the Export dialog, mounted only while open. One of the
+          floating overlays of SNV-FR-56. */}
+      <ExportDialogHost />
 
       {/* NFI-new-file.md: the New File modal, mounted only while creating (a
           closed modal is unmounted so it re-centers fresh on each open,

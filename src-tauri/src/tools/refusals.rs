@@ -528,6 +528,9 @@ pub enum ToolRefusal {
     Denied { message: &'static str, code: &'static str, retryable: bool },
     /// PND-FR-SQTD: the write failed, with the tool's fixed message.
     NotRecordedWith(&'static str),
+    /// RDX-FR-DVQL: the material the model named is not there, with the
+    /// tool's fixed message. Retryable: another name can reach it.
+    NotFoundWith(&'static str),
 }
 
 impl ToolRefusal {
@@ -560,7 +563,8 @@ impl ToolRefusal {
             // absent, which is what `NotFound` means; they differ on
             // `retryable` rather than on kind.
             | ToolRefusal::GraduationFileNotFound
-            | ToolRefusal::GraduationWorkingCopyUnavailable => ToolErrorKind::NotFound,
+            | ToolRefusal::GraduationWorkingCopyUnavailable
+            | ToolRefusal::NotFoundWith(_) => ToolErrorKind::NotFound,
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
             | ToolRefusal::InvalidUpdateAt { .. }
@@ -651,6 +655,8 @@ impl ToolRefusal {
             ToolRefusal::Denied { retryable, .. } => *retryable,
             // PND-FR-SQTD: a write that failed once may succeed next time.
             ToolRefusal::NotRecordedWith(_) => true,
+            // RDX-FR-DVQL: a different path or id can reach a document.
+            ToolRefusal::NotFoundWith(_) => true,
             // Neither is reachable by any argument: one wants a project the
             // model cannot open, the other a name the project made ambiguous.
             // AUC-FR-10 joins them: no argument a model composes reopens a
@@ -788,7 +794,14 @@ impl ToolRefusal {
             ToolRefusal::NotEscalatableNow => "not_escalatable_now",
             ToolRefusal::AlreadyEscalated => "already_escalated",
             ToolRefusal::Denied { code, .. } => code,
+            // RDX-FR-IEQA: an export request is not a proposal.
+            ToolRefusal::NotRecordedWith(message)
+                if *message == super::request_document_export::NOT_RECORDED =>
+            {
+                "export_request_not_recorded"
+            }
             ToolRefusal::NotRecordedWith(_) => "proposal_not_recorded",
+            ToolRefusal::NotFoundWith(_) => "not_found",
         }
     }
 
@@ -860,9 +873,9 @@ impl std::fmt::Display for ToolRefusal {
             }
             ToolRefusal::NotEscalatableNow => f.write_str(NOT_ESCALATABLE_NOW),
             ToolRefusal::AlreadyEscalated => f.write_str(ALREADY_ESCALATED),
-            ToolRefusal::Denied { message, .. } | ToolRefusal::NotRecordedWith(message) => {
-                f.write_str(message)
-            }
+            ToolRefusal::Denied { message, .. }
+            | ToolRefusal::NotRecordedWith(message)
+            | ToolRefusal::NotFoundWith(message) => f.write_str(message),
             // Every word after the fixed opening comes from `Ecosystem`, whose
             // four spellings are compiled in — so this sentence carries no path,
             // no skill name, and nothing the model sent (TLC-FR-09).

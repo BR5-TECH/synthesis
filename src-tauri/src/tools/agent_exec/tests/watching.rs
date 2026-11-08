@@ -182,6 +182,7 @@ fn watching_a_run_does_not_change_what_the_capture_holds() {
             stdout_limit: 4096,
             stderr_limit: 4096,
             observer,
+            final_event: None,
         }))
         .expect("the child ran")
     };
@@ -464,6 +465,7 @@ fn a_credential_split_across_a_delivery_boundary_is_still_masked() {
         durable_failure: StdMutex::new(None),
         log: Silent,
         logs_activity: true,
+        milestones: None,
         vendor: "claude_code".to_string(),
         container: "synthesis-agent-test".to_string(),
         carry: StdMutex::new((Vec::new(), Vec::new())),
@@ -522,6 +524,7 @@ fn a_piece_shorter_than_the_carry_is_held_until_the_rest_arrives() {
         durable_failure: StdMutex::new(None),
         log: Silent,
         logs_activity: true,
+        milestones: None,
         vendor: "claude_code".to_string(),
         container: "synthesis-agent-test".to_string(),
         carry: StdMutex::new((Vec::new(), Vec::new())),
@@ -561,6 +564,7 @@ fn a_whole_line_is_emitted_at_once_with_nothing_held_back() {
         durable_failure: StdMutex::new(None),
         log: Silent,
         logs_activity: true,
+        milestones: None,
         vendor: "claude_code".to_string(),
         container: "synthesis-agent-test".to_string(),
         carry: StdMutex::new((Vec::new(), Vec::new())),

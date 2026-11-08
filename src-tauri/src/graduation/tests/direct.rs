@@ -720,6 +720,7 @@ fn every_switching_route_refuses_while_a_direct_run_stands() {
         &store,
         "elsewhere",
         &copy.to_string_lossy(),
+        None,
     )
     .unwrap_err();
     assert!(create.starts_with(crate::worktree::ERR_DIRECT_GRADUATION_ACTIVE), "{create}");

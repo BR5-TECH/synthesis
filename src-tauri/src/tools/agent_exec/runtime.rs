@@ -30,6 +30,7 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
 use super::descriptor::{docker_search_paths, DOCKER_PROGRAM};
+use super::final_event::{observer_of, FinalEventRule, FinalEventWatch};
 use crate::agentic::SecretString;
 
 /// How often the cancellation flag is looked at while a container runs.
@@ -125,6 +126,9 @@ pub enum RunEnd {
     Cancelled,
     /// The child died without an exit code — a signal from outside.
     Terminated,
+    /// EAC-FR-HZIE: the child wrote its final event, still ran when the grace
+    /// ended, and was killed. The run is read as a clean exit.
+    EndedAfterFinalEvent,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,6 +175,9 @@ pub struct RunRequest<'a> {
     /// before — the capture is unchanged either way, so what an observer sees is
     /// an addition to the outcome rather than a substitute for it.
     pub observer: Option<&'a dyn StreamObserver>,
+    /// EAC-FR-HZIE: the vendor's final event and its grace. `None` for a
+    /// vendor that declares none, and for a run that is not an agent turn.
+    pub final_event: Option<FinalEventRule>,
 }
 
 pub trait DockerRuntime: Send + Sync {
@@ -446,7 +453,10 @@ impl DockerRuntime for HostDockerCli {
             let input = request.stdin.to_vec();
             let stdout_limit = request.stdout_limit;
             let stderr_limit = request.stderr_limit;
-            let observer = request.observer;
+            // EAC-FR-HZIE: the watch sees every line before the observer does.
+            let watch =
+                request.final_event.map(|rule| FinalEventWatch::new(rule, request.observer));
+            let observer = observer_of(&watch, request.observer);
 
             // The three pipes are pumped concurrently with the wait. A child
             // that fills one pipe while nobody reads the other is the classic
@@ -500,6 +510,10 @@ impl DockerRuntime for HostDockerCli {
                             if cancel.is_cancelled() {
                                 kill_tree(&mut child).await;
                                 return (RunEnd::Cancelled, None);
+                            }
+                            if watch.as_ref().is_some_and(FinalEventWatch::grace_over) {
+                                kill_tree(&mut child).await;
+                                return (RunEnd::EndedAfterFinalEvent, None);
                             }
                         }
                     }
@@ -794,10 +808,18 @@ impl DockerRuntime for BollardDocker {
             let mut stderr = StreamCapture::new(request.stderr_limit, StreamChannel::Stderr);
             let deadline = tokio::time::Instant::now() + request.timeout;
             let mut end = RunEnd::Exited;
+            // EAC-FR-HZIE: the watch sees every line before the observer does.
+            let watch =
+                request.final_event.map(|rule| FinalEventWatch::new(rule, request.observer));
+            let observer = observer_of(&watch, request.observer);
 
             loop {
                 if request.cancel.is_cancelled() {
                     end = RunEnd::Cancelled;
+                    break;
+                }
+                if watch.as_ref().is_some_and(FinalEventWatch::grace_over) {
+                    end = RunEnd::EndedAfterFinalEvent;
                     break;
                 }
                 let next = tokio::time::timeout_at(
@@ -821,20 +843,20 @@ impl DockerRuntime for BollardDocker {
                     Ok(Some(Ok(output))) => match output {
                         bollard::container::LogOutput::StdOut { message }
                         | bollard::container::LogOutput::Console { message } => {
-                            stdout.push(&message, request.observer);
+                            stdout.push(&message, observer);
                         }
                         bollard::container::LogOutput::StdErr { message } => {
-                            stderr.push(&message, request.observer);
+                            stderr.push(&message, observer);
                         }
                         bollard::container::LogOutput::StdIn { .. } => {}
                     },
                 }
             }
 
-            if matches!(end, RunEnd::TimedOut | RunEnd::Cancelled) {
-                // EAC-FR-24 / EAC-FR-25: the container and its whole process
-                // tree are terminated, and removal is confirmed by the caller's
-                // own `remove_container` on the way out.
+            if matches!(end, RunEnd::TimedOut | RunEnd::Cancelled | RunEnd::EndedAfterFinalEvent) {
+                // EAC-FR-24 / EAC-FR-25 / EAC-FR-HZIE: the container and its
+                // whole process tree are terminated, and removal is confirmed
+                // by the caller's own `remove_container` on the way out.
                 let _ = docker
                     .kill_container(
                         &spec.name,
@@ -844,8 +866,8 @@ impl DockerRuntime for BollardDocker {
                 return Ok(RuntimeOutcome {
                     end,
                     exit_code: None,
-                    stdout: stdout.finish(request.observer),
-                    stderr: stderr.finish(request.observer),
+                    stdout: stdout.finish(observer),
+                    stderr: stderr.finish(observer),
                 });
             }
 
@@ -872,8 +894,8 @@ impl DockerRuntime for BollardDocker {
             Ok(RuntimeOutcome {
                 end,
                 exit_code,
-                stdout: stdout.finish(request.observer),
-                stderr: stderr.finish(request.observer),
+                stdout: stdout.finish(observer),
+                stderr: stderr.finish(observer),
             })
         })
     }

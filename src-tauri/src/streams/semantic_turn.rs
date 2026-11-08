@@ -35,6 +35,11 @@ const MERGE_INPUT_VERSION: u32 = 2;
 pub(crate) struct MergeAuthorDecision {
     question: String,
     answer: String,
+    /// GXD-FR-NWSL: the summary of the chosen response, or empty.
+    summary: String,
+    /// GXD-FR-NWSL: the turn that asked, and its pass.
+    turn: String,
+    pass: u32,
     /// WKS-FR-CBXW, GXD-FR-BJYT: the author's note beside the answer, where one
     /// was written. It reaches the turn with its answer.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -49,6 +54,9 @@ pub(crate) fn author_decisions(decisions: &[StreamMergeDecision]) -> Vec<MergeAu
         .map(|decision| MergeAuthorDecision {
             question: decision.question.clone(),
             answer: decision.answer.clone(),
+            summary: decision.summary.clone(),
+            turn: decision.turn.clone(),
+            pass: decision.pass,
             note: decision.note.clone(),
         })
         .collect()

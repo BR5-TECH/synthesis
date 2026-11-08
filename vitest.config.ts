@@ -9,6 +9,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Worker threads start faster than child processes: the full suite takes
+    // 57 s instead of 65 s on a 16-core machine.
+    pool: "threads",
     // Node 25 and later puts its own `localStorage` and `sessionStorage` on the
     // global. Without `--localstorage-file`, they are `undefined`. Vitest does
     // not replace a global that already exists, so the tests do not get the

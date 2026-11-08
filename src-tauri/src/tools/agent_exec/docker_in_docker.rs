@@ -132,6 +132,7 @@ where
             stdout_limit: SOCKET_GROUP_OUTPUT_LIMIT,
             stderr_limit: SOCKET_GROUP_OUTPUT_LIMIT,
             observer: None,
+            final_event: None,
         })
         .await;
     let read = match outcome {

@@ -49,6 +49,9 @@ pub(super) struct LaunchObserver<'a, S: LogSink + Clone + Send + Sync + 'static>
     /// **sink is unaffected**: the turn stays watchable in the run's own
     /// activity stream.
     pub(super) logs_activity: bool,
+    /// EAC-FR-HRTK, EAC-FR-QLMD: the milestone state of this call, present for
+    /// the four kinds of turn that announce milestones.
+    pub(super) milestones: Option<std::sync::Mutex<milestone::MilestoneState>>,
     pub(super) vendor: String,
     pub(super) container: String,
     /// One per channel, holding the tail of an unterminated piece.
@@ -158,7 +161,11 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
                 kind: descriptor::ActivityKind::Diagnostic,
                 summary: descriptor::summary_line(&masked),
             },
-            runtime::StreamChannel::Stdout => self.descriptor.activity(&masked),
+            runtime::StreamChannel::Stdout => match self.read_stdout(&masked) {
+                Some(read) => read,
+                // EAC-FR-HTSN: every line of the message became a milestone.
+                None => return,
+            },
         };
         let (payload, payload_truncated) = bounded_payload(&masked);
         self.emit(AgentActivityEvent {
@@ -169,6 +176,58 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
             payload,
             payload_truncated,
         });
+    }
+
+    /// EAC-FR-HRTK / EAC-FR-HTSN: one masked stdout line read as an activity,
+    /// after the milestone markers in its agent text became activities of
+    /// their own. `None` where nothing of the message is left to report.
+    fn read_stdout(&self, masked: &str) -> Option<descriptor::VendorActivity> {
+        let Some(state) = self.milestones.as_ref() else {
+            return Some(self.descriptor.activity(masked));
+        };
+        let texts = std::cell::RefCell::new(Vec::<String>::new());
+        let read = self.descriptor.activity_filtered(masked, &|text| {
+            texts.borrow_mut().push(text.to_string());
+            text.to_string()
+        });
+        let texts = texts.into_inner();
+        if !texts.iter().any(|text| text.contains("SYNTHESIS_MILESTONE")) {
+            return Some(read);
+        }
+        let scanned: Vec<(Vec<milestone::Marker>, String)> = {
+            let mut held = match state.lock() {
+                Ok(held) => held,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            texts.iter().map(|text| held.scan(text)).collect()
+        };
+        if scanned.iter().all(|(markers, _)| markers.is_empty()) {
+            return Some(read);
+        }
+        for marker in scanned.iter().flat_map(|(markers, _)| markers) {
+            let summary = marker.summary();
+            self.emit(AgentActivityEvent {
+                at: crate::notes::now_rfc3339(),
+                channel: runtime::StreamChannel::Stdout.as_str(),
+                kind: descriptor::ActivityKind::Milestone.as_str(),
+                payload: summary.clone(),
+                summary,
+                payload_truncated: false,
+            });
+        }
+        let rests: Vec<String> = scanned.into_iter().map(|(_, rest)| rest).collect();
+        let next = std::cell::Cell::new(0usize);
+        let stripped = self.descriptor.activity_filtered(masked, &|_| {
+            let at = next.get();
+            next.set(at + 1);
+            rests.get(at).cloned().unwrap_or_default()
+        });
+        if stripped.kind == descriptor::ActivityKind::Message
+            && rests.iter().all(|rest| rest.trim().is_empty())
+        {
+            return None;
+        }
+        Some(stripped)
     }
 
     pub(super) fn secret_refs(&self) -> Vec<&str> {

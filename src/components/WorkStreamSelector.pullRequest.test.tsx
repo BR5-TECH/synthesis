@@ -9,12 +9,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { WorkStreamSelector } from "./WorkStreamSelector";
 import type { WorkStreamSummary } from "../types";
 import { mergeRunLink, summary, updateRecord } from "../test/streamFixtures";
+import { resetLogBufferForTest } from "../logging";
+import { resetOpenPullRequestsForTest } from "../state/openPullRequests";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -55,6 +57,8 @@ async function openRow(streams: WorkStreamSummary[]) {
 }
 
 beforeEach(() => {
+  resetLogBufferForTest();
+  resetOpenPullRequestsForTest();
   invokeMock.mockReset();
   onCreatePullRequest.mockReset();
 });
@@ -77,7 +81,7 @@ describe("Create a PR on a stream row", () => {
     });
     const row = await openRow([summary({}, { aheadOfBase: 2 })]);
     await userEvent.click(within(row).getByTestId("stream-create-pr-w1"));
-    expect(onCreatePullRequest).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCreatePullRequest).toHaveBeenCalledTimes(1));
     expect(focusedAtOpen).toBe(screen.getByTestId("stream-selector"));
   });
 
@@ -85,6 +89,7 @@ describe("Create a PR on a stream row", () => {
     const row = await openRow([summary({}, { aheadOfBase: 2 })]);
     await userEvent.click(within(row).getByTestId("stream-create-pr-w1"));
 
+    await waitFor(() => expect(onCreatePullRequest).toHaveBeenCalled());
     expect(onCreatePullRequest).toHaveBeenCalledWith({
       head: "synthesis/stream/editor-work",
       base: "main",

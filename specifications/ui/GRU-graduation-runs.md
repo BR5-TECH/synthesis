@@ -19,6 +19,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 11. **GRU-FR-BHJO** A run in `interrupted` states why it stopped in a headline that names its interruption reason (per `../core/GRD-graduation.md` GRD-FR-PUXO), renders the interruption's detail beneath it, and offers **Continue**. The headline for `retryable_failure` says that the cause was not recorded.
 11. **GRU-FR-QLRQ** A run interrupted on `execution_timeout` offers **Change the time limit** beside its detail. It opens the Settings window on the Graduation section of its Project group with the **Time per turn** slider focused (per `SET-project-settings.md` SET-FR-PSLD and `SWN-settings-windows.md` SWN-FR-HZWD). The run stays interrupted until the author continues it.
 12. **GRU-FR-FZCN** A run in `awaiting_author` renders the escalation and routes to the answering surface (per `GEA-graduation-escalation-answering.md`). A review that did not settle before the pass budget was spent renders its findings, the budget that was spent, and the same route. A run resting on a blocker that repeated states that blocker instead and offers **Continue**.
+12. **GRU-FR-XKCB** A run in `awaiting_author` that holds an escalation offers the answering surface and **Discard run**, and offers no **Continue** (per `../core/GRD-graduation.md` GRD-FR-ZJHD). The answering surface renders only while the run is in `awaiting_author`.
 12. **GRU-FR-WKTL** A run at rest on `total_time_limit` states that reason, the total time limit it rested under and the time it used, and offers **Continue**.
 12. **GRU-FR-TTLR** That run also offers **Change the time limit**. It opens the Settings window on the Graduation section of its Project group with the **Total time per run** slider focused (per `SET-project-settings.md` SET-FR-PSLD). The run stays in `awaiting_author` until the author continues it.
 13. **GRU-FR-QYEE** A draft run in `completed` names the commits it made on the stream and offers to read them. A merge run in `completed` renders its result instead, on the terms of GRU-FR-JRMA. A run in `failed` states the typed failure and offers **Discard run** alone. Where runs are queued behind it, it states that they stay queued until the author discards it, and that the discard removes them.
@@ -42,7 +43,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 25. **GRU-FR-ZPTE** The author drags the column divider to set the paths column's width. On the divider, Left and Right move the width by one percentage point, Home sets the lower bound and End the upper bound. The divider is a separator that states its name and its width as a percentage. A drag end or a key press stores the width.
 19. **GRU-FR-MRPE** Every text this section renders that an agent or a model produced is treated as untrusted: it is rendered as escaped plain text, with no Markdown and no embedded markup.
 20. **GRU-FR-ZVTC** The rail and the run region render from what the backend reports rather than from what the surface attempted. Every `"graduation queue changed"` and `"graduation run changed"` event reloads the listing it names.
-20. **GRU-FR-QKSY** A `"graduation log records appended"` event reloads the listing only where it names a listed, non-terminal run whose progress and log indexes this build reads, and whose log indexes hold no segment naming the run's current stage with the current pass or with `pass = null`. Any other append event reloads nothing.
+20. **GRU-FR-QKSY** A `"graduation log records appended"` event reloads the listing only where it names a listed, non-terminal run whose progress and log indexes this build reads, and whose log indexes hold no segment naming the run's current stage with the current pass or with `pass = null`. An event of the `activity` stream that names the selected, non-terminal run also refreshes that run's milestone list (GRU-FR-JHVX), without a reload of the listing. Any other append event reloads nothing.
     - *Why:* a turn appends many records, only the first of a stage makes it activatable, and some stages hold only `pass = null` records.
 21. **GRU-FR-BLSS** A run entering `awaiting_author`, `blocked`, or a terminal state raises for the author's attention (per `NTF-notifications.md`), addressed to that run. The raise carries a level: Warn for `awaiting_author` and `blocked`; Info for `completed` and `discarded`; Error for `failed` and for `interrupted` on a failure reason. A run entering `interrupted` raises for every reason except `author_pause`, `application_shutdown` and `project_changed`. Progress alone raises nothing.
 21. **GRU-FR-HMPM** A model downgrade of a run (per `../ai/GRL-graduation-loop.md` GRL-FR-OPRK) raises at the level Warn, addressed to that run, on the terms of `NTF-notifications.md` NTF-FR-AGTB. A click on its toast or its OS notification opens the run. It changes no state of the run.
@@ -86,6 +87,23 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 50. **GRU-FR-AQKZ** The stage row of a PR summary run holds three stages: Queued, Summarizing, and Done. It shows no pass, no loop, and no change set.
 51. **GRU-FR-DQSA** A PR summary run in `completed` renders its result from `pr_summary.result`: the title on one line and the description rendered as Markdown with inert links. A PR summary run in `failed` states the typed failure. It renders no result in any other state.
 52. **GRU-FR-LJUY** A PR summary run offers **Pause**, **Continue**, **Discard run**, and **Archive** on the terms of every run. It offers no **Restart** and no **Revert**, and no control that applies its result to a pull request, which the Create a PR window does (per `CPR-create-pull-request.md` CPR-FR-GYVD).
+53. **GRU-FR-NQLG** The run region shows one read-only list called **Escalations log** when the run's decision ledger (per `../core/GXD-graduation-execution.md` GXD-FR-NWSL) is not empty, and shows nothing when it is empty. It stands once in the region, below the escalation and above the change set and the pass history, and no pass entry repeats it.
+54. **GRU-FR-WMTH** The header of the Escalations log is a control that expands and collapses the list. The list is collapsed by default, and the header shows the number of decisions. The control exposes its expanded state in accessible semantics, and the section keeps the open state per run for as long as the run stays selected.
+55. **GRU-FR-DRPW** Each row of an expanded Escalations log shows the question, the answer, the note where there is one, the turn that asked and the pass, as plain text, in the order of the ledger. A question answered twice shows both rows. The list has no control that changes a decision, and it updates when the run state is published.
+56. **GRU-FR-WQHM** The selected run's region shows a **milestone list** under the stage row and the state sentence of the run, and above the escalation, the Escalations log, the change set, and the pass history. The list shows the milestones of the **current turn** alone.
+56. **GRU-FR-NKDU** A run whose current turn has no valid plan renders no milestone list, and nothing marks its absence. A PR summary run renders none.
+57. **GRU-FR-TBNE** The **current turn** is the turn of the run's current phase and pass. A new turn starts with an empty milestone list.
+57. **GRU-FR-RVEQ** For a run in `working` or `reviewing`, the phase of the current turn is `working` or `reviewing`, and its pass is the pass of the run's checkpoint (GRU-FR-PNVX).
+57. **GRU-FR-SXAC** For a run in any other state, the current turn is the phase and the pass of the last segment of the activity stream's log index that names `working` or `reviewing` with a pass number.
+58. **GRU-FR-CYDK** Each milestone shows one state in words and in accessible semantics: **pending** with no marker, **active** after a start marker with no done marker, **done** after a done marker, or **unknown**. A done marker without a start marker makes the milestone done.
+58. **GRU-FR-FHLE** A run in any state but `working` or `reviewing` has ended its turn. Each milestone of such a run that is not done shows as unknown.
+59. **GRU-FR-JHVX** The milestone list reads the `milestone` records of the run's persisted activity stream for the current phase and pass, through `read_graduation_logs` with `kinds` set to `milestone` (per `../core/GRS-graduation-run-log-storage.md` GRS-FR-RNKT). It reads every page of that scope. It reads no observability record and parses no `message` summary.
+59. **GRU-FR-ZCTP** The milestone list reads again when the run is selected, when the run's state, phase, or pass changes, and on an append event of GRU-FR-QKSY.
+60. **GRU-FR-PZGA** The milestone list reads each record's `summary` as one marker and applies the records in the order of their `sequence`. A plan marker replaces the plan before it and sets every milestone to pending. A later plan comes from a later call of the same phase and pass, because each call delivers one plan.
+60. **GRU-FR-BXMS** A start or done marker is ignored before a plan, with an `index` outside the plan, or for a milestone that is already done.
+60. **GRU-FR-ELDK** A record that does not read as a marker is ignored and never an error. A read that fails leaves the list as it was.
+61. **GRU-FR-LMTX** Every milestone title is rendered as escaped plain text (GRU-FR-MRPE). The list renders in plan order and adds no control, and activating a milestone opens nothing.
+
 ## Wireframes
 
 ```
@@ -96,7 +114,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 │   Working  1/2   │ ●────────●────────○────────○                           │
 │ ▸ empty state    │ queued   working  review   done                        │
 │   Queued  #1     │ Working · pass 1 of 2                                  │
-│ ▸ tab close      │                                                        │
+│ ▸ tab close      │ ✓ Read the spec  ● Write the code  ○ Run the checks    │
 │   Completed      │ ▾ Changed · 181   ┃ Passes                   2 passes  │
 │                  │ ┌───────────────┐ ┃ ▸ First pass  The review asked …   │
 │                  │ │ ▾ specs     24│ ┃ ▾ Pass 2      Working              │
@@ -133,7 +151,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 
 ## UI contract boundary
 
-**Owned by the UI**: which run is selected, the rail's filter and ordering view, which pass rows are open, which path lists and which of their folders are open, the bounds and the keyboard steps of the paths column's width, the wording of every state, condition and blocking sentence, the stage labels of a merge run, the rendering of a merge run's paths and result, button enablement, and the escaped rendering of agent text.
+**Owned by the UI**: which run is selected, the rail's filter and ordering view, which pass rows are open, whether the Escalations log is expanded, the milestone list and the state each of its milestones shows, which path lists and which of their folders are open, the bounds and the keyboard steps of the paths column's width, the wording of every state, condition and blocking sentence, the stage labels of a merge run, the rendering of a merge run's paths and result, button enablement, and the escaped rendering of agent text.
 
 **Delegated to backend (abstract)**:
 - `load_app_preferences`
@@ -141,6 +159,7 @@ The surface an author watches a graduation run on. It is a section of the Runs b
 - `list_graduation_queue`
 - `get_graduation_run`
 - `get_graduation_capacity`
+- `read_graduation_logs`
 - `continue_graduation_run`
 - `pause_graduation_run`
 - `set_graduation_auto_start`

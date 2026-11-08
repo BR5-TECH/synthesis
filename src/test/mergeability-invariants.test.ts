@@ -34,10 +34,12 @@ import { extname, join } from "node:path";
 const SKIP = new Set([
   ".git",
   "node_modules",
+  ".pnpm-store",
   "target",
   "dist",
   "coverage",
   ".vite",
+  ".pnpm-store",
 ]);
 
 /**

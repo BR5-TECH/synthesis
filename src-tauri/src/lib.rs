@@ -23,6 +23,7 @@ pub mod comments;
 pub mod dashboard;
 pub mod dialog;
 pub mod docker;
+pub mod document_export;
 pub mod documents;
 pub mod draft_assets;
 pub mod draft_history;
@@ -62,6 +63,7 @@ pub mod secret_vault;
 pub mod settings;
 pub mod settings_window;
 pub mod skills;
+pub mod stamp;
 pub mod statistics;
 pub mod storage_floor;
 pub mod streams;
@@ -531,6 +533,9 @@ pub fn run() {
             git::create_pull_request,
             git::link_pull_request_issues,
             git::get_pull_request_head_state,
+            git::get_branch_stack,
+            git::add_branch_to_stack,
+            git::submit_pull_request_to_stack,
             git::write_guard::commands::get_branch_write_guard,
             git::write_guard::commands::confirm_main_branch_write,
             git::get_pull_request_detail,
@@ -632,6 +637,10 @@ pub fn run() {
             documents::commands::remove_document_source,
             documents::commands::read_document,
             documents::commands::read_document_pdf,
+            document_export::commands::export_document,
+            // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
+            document_export::requests::get_export_request,
+            document_export::requests::resolve_export_request,
             // Embeddings index (EMB-embeddings-index.md).
             embeddings::load_embeddings_settings,
             embeddings::save_embeddings_settings,

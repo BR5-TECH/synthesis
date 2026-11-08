@@ -249,3 +249,129 @@ fn answers_to_a_run_that_asks_nothing_are_refused() {
         .refusing_answers(&["Anything."], "run_state_not_permitted")
         .expect_commits(1);
 }
+
+// GTE-FR-XKGB / GXD-FR-NWSL, GXD-FR-BTIN, GRL-FR-BNDD, GRD-FR-KQLD: every answer enters the
+// run's decision ledger, and every later turn of every pass carries the whole
+// ledger in order, the turn that asked and its pass included.
+#[test]
+fn every_later_turn_carries_the_whole_decision_ledger() {
+    Scenario::named("ledger carried through passes")
+        .work_turn(Script::escalates(&["Which panel is meant?"]))
+        .run()
+        .expect_ledger(&[])
+        .answered(
+            &["The editor's."],
+            vec![
+                Script::reports_success().writes("src/panel.ts", "1\n"),
+                Script::escalates(&["Is the empty state required?"]),
+            ],
+        )
+        .expect_ledger(&[("Which panel is meant?", "The editor's.", "work", 1)])
+        .expect_dispatch(0, |d| {
+            d.decisions(&[("Which panel is meant?", "The editor's.", "work", 1)])
+        })
+        .expect_dispatch(1, |d| {
+            d.part("review").decisions(&[("Which panel is meant?", "The editor's.", "work", 1)])
+        })
+        .answered(
+            &["Yes."],
+            vec![
+                Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."),
+                Script::reports_success().writes("src/panel.ts", "2\n"),
+                Script::answers_ready("The empty state is there now."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_ledger(&[
+            ("Which panel is meant?", "The editor's.", "work", 1),
+            ("Is the empty state required?", "Yes.", "review", 1),
+        ])
+        .expect_dispatch_order(&["review", "work", "review"])
+        .expect_dispatch(0, |d| {
+            d.decisions(&[
+                ("Which panel is meant?", "The editor's.", "work", 1),
+                ("Is the empty state required?", "Yes.", "review", 1),
+            ])
+        })
+        .expect_dispatch(1, |d| {
+            d.decisions(&[
+                ("Which panel is meant?", "The editor's.", "work", 1),
+                ("Is the empty state required?", "Yes.", "review", 1),
+            ])
+        })
+        .expect_dispatch(2, |d| {
+            d.pass(2).decisions(&[
+                ("Which panel is meant?", "The editor's.", "work", 1),
+                ("Is the empty state required?", "Yes.", "review", 1),
+            ])
+        });
+}
+
+// GTE-FR-XKGB / GXD-FR-HRDM: a question the author answered before and answers
+// again adds a new entry, and the old one stays.
+#[test]
+fn a_repeated_question_adds_a_new_ledger_entry() {
+    Scenario::named("repeated question")
+        .work_turn(Script::escalates(&["Which panel is meant?"]))
+        .run()
+        .answered(&["The editor's."], vec![Script::escalates(&["Which panel is meant?"])])
+        .expect_state(GraduationRunState::AwaitingAuthor)
+        .expect_escalation_questions(&["Which panel is meant?"])
+        .answered(
+            &["The sidebar's."],
+            vec![
+                Script::reports_success().writes("src/panel.ts", "1\n"),
+                Script::answers_ready("The work answers the prompt."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_ledger(&[
+            ("Which panel is meant?", "The editor's.", "work", 1),
+            ("Which panel is meant?", "The sidebar's.", "work", 1),
+        ])
+        .expect_dispatch(0, |d| {
+            d.decisions(&[
+                ("Which panel is meant?", "The editor's.", "work", 1),
+                ("Which panel is meant?", "The sidebar's.", "work", 1),
+            ])
+        });
+}
+
+// GTE-FR-XKGB / GXD-FR-NWSL: a refused answer set records nothing in the ledger.
+#[test]
+fn a_refused_answer_set_adds_no_ledger_entry() {
+    Scenario::named("refused answers leave the ledger alone")
+        .work_turn(Script::escalates(&["Which panel is meant?", "Should it be translated?"]))
+        .run()
+        .refusing_answers(&["The editor's."], "the answers do not cover every question")
+        .expect_ledger(&[]);
+}
+
+// GTE-FR-XKGB / GXD-FR-WRVH, GXD-FR-QPFT, GRL-FR-RHST, GRL-FR-VHIS: a work turn
+// carries the findings of the passes before the latest review, and a review
+// turn carries no review history. The latest findings stay the work turn's
+// `loop_instruction`.
+#[test]
+fn a_work_turn_carries_the_findings_of_the_earlier_passes() {
+    Scenario::named("review history reaches the work turn")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The first problem."))
+        .work_turn(Script::reports_success().writes("src/panel.ts", "2\n"))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The second problem."))
+        .run()
+        .expect_state(GraduationRunState::AwaitingAuthor)
+        .expect_review_history_passes(&[1, 2])
+        .expect_dispatch(2, |d| d.part("work").review_history_passes(&[]))
+        .continued(vec![
+            Script::reports_success().writes("src/panel.ts", "3\n"),
+            Script::answers_ready("Both problems are fixed."),
+        ])
+        .expect_state(GraduationRunState::Completed)
+        .expect_review_history_passes(&[1, 2])
+        .expect_dispatch(0, |d| {
+            d.part("work")
+                .review_history_passes(&[1])
+                .field_contains("loop_instruction", "The second problem.")
+        })
+        .expect_dispatch(1, |d| d.part("review").has_no_field("review_history"));
+}

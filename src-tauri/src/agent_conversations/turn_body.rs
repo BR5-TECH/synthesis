@@ -407,6 +407,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 // than one, the first is dispatched and the rest are told
                 // one-at-a-time below.
                 || call.function.name == crate::tools::propose_prompt_changes::NAME
+                // CVL-FR-15 / RDX-FR-PZGN: a recorded export request ends the
+                // turn. It sets the flag a posted question sets.
+                || call.function.name == crate::tools::request_document_export::NAME
         });
         if let Some(index) = ending_first {
             // CVL-FR-33: a call abandoned by cancellation is reported finished
@@ -498,6 +501,8 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::propose_new_draft::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_prompt_changes::NAME {
                 Some(crate::tools::propose_prompt_changes::ONE_AT_A_TIME)
+            } else if call.function.name == crate::tools::request_document_export::NAME {
+                Some(crate::tools::request_document_export::ONE_AT_A_TIME)
             } else {
                 None
             };

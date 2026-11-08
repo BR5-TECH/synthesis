@@ -575,6 +575,17 @@ button.top-chrome__project { background: transparent; border: 0; cursor: pointer
 .wt-select__empty { padding: 6px 8px; font-size: var(--fs-ui-sm); }
 /* WTS-FR-24: typed errors render inline; they never replace the dropdown. */
 .wt-select__error { padding: 6px 8px; color: var(--danger); font-size: var(--fs-ui-xs); }
+/* WTS-FR-BMQI: why Create is unavailable for a new branch on a stack. */
+.wt-select__stack-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--warn, var(--fg-1));
+  font-size: var(--fs-ui-xs);
+}
+.wt-select__stack-reason > svg { flex: none; margin-top: 2px; }
 .wt-select__location { display: flex; gap: 6px; align-items: center; }
 /* The Location field truncates from the left when the path overflows. */
 .wt-select__location .input { flex: 1; min-width: 0; direction: rtl; text-align: left; }

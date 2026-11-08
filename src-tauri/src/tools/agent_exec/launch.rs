@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use super::final_event::FinalEventRule;
 use super::*;
 
 impl AgentCliExecutor {
@@ -386,6 +387,8 @@ impl AgentCliExecutor {
         }
         mounts.extend(dind.mounts);
         env_literals.extend(dind.env_literals);
+        // EAC-FR-WQNH: a long check runs to its end, whatever the image and the project set.
+        env_literals.extend(descriptor::bash_timeouts(descriptor.vendor, &env_names));
         if vm_daemon {
             env_literals.push((
                 descriptor::DOCKER_HOST_ENV.to_string(),
@@ -590,6 +593,10 @@ impl AgentCliExecutor {
             durable_failure: std::sync::Mutex::new(None),
             log: sink.clone(),
             logs_activity: request.supplementary_mount.is_none(),
+            milestones: request
+                .turn_kind
+                .announces_milestones()
+                .then(|| std::sync::Mutex::new(milestone::MilestoneState::default())),
             vendor: vendor.clone(),
             container: container_name.clone(),
             carry: std::sync::Mutex::new((Vec::new(), Vec::new())),
@@ -627,6 +634,9 @@ impl AgentCliExecutor {
             payload_truncated,
         });
 
+        // EAC-FR-HZIE / EAC-FR-QHAY: the vendor's final event, where it declares
+        // one.
+        let final_event = FinalEventRule::for_vendor(descriptor.final_event);
         let (outcome, container_removed) = match (&runtime, &sandboxed, &vm, &request.sandbox_scope)
         {
             (None, Some(settings), Some(vm), Some(scope)) => {
@@ -649,6 +659,7 @@ impl AgentCliExecutor {
                             timeout: Duration::from_millis(request.task.execution.timeout_ms),
                             cancel: run_cancel.clone(),
                             observer: &observer,
+                            final_event,
                         },
                     )
                     .await?;
@@ -666,6 +677,7 @@ impl AgentCliExecutor {
                         stdout_limit: protocol::LIMIT_STDOUT,
                         stderr_limit: protocol::LIMIT_STDERR,
                         observer: Some(&observer),
+                        final_event,
                     })
                     .await;
 
@@ -720,8 +732,12 @@ impl AgentCliExecutor {
         let expected_session_id = (descriptor.assigns_session_id() && resume_session.is_none())
             .then_some(assigned_session_id.as_str());
 
+        let ended_after_final_event = outcome.end == RunEnd::EndedAfterFinalEvent;
         let mut execution =
             self.interpret(descriptor, outcome, started, container_removed, expected_session_id);
+        if ended_after_final_event {
+            super::finish::warn_stopped_after_answer(sink, &vendor, &container_name);
+        }
 
         // EAC-FR-30's last clause. One pinned vendor cannot fail a resume: asked
         // to continue a session it no longer holds, it starts a fresh one and
@@ -766,12 +782,10 @@ impl AgentCliExecutor {
         // EAC-FR-THUT: the run's own channel says how the run ended, so a
         // watched turn that was stopped does not just end mid-command. The
         // line holds counts and codes alone, so it needs no mask.
-        let finished = super::finish::finished_line(
-            execution.process_outcome,
-            execution.exit_code,
-            execution.duration_ms,
+        let finished = super::finish::finished_line_of(
+            &execution,
             request.task.execution.timeout_ms,
-            execution.refusal,
+            ended_after_final_event,
         );
         observer.emit(AgentActivityEvent {
             at: crate::notes::now_rfc3339(),
@@ -911,14 +925,15 @@ impl AgentCliExecutor {
             RunEnd::TimedOut => return base(ProcessOutcome::Timeout, None, None),
             RunEnd::Cancelled => return base(ProcessOutcome::Cancelled, None, None),
             RunEnd::Terminated => return base(ProcessOutcome::Terminated, None, None),
-            RunEnd::Exited => {}
-        }
-
-        // A non-zero exit is not an occasion to look for an envelope: the agent
-        // did not finish its turn, so whatever is on stdout is a fragment of
-        // one at best.
-        if outcome.exit_code != Some(0) {
-            return base(ProcessOutcome::NonZeroExit, None, None);
+            // A non-zero exit is not an occasion to look for an envelope: the
+            // agent did not finish its turn, so whatever is on stdout is a
+            // fragment of one at best.
+            RunEnd::Exited if outcome.exit_code != Some(0) => {
+                return base(ProcessOutcome::NonZeroExit, None, None)
+            }
+            // EAC-FR-HZIE: the agent wrote its final event, and the process was
+            // stopped after the grace. That is a clean exit with no code.
+            RunEnd::Exited | RunEnd::EndedAfterFinalEvent => {}
         }
 
         // EAC-FR-23: a truncated stdout is a prefix, and a prefix is never

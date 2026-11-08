@@ -32,6 +32,8 @@ pub struct PullRequestSummary {
     pub author: String,
     pub head_branch: String,
     pub base_branch: String,
+    /// True when the head repository is not the base repository.
+    pub head_is_fork: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -118,6 +120,21 @@ fn author(value: &Value) -> String {
     nested_text(value, "user", "login").unwrap_or_else(|| GHOST.to_string())
 }
 
+/// The full name of the repository on one side (`head` or `base`), in lower
+/// case.
+fn repo_full_name(value: &Value, side: &str) -> Option<String> {
+    value.get(side)?.get("repo")?.get("full_name")?.as_str().map(str::to_lowercase)
+}
+
+/// True when the head repository differs from the base repository. A row that
+/// lacks one of the names is not from a fork.
+pub(super) fn is_from_fork(value: &Value) -> bool {
+    match (repo_full_name(value, "head"), repo_full_name(value, "base")) {
+        (Some(head), Some(base)) => head != base,
+        _ => false,
+    }
+}
+
 /// The row of one pull request in a list. `None` for an entry with no number,
 /// which is not a pull request this module can name.
 pub(super) fn summary_from_json(value: &Value) -> Option<PullRequestSummary> {
@@ -129,6 +146,7 @@ pub(super) fn summary_from_json(value: &Value) -> Option<PullRequestSummary> {
         author: author(value),
         head_branch: nested_text(value, "head", "ref").unwrap_or_default(),
         base_branch: nested_text(value, "base", "ref").unwrap_or_default(),
+        head_is_fork: is_from_fork(value),
         created_at: text(value, "created_at").unwrap_or_default(),
         updated_at: text(value, "updated_at").unwrap_or_default(),
     })

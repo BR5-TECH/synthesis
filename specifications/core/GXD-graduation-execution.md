@@ -13,12 +13,14 @@ The single seam through which a graduation run reaches an execution agent, and t
 5. **GXD-FR-GBBC** This module supplies no vendor, model, reasoning effort, image, credential or container argument. It supplies the execution directory, the task, the turn kind, the sandbox scope of GXD-FR-SHNW, a cancellation token and the sinks.
 6. **GXD-FR-LBYG** The response envelope is the agent's **report of its turn and never evidence about the filesystem**. No claimed file list and no summary is accepted as what changed; what changed is read from the working copy.
 7. **GXD-FR-XEUX** **The seam ends no run.** Every process outcome and every pre-launch error maps to a run outcome, and not one of them is terminal. A run that could not start a container rests rather than fails.
-8. **GXD-FR-GMDI** The run's persisted **checkpoint** carries the pass it stands at, its `PassBudgetWindow`, the phase it resumes at (`work`, `review` or, for a merge run, `apply`), the change set held against the base commit, what the ignore rules kept out of it, the work turn's reported failure, the next turn's instruction, the escalation state, and the last blocker code with its repeat count. It carries no secret.
+8. **GXD-FR-GMDI** The run's persisted **checkpoint** carries the pass it stands at, its `PassBudgetWindow`, the phase it resumes at (`work`, `review` or, for a merge run, `apply`), the change set held against the base commit, what the ignore rules kept out of it, the work turn's reported failure, the next turn's instruction, the escalation state, the last blocker code with its repeat count, the run's decision ledger (GXD-FR-NWSL) and the run's review history (GXD-FR-WRVH). It carries no secret.
 9. **GXD-FR-QGYA** The checkpoint is written durably before the run is reported as stopped, so a run continued after a relaunch continues from what the store holds rather than from what a loop remembered.
 10. **GXD-FR-PWYD** The checkpoint's pass is the authority the loop counts against its window, whose highest pass is the floor plus the run's pass budget less one and is recomputed at every dispatch. The run's pass budget is the project's graduation pass budget (PSS-FR-QBNE of `PSS-project-settings-storage.md`) for a draft run and the constant of GXD-FR-BQLN for a merge run. It advances at one moment alone: a review that answers `revise` and starts another pass. A resumed run and an answered escalation each continue the pass they were in.
     - *Why:* A pass counted from the record of the passes made instead advances on every turn, so one interruption spends a pass the author never used.
 11. **GXD-FR-HGSU** An escalation pauses the run durably. The agent's reason and its ordered questions are persisted on the run, the run moves to `awaiting_author`, and it keeps its queue and its project slot (per `GRD-graduation.md` GRD-FR-BNTC).
 12. **GXD-FR-BJYT** `answer_graduation_escalation(run_id, answers)` accepts an ordered set covering **every** recorded question and nothing else. Each entry carries the question's position, the answer, a summary, and an optional **note**. A note that is blank once trimmed is stored as no note, and a stored note reaches the agent with its answer. A set that does not cover them all is refused and records nothing. A set against a run in a terminal state is refused with `run_state_not_permitted`. A set against a merge run whose pinned tip moved is refused with `merge_branch_moved` and records nothing (per `GRD-graduation.md` GRD-FR-XHSE).
+12. **GXD-FR-EKEU** `answer_graduation_escalation` against a run that is not in `awaiting_author` is refused with `run_state_not_permitted` and records nothing.
+   - *Why:* an accepted answer starts a turn, and a run that is not at rest for the author can have a turn of its own that runs.
 13. **GXD-FR-XPUR** An answered escalation goes into the **phase that asked**, and the pass does not advance. A work turn's answers resume the vendor's session where it can, and go into a fresh work turn where it cannot. A review turn's answers go into a fresh review turn that resumes no session, and are cleared once it returns a readable verdict. A correction turn resumes the session of the turn it corrects, a review turn's included (per `../ai/GRL-graduation-loop.md` GRL-FR-QKDC).
 14. **GXD-FR-IOZU** Every dispatch carries an activity sink bound to the run, so what the agent does reaches the run it is doing it for (per `AGV-agent-activity.md`), and a durable activity sink bound to the run, the turn's producer, and the turn's pass (per `GRS-graduation-run-log-storage.md`). The executor receives both sinks and never a run identifier.
 23. **GXD-FR-MMFM** A turn whose durable sink failed returns the executor's `DurableOutputFailed` (per `../tools/EAC-execute-agent-cli.md` EAC-FR-ZVRP) and rests the run `interrupted` with the reason `log_persistence_failed`. This reason takes precedence over the `cancelled` outcome the stopped container reports (per `../ai/GLG-graduation-loop-logging.md` GLG-FR-UCRL).
@@ -40,6 +42,12 @@ The single seam through which a graduation run reaches an execution agent, and t
 21. **GXD-FR-BQLN** A merge run's pass budget is **2** passes, a constant of this module and not a project setting. The run's `PassBudgetWindow` starts with a floor of 1 and a limit of 2 at its first dispatch. A merge run's Continue after the budget is spent moves the floor to the next pass and sets the limit to the floor plus 1, so that the window again holds 2 passes and no completed pass is repeated. A change of the project's pass budget does not change a merge run's window.
 22. **GXD-FR-HSQV** An escalation of a `merge_work` or `merge_review` turn pauses the run on the terms of GXD-FR-HGSU and is answered through `answer_graduation_escalation` on the terms of GXD-FR-BJYT and GXD-FR-XPUR: the answers go into the phase that asked, and the pass does not advance. The escalation records the origin `work` for a `merge_work` turn and `review` for a `merge_review` turn.
 23. **GXD-FR-TBOW** The seam also has `review_verdict_recorded`. The loop calls it on its own thread once a `review verdict` record is durable, before the verdict has any effect, and waits for it to return. The production implementation does nothing and reaches no execution agent. A build under test uses it per `../infra/GTE-graduation-end-to-end-tests.md` GTE-FR-KVYE.
+24. **GXD-FR-NWSL** Each run has one **decision ledger**: the ordered, append-only list of the author's answers to its escalations. An accepted answer set appends one entry for each question, in position order, in the same write. An entry holds the question, answer, summary, note, turn that asked and pass. The turn is `work`, `review`, `merge_work`, `merge_review`, or `semantic_rebase`.
+25. **GXD-FR-HRDM** No entry of the ledger is replaced, edited, merged or removed, and the ledger is never truncated, summarised or reordered. A question that the author answered before and answers again adds a new entry beside the old one. Only the author's own answers enter the ledger: an answer of the clarification judgement (`../tools/ESU-escalate-to-user-tool.md` ESU-FR-18) does not.
+26. **GXD-FR-BTIN** Every turn of every kind carries the whole ledger as `decisions` in its structured input (`author_decisions` for `semantic_rebase`): `work`, `review`, `merge_work`, `merge_review` and `semantic_rebase`, in every pass and after every resume, Continue and answered escalation. The ledger is empty before the first answer. The application does not refuse an escalation that repeats a recorded question.
+27. **GXD-FR-WRVH** Each draft run and each merge run keeps one **review history**: the findings of every review verdict, in order, each with the pass of its review. A `ready` verdict adds nothing. The history is append-only and is never truncated, summarised or reordered. A `work` turn and a `merge_work` turn carry it as `review_history`, in every pass and after every resume.
+28. **GXD-FR-QPFT** The `review_history` of a work turn holds the findings of the passes before the latest review, because the latest findings stay in the turn's `loop_instruction` (per `../ai/GRL-graduation-loop.md` GRL-FR-GQAB). A `review` turn, a `merge_review` turn and a `semantic_rebase` turn carry no review history.
+29. **GXD-FR-ZLBK** The ledger and the review history end when the run ends, whether it completes or is discarded. They add no size limit, and the bound of the turn input stays as `../tools/EAC-execute-agent-cli.md` EAC-FR-08 sets it. The ledger of a stream update is on the update record (per `WKS-work-streams.md` WKS-FR-ZKUP).
 
 ## Contract surface
 
@@ -68,6 +76,19 @@ PassBudgetWindow {
   pass_limit                 // pass_floor + the run's pass budget - 1 (the project's graduation
                              //   pass budget, or 2 for a merge run); 0 before the first dispatch. Continue after exhaustion moves the floor
                              //   to the next pass, so no completed pass is repeated.
+}
+
+GraduationDecision {         // one entry of the decision ledger (GXD-FR-NWSL)
+  question, answer, summary,
+  note?,                     // the author's note, where there is one
+  turn,                      // "work" | "review" | "merge_work" | "merge_review"
+                             //   | "semantic_rebase"
+  pass                       // the pass the turn asked in
+}
+
+ReviewHistoryEntry {         // one entry of the review history (GXD-FR-WRVH)
+  pass,                      // the pass of the review that found it
+  finding                    // ReviewFinding of `../ai/GRL-graduation-loop.md`
 }
 
 TurnOutcome =

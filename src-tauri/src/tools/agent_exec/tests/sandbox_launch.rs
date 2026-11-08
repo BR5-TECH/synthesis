@@ -20,6 +20,8 @@ struct RecordedProcess {
     user: String,
     env: BTreeMap<String, String>,
     stdin: Vec<u8>,
+    /// EAC-FR-HZIE: the final-event rule the launch handed the process.
+    final_event: Option<super::super::final_event::FinalEventRule>,
 }
 
 /// A sandbox runtime that records each boot and each process, and replies with
@@ -125,6 +127,7 @@ impl SandboxRuntime for RecordingSandbox {
                     .map(|(name, value)| (name.clone(), value.expose().to_string()))
                     .collect(),
                 stdin: process.stdin.to_vec(),
+                final_event: process.final_event,
             });
             Ok(RuntimeOutcome {
                 end: RunEnd::Exited,
@@ -210,6 +213,27 @@ fn launch(
             supplementary_mount: None,
         },
     ))
+}
+
+/// EAC-FR-ZIYG, EAC-FR-HZIE: a sandbox launch of Claude Code hands its process
+/// the final event of the descriptor and the grace of 30 seconds.
+#[test]
+fn a_sandbox_launch_hands_its_process_the_final_event_rule() {
+    let harness = harness_for("claude_code");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    launch(
+        &harness,
+        RecordingRuntime::replying(""),
+        sandbox.clone(),
+        microsandbox(),
+        scope(),
+        TurnKind::Work,
+    )
+    .expect("runs");
+    let rule = sandbox.only_process().final_event.expect("the process has a final-event rule");
+    assert_eq!(rule.grace, Duration::from_secs(30));
+    assert!((rule.is_final)(br#"{"type":"result"}"#));
+    assert!(!(rule.is_final)(br#"{"type":"assistant"}"#));
 }
 
 /// EAC-FR-SNMS, EAC-FR-ZIYG, EAC-FR-PZNB: under Microsandbox a graduation turn
@@ -351,6 +375,41 @@ fn the_vm_reaches_the_repository_through_a_generated_store() {
         assert_eq!(env.get(name), Some(value), "{name}");
     }
     assert_eq!(env.get("GIT_OPTIONAL_LOCKS").map(String::as_str), Some("0"));
+}
+
+// EAC-FR-WQNH, EAC-FR-PWLA: the process in the VM gets both Bash timeouts of a
+// Claude Code launch, as a container does.
+#[test]
+fn a_sandbox_process_gets_the_bash_timeouts() {
+    let harness = harness_for("claude_code");
+    let docker = RecordingRuntime::replying("");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    launch(&harness, docker, sandbox.clone(), microsandbox(), scope(), TurnKind::Work)
+        .expect("runs");
+
+    let env = sandbox.only_process().env;
+    for name in descriptor::BASH_TIMEOUT_ENVS {
+        assert_eq!(env.get(name).map(String::as_str), Some("1800000"), "{name}");
+    }
+}
+
+// EAC-FR-WQNH, EAC-FR-OWPP: in the VM too, a timeout that the author's entry
+// names keeps the author's value, and the executor sets the other one.
+#[test]
+fn a_sandbox_process_keeps_a_timeout_the_author_names() {
+    let harness = harness_for("claude_code");
+    let (mut records, active) = harness.store.load_agentic_registry().expect("registry");
+    let record = records.iter_mut().find(|r| r.vendor == "claude_code").unwrap();
+    record.env_vars = vec!["BASH_MAX_TIMEOUT_MS=3600000".to_string()];
+    harness.store.save_agentic_registry(records, active).expect("saved");
+    let docker = RecordingRuntime::replying("");
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    launch(&harness, docker, sandbox.clone(), microsandbox(), scope(), TurnKind::Work)
+        .expect("runs");
+
+    let env = sandbox.only_process().env;
+    assert_eq!(env.get("BASH_MAX_TIMEOUT_MS").map(String::as_str), Some("3600000"));
+    assert_eq!(env.get("BASH_DEFAULT_TIMEOUT_MS").map(String::as_str), Some("1800000"));
 }
 
 // EAC-FR-WBDE, EAC-FR-HXDN: a later launch removes what a turn added to the

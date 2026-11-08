@@ -5,8 +5,54 @@
 //! middle of a command: nothing on the run's own channel says it was stopped,
 //! by what, or after how long.
 
+use super::final_event::FINAL_EVENT_GRACE;
 use super::protocol::EnvelopeInvalid;
-use super::ProcessOutcome;
+use super::{AgentExecution, ProcessOutcome};
+use crate::log_fields;
+use crate::logging::{self, Domain, LogSink, BUFFER};
+
+/// EAC-FR-THUT: the line of `execution`. A run that the executor stopped after
+/// its final event says so and names the grace, whatever its outcome
+/// (EAC-FR-HZIE).
+pub fn finished_line_of(
+    execution: &AgentExecution,
+    limit_ms: u64,
+    stopped_after_answer: bool,
+) -> String {
+    let line = finished_line(
+        execution.process_outcome,
+        execution.exit_code,
+        execution.duration_ms,
+        limit_ms,
+        execution.refusal,
+    );
+    if stopped_after_answer {
+        with_stop_after_answer(line, FINAL_EVENT_GRACE.as_millis() as u64)
+    } else {
+        line
+    }
+}
+
+/// EAC-FR-PPXB: the one record of a run that the executor stopped after its
+/// final event. Only this record shows that the process outlived its answer,
+/// most probably because of something the agent started. It names the vendor,
+/// the container, and the grace, and nothing of the task or the output.
+pub(super) fn warn_stopped_after_answer<S>(sink: &S, vendor: &str, container: &str)
+where
+    S: LogSink + Clone + Send + 'static,
+{
+    logging::log_warn(
+        sink,
+        &BUFFER,
+        &[Domain::Ai, Domain::Backend],
+        "agent process still ran after its final event and was stopped",
+        log_fields! {
+            "vendor" => vendor,
+            "container" => container,
+            "grace_ms" => FINAL_EVENT_GRACE.as_millis() as u64,
+        },
+    );
+}
 
 /// EAC-FR-THUT: the line that names how a run ended and after how long.
 ///
@@ -43,6 +89,15 @@ pub fn finished_line(
             None => format!("Turn finished after {after}, but its answer could not be read."),
         },
     }
+}
+
+/// EAC-FR-THUT / EAC-FR-HZIE: `line`, followed by the sentence that says the
+/// process still ran when the grace ended and was stopped.
+pub fn with_stop_after_answer(line: String, grace_ms: u64) -> String {
+    format!(
+        "{line} The agent process still ran {} after its answer, so it was stopped.",
+        human_duration(grace_ms)
+    )
 }
 
 /// A duration as a person reads it: "2 h", "1 h 5 min", "45 min",
@@ -126,6 +181,34 @@ mod tests {
             ),
             "Turn finished after 1 min 7 s, but its answer could not be read: the escalation broke a structure rule."
         );
+    }
+
+    // EAC-FR-THUT, EAC-FR-HZIE: a run stopped after its answer says so and
+    // names the grace.
+    #[test]
+    fn a_run_stopped_after_its_answer_says_so_and_names_the_grace() {
+        let finished = finished_line(
+            ProcessOutcome::Completed,
+            None,
+            56 * 60 * 1000 + 31_000,
+            TWO_HOURS,
+            None,
+        );
+        assert_eq!(
+            with_stop_after_answer(finished, 30_000),
+            "Turn finished after 56 min. The agent process still ran 30 s after its answer, so it was stopped."
+        );
+        // A refused answer keeps its own words, and the stop follows them.
+        let refused = finished_line(
+            ProcessOutcome::InvalidStructuredOutput,
+            None,
+            12_000,
+            TWO_HOURS,
+            Some(EnvelopeInvalid::VendorRunFailed),
+        );
+        let line = with_stop_after_answer(refused.clone(), 30_000);
+        assert!(line.starts_with(&refused), "{line}");
+        assert!(line.ends_with("still ran 30 s after its answer, so it was stopped."), "{line}");
     }
 
     // EAC-FR-THUT: durations read in the units a person uses.

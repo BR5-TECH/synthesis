@@ -124,6 +124,9 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
             retryable: true,
         },
         ToolRefusal::NotRecordedWith(crate::tools::propose_new_draft::NOT_RECORDED),
+        // RDX-FR-DVQL: the export tool's refusals join the group.
+        ToolRefusal::NotFoundWith(crate::tools::request_document_export::DOCUMENT_NOT_FOUND),
+        ToolRefusal::NotRecordedWith(crate::tools::request_document_export::NOT_RECORDED),
     ]
     .into_iter()
     .inspect(|refusal| match refusal {
@@ -150,6 +153,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::ProposalNotRecorded
         | ToolRefusal::Denied { .. }
         | ToolRefusal::NotRecordedWith(_)
+        | ToolRefusal::NotFoundWith(_)
         | ToolRefusal::DraftNotFound
         | ToolRefusal::DraftInconsistent
         | ToolRefusal::DraftPromptUnreadable

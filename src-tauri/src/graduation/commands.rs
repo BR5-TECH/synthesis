@@ -125,9 +125,34 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
     if run.state.is_terminal() {
         return Err(ERR_RUN_STATE_NOT_PERMITTED.to_string());
     }
+    // GRD-FR-ZJHD: a run that waits on its questions moves on only by the
+    // answers or by a discard. A Continue would run the turn that asked again,
+    // without the answers, and that turn asks the same questions again.
+    if run.state == GraduationRunState::AwaitingAuthor && run.escalation.is_some() {
+        logging::log_warn(
+            &app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation refused to continue a run that waits on its questions",
+            log_fields! { "run_id" => run.id.clone(), "state" => run.state.as_str().to_string() },
+        );
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
+    }
     // GRD-FR-XHSE: a merge run does not resume over a branch that moved. The
     // check comes first, so a refusal changes nothing.
     refuse_moved_tips(&app, &run)?;
+    // GRD-FR-ZJHD: questions that a run outside `awaiting_author` still holds
+    // are offered by no surface. They are dropped, so they neither block the
+    // run nor reach its next turn.
+    if run.escalation.take().is_some() {
+        logging::log_warn(
+            &app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation dropped questions a continued run still held",
+            log_fields! { "run_id" => run.id.clone(), "state" => run.state.as_str().to_string() },
+        );
+    }
     let paused = matches!(
         run.interruption.as_ref().map(|i| i.reason),
         Some(GraduationInterruptionReason::AuthorPause)
@@ -360,6 +385,19 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
         );
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
     }
+    // GXD-FR-EKEU: an accepted answer starts a turn. A run that is not at rest
+    // for the author can have a turn of its own that runs, and a second turn
+    // beside it would write into the same working copy.
+    if run.state != GraduationRunState::AwaitingAuthor {
+        logging::log_warn(
+            &app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation refused answers to a run that does not wait on the author",
+            log_fields! { "run_id" => run.id.clone(), "state" => run.state.as_str().to_string() },
+        );
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
+    }
     let Some(escalation) = run.escalation.clone() else {
         logging::log_warn(
             &app,
@@ -404,11 +442,41 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
             "run_id" => run.id.clone(),
             "answers" => answers.len() as i64,
             "notes" => answers.iter().filter(|a| a.note.is_some()).count() as i64,
+            "decisions" => (run.checkpoint.decisions.len() + answers.len()) as i64,
         },
     );
+    // GXD-FR-NWSL: one ledger entry for each answered question, in the order of
+    // the positions. The answers were checked above to cover every question.
+    let turn = escalation.origin.decision_turn(run.is_merge());
+    let pass = run.pass();
+    let entries: Vec<GraduationDecision> = escalation
+        .questions
+        .iter()
+        .filter_map(|question| {
+            let answer = answers.iter().find(|a| a.position == question.position)?;
+            Some(GraduationDecision::from_answer(question, answer, turn, pass))
+        })
+        .collect();
+    run.checkpoint.decisions.extend(entries);
     run.checkpoint.pending_escalation_answers = answers;
     run.checkpoint.resume = escalation.resume.clone();
     run.escalation = None;
+    // GRL-FR-NVGQ: the turn that takes the answers gets the whole total time
+    // limit. The pass budget stays as it is.
+    if run.turn_time_used_ms > 0 || run.rest.is_some() {
+        logging::log_info(
+            &app,
+            &BUFFER,
+            &[Domain::Ai, Domain::Backend],
+            "graduation reset the used total time for the answers",
+            log_fields! {
+                "run_id" => run.id.clone(),
+                "used_ms" => run.turn_time_used_ms as i64,
+            },
+        );
+    }
+    run.turn_time_used_ms = 0;
+    run.rest = None;
     transitions::transition(&app, &mut run, GraduationRunState::Queued)?;
     dispatch_pending(&app);
     runs::load_run(&app, &run_id)
@@ -844,6 +912,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
     cursor: Option<logs::GraduationLogCursor>,
     limit: Option<u32>,
     query: Option<String>,
+    kinds: Option<Vec<String>>,
 ) -> Result<logs::GraduationLogPage, String> {
     // Every refusal is reported, so a window that says it could not read the
     // log is answerable from the Logs panel. The values named here are the
@@ -902,6 +971,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
             cursor,
             limit,
             query,
+            kinds,
         },
     )
     .inspect_err(|reason| {

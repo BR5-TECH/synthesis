@@ -208,6 +208,24 @@ pub const DOCKER_HOST_ENV: &str = "DOCKER_HOST";
 pub const VM_DOCKER_HOST_VALUE: &str = "unix:///var/run/docker.sock";
 /// The environment variable Claude Code reads its OAuth token from (EAC-FR-15).
 pub const CLAUDE_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
+/// EAC-FR-WQNH: the two Bash timeouts of the Claude Code CLI.
+pub const BASH_TIMEOUT_ENVS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
+/// EAC-FR-WQNH: the value of each of [`BASH_TIMEOUT_ENVS`], 30 minutes.
+pub const BASH_TIMEOUT_MS: &str = "1800000";
+
+/// EAC-FR-WQNH: the Bash timeouts the executor sets on a launch of `vendor`.
+/// A Claude Code launch gets both, except a variable that the launch
+/// environment names: the author's value then stands. Other vendors get none.
+pub fn bash_timeouts(vendor: &str, env_names: &[String]) -> Vec<(String, String)> {
+    if vendor != CLAUDE_CODE.vendor {
+        return Vec::new();
+    }
+    BASH_TIMEOUT_ENVS
+        .iter()
+        .filter(|name| !env_names.iter().any(|named| named == *name))
+        .map(|name| (name.to_string(), BASH_TIMEOUT_MS.to_string()))
+        .collect()
+}
 
 // ---------------------------------------------------------------------------
 // Vendor descriptors
@@ -254,6 +272,9 @@ pub enum ActivityKind {
     Reasoning,
     /// Prose the agent wrote.
     Message,
+    /// One valid milestone marker the agent wrote in its prose (EAC-FR-ZNBD).
+    /// The executor makes it from a message line. A vendor reader never does.
+    Milestone,
     /// The agent asked for a tool.
     ToolCall,
     /// A tool answered.
@@ -285,6 +306,7 @@ impl ActivityKind {
             ActivityKind::Started => "started",
             ActivityKind::Reasoning => "reasoning",
             ActivityKind::Message => "message",
+            ActivityKind::Milestone => "milestone",
             ActivityKind::ToolCall => "tool_call",
             ActivityKind::ToolResult => "tool_result",
             ActivityKind::Command => "command",
@@ -403,7 +425,11 @@ type ResumeArgv = fn(
 type Extractor = fn(&ExtractContext<'_>) -> Result<Extracted, EnvelopeInvalid>;
 type EffortSupported = fn(&str) -> bool;
 /// One line of this vendor's stdout, read as an activity (EAC-FR-33).
-type ActivityReader = fn(&str) -> VendorActivity;
+type ActivityReader = fn(&str, TextFilter<'_>) -> VendorActivity;
+
+/// What a reader does to each agent text block before it composes a summary
+/// from it. The identity filter reads the line as it came (EAC-FR-HTSN).
+pub type TextFilter<'a> = &'a dyn Fn(&str) -> String;
 
 /// Everything one vendor's invocation needs, as immutable application data
 /// transcribed from that vendor's own protocol specification (EAC-FR-10).
@@ -426,6 +452,10 @@ pub struct VendorExecutionDescriptor {
     pub session_source: SessionSource,
     pub session_state: SessionStateMount,
     pub credential_form: CredentialForm,
+    /// EAC-FR-HZIE: the stdout line that ends this vendor's turn. `None` for a
+    /// vendor that declares none, whose run ends only by exit, cancellation, or
+    /// the deadline (EAC-FR-QHAY).
+    pub final_event: Option<super::final_event::FinalEvent>,
 }
 
 impl std::fmt::Debug for VendorExecutionDescriptor {
@@ -437,6 +467,7 @@ impl std::fmt::Debug for VendorExecutionDescriptor {
             .field("session_source", &self.session_source)
             .field("session_state", &self.session_state)
             .field("credential_form", &self.credential_form)
+            .field("final_event", &self.final_event.is_some())
             .finish()
     }
 }
@@ -450,7 +481,7 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     effort_supported: Some(claude_code::effort_supported),
     extractor: claude_code::extract,
     session_reader: claude_code::reported_session,
-    activity: claude_code::activity,
+    activity: claude_code::activity_filtered,
     // CCP-FR-09: the schema-validated object first, the text form second.
     response_sources: &[
         ResponseSource::JsonObjectField { key: "structured_output" },
@@ -463,6 +494,8 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
         target: claude_code::SESSION_STATE_TARGET,
     },
     credential_form: CredentialForm::EnvironmentVariable(CLAUDE_TOKEN_ENV),
+    // CCP-FR-RGVA: the `result` line.
+    final_event: Some(claude_code::is_final_event),
 };
 
 /// EAC-FR-12: Codex's descriptor, transcribing `CDX`.
@@ -484,7 +517,7 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     effort_supported: Some(codex::effort_supported),
     extractor: codex::extract,
     session_reader: codex::reported_session,
-    activity: codex::activity,
+    activity: codex::activity_filtered,
     // CDX-FR-12: exactly one position.
     response_sources: &[ResponseSource::JsonlLastItem {
         event_type: "item.completed",
@@ -499,6 +532,8 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     // CDX-FR-23: login directory and session directory are the same directory.
     session_state: SessionStateMount::SharedWithCredentialMount { env: codex::SESSION_STATE_ENV },
     credential_form: CredentialForm::Mount,
+    // EAC-FR-QHAY: this vendor declares no final event.
+    final_event: None,
 };
 
 pub fn descriptor_for(vendor: &str) -> Option<&'static VendorExecutionDescriptor> {
@@ -587,7 +622,14 @@ impl VendorExecutionDescriptor {
     /// one carrying an event this build has never heard of. A vendor that adds
     /// an event must not make a run go quiet.
     pub fn activity(&self, line: &str) -> VendorActivity {
-        (self.activity)(line)
+        (self.activity)(line, &|text| text.to_string())
+    }
+
+    /// EAC-FR-HTSN: the same reading, with each agent text block passed through
+    /// `filter` before it reaches the summary. The filter is called once for
+    /// each text block, in the order the vendor wrote them.
+    pub fn activity_filtered(&self, line: &str, filter: TextFilter<'_>) -> VendorActivity {
+        (self.activity)(line, filter)
     }
 }
 

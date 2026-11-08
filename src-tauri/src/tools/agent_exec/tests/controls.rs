@@ -417,6 +417,7 @@ fn a_read_error_marks_the_capture_truncated_rather_than_complete() {
             stdout_limit: 100,
             stderr_limit: 100,
             observer: None,
+            final_event: None,
         })
         .await
     })
@@ -438,6 +439,7 @@ fn a_read_error_marks_the_capture_truncated_rather_than_complete() {
             stdout_limit: 100,
             stderr_limit: 100,
             observer: None,
+            final_event: None,
         })
         .await
     })
@@ -457,6 +459,7 @@ fn a_read_error_marks_the_capture_truncated_rather_than_complete() {
             stdout_limit: 5,
             stderr_limit: 5,
             observer: None,
+            final_event: None,
         })
         .await
     })
@@ -487,6 +490,7 @@ fn a_timeout_kills_the_grandchildren_too() {
             stdout_limit: 1024,
             stderr_limit: 1024,
             observer: None,
+            final_event: None,
         })
         .await
     })
@@ -529,6 +533,7 @@ fn a_pre_cancelled_token_ends_the_run_immediately() {
             stdout_limit: 1024,
             stderr_limit: 1024,
             observer: None,
+            final_event: None,
         })
         .await
     })

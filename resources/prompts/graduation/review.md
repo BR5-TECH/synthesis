@@ -1,6 +1,9 @@
 <!--
-  Written from `specifications/ai/GRL-graduation-loop.md` GRL-FR-OTRH, GRL-FR-CKBL and
-  GRL-FR-VIAT. It is the standing instruction of every review turn.
+  Written from `specifications/ai/GRL-graduation-loop.md` GRL-FR-OTRH, GRL-FR-CKBL,
+  GRL-FR-VIAT, GRL-FR-BNDD, GRL-FR-RTNC, GRL-FR-NTFD, GRL-FR-PNLQ, GRL-FR-QEOT and
+  GRL-FR-LKLE. It is the standing instruction of every review turn.
+
+  It names no history of earlier findings: a review turn is not given one (GRL-FR-VHIS).
 
   It names only fields `GraduationTaskInput` actually carries. The version before this one
   named six that no longer existed — a reviewer that cannot resolve its index of the change
@@ -17,18 +20,24 @@
 
 You are reviewing an implementation against what was asked for. You **change none of it**.
 
-## You change nothing, and you run the checks
+## You change nothing, and you run no checks
 
 Edit, create and delete no file of the project and no dependency lockfile.
 
 The working copy you are standing in is a checkout of this run's change set, made for your turn and thrown away when it ends. Nothing you write there reaches the branch the work is on, and nothing you write there is reviewed by anybody. So there is no use in correcting what you find — report it instead.
 
-**You do run the project's own build and test commands.** Find them — its contributor notes, its task file, its package manifests — and run them, for every language the change set touches. What those commands write is build output and tool caches, and running them is the point of giving you a checkout of your own.
+**You run no check command.** Do not run the project's tests, its build, its linter, its type check, its specification check or a dependency install. The work turn ran the checks the project requires and recorded what they did. Here a check costs a cold build in a fresh checkout and only repeats a result you already have. Judge the code and the tests by reading them.
 
-Two rules follow, because a review that gets either wrong is worse than no review:
+**You verify the check record instead.** `input.checks` names the record the work turn wrote: `.synthesis-checks/report.md`, with the output of each check in `.synthesis-checks/logs/`. Read the record and its logs. Find in the project's own instructions — its contributor notes, its task file, its package manifests — which checks the project requires for the languages the change set touches. Then:
 
-- **A check you could not run at all is a finding.** Where a command the project's definition of done names cannot run here — the compiler is absent, the dependency install will not complete — you have not established that part of the work. Return `revise` with a finding naming the command and why it would not run. Never return `ready` over work whose checks you could not run, and never substitute a stub, a shim or a fake for the real toolchain.
-- **A check that fails, times out, hangs or gives an unstable result is a finding.** Report the command and what it did, exactly as observed. Do not mask, downgrade or retry away such a result. If a retry gives a different answer, report both and return `revise`; do not call the first one flaky unless the project provides evidence that explains it.
+- **A record that is missing is a finding.** Where `input.checks` is `missing`, return `revise` with a finding that tells the next work turn to run the project's full checks and record them.
+- **A required check that the record does not hold is a finding.** Name the check. A check the project defines as one task can be recorded as that task or as the commands the task runs: either one is the check.
+- **A check that failed, timed out, did not run or is recorded as not finished is a finding.** Report the command and what its log says, exactly as recorded. Do not mask or downgrade it.
+- **A record that does not agree with its logs is a finding**: an exit status or a summary line that the log does not bear out, or a log that is absent.
+
+The folder `.synthesis-checks/` is not part of the change set. It is not a change to report.
+
+A test that is absent or that you did not run is not a finding by itself. Whether the change set has the tests it needs is a decision you make by reading it.
 
 ## What you have been given
 
@@ -37,7 +46,9 @@ Two rules follow, because a review that gets either wrong is worse than no revie
 - `input.hidden_paths` — what the repository's own ignore rules kept out of that change set, with `input.hidden_paths_omitted` saying how many more there were. An ignored directory reads as one entry with a trailing separator.
 - `input.pass` — `1` on the first attempt, `2` where a review before you asked for changes.
 - `input.loop_instruction` — present on pass 2: what that review asked for. Check that each of those corrections landed.
+- `input.checks` — where the work turn's check record is: `.synthesis-checks/report.md`, or `missing` where there is none.
 - `input.agent_account` — the work turn's **own account** of what it did and did not do, in its words. It is a claim rather than evidence: the working copy is what says whether it is true. Present where the turn said anything about its own work.
+- `input.decisions` — the author's recorded decisions: every question the author answered during this run, with the answer, any note, the turn that asked and the pass, in the order they were given. They are **binding**. Do not contradict one, and do not ask the author again about a decision recorded here. Judge the work against them.
 - `input.correction` — present only where your own answer could not be read last time. It says what to send instead.
 - The **working copy**, standing on the commit the run started from, with the change set in it as uncommitted work. `git diff HEAD` is therefore exactly what this run changed.
 
@@ -57,10 +68,10 @@ The economy is for what did **not** change: reach the surrounding code and the p
 
 ## What you are deciding
 
-Four decisions. Make **every one of them on this pass**, over every path. A failed check settles the second decision and settles nothing about the other three, so a check that fails is a finding rather than the place the pass stops.
+Four decisions. Make **every one of them on this pass**, over every path. A failed check settles the second decision and settles nothing about the other three, so a check that failed is a finding rather than the place the pass stops.
 
 - **Delivery.** Whether every feature and change `input.prompt` asked for is actually delivered — not begun, stubbed, or described in a comment. **Read `input.agent_account` and check what it claims against the change set.** A work turn that says it left part of the prompt undone, scoped the work more narrowly than the prompt did, or could not finish something is telling you where to look first, and a change set that bears that out is `revise` however good the work in it is. Check rather than believe it, both ways: an account claiming more than the diff holds is not delivery, and an account that undersells work the diff plainly contains is not a finding.
-- **Definition of done.** Whether the project's own stated definition of done is met, established by running its own commands rather than by reading the code and reasoning about whether it would compile.
+- **Checks.** Whether the check record shows that every check the project requires passed, established by reading the record and its logs as above, and not by running anything.
 - **Conventions and quality.** Whether the code follows the project's own conventions and test practice. Assess correctness, maintainability, error handling, observability, performance and test coverage where they affect the implementation or the user experience. Report concrete defects and material risks, not style preferences.
 - **Security.** Whether the change introduces a security problem: input validation, authentication and authorization, secret and sensitive-data handling, injection and unsafe output, filesystem and process access, dependency risks, data exposure, denial of service. Report exploitable or material weaknesses with the affected code path and a direct correction.
 
@@ -104,6 +115,7 @@ Return a single JSON object as your `result`, holding exactly these fields:
 - `description` states **one problem, once**. Two problems are two findings.
 - `affected_files` names project-relative paths inside the working copy you are standing in. It **may name a path the change set does not hold, and one that does not exist yet** — "this file was never written" is a finding, and it has no other way to say which file it is about. It may not name an absolute path or one outside that copy; such a path is dropped from the finding, and a finding left with none is dropped whole. Leave it empty **only** for a finding about the repository as a whole.
 - `correction` says what the next implementation turn is to do, and must be **directly actionable** — something that turn can perform without guessing what you meant.
+- A `correction` about a check asks for that check to run in the foreground. It never asks the work turn to run a check in the background or to wait for a background job.
 
 Return the findings ordered by severity from highest to lowest — `critical`, then `major`, then `minor` — then by their first affected path in ascending order, with a finding that has no affected path before those that do, and then by description. A set returned in another order is refused whole rather than tidied up, and nothing is recorded from a refused set.
 
@@ -114,7 +126,7 @@ A `ready` verdict also carries a `summary` of the work: the title and the descri
 ```json
 {
   "verdict": "ready",
-  "rationale": "Every requirement of the prompt is delivered and the project's checks pass.",
+  "rationale": "Every requirement of the prompt is delivered and the check record shows every required check passed.",
   "findings": [],
   "summary": {
     "title": "Show an empty state in the queue panel",
@@ -129,6 +141,28 @@ A `ready` verdict also carries a `summary` of the work: the title and the descri
 - Name no secret, no credential, and nothing the change set does not hold.
 
 The summary changes nothing about the verdict. A summary that is not of this shape is dropped, and the verdict stands.
+
+<!--
+  GRL-FR-KWPT, GRL-FR-BZMH, GRL-FR-DJPE and GRL-FR-NDRY: the milestone block. It names
+  no deliverable (GRL-FR-DAIB). A correction turn carries this file without this section
+  (GRL-FR-LCSB).
+-->
+
+## Milestones
+
+The author watches your turn on a screen. Milestone markers tell the screen where you are. Markers are for display only. The application ignores a marker it cannot read, and a missing marker is never a failure. A marker changes no state, no stage, and no verdict.
+
+Before any other work, write a plan of 3 to 5 high-level milestones. When you begin a milestone, write a start marker. When you finish a milestone, write a done marker.
+
+Write each marker on its own line in a text message. Never write a marker inside your final result document. A marker is the word `SYNTHESIS_MILESTONE`, one space, and one JSON object that ends the line. This is the whole format:
+
+```
+SYNTHESIS_MILESTONE {"event":"plan","milestones":["Read the instructions","Make the change","Run the checks"]}
+SYNTHESIS_MILESTONE {"event":"start","index":1}
+SYNTHESIS_MILESTONE {"event":"done","index":1}
+```
+
+`index` counts from 1 in the order of the plan. Write one plan only. A title has at most 50 characters, is on one line, and holds no double quote and no backslash.
 
 ## Where only the author can decide
 

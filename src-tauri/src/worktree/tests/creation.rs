@@ -115,8 +115,9 @@ fn a_creation_that_cannot_finish_reclaims_the_worktree_and_only_a_branch_it_made
     let main = Repository::open(f.root()).unwrap();
     let target = f.sibling("wt-spike");
     let seam = BreakRecord(f.root().join(".git/worktrees/wt-spike/commondir"));
-    let refusal = create_worktree_seamed(&f.root(), "spike", &target.to_string_lossy(), &seam)
-        .expect_err("a creation that cannot be finished is refused");
+    let refusal =
+        create_worktree_seamed(&f.root(), "spike", &target.to_string_lossy(), None, &seam)
+            .expect_err("a creation that cannot be finished is refused");
 
     assert!(refusal.starts_with("failed to create worktree"), "{refusal}");
     assert!(!target.exists(), "the working copy is gone");
@@ -133,7 +134,7 @@ fn a_creation_that_cannot_finish_reclaims_the_worktree_and_only_a_branch_it_made
     f.branch("alpha");
     let second = f.sibling("wt-alpha");
     let seam = BreakRecord(f.root().join(".git/worktrees/wt-alpha/commondir"));
-    create_worktree_seamed(&f.root(), "alpha", &second.to_string_lossy(), &seam)
+    create_worktree_seamed(&f.root(), "alpha", &second.to_string_lossy(), None, &seam)
         .expect_err("refused on the same terms");
     assert!(!second.exists());
     assert!(
@@ -222,4 +223,105 @@ fn creating_for_a_branch_that_already_has_a_worktree_is_the_typed_error() {
     let err = create_worktree_at(&f.root(), &main, &fresh.to_string_lossy()).unwrap_err();
     assert_eq!(err, ERR_BRANCH_ALREADY_CHECKED_OUT);
     assert!(!fresh.exists(), "no directory is created when the branch is refused");
+}
+
+// -- WTC-FR-NQZE: a new branch at the tip of `start` --------------------
+
+/// A fixture whose branch `top` is one commit ahead of the active `HEAD`.
+fn fixture_with_top() -> (Fixture, git2::Oid, git2::Oid) {
+    let f = Fixture::new();
+    let base = f.repo().head().unwrap().peel_to_commit().unwrap().id();
+    let main = f.current_branch();
+    f.branch("top");
+    f.repo().set_head("refs/heads/top").unwrap();
+    f.write("top.md", "top");
+    f.commit("top");
+    let top = f.repo().head().unwrap().peel_to_commit().unwrap().id();
+    f.repo().set_head(&format!("refs/heads/{main}")).unwrap();
+    f.repo().checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+    (f, base, top)
+}
+
+// WTC-FR-NQZE: the new branch starts at the tip of `start`, not at `HEAD`.
+#[test]
+fn a_new_branch_with_a_start_starts_at_the_tip_of_that_branch() {
+    let (f, base, top) = fixture_with_top();
+    assert_ne!(base, top);
+    let target = f.sibling("wt-next");
+    let created =
+        create_worktree_from(&f.root(), "next", &target.to_string_lossy(), "top").unwrap();
+    let repo = Repository::open(&created).unwrap();
+    assert_eq!(repo.head().unwrap().shorthand().unwrap(), "next");
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), top);
+    assert!(created.join("top.md").exists(), "the content of the start is checked out");
+}
+
+// WTC-FR-NQZE: with no local branch of the name, the remote-tracking branch
+// of the primary remote is the start.
+#[test]
+fn a_start_with_no_local_branch_uses_the_primary_remote() {
+    let (f, _, top) = fixture_with_top();
+    f.repo().remote("origin", "https://example.invalid/r.git").unwrap();
+    f.repo().reference("refs/remotes/origin/far", top, true, "test").unwrap();
+    let target = f.sibling("wt-next");
+    let created =
+        create_worktree_from(&f.root(), "next", &target.to_string_lossy(), "far").unwrap();
+    let repo = Repository::open(&created).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), top);
+}
+
+// WTC-FR-NQZE: a start that resolves to no commit is `branch_missing`, and
+// the creation makes no directory and no branch.
+#[test]
+fn a_start_that_is_no_branch_is_the_typed_error_and_creates_nothing() {
+    let f = Fixture::new();
+    let target = f.sibling("wt-next");
+    let err =
+        create_worktree_from(&f.root(), "next", &target.to_string_lossy(), "nowhere").unwrap_err();
+    assert_eq!(err, crate::git::objects::ERR_BRANCH_MISSING);
+    assert!(!target.exists());
+    assert!(f.repo().find_branch("next", BranchType::Local).is_err());
+    assert_eq!(context_for(&f.root()).unwrap().worktrees.len(), 1);
+}
+
+// WTC-FR-NQZE: an existing branch ignores `start`, and an empty `start` is
+// no `start`.
+#[test]
+fn an_existing_branch_and_an_empty_start_ignore_the_start() {
+    let (f, base, _) = fixture_with_top();
+    f.branch("alpha");
+    let created =
+        create_worktree_from(&f.root(), "alpha", &f.sibling("wt-a").to_string_lossy(), "top")
+            .unwrap();
+    let repo = Repository::open(&created).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), base);
+
+    let created =
+        create_worktree_from(&f.root(), "beta", &f.sibling("wt-b").to_string_lossy(), " ").unwrap();
+    let repo = Repository::open(&created).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), base);
+}
+
+// WTC-FR-NQZE: through the path of the command, a start that resolves to no
+// commit leaves the content root where it was.
+#[test]
+fn a_start_that_is_no_branch_leaves_the_content_root_unchanged() {
+    use tauri::Manager;
+    let f = Fixture::new();
+    let app = mock_app_on(&f.root(), &f.root());
+    let store = GlobalSettingsStore::in_memory();
+    let target = f.sibling("wt-next");
+    let err = create_worktree_in(
+        app.handle(),
+        &app.state::<ProjectState>(),
+        &app.state::<ProjectWatcher>(),
+        &store,
+        "next",
+        &target.to_string_lossy(),
+        Some("nowhere"),
+    )
+    .unwrap_err();
+    assert_eq!(err, crate::git::objects::ERR_BRANCH_MISSING);
+    assert_eq!(app.state::<ProjectState>().root(), Some(f.root()));
+    assert!(!target.exists());
 }

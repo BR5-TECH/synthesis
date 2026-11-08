@@ -74,6 +74,7 @@ fn read(fx: &Fixture, run_id: &str, scope: serde_json::Value, stream: &str) -> G
         None,
         Some(1000),
         None,
+        None,
     )
     .expect("a page")
 }

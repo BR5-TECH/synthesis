@@ -217,13 +217,10 @@ fn sanitize_key(key: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
-/// GRD-FR-VLFO: a run id, unique across projects.
+/// GRD-FR-VLFO: a run id, unique across projects, also for two runs made in
+/// the same microsecond.
 pub fn new_run_id() -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    format!("g{nanos:x}{:x}", std::process::id())
+    format!("g{:x}{:x}", crate::stamp::unique_nanos(), std::process::id())
 }
 
 /// GRD-FR-LGDV: read one run's record.

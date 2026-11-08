@@ -59,6 +59,9 @@ pub fn run_tree(worktree: &Path, base_commit: &str) -> Result<Option<RunTree>, S
             }
         }
     }
+    // GRL-FR-DCKG: the check folder is never part of the change set, also
+    // where the repository's `info/exclude` does not hide it.
+    paths.retain(|path| !super::driver::checks_folder::is_check_path(path));
     paths.sort();
     paths.dedup();
     if paths.is_empty() {
@@ -204,15 +207,24 @@ pub fn commit_author_work(worktree: &Path, message: &str) -> Result<Option<Strin
         .ok_or_else(|| "the repository index is held by another write".to_string())?;
     let mut status = git2::StatusOptions::new();
     status.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
+    // GRL-FR-DCKG: the check folder is not standing work, also where the
+    // repository's `info/exclude` does not hide it.
+    let is_check =
+        |path: Option<&str>| path.is_some_and(super::driver::checks_folder::is_check_path);
     let dirty = repo
         .statuses(Some(&mut status))
-        .map(|s| s.iter().any(|e| !e.status().is_empty()))
+        .map(|s| s.iter().any(|e| !e.status().is_empty() && !is_check(e.path().ok())))
         .unwrap_or(false);
     if !dirty {
         return Ok(None);
     }
     let mut index = repo.index().map_err(|e| e.to_string())?;
-    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).map_err(|e| e.to_string())?;
+    let mut skip_checks = |path: &Path, _spec: &[u8]| -> i32 {
+        i32::from(super::driver::checks_folder::is_check_path(&path.to_string_lossy()))
+    };
+    index
+        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, Some(&mut skip_checks))
+        .map_err(|e| e.to_string())?;
     index.write().map_err(|e| e.to_string())?;
     let tree_oid = index.write_tree().map_err(|e| e.to_string())?;
     let tree = repo.find_tree(tree_oid).map_err(|e| e.to_string())?;

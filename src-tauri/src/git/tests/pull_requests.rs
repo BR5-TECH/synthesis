@@ -33,6 +33,7 @@ pub(super) struct FakeGithub {
     requests: Mutex<Vec<(String, String)>>,
     posts: Mutex<Vec<(String, String, Value)>>,
     post_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
+    post_queue: Mutex<std::collections::VecDeque<Result<Value, GithubWriteFailure>>>,
     patches: Mutex<Vec<(String, String, Value)>>,
     patch_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
 }
@@ -64,6 +65,12 @@ impl FakeGithub {
         *self.post_answer.lock().unwrap() = Some(answer);
     }
 
+    /// Answer the next write with `answer`, before the answer of `answer_post`.
+    /// Each queued answer serves one write, in order.
+    pub(super) fn queue_post(&self, answer: Result<Value, GithubWriteFailure>) {
+        self.post_queue.lock().unwrap().push_back(answer);
+    }
+
     /// Every `(secret, path, body)` this fake was asked to write, in order.
     pub(super) fn posts(&self) -> Vec<(String, String, Value)> {
         self.posts.lock().unwrap().clone()
@@ -92,6 +99,9 @@ impl GithubPullRequests for FakeGithub {
         body: &Value,
     ) -> Result<Value, GithubWriteFailure> {
         self.posts.lock().unwrap().push((secret.to_string(), path.to_string(), body.clone()));
+        if let Some(queued) = self.post_queue.lock().unwrap().pop_front() {
+            return queued;
+        }
         self.post_answer.lock().unwrap().clone().unwrap_or(Err(GithubWriteFailure::Unreachable))
     }
 
@@ -285,6 +295,26 @@ fn listing_open_pull_requests_asks_for_the_open_state_newest_update_first() {
 
 // GTC-FR-GXUB
 #[test]
+fn a_list_row_tells_whether_its_head_repository_is_a_fork() {
+    let f = repo_with_origin(PLATFORM);
+    let github = FakeGithub::new();
+    let side = |name: &str| json!({ "ref": "feature", "repo": { "full_name": name } });
+    let mut own = pr_json(1, "open", None, "2024-03-01T00:00:00Z");
+    own["head"] = side("Acme/Platform");
+    own["base"] = side("acme/platform");
+    let mut fork = pr_json(2, "open", None, "2024-02-01T00:00:00Z");
+    fork["head"] = side("dev/platform");
+    fork["base"] = side("acme/platform");
+    let bare = pr_json(3, "open", None, "2024-01-01T00:00:00Z");
+    github.pages(&list_path("open"), vec![vec![own, fork, bare]]);
+
+    let rows = list(&f, &github, &token_ready(), own_buffer(), "open").unwrap();
+
+    assert_eq!(rows.iter().map(|r| r.head_is_fork).collect::<Vec<_>>(), vec![false, true, false]);
+}
+
+// GTC-FR-GXUB
+#[test]
 fn a_list_row_serialises_to_the_camel_case_contract() {
     let f = repo_with_origin(PLATFORM);
     let github = FakeGithub::new();
@@ -303,6 +333,7 @@ fn a_list_row_serialises_to_the_camel_case_contract() {
             "author": "alice",
             "headBranch": "feature",
             "baseBranch": "main",
+            "headIsFork": false,
             "createdAt": "2024-01-01T00:00:00Z",
             "updatedAt": "2024-03-01T00:00:00Z",
         }])

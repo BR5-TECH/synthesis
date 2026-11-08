@@ -33,6 +33,7 @@ import type {
   PullRequestHeadState,
   PullRequestIssueRef,
   PullRequestSummary,
+  StackStep,
 } from "../types";
 
 const invokeMock = vi.fn();
@@ -197,7 +198,9 @@ beforeEach(() => {
 afterEach(cleanup);
 
 function mount() {
-  const onCreated = vi.fn<(c: CreatedPullRequest, l: PullRequestLinkResult | null) => void>();
+  const onCreated = vi.fn<
+    (c: CreatedPullRequest, l: PullRequestLinkResult | null, s?: StackStep | null) => void
+  >();
   const onClose = vi.fn();
   const view = render(
     <CreatePullRequestWindow
@@ -439,6 +442,7 @@ describe("linking on submit (CPR-FR-BLEN, CPR-FR-XMRL, CPR-FR-ESXZ, CPR-FR-FFQD)
     await waitFor(() => expect(h.onCreated).toHaveBeenCalledWith(
       { number: 42, url: "https://github.com/acme/platform/pull/42" },
       null,
+      null,
     ));
     expect(calls("link_pull_request_issues")).toHaveLength(0);
   });
@@ -508,6 +512,7 @@ describe("stacked pull requests (CPR-FR-IPKX, CPR-FR-JBPQ)", () => {
     author: "alice",
     headBranch: "feature/pr-tools",
     baseBranch: "main",
+    headIsFork: false,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-02T00:00:00Z",
   };

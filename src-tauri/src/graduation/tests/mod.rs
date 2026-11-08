@@ -25,13 +25,16 @@ use crate::tools::agent_exec::{
 
 mod activity_stream;
 mod blocking;
+mod check_folder;
 mod checkout_paths;
 mod collaborators;
 mod commit_retitle;
+mod decision_ledger;
 mod direct;
 mod direct_message;
 mod docker_socket;
 mod e2e;
+mod escalation_gate;
 mod github_shadow;
 mod hold;
 mod idle_sandbox;
@@ -49,6 +52,7 @@ mod merge_passes;
 mod merge_prompts;
 mod merge_records;
 mod merge_run;
+mod milestone_prompts;
 mod pr_summary;
 mod pr_summary_turn;
 mod prompts;

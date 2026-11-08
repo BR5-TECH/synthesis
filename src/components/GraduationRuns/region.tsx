@@ -59,8 +59,10 @@ import type {
 import { RunProgress } from "../RunProgress";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
 import { RunEscalationForm } from "./escalation";
+import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
 import { MergePaths, MergePublication, MergeResult } from "./merge";
+import { MilestoneList } from "./milestones";
 import { PrSummaryResult } from "./prSummary";
 
 /**
@@ -217,6 +219,11 @@ export function RunRegion({
         )
       )}
 
+      {/* GRU-FR-WQHM: the milestones of the run's current turn, under the stage
+          row and above everything that follows it. Keyed by run, so another run
+          starts with an empty list. */}
+      <MilestoneList key={run.id} run={run} />
+
       {/* GRU-FR-LBPR / GRU-FR-FZCN / GRU-FR-DBUS: a run resting on a blocker
           states it in either state that carries one. */}
       {blockerStatement(run) && (
@@ -289,14 +296,21 @@ export function RunRegion({
 
       {/* GRU-FR-FZCN: an escalation, and the answers it is waiting for. The
           questions and the fields are one surface: questions the author cannot
-          answer are a run nothing can release. */}
-      {run.escalation && (
+          answer are a run nothing can release. GRU-FR-XKCB: only while the
+          run waits on the author, so a record that still names questions
+          while a turn runs offers no answer to them. */}
+      {run.escalation && run.state === "awaiting_author" && (
         <RunEscalationForm
           run={run}
           busy={busy}
           onAnswered={onAnswered}
         />
       )}
+
+      {/* GRU-FR-NQLG: the decisions the author made during this run, once,
+          read-only and collapsed. It is keyed by run, so another run starts
+          collapsed. */}
+      <EscalationsLog key={run.id} run={run} />
 
       {/* GRU-FR-MCYF: what the run changed and how it got there, side by side
           where the region is wide enough and stacked where not.

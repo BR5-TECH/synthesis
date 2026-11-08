@@ -483,3 +483,93 @@ fn each_image_names_a_writable_home_for_the_uid_a_launch_supplies() {
         );
     }
 }
+
+/// AVI-FR-NEGK — both images carry the `task` runner at one pinned version,
+/// fetched from the release archive and checked against a SHA-256 per
+/// architecture before it is unpacked.
+#[test]
+fn each_image_carries_a_checked_task_runner() {
+    let mut versions: Vec<String> = Vec::new();
+    let mut blocks: Vec<String> = Vec::new();
+    for (vendor, dockerfile) in dockerfiles() {
+        let version = directives(dockerfile)
+            .into_iter()
+            .find_map(|line| line.strip_prefix("ARG TASK_VERSION="))
+            .unwrap_or_else(|| panic!("{vendor} does not pin the task runner"));
+        assert!(
+            version.split('.').count() == 3 && version.split('.').all(|p| p.parse::<u32>().is_ok()),
+            "{vendor} pins the task runner to something other than an exact version: {version}"
+        );
+        versions.push(version.to_string());
+
+        let block = run_block(dockerfile, "go-task/task/releases/download");
+        assert!(block.starts_with("RUN set -eux;"), "{vendor}: a failed check must stop the build");
+        let checked = block
+            .find("sha256sum --check --strict")
+            .unwrap_or_else(|| panic!("{vendor} unpacks the task runner without checking it"));
+        let unpacked = block
+            .find("tar -xzf /tmp/task.tar.gz")
+            .unwrap_or_else(|| panic!("{vendor} does not unpack the archive it downloaded"));
+        assert!(checked < unpacked, "{vendor} unpacks the task runner before checking it");
+
+        let checksums: Vec<&str> =
+            block.split("sha256='").skip(1).filter_map(|rest| rest.split('\'').next()).collect();
+        assert_eq!(checksums.len(), 2, "{vendor} records one checksum per architecture");
+        for checksum in &checksums {
+            assert!(
+                checksum.len() == 64
+                    && checksum.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+                "{vendor} records something other than a SHA-256: {checksum}"
+            );
+        }
+        assert_ne!(
+            checksums[0], checksums[1],
+            "{vendor} shares one checksum between two architectures"
+        );
+        assert!(
+            block.contains("no go-task checksum recorded for architecture")
+                && block.contains("exit 1"),
+            "{vendor} does not stop on an architecture it has no checksum for"
+        );
+        assert!(block.contains("-C /usr/local/bin task"), "{vendor} puts `task` off the PATH");
+        assert!(
+            block.contains("/releases/download/v${TASK_VERSION}/task_linux_${arch}.tar.gz"),
+            "{vendor} downloads a release other than the one it pins"
+        );
+        for arch in ["amd64) sha256='", "arm64) sha256='"] {
+            assert!(block.contains(arch), "{vendor} names no checksum for {arch}");
+        }
+        blocks.push(block);
+    }
+    assert_eq!(versions[0], versions[1], "the two images pin different task runners");
+    let checksums = |block: &str| -> Vec<String> {
+        block
+            .split("sha256='")
+            .skip(1)
+            .filter_map(|r| r.split('\'').next())
+            .map(String::from)
+            .collect()
+    };
+    assert_eq!(
+        checksums(&blocks[0]),
+        checksums(&blocks[1]),
+        "the two images check different archives"
+    );
+}
+
+/// AVI-FR-WWVY — the Claude Code image sets both Bash timeouts to 30 minutes,
+/// and the Codex image, whose CLI reads neither, sets none.
+#[test]
+fn the_claude_code_image_sets_the_bash_timeouts() {
+    for (vendor, dockerfile) in dockerfiles() {
+        let assignments = env_assignments(dockerfile);
+        for name in ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"] {
+            let set = assignments.iter().any(|a| a == &format!("{name}=1800000"));
+            if vendor == "claude-code" {
+                assert!(set, "{vendor} does not set {name}=1800000: {assignments:?}");
+            } else {
+                assert!(!assignments.iter().any(|a| a.starts_with(name)), "{vendor} sets {name}");
+            }
+        }
+    }
+}

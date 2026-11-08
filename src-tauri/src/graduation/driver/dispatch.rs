@@ -29,7 +29,12 @@ pub(super) async fn execute<R: tauri::Runtime>(
     let TurnRequest { execution_directory, part, input, bound, resume } = turn;
     let task = AgentTaskRequest {
         protocol_version: PROTOCOL_VERSION,
-        instruction: prompts::instruction_for_run(run, part).to_string(),
+        // GRL-FR-LCSB: a correction turn announces no milestones.
+        instruction: if input.correction.is_some() {
+            prompts::without_milestones(prompts::instruction_for_run(run, part))
+        } else {
+            prompts::instruction_for_run(run, part).to_string()
+        },
         input: Some(input.to_map()),
         // GRL-FR-VIAT / GRL-FR-UNKD: the review and the PR summary turn name the
         // shape their own answer must take.

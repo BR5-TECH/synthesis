@@ -40,7 +40,7 @@ import {
   discoverPullRequestSummaryRun,
   generatePullRequestSummary,
 } from "../state/pullRequestSummaries";
-import type { CreatedPullRequest } from "../types";
+import type { CreatedPullRequest, StackStep } from "../types";
 import { DescriptionField } from "./CreatePullRequest/DescriptionField";
 import { FeaturesField, useFeatureCatalog } from "./CreatePullRequest/FeaturesField";
 import {
@@ -75,8 +75,15 @@ export interface CreatePullRequestWindowProps {
   returnFocus?: HTMLElement | null;
   /** CPR-FR-SSQI: Cancel, Escape and the backdrop. */
   onClose: () => void;
-  /** CPR-FR-ITWJ / CPR-FR-UXXF: the pull request exists, and how it is linked. */
-  onCreated: (created: CreatedPullRequest, link: PullRequestLinkResult | null) => void;
+  /**
+   * CPR-FR-ITWJ / CPR-FR-UXXF / CPR-FR-YDLV: the pull request exists, how it
+   * is linked, and what the stack step did when it was submitted to a stack.
+   */
+  onCreated: (
+    created: CreatedPullRequest,
+    link: PullRequestLinkResult | null,
+    stack?: StackStep | null,
+  ) => void;
   /** CPR-FR-VZUZ: the window gives way to the picker, holding `input`. */
   onRequestToken: (input: PullRequestInput) => void;
   /** CPR-FR-FGGU: the route to the Global settings GitHub section. */
@@ -162,6 +169,9 @@ export function CreatePullRequestWindow({
   const integration = useAgenticIntegration();
   const catalog = useFeatureCatalog();
   const stacked = stackedOn(openPulls, base);
+  // CPR-FR-QXTB: with the parent in the stack as its base, Submit adds the
+  // pull request to the stack.
+  const toStack = source.stackParent !== undefined && base === source.stackParent;
   const submitRef = useRef<HTMLButtonElement>(null);
   const retrySubmit = useRef<() => void>(() => {});
 
@@ -278,10 +288,29 @@ export function CreatePullRequestWindow({
     setPhase(pushNotice !== null ? "pushing" : "creating");
     if (pushNotice !== null && !(await pushHead(fromResume))) return;
     if (mounted.current) setPhase("creating");
-    logInfo(["frontend", "remote"], "pull request creation started", { head, base, draft });
+    logInfo(["frontend", "remote"], "pull request creation started", {
+      head,
+      base,
+      draft,
+      toStack,
+    });
     let created: CreatedPullRequest;
+    let stackStep: StackStep | null = null;
     try {
-      created = await api.createPullRequest(title, body, base, head, draft);
+      if (toStack) {
+        const answer = await api.submitPullRequestToStack(title, body, base, head, draft);
+        created = { number: answer.number, url: answer.url };
+        stackStep = answer.stack;
+        logInfo(["frontend", "remote"], "pull request stack step finished", {
+          head,
+          number: answer.number,
+          state: answer.stack?.state,
+          stackNumber: answer.stack?.stackNumber,
+          error: answer.stack?.error?.split(":")[0],
+        });
+      } else {
+        created = await api.createPullRequest(title, body, base, head, draft);
+      }
     } catch (error) {
       const code = parseRejection(error).code;
       logWarn(["frontend", "remote"], "pull request creation failed", {
@@ -319,7 +348,7 @@ export function CreatePullRequestWindow({
     if (!mounted.current) return;
     // CPR-FR-ESXZ: the next opening for this head branch starts from the source.
     clearPullRequestSession(head);
-    onCreated(created, link);
+    onCreated(created, link, stackStep);
   };
 
   // CPR-FR-ODTB: push the head branch before the creation. True when the
@@ -523,6 +552,14 @@ export function CreatePullRequestWindow({
                   ? `Stacked on #${stacked.number} “${stacked.title}”. Its closing keywords close no issue when it merges, because GitHub closes an issue only when a pull request merges into the default branch.`
                   : `The pull request goes into ${base}.`}
               </span>
+            </p>
+          )}
+
+          {/* CPR-FR-HZRN: Submit adds the pull request to the stack. */}
+          {toStack && (
+            <p className="create-pr__notice create-pr__stack" data-testid="create-pr-stack">
+              <Icon.Info size={12} aria-hidden="true" />
+              <span>{`Submit adds the pull request to the stack of ${base}.`}</span>
             </p>
           )}
 

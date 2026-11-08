@@ -3830,6 +3830,10 @@ let agentTurns: any[] = [
 ];
 
 /** The harness's own emitter seam (see `mock-event.ts`). */
+// DXP-FR-YEAQ: the export requests the harness answers for.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const exportRequests: Record<string, any> = {};
+
 function fireBus(name: string, payload?: unknown): void {
   const fire = (globalThis as Record<string, unknown>).__fireBusEvent as
     | ((n: string, p?: unknown) => void)
@@ -7414,6 +7418,9 @@ function readGraduationActivity(a: any) {
           ? r.pass === null
           : true),
   );
+  // GRS-FR-RNKT: a kind list keeps the records of those kinds alone.
+  if (Array.isArray(a.kinds) && a.kinds.length > 0)
+    inScope = inScope.filter((r) => a.kinds.includes(r.kind));
   if (query)
     inScope = inScope.filter((r) =>
       `${r.kind} ${r.summary}`.toLowerCase().includes(query),
@@ -8246,6 +8253,56 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return harnessFlag("cancelSave")
         ? "cancelled"
         : { selected: { path: `/Users/demo/Desktop/${a.defaultName ?? "export"}` } };
+    // DXP-FR-IEQA / DXP-FR-LSYA: an export that walks its four stages and
+    // writes nothing. `?exportFail` refuses it with `conversion_failed`, and
+    // `?exportWarn` reports one diagram that stayed as code.
+    case "export_document": {
+      const exportId = String(a.exportId);
+      const stages = ["reading", "diagrams", "converting", "writing"];
+      for (const stage of stages) {
+        await new Promise((r) => setTimeout(r, 250));
+        fireBus("document-export-progress", {
+          exportId,
+          stage,
+          done: stage === "diagrams" ? 1 : 0,
+          total: stage === "diagrams" ? 2 : 0,
+        });
+      }
+      if (harnessFlag("exportFail")) throw "conversion_failed";
+      return {
+        destination: String(a.destination),
+        warnings: harnessFlag("exportWarn") ? [{ kind: "diagram_failed", index: 2 }] : [],
+      };
+    }
+    // DXP-FR-NXGQ / DXP-FR-LHAG: one pending request per id, held in memory.
+    case "get_export_request": {
+      const id = String(a.requestId);
+      return (exportRequests[id] ??= {
+        id,
+        path: "docs/guide.md",
+        format: "pdf",
+        discussionId: "d-export",
+        target: { kind: "artifact", artifactId: "docs/guide.md" },
+        state: "pending",
+        createdAt: new Date().toISOString(),
+      });
+    }
+    case "resolve_export_request": {
+      const id = String(a.requestId);
+      const current = exportRequests[id];
+      if (current && current.state !== "pending") throw "already_resolved";
+      const next = {
+        ...(current ?? { id, path: "docs/guide.md", discussionId: "d-export",
+          target: { kind: "artifact", artifactId: "docs/guide.md" }, createdAt: new Date().toISOString() }),
+        state: a.outcome,
+        destination: a.destination,
+        error: a.error,
+        resolvedAt: new Date().toISOString(),
+      };
+      exportRequests[id] = next;
+      fireBus("export-request-changed", next);
+      return { request: next, commentFailed: false };
+    }
     case "assign_artifact_type":
       assignedTypes[String(a.path)] = { type: String(a.artifactType), scope: a.scope };
       publishDocumentTypes();
@@ -8362,7 +8419,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         checksum: "sha-1",
       };
     }
-    case "open_artifact_by_id":
+    case "open_artifact_by_id": {
+      // PST-FR-QQAE: the answer carries the resolved type of the file, which
+      // includes this session's assignments (TAB-FR-SZGD reads it from here).
+      const artifactType = findIn(tree(), String(a.id))?.artifactType;
       return {
         key: a.id,
         kind: String(a.id).endsWith(".flow.md")
@@ -8370,7 +8430,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           : String(a.id).endsWith(".md")
             ? "markdown"
             : "text",
+        ...(artifactType ? { artifactType } : {}),
       };
+    }
     case "save_artifact_contents":
       return { checksum: "sha-2" };
     /**

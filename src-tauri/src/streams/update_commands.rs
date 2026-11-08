@@ -259,20 +259,21 @@ pub(crate) fn answer_work_stream_update_escalation_with<R: tauri::Runtime>(
     }
 
     // GRB-FR-KMXT: the question travels with the answer.
-    let decisions: Vec<StreamMergeDecision> = escalation
-        .questions
-        .iter()
-        .filter_map(|question| {
-            let answer = answers.iter().find(|a| a.position == question.position)?;
-            Some(StreamMergeDecision {
-                position: question.position,
-                question: question.question.clone(),
-                answer: answer.answer.clone(),
-                summary: answer.summary.clone(),
-                note: answer.clone().normalized().note,
-            })
+    // GXD-FR-NWSL: the ledger of the update keeps every earlier answer and adds
+    // these after them.
+    let mut decisions: Vec<StreamMergeDecision> = record.decisions.clone();
+    decisions.extend(escalation.questions.iter().filter_map(|question| {
+        let answer = answers.iter().find(|a| a.position == question.position)?;
+        Some(StreamMergeDecision {
+            position: question.position,
+            question: question.question.clone(),
+            answer: answer.answer.clone(),
+            summary: answer.summary.clone(),
+            note: answer.clone().normalized().note,
+            turn: crate::streams::SEMANTIC_REBASE_TURN.to_string(),
+            pass: 1,
         })
-        .collect();
+    }));
 
     record.escalation = None;
     record.reason = String::new();

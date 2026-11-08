@@ -105,8 +105,12 @@ export function actionsFor(run: GraduationRun): RunAction[] {
       offered.add("pause").add("discard");
       break;
     case "awaiting_author":
+      // GRU-FR-XKCB: a run that waits on its questions moves on only by the
+      // answers or by a discard (GRD-FR-ZJHD). Continue would run the turn
+      // that asked again, without the answers.
       if (run.escalation) offered.add("answer");
-      offered.add("continue").add("discard");
+      else offered.add("continue");
+      offered.add("discard");
       break;
     case "blocked":
     case "interrupted":

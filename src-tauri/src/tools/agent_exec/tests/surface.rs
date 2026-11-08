@@ -55,7 +55,7 @@ fn module_sources() -> [&'static str; 4] {
 // EAC-FR-35, EAC-FR-10, EAC-FR-11, EAC-FR-13, EAC-FR-22 / EAC-FR-12 — the generated invocations, exactly
 // ---------------------------------------------------------------------------
 
-/// EAC-FR-35, EAC-FR-10, EAC-FR-11, EAC-FR-13, EAC-FR-22 — Claude Code's complete Docker and vendor vectors, and the task
+/// EAC-FR-35, EAC-FR-10, EAC-FR-11, EAC-FR-13, EAC-FR-22, EAC-FR-WQNH — Claude Code's complete Docker and vendor vectors, and the task
 /// on stdin.
 #[test]
 fn claude_codes_generated_invocation_is_exactly_the_descriptor() {
@@ -106,6 +106,11 @@ fn claude_codes_generated_invocation_is_exactly_the_descriptor() {
             "CLAUDE_CODE_OAUTH_TOKEN".into(),
             "--env".into(),
             "CLAUDE_CONFIG_DIR=/home/agent/.claude".into(),
+            // EAC-FR-WQNH: the CLI's two Bash timeouts.
+            "--env".into(),
+            "BASH_DEFAULT_TIMEOUT_MS=1800000".into(),
+            "--env".into(),
+            "BASH_MAX_TIMEOUT_MS=1800000".into(),
             image,
             "-p".into(),
             "--output-format".into(),

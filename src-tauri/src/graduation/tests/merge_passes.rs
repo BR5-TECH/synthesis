@@ -322,3 +322,31 @@ fn a_note_is_stored_trimmed_and_reaches_the_turn_with_its_answer() {
     assert_eq!(answers[0]["note"], "keep the base value");
     assert!(answers[1].get("note").is_none(), "no note travels for a blank one");
 }
+
+// GRL-FR-FESZ, GRL-FR-AMQE, GRL-FR-KYYW, GRL-FR-DCKG: a merge run hands the
+// record of each merge work turn to its own merge review, a later pass starts
+// with no record, and the applied merge holds none of the folder.
+#[test]
+fn each_merge_review_reads_the_record_of_its_own_merge_work_turn() {
+    use crate::graduation::driver::checks_folder::{DIR, MISSING, REPORT_PATH};
+    let fx = Fixture::new();
+    let (_stream, run) = queued_merge_run(&fx);
+    let dispatch = ScriptedDispatch::new(vec![
+        Turn::work().writing("README.md", "one\n").writing(REPORT_PATH, "| check | 0 |\n"),
+        Turn::revise(ReviewSeverity::Minor, "Settle the other two paths."),
+        settling(),
+        Turn::ready(),
+    ]);
+
+    let done = fx.drive(&run, dispatch.clone());
+    assert_eq!(done.state, GraduationRunState::Completed, "{done:?}");
+
+    let seen = dispatch.seen();
+    assert!(!seen[0].input.contains_key("checks"), "a merge work turn carries no checks");
+    assert_eq!(seen[1].input.get("checks").and_then(|v| v.as_str()), Some(REPORT_PATH));
+    assert_eq!(seen[1].tree.get(REPORT_PATH).map(String::as_str), Some("| check | 0 |\n"));
+    assert_eq!(seen[1].diff_paths, vec!["README.md".to_string()], "the folder is no change");
+    assert!(!seen[2].tree.keys().any(|p| p.starts_with(DIR)), "pass 2 starts with no record");
+    assert_eq!(seen[3].input.get("checks").and_then(|v| v.as_str()), Some(MISSING));
+    assert!(!fx.root().join(DIR).exists(), "the applied merge holds none of the folder");
+}

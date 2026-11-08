@@ -53,6 +53,7 @@ fn read(fx: &Fixture, run: &GraduationRun, ask: Ask<'_>) -> GraduationLogPage {
             cursor,
             limit,
             query: query.map(str::to_string),
+            kinds: None,
         },
     )
     .expect("a page")
@@ -373,6 +374,7 @@ fn a_cursor_of_another_scope_is_refused() {
             }),
             limit: None,
             query: None,
+            kinds: None,
         },
     );
     assert_eq!(refused.unwrap_err(), logs::read::ERR_CURSOR_NOT_FOR_THIS_SCOPE);
@@ -757,6 +759,7 @@ fn a_cursor_of_the_other_stream_or_of_no_direction_is_refused() {
                 cursor: Some(cursor),
                 limit: None,
                 query: None,
+                kinds: None,
             },
         )
         .unwrap_err()

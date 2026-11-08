@@ -65,6 +65,7 @@ pub mod propose_new_draft;
 pub mod propose_prompt_changes;
 pub mod read_graduation_file;
 pub mod refusals;
+pub mod request_document_export;
 pub mod skill_list;
 pub mod skill_load;
 pub mod skill_search;

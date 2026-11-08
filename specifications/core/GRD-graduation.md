@@ -52,9 +52,12 @@ The backend module that turns a finished draft prompt into committed work. A dra
 32. **GRD-FR-TWMA** A project change and an application shutdown stop every running turn. The interruption each records carries `project_changed` or `application_shutdown` after the stopped turn returns. **A change of active worktree stops nothing**: a run works in its target's working copy. A dispatched direct run also prevents the change (`WTC-worktree-context.md` WTC-FR-FBJQ).
 33. **GRD-FR-KVNZ** Every behaviour of this module is exercisable on a machine with no container runtime, no agentic CLI, no provider credential and no network. The state machine, the queues, the ordering rules, the refusals and the record are reached through the dispatch seam of `GXD-graduation-execution.md` alone.
 34. **GRD-FR-WKMD** A run rests `awaiting_author` on an escalation, on a review that did not settle, on a spent pass budget (per `../ai/GRL-graduation-loop.md` GRL-FR-XBUE), on a spent total time (GRD-FR-SKLO), or on a blocker that repeated (per `../ai/GRL-graduation-loop.md` GRL-FR-QZFB). A run resting on a blocker, a spent budget or a spent total time keeps its reason and holds no escalation. Every run in `awaiting_author` keeps its queue and its project slot (GRD-FR-BNTC).
+35. **GRD-FR-KQLD** `answer_graduation_escalation` appends the accepted answers to the run's decision ledger (per `GXD-graduation-execution.md` GXD-FR-NWSL). The ledger is part of the run record that every run read returns, survives a relaunch, an interruption, a resume and a Continue, and ends when the run completes or is discarded.
 
 34. **GRD-FR-UTTX** A run records its **used total time**: the sum, in milliseconds, of the execution time of every turn it dispatched. Time the run spends `queued`, `awaiting_author`, `blocked` or `interrupted` is not added. A turn stopped at its effective timeout adds at least that timeout. The run record stores the value, so it survives an application restart.
 34. **GRD-FR-SKLO** A run at rest on the total time limit records a **rest**: the reason `total_time_limit`, when it rested, the limit, and the used total time. `continue_graduation_run` against it clears the rest, resets the used total time alone, and resumes from the checkpoint (per `../ai/GRL-graduation-loop.md` GRL-FR-SPRE). A run with a rest is not a run whose pass budget is spent.
+34. **GRD-FR-ZJHD** `continue_graduation_run` against a run in `awaiting_author` that holds an escalation is refused with `run_state_not_permitted` and changes nothing. Such a run moves on only by an answer (per `GXD-graduation-execution.md` GXD-FR-BJYT) or by `discard_graduation_run`. Against a run in another state that has not ended, Continue drops an escalation the record still holds and continues as for that state.
+   - *Why:* a Continue without the answers runs the turn that asked again, which asks the same question again, but questions that no surface offers must not block a run.
 
 35. **GRD-FR-BSNI** A direct run and a pull run record a **direct target**: the absolute path of the worktree, the branch it held when the author confirmed, and the worktree's name. It is written when the run is enqueued, never changed, and kept through queueing, pauses, interruptions, restarts and relaunch. A stream run carries none.
 36. **GRD-FR-ZVNO** A direct run on an ordinary worktree belongs to that worktree's **durable queue**. A direct run on a stream's working copy belongs to that stream's queue, so stream runs and direct runs of one working copy share one order and one lock. Runs that share a working copy never work at the same time.
@@ -233,6 +236,8 @@ GraduationRun {
   turn_time_used_ms,             // GRD-FR-UTTX; the used total time, 0 for a new run
   rest?,                         // GraduationRest; GRD-FR-SKLO
   checkpoint,                    // GraduationCheckpoint; holds the optional answer_correction { part, reason, resume } of GRL-FR-HWLD
+                                 //   and the run's decisions (GraduationDecision[], GXD-FR-NWSL) and
+                                 //   review_history (ReviewHistoryEntry[], GXD-FR-WRVH), both append-only
   observability,                 // per GOB-graduation-observability.md
   escalation?,                   // the questions waiting on the author
   blocker?,                      // what blocks it and the act that clears it

@@ -17,7 +17,9 @@ import type { EditSessionStore } from "../../state/editSessions";
 import type { FlowSessionStore } from "../../state/flowSessions";
 import type { SearchResultsTarget } from "../../components/SearchResults";
 import type { SpecMapSessionStore } from "../../state/specMap/session";
-import { logDebug } from "../../logging";
+import * as api from "../../api";
+import { typeChip } from "../../artifactTypes";
+import { logDebug, logWarn } from "../../logging";
 import { SPEC_MAP_TAB } from "./tabRecords";
 import type {
   BottomSurface,
@@ -83,7 +85,8 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     // basename in different folders open distinct tabs (TAB-FR-04).
     const resolvedType = item.artifactType ?? item.type;
     const id = `art:${item.id ?? item.name}`;
-    if (!tabs.find((t) => t.id === id)) {
+    const isNew = !tabs.find((t) => t.id === id);
+    if (isNew) {
       setTabs((ts) => [
         ...ts,
         {
@@ -108,6 +111,37 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
       else sessions.openTab(item.id);
     }
     activateTab(id);
+    // TAB-FR-SZGD: a surface that gives no type still gets a typed tab. The
+    // shell reads the type of the file and sets it on the tab.
+    if (isNew && item.id && resolvedType === undefined) resolveTabType(id, item.id);
+  };
+
+  /**
+   * TAB-FR-SZGD / PST-FR-QQAE: read the resolved type of the file at `path` and
+   * set it, and its chip, on the tab `tabId`. A tab that has a type by then
+   * keeps it. A failed read leaves the tab with no type.
+   */
+  const resolveTabType = (tabId: string, path: string) => {
+    void api
+      .openArtifactById(path)
+      .then((opened) => {
+        if (!opened) return;
+        const type = opened.artifactType;
+        logDebug(["frontend"], "tab type resolved", { type: type ?? "none", rule: "TAB-FR-SZGD" });
+        if (!type) return;
+        setTabs((ts) =>
+          ts.map((t) =>
+            t.id === tabId && t.type === undefined
+              ? { ...t, type, chip: t.chip ?? typeChip(type) }
+              : t,
+          ),
+        );
+      })
+      .catch((e) => {
+        logWarn(["frontend"], "tab type could not be resolved", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      });
   };
 
   /**

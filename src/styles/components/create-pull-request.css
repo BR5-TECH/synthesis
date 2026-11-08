@@ -179,6 +179,8 @@
 }
 /* The icon stays on the first line when the text wraps. */
 .create-pr__notice > svg { flex: none; margin-top: 2px; }
+/* CPR-FR-HZRN: the statement that Submit adds the pull request to a stack. */
+.create-pr__stack { margin: 0; font-size: var(--fs-ui-sm); }
 .create-pr__failure {
   display: flex;
   align-items: center;

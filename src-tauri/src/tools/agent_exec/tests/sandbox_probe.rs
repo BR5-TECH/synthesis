@@ -377,6 +377,71 @@ fn sandbox_real_sequential_turns_see_the_new_head() {
     assert_eq!(field(&after, "store_leftover"), "no", "{after}");
 }
 
+// EAC-FR-ZIYG, EAC-FR-HZIE, EAC-FR-DWBS: a turn whose process still runs after
+// its answer is stopped when the grace ends and completes with its answer, and
+// the next turn of the scope then runs in the same VM.
+#[test]
+#[ignore = "needs hardware virtualisation and a Docker daemon"]
+fn sandbox_real_a_turn_that_outlives_its_answer_is_stopped_and_completes() {
+    build_probe_image();
+    let harness = harness_for("claude_code");
+    let root = tempfile::tempdir().unwrap();
+    repository(root.path(), &harness.workspace(), "linger", "one\n");
+    let pool = real_pool();
+    let rt = runtime();
+    let _stop = StopOnDrop(&rt, pool.clone());
+    let executor = executor(&harness, microsandbox(), &pool);
+    let scope = probe_scope();
+    let workspace = harness.workspace();
+    let linger = workspace.join("probe-linger");
+    std::fs::write(&linger, "").unwrap();
+    let mut lingering = task("probe");
+    // The deadline is far after the grace, so only the grace can end the turn.
+    lingering.execution.timeout_ms = 300_000;
+
+    let (execution, elapsed, first, after) = rt.block_on(async {
+        let started = std::time::Instant::now();
+        let execution = executor
+            .execute_agent_cli(
+                &Silent,
+                &LaunchContext { images: &PROBE_IMAGES, ..harness.context() },
+                AgentExecutionRequest {
+                    sandbox_scope: Some(scope.clone()),
+                    turn_kind: TurnKind::Work,
+                    execution_directory: workspace.clone(),
+                    task: lingering,
+                    cancellation: CancellationToken::new(),
+                    activity: None,
+                    durable_output: None,
+                    supplementary_mount: None,
+                },
+            )
+            .await
+            .expect("the probe launches");
+        let elapsed = started.elapsed();
+        let first = std::fs::read_to_string(workspace.join(".probe/result.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+        std::fs::remove_file(&linger).unwrap();
+        let after = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        (execution, elapsed, first, after)
+    });
+
+    assert_eq!(
+        execution.process_outcome,
+        ProcessOutcome::Completed,
+        "stderr {}",
+        String::from_utf8_lossy(&execution.stderr.bytes)
+    );
+    assert_eq!(execution.exit_code, None);
+    assert!(execution.response.is_some());
+    assert!(execution.container_removed, "the end of the process was confirmed");
+    assert!(elapsed >= Duration::from_secs(30), "the turn ended before the grace: {elapsed:?}");
+    assert!(elapsed < Duration::from_secs(240), "the deadline ended the turn: {elapsed:?}");
+    let first = first.expect("the lingering turn wrote its probe result");
+    assert_eq!(field(&first, "boot_id"), field(&after, "boot_id"), "the VM was reused");
+}
+
 // EAC-FR-RVQE, EAC-FR-LQRI, EAC-FR-UEFI: the stop of an idle queue stops its
 // real VM, and the next turn of the scope boots a new VM and completes.
 #[test]

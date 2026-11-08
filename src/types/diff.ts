@@ -102,4 +102,6 @@ export type ArtifactKind = "markdown" | "flow" | "text";
 export interface OpenedArtifact {
   key: string;
   kind: ArtifactKind;
+  /** PST-FR-QQAE: the resolved type. Absent for a file with no type. */
+  artifactType?: ArtifactType;
 }

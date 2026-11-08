@@ -1,0 +1,149 @@
+/* EXD-export-dialog.md: the Export dialog and the export request card. */
+
+.export-dialog {
+  width: min(520px, calc(100vw - 48px));
+}
+
+.export-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.export-dialog__file {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2, inherit);
+  overflow-wrap: anywhere;
+}
+
+.export-dialog__formats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.export-dialog__formats legend {
+  float: left;
+  margin-right: 8px;
+}
+
+.export-dialog__radio,
+.export-dialog__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-ui-sm);
+}
+
+.export-dialog__destination-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-dialog__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-ui-sm);
+  padding: 4px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
+  background: var(--bg-sunken);
+}
+
+.export-dialog__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-ui-sm);
+}
+
+.export-dialog__spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: export-dialog-spin 0.8s linear infinite;
+}
+
+@keyframes export-dialog-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-dialog__spinner {
+    animation: none;
+  }
+}
+
+.export-dialog__error {
+  font-size: var(--fs-ui-sm);
+  color: var(--danger, #e5484d);
+}
+
+.export-dialog__warnings p {
+  margin: 0 0 6px;
+  font-size: var(--fs-ui-sm);
+}
+
+.export-request-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  max-width: 100%;
+}
+
+.export-request-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-ui-sm);
+  min-width: 0;
+}
+
+.export-request-card__title {
+  font-weight: 600;
+}
+
+.export-request-card__file {
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.export-request-card__format {
+  margin-left: auto;
+  font-size: var(--fs-ui-xs, var(--fs-ui-sm));
+  opacity: 0.8;
+}
+
+.export-request-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-ui-sm);
+}
+
+.export-request-card__state {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

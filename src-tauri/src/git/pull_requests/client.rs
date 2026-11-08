@@ -35,6 +35,9 @@ pub(crate) enum GithubFailure {
     NotFound,
     /// HTTP 401 or 403: GitHub refused the token.
     Rejected,
+    /// HTTP 400 or 410 of a stacks endpoint: the host does not know the stacks
+    /// API or its API version (GTS-FR-NWVR, GTC-FR-TBQW).
+    Unsupported,
     /// Anything else: no answer in time, a transport error, another status, or
     /// a body that is not the JSON GitHub documents.
     Unreachable,
@@ -54,6 +57,8 @@ pub(crate) enum GithubWriteFailure {
     Rejected,
     /// HTTP 422: GitHub refused the content. Carries the reasons GitHub gave.
     Invalid(String),
+    /// HTTP 409: another request changes the same resource (GTC-FR-KQVA).
+    Conflict,
     /// Anything else.
     Unreachable,
     /// The TLS check refused GitHub's certificate (AAP-FR-HZTB).
@@ -205,12 +210,12 @@ impl GithubPullRequests for HostedGithubPullRequests {
 
 /// The HTTP method of one write.
 #[derive(Clone, Copy)]
-enum WriteMethod {
+pub(crate) enum WriteMethod {
     Post,
     Patch,
 }
 
-fn write_at(
+pub(crate) fn write_at(
     api: &str,
     method: WriteMethod,
     secret: &str,
@@ -230,7 +235,7 @@ fn write_at(
     let mut response = request
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("X-GitHub-Api-Version", crate::github_tokens::api_version_for_path(path))
         .header("User-Agent", "synthesis")
         .header("Content-Type", "application/json")
         .send(payload)
@@ -244,12 +249,16 @@ fn write_at(
         200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
         401 | 403 => Err(GithubWriteFailure::Rejected),
         404 | 410 => Err(GithubWriteFailure::NotFound),
+        // GTC-FR-KQVA: a stacks endpoint that answers 400 does not know the
+        // stacks API version of the host.
+        400 if crate::github_tokens::is_stacks_path(path) => Err(GithubWriteFailure::NotFound),
+        409 => Err(GithubWriteFailure::Conflict),
         422 => Err(GithubWriteFailure::Invalid(invalid_reason(&text))),
         _ => Err(GithubWriteFailure::Unreachable),
     }
 }
 
-fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, GithubFailure> {
+pub(crate) fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, GithubFailure> {
     // The API base is fixed by the client, so the token cannot be sent
     // anywhere else.
     if !path.starts_with('/') {
@@ -260,12 +269,17 @@ fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, GithubFailure> {
         .get(&url)
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("X-GitHub-Api-Version", crate::github_tokens::api_version_for_path(path))
         // GitHub rejects a request with no User-Agent, which would
         // otherwise read as a bad token.
         .header("User-Agent", "synthesis")
         .call()
-        .map_err(|error| classify_at(&error, api))?;
+        .map_err(|error| match error {
+            ureq::Error::StatusCode(400 | 410) if crate::github_tokens::is_stacks_path(path) => {
+                GithubFailure::Unsupported
+            }
+            other => classify_at(&other, api),
+        })?;
     let body = response.body_mut().read_to_string().map_err(|_| GithubFailure::Unreachable)?;
     serde_json::from_str(&body).map_err(|_| GithubFailure::Unreachable)
 }

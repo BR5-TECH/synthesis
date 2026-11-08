@@ -43,6 +43,7 @@ use support::*;
 #[path = "../mock_tests/mod.rs"]
 mod mock_tests;
 
+mod bash_timeouts;
 mod capture;
 mod concurrency;
 mod contracts;
@@ -52,8 +53,11 @@ mod docker_in_docker;
 mod durable;
 mod env_values;
 mod envelope;
+mod final_event_launch;
+mod final_event_runs;
 mod gateway_env;
 mod merge_turns;
+mod milestones;
 mod observers;
 mod rebase_isolation;
 mod rebase_mounts;
@@ -158,6 +162,8 @@ struct Recorded {
     cancel: CancellationToken,
     stdout_limit: usize,
     stderr_limit: usize,
+    /// EAC-FR-HZIE: the final-event rule the launch handed the seam.
+    final_event: Option<super::final_event::FinalEventRule>,
 }
 
 /// What the seam should do when asked.
@@ -177,6 +183,9 @@ enum Script {
     Terminate,
     /// Answer each vendor in its own output shape, decided from the argv.
     PerVendor,
+    /// EAC-FR-HZIE: write a response, then stay alive until the executor
+    /// stops the process after the grace.
+    AnswerThenLinger { stdout: String },
 }
 
 /// The recording seam (EAC-FR-17).
@@ -365,6 +374,7 @@ impl DockerRuntime for RecordingRuntime {
                 cancel: request.cancel.clone(),
                 stdout_limit: request.stdout_limit,
                 stderr_limit: request.stderr_limit,
+                final_event: request.final_event,
             });
 
             if let Some(error) = &self.launch_error {
@@ -407,6 +417,15 @@ impl DockerRuntime for RecordingRuntime {
                     // times out: a partial run is never promoted.
                     stdout: CapturedStream {
                         bytes: valid_claude_stdout().into_bytes(),
+                        truncated: false,
+                    },
+                    stderr: CapturedStream::default(),
+                },
+                Script::AnswerThenLinger { stdout } => RuntimeOutcome {
+                    end: RunEnd::EndedAfterFinalEvent,
+                    exit_code: None,
+                    stdout: CapturedStream {
+                        bytes: substitute_session(stdout, request.argv).into_bytes(),
                         truncated: false,
                     },
                     stderr: CapturedStream::default(),

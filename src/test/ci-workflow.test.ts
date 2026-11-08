@@ -567,6 +567,28 @@ describe("CIP-FR-MRCZ microsandbox runtime cache", () => {
     expect(key()).toContain("${{ runner.arch }}");
   });
 
+  // On a miss the lane downloads the archive itself, with retries, to the path
+  // the build script reads before its own single attempt (CIP-FR-MRCZ).
+  it("downloads the archive with retries on a miss, before the first cargo command", () => {
+    const download = steps.findIndex((step) => step.name === "Download the microsandbox runtime archive");
+    expect(download).toBeGreaterThan(runtimeCache);
+    const firstCargo = steps.findIndex((step) => commandsOf(step.run ?? "").includes("cargo"));
+    expect(firstCargo).toBeGreaterThan(download);
+    const step = steps[download];
+    expect(cacheStep().id).toBe("microsandbox-cache");
+    expect(step.if).toBe("steps.microsandbox-cache.outputs.cache-hit != 'true'");
+    expect(String(step.env?.VERSION)).toBe("${{ steps.microsandbox.outputs.version }}");
+    const run = String(step.run);
+    expect(run).toMatch(/--retry \d+ --retry-all-errors/);
+    expect(run).toContain("--fail");
+    expect(run).toContain(
+      "target/debug/.microsandbox-runtime-cache/microsandbox-runtime-$VERSION-linux-x86_64.tar.gz",
+    );
+    expect(resolveFrom(stepDirOf("backend", step), "target/debug/.microsandbox-runtime-cache")).toBe(
+      String(cacheStep().with?.path),
+    );
+  });
+
   // The version step reads the line after the package name, so the lock file
   // must hold one package of that exact name with its version on the next line.
   it("finds one microsandbox package with its version in Cargo.lock", () => {

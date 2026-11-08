@@ -217,6 +217,10 @@ describe("GitHub token picker", () => {
     await waitFor(() =>
       expect(screen.getAllByTestId("picker-token-row")).toHaveLength(2),
     );
+    // The picker moves focus to the first row in an effect after the rows
+    // render (GHA-FR-21). Wait for that focus, so it cannot land after the
+    // focus below and take the key press to the first row.
+    await waitFor(() => expect(screen.getAllByRole("radio")[0]).toHaveFocus());
 
     const second = screen.getByRole("radio", { name: "personal" });
     second.focus();

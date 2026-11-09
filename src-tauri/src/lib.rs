@@ -643,6 +643,7 @@ pub fn run() {
             documents::commands::read_document,
             documents::commands::read_document_pdf,
             document_export::commands::export_document,
+            document_export::commands::list_export_calm_sources,
             // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
             document_export::requests::get_export_request,
             document_export::requests::resolve_export_request,

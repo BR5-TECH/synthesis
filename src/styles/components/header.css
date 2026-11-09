@@ -512,6 +512,7 @@
 .chip-type[data-type="prompt"]       { background: #DFF3EA; color: #1F8F6B; }
 .chip-type[data-type="spec"]         { background: #FCE6E6; color: #C82A2F; }
 .chip-type[data-type="flow"]         { background: #E5E0D6; color: #44403B; }
+.chip-type[data-type="architecture"] { background: #DDF1F5; color: #0B6B84; }
 .chip-type[data-type="instructions"] { background: #FFEDE0; color: #E5530B; }
 .chip-type[data-type="scenario"]     { background: #EDE5FB; color: #6F47C2; }
 .chip-type[data-type="scratchpad"]   { background: #E0EBF8; color: #2862AB; }
@@ -521,6 +522,7 @@
 [data-theme="dark"] .chip-type[data-type="prompt"]       { background: #14322A; color: #6BD7AA; }
 [data-theme="dark"] .chip-type[data-type="spec"]         { background: #401819; color: #F39DA0; }
 [data-theme="dark"] .chip-type[data-type="flow"]         { background: #2A2E37; color: #B8B4AC; }
+[data-theme="dark"] .chip-type[data-type="architecture"] { background: #0F2E36; color: #67D3E6; }
 [data-theme="dark"] .chip-type[data-type="instructions"] { background: #3A1E10; color: #FF8453; }
 [data-theme="dark"] .chip-type[data-type="scenario"]     { background: #2A1F40; color: #C19EFF; }
 [data-theme="dark"] .chip-type[data-type="scratchpad"]   { background: #1A2538; color: #8AB4E8; }

@@ -49,7 +49,10 @@ impl Project {
     }
 }
 
-fn no_diagram(_: &str) -> Result<Vec<u8>, convert::diagrams::DiagramFailure> {
+fn no_diagram(
+    _: convert::model::DiagramKind,
+    _: &str,
+) -> Result<Vec<u8>, convert::diagrams::DiagramFailure> {
     Err(convert::diagrams::DiagramFailure::Invalid)
 }
 
@@ -278,9 +281,61 @@ fn an_unknown_format_is_invalid_format() {
         false,
         destination.clone(),
         "e-1".into(),
+        None,
     ));
     assert_eq!(outcome.unwrap_err(), ERR_INVALID_FORMAT);
     assert!(!std::path::Path::new(&destination).exists());
     assert_eq!(Format::parse("PDF"), Some(Format::Pdf));
     assert_eq!(Format::parse("Docx"), Some(Format::Docx));
+}
+
+// DXP-FR-TQCQ: the CALM sources of the saved file, each one time and in
+// order, with one DEBUG record that holds the count and no source text.
+#[test]
+fn the_calm_sources_of_a_doc_artifact_are_listed() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let p = Project::new();
+    let text = "# Guide\n\n```calm\n{\"secret-node\": 1}\n```\n\n- step\n\n  ```calm\n  {\"other\": 2}\n  ```\n\n```calm\n{\"secret-node\": 1}\n```\n";
+    p.root.write_text_atomic("docs/arch.md", text).unwrap();
+    let app = tauri::test::mock_app();
+    let sources =
+        commands::run_list_calm_sources(app.handle(), &BUFFER, Some(&p.root), "docs/arch.md");
+    assert_eq!(sources, Ok(vec!["{\"secret-node\": 1}".to_string(), "{\"other\": 2}".to_string()]));
+    let records = backend_records(&BUFFER);
+    let listed: Vec<_> = records
+        .iter()
+        .filter(|r| r.message == "the CALM sources of a document export were listed")
+        .collect();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].level, LogLevel::Debug);
+    assert_eq!(listed[0].fields.get("sources"), Some(&serde_json::json!(2)));
+    let all =
+        serde_json::to_string(&records.iter().map(|r| &r.fields).collect::<Vec<_>>()).unwrap();
+    assert!(!all.contains("secret-node") && !all.contains("arch.md"));
+}
+
+// DXP-FR-TQCQ: the list call has the checks and the typed errors of the
+// export, and logs each failure with its typed error alone.
+#[test]
+fn the_calm_sources_need_a_doc_artifact_and_a_project() {
+    static BUFFER: LogBuffer = LogBuffer::new();
+    let p = Project::new();
+    let app = tauri::test::mock_app();
+    let list = |root: Option<&RootFs>, path: &str| {
+        commands::run_list_calm_sources(app.handle(), &BUFFER, root, path)
+    };
+    assert_eq!(list(None, "docs/guide.md"), Err(ERR_NO_PROJECT_OPEN));
+    assert_eq!(list(Some(&p.root), "notes/plain.md"), Err(ERR_NOT_DOC_ARTIFACT));
+    assert_eq!(list(Some(&p.root), "docs/data.txt"), Err(ERR_NOT_MARKDOWN));
+    assert_eq!(list(Some(&p.root), "docs/missing.md"), Err(ERR_NOT_FOUND));
+    assert_eq!(list(Some(&p.root), "../outside.md"), Err(ERR_OUTSIDE_PROJECT));
+    assert_eq!(list(Some(&p.root), "docs/guide.md"), Ok(vec![]));
+    p.root.write_bytes_atomic("docs/broken.md", &[0xff, 0xfe, 0x00, 0xc3]).unwrap();
+    assert_eq!(list(Some(&p.root), "docs/broken.md"), Err(ERR_READ_FAILED));
+    let warnings: Vec<_> = backend_records(&BUFFER)
+        .into_iter()
+        .filter(|r| r.message == "the CALM sources of a document export were not listed")
+        .collect();
+    assert_eq!(warnings.len(), 6);
+    assert!(warnings.iter().all(|r| r.level == LogLevel::Warn && r.fields.len() == 1));
 }

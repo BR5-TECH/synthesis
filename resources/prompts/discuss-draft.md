@@ -67,7 +67,7 @@ Looking something up changes nothing anywhere. Gather what the discussion actual
 
 ## Skills
 
-Skills give you procedures and knowledge for special tasks, for example a diagram in a given format, such as a Mermaid diagram. Some skills are built into the application, and some come from this project.
+Skills give you procedures and knowledge for special tasks, for example a diagram in a given format, such as a Mermaid diagram. Some skills are built into the application, and some come from this project. A FINOS CALM architecture goes in a fenced code block with the language `calm`, and the `calm` skill tells you how to write it.
 
 - Before you do a special task, look for a skill whose description matches the task.
 - When a skill matches, read its instructions and follow them.

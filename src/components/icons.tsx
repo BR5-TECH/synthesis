@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from "react";
 
-import { CODE_GLYPH, DIAGRAM_GLYPH } from "./domIcons";
+import { ARCHITECTURE_GLYPH, CODE_GLYPH, DIAGRAM_GLYPH } from "./domIcons";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
@@ -146,6 +146,16 @@ export const Icon = {
   Diagram: (p: IconProps) => (
     <I {...p}>
       <path d={DIAGRAM_GLYPH} />
+    </I>
+  ),
+  /**
+   * ASC-FR-02, LIB-FR-08: the Architecture artifact type — three boxes in two
+   * levels that lines join. The glyph is shared with controls drawn outside
+   * React (`domIcons.ts`).
+   */
+  Architecture: (p: IconProps) => (
+    <I {...p}>
+      <path d={ARCHITECTURE_GLYPH} />
     </I>
   ),
   /**

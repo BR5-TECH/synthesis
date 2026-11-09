@@ -26,4 +26,5 @@
 @import "./components/pdf-viewer.css";
 @import "./components/mermaid-diagrams.css";
 @import "./components/diagram-editor.css";
+@import "./components/calm-diagram.css";
 @import "./components/markdown-markup.css";

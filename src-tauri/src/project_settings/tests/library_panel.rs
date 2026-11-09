@@ -278,15 +278,15 @@ fn the_artifact_type_filter_rejects_an_unknown_value() {
     assert!(serde_json::from_str::<ArtifactTypeFilter>("\"all_diagrams\"").is_err());
 }
 
-/// The persisted vocabulary, spelled out. The frontend's own round-trip
+/// PSS-FR-18, LIB-FR-04: the persisted vocabulary, spelled out. The frontend's own round-trip
 /// test cannot catch a divergence from this side: a rename to
 /// `"instruction"` here would leave `filterToLens` quietly falling back to
-/// the default lens rather than failing. The same eleven strings are asserted
+/// the default lens rather than failing. The same twelve strings are asserted
 /// in `src/artifactTypes.test.ts`'s
 /// "pins the exact wire vocabulary shared with the Rust side", so a rename
 /// on either side breaks a named assertion.
 #[test]
-fn the_wire_vocabulary_is_exactly_these_eleven_strings() {
+fn the_wire_vocabulary_is_exactly_these_twelve_strings() {
     use ArtifactTypeFilter::*;
     let all = [
         AllArtifacts,
@@ -295,6 +295,7 @@ fn the_wire_vocabulary_is_exactly_these_eleven_strings() {
         Prompt,
         Spec,
         Flow,
+        Architecture,
         Instructions,
         Scenario,
         Scratchpad,
@@ -314,6 +315,7 @@ fn the_wire_vocabulary_is_exactly_these_eleven_strings() {
             "prompt",
             "spec",
             "flow",
+            "architecture",
             "instructions",
             "scenario",
             "scratchpad",

@@ -40,6 +40,25 @@ fn ts10_grouping_splits_artifacts_entities_and_plain_files() {
     assert_eq!(file.edit_context, None);
 }
 
+// SCC-FR-08, ASC-FR-QVCN: an Architecture is an artifact with the subtype
+// `architecture`, and the Editor edits it, so its edit context is `standalone`.
+#[test]
+fn an_architecture_hit_is_an_artifact_edited_standalone() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    write(root, "docs/system.calm.json", "{\"needle\":1}\n");
+
+    let (sink, _) = search(root, "needle", SearchMode::LiteralInsensitive, SearchScope::Full);
+    let hits = sink.hits();
+    let hit = hits.iter().find(|h| h.path == "docs/system.calm.json").expect("a hit");
+    assert_eq!(hit.group, SearchGroup::Artifact);
+    assert_eq!(hit.subtype, Some(ArtifactType::Architecture));
+    assert_eq!(hit.edit_context, Some(EditContext::Standalone));
+    let json = serde_json::to_value(hit).unwrap();
+    assert_eq!(json.get("subtype").unwrap(), "architecture");
+    assert_eq!(json.get("editContext").unwrap(), "standalone");
+}
+
 #[test]
 fn ts11_an_entity_directory_outranks_artifact_classification() {
     // SCC-FR-08: a playbook that ALSO classifies as an artifact is grouped as

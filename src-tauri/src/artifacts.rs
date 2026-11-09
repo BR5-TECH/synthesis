@@ -297,7 +297,9 @@ pub(crate) fn save_validated_artifact(
 }
 
 /// The kind hint the UI routes on (PST-FR-08 / PST-FR-12 / DSH-FR-06): a
-/// `flow` opens in the Flow tab, every other Markdown artifact in the Editor,
+/// `flow` opens in the Flow tab, every other artifact in the Editor (an
+/// `architecture` too: its `.calm.json` name makes it a source file there, per
+/// ESH-FR-SSDV, so the kind does not have to tell it apart),
 /// and a `text` — a file the scan surfaces with no resolved artifact type — in
 /// the Editor as a plain text file (PST-FR-24 / ESH-FR-ATDS).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -605,6 +607,8 @@ mod tests {
         assert_eq!(root.read_text(root.join("a.spec.md")).unwrap(), "{ not json");
     }
 
+    // PST-FR-08, PST-FR-ULAY, ESH-FR-SSDV: only a Flow opens in the Flow tab. An
+    // Architecture opens in the Editor like every other artifact.
     #[test]
     fn artifact_kind_from_artifact_type_only_flow_is_flow() {
         use scanning::ArtifactType;
@@ -614,6 +618,7 @@ mod tests {
             ArtifactType::Agent,
             ArtifactType::Prompt,
             ArtifactType::Spec,
+            ArtifactType::Architecture,
             ArtifactType::Instructions,
             ArtifactType::Scenario,
             ArtifactType::Scratchpad,
@@ -867,8 +872,9 @@ mod tests {
         );
     }
 
-    // PST-FR-QQAE: the answer carries the resolved artifact type, in the
-    // lowercase name the tree nodes use, and omits it for a file with no type.
+    // PST-FR-QQAE, ASC-FR-02: the answer carries the resolved artifact type, in
+    // the lowercase name the tree nodes use, and omits it for a file with no
+    // type. Each of the ten types answers its name.
     #[test]
     fn open_artifact_by_id_answers_the_resolved_artifact_type() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -892,7 +898,7 @@ mod tests {
         let json = serde_json::to_value(&plain).unwrap();
         assert!(json.get("artifactType").is_none(), "no type gives no field");
 
-        // Each of the nine types answers its lowercase name.
+        // Each of the ten types answers its lowercase name.
         use scanning::ArtifactType as T;
         let names = [
             (T::Skill, "skill"),
@@ -900,6 +906,7 @@ mod tests {
             (T::Prompt, "prompt"),
             (T::Spec, "spec"),
             (T::Flow, "flow"),
+            (T::Architecture, "architecture"),
             (T::Instructions, "instructions"),
             (T::Scenario, "scenario"),
             (T::Scratchpad, "scratchpad"),
@@ -913,6 +920,21 @@ mod tests {
             let json = serde_json::to_value(&opened).unwrap();
             assert_eq!(json.get("artifactType").unwrap(), name);
         }
+    }
+
+    // PST-FR-08, PST-FR-ULAY, PST-FR-QQAE, ASC-FR-QVCN: a `*.calm.json` file is inferred as
+    // an Architecture and opens in the Editor, not in the Flow tab.
+    #[test]
+    fn a_calm_json_file_opens_as_an_architecture_in_the_editor() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = &crate::fs::RootFs::for_root(dir.path());
+        std::fs::write(root.join("system.calm.json"), b"{}\n").unwrap();
+        let opened = open_artifact_by_id_impl(root, "system.calm.json").unwrap();
+        assert_eq!(opened.artifact_type, Some(scanning::ArtifactType::Architecture));
+        assert_eq!(opened.kind, ArtifactKind::Markdown);
+        let json = serde_json::to_value(&opened).unwrap();
+        assert_eq!(json.get("artifactType").unwrap(), "architecture");
+        assert_eq!(json.get("kind").unwrap(), "markdown");
     }
 
     #[test]

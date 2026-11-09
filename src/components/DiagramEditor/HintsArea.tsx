@@ -7,19 +7,36 @@
  */
 import { useMemo } from "react";
 
+import type { DiagramKind } from "../diagramKind";
 import { hintsFor } from "./hints";
+import { CALM_HINT_GROUPS, CALM_HINTS_TITLE } from "./hints/calmHints";
 
 /** EDT-FR-HVGG: the accessible name of the hints area. */
 export const HINTS_LABEL = "Mermaid syntax hints";
+/** CAD-FR-KWIY: the accessible name of the hints area on a CALM fence. */
+export const CALM_HINTS_LABEL = "CALM syntax hints";
 
-export function HintsArea({ source }: { source: string }) {
+export function HintsArea({
+  source,
+  diagram = "mermaid",
+}: {
+  source: string;
+  diagram?: DiagramKind;
+}) {
   // EDT-FR-NWZX: the hints follow the source while the author types.
-  const shown = useMemo(() => hintsFor(source), [source]);
+  // CAD-FR-KWIY: a CALM fence has one hint set.
+  const shown = useMemo(
+    () =>
+      diagram === "calm"
+        ? { title: CALM_HINTS_TITLE, key: "calm", groups: CALM_HINT_GROUPS }
+        : hintsFor(source),
+    [source, diagram],
+  );
   return (
     <section
       className="diagram-hints"
       role="region"
-      aria-label={HINTS_LABEL}
+      aria-label={diagram === "calm" ? CALM_HINTS_LABEL : HINTS_LABEL}
       tabIndex={0}
       data-chart-type={shown.key ?? "general"}
     >

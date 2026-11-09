@@ -7,6 +7,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CalmPicture,
   ExportFormat,
   ExportOutcome,
   ExportRequest,
@@ -17,7 +18,8 @@ import type {
 /**
  * DXP-FR-IEQA: convert the saved file at the project-relative `path` and write
  * it to `destination`. Progress arrives on `"document export progress"` for
- * `exportId` (DXP-FR-LSYA).
+ * `exportId` (DXP-FR-LSYA). `calmPictures` holds the print drawing of each
+ * CALM source (DXP-FR-VMPP).
  */
 export const exportDocument = (request: {
   path: string;
@@ -25,7 +27,12 @@ export const exportDocument = (request: {
   includeFrontmatter: boolean;
   destination: string;
   exportId: string;
+  calmPictures: CalmPicture[];
 }) => invoke<ExportResult>("export_document", request);
+
+/** DXP-FR-TQCQ: the CALM sources of the saved file at `path`, in order. */
+export const listExportCalmSources = (path: string) =>
+  invoke<string[]>("list_export_calm_sources", { path });
 
 /** DXP-FR-NXGQ: one export request. */
 export const getExportRequest = (requestId: string) =>

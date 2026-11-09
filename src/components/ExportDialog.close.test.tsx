@@ -45,7 +45,8 @@ beforeEach(() => {
   resetToasts();
   dispatchMock.mockReset();
   invokeMock.mockReset();
-  handlers = {};
+  // EXD-FR-UKLK: the file holds no CALM fence unless a test says so.
+  handlers = { list_export_calm_sources: () => [] };
   invokeMock.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
     if (cmd === "append_log_records") return undefined;
     const handler = handlers[cmd];

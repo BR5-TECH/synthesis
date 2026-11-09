@@ -187,6 +187,10 @@ merman = { version = "=0.10.0-alpha.2", default-features = false, features = ["a
 # DXP-FR-RKJC: the raster options a PNG request of `merman` carries. The crate
 # is already in the tree under `merman`, which does not re-export the type.
 merman-export = { version = "=0.10.0-alpha.2", default-features = false }
+# DXP-FR-WGLT / DXP-FR-DMUH: rasterises the SVG drawing of a CALM fence. The
+# crate is already in the tree under `merman-export`, at this version. Only the
+# text feature is on: no host fonts, no raster images.
+resvg = { version = "0.47.0", default-features = false, features = ["text"] }
 
 # EMB-FR-MHHY: the embeddings of the vector index. ONNX Runtime runs the
 # recommended models, and its binaries link statically (NLL-FR-VMBF). The

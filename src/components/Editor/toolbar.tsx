@@ -64,6 +64,11 @@ interface ActionClusterProps {
    * toggle. Present over a Markdown file alone.
    */
   outline?: DocumentOutline;
+  /**
+   * CAD-FR-OJTD: the Diagram / Source toggle of an Architecture tab, in the
+   * place of the editing-mode toggle.
+   */
+  architecture?: { view: "diagram" | "source"; onToggle: () => void };
 }
 
 export function ActionCluster({
@@ -75,6 +80,7 @@ export function ActionCluster({
   proposal,
   report,
   outline,
+  architecture,
 }: ActionClusterProps) {
   return (
     <div className="editor__actions">
@@ -125,6 +131,32 @@ export function ActionCluster({
           onClick={onToggleMode}
         >
           {mode === "wysiwyg" ? <Icon.Code size={15} /> : <Icon.Doc size={15} />}
+        </button>
+      )}
+      {/* CAD-FR-OJTD, CAD-FR-QADV: enabled in every state of the tab, because
+          a switch of the view changes no byte. */}
+      {architecture && (
+        <button
+          className="btn btn--ghost btn--icon"
+          aria-label={
+            architecture.view === "diagram"
+              ? "Show architecture source"
+              : "Show architecture diagram"
+          }
+          title={
+            architecture.view === "diagram"
+              ? "Show architecture source"
+              : "Show architecture diagram"
+          }
+          data-active={architecture.view === "source"}
+          data-testid="architecture-view-toggle"
+          onClick={architecture.onToggle}
+        >
+          {architecture.view === "diagram" ? (
+            <Icon.Code size={15} />
+          ) : (
+            <Icon.Architecture size={15} />
+          )}
         </button>
       )}
       {/* EDT-FR-16 / DDS-FR-XQMF: the column's controls at the trailing end,

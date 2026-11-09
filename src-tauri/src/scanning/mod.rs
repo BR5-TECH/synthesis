@@ -39,7 +39,9 @@ pub use inference::{infer_from_content, infer_from_path, read_content_facts, Con
 // ---------------------------------------------------------------------------
 
 /// The fixed built-in artifact-type set (ASC-FR-02). `Flow` is what the UI
-/// opens in the Flow tab (`../ui/FLO-flow.md`). `Doc` makes a file or folder a
+/// opens in the Flow tab (`../ui/FLO-flow.md`). `Architecture` is a FINOS CALM
+/// architecture document, and only its `*.calm.json` name or an assignment
+/// produces it (ASC-FR-QVCN). `Doc` makes a file or folder a
 /// source of the Documents collection; only an assignment produces it
 /// (ASC-FR-JWPH). No other type is produced in v1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +58,7 @@ pub enum ArtifactType {
     /// rendering). Only `flow` is ever written back out.
     #[serde(alias = "harness")]
     Flow,
+    Architecture,
     Instructions,
     Scenario,
     Scratchpad,
@@ -77,6 +80,7 @@ impl ArtifactType {
             ArtifactType::Prompt => "prompt",
             ArtifactType::Spec => "spec",
             ArtifactType::Flow => "flow",
+            ArtifactType::Architecture => "architecture",
             ArtifactType::Instructions => "instructions",
             ArtifactType::Scenario => "scenario",
             ArtifactType::Scratchpad => "scratchpad",
@@ -85,7 +89,7 @@ impl ArtifactType {
     }
 
     /// AGC-FR-07: whether an agent is told this type. `doc` is not reported, so
-    /// the agent-facing set stays at the other eight types.
+    /// the agent-facing set stays at the other nine types.
     pub fn is_agent_facing(self) -> bool {
         self != ArtifactType::Doc
     }
@@ -93,7 +97,9 @@ impl ArtifactType {
     /// Parse a content-marker / TOML value into a built-in type. Accepts the
     /// canonical lowercase names, plus `harness` for `flow` on the same terms
     /// as the serde alias above. `doc` is not a marker: only an assignment
-    /// gives that type (ASC-FR-JWPH).
+    /// gives that type (ASC-FR-JWPH). `architecture` is not a marker either:
+    /// only the `*.calm.json` name or an assignment gives that type
+    /// (ASC-FR-QVCN).
     fn from_marker(s: &str) -> Option<ArtifactType> {
         match s.trim().to_ascii_lowercase().as_str() {
             "skill" => Some(ArtifactType::Skill),

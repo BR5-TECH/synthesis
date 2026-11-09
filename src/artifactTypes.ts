@@ -22,6 +22,13 @@ export const ARTIFACT_TYPES: {
   { value: "prompt", label: "Prompt", chip: "PRO", icon: Icon.Notes },
   { value: "spec", label: "Spec", chip: "SPC", icon: Icon.Book },
   { value: "flow", label: "Flow", chip: "FLW", icon: Icon.Branch },
+  // ASC-FR-QVCN: a FINOS CALM architecture document (`*.calm.json`).
+  {
+    value: "architecture",
+    label: "Architecture",
+    chip: "ARC",
+    icon: Icon.Architecture,
+  },
   { value: "instructions", label: "Instructions", chip: "INS", icon: Icon.Doc },
   { value: "scenario", label: "Scenario", chip: "SCN", icon: Icon.Play },
   { value: "scratchpad", label: "Scratchpad", chip: "SCR", icon: Icon.Code },
@@ -46,7 +53,7 @@ export function typeChip(type: ArtifactType): string {
  * (LIB-FR-04 / LIB-FR-05): `"artifacts"` (the default) shows only classified
  * files, a specific `ArtifactType` narrows to that type, and `"files"` shows
  * every file including unclassified ones. The two sentinels can't collide with
- * an `ArtifactType` (none of the nine built-ins is named "artifacts"/"files").
+ * an `ArtifactType` (none of the ten built-ins is named "artifacts"/"files").
  */
 export type TypeLens = "artifacts" | ArtifactType | "files";
 
@@ -66,8 +73,8 @@ export const LENS_ALL_FILES_LABEL = "All Files";
 /**
  * LIB-FR-19 (and CHG-FR-14, which adopts it wholesale): the lens is the toggle
  * row of SNV-FR-62, and it offers the types the content in front of the author
- * actually has rather than the eight it could have — a project of Skills and
- * Specs shows two type buttons, not eight.
+ * actually has rather than the ten it could have — a project of Skills and
+ * Specs shows two type buttons, not ten.
  *
  * `present` is the set of types the loaded tree or change set carries. The two
  * sentinels name no type and always render, and so does whichever position is

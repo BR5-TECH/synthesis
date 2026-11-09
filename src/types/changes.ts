@@ -99,7 +99,7 @@ export interface ChangesPanelState {
  * Deliberately distinct from the UI-internal `TypeLens` in `artifactTypes.ts`,
  * whose two sentinels are the shorter `"artifacts"` / `"files"`: this is the
  * persisted wire vocabulary and `artifactTypes.ts` owns the mapping between
- * them. The eight concrete values are the ASC-FR-02 type ids the tree already
+ * them. The ten concrete values are the ASC-FR-02 type ids the tree already
  * tags nodes with.
  */
 export type ArtifactTypeFilter = "all_artifacts" | "all_files" | ArtifactType;

@@ -19,6 +19,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { CalmPreview } from "../CalmDiagram/CalmPreview";
+import { diagramKindAt, type DiagramKind } from "../diagramKind";
+import { CalmViewerOverlay } from "./CalmViewer";
 import { DiagramPreview } from "./DiagramPreview";
 import { DiagramViewerOverlay } from "./DiagramViewer";
 import { sendHistoryKey, writeSource } from "./fence";
@@ -39,6 +42,8 @@ import { useFence } from "./useFence";
 
 /** EDT-FR-HVGG: the accessible names of the overlay and its parts. */
 export const DIAGRAM_EDITOR_LABEL = "Edit Mermaid diagram";
+/** CAD-FR-KUYJ: the accessible name of the overlay on a CALM fence. */
+export const CALM_EDITOR_LABEL = "Edit CALM architecture";
 export const SOURCE_LABEL = "Diagram source";
 export const DIVIDER_LABEL = "Resize the panes";
 
@@ -46,11 +51,26 @@ export const DIVIDER_LABEL = "Resize the panes";
 export function DiagramEditorHost() {
   const request = useSyncExternalStore(subscribeDiagramEditor, diagramEditorRequest);
   if (!request) return null;
-  if (request.kind === "view") return <DiagramViewerOverlay key={request.id} request={request} />;
-  return <DiagramEditorOverlay key={request.id} request={request} />;
+  // EDT-FR-TQWB: the kind of the fence chooses the drawing, the labels, and
+  // the hints. It is read once, when the overlay opens.
+  const diagram = diagramKindAt(request.view.state.doc, request.fence) ?? "mermaid";
+  if (request.kind === "view") {
+    return diagram === "calm" ? (
+      <CalmViewerOverlay key={request.id} request={request} />
+    ) : (
+      <DiagramViewerOverlay key={request.id} request={request} />
+    );
+  }
+  return <DiagramEditorOverlay key={request.id} request={request} diagram={diagram} />;
 }
 
-function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
+function DiagramEditorOverlay({
+  request,
+  diagram,
+}: {
+  request: DiagramEditorRequest;
+  diagram: DiagramKind;
+}) {
   const { view } = request;
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const { place, source, setSource, finish } = useFence(
@@ -194,7 +214,7 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
 
   return (
     <OverlayFrame
-      label={DIAGRAM_EDITOR_LABEL}
+      label={diagram === "calm" ? CALM_EDITOR_LABEL : DIAGRAM_EDITOR_LABEL}
       className="diagram-editor"
       scrimTestId="diagram-editor-scrim"
       home={sourceRef}
@@ -249,9 +269,9 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
             </span>
           )}
         </div>
-        <DiagramPreview source={source} />
+        {diagram === "calm" ? <CalmPreview source={source} /> : <DiagramPreview source={source} />}
       </div>
-      <HintsArea source={source} />
+      <HintsArea source={source} diagram={diagram} />
     </OverlayFrame>
   );
 }

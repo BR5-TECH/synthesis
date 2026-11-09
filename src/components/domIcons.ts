@@ -14,6 +14,16 @@ export const DIAGRAM_GLYPH =
   "M15 13h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z" +
   "M7 11v4a2 2 0 0 0 2 2h4";
 
+/**
+ * ASC-FR-02, LIB-FR-08: the Architecture artifact type — three boxes in two
+ * levels, one box above and two below, that lines join.
+ */
+export const ARCHITECTURE_GLYPH =
+  "M10 3h4a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" +
+  "M4 16h4a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" +
+  "M16 16h4a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" +
+  "M12 8v4M6 16v-4h12v4";
+
 /** EDT-FR-YVAI: an expand glyph — two arrows that point out to two corners. */
 export const EXPAND_GLYPH = "M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5";
 

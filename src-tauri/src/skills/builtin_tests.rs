@@ -139,6 +139,81 @@ fn the_mermaid_skill_names_a_reference_for_each_diagram_type_and_each_exists() {
     }
 }
 
+/// The bodies of the ```` ```json ```` blocks of a Markdown text. A block of
+/// another language, such as ```` ```jsonc ````, is not one of them.
+fn json_blocks(text: &str) -> Vec<&str> {
+    let mut blocks = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("```json\n") {
+        let body = &rest[start + "```json\n".len()..];
+        let end = body.find("\n```").expect("a ```json block is closed");
+        blocks.push(&body[..end]);
+        rest = &body[end + "\n```".len()..];
+    }
+    blocks
+}
+
+// DSL-FR-HWQZ, DSL-FR-NXRB: the `calm` skill is eligible, names one reference
+// file per CALM concept, and every file it names is embedded. Each JSON
+// example is a whole CALM document that declares the CALM 1.3 schema. The
+// schema validation itself runs outside the build, against the bundled
+// `@finos/calm-schema` files.
+#[test]
+fn the_calm_skill_names_a_reference_for_each_concept_and_each_example_is_a_document() {
+    let (skills, _) = enumerate_builtin();
+    let calm = builtin_named(&skills, "calm").expect("the calm skill is eligible");
+    assert_eq!(calm.path, "builtin:calm/SKILL.md");
+    for phrase in ["FINOS CALM 1.3", "architecture as code", "JSON"] {
+        assert!(calm.description.contains(phrase), "the description lacks {phrase:?}");
+    }
+
+    let skill = builtin_skill_file("calm", "SKILL.md").expect("SKILL.md");
+    let named: Vec<&str> = skill
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|token| token.starts_with("references/") && token.ends_with(".md"))
+        .collect();
+    let embedded: Vec<&str> = builtin::files()
+        .iter()
+        .filter_map(|(path, _)| path.strip_prefix("calm/"))
+        .filter(|path| path.starts_with("references/"))
+        .collect();
+    for concept in [
+        "document",
+        "nodes",
+        "relationships",
+        "interfaces",
+        "flows",
+        "controls",
+        "complete-example",
+    ] {
+        let file = format!("references/{concept}.md");
+        assert!(named.contains(&file.as_str()), "SKILL.md does not name {file}");
+    }
+    for file in &embedded {
+        assert!(named.contains(file), "SKILL.md does not name {file}");
+    }
+    for file in &named {
+        let text = builtin_skill_file("calm", file).unwrap_or_else(|| panic!("{file} missing"));
+        assert!(text.contains("## Common mistakes"), "{file} has no common mistakes");
+        let blocks = json_blocks(text);
+        assert!(!blocks.is_empty(), "{file} holds no complete example");
+        for (index, block) in blocks.iter().enumerate() {
+            let document: serde_json::Value = serde_json::from_str(block)
+                .unwrap_or_else(|e| panic!("{file} example {index} is not JSON: {e}"));
+            let object = document
+                .as_object()
+                .unwrap_or_else(|| panic!("{file} example {index} is not an object"));
+            assert_eq!(
+                object.get("$schema").and_then(|v| v.as_str()),
+                Some("https://calm.finos.org/release/1.3/meta/calm.json"),
+                "{file} example {index} does not declare the CALM 1.3 schema",
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // DSL-FR-LFCA — the embedded files
 // ---------------------------------------------------------------------------
@@ -190,6 +265,23 @@ fn every_pass_adds_the_builtin_skills_to_the_registry_and_the_index() {
     sorted.sort();
     assert_eq!(paths, sorted, "DSL-FR-15: path order");
     assert_eq!(every.last().unwrap().ecosystem, Ecosystem::Builtin, "`builtin:` sorts last");
+}
+
+// DSL-FR-NXRB: a CALM query ranks `calm` first, and a query for a Mermaid
+// chart type still ranks `mermaid` first.
+#[test]
+fn a_calm_query_ranks_calm_first_and_a_mermaid_query_ranks_mermaid_first() {
+    let empty = crate::tools::tests::empty_project();
+    let indexer = empty.app.state::<Bm25Indexer>();
+    for (query, first) in [
+        ("model a payment system as a FINOS CALM architecture", "calm"),
+        ("draw a sequence diagram of the login flow", "mermaid"),
+        ("sequence diagram flowchart", "mermaid"),
+    ] {
+        let ranked = search_skills(&indexer, query, 5, &SkillFilter::empty());
+        let names: Vec<&str> = ranked.iter().map(|r| r.skill.name.as_str()).collect();
+        assert_eq!(names.first(), Some(&first), "{query:?} ranks {names:?}");
+    }
 }
 
 // DSL-FR-17 / DSL-FR-RJKY: a project skill named like a built-in skill is a

@@ -1,6 +1,8 @@
 /**
- * EDT-FR-MOYS – EDT-FR-UYEN, EFR-FR-DGBG: a fenced code block whose language is
- * `mermaid` shows on the WYSIWYG surface as the diagram its source describes.
+ * EDT-FR-MOYS – EDT-FR-UYEN, EDT-FR-TQWB, EFR-FR-DGBG: a fenced code block
+ * whose language is `mermaid` or `calm` shows on the WYSIWYG surface as the
+ * diagram its source describes. The parts that differ for a CALM fence are in
+ * `markdownCalm.ts` (`CAD-calm-architecture-diagrams.md`).
  *
  * The fence stays an ordinary `codeBlock` node, so the Markdown behind it is the
  * plain fence it always was and serialises exactly as any fenced block does
@@ -45,23 +47,29 @@ import {
   PENCIL_GLYPH,
   iconElement,
 } from "./domIcons";
+import { diagramKindOf, MERMAID_LANGUAGE, type DiagramKind } from "./diagramKind";
 import { findHighlightKey } from "./findHighlight";
 import {
-  cachedDiagram,
+  CALM_DIAGRAM_LABEL,
+  cachedFence,
+  forgetFenceTransientFailures,
+  mountCalmFigure,
+  releaseFences,
+  renderFence,
+  showFences,
+  unmountCalmFigures,
+  type FenceResult,
+} from "./markdownCalm";
+import {
   currentTheme,
   diagramElement,
-  forgetTransientFailures,
-  releaseDiagrams,
-  renderDiagram,
-  showDiagrams,
   subscribeTheme,
   textTag,
-  type DiagramResult,
   type DiagramTheme,
 } from "./markdownMermaidRender";
 
 /** EDT-FR-MOYS: the language that makes a fenced block a diagram fence. */
-export const DIAGRAM_LANGUAGE = "mermaid";
+export const DIAGRAM_LANGUAGE = MERMAID_LANGUAGE;
 
 /** EDT-FR-USWS: the accessible names of the view toggle, by the view it shows. */
 export const SHOW_SOURCE_LABEL = "Show diagram source";
@@ -105,11 +113,13 @@ type MermaidMeta =
 
 export const mermaidKey = new PluginKey<MermaidState>("synthesisMermaid");
 
+/** EDT-FR-MOYS: a Mermaid fence or a CALM fence (CAD-FR-PFNM). */
 export function isDiagramFence(node: PMNode): boolean {
-  if (node.type.name !== "codeBlock") return false;
-  const language = node.attrs.language;
-  return typeof language === "string" && language.trim() === DIAGRAM_LANGUAGE;
+  return diagramKindOf(node) !== null;
 }
+
+/** The kind of a node that `eachFence` gave, which is always a diagram fence. */
+const kindOf = (node: PMNode): DiagramKind => diagramKindOf(node) ?? "mermaid";
 
 /** Each diagram fence in the document, with its start position. */
 function eachFence(doc: PMNode, visit: (node: PMNode, pos: number) => void): void {
@@ -250,8 +260,9 @@ export interface MermaidDiagramsOptions {
 
 interface FenceDecorationInput extends FenceLook {
   node: PMNode;
+  kind: DiagramKind;
   pos: number;
-  result: DiagramResult | undefined;
+  result: FenceResult | undefined;
   editable: boolean;
   /** EDT-FR-ADNU, EDT-FR-QTHL: the Edit button is drawn, in every view. */
   edit: boolean;
@@ -349,7 +360,11 @@ function diagramFigure(
   const figure = document.createElement("span");
   figure.className = "mermaid-diagram";
   const rendered = input.result?.state === "rendered" ? input.result : null;
-  if (rendered) {
+  const calm = input.kind === "calm";
+  if (rendered && "layout" in rendered) {
+    // CAD-FR-IPRR: the inline canvas of a CALM fence.
+    mountCalmFigure(figure, rendered.layout);
+  } else if (rendered && "svg" in rendered) {
     const svg = diagramElement(rendered.svg, rendered.id);
     if (svg) figure.appendChild(svg);
   } else {
@@ -362,13 +377,13 @@ function diagramFigure(
     figure.addEventListener("click", (event) => event.preventDefault());
     if (rendered) {
       figure.setAttribute("role", "img");
-      figure.setAttribute("aria-label", INERT_DIAGRAM_LABEL);
+      figure.setAttribute("aria-label", calm ? CALM_DIAGRAM_LABEL : INERT_DIAGRAM_LABEL);
     }
     return figure;
   }
   figure.tabIndex = 0;
   figure.setAttribute("role", "button");
-  figure.setAttribute("aria-label", DIAGRAM_LABEL);
+  figure.setAttribute("aria-label", calm ? CALM_DIAGRAM_LABEL : DIAGRAM_LABEL);
   const edit = () => {
     const fence = fenceOfWidget(view, getPos);
     if (fence !== null) editFenceSource(view, fence);
@@ -398,7 +413,7 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
   const hasDiagram = shown === "diagram" || shown === "pending";
   if (hasDiagram || toggle || edit || viewer) {
     const key = [
-      "mermaid",
+      input.kind,
       shown,
       editable ? "edit" : "inert",
       toggle ? "toggle" : "",
@@ -427,7 +442,13 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
           }
           return head;
         },
-        { side: -1, key, ignoreSelection: true, stopEvent: () => true },
+        {
+          side: -1,
+          key,
+          ignoreSelection: true,
+          stopEvent: () => true,
+          destroy: unmountCalmFigures,
+        },
       ),
     );
   }
@@ -492,7 +513,7 @@ function validFences(doc: PMNode, theme: DiagramTheme, previous: readonly number
   eachFence(doc, (node, pos) => {
     const source = node.textContent;
     if (source.trim() === "") return;
-    const result = cachedDiagram(source, theme);
+    const result = cachedFence(kindOf(node), source, theme);
     if (result ? result.state === "rendered" : previous.includes(pos)) valid.push(pos);
   });
   return valid;
@@ -544,7 +565,7 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
       node: PMNode,
       pos: number,
       plugin: MermaidState,
-      result: DiagramResult | undefined,
+      result: FenceResult | undefined,
     ): FenceLook => {
       const editable = isEditable();
       if (node.textContent.trim() === "") return { view: "source", toggle: false };
@@ -606,9 +627,12 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
             const decos: Decoration[] = [];
             const looks: string[] = [];
             const onScreen: Array<[string, DiagramTheme]> = [];
+            const calmOnScreen: string[] = [];
             eachFence(state.doc, (node, pos) => {
-              onScreen.push([node.textContent, plugin.theme]);
-              const result = cachedDiagram(node.textContent, plugin.theme);
+              const kind = kindOf(node);
+              if (kind === "calm") calmOnScreen.push(node.textContent);
+              else onScreen.push([node.textContent, plugin.theme]);
+              const result = cachedFence(kind, node.textContent, plugin.theme);
               const end = pos + node.nodeSize;
               const look = lookOf(state, node, pos, plugin, result);
               looks.push(
@@ -618,6 +642,7 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
                 ...fenceDecorations({
                   ...look,
                   node,
+                  kind,
                   pos,
                   result,
                   editable,
@@ -633,7 +658,7 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
               );
             });
             drawn = looks.join("|");
-            showDiagrams(owner, onScreen);
+            showFences(owner, onScreen, calmOnScreen);
             return decos.length > 0 ? DecorationSet.create(state.doc, decos) : null;
           },
           handleKeyDown() {
@@ -711,11 +736,12 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
             const theme = state.theme;
             eachFence(view.state.doc, (node) => {
               const source = node.textContent;
-              const key = `${theme}\u0000${source}`;
+              const kind = kindOf(node);
+              const key = `${kind}\u0000${theme}\u0000${source}`;
               if (source.trim() === "" || requested.has(key)) return;
-              if (cachedDiagram(source, theme)) return;
+              if (cachedFence(kind, source, theme)) return;
               requested.add(key);
-              renderDiagram(source, theme, wantedNow(source, theme))
+              renderFence(kind, source, theme, wantedNow(source, theme))
                 .then((result) => {
                   requested.delete(key);
                   if (result !== null && !destroyed) {
@@ -736,7 +762,7 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
           requestRenders();
           return {
             update(updated, previous) {
-              if (updated.state.doc !== previous.doc) forgetTransientFailures();
+              if (updated.state.doc !== previous.doc) forgetFenceTransientFailures();
               // EDT-FR-SHYX, EDT-FR-WPGE: the diagram editor overlay follows
               // its fence through each new state of this surface.
               notifyDiagramSurface(updated, "update");
@@ -750,7 +776,7 @@ export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
               destroyed = true;
               notifyDiagramSurface(view, "destroy");
               editorView = null;
-              releaseDiagrams(owner);
+              releaseFences(owner);
               stopTheme();
             },
           };

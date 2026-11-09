@@ -172,7 +172,7 @@ fn type_of(sections: &[InputSection]) -> Option<String> {
 
 #[test]
 fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
-    // ASC-FR-06 / AGC-FR-07. What an agent is asked to do with a document turns
+    // ASC-FR-06 / AGC-FR-07 / ASC-FR-QVCN. What an agent is asked to do with a document turns
     // on what kind of document it is, and a filename does not say — so the input
     // states it, through the one resolver of ASC-FR-06 rather than a second
     // classification of its own.
@@ -182,6 +182,7 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
     std::fs::write(root.join(".claude/skills/deploy/SKILL.md"), "# Deploy").expect("skill");
     std::fs::create_dir_all(root.join("notes")).expect("notes dir");
     std::fs::write(root.join("notes/thing.md"), "Loose thoughts.").expect("note");
+    std::fs::write(root.join("system.calm.json"), "{\"nodes\": []}\n").expect("calm");
 
     let discussion_on = |artifact_id: &str| {
         let thread = crate::comments::open_discussion_in(
@@ -199,8 +200,16 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
     };
 
     assert_eq!(type_of(&discussion_on(".claude/skills/deploy/SKILL.md")).as_deref(), Some("skill"),);
+    // AGC-FR-07, ASC-FR-QVCN: an Architecture is one of the agent-facing types,
+    // and its section holds the CALM JSON document as it is on disk.
+    let architecture = discussion_on("system.calm.json");
+    assert_eq!(type_of(&architecture).as_deref(), Some("architecture"));
+    assert!(
+        section_of(&architecture, TAG_ARTIFACT).body.contains("{\"nodes\": []}"),
+        "the section holds the JSON document"
+    );
     // Unclassified names nothing rather than naming the absence: a value for it
-    // would be a ninth type in a set of eight.
+    // would be a tenth type in a set of nine.
     assert_eq!(type_of(&discussion_on("notes/thing.md")), None);
 
     // The type follows the Library's own attribution, so curating a type in
@@ -215,7 +224,7 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
     assert_eq!(type_of(&discussion_on("notes/thing.md")).as_deref(), Some("scenario"),);
 
     // AGC-FR-07: a Document file names no type, as a file with no type does.
-    // The agent-facing set stays at eight types.
+    // The agent-facing set stays at nine types.
     crate::scanning::assign(
         &root,
         "notes/thing.md",

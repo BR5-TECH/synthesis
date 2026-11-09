@@ -1,0 +1,465 @@
+/* ---------- CALM architecture diagrams (CAD-calm-architecture-diagrams.md, CLM-calm-model.md) ---------- */
+
+/* The canvas is drawn at its natural size. The surface around it scales and
+   moves it, so the canvas library itself never pans or zooms. */
+.calm-canvas {
+  position: relative;
+  font-family: var(--font-ui-family);
+  color: var(--fg-1);
+  --calm-line: var(--fg-3);
+  --calm-flow: var(--accent);
+}
+.calm-canvas .react-flow { background: transparent; }
+.calm-canvas .react-flow__pane { cursor: inherit; }
+.calm-canvas .react-flow__node { cursor: inherit; }
+.calm-canvas--interactive .react-flow__node,
+.calm-canvas--interactive .react-flow__edge,
+.calm-canvas--interactive .calm-edge-label { cursor: pointer; }
+/* The ends that the canvas library joins edges to are not shown. */
+.calm-canvas .calm-end {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  pointer-events: none;
+}
+
+/* CLM-FR-DTYX: a node is an outline on the ground of the canvas. A spine on
+   its leading edge, in a colour of the code palette, tells the family of its
+   type at a glance in both themes. */
+.calm-node {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: var(--sp-2) var(--sp-2-5) var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-3);
+  border-left: 3px solid var(--calm-spine, var(--border-3));
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.calm-node--actor { --calm-spine: var(--code-keyword); border-radius: var(--r-full); padding-left: var(--sp-4); }
+.calm-node--system { --calm-spine: var(--code-type); border-radius: var(--r-xs); border-width: 1.5px 1.5px 1.5px 3px; }
+.calm-node--service { --calm-spine: var(--code-function); }
+.calm-node--database { --calm-spine: var(--code-number); border-radius: var(--r-sm) var(--r-sm) 40% 40% / var(--r-sm) var(--r-sm) 14px 14px; }
+.calm-node--webclient { --calm-spine: var(--code-string); border-top-width: 5px; }
+.calm-node--network { --calm-spine: var(--code-meta); border-style: double; border-width: 3px 3px 3px 3px; border-left-color: var(--code-meta); }
+.calm-node--dataAsset { --calm-spine: var(--code-number); border-radius: var(--r-xs) 14px var(--r-xs) var(--r-xs); }
+.calm-node--generic { --calm-spine: var(--fg-4); border-style: dashed; border-left-style: solid; }
+
+.calm-node__head,
+.calm-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1-5);
+  min-width: 0;
+}
+.calm-glyph {
+  flex: none;
+  fill: none;
+  stroke: var(--calm-spine, var(--fg-3));
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.calm-node__name,
+.calm-group__name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+.calm-node__type,
+.calm-group__type {
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-2xs);
+  line-height: var(--lh-snug);
+  color: var(--fg-3);
+}
+.calm-node__type { margin: 1px 0 0 calc(14px + var(--sp-1-5)); }
+.calm-node__interfaces {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-1) 0 0;
+  border-top: 1px solid var(--border-1);
+}
+.calm-node__interfaces li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-2xs);
+  line-height: 18px;
+  color: var(--fg-2);
+}
+.calm-node__interfaces li::before { content: "◦ "; color: var(--fg-4); }
+.calm-node__interfaces .calm-node__more { font-family: var(--font-ui-family); color: var(--fg-3); }
+.calm-node__interfaces .calm-node__more::before { content: ""; }
+.calm-node__also {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-2xs);
+  line-height: 18px;
+  color: var(--fg-3);
+  font-style: italic;
+}
+
+/* CLM-FR-DWLY: a group frames its members. A deployed-in group is a dashed
+   boundary on the open canvas; a composed-of group is a solid part on a
+   recessed ground, because its members are what it is made of. */
+.calm-group {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1.5px dashed var(--border-3);
+  border-radius: var(--r-md);
+  background: transparent;
+  --calm-spine: var(--code-type);
+}
+.calm-group--composed-of {
+  border-style: solid;
+  border-color: var(--border-2);
+  background: color-mix(in srgb, var(--bg-sunken) 55%, transparent);
+}
+.calm-group__type { flex: none; }
+.calm-group__kind {
+  flex: none;
+  padding: 0 var(--sp-1-5);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-ui-2xs);
+  line-height: 16px;
+  color: var(--fg-3);
+  background: var(--bg-hover);
+}
+
+/* CLM-FR-ETEA, CLM-FR-ESMQ: the control and decision markers. */
+.calm-markers { display: inline-flex; flex: none; gap: var(--sp-1); }
+.calm-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--fs-ui-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--fg-3);
+}
+.calm-marker svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.calm-marker--controls { color: var(--ok); }
+.calm-marker--decisions { color: var(--warn); }
+
+/* CLM-FR-ERXV, CLM-FR-ESCS: edges in the line colour; an interaction is dashed. */
+.calm-canvas .react-flow__edge-path.calm-edge {
+  stroke: var(--calm-line);
+  stroke-width: 1.4;
+}
+.calm-canvas .react-flow__edge-path.calm-edge--interacts { stroke-dasharray: 5 4; }
+.calm-edge-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 220px;
+  padding: 1px var(--sp-1-5);
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+  font-size: var(--fs-ui-2xs);
+  line-height: 16px;
+  color: var(--fg-2);
+  pointer-events: all;
+  white-space: nowrap;
+  box-sizing: border-box;
+  justify-content: center;
+  overflow: hidden;
+}
+.calm-edge-label__text { overflow: hidden; text-overflow: ellipsis; }
+.calm-chip {
+  flex: none;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xs);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-2xs);
+  line-height: 14px;
+  color: var(--fg-2);
+  background: var(--bg-sunken);
+}
+.calm-end-label {
+  position: absolute;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-2xs);
+  line-height: 14px;
+  color: var(--fg-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.calm-end-label--end { translate: -100% 0; }
+
+/* CAD-FR-KSEJ: the chosen flow is the one strong colour of the canvas. Its
+   edges thicken in the accent, each step shows its number, and the rest of the
+   architecture recedes. */
+.calm-canvas .react-flow__edge-path.calm-edge.calm-in-flow {
+  stroke: var(--calm-flow);
+  stroke-width: 2.4;
+  stroke-dasharray: none;
+}
+.calm-node.calm-in-flow { border-color: var(--calm-flow); }
+.calm-group.calm-in-flow { border-color: var(--calm-flow); }
+.calm-step {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: var(--r-full);
+  background: var(--calm-flow, var(--accent));
+  color: var(--accent-fg);
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-semi);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.calm-edge-label.calm-in-flow { color: var(--fg-1); box-shadow: 0 0 0 1px var(--calm-flow); }
+.calm-dim { opacity: 0.25; }
+.calm-canvas .react-flow__edge-path.calm-dim { opacity: 0.2; }
+
+/* CAD-FR-KUBU: the selected item. */
+.calm-node.calm-selected,
+.calm-group.calm-selected { box-shadow: 0 0 0 2px var(--ring); }
+.calm-canvas .react-flow__edge-path.calm-selected { stroke-width: 2.8; }
+.calm-edge-label.calm-selected { box-shadow: 0 0 0 2px var(--ring); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .calm-node,
+  .calm-group,
+  .calm-edge-label { transition: opacity var(--dur-base) var(--ease-out); }
+}
+
+/* ---------- The inline canvas of a fence (CAD-FR-IPRR – CAD-FR-JBUT) ---------- */
+.doc .mermaid-diagram.calm-figure { display: block; padding: var(--sp-2) 0; }
+.calm-inline {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.calm-inline__stage {
+  position: absolute;
+  transform-origin: 0 0;
+}
+.calm-inline--empty {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+}
+
+/* ---------- The interactive canvas (CAD-FR-LLNQ – CAD-FR-NNHM) ---------- */
+.calm-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.calm-stage .calm-stage__area { flex: 1; min-width: 0; background: var(--doc-page-bg); }
+.calm-stage__drawing { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.calm-stage__empty {
+  margin: 0;
+  padding: var(--sp-8);
+  text-align: center;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+}
+.calm-flow-select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1-5);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+.calm-flow-select select {
+  height: var(--ctl-h-sm);
+  max-width: 220px;
+  padding: 0 var(--sp-1-5);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+}
+.calm-flow-select select:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+/* CAD-FR-KUBU, CAD-FR-MYHZ: the details panel. */
+.calm-details {
+  flex: none;
+  width: clamp(220px, 28%, 340px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 1px solid var(--border-1);
+  background: var(--bg-panel);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.calm-details:focus { outline: none; }
+.calm-details:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+.calm-details__title {
+  margin: 0;
+  font-size: var(--fs-ui-lg);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+  overflow-wrap: anywhere;
+}
+.calm-details__header p { margin: var(--sp-1-5) 0 0; }
+.calm-details__id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: 2px;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-2xs);
+  color: var(--fg-3);
+}
+.calm-details__type { color: var(--code-type); }
+.calm-details__counts { color: var(--fg-3); }
+.calm-details__section { margin-top: var(--sp-4); }
+.calm-details__section-title {
+  margin: 0 0 var(--sp-1-5);
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.calm-details__item + .calm-details__item { margin-top: var(--sp-2-5); }
+.calm-details__item-name { font-family: var(--font-source-family); font-size: var(--fs-src-xs); color: var(--fg-1); }
+.calm-details__item p { margin: 2px 0 0; }
+.calm-details__pairs { margin: var(--sp-1) 0 0; }
+.calm-details__pair {
+  display: grid;
+  grid-template-columns: minmax(70px, 38%) 1fr;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+.calm-details__pair dt { color: var(--fg-3); overflow-wrap: anywhere; }
+.calm-details__pair dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--fg-1); }
+.calm-details__url { font-family: var(--font-source-family); font-size: var(--fs-src-2xs); overflow-wrap: anywhere; }
+.calm-details__json {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-1-5);
+  border-radius: var(--r-xs);
+  background: var(--bg-sunken);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-2xs);
+  line-height: var(--lh-snug);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.calm-details__muted { color: var(--fg-3); }
+.calm-details__value { overflow-wrap: anywhere; }
+.calm-details__list,
+.calm-details__steps { list-style: none; margin: 0; padding: 0; }
+.calm-details__entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-1-5);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.calm-details__entry:hover { background: var(--bg-hover); }
+.calm-details__entry:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.calm-details__entry .calm-glyph { margin-top: 3px; --calm-spine: var(--fg-3); }
+.calm-details__step-text { display: flex; flex-direction: column; min-width: 0; color: var(--fg-2); }
+.calm-details__step-joins { color: var(--fg-1); font-weight: var(--fw-medium); }
+
+/* ---------- The Diagram view of an Architecture tab (CAD-FR-RBYK – CAD-FR-QADV) ---------- */
+.architecture-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-canvas);
+}
+.architecture-view__bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  min-height: var(--ctl-h-2xl);
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+}
+.architecture-view .calm-stage__area.doc { border-radius: 0; }
+.architecture-view__message {
+  margin: auto;
+  max-width: 560px;
+  padding: var(--sp-8) var(--sp-6);
+  text-align: center;
+  color: var(--fg-2);
+}
+.architecture-view__summary { margin: 0 0 var(--sp-2); font-weight: var(--fw-semi); color: var(--fg-1); }
+.architecture-view__detail {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-xs);
+  white-space: pre-wrap;
+  text-align: left;
+  color: var(--fg-2);
+}
+
+/* ---------- The diagram pane of the editor overlay (CAD-FR-KUYJ) ---------- */
+.calm-fitted {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.calm-fitted__stage {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  transform-origin: top center;
+}
+.calm-fitted__empty { margin: var(--sp-6); color: var(--fg-3); text-align: center; }
+
+/* CAD-FR-KUYJ: the CALM drawing fills the diagram pane, which fits it. */
+.diagram-editor__preview .calm-preview { flex: 1; width: 100%; min-height: 0; }
+
+/* CAD-FR-LLNQ: the canvas and the details panel fill the viewer below its title bar. */
+.calm-viewer .calm-stage { min-height: 0; }
+
+/* CLM-FR-ERXV: the canvas library draws the edges in an SVG with no size of
+   its own, in a box with no width. The rules that fit a Mermaid drawing to
+   the page (max-width: 100%) would give that SVG no width, and an SVG with
+   no width draws nothing. The CALM canvas keeps the size of each SVG. */
+.doc .calm-canvas svg,
+.diagram-editor__preview .calm-canvas svg {
+  max-width: none;
+}

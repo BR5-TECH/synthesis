@@ -1,6 +1,7 @@
 //! Path-convention inference and the content-marker tiebreak
 //! (`specifications/core/ASC-artifact-scanning.md` ASC-FR-03, ASC-FR-04,
-//! ASC-FR-19, ASC-FR-JWPH). Pure: the caller supplies the text it read.
+//! ASC-FR-19, ASC-FR-JWPH, ASC-FR-QVCN). Pure: the caller supplies the text it
+//! read.
 
 use super::{normalize_rel, ArtifactType};
 
@@ -11,14 +12,22 @@ use super::{normalize_rel, ArtifactType};
 /// The representative recognizer table below spans Claude Code
 /// (`.claude/skills`, `.claude/agents`, `.claude/commands`), Codex
 /// (`AGENTS.md`), GitHub Copilot (`.github/**instructions**`,
-/// `.github/prompts`), and the synthesis conventions (`.synthesis/skills`,
-/// `specifications/`). It is
+/// `.github/prompts`), the synthesis conventions (`.synthesis/skills`,
+/// `specifications/`), and the FINOS CALM `*.calm.json` name. It is
 /// intentionally extensible; the *type set* (ASC-FR-02) is what is fixed.
 pub fn infer_from_path(rel: &str) -> Option<ArtifactType> {
     let rel = normalize_rel(rel);
     let segs: Vec<&str> = rel.split('/').filter(|s| !s.is_empty()).collect();
     let base = segs.last().copied().unwrap_or("");
     let base_lower = base.to_ascii_lowercase();
+
+    // ASC-FR-QVCN: a FINOS CALM architecture document. The suffix match does
+    // not look at letter case, and the rule comes before all folder rules,
+    // because it outranks each of them (`specifications/x.calm.json` is an
+    // architecture, not a spec).
+    if base_lower.ends_with(".calm.json") {
+        return Some(ArtifactType::Architecture);
+    }
 
     // Directory-convention recognizers: a window of two consecutive path
     // segments anchors the ecosystem (e.g. `.claude/skills`).

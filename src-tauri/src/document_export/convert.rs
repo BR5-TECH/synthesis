@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+pub mod calm_raster;
 pub mod diagrams;
 pub mod docx;
 pub mod frontmatter;
@@ -19,6 +20,8 @@ pub mod typography;
 
 #[cfg(test)]
 pub(super) mod tests;
+#[cfg(test)]
+mod tests_calm;
 #[cfg(test)]
 mod tests_comments;
 #[cfg(test)]

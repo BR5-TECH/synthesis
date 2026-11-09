@@ -14,7 +14,8 @@ import {
   type RichUnitMark,
 } from "../DiffRichTarget";
 import { frontmatterLineCount } from "../markdownFidelity";
-import { DIAGRAM_LANGUAGE } from "../markdownMermaid";
+import { diagramKindOfLanguage } from "../diagramKind";
+import { CalmStatic } from "./CalmStatic";
 import { MermaidStatic } from "./MermaidStatic";
 import type { FileRevisions } from "../../types";
 import { BreakSpacer, CommentChip, CommentChipLine } from "../markdownChips";
@@ -424,7 +425,9 @@ function MarkdownBody({
         </pre>
       );
       // DFV-FR-EGFA: a diagram fence drawn here is an inert diagram.
-      return block.language?.trim() === DIAGRAM_LANGUAGE ? (
+      const kind = diagramKindOfLanguage(block.language);
+      if (kind === "calm") return <CalmStatic source={block.text}>{fence}</CalmStatic>;
+      return kind === "mermaid" ? (
         <MermaidStatic source={block.text}>{fence}</MermaidStatic>
       ) : (
         fence

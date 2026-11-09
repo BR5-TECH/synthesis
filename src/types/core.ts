@@ -110,6 +110,8 @@ export interface FlowViolation {
   message: string;
   elementId?: string;
   edgeId?: string;
+  /** The position of the sync link a violation sits on (FGV-FR-LWPD). */
+  linkIndex?: number;
 }
 
 /** What `"validate flow document"` returns (FGV-FR-02). */

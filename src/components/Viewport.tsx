@@ -191,6 +191,7 @@ export function Viewport({
         onOpenRun={onOpenRun}
         onArchived={() => onCloseTab(activeT.id)}
         onNameChanged={(name) => onDraftRenamed(activeT.draftId!, name)}
+        onOpenArtifact={onOpenArtifact}
       />
     );
   // SMP-FR-KQTD: the one Map tab renders from the shell's map session, which

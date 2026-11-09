@@ -3,6 +3,7 @@
  * `index.tsx` to keep that file within the size rule.
  */
 import type { DraftSessionStore } from "../../state/draftSessions";
+import type { OpenableArtifact } from "../../types";
 
 export interface WorkspaceProps {
   draftId: string;
@@ -54,4 +55,6 @@ export interface WorkspaceProps {
   onArchived: () => void;
   /** NAW-FR-04: the strip's label follows the draft's name. */
   onNameChanged: (name: string) => void;
+  /** NAW-FR-TXKN: a plan tag opens its Flow through the shell's open route. */
+  onOpenArtifact?: (item: OpenableArtifact) => void;
 }

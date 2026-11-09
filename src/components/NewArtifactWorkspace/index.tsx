@@ -128,6 +128,7 @@ export function NewArtifactWorkspace({
   onOpenRun,
   onArchived,
   onNameChanged,
+  onOpenArtifact,
 }: WorkspaceProps) {
   useSyncExternalStore(drafts.subscribe, drafts.getVersion);
   const session = drafts.ensure(draftId);
@@ -696,6 +697,7 @@ export function NewArtifactWorkspace({
         superseded={record?.superseded ?? null}
         graduation={graduation}
         onOpenRun={onOpenRun}
+        onOpenArtifact={onOpenArtifact}
         publication={publication}
         pendingProposal={pendingProposal}
         view={view}

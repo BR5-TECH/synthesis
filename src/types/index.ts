@@ -4,6 +4,7 @@
 // was a single file.
 
 export * from "./core";
+export * from "./flowPlan";
 export * from "./changes";
 export * from "./diff";
 export * from "./search";

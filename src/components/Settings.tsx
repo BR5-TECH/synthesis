@@ -7,6 +7,7 @@ import { ProjectAgents, type AgentEditorRequest } from "./Agents";
 import { ProjectAgentGroupSettings } from "./ProjectAgentGroupSettings";
 import { DraftTemplateSection } from "./DraftTemplateSection";
 import { GithubPollingSection } from "./GithubPollingSection";
+import { FlowSyncSettingsGroup } from "./FlowSyncSettings";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
 import { GraduationSettingsSection } from "./GraduationSettingsSection";
 import {
@@ -439,6 +440,8 @@ export function Settings({
         <>
           <GithubPollingSection />
           <GithubPublicationSettingsGroup />
+          {/* SET-FR-ZJRC: the Flow sync group, below the Publication group. */}
+          <FlowSyncSettingsGroup />
         </>
       )}
 

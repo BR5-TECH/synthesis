@@ -3,7 +3,7 @@ name = "agentic-cli-mock"
 version = "0.1.0"
 edition = "2021"
 description = "Standalone stand-in for an agentic CLI, driven by a JSON scenario file"
-license = "Apache-2.0"
+license = "BUSL-1.1"
 publish = false
 
 # ACM-FR-01: the crate depends on a JSON reader and a base64 codec and on

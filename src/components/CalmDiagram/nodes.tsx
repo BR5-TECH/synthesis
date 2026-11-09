@@ -22,7 +22,7 @@ export interface CalmNodeData extends Record<string, unknown> {
 export type CalmFlowNode = Node<CalmNodeData, "calmNode" | "calmGroup">;
 
 /** CLM-FR-DTYX: a small outline glyph for each shape, in the text colour. */
-const GLYPHS: Record<CalmShape, string> = {
+export const GLYPHS: Record<CalmShape, string> = {
   actor: "M8 7.5a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5ZM3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5",
   system: "M2.5 2.5h11v11h-11zM2.5 6h11",
   service: "M3 3.5h10a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 11V5A1.5 1.5 0 0 1 3 3.5ZM5 8h6",

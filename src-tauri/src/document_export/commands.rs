@@ -1,4 +1,5 @@
-//! The Tauri command of an export (DXP-FR-IEQA, DXP-FR-WLGE, DXP-FR-LSYA).
+//! The Tauri commands of an export (DXP-FR-IEQA, DXP-FR-WLGE, DXP-FR-LSYA,
+//! DXP-FR-TQCQ).
 //!
 //! The command reads the saved file through the IDE instance, converts it on a
 //! worker thread, reports each stage to the window, and writes the result to
@@ -7,11 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use serde::Serialize;
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 
-use super::convert::diagrams::DiagramRenderer;
-use super::convert::{self, Format, Input, Stage};
+use super::convert::diagrams::{self, DiagramFailure, DiagramRenderer};
+use super::convert::model::DiagramKind;
+use super::convert::{self, calm_raster, Format, Input, Stage};
 use super::source::check_doc_artifact;
 use super::{
     ERR_CONVERSION_FAILED, ERR_INVALID_DESTINATION, ERR_INVALID_FORMAT, ERR_NOT_FOUND,
@@ -56,6 +60,13 @@ pub struct ExportResult {
     pub warnings: Vec<ExportWarning>,
 }
 
+/// DXP-FR-VMPP: the SVG drawing of one CALM source, as the frontend gives it.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct CalmPicture {
+    pub source: String,
+    pub svg: String,
+}
+
 /// One export, as the command was given it.
 #[derive(Clone, Debug)]
 pub struct ExportJob {
@@ -64,6 +75,27 @@ pub struct ExportJob {
     pub include_frontmatter: bool,
     pub destination: String,
     pub export_id: String,
+}
+
+/// DXP-FR-RKJC, DXP-FR-WGLT, DXP-FR-VMPP: the renderer of each diagram kind.
+/// A Mermaid fence renders with `render_mermaid`. A CALM fence finds its
+/// picture by its exact source, the first entry of a source applying, and
+/// rasterises it. A CALM fence with no picture does not render.
+pub fn diagram_renderer<'a>(
+    pictures: &'a [CalmPicture],
+    render_mermaid: &'a dyn Fn(&str) -> Result<Vec<u8>, DiagramFailure>,
+) -> impl Fn(DiagramKind, &str) -> Result<Vec<u8>, DiagramFailure> + 'a {
+    let mut by_source: HashMap<&str, &str> = HashMap::new();
+    for picture in pictures {
+        by_source.entry(picture.source.as_str()).or_insert(picture.svg.as_str());
+    }
+    move |kind, source| match kind {
+        DiagramKind::Mermaid => render_mermaid(source),
+        DiagramKind::Calm => match by_source.get(source) {
+            Some(svg) => calm_raster::rasterise_svg(svg),
+            None => Err(DiagramFailure::Invalid),
+        },
+    }
 }
 
 /// DXP-FR-IEQA: export the DOC artifact at `path` to `destination`.
@@ -75,6 +107,7 @@ pub async fn export_document<R: tauri::Runtime>(
     include_frontmatter: bool,
     destination: String,
     export_id: String,
+    calm_pictures: Option<Vec<CalmPicture>>,
 ) -> Result<ExportResult, String> {
     let Some(format) = Format::parse(&format) else {
         // DXP-FR-LHEV / DXP-FR-NGUG: the typed error alone, not the text given.
@@ -98,7 +131,9 @@ pub async fn export_document<R: tauri::Runtime>(
         let emit = move |progress: ExportProgress| {
             let _ = emitter.emit(DOCUMENT_EXPORT_PROGRESS, progress);
         };
-        run_export(&worker, &BUFFER, root.as_ref(), &job, &convert::diagrams::render_png, &emit)
+        let pictures = calm_pictures.unwrap_or_default();
+        let render = diagram_renderer(&pictures, &diagrams::render_png);
+        run_export(&worker, &BUFFER, root.as_ref(), &job, &render, &emit)
     })
     .await;
     match joined {
@@ -115,6 +150,66 @@ pub async fn export_document<R: tauri::Runtime>(
             );
             Err(ERR_CONVERSION_FAILED.to_string())
         }
+    }
+}
+
+/// DXP-FR-TQCQ: the CALM sources of the saved DOC artifact at `path`, each
+/// one time, in document order. `root` is `None` with no project open.
+pub fn calm_sources_of(root: Option<&RootFs>, path: &str) -> Result<Vec<String>, &'static str> {
+    let root = root.ok_or(ERR_NO_PROJECT_OPEN)?;
+    let rel = check_doc_artifact(root, path)?;
+    let text = root.read_text(&rel).map_err(|error| match error {
+        fs::FsError::NotFound { .. } => ERR_NOT_FOUND,
+        _ => ERR_READ_FAILED,
+    })?;
+    // The frontmatter holds no fence, so it is left out either way.
+    Ok(diagrams::calm_sources(&convert::document_of(&text, false)))
+}
+
+/// DXP-FR-TQCQ: `calm_sources_of` with its logging. No record carries a
+/// source or a path.
+pub fn run_list_calm_sources<S: LogSink + Clone + Send + 'static>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    root: Option<&RootFs>,
+    path: &str,
+) -> Result<Vec<String>, &'static str> {
+    let outcome = calm_sources_of(root, path);
+    match &outcome {
+        Ok(sources) => logging::log_debug(
+            sink,
+            buffer,
+            &[Domain::Backend],
+            "the CALM sources of a document export were listed",
+            log_fields! { "sources" => sources.len() },
+        ),
+        Err(code) => logging::log_warn(
+            sink,
+            buffer,
+            &[Domain::Backend],
+            "the CALM sources of a document export were not listed",
+            log_fields! { "error" => *code },
+        ),
+    }
+    outcome
+}
+
+/// DXP-FR-TQCQ: list the CALM sources of the DOC artifact at `path`.
+#[tauri::command]
+pub async fn list_export_calm_sources<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    path: String,
+) -> Result<Vec<String>, String> {
+    let worker = app.clone();
+    let joined = tauri::async_runtime::spawn_blocking(move || {
+        let root =
+            worker.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+        run_list_calm_sources(&worker, &BUFFER, root.as_ref(), &path)
+    })
+    .await;
+    match joined {
+        Ok(outcome) => outcome.map_err(str::to_string),
+        Err(_) => Err(ERR_READ_FAILED.to_string()),
     }
 }
 

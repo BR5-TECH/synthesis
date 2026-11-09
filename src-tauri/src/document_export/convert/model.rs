@@ -38,6 +38,28 @@ pub struct ListItem {
     pub blocks: Vec<Block>,
 }
 
+/// DXP-FR-INPH: the language of a diagram fence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiagramKind {
+    /// DXP-FR-RKJC: a `mermaid` fence, which the backend renders.
+    Mermaid,
+    /// DXP-FR-WGLT: a `calm` fence, which the frontend draws.
+    Calm,
+}
+
+impl DiagramKind {
+    /// The kind of a fence with the info string `language`, case ignored.
+    pub fn of_language(language: &str) -> Option<DiagramKind> {
+        if language.eq_ignore_ascii_case("mermaid") {
+            Some(DiagramKind::Mermaid)
+        } else if language.eq_ignore_ascii_case("calm") {
+            Some(DiagramKind::Calm)
+        } else {
+            None
+        }
+    }
+}
+
 /// A block of the output.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Block {
@@ -50,10 +72,12 @@ pub enum Block {
         language: Option<String>,
         text: String,
     },
-    /// DXP-FR-RKJC: a diagram fence. `index` counts from 1 in document order.
-    /// `png` holds the rendered image once the diagram step has run.
+    /// DXP-FR-RKJC, DXP-FR-WGLT: a diagram fence. `index` counts Mermaid and
+    /// CALM fences together from 1 in document order (DXP-FR-INPH). `png`
+    /// holds the rendered image once the diagram step has run.
     Diagram {
         index: usize,
+        kind: DiagramKind,
         source: String,
         png: Option<Vec<u8>>,
     },
@@ -342,9 +366,9 @@ impl<'a> Reader<'a> {
             CodeBlockKind::Indented => None,
         };
         let text = text.strip_suffix('\n').unwrap_or(&text).to_string();
-        if language.as_deref().is_some_and(|l| l.eq_ignore_ascii_case("mermaid")) {
+        if let Some(kind) = language.as_deref().and_then(DiagramKind::of_language) {
             self.diagrams += 1;
-            return Block::Diagram { index: self.diagrams, source: text, png: None };
+            return Block::Diagram { index: self.diagrams, kind, source: text, png: None };
         }
         Block::Code { language, text }
     }

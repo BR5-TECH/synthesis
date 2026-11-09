@@ -3,7 +3,7 @@
 **Spec code:** `CAD`
 
 ## Intent
-How the application shows a FINOS CALM architecture as a diagram. An author keeps an architecture as code, in a ```` ```calm ```` fence of a Markdown file or in a whole `*.calm.json` Architecture artifact, and reads it as a diagram next to the prose that explains it. The diagram is a read-only canvas: the JSON source is the only thing that an author edits, and the canvas shows the result of a read of `CLM-calm-model.md`. A CALM fence is a diagram fence of `EDT-editor.md` EDT-FR-MOYS, so it has the same view toggle, Edit button, View button, and overlays as a Mermaid fence, and this spec states only what is different for CALM. Out of scope: editing on the canvas, and a CALM diagram in a PDF or DOCX export, which keeps the fence as a code block (per `../core/DXP-document-export.md` DXP-FR-WGLT).
+How the application shows a FINOS CALM architecture as a diagram. An author keeps an architecture as code, in a ```` ```calm ```` fence of a Markdown file or in a whole `*.calm.json` Architecture artifact, and reads it as a diagram next to the prose that explains it. The diagram is a read-only canvas: the JSON source is the only thing that an author edits, and the canvas shows the result of a read of `CLM-calm-model.md`. A CALM fence is a diagram fence of `EDT-editor.md` EDT-FR-MOYS, so it has the same view toggle, Edit button, View button, and overlays as a Mermaid fence, and this spec states only what is different for CALM. In a PDF or DOCX export, a CALM fence becomes a picture of the same diagram, drawn for a white page (per `../core/DXP-document-export.md` DXP-FR-WGLT). Out of scope: editing on the canvas, and a flow highlight in an export.
 
 ## Functional requirements
 
@@ -59,6 +59,12 @@ How the application shows a FINOS CALM architecture as a diagram. An author keep
 39. **CAD-FR-QADV** On an Architecture tab that accepts no input, the Diagram / Source toggle stays enabled, because a switch of the view changes no byte. The Diagram view is read-only in each state of the tab.
 40. **CAD-FR-QLQZ** Each switch of the view of an Architecture tab logs one `DEBUG` record under the `frontend` domain through `src/logging.ts`, with the name of the new view. No record holds text from the document.
 
+### Export picture
+41. **CAD-FR-QHEJ** For an export (per `EXD-export-dialog.md` EXD-FR-UKLK), the application draws a CALM source whose read gives a diagram graph with at least one node as a **print drawing**: one self-contained SVG document. The print drawing shows the diagram as the inline canvas shows it, from the same read and layout (per `CLM-calm-model.md` CLM-FR-GDML): the same node boxes with their shapes, glyphs, names, `node-type`, interfaces, and markers; the same group boxes, dashed for `deployed-in`; and the same edge routes with their arrows, labels, protocol chips, and interface labels. No flow is chosen and nothing is selected. Its width and height are those of the diagram.
+42. **CAD-FR-FONB** The print drawing always uses the colours of the light theme, whatever theme is active. It sets its text in Liberation Sans and Liberation Mono (per `../core/DXP-document-export.md` DXP-FR-DMUH), in the places where the canvas uses the interface font and the source font of the theme.
+    - *Why:* the picture goes on a white page, and the backend rasterises it with the bundled fonts alone.
+43. **CAD-FR-VBDT** The print drawing holds every CALM text as escaped SVG text and never as markup (per `CLM-calm-model.md` CLM-FR-IRGG). It refers to no file, font, or URL outside itself. A text that is wider than its place ends with an ellipsis, as on the canvas. A read that ends with an error, or that gives a graph with no nodes, gives no print drawing.
+
 ## User stories
 - As an architect, I want to keep a system architecture as CALM JSON in the project, so that agents and people read the same model.
 - As an author, I want to put a CALM architecture in a Markdown document and see it as a diagram, so that the prose and the model stay together.
@@ -101,8 +107,8 @@ The diagram viewer overlay for a CALM fence, and the Diagram view of an Architec
 - Layout notes: the details panel takes the right side of the canvas, and it scrolls on its own (CAD-FR-KUBU, CAD-FR-MYHZ). In the viewer, the flow selector sits in the title bar before the zoom readout. In an Architecture tab, the flow selector, the zoom readout, and the Fit control sit in a bar above the canvas, and the Diagram / Source toggle is in the action cluster (CAD-FR-OJTD). Items that no step of the chosen flow uses show dimmed (CAD-FR-KSEJ).
 
 ## UI contract boundary
-- **Owned by the UI**: the CALM fence and its inline canvas, the Insert CALM architecture button and its template menu with the bundled templates, the CALM labels and hints of the diagram editor overlay, the interactive canvas of the viewer and of the Architecture tab with its flow selector and details panel, the Diagram / Source toggle and the view state of an Architecture tab. The read of a document is the client-side read of `CLM-calm-model.md`.
-- **Delegated to backend (abstract)**: `"open artifact by id"`, `"load artifact contents by id"`, and `"save artifact contents"`, owned by `../core/PST-project-storage.md`, serve an Architecture artifact as they serve every other file. The type `architecture` and its `.calm.json` rule are owned by `../core/ASC-artifact-scanning.md` (ASC-FR-02, ASC-FR-QVCN). This spec introduces no backend operation.
+- **Owned by the UI**: the CALM fence and its inline canvas, the Insert CALM architecture button and its template menu with the bundled templates, the CALM labels and hints of the diagram editor overlay, the interactive canvas of the viewer and of the Architecture tab with its flow selector and details panel, the Diagram / Source toggle and the view state of an Architecture tab, and the print drawing of a CALM source. The read of a document is the client-side read of `CLM-calm-model.md`.
+- **Delegated to backend (abstract)**: `"open artifact by id"`, `"load artifact contents by id"`, and `"save artifact contents"`, owned by `../core/PST-project-storage.md`, serve an Architecture artifact as they serve every other file. The type `architecture` and its `.calm.json` rule are owned by `../core/ASC-artifact-scanning.md` (ASC-FR-02, ASC-FR-QVCN). The export of the print drawing goes through the operations of `EXD-export-dialog.md`. This spec introduces no backend operation.
 
 ## Non-functional requirements
 - A CALM diagram renders offline and fetches nothing from the network.

@@ -447,6 +447,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "read_document",
     "read_document_pdf",
     "export_document",
+    "list_export_calm_sources",
     // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
     "get_export_request",
     "resolve_export_request",

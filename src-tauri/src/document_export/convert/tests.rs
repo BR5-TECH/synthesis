@@ -5,21 +5,21 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use super::diagrams::{DiagramFailure, FailedDiagram};
-use super::model::{classify_marker_line, parse, Align, Block, Inline, Marker};
+use super::model::{classify_marker_line, parse, Align, Block, DiagramKind, Inline, Marker};
 use super::*;
 
-pub(crate) fn render_ok(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+pub(crate) fn render_ok(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
     let image = image::RgbaImage::new(40, 20);
     let mut out = std::io::Cursor::new(Vec::new());
     image.write_to(&mut out, image::ImageFormat::Png).map_err(|_| DiagramFailure::Invalid)?;
     Ok(out.into_inner())
 }
 
-fn render_fail(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+fn render_fail(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
     Err(DiagramFailure::Invalid)
 }
 
-fn render_past_deadline(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+fn render_past_deadline(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
     Err(DiagramFailure::Deadline)
 }
 
@@ -39,6 +39,20 @@ pub(crate) fn dir_writer(dir: &Path) -> impl Fn(&str, &[u8]) -> Option<PathBuf> 
 /// The bytes of the file at `path`.
 pub(crate) fn read_file(path: &Path) -> Vec<u8> {
     std::fs::read(path).expect("the file reads")
+}
+
+/// Writes `bytes` to `path` in a test folder.
+pub(crate) fn write_test_file(path: &Path, bytes: &[u8]) {
+    std::fs::write(path, bytes).expect("the file writes");
+}
+
+/// The count of PNG files in `dir`.
+pub(crate) fn png_files_in(dir: &Path) -> usize {
+    std::fs::read_dir(dir)
+        .expect("the folder reads")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|x| x == "png"))
+        .count()
 }
 
 /// Convert `text` with the given renderer, writing pictures into `dir`.
@@ -248,20 +262,4 @@ fn pdf_is_written() {
     let text = "---\ntitle: Guide\n---\n<!-- center -->\n# Title\n\n<!-- %% -->\nBody text.\n\n```mermaid\ngraph TD; A-->B\n```\n";
     let (converted, _) = run(text, Format::Pdf, true, &render_ok, dir.path());
     assert!(converted.bytes.starts_with(b"%PDF-"));
-}
-
-fn render_never(_: &str) -> Result<Vec<u8>, DiagramFailure> {
-    panic!("a CALM fence must not reach the diagram renderer");
-}
-
-// DXP-FR-WGLT, DXP-FR-RKJC: a CALM fence stays as a code block with its
-// source. It does not reach the renderer and gives no warning.
-#[test]
-fn a_calm_fence_stays_as_code_with_no_warning() {
-    let dir = tempfile::tempdir().unwrap();
-    let text = "```calm\n{ \"nodes\": [] }\n```\n";
-    let (converted, events) = run(text, Format::Docx, false, &render_never, dir.path());
-    assert!(converted.failed_diagrams.is_empty());
-    assert!(!events.iter().any(|(stage, _, total)| matches!(stage, Stage::Diagrams) && *total > 0));
-    assert!(document_xml(&converted.bytes).contains("nodes"));
 }

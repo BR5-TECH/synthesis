@@ -15,6 +15,12 @@ export interface ExportWarning {
   index: number;
 }
 
+/** DXP-FR-VMPP: the print drawing of one CALM source (CAD-FR-QHEJ). */
+export interface CalmPicture {
+  source: string;
+  svg: string;
+}
+
 /** DXP contract surface: what `export_document` returns. */
 export interface ExportResult {
   destination: string;

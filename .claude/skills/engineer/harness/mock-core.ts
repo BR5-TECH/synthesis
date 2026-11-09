@@ -8465,6 +8465,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // DXP-FR-IEQA / DXP-FR-LSYA: an export that walks its four stages and
     // writes nothing. `?exportFail` refuses it with `conversion_failed`, and
     // `?exportWarn` reports one diagram that stayed as code.
+    /**
+     * DXP-FR-TQCQ: the mock does not keep saved text, so each DOC artifact
+     * holds two CALM fences: the three-tier template and a source that is not
+     * JSON. The dialog draws one picture, and the export states the other.
+     */
+    case "list_export_calm_sources":
+      return [CALM_TEMPLATES.find((t) => t.key === "three-tier")!.source, "{ not json"];
     case "export_document": {
       const exportId = String(a.exportId);
       const stages = ["reading", "diagrams", "converting", "writing"];

@@ -14,8 +14,9 @@ The modal dialog in which the author exports a DOC artifact to a `.pdf` or a `.d
 6. **EXD-FR-LQAW** **Choose…** invokes `"browse for save path"` with the file's base name and the extension of the chosen format. A cancel keeps the earlier destination. A change of format after a destination is chosen replaces the destination's extension with the extension of the new format.
 7. **EXD-FR-BKFL** **Export** is disabled while no destination is chosen, and states why on hover.
 8. **EXD-FR-XNLZ** The dialog is one of the main window's mutually exclusive floating overlays (per `SNV-shell-navigation.md` SNV-FR-56).
-9. **EXD-FR-ESQB** **Export** invokes `"export document (path, format, include frontmatter, destination, export id)"` with a new export id. While it runs the dialog stays open, every control of the dialog is disabled, and Escape does nothing.
-10. **EXD-FR-QWZO** While an export runs, the dialog shows its progress from the `"document export progress"` events of its export id: the stage as text, and the count of diagrams processed in the `diagrams` stage.
+9. **EXD-FR-ESQB** **Export** starts an export: it draws the CALM pictures (EXD-FR-UKLK), and then it invokes `"export document (path, format, include frontmatter, destination, export id, CALM pictures)"` with a new export id and those pictures. From the press of **Export** until the export ends, the dialog stays open, every control of the dialog is disabled, and Escape does nothing.
+9. **EXD-FR-UKLK** To draw the CALM pictures, the dialog invokes `"list export CALM sources (path)"` and makes the print drawing of each source (per `CAD-calm-architecture-diagrams.md` CAD-FR-QHEJ). A source whose read ends with an error, or that has no nodes, gets no picture (CAD-FR-VBDT), so the export states that its diagram stayed as code (EXD-FR-YALT). A list call that fails is an export that fails (EXD-FR-RNJL), with the typed error of the call. The dialog uses the colours of the light theme for the pictures in each theme (CAD-FR-FONB).
+10. **EXD-FR-QWZO** While an export runs, the dialog shows its progress. While it draws the CALM pictures, it shows "Drawing CALM diagrams" with the count of sources drawn and the count of all sources. Then it shows the progress from the `"document export progress"` events of its export id: the stage as text, and the count of diagrams processed in the `diagrams` stage.
 11. **EXD-FR-YTQG** An export that succeeds with no warning closes the dialog and shows a success notification toast that names the file.
 12. **EXD-FR-YALT** An export that succeeds with warnings keeps the dialog open, states that the file was written and which diagrams stayed as code, and shows one **Close** button in place of Cancel and Export.
 13. **EXD-FR-RNJL** An export that fails keeps the dialog open, shows the error inline, and enables the controls again, so **Export** tries again and **Cancel** closes the dialog.
@@ -26,6 +27,7 @@ The modal dialog in which the author exports a DOC artifact to a `.pdf` or a `.d
 18. **EXD-FR-UDHD** **Export…** on a card writes at once any pending write of the file's editing session (per `EDT-editor.md` EDT-FR-70), and then opens the dialog for the request's file with the request's format. A write that fails opens no dialog, as EXD-FR-CBIW states.
 19. **EXD-FR-DHAN** A dialog opened from a card resolves the request through `"resolve export request (id, outcome, destination, error)"` when it closes: `exported` with the destination after a success, `cancelled` when the author closes it with no failed attempt, and `failed` with the last error when the author closes it after a failed attempt.
 20. **EXD-FR-VFFP** A resolution that returns a `commentId` brings the agents back on the terms a decision on a proposal does (per `DCR-draft-change-review.md` DCR-FR-15). A resolution that fails, or that returns `commentFailed: true`, shows an error notification toast that says the conversation was not told.
+21. **EXD-FR-ZQMX** The drawing of the CALM pictures logs one `DEBUG` record under the `frontend` domain with the count of sources, the count of pictures, and the duration. Each source with no picture logs one `WARN` record with the step of its error (per `CLM-calm-model.md` CLM-FR-ODQZ). No record carries CALM text.
 21. **EXD-FR-MRTI** The dialog and the card log under the `frontend` domain: the open, the export start, its success with the warning count, its failure with the typed error, and each resolution with its outcome. No record carries the path, the destination, or document content.
 
 ## Wireframes
@@ -58,7 +60,8 @@ The modal dialog in which the author exports a DOC artifact to a `.pdf` or a `.d
 - **Delegated to backend (abstract)**:
   - `"save artifact contents"` — owned by `../core/PST-project-storage.md` — writes the buffer before the dialog opens (EXD-FR-CDYS).
   - `"browse for save path"` — owned by `../core/FSA-filesystem-access.md` — opens the OS-native save dialog (EXD-FR-LQAW).
-  - `"export document (path, format, include frontmatter, destination, export id)"` and the event `"document export progress"` — owned by `../core/DXP-document-export.md`.
+  - `"list export CALM sources (path)"` — owned by `../core/DXP-document-export.md` — lists the CALM sources of the saved file (EXD-FR-UKLK).
+  - `"export document (path, format, include frontmatter, destination, export id, CALM pictures)"` and the event `"document export progress"` — owned by `../core/DXP-document-export.md`.
   - `"get export request (id)"`, `"resolve export request (id, outcome, destination, error)"`, and the event `"export request changed"` — owned by `../core/DXP-document-export.md`.
   - `"dispatch agent turn"` — owned by `../core/AGC-agent-conversations.md` — brings the agents back after a resolution (EXD-FR-VFFP).
 

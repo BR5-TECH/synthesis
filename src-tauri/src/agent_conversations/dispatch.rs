@@ -393,6 +393,9 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
             speech_input(roots, &origin, text, speaker, &document_budget)
         }
     };
+    // AGC-FR-KQNF: a Flow's material also carries its delivery state and its
+    // overlaps, which need the run queue only the application holds.
+    flow_context::extend_flow_material(app, roots, &document_budget, &mut input);
     // AGC-FR-QSWD: a record that cannot be read adds no question set. The kind
     // is the whole of the record: no path and no content.
     if let Some(kind) = question_set_unreadable {

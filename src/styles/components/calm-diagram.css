@@ -454,3 +454,12 @@
 
 /* CAD-FR-LLNQ: the canvas and the details panel fill the viewer below its title bar. */
 .calm-viewer .calm-stage { min-height: 0; }
+
+/* CLM-FR-ERXV: the canvas library draws the edges in an SVG with no size of
+   its own, in a box with no width. The rules that fit a Mermaid drawing to
+   the page (max-width: 100%) would give that SVG no width, and an SVG with
+   no width draws nothing. The CALM canvas keeps the size of each SVG. */
+.doc .calm-canvas svg,
+.diagram-editor__preview .calm-canvas svg {
+  max-width: none;
+}

@@ -15,7 +15,6 @@ import { absoluteBoxes, type CalmSelection, type FlowHighlight } from "./model";
 import { CALM_NODE_TYPES, type CalmFlowNode } from "./nodes";
 
 const VIEWPORT = { x: 0, y: 0, zoom: 1 };
-const PRO = { hideAttribution: true };
 
 const marker = (inFlow: boolean): EdgeMarker => ({
   type: MarkerType.ArrowClosed,
@@ -135,7 +134,6 @@ export function CalmCanvas({ layout, highlight = null, selected = null, onSelect
         nodesFocusable={false}
         edgesFocusable={false}
         elementsSelectable={false}
-        proOptions={PRO}
         onNodeClick={
           interactive
             ? (event, node) => {

@@ -484,7 +484,7 @@ export function Library({
   const topLevel = tree ? visibleChildren(tree) : [];
 
   /**
-   * LIB-FR-19: the lens offers the types the project has rather than the eight
+   * LIB-FR-19: the lens offers the types the project has rather than the ten
    * it could have. Recomputed from every tree load (LIB-FR-10), so a type gains
    * its button the moment the project's first file of that type appears and
    * loses it once the author has moved off it.

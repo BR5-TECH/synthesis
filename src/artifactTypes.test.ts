@@ -8,9 +8,11 @@ import {
   LENS_ALL_FILES_LABEL,
   lensToFilter,
   presentTypes,
+  typeChip,
   typeLensPositions,
   type TypeLens,
 } from "./artifactTypes";
+import { Icon } from "./components/icons";
 import type { ArtifactType, ArtifactTypeFilter } from "./types";
 
 /**
@@ -29,7 +31,7 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
     expect(filterToLens("all_files")).toBe("files");
   });
 
-  it("PSS-FR-18, ASC-FR-02: passes each of the nine built-in types through unchanged", () => {
+  it("PSS-FR-18, ASC-FR-02: passes each of the ten built-in types through unchanged", () => {
     for (const { value } of ARTIFACT_TYPES) {
       expect(lensToFilter(value)).toBe(value);
       expect(filterToLens(value)).toBe(value);
@@ -68,8 +70,8 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
    * divergence from the Rust side — if the backend serialized `"instruction"`
    * where this side expects `"instructions"`, `filterToLens` would quietly fall
    * back to the default lens and every test here would still pass. This literal
-   * list is asserted against the same nine type strings in
-   * `src-tauri/src/project_settings.rs`'s `the_wire_vocabulary_is_exactly_these_eleven_strings`,
+   * list is asserted against the same ten type strings in
+   * `src-tauri/src/project_settings.rs`'s `the_wire_vocabulary_is_exactly_these_twelve_strings`,
    * so a rename on either side breaks a named assertion rather than silently
    * degrading at runtime.
    */
@@ -85,6 +87,7 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
       "prompt",
       "spec",
       "flow",
+      "architecture",
       "instructions",
       "scenario",
       "scratchpad",
@@ -110,6 +113,23 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
         expect(word[0]).toBe(word[0].toUpperCase());
       }
     }
+  });
+});
+
+describe("the built-in type table (ASC-FR-02 / LIB-FR-08)", () => {
+  it("ASC-FR-02, LIB-FR-08: holds Architecture after Flow, with its own label, chip, and icon", () => {
+    const values = ARTIFACT_TYPES.map((t) => t.value);
+    expect(values.indexOf("architecture")).toBe(values.indexOf("flow") + 1);
+    const architecture = ARTIFACT_TYPES.find((t) => t.value === "architecture")!;
+    expect(architecture).toMatchObject({ label: "Architecture", chip: "ARC" });
+    expect(architecture.icon).toBe(Icon.Architecture);
+    expect(typeChip("architecture")).toBe("ARC");
+  });
+
+  it("LIB-FR-08: gives each of the ten types a chip and an icon of its own", () => {
+    expect(ARTIFACT_TYPES).toHaveLength(10);
+    expect(new Set(ARTIFACT_TYPES.map((t) => t.chip)).size).toBe(10);
+    expect(new Set(ARTIFACT_TYPES.map((t) => t.icon)).size).toBe(10);
   });
 });
 
@@ -162,6 +182,13 @@ describe("typeLensPositions", () => {
       "spec",
       "files",
     ]);
+  });
+
+  it("LIB-FR-04, LIB-FR-19: offers Architecture between Flow and Instructions when the content has it", () => {
+    expect(
+      values(["instructions", "architecture", "flow"], DEFAULT_TYPE_LENS),
+    ).toEqual(["artifacts", "flow", "architecture", "instructions", "files"]);
+    expect(values(["spec"], DEFAULT_TYPE_LENS)).not.toContain("architecture");
   });
 
   it("adds no type button for a sentinel lens", () => {

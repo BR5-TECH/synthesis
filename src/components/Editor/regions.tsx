@@ -7,6 +7,8 @@ import {
 } from "../../state/frontmatterYaml";
 import type { FindMatch } from "../../state/findMatches";
 import { highlightYaml } from "./highlight";
+import type { CalmTemplate } from "../../calm/templates";
+import { CalmInsertMenu } from "./CalmInsertMenu";
 import { DiagramInsertMenu } from "./DiagramInsertMenu";
 import { BlockGroup } from "./BlockGroup";
 import type { DiagramTemplate } from "./diagramTemplates";
@@ -199,6 +201,7 @@ export function FormattingButtons({
   editor,
   editable,
   onInsertDiagram,
+  onInsertCalm,
   onMarkupEdit,
 }: {
   editor: TiptapEditor | null;
@@ -206,6 +209,8 @@ export function FormattingButtons({
   editable: boolean;
   /** EDT-FR-IPMX: inserts a diagram fence that holds the example of a type. */
   onInsertDiagram: (template: DiagramTemplate) => void;
+  /** CAD-FR-KTWD: inserts a CALM fence that holds a template. */
+  onInsertCalm: (template: CalmTemplate) => void;
   /** EDT-FR-RZTS: runs a break or an alignment edit as one step of the history. */
   onMarkupEdit: (run: () => boolean) => boolean;
 }) {
@@ -273,6 +278,7 @@ export function FormattingButtons({
         ”
       </button>
       <DiagramInsertMenu disabled={!editable} onInsert={onInsertDiagram} />
+      <CalmInsertMenu disabled={!editable} onInsert={onInsertCalm} />
     </>
   );
 }

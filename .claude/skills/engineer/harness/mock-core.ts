@@ -10,6 +10,7 @@ import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-document
 import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
+import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
   DECOMPOSITION_ORIGINAL,
   decompositionDiscussion,
@@ -498,6 +499,26 @@ function seededTree(): any {
           },
         ],
       },
+      // CAD-FR-RBYK / CAD-FR-NQXR: an Architecture source file, so the
+      // Diagram view of an Architecture tab is answerable in a browser. Its
+      // body is the "Business flow" template (see `CALM_ARCHITECTURE_BODY`).
+      {
+        id: "architecture",
+        name: "architecture",
+        path: "architecture",
+        nodeKind: "folder",
+        hasArtifacts: true,
+        children: [
+          {
+            id: "architecture/system.calm.json",
+            name: "system.calm.json",
+            path: "architecture/system.calm.json",
+            nodeKind: "file",
+            artifactType: "architecture",
+            typeSource: "inferred",
+          },
+        ],
+      },
       { id: "README.md", name: "README.md", path: "README.md", nodeKind: "file" },
     ],
   };
@@ -656,6 +677,10 @@ function validateFlow(body: string): {
   }
   return { valid: violations.length === 0, violations };
 }
+
+/** CAD-FR-RBYK: the body of the seeded `.calm.json` Architecture file. */
+const CALM_ARCHITECTURE_BODY =
+  CALM_TEMPLATES.find((t) => t.key === "flow")?.source ?? "";
 
 /**
  * EDT-FR-73/EDT-FR-74: a source file the harness serves as source rather than as
@@ -8587,6 +8612,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return {
         body: String(a.id).endsWith(".flow.md")
           ? FLOW_BODY
+          : String(a.id).endsWith(".calm.json")
+          ? CALM_ARCHITECTURE_BODY
           : source !== undefined
             ? source
             : String(a.id).endsWith("EDT-editor.md")

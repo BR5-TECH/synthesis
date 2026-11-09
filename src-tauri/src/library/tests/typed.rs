@@ -216,7 +216,7 @@ fn create_typed_file_impl_requires_a_type_and_a_bare_basename() {
 fn create_typed_file_impl_takes_the_name_verbatim_for_every_built_in_type() {
     // NTA-FR-05, NTA-FR-09 / NTA-FR-06, NTA-FR-11, NTA-FR-12, NTA-FR-13: the name is the complete basename, nothing is
     // appended and no extension is derived from the type; and each of the
-    // nine built-in types creates an empty file carrying exactly that type.
+    // ten built-in types creates an empty file carrying exactly that type.
     let dir = tempfile::TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let cases = [
@@ -225,6 +225,7 @@ fn create_typed_file_impl_takes_the_name_verbatim_for_every_built_in_type() {
         (scanning::ArtifactType::Prompt, "prompt"),
         (scanning::ArtifactType::Spec, "overview.md"),
         (scanning::ArtifactType::Flow, "login.flow"),
+        (scanning::ArtifactType::Architecture, "system.json"),
         (scanning::ArtifactType::Instructions, "Makefile"),
         (scanning::ArtifactType::Scenario, "login.scenario.md"),
         (scanning::ArtifactType::Scratchpad, "notes.tar.gz"),
@@ -237,7 +238,7 @@ fn create_typed_file_impl_takes_the_name_verbatim_for_every_built_in_type() {
         assert_eq!(node.type_source, Some(scanning::TypeSource::Assigned));
         assert_eq!(std::fs::read(root.join(name)).unwrap().len(), 0);
     }
-    assert_eq!(scanning::load_assignments(root).assignments.len(), 9);
+    assert_eq!(scanning::load_assignments(root).assignments.len(), 10);
 }
 
 #[test]
@@ -264,6 +265,7 @@ fn create_typed_file_impl_creates_no_draft_and_reads_no_draft_template() {
         scanning::ArtifactType::Prompt,
         scanning::ArtifactType::Spec,
         scanning::ArtifactType::Flow,
+        scanning::ArtifactType::Architecture,
         scanning::ArtifactType::Instructions,
         scanning::ArtifactType::Scenario,
         scanning::ArtifactType::Scratchpad,
@@ -281,7 +283,7 @@ fn create_typed_file_impl_creates_no_draft_and_reads_no_draft_template() {
             "nothing is written under the drafts root, for any type"
         );
     }
-    assert_eq!(scanning::load_assignments(root).assignments.len(), 9);
+    assert_eq!(scanning::load_assignments(root).assignments.len(), 10);
     // The template is still exactly what it was; nothing read or rewrote it.
     assert_eq!(
         crate::project_settings::load_project_config_from(root).unwrap().draft_template.as_deref(),

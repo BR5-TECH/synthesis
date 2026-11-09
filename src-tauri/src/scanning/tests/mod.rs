@@ -19,14 +19,15 @@ fn entry(rel: &str, is_dir: bool) -> Entry {
     Entry { rel: rel.to_string(), is_dir }
 }
 
-/// The nine built-in types, so a variant added later fails to compile here
+/// The ten built-in types, so a variant added later fails to compile here
 /// rather than quietly escaping the checks below.
-const EVERY_TYPE: [ArtifactType; 9] = [
+const EVERY_TYPE: [ArtifactType; 10] = [
     ArtifactType::Skill,
     ArtifactType::Agent,
     ArtifactType::Prompt,
     ArtifactType::Spec,
     ArtifactType::Flow,
+    ArtifactType::Architecture,
     ArtifactType::Instructions,
     ArtifactType::Scenario,
     ArtifactType::Scratchpad,
@@ -70,6 +71,7 @@ fn project_with_synthesis() -> TempDir {
     tmp
 }
 
+mod architecture;
 mod assignments;
 mod change_paths;
 mod classification;

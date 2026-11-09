@@ -76,13 +76,17 @@ export const DIAGRAM_TEMPLATES: readonly DiagramTemplate[] = (() => {
  * so the surface records it as one ordinary edit. Returns false when the
  * surface accepts no input.
  */
-export function insertDiagramFence(editor: TiptapEditor, source: string): boolean {
+export function insertDiagramFence(
+  editor: TiptapEditor,
+  source: string,
+  language: string = DIAGRAM_LANGUAGE,
+): boolean {
   if (!editor.isEditable) return false;
   const { state } = editor;
   const codeBlock = state.schema.nodes.codeBlock;
   if (!codeBlock) return false;
   const fence = codeBlock.create(
-    { language: DIAGRAM_LANGUAGE },
+    { language },
     source === "" ? null : state.schema.text(source),
   );
   const { selection } = state;

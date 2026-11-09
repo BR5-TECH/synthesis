@@ -249,3 +249,19 @@ fn pdf_is_written() {
     let (converted, _) = run(text, Format::Pdf, true, &render_ok, dir.path());
     assert!(converted.bytes.starts_with(b"%PDF-"));
 }
+
+fn render_never(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+    panic!("a CALM fence must not reach the diagram renderer");
+}
+
+// DXP-FR-WGLT, DXP-FR-RKJC: a CALM fence stays as a code block with its
+// source. It does not reach the renderer and gives no warning.
+#[test]
+fn a_calm_fence_stays_as_code_with_no_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let text = "```calm\n{ \"nodes\": [] }\n```\n";
+    let (converted, events) = run(text, Format::Docx, false, &render_never, dir.path());
+    assert!(converted.failed_diagrams.is_empty());
+    assert!(!events.iter().any(|(stage, _, total)| matches!(stage, Stage::Diagrams) && *total > 0));
+    assert!(document_xml(&converted.bytes).contains("nodes"));
+}

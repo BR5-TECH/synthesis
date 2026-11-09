@@ -33,24 +33,26 @@ describe("groupHits (SCH-FR-03 / SCH-FR-04 / SCH-FR-16)", () => {
     expect(groups[1].subgroups).toBeUndefined();
   });
 
-  it("SCH-FR-03: the Artifacts subtypes are exactly the built-in types other than Document", () => {
+  it("SCH-FR-03, ASC-FR-02: the Artifacts subtypes are exactly the nine built-in types other than Document", () => {
     resetHitOrdinals();
-    const eight = [
+    const nine = [
       "skill",
       "agent",
       "prompt",
       "spec",
       "flow",
+      "architecture",
       "instructions",
       "scenario",
       "scratchpad",
     ] as const;
     const groups = groupHits(
-      eight.map((subtype, i) =>
+      // Reversed, so the order below comes from the table and not the input.
+      [...nine].reverse().map((subtype, i) =>
         hit({ path: `${subtype}-${i}.md`, group: "artifact", subtype }),
       ),
     );
-    expect(groups[0].subgroups).toHaveLength(8);
+    expect(groups[0].subgroups).toHaveLength(9);
     // In the fixed order of ASC-FR-02, not the order the hits arrived in.
     expect(groups[0].subgroups?.map((s) => s.title)).toEqual([
       "Skill",
@@ -58,6 +60,7 @@ describe("groupHits (SCH-FR-03 / SCH-FR-04 / SCH-FR-16)", () => {
       "Prompt",
       "Spec",
       "Flow",
+      "Architecture",
       "Instructions",
       "Scenario",
       "Scratchpad",
@@ -122,6 +125,19 @@ describe("routeForHit (SCH-FR-09)", () => {
       }),
     );
     expect(route.kind).toBe("editor");
+  });
+
+  it("SCH-FR-09, SCC-FR-08: an Architecture routes to the Editor, not to Flow", () => {
+    const route = routeForHit(
+      hit({
+        path: "system.calm.json",
+        group: "artifact",
+        subtype: "architecture",
+        editContext: "standalone",
+      }),
+    );
+    expect(route.kind).toBe("editor");
+    expect(subtypeOf(route.hit)).toBe("architecture");
   });
 
   it("an artifact in flow context, and a Flow, route to Flow", () => {

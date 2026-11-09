@@ -12,8 +12,8 @@ import type { ArtifactType, SearchGroup, SearchHit } from "./types";
 
 /**
  * SCH-FR-03: the v1 result groups, in render order. Artifacts is split by
- * subtype into exactly the eight built-in artifact types of ASC-FR-02, and the
- * Files group holds matches in files carrying no artifact type.
+ * subtype into exactly the nine built-in artifact types of ASC-FR-02 other than
+ * `doc`, and the Files group holds matches in files carrying no artifact type.
  *
  * `run` and `history` are here because the contract carries them (SCC-FR-09);
  * neither is ever populated in v1, and SCH-FR-04 hides an empty group — so they
@@ -98,7 +98,7 @@ export function groupHits(hits: SearchHit[]): RenderedGroup[] {
     // subtype heading. Rather than dropping it — a result the user can see no
     // trace of is worse than an oddly-grouped one — it gets a trailing bucket.
     // Nothing produces one today: the backend only ever sets `subtype` from the
-    // same eight types (SCC-FR-08), so this is the belt to that braces.
+    // same nine types (SCC-FR-08), so this is the belt to that braces.
     const untyped = sorted.filter(
       (h) => !ARTIFACT_TYPES.some((t) => t.value === h.subtype),
     );

@@ -266,7 +266,7 @@ export function NewTypedArtifactModal({
             <label className="picker-field__label" htmlFor="nta-type">
               Artifact Type
             </label>
-            {/* NTA-FR-06: exactly the eight built-in types (ASC-FR-02) and
+            {/* NTA-FR-06: exactly the ten built-in types (ASC-FR-02) and
                 nothing else. Unlike the New Folder window's own type control
                 (NFW-FR-05) there is no unset entry — this window's whole purpose
                 is to settle the type, so the placeholder below is a prompt to

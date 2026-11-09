@@ -12,11 +12,11 @@ fn document(id: &str, text: &str, plain_text: bool) -> SourceFile {
     }
 }
 
-// BMI-FR-02: there are exactly twelve indexes, and the documents index is one of
-// them.
+// BMI-FR-02: there are exactly thirteen indexes, and the documents index is one
+// of them.
 #[test]
-fn there_are_twelve_indexes_and_documents_is_one() {
-    assert_eq!(IndexId::ALL.len(), 12);
+fn there_are_thirteen_indexes_and_documents_is_one() {
+    assert_eq!(IndexId::ALL.len(), 13);
     assert!(IndexId::ALL.contains(&IndexId::Documents));
     assert_eq!(IndexId::Documents.as_str(), "documents");
     assert_eq!(serde_json::to_value(IndexId::Documents).unwrap(), serde_json::json!("documents"));
@@ -30,6 +30,21 @@ fn a_doc_file_belongs_to_no_artifact_index() {
     use crate::scanning::ArtifactType;
     assert_eq!(IndexId::for_artifact_type(ArtifactType::Doc), None);
     assert_eq!(IndexId::for_artifact_type(ArtifactType::Spec), Some(IndexId::Spec));
+}
+
+// BMI-FR-02, BMI-FR-03, ASC-FR-02: an Architecture file belongs to the
+// `architecture` index, which is one of the thirteen and is fed by the scan.
+#[test]
+fn an_architecture_file_belongs_to_the_architecture_index() {
+    use crate::scanning::ArtifactType;
+    assert_eq!(IndexId::for_artifact_type(ArtifactType::Architecture), Some(IndexId::Architecture));
+    assert!(IndexId::ALL.contains(&IndexId::Architecture));
+    assert_eq!(IndexId::Architecture.as_str(), "architecture");
+    assert_eq!(
+        serde_json::to_value(IndexId::Architecture).unwrap(),
+        serde_json::json!("architecture")
+    );
+    assert!(IndexId::Architecture.is_artifact_index(), "a scan node id");
 }
 
 // BMI-FR-05, BMI-FR-FGGU: a Markdown document is cut at its headings, and a text

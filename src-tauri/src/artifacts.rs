@@ -364,6 +364,26 @@ fn open_artifact_by_id_impl(root: &fs::RootFs, id: &str) -> Result<OpenedArtifac
     })
 }
 
+/// FDL-FR-BDOD: every `flow`-typed artifact of the active worktree, as its id
+/// and its body, in path order. A file that cannot be read is left out.
+pub(crate) fn flow_bodies(root: &fs::RootFs) -> Vec<(String, String)> {
+    fn collect(node: &scanning::TreeNode, out: &mut Vec<String>) {
+        if node.artifact_type == Some(scanning::ArtifactType::Flow) {
+            out.push(node.path.clone());
+        }
+        for child in node.children.iter().flatten() {
+            collect(child, out);
+        }
+    }
+    let mut paths = Vec::new();
+    collect(&scanning::scan(root), &mut paths);
+    paths.sort();
+    paths
+        .into_iter()
+        .filter_map(|path| root.read_text(root.join(&path)).ok().map(|body| (path, body)))
+        .collect()
+}
+
 /// The artifact type the scan resolves for the project-relative `id`, or `None`
 /// for a file carrying none.
 ///

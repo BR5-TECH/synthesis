@@ -218,6 +218,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "load_artifact_contents_by_id",
     "save_artifact_contents",
     "validate_flow_document",
+    "load_flow_delivery_state",
+    "find_flow_items_for_draft",
+    "analyze_flow_overlap",
     // Held project close / application quit (SNV-FR-25 / SNV-FR-26 / EDT-FR-33).
     "close_project",
     "finish_exit",

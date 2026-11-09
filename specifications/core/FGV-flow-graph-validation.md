@@ -21,8 +21,8 @@ The backend authority on what a Flow document is. A Flow is the project's **deli
 12. **FGV-FR-13** A `parentId` naming no item in the document, or naming a `task` or a `defect`, yields a violation of code `dangling_parent`. An item that contains itself through any chain of `parentId` values yields a violation of code `containment_cycle` on each item in the chain.
 13. **FGV-FR-YHFX** An item whose container is not one the hierarchy permits for its kind yields a violation of code `invalid_parent_kind`. The permitted containers are: `deliverable`, the top level; `milestone`, a deliverable; `epic`, a milestone; `feature`, a milestone or an epic; `task`, a feature; `defect`, a feature, an epic, or a milestone.
 14. **FGV-FR-KBLT** An edge between an item and one of its ancestors or descendants yields a violation of code `edge_within_lineage`.
-15. **FGV-FR-PMTY** A set of `blocks` edges that makes a leaf item wait, directly or through other leaves, for itself yields a violation of code `dependency_cycle` on each edge in that set. A leaf waits for every leaf at or under an edge's `from` when the edge's `to` is that leaf or one of its ancestors.
-    - *Why:* A container is done only when its leaves are done, so a cycle through the hierarchy is a deadlock even where no two edges join the same items.
+15. **FGV-FR-PMTY** `blocks` edges that make a leaf wait, directly or through other leaves, for itself yield a violation of code `dependency_cycle` on each of those edges. A leaf waits for every leaf at or under an edge's `from` when the edge's `to` is that leaf or one of its ancestors. A container that holds no leaf counts as a leaf.
+    - *Why:* A container is done only when its leaves are done, and an empty one never is (`FDL-flow-delivery.md` FDL-FR-JYKC), so such a cycle is a deadlock.
 16. **FGV-FR-MZIA** A field present on an item whose kind does not carry it yields a violation of code `field_not_allowed_for_kind`: `draftId` or `footprint` on a container kind, `size` on a `task` or a `defect`, and `due` on any kind but `milestone`. A container kind without `size` yields `shape`.
 17. **FGV-FR-CTFX** Two items whose `draftId` values are equal yield a violation of code `duplicate_draft_link` on the second and each later item.
 18. **FGV-FR-RQEM** A `footprint` entry that is empty, absolute, contains a `..` segment, or repeats an earlier entry of the same item yields a violation of code `invalid_footprint_path`.
@@ -102,11 +102,18 @@ The backend authority on what a Flow document is. A Flow is the project's **deli
         "parentId": "f1",
         "localOnly": true,
         "position": { "x": 220, "y": 60 }
+      },
+      {
+        "id": "x1",
+        "kind": "defect",
+        "name": "Decline message is wrong",
+        "parentId": "m1",
+        "position": { "x": 460, "y": 60 }
       }
     ],
     "edges": [
       { "id": "e1", "from": "t1", "to": "t2", "type": "blocks" },
-      { "id": "e2", "from": "f1", "to": "m1", "type": "relates" }
+      { "id": "e2", "from": "t2", "to": "x1", "type": "relates" }
     ],
     "sync": {
       "tracker": "github",

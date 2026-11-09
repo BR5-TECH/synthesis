@@ -57,30 +57,33 @@ afterEach(cleanup);
 // Rich rendering of a Flow (DFV-FR-33, DFV-FR-17 – DFV-FR-18)
 // ---------------------------------------------------------------------------
 
-describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
-  const FLOW_PATH = "workflows/review.flow";
+describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
+  const FLOW_PATH = "plans/payments.flow";
 
   /** A Flow body from the parts a test cares about. */
   const flow = (doc: {
     name?: string;
-    nodes?: Array<Record<string, unknown>>;
+    items?: Array<Record<string, unknown>>;
     edges?: Array<Record<string, unknown>>;
   }) =>
     `${JSON.stringify(
       {
-        version: 1,
-        name: doc.name ?? "Review",
-        nodes: doc.nodes ?? [],
+        version: 2,
+        name: doc.name ?? "Payments",
+        items: doc.items ?? [],
         edges: doc.edges ?? [],
       },
       null,
       2,
     )}\n`;
 
+  /** A top-level deliverable, so a test needs no hierarchy around it. */
   const node = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
     id,
+    kind: "deliverable",
     name,
     position: { x: 0, y: 0 },
+    size: { width: 760, height: 480 },
     ...extra,
   });
 
@@ -115,47 +118,74 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
       entryEl(title)?.querySelectorAll<HTMLElement>(".diff-flow__fact") ?? [],
     ).map((n) => `${n.dataset.mark}:${n.textContent}`);
 
-  // DFV-FR-33, DFV-FR-17: the whole point — a workflow read as a workflow.
-  it("renders added, removed and changed steps and connections", async () => {
+  // DFV-FR-33, DFV-FR-RGBK, DFV-FR-17: the whole point — a plan read as a plan.
+  it("DFV-FR-33, DFV-FR-RGBK: renders added, removed and changed items and edges", async () => {
     await renderFlow({
       isBinary: false,
       old: flow({
-        nodes: [node("n1", "Collect"), node("n2", "Draft"), node("n3", "Old step")],
-        edges: [{ id: "e1", from: "n1", to: "n2", label: "ok" }],
+        items: [node("n1", "Collect"), node("n2", "Draft"), node("n3", "Old item")],
+        edges: [{ id: "e1", from: "n1", to: "n2", type: "blocks" }],
       }),
       new: flow({
-        nodes: [
-          node("n1", "Collect", { artifactIds: ["prompts/gather.md"] }),
+        items: [
+          node("n1", "Collect", { artifactIds: ["specs/gather.md"] }),
           node("n2", "Draft"),
-          node("n4", "New step"),
+          node("n4", "New item"),
         ],
-        edges: [{ id: "e1", from: "n1", to: "n2", label: "retry" }],
+        edges: [{ id: "e1", from: "n1", to: "n2", type: "relates" }],
       }),
     });
 
-    expect(entryEl("New step")).toHaveAttribute("data-mark", "added");
-    expect(entryEl("Old step")).toHaveAttribute("data-mark", "removed");
+    expect(entryEl("New item")).toHaveAttribute("data-mark", "added");
+    expect(entryEl("Old item")).toHaveAttribute("data-mark", "removed");
     expect(entryEl("Collect")).toHaveAttribute("data-mark", "changed");
-    expect(factsOf("Collect")).toEqual(["added:+Artifactprompts/gather.md"]);
-    // The connection is named by its endpoints and states both labels.
-    expect(entryEl("Collect → Draft")).toHaveAttribute("data-mark", "changed");
-    expect(factsOf("Collect → Draft")).toEqual(["changed:~Labelok → retry"]);
-    // A node nothing happened to is not part of a unified rendering at all.
+    expect(factsOf("Collect")).toEqual(["added:+Referencespecs/gather.md"]);
+    // An item entry names its own kind.
+    expect(entryEl("Collect")?.querySelector(".diff-flow__kind")?.textContent).toBe(
+      "deliverable",
+    );
+    // The edge is named by its endpoints and states both types.
+    expect(entryEl("Collect — Draft")).toHaveAttribute("data-mark", "changed");
+    expect(factsOf("Collect — Draft")).toEqual(["changed:~Typeblocks → relates"]);
+    // An item nothing happened to is not part of a unified rendering at all.
     expect(entryEl("Draft")).toBeUndefined();
+  });
+
+  // DFV-FR-RGBK, DFV-FR-35: each side names the kind its own revision holds.
+  it("DFV-FR-RGBK, DFV-FR-35: a changed kind shows the old kind left and the new kind right", async () => {
+    const milestone = { id: "m1", kind: "milestone", name: "Beta", parentId: "n1", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } };
+    await renderFlow(
+      {
+        isBinary: false,
+        old: flow({
+          items: [node("n1", "Payments"), milestone, { id: "x1", kind: "defect", name: "Bug", parentId: "m1", position: { x: 0, y: 0 } }],
+        }),
+        new: flow({
+          items: [node("n1", "Payments"), milestone, { id: "x1", kind: "feature", name: "Bug", parentId: "m1", position: { x: 0, y: 0 }, size: { width: 400, height: 220 } }],
+        }),
+      },
+      "side_by_side",
+    );
+    const row = Array.from(document.querySelectorAll<HTMLElement>(".diff-sbs__row")).find(
+      (r) => r.textContent?.includes("Bug"),
+    )!;
+    const [left, right] = Array.from(row.querySelectorAll<HTMLElement>(".diff-flow__entry"));
+    expect(left.querySelector(".diff-flow__kind")?.textContent).toBe("defect");
+    expect(right.querySelector(".diff-flow__kind")?.textContent).toBe("feature");
   });
 
   // DFV-FR-17: the resolved artifact type decides, not the extension — a user's
   // assignment overrides the path convention here as it does everywhere else.
-  it("reads a Flow by its resolved type, whatever the file is called", async () => {
+  it("DFV-FR-17: reads a Flow by its resolved type, whatever the file is called", async () => {
     const revisions: FileRevisions = {
       isBinary: false,
-      old: flow({ nodes: [] }),
-      new: flow({ nodes: [node("n1", "Step")] }),
+      old: flow({ items: [] }),
+      new: flow({ items: [node("n1", "Step")] }),
     };
     wireBackend({ revisions, prefs: { diffRenderingMode: "rich" } });
 
     // Assigned `flow` under a name no convention would infer it from.
-    renderDiff(target("workflows/pipeline", uncommitted, "flow"));
+    renderDiff(target("plans/payments", uncommitted, "flow"));
     await waitFor(() => expect(entryEl("Step")).toBeTruthy());
     expect(screen.getByTestId("diff-flow-unified")).toBeInTheDocument();
 
@@ -165,7 +195,7 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     // …and a `.flow` file the user assigned another type is not a Flow. It is
     // not Markdown either, so rich does not apply to it at all.
     wireBackend({ revisions, prefs: { diffRenderingMode: "rich" } });
-    renderDiff(target("workflows/review.flow", uncommitted, "spec"));
+    renderDiff(target("plans/payments.flow", uncommitted, "spec"));
     await awaitDiff();
 
     expect(document.querySelector(".diff-flow")).toBeNull();
@@ -174,7 +204,7 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     }
   });
 
-  it("renders source for a .flow the target carries no resolved type for", async () => {
+  it("DFV-FR-17: renders source for a .flow the target carries no resolved type for", async () => {
     wireBackend({
       revisions: { isBinary: false, old: flow({}), new: flow({ name: "R2" }) },
       prefs: { diffRenderingMode: "rich" },
@@ -190,7 +220,7 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
 
   // DFV-FR-18, DFV-FR-17: rich is offered for a Flow and refused for a file with no
   // reading beyond its text.
-  it("enables the rendering toggles for a Flow and disables them for source code", async () => {
+  it("DFV-FR-18, DFV-FR-17: enables the rendering toggles for a Flow and disables them for source code", async () => {
     await renderFlow({ isBinary: false, old: flow({}), new: flow({ name: "R2" }) });
 
     for (const toggle of within(toolbarGroup("Diff rendering")).getAllByRole("radio")) {
@@ -210,11 +240,11 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
   });
 
   // DFV-FR-34, DFV-FR-31: what each visualization mode shows of the same comparison.
-  it("shows only changes in unified, the whole Flow in final", async () => {
+  it("DFV-FR-34: shows only changes in unified, the whole Flow in final", async () => {
     const revisions: FileRevisions = {
       isBinary: false,
-      old: flow({ nodes: [node("n1", "Kept")] }),
-      new: flow({ nodes: [node("n1", "Kept"), node("n2", "Added")] }),
+      old: flow({ items: [node("n1", "Kept")] }),
+      new: flow({ items: [node("n1", "Kept"), node("n2", "Added")] }),
     };
 
     await renderFlow(revisions, "unified");
@@ -234,12 +264,12 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
 
   // DFV-FR-34, last clause / DFV-FR-31: a Flow the comparison added reads as
   // the Flow it is rather than as a wall of marking.
-  it("marks nothing in final when the comparison added the Flow", async () => {
+  it("DFV-FR-34, DFV-FR-31: marks nothing in final when the comparison added the Flow", async () => {
     await renderFlow(
       {
         isBinary: false,
         old: null,
-        new: flow({ nodes: [node("n1", "First"), node("n2", "Second")] }),
+        new: flow({ items: [node("n1", "First"), node("n2", "Second")] }),
       },
       "final",
     );
@@ -249,13 +279,13 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
   });
 
   // DFV-FR-35, DFV-FR-13: each side states what its own revision holds.
-  it("puts each revision's references on its own side in side-by-side", async () => {
+  it("DFV-FR-35, DFV-FR-13: puts each revision's references on its own side in side-by-side", async () => {
     await renderFlow(
       {
         isBinary: false,
-        old: flow({ nodes: [node("n1", "Step", { artifactIds: ["old.md"] })] }),
+        old: flow({ items: [node("n1", "Step", { artifactIds: ["old.md"] })] }),
         new: flow({
-          nodes: [node("n1", "Step", { artifactIds: ["new.md"] }), node("n2", "Fresh")],
+          items: [node("n1", "Step", { artifactIds: ["new.md"] }), node("n2", "Fresh")],
         }),
       },
       "side_by_side",
@@ -274,7 +304,7 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     expect(right.textContent).toContain("new.md");
     expect(right.textContent).not.toContain("old.md");
 
-    // A node only the new revision has faces inert filler on the left.
+    // An item only the new revision has faces inert filler on the left.
     const freshRow = Array.from(rows).find((r) =>
       r.textContent?.includes("Fresh"),
     ) as HTMLElement;
@@ -283,19 +313,19 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     ).toBeTruthy();
   });
 
-  // DFV-FR-34: Final is the mode that has to name what a step lost, since the
+  // DFV-FR-34: Final is the mode that has to name what an item lost, since the
   // outcome cannot otherwise show it.
-  it("names in final the reference a step dropped and the step that went", async () => {
+  it("DFV-FR-34: names in final the reference an item dropped and the item that went", async () => {
     await renderFlow(
       {
         isBinary: false,
         old: flow({
-          nodes: [
-            node("n1", "Step", { artifactIds: ["dropped.md"], prompt: "was" }),
-            node("n2", "Gone", { prompt: "its prompt" }),
+          items: [
+            node("n1", "Step", { artifactIds: ["dropped.md"], description: "was" }),
+            node("n2", "Gone", { description: "its description" }),
           ],
         }),
-        new: flow({ nodes: [node("n1", "Step")] }),
+        new: flow({ items: [node("n1", "Step")] }),
       },
       "final",
     );
@@ -303,19 +333,19 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     expect(entryEl("Step")).toHaveAttribute("data-mark", "changed");
     // The value is named, not left as a signed blank.
     expect(factsOf("Step")).toEqual([
-      "removed:−Artifactdropped.md",
-      "removed:−Promptwas",
+      "removed:−Descriptionwas",
+      "removed:−Referencedropped.md",
     ]);
-    // …and the step that went is shown in the position it held, with its own.
+    // …and the item that went is shown in the position it held, with its own.
     expect(entryEl("Gone")).toHaveAttribute("data-mark", "removed");
-    expect(factsOf("Gone")).toEqual(["unchanged: Promptits prompt"]);
+    expect(factsOf("Gone")).toEqual(["unchanged: Descriptionits description"]);
   });
 
   // DFV-FR-15 / DFV-FR-27, DFV-FR-18 for a Flow: the two states that are not a graph.
-  it("renders the deleted and binary states rather than a graph", async () => {
+  it("DFV-FR-15, DFV-FR-27, DFV-FR-18: renders the deleted and binary states rather than a graph", async () => {
     // Deleted: Final says so outright, and the other modes render the removal.
     await renderFlow(
-      { isBinary: false, old: flow({ nodes: [node("n1", "Step")] }), new: null },
+      { isBinary: false, old: flow({ items: [node("n1", "Step")] }), new: null },
       "final",
     );
     expect(
@@ -326,7 +356,7 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     resetDiffModes();
     resetAppPreferencesCache();
     await renderFlow(
-      { isBinary: false, old: flow({ nodes: [node("n1", "Step")] }), new: null },
+      { isBinary: false, old: flow({ items: [node("n1", "Step")] }), new: null },
       "side_by_side",
     );
     expect(entryEl("Step")).toHaveAttribute("data-mark", "removed");
@@ -356,7 +386,7 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
   });
 
   // DFV-FR-28, DFV-FR-33, DFV-FR-36: the two states that are not a comparison.
-  it("names a revision it cannot read, and says when only the file moved", async () => {
+  it("DFV-FR-28, DFV-FR-33, DFV-FR-36: names a revision it cannot read, and says when only the file moved", async () => {
     await renderFlow({ isBinary: false, old: "{ not json", new: flow({}) });
 
     expect(
@@ -376,10 +406,23 @@ describe("a Flow read as its graph (DFV-FR-33 – DFV-FR-36)", () => {
     cleanup();
     resetDiffModes();
     resetAppPreferencesCache();
-    // Same graph, different bytes: the file changed and the Flow did not.
+    // DFV-FR-33, FGV-FR-07: a version 1 revision is no plan to compare.
     await renderFlow({
       isBinary: false,
       old: '{"version":1,"name":"R","nodes":[],"edges":[]}',
+      new: flow({ name: "R" }),
+    });
+    expect(
+      document.querySelector('[data-state="error"]')?.textContent,
+    ).toMatch(/could not be read as a Flow: old revision: unknown Flow version 1/);
+
+    cleanup();
+    resetDiffModes();
+    resetAppPreferencesCache();
+    // Same plan, different bytes: the file changed and the Flow did not.
+    await renderFlow({
+      isBinary: false,
+      old: '{"version":2,"name":"R","items":[],"edges":[]}',
       new: flow({ name: "R" }),
     });
 

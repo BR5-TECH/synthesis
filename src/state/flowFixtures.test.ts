@@ -1,59 +1,35 @@
 /**
- * FGV-FR-08, FLO-FR-03 / FGV-FR-01: the two implementations of the Flow schema, read
- * against one set of documents.
+ * FLO-FR-03, FGV-FR-01, FLO NFR on round-trips: the committed Flow fixtures,
+ * read by this module's reader and written back by its writer.
  *
- * `../core/FGV-flow-graph-validation.md` defines the shape and the Rust
- * validator judges it; this module serializes to it and deserializes from it.
- * Nothing but a shared body makes the two agree, so every Flow committed to this
- * repository is swept from both sides: the Rust suite asserts each one
- * validates, and this asserts each one parses and re-serializes to itself byte
- * for byte.
- *
- * Byte-for-byte is the strong half of the claim. A file that merely parses
- * proves the reader accepts it; a file that comes back identical proves the
- * WRITER would have produced exactly it — which is what makes the Rust sweep a
- * statement about documents the editor emits rather than about hand-written
- * ones.
+ * A file that only parses proves that the reader accepts it. A file that comes
+ * back byte for byte proves that the writer would make exactly that file.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseFlowDocument, serializeFlowDocument } from "./flowDocument";
+import { ITEM_KINDS, parseFlowDocument, serializeFlowDocument } from "./flowDocument";
 
-/**
- * `resources/flows` holds this project's own workflows; `fixtures/flows` holds
- * the shapes they do not happen to use. Both are swept by the Rust test of the
- * same name, and a directory added to one list belongs in the other.
- */
-const DIRECTORIES = ["resources/flows", "fixtures/flows"];
+/** Version 2 Flows that exist to be read by both sides of the schema. */
+const DIRECTORY = "fixtures/flows";
 
 function bodies(): { path: string; body: string }[] {
-  const out: { path: string; body: string }[] = [];
-  for (const dir of DIRECTORIES) {
-    for (const name of readdirSync(dir)) {
-      if (!name.endsWith(".flow")) continue;
-      const path = join(dir, name);
-      out.push({ path, body: readFileSync(path, "utf8") });
-    }
-  }
-  return out;
+  return readdirSync(DIRECTORY)
+    .filter((n) => n.endsWith(".flow"))
+    .map((n) => {
+      const path = join(DIRECTORY, n);
+      return { path, body: readFileSync(path, "utf8") };
+    });
 }
 
-describe("every Flow committed to this repository (FGV-FR-01, FGV-FR-08, FLO-FR-03)", () => {
-  it("is a directory this test actually found files in", () => {
-    // A sweep over an empty list passes silently, which would make the drift
-    // guard read as green while guarding nothing.
+describe("every committed Flow fixture (FGV-FR-01, FLO-FR-03)", () => {
+  it("FGV-FR-01: the sweep finds files", () => {
+    // A sweep over an empty list passes and guards nothing.
     expect(bodies().length).toBeGreaterThan(0);
-    for (const dir of DIRECTORIES) {
-      expect(
-        readdirSync(dir).filter((n) => n.endsWith(".flow")).length,
-        `no Flow in ${dir}`,
-      ).toBeGreaterThan(0);
-    }
   });
 
-  it("parses, and re-serializes to itself byte for byte", () => {
+  it("FLO-FR-03, FLO NFR: each parses, and re-serializes to itself byte for byte", () => {
     for (const { path, body } of bodies()) {
       const parsed = parseFlowDocument(body);
       expect(parsed.ok ? "" : parsed.error, path).toBe("");
@@ -62,24 +38,32 @@ describe("every Flow committed to this repository (FGV-FR-01, FGV-FR-08, FLO-FR-
     }
   });
 
-  // FLO-FR-37: the loop half of the schema — a loop's own artifact references
-  // and pass bound, a nested loop, members connected among themselves, and the
-  // graph reaching the container rather than its insides (FLO-FR-39).
-  it("covers a loop carrying every field a loop can carry", () => {
-    const parsed = parseFlowDocument(
-      readFileSync("fixtures/flows/Loops.flow", "utf8"),
-    );
-    if (!parsed.ok) throw new Error(parsed.error);
-    const doc = parsed.doc;
-
-    const outer = doc.loops.find((l) => l.id === "l1");
-    expect(outer?.artifactIds).toHaveLength(1);
-    expect(outer?.maxPasses).toBe(5);
-    expect(doc.loops.some((l) => l.parentId === "l1")).toBe(true);
-    expect(doc.nodes.some((n) => n.parentId === "l1")).toBe(true);
-    // An edge to the container and an edge among its members, which is the
-    // whole of what FLO-FR-40 permits.
-    expect(doc.edges.some((e) => e.to === "l1")).toBe(true);
-    expect(doc.edges.some((e) => e.from === "n2" && e.to === "n3")).toBe(true);
+  it("FGV-FR-01: the fixtures use every field of the schema", () => {
+    const docs = bodies().map(({ body }) => {
+      const r = parseFlowDocument(body);
+      if (!r.ok) throw new Error(r.error);
+      return r.doc;
+    });
+    const items = docs.flatMap((d) => d.items);
+    expect(new Set(items.map((i) => i.kind))).toEqual(new Set(ITEM_KINDS));
+    for (const field of [
+      "description",
+      "artifactIds",
+      "parentId",
+      "localOnly",
+      "draftId",
+      "footprint",
+      "due",
+      "size",
+    ] as const) {
+      expect(items.some((i) => i[field] !== undefined), field).toBe(true);
+    }
+    const edges = docs.flatMap((d) => d.edges);
+    expect(new Set(edges.map((e) => e.type))).toEqual(new Set(["blocks", "relates"]));
+    expect(docs.some((d) => d.references.length > 0 && d.description)).toBe(true);
+    const links = docs.flatMap((d) => d.sync?.links ?? []);
+    expect(new Set(links.map((l) => l.ref.kind))).toEqual(new Set(["issue", "milestone"]));
+    expect(links.some((l) => l.base.parent)).toBe(true);
+    expect(links.some((l) => (l.base.blockedBy ?? []).length > 0)).toBe(true);
   });
 });

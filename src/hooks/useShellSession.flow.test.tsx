@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { useShellSession } from "./useShellSession";
 import { FlowSessionStore } from "../state/flowSessions";
-import { addNode } from "../state/flowDocument";
+import { addItem, docOrUnchanged } from "../state/flowDocument";
 import type { WorktreeContext } from "../types";
 import { resetPanelReveals } from "../state/panelReveal";
 import { resetDraftProposals } from "../state/draftProposals";
@@ -129,7 +129,7 @@ describe("Flow tab lifecycle (TAB-FR-12 / FLO-FR-28)", () => {
     });
     act(() =>
       result.current.flows.applyEdit(FLOW_ID, (d) =>
-        addNode(d, { x: 120, y: 80 }),
+        docOrUnchanged(d, addItem(d, "deliverable", { x: 120, y: 80 })),
       ),
     );
     return result;
@@ -194,7 +194,7 @@ describe("Flow tab lifecycle (TAB-FR-12 / FLO-FR-28)", () => {
   // TAB-FR-12 / FLO-FR-27, FLO-FR-28: the close writes first, and retains nothing.
   it("writes the Flow on close and retains nothing, so a reopen loads from disk", async () => {
     const result = await openDirtyFlow();
-    expect(result.current.flows.get(FLOW_ID)?.doc?.nodes).toHaveLength(2);
+    expect(result.current.flows.get(FLOW_ID)?.doc?.items).toHaveLength(2);
 
     await act(async () => {
       await result.current.closeTab(flowTabId);
@@ -216,7 +216,7 @@ describe("Flow tab lifecycle (TAB-FR-12 / FLO-FR-28)", () => {
     });
     const reopened = result.current.flows.get(FLOW_ID)!;
     expect(reopened.dirty).toBe(false);
-    expect(reopened.doc?.nodes).toHaveLength(1);
+    expect(reopened.doc?.items).toHaveLength(1);
   });
 
   // TAB-FR-13: a failed write refuses the close. Driven through a real store

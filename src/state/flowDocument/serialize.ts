@@ -1,59 +1,102 @@
-/** Serialization (FLO NFR: stable key order and formatting). */
-
-import type { FlowDocument } from "./types";
-
 /**
- * Serialize a graph back to the file body.
+ * Serialization of a Flow document (FLO NFR: stable key order and formatting).
  *
- * Fields are written in a fixed order and absent optionals are omitted rather
- * than emitted as `null`, so a Flow that was opened and not edited round-trips
- * byte-for-byte and a Flow's Git history shows only what the author actually
- * changed (FLO NFR). `JSON.stringify` preserves insertion order for string
- * keys, so building each object in the canonical order is what pins it — never
- * rely on the order the parsed document happened to arrive in.
+ * Each object is built in the key order of the backend model
+ * (`src-tauri/src/flow_validation/model.rs`), and an absent optional field is
+ * left out rather than written as `null` or as an empty list. So a Flow that was
+ * opened and not edited writes back byte for byte, and its Git history shows
+ * only what the author changed. `JSON.stringify` keeps the insertion order of
+ * string keys, so the order in which each object is built is the order written.
  */
+
+import type {
+  FlowDocument,
+  FlowEdge,
+  FlowItem,
+  FlowSync,
+  SyncBase,
+  TrackerRef,
+} from "./types";
+
+function item(i: FlowItem): Record<string, unknown> {
+  return {
+    id: i.id,
+    kind: i.kind,
+    name: i.name,
+    ...(i.description !== undefined ? { description: i.description } : {}),
+    ...(i.artifactIds && i.artifactIds.length > 0
+      ? { artifactIds: [...i.artifactIds] }
+      : {}),
+    ...(i.parentId !== undefined ? { parentId: i.parentId } : {}),
+    ...(i.localOnly !== undefined ? { localOnly: i.localOnly } : {}),
+    ...(i.draftId !== undefined ? { draftId: i.draftId } : {}),
+    ...(i.footprint && i.footprint.length > 0
+      ? { footprint: [...i.footprint] }
+      : {}),
+    ...(i.due !== undefined ? { due: i.due } : {}),
+    position: { x: i.position.x, y: i.position.y },
+    ...(i.size !== undefined
+      ? { size: { width: i.size.width, height: i.size.height } }
+      : {}),
+  };
+}
+
+function edge(e: FlowEdge): Record<string, unknown> {
+  return { id: e.id, from: e.from, to: e.to, type: e.type };
+}
+
+function ref(r: TrackerRef): Record<string, unknown> {
+  return {
+    kind: r.kind,
+    host: r.host,
+    owner: r.owner,
+    repo: r.repo,
+    number: r.number,
+    url: r.url,
+  };
+}
+
+/** A base keeps `null` where it holds `null`; only an absent field is left out. */
+function base(b: SyncBase): Record<string, unknown> {
+  return {
+    name: b.name,
+    description: b.description,
+    state: b.state,
+    ...(b.type !== undefined ? { type: b.type } : {}),
+    ...(b.parent !== undefined
+      ? { parent: b.parent === null ? null : ref(b.parent) }
+      : {}),
+    ...(b.milestone !== undefined ? { milestone: b.milestone } : {}),
+    ...(b.blockedBy !== undefined ? { blockedBy: b.blockedBy.map(ref) } : {}),
+    ...(b.due !== undefined ? { due: b.due } : {}),
+  };
+}
+
+function sync(s: FlowSync): Record<string, unknown> {
+  return {
+    tracker: s.tracker,
+    links: s.links.map((l) => ({
+      itemId: l.itemId,
+      ref: ref(l.ref),
+      base: base(l.base),
+    })),
+  };
+}
+
+/** FLO-FR-03: the file body of a plan. */
 export function serializeFlowDocument(doc: FlowDocument): string {
   const out = {
     version: doc.version,
-    // FLO-FR-25: always written, empty or not — a Flow's name is a field it has,
-    // and a file that omits it when unset would read as one that predates it.
+    // FLO-FR-25: always written, empty or not.
     name: doc.name,
     ...(doc.description ? { description: doc.description } : {}),
-    // FLO-FR-37: absent from the file on a Flow holding no loop, so a Flow
-    // authored before loops existed round-trips byte-for-byte.
-    ...(doc.loops.length > 0
-      ? {
-          loops: doc.loops.map((l) => ({
-            id: l.id,
-            name: l.name,
-            ...(l.artifactIds && l.artifactIds.length > 0
-              ? { artifactIds: l.artifactIds }
-              : {}),
-            ...(l.maxPasses !== undefined ? { maxPasses: l.maxPasses } : {}),
-            ...(l.parentId !== undefined ? { parentId: l.parentId } : {}),
-            position: { x: l.position.x, y: l.position.y },
-            size: { width: l.size.width, height: l.size.height },
-          })),
-        }
-      : {}),
-    nodes: doc.nodes.map((n) => ({
-      id: n.id,
-      name: n.name,
-      ...(n.artifactIds && n.artifactIds.length > 0
-        ? { artifactIds: n.artifactIds }
-        : {}),
-      ...(n.prompt !== undefined ? { prompt: n.prompt } : {}),
-      ...(n.parentId !== undefined ? { parentId: n.parentId } : {}),
-      position: { x: n.position.x, y: n.position.y },
-    })),
-    edges: doc.edges.map((e) => ({
-      id: e.id,
-      from: e.from,
-      to: e.to,
-      ...(e.label !== undefined ? { label: e.label } : {}),
-    })),
+    // FLO-FR-YDWT: absent from the file when the Flow has no reference.
+    ...(doc.references.length > 0 ? { references: [...doc.references] } : {}),
+    items: doc.items.map(item),
+    edges: doc.edges.map(edge),
+    ...(doc.sync !== undefined ? { sync: sync(doc.sync) } : {}),
   };
-  // A trailing newline: the file is committed and diffable, and a
-  // newline-terminated one does not show up as "\ No newline at end of file".
+  // A trailing newline: the file is committed, and Git shows a file without
+  // one as "\ No newline at end of file".
   return `${JSON.stringify(out, null, 2)}\n`;
 }

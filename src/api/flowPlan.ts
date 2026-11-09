@@ -55,4 +55,4 @@ export const getFlowTrackerSettings = () =>
 
 /** FTS-FR-ALOJ: `"set flow tracker settings (deliverable type, epic type, feature type, task type, defect type)"`. */
 export const setFlowTrackerSettings = (settings: FlowTrackerSettings) =>
-  invoke<FlowTrackerSettings>("set_flow_tracker_settings", settings);
+  invoke<FlowTrackerSettings>("set_flow_tracker_settings", { ...settings });

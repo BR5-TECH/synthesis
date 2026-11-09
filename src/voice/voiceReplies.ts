@@ -11,6 +11,7 @@ import { getVoiceState, patchVoiceState } from "../state/voiceSession";
 import type { Discussion, PendingQuestion, Participant } from "../types";
 import { pausePlayback, resumePlayback } from "./playback";
 import { cancelFiller, resetVoiceFillerForTest, tryFiller } from "./voiceFiller";
+import { cancelProgress, resetVoiceProgressForTest, tryProgress } from "./voiceProgress";
 import {
   commentSpeech,
   dropReply,
@@ -19,6 +20,7 @@ import {
   speakAs,
   type Speech,
 } from "./voiceSpeech";
+import { isMutedReply, resetGroupSpeechForTest } from "../state/groupSpeech";
 import { questionSetOf } from "../state/questionSets";
 import { questionSpeech, type AnswerTarget } from "./voiceQuestions";
 import { hasUnsettledUtterance } from "./voiceUtterances";
@@ -58,6 +60,7 @@ export function forgetSpokenQuestion(): void {
 export function stopSpeech(): void {
   pendingReply = null;
   cancelFiller("stop");
+  cancelProgress("stop");
   dropReply();
 }
 
@@ -87,8 +90,10 @@ export function noteDiscussionChanged(discussion: Discussion): void {
   fresh.forEach((c) => baseline.add(c.id));
   // VOM-FR-POBZ: a filler never speaks after the reply arrived.
   if (fresh.some((c) => c.author.kind === "agent")) cancelFiller("reply");
+  // VOM-FR-QMBN: a reply of a tagged agent of a group stays text until the Synthesis.
+  const speakable = fresh.filter((c) => !isMutedReply(discussion.id, c));
   if (state.responseMode !== "voice") return;
-  const newest = fresh.map(commentSpeech).filter((s) => s !== null).pop();
+  const newest = speakable.map(commentSpeech).filter((s) => s !== null).pop();
   if (!newest) return;
   if (newest.text === "") logDebug(["frontend", "ai"], "an agent comment has nothing to speak", {});
   speakOrWait(newest, state.activeKey);
@@ -173,8 +178,10 @@ export function afterSettle(): void {
       patchVoiceState({ playbackPaused: false });
     }
   }
-  // VOM-FR-LKXN: a due filler waits until nothing is left to settle.
+  // VOM-FR-LKXN, VOM-FR-RUDX: a due filler and a due update wait until nothing
+  // is left to settle.
   tryFiller();
+  tryProgress();
 }
 
 export function resetVoiceRepliesForTest(): void {
@@ -185,4 +192,6 @@ export function resetVoiceRepliesForTest(): void {
   latest = null;
   resetVoiceSpeechForTest();
   resetVoiceFillerForTest();
+  resetVoiceProgressForTest();
+  resetGroupSpeechForTest();
 }

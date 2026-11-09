@@ -321,6 +321,9 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // AGC-FR-QEOF: the translation prompt of a voice transcript, compiled into
     // the translation module.
     expected.push("translate-transcript.md".to_string());
+    // AGC-FR-YMFC: the prompt of a voice progress update, compiled into the
+    // progress update module.
+    expected.push("voice-progress-update.md".to_string());
     // AGC-FR-WPCZ, CVL-FR-OGXZ, CVL-FR-XIBC, AGC-FR-MWYP: the four prompts of an
     // agent group, compiled into the group module on the same terms.
     for group_prompt in

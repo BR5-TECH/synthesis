@@ -433,6 +433,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "end_speech_turn",
     "cancel_agent_turn",
     "translate_voice_transcript",
+    "write_voice_progress_update",
     "list_agent_turns",
     "estimate_discussion_context",
     "list_recoverable_agent_turn_failures",

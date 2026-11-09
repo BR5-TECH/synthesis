@@ -630,6 +630,7 @@ pub fn run() {
             agent_conversations::end_speech_turn,
             agent_conversations::cancel_agent_turn,
             agent_conversations::translate_voice_transcript,
+            agent_conversations::write_voice_progress_update,
             agent_conversations::list_agent_turns,
             agent_conversations::estimate_discussion_context,
             agent_conversations::list_recoverable_agent_turn_failures,

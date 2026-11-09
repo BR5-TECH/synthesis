@@ -47,7 +47,15 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
         // deadline open; it is the same owned-thread pattern the model calls
         // use, for the same reason — a nested runtime inside a Tokio worker
         // panics at runtime.
-        block_on_with_timeout(async move { Ok(tool.execute(arguments).await) }, remaining)
+        // AGC-FR-WBZN: the advisors tool is bound by the join timeout and by the
+        // cancel of the turn, and not by the whole-turn deadline.
+        let remaining = if is_advisors_call(&name) { ADVISORS_CALL_LIMIT } else { remaining };
+        let outcome =
+            block_on_with_timeout(async move { Ok(tool.execute(arguments).await) }, remaining);
+        if is_advisors_call(&name) {
+            turns.restart_deadline(app, &plan.turn_id);
+        }
+        outcome
     };
 
     match outcome {

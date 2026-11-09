@@ -1,6 +1,7 @@
 /** What the VAD controller tests share (`src/voice/voiceControllerVad*.test.ts`). */
 import { afterEach, beforeEach, expect, vi } from "vitest";
 
+import { refreshAgentGroupSwitch, resetAgentGroupSwitch } from "../state/agentGroupSwitch";
 import { clearAllDiscussionSessions } from "../state/discussionSession";
 import { getVoiceState, patchVoiceState, resetVoiceStateForTest } from "../state/voiceSession";
 import type { Comment, Discussion, VoiceActivityChange } from "../types";
@@ -61,6 +62,12 @@ export function handle(over: Partial<VoiceComposerHandle> = {}) {
     voiceOf: () => "cedar",
     ...over,
   } satisfies VoiceComposerHandle;
+}
+
+/** CTA-FR-UGBA: the agent group switch of the project, as the shell reads it. */
+export async function setGroupSwitch(enabled: boolean): Promise<void> {
+  api.loadAgentGroupSettings.mockImplementation(async () => ({ enabled, joinTimeoutSecs: 60 }));
+  await refreshAgentGroupSwitch();
 }
 
 export function deferred<T>() {
@@ -150,6 +157,14 @@ export function useVadBench(): void {
     vi.useFakeTimers();
     vi.clearAllMocks();
     vi.setSystemTime(new Date("2026-02-01T00:00:00Z"));
+    resetAgentGroupSwitch();
+    api.loadAgentGroupSettings.mockImplementation(async () => ({
+      enabled: false,
+      joinTimeoutSecs: 60,
+    }));
+    api.writeVoiceProgressUpdate.mockImplementation(async () => ({
+      text: "Checking existing specifications.",
+    }));
     resetVoiceStateForTest();
     resetVoiceControllerForTest();
     clearAllDiscussionSessions();

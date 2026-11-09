@@ -17,6 +17,7 @@ import {
 import { logDebug, logInfo, logWarn } from "../logging";
 import { getDiscussionSession, setComposerBody, upsertDiscussionTurn } from "../state/discussionSession";
 import { originFor } from "../state/discussionOrigin";
+import { agentGroupSwitchOn } from "../state/agentGroupSwitch";
 import {
   dropLivePart,
   noteLiveChunk,
@@ -32,6 +33,7 @@ import { postingHandleOf, type PostOutcome } from "./voiceHandles";
 import { canRetry, errorCode } from "./voiceMessages";
 import { questionBlockOf, type AnswerTarget } from "./voiceQuestions";
 import { noteFillerSettled } from "./voiceFiller";
+import { noteProgressSettled } from "./voiceProgress";
 import { afterSettle, latestVoiceDiscussion, noteAnswered } from "./voiceReplies";
 import { translateSpoken } from "./voiceTranslation";
 
@@ -53,6 +55,15 @@ export interface Utterance {
   pendingChunks: number;
   /** VOM-FR-RNBS: "dispatch speech turn" was called. */
   speechStarted: boolean;
+  /**
+   * VOM-FR-SWHT: the first chunk decided how the utterance dispatches. `early`
+   * has a speech turn that the chunks steer. `deferred` has none, because the
+   * first chunk reached several agents with the switch on, and the comment
+   * dispatches as a typed comment does.
+   */
+  speechMode: "undecided" | "early" | "deferred";
+  /** VOM-FR-ETCK: the text of the chunks so far, for the agents that it reaches. */
+  heard: string;
   /** VOM-FR-MVLA, VOM-FR-REJN: "end speech turn" was called. */
   speechEnded: boolean;
   /** VOM-FR-JBJI: voice mode ended, so the speech reaches no agent now. */
@@ -131,6 +142,8 @@ export function beginUtterance(
     finishing: false,
     pendingChunks: 0,
     speechStarted: false,
+    speechMode: "undecided",
+    heard: "",
     speechEnded: false,
     detached: false,
     reached: [],
@@ -153,14 +166,27 @@ function chainSpeech(u: Utterance, call: () => Promise<unknown>): void {
   });
 }
 
-/** VOM-FR-RNBS: the first chunk starts the speech turn of each agent it reaches. */
+/**
+ * VOM-FR-RNBS, VOM-FR-SWHT: the first chunk starts the speech turn of each agent
+ * it reaches. With the agent group switch on and several agents reached, no
+ * speech turn starts for the utterance.
+ */
 function startSpeech(u: Utterance, text: string): void {
   const handle = postingHandleOf(u.key);
   const discussion = latestVoiceDiscussion();
   if (!handle?.targets || discussion === null || discussion.id !== u.key) return;
-  u.speechStarted = true;
   const tagged = handle.tagged(text);
   const targets = handle.targets(tagged);
+  u.heard = tagged;
+  if (agentGroupSwitchOn() && targets.length > 1) {
+    u.speechMode = "deferred";
+    logInfo(["frontend", "ai"], "a speech waits for its comment, because it reaches several agents", {
+      agents: targets.length,
+    });
+    return;
+  }
+  u.speechMode = "early";
+  u.speechStarted = true;
   u.reached = targets;
   const origin = originFor(discussion);
   logInfo(["frontend", "ai"], "a speech turn starts", { agents: targets.length });
@@ -183,8 +209,21 @@ function startSpeech(u: Utterance, text: string): void {
   );
 }
 
-/** VOM-FR-OLFT: a later chunk steers the turns of the speech. */
+/**
+ * VOM-FR-OLFT, VOM-FR-ETCK: a later chunk steers the turns of the speech. With
+ * the switch on, a chunk that makes the text reach several agents cancels the
+ * early turn instead, and the comment dispatches as a typed comment does.
+ */
 function steerSpeech(u: Utterance, text: string): void {
+  u.heard = `${u.heard} ${text}`.trim();
+  const handle = postingHandleOf(u.key);
+  if (agentGroupSwitchOn() && handle?.targets && handle.targets(u.heard).length > 1) {
+    u.speechMode = "deferred";
+    u.reached = [];
+    logInfo(["frontend", "ai"], "a later chunk added a tag, so the early speech turn ends", {});
+    endSpeech(u, null);
+    return;
+  }
   chainSpeech(u, () => steerSpeechTurn(u.captureId, text));
 }
 
@@ -220,8 +259,8 @@ export function noteChunk(change: VoiceChunkChange): void {
       // An empty transcript also takes the place of the live text of its chunk.
       noteLiveChunk(u.captureId, change.index, text);
       if (text !== "") {
-        if (u.speechStarted) steerSpeech(u, text);
-        else startSpeech(u, text);
+        if (u.speechMode === "early") steerSpeech(u, text);
+        else if (u.speechMode === "undecided") startSpeech(u, text);
       }
       break;
     }
@@ -367,6 +406,7 @@ export function settleUtterance(u: Utterance, delivery: Delivery | null): void {
   dropLivePart(u.captureId);
   if (delivery?.answered) noteAnswered();
   noteFillerSettled(u.captureId, delivery?.answered === true);
+  noteProgressSettled(u.captureId, delivery?.answered === true);
   u.done();
   syncTranscribing();
   afterSettle();

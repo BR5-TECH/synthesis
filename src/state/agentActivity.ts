@@ -54,6 +54,7 @@ export const TOOL_ACTIVITY_STATUS: Readonly<Record<string, string>> = {
   list_skills: "Listing available skills…",
   load_skill: "Loading skill instructions…",
   ask_user_comment: "Asking a clarifying question…",
+  ask_advisors: "Asking the advisors…",
   ask_discussion_questions: "Preparing questions for you…",
   propose_draft_changes: "Preparing draft changes…",
   propose_prompt_changes: "Preparing prompt changes…",
@@ -93,6 +94,8 @@ export function activityStatus(
   turn: Pick<AgentTurn, "activeToolCalls" | "speechId">,
 ): string {
   const latest = latestActiveCall(turn.activeToolCalls);
+  // CTA-FR-HPXE: a Meta turn whose advisors tool waits for the end of the speech.
+  if (latest?.tool === "ask_advisors" && turn.speechId) return WAITING_FOR_SPEECH;
   // CTA-FR-QXXR: a call that an advisor requested names the advisor.
   if (latest) {
     const status = toolActivityStatus(latest.tool);

@@ -100,7 +100,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             log_fields! { "turnId" => &plan.turn_id, "concurrency" => turns.concurrency() },
         );
     }
-    let _permit = turns.acquire();
+    let _slot = turns.take_slot(&plan.turn_id);
     check_cancelled(plan)?;
 
     // AGC-FR-24: the turn holds a slot, so it is running and is reported. The
@@ -254,6 +254,11 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // registered stops at its next round.
         expire_idle_speeches(app);
         check_cancelled(plan)?;
+        // AGC-FR-HVQD: a turn that freed its slot for a call of the advisors tool
+        // takes a slot again before its next model call.
+        if turns.ensure_slot(&plan.turn_id) {
+            check_cancelled(plan)?;
+        }
         // CVL-FR-EZKC / CVL-FR-YNOE: the steering messages the turn took go into
         // the exchange before the next call. Before the last call under the
         // logical bound, the turn first stops taking more.
@@ -614,7 +619,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // AGC-FR-WNQE: the tool list of this turn goes in the append of the answer.
         let content = comments::AnswerContent {
             body: answer,
-            attachments: plan.attachments.clone(),
+            attachments: reply_attachments(plan),
             tool_calls: saved_tool_calls(&turns.tool_calls_of(&plan.turn_id)),
         };
         let appended = deliver_with(plan.roots.borrowed(), &plan.origin, &plan.author, content);

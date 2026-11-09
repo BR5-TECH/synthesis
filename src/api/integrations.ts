@@ -443,6 +443,20 @@ export const steerSpeechTurn = (speechId: string, text: string) =>
 export const endSpeechTurn = (speechId: string, commentId: string | null) =>
   invoke<AgentTurn[]>("end_speech_turn", { speechId, commentId });
 
+/** AGC-FR-YMFC: one active tool call of the running turns of an utterance. */
+export interface ProgressActivity {
+  tool: string;
+  advisor?: string;
+}
+
+/**
+ * AGC-FR-YMFC, AGC-FR-PGSJ: the short phrase of a voice progress update, up to
+ * 5 words, in `spokenLanguage`. Rejects `provider_unconfigured` or
+ * `progress_update_failed`.
+ */
+export const writeVoiceProgressUpdate = (activity: ProgressActivity[], spokenLanguage: string) =>
+  invoke<{ text: string }>("write_voice_progress_update", { activity, spokenLanguage });
+
 /** AGC-FR-QEOF: the transcript of a voice comment, in English. */
 /** AGC-FR-QEOF, AGC-FR-WSKP: the text in the document language of `target`. */
 export const translateVoiceTranscript = (

@@ -3,7 +3,7 @@ name = "synthesis"
 version = "0.1.0"
 description = "Synthesis"
 authors = ["Vyacheslav Kokorin <raver119@gmail.com>"]
-license = "Apache-2.0"
+license = "BUSL-1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

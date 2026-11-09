@@ -216,4 +216,11 @@ The repository contains two Claude Code skills for this process, in `.claude/ski
 
 ## License
 
-Synthesis is licensed under the [Apache License 2.0](LICENSE).
+Synthesis is licensed under the [Business Source License 1.1](LICENSE).
+
+- You can use Synthesis to develop any software, also commercial software. The software that you make with Synthesis is yours, and the license does not apply to it.
+- You can read, change, and share the source code of Synthesis.
+- You cannot sell Synthesis, or a changed version of it, as a product or as a service.
+- Four years after each version is published, that version becomes available under the Apache License 2.0.
+
+Versions that were published before this change stay available under the Apache License 2.0.

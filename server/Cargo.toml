@@ -7,7 +7,7 @@ edition = "2021"
 # dependency versions that compile under it (BMS-FR-24).
 rust-version = "1.88"
 description = "Standalone Synthesis backend microservice: Axum over Tokio, the application service and the relay boundary"
-license = "Apache-2.0"
+license = "BUSL-1.1"
 publish = false
 
 # BMS-FR-03: one library target holds every layer, and the binary holds the

@@ -13,7 +13,7 @@ draftTemplate = """
 
 - """
 graduationConcurrencyLimit = 2
-graduationPassBudget = 3
+graduationPassBudget = 4
 lineEndings = "lf"
 
 [dockerImages.claude_code]

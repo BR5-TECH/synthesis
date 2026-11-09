@@ -10,7 +10,6 @@ import {
 import { onNewWorktreeRequested } from "../../state/newWorktreeRequests";
 import {
   mainGuard,
-  protectedRefusal,
   scriptedReads,
   unconfirmedRefusal,
 } from "../../test/mainBranchWriteFixtures";
@@ -145,7 +144,7 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   });
 
-  it("MBW-FR-JZME, MBW-FR-GYVD: New worktree leaves focus in the New worktree dialog, and Close gives it back to the opener", async () => {
+  it("MBW-FR-JZME, MBW-FR-GYVD: New worktree leaves focus in the New worktree dialog, and Cancel gives it back to the opener", async () => {
     scriptedReads(mainGuard({ protection: "protected" }));
     render(
       <>
@@ -161,7 +160,7 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     const open = async () => {
       opener.focus();
       const run = runMainBranchWrite("create_draft", vi.fn(async () => undefined));
-      await screen.findByRole("alertdialog");
+      await screen.findByRole("dialog");
       return { run };
     };
 
@@ -170,20 +169,20 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     await act(async () => {
       await first;
     });
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(branchField).toHaveFocus();
 
     const { run: second } = await open();
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await act(async () => {
       await second;
     });
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(opener).toHaveFocus();
     stop();
   });
 
-  it("MBW-FR-JZME, MBW-FR-PJTG: a protected branch shows the hard block with no confirm action, and New worktree opens the New worktree dialog", async () => {
+  it("MBW-FR-JZME, MBW-FR-RXAR, MBW-FR-PJTG: a protected branch shows the confirmation with the GitHub line, keeps Confirm and Cancel, and offers New worktree as a secondary action", async () => {
     scriptedReads(mainGuard({ protection: "protected" }));
     host();
     const requested = vi.fn();
@@ -193,10 +192,12 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     const run = runMainBranchWrite("push", write).then((value) => {
       result = value;
     });
-    const block = await screen.findByRole("alertdialog");
-    expect(block).toHaveTextContent("GitHub protects main. Work reaches it through a pull request.");
-    expect(screen.queryByRole("button", { name: /Confirm/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("main is the default branch of this repository, and GitHub protects it.");
+    expect(dialog).toHaveTextContent("GitHub protects main and may refuse a push.");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm write to main" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "New worktree" }));
     await act(async () => {
       await run;
@@ -205,11 +206,27 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     expect(requested).toHaveBeenCalledTimes(1);
     expect(result).toBe(WRITE_CANCELLED);
     expect(write).not.toHaveBeenCalled();
+    expect(logged.map((r) => r.message)).not.toContain("main branch write blocked");
     expect(logged).toContainEqual({
-      level: "WARN",
-      message: "main branch write blocked",
+      level: "INFO",
+      message: "main branch write confirmation shown",
       fields: { branch: "main", write: "push", surface: "dialog" },
     });
+  });
+
+  it("MBW-FR-JZME, MBW-FR-ILFN, MBW-FR-XBJS: a confirm of a protected branch runs the write, and the guard then reports the branch as confirmed", async () => {
+    const reads = scriptedReads(mainGuard({ protection: "protected" }));
+    host();
+    const write = vi.fn(async () => "pushed");
+    const run = runMainBranchWrite("push", write);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm write to main" }));
+    await act(async () => {
+      await expect(run).resolves.toBe("pushed");
+    });
+    expect(reads.confirms).toEqual(["main"]);
+    expect(write).toHaveBeenCalledTimes(1);
+    await expect(ensureMainBranchWrite("push")).resolves.toBe(true);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("MBW-FR-UNAN: an unknown protection of the default branch says why, Check again reads with refresh, and Confirm stays available", async () => {
@@ -271,25 +288,6 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     expect(result).toBe("second");
   });
 
-  it("MBW-FR-YSMC: a refusal for a protected branch shows the hard block and invokes nothing more", async () => {
-    scriptedReads(mainGuard({ isMain: false, isDefault: false }));
-    host();
-    const write = vi.fn(async () => {
-      throw protectedRefusal();
-    });
-    let result: unknown;
-    const run = runMainBranchWrite("push", write).then((value) => {
-      result = value;
-    });
-    await screen.findByRole("alertdialog");
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    await act(async () => {
-      await run;
-    });
-    expect(result).toBe(WRITE_CANCELLED);
-    expect(write).toHaveBeenCalledTimes(1);
-  });
-
   it("MBW-FR-ILFN, MBW-FR-PJTG: after a confirmation no further confirmation shows for that branch on any surface, and each step is logged with no content", async () => {
     // The backend holds the confirmation, so every later read answers it.
     scriptedReads(mainGuard());
@@ -335,16 +333,18 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
     });
   });
 
-  it("MBW-FR-UNAN, MBW-FR-JZME: Check again that finds the branch protected turns the confirmation into the hard block", async () => {
+  it("MBW-FR-UNAN, MBW-FR-JZME: Check again that finds the branch protected adds the GitHub line and keeps Confirm available", async () => {
     const reads = scriptedReads(mainGuard({ protection: "unknown", protectionError: "github_unreachable" }));
     host();
     const run = ensureMainBranchWrite("commit");
     await screen.findByRole("dialog");
     reads.answer = mainGuard({ protection: "protected" });
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
-    await screen.findByRole("alertdialog");
-    expect(screen.queryByRole("button", { name: /Confirm/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(await screen.findByTestId("main-branch-write-protected")).toHaveTextContent(
+      "GitHub protects main and may refuse a push.",
+    );
+    expect(screen.getByRole("button", { name: "Confirm write to main" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await act(async () => {
       await expect(run).resolves.toBe(false);
     });

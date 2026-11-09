@@ -594,7 +594,7 @@ fn create_folder_impl(
 /// `recursive = false` is the narrow delete *and* the emptiness probe: a folder
 /// holding anything comes back as `ERR_NOT_EMPTY` with nothing removed, which is
 /// how the Library learns it must ask before taking a subtree (LCM-FR-11).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_path(
     app: tauri::AppHandle,
     path: String,
@@ -603,11 +603,13 @@ pub fn delete_path(
 ) -> Result<(), String> {
     let root = project.require_root()?;
     ensure_inside_root(&app, &root, "delete_path", &path)?;
+    // PST-FR-XLFK: the main branch write check, before anything is written.
+    crate::git::write_guard::commands::require_project_branch_write(&app, "delete_path")?;
     delete_path_impl(&root, &path, recursive)
 }
 
 /// PST-FR-19: rename a project file or folder within its parent (`"rename path"`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_path(
     app: tauri::AppHandle,
     path: String,
@@ -621,12 +623,14 @@ pub fn rename_path(
     // afterwards would leave the rename landed and every thread on the renamed
     // file stranded under its old log id, which no later call repairs.
     let store = project.require_store()?;
+    // PST-FR-XLFK: the main branch write check, before anything is written.
+    crate::git::write_guard::commands::require_project_branch_write(&app, "rename_path")?;
     rename_path_impl(&root, &store, &path, &new_name)
 }
 
 /// PST-FR-20: copy a project file or folder into a destination folder
 /// (`"copy path into folder"`). Copy, not move — the source is left in place.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn copy_path_into_folder(
     app: tauri::AppHandle,
     source_path: String,
@@ -638,6 +642,8 @@ pub fn copy_path_into_folder(
     // the one that leaves the root.
     ensure_inside_root(&app, &root, "copy_path_into_folder", &source_path)?;
     ensure_inside_root(&app, &root, "copy_path_into_folder", &dest_folder)?;
+    // PST-FR-XLFK: the main branch write check, before anything is written.
+    crate::git::write_guard::commands::require_project_branch_write(&app, "copy_path_into_folder")?;
     copy_path_into_folder_impl(&root, &source_path, &dest_folder)
 }
 
@@ -645,7 +651,7 @@ pub fn copy_path_into_folder(
 /// name)"`) and return the created node so the UI can open and reveal it. The
 /// structural change also reaches the Library through the ASC watcher's
 /// `"project tree changed"` event.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_file(
     app: tauri::AppHandle,
     location: Option<String>,
@@ -659,6 +665,8 @@ pub fn create_file(
     if let Some(loc) = location.as_deref() {
         ensure_inside_root(&app, &root, "create_file", loc)?;
     }
+    // PST-FR-XLFK: the main branch write check, before anything is written.
+    crate::git::write_guard::commands::require_project_branch_write(&app, "create_file")?;
     create_file_impl(&root, location.as_deref(), &name)
 }
 
@@ -704,7 +712,7 @@ pub fn create_folder(
 /// (`../ui/NTA-new-typed-artifact.md` NTA-FR-13). The structural change also
 /// reaches the Project panel through the ASC watcher's `"project tree changed"`
 /// event (ASC-FR-10).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_typed_file(
     app: tauri::AppHandle,
     location: Option<String>,
@@ -719,6 +727,8 @@ pub fn create_typed_file(
     if let Some(loc) = location.as_deref() {
         ensure_inside_root(&app, &root, "create_typed_file", loc)?;
     }
+    // PST-FR-XLFK: the main branch write check, before anything is written.
+    crate::git::write_guard::commands::require_project_branch_write(&app, "create_typed_file")?;
     let node = create_typed_file_impl(&root, location.as_deref(), &name, artifact_type);
     match &node {
         Ok(created) => crate::logging::log_info(

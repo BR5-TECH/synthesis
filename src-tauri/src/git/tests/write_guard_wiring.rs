@@ -28,8 +28,8 @@ fn assert_checked_before(source: &str, name: &str, call: &str, write: &str) {
     assert!(checked < written, "{name} calls {write} before {call}");
 }
 
-// GTC-FR-EMLM: the commit, the two pushes, and the pull reconcile run the
-// check; the fast-forward pull does not.
+// GTC-FR-EMLM, MBW-FR-HXTE: the commit and the two pushes run the check; a
+// pull of any kind does not.
 #[test]
 fn the_git_writes_run_the_check() {
     let git = include_str!("../../git.rs");
@@ -39,9 +39,8 @@ fn the_git_writes_run_the_check() {
     let named = "require_branch_write(&app, &root, Some(&branch)";
     assert_checked_before(git, "push_branch", named, "push_named_branch_at(");
     let pull = include_str!("../pull.rs");
-    let project = "require_project_branch_write";
-    assert_checked_before(pull, "reconcile_pull", project, "reconcile_pull_blocking(");
     assert!(!body_of(pull, "pull_current_branch").contains("write_guard"));
+    assert!(!body_of(pull, "reconcile_pull").contains("write_guard"), "a reconcile runs no check");
     let fetch = include_str!("../fetch.rs");
     assert!(!fetch.contains("write_guard"), "a fetch runs no check");
 }
@@ -103,7 +102,6 @@ fn no_command_that_runs_the_check_runs_on_the_main_thread() {
     for name in ["commit_paths", "push_current_branch", "push_branch"] {
         assert!(off_main_thread(git, name), "{name} runs on the main thread");
     }
-    assert!(off_main_thread(include_str!("../pull.rs"), "reconcile_pull"));
     assert!(off_main_thread(include_str!("../../artifacts.rs"), "save_artifact_contents"));
     let drafts = include_str!("../../drafts/commands.rs");
     for name in [
@@ -144,4 +142,38 @@ fn the_draft_event_committer_reads_the_installed_session() {
     let guard = body_of(lib, "main_branch_write_guard");
     assert!(guard.contains("git::write_guard::install(state.session());"));
     assert!(lib.contains(".manage(main_branch_write_guard())"), "the installed guard is managed");
+}
+
+// PST-FR-XLFK, DCP-FR-WGBN, PCP-FR-RDSM: the artifact creation, rename, and
+// deletion, and the accept of a change proposal, run the check before they
+// write, off the main thread.
+#[test]
+fn the_library_writes_and_the_accepts_run_the_check() {
+    let library = include_str!("../../library.rs");
+    let project = "require_project_branch_write";
+    for (name, write) in [
+        ("delete_path", "delete_path_impl("),
+        ("rename_path", "rename_path_impl("),
+        ("copy_path_into_folder", "copy_path_into_folder_impl("),
+        ("create_file", "create_file_impl("),
+        ("create_typed_file", "create_typed_file_impl("),
+    ] {
+        assert_checked_before(library, name, project, write);
+        assert!(off_main_thread_sync(library, name), "{name} runs on the main thread");
+    }
+    let drafts = include_str!("../../draft_proposals/commands.rs");
+    assert_checked_before(drafts, "accept_draft_change_hunk", project, "decide_hunk(");
+    assert!(off_main_thread(drafts, "accept_draft_change_hunk"));
+    let prompts = include_str!("../../prompt_proposals/commands.rs");
+    assert_checked_before(prompts, "accept_prompt_change_hunk", project, "decide_command(");
+    assert!(off_main_thread(prompts, "accept_prompt_change_hunk"));
+    let new_drafts = include_str!("../../new_draft_proposals/commands.rs");
+    assert_checked_before(new_drafts, "accept_new_draft_proposal", project, "decide_command(");
+    assert!(off_main_thread(new_drafts, "accept_new_draft_proposal"));
+}
+
+/// Whether `source` declares `name` as a non-generic sync command that asks for
+/// a thread of its own.
+fn off_main_thread_sync(source: &str, name: &str) -> bool {
+    source.contains(&format!("#[tauri::command(async)]\npub fn {name}("))
 }

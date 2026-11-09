@@ -22,6 +22,7 @@ import {
 import { promptHunkCandidateBuffers } from "../../state/candidateBuffers";
 import { artifactReviewKey } from "../../state/draftDiscussion";
 import type { EditSessionStore } from "../../state/editSessions";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 import { notePromptProposalChanged } from "../../state/promptProposals";
 import {
   PROMPT_PROPOSAL_ERRORS,
@@ -167,8 +168,19 @@ export function useArtifactReview({
     try {
       await sessions.quiesce([artifactId]);
       sessions.dismissConflict(artifactId);
-      acceptedHere.current.add(hunkId);
-      outcome = await api.acceptPromptChangeHunk(pending.id, hunkId);
+      // MBW-FR-DBGA: the accept writes the whole file, so it asks for the
+      // confirmation on a main branch first. A cancel writes nothing, so the
+      // hunk joins the set only when the write runs.
+      const written = await runMainBranchWrite("accept_change", () => {
+        acceptedHere.current.add(hunkId);
+        return api.acceptPromptChangeHunk(pending.id, hunkId);
+      });
+      if (written === WRITE_CANCELLED) {
+        sessions.unquiesce(artifactId);
+        release();
+        return false;
+      }
+      outcome = written;
     } catch (error) {
       const reason = String(error);
       if (reason.includes(PROMPT_PROPOSAL_ERRORS.acceptanceIncomplete)) {

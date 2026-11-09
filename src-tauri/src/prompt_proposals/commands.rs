@@ -247,7 +247,7 @@ where
 
 /// PCP-FR-ZQAH: accept one hunk, writing the file through the artifact's own
 /// save path inside the one-commit-point transaction.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn accept_prompt_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -260,6 +260,11 @@ pub fn accept_prompt_change_hunk<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    // PCP-FR-RDSM: the main branch write check, before the file is written.
+    crate::git::write_guard::commands::require_project_branch_write(
+        &app,
+        "accept_prompt_change_hunk",
+    )?;
     decide_command(
         &app,
         "accept_hunk",

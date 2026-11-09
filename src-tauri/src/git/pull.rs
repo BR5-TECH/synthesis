@@ -504,8 +504,7 @@ pub async fn reconcile_pull(
     remote_tip: String,
 ) -> Result<PullReconcileOutcome, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        // GTC-FR-EMLM: the main branch write check, before anything is written.
-        super::write_guard::commands::require_project_branch_write(&app, "reconcile_pull")?;
+        // GTC-FR-EMLM: a pull of any kind runs no main branch write check.
         let outcome =
             crate::streams::reconcile_pull_blocking(&app, strategy, &local_tip, &remote_tip);
         if outcome.state == RECONCILE_MERGED || outcome.state == RECONCILE_REBASED {

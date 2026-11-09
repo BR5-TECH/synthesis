@@ -5,8 +5,8 @@
 //! A **main branch** is the default branch of the repository or a branch that
 //! GitHub protects. The application writes to a main branch only after the
 //! author confirms it, once per branch for the application session. A branch
-//! that GitHub protects is refused always, because GitHub refuses the push
-//! anyway.
+//! that GitHub protects needs the same confirmation. It is not blocked: the
+//! author owns the choice, and GitHub refuses a push on its own.
 //!
 //! This module holds three things:
 //!
@@ -39,9 +39,6 @@ use super::telemetry::{LOCAL, TRANSFER};
 /// GTC-FR-JWOL: a write to a main branch that the author did not confirm.
 /// Carries the [`BranchWriteGuard`] as JSON.
 pub const ERR_MAIN_BRANCH_WRITE_UNCONFIRMED: &str = "main_branch_write_unconfirmed";
-/// GTC-FR-JWOL / GTC-FR-YWRZ: a write to a branch that GitHub protects.
-/// Carries the [`BranchWriteGuard`] as JSON, which names the branch.
-pub const ERR_MAIN_BRANCH_PROTECTED: &str = "main_branch_protected";
 
 /// GTC-FR-VZJR: the four values of `protection`.
 pub const PROTECTION_PROTECTED: &str = "protected";
@@ -81,10 +78,6 @@ impl BranchWriteGuard {
             confirmed: false,
         }
     }
-
-    fn is_protected(&self) -> bool {
-        self.protection == PROTECTION_PROTECTED
-    }
 }
 
 /// The typed refusal `code`, carrying `guard` as JSON data.
@@ -92,10 +85,9 @@ pub fn refusal(code: &str, guard: &BranchWriteGuard) -> String {
     format!("{code}: {}", serde_json::to_string(guard).unwrap_or_else(|_| "{}".to_string()))
 }
 
-/// Whether `error` is one of the two refusals of the check.
+/// Whether `error` is the refusal of the check.
 pub fn is_write_guard_refusal(error: &str) -> bool {
     error.starts_with(ERR_MAIN_BRANCH_WRITE_UNCONFIRMED)
-        || error.starts_with(ERR_MAIN_BRANCH_PROTECTED)
 }
 
 // ---------------------------------------------------------------------------
@@ -334,16 +326,10 @@ pub(crate) fn check_write<S: LogSink + Clone + Send + 'static>(
         return Ok(());
     };
     let guard = guard_for(sink, buffer, session, access, branch, false);
-    let refused = if guard.is_protected() {
-        Some(ERR_MAIN_BRANCH_PROTECTED)
-    } else if guard.is_default && !guard.confirmed {
-        // GTC-FR-LRNB: an `unknown` protection of the default branch needs the
-        // confirmation, as an unprotected one does.
-        Some(ERR_MAIN_BRANCH_WRITE_UNCONFIRMED)
-    } else {
-        None
-    };
-    if let Some(code) = refused {
+    // GTC-FR-JWOL: a main branch with no confirmation is refused, also a branch
+    // that GitHub protects. GTC-FR-LRNB: an `unknown` protection of the default
+    // branch needs the confirmation, as an unprotected one does.
+    if guard.is_main && !guard.confirmed {
         logging::log_warn(
             sink,
             buffer,
@@ -352,11 +338,11 @@ pub(crate) fn check_write<S: LogSink + Clone + Send + 'static>(
             log_fields! {
                 "branch" => branch,
                 "operation" => operation,
-                "reason" => code,
+                "reason" => ERR_MAIN_BRANCH_WRITE_UNCONFIRMED,
                 "protection" => guard.protection.clone(),
             },
         );
-        return Err(refusal(code, &guard));
+        return Err(refusal(ERR_MAIN_BRANCH_WRITE_UNCONFIRMED, &guard));
     }
     if guard.protection == PROTECTION_UNKNOWN && !guard.is_default {
         // GTC-FR-LRNB: a branch that is not the default branch passes on an
@@ -377,8 +363,8 @@ pub(crate) fn check_write<S: LogSink + Clone + Send + 'static>(
 }
 
 /// GTC `confirm_main_branch_write` (GTC-FR-YWRZ): record the confirmation for
-/// the repository and the branch, in memory. A protected branch is refused and
-/// nothing is recorded.
+/// the repository and the branch, in memory. A protected branch is recorded as
+/// any other main branch.
 pub(crate) fn confirm_write<S: LogSink + Clone + Send + 'static>(
     sink: &S,
     buffer: &'static LogBuffer,
@@ -387,16 +373,6 @@ pub(crate) fn confirm_write<S: LogSink + Clone + Send + 'static>(
     branch: &str,
 ) -> Result<BranchWriteGuard, String> {
     let mut guard = guard_for(sink, buffer, session, access, branch, false);
-    if guard.is_protected() {
-        logging::log_warn(
-            sink,
-            buffer,
-            LOCAL,
-            "main branch write confirmation refused",
-            log_fields! { "branch" => branch, "reason" => ERR_MAIN_BRANCH_PROTECTED },
-        );
-        return Err(refusal(ERR_MAIN_BRANCH_PROTECTED, &guard));
-    }
     let Some(key) = repository_key(access.project.root).filter(|_| !branch.is_empty()) else {
         return Ok(guard);
     };
@@ -407,7 +383,11 @@ pub(crate) fn confirm_write<S: LogSink + Clone + Send + 'static>(
         buffer,
         LOCAL,
         "main branch write confirmed",
-        log_fields! { "branch" => branch, "isDefault" => guard.is_default },
+        log_fields! {
+            "branch" => branch,
+            "isDefault" => guard.is_default,
+            "protection" => guard.protection.clone(),
+        },
     );
     Ok(guard)
 }
@@ -423,14 +403,13 @@ pub fn background_refusal(session: &WriteGuardSession, root: &Path) -> Option<&'
     let (view, read, confirmed) = session.with(&key, |m| {
         (m.github.clone(), m.protection.get(&branch).cloned(), m.confirmed.contains(&branch))
     });
-    if read.as_ref().is_some_and(|read| read.protection == PROTECTION_PROTECTED) {
-        return Some(ERR_MAIN_BRANCH_PROTECTED);
-    }
+    let protected = read.as_ref().is_some_and(|read| read.protection == PROTECTION_PROTECTED);
     let default = match view {
         Some(GithubView::Repository { default_branch: Some(name) }) => Some(name),
         _ => local_default_branch(root),
     };
-    if default.as_deref() == Some(branch.as_str()) && !confirmed {
+    let is_main = protected || default.as_deref() == Some(branch.as_str());
+    if is_main && !confirmed {
         return Some(ERR_MAIN_BRANCH_WRITE_UNCONFIRMED);
     }
     None

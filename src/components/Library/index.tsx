@@ -21,6 +21,7 @@ import { Icon } from "../icons";
 import { SelectorRow } from "../SelectorRow";
 import { TreeRow } from "./TreeRow";
 import { noteOwnerDeleted } from "../../voice/voiceController";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 import {
   ContextMenu,
   RecursiveDeleteConfirm,
@@ -289,7 +290,11 @@ export function Library({
   const deleteNode = async (node: TreeNode) => {
     setCtx(null);
     try {
-      await api.deletePath(node.path, false);
+      // MBW-FR-DBGA: a write to a main branch asks for the confirmation first.
+      const done = await runMainBranchWrite("delete_artifact", () =>
+        api.deletePath(node.path, false),
+      );
+      if (done === WRITE_CANCELLED) return;
       setError(null);
       // CVP-FR-51, VOM-FR-LSBQ: voice mode ends with the file that owns it.
       noteOwnerDeleted({ kind: "artifact", artifactId: node.path });
@@ -308,7 +313,10 @@ export function Library({
   const confirmRecursiveDelete = async (node: TreeNode) => {
     setConfirmRecursive(null);
     try {
-      await api.deletePath(node.path, true);
+      const done = await runMainBranchWrite("delete_artifact", () =>
+        api.deletePath(node.path, true),
+      );
+      if (done === WRITE_CANCELLED) return;
       setError(null);
       // LCM-FR-11, VOM-FR-LSBQ: and with a folder that holds that file.
       noteOwnerDeleted({ kind: "artifact", artifactId: node.path });
@@ -331,7 +339,10 @@ export function Library({
     setCtx(null);
     if (clipboard == null) return;
     try {
-      await api.copyPathIntoFolder(clipboard, folder.path);
+      const done = await runMainBranchWrite("paste_artifact", () =>
+        api.copyPathIntoFolder(clipboard, folder.path),
+      );
+      if (done === WRITE_CANCELLED) return;
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -343,7 +354,10 @@ export function Library({
   const renameNode = async (node: TreeNode, newName: string) => {
     setCtx(null);
     try {
-      await api.renamePath(node.path, newName);
+      const done = await runMainBranchWrite("rename_item", () =>
+        api.renamePath(node.path, newName),
+      );
+      if (done === WRITE_CANCELLED) return;
       setError(null);
     } catch (e) {
       setError(String(e));

@@ -2,8 +2,8 @@
  * The inline section of an overlay that is already open (MBW-FR-URIL,
  * MBW-FR-IOGF, MBW-FR-WCBQ), in each overlay that holds one: the commit message
  * window (CMW-FR-RMCO), the merge confirmation of the work stream selector
- * (WSS-FR-DBGA), the graduation start dialog (GSD-FR-YSMC), and the pull
- * reconcile dialog.
+ * (WSS-FR-DBGA), and the graduation start dialog (GSD-FR-YSMC). The pull
+ * reconcile dialog holds none (MBW-FR-HXTE).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -158,20 +158,30 @@ describe("the commit message window (CMW-FR-RMCO)", () => {
     expect(reads.confirms).toEqual(["trunk"]);
   });
 
-  it("MBW-FR-IOGF, MBW-FR-JZME: a protected branch keeps Commit unavailable, offers no confirm, and routes to a new worktree", async () => {
-    scriptedReads(mainGuard({ protection: "protected" }));
+  it("MBW-FR-IOGF, MBW-FR-JZME: a protected branch shows the GitHub line, keeps Commit unavailable until Confirm, and offers New worktree", async () => {
+    const reads = scriptedReads(mainGuard({ protection: "protected" }));
     const requested = vi.fn();
     const stop = onNewWorktreeRequested(requested);
     const { onClose } = commitWindow();
     await userEvent.type(screen.getByLabelText("Commit message"), "a message");
     const section = await screen.findByTestId("main-branch-write-section");
-    expect(section).toHaveTextContent("GitHub protects main.");
-    expect(screen.queryByRole("button", { name: /Confirm write/ })).not.toBeInTheDocument();
+    expect(section).toHaveTextContent("GitHub protects main and may refuse a push.");
     expect(screen.getByRole("button", { name: /^Commit/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "New worktree" }));
     stop();
     expect(onClose).toHaveBeenCalled();
     expect(requested).toHaveBeenCalledTimes(1);
+    expect(reads.confirms).toEqual([]);
+  });
+
+  it("MBW-FR-JZME, MBW-FR-IOGF: a confirm on a protected branch makes Commit available", async () => {
+    const reads = scriptedReads(mainGuard({ protection: "protected" }));
+    commitWindow();
+    await userEvent.type(screen.getByLabelText("Commit message"), "a message");
+    await screen.findByTestId("main-branch-write-section");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm write to main" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Commit/ })).toBeEnabled());
+    expect(reads.confirms).toEqual(["main"]);
   });
 
   it("MBW-FR-IOGF: while the guard read is under way, Commit is unavailable", async () => {
@@ -245,13 +255,18 @@ describe("the merge confirmation (WSS-FR-DBGA)", () => {
     expect(onStart).toHaveBeenCalledWith(summary, { kind: "uncommitted" });
   });
 
-  it("WSS-FR-DBGA: a protected base branch shows the hard block and points to Create a PR of the same row", async () => {
-    scriptedReads(mainGuard({ protection: "protected" }));
+  it("WSS-FR-DBGA, MBW-FR-JZME: a protected base branch shows the GitHub line, waits for the confirm, and points to Create a PR of the same row", async () => {
+    const reads = scriptedReads(mainGuard({ protection: "protected" }));
     const { onCreatePullRequest } = confirmation();
-    await screen.findByTestId("main-branch-write-section");
-    expect(screen.getByRole("button", { name: "Leave uncommitted" })).toBeDisabled();
+    const section = await screen.findByTestId("main-branch-write-section");
+    expect(section).toHaveTextContent("GitHub protects main and may refuse a push.");
+    const leave = screen.getByRole("button", { name: "Leave uncommitted" });
+    expect(leave).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Create a PR" }));
     expect(onCreatePullRequest).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm write to main" }));
+    await waitFor(() => expect(leave).toBeEnabled());
+    expect(reads.confirms).toEqual(["main"]);
   });
 });
 
@@ -311,16 +326,16 @@ describe("the graduation start dialog (GSD-FR-YSMC)", () => {
   });
 });
 
-describe("the pull reconcile dialog (MBW-FR-DBGA)", () => {
-  it("MBW-FR-DBGA, MBW-FR-URIL: a pull reconcile on a main branch waits for the confirmation in the dialog", async () => {
-    scriptedReads(mainGuard());
+describe("the pull reconcile dialog (MBW-FR-HXTE)", () => {
+  it("MBW-FR-HXTE, MBW-FR-QKVA: a pull reconcile on a main branch reads no guard, shows no section, and runs at once", async () => {
+    const reads = scriptedReads(mainGuard());
     render(<PullReconcileDialog outcome={diverged} onClose={vi.fn()} onOpenRun={vi.fn()} />);
-    await screen.findByTestId("main-branch-write-section");
     const merge = screen.getByTestId("pull-reconcile-merge");
-    expect(merge).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm write to main" }));
-    await waitFor(() => expect(merge).toBeEnabled());
+    expect(merge).toBeEnabled();
+    expect(screen.queryByTestId("main-branch-write-section")).not.toBeInTheDocument();
     fireEvent.click(merge);
     await waitFor(() => expect(calls("reconcile_pull")).toHaveLength(1));
+    expect(reads.reads).toEqual([]);
+    expect(reads.confirms).toEqual([]);
   });
 });

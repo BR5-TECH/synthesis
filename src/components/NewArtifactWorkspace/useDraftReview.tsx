@@ -25,6 +25,7 @@ import {
 } from "../DraftDiscussion/useProposalReview";
 import type { EditorReview } from "../Editor/props";
 import { hunkCandidateBuffers } from "../../state/candidateBuffers";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 
 export function useDraftReview({
   draftId,
@@ -71,7 +72,13 @@ export function useDraftReview({
           // accepts. Written first, the acceptance overwrites it and the timer
           // has nothing left to put back over the accepted text.
           if (path !== null) await flushBeforeApply(path);
-          outcome = await api.acceptDraftChangeHunk(pending.id, hunkId);
+          // MBW-FR-DBGA: the accept writes the file, so it asks for the
+          // confirmation on a main branch first. A cancel decides nothing.
+          const written = await runMainBranchWrite("accept_change", () =>
+            api.acceptDraftChangeHunk(pending.id, hunkId),
+          );
+          if (written === WRITE_CANCELLED) return false;
+          outcome = written;
           if (path !== null) reloadAfterApply(path);
         } else {
           outcome = await api.rejectDraftChangeHunk(pending.id, hunkId);

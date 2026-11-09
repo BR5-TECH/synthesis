@@ -21,6 +21,8 @@ vi.mock("./DraftDiscussion/decisionDispatch", () => ({
 }));
 
 import { Editor } from "./Editor";
+import { MainBranchWriteHost } from "./MainBranchWrite";
+import { mainGuard, scriptedReads } from "../test/mainBranchWriteFixtures";
 import { EditSessionStore } from "../state/editSessions";
 import { notePromptProposalChanged, resetPromptProposals } from "../state/promptProposals";
 import { promptHunkCandidateBuffers } from "../state/candidateBuffers";
@@ -350,6 +352,63 @@ describe("PCR-FR-AXPW: deciding one change", () => {
     );
     await waitFor(() => expect(sessions.get(MD)?.buffer).toContain("A better line."));
     expect(sessions.get(MD)?.dirty).toBe(false);
+  });
+
+  it("PCR-FR-AXPW, MBW-FR-DBGA: Accept on a main branch waits for the confirmation, a cancel accepts nothing and lifts the quiesce, and a confirm accepts", async () => {
+    const reads = scriptedReads(mainGuard());
+    withMd();
+    backend.accept = () => {
+      backend.bodies[MD] = MD_BODY.replace("The original line.", "A better line.");
+      return outcome(["accepted", "accepted"], true);
+    };
+    renderTab(MD, sessions);
+    render(<MainBranchWriteHost />);
+    await screen.findByRole("region", { name: "Proposed changes" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+    });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("You asked to accept a change.");
+    expect(callsTo("accept_prompt_change_hunk")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("accept_prompt_change_hunk")).toHaveLength(0);
+    expect(sessions.get(MD)?.quiesced).toBeFalsy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm write to main" }));
+    await waitFor(() => expect(callsTo("accept_prompt_change_hunk").length).toBeGreaterThan(0));
+    expect(reads.confirms).toEqual(["main"]);
+  });
+
+  it("PCR-FR-AXPW, PCR-FR-LAGZ, MBW-FR-DBGA: a cancelled accept leaves the change open to an accept elsewhere, and the session takes the file's text", async () => {
+    scriptedReads(mainGuard());
+    withMd();
+    renderTab(MD, sessions);
+    render(<MainBranchWriteHost />);
+    await screen.findByRole("region", { name: "Proposed changes" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+    });
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("accept_prompt_change_hunk")).toHaveLength(0);
+
+    const reads = callsTo("load_artifact_contents_by_id").length;
+    backend.bodies[MD] = "# Review\n\nThe accepted line.\n\nA second line.\n";
+    version += 1;
+    await act(async () => {
+      notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["accepted", "pending"]) });
+    });
+    await waitFor(() =>
+      expect(callsTo("load_artifact_contents_by_id").length).toBeGreaterThan(reads),
+    );
+    await waitFor(() => expect(sessions.get(MD)?.buffer).toContain("The accepted line."));
   });
 
   it("PCR-FR-AXPW, EDT-FR-81: an unsaved edit is written before the acceptance is asked for", async () => {

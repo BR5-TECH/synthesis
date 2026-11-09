@@ -24,6 +24,8 @@ import {
   setDiscussionScroll,
 } from "../../../state/discussionSession";
 import { otherCommand } from "../../../test/invokeMocks";
+import { MainBranchWriteHost } from "../../MainBranchWrite";
+import { mainGuard, scriptedReads } from "../../../test/mainBranchWriteFixtures";
 import type {
   AgentTurn,
   Comment,
@@ -372,5 +374,45 @@ describe("the What next? row", () => {
     await waitFor(() => expect(calls("dispatch_agent_turn")).toHaveLength(1));
     expect(calls("dispatch_agent_turn")[0][1]).toMatchObject({ nickname: "arch", triggerCommentId: "decision-1" });
     expect(calls("reject_new_draft_proposal")).toHaveLength(0);
+  });
+
+  it("MBW-FR-DBGA, MBW-FR-XBJS: Accept on a main branch waits for the confirmation, and a cancel creates no draft", async () => {
+    const reads = scriptedReads(mainGuard());
+    renderCard();
+    render(<MainBranchWriteHost />);
+    fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("You asked to create a draft.");
+    expect(calls("accept_new_draft_proposal")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(calls("accept_new_draft_proposal")).toHaveLength(0);
+    expect(reads.confirms).toEqual([]);
+    expect(await screen.findByRole("button", { name: "Accept" })).toBeEnabled();
+  });
+
+  it("MBW-FR-DBGA, MBW-FR-ILFN: Accept on a main branch runs after Confirm, and Reject asks for no confirmation", async () => {
+    const reads = scriptedReads(mainGuard());
+    renderCard();
+    render(<MainBranchWriteHost />);
+    fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm write to main" }));
+
+    await waitFor(() => expect(calls("accept_new_draft_proposal")).toHaveLength(1));
+    expect(reads.confirms).toEqual(["main"]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("MBW-FR-DBGA: Reject writes nothing, so it shows no confirmation on a main branch", async () => {
+    const reads = scriptedReads(mainGuard());
+    renderCard();
+    render(<MainBranchWriteHost />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+
+    await waitFor(() => expect(calls("reject_new_draft_proposal")).toHaveLength(1));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(reads.reads).toEqual([]);
   });
 });

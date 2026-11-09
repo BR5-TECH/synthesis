@@ -57,6 +57,7 @@ The modal surface for creating a plain file in the open project: the user picks 
 12. **NFI-FR-12** On a successful creation the new file opens in its natural surface — an Editor tab, as a plain text file when it resolves to no artifact type (per `ESH-editor-source-files.md` ESH-FR-ATDS) and as an artifact when it resolves to one, or a Flow tab when its resolved type is Flow (per `LIB-library.md` LIB-FR-03, `FLO-flow.md`) — via `"open artifact by id"`, and is revealed and selected in the Project panel (`LIB-library.md` LIB-FR-18).
 13. **NFI-FR-13** The user may dismiss the window — via its close control, Escape, or an outside click — at any time before confirming; dismissal cancels the creation, invokes no backend operation, and leaves no file on disk.
 14. **NFI-FR-14** A creation failure reported by `"create file"` (for example a name collision with an existing entry in the destination) is surfaced inline; the window stays open with its inputs intact and no file is created.
+15. **NFI-FR-BHKR** Creating a file reads the branch write guard of the active worktree's branch before it invokes `"create file (location, name)"`, on the terms of `MBW-main-branch-write.md` MBW-FR-RMCO. On a main branch with no confirmation, the confirmation shows first, and nothing is created until the author confirms.
 
 ## Non-functional requirements
 - The window opens with keyboard focus on the **Name** input, because it is the only value the user must always supply.

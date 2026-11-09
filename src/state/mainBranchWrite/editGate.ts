@@ -13,7 +13,7 @@
  */
 import { logInfo, logWarn } from "../../logging";
 import type { BranchWriteGuard } from "../../types";
-import { ERR_PROTECTED, needsConfirmation, parseMainBranchRefusal } from "./flow";
+import { needsConfirmation, parseMainBranchRefusal } from "./flow";
 import { guardReads } from "./reads";
 import { requestMainBranchWrite } from "./requests";
 
@@ -142,9 +142,6 @@ export function mainBranchSaveRefusal(error: unknown): string | null {
   if (!refusal) return null;
   const branch = refusal.guard?.branch || "this branch";
   primeEditGate();
-  if (refusal.code === ERR_PROTECTED) {
-    return `Not saved: GitHub protects ${branch}. Work reaches it through a pull request. Start a new branch for this work.`;
-  }
   return `Not saved: ${branch} is a main branch, and the write to it is not confirmed. Change the file again to confirm the write.`;
 }
 

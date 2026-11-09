@@ -27,12 +27,19 @@ import {
   type VoiceInputMode,
   type VoiceResponseMode,
 } from "../state/voiceSession";
-import type { AppPreferences, Discussion, DiscussionTarget, VoiceHotkeyBehaviour } from "../types";
+import type {
+  AgentTurn,
+  AppPreferences,
+  Discussion,
+  DiscussionTarget,
+  VoiceHotkeyBehaviour,
+} from "../types";
 import { ChunkPump, MicrophoneError, openMicrophone, type Microphone } from "./capture";
 import { setDeviceFallbackListener, type FallbackKind } from "./audioDevices";
 import { notePlaybackEntry, prepareAudio } from "./playback";
 import { setPlaybackEnvironmentProbe } from "./playbackDiagnostics";
-import { armFiller, cancelFiller } from "./voiceFiller";
+import { armFiller, cancelFiller, noteFillerTurn } from "./voiceFiller";
+import { armProgress, cancelProgress, noteProgressTurn } from "./voiceProgress";
 import {
   addHandle,
   forgetRetained,
@@ -90,7 +97,15 @@ import {
 export { noteChunk } from "./voiceUtterances";
 export { noteActivity, openVadSession, setVadMuted } from "./voiceVad";
 export { noteQuestionShown, stopSpeech } from "./voiceReplies";
-export { noteAgentTurn } from "./voiceFiller";
+
+/**
+ * VOM-FR-VTNW, VOM-FR-LQYS: a turn changed. A tool call can make the filler due,
+ * and the last turn to end stops the progress stream.
+ */
+export function noteAgentTurn(turn: AgentTurn): void {
+  noteFillerTurn(turn);
+  noteProgressTurn(turn);
+}
 export type { PostOutcome, VoiceComposerHandle } from "./voiceHandles";
 export { TAIL_MS };
 
@@ -262,8 +277,10 @@ function endCapture(kind: "keep" | "discard"): void {
 }
 
 function closeVoiceState(): void {
-  // VOM-FR-POBZ: the end of voice mode cancels the filler.
+  // VOM-FR-POBZ, VOM-FR-LQYS: the end of voice mode cancels the filler and the
+  // progress stream.
   cancelFiller("voice mode ended");
+  cancelProgress("voice mode ended");
   forgetRetained();
   forgetRetainedQuestions();
   forgetSpokenQuestion();
@@ -371,8 +388,10 @@ async function completeRecording(active: Capture): Promise<void> {
     if (liveSession === u.captureId) liveSession = null;
     return;
   }
-  // VOM-FR-YGAR: the end of the recording arms its filler.
+  // VOM-FR-YGAR, VOM-FR-JTWB: the end of the recording arms its filler and its
+  // progress stream.
   armFiller(u.captureId);
+  armProgress(u.captureId);
   await finishUtterance(u, finishVoiceCapture(u.captureId));
   if (liveSession === u.captureId) liveSession = null;
 }

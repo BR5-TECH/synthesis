@@ -32,6 +32,7 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
       ["list_skills", "Listing available skills…"],
       ["load_skill", "Loading skill instructions…"],
       ["ask_user_comment", "Asking a clarifying question…"],
+      ["ask_advisors", "Asking the advisors…"],
       ["ask_discussion_questions", "Preparing questions for you…"],
       ["propose_draft_changes", "Preparing draft changes…"],
       ["propose_prompt_changes", "Preparing prompt changes…"],
@@ -49,7 +50,16 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
     expect(Object.keys(TOOL_ACTIVITY_STATUS).sort()).toEqual(
       vocabulary.map(([tool]) => tool).sort(),
     );
-    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(16);
+    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(17);
+  });
+
+  it("CTA-FR-HEYB, CTA-FR-HPXE: the advisors tool waits for the end of an open speech", () => {
+    expect(activityStatus({ activeToolCalls: [call("ask_advisors", 1)], speechId: "c1" })).toBe(
+      WAITING_FOR_SPEECH,
+    );
+    expect(activityStatus({ activeToolCalls: [call("ask_advisors", 1)], speechId: null })).toBe(
+      "Asking the advisors…",
+    );
   });
 
   it("CTA-FR-HPXE, CVP-FR-RNYK: a turn bound to an open speech waits for the author", () => {

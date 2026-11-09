@@ -36,6 +36,10 @@ export const api = {
   steerSpeechTurn: vi.fn(async () => []),
   translateVoiceTranscript: vi.fn(async (text: string) => ({ text })),
   endSpeechTurn: vi.fn(async () => []),
+  loadAgentGroupSettings: vi.fn(async () => ({ enabled: false, joinTimeoutSecs: 60 })),
+  writeVoiceProgressUpdate: vi.fn(async (): Promise<{ text: string }> => ({
+    text: "Checking existing specifications.",
+  })),
 };
 
 export const mic = {

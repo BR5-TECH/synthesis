@@ -178,7 +178,7 @@ export function CreatePullRequestWindow({
   // MBW-FR-RMCO / MBW-FR-URIL: the push of the head branch is a write. The
   // guard of the head branch is read when a push is due, before Submit is
   // available. This window is an open overlay, so a confirmation is an inline
-  // section of it, and a protected head is the hard block (MBW-FR-JZME).
+  // section of it, and a protected head adds the GitHub line (MBW-FR-JZME).
   const writeGuard = useInlineWriteGuard({
     write: "push",
     branch: head,
@@ -369,7 +369,7 @@ export function CreatePullRequestWindow({
       if (!mounted.current) return false;
       // MBW-FR-YSMC: a refusal of the main branch write check shows the
       // section with the guard it carries. A confirm submits once more, so the
-      // push runs again; a hard block offers no confirm.
+      // push runs again.
       if (writeGuard.adoptRefusal(error, () => retrySubmit.current())) return false;
       if (isTokenSelectionRequired(error) && !fromResume) {
         // CPR-FR-VZUZ: the push asks for a token as the creation does.

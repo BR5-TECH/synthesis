@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "../../../api";
 import { logInfo, logWarn } from "../../../logging";
 import { requestDiscussionFoot } from "../../../state/discussionSession";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../../state/mainBranchWrite";
 import {
   clearRevealedCard,
   discussNewDraft,
@@ -141,11 +142,19 @@ export function NewDraftCard({
   const decide = (accept: boolean) => {
     setBusy(true);
     setError(null);
-    const call = accept ? api.acceptNewDraftProposal : api.rejectNewDraftProposal;
     const sent = feedback.trim();
-    call(proposal.id, sent === "" ? null : sent).then(
+    const feedbackText = sent === "" ? null : sent;
+    // MBW-FR-DBGA: an accept creates a draft, so it asks for the confirmation
+    // on a main branch first. A reject writes nothing.
+    const call = accept
+      ? runMainBranchWrite("create_draft", () =>
+          api.acceptNewDraftProposal(proposal.id, feedbackText),
+        )
+      : api.rejectNewDraftProposal(proposal.id, feedbackText);
+    call.then(
       (outcome) => {
         setBusy(false);
+        if (outcome === WRITE_CANCELLED) return;
         setFeedback("");
         logInfo(["frontend"], "a proposed draft was decided", {
           proposalId: proposal.id,

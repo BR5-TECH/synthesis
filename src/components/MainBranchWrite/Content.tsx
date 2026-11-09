@@ -1,10 +1,10 @@
 /**
- * The text of the confirmation and of the hard block, which the standalone
- * dialog and the inline section both render (MBW-FR-RXAR, MBW-FR-JZME,
- * MBW-FR-UNAN, MBW-FR-WCBQ).
+ * The text of the confirmation, which the standalone dialog and the inline
+ * section both render (MBW-FR-RXAR, MBW-FR-JZME, MBW-FR-UNAN, MBW-FR-WCBQ).
  */
 import {
   middleTruncate,
+  protectedSentence,
   protectionCause,
   reasonSentence,
   writeSentence,
@@ -22,7 +22,8 @@ export function BranchName({ name }: { name: string }) {
   );
 }
 
-export function isHardBlock(state: PanelState): boolean {
+/** MBW-FR-JZME: whether GitHub protects the branch of the confirmation. */
+export function isProtectedBranch(state: PanelState): boolean {
   return state.guard?.protection === "protected";
 }
 
@@ -64,20 +65,15 @@ export function MainBranchWriteText({
       </div>
     );
   }
-  if (isHardBlock(state)) {
-    return (
-      <div id={`${idPrefix}-text`}>
-        <p className="main-branch-write__text">
-          GitHub protects <BranchName name={guard.branch} />. Work reaches it
-          through a pull request. Start a new branch for this work.
-        </p>
-      </div>
-    );
-  }
   return (
     <div id={`${idPrefix}-text`}>
       <p className="main-branch-write__text">{reasonSentence(guard)}</p>
       <p className="main-branch-write__text">{writeSentence(write, guard.branch)}</p>
+      {isProtectedBranch(state) && (
+        <p className="main-branch-write__notice" data-testid="main-branch-write-protected">
+          <span>{protectedSentence(guard.branch)}</span>
+        </p>
+      )}
       {guard.isDefault && guard.protection === "unknown" && (
         <p className="main-branch-write__notice">
           <span>

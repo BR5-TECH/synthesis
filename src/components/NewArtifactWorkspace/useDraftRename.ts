@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 
 import * as api from "../../api";
+import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 import type { DraftRecord } from "../../types";
 import type { DraftSessionStore } from "../../state/draftSessions";
 
@@ -78,7 +79,11 @@ export function useDraftRename(input: {
     const oldPrompt = record?.promptPath ?? null;
     if (oldPrompt !== null && dirty && !(await saveCurrent())) return;
     try {
-      const updated = await api.renameDraft(draftId, next);
+      // MBW-FR-DBGA: a write to a main branch asks for the confirmation first.
+      const updated = await runMainBranchWrite("rename_item", () =>
+        api.renameDraft(draftId, next),
+      );
+      if (updated === WRITE_CANCELLED) return;
       setRenaming(false);
       setNameError(null);
       const newPrompt = updated.promptPath ?? null;

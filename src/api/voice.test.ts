@@ -24,7 +24,7 @@ import {
   startVoiceCapture,
   verifyVoiceAiIntegration,
 } from "./voice";
-import { translateVoiceTranscript } from "./integrations";
+import { translateVoiceTranscript, writeVoiceProgressUpdate } from "./integrations";
 
 beforeEach(() => core.invoke.mockClear());
 
@@ -234,6 +234,18 @@ describe("the voice commands", () => {
       text: "Hola.",
       nicknames: ["arch"],
       target,
+    });
+  });
+
+  it("AGC-FR-YMFC, AGC-FR-PGSJ: the progress update takes the activity and the spoken language", async () => {
+    core.invoke.mockResolvedValueOnce({ text: "Checking existing specifications." });
+    const activity = [{ tool: "search_specifications" }, { tool: "search_drafts", advisor: "sec" }];
+    await expect(writeVoiceProgressUpdate(activity, "English")).resolves.toEqual({
+      text: "Checking existing specifications.",
+    });
+    expect(core.invoke).toHaveBeenLastCalledWith("write_voice_progress_update", {
+      activity,
+      spokenLanguage: "English",
     });
   });
 

@@ -110,6 +110,27 @@ pub(super) fn speak(
     )
 }
 
+/// [`speak`] for the agent `nickname`.
+pub(super) fn speak_to(
+    h: &Harness,
+    nickname: &str,
+    origin: &ConversationOrigin,
+    speech_id: &str,
+    text: &str,
+) -> Result<AgentTurn, String> {
+    let root = h.root();
+    dispatch_speech_impl(
+        &h.app.handle().clone(),
+        Roots::same(&root),
+        PROJECT_KEY,
+        nickname,
+        origin.clone(),
+        speech_id,
+        text,
+        &human("ada"),
+    )
+}
+
 pub(super) fn steer(h: &Harness, speech_id: &str, text: &str) -> Vec<AgentTurn> {
     steer_speech_impl(&h.app.handle().clone(), speech_id, text)
 }

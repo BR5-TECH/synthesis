@@ -63,8 +63,7 @@ export function scriptedReads(answer: BranchWriteGuard | Error = mainGuard()): S
       if (reads.confirmError) return Promise.reject(reads.confirmError);
       const base = reads.answer instanceof Error ? mainGuard({ branch }) : reads.answer;
       const guard = { ...base, branch };
-      // The backend refuses a protected branch and records nothing.
-      if (guard.protection === "protected") return Promise.reject(protectedRefusal(guard));
+      // MBW-FR-JZME: a protected branch is recorded like any main branch.
       recorded.add(branch);
       return Promise.resolve(answered(guard));
     },
@@ -76,11 +75,4 @@ export function scriptedReads(answer: BranchWriteGuard | Error = mainGuard()): S
 /** The refusal text the backend answers an unconfirmed write with. */
 export function unconfirmedRefusal(guard: BranchWriteGuard = mainGuard()): string {
   return `main_branch_write_unconfirmed: ${JSON.stringify(guard)}`;
-}
-
-/** The refusal text the backend answers a write to a protected branch with. */
-export function protectedRefusal(
-  guard: BranchWriteGuard = mainGuard({ protection: "protected" }),
-): string {
-  return `main_branch_protected: ${JSON.stringify(guard)}`;
 }

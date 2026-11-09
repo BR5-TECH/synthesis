@@ -119,6 +119,7 @@ use crate::scanning;
 // [`conversation_tools`], whose exclusive attachment of the two proposal tools
 // is read by `crate::tools::propose_prompt_changes`.
 
+mod advisors;
 mod authority;
 mod builders;
 mod cancellation;
@@ -135,6 +136,7 @@ mod key_input;
 mod material;
 mod native_calls;
 mod openrouter_carrier;
+mod progress_update;
 mod prose_tool_calls;
 mod provider_memory;
 mod registry;
@@ -146,6 +148,7 @@ mod rig_messages;
 mod seam;
 mod sections;
 mod served_model;
+mod slots;
 mod speech;
 mod steering;
 mod tool_dispatch;
@@ -154,6 +157,7 @@ mod translation;
 mod turn_body;
 mod wire;
 
+use advisors::*;
 pub use authority::*;
 pub use builders::*;
 pub use cancellation::*;
@@ -168,7 +172,9 @@ pub use groups::*;
 use key_input::*;
 use native_calls::*;
 use openrouter_carrier::*;
+pub use progress_update::*;
 use prose_tool_calls::*;
+use slots::*;
 // The memories are read and written in this module only, so the re-export is
 // private. The two seams a test clears them through are reached the same way.
 use material::*;

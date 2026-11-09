@@ -84,7 +84,7 @@ export function noteFillerSettled(captureId: string, posted: boolean): void {
 }
 
 /** VOM-FR-VTNW: a turn changed. A tool call after the end of the utterance makes the filler due. */
-export function noteAgentTurn(turn: AgentTurn): void {
+export function noteFillerTurn(turn: AgentTurn): void {
   if (turn.state !== "running") {
     running.delete(turn.id);
     return;

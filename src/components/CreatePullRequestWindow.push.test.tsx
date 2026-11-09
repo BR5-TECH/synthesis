@@ -28,7 +28,6 @@ import {
 } from "../test/createPullRequestFixtures";
 import {
   mainGuard,
-  protectedRefusal,
   scriptedReads,
   unconfirmedRefusal,
 } from "../test/mainBranchWriteFixtures";
@@ -482,9 +481,12 @@ describe("a push to a main branch (MBW-FR-URIL, MBW-FR-YSMC, MBW-FR-JZME)", () =
     expect(writes()).toEqual(["push_branch", "push_branch", "create_pull_request"]);
   });
 
-  it("MBW-FR-YSMC, MBW-FR-JZME: a refusal with main_branch_protected shows the hard block, offers no confirm, and pushes nothing more", async () => {
+  it("MBW-FR-YSMC, MBW-FR-JZME: a refusal on a protected branch shows the confirmation with the GitHub line, keeps Confirm and New worktree available, and a confirm pushes once more", async () => {
+    const reads = scriptedReads(mainGuard({ branch: SOURCE.head, isMain: false, isDefault: false }));
+    let refusals = 1;
     push = async () => {
-      throw protectedRefusal(headGuard("protected"));
+      if (refusals-- > 0) throw unconfirmedRefusal(headGuard("protected"));
+      headState = async () => PUSHED;
     };
     const h = mount();
     await ready();
@@ -493,13 +495,37 @@ describe("a push to a main branch (MBW-FR-URIL, MBW-FR-YSMC, MBW-FR-JZME)", () =
     await userEvent.click(submit());
 
     const block = await screen.findByTestId("main-branch-write-section");
-    expect(block).toHaveTextContent("Work reaches it through a pull request.");
-    expect(screen.queryByTestId("main-branch-write-section-confirm")).toBeNull();
+    expect(block).toHaveTextContent(`GitHub protects ${SOURCE.head} and may refuse a push.`);
+    expect(screen.getByTestId("main-branch-write-section-confirm")).toBeEnabled();
     expect(screen.getByRole("button", { name: "New worktree" })).toBeInTheDocument();
     expect(screen.queryByTestId("create-pr-failure")).toBeNull();
     expect(submit()).toBeDisabled();
     expect(writes()).toEqual(["push_branch"]);
+
+    await userEvent.click(screen.getByTestId("main-branch-write-section-confirm"));
+
+    await waitFor(() => expect(h.onCreated).toHaveBeenCalledTimes(1));
+    expect(reads.confirms).toEqual([SOURCE.head]);
+    expect(writes()).toEqual(["push_branch", "push_branch", "create_pull_request"]);
+  });
+
+  it("MBW-FR-ZLPC: a push that GitHub refuses on a confirmed protected branch shows the reason of GitHub in the failure of the push", async () => {
+    scriptedReads(headGuard("protected"));
+    push = async () => {
+      throw "GH006: Protected branch update failed";
+    };
+    const h = mount();
+    await ready();
+    await userEvent.click(await screen.findByTestId("main-branch-write-section-confirm"));
+    await waitFor(() => expect(submit()).toBeEnabled());
+
+    await userEvent.click(submit());
+
+    expect(await screen.findByTestId("create-pr-failure")).toHaveTextContent(
+      `The remote refused the push of ${SOURCE.head}: GH006: Protected branch update failed`,
+    );
     expect(h.onCreated).not.toHaveBeenCalled();
+    expect(calls("create_pull_request")).toHaveLength(0);
   });
 });
 

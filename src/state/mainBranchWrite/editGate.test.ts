@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Editor } from "@tiptap/react";
+import { Editor, Extension } from "@tiptap/react";
+import { Plugin } from "@tiptap/pm/state";
 
 import { markdownExtensions } from "../../components/markdownFidelity";
-import { MainBranchEditGate } from "../../components/Editor/mainBranchEditGate";
+import { isAuthorChange, MainBranchEditGate } from "../../components/Editor/mainBranchEditGate";
 import { FlowSessionStore } from "../flowSessions";
 import { EditSessionStore } from "../editSessions";
 import {
@@ -240,14 +241,117 @@ describe("the hold of the first change (EDT-FR-QXEK, EDT-FR-UPNU)", () => {
     settleMainBranchWrite(false);
   });
 
-  it("MBW-FR-JZME: a save refused because GitHub protects the branch says so, and any other failure is shown as it came", () => {
+  it("MBW-FR-JZME, MBW-FR-YSMC: a save refused on a protected branch reads as an unconfirmed write, and any other failure is shown as it came", () => {
     expect(
       mainBranchSaveRefusal(
-        `main_branch_protected: ${JSON.stringify(mainGuard({ protection: "protected" }))}`,
+        `main_branch_write_unconfirmed: ${JSON.stringify(mainGuard({ protection: "protected" }))}`,
       ),
     ).toBe(
-      "Not saved: GitHub protects main. Work reaches it through a pull request. Start a new branch for this work.",
+      "Not saved: main is a main branch, and the write to it is not confirmed. Change the file again to confirm the write.",
     );
     expect(mainBranchSaveRefusal("disk full")).toBeNull();
+  });
+});
+
+describe("reading never asks (MBW-FR-QKVA)", () => {
+  beforeEach(() => {
+    resetLogBufferForTest();
+  });
+
+  it("MBW-FR-QKVA, EDT-FR-QXEK: opening several files in a row on an unconfirmed main branch reads the guard and shows no confirmation", async () => {
+    const reads = scriptedReads(mainGuard());
+    for (let opened = 0; opened < 3; opened += 1) {
+      primeEditGate();
+      await vi.waitFor(() => expect(isEditGateReading()).toBe(false));
+    }
+    expect(reads.reads).toHaveLength(3);
+    expect(currentMainBranchWrite()).toBeNull();
+  });
+
+  it("MBW-FR-QKVA: opening a file on a branch that GitHub protects shows no confirmation and no block", async () => {
+    scriptedReads(mainGuard({ protection: "protected" }));
+    primeEditGate();
+    await vi.waitFor(() => expect(isEditGateReading()).toBe(false));
+    expect(currentMainBranchWrite()).toBeNull();
+    expect(isEditHeld()).toBe(true);
+  });
+
+  it("MBW-FR-QKVA, EDT-FR-QXEK: a load and the transaction a plugin appends to it ask nothing, while a change of the author still asks", async () => {
+    scriptedReads(mainGuard());
+    editor = new Editor({
+      extensions: markdownExtensions([MainBranchEditGate]),
+      content: "first",
+    });
+    await primed();
+
+    editor.commands.setContent("loaded", { emitUpdate: false });
+    editor.view.dispatch(editor.state.tr.insertText("!", 1).setMeta("addToHistory", false));
+    expect(currentMainBranchWrite()).toBeNull();
+
+    editor.commands.insertContent(" typed");
+    expect(currentMainBranchWrite()?.write).toBe("edit_file");
+    settleMainBranchWrite(false);
+  });
+
+  it("MBW-FR-QKVA, EDT-FR-QXEK: two files that end in a heading, a list or a code fence load with the transaction of the trailing node and ask nothing, while the read is under way and after it landed", async () => {
+    const reads = scriptedReads(mainGuard());
+    let land!: () => void;
+    const answer = reads.read.bind(reads);
+    reads.read = (branch, refresh) =>
+      new Promise((resolve) => {
+        land = () => resolve(answer(branch, refresh));
+      });
+    // A transaction that changes the document and carries no mark: the one
+    // that the trailing node appends to a load.
+    let appended = 0;
+    const Spy = Extension.create({
+      name: "appendedSpy",
+      addProseMirrorPlugins: () => [
+        new Plugin({
+          filterTransaction: (tr) => {
+            if (tr.docChanged && !tr.getMeta("preventUpdate")) appended += 1;
+            return true;
+          },
+        }),
+      ],
+    });
+    editor = new Editor({
+      extensions: markdownExtensions([Spy, MainBranchEditGate]),
+      content: "first",
+    });
+
+    // The first file opens while the guard read is under way.
+    primeEditGate();
+    expect(isEditGateReading()).toBe(true);
+    editor.commands.setContent("# Title", { emitUpdate: false });
+    expect(currentMainBranchWrite()).toBeNull();
+    land();
+    await vi.waitFor(() => expect(isEditGateReading()).toBe(false));
+    expect(currentMainBranchWrite()).toBeNull();
+
+    // The second file opens after the read landed.
+    editor.commands.setContent("- one\n- two", { emitUpdate: false });
+    expect(currentMainBranchWrite()).toBeNull();
+    editor.commands.setContent("```ts\nconst a = 1;\n```", { emitUpdate: false });
+    expect(currentMainBranchWrite()).toBeNull();
+
+    // The trailing node did append a transaction that changed the document.
+    expect(appended).toBe(3);
+    expect(editor.getText()).toContain("const a = 1;");
+
+    // A typed change still asks.
+    editor.commands.insertContent(" typed");
+    expect(currentMainBranchWrite()?.write).toBe("edit_file");
+    settleMainBranchWrite(false);
+  });
+
+  it("MBW-FR-QKVA: only a transaction that changes the document with no marker of the editor is a change of the author", () => {
+    editor = new Editor({ extensions: markdownExtensions([]), content: "first" });
+    const change = editor.state.tr.insertText("x", 1);
+    expect(isAuthorChange(change)).toBe(true);
+    expect(isAuthorChange(editor.state.tr)).toBe(false);
+    expect(isAuthorChange(editor.state.tr.insertText("x", 1).setMeta("preventUpdate", true))).toBe(false);
+    expect(isAuthorChange(editor.state.tr.insertText("x", 1).setMeta("addToHistory", false))).toBe(false);
+    expect(isAuthorChange(change, true)).toBe(false);
   });
 });

@@ -10,25 +10,24 @@ import { guardReads } from "./reads";
 import { requestMainBranchWrite } from "./requests";
 
 export const ERR_UNCONFIRMED = "main_branch_write_unconfirmed";
-export const ERR_PROTECTED = "main_branch_protected";
 
 /** What a write answers when the author did not let it run. */
 export const WRITE_CANCELLED: unique symbol = Symbol("main branch write cancelled");
 export type WriteCancelled = typeof WRITE_CANCELLED;
 
 /**
- * Whether the guard asks for a confirmation or a hard block before a write.
+ * Whether the guard asks for a confirmation before a write. A branch that
+ * GitHub protects is a main branch like the others (MBW-FR-JZME).
  * MBW-FR-ILFN: the backend holds the confirmation for the project and the
  * branch, so a guard read on any surface after a confirm answers `confirmed`.
  */
 export function needsConfirmation(guard: BranchWriteGuard): boolean {
-  if (guard.protection === "protected") return true;
   return guard.isMain && !guard.confirmed;
 }
 
 /** MBW-FR-YSMC: the refusal of a write, with the guard it carries. */
 export interface MainBranchRefusal {
-  code: typeof ERR_UNCONFIRMED | typeof ERR_PROTECTED;
+  code: typeof ERR_UNCONFIRMED;
   guard: BranchWriteGuard | null;
 }
 
@@ -36,12 +35,8 @@ export function parseMainBranchRefusal(error: unknown): MainBranchRefusal | null
   const raw = String(error instanceof Error ? error.message : error ?? "")
     .replace(/^Error:\s*/, "")
     .trim();
-  const code = raw.startsWith(ERR_UNCONFIRMED)
-    ? ERR_UNCONFIRMED
-    : raw.startsWith(ERR_PROTECTED)
-      ? ERR_PROTECTED
-      : null;
-  if (!code) return null;
+  if (!raw.startsWith(ERR_UNCONFIRMED)) return null;
+  const code = ERR_UNCONFIRMED;
   const at = raw.indexOf(": ");
   let guard: BranchWriteGuard | null = null;
   if (at !== -1) {
@@ -56,14 +51,13 @@ export function parseMainBranchRefusal(error: unknown): MainBranchRefusal | null
 
 /** MBW-FR-PJTG: one record of the surface, with no file content. */
 export function logConfirmation(
-  event: "shown" | "confirmed" | "cancelled" | "blocked",
+  event: "shown" | "confirmed" | "cancelled",
   write: MainBranchWriteKind,
   branch: string | null,
   surface: "dialog" | "inline",
 ): void {
   const fields = { branch: branch ?? "", write, surface };
-  if (event === "blocked") logWarn(["frontend"], "main branch write blocked", fields);
-  else logInfo(["frontend"], `main branch write confirmation ${event}`, fields);
+  logInfo(["frontend"], `main branch write confirmation ${event}`, fields);
 }
 
 /**

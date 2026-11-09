@@ -373,6 +373,58 @@ impl TurnRegistry {
     }
 }
 
+/// AGC-FR-KRTP: how the wait of the advisors tool for a speech ended.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum SpeechWait {
+    /// The speech ended, or the turn had none. The comment id is the trigger
+    /// comment of the turn, which a speech that ended with a comment sets.
+    Ended(Option<String>),
+    /// The turn was cancelled, which includes a speech that ended with no
+    /// comment (AGC-FR-NFYK).
+    Cancelled,
+}
+
+impl TurnRegistry {
+    /// AGC-FR-KRTP: wait until the speech of the turn ends. Returns at once for
+    /// a turn that is bound to no open speech. The wait ends when the turn is
+    /// cancelled.
+    pub(super) fn wait_for_speech_end<R: tauri::Runtime>(
+        &self,
+        app: &tauri::AppHandle<R>,
+        turn_id: &str,
+        cancelled: &AtomicBool,
+    ) -> SpeechWait {
+        let mut inner = self.lock();
+        loop {
+            if cancelled.load(Ordering::SeqCst) {
+                return SpeechWait::Cancelled;
+            }
+            let Some(live) = inner.live.get(turn_id) else { return SpeechWait::Cancelled };
+            if live.cancelled.load(Ordering::SeqCst) {
+                return SpeechWait::Cancelled;
+            }
+            let open = live
+                .turn
+                .speech_id
+                .as_deref()
+                .is_some_and(|speech_id| inner.speeches.is_open(speech_id));
+            if !open {
+                return SpeechWait::Ended(live.turn.trigger_comment_id.clone());
+            }
+            if !inner.speeches.idle().is_empty() {
+                drop(inner);
+                expire_idle_speeches(app);
+                inner = self.lock();
+                continue;
+            }
+            inner = match self.speech_changed.wait_timeout(inner, HOLD_POLL) {
+                Ok((guard, _)) => guard,
+                Err(poisoned) => poisoned.into_inner().0,
+            };
+        }
+    }
+}
+
 /// CVL-FR-SZKK, CVL-FR-NEXN: what ends the hold of a reply to an open speech.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum HoldUntil {
@@ -456,7 +508,11 @@ pub fn dispatch_speech_impl<R: tauri::Runtime>(
         return Err(FAIL_SPEECH_ENDED.to_string());
     }
     let trigger = Trigger::Speech { speech_id, text, speaker };
-    let turn = dispatch_with(app, roots, project_key, nickname, origin, trigger)?;
+    // AGC-FR-DLXE: with the agent group switch on, the one agent of a speech runs
+    // as a Meta turn where the mode of AGC-FR-NWDA is `advisor`.
+    let setup = speech_meta_setup(app, roots, project_key, nickname);
+    let meta = setup.is_some();
+    let turn = dispatch_grouped(app, roots, project_key, nickname, origin, trigger, setup)?;
     let turn = turns.record_reach(app, speech_id, &turn, project_key);
     // The ids and the shape, never the text of the speech.
     logging::log_info(
@@ -470,6 +526,7 @@ pub fn dispatch_speech_impl<R: tauri::Runtime>(
             "agentId" => &turn.agent_id,
             "speechId" => speech_id,
             "chunkChars" => text.chars().count(),
+            "meta" => meta,
         },
     );
     Ok(turn)

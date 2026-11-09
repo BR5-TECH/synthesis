@@ -59,7 +59,7 @@ import type {
 import { useSettledText } from "./settle";
 import { diagramEditorRequest, subscribeDiagramEditor } from "../DiagramEditor/store";
 import { DiffComparisonBody, DiffModeToolbar } from "./comparison";
-import { holdEdit } from "../../state/mainBranchWrite";
+import { holdEdit, runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 
 export { DERIVE_SETTLE_MS } from "./settle";
 export { DiffComparisonBody, DiffModeToolbar } from "./comparison";
@@ -221,7 +221,10 @@ export function DiffView({ target, sessions }: DiffViewProps) {
       path: target.path,
     });
     try {
-      await api.createFile({ location: location === "" ? null : location, name });
+      const created = await runMainBranchWrite("create_artifact", () =>
+        api.createFile({ location: location === "" ? null : location, name }),
+      );
+      if (created === WRITE_CANCELLED) return;
       // The comparison is re-derived against the same original: only the target
       // side of it has changed.
       await loadRevisions();

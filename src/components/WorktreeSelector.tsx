@@ -351,7 +351,7 @@ export function WorktreeSelector({
   }, [draft?.branch]);
 
   // WTS-FR-02: no repository, no selector — anywhere in the top chrome.
-  // MBW-FR-JZME: the hard block of a protected branch opens the New worktree
+  // MBW-FR-JZME: the confirmation of a protected branch opens the New worktree
   // dialog. Subscribed before the early return, so the hooks keep their order.
   useEffect(() => onNewWorktreeRequested(() => openDialogRef.current("")), []);
   if (!active) return null;

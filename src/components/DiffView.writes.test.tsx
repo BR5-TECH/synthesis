@@ -11,6 +11,8 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { DERIVE_SETTLE_MS, DiffView } from "./DiffView";
+import { MainBranchWriteHost } from "./MainBranchWrite";
+import { mainGuard, scriptedReads } from "../test/mainBranchWriteFixtures";
 import { AUTOSAVE_DELAY_MS, EditSessionStore } from "../state/editSessions";
 import { sealBurst } from "../state/editHistory";
 import { resetDiffModes } from "../state/diffModes";
@@ -215,6 +217,35 @@ describe("the editable target (DFV-FR-41 .. DFV-FR-50)", () => {
     ).toBeInTheDocument();
     typeInto(targetCells()[0], "written from nothing");
     expect(sessions.get("old-notes.md")?.buffer).toBe("written from nothing");
+  });
+
+  it("DFV-FR-54, MBW-FR-DBGA, MBW-FR-XBJS restores a deleted target on a main branch only after the confirmation", async () => {
+    const reads = scriptedReads(mainGuard());
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_file_revisions") return revs("gone\n", null);
+      if (cmd === "create_file") return { path: "old-notes.md" };
+      if (cmd === "load_app_preferences")
+        return { theme: "system", diffVisualizationMode: "final" };
+      return undefined;
+    });
+    renderDiff(target("old-notes.md"));
+    render(<MainBranchWriteHost />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Restore/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("You asked to create an artifact.");
+    expect(callsTo("create_file")).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("create_file")).toHaveLength(0);
+    expect(reads.confirms).toEqual([]);
+
+    await userEvent.click(screen.getByRole("button", { name: /Restore/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Confirm write to main" }),
+    );
+    await waitFor(() => expect(callsTo("create_file")).toHaveLength(1));
+    expect(reads.confirms).toEqual(["main"]);
   });
 
   it("DFV-FR-54, DFV-FR-15 leaves the deleted state standing when the restore fails", async () => {

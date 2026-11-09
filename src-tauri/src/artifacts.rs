@@ -213,7 +213,11 @@ where
 }
 
 /// The save of `save_artifact_contents`, on the calling thread.
-fn save_artifact_contents_blocking<R: tauri::Runtime>(
+///
+/// `pub(crate)` because `crate::flow_sync` writes a synced Flow through it
+/// (FTS-FR-VFNM): the same checks and the same validated write as a save from
+/// the Flow tab.
+pub(crate) fn save_artifact_contents_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     id: &str,
     body: &str,

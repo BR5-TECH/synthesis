@@ -221,6 +221,13 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "load_flow_delivery_state",
     "find_flow_items_for_draft",
     "analyze_flow_overlap",
+    // Flow tracker sync (FTS-flow-tracker-sync.md).
+    "sync_flow_with_tracker",
+    "resolve_flow_sync_conflicts",
+    "read_tracker_item",
+    "open_tracker_link",
+    "get_flow_tracker_settings",
+    "set_flow_tracker_settings",
     // Held project close / application quit (SNV-FR-25 / SNV-FR-26 / EDT-FR-33).
     "close_project",
     "finish_exit",

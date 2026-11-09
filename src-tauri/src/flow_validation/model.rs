@@ -138,6 +138,18 @@ pub struct TrackerRef {
     pub url: String,
 }
 
+/// Read a field that can be absent, `null`, or a value. Serde reads `null` as
+/// an absent field by default, so a base that holds `"type": null` would lose
+/// the field on the next write. With this, an absent field is `None` (through
+/// `default`) and `null` is `Some(None)`.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
 /// The tracker values at the last sync. The issue-only and milestone-only
 /// fields are absent on the other kind of link.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -146,15 +158,15 @@ pub struct SyncBase {
     pub name: String,
     pub description: String,
     pub state: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub r#type: Option<Option<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub parent: Option<Option<TrackerRef>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub milestone: Option<Option<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_by: Option<Vec<TrackerRef>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub due: Option<Option<String>>,
 }
 

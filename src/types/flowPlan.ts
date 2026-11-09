@@ -63,6 +63,8 @@ export interface FlowReadError {
   code: string;
   message: string;
   report?: FlowValidationReport;
+  /** FTS-FR-AIDI: the tracker items a failed sync created. */
+  createdUrls?: string[];
 }
 
 /** FTS-FR-VEEG. */
@@ -93,8 +95,10 @@ export interface SyncConflict {
 }
 
 export interface SkippedIssue {
-  number: number;
+  /** Absent for an item the sync could not create, which has no number yet. */
+  number: number | null;
   title: string;
+  itemId?: string;
   reason: "no_kind_fits" | "issue_type_unavailable" | "foreign_repository";
 }
 

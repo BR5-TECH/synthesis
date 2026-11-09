@@ -61,6 +61,7 @@ mod docker_images;
 mod docker_in_docker;
 mod draft_template;
 mod drafts_panel;
+mod flow_tracker_settings;
 mod github_polling;
 mod graduation_concurrency;
 mod graduation_loop_settings;

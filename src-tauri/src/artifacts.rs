@@ -546,14 +546,15 @@ mod tests {
         );
     }
 
-    /// PST-FR-31, FGV-FR-12 / PST-FR-28: a valid Flow is written on the ordinary terms.
+    /// PST-FR-31, FGV-FR-01 / PST-FR-28: a valid Flow is written on the ordinary terms.
     #[test]
     fn a_valid_flow_is_written() {
         let dir = tempfile::TempDir::new().unwrap();
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
-        let body = r#"{"version":1,"name":"ok","nodes":[
-            {"id":"n1","name":"a","position":{"x":0,"y":0}}],"edges":[]}"#;
+        let body = r#"{"version":2,"name":"ok","items":[
+            {"id":"d1","kind":"deliverable","name":"a","position":{"x":0,"y":0},
+             "size":{"width":10,"height":10}}],"edges":[]}"#;
         assert_eq!(
             resolved_type(root, "flows/a.flow"),
             Some(scanning::ArtifactType::Flow),
@@ -563,7 +564,7 @@ mod tests {
         assert_eq!(root.read_text(root.join("flows/a.flow")).unwrap(), body);
     }
 
-    /// PST-FR-31, FGV-FR-12 / PST-FR-28: an invalid Flow is refused before the write. The
+    /// PST-FR-31, FGV-FR-PMTY / PST-FR-28: an invalid Flow is refused before the write. The
     /// file keeps the bytes it had, no baseline is recorded (so no self-write
     /// suppression entry is left behind for a write that never happened), and
     /// its modification time is untouched — so the artifact's position in
@@ -575,13 +576,14 @@ mod tests {
         std::fs::create_dir_all(root.join("flows")).unwrap();
         std::fs::write(root.join("flows/a.flow"), b"ORIGINAL").unwrap();
         let tracker = ContentTracker::default();
-        // An edge joining a node inside a loop to one outside it (FGV-FR-12).
-        let body = r#"{"version":1,"name":"x","loops":[
-            {"id":"l1","name":"l","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
-        ],"nodes":[
-            {"id":"n1","name":"a","position":{"x":0,"y":0}},
-            {"id":"n2","name":"b","parentId":"l1","position":{"x":0,"y":0}}
-        ],"edges":[{"id":"e1","from":"n1","to":"n2"}]}"#;
+        // Three deliverables that block each other in a ring (FGV-FR-PMTY).
+        let body = r#"{"version":2,"name":"x","items":[
+            {"id":"d1","kind":"deliverable","name":"a","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
+            {"id":"d2","kind":"deliverable","name":"b","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
+            {"id":"d3","kind":"deliverable","name":"c","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
+        ],"edges":[{"id":"e1","from":"d1","to":"d2","type":"blocks"},
+                   {"id":"e2","from":"d2","to":"d3","type":"blocks"},
+                   {"id":"e3","from":"d3","to":"d1","type":"blocks"}]}"#;
         let err = save_validated_artifact(root, "flows/a.flow", body, &tracker)
             .expect_err("an invalid Flow must be refused");
         assert!(err.contains("could not be written"), "{err}");

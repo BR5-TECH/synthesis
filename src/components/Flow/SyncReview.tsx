@@ -86,16 +86,22 @@ function invalidRule(doc: FlowDocument, c: ReviewConflict): string {
   return `${head} ${permittedText(item.kind, PERMITTED_PARENTS[item.kind])}`;
 }
 
+/**
+ * One conflict. FSR-FR-KDMM: a conflict that carries a URL offers its own
+ * link with that URL, so two conflicts of one item can open two places.
+ */
 function ConflictRow({
   doc,
   conflict,
   choice,
   onChoose,
+  onOpenLink,
 }: {
   doc: FlowDocument;
   conflict: ReviewConflict;
   choice: SyncChoice | undefined;
   onChoose: (c: SyncChoice) => void;
+  onOpenLink: (url: string) => void;
 }) {
   const c = conflict;
   const what =
@@ -106,6 +112,7 @@ function ConflictRow({
         : c.kind === "removed_on_tracker"
           ? "Not found on GitHub"
           : "Not valid in this plan";
+  const url = c.url;
   return (
     <div className="flow-review__row" data-testid={`flow-conflict-${c.id}`} data-stale={!!c.stale}>
       {c.kind === "field" ? (
@@ -147,6 +154,16 @@ function ConflictRow({
             </label>
           ))}
         </div>
+      )}
+      {url && (
+        <button
+          type="button"
+          className="flow-review__link flow-review__rowlink"
+          aria-label={`Open ${c.itemName}: ${what} on GitHub`}
+          onClick={() => onOpenLink(url)}
+        >
+          Open on GitHub <span aria-hidden="true">↗</span>
+        </button>
       )}
     </div>
   );
@@ -244,8 +261,10 @@ export function SyncReview({
           const item = findItem(doc, itemId);
           const name = item?.name ?? list[0].itemName;
           const link = syncLinkOf(doc, itemId);
-          const url = list.find((c) => c.url)?.url ?? link?.ref.url ?? null;
-          const tag = link ? tagText(link) : "GitHub";
+          // FSR-FR-RDZI: the heading names the item's tracker tag. It opens
+          // the item's own link; each row links to its own conflict.
+          const url = link?.ref.url ?? null;
+          const tag = link ? tagText(link) : null;
           return (
             <div className="flow-review__group" key={itemId} data-testid={`flow-review-group-${itemId}`}>
               <div className="flow-review__ghead">
@@ -264,7 +283,7 @@ export function SyncReview({
                 ) : (
                   <span className="flow-review__item flow-review__item--gone">{name}</span>
                 )}
-                {url ? (
+                {tag && url ? (
                   <button
                     type="button"
                     className="flow-tag flow-review__tag"
@@ -274,7 +293,7 @@ export function SyncReview({
                     {tag} <span aria-hidden="true">↗</span>
                   </button>
                 ) : (
-                  link && <span className="flow-tag flow-review__tag">{tag}</span>
+                  tag && <span className="flow-tag flow-review__tag">{tag}</span>
                 )}
               </div>
               {list.map((c) => (
@@ -284,6 +303,7 @@ export function SyncReview({
                   conflict={c}
                   choice={choices[c.id]}
                   onChoose={(choice) => setChoices((prev) => ({ ...prev, [c.id]: choice }))}
+                  onOpenLink={onOpenLink}
                 />
               ))}
             </div>

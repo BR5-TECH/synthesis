@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 
+import { resetLogBufferForTest } from "../logging";
 import { resetDiffModes } from "../state/diffModes";
 import { resetAppPreferencesCache } from "../state/appPreferences";
 import type {
@@ -37,12 +38,51 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
-const wireBackend = makeWireBackend(invokeMock);
+const wireShared = makeWireBackend(invokeMock);
+
+/** The commands the shared backend answers. */
+const KNOWN = new Set([
+  "get_file_revisions",
+  "load_artifact_contents_by_id",
+  "save_artifact_contents",
+  "create_file",
+  "load_app_preferences",
+  "save_app_preferences",
+]);
+
+/** The reads of the tab's discussion surface, which this file answers empty. */
+const EMPTY_LISTS = new Set([
+  "list_discussions",
+  "list_project_agents",
+  "list_agent_turns",
+  "list_agent_turn_image_notices",
+  "list_recoverable_agent_turn_failures",
+]);
+
+/**
+ * The shared backend, made strict for this file: it answers the log flush,
+ * and it rejects a command it does not know rather than answer `undefined`,
+ * so no timer of the code under test can throw into the next test.
+ */
+function wireBackend(options: Parameters<typeof wireShared>[0] = {}) {
+  wireShared(options);
+  const wired = invokeMock.getMockImplementation()!;
+  invokeMock.mockImplementation((cmd: string, args?: unknown) => {
+    if (cmd === "append_log_records") return Promise.resolve();
+    if (EMPTY_LISTS.has(cmd)) return Promise.resolve([]);
+    if (cmd === "resolve_comment_author_identity") {
+      return Promise.resolve({ kind: "human", login: "raver119" });
+    }
+    if (!KNOWN.has(cmd)) return Promise.reject(new Error(`unexpected command ${cmd}`));
+    return wired(cmd, args);
+  });
+}
 
 const callsTo = (name: string) =>
   invokeMock.mock.calls.filter((c) => c[0] === name);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   unlistenMock.mockReset();
   listeners = {};

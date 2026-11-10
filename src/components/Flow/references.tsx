@@ -7,6 +7,8 @@ export interface ReferenceRowsProps {
   /** FLO-FR-10: a reference is removed on its own, from its row. */
   onRemove?: (artifactId: string) => void;
   onOpen: (artifact: ArtifactOption) => void;
+  /** FLO-FR-KHBY: while a sync runs, no reference is removed. */
+  disabled?: boolean;
   className?: string;
 }
 
@@ -16,7 +18,13 @@ export interface ReferenceRowsProps {
  * the artifact. One that does not resolve names the stored id and opens
  * nothing. Nothing is removed for the author.
  */
-export function ReferenceRows({ references, onRemove, onOpen, className }: ReferenceRowsProps) {
+export function ReferenceRows({
+  references,
+  onRemove,
+  onOpen,
+  disabled = false,
+  className,
+}: ReferenceRowsProps) {
   if (references.length === 0) return null;
   return (
     <div className={className ?? "flow-refs"}>
@@ -49,6 +57,7 @@ export function ReferenceRows({ references, onRemove, onOpen, className }: Refer
               type="button"
               className="flow-ref-row__remove"
               aria-label={`Remove reference ${referenceLabel(ref)}`}
+              disabled={disabled}
               onClick={() => onRemove(ref.id)}
             >
               ×
@@ -73,6 +82,7 @@ export function ArtifactPicker({
   onAdd,
   label = "Add reference",
   prompt = "+ Reference",
+  disabled = false,
   className,
 }: {
   artifacts: ArtifactOption[];
@@ -80,6 +90,8 @@ export function ArtifactPicker({
   onAdd: (artifactId: string) => void;
   label?: string;
   prompt?: string;
+  /** FLO-FR-KHBY: while a sync runs, the picker adds nothing. */
+  disabled?: boolean;
   className?: string;
 }) {
   return (
@@ -87,8 +99,9 @@ export function ArtifactPicker({
       className={className ?? "flow-picker"}
       aria-label={label}
       value=""
+      disabled={disabled}
       onChange={(e) => {
-        if (e.target.value) onAdd(e.target.value);
+        if (!disabled && e.target.value) onAdd(e.target.value);
       }}
     >
       <option value="">{prompt}</option>

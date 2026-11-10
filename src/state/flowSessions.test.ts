@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetLogBufferForTest } from "../logging";
 import { FlowSessionStore } from "./flowSessions";
 import { AUTOSAVE_DELAY_MS } from "./writeSchedule";
 import {
@@ -60,6 +61,7 @@ let validation: { valid: boolean; violations: Array<Record<string, string>> } = 
 };
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   unlistenMock.mockReset();
   externalHandlers = [];
@@ -71,6 +73,8 @@ beforeEach(() => {
   validation = { valid: true, violations: [] };
   invokeMock.mockImplementation(
     async (cmd: string, args: Record<string, string>) => {
+      // The log flush runs in the background of every test.
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "validate_flow_document") return validation;
       if (cmd === "load_artifact_contents_by_id") {
         const entry = disk[args.id];
@@ -84,6 +88,7 @@ beforeEach(() => {
         disk[args.id] = { body: args.body, checksum: `ck-${writes.length}` };
         return { checksum: `ck-${writes.length}` };
       }
+      // An async function: this is a rejected promise, not a synchronous throw.
       throw new Error(`unexpected invoke ${cmd}`);
     },
   );
@@ -614,9 +619,18 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
  * write lands for a Flow nobody is looking at.
  */
 describe("the rest after the last canvas edit (FLO-FR-27)", () => {
-  /** Let a scheduled write's rest elapse. */
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(async () => {
+    // Run what the fake clock still holds, such as the log flush.
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
+  });
+
+  /** Let a scheduled write's rest elapse on the fake clock. */
   const rest = async () => {
-    await new Promise((r) => setTimeout(r, AUTOSAVE_DELAY_MS + 30));
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS + 30);
   };
 
   it("FLO-FR-27: writes once after a drag rather than once per frame", async () => {
@@ -649,7 +663,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     expect(store.get("f.flow")?.dirty).toBe(false);
   });
 
-  it("spends the schedule when a Save brings the write forward (SNV-FR-29)", async () => {
+  it("SNV-FR-29, FLO-FR-27: spends the schedule when a Save brings the write forward", async () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
@@ -738,7 +752,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
    * Two writes of one Flow must never be in flight together — see the artifact
    * store's test of the same name for what overlapping costs.
    */
-  it("never overlaps two writes of the same Flow", async () => {
+  it("FLO-FR-27: never overlaps two writes of the same Flow", async () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");

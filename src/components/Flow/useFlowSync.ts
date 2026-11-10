@@ -10,6 +10,13 @@ import { showToast } from "../../state/toasts";
 import type { ConflictResolution, SyncResult } from "../../types";
 import { errorText } from "./geometry";
 
+/**
+ * FLO-FR-AKMV: the band's error when the Flow could not take its sync
+ * section, for example on a main branch whose write is not confirmed.
+ */
+export const SYNC_NOT_CONNECTED =
+  "The Flow was not connected to GitHub: the plan could not be changed. Confirm the write and try again.";
+
 /** FLO-FR-WLHA: the conflicts and skipped issues the Sync control counts. */
 export function reviewCount(state: FlowSyncState): number {
   return state.conflicts.length + state.skipped.length;
@@ -42,7 +49,19 @@ function confirmSync(flowId: string, result: SyncResult): void {
 export async function startFlowSync(flows: FlowSessionStore, flowId: string): Promise<void> {
   const session = flows.get(flowId);
   if (!session?.doc || flows.syncState(flowId).running) return;
-  if (!session.doc.sync) flows.applyEdit(flowId, connectSync);
+  if (!session.doc.sync) {
+    flows.applyEdit(flowId, connectSync);
+    // EDT-FR-UPNU: on an unconfirmed main branch the edit is held, and the
+    // Flow still has no sync section. A sync of that file connects nothing,
+    // so none starts, and the band says why.
+    if (!flows.get(flowId)?.doc?.sync) {
+      logWarn(["frontend"], "flow sync not started: the sync section was not added", {
+        flow: flowId,
+      });
+      flows.setSyncState(flowId, { error: SYNC_NOT_CONNECTED });
+      return;
+    }
+  }
   // FLO-FR-KHBY: inert from the first step, so no edit and no second sync
   // gets in while the pending changes are written.
   flows.setSyncState(flowId, { running: "sync", error: null });

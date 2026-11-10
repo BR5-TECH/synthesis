@@ -1,5 +1,6 @@
 import * as api from "../api";
 import { onArtifactChangedExternally } from "../events";
+import { errorLogCode } from "../errorLogCode";
 import { logError, logWarn } from "../logging";
 import type {
   ArtifactChangedPayload,
@@ -334,7 +335,7 @@ export class FlowSessionStore {
         s.error = String(e);
         logError(["frontend"], "flow load failed", {
           artifact: flowId,
-          reason: String(e),
+          code: errorLogCode(e),
         });
       })
       .finally(() => {
@@ -414,28 +415,33 @@ export class FlowSessionStore {
    * FLO-FR-05 error state — is dropped rather than creating a graph out of
    * nothing, which for the error state would be the very "replaced by an empty
    * graph" the requirement rules out.
+   *
+   * Returns true when the edit changed the graph, and false when it was
+   * dropped or changed nothing. A caller that reports a result after an await
+   * reads it, because a sync can start while the call waits.
    */
   applyEdit(
     flowId: string,
     edit: (doc: FlowDocument) => FlowDocument,
-  ): void {
+  ): boolean {
     const s = this.ensure(flowId);
-    if (!s.doc) return;
+    if (!s.doc) return false;
     // FLO-FR-KHBY: while a sync runs the tab is inert and schedules no write.
-    if (this.syncState(flowId).running) return;
+    if (this.syncState(flowId).running) return false;
     // EDT-FR-UPNU: the canvas saves through "save artifact contents", so its
     // first change on an unconfirmed main branch is held too.
-    if (holdEdit()) return;
+    if (holdEdit()) return false;
     const next = edit(s.doc);
     // An edit that produced the very same document changed nothing, and every
     // mutator returns a new object when it changes anything — so this is a
     // no-op, not an edit, and must not raise the unsaved state (FLO-FR-26).
-    if (next === s.doc) return;
+    if (next === s.doc) return false;
     s.doc = next;
     s.dirty = true;
     // FLO-FR-27: the canvas writes itself a short rest after the last edit.
     this.scheduleWrite(flowId);
     this.notify();
+    return true;
   }
 
   /** Flows holding unsaved changes, in the order they were first opened. */
@@ -532,12 +538,12 @@ export class FlowSessionStore {
       if (refused) {
         logWarn(["frontend"], "flow write refused on a main branch", {
           artifact: flowId,
-          code: String(e).split(":")[0],
+          code: errorLogCode(e),
         });
       } else {
         logError(["frontend"], "flow write failed", {
           artifact: flowId,
-          reason: String(e),
+          code: errorLogCode(e),
         });
       }
       return { ok: false, blocked: "error", artifactId: flowId };

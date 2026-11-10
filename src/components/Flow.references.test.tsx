@@ -67,6 +67,22 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
     expect(flows.get("plans/payments.flow")!.dirty).toBe(false);
   });
 
+  it("FLO-FR-11: while the project tree is not read, no reference shows as unresolved", async () => {
+    const doc = plan([
+      item("f1", "feature"),
+      item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"], position: { x: 20, y: 60 } }),
+    ]);
+    doc.references = ["gone/hld.md"];
+    const b = flowBackend(doc);
+    b.on.load_project_tree = () => new Promise(() => {});
+    await renderFlow(b);
+
+    selectItem("t1");
+    expect(screen.queryAllByTestId("flow-ref-unresolved")).toEqual([]);
+    expect(within(itemEl("t1")).getByText("gone/old.md")).toBeInTheDocument();
+    expect(within(screen.getByTestId("flow-band")).getByText("gone/hld.md")).toBeInTheDocument();
+  });
+
   it("FLO-FR-12: a resolved reference opens through \"open artifact by id\" in its natural surface; an unresolved one opens nothing", async () => {
     const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"], position: { x: 20, y: 60 } })]));
     const { onOpenArtifact } = await renderFlow(b);

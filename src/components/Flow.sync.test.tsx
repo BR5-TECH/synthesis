@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
@@ -16,6 +16,7 @@ import {
   renderFlow,
 } from "../test/flowCanvasHarness";
 import { canvas, client, dragItem, ID, itemEl, panel, selectItem } from "../test/flowFixtures";
+import { FlowCanvas } from "./Flow";
 import { resetListeners } from "../test/flowMocks";
 import { issueBase, issueRef, samplePlan } from "../test/flowPlanFixtures";
 
@@ -90,12 +91,31 @@ describe("the Sync control (FLO-FR-AKMV)", () => {
     b.on.sync_flow_with_tracker = () => emptyResult();
     await renderFlow(b);
     b.validation = { valid: false, violations: [{ code: "dependency_cycle", message: "a cycle" }] };
+    // The clock is held below the rest, so only the sync writes the edit.
+    vi.useFakeTimers();
 
-    await userEvent.type(screen.getByRole("textbox", { name: "Flow description" }), "x");
-    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
-    await screen.findByText("This Flow was not written.");
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "x" } });
+    fireEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await vi.waitFor(() => expect(within(band()).getByRole("button", { name: "Sync" })).toBeEnabled());
+    expect(screen.getByText("This Flow was not written.")).toBeInTheDocument();
+    expect(callsOf(b, "save_artifact_contents")).toEqual([]);
     expect(callsOf(b, "sync_flow_with_tracker")).toEqual([]);
-    expect(within(band()).getByRole("button", { name: "Sync" })).toBeEnabled();
+  });
+
+  it("FLO-FR-AKMV, FLO-FR-27: a write that fails before the sync shows its error in the tab and starts no sync", async () => {
+    const b = flowBackend(synced());
+    b.on.sync_flow_with_tracker = () => emptyResult();
+    b.on.save_artifact_contents = () => Promise.reject("io_error: the disk is full");
+    await renderFlow(b);
+    // The clock is held below the rest, so only the sync writes the edit.
+    vi.useFakeTimers();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "x" } });
+    fireEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await vi.waitFor(() => expect(within(band()).getByRole("button", { name: "Sync" })).toBeEnabled());
+    expect(screen.getByRole("alert")).toHaveTextContent("io_error: the disk is full");
+    expect(callsOf(b, "save_artifact_contents")).toHaveLength(1);
+    expect(callsOf(b, "sync_flow_with_tracker")).toEqual([]);
   });
 });
 
@@ -191,6 +211,30 @@ describe("while a sync runs (FLO-FR-KHBY)", () => {
 });
 
 describe("the result of a sync (FLO-FR-WLHA)", () => {
+  it("FLO-FR-WLHA, FSR-FR-KGOY: a sync that ends while the canvas is not mounted still lands, and the canvas shows its count and review when it mounts again", async () => {
+    const b = flowBackend(synced());
+    let finish!: (r: SyncResult) => void;
+    b.on.sync_flow_with_tracker = () => new Promise((res) => (finish = res));
+    const { flows, view } = await renderFlow(b);
+
+    fireEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(1));
+    view.unmount();
+    await act(async () =>
+      finish(
+        emptyResult({
+          skipped: [{ number: 58, title: "Load test plan", url: null, reason: "no_kind_fits" }],
+        }),
+      ),
+    );
+    await waitFor(() => expect(flows.syncState(ID).running).toBeNull());
+
+    render(<FlowCanvas flowId={ID} flows={flows} />);
+    expect(await within(band()).findByRole("button", { name: "Review 1 sync item" })).toHaveTextContent("1");
+    expect(screen.getByTestId("flow-sync-review")).toHaveTextContent("Load test plan");
+    expect(within(band()).getByRole("button", { name: "Sync" })).toBeEnabled();
+  });
+
   it("FLO-FR-WLHA: a sync with conflicts or skipped issues marks the Sync control with their count and opens the review", async () => {
     const b = flowBackend(synced());
     b.on.sync_flow_with_tracker = () =>
@@ -240,6 +284,37 @@ describe("the result of a sync (FLO-FR-WLHA)", () => {
     });
     expect(screen.queryByTestId("flow-sync-review")).toBeNull();
     expect(within(band()).queryByRole("button", { name: /^Review / })).toBeNull();
+  });
+
+  it("FLO-FR-WLHA: skipped issues alone mark the Sync control with their count", async () => {
+    const b = flowBackend(synced());
+    b.on.sync_flow_with_tracker = () =>
+      emptyResult({
+        skipped: [
+          { number: 58, title: "Load test plan", url: null, reason: "no_kind_fits" },
+          { number: 61, title: "Vendor", url: null, reason: "foreign_repository" },
+        ],
+      });
+    await renderFlow(b);
+
+    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    expect(await within(band()).findByRole("button", { name: "Review 2 sync items" })).toHaveTextContent("2");
+    expect(screen.getByTestId("flow-sync-review")).toBeInTheDocument();
+  });
+
+  it("FLO-FR-WLHA: the next sync that succeeds clears a sync error from the band", async () => {
+    const b = flowBackend(synced());
+    b.on.sync_flow_with_tracker = () =>
+      Promise.reject({ code: "github_unreachable", message: "GitHub did not answer." });
+    await renderFlow(b);
+
+    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    expect(await screen.findByTestId("flow-sync-error")).toHaveTextContent("GitHub did not answer.");
+    b.on.sync_flow_with_tracker = () => emptyResult();
+    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(2));
+    await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+    expect(screen.queryByTestId("flow-sync-error")).toBeNull();
   });
 
   it("FLO-FR-WLHA: a sync error shows its typed text in the band", async () => {
@@ -322,6 +397,44 @@ describe("Link to existing (FLO-FR-TYEZ)", () => {
     expect(await within(panel()).findByRole("alert")).toHaveTextContent("No issue #404 in acme/payments.");
     expect(planOf(flows).sync!.links).toHaveLength(1);
     expect(flows.get(ID)!.dirty).toBe(false);
+  });
+
+  it("FLO-FR-TYEZ: a tracker item that another item links is refused, naming that item, and nothing is stored", async () => {
+    const b = flowBackend(synced());
+    b.on.read_tracker_item = () => ({
+      ref: issueRef(42),
+      name: "Card capture",
+      description: "",
+      state: "open",
+    });
+    const { flows } = await renderFlow(b);
+
+    selectItem("t1");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Link to existing…" }));
+    await userEvent.type(within(panel()).getByRole("spinbutton", { name: "Issue number" }), "42");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Link" }));
+    expect(await within(panel()).findByRole("alert")).toHaveTextContent("F1 already links that item.");
+    expect(planOf(flows).sync!.links).toHaveLength(1);
+    expect(findItem(planOf(flows), "t1")!.name).toBe("T1");
+    expect(flows.get(ID)!.dirty).toBe(false);
+  });
+
+  it("FLO-FR-TYEZ: an empty number or 0 makes no read_tracker_item call", async () => {
+    const b = flowBackend(synced());
+    b.on.read_tracker_item = () => Promise.reject({ code: "tracker_item_not_found", message: "No issue." });
+    await renderFlow(b);
+
+    selectItem("t1");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Link to existing…" }));
+    const field = within(panel()).getByRole("spinbutton", { name: "Issue number" });
+    expect(within(panel()).getByRole("button", { name: "Link" })).toBeDisabled();
+    fireEvent.submit(field.closest("form")!);
+    await userEvent.type(field, "0");
+    expect(within(panel()).getByRole("button", { name: "Link" })).toBeDisabled();
+    fireEvent.submit(field.closest("form")!);
+    await act(async () => {});
+    expect(callsOf(b, "read_tracker_item")).toEqual([]);
+    expect(within(panel()).queryByRole("alert")).toBeNull();
   });
 
   it("FLO-FR-TYEZ: an unsynced Flow, or an item that has a link, offers no Link to existing", async () => {

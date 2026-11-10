@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 
 import * as api from "../../api";
+import { errorLogCode } from "../../errorLogCode";
 import { logWarn } from "../../logging";
 import type { FlowItemMatch, OpenableArtifact } from "../../types";
 import { kindGlyph, kindLabel } from "../Flow/kindGlyphs";
@@ -31,12 +32,11 @@ export function PlanTags({
         if (live) setItems(Array.isArray(found) ? found : []);
       },
       (e: unknown) => {
-        // NAW-FR-SGVS: a failed read shows no tag and is logged.
-        const code =
-          typeof e === "object" && e !== null && "code" in e
-            ? String((e as { code: unknown }).code)
-            : "unknown";
-        logWarn(["frontend"], "plan items of a draft could not be read", { draftId, code });
+        // NAW-FR-SGVS: a failed read shows no tag and is logged by its code.
+        logWarn(["frontend"], "plan items of a draft could not be read", {
+          draftId,
+          code: errorLogCode(e),
+        });
         if (live) setItems([]);
       },
     );

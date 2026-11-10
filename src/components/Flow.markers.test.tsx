@@ -292,38 +292,44 @@ describe("milestones, local-only items, and tracker tags", () => {
 
   it("FLO-FR-XAPK: a milestone is past only when its due date is before today and it is not done", async () => {
     // Midday of 2027-03-15, in local time: the canvas reads "today" in local time.
-    vi.setSystemTime(new Date(2027, 2, 15, 12, 0, 0));
-    const at = (n: number) => ({ x: n * 700, y: 0 });
-    const b = flowBackend(
-      plan([
-        item("m1", "milestone", { due: "2027-03-14", position: at(0) }),
-        item("m2", "milestone", { due: "2027-03-14", position: at(1) }),
-        item("m3", "milestone", { due: "2027-03-15", position: at(2) }),
-        item("m4", "milestone", { due: "2027-03-16", position: at(3) }),
-      ]),
-    );
-    b.delivery = {
-      items: [
-        itemState("m1", "in_progress"),
-        itemState("m2", "done"),
-        itemState("m3", "in_progress"),
-        itemState("m4", "not_started"),
-      ],
-    };
-    await renderFlow(b);
-    await waitFor(() => expect(chipOf("m4")).not.toBeNull());
+    // Only the date is fake, so every timer of the canvas runs as usual.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(2027, 2, 15, 12, 0, 0));
+      const at = (n: number) => ({ x: n * 700, y: 0 });
+      const b = flowBackend(
+        plan([
+          item("m1", "milestone", { due: "2027-03-14", position: at(0) }),
+          item("m2", "milestone", { due: "2027-03-14", position: at(1) }),
+          item("m3", "milestone", { due: "2027-03-15", position: at(2) }),
+          item("m4", "milestone", { due: "2027-03-16", position: at(3) }),
+        ]),
+      );
+      b.delivery = {
+        items: [
+          itemState("m1", "in_progress"),
+          itemState("m2", "done"),
+          itemState("m3", "in_progress"),
+          itemState("m4", "not_started"),
+        ],
+      };
+      await renderFlow(b);
+      await waitFor(() => expect(chipOf("m4")).not.toBeNull());
 
-    const due = (id: string) => within(itemEl(id)).getByTestId("flow-due");
-    expect(due("m1")).toHaveAttribute("data-past", "true");
-    expect(due("m1")).toHaveTextContent("due 2027-03-14 · past");
-    // Done: not past, whatever the date.
-    expect(due("m2")).toHaveAttribute("data-past", "false");
-    expect(due("m2")).toHaveTextContent(/^.*due 2027-03-14$/);
-    // Today is not before today.
-    expect(due("m3")).toHaveAttribute("data-past", "false");
-    // A future date that is not done is not past.
-    expect(due("m4")).toHaveAttribute("data-past", "false");
-    expect(due("m4")).not.toHaveTextContent("past");
+      const due = (id: string) => within(itemEl(id)).getByTestId("flow-due");
+      expect(due("m1")).toHaveAttribute("data-past", "true");
+      expect(due("m1")).toHaveTextContent("due 2027-03-14 · past");
+      // Done: not past, whatever the date.
+      expect(due("m2")).toHaveAttribute("data-past", "false");
+      expect(due("m2")).toHaveTextContent(/^.*due 2027-03-14$/);
+      // Today is not before today.
+      expect(due("m3")).toHaveAttribute("data-past", "false");
+      // A future date that is not done is not past.
+      expect(due("m4")).toHaveAttribute("data-past", "false");
+      expect(due("m4")).not.toHaveTextContent("past");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("FLO-FR-XAPK: a selected milestone offers a Due field that stores a date or nothing", async () => {
@@ -351,6 +357,18 @@ describe("milestones, local-only items, and tracker tags", () => {
     expect(within(itemEl("t1")).getByText("local only")).toBeInTheDocument();
     await userEvent.click(within(panel()).getByRole("switch", { name: "Local only" }));
     expect(findItem(planOf(flows), "t1")!.localOnly).toBeUndefined();
+  });
+
+  it("FLO-FR-TZSU: a local-only container carries the mark in its header", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
+    const head = () => itemEl("f1").querySelector(".flow-ctr__head") as HTMLElement;
+
+    expect(within(head()).queryByText("local only")).toBeNull();
+    selectItem("f1");
+    await userEvent.click(within(panel()).getByRole("switch", { name: "Local only" }));
+    expect(findItem(planOf(flows), "f1")!.localOnly).toBe(true);
+    expect(within(head()).getByText("local only")).toBeInTheDocument();
   });
 
   it("FLO-FR-ULEM: a linked item carries a tracker tag naming the repository and the number; activating it opens the link", async () => {

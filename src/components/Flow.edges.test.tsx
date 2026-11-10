@@ -118,6 +118,36 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
     expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
   });
 
+  it("FLO-FR-33, FLO-FR-16: the item the drag started on is never highlighted, and a release on it is refused", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
+
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    // Inside t1, the item the drag started on.
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 100, y: 210 }) });
+    expect(itemEl("t1")).toHaveAttribute("data-magnet", "false");
+    expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
+    fireEvent.pointerUp(itemEl("t1"), { pointerId: 1 });
+    expect(planOf(flows).edges).toEqual([]);
+    expect(refusal()).toHaveTextContent("An item cannot connect to itself.");
+  });
+
+  it("FLO-FR-33, FLO-FR-GZCH: an item that would close a cycle is never highlighted, and a release on it is refused naming the cycle", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3")]));
+    const { flows } = await renderFlow(b);
+
+    const port = within(itemEl("t3")).getByLabelText("Connect from T3");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 700, y: 260 }) });
+    // Inside t1, which blocks t2, which blocks t3.
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 100, y: 210 }) });
+    expect(itemEl("t1")).toHaveAttribute("data-magnet", "false");
+    expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
+    fireEvent.pointerUp(itemEl("t1"), { pointerId: 1 });
+    expect(planOf(flows).edges.map((e) => e.id)).toEqual(["e1", "e2"]);
+    expect(refusal()).toHaveTextContent("This edge makes a cycle: T1 → T2 → T3 → T1.");
+  });
+
   it("FLO-FR-33: an item snaps within the snap distance of its border, and not beyond it", async () => {
     const b = flowBackend(samplePlan());
     const { flows } = await renderFlow(b);

@@ -9,6 +9,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as api from "../../api";
 import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
+import { errorLogCode } from "../../errorLogCode";
 import { logWarn } from "../../logging";
 import { showDraftCreateFailed, showDraftOpenFailed } from "../../state/shellToasts";
 import type { DraftSessionStore } from "../../state/draftSessions";
@@ -202,7 +203,7 @@ export function createDraftTabActions(
       const created = await createDraftRecord({}, name);
       return created ? { ok: true, draft: created } : { ok: false, error: null };
     } catch (e) {
-      logWarn(["frontend"], "draft creation for a Flow item failed", { reason: String(e) });
+      logWarn(["frontend"], "draft creation for a Flow item failed", { code: errorLogCode(e) });
       const message =
         e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e);
       return { ok: false, error: message };

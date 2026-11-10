@@ -77,6 +77,7 @@ export function Band(props: BandProps) {
             onAdd={props.onAddReference}
             label={doc.references.length === 0 ? "Add HLD" : "Add Flow reference"}
             prompt={doc.references.length === 0 ? "Add HLD" : "+"}
+            disabled={!editable}
             className={`flow-picker flow-picker--band${doc.references.length === 0 ? " flow-picker--hld" : ""}`}
           />
         )}

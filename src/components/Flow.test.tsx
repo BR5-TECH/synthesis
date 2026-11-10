@@ -8,6 +8,7 @@ import { parseFlowDocument, serializeFlowDocument } from "../state/flowDocument"
 import { resetLogBufferForTest } from "../logging";
 import { resetToasts } from "../state/toasts";
 import { AUTOSAVE_DELAY_MS } from "../state/writeSchedule";
+import { currentMainBranchWrite, requestMainBranchWrite } from "../state/mainBranchWrite";
 import type { Discussion } from "../types";
 import { DELIVERY_REST_MS } from "./Flow/useDeliveryState";
 import {
@@ -43,6 +44,28 @@ afterEach(async () => {
 });
 
 const viewport = () => document.querySelector(".flow-viewport") as HTMLElement;
+
+/** A discussion of the Flow file with one comment. */
+function flowDiscussion(body: string): Discussion {
+  return {
+    id: "dsc1",
+    target: { kind: "artifact", artifactId: ID },
+    fragmentTarget: null,
+    comments: [
+      {
+        id: "c1",
+        author: { kind: "human", login: "raver119" },
+        body,
+        quotes: [],
+        attachments: [],
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ],
+    resolved: false,
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  };
+}
 
 /** Press on `el`, move as a pan would, and release on the canvas. */
 function pressAndDrag(el: HTMLElement) {
@@ -383,7 +406,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
     expect(b.writes).toEqual([]);
   });
 
-  it("FLO-FR-35, FLO-FR-07: the add menu and the action control share one transient surface", async () => {
+  it("FLO-FR-07, FLO-FR-34: the add menu and the action control share one transient surface", async () => {
     const b = flowBackend(samplePlan());
     const { flows } = await renderFlow(b);
 
@@ -392,6 +415,45 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByTestId("flow-add-menu")).toBeNull();
     expect(flows.get(ID)!.dirty).toBe(false);
+  });
+
+  it("FLO-FR-07: opening the add menu closes no floating overlay of the window, and dismisses the discussion panel as ACT-FR-12 says", async () => {
+    const b = flowBackend(samplePlan());
+    b.on.list_discussions = () => [flowDiscussion("Is the order of the refunds right?")];
+    b.on.list_project_agents = () => [];
+    b.on.list_agent_turns = () => [];
+    await renderFlow(b);
+    await userEvent.click(await within(canvas()).findByRole("button", { name: "Show discussion (1)" }));
+    expect(screen.getByRole("dialog", { name: "Discussion" })).toBeInTheDocument();
+    // SNV-FR-56: the main branch write confirmation is a floating overlay of the window.
+    void requestMainBranchWrite({ write: "edit_file", branch: "main", guard: null, readError: null });
+    const overlay = currentMainBranchWrite();
+    expect(overlay).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Add to plan" }));
+    expect(screen.getByTestId("flow-add-menu")).toBeInTheDocument();
+    expect(currentMainBranchWrite()).toBe(overlay);
+    expect(screen.queryByRole("dialog", { name: "Discussion" })).toBeNull();
+  });
+
+  it("FLO-FR-36: a discussion opened from the action control targets the Flow file, with no fragment", async () => {
+    const b = flowBackend(samplePlan());
+    b.on.list_project_agents = () => [];
+    b.on.list_agent_turns = () => [];
+    b.on.resolve_comment_author_identity = () => ({ kind: "human", login: "raver119" });
+    b.on.open_discussion = () => flowDiscussion("Check the order.");
+    await renderFlow(b);
+
+    await userEvent.click(within(canvas()).getByRole("button", { name: "Actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Discuss this flow" }), "Check the order.");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    await waitFor(() => expect(callsOf(b, "open_discussion")).toHaveLength(1));
+    expect(callsOf(b, "open_discussion")[0]).toMatchObject({
+      target: { kind: "artifact", artifactId: ID },
+      fragmentTarget: null,
+      body: "Check the order.",
+    });
   });
 });
 

@@ -152,10 +152,10 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
   }, []);
 
   /** FLO-FR-26: every change to the plan goes through the store. */
+  /** Returns true when the edit changed the plan (see `applyEdit`). */
   const edit = useCallback(
-    (fn: (d: FlowDocument) => FlowDocument) => {
-      if (flowId) flows.applyEdit(flowId, fn);
-    },
+    (fn: (d: FlowDocument) => FlowDocument): boolean =>
+      flowId ? flows.applyEdit(flowId, fn) : false,
     [flowId, flows],
   );
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import * as api from "../../api";
+import { errorLogCode } from "../../errorLogCode";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
 import { logError, logInfo, logWarn } from "../../logging";
 import {
@@ -46,6 +47,18 @@ export interface PendingRemoval {
   name: string;
   count: number;
 }
+
+/**
+ * FLO-FR-NRBV / FLO-FR-KHBY: the error of a draft that was created while the
+ * plan could not take its link, for example because a sync started meanwhile.
+ */
+export function unlinkedDraftText(name: string): string {
+  return `The draft ${name} was created, but this item does not link it: the plan could not be changed. Use Link draft to link it.`;
+}
+
+/** FLO-FR-TYEZ / FLO-FR-KHBY: the error of a link the plan could not take. */
+export const LINK_DROPPED_TEXT =
+  "The item was not linked: the plan could not be changed. Try again.";
 
 /** FLO-FR-HGIY: a kind change that would remove a draft link or a footprint. */
 export interface PendingKind {
@@ -211,14 +224,23 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
     setCreating(null);
     if (!outcome.ok) {
       if (outcome.error !== null) {
-        const error = outcome.error;
+        const error = `The draft was not created. ${outcome.error}`;
         setDraftErrors((prev) => ({ ...prev, [id]: error }));
         logWarn(["frontend"], "flow task draft not created", { flow: flowId ?? "", item: id });
       }
       return;
     }
     const draft = outcome.draft;
-    edit((d) => docOrUnchanged(d, setItemDraft(d, id, draft.id)));
+    // FLO-FR-KHBY: a sync that started while the draft was created drops the
+    // link. The item then shows why, and no draft opens that no item links.
+    if (!edit((d) => docOrUnchanged(d, setItemDraft(d, id, draft.id)))) {
+      setDraftErrors((prev) => ({ ...prev, [id]: unlinkedDraftText(draft.name) }));
+      logWarn(["frontend"], "flow task draft created but not linked", {
+        flow: flowId ?? "",
+        item: id,
+      });
+      return;
+    }
     logInfo(["frontend"], "flow task draft created", { flow: flowId ?? "", item: id });
     onOpenDraft?.(draft);
   };
@@ -275,7 +297,11 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
       if (!live) return null;
       const result = setSyncLink(live, id, snap.ref, base);
       if (!result.ok) return refusalMessage(live, "link", result.refusal).text;
-      edit((d) => docOrUnchanged(d, setSyncLink(d, id, snap.ref, base)));
+      // FLO-FR-KHBY: a sync that started while the item was read drops the link.
+      if (!edit((d) => docOrUnchanged(d, setSyncLink(d, id, snap.ref, base)))) {
+        logWarn(["frontend", "remote"], "flow item link dropped", { flow: flowId, item: id });
+        return LINK_DROPPED_TEXT;
+      }
       logInfo(["frontend", "remote"], "flow item linked to tracker", { flow: flowId, item: id });
       return null;
     } catch (e) {
@@ -290,7 +316,7 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
   const sync = () => {
     if (flowId) {
       void startFlowSync(flows, flowId).catch((e) =>
-        logError(["frontend"], "flow sync did not run", { reason: String(e) }),
+        logError(["frontend"], "flow sync did not run", { code: errorLogCode(e) }),
       );
     }
   };

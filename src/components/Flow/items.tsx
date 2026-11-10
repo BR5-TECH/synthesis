@@ -235,7 +235,7 @@ export function CardView(props: CardViewProps) {
       )}
       {props.draftError && (
         <div className="flow-card__error" role="alert">
-          The draft was not created. {props.draftError}
+          {props.draftError}
         </div>
       )}
       <ReferenceRows references={facts.references} onOpen={handlers.onOpenReference} />

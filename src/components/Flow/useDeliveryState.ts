@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "../../api";
 import { onDraftsChanged, onGraduationRunChanged } from "../../events";
+import { errorLogCode } from "../../errorLogCode";
 import { logWarn } from "../../logging";
 import { serializeFlowDocument, type FlowDocument } from "../../state/flowDocument";
 import type { FlowOverlap, ItemDeliveryState } from "../../types";
@@ -47,7 +48,7 @@ export function useDeliveryState(doc: FlowDocument | null): DeliveryView {
         setStates(new Map(answer.items.map((s) => [s.itemId, s])));
       })
       .catch((e) => {
-        logWarn(["frontend"], "flow delivery state failed", { reason: String(e) });
+        logWarn(["frontend"], "flow delivery state failed", { code: errorLogCode(e) });
       });
     void Promise.resolve()
       .then(() => api.analyzeFlowOverlap(asked))
@@ -57,7 +58,7 @@ export function useDeliveryState(doc: FlowDocument | null): DeliveryView {
         setOverlaps(answer.overlaps);
       })
       .catch((e) => {
-        logWarn(["frontend"], "flow overlap analysis failed", { reason: String(e) });
+        logWarn(["frontend"], "flow overlap analysis failed", { code: errorLogCode(e) });
       });
   });
 

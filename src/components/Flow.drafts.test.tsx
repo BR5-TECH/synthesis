@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { resetLogBufferForTest } from "../logging";
+import { FLUSH_DELAY_MS, resetLogBufferForTest } from "../logging";
 import { findItem } from "../state/flowDocument";
 import { resetToasts, visibleToasts } from "../state/toasts";
 import type { DraftSummary } from "../types";
 import {
+  advance,
   callsOf,
   clearFlowStores,
+  endFakeTimers,
   flowBackend,
   itemState,
   planOf,
@@ -31,10 +33,15 @@ beforeEach(() => {
   resetListeners();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await endFakeTimers();
   cleanup();
   clearFlowStores();
 });
+
+/** The log records the frontend handed to the backend, as one text. */
+const loggedText = (b: ReturnType<typeof flowBackend>) =>
+  JSON.stringify(callsOf(b, "append_log_records"));
 
 const draft = (id: string, name: string): DraftSummary =>
   ({ id, name, status: "active", updatedAt: "2026-11-01T00:00:00Z" }) as DraftSummary;
@@ -100,7 +107,7 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const b = flowBackend(twoTasks());
     const onCreateDraft = vi
       .fn<(name: string) => Promise<{ ok: false; error: string | null }>>()
-      .mockResolvedValueOnce({ ok: false, error: "The draft was not created. The name is in use." })
+      .mockResolvedValueOnce({ ok: false, error: "The name is in use." })
       .mockResolvedValueOnce({ ok: false, error: null });
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onCreateDraft, onOpenDraft });
@@ -114,6 +121,26 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     expect(findItem(planOf(flows), "t2")!.draftId).toBeUndefined();
     expect(onOpenDraft).not.toHaveBeenCalled();
     expect(callsOf(b, "create_draft")).toEqual([]);
+  });
+
+  it("FLO-FR-NRBV: a double press makes one \"create draft\" call", async () => {
+    const b = flowBackend(twoTasks());
+    let answer!: (v: unknown) => void;
+    b.on.create_draft = () => new Promise((res) => (answer = res));
+    const onOpenDraft = vi.fn();
+    const { flows } = await renderFlow(b, { onOpenDraft });
+
+    const button = within(itemEl("t1")).getByRole("button", { name: "Create draft" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(within(itemEl("t1")).getByRole("button", { name: "Creating draft…" }));
+    await waitFor(() => expect(callsOf(b, "create_draft")).toHaveLength(1));
+    await act(async () =>
+      answer({ draft: { id: "d-9", name: "Tokenize", status: "active" }, file: "Tokenize.md" }),
+    );
+    await waitFor(() => expect(onOpenDraft).toHaveBeenCalledTimes(1));
+    expect(callsOf(b, "create_draft")).toHaveLength(1);
+    expect(findItem(planOf(flows), "t1")!.draftId).toBe("d-9");
   });
 
   it("FLO-FR-NRBV: a defect with no draft link offers Create draft, which stores the new draft on the defect", async () => {
@@ -234,6 +261,24 @@ describe("Link draft (FLO-FR-RMVR)", () => {
     expect(b.calls.some((c) => /^(delete|rename|set)_draft/.test(c.cmd))).toBe(false);
   });
 
+  it("FLO-FR-RMVR: a drafts list that cannot be read offers the placeholder alone, and the failure is logged by its code", async () => {
+    const b = flowBackend(twoTasks());
+    b.on.list_drafts = () =>
+      Promise.reject({ code: "drafts_store_invalid", message: "The store at /home/me is not valid." });
+    await renderFlow(b);
+    vi.useFakeTimers();
+
+    selectItem("t2");
+    await advance(0);
+    const picker = within(panel()).getByRole("combobox", { name: "Link draft" });
+    expect(within(picker).getAllByRole("option").map((o) => o.textContent)).toEqual(["Link draft…"]);
+    await advance(FLUSH_DELAY_MS);
+    expect(loggedText(b)).toContain("drafts not listed for the Flow");
+    expect(loggedText(b)).toContain("drafts_store_invalid");
+    expect(loggedText(b)).not.toContain("/home/me");
+    expect(panel()).toBeInTheDocument();
+  });
+
   it("FLO-FR-RMVR: a task with no draft offers no Unlink", async () => {
     const b = flowBackend(twoTasks());
     await renderFlow(b);
@@ -273,6 +318,18 @@ describe("the footprint (FLO-FR-ZEJU)", () => {
     expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["src/", "notes.txt"]);
     await userEvent.click(within(panel()).getByRole("button", { name: "Remove path src/" }));
     expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["notes.txt"]);
+  });
+
+  it("FLO-FR-ZEJU: while the project tree is not read, no footprint entry is marked missing", async () => {
+    const b = flowBackend(twoTasks(false, { footprint: ["src/main.ts", "src/gone.ts"] }));
+    b.on.load_project_tree = () => new Promise(() => {});
+    await renderFlow(b);
+
+    selectItem("t1");
+    const entries = [...panel().querySelectorAll(".flow-fp")];
+    expect(entries).toHaveLength(2);
+    for (const entry of entries) expect(entry).toHaveAttribute("data-missing", "false");
+    expect(within(panel()).queryByText("missing")).toBeNull();
   });
 
   it("FLO-FR-ZEJU: a container shows no draft and no footprint controls", async () => {

@@ -76,6 +76,7 @@
 .flow-review__skipped-title { color: var(--fg-1); }
 .flow-review__link { padding: 0; border: none; background: transparent; color: var(--accent); font: inherit; text-align: left; cursor: pointer; }
 .flow-review__link:hover { text-decoration: underline; }
+.flow-review__rowlink { align-self: flex-start; font-size: var(--fs-ui-2xs); }
 .flow-review__reason { margin-left: auto; color: var(--fg-3); text-align: right; }
 .flow-review__done { margin: 8px 0; font-size: var(--fs-ui-sm); font-weight: 600; color: var(--ok); }
 .flow-review__error { margin: 0 14px 8px; padding: 6px 8px; border-radius: var(--r-sm); background: var(--danger-soft); color: var(--danger); font-size: var(--fs-ui-xs); }

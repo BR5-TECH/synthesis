@@ -4,17 +4,28 @@
  * SET-FR-PQWW).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
 
 import { FlowSyncSettingsGroup } from "./FlowSyncSettings";
 import { resetLogBufferForTest } from "../logging";
-import type { FlowTrackerSettings, MetadataList, PublicationIssueType } from "../types";
+import { resetSettingsSections, settingsSectionsPending } from "../state/settingsSweep";
+import { pollingView } from "../test/githubPollingFixtures";
+import { Settings } from "../test/settingsHarness";
+import type {
+  FlowTrackerSettings,
+  GithubPublicationSettings,
+  MetadataList,
+  PublicationIssueType,
+} from "../types";
 
 /** FTS-FR-LMBE: what the backend reads for unset values. */
 const DEFAULTS: FlowTrackerSettings = {
@@ -31,7 +42,17 @@ const types = (...names: string[]): MetadataList<PublicationIssueType> => ({
   error: null,
 });
 
+/** What the Publication group of the same section reads. */
+const PUBLICATION: GithubPublicationSettings = {
+  parentIssueTypes: ["Feature"],
+  subIssueType: "Task",
+  subIssueMilestonePolicy: "inherit_parent",
+  rootIssueType: null,
+  noteIssueType: "Feature",
+};
+
 let stored: FlowTrackerSettings;
+let getImpl: () => Promise<FlowTrackerSettings>;
 let typeList: () => Promise<MetadataList<PublicationIssueType>>;
 let setImpl: (args: FlowTrackerSettings) => Promise<FlowTrackerSettings>;
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
@@ -39,7 +60,9 @@ const select = (label: string) => screen.getByLabelText(label) as HTMLSelectElem
 
 beforeEach(() => {
   resetLogBufferForTest();
+  resetSettingsSections();
   stored = { ...DEFAULTS };
+  getImpl = () => Promise.resolve(stored);
   typeList = async () => types("Feature", "Task", "Bug", "Epic");
   setImpl = async (args) => {
     stored = args;
@@ -51,7 +74,14 @@ beforeEach(() => {
       case "append_log_records":
         return Promise.resolve();
       case "get_flow_tracker_settings":
-        return Promise.resolve(stored);
+        return getImpl();
+      case "get_github_polling_state":
+        return Promise.resolve(pollingView());
+      case "list_github_projects":
+      case "list_github_project_statuses":
+        return Promise.resolve([]);
+      case "get_github_publication_settings":
+        return Promise.resolve(PUBLICATION);
       case "list_github_issue_types":
         return typeList();
       case "set_flow_tracker_settings":
@@ -118,7 +148,55 @@ describe("the Flow sync group of GitHub Project settings", () => {
     render(<FlowSyncSettingsGroup />);
     await waitFor(() => expect(select("Task").options.length).toBe(4));
     await userEvent.selectOptions(select("Task"), "Bug");
-    await screen.findByTestId("flow-sync-save-error");
+    expect(await screen.findByTestId("flow-sync-save-error")).toHaveTextContent(
+      "✗ The GitHub operation failed (invalid_flow_tracker_settings).",
+    );
+    await waitFor(() => expect(select("Task")).toBeEnabled());
     expect(select("Task").value).toBe("Task");
+  });
+
+  it("SET-FR-UFXD: a stored-value read that fails shows its error and offers no selector", async () => {
+    getImpl = () => Promise.reject("no_project_open");
+    render(<FlowSyncSettingsGroup />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("✗ No project is open.");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByText("Loading…")).toBeNull();
+  });
+});
+
+describe("the Flow sync group in GitHub Project settings (SET-FR-ZJRC, SET-FR-PQWW)", () => {
+  /** The Project group of the Settings window, on GitHub Project settings. */
+  async function renderSection() {
+    render(
+      <Settings
+        contentRoot="/p#0"
+        lineEndings="lf"
+        onSelectLineEndings={vi.fn()}
+        sectionRequest={{ section: "project/github-polling", nonce: 1 }}
+      />,
+    );
+    const group = await screen.findByTestId("settings-flow-sync");
+    await waitFor(() => expect(within(group).getByLabelText("Epic")).toBeInTheDocument());
+    return group;
+  }
+
+  it("SET-FR-ZJRC: the Flow sync group renders below the Publication group", async () => {
+    const group = await renderSection();
+
+    const publication = screen.getByTestId("settings-github-publication");
+    expect(publication.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("SET-FR-PQWW, SET-FR-08: a change persists at once and leaves the section dirty state and its Save untouched", async () => {
+    const group = await renderSection();
+    await waitFor(() => expect((within(group).getByLabelText("Epic") as HTMLSelectElement).options.length).toBe(4));
+    const pendingBefore = settingsSectionsPending();
+    expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
+
+    await userEvent.selectOptions(within(group).getByLabelText("Epic"), "Feature");
+    await waitFor(() => expect(calls("set_flow_tracker_settings")).toHaveLength(1));
+    await waitFor(() => expect(within(group).getByLabelText("Epic")).toBeEnabled());
+    expect(settingsSectionsPending()).toEqual(pendingBefore);
+    expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import * as api from "../../api";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
+import { errorLogCode } from "../../errorLogCode";
 import { logWarn } from "../../logging";
 import {
   allowedKinds,
@@ -82,7 +83,7 @@ function LinkExisting({
       className="flow-panel__link"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!valid || busy) return;
+        if (!valid || busy || inert) return;
         setBusy(true);
         setError(null);
         void onLink(n).then((refused) => {
@@ -103,6 +104,7 @@ function LinkExisting({
         placeholder={milestone ? "Milestone" : "Issue #"}
         value={value}
         autoFocus
+        disabled={inert}
         onChange={(e) => setValue(e.target.value)}
       />
       <button type="submit" className="flow-btn flow-btn--xs" disabled={!valid || busy || inert}>
@@ -151,7 +153,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
         if (live) setDrafts(h?.drafts ?? []);
       })
       .catch((e) => {
-        logWarn(["frontend"], "drafts not listed for the Flow", { reason: String(e) });
+        logWarn(["frontend"], "drafts not listed for the Flow", { code: errorLogCode(e) });
         if (live) setDrafts([]);
       });
     return () => {
@@ -188,12 +190,18 @@ export function SelectionPanel(props: SelectionPanelProps) {
               <span aria-hidden="true">{KIND_GLYPHS[item.kind]}</span> {kindLabel(item.kind)}
             </span>
             <span className="flow-panel__spacer" />
-            <button type="button" className="flow-btn flow-btn--xs flow-btn--quiet" onClick={props.onRename}>
+            <button
+              type="button"
+              className="flow-btn flow-btn--xs flow-btn--quiet"
+              disabled={inert}
+              onClick={props.onRename}
+            >
               Rename
             </button>
             <button
               type="button"
               className="flow-btn flow-btn--xs flow-btn--danger"
+              disabled={inert}
               onClick={props.onRemove}
             >
               Remove
@@ -210,6 +218,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
             aria-label="Description"
             placeholder="Markdown"
             rows={3}
+            disabled={inert}
             value={item.description ?? ""}
             onChange={(e) => props.onDescribe(e.target.value)}
           />
@@ -222,6 +231,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
               id={`flow-kind-${item.id}`}
               className="flow-select"
               aria-label="Kind"
+              disabled={inert}
               value={item.kind}
               onChange={(e) => props.onKind(e.target.value as FlowItemKind)}
             >
@@ -241,6 +251,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
                   className="flow-input"
                   type="date"
                   aria-label="Due"
+                  disabled={inert}
                   value={item.due ?? ""}
                   onChange={(e) => props.onDue(e.target.value)}
                 />
@@ -255,6 +266,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
                 <select
                   className="flow-select"
                   aria-label="Link draft"
+                  disabled={inert}
                   value=""
                   onChange={(e) => {
                     if (e.target.value) props.onLinkDraft(e.target.value);
@@ -272,6 +284,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
                     type="button"
                     className="flow-btn flow-btn--xs"
                     aria-label="Unlink draft"
+                    disabled={inert}
                     onClick={() => props.onLinkDraft(null)}
                   >
                     Unlink
@@ -293,6 +306,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
                       type="button"
                       className="flow-fp__remove"
                       aria-label={`Remove path ${p}`}
+                      disabled={inert}
                       onClick={() => props.onRemoveFootprint(p)}
                     >
                       ×
@@ -303,6 +317,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
               <select
                 className="flow-select"
                 aria-label="Add path"
+                disabled={inert}
                 value=""
                 onChange={(e) => {
                   if (e.target.value) props.onAddFootprint(e.target.value);
@@ -325,6 +340,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
               type="checkbox"
               role="switch"
               aria-label="Local only"
+              disabled={inert}
               checked={item.localOnly === true}
               onChange={(e) => props.onLocalOnly(e.target.checked)}
             />
@@ -337,6 +353,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
             references={props.references}
             onOpen={props.onOpenReference}
             onRemove={props.onRemoveReference}
+            disabled={inert}
             className="flow-refs flow-refs--panel"
           />
           <div className="flow-panel__row">
@@ -344,6 +361,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
               artifacts={props.artifacts}
               referenced={referenced}
               onAdd={props.onAddReference}
+              disabled={inert}
             />
             {doc.sync && !link && (
               <LinkExisting

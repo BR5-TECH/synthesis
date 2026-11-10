@@ -3,15 +3,26 @@
  * (`../../specifications/ui/NAW-new-artifact.md` NAW-FR-TXKN, NAW-FR-SGVS).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+
+vi.mock("mermaid", async () => (await import("../test/mermaidMock")).mermaidModule);
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
 
 import { PlanTags } from "./NewArtifactWorkspace/PlanTags";
-import { resetLogBufferForTest } from "../logging";
+import { FLUSH_DELAY_MS, resetLogBufferForTest } from "../logging";
+import { clearAllDiscussionSessions } from "../state/discussionSession";
+import { resetDraftDiscussions } from "../state/draftDiscussion";
+import { resetToasts } from "../state/toasts";
+import { makeStubs, renderWorkspace } from "../test/newArtifactFixtures";
+import { resetMermaidMock } from "../test/mermaidMock";
+import { resetMermaidForTest } from "./markdownMermaidRender";
 import type { FlowItemMatch } from "../types";
 
 const MATCHES: FlowItemMatch[] = [
@@ -19,7 +30,7 @@ const MATCHES: FlowItemMatch[] = [
   { flowId: "plans/unnamed.flow", flowName: "", itemId: "x1", itemName: "Decline text", kind: "defect" },
 ];
 
-function answer(items: FlowItemMatch[] | Error) {
+function answer(items: FlowItemMatch[] | Error | Promise<FlowItemMatch[]>) {
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === "append_log_records") return Promise.resolve();
     if (cmd === "find_flow_items_for_draft") {
@@ -29,13 +40,25 @@ function answer(items: FlowItemMatch[] | Error) {
   });
 }
 
-describe("PlanTags", () => {
-  beforeEach(() => {
-    invokeMock.mockReset();
-    resetLogBufferForTest();
-  });
-  afterEach(cleanup);
+/** The records of every log flush, as one text. */
+const loggedText = () =>
+  JSON.stringify(invokeMock.mock.calls.filter(([cmd]) => cmd === "append_log_records"));
 
+beforeEach(() => {
+  invokeMock.mockReset();
+  resetLogBufferForTest();
+  resetToasts();
+  clearAllDiscussionSessions();
+  resetDraftDiscussions();
+  resetMermaidForTest();
+  resetMermaidMock();
+});
+afterEach(() => {
+  vi.useRealTimers();
+  cleanup();
+});
+
+describe("PlanTags", () => {
   it("NAW-FR-TXKN: one tag per plan item names the Flow and the item with its kind glyph", async () => {
     answer(MATCHES);
     render(<PlanTags draftId="d1" />);
@@ -74,21 +97,53 @@ describe("PlanTags", () => {
   });
 
   it("NAW-FR-SGVS: a draft that belongs to no plan item carries no tag and no placeholder", async () => {
-    answer([]);
+    let settle!: (items: FlowItemMatch[]) => void;
+    const read = new Promise<FlowItemMatch[]>((res) => (settle = res));
+    answer(read);
     const { container } = render(<PlanTags draftId="d1" />);
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("find_flow_items_for_draft", { draftId: "d1" }),
-    );
+    expect(invokeMock).toHaveBeenCalledWith("find_flow_items_for_draft", { draftId: "d1" });
+    // The answer lands before the assertion, so an empty row is the answer's.
+    await act(async () => {
+      settle([]);
+      await read;
+    });
     expect(screen.queryByTestId("draft-plan-tag")).toBeNull();
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("NAW-FR-SGVS: a failed read shows no tag and is logged", async () => {
-    answer(Object.assign(new Error("boom"), { code: "no_project_open" }));
+  it("NAW-FR-SGVS: a failed read shows no tag and is logged by its code", async () => {
+    vi.useFakeTimers();
+    answer(Object.assign(new Error("the project at /home/me is gone"), { code: "no_project_open" }));
     const { container } = render(<PlanTags draftId="d1" />);
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("find_flow_items_for_draft", { draftId: "d1" }),
-    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+    });
     expect(container).toBeEmptyDOMElement();
+    expect(loggedText()).toContain("plan items of a draft could not be read");
+    expect(loggedText()).toContain("no_project_open");
+    expect(loggedText()).not.toContain("/home/me");
+  });
+});
+
+describe("the plan tags in the New Artifact tab (NAW-FR-TXKN)", () => {
+  const { stub } = makeStubs(invokeMock);
+
+  it("NAW-FR-TXKN: the tab's action row carries the tag, and activating it calls the shell's open route with the Flow", async () => {
+    stub();
+    const base = invokeMock.getMockImplementation();
+    invokeMock.mockImplementation((cmd: string, args: unknown) =>
+      cmd === "find_flow_items_for_draft" ? Promise.resolve([MATCHES[0]]) : base?.(cmd, args),
+    );
+    const onOpenArtifact = vi.fn();
+    renderWorkspace(undefined, { onOpenArtifact });
+
+    const row = await screen.findByTestId("draft-workspace-chrome");
+    const tag = await within(row).findByTestId("draft-plan-tag");
+    expect(tag).toHaveTextContent("Payments v2 › Tokenize");
+    fireEvent.click(tag);
+    expect(onOpenArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "plans/payments.flow", artifactType: "flow" }),
+    );
+    expect(invokeMock).toHaveBeenCalledWith("find_flow_items_for_draft", { draftId: "d1" });
   });
 });

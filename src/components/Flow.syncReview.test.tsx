@@ -116,6 +116,8 @@ const RESULT = emptyResult({
   ],
 });
 
+const band = () => screen.getByTestId("flow-band");
+
 /** Render the synced plan, sync, and wait for the review. */
 async function openReview(result: SyncResult = RESULT) {
   const b = flowBackend(synced());
@@ -134,7 +136,7 @@ describe("opening and closing the review (FSR-FR-KGOY, FSR-FR-ODJL)", () => {
     expect(review).toHaveAccessibleName("Sync review");
     expect(review.closest(".flow")).not.toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(review).toHaveFocus();
+    await waitFor(() => expect(review).toHaveFocus());
   });
 
   it("FSR-FR-KGOY, FSR-FR-ODJL: the close button closes it, and the count on the Sync control opens it again", async () => {
@@ -226,6 +228,37 @@ describe("the rows (FSR-FR-RDZI, FSR-FR-IFQE, FSR-FR-BRIA, FSR-FR-QAKW)", () => 
     const f1 = within(review).getByTestId("flow-review-group-f1");
     expect(within(f1).getByRole("button", { name: "Show F1 on the canvas" })).toBeInTheDocument();
     expect(within(f1).getByRole("button", { name: "Open #42 of F1 on GitHub" })).toHaveTextContent("#42");
+  });
+
+  it("FSR-FR-RDZI: the conflicts of one item form one group, in the order of the result", async () => {
+    const { review } = await openReview(
+      emptyResult({
+        conflicts: [
+          nameConflict,
+          { ...nameConflict, id: "c-desc", field: "description", flow: "A", tracker: "B" },
+          invalidConflict,
+        ],
+      }),
+    );
+
+    const groups = [...review.querySelectorAll("[data-testid^='flow-review-group-']")];
+    expect(groups.map((g) => g.getAttribute("data-testid"))).toEqual([
+      "flow-review-group-f1",
+      "flow-review-group-t1",
+    ]);
+    const rows = [...groups[0].querySelectorAll("[data-testid^='flow-conflict-']")];
+    expect(rows.map((r) => r.getAttribute("data-testid"))).toEqual([
+      "flow-conflict-c-name",
+      "flow-conflict-c-desc",
+    ]);
+  });
+
+  it("FSR-FR-RDZI: the group of an item gone from the Flow is headed by its name and its tracker tag", async () => {
+    const { review } = await openReview(emptyResult({ conflicts: [goneConflict] }));
+
+    const gone = within(review).getByTestId("flow-review-group-gone");
+    expect(within(gone).getByText("Old spike")).toBeInTheDocument();
+    expect(within(gone).getByRole("button", { name: "Open #47 of Old spike on GitHub" })).toHaveTextContent("#47");
   });
 
   it("FSR-FR-IFQE: a field conflict names the field and shows both values side by side", async () => {
@@ -400,6 +433,36 @@ describe("skipped issues and links (FSR-FR-CSOT, FSR-FR-KDMM, FSR-FR-PGBX)", () 
     ]);
   });
 
+  it("FSR-FR-KDMM: a row's link opens its conflict's URL, also when the item links another URL", async () => {
+    const elsewhere = "https://github.com/acme/payments/issues/42#issuecomment-7";
+    const { review, b } = await openReview(emptyResult({ conflicts: [{ ...nameConflict, url: elsewhere }] }));
+
+    const row = within(review).getByTestId("flow-conflict-c-name");
+    await userEvent.click(within(row).getByRole("button", { name: "Open F1: Title on GitHub" }));
+    await waitFor(() => expect(callsOf(b, "open_tracker_link")).toEqual([{ url: elsewhere }]));
+  });
+
+  it("FSR-FR-KDMM: two conflicts of one item with two URLs each have their own link; a conflict with no URL has none", async () => {
+    const first = "https://github.com/acme/payments/issues/42";
+    const second = "https://github.com/acme/payments/milestone/3";
+    const { review, b } = await openReview(
+      emptyResult({
+        conflicts: [
+          { ...nameConflict, url: first },
+          { ...nameConflict, id: "c-ms", field: "milestone", base: 3, flow: 3, tracker: 4, url: second },
+          { ...nameConflict, id: "c-desc", field: "description", flow: "A", tracker: "B", url: null },
+        ],
+      }),
+    );
+
+    const f1 = within(review).getByTestId("flow-review-group-f1");
+    await userEvent.click(within(within(f1).getByTestId("flow-conflict-c-name")).getByRole("button", { name: /on GitHub$/ }));
+    await userEvent.click(within(within(f1).getByTestId("flow-conflict-c-ms")).getByRole("button", { name: /on GitHub$/ }));
+    expect(within(within(f1).getByTestId("flow-conflict-c-desc")).queryByRole("button", { name: /on GitHub$/ })).toBeNull();
+    await waitFor(() => expect(callsOf(b, "open_tracker_link")).toHaveLength(2));
+    expect(callsOf(b, "open_tracker_link")).toEqual([{ url: first }, { url: second }]);
+  });
+
   it("FSR-FR-PGBX: an item's name selects it on the canvas; the name of an item that is gone selects nothing", async () => {
     const { review } = await openReview();
 
@@ -414,14 +477,13 @@ describe("skipped issues and links (FSR-FR-CSOT, FSR-FR-KDMM, FSR-FR-PGBX)", () 
   });
 
   it("FSR-FR-PGBX: an item in a collapsed container is shown with its containers expanded", async () => {
-    const { review } = await openReview();
+    await openReview();
 
     // Close the review to collapse, then reopen it.
     await userEvent.click(screen.getByRole("button", { name: "Close sync review" }));
     await userEvent.click(screen.getByRole("button", { name: "Collapse F1" }));
     expect(screen.queryByTestId("flow-item-t1")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Review 4 sync items" }));
-    void review;
     await userEvent.click(screen.getByRole("button", { name: "Show T1 on the canvas" }));
     expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
   });
@@ -486,6 +548,21 @@ describe("Apply (FSR-FR-IDRR, FSR-FR-AUWG, FSR-FR-UHAM, FSR-FR-BXJJ)", () => {
     await waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(2));
   });
 
+  it("FSR-FR-AUWG: a stale conflict that the result also lists renders once, marked stale", async () => {
+    const { review, b } = await openReview();
+    b.on.resolve_flow_sync_conflicts = () =>
+      emptyResult({ conflicts: [nameConflict, goneConflict], stale: ["c-name"] });
+
+    await userEvent.click(within(within(review).getByTestId("flow-conflict-c-name")).getByRole("radio", { name: "Keep Flow" }));
+    await userEvent.click(within(review).getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(within(review).queryByTestId("flow-conflict-c-parent")).toBeNull());
+    const rows = within(review).getAllByTestId("flow-conflict-c-name");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-stale", "true");
+    expect(rows[0]).toHaveTextContent("Changed since the sync");
+    expect(within(rows[0]).queryByRole("radio")).toBeNull();
+  });
+
   it("FSR-FR-AUWG, FLO-FR-AKMV: Sync again first writes the pending changes", async () => {
     const { review, b, flows } = await openReview();
     b.on.resolve_flow_sync_conflicts = () => emptyResult({ conflicts: [goneConflict], stale: ["c-name"] });
@@ -536,12 +613,16 @@ describe("Apply (FSR-FR-IDRR, FSR-FR-AUWG, FSR-FR-UHAM, FSR-FR-BXJJ)", () => {
   it("FSR-FR-BXJJ: a refused write before Apply shows its text and sends nothing", async () => {
     const { review, b } = await openReview();
     b.on.resolve_flow_sync_conflicts = () => emptyResult();
+    // The clock is held below the rest, so only Apply writes the edit.
+    vi.useFakeTimers();
 
-    await userEvent.type(screen.getByRole("textbox", { name: "Flow description" }), "x");
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "x" } });
     b.validation = { valid: false, violations: [{ code: "dependency_cycle", message: "a cycle" }] };
-    await userEvent.click(within(review).getAllByRole("radio", { name: "Keep Flow" })[0]);
-    await userEvent.click(within(review).getByRole("button", { name: "Apply" }));
-    expect(await within(review).findByRole("alert")).toHaveTextContent("a cycle");
+    fireEvent.click(within(review).getAllByRole("radio", { name: "Keep Flow" })[0]);
+    fireEvent.click(within(review).getByRole("button", { name: "Apply" }));
+    await vi.waitFor(() => expect(within(band()).getByRole("button", { name: "Sync" })).toBeEnabled());
+    expect(within(review).getByRole("alert")).toHaveTextContent("a cycle");
+    expect(callsOf(b, "save_artifact_contents")).toEqual([]);
     expect(callsOf(b, "resolve_flow_sync_conflicts")).toEqual([]);
   });
 });

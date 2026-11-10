@@ -20,6 +20,8 @@ import { Icon } from "../icons";
 import { SplitControls, type SplitRatio } from "../DraftDiscussion";
 import { DraftPublicationTag } from "../DraftPublication";
 import { GithubShadowTag } from "./GithubShadow";
+import { PlanTags } from "./PlanTags";
+import type { OpenableArtifact } from "../../types";
 import type { DraftRename } from "./useDraftRename";
 
 export function DraftChrome({
@@ -36,6 +38,7 @@ export function DraftChrome({
   superseded,
   graduation,
   onOpenRun,
+  onOpenArtifact,
   publication,
   pendingProposal,
   view,
@@ -56,6 +59,8 @@ export function DraftChrome({
   superseded: SupersededMarker | null;
   graduation: DraftGraduation | null;
   onOpenRun: (runId: string) => void;
+  /** NAW-FR-TXKN. */
+  onOpenArtifact?: (item: OpenableArtifact) => void;
   publication: UseDraftPublicationResult;
   pendingProposal: DraftChangeProposal | undefined;
   view: DiscussionColumnState;
@@ -161,6 +166,8 @@ export function DraftChrome({
       {shadow && shadowIssue && (
         <GithubShadowTag draftId={draftId} issue={shadowIssue} />
       )}
+      {/* NAW-FR-TXKN: the delivery plan items this draft is worked for. */}
+      <PlanTags draftId={draftId} onOpenArtifact={onOpenArtifact} />
       {/* NAW-FR-35 / DCR-FR-03: a draft carrying an undecided proposal says
           so, and the marker takes the author to the first change still to be
           decided. It clears the moment the proposal is resolved.

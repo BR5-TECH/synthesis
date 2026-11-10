@@ -1,10 +1,13 @@
 import * as api from "../api";
 import { onArtifactChangedExternally } from "../events";
+import { errorLogCode } from "../errorLogCode";
 import { logError, logWarn } from "../logging";
 import type {
   ArtifactChangedPayload,
   FlowValidationReport,
   FlowViolation,
+  SkippedIssue,
+  SyncConflict,
 } from "../types";
 import type { FlushResult } from "./editSessions";
 import { WriteSchedule } from "./writeSchedule";
@@ -93,6 +96,46 @@ export interface FlowSession {
   writeChain: Promise<void>;
 }
 
+/**
+ * FSR-FR-AUWG: one conflict of the sync review. `stale` marks a conflict that a
+ * resolve reported as changed since the sync.
+ */
+export type ReviewConflict = SyncConflict & { stale?: boolean };
+
+/**
+ * FLO-FR-AKMV to FLO-FR-WLHA and FSR: the tracker sync of one Flow, as the tab
+ * shows it. Held by the store and not by the canvas, because only the active
+ * tab's canvas is mounted: a sync that runs while the author looks at another
+ * tab must still keep the Flow inert (FLO-FR-KHBY) and report its result.
+ * Memory only (FSR NFR): a closed tab drops it.
+ */
+export interface FlowSyncState {
+  /** FLO-FR-KHBY / FSR-FR-IDRR: a sync or a resolve is in flight. */
+  running: "sync" | "resolve" | null;
+  /** FLO-FR-WLHA: the typed text of the last sync error, shown in the band. */
+  error: string | null;
+  /** FSR-FR-RDZI: the conflicts of the last sync or resolve. */
+  conflicts: ReviewConflict[];
+  /** FSR-FR-CSOT: the skipped issues of the last sync or resolve. */
+  skipped: SkippedIssue[];
+  /** FSR-FR-KGOY: whether the review panel is open. */
+  reviewOpen: boolean;
+  /** FSR-FR-BXJJ: the typed text of a refused Apply. */
+  applyError: string | null;
+  /** FSR-FR-UHAM: a result has arrived, so an empty list reads as in sync. */
+  settled: boolean;
+}
+
+export const IDLE_SYNC: FlowSyncState = {
+  running: null,
+  error: null,
+  conflicts: [],
+  skipped: [],
+  reviewOpen: false,
+  applyError: null,
+  settled: false,
+};
+
 function newSession(flowId: string): FlowSession {
   return {
     flowId,
@@ -146,6 +189,20 @@ export class FlowSessionStore {
 
   get(flowId: string): FlowSession | undefined {
     return this.sessions.get(flowId);
+  }
+
+  // --- the tracker sync of each Flow (FLO-FR-AKMV, FSR) --------------------
+  private syncStates = new Map<string, FlowSyncState>();
+
+  /** The sync state of a Flow; the idle state when it has none. */
+  syncState(flowId: string): FlowSyncState {
+    return this.syncStates.get(flowId) ?? IDLE_SYNC;
+  }
+
+  /** Change the sync state of a Flow, and tell the canvas. */
+  setSyncState(flowId: string, patch: Partial<FlowSyncState>): void {
+    this.syncStates.set(flowId, { ...this.syncState(flowId), ...patch });
+    this.notify();
   }
 
   /** The Flow's record, created on first use. Does NOT start a load. */
@@ -278,7 +335,7 @@ export class FlowSessionStore {
         s.error = String(e);
         logError(["frontend"], "flow load failed", {
           artifact: flowId,
-          reason: String(e),
+          code: errorLogCode(e),
         });
       })
       .finally(() => {
@@ -309,6 +366,8 @@ export class FlowSessionStore {
    */
   closeTab(flowId: string): void {
     this.cancelWrite(flowId);
+    // FSR NFR: the review is memory only, and a closed tab loses it.
+    this.syncStates.delete(flowId);
     if (!this.sessions.delete(flowId)) return;
     this.notify();
   }
@@ -319,6 +378,7 @@ export class FlowSessionStore {
     // write left scheduled would land in a project that is no longer open.
     this.writes.cancelAll();
     this.sessions.clear();
+    this.syncStates.clear();
     this.notify();
   }
 
@@ -355,26 +415,33 @@ export class FlowSessionStore {
    * FLO-FR-05 error state — is dropped rather than creating a graph out of
    * nothing, which for the error state would be the very "replaced by an empty
    * graph" the requirement rules out.
+   *
+   * Returns true when the edit changed the graph, and false when it was
+   * dropped or changed nothing. A caller that reports a result after an await
+   * reads it, because a sync can start while the call waits.
    */
   applyEdit(
     flowId: string,
     edit: (doc: FlowDocument) => FlowDocument,
-  ): void {
+  ): boolean {
     const s = this.ensure(flowId);
-    if (!s.doc) return;
+    if (!s.doc) return false;
+    // FLO-FR-KHBY: while a sync runs the tab is inert and schedules no write.
+    if (this.syncState(flowId).running) return false;
     // EDT-FR-UPNU: the canvas saves through "save artifact contents", so its
     // first change on an unconfirmed main branch is held too.
-    if (holdEdit()) return;
+    if (holdEdit()) return false;
     const next = edit(s.doc);
     // An edit that produced the very same document changed nothing, and every
     // mutator returns a new object when it changes anything — so this is a
     // no-op, not an edit, and must not raise the unsaved state (FLO-FR-26).
-    if (next === s.doc) return;
+    if (next === s.doc) return false;
     s.doc = next;
     s.dirty = true;
     // FLO-FR-27: the canvas writes itself a short rest after the last edit.
     this.scheduleWrite(flowId);
     this.notify();
+    return true;
   }
 
   /** Flows holding unsaved changes, in the order they were first opened. */
@@ -471,12 +538,12 @@ export class FlowSessionStore {
       if (refused) {
         logWarn(["frontend"], "flow write refused on a main branch", {
           artifact: flowId,
-          code: String(e).split(":")[0],
+          code: errorLogCode(e),
         });
       } else {
         logError(["frontend"], "flow write failed", {
           artifact: flowId,
-          reason: String(e),
+          code: errorLogCode(e),
         });
       }
       return { ok: false, blocked: "error", artifactId: flowId };

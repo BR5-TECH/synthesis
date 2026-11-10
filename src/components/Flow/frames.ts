@@ -1,161 +1,142 @@
 import {
-  findElement,
-  MEMBER_NODE_H,
+  ancestorsOf,
+  CARD_H,
+  CARD_W,
+  findItem,
+  isContainerKind,
   type FlowDocument,
-  type FlowEdge,
-  type FlowElement,
-  type FlowLoop,
   type FlowPosition,
+  type FlowRect,
   type FlowSize,
 } from "../../state/flowDocument";
-import { ANCHOR_DY, NODE_W, type Face } from "./geometry";
+import { COLLAPSED_H, type Face } from "./geometry";
+
+/** The two ends of an edge on the canvas, each on the border of its item. */
+export interface EdgeRoute {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  faceA: Face;
+  faceB: Face;
+  /** The items the edge is drawn between: an end or its collapsed container. */
+  from: string;
+  to: string;
+}
 
 /**
- * The border geometry every edge is drawn against.
+ * The geometry that the canvas draws against: where each item paints, which
+ * collapsed container hides it, and where an edge lands (FLO-FR-39,
+ * FLO-FR-48, FLO-FR-ZASL).
  *
- * A factory rather than free functions, because each of these reads the live
- * document, the positions an in-flight drag gives it, and the heights the nodes
- * report. It is built on every render, exactly as the closures it replaces were.
+ * A factory and not free functions, because it reads the live document, the
+ * positions an in-flight drag or resize gives, the card heights that the cards
+ * report, and the collapse state.
  */
 export function createFrames(ctx: {
   doc: FlowDocument | null;
   heights: Record<string, number>;
+  collapsed: ReadonlySet<string>;
   absOf: (id: string) => FlowPosition;
-  sizeOf: (loop: FlowLoop) => FlowSize;
+  sizeOf: (id: string) => FlowSize | undefined;
 }) {
-  const { doc, heights, absOf, sizeOf } = ctx;
+  const { doc, heights, collapsed, absOf, sizeOf } = ctx;
 
   /**
-   * The rectangle an element actually paints, and the point inside it that its
-   * edges radiate from.
-   *
-   * A loop is its own size, radiating from its centre. A node is `NODE_W` wide
-   * and as tall as it has been measured painting (FLO-FR-13 grows it with its
-   * prompt), falling back to the nominal height before any measurement has been
-   * taken. Its edges radiate from `ANCHOR_DY` below its top rather than from its
-   * middle, so a node that grows — on being selected, say — does not drag every
-   * edge incident to it downward and re-route a graph nothing changed in. On a
-   * node too short for that line to sit above its middle, the middle is what is
-   * used, which keeps an edge meeting a small node square in its side.
+   * FLO-FR-ZASL: the outermost collapsed container that holds `id`, or
+   * undefined when the item shows.
    */
-  const frameOf = (element: FlowElement) => {
-    const at = absOf(element.id);
-    const size =
-      element.kind === "loop"
-        ? sizeOf(element)
-        : { width: NODE_W, height: heights[element.id] || MEMBER_NODE_H };
-    return {
-      left: at.x,
-      top: at.y,
-      right: at.x + size.width,
-      bottom: at.y + size.height,
-      origin: {
-        x: at.x + size.width / 2,
-        y:
-          at.y +
-          (element.kind === "loop"
-            ? size.height / 2
-            : Math.min(ANCHOR_DY, size.height / 2)),
-      },
-    };
+  const hiddenBy = (id: string): string | undefined => {
+    if (!doc) return undefined;
+    const chain = ancestorsOf(doc, id);
+    let out: string | undefined;
+    for (const a of chain) if (collapsed.has(a)) out = a;
+    return out;
   };
 
-  /** Where an element's edges radiate from, and what a magnet measures to. */
-  const anchorCentre = (id: string): FlowPosition | null => {
-    const element = doc ? findElement(doc, id) : null;
-    return element ? frameOf(element).origin : null;
-  };
-
-  /**
-   * How far along `delta` the ray leaving an element's origin crosses its own
-   * border, as a fraction of `delta`'s length. `0` when there is no direction to
-   * leave in, which is the only way this returns something non-finite.
-   */
-  const exitAt = (
-    frame: ReturnType<typeof frameOf>,
-    delta: FlowPosition,
-  ): { t: number; face: Face } => {
-    const { origin } = frame;
-    const tx =
-      delta.x > 0
-        ? (frame.right - origin.x) / delta.x
-        : delta.x < 0
-          ? (frame.left - origin.x) / delta.x
-          : Infinity;
-    const ty =
-      delta.y > 0
-        ? (frame.bottom - origin.y) / delta.y
-        : delta.y < 0
-          ? (frame.top - origin.y) / delta.y
-          : Infinity;
-    if (!Number.isFinite(tx) && !Number.isFinite(ty)) return { t: 0, face: null };
-    return tx <= ty
-      ? { t: Math.max(tx, 0), face: delta.x > 0 ? "right" : "left" }
-      : { t: Math.max(ty, 0), face: delta.y > 0 ? "bottom" : "top" };
-  };
-
-  /**
-   * The two ends of an edge, each stopped on its own element's border.
-   *
-   * An edge therefore stops at the border of what it joins — at a loop's, so it
-   * lands on the container instead of being drawn through it to something
-   * inside (FLO-FR-39), and at a node's, so it lands on the node instead of
-   * under it. That is also what puts the arrowhead somewhere it can be seen
-   * (FLO-FR-48): elements paint over the edge layer, so a head left at an
-   * element's centre would be buried by the very element it points at.
-   */
-  const anchorPair = (fromId: string, toId: string) => {
-    const from = doc ? findElement(doc, fromId) : null;
-    const to = doc ? findElement(doc, toId) : null;
-    if (!from || !to) return null;
-    const a = frameOf(from);
-    const b = frameOf(to);
-    const delta = { x: b.origin.x - a.origin.x, y: b.origin.y - a.origin.y };
-    const exitA = exitAt(a, delta);
-    const exitB = exitAt(b, { x: -delta.x, y: -delta.y });
-    let ta = exitA.t;
-    let tb = exitB.t;
-    // Each border is measured out from its own element, so two elements that
-    // overlap along this line push their ends PAST one another and the edge is
-    // drawn backwards — with its head, which is worse than drawing nothing at
-    // all, because a head pointing the wrong way is read rather than
-    // disregarded. Where they would cross, both ends give up their borders and
-    // the edge runs origin to origin: buried under the overlap, as anything
-    // drawn between two elements sitting on each other must be, but never
-    // pointing anywhere but at its target.
-    if (ta + tb > 1) {
-      ta = 0;
-      tb = 0;
+  /** The rectangle an item paints at, in canvas coordinates. */
+  const rectOf = (id: string): FlowRect | null => {
+    const item = doc ? findItem(doc, id) : undefined;
+    if (!item) return null;
+    const at = absOf(id);
+    if (isContainerKind(item.kind)) {
+      const size = sizeOf(id) ?? item.size ?? { width: CARD_W, height: CARD_H };
+      return {
+        x: at.x,
+        y: at.y,
+        width: size.width,
+        height: collapsed.has(id) ? COLLAPSED_H : size.height,
+      };
     }
-    return {
-      ax: a.origin.x + delta.x * ta,
-      ay: a.origin.y + delta.y * ta,
-      bx: b.origin.x - delta.x * tb,
-      by: b.origin.y - delta.y * tb,
-      faceA: exitA.face,
-      faceB: exitB.face,
-    };
+    return { x: at.x, y: at.y, width: CARD_W, height: heights[id] || CARD_H };
   };
 
-  /** One element's border, toward a loose point — the end of a drag in flight. */
+  /** The item an edge end is drawn on: the item, or the container that hides it. */
+  const endpointOf = (id: string): string => hiddenBy(id) ?? id;
+
+  /**
+   * FLO-FR-39 / FLO-FR-48: an edge runs between the nearest sides of the two
+   * items. Where the two rectangles share a band across that gap, the edge runs
+   * straight across it.
+   */
+  const routeBetween = (a: FlowRect, b: FlowRect) => {
+    const gapX = Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width));
+    const gapY = Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height));
+    if (gapX >= gapY) {
+      const right = b.x + b.width / 2 > a.x + a.width / 2;
+      const top = Math.max(a.y, b.y);
+      const bottom = Math.min(a.y + a.height, b.y + b.height);
+      const shared = bottom - top >= 16;
+      const yA = shared ? (top + bottom) / 2 : a.y + Math.min(a.height / 2, 24);
+      const yB = shared ? (top + bottom) / 2 : b.y + Math.min(b.height / 2, 24);
+      return right
+        ? { ax: a.x + a.width, ay: yA, bx: b.x, by: yB, faceA: "right" as Face, faceB: "left" as Face }
+        : { ax: a.x, ay: yA, bx: b.x + b.width, by: yB, faceA: "left" as Face, faceB: "right" as Face };
+    }
+    const down = b.y + b.height / 2 > a.y + a.height / 2;
+    const left = Math.max(a.x, b.x);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const shared = right - left >= 16;
+    const xA = shared ? (left + right) / 2 : a.x + a.width / 2;
+    const xB = shared ? (left + right) / 2 : b.x + b.width / 2;
+    return down
+      ? { ax: xA, ay: a.y + a.height, bx: xB, by: b.y, faceA: "bottom" as Face, faceB: "top" as Face }
+      : { ax: xA, ay: a.y, bx: xB, by: b.y + b.height, faceA: "top" as Face, faceB: "bottom" as Face };
+  };
+
+  /**
+   * The route of an edge between two items, or null when it is not drawn:
+   * an end is gone, or both ends are hidden in one collapsed container.
+   */
+  const route = (fromId: string, toId: string): EdgeRoute | null => {
+    const from = endpointOf(fromId);
+    const to = endpointOf(toId);
+    if (from === to) return null;
+    const a = rectOf(from);
+    const b = rectOf(to);
+    if (!a || !b) return null;
+    return { ...routeBetween(a, b), from, to };
+  };
+
+  /** One item's border toward a loose point: the free end of a drag. */
   const anchorToward = (id: string, toward: FlowPosition) => {
-    const element = doc ? findElement(doc, id) : null;
-    if (!element) return { x: 0, y: 0, face: null as Face };
-    const frame = frameOf(element);
-    const delta = {
-      x: toward.x - frame.origin.x,
-      y: toward.y - frame.origin.y,
-    };
-    const { t, face } = exitAt(frame, delta);
-    return {
-      x: frame.origin.x + delta.x * t,
-      y: frame.origin.y + delta.y * t,
-      face,
-    };
+    const r = rectOf(endpointOf(id));
+    if (!r) return { x: toward.x, y: toward.y, face: null as Face };
+    const point: FlowRect = { x: toward.x, y: toward.y, width: 0, height: 0 };
+    const leg = routeBetween(r, point);
+    return { x: leg.ax, y: leg.ay, face: leg.faceA };
   };
 
-  /** The two ends of an edge, each stopped at its own element's boundary. */
-  const edgeAnchors = (edge: FlowEdge) => anchorPair(edge.from, edge.to);
+  /** How far `point` is from an item's rectangle; 0 inside it. */
+  const distanceTo = (id: string, point: FlowPosition): number => {
+    const r = rectOf(id);
+    if (!r) return Infinity;
+    const dx = Math.max(r.x - point.x, 0, point.x - (r.x + r.width));
+    const dy = Math.max(r.y - point.y, 0, point.y - (r.y + r.height));
+    return Math.hypot(dx, dy);
+  };
 
-  return { frameOf, anchorCentre, exitAt, anchorPair, anchorToward, edgeAnchors };
+  return { hiddenBy, rectOf, endpointOf, route, anchorToward, distanceTo };
 }
+
+export type Frames = ReturnType<typeof createFrames>;

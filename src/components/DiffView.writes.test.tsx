@@ -269,7 +269,7 @@ describe("the editable target (DFV-FR-41 .. DFV-FR-50)", () => {
 
   it("DFV-FR-48, DFV-FR-41 leaves a Flow's rich reading read-only and its Source editable", async () => {
     const flowBody = (name: string) =>
-      `${JSON.stringify({ version: 1, name, nodes: [], edges: [] }, null, 2)}\n`;
+      `${JSON.stringify({ version: 2, name, items: [], edges: [] }, null, 2)}\n`;
     wireBackend({
       revisions: revs(flowBody("Review"), flowBody("Reviewed")),
       prefs: { diffRenderingMode: "rich" },

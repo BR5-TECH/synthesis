@@ -1,13 +1,18 @@
+/**
+ * The project tree and the pointer helpers of the Flow canvas tests (FLO).
+ *
+ * jsdom lays nothing out: the canvas element reports a zero rectangle, so a
+ * client point is the canvas point moved by the default view offset, and a
+ * card is as tall as the card floor (`CARD_H`).
+ */
 import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { FlowSessionStore } from "../state/flowSessions";
+import { DEFAULT_VIEW } from "../components/Flow/geometry";
+import type { FlowItemKind, FlowPosition } from "../state/flowDocument";
 import type { TreeNode } from "../types";
 
-const file = (
-  path: string,
-  artifactType?: TreeNode["artifactType"],
-): TreeNode => ({
+const file = (path: string, artifactType?: TreeNode["artifactType"]): TreeNode => ({
   id: path,
   name: path.split("/").pop() ?? path,
   path,
@@ -25,12 +30,12 @@ const folder = (path: string, children: TreeNode[]): TreeNode => ({
 });
 
 export const SKILL_ID = ".claude/skills/code-review/SKILL.md";
+export const HLD_ID = "docs/payments-hld.md";
 
 /**
- * A project holding one of everything the picker has to decide about: a prompt
- * and a skill it offers, a supporting file inside the skill's folder and a spec
- * it does not (FLO-FR-10), and an unclassified file that is not an artifact at
- * all.
+ * A project with one of each thing the pickers decide about: a prompt, a
+ * skill and a file in the skill's folder, a spec, a document, another Flow,
+ * an unclassified file, and folders (FLO-FR-10, FLO-FR-ZEJU).
  */
 export const TREE: TreeNode = {
   id: "",
@@ -41,101 +46,83 @@ export const TREE: TreeNode = {
   children: [
     folder("prompts", [file("prompts/gather-repo.md", "prompt")]),
     folder(".claude/skills/code-review", [
-      // ASC-FR-19: the scan carries the name the skill declares for itself.
       { ...file(SKILL_ID, "skill"), displayName: "Code review" },
       file(".claude/skills/code-review/references/rules.md", "skill"),
     ]),
     folder("specifications", [file("specifications/FLO-flow.md", "spec")]),
+    folder("docs", [file(HLD_ID, "doc")]),
+    folder("flows", [file("flows/other.flow", "flow")]),
+    folder("src", [file("src/main.ts")]),
     file("notes.txt"),
   ],
 };
 
-export const ID = "workflows/review.flow";
+export const ID = "plans/payments.flow";
 
-/** A two-node Flow with one edge, as it sits on disk. */
-export const TWO_NODES = JSON.stringify({
-  version: 1,
-  nodes: [
-    { id: "n1", name: "Collect context", position: { x: 0, y: 0 } },
-    { id: "n2", name: "Draft review", position: { x: 300, y: 0 } },
-  ],
-  edges: [{ id: "e1", from: "n1", to: "n2", label: "ok" }],
+/** A client point for a canvas point, under the default view. */
+export const client = (p: FlowPosition) => ({
+  clientX: p.x + DEFAULT_VIEW.x,
+  clientY: p.y + DEFAULT_VIEW.y,
 });
 
-export const nodeEl = (id: string) => screen.getByTestId(`flow-node-${id}`);
-export const loopEl = (id: string) => screen.getByTestId(`flow-loop-${id}`);
+export const itemEl = (id: string) => screen.getByTestId(`flow-item-${id}`);
+export const queryItem = (id: string) => screen.queryByTestId(`flow-item-${id}`);
 export const canvas = () => document.querySelector(".flow") as HTMLElement;
-export const doc = (flows: FlowSessionStore) => flows.get(ID)!.doc!;
 
-/**
- * FLO-FR-07: add through the affordance's menu, which is the only way to add
- * anything — the `+` expands into a short list of what can be added rather than
- * adding a node outright.
- */
-export async function addFromMenu(entry: "Node" | "Loop") {
-  await userEvent.click(screen.getByLabelText("Add to flow"));
-  await userEvent.click(
-    within(screen.getByTestId("flow-add-menu")).getByRole("menuitem", {
-      name: entry,
-    }),
-  );
+/** The element a press selects an item on: a card, or a container's header. */
+export const grip = (id: string) => {
+  const root = itemEl(id);
+  return (root.querySelector(`[data-item-id="${id}"]`) as HTMLElement | null) ?? root;
+};
+
+/** Select an item as a click on it does: a press and a release. */
+export function selectItem(id: string) {
+  fireEvent.pointerDown(grip(id), { pointerId: 1, buttons: 1, clientX: 0, clientY: 0 });
+  fireEvent.pointerUp(grip(id), { pointerId: 1 });
+}
+
+/** Draw a connection from `from`'s port and release it on `to`. */
+export function connectItems(from: string, to: string) {
+  const port = within(itemEl(from)).getByLabelText(/^Connect from /);
+  fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 0, y: 0 }) });
+  fireEvent.pointerUp(itemEl(to), { pointerId: 1 });
 }
 
 /**
- * Select a node the way a click on its body does — press AND release, because a
- * press on a node arms a drag and a test that never releases would leave the
- * canvas mid-gesture.
+ * Drag an item from `start` to `end` (canvas points). The press is on the
+ * item's grip, the moves on the canvas, as a browser reports them while the
+ * button is held.
  */
-export function selectNode(id: string) {
-  fireEvent.pointerDown(nodeEl(id));
-  fireEvent.pointerUp(nodeEl(id));
-}
-
-/** Drag a connection from `from`'s port and release it over `to`. */
-export function connectNodes(from: string, to: string) {
-  const port = within(nodeEl(from)).getByLabelText(/^Connect from /);
-  fireEvent.pointerDown(port, { pointerId: 1 });
-  fireEvent.pointerUp(nodeEl(to), { pointerId: 1 });
-}
-
-/**
- * Drag a node by (dx, dy) through the full pointer sequence.
- *
- * `buttons: 1` on every move is what a browser reports while a button is held;
- * the canvas reads it to tell a real drag from pointer motion after a release
- * it never saw.
- */
-export function dragNode(id: string, dx: number, dy: number, steps = 1) {
-  fireEvent.pointerDown(nodeEl(id), {
-    pointerId: 1,
-    buttons: 1,
-    clientX: 500,
-    clientY: 500,
-  });
+export function dragItem(id: string, start: FlowPosition, end: FlowPosition, steps = 2) {
+  fireEvent.pointerDown(grip(id), { pointerId: 1, buttons: 1, ...client(start) });
   for (let i = 1; i <= steps; i += 1) {
     fireEvent.pointerMove(canvas(), {
       pointerId: 1,
       buttons: 1,
-      clientX: 500 + (dx * i) / steps,
-      clientY: 500 + (dy * i) / steps,
+      ...client({
+        x: start.x + ((end.x - start.x) * i) / steps,
+        y: start.y + ((end.y - start.y) * i) / steps,
+      }),
     });
   }
   fireEvent.pointerUp(canvas(), { pointerId: 1 });
 }
 
-/** Pan the canvas by (dx, dy) from its empty background. */
+/** FLO-FR-07: add an item of `kind` through the add menu. */
+export async function addFromMenu(kind: FlowItemKind) {
+  await userEvent.click(screen.getByRole("button", { name: "Add to plan" }));
+  const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+  await userEvent.click(
+    within(screen.getByTestId("flow-add-menu")).getByRole("menuitem", { name: label }),
+  );
+}
+
+/** Pan the canvas from its empty background. */
 export function panCanvas(dx: number, dy: number) {
-  fireEvent.pointerDown(canvas(), {
-    pointerId: 1,
-    buttons: 1,
-    clientX: 100,
-    clientY: 100,
-  });
-  fireEvent.pointerMove(canvas(), {
-    pointerId: 1,
-    buttons: 1,
-    clientX: 100 + dx,
-    clientY: 100 + dy,
-  });
+  fireEvent.pointerDown(canvas(), { pointerId: 1, buttons: 1, clientX: 900, clientY: 900 });
+  fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, clientX: 900 + dx, clientY: 900 + dy });
   fireEvent.pointerUp(canvas(), { pointerId: 1 });
 }
+
+/** The selection panel of the selected item. */
+export const panel = () => screen.getByTestId("flow-selection-panel");

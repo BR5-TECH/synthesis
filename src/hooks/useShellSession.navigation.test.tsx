@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { useShellSession } from "./useShellSession";
-import { addNode } from "../state/flowDocument";
+import { addItem, docOrUnchanged } from "../state/flowDocument";
 import {
   resetSelectionFollowsTab,
   setSelectionFollowsTab,
@@ -250,7 +250,7 @@ describe("useShellSession.goHome (SNV-FR-41 / TAB-FR-08)", () => {
     });
     act(() =>
       result.current.flows.applyEdit(FLOW_ID, (d) =>
-        addNode(d, { x: 10, y: 10 }),
+        docOrUnchanged(d, addItem(d, "milestone", { x: 10, y: 10 })),
       ),
     );
     await act(async () => {

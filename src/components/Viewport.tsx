@@ -3,6 +3,7 @@ import { DraftPreviewView } from "./DraftPreview";
 import type { EditSessionStore } from "../state/editSessions";
 import type { DraftSessionStore } from "../state/draftSessions";
 import type { FlowSessionStore } from "../state/flowSessions";
+import type { NamedDraftOutcome } from "../hooks/shell/draftActions";
 import { Dashboard } from "./Dashboard";
 import { FlowCanvas } from "./Flow";
 import { Editor } from "./Editor";
@@ -72,6 +73,12 @@ interface ViewportProps {
    */
   onOpenDraft: (draftId: string) => void;
   /**
+   * FLO-FR-NRBV: create a draft named after a Flow task, with no tab opened.
+   */
+  onCreateDraftForFlow?: (name: string) => Promise<NamedDraftOutcome>;
+  /** FLO-FR-NRBV: open a draft that a Flow task just created. */
+  onOpenDraftTab?: (draft: { id: string; name: string }) => void;
+  /**
    * NAW-FR-28: **Archive** closes the tab, because a draft being retired is one
    * the author is finished looking at. The shell's ordinary tab close, not the
    * graduation path — the draft still exists, and its retained selection and
@@ -116,6 +123,8 @@ export function Viewport({
   onGraduationStarted,
   onOpenRun,
   onOpenDraft,
+  onCreateDraftForFlow,
+  onOpenDraftTab,
   onCloseTab,
   onDraftRenamed,
   specMap,
@@ -191,6 +200,7 @@ export function Viewport({
         onOpenRun={onOpenRun}
         onArchived={() => onCloseTab(activeT.id)}
         onNameChanged={(name) => onDraftRenamed(activeT.draftId!, name)}
+        onOpenArtifact={onOpenArtifact}
       />
     );
   // SMP-FR-KQTD: the one Map tab renders from the shell's map session, which
@@ -225,10 +235,15 @@ export function Viewport({
         key={activeT.artifactId ?? activeTab}
         flowId={activeT.artifactId}
         flows={flows}
-        // FLO-FR-12: a node's artifact click-through opens that artifact in its
-        // natural surface, through the same shell entry point every other
+        // FLO-FR-12: an item's artifact click-through opens that artifact in
+        // its natural surface, through the same shell entry point every other
         // surface routes an open through (LIB-FR-03 / TAB-FR-07).
         onOpenArtifact={onOpenArtifact}
+        // FLO-FR-NRBV / FLO-FR-QZUR: a task's draft is created, and opened in a
+        // New Artifact tab, by the shell's own draft routes.
+        onCreateDraft={onCreateDraftForFlow}
+        onOpenDraft={onOpenDraftTab}
+        onOpenDraftById={onOpenDraft}
       />
     );
   return (

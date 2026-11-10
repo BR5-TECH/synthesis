@@ -601,6 +601,10 @@ export function AppShell(props: AppShellProps) {
                 // draft renamed since the widget last read it is still the one
                 // that opens.
                 onOpenDraft={(draftId) => void s.openDraftById(draftId)}
+                // FLO-FR-NRBV: a Flow task's Create draft names the draft after
+                // the task, and the Flow opens it once it stored the link.
+                onCreateDraftForFlow={s.createNamedDraft}
+                onOpenDraftTab={s.openDraft}
                 // SMP-FR-QNUH / SMD-FR-HVBE: the Map tab renders from the shell's
                 // map session, and its New draft runs the Drafts panel's creation.
                 specMap={s.specMap}

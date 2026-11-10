@@ -129,7 +129,7 @@ describe("the hold of the first change (EDT-FR-QXEK, EDT-FR-UPNU)", () => {
   it("EDT-FR-UPNU: the Flow canvas, which saves through save artifact contents, holds its first change too", async () => {
     const store = new FlowSessionStore();
     const session = store.ensure("f.flow");
-    session.doc = { version: 1, name: "", loops: [], nodes: [], edges: [] };
+    session.doc = { version: 2, name: "", references: [], items: [], edges: [] };
     await primed();
     store.applyEdit("f.flow", (doc) => ({ ...doc, name: "changed" }));
     expect(session.doc?.name).toBe("");

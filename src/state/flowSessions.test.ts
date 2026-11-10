@@ -1,13 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetLogBufferForTest } from "../logging";
 import { FlowSessionStore } from "./flowSessions";
 import { AUTOSAVE_DELAY_MS } from "./writeSchedule";
 import {
-  addNode,
-  moveNode,
-  renameNode,
+  addItem,
+  docOrUnchanged,
+  emptyFlow,
+  moveItem,
+  renameItem,
   serializeFlowDocument,
+  type FlowDocument,
+  type FlowPosition,
 } from "./flowDocument";
+
+/** Add a milestone at `at`; the edits these tests make never refuse. */
+const addOne = (d: FlowDocument, at: FlowPosition) =>
+  docOrUnchanged(d, addItem(d, "milestone", at));
+/** Move a top-level item, where canvas and stored coordinates agree. */
+const moveTo = (d: FlowDocument, id: string, at: FlowPosition) =>
+  docOrUnchanged(d, moveItem(d, id, at));
 
 const invokeMock = vi.fn();
 const unlistenMock = vi.fn();
@@ -49,6 +61,7 @@ let validation: { valid: boolean; violations: Array<Record<string, string>> } = 
 };
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   unlistenMock.mockReset();
   externalHandlers = [];
@@ -60,6 +73,8 @@ beforeEach(() => {
   validation = { valid: true, violations: [] };
   invokeMock.mockImplementation(
     async (cmd: string, args: Record<string, string>) => {
+      // The log flush runs in the background of every test.
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "validate_flow_document") return validation;
       if (cmd === "load_artifact_contents_by_id") {
         const entry = disk[args.id];
@@ -73,6 +88,7 @@ beforeEach(() => {
         disk[args.id] = { body: args.body, checksum: `ck-${writes.length}` };
         return { checksum: `ck-${writes.length}` };
       }
+      // An async function: this is a rejected promise, not a synchronous throw.
       throw new Error(`unexpected invoke ${cmd}`);
     },
   );
@@ -88,14 +104,15 @@ async function until(ready: () => boolean, label: string) {
   throw new Error(`timed out waiting for ${label}`);
 }
 
-/** A two-node Flow on disk, as `n1 -> n2`. */
+/** A two-item Flow on disk, as `n1` blocks `n2`. */
 const TWO_NODES = `{
-  "version": 1,
-  "nodes": [
-    { "id": "n1", "name": "A", "position": { "x": 0, "y": 0 } },
-    { "id": "n2", "name": "B", "position": { "x": 200, "y": 0 } }
+  "version": 2,
+  "name": "",
+  "items": [
+    { "id": "n1", "kind": "milestone", "name": "A", "position": { "x": 0, "y": 0 }, "size": { "width": 760, "height": 480 } },
+    { "id": "n2", "kind": "milestone", "name": "B", "position": { "x": 900, "y": 0 }, "size": { "width": 760, "height": 480 } }
   ],
-  "edges": [{ "id": "e1", "from": "n1", "to": "n2" }]
+  "edges": [{ "id": "e1", "from": "n1", "to": "n2", "type": "blocks" }]
 }`;
 
 /** Open `id` on a Flow tab and wait for its first load to settle. */
@@ -115,7 +132,7 @@ describe("loading (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
     expect(invokeMock).toHaveBeenCalledWith("load_artifact_contents_by_id", {
       id: "f.flow",
     });
-    expect(s.doc?.nodes.map((n) => n.name)).toEqual(["A", "B"]);
+    expect(s.doc?.items.map((n) => n.name)).toEqual(["A", "B"]);
     expect(s.doc?.edges).toHaveLength(1);
     expect(s.dirty).toBe(false);
     expect(s.parseError).toBeNull();
@@ -130,7 +147,7 @@ describe("loading (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
 
     const s = await opened(store, "new.flow");
 
-    expect(s.doc).toEqual({ version: 1, name: "", loops: [], nodes: [], edges: [] });
+    expect(s.doc).toEqual(emptyFlow());
     expect(s.parseError).toBeNull();
     expect(s.error).toBeNull();
   });
@@ -146,7 +163,7 @@ describe("loading (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
     expect(s.parseError).toMatch(/not valid JSON/);
 
     // Neither an edit nor an explicit Save can reach the file in this state.
-    store.applyEdit("bad.flow", (d) => addNode(d, { x: 0, y: 0 }));
+    store.applyEdit("bad.flow", (d) => addOne(d, { x: 0, y: 0 }));
     expect(store.get("bad.flow")?.dirty).toBe(false);
     await store.flush("bad.flow", { force: true });
     expect(writes).toEqual([]);
@@ -170,7 +187,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     await opened(store, "f.flow");
     expect(store.get("f.flow")?.dirty).toBe(false);
 
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     expect(store.get("f.flow")?.dirty).toBe(true);
     expect(store.dirtyIds()).toEqual(["f.flow"]);
@@ -202,7 +219,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
 
     // …and the same through a real mutator asked for something already true.
     store.applyEdit("f.flow", (d) =>
-      moveNode(d, "n1", d.nodes[0].position),
+      moveTo(d, "n1", d.items[0].position),
     );
     expect(store.get("f.flow")?.dirty).toBe(false);
 
@@ -213,7 +230,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n2", "Draft review"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n2", "Draft review"));
 
     await store.flush("f.flow");
 
@@ -222,7 +239,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     expect(writes[0].body).toBe(
       serializeFlowDocument(store.get("f.flow")!.doc!),
     );
-    expect(JSON.parse(writes[0].body).nodes[1].name).toBe("Draft review");
+    expect(JSON.parse(writes[0].body).items[1].name).toBe("Draft review");
     // PST-FR-16: the written checksum becomes the baseline, so the watcher's
     // echo of this write is not read as an external change (FLO-FR-31).
     expect(store.get("f.flow")?.baseline).toBe("ck-1");
@@ -246,7 +263,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     failWrites.add("f.flow");
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => addNode(d, { x: 0, y: 0 }));
+    store.applyEdit("f.flow", (d) => addOne(d, { x: 0, y: 0 }));
 
     const res = await store.flush("f.flow");
 
@@ -267,15 +284,15 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     const store = new FlowSessionStore();
     await opened(store, "a.flow");
     await opened(store, "b.flow");
-    store.applyEdit("a.flow", (d) => addNode(d, { x: 0, y: 0 }));
-    store.applyEdit("b.flow", (d) => addNode(d, { x: 0, y: 0 }));
+    store.applyEdit("a.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("b.flow", (d) => addOne(d, { x: 0, y: 0 }));
 
     expect(await store.flushAll()).toEqual({ ok: true });
     expect(writes.map((w) => w.id)).toEqual(["a.flow", "b.flow"]);
 
     failWrites.add("a.flow");
-    store.applyEdit("a.flow", (d) => addNode(d, { x: 0, y: 0 }));
-    store.applyEdit("b.flow", (d) => addNode(d, { x: 0, y: 0 }));
+    store.applyEdit("a.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("b.flow", (d) => addOne(d, { x: 0, y: 0 }));
     const res = await store.flushAll();
 
     expect(res.ok).toBe(false);
@@ -291,8 +308,8 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     const seen: number[] = [];
     store.subscribe(() => seen.push(store.getVersion()));
 
-    store.applyEdit("f.flow", (d) => addNode(d, { x: 0, y: 0 }));
-    store.applyEdit("f.flow", (d) => addNode(d, { x: 0, y: 0 }));
+    store.applyEdit("f.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("f.flow", (d) => addOne(d, { x: 0, y: 0 }));
 
     expect(seen).toHaveLength(2);
     expect(new Set(seen).size).toBe(2);
@@ -306,14 +323,14 @@ describe("lifecycle (FLO-FR-28 / FLO-FR-29 / FLO-FR-30)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "edited"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "edited"));
 
     await store.flush("f.flow");
     store.closeTab("f.flow");
     expect(store.get("f.flow")).toBeUndefined();
 
     const reopened = await opened(store, "f.flow");
-    expect(reopened.doc?.nodes[0].name).toBe("edited");
+    expect(reopened.doc?.items[0].name).toBe("edited");
     expect(reopened.dirty).toBe(false);
     // Two loads: the first open and this one. Nothing was carried over.
     expect(
@@ -327,14 +344,14 @@ describe("lifecycle (FLO-FR-28 / FLO-FR-29 / FLO-FR-30)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "unsaved"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "unsaved"));
 
     store.openTab("f.flow");
 
     expect(
       invokeMock.mock.calls.filter((c) => c[0] === "load_artifact_contents_by_id"),
     ).toHaveLength(1);
-    expect(store.get("f.flow")?.doc?.nodes[0].name).toBe("unsaved");
+    expect(store.get("f.flow")?.doc?.items[0].name).toBe("unsaved");
     expect(store.get("f.flow")?.dirty).toBe(true);
   });
 
@@ -359,10 +376,10 @@ describe("lifecycle (FLO-FR-28 / FLO-FR-29 / FLO-FR-30)", () => {
     await opened(store, "a.flow");
     await opened(store, "b.flow");
 
-    store.applyEdit("a.flow", (d) => renameNode(d, "n1", "only-a"));
+    store.applyEdit("a.flow", (d) => renameItem(d, "n1", "only-a"));
 
-    expect(store.get("a.flow")?.doc?.nodes[0].name).toBe("only-a");
-    expect(store.get("b.flow")?.doc?.nodes[0].name).toBe("A");
+    expect(store.get("a.flow")?.doc?.items[0].name).toBe("only-a");
+    expect(store.get("b.flow")?.doc?.items[0].name).toBe("A");
     expect(store.get("b.flow")?.dirty).toBe(false);
   });
 });
@@ -378,13 +395,13 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
 
     disk["f.flow"] = {
-      body: '{"version":1,"nodes":[{"id":"n9","name":"external","position":{"x":1,"y":2}}],"edges":[]}',
+      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"milestone","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
       checksum: "ck2",
     };
     fireExternal("f.flow", "ck2");
     await store.get("f.flow")?.pendingLoad;
 
-    expect(store.get("f.flow")?.doc?.nodes.map((n) => n.name)).toEqual([
+    expect(store.get("f.flow")?.doc?.items.map((n) => n.name)).toEqual([
       "external",
     ]);
     expect(store.get("f.flow")?.dirty).toBe(false);
@@ -395,17 +412,17 @@ describe("external changes (FLO-FR-31)", () => {
     const store = new FlowSessionStore();
     store.watchExternalChanges();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "mine"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "mine"));
 
-    disk["f.flow"] = { body: '{"version":1,"nodes":[],"edges":[]}', checksum: "ck2" };
+    disk["f.flow"] = { body: '{"version":2,"name":"","items":[],"edges":[]}', checksum: "ck2" };
     fireExternal("f.flow", "ck2");
     await store.get("f.flow")?.pendingLoad;
 
-    expect(store.get("f.flow")?.doc?.nodes[0].name).toBe("mine");
+    expect(store.get("f.flow")?.doc?.items[0].name).toBe("mine");
     expect(store.get("f.flow")?.dirty).toBe(true);
 
     await store.flush("f.flow");
-    expect(JSON.parse(writes[0].body).nodes[0].name).toBe("mine");
+    expect(JSON.parse(writes[0].body).items[0].name).toBe("mine");
   });
 
   // The race the reload path has to lose: the tab is clean when the event
@@ -418,15 +435,15 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
 
     disk["f.flow"] = {
-      body: '{"version":1,"nodes":[{"id":"n9","name":"external","position":{"x":1,"y":2}}],"edges":[]}',
+      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"milestone","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
       checksum: "ck2",
     };
     fireExternal("f.flow", "ck2");
     // Before the load resolves — the tab was clean when it started.
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "mine"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "mine"));
     await store.get("f.flow")?.pendingLoad;
 
-    expect(store.get("f.flow")?.doc?.nodes.map((n) => n.name)).toEqual([
+    expect(store.get("f.flow")?.doc?.items.map((n) => n.name)).toEqual([
       "mine",
       "B",
     ]);
@@ -434,7 +451,7 @@ describe("external changes (FLO-FR-31)", () => {
 
     // …and the next write replaces the file with the graph the user kept.
     await store.flush("f.flow");
-    expect(JSON.parse(writes[0].body).nodes[0].name).toBe("mine");
+    expect(JSON.parse(writes[0].body).items[0].name).toBe("mine");
   });
 
   it("ignores the echo of its own write and events for Flows it holds nothing for", async () => {
@@ -442,7 +459,7 @@ describe("external changes (FLO-FR-31)", () => {
     const store = new FlowSessionStore();
     store.watchExternalChanges();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "mine"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "mine"));
     await store.flush("f.flow");
     const loadsBefore = invokeMock.mock.calls.filter(
       (c) => c[0] === "load_artifact_contents_by_id",
@@ -530,7 +547,7 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
 
     expect(store.get("f.flow")?.violations).toEqual([]);
     expect(store.get("f.flow")?.parseError).toBeNull();
-    expect(store.get("f.flow")?.doc?.nodes).toHaveLength(2);
+    expect(store.get("f.flow")?.doc?.items).toHaveLength(2);
   });
 
   // FLO-FR-27, FLO-FR-47, FLO-FR-28: nothing is written, the file is unchanged, the graph and its
@@ -539,7 +556,7 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     validation = {
       valid: false,
@@ -554,7 +571,7 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
     expect(disk["f.flow"].body).toBe(TWO_NODES);
     const s = store.get("f.flow")!;
     expect(s.dirty).toBe(true);
-    expect(s.doc?.nodes[0].name).toBe("Collect context");
+    expect(s.doc?.items[0].name).toBe("Collect context");
     expect(s.violations.map((v) => v.edgeId)).toEqual(["e4"]);
     expect(s.error).toContain("e4 crosses a loop boundary");
 
@@ -578,14 +595,14 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
   // said Flow, the parser could not build one. It has to surface rather than
   // leave the tab on a blank canvas, and it must still write nothing.
   it("surfaces a body the backend accepted but the parser cannot deserialize", async () => {
-    disk["f.flow"] = { body: '{"version":1,"nodes":"not an array","edges":[]}', checksum: "ck1" };
+    disk["f.flow"] = { body: '{"version":2,"items":"not an array","edges":[]}', checksum: "ck1" };
     validation = { valid: true, violations: [] };
     const store = new FlowSessionStore();
 
     const s = await opened(store, "f.flow");
 
     expect(s.doc).toBeNull();
-    expect(s.parseError).toMatch(/`nodes` must be an array/);
+    expect(s.parseError).toMatch(/`items` must be an array/);
     // No violation list to show, so the tab falls back to the parser's reason.
     expect(s.violations).toEqual([]);
     await store.flush("f.flow", { force: true });
@@ -602,9 +619,18 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
  * write lands for a Flow nobody is looking at.
  */
 describe("the rest after the last canvas edit (FLO-FR-27)", () => {
-  /** Let a scheduled write's rest elapse. */
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(async () => {
+    // Run what the fake clock still holds, such as the log flush.
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
+  });
+
+  /** Let a scheduled write's rest elapse on the fake clock. */
   const rest = async () => {
-    await new Promise((r) => setTimeout(r, AUTOSAVE_DELAY_MS + 30));
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS + 30);
   };
 
   it("FLO-FR-27: writes once after a drag rather than once per frame", async () => {
@@ -614,7 +640,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
 
     // A drag arrives as one edit per animation frame.
     for (let x = 1; x <= 60; x++) {
-      store.applyEdit("f.flow", (d) => moveNode(d, "n1", { x, y: x }));
+      store.applyEdit("f.flow", (d) => moveTo(d, "n1", { x, y: x }));
     }
     expect(writes).toHaveLength(0);
 
@@ -629,7 +655,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     await rest();
 
@@ -637,11 +663,11 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     expect(store.get("f.flow")?.dirty).toBe(false);
   });
 
-  it("spends the schedule when a Save brings the write forward (SNV-FR-29)", async () => {
+  it("SNV-FR-29, FLO-FR-27: spends the schedule when a Save brings the write forward", async () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     await store.flush("f.flow", { force: true });
     expect(writes).toHaveLength(1);
@@ -660,7 +686,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
       valid: false,
       violations: [{ code: "FGV-DANGLING-EDGE", message: "edge to nowhere" }],
     };
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     await rest();
     expect(writes).toHaveLength(0);
@@ -674,7 +700,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     // The author's next edit is what schedules the next attempt, and a graph
     // that now validates is written.
     validation = { valid: true, violations: [] };
-    store.applyEdit("f.flow", (d) => renameNode(d, "n2", "Draft review"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n2", "Draft review"));
     await rest();
 
     expect(writes).toHaveLength(1);
@@ -685,7 +711,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     // The tab close flushes first, then ends the session (FLO-FR-28).
     await store.flush("f.flow");
@@ -699,7 +725,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
 
     store.clear();
 
@@ -712,7 +738,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Collect context"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Collect context"));
     expect(store.hasPendingWrite("f.flow")).toBe(true);
 
     store.closeTab("f.flow");
@@ -726,7 +752,7 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
    * Two writes of one Flow must never be in flight together — see the artifact
    * store's test of the same name for what overlapping costs.
    */
-  it("never overlaps two writes of the same Flow", async () => {
+  it("FLO-FR-27: never overlaps two writes of the same Flow", async () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
@@ -744,10 +770,10 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
         });
       });
 
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "First"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "First"));
     const a = store.flush("f.flow");
     await until(() => release.length === 1, "the first write to start");
-    store.applyEdit("f.flow", (d) => renameNode(d, "n1", "Second"));
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", "Second"));
     const b = store.flush("f.flow", { force: true });
     await until(() => concurrent === 1, "the second write to queue");
 

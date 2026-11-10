@@ -811,6 +811,9 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     expect([...invoked].sort()).toEqual([
       // DDS-FR-KXWQ: the context indicator's estimate, which reads no history.
       "estimate_discussion_context",
+      // NAW-FR-TXKN: the plan items this draft is worked for, read on mount.
+      // It reads no history.
+      "find_flow_items_for_draft",
       // NAW-FR-44 / DRS-FR-18: the draft's lock is the run's state, read from
       // the queue rather than remembered — so the tab asks for it on mount.
       "get_draft_graduation",

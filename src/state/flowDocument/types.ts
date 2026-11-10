@@ -1,4 +1,9 @@
-/** The Flow document shape, its constants, and the empty document. */
+/**
+ * The Flow document shape, version 2: a delivery plan (FGV-FR-01, FLO-FR-03).
+ *
+ * The backend validator (`src-tauri/src/flow_validation.rs`) is the authority on
+ * what a valid document is; these types describe one that has passed it.
+ */
 
 export interface FlowPosition {
   x: number;
@@ -10,110 +15,164 @@ export interface FlowSize {
   height: number;
 }
 
+/** FLO-FR-06: the five kinds of a plan item. */
+export type FlowItemKind =
+  | "milestone"
+  | "epic"
+  | "feature"
+  | "task"
+  | "defect";
+
+/** The order the add menu offers the kinds in (FLO-FR-07). */
+export const ITEM_KINDS: readonly FlowItemKind[] = [
+  "milestone",
+  "epic",
+  "feature",
+  "task",
+  "defect",
+];
+
+/** A container kind carries a size and holds other items (FGV-FR-01). */
+export function isContainerKind(kind: FlowItemKind): boolean {
+  return kind !== "task" && kind !== "defect";
+}
+
 /**
- * FLO-FR-06: what every element — node and loop alike — carries.
- *
- * A `position` is measured from the origin of whatever holds the element: the
- * canvas for a top-level one, the container for a child (FLO-FR-21). That is
- * what makes moving a loop one changed position rather than one per member.
+ * FGV-FR-YHFX: the containers each kind may sit in. `null` is the top level.
  */
-export interface FlowElementBase {
-  /** Unique among ALL elements in the document, and stable across saves. */
+export const PERMITTED_PARENTS: Readonly<
+  Record<FlowItemKind, readonly (FlowItemKind | null)[]>
+> = {
+  milestone: [null],
+  epic: ["milestone"],
+  feature: ["milestone", "epic"],
+  task: ["feature"],
+  defect: ["feature", "epic", "milestone"],
+};
+
+/**
+ * FLO-FR-06: one plan item. Optional fields are absent rather than empty.
+ * `position` is measured from the origin of whatever holds the item
+ * (FLO-FR-21).
+ */
+export interface FlowItem {
+  /** Unique among all items in the document, and stable across saves. */
   id: string;
+  kind: FlowItemKind;
   name: string;
-  /**
-   * FLO-FR-10: the referenced artifacts' stable, path-derived keys (ASC-FR-13),
-   * in the order the author added them. Nodes and loops alike reference any
-   * number of artifacts; the field is absent when the element references none
-   * (FLO-FR-14, FLO-FR-37).
-   */
+  /** FLO-FR-13: Markdown. */
+  description?: string;
+  /** FLO-FR-10: stable, path-derived artifact keys (ASC-FR-13). */
   artifactIds?: string[];
-  /** The loop that holds this element; absent when it sits at the top level. */
+  /** The container that holds this item; absent at the top level. */
   parentId?: string;
+  /** FLO-FR-TZSU: never created on the tracker by a sync. */
+  localOnly?: boolean;
+  /** FLO-FR-NRBV: the draft a task or a defect is worked in. Leaf kinds only. */
+  draftId?: string;
+  /** FLO-FR-ZEJU: project-relative paths; a trailing `/` names a folder. Leaf kinds only. */
+  footprint?: string[];
+  /** FLO-FR-XAPK: a calendar date `YYYY-MM-DD`. Milestones only. */
+  due?: string;
   position: FlowPosition;
+  /** Present on container kinds, absent on leaf kinds (FGV-FR-MZIA). */
+  size?: FlowSize;
 }
 
-/** FLO-FR-06: a node's persisted fields. */
-export interface FlowNode extends FlowElementBase {
-  /** FLO-FR-13: the node's inline prompt, as Markdown. Absent when empty. */
-  prompt?: string;
-}
+/** FLO-FR-15: `blocks` runs from the blocking item to the blocked one. */
+export type FlowEdgeType = "blocks" | "relates";
 
-/**
- * FLO-FR-37: a loop — an element that holds other elements.
- *
- * It expresses the part of a workflow that is not a fixed order: its members are
- * the candidate steps, each deciding from its own prompt which of its neighbours
- * runs next, and the artifacts the loop itself references are the instruction it
- * is run under — which is where the author writes what ends it, in the prompt
- * that says so rather than in a field of its own.
- */
-export interface FlowLoop extends FlowElementBase {
-  /** A whole number greater than zero, or absent for a loop nothing bounds. */
-  maxPasses?: number;
-  size: FlowSize;
-}
-
-/** FLO-FR-15/FLO-FR-19: a directed, optionally labelled edge. */
 export interface FlowEdge {
   id: string;
   from: string;
   to: string;
-  label?: string;
+  type: FlowEdgeType;
+}
+
+/** A tracker reference (FGV-FR-01's `ref`). */
+export interface TrackerRef {
+  kind: "issue" | "milestone";
+  host: string;
+  owner: string;
+  repo: string;
+  number: number;
+  url: string;
+}
+
+/** The tracker values at the last sync (FTS-FR-PNMA). */
+export interface SyncBase {
+  name: string;
+  description: string;
+  state: "open" | "closed";
+  type?: string | null;
+  parent?: TrackerRef | null;
+  milestone?: number | null;
+  blockedBy?: TrackerRef[];
+  due?: string | null;
+}
+
+export interface SyncLink {
+  itemId: string;
+  ref: TrackerRef;
+  base: SyncBase;
+}
+
+export interface FlowSync {
+  tracker: "github";
+  links: SyncLink[];
+  /**
+   * FTS-FR-YHVD: the tracker items a sync never creates or pulls. Absent from
+   * the file when empty (FGV-FR-01).
+   */
+  ignored?: TrackerRef[];
 }
 
 export interface FlowDocument {
-  version: 1;
-  /**
-   * FLO-FR-25: what this Flow is called — the name it will be run under, which
-   * is why it is the Flow's own field rather than its filename. Required in the
-   * sense that the editor asks for one and marks its absence; an empty name is
-   * still written and still saved, because a Flow that cannot be saved until it
-   * is named would lose work over a field nothing reads yet.
-   */
+  version: 2;
+  /** FLO-FR-25: always written, empty or not. */
   name: string;
-  /** FLO-FR-25: what it does, in prose. Optional; absent when empty. */
+  /** FLO-FR-25: absent when empty. */
   description?: string;
-  /** FLO-FR-37: always present in memory; absent from the file when empty. */
-  loops: FlowLoop[];
-  nodes: FlowNode[];
+  /** FLO-FR-YDWT: always present in memory; absent from the file when empty. */
+  references: string[];
+  items: FlowItem[];
   edges: FlowEdge[];
+  /** FLO-FR-AKMV: present once the Flow is connected to a tracker. */
+  sync?: FlowSync;
 }
 
-/** Either kind of element, tagged so callers can tell them apart. */
-export type FlowElement =
-  | ({ kind: "node" } & FlowNode)
-  | ({ kind: "loop" } & FlowLoop);
+/** The only document version this build reads or writes (FGV-FR-07). */
+export const FLOW_VERSION = 2;
 
-/** The only document version this build reads or writes. */
-export const FLOW_VERSION = 1;
+/** FLO-FR-07: what a freshly added item of each kind is called. */
+export const DEFAULT_ITEM_NAMES: Readonly<Record<FlowItemKind, string>> = {
+  milestone: "New milestone",
+  epic: "New epic",
+  feature: "New feature",
+  task: "New task",
+  defect: "New defect",
+};
 
-/** FLO-FR-07: what a freshly-added node is called before the user renames it. */
-export const DEFAULT_NODE_NAME = "New node";
-/** FLO-FR-07: and a freshly-added loop. */
-export const DEFAULT_LOOP_NAME = "New loop";
-/** FLO-FR-07: the size an empty loop arrives at, in graph units. */
-export const DEFAULT_LOOP_SIZE: FlowSize = { width: 420, height: 260 };
+/** FLO-FR-07: the size a new, empty container of each kind arrives at. */
+export const DEFAULT_CONTAINER_SIZES: Readonly<
+  Record<"milestone" | "epic" | "feature", FlowSize>
+> = {
+  milestone: { width: 640, height: 380 },
+  epic: { width: 520, height: 300 },
+  feature: { width: 400, height: 220 },
+};
+
+/** FLO-FR-44: the room a container keeps around what it holds. */
+export const CONTAINER_PADDING = 16;
+/** The room a container's header takes above its members. */
+export const CONTAINER_HEADER_H = 40;
 /**
- * FLO-FR-44: how much room a loop keeps around what it holds. A container drawn
- * exactly on its members' bounding box reads as if they were spilling out of it,
- * and leaves nowhere to drop the next one.
+ * The extent a leaf card occupies, which edges anchor to and a container must
+ * hold (FLO-FR-44). A card grows with its content, so this is the floor.
  */
-export const LOOP_PADDING = 24;
-/** The room the loop's header takes above its members. */
-export const LOOP_HEADER_H = 56;
-/**
- * The extent a node occupies on the canvas, which is what edges anchor to and
- * what a container has to be big enough to hold (FLO-FR-44).
- *
- * A node's height grows with its rendered prompt (FLO-FR-13), so this is the
- * floor rather than the truth for every node. It lives here rather than in the
- * canvas because `minLoopSize` is a document rule and has to agree with what the
- * canvas draws.
- */
-export const MEMBER_NODE_W = 210;
-export const MEMBER_NODE_H = 60;
+export const CARD_W = 170;
+export const CARD_H = 96;
 
 export function emptyFlow(): FlowDocument {
-  return { version: FLOW_VERSION, name: "", loops: [], nodes: [], edges: [] };
+  return { version: FLOW_VERSION, name: "", references: [], items: [], edges: [] };
 }

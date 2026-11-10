@@ -213,7 +213,11 @@ where
 }
 
 /// The save of `save_artifact_contents`, on the calling thread.
-fn save_artifact_contents_blocking<R: tauri::Runtime>(
+///
+/// `pub(crate)` because `crate::flow_sync` writes a synced Flow through it
+/// (FTS-FR-VFNM): the same checks and the same validated write as a save from
+/// the Flow tab.
+pub(crate) fn save_artifact_contents_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     id: &str,
     body: &str,
@@ -364,6 +368,26 @@ fn open_artifact_by_id_impl(root: &fs::RootFs, id: &str) -> Result<OpenedArtifac
         kind: ArtifactKind::from_resolved(artifact_type),
         artifact_type,
     })
+}
+
+/// FDL-FR-BDOD: every `flow`-typed artifact of the active worktree, as its id
+/// and its body, in path order. A file that cannot be read is left out.
+pub(crate) fn flow_bodies(root: &fs::RootFs) -> Vec<(String, String)> {
+    fn collect(node: &scanning::TreeNode, out: &mut Vec<String>) {
+        if node.artifact_type == Some(scanning::ArtifactType::Flow) {
+            out.push(node.path.clone());
+        }
+        for child in node.children.iter().flatten() {
+            collect(child, out);
+        }
+    }
+    let mut paths = Vec::new();
+    collect(&scanning::scan(root), &mut paths);
+    paths.sort();
+    paths
+        .into_iter()
+        .filter_map(|path| root.read_text(root.join(&path)).ok().map(|body| (path, body)))
+        .collect()
 }
 
 /// The artifact type the scan resolves for the project-relative `id`, or `None`
@@ -548,14 +572,15 @@ mod tests {
         );
     }
 
-    /// PST-FR-31, FGV-FR-12 / PST-FR-28: a valid Flow is written on the ordinary terms.
+    /// PST-FR-31, FGV-FR-01 / PST-FR-28: a valid Flow is written on the ordinary terms.
     #[test]
     fn a_valid_flow_is_written() {
         let dir = tempfile::TempDir::new().unwrap();
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
-        let body = r#"{"version":1,"name":"ok","nodes":[
-            {"id":"n1","name":"a","position":{"x":0,"y":0}}],"edges":[]}"#;
+        let body = r#"{"version":2,"name":"ok","items":[
+            {"id":"m1","kind":"milestone","name":"a","position":{"x":0,"y":0},
+             "size":{"width":10,"height":10}}],"edges":[]}"#;
         assert_eq!(
             resolved_type(root, "flows/a.flow"),
             Some(scanning::ArtifactType::Flow),
@@ -565,7 +590,7 @@ mod tests {
         assert_eq!(root.read_text(root.join("flows/a.flow")).unwrap(), body);
     }
 
-    /// PST-FR-31, FGV-FR-12 / PST-FR-28: an invalid Flow is refused before the write. The
+    /// PST-FR-31, FGV-FR-PMTY / PST-FR-28: an invalid Flow is refused before the write. The
     /// file keeps the bytes it had, no baseline is recorded (so no self-write
     /// suppression entry is left behind for a write that never happened), and
     /// its modification time is untouched — so the artifact's position in
@@ -577,13 +602,14 @@ mod tests {
         std::fs::create_dir_all(root.join("flows")).unwrap();
         std::fs::write(root.join("flows/a.flow"), b"ORIGINAL").unwrap();
         let tracker = ContentTracker::default();
-        // An edge joining a node inside a loop to one outside it (FGV-FR-12).
-        let body = r#"{"version":1,"name":"x","loops":[
-            {"id":"l1","name":"l","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
-        ],"nodes":[
-            {"id":"n1","name":"a","position":{"x":0,"y":0}},
-            {"id":"n2","name":"b","parentId":"l1","position":{"x":0,"y":0}}
-        ],"edges":[{"id":"e1","from":"n1","to":"n2"}]}"#;
+        // Three milestones that block each other in a ring (FGV-FR-PMTY).
+        let body = r#"{"version":2,"name":"x","items":[
+            {"id":"m1","kind":"milestone","name":"a","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
+            {"id":"m2","kind":"milestone","name":"b","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
+            {"id":"m3","kind":"milestone","name":"c","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
+        ],"edges":[{"id":"e1","from":"m1","to":"m2","type":"blocks"},
+                   {"id":"e2","from":"m2","to":"m3","type":"blocks"},
+                   {"id":"e3","from":"m3","to":"m1","type":"blocks"}]}"#;
         let err = save_validated_artifact(root, "flows/a.flow", body, &tracker)
             .expect_err("an invalid Flow must be refused");
         assert!(err.contains("could not be written"), "{err}");

@@ -1,624 +1,523 @@
+/**
+ * The Flow document, version 2: its deserialization, its serialization, and
+ * the hierarchy and geometry helpers the canvas reads (FLO-FR-03 to
+ * FLO-FR-05, FLO-FR-21, FLO-FR-42, FLO NFR on round-trips, FGV-FR-01,
+ * FGV-FR-05, FGV-FR-07).
+ */
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_LOOP_NAME,
-  DEFAULT_LOOP_SIZE,
-  MEMBER_NODE_W,
   absolutePosition,
-  addLoop,
-  addNode,
   ancestorsOf,
-  edgesSeveredByMove,
-  innermostLoopAt,
-  loopHolds,
-  minLoopSize,
-  moveElement,
-  removeLoop,
-  renameLoop,
-  resizeLoop,
-  setLoopMaxPasses,
-  subtreeOf,
-  addElementArtifact,
-  connect,
+  CARD_H,
+  CARD_W,
+  childrenOf,
+  containerBounds,
   emptyFlow,
-  moveNode,
+  holdsAnything,
+  inLineage,
+  innermostContainerAt,
+  isAncestor,
+  itemBounds,
+  leavesUnder,
   parseFlowDocument,
-  removeEdge,
-  removeNode,
-  removeElementArtifact,
-  renameEdge,
-  renameNode,
+  permitsParent,
   serializeFlowDocument,
-  setFlowDescription,
-  setFlowName,
-  setNodePrompt,
+  subtreeOf,
   type FlowDocument,
 } from "./flowDocument";
+import { issueRef, item, plan, samplePlan, withItems } from "../test/flowPlanFixtures";
 
-/** The document the FLO contract boundary spells out, as a fixture. */
-const SAMPLE = `{
-  "version": 1,
-  "nodes": [
-    {
-      "id": "n1",
-      "name": "Collect context",
-      "artifactIds": ["prompts/gather-repo.md", ".claude/skills/review/SKILL.md"],
-      "prompt": "Read the repo and list every changed file.",
-      "position": { "x": 120, "y": 80 }
-    },
-    {
-      "id": "n2",
-      "name": "Draft review",
-      "position": { "x": 420, "y": 80 }
-    }
-  ],
-  "edges": [
-    { "id": "e1", "from": "n1", "to": "n2", "label": "ok" }
-  ]
-}`;
-
-/** Parse, asserting success — the shape most tests here start from. */
 function parsed(body: string): FlowDocument {
-  const result = parseFlowDocument(body);
-  if (!result.ok) throw new Error(`expected a document, got: ${result.error}`);
-  return result.doc;
+  const r = parseFlowDocument(body);
+  if (!r.ok) throw new Error(`expected a plan, got: ${r.error}`);
+  return r.doc;
 }
 
-/** The refusal a failed parse reports. */
-function refused(body: string): string {
-  const result = parseFlowDocument(body);
-  if (result.ok) throw new Error("expected the parse to fail");
-  return result.error;
+function parseError(body: string): string {
+  const r = parseFlowDocument(body);
+  if (r.ok) throw new Error("expected a parse error");
+  return r.error;
 }
-
-/** Why `connect` declined, asserting that it did. */
-function refusedConnect(result: ReturnType<typeof connect>): string {
-  if (result.ok) throw new Error("expected the connection to be refused");
-  return result.refused;
-}
-
-/** A graph of `n1 -> n2 -> n3`, the shape the edge rules are exercised on. */
-function chain(): FlowDocument {
-  let doc = emptyFlow();
-  doc = addNode(doc, { x: 0, y: 0 });
-  doc = addNode(doc, { x: 100, y: 0 });
-  doc = addNode(doc, { x: 200, y: 0 });
-  const a = connect(doc, "n1", "n2");
-  if (!a.ok) throw new Error("n1->n2 refused");
-  const b = connect(a.doc, "n2", "n3");
-  if (!b.ok) throw new Error("n2->n3 refused");
-  return b.doc;
-}
-
 
 /**
- * Reading, writing and editing a flow document.
- *
- * One part of the group headed by `./flowDocument.loops.test.ts`, which carries
- * the loop rules; both are written against the same sample document above.
+ * A body that uses every field of the schema, in the order the editor writes
+ * it. A byte-exact round-trip of it proves the writer's key order and its
+ * formatting.
  */
-describe("deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
-  it("reads the document shape the contract boundary defines", () => {
-    const doc = parsed(SAMPLE);
-    expect(doc.version).toBe(1);
-    expect(doc.nodes).toHaveLength(2);
-    expect(doc.nodes[0]).toEqual({
-      id: "n1",
-      name: "Collect context",
-      artifactIds: [
-        "prompts/gather-repo.md",
-        ".claude/skills/review/SKILL.md",
-      ],
-      prompt: "Read the repo and list every changed file.",
-      position: { x: 120, y: 80 },
-    });
-    // FLO-FR-14: neither optional field is required for a node to be valid.
-    expect(doc.nodes[1].artifactIds).toBeUndefined();
-    expect(doc.nodes[1].prompt).toBeUndefined();
-    expect(doc.edges).toEqual([{ id: "e1", from: "n1", to: "n2", label: "ok" }]);
-  });
-
-  // FLO-FR-04: the state a Flow created through New Artifact, New File, or an
-  // external `touch` is in — it must open ready to edit, not in an error state.
-  it("reads an empty or whitespace-only body as an empty graph", () => {
-    const empty = { version: 1, name: "", loops: [], nodes: [], edges: [] };
-    expect(parsed("")).toEqual(empty);
-    expect(parsed("   \n\t \n")).toEqual(empty);
-  });
-
-  it("refuses a body that is not JSON at all (FLO-FR-05)", () => {
-    expect(refused("{ not json")).toMatch(/not valid JSON/);
-    expect(refused("# a markdown heading")).toMatch(/not valid JSON/);
-  });
-
-  it("refuses valid JSON that is not a Flow document (FLO-FR-05)", () => {
-    expect(refused("[]")).toMatch(/expected an object/);
-    expect(refused('"a string"')).toMatch(/expected an object/);
-    expect(refused("null")).toMatch(/expected an object/);
-    expect(refused('{"version":1,"nodes":{},"edges":[]}')).toMatch(/`nodes` must be an array/);
-    expect(refused('{"version":1,"nodes":[],"edges":null}')).toMatch(/`edges` must be an array/);
-  });
-
-  it("refuses a version it cannot read rather than reinterpreting it", () => {
-    // A document written by a build that changed the shape must not be opened
-    // as if it were this one — the write-back would replace it with something
-    // it never said.
-    expect(refused('{"version":2,"nodes":[],"edges":[]}')).toMatch(/unsupported Flow version 2/);
-    expect(refused('{"nodes":[],"edges":[]}')).toMatch(/unsupported Flow version/);
-  });
-
-  it("refuses an entry that is not an object at all", () => {
-    expect(refused('{"version":1,"nodes":[null],"edges":[]}')).toMatch(
-      /node 0 is not an object/,
-    );
-    expect(refused('{"version":1,"nodes":[[]],"edges":[]}')).toMatch(
-      /node 0 is not an object/,
-    );
-    const one = '{"id":"n1","name":"x","position":{"x":0,"y":0}}';
-    expect(refused(`{"version":1,"nodes":[${one}],"edges":[7]}`)).toMatch(
-      /edge 0 is not an object/,
-    );
-  });
-
-  it("refuses an edge missing or mistyping the fields FLO-FR-15 requires", () => {
-    const nodes =
-      '{"id":"n1","name":"x","position":{"x":0,"y":0}},' +
-      '{"id":"n2","name":"y","position":{"x":0,"y":0}}';
-    const edge = (e: string) =>
-      `{"version":1,"nodes":[${nodes}],"edges":[${e}]}`;
-    expect(refused(edge('{"from":"n1","to":"n2"}'))).toMatch(/edge 0 has no id/);
-    expect(refused(edge('{"id":"e1","to":"n2"}'))).toMatch(/has no endpoints/);
-    expect(refused(edge('{"id":"e1","from":1,"to":"n2"}'))).toMatch(
-      /has no endpoints/,
-    );
-    expect(
-      refused(edge('{"id":"e1","from":"n1","to":"n2","label":false}')),
-    ).toMatch(/label must be a string/);
-  });
-
-  // Reachable from a hand-edited file: `1e400` parses to `Infinity`, which would
-  // put a node at a coordinate no layout can render or diff meaningfully.
-  it("refuses a non-finite node position", () => {
-    expect(
-      refused('{"version":1,"nodes":[{"id":"n1","name":"x","position":{"x":1e400,"y":0}}],"edges":[]}'),
-    ).toMatch(/position (has no numeric|is not an object)/);
-  });
-
-  // `null` is how a hand-edited or generated file spells "absent", and the two
-  // must not diverge: an optional field read as `null` would serialize back as
-  // a field that was never there.
-  it("reads a null optional field as absent", () => {
-    const doc = parsed(
-      '{"version":1,"nodes":[{"id":"n1","name":"x","artifactIds":null,' +
-        '"prompt":null,"position":{"x":0,"y":0}}],"edges":[]}',
-    );
-    expect(doc.nodes[0].artifactIds).toBeUndefined();
-    expect(doc.nodes[0].prompt).toBeUndefined();
-    expect(serializeFlowDocument(doc)).not.toContain("null");
-  });
-
-  it("refuses a node missing the fields FLO-FR-06 requires", () => {
-    const doc = (nodes: string) => `{"version":1,"nodes":[${nodes}],"edges":[]}`;
-    expect(refused(doc('{"name":"a","position":{"x":0,"y":0}}'))).toMatch(/node 0 has no id/);
-    expect(refused(doc('{"id":"n1","position":{"x":0,"y":0}}'))).toMatch(/has no name/);
-    expect(refused(doc('{"id":"n1","name":"a"}'))).toMatch(/position (has no numeric|is not an object)/);
-    expect(refused(doc('{"id":"n1","name":"a","position":{"x":"0","y":0}}'))).toMatch(
-      /position (has no numeric|is not an object)/,
-    );
-    expect(
-      refused(doc('{"id":"n1","name":"a","position":{"x":0,"y":0},"prompt":7}')),
-    ).toMatch(/prompt must be a string/);
-  });
-
-  // FLO-FR-06: ids are what a node's identity and every edge's endpoints are
-  // resolved through, so a duplicate is not something the canvas can render.
-  it("refuses duplicate node ids and duplicate edge ids", () => {
-    const two = (id: string) =>
-      `{"id":"${id}","name":"x","position":{"x":0,"y":0}}`;
-    expect(
-      refused(`{"version":1,"nodes":[${two("n1")},${two("n1")}],"edges":[]}`),
-    ).toMatch(/duplicate element id "n1"/);
-    expect(
-      refused(
-        `{"version":1,"nodes":[${two("n1")},${two("n2")}],"edges":[` +
-          `{"id":"e1","from":"n1","to":"n2"},{"id":"e1","from":"n2","to":"n1"}]}`,
-      ),
-    ).toMatch(/duplicate edge id "e1"/);
-  });
-
-  // FLO-FR-08: no edge exists without both of its endpoints — a stored one that
-  // does is a graph the canvas cannot draw.
-  it("refuses an edge whose endpoint is not a node in the document", () => {
-    const nodes = '{"id":"n1","name":"x","position":{"x":0,"y":0}}';
-    expect(
-      refused(`{"version":1,"nodes":[${nodes}],"edges":[{"id":"e1","from":"n1","to":"gone"}]}`),
-    ).toMatch(/ends at unknown element "gone"/);
-    expect(
-      refused(`{"version":1,"nodes":[${nodes}],"edges":[{"id":"e1","from":"gone","to":"n1"}]}`),
-    ).toMatch(/starts at unknown element "gone"/);
-  });
-
-  // The two graph rules, enforced on the way in as well as at the canvas — a
-  // stored document violating one is not something this editor could have
-  // produced, and opening it would mean writing back a graph the file never
-  // described.
-  it("refuses a stored self-edge and a stored duplicate ordered pair", () => {
-    const nodes =
-      '{"id":"n1","name":"x","position":{"x":0,"y":0}},' +
-      '{"id":"n2","name":"y","position":{"x":0,"y":0}}';
-    expect(
-      refused(`{"version":1,"nodes":[${nodes}],"edges":[{"id":"e1","from":"n1","to":"n1"}]}`),
-    ).toMatch(/connects element "n1" to itself/);
-    expect(
-      refused(
-        `{"version":1,"nodes":[${nodes}],"edges":[` +
-          `{"id":"e1","from":"n1","to":"n2"},{"id":"e2","from":"n1","to":"n2"}]}`,
-      ),
-    ).toMatch(/more than one edge from "n1" to "n2"/);
-  });
-
-  // FLO-FR-18: a cycle is not an error — it is how a loop or a retry is
-  // expressed — so a stored one must load like any other graph.
-  it("reads a stored cycle without complaint", () => {
-    const doc = parsed(
-      '{"version":1,"nodes":[' +
-        '{"id":"n1","name":"a","position":{"x":0,"y":0}},' +
-        '{"id":"n2","name":"b","position":{"x":0,"y":0}}],' +
-        '"edges":[{"id":"e1","from":"n1","to":"n2"},' +
-        '{"id":"e2","from":"n2","to":"n1","label":"retry"}]}',
-    );
-    expect(doc.edges.map((e) => [e.from, e.to])).toEqual([
-      ["n1", "n2"],
-      ["n2", "n1"],
-    ]);
-  });
-});
-
-describe("serialization (FLO NFR: stable key order and formatting)", () => {
-  // The Flow is a committed, diffable file: opening one and saving it without
-  // editing must not show up in Git as a change.
-  it("round-trips an unedited document to the same bytes", () => {
-    const once = serializeFlowDocument(parsed(SAMPLE));
-    expect(serializeFlowDocument(parsed(once))).toBe(once);
-    expect(parsed(once)).toEqual(parsed(SAMPLE));
-  });
-
-  it("writes fields in a fixed order whatever order they arrived in", () => {
-    // The same node with its keys shuffled: `JSON.stringify` preserves
-    // insertion order, so a serializer that echoed the parsed object would
-    // produce a different file for an identical graph.
-    const shuffled = parsed(
-      '{"nodes":[{"position":{"y":8,"x":4},"prompt":"p",' +
-        '"name":"N","artifactIds":["a.md"],"id":"n1"}],"description":"d",' +
-        '"edges":[],"name":"F","version":1}',
-    );
-    expect(serializeFlowDocument(shuffled)).toBe(
-      `{
-  "version": 1,
-  "name": "F",
-  "description": "d",
-  "nodes": [
+const FULL_BODY = `{
+  "version": 2,
+  "name": "Payments v2",
+  "description": "Card payments for the EU launch.",
+  "references": [
+    "docs/payments-hld.md"
+  ],
+  "items": [
     {
-      "id": "n1",
-      "name": "N",
+      "id": "m1",
+      "kind": "milestone",
+      "name": "Beta",
+      "description": "Accept **Visa**.",
       "artifactIds": [
-        "a.md"
+        "specifications/core/PAY-payments.md"
       ],
-      "prompt": "p",
+      "localOnly": true,
+      "due": "2027-03-31",
       "position": {
-        "x": 4,
-        "y": 8
+        "x": 40,
+        "y": 40
+      },
+      "size": {
+        "width": 900,
+        "height": 520
+      }
+    },
+    {
+      "id": "f1",
+      "kind": "feature",
+      "name": "Card capture",
+      "parentId": "m1",
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "size": {
+        "width": 420,
+        "height": 300
+      }
+    },
+    {
+      "id": "t1",
+      "kind": "task",
+      "name": "Tokenize card numbers",
+      "parentId": "f1",
+      "localOnly": false,
+      "draftId": "dr_7f3a",
+      "footprint": [
+        "src-tauri/src/payments/",
+        "specifications/core/PAY-payments.md"
+      ],
+      "position": {
+        "x": 20.5,
+        "y": -60
+      }
+    },
+    {
+      "id": "x1",
+      "kind": "defect",
+      "name": "",
+      "parentId": "m1",
+      "position": {
+        "x": 460,
+        "y": 60
       }
     }
   ],
-  "edges": []
-}
-`,
-    );
-  });
-
-  it("omits absent optional fields rather than writing them as null", () => {
-    const text = serializeFlowDocument(chain());
-    expect(text).not.toContain("artifactId");
-    expect(text).not.toContain("artifactIds");
-    expect(text).not.toContain("prompt");
-    expect(text).not.toContain("label");
-    expect(text).not.toContain("null");
-    expect(text.endsWith("}\n")).toBe(true);
-  });
-});
-
-describe("node mutation (FLO-FR-06 – FLO-FR-14, FLO-FR-21)", () => {
-  it("adds an unconnected node with a default name and neither field", () => {
-    const doc = addNode(emptyFlow(), { x: 12, y: 34 });
-    expect(doc.nodes).toEqual([
-      { id: "n1", name: "New node", position: { x: 12, y: 34 } },
-    ]);
-    expect(doc.edges).toEqual([]);
-  });
-
-  // Without this, deleting one node and adding another re-mints an id already
-  // in use: React keys collide and an edge resolves to the wrong node.
-  it("mints an id nothing in the document holds, after a delete", () => {
-    let doc = addNode(addNode(addNode(emptyFlow(), { x: 0, y: 0 }), { x: 0, y: 0 }), {
-      x: 0,
-      y: 0,
-    });
-    doc = removeNode(doc, "n2");
-    doc = addNode(doc, { x: 0, y: 0 });
-    const ids = doc.nodes.map((n) => n.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("removes a node together with every edge incident to it (FLO-FR-08)", () => {
-    const doc = removeNode(chain(), "n2");
-    expect(doc.nodes.map((n) => n.id)).toEqual(["n1", "n3"]);
-    expect(doc.edges).toEqual([]);
-  });
-
-  it("renames without touching identity (FLO-FR-09)", () => {
-    // Two nodes may share a name — identity is the id, never the name.
-    let doc = renameNode(chain(), "n1", "Collect context");
-    doc = renameNode(doc, "n2", "Collect context");
-    expect(doc.nodes.map((n) => n.name)).toEqual([
-      "Collect context",
-      "Collect context",
-      "New node",
-    ]);
-    expect(doc.nodes.map((n) => n.id)).toEqual(["n1", "n2", "n3"]);
-    expect(doc.edges).toEqual(chain().edges);
-  });
-
-  // FLO-FR-25: the Flow's own fields. A Flow written before it could carry a
-  // name opens as one with an empty name rather than as an unreadable file —
-  // the alternative is refusing to open every Flow that already exists.
-  it("names and describes the Flow, and reads a document that carries neither", () => {
-    const older = parsed('{"version":1,"nodes":[],"edges":[]}');
-    expect(older.name).toBe("");
-    expect(older.description).toBeUndefined();
-
-    let doc = setFlowName(older, "Onboarding review");
-    doc = setFlowDescription(doc, "Reviews a new joiner's first PR.");
-    expect(doc.name).toBe("Onboarding review");
-    expect(doc.description).toBe("Reviews a new joiner's first PR.");
-
-    // The name is always written, empty or not; the description is dropped when
-    // emptied, so a cleared one serializes as one that was never set.
-    doc = setFlowDescription(doc, "");
-    expect("description" in doc).toBe(false);
-    const text = serializeFlowDocument(setFlowName(doc, ""));
-    expect(text).toContain('"name": ""');
-    expect(text).not.toContain("description");
-    expect(parsed(text).name).toBe("");
-  });
-
-  it("returns the same document when a field is set to what it holds", () => {
-    const doc = setFlowDescription(setFlowName(emptyFlow(), "F"), "d");
-    expect(setFlowName(doc, "F")).toBe(doc);
-    expect(setFlowDescription(doc, "d")).toBe(doc);
-    // An empty description set on a document that has none changes nothing.
-    const bare = emptyFlow();
-    expect(setFlowDescription(bare, "")).toBe(bare);
-  });
-
-  it("refuses a name or description that is not a string (FLO-FR-05)", () => {
-    expect(refused('{"version":1,"name":7,"nodes":[],"edges":[]}')).toMatch(
-      /`name` must be a string/,
-    );
-    expect(
-      refused('{"version":1,"description":[],"nodes":[],"edges":[]}'),
-    ).toMatch(/`description` must be a string/);
-  });
-
-  it("accumulates artifact references and removes them one at a time (FLO-FR-10)", () => {
-    let doc = addElementArtifact(chain(), "n1", "prompts/gather.md");
-    doc = addElementArtifact(doc, "n1", "prompts/other.md");
-    // Added, not replaced, and in the order the author added them.
-    expect(doc.nodes[0].artifactIds).toEqual([
-      "prompts/gather.md",
-      "prompts/other.md",
-    ]);
-
-    doc = removeElementArtifact(doc, "n1", "prompts/gather.md");
-    expect(doc.nodes[0].artifactIds).toEqual(["prompts/other.md"]);
-
-    doc = removeElementArtifact(doc, "n1", "prompts/other.md");
-    // Emptied means absent, not `[]`: an empty list would serialize as a field
-    // that was never there on a node that references nothing (FLO-FR-14).
-    expect("artifactIds" in doc.nodes[0]).toBe(false);
-    // None of it changed anything else about the node or its edges.
-    expect(doc.nodes[0].name).toBe(chain().nodes[0].name);
-    expect(doc.edges).toEqual(chain().edges);
-  });
-
-  // FLO-FR-26: an action that leaves the graph as it was is not an edit. The
-  // store raises the unsaved state on any new document, so a mutator that
-  // rebuilt the graph to change nothing would dirty a Flow nobody edited.
-  it("returns the very same document for an add or remove that changes nothing", () => {
-    const doc = addElementArtifact(chain(), "n1", "prompts/gather.md");
-    expect(addElementArtifact(doc, "n1", "prompts/gather.md")).toBe(doc);
-    expect(addElementArtifact(doc, "n1", "")).toBe(doc);
-    expect(removeElementArtifact(doc, "n1", "prompts/never-added.md")).toBe(doc);
-  });
-
-  // A node written before a node could reference more than one artifact. Its
-  // Flow has to open — landing in the FLO-FR-05 error state over it would cost
-  // the author the whole file — and its next write emits the list form.
-  it("reads the single `artifactId` an older document carries (FLO-FR-10)", () => {
-    const doc = parsed(
-      '{"version":1,"nodes":[{"id":"n1","name":"x","artifactId":"a.md",' +
-        '"position":{"x":0,"y":0}}],"edges":[]}',
-    );
-    expect(doc.nodes[0].artifactIds).toEqual(["a.md"]);
-    expect(serializeFlowDocument(doc)).toContain('"artifactIds"');
-    expect(serializeFlowDocument(doc)).not.toContain('"artifactId"');
-  });
-
-  it("folds a repeated reference and refuses a non-string one", () => {
-    const doc = parsed(
-      '{"version":1,"nodes":[{"id":"n1","name":"x",' +
-        '"artifactIds":["a.md","b.md","a.md"],"position":{"x":0,"y":0}}],"edges":[]}',
-    );
-    expect(doc.nodes[0].artifactIds).toEqual(["a.md", "b.md"]);
-    expect(
-      refused(
-        '{"version":1,"nodes":[{"id":"n1","name":"x","artifactIds":[7],' +
-          '"position":{"x":0,"y":0}}],"edges":[]}',
-      ),
-    ).toMatch(/not a string/);
-    // An empty ENTRY is refused alongside a non-string one: an artifact id is a
-    // path-derived node key (ASC-FR-13) and `""` names nothing. The backend
-    // refuses it too (FGV-FR-08), and this is where the two readings of the
-    // schema would otherwise diverge — a body it called valid would land here
-    // and fail to deserialize.
-    expect(
-      refused(
-        '{"version":1,"nodes":[{"id":"n1","name":"x","artifactIds":[""],' +
-          '"position":{"x":0,"y":0}}],"edges":[]}',
-      ),
-    ).toMatch(/not a string/);
-    expect(
-      refused(
-        '{"version":1,"nodes":[{"id":"n1","name":"x","artifactIds":"a.md",' +
-          '"position":{"x":0,"y":0}}],"edges":[]}',
-      ),
-    ).toMatch(/must be an array/);
-    // An empty list is the same as no references at all.
-    expect(
-      parsed(
-        '{"version":1,"nodes":[{"id":"n1","name":"x","artifactIds":[],' +
-          '"position":{"x":0,"y":0}}],"edges":[]}',
-      ).nodes[0].artifactIds,
-    ).toBeUndefined();
-  });
-
-  it("drops an emptied inline prompt rather than storing an empty string", () => {
-    let doc = setNodePrompt(chain(), "n1", "One paragraph, no lists.");
-    expect(doc.nodes[0].prompt).toBe("One paragraph, no lists.");
-    doc = setNodePrompt(doc, "n1", "");
-    expect("prompt" in doc.nodes[0]).toBe(false);
-    expect(serializeFlowDocument(doc)).not.toContain("prompt");
-  });
-
-  it("moves a node without disturbing anything else (FLO-FR-21)", () => {
-    const doc = moveNode(chain(), "n2", { x: 640, y: 220 });
-    expect(doc.nodes[1].position).toEqual({ x: 640, y: 220 });
-    expect(doc.nodes[0].position).toEqual({ x: 0, y: 0 });
-    expect(doc.edges).toEqual(chain().edges);
-  });
-
-  it("leaves the document it was given untouched", () => {
-    // Every mutator returns a new document: React compares identities to decide
-    // what to re-render, and an in-place edit would render nothing.
-    const before = chain();
-    const snapshot = JSON.parse(JSON.stringify(before));
-    removeNode(renameNode(addNode(before, { x: 1, y: 1 }), "n1", "x"), "n2");
-    expect(before).toEqual(snapshot);
-  });
-});
-
-describe("edge rules (FLO-FR-15 – FLO-FR-20)", () => {
-  it("refuses a connection from a node to itself (FLO-FR-16)", () => {
-    const doc = chain();
-    const result = connect(doc, "n1", "n1");
-    expect(result).toEqual({ ok: false, refused: "self" });
-  });
-
-  it("refuses a second edge on an ordered pair, keeping the first (FLO-FR-17)", () => {
-    const doc = renameEdge(chain(), "e1", "ok");
-    expect(connect(doc, "n1", "n2")).toEqual({ ok: false, refused: "duplicate" });
-    expect(doc.edges.find((e) => e.id === "e1")?.label).toBe("ok");
-  });
-
-  it("treats B->A as a separate ordered pair from A->B (FLO-FR-17 / FLO-FR-18)", () => {
-    const result = connect(chain(), "n2", "n1");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.doc.edges.map((e) => [e.from, e.to])).toEqual([
-      ["n1", "n2"],
-      ["n2", "n3"],
-      ["n2", "n1"],
-    ]);
-  });
-
-  // FLO-FR-18: no connection is ever refused on the grounds that it would form
-  // a cycle. This is the retry/loop case, and it must simply work.
-  it("creates an edge that closes a cycle", () => {
-    const result = connect(chain(), "n3", "n1");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.doc.edges).toHaveLength(3);
-    expect(result.doc.edges[2]).toEqual({ id: "e3", from: "n3", to: "n1" });
-  });
-
-  it("allows unbounded fan-out and fan-in from one node (FLO-FR-15)", () => {
-    let doc = chain();
-    doc = addNode(doc, { x: 0, y: 0 });
-    for (const [from, to] of [
-      ["n1", "n3"],
-      ["n1", "n4"],
-      ["n2", "n4"],
-      ["n3", "n4"],
-    ]) {
-      const r = connect(doc, from, to);
-      expect(r.ok).toBe(true);
-      if (r.ok) doc = r.doc;
+  "edges": [
+    {
+      "id": "e1",
+      "from": "t1",
+      "to": "x1",
+      "type": "blocks"
+    },
+    {
+      "id": "e2",
+      "from": "x1",
+      "to": "f1",
+      "type": "relates"
     }
-    expect(doc.edges.filter((e) => e.from === "n1")).toHaveLength(3);
-    expect(doc.edges.filter((e) => e.to === "n4")).toHaveLength(3);
+  ],
+  "sync": {
+    "tracker": "github",
+    "links": [
+      {
+        "itemId": "f1",
+        "ref": {
+          "kind": "issue",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 42,
+          "url": "https://github.com/acme/payments/issues/42"
+        },
+        "base": {
+          "name": "Card capture",
+          "description": "",
+          "state": "open",
+          "type": "Feature",
+          "parent": {
+            "kind": "issue",
+            "host": "github.com",
+            "owner": "acme",
+            "repo": "payments",
+            "number": 40,
+            "url": "https://github.com/acme/payments/issues/40"
+          },
+          "milestone": null,
+          "blockedBy": []
+        }
+      },
+      {
+        "itemId": "m1",
+        "ref": {
+          "kind": "milestone",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 3,
+          "url": "https://github.com/acme/payments/milestone/3"
+        },
+        "base": {
+          "name": "Beta",
+          "description": "First cut.",
+          "state": "closed",
+          "due": null
+        }
+      }
+    ],
+    "ignored": [
+      {
+        "kind": "issue",
+        "host": "github.com",
+        "owner": "acme",
+        "repo": "payments",
+        "number": 47,
+        "url": "https://github.com/acme/payments/issues/47"
+      }
+    ]
+  }
+}
+`;
+
+describe("deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
+  it("FLO-FR-04, FGV-FR-05: an empty or whitespace body is the empty plan", () => {
+    expect(parsed("")).toEqual(emptyFlow());
+    expect(parsed("  \n\t ")).toEqual(emptyFlow());
   });
 
-  it("refuses a connection to a node that is no longer in the graph", () => {
-    const doc = removeNode(chain(), "n3");
-    expect(connect(doc, "n1", "n3")).toEqual({ ok: false, refused: "unknown-node" });
+  it("FLO-FR-05, FGV-FR-07: a version 1 document is an unknown version", () => {
+    const body = JSON.stringify({ version: 1, nodes: [], edges: [] });
+    expect(parseError(body)).toMatch(/unknown Flow version 1 \(expected 2\)/);
   });
 
-  // The counterpart of the node-id test above, on the other id space: without
-  // it, removing an edge and drawing another re-mints an id already in use and
-  // two edges collide on one React key.
-  it("mints an edge id nothing in the document holds, after a delete", () => {
-    let doc = chain();
-    doc = removeEdge(doc, "e1");
-    const first = connect(doc, "n1", "n3");
-    expect(first.ok).toBe(true);
-    if (!first.ok) return;
-    const second = connect(first.doc, "n3", "n1");
-    expect(second.ok).toBe(true);
-    if (!second.ok) return;
-    const ids = second.doc.edges.map((e) => e.id);
-    expect(new Set(ids).size).toBe(ids.length);
+  it("FLO-FR-05, FGV-FR-07: a document without a version is an unknown version", () => {
+    expect(parseError('{"items":[],"edges":[]}')).toMatch(/unknown Flow version null/);
   });
 
-  // A selection can name something an external reload removed; the mutators
-  // have to be inert for it rather than throwing or inventing an entry.
-  it("is a no-op for an id the document does not hold", () => {
-    const before = chain();
-    expect(removeNode(before, "gone")).toEqual(before);
-    expect(renameNode(before, "gone", "x")).toEqual(before);
-    expect(setNodePrompt(before, "gone", "p")).toEqual(before);
-    // `toBe`, not `toEqual`: identity is what `applyEdit` reads to tell a
-    // no-op from an edit, and an equal-but-new document dirties the Flow.
-    expect(addElementArtifact(before, "gone", "a.md")).toBe(before);
-    expect(removeElementArtifact(before, "gone", "a.md")).toBe(before);
-    expect(moveNode(before, "gone", { x: 1, y: 1 })).toBe(before);
-    expect(removeEdge(before, "gone")).toEqual(before);
-    expect(renameEdge(before, "gone", "x")).toEqual(before);
+  it("FLO-FR-05: a body that is not JSON, or not an object, is an error", () => {
+    expect(parseError("{ not json")).toMatch(/not valid JSON/);
+    expect(parseError("[1, 2]")).toMatch(/expected an object/);
   });
 
-  it("removes only the named edge, leaving both endpoints (FLO-FR-20)", () => {
-    const doc = removeEdge(chain(), "e1");
-    expect(doc.nodes.map((n) => n.id)).toEqual(["n1", "n2", "n3"]);
-    expect(doc.edges.map((e) => e.id)).toEqual(["e2"]);
+  it("FLO-FR-05, FGV-FR-07: a version given as a string is an unknown version", () => {
+    expect(parseError('{"version":"2","items":[],"edges":[]}')).toMatch(/unknown Flow version "2"/);
   });
 
-  it("labels an edge and clears the label back to a bare arrow (FLO-FR-19)", () => {
-    let doc = renameEdge(chain(), "e2", "retry");
-    expect(doc.edges[1].label).toBe("retry");
-    // Labels are not required to be unique.
-    doc = renameEdge(doc, "e1", "retry");
-    expect(doc.edges.map((e) => e.label)).toEqual(["retry", "retry"]);
-    doc = renameEdge(doc, "e1", "");
-    expect("label" in doc.edges[0]).toBe(false);
+  it("FLO-FR-05: a field of the wrong type is an error", () => {
+    const t = (extra: Record<string, unknown>) =>
+      JSON.stringify({
+        version: 2,
+        items: [{ id: "t1", kind: "task", name: "T", position: { x: 0, y: 0 }, ...extra }],
+        edges: [],
+      });
+    expect(parseError(t({ position: { x: 0 } }))).toMatch(/position has no numeric y/);
+    expect(parseError(t({ localOnly: "yes" }))).toMatch(/localOnly must be a boolean/);
+    expect(parseError(t({ id: "" }))).toMatch(/item 0 has no id/);
+    expect(parseError(t({ footprint: [1] }))).toMatch(/footprint must be a list of strings/);
+  });
+
+  it("FLO-FR-05: a sync section of the wrong shape is an error", () => {
+    const link = {
+      itemId: "t1",
+      ref: { kind: "issue", host: "github.com", owner: "a", repo: "r", number: 1, url: "u" },
+      base: { name: "", description: "", state: "open" },
+    };
+    const s = (sync: unknown) => JSON.stringify({ version: 2, items: [], edges: [], sync });
+    expect(parseError(s({ tracker: "gitlab", links: [] }))).toMatch(/must be github/);
+    expect(parseError(s({ tracker: "github", links: {} }))).toMatch(/`sync.links` must be an array/);
+    expect(parseError(s({ tracker: "github", links: [{ ...link, ref: { ...link.ref, number: 4.5 } }] }))).toMatch(
+      /ref has no number/,
+    );
+    expect(parseError(s({ tracker: "github", links: [{ ...link, base: { ...link.base, state: "merged" } }] }))).toMatch(
+      /base has no state/,
+    );
+    expect(parsed(s({ tracker: "github", links: [link] })).sync?.links).toHaveLength(1);
+  });
+
+  it("FGV-FR-01, FTS-FR-YHVD: sync.ignored is a list of references, and an empty list reads as absent", () => {
+    const s = (sync: unknown) => JSON.stringify({ version: 2, items: [], edges: [], sync });
+    expect(parseError(s({ tracker: "github", links: [], ignored: {} }))).toMatch(
+      /`sync.ignored` must be an array/,
+    );
+    expect(parseError(s({ tracker: "github", links: [], ignored: [{ kind: "pr" }] }))).toMatch(
+      /sync ignored 0 has no kind/,
+    );
+    expect(parsed(s({ tracker: "github", links: [], ignored: [] })).sync).toEqual({
+      tracker: "github",
+      links: [],
+    });
+    expect(parsed(s({ tracker: "github", links: [], ignored: [issueRef(47)] })).sync?.ignored).toEqual([
+      issueRef(47),
+    ]);
+  });
+
+  it("FGV-FR-01: an empty sync.ignored is not written", () => {
+    const body = serializeFlowDocument({ ...emptyFlow(), sync: { tracker: "github", links: [], ignored: [] } });
+    expect(JSON.parse(body).sync).toEqual({ tracker: "github", links: [] });
+  });
+
+  it("FLO-FR-05: items or edges that are not lists are an error", () => {
+    expect(parseError('{"version":2,"items":{},"edges":[]}')).toMatch(
+      /`items` must be an array/,
+    );
+    expect(parseError('{"version":2,"items":[],"edges":"x"}')).toMatch(
+      /`edges` must be an array/,
+    );
+  });
+
+  it("FLO-FR-05: an item with no kind of the five, or an edge with no type, is an error", () => {
+    const badKind = { version: 2, items: [{ id: "a", kind: "node", name: "", position: { x: 0, y: 0 } }] };
+    expect(parseError(JSON.stringify(badKind))).toMatch(/item "a" has no item kind/);
+    const badEdge = {
+      version: 2,
+      items: [],
+      edges: [{ id: "e1", from: "a", to: "b", type: "next" }],
+    };
+    expect(parseError(JSON.stringify(badEdge))).toMatch(/edge "e1" has no type/);
+  });
+
+  it("FGV-FR-01: absent items, edges, name and references read as empty", () => {
+    expect(parsed('{"version":2}')).toEqual(emptyFlow());
+  });
+
+  it("FGV-FR-01: an empty list or an empty description reads as absent", () => {
+    const doc = parsed(
+      JSON.stringify({
+        version: 2,
+        name: "P",
+        description: "",
+        references: [],
+        items: [
+          { id: "t1", kind: "task", name: "T", artifactIds: [], footprint: [], position: { x: 0, y: 0 } },
+        ],
+        edges: [],
+      }),
+    );
+    expect(doc.description).toBeUndefined();
+    expect(doc.references).toEqual([]);
+    expect(doc.items[0]).toEqual({ id: "t1", kind: "task", name: "T", position: { x: 0, y: 0 } });
+  });
+
+  it("FLO-FR-03: every field of the schema is read", () => {
+    const doc = parsed(FULL_BODY);
+    expect(doc.name).toBe("Payments v2");
+    expect(doc.references).toEqual(["docs/payments-hld.md"]);
+    expect(doc.items.map((i) => i.kind)).toEqual(["milestone", "feature", "task", "defect"]);
+    expect(doc.items[0]).toMatchObject({
+      due: "2027-03-31",
+      localOnly: true,
+      artifactIds: ["specifications/core/PAY-payments.md"],
+    });
+    expect("parentId" in doc.items[0]).toBe(false);
+    expect(doc.items[2]).toMatchObject({
+      draftId: "dr_7f3a",
+      footprint: ["src-tauri/src/payments/", "specifications/core/PAY-payments.md"],
+    });
+    expect(doc.edges.map((e) => e.type)).toEqual(["blocks", "relates"]);
+    expect(doc.sync?.links).toHaveLength(2);
+    expect(doc.sync?.links[1].base).toEqual({
+      name: "Beta",
+      description: "First cut.",
+      state: "closed",
+      due: null,
+    });
+    expect(doc.sync?.ignored?.map((r) => r.number)).toEqual([47]);
   });
 });
 
+describe("serialization (FLO-FR-03, FLO NFR on round-trips)", () => {
+  it("FLO-FR-03, FLO NFR: a document that is opened and not edited writes back byte for byte", () => {
+    expect(serializeFlowDocument(parsed(FULL_BODY))).toBe(FULL_BODY);
+  });
+
+  it("FLO NFR: the key order is the schema's, whatever order the object was built in", () => {
+    const scrambled = {
+      sync: { ignored: [issueRef(47)], links: [], tracker: "github" as const },
+      edges: [{ type: "blocks" as const, to: "b", from: "a", id: "e1" }],
+      items: [
+        {
+          size: { height: 220, width: 400 },
+          position: { y: 2, x: 1 },
+          name: "F",
+          kind: "feature" as const,
+          id: "f1",
+        },
+      ],
+      references: ["hld.md"],
+      name: "N",
+      version: 2 as const,
+    };
+    expect(serializeFlowDocument(scrambled)).toBe(
+      `${JSON.stringify(
+        {
+          version: 2,
+          name: "N",
+          references: ["hld.md"],
+          items: [
+            {
+              id: "f1",
+              kind: "feature",
+              name: "F",
+              position: { x: 1, y: 2 },
+              size: { width: 400, height: 220 },
+            },
+          ],
+          edges: [{ id: "e1", from: "a", to: "b", type: "blocks" }],
+          sync: { tracker: "github", links: [], ignored: [issueRef(47)] },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it("FLO-FR-25, FLO-FR-YDWT: the name, items and edges are always written; empty references and absent sync are not", () => {
+    const body = serializeFlowDocument(emptyFlow());
+    expect(body).toBe('{\n  "version": 2,\n  "name": "",\n  "items": [],\n  "edges": []\n}\n');
+  });
+
+  it("FLO-FR-25: an empty description and empty lists are left out", () => {
+    const doc = plan([item("t1", "task", { artifactIds: [], footprint: [] })], [], {
+      description: "",
+    });
+    const out = JSON.parse(serializeFlowDocument(doc));
+    expect(out.description).toBeUndefined();
+    expect(Object.keys(out.items[0])).toEqual(["id", "kind", "name", "position"]);
+  });
+
+  it("FLO NFR: the written body ends in one newline and uses two-space indent", () => {
+    const body = serializeFlowDocument(emptyFlow());
+    expect(body.endsWith("}\n")).toBe(true);
+    expect(body.split("\n")[1]).toBe('  "version": 2,');
+  });
+});
+
+describe("hierarchy helpers (FLO-FR-42, FGV-FR-YHFX, FGV-FR-KBLT)", () => {
+  const doc = samplePlan();
+
+  it("FLO-FR-42: ancestorsOf gives the chain of containers, the nearest first", () => {
+    expect(ancestorsOf(doc, "t3")).toEqual(["f2", "ep1", "m1"]);
+    expect(ancestorsOf(doc, "m1")).toEqual([]);
+    expect(ancestorsOf(doc, "nope")).toEqual([]);
+  });
+
+  it("FGV-FR-13: a chain of parents that closes on itself ends", () => {
+    const loop = plan([
+      item("f1", "feature", { parentId: "f2" }),
+      item("f2", "feature", { parentId: "f1" }),
+    ]);
+    expect(ancestorsOf(loop, "f1")).toEqual(["f2"]);
+    expect(subtreeOf(loop, "f1")).toEqual(new Set(["f1", "f2"]));
+  });
+
+  it("FLO-FR-45: subtreeOf holds the item and everything under it", () => {
+    expect(subtreeOf(doc, "ep1")).toEqual(new Set(["ep1", "f2", "t3"]));
+    expect(subtreeOf(doc, "t1")).toEqual(new Set(["t1"]));
+    expect(subtreeOf(doc, "nope").size).toBe(0);
+  });
+
+  it("FGV-FR-PMTY: leavesUnder gives the tasks and defects in document order", () => {
+    expect(leavesUnder(doc, "m1")).toEqual(["t1", "t2", "t3", "x1"]);
+    expect(leavesUnder(doc, "t2")).toEqual(["t2"]);
+    const empty = withItems(doc, item("f9", "feature", { parentId: "m1" }));
+    expect(leavesUnder(empty, "f9")).toEqual([]);
+  });
+
+  it("FLO-FR-45: childrenOf and holdsAnything read the direct members", () => {
+    expect(childrenOf(doc, "m1").map((i) => i.id)).toEqual(["f1", "ep1", "x1"]);
+    expect(holdsAnything(doc, "f1")).toBe(true);
+    expect(holdsAnything(doc, "t1")).toBe(false);
+  });
+
+  it("FGV-FR-KBLT: isAncestor and inLineage see ancestors at any depth, in both orders", () => {
+    expect(isAncestor(doc, "m1", "t3")).toBe(true);
+    expect(isAncestor(doc, "t3", "m1")).toBe(false);
+    expect(inLineage(doc, "t3", "ep1")).toBe(true);
+    expect(inLineage(doc, "ep1", "t3")).toBe(true);
+    expect(inLineage(doc, "t1", "t3")).toBe(false);
+    expect(inLineage(doc, "f1", "ep1")).toBe(false);
+  });
+
+  it("FGV-FR-YHFX: permitsParent holds the containers each kind may sit in", () => {
+    expect(permitsParent("milestone", null)).toBe(true);
+    expect(permitsParent("milestone", "milestone")).toBe(false);
+    expect(permitsParent("milestone", "epic")).toBe(false);
+    expect(permitsParent("epic", "milestone")).toBe(true);
+    expect(permitsParent("epic", null)).toBe(false);
+    expect(permitsParent("epic", "epic")).toBe(false);
+    expect(permitsParent("feature", "milestone")).toBe(true);
+    expect(permitsParent("feature", null)).toBe(false);
+    expect(permitsParent("task", null)).toBe(false);
+    expect(permitsParent("defect", "feature")).toBe(true);
+    expect(permitsParent("defect", null)).toBe(false);
+    expect(permitsParent("feature", "epic")).toBe(true);
+    expect(permitsParent("feature", "feature")).toBe(false);
+    expect(permitsParent("task", "feature")).toBe(true);
+    expect(permitsParent("task", "milestone")).toBe(false);
+    expect(permitsParent("defect", "milestone")).toBe(true);
+    expect(permitsParent("defect", "epic")).toBe(true);
+    expect(permitsParent("defect", "task")).toBe(false);
+  });
+});
+
+describe("geometry helpers (FLO-FR-21, FLO-FR-42, FLO-FR-44)", () => {
+  const doc = samplePlan();
+
+  it("FLO-FR-21: absolutePosition adds the position of every container", () => {
+    expect(absolutePosition(doc, "t3")).toEqual({ x: 520, y: 240 });
+    expect(absolutePosition(doc, "m1")).toEqual({ x: 20, y: 60 });
+    expect(absolutePosition(doc, "nope")).toEqual({ x: 0, y: 0 });
+  });
+
+  it("FLO-FR-44: containerBounds gives a container's canvas rectangle and null for a leaf", () => {
+    expect(containerBounds(doc, "f2")).toEqual({ x: 500, y: 180, width: 400, height: 220 });
+    expect(containerBounds(doc, "t1")).toBeNull();
+    expect(containerBounds(doc, "nope")).toBeNull();
+  });
+
+  it("FLO-FR-44: itemBounds gives a leaf the card extent", () => {
+    expect(itemBounds(doc, "t1")).toEqual({ x: 60, y: 180, width: CARD_W, height: CARD_H });
+  });
+
+  it("FLO-FR-42: innermostContainerAt gives the deepest container that holds the point", () => {
+    expect(innermostContainerAt(doc, { x: 530, y: 250 })).toBe("f2");
+    expect(innermostContainerAt(doc, { x: 45, y: 125 })).toBe("f1");
+    expect(innermostContainerAt(doc, { x: 25, y: 65 })).toBe("m1");
+    expect(innermostContainerAt(doc, { x: 5, y: 5 })).toBeUndefined();
+    expect(innermostContainerAt(doc, { x: -10, y: -10 })).toBeUndefined();
+  });
+
+  it("FLO-FR-42: a point on the border of a container is inside it", () => {
+    expect(innermostContainerAt(doc, { x: 500, y: 180 })).toBe("f2");
+    expect(innermostContainerAt(doc, { x: 1020, y: 760 })).toBe("m1");
+    expect(innermostContainerAt(doc, { x: 1021, y: 760 })).toBeUndefined();
+  });
+
+  it("FLO-FR-42: an excluded container and every container under it are not the answer", () => {
+    expect(innermostContainerAt(doc, { x: 530, y: 250 }, new Set(["f2"]))).toBe("ep1");
+    expect(innermostContainerAt(doc, { x: 530, y: 250 }, new Set(["ep1"]))).toBe("m1");
+  });
+
+  it("FLO-FR-42: where two sibling containers overlap, the first in document order wins", () => {
+    const doc = plan([
+      item("m1", "milestone", { size: { width: 100, height: 100 } }),
+      item("m2", "milestone", { position: { x: 50, y: 50 }, size: { width: 100, height: 100 } }),
+    ]);
+    expect(innermostContainerAt(doc, { x: 75, y: 75 })).toBe("m1");
+  });
+
+    it("FLO-FR-42: a leaf card is never the container at a point", () => {
+    // t1's card covers (60,180)–(230,276); f1 holds it.
+    expect(innermostContainerAt(doc, { x: 100, y: 200 })).toBe("f1");
+  });
+});

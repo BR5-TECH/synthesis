@@ -22,11 +22,20 @@ export const pendingProposal: DraftChangeProposal = {
   createdAt: "2026-01-01T00:00:00Z",
 };
 
-/** The Flow the Flow-tab tests open, and the single-node graph it holds. */
+/** The Flow the Flow-tab tests open, and the one-item plan it holds. */
 export const FLOW_ID = "workflows/h.flow";
 export const FLOW_BODY = JSON.stringify({
-  version: 1,
-  nodes: [{ id: "n1", name: "A", position: { x: 0, y: 0 } }],
+  version: 2,
+  name: "",
+  items: [
+    {
+      id: "m1",
+      kind: "milestone",
+      name: "A",
+      position: { x: 0, y: 0 },
+      size: { width: 640, height: 380 },
+    },
+  ],
   edges: [],
 });
 

@@ -1,296 +1,271 @@
-/** Deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05). */
+/**
+ * Deserialization of a Flow document, version 2 (FLO-FR-03, FLO-FR-04,
+ * FLO-FR-05).
+ *
+ * The backend validation (`"validate flow document"`, FGV-FR-02) is the
+ * authority on whether a body is a Flow, and a Flow tab validates every body
+ * before it calls this (FLO-FR-46). This reader is not a second validator: it
+ * checks only what it needs to build the typed document, so that a body that
+ * the backend did not see (a Git revision in the Diff tab, DFV-FR-33) gives an
+ * error rather than a broken document.
+ */
 
-import { } from "./containment";
 import {
   emptyFlow,
   FLOW_VERSION,
+  ITEM_KINDS,
   type FlowDocument,
   type FlowEdge,
-  type FlowLoop,
-  type FlowNode } from "./types";
+  type FlowItem,
+  type FlowItemKind,
+  type FlowSync,
+  type SyncBase,
+  type SyncLink,
+  type TrackerRef,
+} from "./types";
 
 export type FlowParseResult =
   | { ok: true; doc: FlowDocument }
   | { ok: false; error: string };
 
-function isObject(v: unknown): v is Record<string, unknown> {
+type Obj = Record<string, unknown>;
+
+/** A failure that ends the parse; caught once, at the top. */
+class ParseError extends Error {}
+
+function fail(message: string): never {
+  throw new ParseError(message);
+}
+
+function isObject(v: unknown): v is Obj {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function optionalString(
+function optString(v: unknown, what: string): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "string") fail(`${what} must be a string`);
+  return v;
+}
+
+function reqString(v: unknown, what: string): string {
+  if (typeof v !== "string") fail(`${what} must be a string`);
+  return v;
+}
+
+/** A list of strings; an empty list reads as absent (FGV-FR-01). */
+function optStrings(v: unknown, what: string): string[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || v.some((s) => typeof s !== "string")) {
+    fail(`${what} must be a list of strings`);
+  }
+  return v.length > 0 ? [...(v as string[])] : undefined;
+}
+
+function numberPair<K extends string>(
   v: unknown,
+  keys: readonly [K, K],
   what: string,
-): { ok: true; value?: string } | { ok: false; error: string } {
-  if (v === undefined || v === null) return { ok: true };
-  if (typeof v !== "string") return { ok: false, error: `${what} must be a string` };
-  return { ok: true, value: v };
-}
-
-/**
- * FLO-FR-10: an element's artifact references — a loop's as much as a node's
- * (FLO-FR-37) — from either the list the field holds now or the single
- * `artifactId` a node carried before it could reference more than one artifact.
- * Accepting the older shape is what keeps a Flow authored against it opening
- * rather than landing in the FLO-FR-05 error state; the next write emits the
- * list form. Only a node is read for it: no loop was ever written with it, so
- * accepting it there would be inventing history rather than keeping it.
- *
- * Repeats are folded rather than refused: referencing the same artifact twice
- * says nothing a single reference does not, and an unreadable-file error over it
- * would cost the author their whole Flow to fix by hand.
- */
-function artifactIdsOf(
-  entry: Record<string, unknown>,
-  id: string,
-  kind: "node" | "loop",
-): { ok: true; value?: string[] } | { ok: false; error: string } {
-  const raw = entry.artifactIds;
-  if (raw === undefined || raw === null) {
-    if (kind === "loop") return { ok: true, value: undefined };
-    const one = optionalString(entry.artifactId, `node "${id}" artifactId`);
-    if (!one.ok) return one;
-    return { ok: true, value: one.value ? [one.value] : undefined };
-  }
-  if (!Array.isArray(raw)) {
-    return { ok: false, error: `${kind} "${id}" artifactIds must be an array` };
-  }
-  const out: string[] = [];
-  for (const v of raw) {
-    if (typeof v !== "string" || v === "") {
-      return {
-        ok: false,
-        error: `${kind} "${id}" has an artifact reference that is not a string` };
+): Record<K, number> {
+  if (!isObject(v)) fail(`${what} is not an object`);
+  const out = {} as Record<K, number>;
+  for (const key of keys) {
+    const n = v[key];
+    if (typeof n !== "number" || !Number.isFinite(n)) {
+      fail(`${what} has no numeric ${key}`);
     }
-    if (!out.includes(v)) out.push(v);
+    out[key] = n;
   }
-  return { ok: true, value: out.length > 0 ? out : undefined };
+  return out;
+}
+
+function readItem(entry: unknown, i: number): FlowItem {
+  if (!isObject(entry)) fail(`item ${i} is not an object`);
+  const id = entry.id;
+  if (typeof id !== "string" || id === "") fail(`item ${i} has no id`);
+  const place = `item "${id}"`;
+  const kind = entry.kind;
+  if (typeof kind !== "string" || !ITEM_KINDS.includes(kind as FlowItemKind)) {
+    fail(`${place} has no item kind`);
+  }
+  const name = reqString(entry.name, `${place} name`);
+  const description = optString(entry.description, `${place} description`);
+  const artifactIds = optStrings(entry.artifactIds, `${place} artifactIds`);
+  const parentId = optString(entry.parentId, `${place} parentId`);
+  let localOnly: boolean | undefined;
+  if (entry.localOnly !== undefined && entry.localOnly !== null) {
+    if (typeof entry.localOnly !== "boolean") {
+      fail(`${place} localOnly must be a boolean`);
+    }
+    localOnly = entry.localOnly;
+  }
+  const draftId = optString(entry.draftId, `${place} draftId`);
+  const footprint = optStrings(entry.footprint, `${place} footprint`);
+  const due = optString(entry.due, `${place} due`);
+  const position = numberPair(entry.position, ["x", "y"] as const, `${place} position`);
+  const size =
+    entry.size === undefined || entry.size === null
+      ? undefined
+      : numberPair(entry.size, ["width", "height"] as const, `${place} size`);
+  return {
+    id,
+    kind: kind as FlowItemKind,
+    name,
+    ...(description !== undefined ? { description } : {}),
+    ...(artifactIds !== undefined ? { artifactIds } : {}),
+    ...(parentId !== undefined ? { parentId } : {}),
+    ...(localOnly !== undefined ? { localOnly } : {}),
+    ...(draftId !== undefined ? { draftId } : {}),
+    ...(footprint !== undefined ? { footprint } : {}),
+    ...(due !== undefined ? { due } : {}),
+    position,
+    ...(size !== undefined ? { size } : {}),
+  };
+}
+
+function readEdge(entry: unknown, i: number): FlowEdge {
+  if (!isObject(entry)) fail(`edge ${i} is not an object`);
+  const id = entry.id;
+  if (typeof id !== "string" || id === "") fail(`edge ${i} has no id`);
+  const from = entry.from;
+  const to = entry.to;
+  if (typeof from !== "string" || typeof to !== "string") {
+    fail(`edge "${id}" has no endpoints`);
+  }
+  const type = entry.type;
+  if (type !== "blocks" && type !== "relates") {
+    fail(`edge "${id}" has no type of blocks or relates`);
+  }
+  return { id, from, to, type };
+}
+
+function readRef(v: unknown, what: string): TrackerRef {
+  if (!isObject(v)) fail(`${what} is not an object`);
+  const kind = v.kind;
+  if (kind !== "issue" && kind !== "milestone") {
+    fail(`${what} has no kind of issue or milestone`);
+  }
+  const number = v.number;
+  if (typeof number !== "number" || !Number.isInteger(number)) {
+    fail(`${what} has no number`);
+  }
+  return {
+    kind,
+    host: reqString(v.host, `${what} host`),
+    owner: reqString(v.owner, `${what} owner`),
+    repo: reqString(v.repo, `${what} repo`),
+    number,
+    url: reqString(v.url, `${what} url`),
+  };
 }
 
 /**
- * FLO-FR-04 / FLO-FR-05: turn a file body into a graph, or say why it cannot be
- * one.
- *
- * An empty or whitespace-only body is an empty graph, not a failure — that is
- * what a Flow created through New Artifact, New File, or an external `touch`
- * looks like on disk, and such a file must open ready to edit (FLO-FR-04).
- * Anything else that will not parse, or that parses to something other than the
- * document shape, is an error the caller renders as the tab's error state; the
- * caller writes nothing while in it, so an unreadable file is never replaced by
- * an empty graph (FLO-FR-05).
- *
- * Validation is deliberately strict about the invariants the canvas relies on —
- * unique node ids, edges whose endpoints both exist, no self-edge, at most one
- * edge per ordered pair — because a document violating one of them is not
- * something the editor can render and then faithfully write back. Reporting it
- * is the only answer that does not lose the author's file.
+ * A sync base. The issue-only and milestone-only fields keep the difference
+ * between absent and `null`, so the base round-trips as it was written.
+ */
+function readBase(v: unknown, what: string): SyncBase {
+  if (!isObject(v)) fail(`${what} is not an object`);
+  const state = v.state;
+  if (state !== "open" && state !== "closed") fail(`${what} has no state`);
+  const base: SyncBase = {
+    name: reqString(v.name, `${what} name`),
+    description: reqString(v.description, `${what} description`),
+    state,
+  };
+  if ("type" in v) {
+    base.type = v.type === null ? null : reqString(v.type, `${what} type`);
+  }
+  if ("parent" in v) {
+    base.parent = v.parent === null ? null : readRef(v.parent, `${what} parent`);
+  }
+  if ("milestone" in v) {
+    if (v.milestone !== null && typeof v.milestone !== "number") {
+      fail(`${what} milestone must be a number or null`);
+    }
+    base.milestone = v.milestone as number | null;
+  }
+  if ("blockedBy" in v) {
+    if (!Array.isArray(v.blockedBy)) fail(`${what} blockedBy must be a list`);
+    base.blockedBy = v.blockedBy.map((r, k) => readRef(r, `${what} blockedBy ${k}`));
+  }
+  if ("due" in v) {
+    base.due = v.due === null ? null : reqString(v.due, `${what} due`);
+  }
+  return base;
+}
+
+function readSync(v: unknown): FlowSync | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!isObject(v)) fail("`sync` is not an object");
+  if (v.tracker !== "github") fail("`sync.tracker` must be github");
+  if (!Array.isArray(v.links)) fail("`sync.links` must be an array");
+  const links: SyncLink[] = v.links.map((entry, i) => {
+    if (!isObject(entry)) fail(`sync link ${i} is not an object`);
+    return {
+      itemId: reqString(entry.itemId, `sync link ${i} itemId`),
+      ref: readRef(entry.ref, `sync link ${i} ref`),
+      base: readBase(entry.base, `sync link ${i} base`),
+    };
+  });
+  let ignored: TrackerRef[] | undefined;
+  if (v.ignored !== undefined && v.ignored !== null) {
+    if (!Array.isArray(v.ignored)) fail("`sync.ignored` must be an array");
+    ignored = v.ignored.map((r, i) => readRef(r, `sync ignored ${i}`));
+  }
+  // FGV-FR-01: an empty list reads as absent.
+  return {
+    tracker: "github",
+    links,
+    ...(ignored && ignored.length > 0 ? { ignored } : {}),
+  };
+}
+
+function readDocument(raw: unknown): FlowDocument {
+  if (!isObject(raw)) fail("not a Flow document: expected an object");
+  // FGV-FR-07: a version 1 document is an unknown version.
+  if (raw.version !== FLOW_VERSION) {
+    fail(
+      `unknown Flow version ${JSON.stringify(raw.version ?? null)} (expected ${FLOW_VERSION})`,
+    );
+  }
+  for (const list of ["items", "edges"] as const) {
+    if (raw[list] !== undefined && raw[list] !== null && !Array.isArray(raw[list])) {
+      fail(`\`${list}\` must be an array`);
+    }
+  }
+  const name = optString(raw.name, "`name`") ?? "";
+  const description = optString(raw.description, "`description`");
+  const references = optStrings(raw.references, "`references`") ?? [];
+  const items = ((raw.items as unknown[] | undefined) ?? []).map(readItem);
+  const edges = ((raw.edges as unknown[] | undefined) ?? []).map(readEdge);
+  const sync = readSync(raw.sync);
+  return {
+    version: FLOW_VERSION,
+    name,
+    // FLO-FR-25: an empty description is absent.
+    ...(description ? { description } : {}),
+    references,
+    items,
+    edges,
+    ...(sync !== undefined ? { sync } : {}),
+  };
+}
+
+/**
+ * FLO-FR-04 / FLO-FR-05: turn a file body into a plan, or say why it cannot
+ * be one. An empty or whitespace-only body is the empty plan (FGV-FR-05).
  */
 export function parseFlowDocument(body: string): FlowParseResult {
   if (body.trim() === "") return { ok: true, doc: emptyFlow() };
-
   let raw: unknown;
   try {
     raw = JSON.parse(body);
   } catch (e) {
     return { ok: false, error: `not valid JSON: ${(e as Error).message}` };
   }
-
-  if (!isObject(raw)) return { ok: false, error: "not a Flow document: expected an object" };
-  if (raw.version !== FLOW_VERSION) {
-    return {
-      ok: false,
-      error: `unsupported Flow version ${JSON.stringify(raw.version)} (expected ${FLOW_VERSION})` };
+  try {
+    return { ok: true, doc: readDocument(raw) };
+  } catch (e) {
+    if (e instanceof ParseError) return { ok: false, error: e.message };
+    throw e;
   }
-  if (!Array.isArray(raw.nodes)) return { ok: false, error: "`nodes` must be an array" };
-  if (!Array.isArray(raw.edges)) return { ok: false, error: "`edges` must be an array" };
-  // FLO-FR-37: `loops` is absent from a document holding none.
-  if (raw.loops !== undefined && raw.loops !== null && !Array.isArray(raw.loops)) {
-    return { ok: false, error: "`loops` must be an array" };
-  }
-  const rawLoops: unknown[] = Array.isArray(raw.loops) ? raw.loops : [];
-
-  // FLO-FR-25: a Flow written before it could carry a name reads as one with an
-  // empty name rather than as an unreadable file — the alternative is refusing
-  // to open every Flow that already exists.
-  const name = optionalString(raw.name, "`name`");
-  if (!name.ok) return name;
-  const description = optionalString(raw.description, "`description`");
-  if (!description.ok) return description;
-
-  /** A `{ x, y }` or `{ width, height }` block of finite numbers. */
-  function numberPair<K extends string>(
-    v: unknown,
-    keys: readonly [K, K],
-    what: string,
-  ): { ok: true; value: Record<K, number> } | { ok: false; error: string } {
-    if (!isObject(v)) return { ok: false, error: `${what} is not an object` };
-    const out = {} as Record<K, number>;
-    for (const key of keys) {
-      const n = v[key];
-      if (typeof n !== "number" || !Number.isFinite(n)) {
-        return { ok: false, error: `${what} has no numeric ${key}` };
-      }
-      out[key] = n;
-    }
-    return { ok: true, value: out };
-  }
-
-  // FLO-FR-06: nodes and loops share ONE id space, so both are collected here
-  // before either is used as an edge endpoint or as a parent.
-  const elementIds = new Set<string>();
-  const parents = new Map<string, string | undefined>();
-
-  const loops: FlowLoop[] = [];
-  for (const [i, entry] of rawLoops.entries()) {
-    if (!isObject(entry)) return { ok: false, error: `loop ${i} is not an object` };
-    const { id, name } = entry;
-    if (typeof id !== "string" || id === "") {
-      return { ok: false, error: `loop ${i} has no id` };
-    }
-    if (elementIds.has(id)) return { ok: false, error: `duplicate element id "${id}"` };
-    if (typeof name !== "string") return { ok: false, error: `loop "${id}" has no name` };
-    const position = numberPair(entry.position, ["x", "y"] as const, `loop "${id}" position`);
-    if (!position.ok) return position;
-    const size = numberPair(
-      entry.size,
-      ["width", "height"] as const,
-      `loop "${id}" size`,
-    );
-    if (!size.ok) return size;
-    const artifactIds = artifactIdsOf(entry, id, "loop");
-    if (!artifactIds.ok) return artifactIds;
-    const parentId = optionalString(entry.parentId, `loop "${id}" parentId`);
-    if (!parentId.ok) return parentId;
-    // FLO-FR-37: a pass bound is a whole number greater than zero, or absent.
-    const maxPassesRaw = entry.maxPasses;
-    let maxPasses: number | undefined;
-    if (maxPassesRaw !== undefined && maxPassesRaw !== null) {
-      if (
-        typeof maxPassesRaw !== "number" ||
-        !Number.isInteger(maxPassesRaw) ||
-        maxPassesRaw < 1
-      ) {
-        return {
-          ok: false,
-          error: `loop "${id}" maxPasses must be a whole number greater than zero` };
-      }
-      maxPasses = maxPassesRaw;
-    }
-
-    elementIds.add(id);
-    parents.set(id, parentId.value);
-    loops.push({
-      id,
-      name,
-      ...(artifactIds.value !== undefined ? { artifactIds: artifactIds.value } : {}),
-      ...(maxPasses !== undefined ? { maxPasses } : {}),
-      ...(parentId.value !== undefined ? { parentId: parentId.value } : {}),
-      position: position.value,
-      size: size.value });
-  }
-
-  const nodes: FlowNode[] = [];
-  for (const [i, entry] of raw.nodes.entries()) {
-    if (!isObject(entry)) return { ok: false, error: `node ${i} is not an object` };
-    const { id, name } = entry;
-    if (typeof id !== "string" || id === "") {
-      return { ok: false, error: `node ${i} has no id` };
-    }
-    if (elementIds.has(id)) return { ok: false, error: `duplicate element id "${id}"` };
-    if (typeof name !== "string") {
-      return { ok: false, error: `node "${id}" has no name` };
-    }
-    const position = numberPair(entry.position, ["x", "y"] as const, `node "${id}" position`);
-    if (!position.ok) return position;
-    const artifactIds = artifactIdsOf(entry, id, "node");
-    if (!artifactIds.ok) return artifactIds;
-    const prompt = optionalString(entry.prompt, `node "${id}" prompt`);
-    if (!prompt.ok) return prompt;
-    const parentId = optionalString(entry.parentId, `node "${id}" parentId`);
-    if (!parentId.ok) return parentId;
-
-    elementIds.add(id);
-    parents.set(id, parentId.value);
-    nodes.push({
-      id,
-      name,
-      ...(artifactIds.value !== undefined ? { artifactIds: artifactIds.value } : {}),
-      ...(prompt.value !== undefined ? { prompt: prompt.value } : {}),
-      ...(parentId.value !== undefined ? { parentId: parentId.value } : {}),
-      position: position.value });
-  }
-
-  // FLO-FR-41: a `parentId` names a loop, and containment is acyclic.
-  const loopIds = new Set(loops.map((l) => l.id));
-  for (const [id, parent] of parents) {
-    if (parent === undefined) continue;
-    if (!loopIds.has(parent)) {
-      return { ok: false, error: `"${id}" names a parent "${parent}" that is not a loop` };
-    }
-    const seen = new Set<string>([id]);
-    let at: string | undefined = parent;
-    while (at !== undefined) {
-      if (seen.has(at)) {
-        return { ok: false, error: `loop "${id}" contains itself through its parents` };
-      }
-      seen.add(at);
-      at = parents.get(at);
-    }
-  }
-
-  const edges: FlowEdge[] = [];
-  const edgeIds = new Set<string>();
-  const pairs = new Set<string>();
-  for (const [i, entry] of raw.edges.entries()) {
-    if (!isObject(entry)) return { ok: false, error: `edge ${i} is not an object` };
-    const { id, from, to } = entry;
-    if (typeof id !== "string" || id === "") {
-      return { ok: false, error: `edge ${i} has no id` };
-    }
-    if (edgeIds.has(id)) return { ok: false, error: `duplicate edge id "${id}"` };
-    if (typeof from !== "string" || typeof to !== "string") {
-      return { ok: false, error: `edge "${id}" has no endpoints` };
-    }
-    // FLO-FR-08: no edge exists without both of its endpoints. Either may be a
-    // node or a loop — both are elements the graph connects (FLO-FR-39).
-    if (!elementIds.has(from)) {
-      return { ok: false, error: `edge "${id}" starts at unknown element "${from}"` };
-    }
-    if (!elementIds.has(to)) {
-      return { ok: false, error: `edge "${id}" ends at unknown element "${to}"` };
-    }
-    // FLO-FR-16 / FLO-FR-17 / FLO-FR-40: the three rules that bound what a
-    // graph may hold.
-    if (from === to) {
-      return { ok: false, error: `edge "${id}" connects element "${from}" to itself` };
-    }
-    if (parents.get(from) !== parents.get(to)) {
-      return {
-        ok: false,
-        error: `edge "${id}" joins "${from}" and "${to}", which are in different containers` };
-    }
-    const pair = `${from}\0${to}`;
-    if (pairs.has(pair)) {
-      return { ok: false, error: `more than one edge from "${from}" to "${to}"` };
-    }
-    const label = optionalString(entry.label, `edge "${id}" label`);
-    if (!label.ok) return label;
-
-    edgeIds.add(id);
-    pairs.add(pair);
-    edges.push({
-      id,
-      from,
-      to,
-      ...(label.value !== undefined ? { label: label.value } : {}) });
-  }
-
-  return {
-    ok: true,
-    doc: {
-      version: FLOW_VERSION,
-      name: name.value ?? "",
-      ...(description.value ? { description: description.value } : {}),
-      loops,
-      nodes,
-      edges } };
 }

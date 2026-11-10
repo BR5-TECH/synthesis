@@ -24,6 +24,7 @@ import type {
   DraftPublicationView,
   DraftStatus,
   MetadataList,
+  OpenableArtifact,
   Participant,
   PublicationErrorCode,
   PublicationMetadata,
@@ -350,7 +351,11 @@ export type DraftGraduationStub = {
   implementationBlocker?: unknown;
 };
 
-export function renderWorkspace(drafts = new DraftSessionStore()) {
+export function renderWorkspace(
+  drafts = new DraftSessionStore(),
+  /** NAW-FR-TXKN: the shell's open route, for a test that follows a plan tag. */
+  extra: { onOpenArtifact?: (item: OpenableArtifact) => void } = {},
+) {
   const onDraftChanged = vi.fn();
   const onGraduationStarted = vi.fn();
   const onOpenRun = vi.fn();
@@ -367,6 +372,7 @@ export function renderWorkspace(drafts = new DraftSessionStore()) {
       onOpenRun={onOpenRun}
       onArchived={onArchived}
       onNameChanged={onNameChanged}
+      onOpenArtifact={extra.onOpenArtifact}
     />,
   );
   return {

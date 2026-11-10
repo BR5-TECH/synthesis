@@ -58,9 +58,9 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const BODY = "# Editor\n\nSteps to run before the first session.\n";
 const FLOW_BODY = JSON.stringify({
-  version: 1,
+  version: 2,
   name: "Onboarding review",
-  nodes: [],
+  items: [],
   edges: [],
 });
 
@@ -255,6 +255,7 @@ describe("the action set is decided by the item (ACT-FR-04, ACT-FR-05)", () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "load_artifact_contents_by_id")
         return { body: FLOW_BODY, checksum: "ck1" };
+      if (cmd === "validate_flow_document") return { valid: true, violations: [] };
       if (cmd === "list_discussions") return b.discussions;
       if (cmd === "list_project_agents") return b.agents;
       if (cmd === "resolve_comment_author_identity") return human("raver119");

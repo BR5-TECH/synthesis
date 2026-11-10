@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { useShellSession } from "./useShellSession";
-import { addNode } from "../state/flowDocument";
+import { addItem, docOrUnchanged } from "../state/flowDocument";
 import { resetPanelReveals } from "../state/panelReveal";
 import { resetDraftProposals } from "../state/draftProposals";
 import {
@@ -503,7 +503,7 @@ describe("File menu Save / Save All (SNV-FR-28..31)", () => {
       await result.current.flows.get(id)?.pendingLoad;
     });
     act(() =>
-      result.current.flows.applyEdit(id, (d) => addNode(d, { x: 40, y: 40 })),
+      result.current.flows.applyEdit(id, (d) => docOrUnchanged(d, addItem(d, "milestone", { x: 40, y: 40 }))),
     );
   };
 

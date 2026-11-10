@@ -1,6 +1,6 @@
 /**
  * The project's classified artifacts, as the Flow canvas's artifact-association
- * picker offers them (`FLO-flow.md` FLO-FR-10) and as it resolves a node's
+ * picker offers them (`FLO-flow.md` FLO-FR-10) and as it resolves an item's
  * stored artifact references to display names and types for rendering
  * (FLO-FR-11).
  *
@@ -16,17 +16,17 @@ import * as api from "../api";
 import { onProjectTreeChanged } from "../events";
 import type { ArtifactType, TreeNode } from "../types";
 
-/** One artifact a node may reference. */
+/** One artifact an item may reference. */
 export interface ArtifactOption {
-  /** The stable, path-derived key stored on the node (ASC-FR-13). */
+  /** The stable, path-derived key stored on the item (ASC-FR-13). */
   id: string;
-  /** Basename, what the picker and the node fall back to. */
+  /** Basename, what the picker and the item fall back to. */
   name: string;
   /** Project-relative path, what the picker lists so two basenames are told apart. */
   path: string;
   artifactType: ArtifactType;
   /**
-   * FLO-FR-11: what the picker and the node render. The basename for every
+   * FLO-FR-11: what the picker and the item render. The basename for every
    * artifact whose filename identifies it, and the name declared in the file
    * for a skill — whose file is always `SKILL.md`, so its filename identifies
    * nothing. The scan resolves which is which (ASC-FR-19); nothing here reads
@@ -40,47 +40,61 @@ export interface ProjectArtifacts {
   artifacts: ArtifactOption[];
   /** FLO-FR-10: the subset the picker offers. */
   referenceable: ArtifactOption[];
+  /** FLO-FR-ZEJU: every file and folder path, which the footprint picker offers. */
+  paths: string[];
   /**
    * Whether a tree has actually been read. Load-bearing for FLO-FR-11: before
    * one has, EVERY stored reference would compare as unresolved, so the canvas
    * must not render the warning row yet — a Flow opening in a project whose
-   * scan is still in flight would otherwise flash "unresolved" across every node.
+   * scan is still in flight would otherwise flash "unresolved" across every item.
    */
   loaded: boolean;
 }
 
 /**
- * FLO-FR-10: the artifact types a Flow node can be built out of. A Flow wires
- * prompts and the instructions around them into a workflow, so those are what
- * the picker offers; a spec, a scenario, a scratchpad, an agent definition or
- * another Flow is not a step in one, and listing them buries the artifacts that
- * are behind the ones that never will be.
- */
-const REFERENCEABLE_TYPES: ReadonlySet<ArtifactType> = new Set<ArtifactType>([
-  "skill",
-  "prompt",
-  "instructions",
-]);
-
-/**
  * A skill is its `SKILL.md`. The supporting files that live beside it in the
  * skill's folder — references, templates, scripts — classify as `skill` too
- * because they sit under a skills directory, but none of them is a skill a node
- * can reference, so only the entry point is offered.
+ * because they sit under a skills directory, but none of them is a skill an
+ * item can reference, so only the entry point is offered.
  */
 function isSkillEntryPoint(a: ArtifactOption): boolean {
   return a.name.toLowerCase() === "skill.md";
 }
 
-/** FLO-FR-10: the artifacts the picker offers, out of everything classified. */
+/**
+ * FLO-FR-10: the artifacts the picker offers, out of everything classified:
+ * every artifact that is not a Flow, and of a skill's folder only its
+ * `SKILL.md`.
+ */
 export function referenceableArtifacts(
   artifacts: ArtifactOption[],
 ): ArtifactOption[] {
   return artifacts.filter(
     (a) =>
-      REFERENCEABLE_TYPES.has(a.artifactType) &&
+      a.artifactType !== "flow" &&
       (a.artifactType !== "skill" || isSkillEntryPoint(a)),
   );
+}
+
+/**
+ * FLO-FR-ZEJU: every file and folder of the tree as a project path, in tree
+ * order. A folder's path ends in `/`, as a footprint entry that names a folder
+ * does (FGV-FR-RQEM). The root is not listed.
+ */
+export function flattenPaths(root: TreeNode): string[] {
+  const out: string[] = [];
+  const walk = (node: TreeNode) => {
+    for (const c of node.children ?? []) {
+      if (c.nodeKind === "folder") {
+        out.push(`${c.path}/`);
+        walk(c);
+      } else {
+        out.push(c.path);
+      }
+    }
+  };
+  walk(root);
+  return out;
 }
 
 /** Every classified file in the tree, depth-first in tree order. */
@@ -106,6 +120,7 @@ export function flattenArtifacts(root: TreeNode): ArtifactOption[] {
 
 export function useProjectArtifacts(): ProjectArtifacts {
   const [artifacts, setArtifacts] = useState<ArtifactOption[]>([]);
+  const [paths, setPaths] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -123,6 +138,7 @@ export function useProjectArtifacts(): ProjectArtifacts {
         .then((tree) => {
           if (cancelled || generation !== latest) return;
           setArtifacts(flattenArtifacts(tree));
+          setPaths(flattenPaths(tree));
           setLoaded(true);
         })
         // A tree that cannot be read leaves `loaded` false, so stored references
@@ -148,5 +164,5 @@ export function useProjectArtifacts(): ProjectArtifacts {
     [artifacts],
   );
 
-  return { artifacts, referenceable, loaded };
+  return { artifacts, referenceable, paths, loaded };
 }

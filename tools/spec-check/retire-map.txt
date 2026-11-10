@@ -277,3 +277,14 @@ GCM-FR-22   NAW-FR-19
 GCM-FR-24   GRU-FR-WJHV
 GVJ-FR-27   GRL-FR-GADT
 GIL-FR-37   GRL-FR-OTRH
+
+# Flow becomes the delivery plan: loops, inline prompts, labels, cyclic
+# edges and the cross-container rule are gone.
+FLO-FR-18   DROP
+FLO-FR-19   FLO-FR-CEVI
+FLO-FR-37   DROP
+FLO-FR-40   FLO-FR-15
+FLO-FR-41   FLO-FR-OAOZ
+FLO-FR-43   DROP
+FGV-FR-12   DROP
+FGV-FR-14   DROP

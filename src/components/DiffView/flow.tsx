@@ -40,7 +40,22 @@ function FlowFactValue({ fact, side }: { fact: FlowFact; side: FlowSide }) {
 }
 
 /**
- * One entry — the Flow's own fields, a node, or a connection — with the facts
+ * The kind a rendered entry names: an item's own kind, as the side that is
+ * rendered has it, or `flow` or `edge`.
+ */
+function kindLabel(entry: FlowDiffEntry, side: FlowSide): string {
+  if (entry.kind !== "item") return entry.kind;
+  const kind =
+    side === "before"
+      ? entry.itemKindBefore
+      : side === "after"
+        ? entry.itemKindAfter
+        : (entry.itemKindAfter ?? entry.itemKindBefore);
+  return kind ?? entry.kind;
+}
+
+/**
+ * One entry — the Flow's own fields, a plan item, or an edge — with the facts
  * the surface is showing about it.
  *
  * The marking is a whole-entry treatment carrying a sign character as well as a
@@ -75,7 +90,7 @@ function FlowEntryView({
         <span className="diff-flow__sign" aria-hidden="true">
           {FLOW_SIGN[mark]}
         </span>
-        <span className="diff-flow__kind">{entry.kind}</span>
+        <span className="diff-flow__kind">{kindLabel(entry, side)}</span>
         <span className="diff-flow__name">{title || "(unnamed)"}</span>
       </div>
       {facts.map((fact, i) => (
@@ -185,7 +200,7 @@ export function FlowSideBySide({ revisions }: { revisions: FileRevisions | null 
 /**
  * DFV-FR-34: **Final** over a Flow — the whole of the new Flow with what
  * changed marked in place, and what was removed shown in the position it held,
- * since a Flow that no longer has a step is the one edit the outcome cannot
+ * since an item that the plan no longer has is the one edit the outcome cannot
  * otherwise show.
  */
 export function FlowFinal({ revisions }: { revisions: FileRevisions | null }) {
@@ -201,8 +216,8 @@ export function FlowFinal({ revisions }: { revisions: FileRevisions | null }) {
           key={entry.key}
           entry={entry}
           // `both`: a changed entry states what each fact was and became, and a
-          // fact only one revision holds — a reference the step lost — renders
-          // the value it has rather than the empty side (DFV-FR-33).
+          // fact only one revision holds — a reference the item lost — renders
+          // the value it has rather than the empty side (DFV-FR-RGBK).
           side="both"
           mark={
             wholeFileIsNew || entry.status === "unchanged" ? "none" : entry.status

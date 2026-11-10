@@ -1,64 +1,753 @@
 /* ---------- Flow (FLO-flow.md) ---------- */
-/* The tab is the Flow's own fields above a canvas that takes the rest — every
-   action lives on the canvas itself (FLO wireframe layout notes). */
+/* The tab is a band above a canvas that takes the rest (FLO layout notes). */
 .flow-surface {
   height: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-/* FLO-FR-25: the Flow's name and description, the tab's only chrome — and
-   chrome sits on the field, the same as every other tab's does (EDT-FR-63).
-   On `--bg-elevated` this row was the one white band left in the shell, which
-   read as a surface belonging to something else rather than as this tab's own
-   heading. */
-.flow-header {
+/* FLO-FR-KHBY: while a sync runs, no item takes a press. A press reaches the
+   canvas, which pans, and the view controls still act. */
+.flow-surface[data-syncing="true"] .flow-viewport { pointer-events: none; }
+.flow-surface[data-syncing="true"] .flow-viewport > * { opacity: 0.72; }
+
+/* ---- the band: name, description, references, Sync (FLO-FR-25, YDWT, AKMV) */
+.flow-band {
   flex: none;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border-2);
-  background: var(--doc-field-bg);
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-app);
+  min-width: 0;
 }
-.flow-header__name,
-.flow-header__description {
+.flow-band__name,
+.flow-band__description {
   border: 1px solid transparent;
   background: transparent;
   color: var(--fg-1);
   font: inherit;
-  padding: 2px 5px;
+  padding: 2px 4px;
   border-radius: var(--r-sm);
   min-width: 0;
+  flex: none;
 }
-.flow-header__name { font-weight: 600; font-size: var(--fs-ui-md); flex: none; width: 240px; }
-.flow-header__description { flex: 1; font-size: var(--fs-ui-sm); color: var(--fg-2); }
-.flow-header__name:hover,
-.flow-header__description:hover { border-color: var(--border-2); }
-.flow-header__name:focus,
-.flow-header__description:focus {
-  border-color: var(--accent);
-  outline: none;
+.flow-band__name { font-weight: 600; font-size: var(--fs-ui-md); max-width: 280px; }
+.flow-band__description { font-size: var(--fs-ui-sm); color: var(--fg-2); max-width: 420px; flex: 0 1 auto; }
+.flow-band__name:hover:not(:disabled),
+.flow-band__description:hover:not(:disabled) { border-color: var(--border-2); }
+.flow-band__name:focus,
+.flow-band__description:focus { border-color: var(--accent); outline: none; background: var(--bg-canvas); }
+.flow-band__name:disabled,
+.flow-band__description:disabled { color: inherit; }
+.flow-band__name::placeholder,
+.flow-band__description::placeholder { color: var(--fg-4); }
+/* FLO-FR-25: a missing name is marked, never enforced. */
+.flow-band__name[data-missing="true"] { border-color: var(--danger); }
+.flow-band__required { flex: none; font-size: var(--fs-ui-xs); color: var(--danger); }
+.flow-band__refs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+.flow-band__spacer { flex: 1; }
+.flow-band__error {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 420px;
+  font-size: var(--fs-ui-xs);
+  color: var(--danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* FLO-FR-AKMV / FLO-FR-WLHA: the Sync control and its count. */
+.flow-sync {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 2px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
   background: var(--bg-canvas);
 }
-/* Required, and marked rather than enforced: an unnamed Flow still saves. */
-.flow-header__name[data-missing="true"] { border-color: var(--danger, crimson); }
-.flow-header__required {
-  flex: none;
-  font-size: var(--fs-ui-xs);
-  color: var(--danger, crimson);
+.flow-sync__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  padding: 3px 6px;
+  border-radius: var(--r-xs);
+  cursor: pointer;
+}
+.flow-sync__btn:hover:not(:disabled) { background: var(--bg-active); }
+.flow-sync__btn:disabled { color: var(--fg-2); cursor: progress; }
+.flow-sync__icon { display: inline-block; color: var(--fg-3); }
+.flow-sync[data-running="true"] .flow-sync__icon { animation: flow-spin 1s linear infinite; color: var(--accent); }
+.flow-sync__count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: var(--r-full);
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font: inherit;
+  font-size: var(--fs-ui-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.flow-sync__repo { color: var(--fg-3); font-size: var(--fs-ui-xs); white-space: nowrap; }
+@keyframes flow-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .flow-sync[data-running="true"] .flow-sync__icon { animation: none; }
 }
 
-.flow-banner {
-  flex: none;
-  padding: 5px 12px;
+/* ---- references (FLO-FR-10, FLO-FR-11, FLO-FR-YDWT) ---- */
+.flow-refs { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.flow-refs--band { flex-direction: row; align-items: center; gap: 6px; }
+.flow-refs--panel { gap: 3px; }
+.flow-ref-row { position: relative; display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-width: 0; }
+.flow-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  font: inherit;
   font-size: var(--fs-ui-xs);
   color: var(--fg-2);
-  background: var(--accent-soft);
-  border-bottom: 1px solid var(--border-2);
+  padding: 2px 6px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  cursor: pointer;
 }
-.flow-banner--error { color: var(--danger, crimson); background: transparent; }
+button.flow-ref:hover { border-color: var(--border-3); color: var(--fg-1); }
+.flow-ref__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-ref__go { color: var(--fg-4); }
+.flow-ref--unresolved { color: var(--warn); border-style: dashed; border-color: var(--warn); cursor: default; }
+.flow-ref-row__remove {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--fg-4);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  line-height: 1;
+  padding: 0 3px;
+  cursor: pointer;
+}
+.flow-ref-row__remove:hover { color: var(--danger); }
+/* In the band the remove control waits for hover or focus, so a reference
+   reads as a plain chip. */
+.flow-refs--band .flow-ref-row__remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--bg-elevated);
+  font-size: var(--fs-ui-2xs);
+  opacity: 0;
+}
+.flow-refs--band .flow-ref-row:hover .flow-ref-row__remove,
+.flow-refs--band .flow-ref-row__remove:focus-visible { opacity: 1; }
 
+/* ---- shared controls ---- */
+.flow-btn {
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  padding: 4px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-2);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.flow-btn:hover:not(:disabled) { border-color: var(--border-3); }
+.flow-btn:disabled { opacity: 0.55; cursor: default; }
+.flow-btn--xs { font-size: var(--fs-ui-xs); padding: 2px 8px; }
+.flow-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.flow-btn--primary:hover:not(:disabled) { border-color: var(--accent); filter: brightness(1.06); }
+.flow-btn--danger { color: var(--danger); }
+.flow-btn--danger-solid { background: var(--danger); border-color: var(--danger); color: var(--accent-fg); }
+.flow-btn--quiet { border-color: transparent; background: transparent; color: var(--fg-2); }
+.flow-select,
+.flow-picker,
+.flow-input {
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  padding: 2px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  max-width: 100%;
+  min-width: 0;
+}
+.flow-select:focus,
+.flow-picker:focus,
+.flow-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--shadow-focus); }
+/* The band's picker reads as a small "+" chip, or as "Add HLD" while the Flow
+   has no reference (FLO-FR-YDWT). */
+.flow-picker--band {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  text-align: center;
+  text-align-last: center;
+  border-style: dashed;
+  color: var(--fg-3);
+  background: transparent;
+  cursor: pointer;
+}
+.flow-picker--hld { width: auto; padding: 0 8px; color: var(--accent); border-color: var(--accent); }
+
+/* ---- the canvas ---- */
+.flow {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: radial-gradient(circle at 1px 1px, var(--border-2) 1px, transparent 0);
+  background-size: 16px 16px;
+  background-color: var(--bg-canvas);
+  overflow: hidden;
+  touch-action: none;
+}
+/* Pan and zoom act on this layer, not on the plan's coordinates (FLO-FR-22). */
+.flow-viewport { position: absolute; inset: 0; }
+.flow-glyph { width: 14px; flex: none; text-align: center; color: var(--fg-2); font-size: var(--fs-ui-xs); line-height: 1.3; }
+.flow-placeholder { color: var(--fg-4); font-weight: 400; }
+
+/* FLO-FR-38: a container, by kind. The border style, not a colour, tells the
+   kinds apart, and the glyph names the kind. */
+.flow-ctr {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg-sunken) 55%, transparent);
+}
+.flow-ctr[data-kind="milestone"] {
+  border-width: 1.5px;
+  border-color: var(--border-3);
+  background: color-mix(in srgb, var(--bg-sunken) 30%, transparent);
+}
+.flow-ctr[data-kind="epic"] { border-style: dashed; }
+.flow-ctr[data-kind="feature"] { background: color-mix(in srgb, var(--bg-sunken) 85%, transparent); }
+.flow-ctr[data-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.flow-ctr[data-magnet="true"] { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.flow-ctr__head {
+  position: relative;
+  height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 6px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  cursor: grab;
+  min-width: 0;
+}
+.flow-ctr__toggle {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-2xs);
+  line-height: 1;
+  cursor: pointer;
+}
+.flow-ctr__toggle:hover { color: var(--fg-1); background: var(--bg-active); }
+.flow-ctr__name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 24px; flex: 0 1 auto; }
+.flow-ctr__spacer { flex: 1; min-width: 4px; }
+.flow-ctr__counts { padding: 0 10px 6px 34px; font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-ctr__about {
+  position: relative;
+  margin-top: -6px;
+  padding: 0 10px 0 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+}
+.flow-ctr__about > * { pointer-events: auto; }
+/* FLO-FR-44: resized from its own edges and corners. */
+.flow-resize { position: absolute; z-index: 1; }
+.flow-resize--n { top: -4px; left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
+.flow-resize--s { bottom: -4px; left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
+.flow-resize--w { left: -4px; top: 12px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.flow-resize--e { right: -4px; top: 12px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.flow-resize--nw, .flow-resize--ne, .flow-resize--sw, .flow-resize--se { width: 12px; height: 12px; }
+.flow-resize--nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.flow-resize--se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.flow-resize--ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.flow-resize--sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+
+/* FLO-FR-38: a task or a defect, as a card that grows with its content. */
+.flow-card {
+  position: absolute;
+  box-sizing: border-box;
+  width: 170px;
+  background-image: radial-gradient(circle at 1px 1px, var(--flow-node-dot) 1px, transparent 0);
+  background-size: 16px 16px;
+  background-color: var(--flow-node-bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 7px 9px;
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: grab;
+}
+.flow-card[data-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); z-index: 5; }
+.flow-card[data-magnet="true"] { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.flow-card__head { display: flex; align-items: flex-start; gap: 5px; min-width: 0; }
+.flow-card__head .flow-glyph { margin-top: 1px; }
+.flow-card__name { font-weight: 600; flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.flow-card__name--edit,
+.flow-ctr__name--edit {
+  font: inherit;
+  font-weight: 600;
+  color: var(--fg-1);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  padding: 0 3px;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.flow-ctr__name--edit { width: 220px; flex: 0 1 auto; }
+.flow-card__row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.flow-card__error { font-size: var(--fs-ui-xs); color: var(--danger); line-height: 1.35; }
+
+/* FLO-FR-32 / FLO-FR-33: the connection source, shown on hover and selection. */
+.flow-port {
+  position: absolute;
+  right: -7px;
+  top: 12px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-3);
+  background: var(--bg-elevated);
+  cursor: crosshair;
+  opacity: 0;
+  z-index: 2;
+}
+.flow-port--ctr { top: 14px; }
+.flow-card:hover > .flow-port,
+.flow-card[data-selected="true"] > .flow-port,
+.flow-ctr__head:hover > .flow-port,
+.flow-ctr[data-selected="true"] .flow-port,
+.flow-port:focus-visible { opacity: 1; }
+.flow-port:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* FLO-FR-KQCE: the status chip, a shape and a word. */
+.flow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: var(--fs-ui-2xs);
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0 6px 0 4px;
+  border-radius: var(--r-full);
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.flow-chip__shape { font-size: var(--fs-ui-2xs); }
+.flow-chip[data-state="not_started"] { color: var(--fg-3); }
+.flow-chip[data-state="drafting"] { color: var(--accent); }
+.flow-chip[data-state="in_progress"] { color: var(--warn); }
+.flow-chip[data-state="done"] { color: var(--ok); }
+.flow-chip[data-state="dropped"] { color: var(--fg-4); text-decoration: line-through; }
+/* FLO-FR-IKMM / FLO-FR-KWFH: the Blocked and Overlap markers. */
+.flow-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  font: inherit;
+  font-size: var(--fs-ui-2xs);
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: var(--r-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.flow-marker--blocked { color: var(--danger); background: var(--danger-soft); border: 1px solid var(--danger); }
+.flow-marker--overlap { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); }
+/* FLO-FR-ULEM: the tracker tag. */
+.flow-tag {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-3);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border-1);
+  background: var(--bg-canvas);
+  white-space: nowrap;
+  cursor: pointer;
+}
+button.flow-tag:hover { color: var(--accent); border-color: var(--accent); }
+/* FLO-FR-TZSU: the local-only mark, dashed like a thing that stays here. */
+.flow-local {
+  flex: none;
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-3);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  border: 1px dashed var(--border-3);
+  white-space: nowrap;
+}
+/* FLO-FR-XAPK: the due date, and the past mark in words. */
+.flow-due { flex: none; font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; }
+.flow-due[data-past="true"] { color: var(--danger); }
+.flow-due__past { font-family: var(--font-ui-family); font-weight: 600; }
+/* FLO-FR-QZUR: the draft row. */
+.flow-draft {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  text-align: left;
+  padding: 2px 5px;
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  cursor: pointer;
+}
+button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
+.flow-draft__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-draft__run { margin-left: auto; flex: none; color: var(--fg-3); font-size: var(--fs-ui-2xs); }
+.flow-draft--missing { color: var(--warn); border-color: var(--warn); border-style: dashed; cursor: default; }
+.flow-draft--missing .flow-btn { margin-left: auto; }
+/* FLO-FR-13: a description as rich text. */
+.flow-desc { font-size: var(--fs-ui-xs); color: var(--fg-2); line-height: 1.4; overflow-wrap: anywhere; }
+.flow-desc > :first-child { margin-top: 0; }
+.flow-desc > :last-child { margin-bottom: 0; }
+.flow-desc p { margin: 0 0 4px; }
+.flow-desc code { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); background: var(--bg-sunken); padding: 0 3px; border-radius: 3px; }
+/* A container's description: one line under its header. */
+.flow-desc-ctr {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.flow-desc-ctr > * { display: inline; margin: 0; }
+.flow-desc-ctr code { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); }
+
+/* ---- edges (FLO-FR-48, FLO-FR-32) ---- */
+.flow-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.flow-edge { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-linecap: round; }
+.flow-edge--relates { stroke-dasharray: 5 4; }
+.flow-edge[data-selected="true"] { stroke: var(--accent); stroke-width: 2.2; }
+.flow-edge--preview { stroke: var(--accent); stroke-dasharray: 5 4; }
+.flow-edge--refused { stroke: var(--danger); stroke-dasharray: 5 4; }
+.flow-edge-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.flow-arrow { fill: var(--fg-3); }
+.flow-arrow--active { fill: var(--accent); }
+.flow-arrow--refused { fill: var(--danger); }
+.flow-edge-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--fg-3);
+  background: var(--bg-elevated);
+  opacity: 0;
+  cursor: pointer;
+  z-index: 3;
+}
+.flow-edge-handle:hover,
+.flow-edge-handle:focus-visible { opacity: 1; }
+.flow-edge-handle[data-selected="true"] { opacity: 1; border-color: var(--accent); background: var(--accent); }
+/* FLO-FR-CEVI: the controls of the selected edge. */
+.flow-edge-panel {
+  position: absolute;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+.flow-seg { display: inline-flex; border: 1px solid var(--border-2); border-radius: var(--r-sm); overflow: hidden; }
+.flow-seg__opt {
+  border: none;
+  background: var(--bg-canvas);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  padding: 2px 9px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.flow-seg__opt + .flow-seg__opt { border-left: 1px solid var(--border-2); }
+.flow-seg__opt[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* ---- the selected item's panel, attached below it and over the canvas ---- */
+.flow-panel {
+  position: absolute;
+  z-index: 15;
+  width: 300px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+.flow-panel::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 24px;
+  width: 10px;
+  height: 10px;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--accent);
+  border-top: 1px solid var(--accent);
+  transform: rotate(45deg);
+}
+/* Opened above the item when the room below is short: the pointer is at the foot. */
+.flow-panel[data-placement="above"]::before {
+  top: auto;
+  bottom: -6px;
+  transform: rotate(225deg);
+}
+.flow-panel__fields {
+  padding: 9px 10px 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* A bound panel scrolls inside itself (FLO layout notes). A soft edge shows
+     at the top or the bottom while more of the panel is past that edge: the
+     covers scroll with the content and hide each edge at its own end. */
+  background:
+    linear-gradient(var(--bg-elevated) 40%, transparent) top / 100% 24px no-repeat local,
+    linear-gradient(transparent, var(--bg-elevated) 60%) bottom / 100% 24px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--fg-1) 20%, transparent), transparent) top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--fg-1) 20%, transparent), transparent) bottom / 100% 10px no-repeat scroll;
+  border-radius: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* KHBY: the fieldset only disables its controls; it takes no box. */
+.flow-panel__fieldset { display: contents; }
+.flow-panel__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.flow-panel__row--head { margin-bottom: 2px; }
+.flow-panel__title { font-size: var(--fs-ui-xs); font-weight: 600; color: var(--fg-2); }
+.flow-panel__spacer { flex: 1; }
+.flow-panel__label { font-size: var(--fs-ui-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-4); }
+.flow-panel__src {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  line-height: 1.5;
+  color: var(--fg-1);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 5px 6px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  resize: vertical;
+}
+.flow-panel__src:focus { outline: none; border-color: var(--accent); }
+.flow-panel__note { font-size: var(--fs-ui-xs); color: var(--warn); }
+.flow-panel__error { width: 100%; font-size: var(--fs-ui-xs); color: var(--danger); }
+.flow-panel__link { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.flow-input--num { width: 84px; }
+.flow-panel .flow-select[aria-label="Add path"],
+.flow-panel .flow-select[aria-label="Link draft"] { max-width: 220px; }
+/* FLO-FR-ZEJU: a footprint entry; one that names nothing on disk is marked. */
+.flow-fp {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-2);
+  padding: 2px 5px;
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  min-width: 0;
+}
+.flow-fp[data-missing="true"] { border-color: var(--warn); border-style: dashed; }
+.flow-fp__path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-fp__missing { flex: none; color: var(--warn); font-family: var(--font-ui-family); }
+.flow-fp__remove { margin-left: auto; flex: none; border: none; background: transparent; color: var(--fg-4); cursor: pointer; padding: 0 2px; font: inherit; }
+.flow-fp__remove:hover { color: var(--danger); }
+/* FLO-FR-TZSU: the Local only switch. */
+.flow-switch { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-ui-xs); cursor: pointer; align-self: flex-start; }
+.flow-switch input { position: absolute; left: 0; top: 50%; width: 24px; height: 14px; margin: -7px 0 0; opacity: 0; cursor: pointer; }
+.flow-switch__track { position: relative; width: 24px; height: 14px; border-radius: 7px; background: var(--border-3); flex: none; }
+.flow-switch__track::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bg-elevated);
+}
+.flow-switch input:checked + .flow-switch__track { background: var(--accent); }
+.flow-switch input:checked + .flow-switch__track::after { left: 12px; background: var(--accent-fg); }
+.flow-switch input:focus-visible + .flow-switch__track { box-shadow: var(--shadow-focus); }
+
+/* ---- the canvas's own chrome ---- */
+/* FLO-FR-16: the feedback of a refusal, at the top of the canvas. */
+.flow-refusal {
+  position: absolute;
+  top: 12px;
+  left: 64px;
+  right: 64px;
+  width: fit-content;
+  margin: 0 auto;
+  z-index: 30;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--danger);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.flow-refusal__title { color: var(--danger); white-space: nowrap; }
+.flow-refusal__close { border: none; background: transparent; color: var(--fg-3); cursor: pointer; font: inherit; padding: 0 4px; }
+/* FLO-FR-07: the add affordance and its menu of six kinds. */
+.flow-addmenu { position: absolute; top: 0; right: 0; z-index: 20; }
+.flow-overlay {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-canvas) 80%, transparent);
+  color: var(--fg-2);
+  padding: 2px;
+  box-sizing: border-box;
+}
+.flow-overlay--add {
+  top: 10px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  cursor: pointer;
+}
+.flow-overlay--add:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.flow-overlay--add:disabled { opacity: 0.5; cursor: default; }
+/* The menu borrows the action control's menu; only its anchoring is the
+   canvas's own, and kit.css loads after components.css so this wins. */
+.flow-addmenu__list {
+  top: 46px;
+  right: 12px;
+  bottom: auto;
+}
+.flow-addmenu__list.draft-actions__menu {
+  width: 176px;
+  gap: 0;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+.flow-addmenu__list .draft-actions__item {
+  min-width: 0;
+  border-color: transparent;
+  background: var(--bg-elevated);
+  box-shadow: none;
+  padding: 5px 8px;
+}
+.flow-addmenu__list .draft-actions__item:hover,
+.flow-addmenu__list .draft-actions__item:focus-visible { background: var(--accent-soft); outline: none; }
+.flow-addmenu__glyph { width: 14px; text-align: center; color: var(--fg-2); }
+/* FLO-FR-34 / ACT-FR-10: the action control sits leading of the view
+   controls, which keep the trailing end of the bottom line. Its own rules
+   place it against this host's trailing edge. */
+.flow-actionhost { position: absolute; inset: 0 148px 0 0; pointer-events: none; z-index: 6; }
+.flow-actionhost .draft-actions__toggle,
+.flow-actionhost .draft-actions__menu,
+.flow-actionhost .action-control__discussions,
+.flow-actionhost .action-control__panel,
+.flow-actionhost .draft-composer,
+.flow-actionhost .action-control__note { pointer-events: auto; }
+/* FLO-FR-22: the view controls. */
+.flow-overlay--view { right: 12px; bottom: 20px; height: 28px; z-index: 6; }
+.flow-overlay__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.flow-overlay__btn:hover { color: var(--accent); background: var(--accent-soft); }
+.flow-overlay__zoom { min-width: 40px; text-align: center; color: var(--fg-3); font-size: var(--fs-ui-xs); }
+/* FLO-FR-23: the readout at the start of the bottom line. */
+.flow-status { position: absolute; left: 12px; bottom: 26px; font-size: var(--fs-ui-xs); color: var(--fg-3); pointer-events: none; z-index: 6; }
+
+/* FLO-FR-05 / FLO-FR-47: a refused body or write. */
+.flow-banner { flex: none; padding: 6px 12px; font-size: var(--fs-ui-xs); color: var(--fg-2); background: var(--accent-soft); border-bottom: 1px solid var(--border-2); }
+.flow-banner--error { color: var(--danger); background: var(--danger-soft); }
 .flow-error {
   flex: 1;
   display: flex;
@@ -71,410 +760,29 @@
   padding: 24px;
   text-align: center;
 }
-
-.flow {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  background:
-    radial-gradient(circle at 1px 1px, var(--border-2) 1px, transparent 0);
-  background-size: 16px 16px;
-  background-color: var(--bg-canvas);
-  overflow: hidden;
-  touch-action: none;
-}
-/* Pan and zoom are applied to this layer, not to the graph's coordinates: the
-   document stores unscaled positions (FLO-FR-21) and the view is never part of
-   it (FLO-FR-22). */
-.flow-viewport { position: absolute; inset: 0; }
-/* Edges are drawn in graph coordinates, which routinely fall outside the
-   element's own box — clipping them would hide exactly the long back-edges a
-   retry is drawn as. */
-.flow-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-
-/* FLO-FR-38: a loop, drawn as the region it is. Recessed rather than elevated,
-   so it reads as ground its members sit on rather than as a card in front of
-   them, and so a node inside one still reads as a node. */
-.flow-loop {
-  position: absolute;
-  /* The size the document carries is the size the box PAINTS at (FLO-FR-21):
-     there is no global reset, so without this the border and padding are added
-     outside the width, and every edge anchored to the border — and every
-     containment test the canvas makes — is off by that much. */
-  box-sizing: border-box;
-  border: 1px dashed var(--border-3);
-  border-radius: var(--r-lg);
-  background: var(--bg-sunken, rgba(127, 127, 127, 0.06));
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  font-size: var(--fs-ui-sm);
-  color: var(--fg-2);
-}
-.flow-loop[data-selected="true"] { border-color: var(--accent); border-style: solid; }
-.flow-loop[data-magnet="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-.flow-loop__head { display: flex; align-items: center; gap: 4px; cursor: grab; }
-.flow-loop__grip { color: var(--fg-4); font-size: var(--fs-ui-sm); line-height: 1; }
-.flow-loop__name,
-.flow-loop__passes {
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  padding: 1px 4px;
-  min-width: 0;
-}
-.flow-loop__name { flex: 1; font-weight: 600; }
-.flow-loop__passes { width: 52px; flex: none; text-align: right; color: var(--fg-3); }
-.flow-loop__name:hover,
-.flow-loop__passes:hover { border-color: var(--border-2); }
-.flow-loop__name:focus,
-.flow-loop__passes:focus {
-  border-color: var(--accent);
-  outline: none;
-  background: var(--bg-canvas);
-}
-/* FLO-FR-38: the artifacts the loop is run under, in the header region above
-   its members. The rows are a node's (`.flow-node__ref*`), so only the column
-   they sit in is declared here — and it takes no height it does not need, a
-   loop referencing nothing having nothing to show. */
-.flow-loop__refs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* Each row is as wide as what it holds rather than as wide as the container.
-     A loop is metres wide where a reference row is a chip and a filename, and a
-     column stretched to the loop's full width is a box of mostly nothing —
-     which, being drawn over the loop's members (below), would take the presses
-     meant for them across the whole width of the container. */
-  align-items: flex-start;
-  flex: none;
-}
-.flow-loop__refs:empty { display: none; }
-/* FLO-FR-38: the loop's own chrome is drawn ABOVE what the loop holds.
-   Members are absolutely-placed siblings later in the viewport, so without a
-   stacking order they paint over the header — and a member the author dropped
-   near the top of the container swallows the picker, the remove affordances,
-   and the click-throughs, taking the presses meant for them. Every reference
-   the loop gains pushes the column further into that region, so this is the
-   ordinary case rather than a corner of it.
-
-   Above the edge labels too (`.flow-edge-label`, z-index 1): a label is one
-   more thing drawn inside the container, and the container's own controls have
-   to stay reachable whatever is drawn over the region they sit in. */
-.flow-loop__head,
-.flow-loop__refs {
-  position: relative;
-  z-index: 2;
-}
-/* …and in the reference column it is only the ROWS that are raised, not the
-   ground between them. The column stacks its rows with a gap, and a gap is the
-   container's own ground: a press landing there is aimed at whatever shows
-   through, so the column passes pointers through and each row takes its own
-   back. The header is left alone — its whole width IS a control, being what
-   drags the loop (FLO-FR-21). */
-.flow-loop__refs { pointer-events: none; }
-.flow-loop__refs > * { pointer-events: auto; }
-/* The loop's connection port sits at the middle of its trailing border, which
-   is the side of it an edge into a loop lands on (FLO-FR-39) — a container is
-   met on its border rather than at a fixed offset from its top, which is what a
-   node's port marks.
-
-   Written as a compound selector because `.flow-node__port` below carries the
-   node's `top` and is declared LATER: at equal specificity the later rule wins,
-   and this one would be dead. */
-.flow-loop__port.flow-loop__port { top: 50%; margin-top: -6px; }
-/* FLO-FR-44: resized from its own corner. */
-.flow-loop__resize {
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid var(--border-3);
-  border-radius: 3px;
-  background: var(--bg-elevated);
-  cursor: nwse-resize;
-}
-.flow-loop__resize:hover { border-color: var(--accent); background: var(--accent-soft); }
-
-.flow-node {
-  position: absolute;
-  /* As for `.flow-loop` above: the laid-out width is the painted width, so two
-     nodes the document places a node-width apart do not overlap. */
-  box-sizing: border-box;
-  /* A node is part of the drawing rather than a card set on top of it: a light,
-     slightly translucent surface carrying the canvas's own dot grid at the same
-     16px pitch. The tone still separates the node from the canvas — a node has
-     to be legible as a box — but by a step rather than by a slab.
-
-     The two grids are the same texture, not one continuous field: the canvas
-     paints its dots on `.flow`, which does not move, while a node sits inside
-     `.flow-viewport`, which is what pan and zoom transform. So the node's dots
-     travel and scale with the graph and the canvas's stay put. That is the
-     right way round — the texture belongs to the node the way it belongs to the
-     canvas — but it does mean the two only line up by coincidence. */
-  background-image:
-    radial-gradient(circle at 1px 1px, var(--flow-node-dot) 1px, transparent 0);
-  background-size: 16px 16px;
-  background-color: var(--flow-node-bg);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-md);
-  padding: 8px 10px;
-  box-shadow: var(--shadow-2);
-  font-size: var(--fs-ui-sm);
-  color: var(--fg-1);
-  cursor: grab;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.flow-node[data-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-/* FLO-FR-33: the node an in-flight connection would land on. Reads as a target
-   rather than as a selection, so it does not compete with the selected node. */
-.flow-node[data-magnet="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-.flow-node__head { display: flex; align-items: center; gap: 4px; }
-.flow-node__grip { color: var(--fg-4); font-size: var(--fs-ui-xs); line-height: 1; }
-/* The name reads as a label until it is focused, so a node renders as its name
-   rather than as a form (FLO-FR-09). */
-.flow-node__name {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--fg-1);
-  font: inherit;
-  font-weight: 600;
-  padding: 1px 3px;
-  border-radius: var(--r-sm);
-}
-.flow-node__name:hover { border-color: var(--border-2); }
-.flow-node__name:focus { border-color: var(--accent); outline: none; background: var(--bg-canvas); }
-
-/* One row per artifact the node references (FLO-FR-10), the remove affordance
-   sitting after the reference itself and only while the node is selected. */
-.flow-node__ref-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-.flow-node__ref-row > :first-child { flex: 1; min-width: 0; }
-
-.flow-node__ref {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--fs-ui-xs);
-  color: var(--fg-2);
-  background: transparent;
-  border: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  min-width: 0;
-}
-.flow-node__ref-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flow-node__ref--unresolved { color: var(--danger, crimson); cursor: default; }
-
-/* The shared select chrome, at the canvas's own denser measure. kit.css loads
-   after components.css, so these two declarations win over `.select--sm`. */
-.flow-node__picker { font-size: var(--fs-ui-xs); max-width: 100%; height: 22px; }
-.flow-node__prompt {
-  font: inherit;
-  font-size: var(--fs-ui-xs);
-  color: var(--fg-2);
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-sm);
-  padding: 4px 6px;
-  resize: vertical;
-  border-top: 1px solid var(--border-2);
-}
-/* The connection source, on the node's trailing edge. */
-.flow-node__port {
-  position: absolute;
-  right: -6px;
-  top: 12px;
-  width: 12px;
-  height: 12px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--border-3);
-  background: var(--bg-elevated);
-  cursor: crosshair;
-}
-.flow-node__port:hover { border-color: var(--accent); background: var(--accent-soft); }
-
-.flow-edge-label {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-sm);
-  padding: 1px 4px;
-  font-size: var(--fs-ui-2xs);
-  color: var(--fg-3);
-  cursor: pointer;
-  white-space: nowrap;
-  /* FLO-FR-19: the label sits at the edge's midpoint, which is inside a node
-     whenever the label is wider than the gap between the two it joins. Both
-     boxes are opaque, so without a stacking order the node paints last and
-     slices the label with no ellipsis and nothing to say it happened. The
-     label is the smaller box and the one carrying the text, so it goes on
-     top. */
-  z-index: 1;
-}
-.flow-edge-label[data-selected="true"] { border-color: var(--accent); }
-.flow-edge-label__input {
-  border: none;
-  background: transparent;
-  color: var(--fg-1);
-  font: inherit;
-  width: 72px;
-  outline: none;
-}
-/* The same measure the input takes, so the label's box does not resize as it
-   toggles between reading and editing — the edge would appear to jump on a
-   click that changed nothing but the affordance. */
-.flow-edge-label__text {
-  display: inline-block;
-  max-width: 72px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.flow-status {
-  position: absolute;
-  left: 10px;
-  bottom: 8px;
-  pointer-events: none;
-}
-
-/* FLO-FR-13: a node's prompt read as the formatted text it is. The block
-   treatments come from the shared renderer; only the box around them is the
-   node's own, and it is unbounded in height because the node grows to fit. */
-.flow-node__rendered {
-  font-size: var(--fs-ui-xs);
-  color: var(--fg-2);
-  border-top: 1px solid var(--border-1);
-  padding-top: 6px;
-  overflow-wrap: anywhere;
-}
-.flow-node__rendered > :first-child { margin-top: 0; }
-.flow-node__rendered > :last-child { margin-bottom: 0; }
-
-/* FLO-FR-05 / FLO-FR-47: what a validation refused, one entry per violation. */
-.flow-violations {
-  margin: 4px 0 0;
-  padding-left: 18px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--fs-ui-xs);
-}
-.flow-violations__at {
-  font-family: var(--font-mono, monospace);
-  color: var(--fg-3);
-}
-
-/* FLO-FR-43 / FLO-FR-45: the two questions the canvas asks before an edit that
-   would take something away. Anchored over the canvas rather than over the
-   window, on the same footing as the tab's other transient surfaces. */
+.flow-violations { margin: 4px 0 0; padding-left: 18px; text-align: left; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-ui-xs); }
+.flow-violations__at { font-family: var(--font-mono); color: var(--fg-3); }
+/* FLO-FR-45 / FLO-FR-HGIY: the questions the canvas asks before it removes. */
 .flow-dialog {
   position: absolute;
   left: 50%;
   top: 24px;
   transform: translateX(-50%);
+  z-index: 35;
   max-width: 420px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-3, var(--shadow-2));
-  padding: 12px 14px;
-  font-size: var(--fs-ui-sm);
-  color: var(--fg-1);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 5;
+  padding: 12px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
 }
 .flow-dialog p { margin: 0; }
 .flow-dialog__actions { display: flex; gap: 6px; justify-content: flex-end; }
-
-/* The canvas's own controls: transparent until hovered, so the graph reads
-   through them (FLO-FR-07 / FLO-FR-22). */
-.flow-overlay {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--fg-3);
-  padding: 2px;
-}
-.flow-overlay:hover { border-color: var(--border-2); background: var(--bg-elevated); }
-/* FLO-FR-07: the add affordance and the short menu of what it adds.
-
-   The menu itself is the action control's own (`.draft-actions__menu`, ACT-FR-05)
-   — one treatment for both menus a Flow tab can open. Only its anchoring is this
-   canvas's business: the control's menu rises from a corner at the FOOT of its
-   tab, and this one hangs from an affordance at the head, so the two offsets it
-   sets against `bottom` are overridden here rather than restated. */
-.flow-addmenu { position: absolute; top: 0; right: 0; }
-.flow-addmenu__list {
-  top: 38px;
-  right: 8px;
-  bottom: auto;
-}
-.flow-overlay--add {
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  justify-content: center;
-  cursor: pointer;
-}
-.flow-overlay--add:hover { color: var(--accent); }
-/* ACT-FR-10: the action control keeps the corner and the view controls sit
-   LEADING of it, clear of the whole dock — the collapsed toggle, the discussions
-   pill beside it, and the gutter they share. Without this the control lands on
-   top of Fit and takes the press meant for it. */
-.flow-overlay--view {
-  right: calc(var(--sp-4) + var(--draft-actions-size) + 96px);
-  bottom: 8px;
-}
-.flow-overlay__btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.flow-overlay__btn:hover { color: var(--accent); background: var(--accent-soft); }
-.flow-overlay__zoom { min-width: 34px; text-align: center; color: var(--fg-3); }
 
 /* ---------- Runs ---------- */
 .runs-log {

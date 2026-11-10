@@ -32,6 +32,9 @@ pub mod draft_proposals;
 pub mod draft_watcher;
 pub mod drafts;
 pub mod embeddings;
+pub mod flow_delivery;
+pub mod flow_overlap;
+pub mod flow_sync;
 pub mod flow_validation;
 pub mod fonts;
 pub mod fs;
@@ -476,6 +479,15 @@ pub fn run() {
             artifacts::load_artifact_contents_by_id,
             artifacts::save_artifact_contents,
             flow_validation::validate_flow_document,
+            flow_delivery::load_flow_delivery_state,
+            flow_delivery::find_flow_items_for_draft,
+            flow_overlap::analyze_flow_overlap,
+            flow_sync::sync_flow_with_tracker,
+            flow_sync::resolve_flow_sync_conflicts,
+            flow_sync::read_tracker_item,
+            flow_sync::open_tracker_link,
+            flow_sync::get_flow_tracker_settings,
+            flow_sync::set_flow_tracker_settings,
             project::close_project,
             menu::finish_exit,
             menu::set_save_menu_state,

@@ -329,110 +329,76 @@ describe("a Markdown body takes its host's type treatment (NTS-FR-25 / CMP-FR-12
   });
 });
 
-describe("an edge label outranks the nodes it sits between (FLO-FR-19)", () => {
-  // The label is placed at the edge's midpoint, which falls inside a node
-  // whenever the label is wider than the gap between the two it joins. Both
-  // boxes are opaque; without a stacking order the node paints last and slices
-  // the label with no ellipsis to show for it.
-  //
-  // The comparison is derived rather than fixed: the invariant is that the label
-  // outranks EVERY node, so a `z-index` added to a node state later — a selected
-  // node lifting itself, say — has to be answered here rather than silently
-  // winning against a hardcoded `> 0`.
-  it("declares a stacking order above every node", () => {
+describe("the panels of a Flow tab draw over every item (FLO-FR-44, FSR-FR-KGOY)", () => {
+  // Items are absolutely placed in the viewport, and a selected card lifts
+  // itself above its neighbours. The selected item's panel, the edge panel,
+  // the refusal feedback, and the sync review are drawn over the canvas, so
+  // each one must outrank every item layer, or a card dropped near the
+  // selection paints over the panel and takes the presses meant for it.
+  // jsdom applies no stylesheet, so no rendering test can see this.
+  it("declares a stacking order above every item layer", () => {
     const css = sheet("kit.css");
-    const blocks = blocksFor(css, ".flow-edge-label");
-    expect(blocks).toHaveLength(1);
-    const label = Number(decl(blocks[0], "z-index"));
-    expect(label).toBeGreaterThan(0);
-
-    const nodeLayers: number[] = [];
-    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const selectors = m[1].split(",").map((s) => s.trim());
-      if (!selectors.some((s) => /^\.flow-node\b/.test(s))) continue;
-      const z = decl(m[2], "z-index");
-      if (z !== null && z !== "auto") nodeLayers.push(Number(z));
+    const items = [
+      ...layersOf(css, /^\.flow-card\b/),
+      ...layersOf(css, /^\.flow-ctr\b/),
+      ...layersOf(css, /^\.flow-port\b/),
+      ...layersOf(css, /^\.flow-edge-handle\b/),
+      ...layersOf(css, /^\.flow-resize\b/),
+    ];
+    expect(items.length).toBeGreaterThan(0);
+    for (const surface of [".flow-panel", ".flow-edge-panel", ".flow-refusal", ".flow-review"]) {
+      const blocks = blocksFor(css, surface).filter((b) => decl(b, "z-index") !== null);
+      expect(blocks, `${surface} declares no z-index`).toHaveLength(1);
+      const z = Number(decl(blocks[0], "z-index"));
+      for (const layer of items) expect(z, surface).toBeGreaterThan(layer);
     }
-    for (const z of nodeLayers) expect(label).toBeGreaterThan(z);
+  });
+
+  // FSR-FR-KGOY: the review is above the selected item's panel, which an item
+  // the review selects opens beside it.
+  it("puts the sync review above the selection panel", () => {
+    const css = sheet("kit.css");
+    const z = (sel: string) =>
+      Number(decl(blocksFor(css, sel).find((b) => decl(b, "z-index") !== null)!, "z-index"));
+    expect(z(".flow-review")).toBeGreaterThan(z(".flow-panel"));
   });
 });
 
-
-describe("a loop's own chrome outranks what the loop holds (FLO-FR-38)", () => {
-  // Members are absolutely-placed SIBLINGS of the loop, later in the viewport,
-  // so paint order alone puts them over the container's header — and a member
-  // dropped near the top of a loop takes every press meant for the loop's
-  // picker, its remove affordances, and its click-throughs. Found in a browser;
-  // invisible to every rendering test, since jsdom applies no stylesheet and
-  // hit-testing in it does not depend on one.
-  it("declares a stacking order above every node and every edge label", () => {
+describe("an edge takes a press on its stroke and nowhere else (FLO-FR-CEVI)", () => {
+  // The edge layer is one SVG over the whole viewport. If it took pointer
+  // events, it would take every press meant for the canvas behind it; if its
+  // hit paths did not, an edge could be selected only from its handle.
+  it("passes pointers through the layer and takes them on the hit stroke", () => {
     const css = sheet("kit.css");
-    const chrome = blocksFor(css, ".flow-loop__head").filter(
-      (b) => decl(b, "z-index") !== null,
-    );
-    expect(chrome).toHaveLength(1);
-    const z = Number(decl(chrome[0], "z-index"));
-    expect(z).toBeGreaterThan(0);
-    // A z-index on a statically-positioned box does nothing at all.
-    expect(decl(chrome[0], "position")).toBe("relative");
-
-    // The reference column shares the rule, so it cannot drift below the header
-    // it hangs from.
-    const refs = blocksFor(css, ".flow-loop__refs").filter(
-      (b) => decl(b, "z-index") !== null,
-    );
-    expect(refs).toHaveLength(1);
-    expect(Number(decl(refs[0], "z-index"))).toBe(z);
-
-    // Derived rather than fixed: a layer added to a node state or to the edge
-    // labels later has to be answered here rather than silently winning.
-    for (const other of [
-      ...layersOf(css, /^\.flow-node\b/),
-      ...layersOf(css, /^\.flow-edge-label\b/),
-    ]) {
-      expect(z).toBeGreaterThan(other);
-    }
+    expect(decl(blocksFor(css, ".flow-edges")[0], "pointer-events")).toBe("none");
+    expect(decl(blocksFor(css, ".flow-edge-hit")[0], "pointer-events")).toBe("stroke");
   });
 
-  // Raising the column put a box over the members; the box has to be no bigger
-  // than what it draws, or it takes presses aimed at everything showing through
-  // it — the members underneath, and the edge labels of a graph drawn inside the
-  // loop. Both were measured in a browser after the stacking order landed.
+  // FLO-FR-48: the type is in the shape. A relates edge is dashed, and the
+  // provisional edge of a drag is dashed so it does not read as an edge.
+  it("draws a relates edge and a provisional edge dashed", () => {
+    const css = sheet("kit.css");
+    expect(decl(blocksFor(css, ".flow-edge--relates")[0], "stroke-dasharray")).not.toBeNull();
+    expect(decl(blocksFor(css, ".flow-edge--preview")[0], "stroke-dasharray")).not.toBeNull();
+    expect(decl(blocksFor(css, ".flow-edge")[0], "stroke-dasharray")).toBeNull();
+  });
+});
+
+describe("a container's own chrome leaves its members reachable (FLO-FR-38)", () => {
+  // A container's references and description sit below its header, over the
+  // top of its members' region. The column passes pointers through, so a
+  // member under it still takes a press, and each row takes its own back.
   it("raises the rows without raising the ground between them", () => {
     const css = sheet("kit.css");
-    const column = blocksFor(css, ".flow-loop__refs");
-    // Each row is as wide as its content, not as wide as the container.
-    const stretched = column.filter((b) => decl(b, "align-items") !== null);
-    expect(stretched).toHaveLength(1);
-    expect(decl(stretched[0], "align-items")).toBe("flex-start");
-    // The gaps between the rows pass pointers through…
-    const inert = column.filter((b) => decl(b, "pointer-events") === "none");
-    expect(inert).toHaveLength(1);
-    // …and each row takes its own back, or the column draws affordances that
-    // cannot be pressed at all.
-    const rows = blocksFor(css, ".flow-loop__refs > *");
+    const column = blocksFor(css, ".flow-ctr__about");
+    expect(column.some((b) => decl(b, "pointer-events") === "none")).toBe(true);
+    const rows = blocksFor(css, ".flow-ctr__about > *");
     expect(rows).toHaveLength(1);
     expect(decl(rows[0], "pointer-events")).toBe("auto");
   });
-
-  // `.flow-node__port` carries the node's `top` and is declared later in the
-  // same sheet, so a single-class rule for the loop's port is dead at equal
-  // specificity — the port renders 12px below the loop's top corner instead of
-  // at the middle of its border, which is the side an edge into a loop lands on.
-  it("places the loop's port with a rule that outranks the node's", () => {
-    const css = sheet("kit.css");
-    const loopPort = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-      .map((m) => [m[1].trim(), m[2]] as const)
-      .filter(([sel, body]) => sel.includes(".flow-loop__port") && decl(body, "top"));
-    expect(loopPort).toHaveLength(1);
-    const [selector, body] = loopPort[0];
-    expect(decl(body, "top")).toBe("50%");
-    // Two class names on one element, which beats `.flow-node__port`'s one.
-    expect(selector.match(/\.flow-loop__port/g)?.length).toBeGreaterThan(1);
-  });
 });
 
-describe("a Flow node reads as part of the drawing (FLO-flow.md Layout notes)", () => {
+describe("a Flow card reads as part of the drawing (FLO-flow.md Layout notes)", () => {
   // The whole of this is presentational: a node's surface is lighter than the
   // elevated tone a modal takes, slightly translucent, and carries the canvas's
   // own dot texture. jsdom applies no stylesheet, so a revert to
@@ -452,8 +418,8 @@ describe("a Flow node reads as part of the drawing (FLO-flow.md Layout notes)", 
     ["dark", '\\[data-theme="dark"\\]'],
   ];
 
-  it("paints the node's own tone and the canvas's dot pitch", () => {
-    const blocks = blocksFor(sheet("kit.css"), ".flow-node");
+  it("paints the card's own tone and the canvas's dot pitch", () => {
+    const blocks = blocksFor(sheet("kit.css"), ".flow-card");
     expect(blocks).toHaveLength(1);
     const node = blocks[0];
     expect(decl(node, "background-color")).toBe("var(--flow-node-bg)");
@@ -537,8 +503,8 @@ describe("a Markdown body is only ever rendered on its own surface", () => {
   // page, the document scale, which is the defect relocated rather than fixed.
   //
   // One component emits the modifier, and it composes it onto a host class its
-  // caller names: a card in a discussion, and a Flow node rendering its inline
-  // prompt (`FLO-flow.md` FLO-FR-13). So the invariant is not one fixed class —
+  // caller names: a card in a discussion, and a Flow item rendering its
+  // description (`FLO-flow.md` FLO-FR-13). So the invariant is not one fixed class —
   // it is that EVERY host handed to it declares its own `font-size`.
   it("emits the panel modifier from one component, onto a host that sizes itself", () => {
     const components = [
@@ -564,7 +530,7 @@ describe("a Markdown body is only ever rendered on its own surface", () => {
       "discussion/DiscussionMessages.tsx",
       "Comments.tsx",
       "Notes/index.tsx",
-      "Flow/nodes.tsx",
+      "Flow/items.tsx",
     ]) {
       const src = readFileSync(resolve(process.cwd(), "src/components", file), "utf8");
       for (const m of src.matchAll(/<CommentMarkdown[^>]*?className="([^"{]+)"/gs)) {

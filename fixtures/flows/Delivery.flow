@@ -1,0 +1,257 @@
+{
+  "version": 2,
+  "name": "Payments v2",
+  "description": "Card payments for the EU launch.",
+  "references": [
+    "docs/payments-hld.md"
+  ],
+  "items": [
+    {
+      "id": "m1",
+      "kind": "milestone",
+      "name": "Beta",
+      "description": "Accept **Visa** and **Mastercard**.",
+      "artifactIds": [
+        "specifications/core/PAY-payments.md"
+      ],
+      "due": "2027-03-31",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "size": {
+        "width": 1100,
+        "height": 660
+      }
+    },
+    {
+      "id": "f1",
+      "kind": "feature",
+      "name": "Card capture",
+      "parentId": "m1",
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "size": {
+        "width": 420,
+        "height": 300
+      }
+    },
+    {
+      "id": "t1",
+      "kind": "task",
+      "name": "Tokenize card numbers",
+      "parentId": "f1",
+      "draftId": "dr_7f3a",
+      "footprint": [
+        "src-tauri/src/payments/",
+        "specifications/core/PAY-payments.md"
+      ],
+      "position": {
+        "x": 20,
+        "y": 60
+      }
+    },
+    {
+      "id": "t2",
+      "kind": "task",
+      "name": "Card form",
+      "parentId": "f1",
+      "localOnly": true,
+      "position": {
+        "x": 220,
+        "y": 60
+      }
+    },
+    {
+      "id": "ep1",
+      "kind": "epic",
+      "name": "Refunds",
+      "parentId": "m1",
+      "position": {
+        "x": 460,
+        "y": 60
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      }
+    },
+    {
+      "id": "f2",
+      "kind": "feature",
+      "name": "Partial refunds",
+      "parentId": "ep1",
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "size": {
+        "width": 400,
+        "height": 220
+      }
+    },
+    {
+      "id": "t3",
+      "kind": "task",
+      "name": "Refund ledger",
+      "parentId": "f2",
+      "footprint": [
+        "src-tauri/src/payments/ledger.rs"
+      ],
+      "position": {
+        "x": 20,
+        "y": 60
+      }
+    },
+    {
+      "id": "x2",
+      "kind": "defect",
+      "name": "Refund rounds down",
+      "parentId": "ep1",
+      "position": {
+        "x": 440,
+        "y": 60
+      }
+    },
+    {
+      "id": "x1",
+      "kind": "defect",
+      "name": "Decline message is wrong",
+      "parentId": "m1",
+      "position": {
+        "x": 20,
+        "y": 420
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "t1",
+      "to": "t2",
+      "type": "blocks"
+    },
+    {
+      "id": "e2",
+      "from": "t2",
+      "to": "x1",
+      "type": "relates"
+    },
+    {
+      "id": "e3",
+      "from": "f1",
+      "to": "ep1",
+      "type": "blocks"
+    }
+  ],
+  "sync": {
+    "tracker": "github",
+    "links": [
+      {
+        "itemId": "f1",
+        "ref": {
+          "kind": "issue",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 42,
+          "url": "https://github.com/acme/payments/issues/42"
+        },
+        "base": {
+          "name": "Card capture",
+          "description": "",
+          "state": "open",
+          "type": "Feature",
+          "parent": null,
+          "milestone": 3,
+          "blockedBy": []
+        }
+      },
+      {
+        "itemId": "t1",
+        "ref": {
+          "kind": "issue",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 43,
+          "url": "https://github.com/acme/payments/issues/43"
+        },
+        "base": {
+          "name": "Tokenize card numbers",
+          "description": "",
+          "state": "open",
+          "type": null,
+          "parent": {
+            "kind": "issue",
+            "host": "github.com",
+            "owner": "acme",
+            "repo": "payments",
+            "number": 42,
+            "url": "https://github.com/acme/payments/issues/42"
+          },
+          "milestone": 3,
+          "blockedBy": []
+        }
+      },
+      {
+        "itemId": "t3",
+        "ref": {
+          "kind": "issue",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 44,
+          "url": "https://github.com/acme/payments/issues/44"
+        },
+        "base": {
+          "name": "Refund ledger",
+          "description": "",
+          "state": "closed",
+          "type": null,
+          "parent": null,
+          "milestone": null,
+          "blockedBy": [
+            {
+              "kind": "issue",
+              "host": "github.com",
+              "owner": "acme",
+              "repo": "payments",
+              "number": 43,
+              "url": "https://github.com/acme/payments/issues/43"
+            }
+          ]
+        }
+      },
+      {
+        "itemId": "m1",
+        "ref": {
+          "kind": "milestone",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 3,
+          "url": "https://github.com/acme/payments/milestone/3"
+        },
+        "base": {
+          "name": "Beta",
+          "description": "",
+          "state": "open",
+          "due": "2027-03-31"
+        }
+      }
+    ],
+    "ignored": [
+      {
+        "kind": "issue",
+        "host": "github.com",
+        "owner": "acme",
+        "repo": "payments",
+        "number": 47,
+        "url": "https://github.com/acme/payments/issues/47"
+      }
+    ]
+  }
+}

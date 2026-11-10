@@ -56,7 +56,8 @@ pub(super) enum Write {
     Parent {
         item_id: String,
         number: u64,
-        current: Option<u64>,
+        /// The parent the tracker reported, in this or another repository.
+        current: Option<super::adapter::IssueKey>,
         parent: Option<crate::flow_validation::model::TrackerRef>,
     },
     Milestone {
@@ -162,10 +163,12 @@ pub fn run(
     sync.removed_pass();
     sync.pending = sync.pending_links();
     sync.pull_all().map_err(FlowSyncError::of)?;
-    sync.merge_pass();
+    // FTS-FR-XITX: the merge must know whether the repository offers Types
+    // at all before it compares one.
     if sync.needs_issue_types() {
         sync.issue_types = Some(sync.adapter.list_issue_types().map_err(FlowSyncError::of)?);
     }
+    sync.merge_pass();
     // A guard: the plan the merge made must still be a plan before anything
     // is written to the tracker (PST-FR-28 refuses it later otherwise).
     let report = crate::flow_validation::validate(&super::serialize::write_flow(&sync.doc));
@@ -233,7 +236,11 @@ impl Sync<'_> {
     }
 
     pub(super) fn sync_mut(&mut self) -> &mut FlowSync {
-        self.doc.sync.get_or_insert_with(|| FlowSync { tracker: "github".into(), links: vec![] })
+        self.doc.sync.get_or_insert_with(|| FlowSync {
+            tracker: "github".into(),
+            links: vec![],
+            ignored: vec![],
+        })
     }
 
     pub(super) fn link(&self, item_id: &str) -> Option<&SyncLink> {
@@ -315,16 +322,20 @@ impl Sync<'_> {
         Some(choice)
     }
 
+    /// FTS-FR-LVTU: report one issue the sync did not sync, with the URL of
+    /// its tracker item where it has one.
     pub(super) fn skip(
         &mut self,
         number: Option<u64>,
         title: &str,
+        url: Option<&str>,
         reason: &'static str,
         item_id: Option<&str>,
     ) {
         let entry = SkippedIssue {
             number,
             title: title.to_string(),
+            url: url.map(str::to_string),
             reason,
             item_id: item_id.map(str::to_string),
         };
@@ -339,17 +350,27 @@ impl Sync<'_> {
         }
     }
 
-    /// Whether a planned write or a creation names an issue Type, so the
-    /// Types the repository offers must be known (FTS-FR-XITX).
+    /// Whether the sync compares or writes an issue Type, so the Types the
+    /// repository offers must be known (FTS-FR-XITX): a linked issue that the
+    /// merge reads, or an issue that the sync can create.
     fn needs_issue_types(&self) -> bool {
-        let typed_write = self.writes.iter().any(
-            |w| matches!(w, Write::Issue { change, .. } if matches!(change.issue_type, Some(Some(_)))),
-        );
-        typed_write
+        let merged = self.links().iter().any(|l| {
+            l.reference.kind == RefKind::Issue
+                && self.repo.holds(&l.reference)
+                && self.issues.contains_key(&l.reference.number)
+                && self.item(&l.item_id).is_some()
+        });
+        merged
             || self.creation_order().iter().any(|id| {
                 self.item(id)
                     .is_some_and(|i| i.kind != crate::flow_validation::model::Kind::Milestone)
             })
+    }
+
+    /// FTS-FR-XITX: whether the repository offers no issue Type at all, so
+    /// its issues are plain issues and no `type` is written or compared.
+    pub(super) fn plain_issues(&self) -> bool {
+        self.issue_types.as_ref().is_some_and(Vec::is_empty)
     }
 
     /// The spelling the repository uses for `name`, where it offers it.

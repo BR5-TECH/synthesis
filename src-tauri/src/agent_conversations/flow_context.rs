@@ -127,8 +127,7 @@ mod tests {
     use crate::flow_overlap::overlaps;
 
     const PLAN: &str = r#"{"version":2,"name":"P","items":[
-      {"id":"d1","kind":"deliverable","name":"Pay","position":{"x":0,"y":0},"size":{"width":1,"height":1}},
-      {"id":"m1","kind":"milestone","name":"Beta","parentId":"d1","position":{"x":0,"y":0},"size":{"width":1,"height":1}},
+      {"id":"m1","kind":"milestone","name":"Beta","position":{"x":0,"y":0},"size":{"width":1,"height":1}},
       {"id":"f1","kind":"feature","name":"Capture","parentId":"m1","position":{"x":0,"y":0},"size":{"width":1,"height":1}},
       {"id":"t1","kind":"task","name":"Tokenize","parentId":"f1","footprint":["src/pay/"],"position":{"x":0,"y":0}},
       {"id":"t2","kind":"task","name":"Form","parentId":"f1","footprint":["src/pay/form.rs"],"position":{"x":0,"y":0}},

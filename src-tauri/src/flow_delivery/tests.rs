@@ -58,8 +58,7 @@ fn doc(items: Vec<Value>, edges: Value, sync: Option<Value>) -> FlowDocument {
 
 fn skeleton(leaves: Vec<Value>) -> Vec<Value> {
     let mut items = vec![
-        container("d1", "deliverable", None),
-        container("m1", "milestone", Some("d1")),
+        container("m1", "milestone", None),
         container("f1", "feature", Some("m1")),
         container("f2", "feature", Some("m1")),
     ];
@@ -192,8 +191,8 @@ fn container_states_and_counts() {
     assert_eq!((counts.done, counts.dropped, counts.not_started), (1, 2, 0));
     assert!(state_of(&s, "t1").leaf_counts.is_none());
 
-    let empty = doc(vec![container("d1", "deliverable", None)], json!([]), None);
-    assert_eq!(state_of(&delivery_state(&empty, &[]), "d1").state, ItemState::NotStarted);
+    let empty = doc(vec![container("m9", "milestone", None)], json!([]), None);
+    assert_eq!(state_of(&delivery_state(&empty, &[]), "m9").state, ItemState::NotStarted);
 
     let mixed =
         doc(skeleton(vec![task("t1", "f1", None), task("t2", "f1", Some("a"))]), json!([]), None);
@@ -251,7 +250,7 @@ fn pure_and_in_document_order() {
     let a = delivery_state(&d, &[]);
     assert_eq!(a, delivery_state(&d, &[]));
     let ids: Vec<_> = a.items.iter().map(|i| i.item_id.as_str()).collect();
-    assert_eq!(ids, vec!["d1", "m1", "f1", "f2", "t1"]);
+    assert_eq!(ids, vec!["m1", "f1", "f2", "t1"]);
 }
 
 /// FDL-FR-BDOD, FDL-FR-JLXF: the items a draft is worked for, across Flows in

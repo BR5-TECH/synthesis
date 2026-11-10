@@ -1,5 +1,6 @@
-//! FTS-FR-EGJL, FTS-FR-CJVS, FTS-FR-LKZO, FTS-FR-WANV: sub-issues that come
-//! into the Flow, and links of another repository.
+//! FTS-FR-EGJL, FTS-FR-CJVS, FTS-FR-LKZO, FTS-FR-WANV, FTS-FR-YHVD:
+//! sub-issues that come into the Flow, the ones it ignores, and links of
+//! another repository.
 
 use super::*;
 use crate::flow_sync::values::{default_size, CARD_H, CONTAINER_PADDING};
@@ -40,19 +41,46 @@ fn a_closed_sub_issue_is_pulled() {
     assert_eq!(link_of(&out.doc, &pulled.id).base.state, "closed");
 }
 
-/// FTS-FR-EGJL / FTS-FR-CJVS: a sub-issue of the deliverable goes into the
-/// linked milestone item of its milestone, which is under the deliverable,
-/// and takes the first kind of its Type that the milestone permits.
+/// FTS-FR-EGJL / FTS-FR-CJVS: a sub-issue of the epic goes into the epic's
+/// item, since a milestone is never under a parent item, and takes the kind
+/// of its Type.
 #[test]
-fn a_sub_issue_goes_into_its_milestone_item_with_the_first_kind_that_fits() {
+fn a_sub_issue_of_an_epic_goes_into_the_epic() {
     let (tracker, d) = plan();
-    let tracker = tracker.with_issue(child(9, "Wallets", "Feature", Some(1), Some(5)));
+    let tracker = tracker
+        .with_issue(child(9, "Wallets", "Feature", Some(1), Some(5)))
+        .with_issue(child(10, "Wrong total", "Bug", Some(1), Some(5)));
     let out = sync(&tracker, d);
+    let feature = out.doc.items.iter().find(|i| i.name == "Wallets").expect("pulled");
+    assert_eq!((feature.kind, feature.parent_id.as_deref()), (Kind::Feature, Some("ep1")));
+    let defect = out.doc.items.iter().find(|i| i.name == "Wrong total").expect("pulled");
+    assert_eq!((defect.kind, defect.parent_id.as_deref()), (Kind::Defect, Some("ep1")));
+    assert_eq!(
+        link_of(&out.doc, &feature.id).base.parent.clone().flatten().map(|p| p.number),
+        Some(1)
+    );
+    assert!(out.result.skipped.is_empty(), "{:?}", out.result.skipped);
+    assert_valid(&out.doc);
+}
+
+/// FTS-FR-CJVS: a pulled item takes the first kind, in the order epic,
+/// feature, task, defect, whose Type matches and that its container
+/// permits: with one Type for an epic and a feature, a sub-issue of an epic
+/// is a feature, since an epic does not sit in an epic.
+#[test]
+fn a_pulled_item_takes_the_first_kind_its_container_permits() {
+    let (tracker, d) = plan();
+    tracker.state.borrow_mut().types.push("Work".into());
+    let tracker = tracker.with_issue(child(9, "Wallets", "Work", Some(1), Some(5)));
+    let settings =
+        FlowTrackerSettings { epic_type: "Work".into(), feature_type: "Work".into(), ..settings() };
+    let out = run(
+        &tracker,
+        SyncRequest { flow_id: FLOW_ID, doc: d, settings: &settings, resolutions: &[] },
+    )
+    .unwrap();
     let pulled = out.doc.items.iter().find(|i| i.name == "Wallets").expect("pulled");
-    // `deliverable` does not sit in a milestone; `epic` does, and its Type is
-    // `Feature` by default.
-    assert_eq!((pulled.kind, pulled.parent_id.as_deref()), (Kind::Epic, Some("m1")));
-    assert_eq!(pulled.id, "ep1");
+    assert_eq!((pulled.kind, pulled.parent_id.as_deref()), (Kind::Feature, Some("ep1")));
     assert_valid(&out.doc);
 }
 
@@ -65,7 +93,7 @@ fn a_milestone_outside_the_parent_leaves_the_item_in_the_parent() {
     let tracker = tracker
         .with_issue(child(9, "Card form", "Task", Some(2), Some(7)))
         .with_milestone(milestone(7, "GA"));
-    d.items.push(serde_json::from_value(item("m2", "milestone", "GA", Some("d1"))).unwrap());
+    d.items.push(serde_json::from_value(item("m2", "milestone", "GA", None)).unwrap());
     d.sync.as_mut().unwrap().links.push(
         serde_json::from_value(link("m2", "milestone", 7, milestone_base("GA", None))).unwrap(),
     );
@@ -99,12 +127,14 @@ fn a_sub_issue_no_kind_fits_is_skipped() {
             SkippedIssue {
                 number: Some(9),
                 title: "Load test".into(),
+                url: Some(url_of(9)),
                 reason: SKIP_NO_KIND_FITS,
                 item_id: None
             },
             SkippedIssue {
                 number: Some(10),
                 title: "Payouts".into(),
+                url: Some(url_of(10)),
                 reason: SKIP_NO_KIND_FITS,
                 item_id: None
             },
@@ -136,19 +166,22 @@ fn a_pulled_container_takes_a_default_size_and_brings_its_sub_issues() {
     let (tracker, d) = plan();
     let tracker = tracker
         .with_issue(child(9, "Wallets", "Feature", Some(1), Some(5)))
-        .with_issue(child(10, "Apple Pay", "Feature", Some(9), Some(5)))
-        .with_issue(child(11, "Token vault", "Task", Some(10), Some(5)));
+        .with_issue(child(10, "Apple Pay", "Task", Some(9), Some(5)))
+        .with_issue(child(11, "Token vault", "Bug", Some(9), Some(5)));
     let out = sync(&tracker, d);
-    let epic = out.doc.items.iter().find(|i| i.name == "Wallets").unwrap();
-    assert_eq!(epic.kind, Kind::Epic);
-    assert_eq!(epic.size, default_size(Kind::Epic));
-    let feature = out.doc.items.iter().find(|i| i.name == "Apple Pay").unwrap();
-    assert_eq!(
-        (feature.kind, feature.parent_id.as_deref()),
-        (Kind::Feature, Some(epic.id.as_str()))
-    );
-    let task = out.doc.items.iter().find(|i| i.name == "Token vault").unwrap();
+    let feature = out.doc.items.iter().find(|i| i.name == "Wallets").unwrap();
+    assert_eq!((feature.kind, feature.parent_id.as_deref()), (Kind::Feature, Some("ep1")));
+    // The default size, grown to hold its two members (FLO-FR-44).
+    let (size, default) = (feature.size.unwrap(), default_size(Kind::Feature).unwrap());
+    assert_eq!(size.width, default.width);
+    assert!(size.height > default.height, "{size:?}");
+    let task = out.doc.items.iter().find(|i| i.name == "Apple Pay").unwrap();
     assert_eq!((task.kind, task.parent_id.as_deref()), (Kind::Task, Some(feature.id.as_str())));
+    let defect = out.doc.items.iter().find(|i| i.name == "Token vault").unwrap();
+    assert_eq!(
+        (defect.kind, defect.parent_id.as_deref()),
+        (Kind::Defect, Some(feature.id.as_str()))
+    );
     assert_eq!(out.result.added, 3);
     assert!(tracker.writes().is_empty());
     assert_valid(&out.doc);
@@ -172,6 +205,7 @@ fn a_link_of_another_repository_is_skipped() {
     let t1 = d.sync.as_mut().unwrap().links.iter_mut().find(|l| l.item_id == "t1").unwrap();
     t1.reference.repo = "other".into();
     t1.reference.number = 77;
+    t1.reference.url = format!("https://{HOST}/{OWNER}/other/issues/77");
     d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Changed".into();
     // Issue 3 of this repository is not the linked issue any more.
     tracker.state.borrow_mut().issues.remove(&3);
@@ -183,12 +217,36 @@ fn a_link_of_another_repository_is_skipped() {
         vec![SkippedIssue {
             number: Some(77),
             title: "Tokenize".into(),
+            url: Some(format!("https://{HOST}/{OWNER}/other/issues/77")),
             reason: SKIP_FOREIGN_REPOSITORY,
-            item_id: None,
+            item_id: Some("t1".into()),
         }]
     );
     let read = tracker.calls().into_iter().find(|c| c.starts_with("read_issues")).unwrap();
     assert_eq!(read, "read_issues 2", "the foreign link is not read");
+}
+
+/// FTS-FR-WANV: a link to the same owner and repository on another host
+/// names another repository, so it is not synced and is skipped.
+#[test]
+fn the_same_repository_on_another_host_is_foreign() {
+    let (tracker, mut d) = plan();
+    let t1 = d.sync.as_mut().unwrap().links.iter_mut().find(|l| l.item_id == "t1").unwrap();
+    t1.reference.host = "github.example.com".into();
+    t1.reference.url = format!("https://github.example.com/{OWNER}/{REPO}/issues/3");
+    d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Changed".into();
+    // Issue 3 of this host is not the linked issue.
+    tracker.state.borrow_mut().issues.remove(&3);
+    let out = sync(&tracker, d);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(out.result.conflicts.is_empty(), "{:?}", out.result.conflicts);
+    assert_eq!(out.result.skipped.len(), 1);
+    assert_eq!(
+        (out.result.skipped[0].reason, out.result.skipped[0].item_id.as_deref()),
+        (SKIP_FOREIGN_REPOSITORY, Some("t1"))
+    );
+    let read = tracker.calls().into_iter().find(|c| c.starts_with("read_issues")).unwrap();
+    assert_eq!(read, "read_issues 2", "the link of the other host is not read");
 }
 
 /// FTS-FR-WANV / FTS-FR-EGJL: a sub-issue in another repository is not
@@ -203,4 +261,25 @@ fn a_sub_issue_of_another_repository_is_skipped() {
     assert_eq!(out.doc.items.len(), d.items.len());
     assert_eq!(out.result.skipped[0].reason, SKIP_FOREIGN_REPOSITORY);
     assert_eq!(out.result.skipped[0].number, Some(12));
+    assert_eq!(out.result.skipped[0].url.as_deref(), Some(url_of(12).as_str()));
+}
+
+/// FTS-FR-EGJL / FTS-FR-YHVD: a sub-issue that `sync.ignored` holds is not
+/// pulled, nor are its own sub-issues, and it is not reported.
+#[test]
+fn an_ignored_sub_issue_is_not_pulled() {
+    let (tracker, d) = plan();
+    let tracker = tracker
+        .with_issue(child(9, "Card form", "Task", Some(2), Some(5)))
+        .with_issue(child(12, "Wallets", "Feature", Some(1), Some(5)))
+        .with_issue(child(13, "Apple Pay", "Task", Some(12), Some(5)));
+    let mut d = d;
+    let ignored = |n: u64| serde_json::from_value(ref_json("issue", n)).unwrap();
+    d.sync.as_mut().unwrap().ignored = vec![ignored(9), ignored(12)];
+    let out = sync(&tracker, d.clone());
+    assert_eq!(out.doc.items.len(), d.items.len());
+    assert_eq!(out.result.added, 0);
+    assert!(out.result.skipped.is_empty(), "{:?}", out.result.skipped);
+    assert!(!out.doc_changed);
+    assert!(tracker.writes().is_empty());
 }

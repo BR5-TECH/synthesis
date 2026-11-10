@@ -18,7 +18,10 @@ fn an_unlinked_item_gets_an_issue() {
     t9["description"] = json!("Use the SDK.");
     add(&mut d, t9);
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["create_issue 100", "set_parent 100"]);
+    assert_eq!(
+        tracker.writes(),
+        vec!["create_issue 100 type=Task milestone=5", "set_parent 100 none->2"]
+    );
     let created = tracker.issue(100);
     assert_eq!(created.title, "Card form");
     assert_eq!(created.body, "Use the SDK.");
@@ -52,11 +55,16 @@ fn items_are_created_parents_first() {
     // The task comes first in the document; its feature is still created
     // first.
     add(&mut d, item("t9", "task", "Card form", Some("f9")));
-    add(&mut d, item("f9", "feature", "Checkout", Some("m1")));
+    add(&mut d, item("f9", "feature", "Checkout", Some("ep1")));
     let out = sync(&tracker, d);
     assert_eq!(
         tracker.writes(),
-        vec!["create_issue 100", "set_parent 100", "create_issue 101", "set_parent 101"]
+        vec![
+            "create_issue 100 type=Feature milestone=5",
+            "set_parent 100 none->1",
+            "create_issue 101 type=Task milestone=5",
+            "set_parent 101 none->100",
+        ]
     );
     assert_eq!(link_of(&out.doc, "f9").reference.number, 100);
     assert_eq!(tracker.issue(101).parent.map(|k| k.number), Some(100));
@@ -69,7 +77,7 @@ fn items_are_created_parents_first() {
 #[test]
 fn a_milestone_item_gets_a_milestone() {
     let (tracker, mut d) = plan();
-    let mut m9 = item("m9", "milestone", "GA", Some("d1"));
+    let mut m9 = item("m9", "milestone", "GA", None);
     m9["due"] = json!("2027-09-30");
     add(&mut d, m9);
     let out = sync(&tracker, d);
@@ -140,6 +148,7 @@ fn an_item_whose_type_is_not_offered_is_skipped() {
         vec![SkippedIssue {
             number: None,
             title: "Wrong decline text".into(),
+            url: None,
             reason: SKIP_TYPE_UNAVAILABLE,
             item_id: Some("x9".into()),
         }]
@@ -159,6 +168,8 @@ fn a_type_change_the_repository_does_not_offer_is_skipped() {
     .unwrap();
     assert!(tracker.writes().is_empty());
     assert_eq!(out.result.skipped[0].number, Some(3));
+    assert_eq!(out.result.skipped[0].url.as_deref(), Some(url_of(3).as_str()));
+    assert_eq!(out.result.skipped[0].item_id.as_deref(), Some("t1"));
     assert_eq!(out.result.skipped[0].reason, SKIP_TYPE_UNAVAILABLE);
     assert_eq!(link_of(&out.doc, "t1").base.r#type, Some(Some("Task".into())));
 }
@@ -251,24 +262,35 @@ fn a_flow_without_a_sync_section_is_refused() {
     assert!(tracker.calls().is_empty());
 }
 
+/// A plan of `count` epics in sync, each with its own issue, in milestone
+/// `m0` (milestone 1000).
+fn many_epics(count: u64) -> (FakeTracker, FlowDocument) {
+    let tracker = FakeTracker::new().with_milestone(milestone(1000, "Beta"));
+    let mut items = vec![item("m0", "milestone", "Beta", None)];
+    let mut links = vec![link("m0", "milestone", 1000, milestone_base("Beta", None))];
+    for n in 1..=count {
+        let id = format!("ep{n}");
+        let name = format!("Plan {n}");
+        items.push(item(&id, "epic", &name, Some("m0")));
+        links.push(link(&id, "issue", n, issue_base(&name, Some("Epic"), None, Some(1000), &[])));
+        tracker.state.borrow_mut().issues.insert(n, child(n, &name, "Epic", None, Some(1000)));
+    }
+    (tracker, doc(items, vec![], links))
+}
+
 /// FTS NFR: the reads are made in batches, so many linked items need few
-/// requests.
+/// requests: 121 issues in batches of 50.
 #[test]
 fn linked_items_are_read_in_batches() {
-    let tracker = FakeTracker::new().with_issue(issue(1, "Card payments", Some("Feature")));
-    let mut items = vec![item("d1", "deliverable", "Card payments", None)];
-    let mut links =
-        vec![link("d1", "issue", 1, issue_base("Card payments", Some("Feature"), None, None, &[]))];
-    for n in 0..120u64 {
-        let id = format!("d{}", n + 2);
-        let name = format!("Plan {n}");
-        items.push(item(&id, "deliverable", &name, None));
-        links.push(link(&id, "issue", n + 2, issue_base(&name, Some("Feature"), None, None, &[])));
-        tracker.state.borrow_mut().issues.insert(n + 2, issue(n + 2, &name, Some("Feature")));
-    }
-    let out = sync(&tracker, doc(items, vec![], links));
-    let reads = tracker.calls().iter().filter(|c| c.starts_with("read_issues")).count();
-    assert_eq!(reads, 3, "121 issues in batches of 50");
+    let (tracker, d) = many_epics(121);
+    let out = sync(&tracker, d);
+    let reads: Vec<String> =
+        tracker.calls().into_iter().filter(|c| c.starts_with("read_issues")).collect();
+    assert_eq!(reads, vec!["read_issues 50", "read_issues 50", "read_issues 21"]);
+    let milestones: Vec<String> =
+        tracker.calls().into_iter().filter(|c| c.starts_with("read_milestones")).collect();
+    assert_eq!(milestones, vec!["read_milestones 1"]);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
     assert!(!out.doc_changed);
 }
 
@@ -306,37 +328,38 @@ fn a_new_issue_takes_the_repository_spelling_of_its_type() {
     assert_eq!(link_of(&out.doc, "t9").base.r#type, Some(Some("Task".into())));
 }
 
-/// FTS-FR-XITX: the Types are read once, and only where a write or a
-/// creation names one.
+/// FTS-FR-XITX: the Types are read once per sync where the sync merges or
+/// creates an issue, and not at all for a plan of milestones alone.
 #[test]
-fn the_types_are_read_only_when_a_write_names_one() {
+fn the_types_are_read_once_where_an_issue_is_merged_or_created() {
+    let types = |tracker: &FakeTracker| {
+        tracker.calls().iter().filter(|c| c.starts_with("list_issue_types")).count()
+    };
     let (tracker, mut d) = plan();
     d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Tokenize cards".into();
-    add(&mut d, item("m9", "milestone", "GA", Some("d1")));
-    sync(&tracker, d);
-    assert!(!tracker.calls().iter().any(|c| c.starts_with("list_issue_types")));
-
-    let (tracker, mut d) = plan();
     add(&mut d, item("t8", "task", "One", Some("f1")));
     add(&mut d, item("t9", "task", "Two", Some("f1")));
     sync(&tracker, d);
-    assert_eq!(tracker.calls().iter().filter(|c| c.starts_with("list_issue_types")).count(), 1);
+    assert_eq!(types(&tracker), 1);
+
+    let tracker = FakeTracker::new().with_milestone(milestone(5, "Beta"));
+    let mut d = doc(
+        vec![item("m1", "milestone", "Beta", None)],
+        vec![],
+        vec![link("m1", "milestone", 5, milestone_base("Beta", None))],
+    );
+    add(&mut d, item("m9", "milestone", "GA", None));
+    sync(&tracker, d);
+    assert_eq!(types(&tracker), 0);
+    assert_eq!(tracker.writes(), vec!["create_milestone 100"]);
 }
 
-/// FTS NFR: the sub-issues are read in batches too.
+/// FTS NFR: the sub-issues are read in batches too: 25 parents in batches
+/// of 10.
 #[test]
 fn sub_issues_are_read_in_batches() {
-    let tracker = FakeTracker::new();
-    let mut items = Vec::new();
-    let mut links = Vec::new();
-    for n in 1..=25u64 {
-        let id = format!("d{n}");
-        let name = format!("Plan {n}");
-        items.push(item(&id, "deliverable", &name, None));
-        links.push(link(&id, "issue", n, issue_base(&name, Some("Feature"), None, None, &[])));
-        tracker.state.borrow_mut().issues.insert(n, issue(n, &name, Some("Feature")));
-    }
-    sync(&tracker, doc(items, vec![], links));
+    let (tracker, d) = many_epics(25);
+    sync(&tracker, d);
     let reads: Vec<String> =
         tracker.calls().into_iter().filter(|c| c.starts_with("read_sub_issues")).collect();
     assert_eq!(reads, vec!["read_sub_issues 10", "read_sub_issues 10", "read_sub_issues 5"]);
@@ -348,13 +371,70 @@ fn sub_issues_are_read_in_batches() {
 fn a_new_milestone_is_created_before_its_members() {
     let (tracker, mut d) = plan();
     add(&mut d, item("x9", "defect", "Decline text", Some("m9")));
-    add(&mut d, item("m9", "milestone", "GA", Some("d1")));
+    add(&mut d, item("m9", "milestone", "GA", None));
+    let out = sync(&tracker, d);
+    // A defect directly in a milestone has no parent issue (FTS-FR-HLVJ).
+    assert_eq!(
+        tracker.writes(),
+        vec!["create_milestone 100", "create_issue 101 type=Bug milestone=100"]
+    );
+    assert_eq!(tracker.issue(101).milestone, Some(100));
+    assert_eq!(tracker.issue(101).parent, None);
+    assert_eq!(link_of(&out.doc, "x9").base.parent, Some(None));
+    assert_eq!(out.created_urls, vec![milestone_url(100), url_of(101)]);
+}
+
+/// FTS-FR-XITX: a repository that offers no issue Type at all gets plain
+/// issues. A new issue has no Type and a base `type` of `null`, a linked
+/// issue's `type` is neither written nor compared, and the next sync finds
+/// nothing to do.
+#[test]
+fn a_repository_without_types_gets_plain_issues() {
+    let (tracker, mut d) = plan();
+    tracker.state.borrow_mut().types.clear();
+    for n in 1..=3 {
+        tracker.edit(n, |i| i.issue_type = None);
+    }
+    add(&mut d, item("t9", "task", "Card form", Some("f1")));
     let out = sync(&tracker, d);
     assert_eq!(
         tracker.writes(),
-        vec!["create_milestone 100", "create_issue 101", "set_parent 101"]
+        vec!["create_issue 100 type=none milestone=5", "set_parent 100 none->2"]
     );
-    assert_eq!(tracker.issue(101).milestone, Some(100));
-    assert_eq!(tracker.issue(101).parent.map(|k| k.number), Some(1));
-    assert_eq!(out.created_urls, vec![milestone_url(100), url_of(101)]);
+    assert_eq!(tracker.issue(100).issue_type, None);
+    assert_eq!(link_of(&out.doc, "t9").base.r#type, Some(None));
+    // The bases of the linked issues keep the Type they had.
+    assert_eq!(link_of(&out.doc, "t1").base.r#type, Some(Some("Task".into())));
+    assert!(out.result.conflicts.is_empty(), "{:?}", out.result.conflicts);
+    assert!(out.result.skipped.is_empty(), "{:?}", out.result.skipped);
+    assert_eq!(find(&out.doc, "t1").kind, crate::flow_validation::model::Kind::Task);
+    assert_valid(&out.doc);
+    tracker.clear_calls();
+    let again = sync(&tracker, out.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(again.result.conflicts.is_empty());
+    assert!(!again.doc_changed);
+}
+
+/// FTS-FR-LTMW: a read of the milestones, of the sub-issues, or of the
+/// Types that fails returns its code, and no write is made.
+#[test]
+fn a_failed_read_of_any_kind_returns_its_code_and_writes_nothing() {
+    for operation in ["read_milestones", "read_sub_issues", "list_issue_types"] {
+        let (tracker, mut d) = plan();
+        let tracker = tracker.failing(operation, 0);
+        d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Tokenize cards".into();
+        add(&mut d, item("t9", "task", "Card form", Some("f1")));
+        let settings = settings();
+        let error = run(
+            &tracker,
+            SyncRequest { flow_id: FLOW_ID, doc: d, settings: &settings, resolutions: &[] },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ERR_GITHUB_UNREACHABLE, "{operation}");
+        assert!(error.created_urls.is_empty(), "{operation}");
+        let writes: Vec<String> =
+            tracker.writes().into_iter().filter(|w| !w.contains("FAILED")).collect();
+        assert!(writes.is_empty(), "{operation}: {writes:?}");
+    }
 }

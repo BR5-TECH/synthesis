@@ -18,6 +18,8 @@ use crate::project_settings::FlowTrackerSettings;
 mod conflicts;
 mod create;
 mod edges_of_removal;
+mod flow_write;
+mod github;
 mod links;
 mod merge;
 mod pull;
@@ -40,7 +42,8 @@ pub struct FakeState {
     pub pull_requests: Vec<u64>,
     pub types: Vec<String>,
     pub next_number: u64,
-    /// Every call, in the order it was made: `operation subject`.
+    /// Every call, in the order it was made: `operation subject`, and for a
+    /// write the arguments it was made with (see [`FakeTracker::call`]).
     pub calls: Vec<String>,
     /// The operation that fails, and after how many successful calls of it.
     pub fail: Option<(String, usize)>,
@@ -108,7 +111,7 @@ impl FakeTracker {
     pub fn new() -> Self {
         Self {
             state: RefCell::new(FakeState {
-                types: vec!["Feature".into(), "Task".into(), "Bug".into()],
+                types: vec!["Epic".into(), "Feature".into(), "Task".into(), "Bug".into()],
                 next_number: 100,
                 ..FakeState::default()
             }),
@@ -154,21 +157,53 @@ impl FakeTracker {
             .collect()
     }
 
-    fn call(&self, operation: &str, subject: u64) -> Result<(), String> {
+    /// Record one call as `operation subject`, or `operation subject args`
+    /// where `args` is not empty, and fail it where [`Self::failing`] asks.
+    /// The arguments of each write:
+    /// - `create_issue 100 type=Task milestone=5`
+    /// - `update_issue 3 title,body,type` (the fields it writes)
+    /// - `set_parent 3 2->6` (the current parent to the new one; `none` for
+    ///   no parent, `owner/repo#9` for a parent in another repository)
+    /// - `set_milestone 6 5->7` (the milestone it had to the new one)
+    /// - `add_blocked_by 3 4` and `remove_blocked_by 3 4` (the blocker)
+    /// - `create_milestone 100` and `update_milestone 5 title,description,due`
+    fn call(&self, operation: &str, subject: u64, args: &str) -> Result<(), String> {
         let mut state = self.state.borrow_mut();
+        let entry = if args.is_empty() {
+            format!("{operation} {subject}")
+        } else {
+            format!("{operation} {subject} {args}")
+        };
         if let Some((failing, after)) = state.fail.clone() {
             if failing == operation {
                 let made =
                     state.calls.iter().filter(|c| c.split(' ').next() == Some(operation)).count();
                 if made >= after {
-                    state.calls.push(format!("{operation} {subject} FAILED"));
+                    state.calls.push(format!("{entry} FAILED"));
                     return Err(ERR_GITHUB_UNREACHABLE.into());
                 }
             }
         }
-        state.calls.push(format!("{operation} {subject}"));
+        state.calls.push(entry);
         Ok(())
     }
+}
+
+fn opt_number(n: Option<u64>) -> String {
+    n.map_or_else(|| "none".to_string(), |n| n.to_string())
+}
+
+/// A parent as [`FakeTracker::call`] records it.
+fn parent_text(k: Option<&IssueKey>) -> String {
+    match k {
+        None => "none".into(),
+        Some(k) if k.owner == OWNER && k.repo == REPO => k.number.to_string(),
+        Some(k) => format!("{}/{}#{}", k.owner, k.repo, k.number),
+    }
+}
+
+fn fields_text(fields: &[(&str, bool)]) -> String {
+    fields.iter().filter(|(_, on)| *on).map(|(name, _)| *name).collect::<Vec<_>>().join(",")
 }
 
 impl TrackerAdapter for FakeTracker {
@@ -177,7 +212,7 @@ impl TrackerAdapter for FakeTracker {
     }
 
     fn read_issues(&self, numbers: &[u64]) -> Result<Vec<(u64, Option<TrackerIssue>)>, String> {
-        self.call("read_issues", numbers.len() as u64)?;
+        self.call("read_issues", numbers.len() as u64, "")?;
         let state = self.state.borrow();
         Ok(numbers
             .iter()
@@ -196,13 +231,13 @@ impl TrackerAdapter for FakeTracker {
         &self,
         numbers: &[u64],
     ) -> Result<Vec<(u64, Option<TrackerMilestone>)>, String> {
-        self.call("read_milestones", numbers.len() as u64)?;
+        self.call("read_milestones", numbers.len() as u64, "")?;
         let state = self.state.borrow();
         Ok(numbers.iter().map(|n| (*n, state.milestones.get(n).cloned())).collect())
     }
 
     fn read_sub_issues(&self, parents: &[u64]) -> Result<Vec<(u64, Vec<TrackerIssue>)>, String> {
-        self.call("read_sub_issues", parents.len() as u64)?;
+        self.call("read_sub_issues", parents.len() as u64, "")?;
         let state = self.state.borrow();
         Ok(parents
             .iter()
@@ -223,7 +258,12 @@ impl TrackerAdapter for FakeTracker {
 
     fn create_issue(&self, new: &NewIssue) -> Result<Created, String> {
         let number = self.state.borrow().next_number;
-        self.call("create_issue", number)?;
+        let args = format!(
+            "type={} milestone={}",
+            new.issue_type.as_deref().unwrap_or("none"),
+            opt_number(new.milestone)
+        );
+        self.call("create_issue", number, &args)?;
         let mut state = self.state.borrow_mut();
         state.next_number += 1;
         let mut i = issue(number, &new.title, new.issue_type.as_deref());
@@ -234,7 +274,12 @@ impl TrackerAdapter for FakeTracker {
     }
 
     fn update_issue(&self, number: u64, change: &IssueChange) -> Result<(), String> {
-        self.call("update_issue", number)?;
+        let args = fields_text(&[
+            ("title", change.title.is_some()),
+            ("body", change.body.is_some()),
+            ("type", change.issue_type.is_some()),
+        ]);
+        self.call("update_issue", number, &args)?;
         let mut state = self.state.borrow_mut();
         let i = state.issues.get_mut(&number).ok_or(ERR_GITHUB_UNREACHABLE)?;
         if let Some(t) = &change.title {
@@ -252,10 +297,11 @@ impl TrackerAdapter for FakeTracker {
     fn set_parent(
         &self,
         number: u64,
-        _current: Option<u64>,
+        current: Option<&IssueKey>,
         parent: Option<u64>,
     ) -> Result<(), String> {
-        self.call("set_parent", number)?;
+        let args = format!("{}->{}", parent_text(current), opt_number(parent));
+        self.call("set_parent", number, &args)?;
         let mut state = self.state.borrow_mut();
         let i = state.issues.get_mut(&number).ok_or(ERR_GITHUB_UNREACHABLE)?;
         i.parent = parent.map(key);
@@ -263,21 +309,26 @@ impl TrackerAdapter for FakeTracker {
     }
 
     fn set_milestone(&self, number: u64, milestone: Option<u64>) -> Result<(), String> {
-        self.call("set_milestone", number)?;
+        let had = self.state.borrow().issues.get(&number).and_then(|i| i.milestone);
+        self.call(
+            "set_milestone",
+            number,
+            &format!("{}->{}", opt_number(had), opt_number(milestone)),
+        )?;
         let mut state = self.state.borrow_mut();
         state.issues.get_mut(&number).ok_or(ERR_GITHUB_UNREACHABLE)?.milestone = milestone;
         Ok(())
     }
 
     fn add_blocked_by(&self, number: u64, blocker: u64) -> Result<(), String> {
-        self.call("add_blocked_by", number)?;
+        self.call("add_blocked_by", number, &blocker.to_string())?;
         let mut state = self.state.borrow_mut();
         state.issues.get_mut(&number).ok_or(ERR_GITHUB_UNREACHABLE)?.blocked_by.push(key(blocker));
         Ok(())
     }
 
     fn remove_blocked_by(&self, number: u64, blocker: u64) -> Result<(), String> {
-        self.call("remove_blocked_by", number)?;
+        self.call("remove_blocked_by", number, &blocker.to_string())?;
         let mut state = self.state.borrow_mut();
         let i = state.issues.get_mut(&number).ok_or(ERR_GITHUB_UNREACHABLE)?;
         i.blocked_by.retain(|k| k.number != blocker);
@@ -286,7 +337,7 @@ impl TrackerAdapter for FakeTracker {
 
     fn create_milestone(&self, new: &NewMilestone) -> Result<Created, String> {
         let number = self.state.borrow().next_number;
-        self.call("create_milestone", number)?;
+        self.call("create_milestone", number, "")?;
         let mut state = self.state.borrow_mut();
         state.next_number += 1;
         let mut m = milestone(number, &new.title);
@@ -297,7 +348,12 @@ impl TrackerAdapter for FakeTracker {
     }
 
     fn update_milestone(&self, number: u64, change: &MilestoneChange) -> Result<(), String> {
-        self.call("update_milestone", number)?;
+        let args = fields_text(&[
+            ("title", change.title.is_some()),
+            ("description", change.description.is_some()),
+            ("due", change.due.is_some()),
+        ]);
+        self.call("update_milestone", number, &args)?;
         let mut state = self.state.borrow_mut();
         let m = state.milestones.get_mut(&number).ok_or(ERR_GITHUB_UNREACHABLE)?;
         if let Some(t) = &change.title {
@@ -313,7 +369,7 @@ impl TrackerAdapter for FakeTracker {
     }
 
     fn list_issue_types(&self) -> Result<Vec<String>, String> {
-        self.call("list_issue_types", 0)?;
+        self.call("list_issue_types", 0, "")?;
         Ok(self.state.borrow().types.clone())
     }
 }
@@ -373,12 +429,22 @@ pub fn blocks(id: &str, from: &str, to: &str) -> Value {
 
 /// A valid document of these items, edges, and links.
 pub fn doc(items: Vec<Value>, edges: Vec<Value>, links: Vec<Value>) -> FlowDocument {
+    doc_ignoring(items, edges, links, vec![])
+}
+
+/// [`doc`] with these `sync.ignored` references.
+pub fn doc_ignoring(
+    items: Vec<Value>,
+    edges: Vec<Value>,
+    links: Vec<Value>,
+    ignored: Vec<Value>,
+) -> FlowDocument {
     let body = json!({
         "version": 2,
         "name": "Payments",
         "items": items,
         "edges": edges,
-        "sync": { "tracker": "github", "links": links },
+        "sync": { "tracker": "github", "links": links, "ignored": ignored },
     })
     .to_string();
     match parse_valid(&body) {
@@ -430,26 +496,27 @@ pub fn choose(conflict: &SyncConflict, choice: Choice) -> ConflictResolution {
     ConflictResolution { conflict_id: conflict.id.clone(), choice }
 }
 
-/// A plan in sync with its tracker: deliverable `d1` (issue 1) holds
-/// milestone `m1` (milestone 5), which holds feature `f1` (issue 2), which
-/// holds task `t1` (issue 3).
+/// A plan in sync with its tracker: milestone `m1` (milestone 5) holds epic
+/// `ep1` (issue 1), which holds feature `f1` (issue 2), which holds task `t1`
+/// (issue 3). The epic sits directly in the milestone, so its issue has no
+/// parent (FTS-FR-HLVJ). The link of `t1` is the fourth link.
 pub fn plan() -> (FakeTracker, FlowDocument) {
     let tracker = FakeTracker::new()
-        .with_issue(issue(1, "Card payments", Some("Feature")))
+        .with_issue(child(1, "Card payments", "Epic", None, Some(5)))
         .with_issue(child(2, "Card capture", "Feature", Some(1), Some(5)))
         .with_issue(child(3, "Tokenize", "Task", Some(2), Some(5)))
         .with_milestone(milestone(5, "Beta"));
     let d = doc(
         vec![
-            item("d1", "deliverable", "Card payments", None),
-            item("m1", "milestone", "Beta", Some("d1")),
-            item("f1", "feature", "Card capture", Some("m1")),
+            item("m1", "milestone", "Beta", None),
+            item("ep1", "epic", "Card payments", Some("m1")),
+            item("f1", "feature", "Card capture", Some("ep1")),
             item("t1", "task", "Tokenize", Some("f1")),
         ],
         vec![],
         vec![
-            link("d1", "issue", 1, issue_base("Card payments", Some("Feature"), None, None, &[])),
             link("m1", "milestone", 5, milestone_base("Beta", None)),
+            link("ep1", "issue", 1, issue_base("Card payments", Some("Epic"), None, Some(5), &[])),
             link(
                 "f1",
                 "issue",

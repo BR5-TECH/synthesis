@@ -1,9 +1,9 @@
 //! `FGV-flow-graph-validation.md`: the backend authority on what a Flow document
 //! is.
 //!
-//! A Flow is the project's delivery plan: a hierarchy of deliverables,
-//! milestones, epics, features, tasks, and defects, the `blocks` and `relates`
-//! edges between them, and the tracker issues it is synced with. This module
+//! A Flow is the project's delivery plan: a hierarchy of milestones, epics,
+//! features, tasks, and defects, the `blocks` and `relates` edges between
+//! them, and the tracker issues it is synced with. This module
 //! owns its schema (FGV-FR-01) and the structural rules it obeys, and answers
 //! one question about a body of text: is this a Flow, and if not, exactly what
 //! is wrong with it.
@@ -111,7 +111,8 @@ fn order_by_position(group: &mut [FlowViolation], key: impl Fn(&FlowViolation) -
 }
 
 /// FGV-FR-02: judge `body` against the Flow schema and the plan's structural
-/// rules. Pure — the same body always yields the same report.
+/// rules. Pure — the same body always yields the same report. FGV-FR-03: the
+/// report holds every violation of the document, not the first one found.
 pub fn validate(body: &str) -> ValidationReport {
     // FGV-FR-05: an empty or whitespace-only body is the empty plan.
     if body.trim().is_empty() {
@@ -172,11 +173,11 @@ pub fn validate(body: &str) -> ValidationReport {
         .enumerate()
         .filter_map(|(i, v)| shape::read_edge(v, i, &mut edge_level))
         .collect();
-    let links = obj.get("sync").map(|s| shape::read_sync(s, &mut link_level)).unwrap_or_default();
+    let sync = obj.get("sync").map(|s| shape::read_sync(s, &mut link_level)).unwrap_or_default();
 
     rules::item_rules(&items, &mut item_level);
     rules::edge_rules(&items, &edges, &mut edge_level);
-    rules::link_rules(&items, &links, &mut link_level);
+    rules::link_rules(&items, &sync, &mut link_level);
 
     // FGV-FR-04: within each group, the order the subjects appear in.
     let mut item_rank = HashMap::new();
@@ -247,6 +248,6 @@ pub fn validate_flow_document(app: tauri::AppHandle, body: String) -> Validation
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 #[cfg(test)]
 mod tests_rules;

@@ -1,7 +1,8 @@
 //! The GitHub tracker adapter (FTS-FR-ARMD, FTS-FR-ZLFX).
 //!
-//! The reads go through GraphQL, many items to one request (FTS NFR). The
-//! writes go through REST: an issue's title, body, Type, and milestone, a
+//! The reads go through GraphQL, many items to one request (FTS NFR). A
+//! relation list longer than one page is read page by page, so a list is
+//! never cut. The writes go through REST: an issue's title, body, Type, and milestone, a
 //! milestone, a sub-issue relation, and a blocked-by relation. No request
 //! closes, reopens, or deletes an issue or a milestone.
 //!
@@ -24,8 +25,13 @@ const ISSUE_BATCH: usize = 50;
 /// The most parents one sub-issue read asks for: each answer holds up to
 /// [`CONNECTION_SIZE`] sub-issues with their own relations.
 const PARENT_BATCH: usize = 10;
-/// The most relations of one kind read for one issue.
+/// The most relations of one kind one page reads for one issue. A longer
+/// list is read page by page, so no list is cut.
 const CONNECTION_SIZE: usize = 50;
+/// The page cursor of a connection.
+const PAGE_INFO: &str = "pageInfo { hasNextPage endCursor }";
+/// The fields of an issue that a relation names.
+const KEY_FIELDS: &str = "number url repository { name owner { login } }";
 
 /// The adapter of one GitHub repository, with the secret it sends.
 pub struct GithubAdapter {
@@ -53,6 +59,23 @@ impl GithubAdapter {
         }
     }
 
+    /// An adapter whose requests go to the REST base `api` and the GraphQL
+    /// address `graphql`, so a test can answer them from a local server.
+    #[cfg(test)]
+    pub(crate) fn at(api: &str, graphql: &str, owner: &str, repo: &str) -> Self {
+        Self {
+            api: api.to_string(),
+            graphql: graphql.to_string(),
+            ..Self::new("github.com", owner, repo, "test-secret".to_string())
+        }
+    }
+
+    /// Record GitHub's numeric id of an issue, as a read does.
+    #[cfg(test)]
+    pub(crate) fn remember_id(&self, number: u64, id: u64) {
+        self.remember(number, id);
+    }
+
     fn agent() -> ureq::Agent {
         crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
     }
@@ -61,11 +84,18 @@ impl GithubAdapter {
         crate::tls::ureq_wire(error, url).unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
     }
 
+    /// The `repository` of a query whose variables are the bound repository.
     fn graphql(&self, query: &str) -> Result<Value, String> {
-        let payload = json!({
-            "query": query,
-            "variables": { "owner": self.owner, "name": self.repo },
-        });
+        let data = self.graphql_data(query, json!({ "owner": self.owner, "name": self.repo }))?;
+        data.get("repository")
+            .filter(|r| !r.is_null())
+            .cloned()
+            .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
+    }
+
+    /// The `data` of one GraphQL request.
+    fn graphql_data(&self, query: &str, variables: Value) -> Result<Value, String> {
+        let payload = json!({ "query": query, "variables": variables });
         let response = Self::agent()
             .post(&self.graphql)
             .header("Authorization", &format!("Bearer {}", self.secret))
@@ -87,38 +117,76 @@ impl GithubAdapter {
         }
         value
             .get("data")
-            .and_then(|d| d.get("repository"))
-            .filter(|r| !r.is_null())
+            .filter(|d| !d.is_null())
             .cloned()
             .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
     }
 
+    /// The connection `connection` of the issue with the global id `node_id`,
+    /// from the page after `after`.
+    fn next_page(
+        &self,
+        node_id: &str,
+        connection: &str,
+        fields: &str,
+        after: &str,
+    ) -> Result<Value, String> {
+        let n = CONNECTION_SIZE;
+        let query = format!(
+            "query($id: ID!, $after: String!) {{ node(id: $id) {{ ... on Issue {{ \
+             {connection}(first: {n}, after: $after) {{ nodes {{ {fields} }} {PAGE_INFO} }} }} }} }}"
+        );
+        let data = self.graphql_data(&query, json!({ "id": node_id, "after": after }))?;
+        data.get("node")
+            .and_then(|node| node.get(connection))
+            .filter(|c| !c.is_null())
+            .cloned()
+            .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
+    }
+
+    /// Every node of the connection `connection` of `issue`: the first page,
+    /// which the read gave, and every page after it.
+    fn all_of(&self, issue: &Value, connection: &str, fields: &str) -> Result<Vec<Value>, String> {
+        let Some(first) = issue.get(connection).filter(|c| !c.is_null()) else {
+            return Ok(Vec::new());
+        };
+        let node_id = str_of(issue, "id");
+        all_nodes(first, |after| {
+            if node_id.is_empty() {
+                return Err(ERR_GITHUB_UNREACHABLE.to_string());
+            }
+            self.next_page(&node_id, connection, fields, after)
+        })
+    }
+
+    /// One issue of an answer, with every page of its blockers.
+    fn complete_issue(&self, value: &Value) -> Result<Option<TrackerIssue>, String> {
+        let Some(mut issue) = issue_of(value) else { return Ok(None) };
+        issue.blocked_by =
+            self.all_of(value, "blockedBy", KEY_FIELDS)?.iter().filter_map(key_of).collect();
+        Ok(Some(issue))
+    }
+
+    /// One REST request. A request with no payload sends no body: a `DELETE`
+    /// with a body of `null` is refused by GitHub.
     fn rest(&self, method: &str, path: &str, payload: Option<Value>) -> Result<Value, String> {
         let url = format!("{}{path}", self.api);
         let agent = Self::agent();
         let auth = format!("Bearer {}", self.secret);
         let version = crate::github_tokens::GITHUB_API_VERSION;
         let result = match (method, payload) {
-            ("GET", _) => agent
-                .get(&url)
-                .header("Authorization", &auth)
-                .header("Accept", "application/vnd.github+json")
-                .header("X-GitHub-Api-Version", version)
-                .header("User-Agent", "synthesis")
-                .call(),
-            (method, payload) => {
-                let builder = match method {
-                    "PATCH" => agent.patch(&url),
-                    "DELETE" => agent.delete(&url).force_send_body(),
-                    _ => agent.post(&url),
-                };
-                builder
-                    .header("Authorization", &auth)
-                    .header("Accept", "application/vnd.github+json")
+            ("GET", _) => rest_headers(agent.get(&url), &auth, version).call(),
+            ("DELETE", None) => rest_headers(agent.delete(&url), &auth, version).call(),
+            ("DELETE", Some(payload)) => {
+                rest_headers(agent.delete(&url).force_send_body(), &auth, version)
                     .header("Content-Type", "application/json")
-                    .header("X-GitHub-Api-Version", version)
-                    .header("User-Agent", "synthesis")
-                    .send(payload.unwrap_or(Value::Null).to_string())
+                    .send(payload.to_string())
+            }
+            (method, payload) => {
+                let builder = if method == "PATCH" { agent.patch(&url) } else { agent.post(&url) };
+                rest_headers(builder, &auth, version)
+                    .header("Content-Type", "application/json")
+                    .send(payload.unwrap_or_else(|| json!({})).to_string())
             }
         };
         let mut response = result.map_err(|e| self.fail(&e, &url))?;
@@ -149,16 +217,74 @@ impl GithubAdapter {
     }
 }
 
-/// The issue fields every read asks for.
+/// The headers of every REST request.
+fn rest_headers<B>(
+    builder: ureq::RequestBuilder<B>,
+    auth: &str,
+    version: &str,
+) -> ureq::RequestBuilder<B> {
+    builder
+        .header("Authorization", auth)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", version)
+        .header("User-Agent", "synthesis")
+}
+
+/// The issue fields every read asks for. `id` is the global id that a read
+/// of the next page of a relation names.
 fn issue_fields() -> String {
     let n = CONNECTION_SIZE;
     format!(
-        "databaseId number url state title body \
+        "id databaseId number url state title body \
          repository {{ name owner {{ login }} }} \
          issueType {{ name }} milestone {{ number }} \
-         parent {{ number url repository {{ name owner {{ login }} }} }} \
-         blockedBy(first: {n}) {{ nodes {{ number url repository {{ name owner {{ login }} }} }} }}"
+         parent {{ {KEY_FIELDS} }} \
+         blockedBy(first: {n}) {{ nodes {{ {KEY_FIELDS} }} {PAGE_INFO} }}"
     )
+}
+
+/// The cursor of the page after `connection`, or `None` where it is the
+/// last page. A connection that has a next page and no cursor cannot be
+/// read to its end, so it is an error: a cut list never reads as complete.
+pub fn next_cursor(connection: &Value) -> Result<Option<String>, String> {
+    let info = connection.get("pageInfo");
+    let more = info.and_then(|i| i.get("hasNextPage")).and_then(Value::as_bool);
+    match more {
+        Some(false) => Ok(None),
+        Some(true) => info
+            .and_then(|i| i.get("endCursor"))
+            .and_then(Value::as_str)
+            .filter(|c| !c.is_empty())
+            .map(|c| Some(c.to_string()))
+            .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string()),
+        None => Err(ERR_GITHUB_UNREACHABLE.to_string()),
+    }
+}
+
+/// Every node of a connection: the nodes of `first`, then the nodes of each
+/// page that `next_page` reads for the cursor of the page before it. A page
+/// that gives the same cursor again is an error, so the read always ends.
+pub fn all_nodes(
+    first: &Value,
+    mut next_page: impl FnMut(&str) -> Result<Value, String>,
+) -> Result<Vec<Value>, String> {
+    let nodes_of = |c: &Value| -> Result<Vec<Value>, String> {
+        c.get("nodes")
+            .and_then(Value::as_array)
+            .cloned()
+            .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
+    };
+    let mut out = nodes_of(first)?;
+    let mut cursor = next_cursor(first)?;
+    while let Some(after) = cursor {
+        let page = next_page(&after)?;
+        out.extend(nodes_of(&page)?);
+        cursor = next_cursor(&page)?;
+        if cursor.as_deref() == Some(after.as_str()) {
+            return Err(ERR_GITHUB_UNREACHABLE.to_string());
+        }
+    }
+    Ok(out)
 }
 
 fn str_of(value: &Value, key: &str) -> String {
@@ -248,15 +374,11 @@ impl TrackerAdapter for GithubAdapter {
                 format!("query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {aliases} }} }}");
             let repository = self.graphql(&query)?;
             for (i, number) in chunk.iter().enumerate() {
-                let issue = repository.get(format!("i{i}")).and_then(issue_of);
-                if let Some(id) = repository
-                    .get(format!("i{i}"))
-                    .and_then(|v| v.get("databaseId"))
-                    .and_then(Value::as_u64)
-                {
+                let value = repository.get(format!("i{i}")).cloned().unwrap_or(Value::Null);
+                if let Some(id) = value.get("databaseId").and_then(Value::as_u64) {
                     self.remember(*number, id);
                 }
-                out.push((*number, issue));
+                out.push((*number, self.complete_issue(&value)?));
             }
         }
         Ok(out)
@@ -294,29 +416,35 @@ impl TrackerAdapter for GithubAdapter {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
-                    format!("i{i}: issue(number: {p}) {{ subIssues(first: {n}) {{ nodes {{ {fields} }} }} }} ")
+                    format!("i{i}: issue(number: {p}) {{ id subIssues(first: {n}) {{ nodes {{ {fields} }} {PAGE_INFO} }} }} ")
                 })
                 .collect();
             let query =
                 format!("query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {aliases} }} }}");
             let repository = self.graphql(&query)?;
             for (i, parent) in chunk.iter().enumerate() {
-                let nodes = repository
-                    .get(format!("i{i}"))
-                    .and_then(|v| v.get("subIssues"))
-                    .and_then(|c| c.get("nodes"))
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
+                let value = repository.get(format!("i{i}")).cloned().unwrap_or(Value::Null);
+                let nodes = self.all_of(&value, "subIssues", &fields)?;
+                let mut children = Vec::new();
                 for node in &nodes {
-                    if let (Some(number), Some(id)) = (
+                    // A sub-issue in another repository has a number of its
+                    // own repository, so only an own one is remembered.
+                    let own = key_of(node).is_some_and(|k| {
+                        k.owner.eq_ignore_ascii_case(&self.owner)
+                            && k.repo.eq_ignore_ascii_case(&self.repo)
+                    });
+                    if let (true, Some(number), Some(id)) = (
+                        own,
                         node.get("number").and_then(Value::as_u64),
                         node.get("databaseId").and_then(Value::as_u64),
                     ) {
                         self.remember(number, id);
                     }
+                    if let Some(issue) = self.complete_issue(node)? {
+                        children.push(issue);
+                    }
                 }
-                out.push((*parent, nodes.iter().filter_map(issue_of).collect()));
+                out.push((*parent, children));
             }
         }
         Ok(out)
@@ -356,7 +484,7 @@ impl TrackerAdapter for GithubAdapter {
     fn set_parent(
         &self,
         number: u64,
-        current: Option<u64>,
+        current: Option<&IssueKey>,
         parent: Option<u64>,
     ) -> Result<(), String> {
         let id = self.database_id(number)?;
@@ -368,10 +496,15 @@ impl TrackerAdapter for GithubAdapter {
                     Some(json!({ "sub_issue_id": id, "replace_parent": true })),
                 )
                 .map(|_| ()),
+            // The current parent can be in another repository: the relation
+            // is removed on the parent's own repository.
             (None, Some(current)) => self
                 .rest(
                     "DELETE",
-                    &format!("{}/issues/{current}/sub_issue", self.repo_path()),
+                    &format!(
+                        "/repos/{}/{}/issues/{}/sub_issue",
+                        current.owner, current.repo, current.number
+                    ),
                     Some(json!({ "sub_issue_id": id })),
                 )
                 .map(|_| ()),

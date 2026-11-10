@@ -118,6 +118,8 @@ pub struct SkippedIssue {
     /// The issue number, or `null` for an item whose issue was not created.
     pub number: Option<u64>,
     pub title: String,
+    /// The tracker item's URL, or `null` where it has none.
+    pub url: Option<String>,
     pub reason: &'static str,
     /// The Flow item the skip is about, where there is one.
     #[serde(skip_serializing_if = "Option::is_none")]

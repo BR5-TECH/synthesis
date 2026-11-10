@@ -22,7 +22,7 @@ fn a_name_only_the_flow_changed_is_written_to_the_tracker() {
     let (tracker, mut d) = plan();
     d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Tokenize cards".into();
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["update_issue 3"]);
+    assert_eq!(tracker.writes(), vec!["update_issue 3 title"]);
     assert_eq!(tracker.issue(3).title, "Tokenize cards");
     assert_eq!(link_of(&out.doc, "t1").base.name, "Tokenize cards");
     assert_eq!((out.result.updated, out.result.changed), (1, 0));
@@ -91,7 +91,7 @@ fn a_description_only_the_flow_changed_is_written_as_the_body() {
     let (tracker, mut d) = plan();
     d.items.iter_mut().find(|i| i.id == "f1").unwrap().description = Some("3DS too".into());
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["update_issue 2"]);
+    assert_eq!(tracker.writes(), vec!["update_issue 2 body"]);
     assert_eq!(tracker.issue(2).body, "3DS too");
     assert_eq!(link_of(&out.doc, "f1").base.description, "3DS too");
 }
@@ -117,7 +117,7 @@ fn a_milestone_link_syncs_name_description_and_due() {
     d.items.iter_mut().find(|i| i.id == "m1").unwrap().due = Some("2027-03-31".into());
     tracker.state.borrow_mut().milestones.get_mut(&5).unwrap().title = "Beta 1".into();
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["update_milestone 5"]);
+    assert_eq!(tracker.writes(), vec!["update_milestone 5 due"]);
     assert_eq!(tracker.state.borrow().milestones[&5].due.as_deref(), Some("2027-03-31"));
     assert_eq!(find(&out.doc, "m1").name, "Beta 1");
     let base = &link_of(&out.doc, "m1").base;
@@ -142,33 +142,49 @@ fn a_due_date_only_the_tracker_changed_comes_to_the_flow() {
 #[test]
 fn an_unlinked_ancestor_is_passed_over() {
     let tracker = FakeTracker::new()
-        .with_issue(issue(1, "Card payments", Some("Feature")))
-        .with_issue(child(2, "Card capture", "Feature", Some(1), Some(5)))
+        .with_issue(child(1, "Card payments", "Epic", None, Some(5)))
+        .with_issue(child(3, "Tokenize", "Task", Some(1), Some(5)))
         .with_milestone(milestone(5, "Beta"));
-    let mut epic = item("ep1", "epic", "Wallets", Some("m1"));
-    epic["localOnly"] = json!(true);
+    let mut feature = item("f1", "feature", "Card capture", Some("ep1"));
+    feature["localOnly"] = json!(true);
     let d = doc(
         vec![
-            item("d1", "deliverable", "Card payments", None),
-            item("m1", "milestone", "Beta", Some("d1")),
-            epic,
-            item("f1", "feature", "Card capture", Some("ep1")),
+            item("m1", "milestone", "Beta", None),
+            item("ep1", "epic", "Card payments", Some("m1")),
+            feature,
+            item("t1", "task", "Tokenize", Some("f1")),
         ],
         vec![],
         vec![
-            link("d1", "issue", 1, issue_base("Card payments", Some("Feature"), None, None, &[])),
             link("m1", "milestone", 5, milestone_base("Beta", None)),
-            link(
-                "f1",
-                "issue",
-                2,
-                issue_base("Card capture", Some("Feature"), Some(1), Some(5), &[]),
-            ),
+            link("ep1", "issue", 1, issue_base("Card payments", Some("Epic"), None, Some(5), &[])),
+            link("t1", "issue", 3, issue_base("Tokenize", Some("Task"), Some(1), Some(5), &[])),
         ],
     );
     let out = sync(&tracker, d);
     assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
     assert!(!out.doc_changed);
+}
+
+/// FTS-FR-HLVJ: an epic or a feature directly in a milestone has no parent
+/// issue, since a milestone is never a parent. A feature the Flow moves from
+/// an epic into its milestone loses its parent on the tracker.
+#[test]
+fn an_item_directly_in_a_milestone_has_no_parent_issue() {
+    let (tracker, mut d) = plan();
+    let f1 = d.items.iter_mut().find(|i| i.id == "f1").unwrap();
+    f1.parent_id = Some("m1".into());
+    let out = sync(&tracker, d);
+    assert_eq!(tracker.writes(), vec!["set_parent 2 1->none"]);
+    assert_eq!(tracker.issue(2).parent, None);
+    assert_eq!(tracker.issue(2).milestone, Some(5));
+    assert_eq!(link_of(&out.doc, "f1").base.parent, Some(None));
+    assert_eq!(link_of(&out.doc, "ep1").base.parent, Some(None));
+    tracker.clear_calls();
+    let again = sync(&tracker, out.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(again.result.conflicts.is_empty());
+    assert!(!again.doc_changed);
 }
 
 /// FTS-FR-AIJM / FTS-FR-LMBE: a changed Type setting is a Flow change of the
@@ -183,7 +199,7 @@ fn a_changed_type_setting_is_written_to_the_tracker() {
         SyncRequest { flow_id: FLOW_ID, doc: d, settings: &settings, resolutions: &[] },
     )
     .unwrap();
-    assert_eq!(tracker.writes(), vec!["update_issue 3"]);
+    assert_eq!(tracker.writes(), vec!["update_issue 3 type"]);
     assert_eq!(tracker.issue(3).issue_type.as_deref(), Some("Chore"));
     assert_eq!(link_of(&out.doc, "t1").base.r#type, Some(Some("Chore".into())));
     // The comparison ignores case, so the next sync finds nothing to do.
@@ -204,7 +220,7 @@ fn a_blocks_edge_the_flow_added_is_added_on_the_tracker() {
     let (tracker, mut d) = plan_with_two_tasks();
     d.edges.push(serde_json::from_value(blocks("e1", "t2", "t1")).unwrap());
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["add_blocked_by 3"]);
+    assert_eq!(tracker.writes(), vec!["add_blocked_by 3 4"]);
     assert_eq!(tracker.issue(3).blocked_by.iter().map(|k| k.number).collect::<Vec<_>>(), vec![4]);
     let base = link_of(&out.doc, "t1").base.blocked_by.clone().unwrap();
     assert_eq!(base.iter().map(|r| r.number).collect::<Vec<_>>(), vec![4]);
@@ -234,7 +250,7 @@ fn an_edge_the_flow_removed_is_removed_on_the_tracker() {
     let t1 = links.iter_mut().find(|l| l.item_id == "t1").unwrap();
     t1.base.blocked_by = Some(vec![serde_json::from_value(ref_json("issue", 4)).unwrap()]);
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["remove_blocked_by 3"]);
+    assert_eq!(tracker.writes(), vec!["remove_blocked_by 3 4"]);
     assert!(tracker.issue(3).blocked_by.is_empty());
     assert!(link_of(&out.doc, "t1").base.blocked_by.as_ref().unwrap().is_empty());
 }
@@ -363,4 +379,50 @@ fn a_due_date_both_changed_is_a_conflict() {
     let out = resolve(&tracker, d, &[choose(c, Choice::KeepFlow)]);
     assert_eq!(tracker.state.borrow().milestones[&5].due.as_deref(), Some("2027-03-31"));
     assert!(out.result.conflicts.is_empty());
+}
+
+/// FTS-FR-VYOV / FTS-FR-WANV: a blocker in another repository is ignored: no
+/// edge, no base entry, and no write, in this sync and the next.
+#[test]
+fn a_blocker_of_another_repository_is_ignored() {
+    let (tracker, d) = plan();
+    let mut upstream = key(4);
+    upstream.repo = "upstream".into();
+    tracker.edit(3, |i| i.blocked_by.push(upstream));
+    let out = sync(&tracker, d);
+    assert!(out.doc.edges.is_empty());
+    assert!(link_of(&out.doc, "t1").base.blocked_by.as_ref().unwrap().is_empty());
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(!out.doc_changed);
+    let again = sync(&tracker, out.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert_eq!(tracker.issue(3).blocked_by.len(), 1);
+    assert!(!again.doc_changed);
+}
+
+/// FTS-FR-VFNM / FTS-FR-AIDI: an `update_issue` that fails during the merge
+/// stops the writes after it and keeps the base of its field, so the next
+/// sync writes it again without a conflict.
+#[test]
+fn a_failed_update_during_the_merge_keeps_the_base() {
+    let (tracker, mut d) = plan_with_two_tasks();
+    let tracker = tracker.failing("update_issue", 0);
+    d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Tokenize cards".into();
+    d.items.iter_mut().find(|i| i.id == "t2").unwrap().name = "Card form v2".into();
+    let out = sync(&tracker, d);
+    assert_eq!(out.write_error.as_deref(), Some(ERR_GITHUB_UNREACHABLE));
+    assert_eq!(tracker.writes(), vec!["update_issue 3 title FAILED"]);
+    assert_eq!(link_of(&out.doc, "t1").base.name, "Tokenize");
+    assert_eq!(link_of(&out.doc, "t2").base.name, "Card form");
+    assert_eq!(out.result.updated, 0);
+
+    tracker.state.borrow_mut().fail = None;
+    tracker.clear_calls();
+    let next = sync(&tracker, out.doc);
+    assert!(next.write_error.is_none());
+    assert!(next.result.conflicts.is_empty());
+    let mut writes = tracker.writes();
+    writes.sort();
+    assert_eq!(writes, vec!["update_issue 3 title", "update_issue 4 title"]);
+    assert_eq!(tracker.issue(3).title, "Tokenize cards");
 }

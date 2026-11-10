@@ -1,6 +1,6 @@
 //! The links whose item is gone on one side (FTS-FR-BMWI, FTS-FR-VXMN), the
 //! links of another repository (FTS-FR-WANV), and the choices that answer a
-//! removal: `unlink`, `restore`, and `remove_item`.
+//! removal: `unlink` (FTS-FR-YHVD), `restore`, and `remove_item`.
 
 use serde_json::Value;
 
@@ -28,8 +28,14 @@ impl Sync<'_> {
         for link in links {
             let number = link.reference.number;
             if !self.repo.holds(&link.reference) {
-                // FTS-FR-WANV.
-                self.skip(Some(number), &link.base.name, SKIP_FOREIGN_REPOSITORY, None);
+                // FTS-FR-WANV: the skip is about the item of the link.
+                self.skip(
+                    Some(number),
+                    &link.base.name,
+                    Some(&link.reference.url),
+                    SKIP_FOREIGN_REPOSITORY,
+                    Some(&link.item_id),
+                );
                 continue;
             }
             let in_flow = self.original.items.iter().any(|i| i.id == link.item_id);
@@ -96,7 +102,7 @@ impl Sync<'_> {
             url: Some(found.url),
         };
         match self.choice_for(&conflict) {
-            Some(Choice::Unlink) => self.remove_link(&link.item_id),
+            Some(Choice::Unlink) => self.unlink(&link.item_id),
             Some(Choice::Restore) => return Some(conflict),
             _ => self.result.conflicts.push(conflict),
         }
@@ -126,14 +132,37 @@ impl Sync<'_> {
         }
     }
 
-    /// `unlink`: the link goes, and the item and the tracker item stay as they
-    /// are. No issue is created for the item in the same call.
+    /// FTS-FR-YHVD: `unlink`. The link goes, its reference goes to
+    /// `sync.ignored`, and the item, where it is still in the Flow, becomes
+    /// `localOnly`. The tracker item stays as it is. So no later sync creates
+    /// a tracker item for the item, or pulls the ignored tracker item.
     pub(super) fn unlink(&mut self, item_id: &str) {
         // The conflicts of the link go with it.
         self.result.conflicts.retain(|c| c.item_id != item_id);
+        let references: Vec<_> = self
+            .links()
+            .iter()
+            .filter(|l| l.item_id == item_id)
+            .map(|l| l.reference.clone())
+            .collect();
         self.remove_link(item_id);
+        let sync = self.sync_mut();
+        for reference in references {
+            let id = values::ref_id(&reference);
+            let held = sync.ignored.iter().any(|r| {
+                r.kind == reference.kind
+                    && r.host.eq_ignore_ascii_case(&reference.host)
+                    && values::ref_id(r) == id
+            });
+            if !held {
+                sync.ignored.push(reference);
+            }
+        }
         self.no_create.insert(item_id.to_string());
-        self.mark_changed(item_id);
+        if let Some(item) = self.item_mut(item_id) {
+            item.local_only = Some(true);
+            self.mark_changed(item_id);
+        }
     }
 
     /// `remove_item`: the item, every item under it, and every edge of each go,
@@ -202,17 +231,7 @@ impl Sync<'_> {
             }
             RefKind::Milestone => {
                 let Some(m) = self.milestones.get(&number).cloned() else { return false };
-                // A milestone sits in a deliverable, and the tracker names
-                // none: the first deliverable of the plan holds it.
-                let Some(container) = self
-                    .doc
-                    .items
-                    .iter()
-                    .find(|i| i.kind == Kind::Deliverable)
-                    .map(|i| i.id.clone())
-                else {
-                    return false;
-                };
+                // FGV-FR-YHFX: a milestone sits at the top level.
                 let base = SyncBase {
                     name: m.title.clone(),
                     description: m.description.clone(),
@@ -223,7 +242,7 @@ impl Sync<'_> {
                     blocked_by: None,
                     due: Some(m.due.clone()),
                 };
-                (Kind::Milestone, Some(container), base, m.title, m.description, m.due)
+                (Kind::Milestone, None, base, m.title, m.description, m.due)
             }
         };
         let id = if self.item(&link.item_id).is_none() {

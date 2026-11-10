@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::model::{EdgeType, Hierarchy, Kind, RefKind, WaitGraph};
-use super::shape::{RawEdge, RawItem, RawLink};
+use super::shape::{RawEdge, RawItem, RawSync};
 use super::FlowViolation;
 
 /// FGV-FR-09, FGV-FR-13, FGV-FR-YHFX, FGV-FR-CTFX: the rules on items alone.
@@ -181,8 +181,10 @@ pub fn edge_rules(items: &[RawItem], edges: &[RawEdge], out: &mut Vec<FlowViolat
     }
 }
 
-/// FGV-FR-LWPD: the rules on sync links.
-pub fn link_rules(items: &[RawItem], links: &[RawLink], out: &mut Vec<FlowViolation>) {
+/// FGV-FR-LWPD, FGV-FR-TLMV: the rules on sync links and on the ignored
+/// references.
+pub fn link_rules(items: &[RawItem], sync: &RawSync, out: &mut Vec<FlowViolation>) {
+    let links = &sync.links;
     let kinds: HashMap<&str, Option<Kind>> =
         items.iter().map(|i| (i.id.as_str(), i.kind)).collect();
     let mut seen_items = HashSet::new();
@@ -215,6 +217,24 @@ pub fn link_rules(items: &[RawItem], links: &[RawLink], out: &mut Vec<FlowViolat
                     ),
                 ));
             }
+        }
+    }
+    // FGV-FR-TLMV: an ignored reference is about the sync section as a whole,
+    // so its violation carries no index and its message names the entry. It
+    // follows the violations of the links (FGV-FR-04).
+    let mut seen_ignored = HashSet::new();
+    for entry in &sync.ignored {
+        let repeats = !seen_ignored.insert(entry.ref_key.clone());
+        let linked = seen_refs.contains(&entry.ref_key);
+        if repeats || linked {
+            out.push(FlowViolation::doc(
+                "duplicate_tracker_link",
+                format!(
+                    "sync ignored entry {} names a tracker reference that {}",
+                    entry.index,
+                    if linked { "a sync link names" } else { "an earlier ignored entry names" }
+                ),
+            ));
         }
     }
 }

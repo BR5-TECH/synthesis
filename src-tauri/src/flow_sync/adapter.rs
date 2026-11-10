@@ -140,11 +140,12 @@ pub trait TrackerAdapter {
     fn update_issue(&self, number: u64, change: &IssueChange) -> Result<(), String>;
 
     /// Make `parent` the parent of `number`, or remove the parent `current`
-    /// where `parent` is `None`.
+    /// where `parent` is `None`. `current` is the parent the tracker reported,
+    /// which can be in another repository.
     fn set_parent(
         &self,
         number: u64,
-        current: Option<u64>,
+        current: Option<&IssueKey>,
         parent: Option<u64>,
     ) -> Result<(), String>;
 

@@ -7,12 +7,11 @@ use super::model::{parse_valid, EdgeType, Hierarchy, Kind, WaitGraph};
 use super::tests::{codes, doc, edge, item, CANONICAL};
 use super::*;
 
-/// A valid skeleton: deliverable d1 > milestone m1 > features f1, f2, f3, each
-/// with one task (t1, t2, t3).
+/// A valid skeleton: milestone m1 > features f1, f2, f3, each with one task
+/// (t1, t2, t3).
 fn skeleton() -> Vec<Value> {
     vec![
-        item("d1", "deliverable", None),
-        item("m1", "milestone", Some("d1")),
+        item("m1", "milestone", None),
         item("f1", "feature", Some("m1")),
         item("f2", "feature", Some("m1")),
         item("f3", "feature", Some("m1")),
@@ -101,17 +100,16 @@ fn dangling_parents_and_containment_cycles() {
 /// FGV-FR-YHFX: every kind in every container, against the permitted table.
 #[test]
 fn hierarchy_table() {
-    let kinds = ["deliverable", "milestone", "epic", "feature", "task", "defect"];
+    let kinds = ["milestone", "epic", "feature", "task", "defect"];
     let permitted: &[(&str, &[&str])] = &[
-        ("deliverable", &["top"]),
-        ("milestone", &["deliverable"]),
+        ("milestone", &["top"]),
         ("epic", &["milestone"]),
         ("feature", &["milestone", "epic"]),
         ("task", &["feature"]),
         ("defect", &["feature", "epic", "milestone"]),
     ];
     for (kind, allowed) in permitted {
-        for container in ["top", "deliverable", "milestone", "epic", "feature"] {
+        for container in ["top", "milestone", "epic", "feature"] {
             let mut items = vec![];
             let parent = if container == "top" {
                 None
@@ -136,7 +134,7 @@ fn hierarchy_table() {
 fn edges_within_a_lineage() {
     let body = plan(json!([
         edge("e1", "f1", "t1", "blocks"),
-        edge("e2", "t2", "d1", "relates"),
+        edge("e2", "t2", "m1", "relates"),
         edge("e3", "f1", "t2", "blocks"),
     ]));
     assert_eq!(
@@ -205,9 +203,9 @@ fn only_cycle_edges_are_flagged() {
 #[test]
 fn duplicate_draft_links() {
     let mut items = skeleton();
+    items[4]["draftId"] = json!("dr1");
     items[5]["draftId"] = json!("dr1");
-    items[6]["draftId"] = json!("dr1");
-    items[7]["draftId"] = json!("dr2");
+    items[6]["draftId"] = json!("dr2");
     let report = validate(&doc(Value::Array(items), json!([])));
     let got: Vec<_> =
         report.violations.iter().map(|v| (v.code, v.element_id.clone().unwrap())).collect();
@@ -259,14 +257,15 @@ fn sync_link_rules() {
 #[test]
 fn parse_valid_reads_the_typed_model() {
     let doc = parse_valid(CANONICAL).expect("the canonical document is valid");
-    assert_eq!(doc.items.len(), 6);
-    assert_eq!(doc.items[1].kind, Kind::Milestone);
-    assert_eq!(doc.items[1].due.as_deref(), Some("2027-03-31"));
-    assert_eq!(doc.items[3].footprint.as_ref().unwrap().len(), 2);
+    assert_eq!(doc.items.len(), 5);
+    assert_eq!((doc.items[0].kind, doc.items[0].parent_id.as_deref()), (Kind::Milestone, None));
+    assert_eq!(doc.items[0].due.as_deref(), Some("2027-03-31"));
+    assert_eq!(doc.items[2].footprint.as_ref().unwrap().len(), 2);
     assert_eq!(doc.edges[0].edge_type, EdgeType::Blocks);
     let sync = doc.sync.as_ref().unwrap();
     assert_eq!(sync.links[0].reference.number, 42);
     assert_eq!(sync.links[0].base.milestone, Some(Some(3)));
+    assert_eq!(sync.ignored.iter().map(|r| r.number).collect::<Vec<_>>(), vec![47]);
 
     assert!(parse_valid("").unwrap().items.is_empty());
     assert!(parse_valid(r#"{"version":1}"#).is_err());
@@ -291,23 +290,23 @@ fn wait_graph_orders_leaves_through_containers() {
     assert!(!graph.waits_for("t1", "t1"));
     assert!(graph.cycle_edges().is_empty());
     assert_eq!(hierarchy.leaves_under("m1"), vec!["t1", "t2", "t3"]);
-    assert_eq!(hierarchy.ancestors("t1"), vec!["f1", "m1", "d1"]);
+    assert_eq!(hierarchy.ancestors("t1"), vec!["f1", "m1"]);
 }
 
 /// FGV-FR-PMTY: a container that holds no leaf counts as a leaf, so a ring of
-/// empty deliverables that block each other is a cycle.
+/// empty milestones that block each other is a cycle.
 #[test]
 fn empty_containers_in_a_ring_are_a_cycle() {
     let body = doc(
         json!([
-            item("d1", "deliverable", None),
-            item("d2", "deliverable", None),
-            item("d3", "deliverable", None)
+            item("m1", "milestone", None),
+            item("m2", "milestone", None),
+            item("m3", "milestone", None)
         ]),
         json!([
-            edge("e1", "d1", "d2", "blocks"),
-            edge("e2", "d2", "d3", "blocks"),
-            edge("e3", "d3", "d1", "blocks")
+            edge("e1", "m1", "m2", "blocks"),
+            edge("e2", "m2", "m3", "blocks"),
+            edge("e3", "m3", "m1", "blocks")
         ]),
     );
     assert_eq!(
@@ -320,11 +319,90 @@ fn empty_containers_in_a_ring_are_a_cycle() {
     );
     let open_chain = doc(
         json!([
-            item("d1", "deliverable", None),
-            item("d2", "deliverable", None),
-            item("d3", "deliverable", None)
+            item("m1", "milestone", None),
+            item("m2", "milestone", None),
+            item("m3", "milestone", None)
         ]),
-        json!([edge("e1", "d1", "d2", "blocks"), edge("e2", "d2", "d3", "blocks")]),
+        json!([edge("e1", "m1", "m2", "blocks"), edge("e2", "m2", "m3", "blocks")]),
     );
     assert!(validate(&open_chain).valid);
+}
+
+/// FGV-FR-08 / FGV-FR-01: `deliverable` is no item kind any more, so a
+/// document that holds one is `shape`.
+#[test]
+fn a_deliverable_is_outside_the_kind_enumeration() {
+    let body = doc(json!([item("d1", "deliverable", None)]), json!([]));
+    let report = validate(&body);
+    assert_eq!(codes(&body), vec!["shape"]);
+    assert_eq!(report.violations[0].element_id.as_deref(), Some("d1"));
+    assert!(report.violations[0].message.contains("deliverable"));
+}
+
+fn ignored(number: u64) -> Value {
+    json!({ "kind": "issue", "host": "github.com", "owner": "o", "repo": "r", "number": number,
+            "url": format!("https://github.com/o/r/issues/{number}") })
+}
+
+/// FGV-FR-TLMV / FGV-FR-04: an ignored reference that repeats an earlier
+/// one, or that a sync link names, is `duplicate_tracker_link`. It is a
+/// violation of the sync section as a whole: it carries no item, edge, or
+/// link index, its message names the entry, and it comes after the
+/// violations of the links.
+#[test]
+fn ignored_references_repeat_nothing() {
+    let body = |links: Value, ignore: Value| {
+        json!({ "version": 2, "items": skeleton(), "edges": [],
+                "sync": { "tracker": "github", "links": links, "ignored": ignore } })
+        .to_string()
+    };
+    assert!(
+        validate(&body(json!([link("f1", "issue", 1)]), json!([ignored(2), ignored(3)]))).valid
+    );
+    // The same number as a milestone is another reference.
+    let mut milestone = ignored(1);
+    milestone["kind"] = json!("milestone");
+    assert!(validate(&body(json!([link("f1", "issue", 1)]), json!([milestone]))).valid);
+
+    let report = validate(&body(
+        json!([link("f1", "issue", 1), link("f2", "issue", 1)]),
+        json!([ignored(2), ignored(1), ignored(2)]),
+    ));
+    let got: Vec<_> = report
+        .violations
+        .iter()
+        .map(|v| (v.code, v.link_index, v.element_id.clone(), v.edge_id.clone()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("duplicate_tracker_link", Some(1), None, None),
+            ("duplicate_tracker_link", None, None, None),
+            ("duplicate_tracker_link", None, None, None),
+        ]
+    );
+    assert!(report.violations[1].message.contains("ignored entry 1"), "{:?}", report.violations[1]);
+    assert!(report.violations[1].message.contains("sync link"));
+    assert!(report.violations[2].message.contains("ignored entry 2"), "{:?}", report.violations[2]);
+    assert!(report.violations[2].message.contains("earlier ignored entry"));
+}
+
+/// FGV-FR-08: `sync.ignored` is a list of references; anything else is
+/// `shape`, and an entry with a field the schema does not define is
+/// `unknown_field`.
+#[test]
+fn ignored_references_have_the_reference_shape() {
+    let body = |ignore: Value| {
+        json!({ "version": 2, "items": skeleton(), "edges": [],
+                "sync": { "tracker": "github", "links": [], "ignored": ignore } })
+        .to_string()
+    };
+    assert_eq!(codes(&body(json!({}))), vec!["shape"]);
+    let mut no_number = ignored(1);
+    no_number.as_object_mut().unwrap().remove("number");
+    assert_eq!(codes(&body(json!([no_number]))), vec!["shape"]);
+    let mut extra = ignored(1);
+    extra["title"] = json!("x");
+    assert_eq!(codes(&body(json!([extra]))), vec!["unknown_field"]);
+    assert_eq!(codes(&body(json!(["issue 1"]))), vec!["shape"]);
 }

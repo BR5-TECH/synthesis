@@ -17,28 +17,26 @@ fn project_toml(dir: &TempDir) -> String {
 
 fn custom() -> FlowTrackerSettings {
     FlowTrackerSettings {
-        deliverable_type: "Initiative".into(),
-        epic_type: "Epic".into(),
+        epic_type: "Initiative".into(),
         feature_type: "Feature".into(),
         task_type: "Chore".into(),
         defect_type: "Defect".into(),
     }
 }
 
-/// PSS-FR-VGWF: an unset store reads as `Feature`, `Feature`, `Feature`,
+/// PSS-FR-VGWF / FTS-FR-LMBE: an unset store reads as `Epic`, `Feature`,
 /// `Task`, and `Bug`.
 #[test]
 fn an_unset_flow_tracker_store_reads_as_the_defaults() {
     let (_dir, root) = fresh();
     let settings = load_flow_tracker_settings_from(&root).unwrap();
-    assert_eq!(settings.deliverable_type, "Feature");
-    assert_eq!(settings.epic_type, "Feature");
+    assert_eq!(settings.epic_type, "Epic");
     assert_eq!(settings.feature_type, "Feature");
     assert_eq!(settings.task_type, "Task");
     assert_eq!(settings.defect_type, "Bug");
 }
 
-/// PSS-FR-VGWF: the five Types are stored in a table of their own in the
+/// PSS-FR-VGWF: the four Types are stored in a table of their own in the
 /// project-public store and read back as written. Nothing goes to the
 /// project-local store.
 #[test]
@@ -59,12 +57,11 @@ fn an_invalid_flow_tracker_value_reads_as_its_default() {
     let (dir, root) = fresh();
     std::fs::write(
         dir.path().join(".synthesis/project.toml"),
-        "[flowTracker]\ndeliverableType = \"   \"\nepicType = 3\ntaskType = \" Chore \"\n",
+        "[flowTracker]\nepicType = 3\nfeatureType = \"   \"\ntaskType = \" Chore \"\n",
     )
     .unwrap();
     let settings = load_flow_tracker_settings_from(&root).unwrap();
-    assert_eq!(settings.deliverable_type, "Feature");
-    assert_eq!(settings.epic_type, "Feature");
+    assert_eq!(settings.epic_type, "Epic");
     assert_eq!(settings.feature_type, "Feature");
     assert_eq!(settings.task_type, "Chore");
     assert_eq!(settings.defect_type, "Bug");
@@ -113,4 +110,50 @@ fn a_malformed_store_refuses_the_flow_tracker_settings() {
     );
     assert!(save_flow_tracker_settings_to(&root, &custom()).is_err());
     assert_eq!(project_toml(&dir), "not = [valid");
+}
+
+/// PSS-FR-VGWF: a `deliverableType` that an earlier build stored is ignored on
+/// read, and the next save writes the four keys alone.
+#[test]
+fn a_stored_deliverable_type_is_ignored() {
+    let (dir, root) = fresh();
+    std::fs::write(
+        dir.path().join(".synthesis/project.toml"),
+        "[flowTracker]\ndeliverableType = \"Initiative\"\nepicType = \"Saga\"\n",
+    )
+    .unwrap();
+    let settings = load_flow_tracker_settings_from(&root).unwrap();
+    assert_eq!(settings, FlowTrackerSettings { epic_type: "Saga".into(), ..Default::default() });
+    save_flow_tracker_settings_to(&root, &settings).unwrap();
+    let text = project_toml(&dir);
+    assert!(!text.contains("deliverableType"), "{text}");
+    for key in ["epicType", "featureType", "taskType", "defectType"] {
+        assert!(text.contains(key), "{key} in {text}");
+    }
+}
+
+/// PSS-FR-VGWF / PSS-FR-DNVN: a save where no `project.toml` exists yet
+/// creates it with the settings table alone.
+#[test]
+fn a_save_without_a_project_file_creates_it() {
+    let (dir, root) = fresh();
+    assert!(!dir.path().join(".synthesis/project.toml").exists());
+    save_flow_tracker_settings_to(&root, &custom()).unwrap();
+    assert_eq!(load_flow_tracker_settings_from(&root).unwrap(), custom());
+    assert!(project_toml(&dir).contains("[flowTracker]"));
+}
+
+/// PSS-FR-VGWF: a Type with quotes, a backslash, and text that is not ASCII
+/// is stored and read back unchanged.
+#[test]
+fn a_type_with_quotes_and_non_ascii_text_round_trips() {
+    let (_dir, root) = fresh();
+    let settings = FlowTrackerSettings {
+        epic_type: "Épopée \"grande\"".into(),
+        feature_type: "機能".into(),
+        task_type: "Task \\ sub".into(),
+        defect_type: "Ошибка ✓".into(),
+    };
+    save_flow_tracker_settings_to(&root, &settings).unwrap();
+    assert_eq!(load_flow_tracker_settings_from(&root).unwrap(), settings);
 }

@@ -14,15 +14,13 @@ use super::{load_public, save_public};
 
 /// PSS-FR-VGWF: the project-public table the flow tracker settings live in.
 const FLOW_TRACKER_KEY: &str = "flowTracker";
-const DELIVERABLE_TYPE_KEY: &str = "deliverableType";
 const EPIC_TYPE_KEY: &str = "epicType";
 const FEATURE_TYPE_KEY: &str = "featureType";
 const TASK_TYPE_KEY: &str = "taskType";
 const DEFECT_TYPE_KEY: &str = "defectType";
 
 /// PSS-FR-VGWF: the Types that an unset value reads as.
-pub const DEFAULT_DELIVERABLE_TYPE: &str = "Feature";
-pub const DEFAULT_EPIC_TYPE: &str = "Feature";
+pub const DEFAULT_EPIC_TYPE: &str = "Epic";
 pub const DEFAULT_FEATURE_TYPE: &str = "Feature";
 pub const DEFAULT_TASK_TYPE: &str = "Task";
 pub const DEFAULT_DEFECT_TYPE: &str = "Bug";
@@ -31,7 +29,6 @@ pub const DEFAULT_DEFECT_TYPE: &str = "Bug";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FlowTrackerSettings {
-    pub deliverable_type: String,
     pub epic_type: String,
     pub feature_type: String,
     pub task_type: String,
@@ -41,7 +38,6 @@ pub struct FlowTrackerSettings {
 impl Default for FlowTrackerSettings {
     fn default() -> Self {
         Self {
-            deliverable_type: DEFAULT_DELIVERABLE_TYPE.to_string(),
             epic_type: DEFAULT_EPIC_TYPE.to_string(),
             feature_type: DEFAULT_FEATURE_TYPE.to_string(),
             task_type: DEFAULT_TASK_TYPE.to_string(),
@@ -50,10 +46,9 @@ impl Default for FlowTrackerSettings {
     }
 }
 
-/// The five keys and the field of each, in the order the table writes them.
-fn fields(settings: &mut FlowTrackerSettings) -> [(&'static str, &mut String); 5] {
+/// The four keys and the field of each, in the order the table writes them.
+fn fields(settings: &mut FlowTrackerSettings) -> [(&'static str, &mut String); 4] {
     [
-        (DELIVERABLE_TYPE_KEY, &mut settings.deliverable_type),
         (EPIC_TYPE_KEY, &mut settings.epic_type),
         (FEATURE_TYPE_KEY, &mut settings.feature_type),
         (TASK_TYPE_KEY, &mut settings.task_type),
@@ -62,8 +57,9 @@ fn fields(settings: &mut FlowTrackerSettings) -> [(&'static str, &mut String); 5
 }
 
 /// PSS-FR-VGWF: the stored settings. A value that is unset, is not a string, or
-/// is blank reads as its default. A malformed `project.toml` is the typed error
-/// of PSS-FR-10.
+/// is blank reads as its default. A key the table no longer defines, such as
+/// the `deliverableType` of an earlier build, is not read. A malformed
+/// `project.toml` is the typed error of PSS-FR-10.
 pub fn load_flow_tracker_settings_from(
     root: &crate::fs::RootFs,
 ) -> Result<FlowTrackerSettings, String> {

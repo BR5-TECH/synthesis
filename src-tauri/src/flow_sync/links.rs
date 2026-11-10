@@ -106,20 +106,18 @@ pub fn is_tracker_url(url: &str, host: &str, owner: &str, repo: &str) -> bool {
         && !number.starts_with('0')
 }
 
-/// FTS-FR-ALOJ: the five Types, trimmed, or `invalid_flow_tracker_settings`
+/// FTS-FR-ALOJ: the four Types, trimmed, or `invalid_flow_tracker_settings`
 /// where one is empty. No Type is checked against GitHub.
 pub fn validated_settings(
-    deliverable_type: &str,
     epic_type: &str,
     feature_type: &str,
     task_type: &str,
     defect_type: &str,
 ) -> Result<FlowTrackerSettings, FlowSyncError> {
-    let names = [deliverable_type, epic_type, feature_type, task_type, defect_type]
-        .map(|n| n.trim().to_string());
+    let names = [epic_type, feature_type, task_type, defect_type].map(|n| n.trim().to_string());
     if names.iter().any(String::is_empty) {
         return Err(FlowSyncError::of(ERR_INVALID_SETTINGS));
     }
-    let [deliverable_type, epic_type, feature_type, task_type, defect_type] = names;
-    Ok(FlowTrackerSettings { deliverable_type, epic_type, feature_type, task_type, defect_type })
+    let [epic_type, feature_type, task_type, defect_type] = names;
+    Ok(FlowTrackerSettings { epic_type, feature_type, task_type, defect_type })
 }

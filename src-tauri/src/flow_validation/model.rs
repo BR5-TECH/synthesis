@@ -11,11 +11,10 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-/// The six kinds of a plan item (FGV-FR-01).
+/// The five kinds of a plan item (FGV-FR-01).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
-    Deliverable,
     Milestone,
     Epic,
     Feature,
@@ -26,7 +25,6 @@ pub enum Kind {
 impl Kind {
     pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
-            "deliverable" => Self::Deliverable,
             "milestone" => Self::Milestone,
             "epic" => Self::Epic,
             "feature" => Self::Feature,
@@ -38,7 +36,6 @@ impl Kind {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Deliverable => "deliverable",
             Self::Milestone => "milestone",
             Self::Epic => "epic",
             Self::Feature => "feature",
@@ -56,8 +53,7 @@ impl Kind {
     /// FGV-FR-YHFX: the containers this kind may sit in. `None` is the top level.
     pub fn permitted_parents(self) -> &'static [Option<Kind>] {
         match self {
-            Self::Deliverable => &[None],
-            Self::Milestone => &[Some(Self::Deliverable)],
+            Self::Milestone => &[None],
             Self::Epic => &[Some(Self::Milestone)],
             Self::Feature => &[Some(Self::Milestone), Some(Self::Epic)],
             Self::Task => &[Some(Self::Feature)],
@@ -183,6 +179,10 @@ pub struct SyncLink {
 pub struct Sync {
     pub tracker: String,
     pub links: Vec<SyncLink>,
+    /// FTS-FR-YHVD: the tracker items a sync never creates or pulls. Absent
+    /// when empty, as the Flow tab writes it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignored: Vec<TrackerRef>,
 }
 
 /// A valid Flow document, version 2.

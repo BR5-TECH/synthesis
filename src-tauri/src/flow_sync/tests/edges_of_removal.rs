@@ -90,7 +90,11 @@ fn an_item_moved_into_a_new_container_names_its_new_issue() {
     d.items.push(serde_json::from_value(item("f9", "feature", "Checkout", Some("m1"))).unwrap());
     d.items.iter_mut().find(|i| i.id == "t1").unwrap().parent_id = Some("f9".into());
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["create_issue 100", "set_parent 100", "set_parent 3"]);
+    // The new feature sits directly in the milestone, so it has no parent.
+    assert_eq!(
+        tracker.writes(),
+        vec!["create_issue 100 type=Feature milestone=5", "set_parent 3 2->100"]
+    );
     assert_eq!(tracker.issue(3).parent.map(|k| k.number), Some(100));
     assert_eq!(link_of(&out.doc, "t1").base.parent.clone().flatten().map(|p| p.number), Some(100));
     tracker.clear_calls();
@@ -108,24 +112,12 @@ fn restores_of_an_item_and_its_container_do_not_depend_on_link_order() {
     let links = &mut d.sync.as_mut().unwrap().links;
     let t1: SyncLink = links.remove(3);
     links.insert(2, t1);
-    // With the default settings an epic and a feature share the Type
-    // `Feature`, and FTS-FR-CJVS gives the first kind: an epic. Distinct
-    // Types make the restored container a feature again.
-    let settings = FlowTrackerSettings { epic_type: "Epic".into(), ..settings() };
-    let first = run(
-        &tracker,
-        SyncRequest { flow_id: FLOW_ID, doc: d.clone(), settings: &settings, resolutions: &[] },
-    )
-    .unwrap();
+    let first = sync(&tracker, d.clone());
     let picks: Vec<ConflictResolution> =
         first.result.conflicts.iter().map(|c| choose(c, Choice::Restore)).collect();
     assert_eq!(picks.len(), 2);
-    let out = run(
-        &tracker,
-        SyncRequest { flow_id: FLOW_ID, doc: d, settings: &settings, resolutions: &picks },
-    )
-    .unwrap();
-    assert_eq!(find(&out.doc, "f1").parent_id.as_deref(), Some("m1"));
+    let out = resolve(&tracker, d, &picks);
+    assert_eq!(find(&out.doc, "f1").parent_id.as_deref(), Some("ep1"));
     assert_eq!(find(&out.doc, "t1").parent_id.as_deref(), Some("f1"));
     assert!(out.result.conflicts.is_empty());
     assert_eq!(out.result.added, 2);
@@ -164,6 +156,7 @@ fn a_sub_issue_of_a_linked_leaf_is_skipped() {
         (out.result.skipped[0].number, out.result.skipped[0].reason),
         (Some(9), SKIP_NO_KIND_FITS)
     );
+    assert_eq!(out.result.skipped[0].url.as_deref(), Some(url_of(9).as_str()));
 }
 
 /// FTS-FR-HDRR / FTS-FR-VXMN: an issue created under a container whose issue
@@ -174,6 +167,6 @@ fn a_creation_under_a_missing_parent_sets_no_parent() {
     tracker.state.borrow_mut().issues.remove(&2);
     d.items.push(serde_json::from_value(item("t9", "task", "Card form", Some("f1"))).unwrap());
     let out = sync(&tracker, d);
-    assert_eq!(tracker.writes(), vec!["create_issue 100"]);
+    assert_eq!(tracker.writes(), vec!["create_issue 100 type=Task milestone=5"]);
     assert_eq!(link_of(&out.doc, "t9").base.parent, Some(None));
 }

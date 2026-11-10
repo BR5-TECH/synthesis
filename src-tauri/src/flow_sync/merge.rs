@@ -211,14 +211,21 @@ impl Sync<'_> {
         } else {
             issue.parent.as_ref().map(|k| self.repo.issue_ref(k))
         };
+        // FTS-FR-XITX: a repository with no Types has plain issues, and no
+        // `type` is compared.
+        let type_side = if self.plain_issues() {
+            Side::Same
+        } else {
+            decide(
+                &values::normalize_type(base_type.as_deref()),
+                &values::normalize_type(flow_type.as_deref()),
+                &values::normalize_type(issue.issue_type.as_deref()),
+            )
+        };
         let mut fields = vec![
             StructuralField {
                 field: Structural::Type,
-                side: decide(
-                    &values::normalize_type(base_type.as_deref()),
-                    &values::normalize_type(flow_type.as_deref()),
-                    &values::normalize_type(issue.issue_type.as_deref()),
-                ),
+                side: type_side,
                 base: base_type.clone().map_or(Value::Null, Value::String),
                 flow: flow_type.clone().map_or(Value::Null, Value::String),
                 tracker: issue.issue_type.clone().map_or(Value::Null, Value::String),
@@ -343,8 +350,7 @@ impl Sync<'_> {
             self.writes.push(Write::Issue { item_id: item_id.clone(), number, change });
         }
         if side_of(Structural::Parent) == Some(Side::Flow) {
-            let current =
-                issue.parent.as_ref().filter(|p| self.repo.holds_key(p)).map(|p| p.number);
+            let current = issue.parent.clone();
             self.writes.push(Write::Parent {
                 item_id: item_id.clone(),
                 number,

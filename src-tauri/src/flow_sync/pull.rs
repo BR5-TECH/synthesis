@@ -1,5 +1,6 @@
-//! FTS-FR-EGJL, FTS-FR-CJVS, FTS-FR-LKZO: the sub-issues of linked issues that
-//! the Flow does not hold come into the Flow.
+//! FTS-FR-EGJL, FTS-FR-CJVS, FTS-FR-LKZO, FTS-FR-YHVD: the sub-issues of
+//! linked issues that the Flow does not hold and does not ignore come into
+//! the Flow.
 
 use std::collections::HashSet;
 
@@ -17,12 +18,22 @@ impl Sync<'_> {
     /// Pull every sub-issue that no link names, level by level, so the
     /// sub-issues of a pulled container are pulled in the same sync.
     pub(super) fn pull_all(&mut self) -> Result<(), String> {
+        // FTS-FR-YHVD: an issue that `sync.ignored` holds is never pulled.
+        let ignored: Vec<u64> = self
+            .doc
+            .sync
+            .iter()
+            .flat_map(|s| s.ignored.iter())
+            .filter(|r| r.kind == RefKind::Issue && self.repo.holds(r))
+            .map(|r| r.number)
+            .collect();
         let mut named: HashSet<u64> = self
             .links()
             .iter()
             .filter(|l| l.reference.kind == RefKind::Issue && self.repo.holds(&l.reference))
             .map(|l| l.reference.number)
             .chain(self.released.iter().copied())
+            .chain(ignored)
             .collect();
         // Every linked issue, leaves too: a sub-issue of a leaf has no kind
         // that fits, and is reported (FTS-FR-CJVS).
@@ -66,7 +77,13 @@ impl Sync<'_> {
         if !child.owner.eq_ignore_ascii_case(&self.repo.owner)
             || !child.repo.eq_ignore_ascii_case(&self.repo.repo)
         {
-            self.skip(Some(child.number), &child.title, SKIP_FOREIGN_REPOSITORY, None);
+            self.skip(
+                Some(child.number),
+                &child.title,
+                Some(&child.url),
+                SKIP_FOREIGN_REPOSITORY,
+                None,
+            );
             return None;
         }
         if !named.insert(child.number) {
@@ -82,7 +99,7 @@ impl Sync<'_> {
         let Some(kind) =
             values::kind_for(self.settings, child.issue_type.as_deref(), container_kind)
         else {
-            self.skip(Some(child.number), &child.title, SKIP_NO_KIND_FITS, None);
+            self.skip(Some(child.number), &child.title, Some(&child.url), SKIP_NO_KIND_FITS, None);
             return None;
         };
         let links = values::own_links(&self.doc, &self.repo);

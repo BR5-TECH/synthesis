@@ -45,13 +45,22 @@ fn read_tracker_item_returns_a_milestone_with_its_due_date() {
     assert!(v.get("type").is_none() && v.get("blockedBy").is_none());
 }
 
-/// FTS-FR-TPWE: no such item, and a pull request, are `tracker_item_not_found`.
+/// FTS-FR-TPWE / FTS-FR-VXMN: no such item, a pull request, and an issue
+/// transferred to another repository are `tracker_item_not_found`.
 #[test]
 fn read_tracker_item_refuses_a_missing_item_and_a_pull_request() {
     let (tracker, d) = plan();
     let tracker = tracker.with_issue(issue(9, "A pull request", None));
     tracker.state.borrow_mut().pull_requests.push(9);
-    for (kind, number) in [(RefKind::Issue, 404), (RefKind::Issue, 9), (RefKind::Milestone, 404)] {
+    let mut moved = issue(10, "Moved away", Some("Task"));
+    moved.repo = "elsewhere".into();
+    let tracker = tracker.with_issue(moved);
+    for (kind, number) in [
+        (RefKind::Issue, 404),
+        (RefKind::Issue, 9),
+        (RefKind::Issue, 10),
+        (RefKind::Milestone, 404),
+    ] {
         let error = snapshot(&tracker, &d, kind, number).unwrap_err();
         assert_eq!(error.code, ERR_TRACKER_ITEM_NOT_FOUND, "{kind:?} {number}");
     }
@@ -114,31 +123,38 @@ fn every_other_address_is_refused() {
 #[test]
 fn each_issue_kind_has_its_type() {
     let s = settings();
-    assert_eq!(type_for(&s, Kind::Deliverable), Some("Feature"));
-    assert_eq!(type_for(&s, Kind::Epic), Some("Feature"));
+    assert_eq!(type_for(&s, Kind::Epic), Some("Epic"));
     assert_eq!(type_for(&s, Kind::Feature), Some("Feature"));
     assert_eq!(type_for(&s, Kind::Task), Some("Task"));
     assert_eq!(type_for(&s, Kind::Defect), Some("Bug"));
     assert_eq!(type_for(&s, Kind::Milestone), None);
 }
 
-/// FTS-FR-ALOJ: the five Types are trimmed and returned; an empty one is
+/// FTS-FR-ALOJ: the four Types are trimmed and returned; an empty one is
 /// `invalid_flow_tracker_settings`.
 #[test]
 fn settings_are_trimmed_and_an_empty_type_is_refused() {
-    let s = validated_settings(" Initiative ", "Epic", "Feature", "Task", "Bug").unwrap();
-    assert_eq!(s.deliverable_type, "Initiative");
-    for blank in 0..5 {
-        let mut names = ["A", "B", "C", "D", "E"];
+    let s = validated_settings(" Initiative ", "Feature", "Task", "Bug").unwrap();
+    assert_eq!(s.epic_type, "Initiative");
+    for blank in 0..4 {
+        let mut names = ["A", "B", "C", "D"];
         names[blank] = "  ";
-        let error =
-            validated_settings(names[0], names[1], names[2], names[3], names[4]).unwrap_err();
+        let error = validated_settings(names[0], names[1], names[2], names[3]).unwrap_err();
         assert_eq!(error.code, ERR_INVALID_SETTINGS);
         assert!(!error.message.is_empty());
     }
-    let v = serde_json::to_value(&s).unwrap();
-    assert_eq!(v["deliverableType"], json!("Initiative"));
-    assert_eq!(v["defectType"], json!("Bug"));
+}
+
+/// FTS-FR-LMBE / FTS-FR-ALOJ: the settings go to the frontend as the four
+/// camelCase Types, and no other key.
+#[test]
+fn the_settings_serialize_as_four_types() {
+    let s = validated_settings("Epic", "Feature", "Task", "Bug").unwrap();
+    assert_eq!(s, settings());
+    assert_eq!(
+        serde_json::to_value(&s).unwrap(),
+        json!({ "epicType": "Epic", "featureType": "Feature", "taskType": "Task", "defectType": "Bug" })
+    );
 }
 
 /// FTS-FR-TUEJ: a second claim of one Flow is refused while the first is
@@ -164,12 +180,22 @@ fn the_sync_result_serializes_in_the_contract_shape() {
         added: 3,
         changed: 4,
         conflicts: vec![],
-        skipped: vec![SkippedIssue {
-            number: Some(58),
-            title: "Load test plan".into(),
-            reason: SKIP_NO_KIND_FITS,
-            item_id: None,
-        }],
+        skipped: vec![
+            SkippedIssue {
+                number: Some(58),
+                title: "Load test plan".into(),
+                url: Some(url_of(58)),
+                reason: SKIP_NO_KIND_FITS,
+                item_id: None,
+            },
+            SkippedIssue {
+                number: None,
+                title: "Card form".into(),
+                url: None,
+                reason: SKIP_TYPE_UNAVAILABLE,
+                item_id: Some("t9".into()),
+            },
+        ],
         stale: vec!["fsc_1".into()],
     };
     let v = serde_json::to_value(&result).unwrap();
@@ -178,7 +204,13 @@ fn the_sync_result_serializes_in_the_contract_shape() {
         json!({
             "created": 1, "updated": 2, "added": 3, "changed": 4,
             "conflicts": [],
-            "skipped": [{ "number": 58, "title": "Load test plan", "reason": "no_kind_fits" }],
+            "skipped": [
+                { "number": 58, "title": "Load test plan", "url": url_of(58), "reason": "no_kind_fits" },
+                {
+                    "number": null, "title": "Card form", "url": null,
+                    "reason": "issue_type_unavailable", "itemId": "t9"
+                },
+            ],
             "stale": ["fsc_1"],
         })
     );

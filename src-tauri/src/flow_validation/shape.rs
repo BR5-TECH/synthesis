@@ -29,7 +29,7 @@ const ITEM_FIELDS: &[&str] = &[
 const EDGE_FIELDS: &[&str] = &["id", "from", "to", "type"];
 const POSITION_FIELDS: &[&str] = &["x", "y"];
 const SIZE_FIELDS: &[&str] = &["width", "height"];
-const SYNC_FIELDS: &[&str] = &["tracker", "links"];
+const SYNC_FIELDS: &[&str] = &["tracker", "links", "ignored"];
 const LINK_FIELDS: &[&str] = &["itemId", "ref", "base"];
 const REF_FIELDS: &[&str] = &["kind", "host", "owner", "repo", "number", "url"];
 const ISSUE_BASE_FIELDS: &[&str] =
@@ -454,20 +454,41 @@ fn read_base(
     }
 }
 
-/// Read the `sync` section (FGV-FR-08, FGV-FR-01). Returns its links.
-pub fn read_sync(value: &Value, out: &mut Vec<FlowViolation>) -> Vec<RawLink> {
+/// One `sync.ignored` entry as the structural rules read it.
+pub struct RawIgnored {
+    pub index: usize,
+    pub ref_key: RefKey,
+}
+
+/// The `sync` section as the structural rules read it.
+#[derive(Default)]
+pub struct RawSync {
+    pub links: Vec<RawLink>,
+    pub ignored: Vec<RawIgnored>,
+}
+
+/// Read the `sync` section (FGV-FR-08, FGV-FR-01). Returns its links and its
+/// ignored references.
+pub fn read_sync(value: &Value, out: &mut Vec<FlowViolation>) -> RawSync {
     let Some(obj) = value.as_object() else {
         out.push(FlowViolation::doc("shape", "the document has a `sync` that is not an object"));
-        return Vec::new();
+        return RawSync::default();
     };
     unknown_fields(obj, SYNC_FIELDS, "the sync section", At::Doc, out);
     if obj.get("tracker").and_then(Value::as_str) != Some("github") {
         out.push(FlowViolation::doc("shape", "the sync section has no `tracker` of `github`"));
     }
-    let Some(links) = obj.get("links").and_then(Value::as_array) else {
-        out.push(FlowViolation::doc("shape", "the sync section has no `links` array"));
-        return Vec::new();
+    let links = match obj.get("links").and_then(Value::as_array) {
+        Some(links) => read_links(links, out),
+        None => {
+            out.push(FlowViolation::doc("shape", "the sync section has no `links` array"));
+            Vec::new()
+        }
     };
+    RawSync { links, ignored: read_ignored(obj.get("ignored"), out) }
+}
+
+fn read_links(links: &[Value], out: &mut Vec<FlowViolation>) -> Vec<RawLink> {
     let mut raw = Vec::new();
     for (index, v) in links.iter().enumerate() {
         let at = At::Link(index);
@@ -487,4 +508,27 @@ pub fn read_sync(value: &Value, out: &mut Vec<FlowViolation>) -> Vec<RawLink> {
         }
     }
     raw
+}
+
+/// FGV-FR-01: `sync.ignored` is an optional list of references. A violation
+/// of an entry is about the sync section as a whole, so it carries no index;
+/// its message names the entry.
+fn read_ignored(value: Option<&Value>, out: &mut Vec<FlowViolation>) -> Vec<RawIgnored> {
+    let Some(value) = value else { return Vec::new() };
+    let Some(entries) = value.as_array() else {
+        out.push(FlowViolation::doc(
+            "shape",
+            "the sync section has an `ignored` that is not an array",
+        ));
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, v)| {
+            let place = format!("sync ignored entry {index}");
+            read_ref(Some(v), &place, At::Doc, out)
+                .map(|(_, ref_key)| RawIgnored { index, ref_key })
+        })
+        .collect()
 }

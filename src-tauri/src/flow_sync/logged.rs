@@ -79,7 +79,7 @@ impl<S: LogSink + Clone + Send + 'static> TrackerAdapter for LoggedAdapter<'_, S
     fn set_parent(
         &self,
         number: u64,
-        current: Option<u64>,
+        current: Option<&IssueKey>,
         parent: Option<u64>,
     ) -> Result<(), String> {
         self.record("set_parent", number, self.inner.set_parent(number, current, parent))

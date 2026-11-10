@@ -23,7 +23,6 @@ pub const CONTAINER_HEADER_H: f64 = 40.0;
 /// The size a new container of each kind takes (`DEFAULT_CONTAINER_SIZES`).
 pub fn default_size(kind: Kind) -> Option<Size> {
     let (width, height) = match kind {
-        Kind::Deliverable => (760.0, 480.0),
         Kind::Milestone => (640.0, 380.0),
         Kind::Epic => (520.0, 300.0),
         Kind::Feature => (400.0, 220.0),
@@ -35,7 +34,6 @@ pub fn default_size(kind: Kind) -> Option<Size> {
 /// The id prefix of each kind (`ITEM_ID_PREFIX`).
 fn id_prefix(kind: Kind) -> &'static str {
     match kind {
-        Kind::Deliverable => "d",
         Kind::Milestone => "m",
         Kind::Epic => "ep",
         Kind::Feature => "f",
@@ -71,7 +69,6 @@ fn mint(prefix: &str, taken: &HashSet<&str>, from: usize) -> String {
 /// FTS-FR-LMBE: the issue Type of an issue kind. A milestone has none.
 pub fn type_for(settings: &FlowTrackerSettings, kind: Kind) -> Option<&str> {
     Some(match kind {
-        Kind::Deliverable => &settings.deliverable_type,
         Kind::Epic => &settings.epic_type,
         Kind::Feature => &settings.feature_type,
         Kind::Task => &settings.task_type,
@@ -81,8 +78,7 @@ pub fn type_for(settings: &FlowTrackerSettings, kind: Kind) -> Option<&str> {
 }
 
 /// FTS-FR-CJVS: the order in which the kinds are tried.
-pub const PULL_ORDER: [Kind; 5] =
-    [Kind::Deliverable, Kind::Epic, Kind::Feature, Kind::Task, Kind::Defect];
+pub const PULL_ORDER: [Kind; 4] = [Kind::Epic, Kind::Feature, Kind::Task, Kind::Defect];
 
 /// The kinds whose Type is `issue_type`, in the order of FTS-FR-CJVS.
 pub fn kinds_of_type(settings: &FlowTrackerSettings, issue_type: Option<&str>) -> Vec<Kind> {

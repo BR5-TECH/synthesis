@@ -577,7 +577,7 @@ mod tests {
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
         let body = r#"{"version":2,"name":"ok","items":[
-            {"id":"d1","kind":"deliverable","name":"a","position":{"x":0,"y":0},
+            {"id":"m1","kind":"milestone","name":"a","position":{"x":0,"y":0},
              "size":{"width":10,"height":10}}],"edges":[]}"#;
         assert_eq!(
             resolved_type(root, "flows/a.flow"),
@@ -600,14 +600,14 @@ mod tests {
         std::fs::create_dir_all(root.join("flows")).unwrap();
         std::fs::write(root.join("flows/a.flow"), b"ORIGINAL").unwrap();
         let tracker = ContentTracker::default();
-        // Three deliverables that block each other in a ring (FGV-FR-PMTY).
+        // Three milestones that block each other in a ring (FGV-FR-PMTY).
         let body = r#"{"version":2,"name":"x","items":[
-            {"id":"d1","kind":"deliverable","name":"a","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
-            {"id":"d2","kind":"deliverable","name":"b","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
-            {"id":"d3","kind":"deliverable","name":"c","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
-        ],"edges":[{"id":"e1","from":"d1","to":"d2","type":"blocks"},
-                   {"id":"e2","from":"d2","to":"d3","type":"blocks"},
-                   {"id":"e3","from":"d3","to":"d1","type":"blocks"}]}"#;
+            {"id":"m1","kind":"milestone","name":"a","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
+            {"id":"m2","kind":"milestone","name":"b","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
+            {"id":"m3","kind":"milestone","name":"c","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
+        ],"edges":[{"id":"e1","from":"m1","to":"m2","type":"blocks"},
+                   {"id":"e2","from":"m2","to":"m3","type":"blocks"},
+                   {"id":"e3","from":"m3","to":"m1","type":"blocks"}]}"#;
         let err = save_validated_artifact(root, "flows/a.flow", body, &tracker)
             .expect_err("an invalid Flow must be refused");
         assert!(err.contains("could not be written"), "{err}");

@@ -30,29 +30,56 @@ pub(super) fn edge(id: &str, from: &str, to: &str, ty: &str) -> Value {
     json!({ "id": id, "from": from, "to": to, "type": ty })
 }
 
-/// The example document of the spec's contract surface.
-pub(super) const CANONICAL: &str = r#"{
+/// The example document of the spec's contract surface, as the spec writes
+/// it.
+pub(crate) const CANONICAL: &str = r#"{
   "version": 2,
   "name": "Payments v2",
   "description": "Card payments for the EU launch.",
   "references": ["docs/payments-hld.md"],
   "items": [
-    { "id": "d1", "kind": "deliverable", "name": "Card payments",
+    {
+      "id": "m1",
+      "kind": "milestone",
+      "name": "Beta",
       "description": "Accept **Visa** and **Mastercard**.",
       "artifactIds": ["specifications/core/PAY-payments.md"],
-      "position": { "x": 40, "y": 40 }, "size": { "width": 1200, "height": 700 } },
-    { "id": "m1", "kind": "milestone", "name": "Beta", "due": "2027-03-31", "parentId": "d1",
-      "position": { "x": 20, "y": 60 }, "size": { "width": 900, "height": 520 } },
-    { "id": "f1", "kind": "feature", "name": "Card capture", "parentId": "m1",
-      "position": { "x": 20, "y": 60 }, "size": { "width": 420, "height": 300 } },
-    { "id": "t1", "kind": "task", "name": "Tokenize card numbers", "parentId": "f1",
+      "due": "2027-03-31",
+      "position": { "x": 40, "y": 40 },
+      "size": { "width": 900, "height": 520 }
+    },
+    {
+      "id": "f1",
+      "kind": "feature",
+      "name": "Card capture",
+      "parentId": "m1",
+      "position": { "x": 20, "y": 60 },
+      "size": { "width": 420, "height": 300 }
+    },
+    {
+      "id": "t1",
+      "kind": "task",
+      "name": "Tokenize card numbers",
+      "parentId": "f1",
       "draftId": "dr_7f3a",
       "footprint": ["src-tauri/src/payments/", "specifications/core/PAY-payments.md"],
-      "position": { "x": 20, "y": 60 } },
-    { "id": "t2", "kind": "task", "name": "Card form", "parentId": "f1", "localOnly": true,
-      "position": { "x": 220, "y": 60 } },
-    { "id": "x1", "kind": "defect", "name": "Decline message is wrong", "parentId": "m1",
-      "position": { "x": 460, "y": 60 } }
+      "position": { "x": 20, "y": 60 }
+    },
+    {
+      "id": "t2",
+      "kind": "task",
+      "name": "Card form",
+      "parentId": "f1",
+      "localOnly": true,
+      "position": { "x": 220, "y": 60 }
+    },
+    {
+      "id": "x1",
+      "kind": "defect",
+      "name": "Decline message is wrong",
+      "parentId": "m1",
+      "position": { "x": 460, "y": 60 }
+    }
   ],
   "edges": [
     { "id": "e1", "from": "t1", "to": "t2", "type": "blocks" },
@@ -61,11 +88,36 @@ pub(super) const CANONICAL: &str = r#"{
   "sync": {
     "tracker": "github",
     "links": [
-      { "itemId": "f1",
-        "ref": { "kind": "issue", "host": "github.com", "owner": "acme", "repo": "payments",
-                 "number": 42, "url": "https://github.com/acme/payments/issues/42" },
-        "base": { "name": "Card capture", "description": "", "type": "Feature", "parent": null,
-                  "milestone": 3, "blockedBy": [], "state": "open" } }
+      {
+        "itemId": "f1",
+        "ref": {
+          "kind": "issue",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 42,
+          "url": "https://github.com/acme/payments/issues/42"
+        },
+        "base": {
+          "name": "Card capture",
+          "description": "",
+          "type": "Feature",
+          "parent": null,
+          "milestone": 3,
+          "blockedBy": [],
+          "state": "open"
+        }
+      }
+    ],
+    "ignored": [
+      {
+        "kind": "issue",
+        "host": "github.com",
+        "owner": "acme",
+        "repo": "payments",
+        "number": 47,
+        "url": "https://github.com/acme/payments/issues/47"
+      }
     ]
   }
 }"#;
@@ -107,7 +159,7 @@ fn every_version_but_two_is_unknown_and_alone() {
 /// wrong type or outside its enumeration is `shape`.
 #[test]
 fn unknown_fields_and_wrong_types_are_reported() {
-    let mut i = item("d1", "deliverable", None);
+    let mut i = item("m1", "milestone", None);
     i["prompt"] = json!("old");
     let body = json!({ "version": 2, "loops": [], "items": [i], "edges": [] }).to_string();
     assert_eq!(codes(&body), vec!["unknown_field", "unknown_field"]);
@@ -118,7 +170,7 @@ fn unknown_fields_and_wrong_types_are_reported() {
     );
     assert_eq!(codes(&bad_kind), vec!["shape"]);
 
-    let mut no_name = item("d1", "deliverable", None);
+    let mut no_name = item("m1", "milestone", None);
     no_name.as_object_mut().unwrap().remove("name");
     no_name["localOnly"] = json!("yes");
     assert_eq!(codes(&doc(json!([no_name]), json!([]))), vec!["shape", "shape"]);
@@ -183,20 +235,20 @@ fn invalid_footprint_paths() {
 #[test]
 fn invalid_due_dates() {
     for bad in ["2027-02-30", "2027-13-01", "27-01-01", "2027-1-01", "tomorrow", "2027-02-29"] {
-        let mut m = item("m1", "milestone", Some("d1"));
+        let mut m = item("m1", "milestone", None);
         m["due"] = json!(bad);
-        let body = doc(json!([item("d1", "deliverable", None), m]), json!([]));
+        let body = doc(json!([m]), json!([]));
         assert_eq!(codes(&body), vec!["invalid_due_date"], "{bad}");
     }
-    let mut m = item("m1", "milestone", Some("d1"));
+    let mut m = item("m1", "milestone", None);
     m["due"] = json!("2028-02-29");
-    assert!(validate(&doc(json!([item("d1", "deliverable", None), m]), json!([]))).valid);
+    assert!(validate(&doc(json!([m]), json!([]))).valid);
 }
 
 /// FGV-FR-JDGO: a repeated reference, in an item or in the document.
 #[test]
 fn duplicate_references() {
-    let mut t = item("d1", "deliverable", None);
+    let mut t = item("m1", "milestone", None);
     t["artifactIds"] = json!(["a.md", "a.md"]);
     let mut body: Value = serde_json::from_str(&doc(json!([t]), json!([]))).unwrap();
     body["references"] = json!(["hld.md", "hld.md"]);
@@ -208,7 +260,7 @@ fn duplicate_references() {
 /// FGV-FR-15: what is not a violation.
 #[test]
 fn deliberate_non_violations() {
-    let mut d = item("d1", "deliverable", None);
+    let mut d = item("m1", "milestone", None);
     d["name"] = json!("");
     d["artifactIds"] = json!(["gone/file.md"]);
     let mut t = item("t1", "task", Some("f1"));
@@ -217,7 +269,7 @@ fn deliberate_non_violations() {
     let body = json!({
         "version": 2,
         "references": ["gone.md"],
-        "items": [d, item("m1", "milestone", Some("d1")), item("f1", "feature", Some("m1")), t,
+        "items": [d, item("f1", "feature", Some("m1")), t,
                   item("f2", "feature", Some("m1")), item("f3", "feature", Some("m1"))],
         "edges": [edge("e1", "f1", "f2", "relates"), edge("e2", "f2", "f3", "relates"),
                   edge("e3", "f3", "f1", "relates")],
@@ -235,9 +287,8 @@ fn deliberate_non_violations() {
 #[test]
 fn sync_section_shape() {
     let body = |sync: Value| {
-        json!({ "version": 2, "items": [item("d1", "deliverable", None), item("m1", "milestone", Some("d1"))],
-                "edges": [], "sync": sync })
-        .to_string()
+        json!({ "version": 2, "items": [item("m1", "milestone", None)], "edges": [], "sync": sync })
+            .to_string()
     };
     assert_eq!(codes(&body(json!({ "tracker": "jira", "links": [] }))), vec!["shape"]);
     assert_eq!(codes(&body(json!({ "tracker": "github" }))), vec!["shape"]);
@@ -263,7 +314,8 @@ fn sync_section_shape() {
     );
 }
 
-/// FGV-FR-04: document, then items, then edges, then sync links; each group in
+/// FGV-FR-03 / FGV-FR-04: every violation is reported, not the first one:
+/// document, then items, then edges, then sync links; each group in
 /// document order.
 #[test]
 fn violations_are_grouped_and_ordered() {

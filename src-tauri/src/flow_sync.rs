@@ -242,7 +242,8 @@ fn sync_steps<R: tauri::Runtime>(
     let root = project_root(app)?;
     let key = format!("{}\u{0}{flow_id}", root.path().display());
     let _claim = BusyClaim::take(key).ok_or_else(|| FlowSyncError::of(ERR_SYNC_IN_PROGRESS))?;
-    let doc = read_valid_flow(app, &root, flow_id)?;
+    let read = read_flow(app, &root, flow_id)?;
+    let doc = parse_valid(&read).map_err(FlowSyncError::invalid)?;
     if doc.sync.is_none() {
         return Err(FlowSyncError::of(ERR_SYNC_NOT_ENABLED));
     }
@@ -256,18 +257,66 @@ fn sync_steps<R: tauri::Runtime>(
     let logged = logged::LoggedAdapter::new(app, &tracker);
     let request = engine::SyncRequest { flow_id, doc, settings: &settings, resolutions };
     let outcome = engine::run(&logged, request)?;
-    if outcome.doc_changed {
-        // FTS-FR-VFNM: one write, through the save path that validates it.
-        let body = serialize::write_flow(&outcome.doc);
-        if crate::artifacts::save_artifact_contents_blocking(app, flow_id, &body).is_err() {
-            // FTS-FR-AIDI.
-            return Err(FlowSyncError::of(ERR_WRITE_FAILED).with_created(outcome.created_urls));
+    let write = FlowWrite {
+        read: &read,
+        reread: || read_flow(app, &root, flow_id).ok(),
+        save: |body: &str| {
+            crate::artifacts::save_artifact_contents_blocking(app, flow_id, body).is_ok()
+        },
+        changed: || {
+            log_warn(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "flow changed during the sync, not written",
+                log_fields! { "operation" => operation, "flow" => flow_id },
+            )
+        },
+    };
+    write.finish(outcome)
+}
+
+/// FTS-FR-VFNM, FTS-FR-AIDI: the one Flow write of a sync or a resolve.
+pub struct FlowWrite<'a, Reread, Save, Changed> {
+    /// The body the sync read at its start.
+    pub read: &'a str,
+    /// The body on disk now, or `None` where it cannot be read.
+    pub reread: Reread,
+    /// Write a body through the save path that validates it. False where the
+    /// write failed.
+    pub save: Save,
+    /// Report that the Flow changed on disk during the sync.
+    pub changed: Changed,
+}
+
+impl<Reread, Save, Changed> FlowWrite<'_, Reread, Save, Changed>
+where
+    Reread: FnOnce() -> Option<String>,
+    Save: FnOnce(&str) -> bool,
+    Changed: FnOnce(),
+{
+    /// Write the Flow of `outcome` once, where the sync changed it, and give
+    /// the result of the call.
+    pub fn finish(self, outcome: engine::SyncOutcome) -> Result<SyncResult, FlowSyncError> {
+        if outcome.doc_changed {
+            // The Flow can change on disk while the tracker is read and
+            // written: the author edits it, or a merge rewrites it. Such a
+            // change is not overwritten, so the write fails as a lost Flow
+            // write does (FTS-FR-AIDI), and the next sync reads the new Flow.
+            if (self.reread)().as_deref() != Some(self.read) {
+                (self.changed)();
+                return Err(FlowSyncError::of(ERR_WRITE_FAILED).with_created(outcome.created_urls));
+            }
+            let body = serialize::write_flow(&outcome.doc);
+            if !(self.save)(&body) {
+                return Err(FlowSyncError::of(ERR_WRITE_FAILED).with_created(outcome.created_urls));
+            }
         }
+        if let Some(code) = outcome.write_error {
+            return Err(FlowSyncError::of(code).with_created(outcome.created_urls));
+        }
+        Ok(outcome.result)
     }
-    if let Some(code) = outcome.write_error {
-        return Err(FlowSyncError::of(code).with_created(outcome.created_urls));
-    }
-    Ok(outcome.result)
 }
 
 /// FTS-FR-TPWE: `"read tracker item"`.
@@ -341,12 +390,11 @@ pub fn get_flow_tracker_settings(
         .map_err(|code| refuse(&app, operation, FlowSyncError::of(code)))
 }
 
-/// FTS-FR-ALOJ: `"set flow tracker settings"`. Stores the five Types and
+/// FTS-FR-ALOJ: `"set flow tracker settings"`. Stores the four Types and
 /// returns them, or refuses and writes nothing.
 #[tauri::command]
 pub fn set_flow_tracker_settings(
     app: tauri::AppHandle,
-    deliverable_type: String,
     epic_type: String,
     feature_type: String,
     task_type: String,
@@ -354,14 +402,8 @@ pub fn set_flow_tracker_settings(
 ) -> Result<FlowTrackerSettings, FlowSyncError> {
     let operation = "set_flow_tracker_settings";
     let root = project_root(&app).map_err(|e| refuse(&app, operation, e))?;
-    let settings = links::validated_settings(
-        &deliverable_type,
-        &epic_type,
-        &feature_type,
-        &task_type,
-        &defect_type,
-    )
-    .map_err(|e| refuse(&app, operation, e))?;
+    let settings = links::validated_settings(&epic_type, &feature_type, &task_type, &defect_type)
+        .map_err(|e| refuse(&app, operation, e))?;
     crate::project_settings::save_flow_tracker_settings_to(&root, &settings)
         .map_err(|code| refuse(&app, operation, FlowSyncError::of(code)))?;
     log_info(&app, &BUFFER, &[Domain::Backend], "flow tracker settings saved", log_fields! {});

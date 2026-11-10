@@ -72,7 +72,9 @@ fn the_conflict_id_follows_the_values_and_the_flow() {
 fn keep_flow_writes_the_flow_value() {
     let (tracker, d) = name_conflict();
     let pick = choose(&sync(&tracker, d.clone()).result.conflicts[0], Choice::KeepFlow);
+    tracker.clear_calls();
     let out = resolve(&tracker, d, &[pick]);
+    assert_eq!(tracker.writes(), vec!["update_issue 3 title"]);
     assert_eq!(tracker.issue(3).title, "Tokenize cards");
     assert_eq!(link_of(&out.doc, "t1").base.name, "Tokenize cards");
     assert!(out.result.conflicts.is_empty() && out.result.stale.is_empty());
@@ -137,8 +139,8 @@ fn a_link_whose_item_is_gone_is_removed_in_flow() {
     assert!(has_link(&out.doc, "t1"));
 }
 
-/// FTS-FR-BMWI: `unlink` removes the link and leaves the tracker item as it
-/// is.
+/// FTS-FR-BMWI / FTS-FR-YHVD: `unlink` removes the link, adds its reference
+/// to `sync.ignored`, and leaves the tracker item as it is.
 #[test]
 fn unlink_of_a_removed_item_drops_the_link() {
     let (tracker, mut d) = plan();
@@ -147,9 +149,31 @@ fn unlink_of_a_removed_item_drops_the_link() {
     tracker.clear_calls();
     let out = resolve(&tracker, d, &[pick]);
     assert!(!has_link(&out.doc, "t1"));
+    let ignored = &out.doc.sync.as_ref().unwrap().ignored;
+    assert_eq!(ignored, &vec![link_of(&plan().1, "t1").reference.clone()]);
     assert!(tracker.writes().is_empty());
     assert_eq!(tracker.issue(3).state, "open");
     assert!(out.result.conflicts.is_empty());
+    assert_eq!(out.result.changed, 0, "no item of the Flow changed");
+    assert_valid(&out.doc);
+}
+
+/// FTS-FR-YHVD / FTS-FR-EGJL: after `unlink` of an item gone from the Flow, a
+/// plain sync does not pull its issue back, though it is still a sub-issue
+/// of a linked issue.
+#[test]
+fn after_unlink_a_plain_sync_does_not_pull_the_issue_back() {
+    let (tracker, mut d) = plan();
+    d.items.retain(|i| i.id != "t1");
+    let pick = choose(&sync(&tracker, d.clone()).result.conflicts[0], Choice::Unlink);
+    let unlinked = resolve(&tracker, d, &[pick]).doc;
+    tracker.clear_calls();
+    let next = sync(&tracker, unlinked);
+    assert_eq!(next.result.added, 0);
+    assert!(next.doc.items.iter().all(|i| i.name != "Tokenize"));
+    assert!(next.result.conflicts.is_empty());
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(!next.doc_changed);
 }
 
 /// FTS-FR-BMWI: `restore` adds the item back from the tracker values, in the
@@ -170,22 +194,43 @@ fn restore_adds_the_item_back_from_the_tracker() {
     assert!(out.result.conflicts.is_empty());
     assert!(tracker.writes().is_empty());
     assert_valid(&out.doc);
+    tracker.clear_calls();
+    let again = sync(&tracker, out.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(again.result.conflicts.is_empty());
+    assert!(!again.doc_changed);
 }
 
-/// FTS-FR-BMWI: a restored milestone goes into the first deliverable, since
-/// the tracker names no container for a milestone.
+/// FTS-FR-BMWI / FGV-FR-YHFX: a restored milestone goes to the top level,
+/// below the lowest top-level item.
 #[test]
-fn restore_of_a_milestone_goes_into_the_first_deliverable() {
+fn restore_of_a_milestone_goes_to_the_top_level() {
     let (tracker, mut d) = plan();
     // The milestone's members go too, or the plan would not be valid.
-    d.items.retain(|i| i.id == "d1");
-    d.sync.as_mut().unwrap().links.retain(|l| l.item_id == "d1" || l.item_id == "m1");
+    d.items.clear();
+    let mut m2 = item("m2", "milestone", "Later", None);
+    m2["localOnly"] = json!(true);
+    d.items.push(serde_json::from_value(m2).unwrap());
+    d.sync.as_mut().unwrap().links.retain(|l| l.item_id == "m1");
     let first = sync(&tracker, d.clone());
     let c = first.result.conflicts.iter().find(|c| c.item_id == "m1").unwrap();
+    tracker.clear_calls();
     let out = resolve(&tracker, d, &[choose(c, Choice::Restore)]);
     let m1 = find(&out.doc, "m1");
-    assert_eq!((m1.kind, m1.parent_id.as_deref()), (Kind::Milestone, Some("d1")));
+    assert_eq!(
+        (m1.kind, m1.parent_id.as_deref(), m1.name.as_str()),
+        (Kind::Milestone, None, "Beta")
+    );
+    let m2 = find(&out.doc, "m2");
+    assert!(m1.position.y >= m2.position.y + m2.size.unwrap().height, "{m1:?}");
+    assert_eq!(out.result.added, 1);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
     assert_valid(&out.doc);
+    tracker.clear_calls();
+    let again = sync(&tracker, out.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(again.result.conflicts.is_empty());
+    assert!(!again.doc_changed);
 }
 
 /// FTS-FR-BMWI: a restore that the plan cannot hold applies nothing, and the
@@ -251,24 +296,59 @@ fn remove_item_removes_the_item_and_its_edges() {
     assert!(out.doc.items.iter().all(|i| i.id != "t1"));
     assert!(out.doc.edges.is_empty());
     assert!(!has_link(&out.doc, "t1"));
+    assert!(out.doc.sync.as_ref().unwrap().ignored.is_empty(), "remove_item ignores nothing");
     assert!(tracker.writes().is_empty());
     assert_valid(&out.doc);
 }
 
-/// FTS-FR-VXMN / FTS-FR-HDRR: `unlink` keeps the item and removes the link;
-/// the call creates nothing, and the next sync creates a new issue for it.
+/// FTS-FR-VXMN: `remove_item` on a container removes every item under it
+/// too. The links of the items under it stay, so the next sync reports them
+/// as removed in the Flow.
 #[test]
-fn unlink_of_a_missing_item_keeps_it_and_the_next_sync_creates_it() {
+fn remove_item_on_a_container_removes_its_members() {
+    let (tracker, d) = plan_with_two_tasks();
+    tracker.state.borrow_mut().issues.remove(&2);
+    let c = sync(&tracker, d.clone()).result.conflicts[0].clone();
+    assert_eq!((c.kind, c.item_id.as_str()), (ConflictKind::RemovedOnTracker, "f1"));
+    tracker.clear_calls();
+    let out = resolve(&tracker, d, &[choose(&c, Choice::RemoveItem)]);
+    let ids: Vec<&str> = out.doc.items.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, vec!["m1", "ep1"]);
+    assert!(!has_link(&out.doc, "f1"));
+    assert!(has_link(&out.doc, "t1") && has_link(&out.doc, "t2"));
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert_valid(&out.doc);
+    let next = sync(&tracker, out.doc);
+    let mut gone: Vec<(&str, ConflictKind)> =
+        next.result.conflicts.iter().map(|c| (c.item_id.as_str(), c.kind)).collect();
+    gone.sort_by_key(|(id, _)| *id);
+    assert_eq!(
+        gone,
+        vec![("t1", ConflictKind::RemovedInFlow), ("t2", ConflictKind::RemovedInFlow)]
+    );
+}
+
+/// FTS-FR-VXMN / FTS-FR-YHVD: `unlink` keeps the item as a local-only item,
+/// removes the link, and ignores its issue. Neither the call nor a plain
+/// sync after it creates an issue for the item.
+#[test]
+fn unlink_of_a_missing_item_keeps_it_and_no_sync_creates_it() {
     let (tracker, d) = plan();
     tracker.state.borrow_mut().issues.remove(&3);
     let c = sync(&tracker, d.clone()).result.conflicts[0].clone();
     let out = resolve(&tracker, d, &[choose(&c, Choice::Unlink)]);
     assert!(!has_link(&out.doc, "t1"));
-    assert_eq!(find(&out.doc, "t1").name, "Tokenize");
-    assert_eq!(out.result.created, 0);
+    let t1 = find(&out.doc, "t1");
+    assert_eq!((t1.name.as_str(), t1.local_only), ("Tokenize", Some(true)));
+    assert_eq!(out.doc.sync.as_ref().unwrap().ignored[0].number, 3);
+    assert_eq!((out.result.created, out.result.changed), (0, 1));
+    assert_valid(&out.doc);
+    tracker.clear_calls();
     let next = sync(&tracker, out.doc);
-    assert_eq!(next.result.created, 1);
-    assert!(has_link(&next.doc, "t1"));
+    assert_eq!(next.result.created, 0);
+    assert!(!has_link(&next.doc, "t1"));
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(!next.doc_changed);
 }
 
 /// FTS-FR-BMWI / FTS-FR-VXMN: a link whose item is gone from both sides holds

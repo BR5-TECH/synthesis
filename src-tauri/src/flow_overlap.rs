@@ -160,8 +160,7 @@ mod tests {
 
     fn skeleton(leaves: Vec<serde_json::Value>) -> serde_json::Value {
         let mut items = vec![
-            container("d1", "deliverable", None),
-            container("m1", "milestone", Some("d1")),
+            container("m1", "milestone", None),
             container("f1", "feature", Some("m1")),
             container("f2", "feature", Some("m1")),
         ];

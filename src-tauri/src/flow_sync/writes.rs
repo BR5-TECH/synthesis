@@ -70,7 +70,14 @@ impl Sync<'_> {
                                 .get(&number)
                                 .map(|i| i.title.clone())
                                 .unwrap_or_default();
-                            self.skip(Some(number), &title, SKIP_TYPE_UNAVAILABLE, Some(&item_id));
+                            let url = self.issues.get(&number).map(|i| i.url.clone());
+                            self.skip(
+                                Some(number),
+                                &title,
+                                url.as_deref(),
+                                SKIP_TYPE_UNAVAILABLE,
+                                Some(&item_id),
+                            );
                         }
                     }
                 }
@@ -105,7 +112,12 @@ impl Sync<'_> {
                 if parent.as_ref().is_some_and(|p| self.missing_issues.contains(&p.number)) {
                     return Ok(());
                 }
-                self.adapter.set_parent(number, current, parent.as_ref().map(|p| p.number))?;
+                // A parent in another repository is removed there.
+                self.adapter.set_parent(
+                    number,
+                    current.as_ref(),
+                    parent.as_ref().map(|p| p.number),
+                )?;
                 if let Some(l) = self.link_mut(&item_id) {
                     l.base.parent = Some(parent);
                 }
@@ -216,11 +228,18 @@ impl Sync<'_> {
                 self.add_created_link(&item_id, RefKind::Milestone, created, base);
                 continue;
             }
-            let wanted = values::type_for(self.settings, item.kind).unwrap_or_default();
-            let Some(issue_type) = self.offered_type(wanted) else {
-                // FTS-FR-XITX.
-                self.skip(None, &item.name, SKIP_TYPE_UNAVAILABLE, Some(&item_id));
-                continue;
+            // FTS-FR-XITX: a repository with no Types gets a plain issue. In
+            // one with Types, an issue whose Type it does not offer is not
+            // created.
+            let issue_type = if self.plain_issues() {
+                None
+            } else {
+                let wanted = values::type_for(self.settings, item.kind).unwrap_or_default();
+                let Some(spelling) = self.offered_type(wanted) else {
+                    self.skip(None, &item.name, None, SKIP_TYPE_UNAVAILABLE, Some(&item_id));
+                    continue;
+                };
+                Some(spelling)
             };
             let hierarchy = Hierarchy::new(&self.doc.items);
             let links = values::own_links(&self.doc, &self.repo);
@@ -233,7 +252,7 @@ impl Sync<'_> {
             let created = self.adapter.create_issue(&NewIssue {
                 title: item.name.clone(),
                 body: description.clone(),
-                issue_type: Some(issue_type.clone()),
+                issue_type: issue_type.clone(),
                 milestone,
             })?;
             let number = created.number;
@@ -241,7 +260,7 @@ impl Sync<'_> {
                 name: item.name.clone(),
                 description,
                 state: "open".into(),
-                r#type: Some(Some(issue_type)),
+                r#type: Some(issue_type),
                 parent: Some(None),
                 milestone: Some(milestone),
                 blocked_by: Some(Vec::new()),

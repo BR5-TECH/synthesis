@@ -5,7 +5,7 @@ use crate::flow_validation::model::{parse_valid, Position};
 
 /// A plan as `JSON.stringify(doc, null, 2) + "\n"` writes it: whole numbers
 /// with no fraction, a fraction, a negative number, escapes, text that is not
-/// ASCII, `null` base values, and empty lists.
+/// ASCII, `null` base values, empty lists, and `sync.ignored` after the links.
 const CANONICAL: &str = r#"{
   "version": 2,
   "name": "Payments v2",
@@ -15,13 +15,14 @@ const CANONICAL: &str = r#"{
   ],
   "items": [
     {
-      "id": "d1",
-      "kind": "deliverable",
+      "id": "m1",
+      "kind": "milestone",
       "name": "Karten – Zahlungen ✓",
       "description": "Accept **Visa**.",
       "artifactIds": [
         "specifications/core/PAY-payments.md"
       ],
+      "due": "2027-03-31",
       "position": {
         "x": 40,
         "y": -12.5
@@ -32,11 +33,10 @@ const CANONICAL: &str = r#"{
       }
     },
     {
-      "id": "m1",
-      "kind": "milestone",
+      "id": "ep1",
+      "kind": "epic",
       "name": "Beta",
-      "parentId": "d1",
-      "due": "2027-03-31",
+      "parentId": "m1",
       "position": {
         "x": 0,
         "y": 60
@@ -51,7 +51,7 @@ const CANONICAL: &str = r#"{
       "kind": "defect",
       "name": "Tokenize",
       "description": "",
-      "parentId": "m1",
+      "parentId": "ep1",
       "localOnly": false,
       "draftId": "dr_7f3a",
       "footprint": [
@@ -68,7 +68,7 @@ const CANONICAL: &str = r#"{
     "tracker": "github",
     "links": [
       {
-        "itemId": "d1",
+        "itemId": "ep1",
         "ref": {
           "kind": "issue",
           "host": "github.com",
@@ -104,6 +104,16 @@ const CANONICAL: &str = r#"{
           "due": null
         }
       }
+    ],
+    "ignored": [
+      {
+        "kind": "issue",
+        "host": "github.com",
+        "owner": "acme",
+        "repo": "payments",
+        "number": 47,
+        "url": "https://github.com/acme/payments/issues/47"
+      }
     ]
   }
 }
@@ -117,10 +127,10 @@ fn a_canonical_flow_round_trips_byte_for_byte() {
     assert_eq!(write_flow(&doc), CANONICAL);
 }
 
-/// FTS-FR-VFNM: the fixture document of FGV-flow-graph-validation.md, which
-/// the Flow tab writes, round-trips too.
+/// FTS-FR-VFNM: a plan the sync wrote reads back to the same plan and is
+/// written with the same bytes again.
 #[test]
-fn the_specification_example_round_trips_byte_for_byte() {
+fn a_written_plan_is_written_again_with_the_same_bytes() {
     let doc = super::plan().1;
     let first = write_flow(&doc);
     let again = parse_valid(&first).expect("the written plan is valid");
@@ -190,4 +200,28 @@ fn empty_fields_are_left_out_as_the_flow_tab_does() {
     for gone in ["\n  \"description\": \"\"", "references", "artifactIds", "footprint"] {
         assert!(!text.contains(gone), "{gone}");
     }
+}
+
+/// FTS-FR-VFNM / FGV-FR-01: the example document of
+/// FGV-flow-graph-validation.md, which starts at a milestone and ignores one
+/// issue, reads as a plan, and the plan it is written as reads back to the
+/// same plan, `sync.ignored` included.
+#[test]
+fn the_specification_example_reads_back_as_the_same_plan() {
+    let doc = parse_valid(crate::flow_validation::tests::CANONICAL).expect("the example is valid");
+    let written = write_flow(&doc);
+    let again = parse_valid(&written).expect("the written example is valid");
+    assert_eq!(again, doc);
+    assert_eq!(write_flow(&again), written);
+    let ignored = written.find("\"ignored\"").expect("the ignored list is written");
+    assert!(written.find("\"links\"").unwrap() < ignored, "ignored comes after links");
+}
+
+/// FTS-FR-VFNM / FTS-FR-YHVD: an empty `sync.ignored` is left out, as the
+/// Flow tab leaves it out.
+#[test]
+fn an_empty_ignored_list_is_left_out() {
+    let mut doc = super::plan().1;
+    doc.sync.as_mut().unwrap().ignored = Vec::new();
+    assert!(!write_flow(&doc).contains("ignored"));
 }

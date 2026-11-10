@@ -16,6 +16,7 @@ import type { SpecMapSessionStore } from "../state/specMap/session";
 import { SpecMap } from "./SpecMap";
 import { DocumentTextViewer } from "./DocumentViewer";
 import { PdfViewer } from "./PdfViewer";
+import { OpenSpecChangeWorkspace } from "./OpenSpecChange";
 import type { Discussion, SearchHit } from "../types";
 
 interface ViewportProps {
@@ -226,6 +227,17 @@ export function Viewport({
   if (activeT?.kind === "draftPreview" && activeT.proposalId)
     return (
       <DraftPreviewView key={activeT.id} proposalId={activeT.proposalId} label={activeT.label} />
+    );
+  // OCW-FR-DMGL / TAB-FR-KOTW: the change workspace, keyed on the tab id, which
+  // names the location and the change.
+  if (activeT?.kind === "openspecChange" && activeT.openspecChange)
+    return (
+      <OpenSpecChangeWorkspace
+        key={activeT.id}
+        tabId={activeT.id}
+        target={activeT.openspecChange}
+        onOpenArtifact={onOpenArtifact}
+      />
     );
   if (activeT?.kind === "pdf" && activeT.documentId)
     return <PdfViewer key={activeT.id} documentId={activeT.documentId} />;

@@ -19,6 +19,7 @@ pub mod ai_openrouter;
 pub mod ai_shared;
 pub mod artifacts;
 pub mod bm25_index;
+pub mod change_proposals;
 pub mod changes;
 pub mod comments;
 pub mod dashboard;
@@ -54,6 +55,7 @@ pub mod new_draft_proposals;
 pub mod notes;
 pub mod notifications;
 mod onnx_runtime;
+pub mod openspec;
 pub mod progress;
 pub mod project;
 pub mod project_settings;
@@ -126,6 +128,9 @@ pub fn run() {
         // binary what it is. The registry is NOT here — it lives in the
         // user-global store above (GSS-FR-14).
         .manage(agentic::AgenticIntegrations::default())
+        // OSM-openspec-mode.md: the one OpenSpec seam, with its kept CLI check
+        // and its slots for CLI processes (OSM-FR-ZNVZ, OSM-FR-QHRV).
+        .manage(openspec::OpenSpec::default())
         // VOP-FR-ZSXI, VOP-FR-KBPZ: the vault namespace of provider keys, and
         // the one capture session. The registry lives in the store above.
         .manage(voice_ai::VoiceAi::default())
@@ -233,6 +238,8 @@ pub fn run() {
             notifications::install(app.handle());
             // VOP-FR-BSNY.
             voice_ai::start_watchdog(app.handle().clone());
+            // AGC-FR-NBZN: the turn builders find a stream's working copy.
+            change_proposals::install_stream_lookup(app.handle().clone());
             // VOP-FR-MNTN: WebKitGTK denies capture without a handler.
             #[cfg(target_os = "linux")]
             voice_ai::linux_media::install(app.handle());
@@ -468,6 +475,14 @@ pub fn run() {
             new_draft_proposals::accept_new_draft_proposal,
             new_draft_proposals::reject_new_draft_proposal,
             new_draft_proposals::confirm_draft_decomposition,
+            change_proposals::list_change_edit_proposals,
+            change_proposals::load_change_edit_proposal_hunks,
+            change_proposals::accept_change_edit_hunk,
+            change_proposals::reject_change_edit_hunk,
+            change_proposals::set_change_edit_hunk_discussing,
+            change_proposals::edit_change_edit_hunk,
+            change_proposals::decline_change_edit_proposal,
+            change_proposals::complete_change_edit_decision,
             prompt_proposals::list_prompt_change_proposals,
             prompt_proposals::load_prompt_change_proposal_hunks,
             prompt_proposals::accept_prompt_change_hunk,
@@ -599,6 +614,8 @@ pub fn run() {
             agentic::get_project_agentic_integration,
             agentic::set_project_agentic_integration,
             project_settings::load_project_docker_images,
+            openspec::get_openspec_status,
+            openspec::change::read_openspec_change,
             project_settings::save_project_vendor_image,
             project_settings::build_project_vendor_image,
             project_settings::cancel_project_vendor_image_build,

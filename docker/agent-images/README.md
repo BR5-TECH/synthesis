@@ -72,9 +72,9 @@ application's, performed on the host where the whole repository is reachable.
   executor generates are the CLI's own and nothing wraps or rewrites them.
 - **Browser** — Chromium at a pinned Playwright version (AVI-FR-16), at
   `/opt/ms-playwright`. See below.
-- **Toolchains** — Rust, pnpm, the TypeScript compiler, the `task` runner, and
-  `cargo-nextest`, each at a pinned version (AVI-FR-17, AVI-FR-NEGK,
-  AVI-FR-PBVT). See below.
+- **Toolchains** — Rust, pnpm, the TypeScript compiler, the `task` runner,
+  `cargo-nextest`, and the OpenSpec CLI, each at a pinned version (AVI-FR-17,
+  AVI-FR-NEGK, AVI-FR-PBVT, AVI-FR-RZFR). See below.
 
 ### The toolchains
 
@@ -89,6 +89,11 @@ describe an edit, which is the same gap the missing browser was.
 | TypeScript — `tsc` | `ARG TYPESCRIPT_VERSION` | npm global |
 | go-task — `task` (AVI-FR-NEGK) | `ARG TASK_VERSION` | `/usr/local/bin/task` |
 | `cargo-nextest` (AVI-FR-PBVT) | `ARG NEXTEST_VERSION` | `/usr/local/bin/cargo-nextest` |
+| OpenSpec CLI — `openspec` (AVI-FR-RZFR) | `ARG OPENSPEC_VERSION`, the npm package `@fission-ai/openspec` | npm global |
+
+An agent in a project that uses OpenSpec follows instructions that call `openspec`, so both images
+carry it at the same exact version, 1.17.0 today. Both images set `OPENSPEC_TELEMETRY=0`
+(AVI-FR-NFNR), so the CLI sends no telemetry from a container.
 
 The go-task and `cargo-nextest` release archives are checked against the SHA-256 that the release
 publishes, per architecture, on the same terms as `rustup-init`.

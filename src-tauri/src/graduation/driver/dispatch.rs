@@ -31,9 +31,9 @@ pub(super) async fn execute<R: tauri::Runtime>(
         protocol_version: PROTOCOL_VERSION,
         // GRL-FR-LCSB: a correction turn announces no milestones.
         instruction: if input.correction.is_some() {
-            prompts::without_milestones(prompts::instruction_for_run(run, part))
+            prompts::without_milestones(&prompts::instruction_text_for_run(run, part))
         } else {
-            prompts::instruction_for_run(run, part).to_string()
+            prompts::instruction_text_for_run(run, part)
         },
         input: Some(input.to_map()),
         // GRL-FR-VIAT / GRL-FR-UNKD / GRL-FR-IJTT: every turn of the loop

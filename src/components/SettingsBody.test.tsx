@@ -19,11 +19,11 @@ import {
  */
 
 describe("the section vocabulary", () => {
-  it("SWN-FR-QXTV: the Global group lists 15 sections, the Project group 11, in the keys a route names", () => {
+  it("SWN-FR-QXTV: the Global group lists 15 sections, the Project group 12, in the keys a route names", () => {
     expect(GLOBAL_SECTIONS.map(([key]) => key)).toEqual([...GLOBAL_SECTION_KEYS]);
     expect(PROJECT_SECTIONS.map(([key]) => key)).toEqual([...PROJECT_SECTION_KEYS]);
     expect(GLOBAL_SECTIONS).toHaveLength(15);
-    expect(PROJECT_SECTIONS).toHaveLength(11);
+    expect(PROJECT_SECTIONS).toHaveLength(12);
   });
 
   it("GLS-FR-03: Isolation sits directly after Docker and before Remote connectivity", () => {

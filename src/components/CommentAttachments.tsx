@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
 import { ProposalHunkControl } from "./ProposalHunkControl";
+import { ChangeProposalAttachmentView } from "./ChangeProposalAttachment";
 import { NewDraftReferenceControl } from "./NewDraftReferenceControl";
 import {
   openReview,
@@ -38,7 +39,6 @@ import {
 import {
   attachmentName,
   isImageAttachment,
-  isProposalAttachment,
   undecidedCount,
   type Attachment,
   type AttachmentInput,
@@ -693,7 +693,7 @@ function PromptProposalAttachmentView({
  * a reading of the proposal answers. The count of changes is the proposal's,
  * so it shows only after one does.
  */
-function ProposalCount({
+export function ProposalCount({
   update,
   changes,
 }: {
@@ -722,7 +722,7 @@ function ProposalCount({
  * for either, and a sentence that drifted between them would be the difference
  * an author reads as a difference in what the control does.
  */
-function proposalControlLabel(
+export function proposalControlLabel(
   state: "pending" | "accepted" | "rejected" | null,
   gone: boolean,
 ): string | null {
@@ -744,7 +744,7 @@ function AttachmentView({
   draftId?: string;
   attachment: Exclude<
     Attachment,
-    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" | "synthesis" | "advisors" }
+    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" | "synthesis" | "advisors" | "changeProposal" }
   >;
 }) {
   const name = attachmentName(attachment);
@@ -848,7 +848,9 @@ function AttachmentView({
       <span className="comment-attach__chip-type">
         {failed
           ? "could not be loaded"
-          : isProposalAttachment(attachment) || attachment.kind === "proposalHunk"
+          : attachment.kind === "proposal" ||
+              attachment.kind === "promptProposal" ||
+              attachment.kind === "proposalHunk"
             ? attachment.path
             : attachment.mediaType}
       </span>
@@ -880,6 +882,9 @@ export function CommentAttachmentList({
           <ProposalAttachmentView key={i} attachment={a} />
         ) : a.kind === "promptProposal" ? (
           <PromptProposalAttachmentView key={i} attachment={a} />
+        ) : a.kind === "changeProposal" ? (
+          // CMT-FR-48 / OCW-FR-COLR: the edits proposed to an OpenSpec change.
+          <ChangeProposalAttachmentView key={i} attachment={a} />
         ) : a.kind === "proposalHunk" ? (
           <ProposalHunkControl key={i} attachment={a} />
         ) : a.kind === "newDraftProposal" ? (

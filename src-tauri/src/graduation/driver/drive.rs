@@ -547,6 +547,8 @@ async fn review_turn<R: tauri::Runtime>(
     // than falling out to a further work turn: the work has not changed, so a
     // work turn would spend a container and a pass re-deciding work nobody
     // reported a problem with.
+    // GRL-FR-CDNI: the validation of the last review checkout, for the gate.
+    let mut validation: Option<crate::openspec::ChangeValidation>;
     let (verdict, summary) = loop {
         let settings = settings_for_dispatch(app, run, phases::PART_REVIEW);
         // A budget the author lowered while the work turn ran rests the run,
@@ -632,6 +634,18 @@ async fn review_turn<R: tauri::Runtime>(
             );
         }
         input.checks = Some(checks);
+        // GRL-FR-CDNI, GRL-FR-KDYL: a propose run's change is validated in this
+        // checkout before the review turn, which reads the result as evidence.
+        match openspec_review::validation(app, run, &checkout).await {
+            Ok(result) => {
+                input.openspec_validation.clone_from(&result);
+                validation = result;
+            }
+            Err(()) => {
+                let _ = review_checkout::release(app, run, worktree);
+                return Step::Stop;
+            }
+        }
         let bound = settings.turn_bound(run.turn_time_used_ms);
         let turn = TurnRequest {
             execution_directory: &checkout,
@@ -753,6 +767,22 @@ async fn review_turn<R: tauri::Runtime>(
         && verdict.verdict == ReviewOutcome::Revise
         && verdict.findings.len() <= 2
         && verdict.findings.iter().all(|f| f.severity == ReviewSeverity::Minor);
+    // GRL-FR-HSZD: a change that does not validate never ends the loop.
+    let ends_as_ready = verdict.verdict == ReviewOutcome::Ready || advisory;
+    let gated =
+        openspec_review::gate_verdict(run, verdict.clone(), ends_as_ready, validation.as_ref());
+    let replaced = gated != verdict;
+    let verdict = gated;
+    let advisory = advisory && !replaced;
+    if replaced {
+        let _ = logs::emit(
+            app,
+            run,
+            StructuredEvent::new(GraduationLogProducer::ReviewTurn, "propose review replaced")
+                .at_level(GraduationLogLevel::Warn)
+                .with("findings", 1u64),
+        );
+    }
 
     if verdict.verdict == ReviewOutcome::Ready || advisory {
         run.observability.settle_pass(&verdict, None, crate::notes::now_rfc3339());

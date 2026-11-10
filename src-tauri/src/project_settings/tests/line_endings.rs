@@ -150,6 +150,8 @@ fn project_config_serialises_camel_case_with_lowercase_conventions() {
             "graduationPassBudget": null,
             "graduationStageTimeLimitMs": null,
             "graduationTotalTimeLimitMs": null,
+            // PSS-FR-HVUZ: the OpenSpec mode setting rides there too.
+            "openspecMode": null,
         })
     );
     // And it deserialises from the frontend shape, and from an empty object.

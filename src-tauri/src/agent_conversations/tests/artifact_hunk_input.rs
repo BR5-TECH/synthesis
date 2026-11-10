@@ -72,6 +72,7 @@ fn open_hunk_discussion(h: &Harness, proposal_id: &str, hunk_id: &str) -> Discus
         None,
         "@arch why two?".into(),
         vec![crate::comments::AttachmentInput::ProposalHunk {
+            change: None,
             proposal_id: proposal_id.into(),
             hunk_id: hunk_id.into(),
             draft_id: None,

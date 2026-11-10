@@ -11,6 +11,7 @@ pub fn start_graduation<R: tauri::Runtime>(
     stream_id: String,
     standing_work: StandingWork,
     standing_work_message: Option<String>,
+    openspec_change: Option<String>,
 ) -> Result<GraduationRun, String> {
     write_check::prime_start_write(&app, &queue::project_key(&app), None);
     let state = app.try_state::<GraduationState>();
@@ -26,6 +27,10 @@ pub fn start_graduation<R: tauri::Runtime>(
     // GSU-FR-JBKZ: the stream must be one the project holds.
     let stream = crate::streams::stream_of(&app, &stream_id)
         .ok_or_else(|| ERR_UNKNOWN_STREAM.to_string())?;
+    // GSU-FR-MIVF, GSU-FR-MTDA: a propose start checks OpenSpec before the image.
+    if let Some(name) = openspec_change.as_deref() {
+        openspec_start::preflight(&app, &stream, name, true)?;
+    }
 
     // GSU-FR-GLVQ: the image preflight probes nothing and refuses before a run
     // exists, so a machine that cannot execute an agent costs no run.
@@ -56,6 +61,7 @@ pub fn start_graduation<R: tauri::Runtime>(
     // applies it when its turn comes. The start reads no working copy: what
     // stands in the stream now is not what stands there at the dispatch.
     let mut run = new_run(&project_key, &stream, input, standing_work, standing_work_message);
+    run.openspec = openspec_change.as_deref().map(openspec_start::propose_data);
     // GRS-FR-KDOY: both streams are created in the write that creates the run,
     // so a run that has emitted nothing still has two readable ones.
     crate::graduation::logs::initialize(&app, &mut run);
@@ -618,6 +624,10 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
     }
     let stream = crate::streams::stream_of(&app, &stream_id)
         .ok_or_else(|| ERR_UNKNOWN_STREAM.to_string())?;
+    // GSU-FR-QSNE: a restart of a propose run checks the mode and the name afresh.
+    if let Some(data) = discarded.openspec.as_ref() {
+        openspec_start::preflight(&app, &stream, &data.change, false)?;
+    }
     image_preflight(&app)?;
 
     // The captured input travels whole: the run answers the prompt as it stood
@@ -633,6 +643,7 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
         standing_work_message,
     );
     run.restarted_from_run_id = Some(discarded.id.clone());
+    run.openspec = discarded.openspec.clone();
     crate::graduation::logs::initialize(&app, &mut run);
     runs::save_run(&app, &mut run)?;
     // GSU-FR-RNOM: a restart that enqueues a run asks for the same commit a
@@ -802,6 +813,7 @@ pub(crate) fn build_run(
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),

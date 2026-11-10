@@ -87,7 +87,7 @@ impl Fixture {
         run
     }
 
-    fn start_direct(&self, draft: &str) -> Result<GraduationRun, String> {
+    pub(super) fn start_direct(&self, draft: &str) -> Result<GraduationRun, String> {
         crate::graduation::start_direct_graduation(
             self.app.clone(),
             draft.to_string(),
@@ -954,6 +954,7 @@ fn a_refused_start_keeps_the_stream_that_stood_before_it() {
         draft.clone(),
         stream.id.clone(),
         StandingWork::Keep,
+        None,
         None,
     );
     assert!(refused.is_err());

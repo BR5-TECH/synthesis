@@ -277,6 +277,7 @@ mod artifact_discussions;
 mod attachment_read;
 mod attachments;
 mod author_comments;
+mod change_owner;
 mod errors_and_lifecycle;
 mod local_participant;
 mod log_and_fold;

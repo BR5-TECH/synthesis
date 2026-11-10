@@ -44,6 +44,10 @@ pub const STATISTICS_DIRNAME: &str = "statistics";
 /// RMS-FR-MVDU: one draft's own conversation folder, addressed by its stable id.
 pub const DRAFTS_DIRNAME: &str = "drafts";
 
+/// CMS-FR-GJEY / CEP-FR-IISM: one OpenSpec change's own folder, addressed by
+/// its stream id and its change name.
+pub const CHANGES_DIRNAME: &str = "changes";
+
 /// RMS-FR-WGQS: the store could not be resolved or created.
 pub const ERR_STORE_UNAVAILABLE: &str = "store_unavailable";
 

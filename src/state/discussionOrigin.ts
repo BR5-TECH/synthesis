@@ -24,6 +24,13 @@ export function originDraftId(o: ConversationOrigin): string | null {
   return o.target.kind === "draft" ? o.target.draftId : null;
 }
 
+/** CVP-FR-FWOB: the target key of the change that owns the origin, if any. */
+export function originChangeKey(o: ConversationOrigin): string | null {
+  return o.target.kind === "change"
+    ? `change:${o.target.streamId}:${o.target.change}`
+    : null;
+}
+
 /** AGC-FR-05: the id of the artifact that owns the origin's discussion, if any. */
 export function originArtifactId(o: ConversationOrigin): string | null {
   return o.target.kind === "artifact" ? o.target.artifactId : null;
@@ -39,7 +46,9 @@ export type OriginKind =
   | "artifact_discussion"
   | "draft_comment"
   | "draft_discussion"
-  | "note_discussion";
+  | "note_discussion"
+  | "change_discussion"
+  | "change_comment";
 
 /** AGC-FR-05: the kind of conversation the origin names. */
 export function originKind(o: ConversationOrigin): OriginKind {
@@ -51,6 +60,9 @@ export function originKind(o: ConversationOrigin): OriginKind {
       return fragment ? "draft_comment" : "draft_discussion";
     case "note":
       return "note_discussion";
+    // CMS-FR-UEXD: a change owner has whole-change and fragment discussions.
+    case "change":
+      return fragment ? "change_comment" : "change_discussion";
   }
 }
 
@@ -67,5 +79,8 @@ export function locatorOf(target: DiscussionTarget): {
       return { artifactId: target.artifactId };
     case "note":
       return { noteId: target.noteId };
+    // The backend finds a change discussion by its id. No hint narrows it.
+    case "change":
+      return {};
   }
 }

@@ -202,6 +202,8 @@ fn no_dockerfile_bakes_in_a_credential() {
         //
         // AVI-FR-WWVY: the Claude Code image also sets the CLI's two Bash
         // timeouts, which hold a number of milliseconds rather than a path.
+        // AVI-FR-NFNR: both images turn the OpenSpec CLI's telemetry off, and
+        // the one value that variable may hold is `0`.
         const DEFINED: [&str; 6] =
             ["CARGO_HOME", "HOME", "PATH", "PLAYWRIGHT_BROWSERS_PATH", "PNPM_HOME", "RUSTUP_HOME"];
         const TIMEOUTS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
@@ -211,7 +213,9 @@ fn no_dockerfile_bakes_in_a_credential() {
                 let (name, value) = assignment
                     .split_once('=')
                     .unwrap_or_else(|| panic!("{vendor} sets an ENV with no value: {assignment}"));
-                if vendor == "claude-code" && TIMEOUTS.contains(&name) {
+                if name == "OPENSPEC_TELEMETRY" {
+                    assert_eq!(value, "0", "{vendor} sets {name} to something other than 0");
+                } else if vendor == "claude-code" && TIMEOUTS.contains(&name) {
                     assert!(
                         !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()),
                         "{vendor} sets {name} to something other than a number: {value}"
@@ -227,6 +231,7 @@ fn no_dockerfile_bakes_in_a_credential() {
             .collect();
         names.sort();
         let mut expected: Vec<&str> = DEFINED.to_vec();
+        expected.push("OPENSPEC_TELEMETRY");
         if vendor == "claude-code" {
             expected.extend(TIMEOUTS);
         }

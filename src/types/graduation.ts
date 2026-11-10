@@ -8,6 +8,7 @@
 
 import type { GraduationObservability } from "./graduationObservability";
 import type { GraduationLogStream } from "./graduationLogs";
+import type { DraftOpenspecChange, GraduationOpenspec } from "./openspec";
 
 /** GRD-FR-QJHM: the nine states a run stands in. */
 export type GraduationRunState =
@@ -553,6 +554,8 @@ export interface GraduationRun {
   merge?: GraduationMergeData | null;
   /** GRD-FR-KAKU: present on a PR summary run alone. */
   prSummary?: PrSummaryData | null;
+  /** GRD-FR-LKGC: present on a propose run alone. */
+  openspec?: GraduationOpenspec | null;
   /** GRD-FR-UUGP: the run summary of a completed draft run's `ready` review. */
   runSummary?: RunSummary | null;
   /** GRD-FR-PXQN: empty until the run's work is on a branch. */
@@ -611,6 +614,8 @@ export interface DraftGraduation {
   locked: boolean;
   /** DRS-FR-KQTW: a run of this draft committed and is not discarded. */
   graduated: boolean;
+  /** DRS-FR-VHMB: the change a propose run writes, and the stream it lives on. */
+  openspecChange?: DraftOpenspecChange | null;
 }
 
 /** GRD-FR-EFAU: what the queue-changed event carries. */

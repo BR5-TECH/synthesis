@@ -116,6 +116,9 @@ fn every_tool_name_is_snake_case_unique_and_matches_its_definition() {
                 .to_string(),
             <document_get::GetDocumentTool<tauri::test::MockRuntime> as PortableTool>::NAME
                 .to_string(),
+            crate::tools::openspec_list_specs::NAME.to_string(),
+            crate::tools::openspec_read_spec::NAME.to_string(),
+            crate::tools::openspec_list_changes::NAME.to_string(),
             <read_graduation_file::ReadGraduationFileTool<tauri::test::MockRuntime> as PortableTool>::NAME
                 .to_string(),
             <ask_user_comment::AskUserCommentTool<tauri::test::MockRuntime> as PortableTool>::NAME
@@ -180,6 +183,17 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             n if n == document_get::NAME => "Returns the whole text by default",
             n if n == draft_read::NAME => "It returns the draft's stable metadata",
             n if n == skill_list::NAME => "Each entry gives",
+            // LOS-FR-UPKL, ROS-FR-AZNY, LOC-FR-YVDP: what each OpenSpec read
+            // returns.
+            n if n == crate::tools::openspec_list_specs::NAME => {
+                "Each entry gives the capability id"
+            }
+            n if n == crate::tools::openspec_read_spec::NAME => {
+                "its title, its overview, and each requirement with its scenarios"
+            }
+            n if n == crate::tools::openspec_list_changes::NAME => {
+                "Each entry gives the change name"
+            }
             // AUC's and PDC's answer to "what do I get back" is that you get
             // nothing back and why, which is the more useful thing for a model
             // to read about a tool that ends its turn.
@@ -232,6 +246,15 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
                 "nothing that is found is read out of, changed, resolved, or deleted"
             }
             n if n == file_read::NAME => "it does not search for a file",
+            // LOS-FR-UPKL, ROS-FR-AZNY, LOC-FR-YVDP: the boundary each OpenSpec
+            // read draws against its two neighbours.
+            n if n == crate::tools::openspec_list_specs::NAME => {
+                "This does not list changes in progress"
+            }
+            n if n == crate::tools::openspec_read_spec::NAME => "This does not read a change",
+            n if n == crate::tools::openspec_list_changes::NAME => {
+                "Archived changes are not listed"
+            }
             // SDT-FR-JMSA: finding a document changes nothing about it.
             n if n == document_search::NAME => "Nothing that is found is changed",
             // GDT-FR-GNCR: the boundary is which files it reaches — only a
@@ -310,6 +333,11 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // themselves being what the sentence after it is about.
             n if n == escalate_to_user::NAME => "ask",
             n if n == measure_document::NAME => "size",
+            // LOS-FR-UPKL, ROS-FR-AZNY, LOC-FR-YVDP: capabilities, one
+            // capability, and changes in progress.
+            n if n == crate::tools::openspec_list_specs::NAME => "capabilities",
+            n if n == crate::tools::openspec_read_spec::NAME => "one capability",
+            n if n == crate::tools::openspec_list_changes::NAME => "changes in progress",
             other => panic!("no subject declared for {other} (TLC-FR-03)"),
         };
         let first = text.split(". ").next().unwrap_or_default();

@@ -100,6 +100,15 @@ export function graduationErrorMessage(error: string): string {
       // GRU-FR-EMNV / GEA-FR-HBCF: a Continue or an answer refused because a
       // branch moved says so, and says that nothing was written.
       return MERGE_BRANCH_MOVED_STATEMENT;
+    // GSU-FR-MTDA / GSU-FR-CZEP / GSU-FR-UIDE: the refusals of a propose start.
+    case "openspec_mode_inactive":
+      return "OpenSpec mode is not active for this project, so a change cannot be proposed.";
+    case "openspec_cli_unavailable":
+      return "The OpenSpec CLI is not available on this machine, so a change cannot be proposed.";
+    case "invalid_change_name":
+      return "That is not a valid change name.";
+    case "openspec_change_exists":
+      return "A change of that name is already on that stream, or a run is proposing it.";
     case "direct graduation active":
       return "A graduation run is working in the active worktree. Switching waits until the run ends.";
     default:

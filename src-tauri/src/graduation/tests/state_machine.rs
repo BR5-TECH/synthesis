@@ -42,6 +42,7 @@ fn run_at(state: GraduationRunState) -> GraduationRun {
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),

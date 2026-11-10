@@ -27,6 +27,11 @@ import {
   usePromptProposalReference,
 } from "../../../state/promptProposals";
 import { setFocusedHunk } from "../../../state/draftDiscussion";
+import {
+  asReviewable,
+  showChangeProposal,
+  useChangeProposalReference,
+} from "../../../state/openspec/changeProposals";
 import { formatRelative } from "../../ProjectPicker";
 import { TypeChip } from "./TypeChip";
 import type { ProposalState, ProposalUpdateCounts } from "../../../types";
@@ -55,10 +60,44 @@ export interface ChangeRowProps {
 }
 
 export function ChangeRow(props: ChangeRowProps) {
-  return props.reference.kind === "proposal" ? (
-    <DraftChangeRow {...props} reference={props.reference} />
-  ) : (
-    <PromptChangeRow {...props} reference={props.reference} />
+  if (props.reference.kind === "proposal") {
+    return <DraftChangeRow {...props} reference={props.reference} />;
+  }
+  if (props.reference.kind === "changeProposal") {
+    return <OpenSpecChangeRow {...props} reference={props.reference} />;
+  }
+  return <PromptChangeRow {...props} reference={props.reference} />;
+}
+
+/**
+ * OCW-FR-COLR / CMT-FR-48: the edits proposed to an OpenSpec change. The row
+ * opens or focuses the change workspace tab, at the first undecided hunk.
+ */
+function OpenSpecChangeRow({
+  reference,
+  createdAt,
+}: {
+  reference: Extract<ChangeReference, { kind: "changeProposal" }>;
+  createdAt: string;
+}) {
+  const read = useChangeProposalReference(
+    reference.streamId,
+    reference.change,
+    reference.proposalId,
+  );
+  const proposal = read.kind === "known" ? read.proposal : null;
+  return (
+    <Row
+      path={reference.change}
+      changes={proposal ? reviewedHunkTotal(asReviewable(proposal)) : 0}
+      update={reference.update}
+      state={proposal?.state ?? null}
+      gone={read.kind === "gone"}
+      createdAt={createdAt}
+      onOpen={() =>
+        showChangeProposal(reference.streamId, reference.change, reference.proposalId)
+      }
+    />
   );
 }
 

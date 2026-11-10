@@ -658,6 +658,9 @@ pub struct GraduationRun {
     /// PR summary run alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_summary: Option<PrSummaryData>,
+    /// GRD-FR-LKGC: the phase and the change of a propose run alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec: Option<RunOpenSpec>,
     /// GRD-FR-UUGP: the run summary of the `ready` review a completed draft run
     /// ended on. Absent on every other run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -814,6 +817,7 @@ impl GraduationRun {
             failure: None,
             merge: None,
             pr_summary: None,
+            openspec: None,
             run_summary: None,
             landings: Vec::new(),
             reverts: Vec::new(),
@@ -940,6 +944,21 @@ pub struct GraduationQueue {
     pub runs: Vec<GraduationRun>,
 }
 
+/// GRD-FR-LKGC: what a propose run records about the change it writes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunOpenSpec {
+    pub phase: String,
+    pub change: String,
+}
+
+/// DRS-FR-VHMB: the change a draft's propose run writes, and its stream.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftOpenSpecChange {
+    pub name: String,
+    pub stream_id: String,
+}
+
 /// What the Drafts panel is told about a draft's run (`DRS-FR-18`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -951,4 +970,7 @@ pub struct DraftGraduation {
     /// DRS-FR-KQTW: a run of this draft has committed its work onto a stream
     /// and is not discarded.
     pub graduated: bool,
+    /// DRS-FR-VHMB: present where that run is a propose run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_change: Option<DraftOpenSpecChange>,
 }

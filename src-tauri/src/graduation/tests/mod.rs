@@ -58,6 +58,7 @@ mod milestone_prompts;
 mod pr_summary;
 mod pr_summary_turn;
 mod prompts;
+mod propose_run;
 mod review_checkout;
 mod run_progress;
 mod run_summary;

@@ -37,6 +37,7 @@ pub mod images;
 use build_seam::AppBuildEvents;
 pub use build_seam::ImageBuilderSeam;
 pub mod loop_settings;
+pub mod openspec_mode;
 pub mod public_store;
 pub mod publication_settings;
 pub use concurrency::GraduationConcurrency;
@@ -322,6 +323,10 @@ pub struct ProjectConfig {
     /// PSS-FR-RKTW: the graduation total time limit, in milliseconds.
     #[serde(default, deserialize_with = "explicit_option")]
     pub graduation_total_time_limit_ms: Option<Option<i64>>,
+    /// PSS-FR-IMDN: `auto` or `off`. Always present on read; on a write an
+    /// absent value leaves the setting as it stands (PSS-FR-HVUZ).
+    #[serde(default)]
+    pub openspec_mode: Option<String>,
 }
 
 /// Tell a key that was **absent** from a key that carried `null`.

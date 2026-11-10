@@ -206,6 +206,14 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "accept_new_draft_proposal",
     "reject_new_draft_proposal",
     "confirm_draft_decomposition",
+    "list_change_edit_proposals",
+    "load_change_edit_proposal_hunks",
+    "accept_change_edit_hunk",
+    "reject_change_edit_hunk",
+    "set_change_edit_hunk_discussing",
+    "edit_change_edit_hunk",
+    "decline_change_edit_proposal",
+    "complete_change_edit_decision",
     "list_prompt_change_proposals",
     "load_prompt_change_proposal_hunks",
     "accept_prompt_change_hunk",
@@ -388,6 +396,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // it is the read path for an actual Docker operation and must stay
     // unreachable from the frontend (GSS-FR-40).
     "load_project_docker_images",
+    // OpenSpec mode (OSM-openspec-mode.md OSM-FR-YXUC).
+    "get_openspec_status",
+    "read_openspec_change",
     "save_project_vendor_image",
     "build_project_vendor_image",
     "cancel_project_vendor_image_build",

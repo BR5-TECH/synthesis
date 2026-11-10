@@ -18,10 +18,13 @@ The backend module that turns a finished draft prompt into committed work. A dra
 10. **GRD-FR-WSXA** The operations that settle order, membership and eligibility — pause, resume, auto-start, reorder, and a discard or a revert that removes runs (GRD-FR-QCZF) — are serialized against each other and against dispatch, under one exclusive hold on the project's store. Each reads, checks its precondition, writes, and only then emits.
 11. **GRD-FR-JOFE** A run carries an **archive state independent of its lifecycle state**. `archive_graduation_run` and `unarchive_graduation_run` are accepted from every state, are idempotent, and change nothing else: not the run's state, its queue place, its stream, or its observability.
 12. **GRD-FR-LGDV** A run's record is the project's durable history. `list_graduation_queue` and `get_graduation_run` answer for every run the project holds in its run order, terminal runs included, with the complete record of each. A record survives an application restart and the deletion of the stream the run ran in.
-13. **GRD-FR-FTBQ** `start_graduation(draft_id, stream_id, standing_work, standing_work_message)` captures the draft's prompt, its name, and the checksum of the prompt bytes as a `CapturedGraduationInput`. The capture is taken once and is immutable for the run's life.
+13. **GRD-FR-FTBQ** `start_graduation(draft_id, stream_id, standing_work, standing_work_message, openspec_change?)` captures the draft's prompt, its name, and the checksum of the prompt bytes as a `CapturedGraduationInput`. The capture is taken once and is immutable for the run's life.
     - *Why:* A run answers the prompt as it stood when the author judged it finished, so an edit made afterwards is a different prompt and belongs to a different run.
 14. **GRD-FR-DXWL** A draft a **non-terminal** run holds is locked, and the lock is enforced in draft storage rather than trusted to a caller (per `DRS-draft-storage.md` DRS-FR-19). A draft with any `completed` run is not deletable.
 15. **GRD-FR-JGEC** A GitHub-shadow draft (per `DRS-draft-storage.md` DRS-FR-XDWS) graduates on the terms of every other draft. A run that commits makes it report `graduated` (DRS-FR-EZDB), and no run changes, closes, or reads the GitHub issue the draft names (per `GPP-github-polling.md` GPP-FR-CRWY).
+15. **GRD-FR-LKGC** A **propose run** is a stream draft run whose record carries `openspec` data: the phase `propose` and the name of the OpenSpec change it writes, taken at enqueue from `openspec_change` (per `GSU-graduation-start.md` GSU-FR-MIVF). Every requirement of a draft run holds for it, except where `../ai/GRL-graduation-loop.md` names a propose run.
+15. **GRD-FR-SYHE** A completed propose run commits like every draft run (GRD-FR-ARLT), so its draft reports `graduated` (per `DRS-draft-storage.md` DRS-FR-20). `get_draft_graduation` returns that run with its `openspec` data, which is the link from the draft to its change.
+15. **GRD-FR-UJII** A propose run that rests `blocked` with the code `openspec_validation_unavailable` (per `../ai/GRL-graduation-loop.md` GRL-FR-KDYL) keeps its queue and its project slot, and the author's Continue dispatches its review again.
 15. **GRD-FR-YBUM** The run records the stream branch's revision as its **base commit** at the moment its first turn is dispatched, before the container starts. Every commit the run makes is measured from that revision. A merge run records its merge snapshot commit instead (GRD-FR-KZPT).
 16. **GRD-FR-HQPD** What a run does with work standing uncommitted in its stream when it is dispatched is the `standing_work` choice recorded when the run was enqueued. `keep` commits nothing. `commit` commits those paths as the author's own commit, which becomes the run's base commit. `commit_and_push` commits them the same way. A merge run's choice is `keep` and it runs no standing-work step.
 17. **GRD-FR-RJFC** A commit the standing-work choice makes takes the `standing_work_message` recorded with the choice. A run that carries none commits under its own name, which is the draft name its captured input holds.
@@ -135,7 +138,7 @@ A merge run also owns, in the repository, the scratch branch `synthesis/merge-ru
 `<project-key>` is the project key of `GSS-global-settings-storage.md` GSS-FR-18, so every worktree of one repository shares one run order. Nothing of this store is written into a project's `.synthesis/`, and none of it is committed.
 
 ### Tauri commands
-- `start_graduation(draft_id, stream_id, standing_work, standing_work_message)` → `GraduationRun`
+- `start_graduation(draft_id, stream_id, standing_work, standing_work_message, openspec_change?)` → `GraduationRun`
 - `start_direct_graduation(draft_id, expected_worktree, expected_branch)` → `GraduationRun` (per `GSU-graduation-start.md`)
 - `preflight_direct_graduation()` → `DirectGraduationPreflight` (per `GSU-graduation-start.md`)
 - `list_graduation_queue()` → `GraduationQueue`
@@ -252,6 +255,7 @@ GraduationRun {
   restarted_from_run_id?,
   failure?,                      // { code, message, retryable }
   pr_summary?,                   // PrSummaryData; present on a PR summary run alone (GRD-FR-KAKU)
+  openspec?,                     // { phase: "propose", change }; present on a propose run alone (GRD-FR-LKGC)
   run_summary?,                  // RunSummary; a completed draft run only (GRD-FR-UUGP)
   landings,                      // [Landing]; empty until the run's work is on a branch (GRD-FR-PXQN)
   reverts                        // [Landing]; one per revert of the run (GRD-FR-RVXK)

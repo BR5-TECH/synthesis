@@ -313,6 +313,7 @@ pub(super) fn save_plain_run(
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),

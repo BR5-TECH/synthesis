@@ -28,7 +28,7 @@ const CLASSIFIER_INSTRUCTIONS_CHARS: usize = 2_000;
 
 /// CVL-FR-HNGB: the tools an advisor turn does not carry — the tools that end a
 /// turn on a contribution, and the tools that decide a proposal.
-pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 8] = [
+pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 10] = [
     crate::tools::ask_user_comment::NAME,
     crate::tools::request_document_export::NAME,
     crate::tools::ask_discussion_questions::NAME,
@@ -37,6 +37,8 @@ pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 8] = [
     crate::tools::propose_prompt_changes::NAME,
     crate::tools::decide_draft_changes::NAME,
     crate::tools::decide_prompt_changes::NAME,
+    crate::tools::propose_change_edits::NAME,
+    crate::tools::decide_change_edits::NAME,
 ];
 
 static NEXT_GROUP: AtomicU64 = AtomicU64::new(1);
@@ -515,6 +517,16 @@ fn run_synthesis_monitor<R: tauri::Runtime>(
     }
 }
 
+/// AGC-FR-DIZM / AGC-FR-WPAP: the proposal tool a synthesis turn on `target`
+/// has, which its `group_proposals` section names.
+pub(super) fn proposal_tool_of(target: &DiscussionTarget) -> &'static str {
+    match target {
+        DiscussionTarget::Artifact { .. } => crate::tools::propose_prompt_changes::NAME,
+        DiscussionTarget::Change { .. } => crate::tools::propose_change_edits::NAME,
+        _ => crate::tools::propose_draft_changes::NAME,
+    }
+}
+
 /// AGC-FR-CZCU, AGC-FR-DIZM: the sections of a synthesis turn.
 fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<InputSection> {
     let replies = state.replies();
@@ -555,10 +567,8 @@ fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<In
             .join("\n\n");
         // CVL-FR-08: a draft turn has `propose_draft_changes` and an artifact
         // turn has `propose_prompt_changes`. The turn is told the one it has.
-        let tool = match origin.target {
-            DiscussionTarget::Artifact { .. } => crate::tools::propose_prompt_changes::NAME,
-            _ => crate::tools::propose_draft_changes::NAME,
-        };
+        // AGC-FR-WPAP: a change turn has `propose_change_edits`.
+        let tool = proposal_tool_of(&origin.target);
         let body = format!("Propose the merged change with `{tool}`.\n\n{offers}");
         sections.push(section("group_proposals", body));
     }
@@ -707,6 +717,7 @@ pub(super) fn capture_contributions(
                 (Arc::clone(asked_questions), true)
             } else if name == crate::tools::propose_draft_changes::NAME
                 || name == crate::tools::propose_prompt_changes::NAME
+                || name == crate::tools::propose_change_edits::NAME
             {
                 (Arc::clone(proposed), false)
             } else {

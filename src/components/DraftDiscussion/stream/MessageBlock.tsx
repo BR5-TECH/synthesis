@@ -191,6 +191,7 @@ export function MessageBlock({
               (a) =>
                 a.kind !== "proposal" &&
                 a.kind !== "promptProposal" &&
+                a.kind !== "changeProposal" &&
                 // DCR-FR-RDLK: the new-draft card is an item of its own.
                 a.kind !== "newDraftProposal" &&
                 a.kind !== "newDraftSubject",

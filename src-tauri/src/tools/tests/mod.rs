@@ -69,6 +69,22 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         )),
         rig::tool::tool_definition(&document_search::SearchDocumentsTool::new(handle.clone())),
         rig::tool::tool_definition(&document_get::GetDocumentTool::new(handle.clone())),
+        // LOS-FR-QKCD, ROS-FR-XPYM, LOC-FR-ZDJW: the OpenSpec read tools are held to
+        // every convention of the group.
+        rig::tool::tool_definition(&crate::tools::openspec_list_specs::ListOpenSpecSpecsTool::new(
+            handle.clone(),
+            "definitions",
+        )),
+        rig::tool::tool_definition(&crate::tools::openspec_read_spec::ReadOpenSpecSpecTool::new(
+            handle.clone(),
+            "definitions",
+        )),
+        rig::tool::tool_definition(
+            &crate::tools::openspec_list_changes::ListOpenSpecChangesTool::new(
+                handle.clone(),
+                "definitions",
+            ),
+        ),
         // RGF-FR-02 / ESU-FR-19: both are constructed against one graduation
         // run, so this one needs a run id and an execution directory to exist
         // at all. Neither reaches the schema — two instances built for two runs
@@ -496,6 +512,7 @@ pub(crate) fn tree_snapshot(root: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     out
 }
 
+mod change_edit_tools;
 mod conventions;
 mod native;
 mod refusals;

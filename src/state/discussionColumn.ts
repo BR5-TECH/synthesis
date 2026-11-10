@@ -47,10 +47,19 @@ export interface DiscussionColumnState {
  * Which column a state belongs to. A draft and a file are two kinds of key, so
  * the kind is part of the key and a draft id never names a file's column.
  */
-export type ColumnKey = `draft:${string}` | `file:${string}`;
+export type ColumnKey = `draft:${string}` | `file:${string}` | `change:${string}`;
 
 export function draftColumn(draftId: string): ColumnKey {
   return `draft:${draftId}`;
+}
+
+/**
+ * DDS-FR-POJC: a change workspace's column, keyed by its stream and its change
+ * name. Its split is kept for the session alone: the layout record holds the
+ * splits of drafts and files only.
+ */
+export function changeColumn(streamId: string, change: string): ColumnKey {
+  return `change:${streamId}:${change}`;
 }
 
 /** CMT-FR-30: a file's column is keyed by its project-relative path. */
@@ -162,7 +171,7 @@ function storedAs(key: ColumnKey): {
  * the field they share is one.
  */
 function persist(key: ColumnKey, entry: { ratio?: string; hidden?: boolean }): void {
-  if (projectKey === null) return;
+  if (projectKey === null || key.startsWith("change:")) return;
   const project = projectKey;
   const at = storedAs(key);
   void patchLayoutPreferences(project, (base) => {

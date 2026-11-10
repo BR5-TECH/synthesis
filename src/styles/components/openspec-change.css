@@ -1,0 +1,340 @@
+/* openspec-change: the change workspace tab (OCW). */
+
+.openspec-change {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+}
+
+/* OCW-FR-LSFO: the header, with the facts of the change and its chips. */
+.openspec-change__head {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2-5) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-chrome);
+}
+.openspec-change__facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.openspec-change__name {
+  margin: 0;
+  font-size: var(--fs-ui-title);
+  font-weight: var(--fw-semi);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.openspec-change__fact {
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+}
+.openspec-change__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* The state shows as a word as well as a tone, so colour is not the only sign. */
+.openspec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: var(--ctl-h-sm);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  background: var(--bg-canvas);
+}
+.openspec-chip__state { color: var(--fg-3); }
+.openspec-chip[data-status="done"] { border-color: var(--ok); background: var(--ok-soft); }
+.openspec-chip[data-status="ready"] { border-color: var(--accent); background: var(--accent-soft); }
+.openspec-chip[data-status="blocked"] { border-color: var(--warn); background: var(--warn-soft); }
+.openspec-chip[data-status="skipped"] { border-style: dashed; color: var(--fg-3); }
+
+/* OCW-FR-PFUQ: a read that failed after one that succeeded. */
+.openspec-change__failure {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--warn-soft);
+  font-size: var(--fs-ui-sm);
+}
+
+/* The artifact list has a fixed width, and each pane scrolls on its own. */
+.openspec-change__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.openspec-change__list {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+  padding: var(--sp-2);
+  overflow: auto;
+  border-right: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.openspec-change__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1-5) var(--sp-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.openspec-change__item:hover { background: var(--bg-hover); color: var(--fg-1); }
+.openspec-change__item[aria-current="true"] {
+  background: var(--bg-active);
+  color: var(--fg-1);
+  font-weight: var(--fw-semi);
+}
+.openspec-change__item:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.openspec-change__item-id { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.openspec-change__item-state { flex: 0 0 auto; font-size: var(--fs-ui-xs); color: var(--fg-3); }
+
+.openspec-change__reading {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-10);
+  container-type: inline-size;
+}
+.openspec-change__reading:focus-visible { outline: none; box-shadow: inset var(--shadow-focus); }
+.openspec-change__reading--alone { flex: 1 1 auto; }
+.openspec-change__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-md);
+}
+.openspec-change__state p { margin: 0; }
+.openspec-reading__empty { color: var(--fg-3); font-size: var(--fs-ui-md); }
+
+/* OCW-FR-NOTT: one file of an artifact. */
+.openspec-file + .openspec-file { margin-top: var(--sp-8); }
+.openspec-file__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-1-5);
+  border-bottom: 1px solid var(--border-1);
+}
+.openspec-file__path { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.openspec-file__text { color: var(--fg-2); max-width: 760px; }
+.openspec-file__unreadable { color: var(--fg-3); font-style: italic; }
+
+/* OCW-FR-OUXA: every delta of the change, and the deltas of one capability. */
+.openspec-deltas { max-width: 1100px; }
+.openspec-capability + .openspec-capability { margin-top: var(--sp-8); }
+.openspec-capability__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-1-5);
+  border-bottom: 1px solid var(--border-2);
+}
+.openspec-capability__id {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-lg);
+  font-weight: var(--fw-semi);
+}
+.openspec-capability__exists { color: var(--fg-3); }
+
+.openspec-delta { margin-top: var(--sp-4); }
+.openspec-delta__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-1-5);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-semi);
+}
+.openspec-delta__name { overflow-wrap: anywhere; }
+.openspec-delta__from { color: var(--fg-3); }
+.openspec-delta__to { color: var(--fg-1); }
+/* The operation shows as a word, so colour is not the only sign. */
+.openspec-delta__op {
+  padding: 0 var(--sp-1-5);
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  letter-spacing: 0.04em;
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+}
+.openspec-delta__op[data-op="ADDED"] { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+.openspec-delta__op[data-op="REMOVED"] { background: var(--diff-del-bg); color: var(--diff-del-fg); }
+.openspec-delta__op[data-op="MODIFIED"] { background: var(--warn-soft); }
+.openspec-delta__op[data-op="RENAMED"] { background: var(--accent-soft); }
+.openspec-delta__added {
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: 3px solid var(--diff-add-fg);
+  background: var(--diff-add-bg);
+  border-radius: var(--r-sm);
+}
+.openspec-delta__removed {
+  display: block;
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: 3px solid var(--diff-del-fg);
+  background: var(--diff-del-bg);
+  border-radius: var(--r-sm);
+  text-decoration: line-through;
+}
+.openspec-delta__note { margin: var(--sp-1-5) 0 0; color: var(--fg-3); font-size: var(--fs-ui-sm); }
+
+/* OCW-FR-WIKH: two panes of equal width, which stack below 640 px. */
+.openspec-delta__sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-3);
+}
+@container (max-width: 640px) {
+  .openspec-delta__sides { grid-template-columns: minmax(0, 1fr); }
+}
+.openspec-delta__side {
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+}
+.openspec-delta__side-label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.openspec-requirement { min-width: 0; }
+.openspec-requirement__text,
+.openspec-scenario__text { color: var(--fg-2); overflow-wrap: anywhere; }
+.openspec-requirement__text p,
+.openspec-scenario__text p { margin: 0 0 var(--sp-2); }
+.openspec-scenario { margin-top: var(--sp-2); }
+.openspec-scenario__name {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-ui-sm);
+  font-weight: var(--fw-semi);
+}
+
+/* OCW-FR-XUJN: the stream name beside the change name in the tab. It is the
+   first part of the tab to give way. */
+.tab__label-detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-3);
+}
+
+/* GRU-FR-YHFQ: the change a propose run writes, beside its draft name. */
+.graduation__change {
+  margin-inline-start: var(--sp-2);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* DDS-FR-POJC / OCW-FR-TRLG: on a stream, the reading pane is the document
+   column of the discussion split. */
+.openspec-change__split { flex: 1 1 auto; }
+.openspec-change__doc {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* OCW-FR-ZZHS: a worktree that is not a stream has no discussion column. */
+.openspec-change__no-discussion {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--sp-1-5) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  color: var(--fg-3);
+}
+
+/* OCW-FR-RRXG: the count of the undecided hunks an artifact holds. */
+.openspec-change__item-hunks {
+  flex: 0 0 auto;
+  min-width: 1.6em;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-full);
+  background: var(--warn-soft);
+  color: var(--fg-1);
+  font-size: var(--fs-ui-2xs);
+  text-align: center;
+}
+
+/* OCW-FR-RRXG: a file that a hunk would create. */
+.openspec-file__new {
+  padding: 0 var(--sp-1-5);
+  border-radius: var(--r-xs);
+  background: var(--diff-add-bg);
+  color: var(--diff-add-fg);
+  font-size: var(--fs-ui-2xs);
+  letter-spacing: 0.04em;
+}
+
+/* OCW-FR-ABUR: the Rich and Source switch of one file. */
+.openspec-mode { display: inline-flex; gap: var(--sp-0-5); }
+.openspec-mode__option[aria-pressed="true"] { background: var(--bg-active); color: var(--fg-1); }
+
+/* OCW-FR-ABUR: a file's text as stored. */
+.openspec-source { position: relative; margin-top: var(--sp-2); }
+.openspec-source__text {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+/* OCW-FR-JBFZ: the offer to discuss the selected passage. */
+.openspec-source__comment { display: flex; justify-content: flex-end; margin-bottom: var(--sp-1-5); }
+/* OCW-FR-DTRX: a refused decision, stated at its hunk. */
+.openspec-source__refusal {
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-1-5) var(--sp-3);
+  border-inline-start: 3px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--fg-1);
+  font-size: var(--fs-ui-sm);
+}

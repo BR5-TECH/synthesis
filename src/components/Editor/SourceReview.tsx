@@ -87,10 +87,16 @@ function classes(hunk: DecoratedHunk, part: string): string {
 export function SourceReview({
   text,
   review,
+  note = SOURCE_REVIEW_NOTE,
 }: {
   /** The file text as the session holds it. */
   text: string;
   review: EditorReview;
+  /**
+   * The statement above the text, or null for none. The change workspace
+   * (OCW-FR-COLR) never edits its files, so it states nothing here.
+   */
+  note?: string | null;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const placed = useMemo(() => placeOnSource(text, review.hunks), [text, review.hunks]);
@@ -150,13 +156,10 @@ export function SourceReview({
           </span>
           <span className="hunk__body">
             {editable ? (
-              <textarea
-                className="hunk__doc hunk__source-edit"
-                aria-label={`Proposed text of ${label}`}
+              <GrowingText
+                label={`Proposed text of ${label}`}
                 value={value}
-                spellCheck={false}
-                rows={Math.max(1, value.split("\n").length)}
-                onChange={(e) => review.onEdit(hunk.id, e.target.value)}
+                onChange={(next) => review.onEdit(hunk.id, next)}
               />
             ) : (
               <span className="hunk__doc hunk__plain">{value}</span>
@@ -182,9 +185,11 @@ export function SourceReview({
       }}
     >
       {/* PCR-FR-SKRV: the surface says why the text takes no edit. */}
-      <p className="editor__source-review-note t-ui-xs" role="note">
-        {SOURCE_REVIEW_NOTE}
-      </p>
+      {note !== null && (
+        <p className="editor__source-review-note t-ui-xs" role="note">
+          {note}
+        </p>
+      )}
       <div className="editor__source-review-text" aria-label="Source" role="document">
         {parts}
       </div>
@@ -196,5 +201,52 @@ export function SourceReview({
         extent={text.length}
       />
     </div>
+  );
+}
+
+/**
+ * OCW-FR-COLR: the proposed text, as tall as its wrapped lines. A count of
+ * line breaks is not enough: in a narrow pane one line wraps to several, and
+ * the field then clips the text the author decides about.
+ */
+function GrowingText({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const field = ref.current;
+    if (!field) return;
+    const fit = () => {
+      field.style.height = "auto";
+      field.style.height = `${field.scrollHeight}px`;
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    // The width changes when the splitter or the window moves.
+    let width = field.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (field.clientWidth === width) return;
+      width = field.clientWidth;
+      fit();
+    });
+    observer.observe(field);
+    return () => observer.disconnect();
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className="hunk__doc hunk__source-edit"
+      aria-label={label}
+      value={value}
+      spellCheck={false}
+      rows={Math.max(1, value.split("\n").length)}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }

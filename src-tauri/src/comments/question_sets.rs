@@ -166,9 +166,20 @@ pub fn question_set_lock(thread_id: &str) -> std::sync::MutexGuard<'static, ()> 
 /// borrowed scope on demand.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DiscussionRef {
-    Draft { draft_id: String },
-    Artifact { artifact_id: String },
-    Note { note_id: String },
+    Draft {
+        draft_id: String,
+    },
+    Artifact {
+        artifact_id: String,
+    },
+    Note {
+        note_id: String,
+    },
+    /// CMS-FR-UEXD: the whole-change discussion of an OpenSpec change.
+    Change {
+        stream_id: String,
+        change: String,
+    },
 }
 
 impl DiscussionRef {
@@ -178,6 +189,9 @@ impl DiscussionRef {
             DiscussionRef::Draft { draft_id } => ThreadRef::discussion(draft_id),
             DiscussionRef::Artifact { artifact_id } => ThreadRef::artifact_discussion(artifact_id),
             DiscussionRef::Note { note_id } => ThreadRef::note_discussion(note_id),
+            DiscussionRef::Change { stream_id, change } => {
+                ThreadRef::change_discussion(stream_id, change)
+            }
         }
     }
 }
@@ -198,6 +212,9 @@ pub fn discussion_ref_of(discussion: &Discussion) -> Option<DiscussionRef> {
         DiscussionTarget::Draft { draft_id } => DiscussionRef::Draft { draft_id: draft_id.clone() },
         DiscussionTarget::Artifact { artifact_id } => {
             DiscussionRef::Artifact { artifact_id: artifact_id.clone() }
+        }
+        DiscussionTarget::Change { stream_id, change } => {
+            DiscussionRef::Change { stream_id: stream_id.clone(), change: change.clone() }
         }
     })
 }

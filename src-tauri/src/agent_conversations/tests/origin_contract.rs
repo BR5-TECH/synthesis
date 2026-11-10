@@ -22,11 +22,12 @@ fn cases() -> Vec<(String, serde_json::Value)> {
         .collect()
 }
 
-// AGC-FR-05: every origin the frontend sends reads as the kind it names.
+// AGC-FR-05 / CMS-FR-UEXD: every origin the frontend sends reads as the kind it
+// names, the two change kinds included.
 #[test]
 fn every_origin_the_frontend_sends_is_read() {
     let cases = cases();
-    assert_eq!(cases.len(), 5, "the contract holds one case per origin kind");
+    assert_eq!(cases.len(), 7, "the contract holds one case per origin kind");
     for (kind, json) in cases {
         let origin: ConversationOrigin = serde_json::from_value(json.clone())
             .unwrap_or_else(|e| panic!("the {kind} origin does not deserialize: {e}"));

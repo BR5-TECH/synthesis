@@ -123,6 +123,7 @@ mod advisors;
 mod authority;
 mod builders;
 mod cancellation;
+mod change_material;
 mod citation_markers;
 mod compaction;
 mod context_figures;
@@ -178,6 +179,7 @@ use prose_tool_calls::*;
 use slots::*;
 // The memories are read and written in this module only, so the re-export is
 // private. The two seams a test clears them through are reached the same way.
+use change_material::*;
 use material::*;
 use provider_memory::*;
 pub use registry::*;
@@ -257,6 +259,11 @@ pub const DISCUSS_DRAFT_PROMPT_TEMPLATE: &str =
 pub const DISCUSS_NOTE_PROMPT_TEMPLATE: &str =
     include_str!("../../resources/prompts/discuss-note.md");
 
+/// CVL-FR-FGGI: a whole OpenSpec change — several files that must agree, and
+/// every edit offered as a proposal the author decides.
+pub const DISCUSS_CHANGE_PROMPT_TEMPLATE: &str =
+    include_str!("../../resources/prompts/discuss-change.md");
+
 /// CVL-FR-03: a turn's prompt is selected by its origin kind and by nothing else.
 ///
 /// The selection is the extension point beside the builder of AGC-FR-05: a
@@ -267,7 +274,10 @@ pub fn prompt_template(kind: OriginKind) -> &'static str {
     match kind {
         // Both are a remark pinned to a passage, and are answered under one
         // instruction whichever file the passage is in.
-        OriginKind::ArtifactComment | OriginKind::DraftComment => COMMENT_PROMPT_TEMPLATE,
+        // CVL-FR-XUJX: a fragment of a file of a change is a remark too.
+        OriginKind::ArtifactComment | OriginKind::DraftComment | OriginKind::ChangeComment => {
+            COMMENT_PROMPT_TEMPLATE
+        }
         // A whole file the project already holds: what is asked is what to do
         // with the document as it stands.
         OriginKind::ArtifactDiscussion => DISCUSS_ARTIFACT_PROMPT_TEMPLATE,
@@ -277,6 +287,8 @@ pub fn prompt_template(kind: OriginKind) -> &'static str {
         // A note: the material is the author's own observation rather than any
         // file, and the one origin kind whose first section is not `artifact`.
         OriginKind::NoteDiscussion => DISCUSS_NOTE_PROMPT_TEMPLATE,
+        // CVL-FR-FGGI: the whole change.
+        OriginKind::ChangeDiscussion => DISCUSS_CHANGE_PROMPT_TEMPLATE,
     }
 }
 
@@ -563,6 +575,33 @@ fn conversation_tools<R: tauri::Runtime>(
             Arc::clone(asked),
         )),
     ];
+    // CVL-FR-DPWP: the three OpenSpec read tools, while OpenSpec mode is active
+    // and its CLI is available at the start of the turn. A project that does
+    // not use OpenSpec gets exactly the set it gets without OpenSpec support.
+    // CVL-FR-TPHR: they end no turn, and an advisor keeps them.
+    // The decision reads only the kept CLI check, because this runs on the
+    // thread of a synchronous command: where no check is kept, the turn goes
+    // without the tools and a check starts on a blocking thread.
+    let openspec =
+        tauri::Manager::try_state::<crate::openspec::OpenSpec>(app).is_some_and(|seam| {
+            seam.read_tools_attached_now(Some(roots.worktree), || {
+                crate::openspec::warm_cli_check(app)
+            })
+        });
+    if openspec {
+        tools.push(erase_tool(crate::tools::openspec_list_specs::ListOpenSpecSpecsTool::new(
+            app.clone(),
+            session,
+        )));
+        tools.push(erase_tool(crate::tools::openspec_read_spec::ReadOpenSpecSpecTool::new(
+            app.clone(),
+            session,
+        )));
+        tools.push(erase_tool(crate::tools::openspec_list_changes::ListOpenSpecChangesTool::new(
+            app.clone(),
+            session,
+        )));
+    }
     // CVL-FR-08: a discussion origin is attached `ask_discussion_questions`
     // beside the nine, and an anchored comment origin is attached none — a
     // passage under review being one remark rather than a set of open points
@@ -618,6 +657,15 @@ fn conversation_tools<R: tauri::Runtime>(
                 Arc::clone(proposed),
             ),
         ));
+    } else if origin.is_change() {
+        // CVL-FR-EZKH / PCE-FR-FVPF: a change turn proposes edits to its change.
+        tools.push(erase_tool(crate::tools::propose_change_edits::ProposeChangeEditsTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(proposed),
+        )));
     }
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool, by the same
     // rule. Never both, none on a note, and neither ends the turn (CVL-FR-15).
@@ -633,6 +681,15 @@ fn conversation_tools<R: tauri::Runtime>(
         )));
     } else if origin.is_artifact() {
         tools.push(erase_tool(crate::tools::decide_prompt_changes::DecidePromptChangesTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            session,
+        )));
+    } else if origin.is_change() {
+        // CVL-FR-EZKH / DCE-FR-WYJP.
+        tools.push(erase_tool(crate::tools::decide_change_edits::DecideChangeEditsTool::new(
             app.clone(),
             roots.owned(),
             origin.clone(),

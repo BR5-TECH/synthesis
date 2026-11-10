@@ -127,6 +127,33 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         // RDX-FR-DVQL: the export tool's refusals join the group.
         ToolRefusal::NotFoundWith(crate::tools::request_document_export::DOCUMENT_NOT_FOUND),
         ToolRefusal::NotRecordedWith(crate::tools::request_document_export::NOT_RECORDED),
+        // LOS-FR-SBNB, LOS-FR-IEDQ, ROS-FR-FQHM, ROS-FR-RZRC, ROS-FR-GNFU,
+        // ROS-FR-MOFU, LOC-FR-YEQH: the OpenSpec read tools' refusals join the
+        // group and are held to exactly the same rules.
+        crate::tools::openspec_shared::unavailable(),
+        crate::tools::openspec_shared::read_failed(crate::tools::openspec_list_specs::READ_FAILED),
+        crate::tools::openspec_shared::read_failed(crate::tools::openspec_read_spec::READ_FAILED),
+        crate::tools::openspec_shared::read_failed(
+            crate::tools::openspec_list_changes::READ_FAILED,
+        ),
+        ToolRefusal::Fixed {
+            kind: crate::tools::FixedKind::InvalidArgs,
+            message: crate::tools::openspec_read_spec::INVALID_CAPABILITY,
+            code: "invalid_capability",
+            retryable: true,
+        },
+        ToolRefusal::Fixed {
+            kind: crate::tools::FixedKind::NotFound,
+            message: crate::tools::openspec_read_spec::UNKNOWN_CAPABILITY,
+            code: "unknown_capability",
+            retryable: true,
+        },
+        ToolRefusal::Fixed {
+            kind: crate::tools::FixedKind::NotFound,
+            message: crate::tools::openspec_read_spec::UNKNOWN_REQUIREMENT,
+            code: "unknown_requirement",
+            retryable: true,
+        },
     ]
     .into_iter()
     .inspect(|refusal| match refusal {
@@ -152,6 +179,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::ProposalConversationResolved
         | ToolRefusal::ProposalNotRecorded
         | ToolRefusal::Denied { .. }
+        | ToolRefusal::Fixed { .. }
         | ToolRefusal::NotRecordedWith(_)
         | ToolRefusal::NotFoundWith(_)
         | ToolRefusal::DraftNotFound

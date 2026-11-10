@@ -42,6 +42,7 @@ fn a_start_on_an_unconfirmed_main_branch_enqueues_nothing() {
             stream.id.clone(),
             StandingWork::Keep,
             None,
+            None,
         )
     };
     let refused = start().unwrap_err();

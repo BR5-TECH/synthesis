@@ -189,6 +189,18 @@ pub enum Attachment {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         update: Option<ProposalUpdateCounts>,
     },
+    /// CMS-FR-QLMV: a reference to edits an agent proposed to an OpenSpec
+    /// change (`CEP-change-edit-proposals.md` CEP-FR-QDJH). Identity alone,
+    /// appended through `append_as` alone; no [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    ChangeProposal {
+        proposal_id: String,
+        stream_id: String,
+        change: String,
+        /// CMS-FR-BSQB: present on the comment an update appended.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<ProposalUpdateCounts>,
+    },
     /// CMS-FR-42 / CMS-FR-TQVB: one change of a draft change proposal
     /// (`DCP-draft-change-proposals.md` DCP-FR-FHWN) or of a prompt change
     /// proposal (`PCP-prompt-change-proposals.md`), which the comment is about.
@@ -211,7 +223,11 @@ pub enum Attachment {
         /// CMS-FR-TQVB: the artifact of a prompt change proposal.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         artifact_id: Option<String>,
-        /// Draft-relative path for a draft, project-relative for an artifact.
+        /// CMS-FR-YQAX: the change of a change edit proposal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change: Option<ChangeOwnerRef>,
+        /// Draft-relative path for a draft, project-relative for an artifact,
+        /// change-relative for a change.
         path: String,
     },
     /// CMS-FR-YKGI / CMS-FR-LIBT: a reference to a new draft an agent proposed
@@ -248,6 +264,14 @@ pub enum Attachment {
     /// an agent turn's append alone.
     #[serde(rename_all = "camelCase")]
     Advisors { advisors: Vec<AdvisorEntry> },
+}
+
+/// CMS-FR-YQAX: the change a `proposal_hunk` of a change edit proposal names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeOwnerRef {
+    pub stream_id: String,
+    pub change: String,
 }
 
 /// CMS-FR-KVDV: one advisor of a Meta reply, finished or skipped.
@@ -314,6 +338,9 @@ pub enum AttachmentInput {
         draft_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         artifact_id: Option<String>,
+        /// CMS-FR-YQAX: the change of a change edit proposal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change: Option<ChangeOwnerRef>,
         path: String,
     },
     /// CMS-FR-KAXQ: stored verbatim as an [`Attachment::NewDraftSubject`].

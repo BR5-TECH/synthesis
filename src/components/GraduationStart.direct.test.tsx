@@ -405,6 +405,7 @@ describe("a stream the dialog creates", () => {
       streamId: "fresh",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
     const order = invoked.mock.calls.map(([name]) => name);
     expect(order.indexOf("create_work_stream")).toBeLessThan(

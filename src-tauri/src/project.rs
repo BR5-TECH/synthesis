@@ -585,6 +585,9 @@ fn activate_project<R: tauri::Runtime>(
     // GHP-FR-ISJI: the publication metadata cache starts empty for the opened
     // project, and the startup refresh runs in the background.
     crate::github_publication::metadata_refresh::on_project_opened(app);
+    // OSM-FR-ZNVZ: the OpenSpec CLI check runs in the background, so a turn
+    // finds its result kept.
+    crate::openspec::warm_on_project_open(app);
 }
 
 /// Tear down everything tied to the open project (SNV-FR-25): forget the root

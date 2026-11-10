@@ -24,6 +24,7 @@ import {
 import type { RunAction } from "../../state/graduation/runState";
 import type { GraduationQueue, GraduationRun } from "../../types";
 import { RestartRegionControl } from "./restart";
+import { openOpenSpecChange } from "../../state/openspec/changeRoutes";
 
 /** The action-row control an act was issued from, and the run it acted on. */
 export interface PressedAction {
@@ -243,6 +244,24 @@ export function RunActionRow({
               return null;
           }
         })}
+        {/* GRU-FR-LTWN: a completed propose run opens the change it wrote, on
+            its stream. It only navigates, so it stays enabled. */}
+        {run.openspec && run.state === "completed" && run.streamId && (
+          <button
+            type="button"
+            className="btn btn--sm btn--default"
+            data-action="open-change"
+            onClick={() =>
+              openOpenSpecChange(
+                { kind: "stream", streamId: run.streamId },
+                run.openspec!.change,
+                { streamName: run.streamName || undefined },
+              )
+            }
+          >
+            Open change
+          </button>
+        )}
       </div>
       {/* GRU-FR-CLFA: the runs the act removes are named before it is invoked,
           and their drafts are said to return to the active drafts. */}

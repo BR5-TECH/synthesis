@@ -191,6 +191,16 @@ RUN npm install --global --no-fund --no-audit \
         "typescript@${TYPESCRIPT_VERSION}" \
     && npm cache clean --force
 
+# AVI-FR-RZFR: the OpenSpec CLI, because an agent in a project that uses
+# OpenSpec follows instructions that call `openspec`. An exact version, the same
+# in both images, installed globally by npm like the two above.
+# AVI-FR-NFNR: its telemetry is off in every container.
+ARG OPENSPEC_VERSION=1.17.0
+RUN npm install --global --no-fund --no-audit \
+        "@fission-ai/openspec@${OPENSPEC_VERSION}" \
+    && npm cache clean --force
+ENV OPENSPEC_TELEMETRY=0
+
 # AVI-FR-06: an exact version, never a floating tag.
 ARG CODEX_VERSION=0.147.0
 RUN npm install --global --no-fund --no-audit \

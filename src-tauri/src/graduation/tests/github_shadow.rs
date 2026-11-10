@@ -49,6 +49,7 @@ fn a_shadow_draft_is_admitted_to_graduation() {
         "no-such-stream".into(),
         StandingWork::Keep,
         None,
+        None,
     );
     assert!(refused.is_err());
     assert_eq!(fx.resolved_status(&draft), crate::drafts::DraftStatus::GithubShadow);
@@ -74,6 +75,7 @@ fn a_shadow_draft_is_admitted_to_graduation() {
         draft.clone(),
         stream.id.clone(),
         StandingWork::Keep,
+        None,
         None,
     )
     .expect("a shadow draft starts like any other");

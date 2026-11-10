@@ -22,6 +22,7 @@ fn draft(id: &str, status: DraftStatus, run: Option<GraduationRunState>) -> Draf
             state,
             locked: run_is_open(state),
             graduated: state == GraduationRunState::Completed,
+            openspec_change: None,
         }),
         github_issue: None,
         publication: None,

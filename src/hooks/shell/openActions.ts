@@ -21,6 +21,7 @@ import * as api from "../../api";
 import { typeChip } from "../../artifactTypes";
 import { logDebug, logWarn } from "../../logging";
 import { SPEC_MAP_TAB } from "./tabRecords";
+import { changeFileTarget } from "../../state/openspec/changeName";
 import type {
   BottomSurface,
   DiffTarget,
@@ -49,6 +50,8 @@ export interface OpenActionDeps {
   openDraftHit: (hit: SearchHit) => void;
   /** TAB-FR-GVOS: open the PDF Viewer tab of the document at a project path. */
   openDocumentByProjectPath: (path: string) => void;
+  /** LIB-FR-OKIZ: open a change of the active worktree, with one file selected. */
+  openWorktreeChange: (name: string, file: string) => void;
 }
 
 export interface OpenActions {
@@ -75,6 +78,7 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     openDocumentHit,
     openDraftHit,
     openDocumentByProjectPath,
+    openWorktreeChange,
   } = deps;
   const openRuns = () => showBottom("runs");
 
@@ -276,6 +280,27 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     // opens in the PDF Viewer tab of its document.
     if (item.artifactType === "doc" && item.id?.toLowerCase().endsWith(".pdf")) {
       openDocumentByProjectPath(item.id);
+      return;
+    }
+    // LIB-FR-OKIZ: while OpenSpec mode is active, a file of an active change
+    // opens the change workspace tab of that change in the active worktree, with
+    // that file selected. With the mode off, or a status that cannot be read,
+    // the file opens in its natural surface (LIB-FR-03, OSM-FR-RMUD).
+    const change = item.id ? changeFileTarget(item.id) : null;
+    if (change) {
+      void api
+        .getOpenspecStatus()
+        .then((status) => status.active)
+        .catch((e) => {
+          logWarn(["frontend"], "openspec status could not be read for a library click", {
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return false;
+        })
+        .then((active) => {
+          if (active) openWorktreeChange(change.name, change.file);
+          else openArtifact(item);
+        });
       return;
     }
     openArtifact(item);

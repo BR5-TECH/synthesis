@@ -25,6 +25,9 @@ static PR_SUMMARY_SOURCE: &str =
     include_str!("../../../../resources/prompts/graduation/pr-summary.md");
 /// What an undispatchable tool call is answered with.
 static REFUSALS_SOURCE: &str = include_str!("../../../../resources/prompts/graduation/refusals.md");
+/// GRL-FR-GADT, GRL-FR-FYKL, GRL-FR-APHV: the two blocks of a propose run.
+static OPENSPEC_PROPOSE_SOURCE: &str =
+    include_str!("../../../../resources/prompts/graduation/openspec-propose.md");
 
 /// GRL-FR-YIJG: a prompt file's instruction text is its content with every
 /// authoring comment removed. The files carry comments naming the requirements
@@ -41,6 +44,8 @@ pub static MERGE_REVIEW_PROMPT: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(MERGE_REVIEW_SOURCE));
 pub static PR_SUMMARY_PROMPT: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(PR_SUMMARY_SOURCE));
+pub static OPENSPEC_PROPOSE: LazyLock<String> =
+    LazyLock::new(|| crate::prompts::instruction_text(OPENSPEC_PROPOSE_SOURCE));
 pub static REFUSALS: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(REFUSALS_SOURCE));
 
@@ -77,6 +82,40 @@ pub fn instruction_for_run(run: &crate::graduation::GraduationRun, part: &str) -
 }
 
 /// The heading of the milestone block of GRL-FR-KWPT.
+/// GRL-FR-DXLU, GRL-FR-FYKL, GRL-FR-APHV: the whole instruction of a turn. A
+/// propose run's work and review turns carry their block after the standing
+/// instruction, with the change name filled in.
+pub fn instruction_text_for_run(run: &crate::graduation::GraduationRun, part: &str) -> String {
+    let base = instruction_for_run(run, part).to_string();
+    let Some(data) = run.openspec.as_ref() else {
+        return base;
+    };
+    let key = match part {
+        super::phases::PART_WORK => "Propose work",
+        super::phases::PART_REVIEW => "Propose review",
+        _ => return base,
+    };
+    let block = propose_block(key).replace("{{ change-name }}", &data.change);
+    format!("{}\n\n{}\n", base.trim_end(), block)
+}
+
+/// One block of `openspec-propose.md`: the text below its `# ` heading line
+/// and up to the next one.
+fn propose_block(key: &str) -> String {
+    let text = OPENSPEC_PROPOSE.as_str();
+    let head = format!("## {key}\n");
+    let Some(start) = text.find(&head).map(|at| at + head.len()) else {
+        return String::new();
+    };
+    let rest = &text[start..];
+    let end = ["## Propose work\n", "## Propose review\n"]
+        .iter()
+        .filter_map(|marker| rest.find(marker))
+        .min()
+        .unwrap_or(rest.len());
+    rest[..end].trim().to_string()
+}
+
 const MILESTONES_HEADING: &str = "## Milestones";
 
 /// GRL-FR-LCSB: an instruction without its milestone block, which is what a

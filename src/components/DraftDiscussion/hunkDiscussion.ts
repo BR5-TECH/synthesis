@@ -12,6 +12,11 @@ import { logDebug } from "../../logging";
 import { openReview, useProposalReference } from "../../state/draftProposals";
 import { revealHunk } from "../../state/draftDiscussion";
 import { showPromptHunk, usePromptProposalReference } from "../../state/promptProposals";
+import {
+  asReviewable,
+  showChangeHunk,
+  useChangeProposalReference,
+} from "../../state/openspec/changeProposals";
 import type { HunkSource } from "../../state/proposalHunks";
 import type {
   Discussion,
@@ -40,6 +45,7 @@ export type HunkProposalReference =
 
 /** Which store reads the changes of the proposal a reference names. */
 export function hunkSourceOf(reference: ProposalHunkReference): HunkSource {
+  if (reference.change) return "change";
   return reference.artifactId ? "prompt" : "draft";
 }
 
@@ -50,10 +56,21 @@ export function hunkSourceOf(reference: ProposalHunkReference): HunkSource {
  */
 export function useHunkProposal(reference: ProposalHunkReference): HunkProposalReference {
   const draft = useProposalReference(
-    reference.artifactId ? undefined : reference.draftId,
+    reference.artifactId || reference.change ? undefined : reference.draftId,
     reference.proposalId,
   );
   const prompt = usePromptProposalReference(reference.artifactId, reference.proposalId);
+  // CMS-FR-YQAX: a hunk of a change edit proposal, read from the change store.
+  const change = useChangeProposalReference(
+    reference.change?.streamId,
+    reference.change?.change,
+    reference.proposalId,
+  );
+  if (reference.change) {
+    return change.kind === "known"
+      ? { kind: "known", proposal: asReviewable(change.proposal) }
+      : change;
+  }
   return reference.artifactId ? prompt : draft;
 }
 
@@ -111,6 +128,18 @@ export function isShownInDocument(
  * Editor tab, which is opened or focused first.
  */
 export function showHunkInDocument(reference: ProposalHunkReference): void {
+  // OCW-FR-COLR: a hunk of a change edit proposal is shown in the change
+  // workspace tab of its stream, in the Source of its file.
+  if (reference.change) {
+    showChangeHunk(
+      reference.change.streamId,
+      reference.change.change,
+      reference.proposalId,
+      reference.hunkId,
+      reference.path,
+    );
+    return;
+  }
   if (reference.artifactId) {
     showPromptHunk(reference.artifactId, reference.proposalId, reference.hunkId);
     return;

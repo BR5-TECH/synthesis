@@ -37,3 +37,14 @@ pub fn stream_at_path<R: tauri::Runtime>(
         .into_iter()
         .find(|stream| crate::changes::canonicalize_lenient(&stream.worktree()) == wanted)
 }
+
+/// OSM-FR-MFVN: the live stream of the project with this id, if one exists.
+pub fn stream_by_id<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    stream_id: &str,
+) -> Option<WorkStream> {
+    let store = store_for(app)?;
+    let fs = access_for(app)?;
+    let key = project_key_of(app);
+    store::list_streams(&fs, &store, &key).into_iter().find(|stream| stream.id == stream_id)
+}

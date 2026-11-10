@@ -208,6 +208,13 @@ pub fn read_discussion_by_id(
             return Some(discussion);
         }
     }
+    // CMS-FR-GJEY: last, the change owners, each a small folder of the store.
+    for (stream_id, change) in stored_change_owners(root) {
+        let target = DiscussionTarget::Change { stream_id, change };
+        if let Some(discussion) = locate_discussion_of(root, &target, discussion_id) {
+            return Some(discussion);
+        }
+    }
     None
 }
 

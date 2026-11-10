@@ -25,7 +25,7 @@ import { visibleBody } from "../../../text/spokenPart";
 /** A change reference a comment carries, with the comment it came from. */
 export type ChangeReference = Extract<
   Attachment,
-  { kind: "proposal" | "promptProposal" }
+  { kind: "proposal" | "promptProposal" | "changeProposal" }
 >;
 
 /** One thing the column draws. */

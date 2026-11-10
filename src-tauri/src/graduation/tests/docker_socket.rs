@@ -33,6 +33,7 @@ impl Fixture {
             stream.id.clone(),
             StandingWork::Keep,
             None,
+            None,
         )
     }
 }

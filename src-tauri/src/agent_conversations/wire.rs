@@ -52,6 +52,10 @@ pub enum OriginKind {
     DraftComment,
     DraftDiscussion,
     NoteDiscussion,
+    /// AGC-FR-05: a fragment discussion of an OpenSpec change.
+    ChangeComment,
+    /// AGC-FR-05: a whole-change discussion.
+    ChangeDiscussion,
 }
 
 impl ConversationOrigin {
@@ -75,6 +79,8 @@ impl ConversationOrigin {
             (DiscussionTarget::Draft { .. }, true) => OriginKind::DraftComment,
             (DiscussionTarget::Draft { .. }, false) => OriginKind::DraftDiscussion,
             (DiscussionTarget::Note { .. }, _) => OriginKind::NoteDiscussion,
+            (DiscussionTarget::Change { .. }, true) => OriginKind::ChangeComment,
+            (DiscussionTarget::Change { .. }, false) => OriginKind::ChangeDiscussion,
         }
     }
 
@@ -96,6 +102,12 @@ impl ConversationOrigin {
     /// the origin.
     pub fn is_artifact(&self) -> bool {
         matches!(self.target, DiscussionTarget::Artifact { .. })
+    }
+
+    /// CVL-FR-EZKH: whether this conversation is about an OpenSpec change,
+    /// which decides the change proposal and decision tools.
+    pub fn is_change(&self) -> bool {
+        matches!(self.target, DiscussionTarget::Change { .. })
     }
 
     /// CVL-FR-08: whether this conversation is about a whole target, which is what
@@ -178,6 +190,8 @@ impl OriginKind {
             OriginKind::DraftComment => "draft_comment",
             OriginKind::DraftDiscussion => "draft_discussion",
             OriginKind::NoteDiscussion => "note_discussion",
+            OriginKind::ChangeComment => "change_comment",
+            OriginKind::ChangeDiscussion => "change_discussion",
         }
     }
 }
@@ -439,6 +453,10 @@ pub const INPUT_TAGS: [&str; 3] = [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CUR
 pub const NOTE_INPUT_TAGS: [&str; 3] =
     [TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
+/// AGC-FR-NBZN / CVL-FR-06: the tag vocabulary of a change turn.
+pub const CHANGE_INPUT_TAGS: [&str; 3] =
+    [super::TAG_OPENSPEC_CHANGE, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
+
 /// CVL-FR-06: the tags a turn of this origin kind emits, in order.
 ///
 /// The parity check of CVL-FR-06 reads this and the prompt the same kind
@@ -447,6 +465,7 @@ pub const NOTE_INPUT_TAGS: [&str; 3] =
 pub fn input_tags(kind: OriginKind) -> [&'static str; 3] {
     match kind {
         OriginKind::NoteDiscussion => NOTE_INPUT_TAGS,
+        OriginKind::ChangeComment | OriginKind::ChangeDiscussion => CHANGE_INPUT_TAGS,
         _ => INPUT_TAGS,
     }
 }

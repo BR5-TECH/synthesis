@@ -115,6 +115,7 @@ pub(super) fn progress_label_of(
         ),
         DiscussionTarget::Artifact { artifact_id } => Some(artifact_id.clone()),
         DiscussionTarget::Note { .. } => None,
+        DiscussionTarget::Change { change, .. } => Some(change.clone()),
     };
     match subject {
         Some(subject) => format!("@{nickname} is thinking about {subject}…"),

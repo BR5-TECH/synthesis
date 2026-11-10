@@ -7,7 +7,7 @@ The one surface a graduation run is started from. A draft's **Graduate** action 
 
 ## Functional requirements
 1. **GSD-FR-QMTF** The dialog opens from a draft's **Graduate** action (per `NAW-new-artifact.md` NAW-FR-18), from the **Graduate** entry of a GitHub-shadow row in the Drafts panel (per `DRP-drafts-panel.md` DRP-FR-NPZO), and from the Ready tasks section of the Git panel (per `GIT-git.md` GIT-FR-NQTZ, GIT-FR-OLNA), and from nowhere else. It is a floating overlay of the main window (per `SNV-shell-navigation.md` SNV-FR-56), and it is the only surface that invokes `start_graduation` and `start_direct_graduation`.
-2. **GSD-FR-VKLD** The dialog asks for the **destination** always (GSD-FR-BZHW), and for the **standing-work choice** only where the run is a stream run that will wait, for either reason of GSD-FR-WQPD. It asks nothing about the prompt or about what type the files take.
+2. **GSD-FR-VKLD** The dialog asks for the **destination** always (GSD-FR-BZHW), for what the run makes while OpenSpec mode is active (GSD-FR-DCLQ), and for the **standing-work choice** only where the run is a stream run that will wait, for either reason of GSD-FR-WQPD. It asks nothing about the prompt or about what type the files take.
 3. **GSD-FR-ZPWN** The stream choice lists every live stream of the project, each row naming the stream and how many runs are queued on it. A stream the backend reports as missing is not listed (per `WSS-work-stream-selector.md` WSS-FR-OQYG).
 4. **GSD-FR-HRJE** A stream a run holds is offered like every other stream. The dialog states that a run holds that stream now, working or at rest, and that this run waits behind it until that run is completed or discarded.
 5. **GSD-FR-TBQX** The standing-work choice has three positions: **keep** the work uncommitted, **commit** it, and **commit and push** it. `commit` is the resting position. The answer travels with `start_graduation`, and the run applies it when its turn comes (per `../core/GRD-graduation.md` GRD-FR-HQPD).
@@ -30,6 +30,11 @@ The one surface a graduation run is started from. A draft's **Graduate** action 
 15. **GSD-FR-LXAF** For a GitHub-shadow draft the dialog is unchanged: it asks the same questions, offers the same choices, and starts nothing on its own. Cancelling it, or a refused start, changes nothing about the draft or its GitHub issue (per `../core/GPP-github-polling.md` GPP-FR-ZLBF).
 
 16. **GSD-FR-BZHW** The destination is one choice of four: **Existing stream**, **New stream**, **Temporary stream** and **Work directly**. The four are one segmented toggle on one line, and the four segments have equal width. A choice that is not offered stays in the toggle as a disabled segment. It rests on **Existing stream** where the project holds a usable stream. Each choice shows only its own fields, and the confirm names the choice.
+16. **GSD-FR-DCLQ** The dialog reads `"get openspec status"` when it opens. While OpenSpec mode is active, it first asks **Graduate as**: **Propose change** or **Implement**, one segmented toggle that rests on **Propose change**. While the mode is not active, or the status cannot be read, the dialog shows no such choice and starts a draft run.
+16. **GSD-FR-CKSV** **Propose change** shows a **Change name** field. It is prefilled with the draft name in lowercase, each run of characters other than `a-z` and `0-9` replaced by one `-`, trimmed of `-` at both ends, cut to 59 characters, then `-` and the first four letters or digits of the draft id in lowercase.
+16. **GSD-FR-DCBH** The field is checked as the author types, on the terms of `../core/OSM-openspec-mode.md` OSM-FR-IHUO. A name that is not valid disables the confirm and states the rule under the field. A refusal `invalid_change_name` or `openspec_change_exists` renders against the field.
+16. **GSD-FR-AGPL** **Propose change** offers the three stream destinations alone. **Work directly** stays in the toggle as a disabled segment, with the reason that a proposed change lives on a stream. **Implement** offers all four.
+16. **GSD-FR-ZAFX** Confirming **Propose change** invokes `start_graduation` with the change name as `openspec_change`, after `create_work_stream` where a new stream is chosen. Confirming **Implement** invokes the start that the destination names, with no change name. The confirm names what it starts: **Propose change** or the destination.
 17. **GSD-FR-QGTC** **New stream** and **Temporary stream** each ask a name and the branch the stream is created from, on the terms of `WSS-work-stream-selector.md` WSS-FR-XZRO, inside this dialog. Confirming invokes `create_work_stream`, then `start_graduation` on the new stream. The new stream is free, so the standing-work choice is asked only where the project-wide limit is full (GSD-FR-LHQY). A name refusal renders against the name field.
 18. **GSD-FR-TZGT** A stream the dialog created stays when the start that follows is refused. The dialog lists it, selects it as an existing stream, and a retry starts on it without creating a second one. A temporary stream stays temporary.
 19. **GSD-FR-FQQP** **Work directly** names the active worktree by its directory name and absolute path, and its branch, read through `preflight_direct_graduation`. It states that the run writes in that worktree on that branch and commits there. It asks no standing-work choice and no commit message.
@@ -158,9 +163,10 @@ Work directly names the worktree and asks nothing else:
 - `preflight_direct_graduation`
 - `start_graduation`
 - `start_direct_graduation`
+- `get_openspec_status`
 - `get_graduation_capacity`
 - `list_graduation_queue`
 
 ## Non-functional requirements
-- Opening the dialog costs one stream listing, one capacity read and one queue read. It reads no working copy until **Work directly** is chosen, and then one status read. It computes no change set.
+- Opening the dialog costs one stream listing, one capacity read, one queue read and one OpenSpec status read. It reads no working copy until **Work directly** is chosen, and then one status read. It computes no change set.
 - The dialog holds nothing that outlives it: a dismissal keeps neither the stream, nor the standing-work choice, nor the message, and the next opening rests where the first one did. A stream the dialog created is the one exception, being a stream of the project.

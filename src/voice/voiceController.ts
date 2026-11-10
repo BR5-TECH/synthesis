@@ -599,6 +599,15 @@ export function noteDiscussionChanged(discussion: Discussion): void {
   noteRepliesDiscussionChanged(discussion);
 }
 
+/**
+ * VOM-FR-NTKT: the owner of the voice discussion, while voice mode is on, so a
+ * surface that learns a stream left the project can tell whether it ends it.
+ */
+export function voiceOwner(): DiscussionTarget | null {
+  if (getVoiceState().activeKey === null) return null;
+  return voiceTarget;
+}
+
 /** CVP-FR-51, VOM-FR-LSBQ: the owner of the voice discussion was deleted. */
 export function noteOwnerDeleted(target: DiscussionTarget): void {
   if (voiceTarget === null || getVoiceState().activeKey === null) return;
@@ -609,7 +618,12 @@ export function noteOwnerDeleted(target: DiscussionTarget): void {
       // LCM-FR-11: a folder that holds the file goes with it.
       (voiceTarget.artifactId === target.artifactId ||
         voiceTarget.artifactId.startsWith(`${target.artifactId.replace(/\/+$/, "")}/`))) ||
-    (voiceTarget.kind === "note" && target.kind === "note" && voiceTarget.noteId === target.noteId);
+    (voiceTarget.kind === "note" && target.kind === "note" && voiceTarget.noteId === target.noteId) ||
+    // VOM-FR-NTKT: a change discussion ends with its stream or its change folder.
+    (voiceTarget.kind === "change" &&
+      target.kind === "change" &&
+      voiceTarget.streamId === target.streamId &&
+      voiceTarget.change === target.change);
   if (!same) return;
   logInfo(["frontend"], "voice mode ended with its owner", { kind: target.kind });
   discardAll();

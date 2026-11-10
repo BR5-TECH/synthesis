@@ -41,6 +41,7 @@ mod dispatch;
 pub mod drive;
 pub mod merge_drive;
 pub mod merge_workspace;
+pub mod openspec_review;
 pub mod phases;
 pub mod pr_summary_checkout;
 mod pr_summary_drive;

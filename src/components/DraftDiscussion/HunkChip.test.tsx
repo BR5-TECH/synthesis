@@ -3,6 +3,7 @@
  * DCR-FR-12, DCR-FR-28, DCR-FR-10).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useRef } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { HunkChip } from "./HunkChip";
@@ -32,8 +33,7 @@ function hunk(over: Partial<DecoratedHunk> = {}): DecoratedHunk {
  * host holding that block is all it needs to render.
  */
 function mount(h: DecoratedHunk) {
-  // Built outside React, so the host is there before the chip's layout effect
-  // asks for it — a ref on a parent is attached only after its children.
+  // Built outside React. The test below builds the host inside React too.
   const scroller = document.createElement("div");
   const block = document.createElement("div");
   block.className = "hunk hunk--add";
@@ -79,5 +79,25 @@ describe("DCR-FR-10: what a change is called", () => {
       "Change 2 of 3, replacement proposed by @arch, rejected",
     );
     expect(hunkLabel(hunk())).not.toContain("rejected");
+  });
+});
+
+/** A host and its chip that mount in one commit, as a Source review does. */
+function HostWithChip({ h }: { h: DecoratedHunk }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={hostRef}>
+      <div className="hunk hunk--add" {...{ [HUNK_ATTR]: h.id }}>
+        new
+      </div>
+      <HunkChip hunk={h} hostRef={hostRef} busy={false} onAccept={vi.fn()} onReject={vi.fn()} onDiscuss={vi.fn()} />
+    </div>
+  );
+}
+
+describe("OCW-FR-COLR: a chip whose host mounts with it", () => {
+  it("OCW-FR-COLR, DCR-FR-12: the chip shows when it mounts in the same commit as its host", () => {
+    render(<HostWithChip h={hunk()} />);
+    expect(screen.getByRole("button", { name: /Accept/ })).toBeInTheDocument();
   });
 });

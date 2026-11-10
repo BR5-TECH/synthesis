@@ -35,6 +35,13 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
     const EXCEPTIONS: &[(&str, &str)] = &[
         // A user-named CLI binary, anywhere on the machine (AII-FR-05).
         ("agentic/runner.rs", "is_executable"),
+        // OSM-FR-EZKW, OSM-FR-ZNVZ: the OpenSpec CLI, installed anywhere on
+        // the machine, on the terms of the line above. These ask whether it is
+        // executable, when it last changed, and which Node version folders
+        // stand under `~/.nvm/versions/node`. No content is read.
+        ("openspec/cli.rs", "is_executable"),
+        ("openspec/cli.rs", "modified"),
+        ("openspec/cli.rs", "subfolders"),
         // Git's own admin directory, which for a linked worktree lives under
         // the *primary* checkout.
         ("worktree.rs", "branch_from_head_file"),

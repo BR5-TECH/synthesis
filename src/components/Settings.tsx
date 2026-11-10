@@ -6,6 +6,7 @@ import { ProjectAiIntegrations } from "./AiIntegrations";
 import { ProjectAgents, type AgentEditorRequest } from "./Agents";
 import { ProjectAgentGroupSettings } from "./ProjectAgentGroupSettings";
 import { DraftTemplateSection } from "./DraftTemplateSection";
+import { OpenSpecSection } from "./OpenSpecSection";
 import { GithubPollingSection } from "./GithubPollingSection";
 import { FlowSyncSettingsGroup } from "./FlowSyncSettings";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
@@ -39,6 +40,14 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
     "template",
     "Draft template",
     "The text every new draft in this project starts with.",
+  ],
+  // SET-FR-03 / SET-FR-FZKL: the OpenSpec section, after the Draft template.
+  // Its checkbox persists at once, outside the section dirty state
+  // (SET-FR-QVUP).
+  [
+    "openspec",
+    "OpenSpec",
+    "Whether this project uses OpenSpec, and whether agents work with it in OpenSpec mode.",
   ],
   [
     "bindings",
@@ -228,6 +237,10 @@ export function Settings({
       {section === "template" && (
         <DraftTemplateSection contentRoot={contentRoot} />
       )}
+
+      {/* SET-FR-FZKL through SET-FR-ABXE: the OpenSpec section. Keyed on the
+          content root so a project or worktree change reads its status again. */}
+      {section === "openspec" && <OpenSpecSection key={contentRoot} />}
 
       {section === "plugins" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -452,6 +465,7 @@ export function Settings({
       {section !== "plugins" &&
         section !== "project" &&
         section !== "template" &&
+        section !== "openspec" &&
         section !== "docker" &&
         section !== "graduation" &&
         section !== "github-polling" &&

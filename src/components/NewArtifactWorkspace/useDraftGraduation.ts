@@ -35,6 +35,11 @@ export function useDraftGraduation(draftId: string, draftsRevision: number) {
               state: run.state,
               locked: !isTerminalRun(run.state),
               graduated: run.commits.length > 0 && run.state !== "discarded",
+              // NAW-FR-XDDQ / DRS-FR-VHMB: the change a propose run writes.
+              openspecChange:
+                run.openspec && run.streamId
+                  ? { name: run.openspec.change, streamId: run.streamId }
+                  : null,
             }
           : null,
       );

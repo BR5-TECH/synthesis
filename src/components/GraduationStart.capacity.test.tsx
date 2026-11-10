@@ -134,6 +134,7 @@ describe("a project slot that is free", () => {
       streamId: "editor-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 });
@@ -162,6 +163,7 @@ describe("a project limit that is full", () => {
       streamId: "editor-work",
       standingWork: "keep",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -181,6 +183,7 @@ describe("a project limit that is full", () => {
         streamId: "editor-work",
         standingWork: "commit",
         standingWorkMessage: "Wait for the slot",
+        openspecChange: null,
       }),
     );
   });
@@ -270,6 +273,7 @@ describe("a new stream", () => {
       streamId: "made",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -294,6 +298,7 @@ describe("a new stream", () => {
       streamId: "made",
       standingWork: "commit_and_push",
       standingWorkMessage: "Land it",
+      openspecChange: null,
     });
   });
 });

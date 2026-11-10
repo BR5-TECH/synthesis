@@ -173,6 +173,10 @@ pub(crate) fn target_text(
         DiscussionTarget::Note { note_id } => {
             crate::notes::load_note(roots.worktree, note_id).map(|note| note.body)
         }
+        // AGC-FR-TKXH: `proposal.md`, or the file of the fragment.
+        DiscussionTarget::Change { stream_id, change } => {
+            super::change_language_text(stream_id, change, fragment)
+        }
     }
 }
 
@@ -198,6 +202,7 @@ pub(crate) fn log_document_language<R: tauri::Runtime>(
         DiscussionTarget::Artifact { .. } => "artifact",
         DiscussionTarget::Draft { .. } => "draft",
         DiscussionTarget::Note { .. } => "note",
+        DiscussionTarget::Change { .. } => "change",
     };
     logging::log_debug(
         app,

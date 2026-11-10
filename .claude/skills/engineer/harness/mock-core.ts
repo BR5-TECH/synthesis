@@ -10,6 +10,15 @@ import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-document
 import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
+import {
+  OPENSPEC_DEMO_DRAFT,
+  OPENSPEC_DEMO_DRAFT_ID,
+  OPENSPEC_DEMO_RECORD,
+  OPENSPEC_DEMO_RUN_FIELDS,
+  openspecDiscussionInvoke,
+  openspecInvoke,
+  validChangeName,
+} from "./mock-openspec";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
@@ -415,6 +424,26 @@ function seededTree(): any {
             id: "flows/payments-hld.md",
             name: "payments-hld.md",
             path: "flows/payments-hld.md",
+            nodeKind: "file",
+            artifactType: "doc",
+            typeSource: "inferred",
+          },
+        ],
+      },
+      // LIB-FR-OKIZ / OCW-FR-ZZHS: the demo change in the active worktree, so
+      // a click on its file opens the change workspace tab of a worktree
+      // location (see mock-openspec.ts).
+      {
+        id: "openspec/changes/add-logout-3f2a",
+        name: "add-logout-3f2a",
+        path: "openspec/changes/add-logout-3f2a",
+        nodeKind: "folder",
+        hasArtifacts: true,
+        children: [
+          {
+            id: "openspec/changes/add-logout-3f2a/proposal.md",
+            name: "proposal.md",
+            path: "openspec/changes/add-logout-3f2a/proposal.md",
             nodeKind: "file",
             artifactType: "doc",
             typeSource: "inferred",
@@ -4474,7 +4503,9 @@ let projectConfig: {
   graduationPassBudget: number | null;
   graduationStageTimeLimitMs: number | null;
   graduationTotalTimeLimitMs: number | null;
+  openspecMode: "auto" | "off";
 } = {
+  openspecMode: "auto",
   lineEndings: "lf",
   draftTemplate: null,
   // PSS-FR-JRWC: one is the resting limit. Seed another at
@@ -6569,6 +6600,13 @@ function makeStreamRun(over: any) {
   };
 }
 
+// GRD-FR-LKGC / GRU-FR-LTWN: a completed propose run, and the graduated draft
+// it was made from (DRP-FR-YGOU, NAW-FR-XDDQ). See mock-openspec.ts.
+graduationRuns.push(makeStreamRun(OPENSPEC_DEMO_RUN_FIELDS));
+(drafts as any[]).push({ ...OPENSPEC_DEMO_DRAFT });
+draftRecords[OPENSPEC_DEMO_DRAFT_ID] = { ...OPENSPEC_DEMO_RECORD };
+draftFiles[OPENSPEC_DEMO_DRAFT_ID] = [String(OPENSPEC_DEMO_RECORD.promptPath)];
+
 graduationRuns.push(
   // GRT-FR-CTNO: the one state Restart is offered for.
   makeStreamRun({
@@ -7275,7 +7313,14 @@ function draftGraduation(draftId: string): any {
     runId: run.id,
     state: run.state,
     locked: !GRADUATION_TERMINAL.includes(run.state),
-    graduated: run.publication != null || IMPLEMENTATION_PART.includes(run.state),
+    graduated:
+      run.publication != null ||
+      IMPLEMENTATION_PART.includes(run.state) ||
+      (run.state === "completed" && (run.commits?.length ?? 0) > 0),
+    // DRS-FR-VHMB: the change a propose run writes, and its stream.
+    openspecChange: run.openspec
+      ? { name: run.openspec.change, streamId: run.streamId }
+      : null,
   };
 }
 
@@ -8042,6 +8087,10 @@ function publicationMetadataMock() {
  * switch below (see `mock-unified-discussions.ts`).
  */
 export async function invoke(cmd: string, args?: Record<string, any>): Promise<any> {
+  // OCW-FR-TRLG / OCW-FR-COLR: the discussions and the edit proposal of the
+  // demo change on its stream (see mock-openspec.ts).
+  const change = openspecDiscussionInvoke(cmd, args ?? {});
+  if (change !== NOT_HANDLED) return change;
   return unifiedInvoke(cmd, args, legacyInvoke);
 }
 
@@ -8097,6 +8146,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // PPK-project-picker.md: the recent list, with Pin, Unpin, and Hide state.
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
+  // OCW-openspec-change-workspace.md: the one demo change.
+  const openspec = openspecInvoke(cmd, a);
+  if (openspec !== NOT_HANDLED) return openspec;
   // FLO-flow.md / FSR-flow-sync-review.md: the delivery plan's state, its
   // overlaps, and the tracker sync.
   const flowPlan = flowPlanInvoke(cmd, a);
@@ -8326,8 +8378,30 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           patch.graduationTotalTimeLimitMs === undefined
             ? projectConfig.graduationTotalTimeLimitMs
             : patch.graduationTotalTimeLimitMs,
+        // PSS-FR-HVUZ: omitted leaves it as stored; `auto` and `off` store it.
+        openspecMode: patch.openspecMode === "off" ? "off" : patch.openspecMode === "auto" ? "auto" : projectConfig.openspecMode,
       };
       return undefined;
+    }
+
+    // OSM-FR-YXUC: the demo project uses OpenSpec and the CLI is found.
+    // Seed http://localhost:5199/?openspecCli=not_found to see the install
+    // statement (SET-FR-ABXE).
+    case "get_openspec_status": {
+      const cliSeed =
+        typeof location === "undefined" ? null : new URLSearchParams(location.search).get("openspecCli");
+      const cli =
+        cliSeed === "not_found"
+          ? { state: "not_found" }
+          : cliSeed === "unsupported"
+            ? { state: "unsupported", path: "/opt/homebrew/bin/openspec", version: "0.16.0" }
+            : { state: "available", path: "/opt/homebrew/bin/openspec", version: "1.17.0" };
+      return {
+        setting: projectConfig.openspecMode,
+        usesOpenspec: true,
+        active: projectConfig.openspecMode === "auto",
+        cli,
+      };
     }
 
     // ---- plugins ---------------------------------------------------------
@@ -9254,6 +9328,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
     }
     case "get_draft_graduation":
+      // NAW-FR-XDDQ: the tab reads the run itself (GraduationRun).
+      if (a.draftId === OPENSPEC_DEMO_DRAFT_ID) {
+        return graduationRuns.find((r) => r.draftId === OPENSPEC_DEMO_DRAFT_ID) ?? null;
+      }
       return draftGraduation(String(a.draftId ?? ""));
     /**
      * GRV-FR-04: a project outside Git refuses the first attempt with the typed
@@ -9305,6 +9383,20 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         // eslint-disable-next-line no-throw-literal
         throw "draft_already_graduating";
       }
+      // GSU-FR-CZEP / GSU-FR-UIDE: the refusals of a propose start.
+      const openspecChange = a.openspecChange == null ? null : String(a.openspecChange);
+      if (openspecChange !== null) {
+        // eslint-disable-next-line no-throw-literal
+        if (!validChangeName(openspecChange)) throw "invalid_change_name";
+        const taken = graduationRuns.some(
+          (r) =>
+            r.openspec?.change === openspecChange &&
+            r.streamId === String(a.streamId ?? "") &&
+            (r.state === "completed" || !GRADUATION_TERMINAL.includes(r.state)),
+        );
+        // eslint-disable-next-line no-throw-literal
+        if (taken) throw "openspec_change_exists";
+      }
       const inPlace = harnessFlag("graduationInPlace");
       const id = `g-${graduationRuns.length + 1}`;
       // GSD-FR-VKLD / GSD-FR-WQPD / GSD-FR-MZTB: the four answers the start
@@ -9323,6 +9415,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         streamName: startStream?.name ?? null,
         standingWork: String(a.standingWork ?? "commit"),
         standingWorkMessage: a.standingWorkMessage ?? null,
+        // GRD-FR-LKGC: a propose run carries the change it writes.
+        openspec: openspecChange ? { phase: "propose", change: openspecChange } : null,
         input: {
           draftId,
           draftName: String(record.name ?? draftId),

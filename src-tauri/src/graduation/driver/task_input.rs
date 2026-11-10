@@ -154,6 +154,13 @@ pub struct GraduationTaskInput {
     /// GRL-FR-SNHR: the pull request the turn of a PR summary run describes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_summary: Option<PrSummaryTaskContext>,
+    /// GRL-FR-MXXA: the phase and the change, on every turn of a propose run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec: Option<crate::graduation::RunOpenSpec>,
+    /// GRL-FR-CDNI: the validation of the reviewed tree, on the review turns of
+    /// a propose run alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_validation: Option<crate::openspec::ChangeValidation>,
     /// GRL-FR-FESZ: where a `review` or `merge_review` turn finds the check
     /// report the work turn wrote, or `missing`. No other turn carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -334,6 +341,10 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
     GraduationTaskInput {
         merge,
         pr_summary: None,
+        // GRL-FR-MXXA: every turn of a propose run names its change.
+        openspec: run.openspec.clone(),
+        // GRL-FR-CDNI: set by the review alone, once its checkout stands.
+        openspec_validation: None,
         graduation_input_version: GRADUATION_INPUT_VERSION,
         run_id: run.id.clone(),
         part: input_part.to_string(),

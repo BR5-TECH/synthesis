@@ -40,7 +40,7 @@ mod updating;
 pub use artifact::MergeConflict;
 pub use commands::*;
 pub use conflict_types::{StreamMergeConflict, StreamMergeDecision, SEMANTIC_REBASE_TURN};
-pub use lookup::{stream_at_path, stream_on_branch};
+pub use lookup::{stream_at_path, stream_by_id, stream_on_branch};
 pub use merge_apply::{apply_merge_run, merge_tips_moved, MergeApplied, MergeApplyFailure};
 pub use merge_handoff::*;
 pub(crate) use merge_snapshot::{has_ref as has_snapshot_ref, release_ref as release_snapshot_ref};

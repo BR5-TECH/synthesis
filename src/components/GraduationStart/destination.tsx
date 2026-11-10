@@ -29,6 +29,8 @@ export interface DestinationChoiceProps {
   disabled: boolean;
   /** GSD-FR-LDGM / GSD-FR-CXVA: no stream to choose from. */
   noStream: boolean;
+  /** GSD-FR-AGPL: why Work directly is not offered, or null where it is. */
+  directDisabledReason?: string | null;
   onChange: (value: Destination, via: DestinationInput) => void;
 }
 
@@ -43,13 +45,16 @@ export function DestinationChoice({
   value,
   disabled,
   noStream,
+  directDisabledReason = null,
   onChange,
 }: DestinationChoiceProps) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // GSD-FR-LDGM: a project with no stream has none to choose.
   const isDisabled = (choice: Destination) =>
-    disabled || (choice === "stream" && noStream);
+    disabled ||
+    (choice === "stream" && noStream) ||
+    (choice === "direct" && directDisabledReason !== null);
 
   // The Tab key reaches the chosen segment. Where that one is disabled, it
   // reaches the first segment that is not, so the group is never unreachable.
@@ -117,7 +122,11 @@ export function DestinationChoice({
               data-active={active ? "true" : "false"}
               tabIndex={index === tabStop ? 0 : -1}
               disabled={isDisabled(choice.value)}
-              title={choice.label}
+              title={
+                choice.value === "direct" && directDisabledReason
+                  ? directDisabledReason
+                  : choice.label
+              }
               onClick={() => {
                 if (!active) onChange(choice.value, "click");
               }}
@@ -128,6 +137,12 @@ export function DestinationChoice({
           );
         })}
       </div>
+      {/* GSD-FR-AGPL: the disabled segment states why. */}
+      {directDisabledReason && (
+        <p className="t-ui-xs graduation-start__note" data-testid="graduation-direct-reason">
+          {directDisabledReason}
+        </p>
+      )}
     </fieldset>
   );
 }

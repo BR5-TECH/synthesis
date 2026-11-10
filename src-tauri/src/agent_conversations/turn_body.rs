@@ -65,13 +65,14 @@ pub(super) enum TurnEnd {
 /// recorded question set, a proposal, a new draft, a prompt change, or an
 /// export request. The artifact origins' proposal tool is never attached with
 /// the two draft tools (CVL-FR-08).
-fn ends_turn(name: &str) -> bool {
+pub(super) fn ends_turn(name: &str) -> bool {
     [
         crate::tools::ask_user_comment::NAME,
         crate::tools::ask_discussion_questions::NAME,
         crate::tools::propose_draft_changes::NAME,
         crate::tools::propose_new_draft::NAME,
         crate::tools::propose_prompt_changes::NAME,
+        crate::tools::propose_change_edits::NAME,
         crate::tools::request_document_export::NAME,
     ]
     .contains(&name)
@@ -515,7 +516,10 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::propose_draft_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_new_draft::NAME {
                 Some(crate::tools::propose_new_draft::ONE_AT_A_TIME)
-            } else if call.function.name == crate::tools::propose_prompt_changes::NAME {
+            } else if call.function.name == crate::tools::propose_prompt_changes::NAME
+                || call.function.name == crate::tools::propose_change_edits::NAME
+            {
+                // CVL-FR-15: one proposal per turn, whichever store it is for.
                 Some(crate::tools::propose_prompt_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::request_document_export::NAME {
                 Some(crate::tools::request_document_export::ONE_AT_A_TIME)

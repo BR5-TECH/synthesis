@@ -135,6 +135,7 @@ fn graduation_input_fields(part: &str) -> Vec<String> {
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),

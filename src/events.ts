@@ -22,6 +22,7 @@ import type {
   PublicationMetadataStartupFailed,
   AgentActivityState,
   ChangesUpdatedPayload,
+  ChangeProposalsChangedPayload,
   Discussion,
   PendingQuestionSet,
   DashboardRefreshFailedPayload,
@@ -98,6 +99,12 @@ export const DRAFTS_CHANGED = "drafts-changed";
 export const DRAFT_CHANGE_PROPOSALS_CHANGED = "draft-change-proposals-changed";
 /** PCP-FR-17: a change was proposed to a prompt artifact, or one was decided. */
 export const PROMPT_CHANGE_PROPOSALS_CHANGED = "prompt-change-proposals-changed";
+
+/**
+ * CEP-FR-SQCG: a change edit proposal was recorded, updated, decided, held, or
+ * committed. It carries the stream id, the change name, and the whole proposal.
+ */
+export const CHANGE_EDIT_PROPOSALS_CHANGED = "change-edit-proposals-changed";
 
 /**
  * DHS-FR-22: a version of a draft's prompt became visible, or a reconciliation
@@ -424,6 +431,16 @@ export const onPromptChangeProposalsChanged = (
   handler: (payload: PromptProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
   listen<PromptProposalsChangedPayload>(PROMPT_CHANGE_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/**
+ * CEP-FR-SQCG / OCW-FR-TAZJ: a change edit proposal of one change moved on.
+ */
+export const onChangeEditProposalsChanged = (
+  handler: (payload: ChangeProposalsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<ChangeProposalsChangedPayload>(CHANGE_EDIT_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 

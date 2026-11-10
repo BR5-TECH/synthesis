@@ -29,6 +29,8 @@ export * from "./githubPolling";
 export * from "./integrations";
 export * from "./library";
 export * from "./modelDowngrades";
+export * from "./openspec";
+export * from "./changeProposals";
 export * from "./panels";
 export * from "./project";
 export * from "./streams";

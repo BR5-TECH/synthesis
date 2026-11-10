@@ -453,6 +453,7 @@ fn the_start_records_the_answers_and_touches_no_working_copy() {
         stream.id.clone(),
         StandingWork::CommitAndPush,
         Some("Notes from the review meeting".to_string()),
+        None,
     )
     .expect("work standing in the stream refuses no start");
 
@@ -484,6 +485,7 @@ fn the_start_captures_the_prompt_and_enqueues_one_run() {
         draft.clone(),
         stream.id.clone(),
         StandingWork::Keep,
+        None,
         None,
     )
     .expect("a run");
@@ -519,6 +521,7 @@ fn a_restart_records_its_own_answers() {
         stream.id.clone(),
         StandingWork::Keep,
         Some("the first run's message".to_string()),
+        None,
     )
     .expect("a run");
     let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone())
@@ -560,6 +563,7 @@ fn a_restart_asks_for_a_commit_under_the_drafts_current_name() {
         draft.clone(),
         stream.id.clone(),
         StandingWork::Keep,
+        None,
         None,
     )
     .expect("a run");

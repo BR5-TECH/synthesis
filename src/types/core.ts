@@ -7,6 +7,7 @@
 import type { DiscussionTarget } from "./comments";
 import { DiffTarget } from "./diff";
 import { SearchMode } from "./search";
+import type { ChangeLocation } from "./openspec";
 
 export type ArtifactType =
   | "skill"
@@ -185,7 +186,8 @@ export interface Tab {
     | "map"
     | "document"
     | "pdf"
-    | "draftPreview";
+    | "draftPreview"
+    | "openspecChange";
   dirty?: boolean;
   // The backend artifact id (project-relative path, ASC-FR-13) when this tab
   // was opened from a real filesystem node. Present -> the Editor loads/saves
@@ -232,4 +234,22 @@ export interface Tab {
   ownerLabel?: string;
   /** CVP-FR-57: the conversation's subject, which follows the name. */
   subject?: string;
+  /** TAB-FR-KOTW: the change a change workspace tab shows (OCW-FR-DMGL). */
+  openspecChange?: OpenSpecChangeTabTarget;
+}
+
+/**
+ * TAB-FR-KOTW / OCW-FR-DMGL / OCW-FR-IAPK: what a change workspace tab shows.
+ * The location and the name identify the tab. `file` and `openSeq` are the
+ * last open of the tab: each open increments `openSeq`, so the tab applies the
+ * selection of that open once.
+ */
+export interface OpenSpecChangeTabTarget {
+  location: ChangeLocation;
+  name: string;
+  /** OCW-FR-XUJN: the name of the stream of a stream location, once known. */
+  streamName?: string;
+  /** OCW-FR-IAPK: the change-relative path the last open names, or null. */
+  file: string | null;
+  openSeq: number;
 }

@@ -21,6 +21,8 @@ export * from "./agentActivity";
 export * from "./seeds";
 export * from "./progress";
 export * from "./projectConfig";
+export * from "./openspec";
+export * from "./changeProposals";
 export * from "./logging";
 export * from "./worktree";
 export * from "./gitHistory";

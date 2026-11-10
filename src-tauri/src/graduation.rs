@@ -57,6 +57,7 @@ mod events;
 mod idle_sandbox;
 mod landings;
 mod merge_run;
+pub mod openspec_start;
 mod pr_summary;
 mod queue;
 mod read_failure;
@@ -92,10 +93,10 @@ pub use observability::{
 };
 pub use pr_summary::*;
 pub use queue::{
-    draft_graduation, draft_graduation_stands, holder_of_queue, latest_run_for,
-    live_run_on_worktree, load_queue, merge_runs_by_stream, next_eligible, position_in_queue,
-    project_queue, queue_of, queued_counts_by_stream, require_no_running_graduation,
-    require_unlocked_draft, slot_holders, streams_with_runs,
+    agent_work_run_on_stream, draft_graduation, draft_graduation_stands, holder_of_queue,
+    latest_run_for, live_run_on_worktree, load_queue, merge_runs_by_stream, next_eligible,
+    position_in_queue, project_queue, queue_of, queued_counts_by_stream,
+    require_no_running_graduation, require_unlocked_draft, slot_holders, streams_with_runs,
 };
 pub use record::*;
 pub use run_progress::{end_with_loop as end_run_progress, PROGRESS_KIND_GRADUATION};

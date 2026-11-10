@@ -136,6 +136,13 @@ export function RunRegion({
         {/* GRU-FR-HDPQ: a merge run's title stands where a draft run's draft
             name does. */}
         <span className="graduation__name">{title}</span>
+        {/* GRU-FR-YHFQ: a propose run names the change it writes, beside its
+            source draft, in every state. */}
+        {run.openspec && (
+          <span className="graduation__change t-meta" data-testid="graduation-openspec-change">
+            Change {run.openspec.change}
+          </span>
+        )}
         <span className="spacer" />
         {/* GRU-FR-NBRO: the state in words and in accessible semantics rather
             than by colour, and announced when it changes. */}

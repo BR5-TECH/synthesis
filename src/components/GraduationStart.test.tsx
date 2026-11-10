@@ -112,6 +112,8 @@ const windowCommands = () =>
     (c) =>
       c !== "get_graduation_capacity" &&
       c !== "list_graduation_queue" &&
+      // GSD-FR-DCLQ: the OpenSpec status read is one of the reads of an open.
+      c !== "get_openspec_status" &&
       c !== "append_log_records",
   );
 
@@ -336,6 +338,7 @@ describe("what the run does with work standing in the stream", () => {
       streamId: "editor-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -354,6 +357,7 @@ describe("what the run does with work standing in the stream", () => {
       streamId: "registry-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -379,6 +383,7 @@ describe("what the run does with work standing in the stream", () => {
       streamId: "registry-work",
       standingWork: "keep",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -392,6 +397,7 @@ describe("what the run does with work standing in the stream", () => {
         streamId: "editor-work",
         standingWork: "commit",
         standingWorkMessage: null,
+        openspecChange: null,
       }),
     );
   });
@@ -608,6 +614,7 @@ describe("a refused start", () => {
         streamId: "registry-work",
         standingWork: "commit_and_push",
         standingWorkMessage: "Notes from the meeting",
+        openspecChange: null,
       }),
     );
   });
@@ -708,6 +715,7 @@ describe("the message a commit takes", () => {
       streamId: "registry-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 });

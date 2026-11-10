@@ -426,6 +426,148 @@ pub fn list_all_draft_fragment_discussions_in(
     out
 }
 
+/// CMS-FR-GJEY: where one change owner's logs live:
+/// `changes/<stream-id>/<change>/comments/` inside the repository machine
+/// store.
+///
+/// Both parts are checked before they become a path. A stream id is an opaque
+/// storage id and a change name is the OpenSpec form (OSM-FR-IHUO), so neither
+/// can hold a separator or a dot segment.
+pub(super) fn change_comments_dir(
+    root: &crate::fs::RootFs,
+    stream_id: &str,
+    change: &str,
+) -> Result<PathBuf, String> {
+    if !is_change_owner(stream_id, change) {
+        return Err(ERR_CHANGE_NOT_FOUND.to_string());
+    }
+    fsa::resolve_under(
+        root,
+        format!("{CHANGE_COMMENTS_ROOT}/{stream_id}/{change}/{DRAFT_COMMENTS_SUBDIR}"),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// CMS-FR-UEXD: whether a stream id and a change name may name a change owner.
+pub fn is_change_owner(stream_id: &str, change: &str) -> bool {
+    is_storage_id(stream_id) && crate::openspec::change::valid_change_name(change)
+}
+
+/// The threads of one file of a change, folded from its fragment log
+/// (CMS-FR-GJEY). The filename is derived from the change-relative path as
+/// CMS-FR-02 derives it.
+pub fn list_change_fragment_discussions_in(
+    root: &crate::fs::RootFs,
+    stream_id: &str,
+    change: &str,
+    file_rel: &str,
+) -> Vec<Discussion> {
+    let Ok(dir) = change_comments_dir(root, stream_id, change) else {
+        return Vec::new();
+    };
+    let Ok(path) = fsa::resolve_under(dir, format!("{}.jsonl", log_id(file_rel))) else {
+        return Vec::new();
+    };
+    let Ok(text) = root.read_text(&path) else {
+        return Vec::new();
+    };
+    fold_events_for(FoldTarget::ChangeFile { stream_id, change, file_rel }, parse_events(&text))
+}
+
+/// CMS-FR-GJEY: every whole-change discussion of one change, in the order they
+/// were begun.
+pub fn fold_change_discussion(
+    root: &crate::fs::RootFs,
+    stream_id: &str,
+    change: &str,
+) -> Vec<Discussion> {
+    let Ok(dir) = change_comments_dir(root, stream_id, change) else {
+        return Vec::new();
+    };
+    let Ok(path) = fsa::resolve_under(dir, DISCUSSION_LOG_NAME) else {
+        return Vec::new();
+    };
+    let Ok(text) = root.read_text(&path) else {
+        return Vec::new();
+    };
+    fold_events_for(FoldTarget::ChangeDiscussion { stream_id, change }, parse_events(&text))
+}
+
+/// The change-relative path a change's fragment log recorded at its opening.
+fn recorded_change_path(events: &[Event]) -> Option<&str> {
+    events.iter().find_map(|e| match &e.body {
+        EventBody::DiscussionOpened { fragment_target: Some(fragment), .. }
+            if matches!(fragment.owner, DiscussionTarget::Change { .. }) =>
+        {
+            Some(fragment.path.as_str())
+        }
+        _ => None,
+    })
+}
+
+/// CMS-FR-GJEY: every fragment discussion of every file of one change.
+///
+/// It walks the change's own folder, because the filename derivation is one-way
+/// (CMS-FR-02) and a caller may hold a discussion id rather than a path.
+pub fn list_all_change_fragment_discussions_in(
+    root: &crate::fs::RootFs,
+    stream_id: &str,
+    change: &str,
+) -> Vec<Discussion> {
+    let Ok(dir) = change_comments_dir(root, stream_id, change) else {
+        return Vec::new();
+    };
+    let Ok(entries) = root.list_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries {
+        let path = dir.join(&entry.name);
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        if path.file_name().and_then(|n| n.to_str()) == Some(DISCUSSION_LOG_NAME) {
+            continue;
+        }
+        let Ok(text) = root.read_text(&path) else {
+            continue; // CMS-FR-35: one unreadable log never costs the rest.
+        };
+        let events = parse_events(&text);
+        let Some(recorded) = recorded_change_path(&events).map(str::to_string) else {
+            continue;
+        };
+        out.extend(fold_events_for(
+            FoldTarget::ChangeFile { stream_id, change, file_rel: &recorded },
+            events.clone(),
+        ));
+    }
+    out
+}
+
+/// CMS-FR-GJEY: every change owner the store holds conversation storage for, as
+/// `(stream id, change name)` pairs in a stable order.
+pub fn stored_change_owners(root: &crate::fs::RootFs) -> Vec<(String, String)> {
+    let Ok(dir) = fsa::resolve_under(root, CHANGE_COMMENTS_ROOT) else {
+        return Vec::new();
+    };
+    let Ok(streams) = root.list_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for stream in streams.into_iter().filter(|e| is_storage_id(&e.name)) {
+        let Ok(changes) = root.list_dir(dir.join(&stream.name)) else {
+            continue;
+        };
+        for change in changes {
+            if is_change_owner(&stream.name, &change.name) {
+                out.push((stream.name.clone(), change.name));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
 /// CMS-FR-58: fragment discussions first, ordered by `fragment_target.start` then
 /// `created_at`; whole-target ones after them, ordered by `created_at`.
 fn order_owner_discussions(mut items: Vec<Discussion>) -> Vec<Discussion> {
@@ -459,6 +601,11 @@ pub fn list_discussions_in(root: &crate::fs::RootFs, target: &DiscussionTarget) 
             v
         }
         DiscussionTarget::Note { note_id } => fold_note_discussion(root, note_id),
+        DiscussionTarget::Change { stream_id, change } => {
+            let mut v = list_all_change_fragment_discussions_in(root, stream_id, change);
+            v.extend(fold_change_discussion(root, stream_id, change));
+            v
+        }
     };
     items = order_owner_discussions(items);
     items
@@ -509,6 +656,15 @@ pub fn list_all_discussions_in(
                     owner_unavailable: !existing.contains(&entry.name),
                 });
             }
+        }
+    }
+    // CMS-FR-ZILU: a change's logs stay when its change or its stream goes, so
+    // they are listed. Whether the owner still resolves needs the stream
+    // registry, which this read does not hold, so they list as available.
+    for (stream_id, change) in stored_change_owners(root) {
+        let target = DiscussionTarget::Change { stream_id, change };
+        for discussion in list_discussions_in(root, &target) {
+            out.push(DiscussionListItem { discussion, owner_unavailable: false });
         }
     }
     sort_items(&mut out);

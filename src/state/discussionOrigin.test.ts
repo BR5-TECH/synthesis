@@ -31,10 +31,12 @@ function discussionOf(origin: ConversationOrigin): Discussion {
 }
 
 describe("the origin a turn is dispatched with", () => {
-  it("AGC-FR-05: the contract holds every origin kind", () => {
+  it("AGC-FR-05, CMS-FR-UEXD: the contract holds every origin kind", () => {
     expect(CASES.map((c) => c.kind).sort()).toEqual([
       "artifact_comment",
       "artifact_discussion",
+      "change_comment",
+      "change_discussion",
       "draft_comment",
       "draft_discussion",
       "note_discussion",

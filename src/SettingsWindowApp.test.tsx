@@ -236,6 +236,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
     expect(rowsOf("Project")).toEqual([
       "Project",
       "Draft template",
+      "OpenSpec",
       "Target repo bindings",
       "GitHub Project settings",
       "Agent adapters",

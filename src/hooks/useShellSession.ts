@@ -58,6 +58,11 @@ import {
   useViewerStatePruning,
 } from "./shell/documentActions";
 import { createDraftPreviewActions } from "./shell/draftPreviewActions";
+import {
+  createOpenSpecChangeActions,
+  useOpenSpecChangeTabs,
+  worktreeChangeLocation,
+} from "./shell/openspecChangeActions";
 import { useTabScrollPruning } from "./shell/tabScrollPruning";
 
 export { conversationTabId };
@@ -420,6 +425,12 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     openDocumentHit: (hit) => openDocumentById(hit.documentId ?? hit.id),
     openDocumentByProjectPath: (path) => openDocumentByProjectPath(path),
     openDraftHit: (hit) => void openDraftById(hit.draftId ?? hit.id),
+    // OCW-FR-PLDG: a worktree that is a stream's working copy opens the
+    // change on that stream.
+    openWorktreeChange: (name, file) => {
+      const { location, streamName } = worktreeChangeLocation(activeWorktree);
+      openChange(location, name, { file, streamName });
+    },
   });
   /**
    * TAB-FR-37 / TAB-FR-39: the eligible set, held here so the strip's menu can
@@ -614,6 +625,15 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     setActiveTab,
     activateTab,
   });
+  // TAB-FR-KOTW / TAB-FR-DRXS / OCW-FR-DMGL: the change workspace tabs.
+  const openSpecChanges = createOpenSpecChangeActions({
+    tabsRef,
+    setTabs,
+    setActiveTab,
+    activateTab,
+  });
+  const { openChange } = openSpecChanges;
+  useOpenSpecChangeTabs(tabs, tabsRef, openSpecChanges);
   useViewerStatePruning(tabs);
   useTabScrollPruning(tabs);
 
@@ -818,6 +838,8 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     // TAB-FR-CIGU / TAB-FR-OMWY: the draft preview tab.
     openDraftPreview,
     closeDraftPreview,
+    // OCW-FR-DMGL: the change workspace tab.
+    openChange,
     // TAB-FR-22: the strip closes exactly the Diff tabs a commit has finished
     // with, from the paths the commit recorded.
     closeDiffTabsForCommittedPaths,

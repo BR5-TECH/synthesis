@@ -35,7 +35,7 @@ The panel in which the architect decides what a tracker sync could not decide al
 │                                                │
 │ ☐ Tokenize card numbers               #51 ↗    │
 │   Not valid in this plan                       │
-│   GitHub moved it under #40, a deliverable.    │
+│   GitHub moved it under #41, an epic.          │
 │   A task must sit in a feature.                │
 │   ( ) Keep Flow   ( ) Unlink                   │
 │                                                │

@@ -3,7 +3,7 @@
 **Spec code:** `FGV`
 
 ## Intent
-The backend authority on what a Flow document is. A Flow is the project's **delivery plan**: a hierarchy of deliverables, milestones, epics, features, tasks, and defects, the `blocks` and `relates` edges between them, the drafts its tasks are worked in, and the tracker issues it is synced with. This module owns the Flow document schema and the structural rules the plan obeys, and answers one question about a body of text: is this a Flow, and if not, exactly what is wrong with it. A Flow is a plain JSON file committed to the repository: an agent writes one, a merge resolves one, a person edits one by hand, and the tracker sync writes one. The canvas that enforces these rules while an author draws is present for none of that, so a document is checked on the way in and refused on the way out. Out of scope: what a plan's state is, which `FDL-flow-delivery.md` derives; whether a reference, a draft link, or a footprint path points at something that still exists, which the editor shows rather than refuses (per `../ui/FLO-flow.md` FLO-FR-11); how the plan compares with a tracker, which is `FTS-flow-tracker-sync.md`'s; and where items sit on the canvas, which is the canvas's business.
+The backend authority on what a Flow document is. A Flow is the project's **delivery plan**: a hierarchy of milestones, epics, features, tasks, and defects, the `blocks` and `relates` edges between them, the drafts its tasks are worked in, and the tracker issues it is synced with. This module owns the Flow document schema and the structural rules the plan obeys, and answers one question about a body of text: is this a Flow, and if not, exactly what is wrong with it. A Flow is a plain JSON file committed to the repository: an agent writes one, a merge resolves one, a person edits one by hand, and the tracker sync writes one. The canvas that enforces these rules while an author draws is present for none of that, so a document is checked on the way in and refused on the way out. Out of scope: what a plan's state is, which `FDL-flow-delivery.md` derives; whether a reference, a draft link, or a footprint path points at something that still exists, which the editor shows rather than refuses (per `../ui/FLO-flow.md` FLO-FR-11); how the plan compares with a tracker, which is `FTS-flow-tracker-sync.md`'s; and where items sit on the canvas, which is the canvas's business.
 
 ## Functional requirements
 1. **FGV-FR-01** This module is the single definition of the Flow document schema. The shape in the contract surface is that definition. Every module that reads or writes a Flow document conforms to it: `../ui/FLO-flow.md` (FLO-FR-03), `../ui/DFV-diff-viewer.md` (DFV-FR-33), `FDL-flow-delivery.md`, `FOA-flow-overlap-analysis.md`, and `FTS-flow-tracker-sync.md`.
@@ -19,7 +19,7 @@ The backend authority on what a Flow document is. A Flow is the project's **deli
 10. **FGV-FR-10** An edge whose `from` or `to` names no item in the document yields a violation of code `dangling_edge_endpoint`.
 11. **FGV-FR-11** An edge whose `from` and `to` are the same item yields a violation of code `self_edge`. Two items joined by more than one edge, whatever the edges' directions and types, yield a violation of code `duplicate_edge` on the second and each later edge.
 12. **FGV-FR-13** A `parentId` naming no item in the document, or naming a `task` or a `defect`, yields a violation of code `dangling_parent`. An item that contains itself through any chain of `parentId` values yields a violation of code `containment_cycle` on each item in the chain.
-13. **FGV-FR-YHFX** An item whose container is not one the hierarchy permits for its kind yields a violation of code `invalid_parent_kind`. The permitted containers are: `deliverable`, the top level; `milestone`, a deliverable; `epic`, a milestone; `feature`, a milestone or an epic; `task`, a feature; `defect`, a feature, an epic, or a milestone.
+13. **FGV-FR-YHFX** An item whose container is not one the hierarchy permits for its kind yields a violation of code `invalid_parent_kind`. The permitted containers are: `milestone`, the top level; `epic`, a milestone; `feature`, a milestone or an epic; `task`, a feature; `defect`, a feature, an epic, or a milestone.
 14. **FGV-FR-KBLT** An edge between an item and one of its ancestors or descendants yields a violation of code `edge_within_lineage`.
 15. **FGV-FR-PMTY** `blocks` edges that make a leaf wait, directly or through other leaves, for itself yield a violation of code `dependency_cycle` on each of those edges. A leaf waits for every leaf at or under an edge's `from` when the edge's `to` is that leaf or one of its ancestors. A container that holds no leaf counts as a leaf.
     - *Why:* A container is done only when its leaves are done, and an empty one never is (`FDL-flow-delivery.md` FDL-FR-JYKC), so such a cycle is a deadlock.
@@ -29,6 +29,7 @@ The backend authority on what a Flow document is. A Flow is the project's **deli
 19. **FGV-FR-RRND** A `due` that is not a calendar date in the form `YYYY-MM-DD` yields a violation of code `invalid_due_date`.
 20. **FGV-FR-JDGO** An `artifactIds` list or the document's `references` list that holds the same id twice yields a violation of code `duplicate_reference`.
 21. **FGV-FR-LWPD** Two sync links naming the same `itemId`, or the same tracker reference, yield a violation of code `duplicate_tracker_link`. A link whose item is a `milestone` and whose reference is not a milestone reference, or the reverse, yields a violation of code `tracker_kind_mismatch`.
+21. **FGV-FR-TLMV** A `sync.ignored` entry that repeats an earlier entry, or that names the reference of a sync link, yields a violation of code `duplicate_tracker_link`.
 22. **FGV-FR-15** These are not violations: a reference that resolves to no file; a `draftId` that names no draft; a `footprint` path that names nothing on disk; an empty Flow or item name; an empty container; `relates` edges that form a cycle; a sync link whose `itemId` names no item; and every fact about where an item sits on the canvas.
     - *Why:* A link to an item that is gone is the record `FTS-flow-tracker-sync.md` reads as a local removal, so it must survive validation.
 
@@ -61,21 +62,13 @@ The backend authority on what a Flow document is. A Flow is the project's **deli
     "references": ["docs/payments-hld.md"],
     "items": [
       {
-        "id": "d1",
-        "kind": "deliverable",
-        "name": "Card payments",
-        "description": "Accept **Visa** and **Mastercard**.",
-        "artifactIds": ["specifications/core/PAY-payments.md"],
-        "position": { "x": 40, "y": 40 },
-        "size": { "width": 1200, "height": 700 }
-      },
-      {
         "id": "m1",
         "kind": "milestone",
         "name": "Beta",
+        "description": "Accept **Visa** and **Mastercard**.",
+        "artifactIds": ["specifications/core/PAY-payments.md"],
         "due": "2027-03-31",
-        "parentId": "d1",
-        "position": { "x": 20, "y": 60 },
+        "position": { "x": 40, "y": 40 },
         "size": { "width": 900, "height": 520 }
       },
       {
@@ -138,16 +131,26 @@ The backend authority on what a Flow document is. A Flow is the project's **deli
             "state": "open"
           }
         }
+      ],
+      "ignored": [
+        {
+          "kind": "issue",
+          "host": "github.com",
+          "owner": "acme",
+          "repo": "payments",
+          "number": 47,
+          "url": "https://github.com/acme/payments/issues/47"
+        }
       ]
     }
   }
   ```
 
-  Every item carries `id`, `kind`, `name`, and `position`. `kind` is one of `deliverable`, `milestone`, `epic`, `feature`, `task`, and `defect`; the first four are **container kinds** and carry `size`, and `task` and `defect` are **leaf kinds**. `description`, `artifactIds`, `parentId`, `localOnly`, `draftId`, `footprint`, and `due` are optional, and each is absent rather than empty when unset. An absent `parentId` means the item sits at the top level. `artifactIds` and `references` hold the stable, path-derived node keys of `ASC-artifact-scanning.md` ASC-FR-13 in the order the author added them. `draftId` holds the stable id of a draft (`DRS-draft-storage.md`). A `footprint` entry is a project-relative path, a trailing `/` naming a folder. `due` is a calendar date. A `position` is measured from the origin of whatever holds the item.
+  Every item carries `id`, `kind`, `name`, and `position`. `kind` is one of `milestone`, `epic`, `feature`, `task`, and `defect`; the first three are **container kinds** and carry `size`, and `task` and `defect` are **leaf kinds**. `description`, `artifactIds`, `parentId`, `localOnly`, `draftId`, `footprint`, and `due` are optional, and each is absent rather than empty when unset. An absent `parentId` means the item sits at the top level. `artifactIds` and `references` hold the stable, path-derived node keys of `ASC-artifact-scanning.md` ASC-FR-13 in the order the author added them. `draftId` holds the stable id of a draft (`DRS-draft-storage.md`). A `footprint` entry is a project-relative path, a trailing `/` naming a folder. `due` is a calendar date. A `position` is measured from the origin of whatever holds the item.
 
   An edge carries `id`, `from`, `to`, and `type`, which is `blocks` or `relates`. A `blocks` edge reads "`from` blocks `to`": `to` waits for `from`. A `relates` edge carries no order, and its `from` and `to` are only the ends it was drawn between.
 
-  `references` and `sync` are optional, and `edges` and `items` may be absent on a document holding none. `sync.tracker` is `github`. A link's `ref.kind` is `issue` or `milestone`, and `ref` carries `number` for both. `base` is the snapshot of the tracker values at the last sync: `name`, `description`, and `state` always; `type` (a string or `null`), `parent` (a `ref` or `null`), `milestone` (a number or `null`), and `blockedBy` (a list of `ref`) on an issue link; and `due` (a date or `null`) on a milestone link. `FTS-flow-tracker-sync.md` owns what these values mean.
+  `references` and `sync` are optional, and `edges` and `items` may be absent on a document holding none. `sync.tracker` is `github`. `sync.ignored` is an optional list of `ref`, the tracker items a sync never creates or pulls (`FTS-flow-tracker-sync.md` FTS-FR-YHVD). A link's `ref.kind` is `issue` or `milestone`, and `ref` carries `number` for both. `base` is the snapshot of the tracker values at the last sync: `name`, `description`, and `state` always; `type` (a string or `null`), `parent` (a `ref` or `null`), `milestone` (a number or `null`), and `blockedBy` (a list of `ref`) on an issue link; and `due` (a date or `null`) on a milestone link. `FTS-flow-tracker-sync.md` owns what these values mean.
 
 - This module invokes nothing. It performs no filesystem access, so it uses no primitive of `FSA-filesystem-access.md`, and it contacts no integration.
 

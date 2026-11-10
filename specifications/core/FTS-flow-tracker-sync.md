@@ -3,7 +3,7 @@
 **Spec code:** `FTS`
 
 ## Intent
-The backend that keeps a delivery plan and the team's tracker the same plan. A Flow (`FGV-flow-graph-validation.md`) that carries a sync section is synced in both directions with the project's publication repository on GitHub (per `GHP-github-publication.md` GHP-FR-YDAN): a deliverable, an epic, a feature, a task, or a defect is an issue with an issue Type, a container is the parent of its members' issues, a milestone is a GitHub milestone, and a `blocks` edge is a "blocked by" relation. It exists because the architect plans in the IDE and the team works in the tracker, and a plan that only one side can change is a plan that one side stops reading. Each sync compares, field by field, the Flow's value, the tracker's value, and the **base** both had at the last sync. A change on one side goes to the other side. A field both sides changed differently is a **conflict**, and the author decides it (`../ui/FSR-flow-sync-review.md`); nothing is overwritten silently. Every tracker call goes through one **adapter** boundary, so another tracker can be added beside GitHub. Out of scope: Jira and every tracker other than GitHub; GitHub Project fields, assignees, labels, and comments; closing or reopening an issue or a milestone, which the team and its CI/CD own (per `GPP-github-polling.md`); `relates` edges, which stay in the Flow; and a sync that runs on a timer, every sync being one the author starts.
+The backend that keeps a delivery plan and the team's tracker the same plan. A Flow (`FGV-flow-graph-validation.md`) that carries a sync section is synced in both directions with the project's publication repository on GitHub (per `GHP-github-publication.md` GHP-FR-YDAN): an epic, a feature, a task, or a defect is an issue with an issue Type, a container is the parent of its members' issues, a milestone is a GitHub milestone, and a `blocks` edge is a "blocked by" relation. It exists because the architect plans in the IDE and the team works in the tracker, and a plan that only one side can change is a plan that one side stops reading. Each sync compares, field by field, the Flow's value, the tracker's value, and the **base** both had at the last sync. A change on one side goes to the other side. A field both sides changed differently is a **conflict**, and the author decides it (`../ui/FSR-flow-sync-review.md`); nothing is overwritten silently. Every tracker call goes through one **adapter** boundary, so another tracker can be added beside GitHub. Out of scope: Jira and every tracker other than GitHub; GitHub Project fields, assignees, labels, and comments; closing or reopening an issue or a milestone, which the team and its CI/CD own (per `GPP-github-polling.md`); `relates` edges, which stay in the Flow; and a sync that runs on a timer, every sync being one the author starts.
 
 ## Functional requirements
 1. **FTS-FR-LTMW** `sync_flow_with_tracker(flow_id)` reads the Flow's file through `PST-project-storage.md` and validates it (per `FGV-flow-graph-validation.md` FGV-FR-02). An invalid Flow is refused with `flow_invalid`, and a Flow with no sync section with `sync_not_enabled`. Neither makes a tracker request.
@@ -18,8 +18,8 @@ The backend that keeps a delivery plan and the team's tracker the same plan. A F
 10. **FTS-FR-CYJJ** A sync writes no `state`. It stores the tracker's `state` of each linked item in the base, so a closed issue or milestone reads as done (per `FDL-flow-delivery.md` FDL-FR-VGZI).
 11. **FTS-FR-HDRR** A sync creates a tracker item for each item with no link that is not `localOnly`: a milestone for a milestone item, and otherwise an issue with the item's name, description, Type, parent, and milestone. Items are created parents first. Each new link stores the created values as its base.
 12. **FTS-FR-DNBY** After the creations, a sync adds the blocked-by relations of the created items on the tracker.
-13. **FTS-FR-EGJL** A sync pulls each open or closed sub-issue of a linked issue that no link of the Flow names. The pulled item is placed in the linked milestone item of its milestone, where that item is under the parent's item, and in the parent's item otherwise.
-14. **FTS-FR-CJVS** A pulled item takes the first kind, in the order deliverable, epic, feature, task, defect, whose Type in the settings equals the issue's Type and that its container permits (per `FGV-flow-graph-validation.md` FGV-FR-YHFX). An issue for which no kind fits is not pulled and is reported as skipped with `no_kind_fits`.
+13. **FTS-FR-EGJL** A sync pulls each open or closed sub-issue of a linked issue that no link of the Flow names and `sync.ignored` does not hold. The pulled item is placed in the linked milestone item of its milestone, where that item is under the parent's item, and in the parent's item otherwise.
+14. **FTS-FR-CJVS** A pulled item takes the first kind, in the order epic, feature, task, defect, whose Type in the settings equals the issue's Type and that its container permits (per `FGV-flow-graph-validation.md` FGV-FR-YHFX). An issue for which no kind fits is not pulled and is reported as skipped with `no_kind_fits`.
 15. **FTS-FR-LKZO** A pulled item is placed below the last member of its container, and a pulled container kind takes a default size. Its own sub-issues are pulled in the same sync.
 16. **FTS-FR-VEEG** A conflict carries an id, the item id, the field, and the base, Flow, and tracker values. Its id is derived from the Flow id, the item id, the field, and the two values, so the same conflict has the same id in every sync.
 17. **FTS-FR-AONJ** A sync changes neither side of a conflicting field and keeps its base, so the next sync reports the same conflict until the author resolves it.
@@ -27,14 +27,15 @@ The backend that keeps a delivery plan and the team's tracker the same plan. A F
 19. **FTS-FR-BMWI** A link whose item is gone from the Flow is a conflict of kind `removed_in_flow`. Its choices are `unlink`, which removes the link and leaves the tracker item as it is, and `restore`, which adds the item back from the tracker values in the container its parent and milestone give.
 20. **FTS-FR-VXMN** A link whose tracker item cannot be found, was deleted, or was transferred to another repository is a conflict of kind `removed_on_tracker`. Its choices are `remove_item`, which removes the item and its edges, and `unlink`, which keeps the item and removes the link.
 21. **FTS-FR-PBQC** A field conflict offers two choices: `keep_flow`, which writes the Flow's value to the tracker, and `take_tracker`, which writes the tracker's value to the Flow. Either choice sets the base to the chosen value.
+21. **FTS-FR-YHVD** The `unlink` choice removes the link, adds its reference to `sync.ignored`, and marks the item `localOnly` where the item is still in the Flow. No later sync creates a tracker item for that item, or pulls an ignored tracker item.
 22. **FTS-FR-ARHM** `resolve_flow_sync_conflicts(flow_id, resolutions)` reads the Flow and the tracker again and applies each resolution whose conflict id still matches. A resolution whose id no longer matches is returned as `stale` and applies nothing.
 23. **FTS-FR-VFNM** A sync or a resolve makes every tracker write first and then writes the Flow once, through `PST-project-storage.md`'s save path, which validates it (PST-FR-28). A Flow that nothing changed is not written.
 24. **FTS-FR-AIDI** A Flow write that fails after tracker writes returns `write_failed` with the URL of each tracker item the call created. The bases stay as they were, so the next sync finds the other written fields equal on both sides and only updates their bases (FTS-FR-AIJM).
-25. **FTS-FR-LVTU** A sync returns the counts of tracker items created and updated, of Flow items added and updated, the conflicts, and the skipped issues, each skipped issue with its number, title, and reason.
+25. **FTS-FR-LVTU** A sync returns the counts of tracker items created and updated, of Flow items added and updated, the conflicts, and the skipped issues, each with its number, title, URL, and reason, and the Flow item where the skip is about one.
 26. **FTS-FR-WANV** A link whose reference names a repository other than the publication repository is not synced and is reported as skipped with `foreign_repository`.
-27. **FTS-FR-LMBE** The **flow tracker settings** hold the issue Type of each issue kind: deliverable, epic, feature, task, and defect. An unset value reads as `Feature`, `Feature`, `Feature`, `Task`, and `Bug`. They are stored through `PSS-project-settings-storage.md` (PSS-FR-VGWF).
-28. **FTS-FR-ALOJ** `set_flow_tracker_settings` stores the five Types and returns them. It refuses an empty Type name with `invalid_flow_tracker_settings` and writes nothing. It never checks a Type against GitHub.
-29. **FTS-FR-XITX** An issue the sync would create with a Type the repository does not offer is not created. Its item is reported as skipped with `issue_type_unavailable`, and the sync goes on with the other items.
+27. **FTS-FR-LMBE** The **flow tracker settings** hold the issue Type of each issue kind: epic, feature, task, and defect. An unset value reads as `Epic`, `Feature`, `Task`, and `Bug`. They are stored through `PSS-project-settings-storage.md` (PSS-FR-VGWF).
+28. **FTS-FR-ALOJ** `set_flow_tracker_settings` stores the four Types and returns them. It refuses an empty Type name with `invalid_flow_tracker_settings` and writes nothing. It never checks a Type against GitHub.
+29. **FTS-FR-XITX** A repository that offers no issue Type at all gets plain issues: a sync creates them with no Type and neither writes nor compares a `type`. In a repository that offers Types, an issue whose Type it does not offer is not created; its item is skipped with `issue_type_unavailable`, and the sync goes on.
 30. **FTS-FR-TPWE** `read_tracker_item(flow_id, kind, number)` reads one issue or milestone of the publication repository and returns its reference and its values on the terms of FTS-FR-PNMA. It refuses with `tracker_item_not_found` for no such item and for a pull request, and with `already_linked` where a link of that Flow names it.
 31. **FTS-FR-OBPX** `open_tracker_link(url)` opens the OS default browser at the URL and opens no page inside the application. It refuses with `tracker_url_refused` a URL that is not an HTTPS issue or milestone address of the publication repository.
 32. **FTS-FR-FDDV** A sync logs its start, each tracker request with its operation and its outcome, its counts, and every error, handled ones included. No record carries a token, a title, a description, or a URL query.
@@ -46,7 +47,7 @@ The backend that keeps a delivery plan and the team's tracker the same plan. A F
 - `"read tracker item"` → `read_tracker_item(flow_id, kind, number)` → `TrackerItemSnapshot`. `kind` is `issue` or `milestone`. Invoked by `../ui/FLO-flow.md` (FLO-FR-TYEZ).
 - `"open tracker link"` → `open_tracker_link(url)` → nothing. Invoked by `../ui/FLO-flow.md` (FLO-FR-ULEM) and `../ui/FSR-flow-sync-review.md`.
 - `"get flow tracker settings"` → `get_flow_tracker_settings()` → `FlowTrackerSettings`, with defaults applied. Invoked by `../ui/SET-project-settings.md` (SET-FR-UFXD).
-- `"set flow tracker settings (deliverable type, epic type, feature type, task type, defect type)"` → `set_flow_tracker_settings(deliverable_type, epic_type, feature_type, task_type, defect_type)` → `FlowTrackerSettings`. Invoked by `../ui/SET-project-settings.md` (SET-FR-PQWW).
+- `"set flow tracker settings (epic type, feature type, task type, defect type)"` → `set_flow_tracker_settings(epic_type, feature_type, task_type, defect_type)` → `FlowTrackerSettings`. Invoked by `../ui/SET-project-settings.md` (SET-FR-PQWW).
 
 ```
 SyncResult {
@@ -77,7 +78,10 @@ ConflictResolution {
 }
 
 SkippedIssue {
-  number, title,
+  number,           // null for an item the sync could not create
+  title,
+  url,              // the tracker item's URL, or null where it has none
+  item_id,          // the Flow item, where the skip is about one
   reason            // "no_kind_fits" | "issue_type_unavailable" | "foreign_repository"
 }
 
@@ -89,7 +93,7 @@ TrackerItemSnapshot {
 }
 
 FlowTrackerSettings {
-  deliverable_type, epic_type, feature_type, task_type, defect_type
+  epic_type, feature_type, task_type, defect_type
 }
 ```
 

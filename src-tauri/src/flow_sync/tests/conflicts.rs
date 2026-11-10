@@ -399,6 +399,7 @@ fn unlink_of_a_missing_milestone_keeps_it_and_no_sync_creates_it() {
         (c.kind, c.item_id.as_str(), c.choices.clone()),
         (ConflictKind::RemovedOnTracker, "m1", vec![Choice::RemoveItem, Choice::Unlink])
     );
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
     tracker.clear_calls();
     let out = resolve(&tracker, d, &[choose(&c, Choice::Unlink)]);
     assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());

@@ -401,7 +401,7 @@ fn an_ignored_sub_issue_is_not_pulled() {
     assert!(tracker.writes().is_empty());
 }
 
-/// FTS-FR-YHVD / FTS-FR-EGJL / FTS-FR-WANV: an ignored reference with the
+/// FTS-FR-YHVD / FTS-FR-EGJL: an ignored reference with the
 /// number 9 in another repository, or on another host, does not name own
 /// issue 9, so issue 9 is still pulled.
 #[test]

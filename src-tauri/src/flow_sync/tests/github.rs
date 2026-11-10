@@ -79,9 +79,9 @@ impl Server {
     /// a connection of its own, so a test whose adapter made fewer requests
     /// than the list holds fails on the count of requests and does not wait.
     fn requests(self) -> Vec<String> {
-        if let Ok(mut stop) = TcpStream::connect(self.addr) {
-            let _ = write!(stop, "{STOP}\r\n\r\n");
-        }
+        let mut stop = TcpStream::connect(self.addr).expect("the stop connection");
+        write!(stop, "{STOP}\r\n\r\n").expect("the stop request");
+        drop(stop);
         self.handle.join().expect("the server thread")
     }
 }
@@ -95,7 +95,9 @@ fn serve(bodies: Vec<Value>) -> Server {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { break };
             let request = read_request(&mut stream);
-            if request.starts_with(STOP) {
+            // A connection that closes with no byte is a stop as well, so a
+            // stop that arrives cut short cannot leave the server waiting.
+            if request.is_empty() || request.starts_with(STOP) {
                 break;
             }
             seen.push(request);
@@ -151,9 +153,9 @@ fn sub_issue_answer(children: Vec<Value>) -> Value {
     json!({ "data": { "repository": { "i0": { "id": "I_2", "subIssues": page(children, None) } } } })
 }
 
-/// FTS-FR-ARMD / FTS-FR-ZLFX: the adapter of a test sends its requests
-/// directly to the local server and never through a proxy that the
-/// environment names, so the tests give the same result on every machine.
+/// FTS-FR-ARMD: the adapter of a test sends its requests directly to the
+/// local server and never through a proxy that the environment names. This
+/// test can fail only on a machine where a proxy variable is set.
 #[test]
 fn the_test_adapter_uses_no_proxy() {
     let github = adapter("http://127.0.0.1:9");
@@ -259,7 +261,7 @@ fn a_numeric_id_that_no_read_gave_is_read_before_the_write() {
     assert_eq!(body_of(&requests[1]), json!({ "issue_id": 4444 }));
 }
 
-/// FTS-FR-ARMD / FTS-FR-WANV: a sub-issue in another repository with the
+/// FTS-FR-ARMD / FTS-FR-EGJL: a sub-issue in another repository with the
 /// same number as an issue of this repository does not give its numeric id
 /// to that issue. A later relation write reads the id of the own issue.
 #[test]

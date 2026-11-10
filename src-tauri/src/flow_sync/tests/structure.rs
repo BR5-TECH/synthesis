@@ -361,7 +361,7 @@ fn keep_flow_of_an_invalid_type_writes_the_flow_type_back() {
     assert!(again.result.conflicts.is_empty());
 }
 
-/// FTS-FR-SZGF / FTS-FR-YHVD / FTS-FR-HLVJ / FTS-FR-EGJL: `unlink` on an
+/// FTS-FR-SZGF / FTS-FR-YHVD / FTS-FR-HLVJ / FTS-FR-EGJL / FTS-FR-AIJM: `unlink` on an
 /// `invalid_on_tracker` Type removes the link, ignores the issue, and makes
 /// the item local only. The item keeps its kind, and the resolve writes
 /// nothing to the tracker. A later sync does not pull issue 2 back.

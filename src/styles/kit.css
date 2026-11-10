@@ -1,6 +1,7 @@
 @import "./kit/header.css";
 @import "./kit/dashboard-widgets.css";
 @import "./kit/flow.css";
+@import "./kit/flow-review.css";
 @import "./kit/git-panel.css";
 @import "./kit/notes.css";
 @import "./kit/notes-cont.css";

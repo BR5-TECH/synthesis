@@ -383,7 +383,7 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
       expect(document.querySelector(".flow")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("flow-status")).toHaveTextContent(
-      "0 nodes · 0 edges",
+      "0 items · 0 edges",
     );
     // No surface of the application stages an artifact to an agent any more.
     // Asserted here as well as on the canvas, because the shell is what would

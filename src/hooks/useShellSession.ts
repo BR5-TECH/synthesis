@@ -569,6 +569,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   const {
     openDraft,
     createDraft,
+    createNamedDraft,
     createDraftForMapNode,
     renameDraftTab,
     openDraftById,
@@ -869,6 +870,8 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     openDraft,
     openDraftById,
     createDraft,
+    // FLO-FR-NRBV: a Flow task's Create draft.
+    createNamedDraft,
     // SMD-FR-HVBE: the map's New draft.
     createDraftForMapNode,
     renameDraftTab,

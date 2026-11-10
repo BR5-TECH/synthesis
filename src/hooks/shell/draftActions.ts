@@ -33,8 +33,15 @@ export interface DraftTabActionDeps {
 /** SMD-FR-EKWN: what the author reads when the map's New draft fails. */
 export const MAP_DRAFT_FAILED = "The draft could not be created.";
 
+/** FLO-FR-NRBV: what a draft creation for a Flow task answers. */
+export type NamedDraftOutcome =
+  | { ok: true; draft: { id: string; name: string } }
+  /** `error` is null where the author cancelled the creation. */
+  | { ok: false; error: string | null };
+
 export interface DraftTabActions {
   openDraft: (draft: { id: string; name: string }) => void;
+  createNamedDraft: (name: string) => Promise<NamedDraftOutcome>;
   createDraft: (
     seed?: NewDraftSeed,
     failureMessage?: string,
@@ -116,15 +123,20 @@ export function createDraftTabActions(
    * rename mode (DRP-FR-36), and `null` where the creation was refused — which
    * this reports itself, there being no row for the panel to name.
    */
-  const createDraft = async (
-    seed: NewDraftSeed = {},
-    failureMessage?: string,
+  /**
+   * DRS-FR-06: create a draft and record its first file and its prompt, with
+   * no tab opened. Throws the backend's refusal, and resolves `null` where the
+   * author cancelled the main branch write.
+   */
+  const createDraftRecord = async (
+    seed: NewDraftSeed,
+    name: string | null,
   ): Promise<{ id: string; name: string } | null> => {
-    try {
-      // DRP-FR-MKCP / MBW-FR-RMCO: the branch write guard is read first, and a
-      // draft on a main branch waits for the author's confirmation.
-      const created = await runMainBranchWrite("create_draft", () =>
-        api.createDraft({
+    // DRP-FR-MKCP / MBW-FR-RMCO: the branch write guard is read first, and a
+    // draft on a main branch waits for the author's confirmation.
+    const created = await runMainBranchWrite("create_draft", () =>
+      api.createDraft({
+        name,
         // DRS-FR-07: where the draft is *filed*, and the only thing a creation
         // says about where anything goes. Where its specification lands is the
         // graduation agent's choice from the captured prompt (NAW-FR-19), so no
@@ -132,18 +144,40 @@ export function createDraftTabActions(
         // supplies a folder; every other entry point supplies none and the
         // draft is created at the drafts root.
         folder: seed.folder ?? null,
-        }),
-      );
-      if (created === WRITE_CANCELLED) return null;
-      // NAW-FR-06 / DRS-FR-06: a draft is created holding one Markdown file, and
-      // the tab opens on it — so the selection is recorded before the workspace
-      // mounts rather than being rediscovered from a tree it has yet to load.
-      drafts.select(created.draft.id, created.file);
-      // NAW-FR-25: where the draft's name is bound, from the moment it exists.
-      drafts.setPromptPath(created.draft.id, created.draft.promptPath ?? created.file);
-      bumpDrafts();
-      openDraft(created.draft);
-      return { id: created.draft.id, name: created.draft.name };
+      }),
+    );
+    if (created === WRITE_CANCELLED) return null;
+    // NAW-FR-06 / DRS-FR-06: a draft is created holding one Markdown file, and
+    // the tab opens on it — so the selection is recorded before the workspace
+    // mounts rather than being rediscovered from a tree it has yet to load.
+    drafts.select(created.draft.id, created.file);
+    // NAW-FR-25: where the draft's name is bound, from the moment it exists.
+    drafts.setPromptPath(created.draft.id, created.draft.promptPath ?? created.file);
+    bumpDrafts();
+    return { id: created.draft.id, name: created.draft.name };
+  };
+
+  /**
+   * NAW-FR-03 / DRP-FR-06 / DRP-FR-26: create a draft and open it in a New
+   * Artifact tab, made the active tab.
+   *
+   * The **Drafts panel** is the only entry point. The File menu's and the
+   * Project context menu's **New Artifact** items open the typed-artifact window
+   * instead (NTA-FR-14, SNV-FR-24, LCM-FR-08), which creates a project file and
+   * reaches nothing here.
+   *
+   * Resolves the created draft so the panel can put its row straight into
+   * rename mode (DRP-FR-36), and `null` where the creation was refused — which
+   * this reports itself, there being no row for the panel to name.
+   */
+  const createDraft = async (
+    seed: NewDraftSeed = {},
+    failureMessage?: string,
+  ): Promise<{ id: string; name: string } | null> => {
+    try {
+      const created = await createDraftRecord(seed, null);
+      if (created) openDraft(created);
+      return created;
     } catch (e) {
       // DRS-FR-39: a malformed project-public store fails the creation with a
       // typed error rather than creating a draft without the starting content
@@ -155,6 +189,23 @@ export function createDraftTabActions(
       });
       showDraftCreateFailed(failureMessage ?? String(e));
       return null;
+    }
+  };
+
+  /**
+   * FLO-FR-NRBV: create a draft named after a Flow task. The Flow stores the
+   * draft's id and then opens the tab, so this opens none. A refusal is
+   * returned, not shown: the Flow shows it on the item.
+   */
+  const createNamedDraft = async (name: string): Promise<NamedDraftOutcome> => {
+    try {
+      const created = await createDraftRecord({}, name);
+      return created ? { ok: true, draft: created } : { ok: false, error: null };
+    } catch (e) {
+      logWarn(["frontend"], "draft creation for a Flow item failed", { reason: String(e) });
+      const message =
+        e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e);
+      return { ok: false, error: message };
     }
   };
 
@@ -252,6 +303,7 @@ export function createDraftTabActions(
   return {
     openDraft,
     createDraft,
+    createNamedDraft,
     createDraftForMapNode,
     renameDraftTab,
     followDraftPrompt,

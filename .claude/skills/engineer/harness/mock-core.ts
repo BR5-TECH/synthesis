@@ -10,6 +10,7 @@ import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-document
 import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
+import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import {
   DECOMPOSITION_ORIGINAL,
   decompositionDiscussion,
@@ -408,6 +409,15 @@ function seededTree(): any {
             artifactType: "flow",
             typeSource: "inferred",
           },
+          // FLO-FR-YDWT: the HLD the delivery plan answers to.
+          {
+            id: "flows/payments-hld.md",
+            name: "payments-hld.md",
+            path: "flows/payments-hld.md",
+            nodeKind: "file",
+            artifactType: "doc",
+            typeSource: "inferred",
+          },
         ],
       },
       {
@@ -534,127 +544,6 @@ function findTreeNode(path: string): any | undefined {
     return undefined;
   };
   return walk(tree());
-}
-
-const FLOW_BODY = JSON.stringify(
-  {
-    version: 1,
-    name: "Release review",
-    description: "Draft the notes, review them, then cut the tag.",
-    // FLO-FR-37: a loop holding two steps that decide between themselves, with
-    // the graph reaching it as one element (FLO-FR-39).
-    loops: [
-      {
-        id: "l1",
-        name: "Review cycle",
-        // FLO-FR-37: what the loop is run under, and where its author says
-        // what ends it. A prompt, because that is what the picker offers
-        // (FLO-FR-10) — a reference no picker could have produced would make
-        // the fixture unreachable from the surface it is meant to exercise.
-        artifactIds: ["prompts/review.md"],
-        maxPasses: 5,
-        position: { x: 420, y: 60 },
-        size: { width: 460, height: 280 },
-      },
-    ],
-    nodes: [
-      {
-        id: "n1",
-        name: "Draft release notes",
-        position: { x: 120, y: 120 },
-        artifactIds: ["specifications/ui/LIB-library.md"],
-        prompt: "Read the **changelog** and list every `FR` that moved.",
-      },
-      {
-        id: "n2",
-        name: "Review with the team",
-        parentId: "l1",
-        position: { x: 30, y: 90 },
-        prompt: "Check every FR that moved this cycle.",
-      },
-      {
-        id: "n3",
-        name: "Answer the findings",
-        parentId: "l1",
-        position: { x: 240, y: 90 },
-      },
-      { id: "n4", name: "Cut the tag", position: { x: 420, y: 420 } },
-    ],
-    edges: [
-      { id: "e1", from: "n1", to: "l1", label: "needs review" },
-      { id: "e2", from: "l1", to: "n4", label: "done" },
-      { id: "e3", from: "n2", to: "n3" },
-      { id: "e4", from: "n3", to: "n2", label: "again" },
-    ],
-  },
-  null,
-  2,
-);
-
-/** One entry of the report `validate_flow_document` returns (FGV-FR-04). */
-interface HarnessViolation {
-  code: string;
-  message: string;
-  elementId?: string;
-  edgeId?: string;
-}
-
-/** The harness's stand-in for the Rust validator. See the command's comment. */
-function validateFlow(body: string): {
-  valid: boolean;
-  violations: HarnessViolation[];
-} {
-  // FGV-FR-05: an empty body is the empty graph.
-  if (body.trim() === "") return { valid: true, violations: [] };
-  let raw: Record<string, unknown>;
-  try {
-    raw = JSON.parse(body) as Record<string, unknown>;
-  } catch (e) {
-    // FGV-FR-06: reported alone — nothing structural applies to a body that
-    // could not be read.
-    return {
-      valid: false,
-      violations: [{ code: "not_json", message: `the file is not valid JSON: ${e}` }],
-    };
-  }
-  if (raw?.version !== 1) {
-    return {
-      valid: false,
-      violations: [
-        { code: "unknown_version", message: "expected a Flow document of version 1" },
-      ],
-    };
-  }
-  const loops = (raw.loops ?? []) as Array<Record<string, unknown>>;
-  const nodes = (raw.nodes ?? []) as Array<Record<string, unknown>>;
-  const edges = (raw.edges ?? []) as Array<Record<string, unknown>>;
-  const parent = new Map<string, string | undefined>();
-  for (const e of [...loops, ...nodes]) {
-    parent.set(String(e.id), e.parentId === undefined ? undefined : String(e.parentId));
-  }
-  const violations: HarnessViolation[] = [];
-  for (const edge of edges) {
-    const id = String(edge.id);
-    const from = String(edge.from);
-    const to = String(edge.to);
-    if (!parent.has(from) || !parent.has(to)) {
-      violations.push({
-        code: "dangling_edge_endpoint",
-        message: `edge \`${id}\` names an element this document does not hold`,
-        edgeId: id,
-      });
-      continue;
-    }
-    // FGV-FR-12: both endpoints share a container.
-    if (parent.get(from) !== parent.get(to)) {
-      violations.push({
-        code: "cross_container_edge",
-        message: `edge \`${id}\` joins \`${from}\` and \`${to}\`, which are in different containers`,
-        edgeId: id,
-      });
-    }
-  }
-  return { valid: violations.length === 0, violations };
 }
 
 /**
@@ -8183,6 +8072,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // PPK-project-picker.md: the recent list, with Pin, Unpin, and Hide state.
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
+  // FLO-flow.md / FSR-flow-sync-review.md: the delivery plan's state, its
+  // overlaps, and the tracker sync.
+  const flowPlan = flowPlanInvoke(cmd, a);
+  if (flowPlan !== NOT_HANDLED) return flowPlan;
   // DCP "New-draft proposals": the decomposition commands.
   const decomposition = decompositionInvoke(cmd, a, {
     createDraft: (name, sequence) => {
@@ -8586,7 +8479,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const source = SOURCE_BODIES[ext.toLowerCase()];
       return {
         body: String(a.id).endsWith(".flow.md")
-          ? FLOW_BODY
+          ? FLOW_PLAN_BODY
           : source !== undefined
             ? source
             : String(a.id).endsWith("EDT-editor.md")
@@ -8639,13 +8532,12 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      * Flow body, which the Flow tab asks for on load (FLO-FR-46) and before a
      * write (FLO-FR-47).
      *
-     * A cut-down stand-in for the Rust validator: it covers the rules a browser
-     * pass can actually reach — the body parses, claims version 1, and joins
-     * only elements that share a container — so the canvas's error state is
-     * reachable here without a second copy of the whole rule set.
+     * A cut-down stand-in for the Rust validator: the body parses and claims
+     * version 2, so the canvas's error state is reachable here without a
+     * second copy of the whole rule set.
      */
     case "validate_flow_document":
-      return validateFlow(String(a.body ?? ""));
+      return validateFlowPlan(String(a.body ?? ""));
     // ---- Dashboard widget loaders (PST-FR-31 .. PST-FR-34) ---------------
     // Each loader applies its own five-item limit and its own ordering; the
     // Dashboard renders what it is given (DSH-FR-09, DSH-FR-11, DSH-FR-13,

@@ -1,517 +1,293 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { FlowCanvas } from "./Flow";
-import { FlowSessionStore } from "../state/flowSessions";
-import {
-  canvas,
-  connectNodes,
-  doc,
-  ID,
-  nodeEl,
-  TREE,
-  TWO_NODES,
-} from "../test/flowFixtures";
+import { resetLogBufferForTest } from "../logging";
+import { resetToasts } from "../state/toasts";
+import { clearFlowStores, flowBackend, planOf, renderFlow } from "../test/flowCanvasHarness";
+import { canvas, client, connectItems, ID, itemEl } from "../test/flowFixtures";
+import { resetListeners } from "../test/flowMocks";
+import { blocks, item, plan, relates, samplePlan } from "../test/flowPlanFixtures";
 
-const invokeMock = vi.fn();
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
+vi.mock("@tauri-apps/api/core", async () => ({
+  invoke: (await import("../test/flowMocks")).invoke,
 }));
-
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async () => () => {}),
+vi.mock("@tauri-apps/api/event", async () => ({
+  listen: (await import("../test/flowMocks")).listen,
 }));
-
-let body = "";
-let writes: string[] = [];
-/**
- * FGV-FR-02: what `"validate flow document"` answers. Valid by default — the
- * rule set is the Rust suite's business (FGV-FR-05..14); what these tests care
- * about is that the canvas asks before it renders (FLO-FR-46) and what it shows
- * when the answer is `No` (FLO-FR-05).
- */
-let validation: { valid: boolean; violations: Array<Record<string, string>> } = {
-  valid: true,
-  violations: [],
-};
 
 beforeEach(() => {
-  writes = [];
-  validation = { valid: true, violations: [] };
-  invokeMock.mockReset();
-  invokeMock.mockImplementation(
-    async (cmd: string, args: Record<string, string>) => {
-      switch (cmd) {
-        case "load_project_tree":
-          return TREE;
-        case "validate_flow_document":
-          return validation;
-        case "load_artifact_contents_by_id":
-          return { body, checksum: "ck1" };
-        case "save_artifact_contents":
-          writes.push(args.body);
-          return { checksum: "ck2" };
-        case "open_artifact_by_id":
-          return { key: args.id, kind: "markdown" };
-        default:
-          throw new Error(`unexpected invoke ${cmd}`);
-      }
-    },
-  );
+  resetLogBufferForTest();
+  resetToasts();
+  resetListeners();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  clearFlowStores();
+});
 
-/** Load `content` as the Flow's body and render a canvas over it. */
-async function renderCanvas(content: string) {
-  body = content;
-  const onOpenArtifact = vi.fn();
-  const flows = new FlowSessionStore();
-  await act(async () => {
-    flows.openTab(ID);
-    await flows.get(ID)?.pendingLoad;
-  });
-  const view = render(
-    <FlowCanvas flowId={ID} flows={flows} onOpenArtifact={onOpenArtifact} />,
-  );
-  // The artifact list is fetched on mount; wait for it so reference resolution
-  // is settled rather than in its `pending` state.
-  await waitFor(() =>
-    expect(
-      invokeMock.mock.calls.some((c) => c[0] === "load_project_tree"),
-    ).toBe(true),
-  );
-  // The call having been ISSUED is not the same as its result having been
-  // applied. Until the tree lands, `treeLoaded` is false and every reference
-  // renders in the `pending` shape — a bare id with no click-through, so a test
-  // that clicks "Open <name>" finds nothing (FLO-FR-11). Flush the resolution
-  // and the state update it causes, which is what "settled" above claims.
-  await act(async () => {});
-  return { flows, view, onOpenArtifact };
-}
+const refusal = () => screen.getByTestId("flow-refusal");
+const edgeHandle = (id: string) => screen.getByTestId(`flow-edge-${id}`);
+const edgePanel = () => screen.getByRole("group", { name: /^Edge / });
 
-describe("edge rules on the canvas (FLO-FR-16 – FLO-FR-19, FLO-FR-20)", () => {
-  it("refuses a connection from a node back to itself and signals the rejection", async () => {
-    const { flows } = await renderCanvas(TWO_NODES);
+describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", () => {
+  it("FLO-FR-15, FLO-FR-CEVI: a completed connection creates a blocks edge from the item the drag started on", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
 
-    connectNodes("n1", "n1");
-
-    expect(doc(flows).edges).toHaveLength(1);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "An element cannot be connected to itself.",
-    );
-    // A refusal is not an edit.
-    expect(flows.get(ID)?.dirty).toBe(false);
+    connectItems("t1", "t3");
+    expect(planOf(flows).edges).toEqual([{ id: "e1", from: "t1", to: "t3", type: "blocks" }]);
+    expect(flows.get(ID)!.dirty).toBe(true);
   });
 
-  it("refuses a second edge on an ordered pair but allows the reverse one", async () => {
-    const { flows } = await renderCanvas(TWO_NODES);
+  it("FLO-FR-15, FLO-FR-39: an edge joins items in different containers, and a container takes edges too", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
 
-    connectNodes("n1", "n2");
-
-    expect(doc(flows).edges).toHaveLength(1);
-    expect(doc(flows).edges[0].label).toBe("ok");
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "already connected in that direction",
-    );
-
-    // FLO-FR-17, FLO-FR-18 second half: B->A is a separate pair, giving a two-node cycle.
-    connectNodes("n2", "n1");
-
-    expect(doc(flows).edges.map((e) => [e.from, e.to])).toEqual([
-      ["n1", "n2"],
-      ["n2", "n1"],
+    connectItems("f1", "f2");
+    connectItems("x1", "t3");
+    expect(planOf(flows).edges.map((e) => [e.from, e.to])).toEqual([
+      ["f1", "f2"],
+      ["x1", "t3"],
     ]);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("creates an edge that closes a longer cycle with no warning (FLO-FR-18)", async () => {
-    const { flows } = await renderCanvas(
-      JSON.stringify({
-        version: 1,
-        nodes: [
-          { id: "n1", name: "A", position: { x: 0, y: 0 } },
-          { id: "n2", name: "B", position: { x: 200, y: 0 } },
-          { id: "n3", name: "C", position: { x: 400, y: 0 } },
-        ],
-        edges: [
-          { id: "e1", from: "n1", to: "n2" },
-          { id: "e2", from: "n2", to: "n3" },
-        ],
-      }),
-    );
+  it("FLO-FR-32: from the start of the drag, a dashed provisional edge runs to the pointer with an arrowhead", async () => {
+    const b = flowBackend(samplePlan());
+    await renderFlow(b);
 
-    connectNodes("n3", "n1");
-
-    expect(doc(flows).edges).toHaveLength(3);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    const preview = screen.getByTestId("flow-connection");
+    expect(preview).toHaveClass("flow-edge--preview");
+    expect(preview.getAttribute("marker-end")).toMatch(/^url\(#flow-arrow-active-/);
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 1100, y: 700 }) });
+    expect(screen.getByTestId("flow-connection").getAttribute("d")).toMatch(/, 1100 700$/);
   });
 
-  it("labels an edge in place and removes it without touching its endpoints", async () => {
-    const { flows } = await renderCanvas(
-      JSON.stringify({
-        version: 1,
-        nodes: [
-          { id: "n1", name: "A", position: { x: 0, y: 0 } },
-          { id: "n2", name: "C", position: { x: 200, y: 0 } },
-        ],
-        edges: [{ id: "e1", from: "n1", to: "n2" }],
-      }),
-    );
-    // An unlabelled edge still carries a marker, which is what selects it.
-    expect(screen.getByTestId("flow-edge-e1")).toHaveTextContent("＋");
+  it("FLO-FR-32: an abandoned drag leaves the plan untouched", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
 
-    fireEvent.pointerDown(screen.getByTestId("flow-edge-e1"));
-    fireEvent.change(screen.getByLabelText("Edge label"), {
-      target: { value: "retry" },
-    });
-    expect(doc(flows).edges[0].label).toBe("retry");
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 1100, y: 1000 }) });
+    fireEvent.pointerUp(canvas(), { pointerId: 1 });
+    expect(screen.queryByTestId("flow-connection")).toBeNull();
+    expect(planOf(flows).edges).toEqual([]);
+    expect(flows.get(ID)!.dirty).toBe(false);
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: "Remove edge" }));
+  it("FLO-FR-33: the nearest item in reach is highlighted, and a release completes the connection onto it", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
 
-    expect(doc(flows).edges).toEqual([]);
-    expect(doc(flows).nodes.map((n) => n.name)).toEqual(["A", "C"]);
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    // Inside t3, inside f2: the deepest item in reach wins.
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 530, y: 250 }) });
+    expect(itemEl("t3")).toHaveAttribute("data-magnet", "true");
+    expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "true");
+    fireEvent.pointerUp(canvas(), { pointerId: 1 });
+    expect(planOf(flows).edges).toEqual([blocks("e1", "t1", "t3")]);
+  });
+
+  it("FLO-FR-33: an item the rules would refuse is never highlighted", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]));
+    await renderFlow(b);
+
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    // Inside t2, which an edge already joins to t1, and inside f1, which holds t1.
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 300, y: 230 }) });
+    expect(itemEl("t2")).toHaveAttribute("data-magnet", "false");
+    expect(itemEl("f1")).toHaveAttribute("data-magnet", "false");
+    expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
+  });
+
+  it("FLO-FR-33: a release the canvas never sees abandons the drag", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
+
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 510, y: 280 }) });
+    fireEvent.pointerMove(window, { pointerId: 1, buttons: 0, ...client({ x: 510, y: 280 }) });
+    expect(screen.queryByTestId("flow-connection")).toBeNull();
+    fireEvent.pointerUp(itemEl("x1"), { pointerId: 1 });
+    expect(planOf(flows).edges).toEqual([]);
   });
 });
 
-describe("drawing a connection (FLO-FR-32 / FLO-FR-33, FLO-FR-16, FLO-FR-17)", () => {
-  /** Three unconnected nodes in a row, 200 apart: n1 at 0, n2 at 200, n3 at 400. */
-  const THREE_APART = JSON.stringify({
-    version: 1,
-    nodes: [
-      { id: "n1", name: "A", position: { x: 0, y: 0 } },
-      { id: "n2", name: "B", position: { x: 200, y: 0 } },
-      { id: "n3", name: "C", position: { x: 400, y: 0 } },
-    ],
-    edges: [],
+describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)", () => {
+  it("FLO-FR-16: a connection from an item to itself is refused with feedback", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
+
+    connectItems("t1", "t1");
+    expect(planOf(flows).edges).toEqual([]);
+    expect(refusal()).toHaveTextContent("Not connected.");
+    expect(refusal()).toHaveTextContent("An item cannot connect to itself.");
   });
 
-  /** Press the source's port, then move the pointer to a canvas point. */
-  function dragConnection(from: string, x: number, y: number) {
-    fireEvent.pointerDown(within(nodeEl(from)).getByLabelText(/^Connect from /), {
-      pointerId: 1,
-      buttons: 1,
-      clientX: 5,
-      clientY: 30,
-    });
-    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, clientX: x, clientY: y });
-  }
+  it("FLO-FR-17: a second edge between two items is refused in either direction, and the first stays", async () => {
+    const b = flowBackend(samplePlan([relates("e1", "t1", "t3")]));
+    const { flows } = await renderFlow(b);
 
-  const preview = () => screen.queryByTestId("flow-connection");
-
-  // FLO-FR-32: the connection is visible while it is being drawn, and it is a
-  // preview only — nothing is in the document until it completes.
-  it("draws a provisional edge to the pointer and commits nothing until release", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    expect(preview()).not.toBeInTheDocument();
-    dragConnection("n1", 150, 30);
-
-    expect(preview()).toBeInTheDocument();
-    // Not snapped to anything: the nearest node's centre is 155 away.
-    expect(preview()).toHaveAttribute("data-magnet", "false");
-    expect(preview()?.getAttribute("d")).toContain("150 30");
-    expect(doc(flows).edges).toEqual([]);
-
-    // Abandoned over empty canvas: the preview goes, and so does the gesture.
-    fireEvent.pointerUp(canvas(), { pointerId: 1 });
-
-    expect(preview()).not.toBeInTheDocument();
-    expect(doc(flows).edges).toEqual([]);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(flows.get(ID)?.dirty).toBe(false);
+    connectItems("t3", "t1");
+    connectItems("t1", "t3");
+    expect(planOf(flows).edges).toEqual([relates("e1", "t1", "t3")]);
+    expect(refusal()).toHaveTextContent("An edge already joins these two items.");
   });
 
-  // FLO-FR-33: the magnet. Releasing near a node — not on it — connects to it.
-  it("snaps to the nearest node in reach and connects on release", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
+  it("FLO-FR-ZEPI: a connection between an item and its ancestor is refused", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
 
-    dragConnection("n1", 250, 30);
-
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "true");
-    expect(nodeEl("n3")).toHaveAttribute("data-magnet", "false");
-    expect(preview()).toHaveAttribute("data-magnet", "true");
-    // Snapped: the free end sits on n2's anchor rather than on the pointer.
-    // These three are 200 apart and NODE_W wide, so their boxes overlap and
-    // there is no border between them to land on — the anchor falls back to the
-    // element's origin, which still points the edge at n2 (FLO-FR-48).
-    expect(preview()?.getAttribute("d")).toContain("305 30");
-
-    fireEvent.pointerUp(canvas(), { pointerId: 1 });
-
-    expect(doc(flows).edges.map((e) => [e.from, e.to])).toEqual([["n1", "n2"]]);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    connectItems("t1", "m1");
+    expect(planOf(flows).edges).toEqual([]);
+    expect(refusal()).toHaveTextContent("An item cannot connect to an item that holds it or that it holds.");
   });
 
-  it("snaps to the nearer of two nodes both in reach", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
+  it("FLO-FR-GZCH: a connection that closes a cycle is refused, and the feedback names the cycle in blocking order", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]));
+    const { flows } = await renderFlow(b);
 
-    dragConnection("n1", 420, 30);
-    expect(nodeEl("n3")).toHaveAttribute("data-magnet", "true");
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "false");
-
-    fireEvent.pointerUp(canvas(), { pointerId: 1 });
-    expect(doc(flows).edges.map((e) => [e.from, e.to])).toEqual([["n1", "n3"]]);
+    connectItems("t2", "t1");
+    expect(planOf(flows).edges).toHaveLength(1);
+    // An edge already joins them, so try one step further away.
+    connectItems("t2", "t3");
+    connectItems("t3", "t1");
+    expect(planOf(flows).edges.map((e) => e.id)).toEqual(["e1", "e2"]);
+    expect(refusal()).toHaveTextContent("This edge makes a cycle: T1 → T2 → T3 → T1.");
+    expect(screen.getByTestId("flow-edge-refused")).toBeInTheDocument();
   });
 
-  // FLO-FR-33: a node the connection could only be refused on is not a target.
-  // Snapping to one would replace a connection the author can still complete
-  // with one that cannot be made at all.
-  it("never snaps to the source node or to one already connected that way", async () => {
-    const { flows } = await renderCanvas(TWO_NODES);
+  it("FLO-FR-GZCH: a blocks edge into a container closes a cycle through its members", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "x1")]));
+    const { flows } = await renderFlow(b);
 
-    // n1 -> n2 already exists, and the pointer is right on n2.
-    dragConnection("n1", 405, 30);
-
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "false");
-    expect(preview()).toHaveAttribute("data-magnet", "false");
-
-    // …and back over the source itself, which FLO-FR-16 refuses.
-    fireEvent.pointerMove(canvas(), {
-      pointerId: 1,
-      buttons: 1,
-      clientX: 105,
-      clientY: 30,
-    });
-    expect(nodeEl("n1")).toHaveAttribute("data-magnet", "false");
-
-    fireEvent.pointerUp(canvas(), { pointerId: 1 });
-    expect(doc(flows).edges).toHaveLength(1);
-    expect(flows.get(ID)?.dirty).toBe(false);
+    connectItems("x1", "f1");
+    expect(planOf(flows).edges).toHaveLength(1);
+    expect(refusal()).toHaveTextContent("This edge makes a cycle:");
+    expect(refusal()).toHaveTextContent("F1");
   });
 
-  // Releasing directly on a node still connects to it, magnet or not — which is
-  // how the author finds out the rules refused it (FLO-FR-16, FLO-FR-17).
-  it("connects to the node a release lands on, refusal included", async () => {
-    const { flows } = await renderCanvas(TWO_NODES);
+  it("FLO-FR-46: a refusal costs no backend call", async () => {
+    const b = flowBackend(samplePlan());
+    await renderFlow(b);
+    const before = b.calls.length;
 
-    dragConnection("n1", 405, 30);
-    fireEvent.pointerUp(nodeEl("n2"), { pointerId: 1 });
-
-    expect(doc(flows).edges).toHaveLength(1);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "already connected in that direction",
-    );
-    expect(preview()).not.toBeInTheDocument();
-  });
-
-  // FLO-FR-32: the preview exists from the first frame, before any movement —
-  // and nothing is snapped yet, so a bare click on the port cannot mint an edge
-  // to whatever happens to be sitting within the snap radius.
-  it("draws from the press and snaps to nothing until the pointer moves", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    fireEvent.pointerDown(within(nodeEl("n1")).getByLabelText(/^Connect from /), {
-      pointerId: 1,
-      buttons: 1,
-      // The port sits on the node's trailing edge, 96 units from n2's centre —
-      // well inside MAGNET_RADIUS.
-      clientX: 210,
-      clientY: 18,
-    });
-
-    expect(preview()).toBeInTheDocument();
-    expect(preview()).toHaveAttribute("data-magnet", "false");
-    // The press point is on n1's own border, so the preview starts from there
-    // rather than from the centre the edge aims out of (FLO-FR-48).
-    expect(preview()?.getAttribute("d")).toMatch(/^M 210 18/);
-
-    // …and from a point well clear of the border it still starts ON it, which
-    // is what shows the projection ran rather than the pointer being copied.
-    // Away from n2 and n3, so this move tests the anchor and nothing else.
-    fireEvent.pointerMove(canvas(), {
-      pointerId: 1,
-      buttons: 1,
-      clientX: -200,
-      clientY: 30,
-    });
-    expect(preview()).toHaveAttribute("data-magnet", "false");
-    expect(preview()?.getAttribute("d")).toMatch(/^M 0 30/);
-
-    fireEvent.pointerUp(canvas(), { pointerId: 1 });
-
-    expect(doc(flows).edges).toEqual([]);
-    expect(flows.get(ID)?.dirty).toBe(false);
-  });
-
-  // A sticky magnet would leave the wrong node highlighted and connect to it.
-  it("releases the magnet when the pointer leaves its reach, and on release", async () => {
-    await renderCanvas(THREE_APART);
-
-    dragConnection("n1", 250, 30);
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "true");
-
-    fireEvent.pointerMove(canvas(), {
-      pointerId: 1,
-      buttons: 1,
-      clientX: 150,
-      clientY: 30,
-    });
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "false");
-    expect(preview()).toHaveAttribute("data-magnet", "false");
-
-    fireEvent.pointerMove(canvas(), {
-      pointerId: 1,
-      buttons: 1,
-      clientX: 250,
-      clientY: 30,
-    });
-    fireEvent.pointerUp(canvas(), { pointerId: 1 });
-
-    expect(
-      document.querySelectorAll('[data-magnet="true"]'),
-    ).toHaveLength(0);
-  });
-
-  // The drop wins over the magnet, not the other way round: an implementation
-  // that only filled the target in when nothing was snapped would connect to
-  // the node the pointer was near rather than the one it was released on.
-  it("connects to the node released on, not to the one it had snapped to", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    dragConnection("n1", 420, 30);
-    expect(nodeEl("n3")).toHaveAttribute("data-magnet", "true");
-
-    fireEvent.pointerUp(nodeEl("n2"), { pointerId: 1 });
-
-    expect(doc(flows).edges.map((e) => [e.from, e.to])).toEqual([["n1", "n2"]]);
-  });
-
-  // The release happened where nothing could see it — the pointer left the
-  // window. Re-entering must not complete the connection the magnet was holding:
-  // a Flow has no undo, so an edge nobody asked for has to be found and deleted.
-  it("abandons a snapped connection whose release was never seen", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    dragConnection("n1", 250, 30);
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "true");
-
-    // The pointer comes back over the canvas with no button held.
-    fireEvent.pointerMove(canvas(), {
-      pointerId: 1,
-      buttons: 0,
-      clientX: 250,
-      clientY: 30,
-    });
-
-    expect(doc(flows).edges).toEqual([]);
-    expect(flows.get(ID)?.dirty).toBe(false);
-    expect(preview()).not.toBeInTheDocument();
-  });
-
-  // The same lost release, seen from outside the canvas. The window handler is
-  // the one that exists for exactly those moves, so without its own guard the
-  // connection stays live across the whole window and the user's next unrelated
-  // click completes it.
-  it("abandons a lost release seen only outside the canvas", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    dragConnection("n1", 250, 30);
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "true");
-
-    // Re-entering over the toolbar band, not over `.flow`.
-    fireEvent.pointerMove(window, {
-      pointerId: 1,
-      buttons: 0,
-      clientX: 250,
-      clientY: 30,
-    });
-    fireEvent.pointerUp(window, { pointerId: 1 });
-
-    expect(doc(flows).edges).toEqual([]);
-    expect(flows.get(ID)?.dirty).toBe(false);
-    expect(preview()).not.toBeInTheDocument();
-  });
-
-  // A cancel is not a release: the OS took the pointer away and the user never
-  // let go of anything.
-  it("abandons a snapped connection on pointercancel", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    dragConnection("n1", 250, 30);
-    expect(nodeEl("n2")).toHaveAttribute("data-magnet", "true");
-
-    fireEvent.pointerCancel(canvas(), { pointerId: 1 });
-
-    expect(doc(flows).edges).toEqual([]);
-    expect(flows.get(ID)?.dirty).toBe(false);
-    expect(preview()).not.toBeInTheDocument();
-
-    // …and the same through the window, which is where a cancel outside the
-    // canvas lands.
-    dragConnection("n1", 250, 30);
-    fireEvent.pointerCancel(window, { pointerId: 1 });
-
-    expect(doc(flows).edges).toEqual([]);
-    expect(flows.get(ID)?.dirty).toBe(false);
-  });
-
-  // The preview has to keep following a pointer that has left the canvas, or a
-  // connection dragged over the toolbar freezes mid-air and reads as stuck.
-  it("follows a pointer that leaves the canvas and ends there", async () => {
-    const { flows } = await renderCanvas(THREE_APART);
-
-    dragConnection("n1", 150, 30);
-    fireEvent.pointerMove(window, { pointerId: 1, buttons: 1, clientX: 250, clientY: 30 });
-
-    expect(preview()).toHaveAttribute("data-magnet", "true");
-
-    fireEvent.pointerUp(window, { pointerId: 1 });
-
-    expect(preview()).not.toBeInTheDocument();
-    expect(doc(flows).edges.map((e) => [e.from, e.to])).toEqual([["n1", "n2"]]);
+    connectItems("t1", "t1");
+    connectItems("t1", "f1");
+    expect(b.calls.slice(before).filter((c) => c.cmd !== "append_log_records")).toEqual([]);
   });
 });
 
-describe("reciprocal edges keep two labels (FLO-FR-19 / FLO-FR-17)", () => {
-  // `A→B` and `B→A` are two edges whose midpoints coincide. Their labels have
-  // to separate, or one buries the other's affordance entirely and neither edge
-  // can be told from the other.
-  it("separates the labels of a two-element cycle", async () => {
-    await renderCanvas(
-      JSON.stringify({
-        version: 1,
-        name: "F",
-        nodes: [
-          { id: "n1", name: "A", position: { x: 0, y: 0 } },
-          { id: "n2", name: "B", position: { x: 400, y: 0 } },
-        ],
-        edges: [
-          { id: "e1", from: "n1", to: "n2" },
-          { id: "e2", from: "n2", to: "n1", label: "again" },
-        ],
-      }),
-    );
+describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
+  it("FLO-FR-CEVI: a selected edge offers its type as Blocks or Relates, and Reverse on a blocks edge", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    const { flows } = await renderFlow(b);
 
-    const a = screen.getByTestId("flow-edge-e1");
-    const b = screen.getByTestId("flow-edge-e2");
-    const at = (el: HTMLElement) => ({
-      left: parseFloat(el.style.left),
-      top: parseFloat(el.style.top),
-    });
-    const pa = at(a);
-    const pb = at(b);
-    expect(Math.hypot(pa.left - pb.left, pa.top - pb.top)).toBeGreaterThan(20);
+    await userEvent.click(edgeHandle("e1"));
+    const type = within(edgePanel()).getByRole("radiogroup", { name: "Edge type" });
+    expect(within(type).getByRole("radio", { name: "Blocks" })).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(within(edgePanel()).getByRole("button", { name: "Reverse" }));
+    expect(planOf(flows).edges).toEqual([blocks("e1", "t3", "t1")]);
+    await userEvent.click(within(type).getByRole("radio", { name: "Relates" }));
+    expect(planOf(flows).edges).toEqual([relates("e1", "t3", "t1")]);
+    expect(within(edgePanel()).queryByRole("button", { name: "Reverse" })).toBeNull();
   });
 
-  // A one-way edge is not nudged: it sits on its own midpoint.
-  it("leaves a lone edge's label on the midpoint", async () => {
-    await renderCanvas(TWO_NODES);
-    const only = screen.getByTestId("flow-edge-e1");
-    // n1 at (0,0) and n2 at (300,0): the edge runs from n1's trailing border to
-    // n2's leading one (FLO-FR-48), so its midpoint is halfway between 210 and
-    // 300, on the anchor line both nominal boxes share.
-    expect(parseFloat(only.style.left)).toBe(255);
-    expect(parseFloat(only.style.top)).toBe(30);
+  it("FLO-FR-GZCH, FLO-FR-CEVI: a reversal that closes a cycle is refused and leaves the edge as it was", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3"), blocks("e3", "t1", "t3")]));
+    const { flows } = await renderFlow(b);
+
+    await userEvent.click(edgeHandle("e3"));
+    await userEvent.click(within(edgePanel()).getByRole("button", { name: "Reverse" }));
+    expect(planOf(flows).edges[2]).toEqual(blocks("e3", "t1", "t3"));
+    expect(refusal()).toHaveTextContent("Not reversed.");
+    expect(refusal()).toHaveTextContent("makes a cycle");
+  });
+
+  it("FLO-FR-GZCH: a change to blocks that closes a cycle is refused; a relates edge never forms one", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3"), relates("e3", "t3", "t1")]));
+    const { flows } = await renderFlow(b);
+
+    await userEvent.click(edgeHandle("e3"));
+    await userEvent.click(within(edgePanel()).getByRole("radio", { name: "Blocks" }));
+    expect(planOf(flows).edges[2]).toEqual(relates("e3", "t3", "t1"));
+    expect(refusal()).toHaveTextContent("Not changed.");
+  });
+
+  it("FLO-FR-20: removing an edge removes only that edge", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), blocks("e2", "t1", "x1")]));
+    const { flows } = await renderFlow(b);
+
+    await userEvent.click(edgeHandle("e1"));
+    await userEvent.click(within(edgePanel()).getByRole("button", { name: "Remove edge" }));
+    expect(planOf(flows).edges).toEqual([blocks("e2", "t1", "x1")]);
+    expect(planOf(flows).items).toHaveLength(9);
+  });
+
+  it("FLO-FR-CEVI: a press on an edge's path selects it", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    await renderFlow(b);
+
+    const hit = document.querySelector('.flow-edge-hit[data-edge-id="e1"]') as Element;
+    fireEvent.pointerDown(hit, { pointerId: 1, buttons: 1 });
+    expect(screen.getByTestId("flow-edge-path-e1")).toHaveAttribute("data-selected", "true");
+    expect(edgePanel()).toHaveAccessibleName("Edge T1 blocks T3");
+  });
+});
+
+describe("how an edge is drawn (FLO-FR-48, FLO-FR-39)", () => {
+  it("FLO-FR-48: a blocks edge is solid with an arrowhead at the blocked end; a relates edge is dashed with none", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), relates("e2", "t2", "x1")]));
+    await renderFlow(b);
+
+    const solid = screen.getByTestId("flow-edge-path-e1");
+    expect(solid).toHaveClass("flow-edge--blocks");
+    expect(solid.getAttribute("marker-end")).toMatch(/^url\(#flow-arrow-/);
+    expect(solid).not.toHaveAttribute("marker-start");
+    const dashed = screen.getByTestId("flow-edge-path-e2");
+    expect(dashed).toHaveClass("flow-edge--relates");
+    expect(dashed).not.toHaveAttribute("marker-end");
+    expect(edgeHandle("e1")).toHaveAccessibleName("Edge: T1 blocks T3");
+    expect(edgeHandle("e2")).toHaveAccessibleName("Edge: T2 relates to X1");
+  });
+
+  it("FLO-FR-48, FLO-FR-39: a blocks edge ends on the border of the blocked item, pointing into it", async () => {
+    // t1 is at (60, 180) and t3 at (520, 240), both 170 × 96.
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    await renderFlow(b);
+
+    const d = screen.getByTestId("flow-edge-path-e1").getAttribute("d")!;
+    // They share the band y 240..276, so the edge runs straight across at 258.
+    expect(d.startsWith("M 230 258 ")).toBe(true);
+    expect(d.endsWith(", 520 258")).toBe(true);
+  });
+
+  it("FLO-FR-39: an edge to a container lands on the container's border", async () => {
+    const b = flowBackend(plan([
+      item("d1", "deliverable", { size: { width: 300, height: 200 } }),
+      item("d2", "deliverable", { position: { x: 500, y: 0 }, size: { width: 300, height: 200 } }),
+    ], [blocks("e1", "d1", "d2")]));
+    await renderFlow(b);
+
+    expect(screen.getByTestId("flow-edge-path-e1").getAttribute("d")).toBe(
+      "M 300 100 C 390 100, 410 100, 500 100",
+    );
+  });
+
+  it("FLO-FR-48: a selected edge takes the selection emphasis and its arrowhead with it", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    await renderFlow(b);
+
+    await userEvent.click(edgeHandle("e1"));
+    const path = screen.getByTestId("flow-edge-path-e1");
+    expect(path).toHaveAttribute("data-selected", "true");
+    expect(path.getAttribute("marker-end")).toMatch(/^url\(#flow-arrow-active-/);
   });
 });

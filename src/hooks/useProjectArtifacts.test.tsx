@@ -3,6 +3,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
 import {
   flattenArtifacts,
+  flattenPaths,
   referenceableArtifacts,
   useProjectArtifacts,
 } from "./useProjectArtifacts";
@@ -175,15 +176,28 @@ describe("referenceableArtifacts (FLO-FR-10)", () => {
     );
   });
 
-  // A Flow is prompts and the instructions around them; a spec, another Flow,
-  // an agent definition or a scratchpad is not a step in one, and listing them
-  // buries the artifacts that are behind the ones that never will be.
-  it("offers skills, prompts and instructions and nothing else", () => {
+  it("FLO-FR-10: offers every artifact that is not a Flow", () => {
     expect(referenceableArtifacts(catalogue()).map((a) => a.id)).toEqual([
       ".claude/skills/code-review/SKILL.md",
       "prompts/gather.md",
       "AGENTS.md",
+      "specifications/ui/FLO-flow.md",
+      "agents/reviewer.md",
+      "scratch/notes.md",
     ]);
+  });
+});
+
+describe("flattenPaths (FLO-FR-ZEJU)", () => {
+  it("FLO-FR-ZEJU: lists every file and folder, a folder with a trailing slash", () => {
+    expect(
+      flattenPaths(
+        root([
+          folder("src", [file("src/main.ts"), folder("src/ui", [])]),
+          file("README.md", "doc"),
+        ]),
+      ),
+    ).toEqual(["src/", "src/main.ts", "src/ui/", "README.md"]);
   });
 });
 

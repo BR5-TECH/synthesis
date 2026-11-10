@@ -48,9 +48,9 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const human = { kind: "human", login: "raver119" } as const;
 const FLOW_BODY = JSON.stringify({
-  version: 1,
+  version: 2,
   name: "Onboarding review",
-  nodes: [],
+  items: [],
   edges: [],
 });
 
@@ -86,6 +86,8 @@ function wire(b: Backend, flowBody = FLOW_BODY) {
     switch (cmd) {
       case "load_artifact_contents_by_id":
         return { body: flowBody, checksum: "ck1" };
+      case "validate_flow_document":
+        return { valid: true, violations: [] };
       case "list_discussions":
         return b.discussions;
       case "list_project_agents":

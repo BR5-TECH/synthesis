@@ -1,110 +1,104 @@
-import { typeChip } from "../../artifactTypes";
+import { ARTIFACT_TYPES, typeChip } from "../../artifactTypes";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
-import { Icon } from "../icons";
-import {
-  REFERENCE_GROUPS,
-  optionLabel,
-  referenceLabel,
-  type Reference,
-} from "./geometry";
+import { optionLabel, referenceLabel, type Reference } from "./geometry";
 
-export interface ElementReferencesProps {
+export interface ReferenceRowsProps {
   references: Reference[];
-  /** FLO-FR-10: the remove affordances appear only while the element is selected. */
-  selected: boolean;
-  onRemoveArtifact: (artifactId: string) => void;
-  onOpenArtifact: (artifact: ArtifactOption) => void;
+  /** FLO-FR-10: a reference is removed on its own, from its row. */
+  onRemove?: (artifactId: string) => void;
+  onOpen: (artifact: ArtifactOption) => void;
+  className?: string;
 }
 
 /**
- * FLO-FR-11: one row per reference, in the order the element carries them —
- * a loop's on exactly a node's terms (FLO-FR-37).
- *
- * A resolved reference renders as the artifact's display name with its type chip
- * and a click-through; one that does not resolve names the stored id instead, and
- * nothing in the graph is removed on the user's behalf.
+ * FLO-FR-11 / FLO-FR-12 / FLO-FR-YDWT: one row per stored reference. A
+ * resolved reference shows the artifact's display name and type chip and opens
+ * the artifact. One that does not resolve names the stored id and opens
+ * nothing. Nothing is removed for the author.
  */
-export function ElementReferences({
-  references,
-  selected,
-  onRemoveArtifact,
-  onOpenArtifact,
-}: ElementReferencesProps) {
+export function ReferenceRows({ references, onRemove, onOpen, className }: ReferenceRowsProps) {
+  if (references.length === 0) return null;
   return (
-    <>
+    <div className={className ?? "flow-refs"}>
       {references.map((ref) => (
-        <div className="flow-node__ref-row" key={ref.id}>
+        <span className="flow-ref-row" key={ref.id}>
           {ref.state === "resolved" ? (
             <button
-              className="flow-node__ref"
+              type="button"
+              className="flow-ref"
               aria-label={`Open ${ref.artifact.displayName}`}
-              onClick={() => onOpenArtifact(ref.artifact)}
+              onClick={() => onOpen(ref.artifact)}
             >
               <span className="chip-type" data-type={ref.artifact.artifactType}>
                 {typeChip(ref.artifact.artifactType)}
               </span>
-              <span className="flow-node__ref-name">
-                {ref.artifact.displayName}
+              <span className="flow-ref__name">{ref.artifact.displayName}</span>
+              <span className="flow-ref__go" aria-hidden="true">
+                ↗
               </span>
-              <span aria-hidden="true">↗</span>
             </button>
           ) : ref.state === "unresolved" ? (
-            <div className="flow-node__ref flow-node__ref--unresolved">
-              ⚠ unresolved: {ref.id}
-            </div>
+            <span className="flow-ref flow-ref--unresolved" data-testid="flow-ref-unresolved">
+              <span aria-hidden="true">⚠</span> unresolved: {ref.id}
+            </span>
           ) : (
-            <div className="flow-node__ref">{ref.id}</div>
+            <span className="flow-ref">{ref.id}</span>
           )}
-          {selected && (
+          {onRemove && (
             <button
-              className="btn btn--ghost btn--icon btn--sm"
+              type="button"
+              className="flow-ref-row__remove"
               aria-label={`Remove reference ${referenceLabel(ref)}`}
-              onClick={() => onRemoveArtifact(ref.id)}
+              onClick={() => onRemove(ref.id)}
             >
-              <Icon.X size={11} />
+              ×
             </button>
           )}
-        </div>
+        </span>
       ))}
-    </>
+    </div>
   );
 }
 
+/** FLO-FR-10: the types the picker offers, in the order of the type list. */
+const PICKER_GROUPS = ARTIFACT_TYPES.filter((t) => t.value !== "flow");
+
 /**
- * FLO-FR-10: the picker, listing the artifacts an element can be built out of.
- *
- * It adds rather than replaces — an element may reference any number of
- * artifacts — so it holds no value of its own and returns to its prompt after
- * each choice. An artifact the element already references is not offered again;
- * a reference is dropped from its own row, never by changing a select, so an
- * unresolved one cannot be cleared by accident.
+ * FLO-FR-10: the picker of project artifacts. It adds and keeps no value of its
+ * own, and it never offers an artifact that is already referenced.
  */
 export function ArtifactPicker({
   artifacts,
   referenced,
   onAdd,
+  label = "Add reference",
+  prompt = "+ Reference",
+  className,
 }: {
   artifacts: ArtifactOption[];
-  referenced: Set<string>;
+  referenced: ReadonlySet<string>;
   onAdd: (artifactId: string) => void;
+  label?: string;
+  prompt?: string;
+  className?: string;
 }) {
   return (
     <select
-      className="select select--sm flow-node__picker"
-      aria-label="Add artifact"
+      className={className ?? "flow-picker"}
+      aria-label={label}
       value=""
       onChange={(e) => {
         if (e.target.value) onAdd(e.target.value);
       }}
     >
-      <option value="">Add artifact…</option>
-      {REFERENCE_GROUPS.map(({ type, label }) => {
+      <option value="">{prompt}</option>
+      {PICKER_GROUPS.map(({ value, label: groupLabel }) => {
         const group = artifacts.filter(
-          (a) => a.artifactType === type && !referenced.has(a.id),
+          (a) => a.artifactType === value && !referenced.has(a.id),
         );
         if (group.length === 0) return null;
         return (
-          <optgroup key={type} label={label}>
+          <optgroup key={value} label={groupLabel}>
             {group.map((a) => (
               <option key={a.id} value={a.id}>
                 {optionLabel(a)}

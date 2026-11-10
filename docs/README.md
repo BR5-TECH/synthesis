@@ -53,7 +53,6 @@ and the backend sends updates back as Tauri events.
 | `tools/agentic-cli-mock/` | A test executable that acts as an agent CLI and plays recorded scenarios. |
 | `tools/spec-check/` | A Python script that checks the specification corpus and every citation of a requirement identifier. |
 | `resources/prompts/` | The prompts of the conversation loop and the graduation loop. The backend compiles them in with `include_str!`. |
-| `resources/flows/` | The flow documents of this project. |
 | `fixtures/flows/` | Flow documents that the TypeScript serializer and the Rust validator both read, so the two stay in agreement. |
 | `api/openapi.yaml` | The OpenAPI 3.1 description of the server REST API. |
 | `specifications/` | The specifications, in six categories: `ui/`, `core/`, `ai/`, `tools/`, `server/`, and `infra/`. See [`specifications/TEMPLATE.md`](../specifications/TEMPLATE.md). |

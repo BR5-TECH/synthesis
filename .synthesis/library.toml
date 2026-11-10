@@ -10,10 +10,6 @@ scope = "folder"
 type = "prompt"
 scope = "folder"
 
-[assignments."resources/flows/Test"]
-type = "flow"
-scope = "file"
-
 [assignments."resources/prompts"]
 type = "prompt"
 scope = "folder"

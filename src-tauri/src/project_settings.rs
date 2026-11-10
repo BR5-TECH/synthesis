@@ -78,7 +78,7 @@ pub struct ChangesPanelState {
 
 /// The Library's artifact-type lens (PSS-FR-18).
 ///
-/// The two sentinels bracket the eight built-in artifact types of
+/// The two sentinels bracket the ten built-in artifact types of
 /// `ASC-artifact-scanning.md` ASC-FR-02, matching the single-select the Library
 /// renders (`../ui/LIB-library.md` LIB-FR-04). `AllArtifacts` is the default the
 /// panel takes when nothing has been persisted (LIB-FR-12).
@@ -98,6 +98,7 @@ pub enum ArtifactTypeFilter {
     /// resetting the panel to its default lens. Only `flow` is written back out.
     #[serde(alias = "harness")]
     Flow,
+    Architecture,
     Instructions,
     Scenario,
     Scratchpad,

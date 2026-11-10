@@ -33,7 +33,7 @@ export const TAB_INPUT_ATTR = "data-tab-input";
 
 /** The parts of an overlay that take focus with Tab (EDT-FR-HGAZ, EDT-FR-ELUJ). */
 export const FOCUSABLE =
-  "textarea, button:not([disabled]), [role='separator'][tabindex], [tabindex='0']";
+  "textarea, select:not([disabled]), button:not([disabled]), [role='separator'][tabindex], [tabindex='0']";
 
 const windowBounds = () => ({ width: window.innerWidth, height: window.innerHeight });
 

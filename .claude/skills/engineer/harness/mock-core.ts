@@ -11,6 +11,7 @@ import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
+import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
   DECOMPOSITION_ORIGINAL,
   decompositionDiscussion,
@@ -508,6 +509,26 @@ function seededTree(): any {
           },
         ],
       },
+      // CAD-FR-RBYK / CAD-FR-NQXR: an Architecture source file, so the
+      // Diagram view of an Architecture tab is answerable in a browser. Its
+      // body is the "Business flow" template (see `CALM_ARCHITECTURE_BODY`).
+      {
+        id: "architecture",
+        name: "architecture",
+        path: "architecture",
+        nodeKind: "folder",
+        hasArtifacts: true,
+        children: [
+          {
+            id: "architecture/system.calm.json",
+            name: "system.calm.json",
+            path: "architecture/system.calm.json",
+            nodeKind: "file",
+            artifactType: "architecture",
+            typeSource: "inferred",
+          },
+        ],
+      },
       { id: "README.md", name: "README.md", path: "README.md", nodeKind: "file" },
     ],
   };
@@ -545,6 +566,10 @@ function findTreeNode(path: string): any | undefined {
   };
   return walk(tree());
 }
+
+/** CAD-FR-RBYK: the body of the seeded `.calm.json` Architecture file. */
+const CALM_ARCHITECTURE_BODY =
+  CALM_TEMPLATES.find((t) => t.key === "flow")?.source ?? "";
 
 /**
  * EDT-FR-73/EDT-FR-74: a source file the harness serves as source rather than as
@@ -8333,6 +8358,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // DXP-FR-IEQA / DXP-FR-LSYA: an export that walks its four stages and
     // writes nothing. `?exportFail` refuses it with `conversion_failed`, and
     // `?exportWarn` reports one diagram that stayed as code.
+    /**
+     * DXP-FR-TQCQ: the mock does not keep saved text, so each DOC artifact
+     * holds two CALM fences: the three-tier template and a source that is not
+     * JSON. The dialog draws one picture, and the export states the other.
+     */
+    case "list_export_calm_sources":
+      return [CALM_TEMPLATES.find((t) => t.key === "three-tier")!.source, "{ not json"];
     case "export_document": {
       const exportId = String(a.exportId);
       const stages = ["reading", "diagrams", "converting", "writing"];
@@ -8480,6 +8512,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return {
         body: String(a.id).endsWith(".flow.md")
           ? FLOW_PLAN_BODY
+          : String(a.id).endsWith(".calm.json")
+          ? CALM_ARCHITECTURE_BODY
           : source !== undefined
             ? source
             : String(a.id).endsWith("EDT-editor.md")

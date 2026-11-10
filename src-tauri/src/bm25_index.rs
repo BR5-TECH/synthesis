@@ -1,6 +1,6 @@
 //! BM25 indexing (`BMI-bm25-indexing.md`).
 //!
-//! Twelve in-memory BM25 indexes — one per built-in artifact type (BMI-FR-02),
+//! Thirteen in-memory BM25 indexes — one per built-in artifact type (BMI-FR-02),
 //! one for drafts, one for notes, one for skills, and one for the user's
 //! reference documents — kept in agreement with
 //! what is on disk, and a ranked multi-index [`search`] for the AI integrations
@@ -8,9 +8,9 @@
 //! module's whole surface is the internal Rust API below, so no frontend
 //! `invoke` can reach it (BMI-FR-01).
 //!
-//! ## Why two of the eleven are shaped differently
+//! ## Why two of the thirteen are shaped differently
 //!
-//! Nine of the eleven hold the chunks of files. The `skills` index instead
+//! Eleven of the thirteen hold the chunks of files or documents. The `skills` index instead
 //! holds one whole document per invocable skill, supplied by
 //! `DSL-dynamic-skills-loading.md`, and the `notes` index one whole document
 //! per persisted note — that note's `body` and nothing else — supplied by
@@ -81,7 +81,7 @@ pub const COALESCE_WINDOW: Duration = Duration::from_millis(250);
 // Contract surface types
 // ---------------------------------------------------------------------------
 
-/// The twelve indexes of BMI-FR-02: one per built-in artifact type of
+/// The thirteen indexes of BMI-FR-02: one per built-in artifact type of
 /// ASC-FR-02, plus drafts, plus notes, plus skills, plus documents.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,6 +91,7 @@ pub enum IndexId {
     Prompt,
     Spec,
     Flow,
+    Architecture,
     Instructions,
     Scenario,
     Scratchpad,
@@ -118,12 +119,13 @@ pub enum IndexId {
 impl IndexId {
     /// Every index, in a stable order. The set a `search` with no explicit
     /// selection runs against (BMI-FR-10).
-    pub const ALL: [IndexId; 12] = [
+    pub const ALL: [IndexId; 13] = [
         IndexId::Skill,
         IndexId::Agent,
         IndexId::Prompt,
         IndexId::Spec,
         IndexId::Flow,
+        IndexId::Architecture,
         IndexId::Instructions,
         IndexId::Scenario,
         IndexId::Scratchpad,
@@ -145,6 +147,7 @@ impl IndexId {
             ArtifactType::Prompt => Some(IndexId::Prompt),
             ArtifactType::Spec => Some(IndexId::Spec),
             ArtifactType::Flow => Some(IndexId::Flow),
+            ArtifactType::Architecture => Some(IndexId::Architecture),
             ArtifactType::Instructions => Some(IndexId::Instructions),
             ArtifactType::Scenario => Some(IndexId::Scenario),
             ArtifactType::Scratchpad => Some(IndexId::Scratchpad),
@@ -159,6 +162,7 @@ impl IndexId {
             IndexId::Prompt => "prompt",
             IndexId::Spec => "spec",
             IndexId::Flow => "flow",
+            IndexId::Architecture => "architecture",
             IndexId::Instructions => "instructions",
             IndexId::Scenario => "scenario",
             IndexId::Scratchpad => "scratchpad",
@@ -336,7 +340,7 @@ struct FileEntry {
     chunk_count: u32,
 }
 
-/// The eleven indexes (BMI-FR-02), as one immutable snapshot.
+/// The thirteen indexes (BMI-FR-02), as one immutable snapshot.
 ///
 /// A pass builds the next snapshot from the current one and swaps it in whole,
 /// so `search` never waits on indexing and never observes a half-applied pass
@@ -673,7 +677,7 @@ impl Bm25Indexer {
         schedule.pending = PassScope::ALL;
     }
 
-    /// BMI-FR-25: discard all twelve indexes, the skill registry with them
+    /// BMI-FR-25: discard all thirteen indexes, the skill registry with them
     /// (DSL-FR-22). A pass already running abandons its
     /// result when it sees the generation has moved.
     pub fn clear(&self) {

@@ -4,7 +4,7 @@
 
 use super::*;
 
-/// ASC-FR-02: one vocabulary, not two.
+/// ASC-FR-02, ASC-FR-JWPH, ASC-FR-QVCN: one vocabulary, not two.
 ///
 /// `as_str` is what an agent's input names the material's type with
 /// (`../core/AGC-agent-conversations.md` AGC-FR-07) and serde is what
@@ -20,8 +20,10 @@ fn every_types_stated_name_is_the_name_it_is_stored_under() {
             "{t:?} states a different name than it stores",
         );
         // …and the round trip, so a name that is written can be read back.
-        // `doc` is the one type no content marker gives (ASC-FR-JWPH).
-        let expected = (t != ArtifactType::Doc).then_some(t);
+        // `doc` and `architecture` are the two types no content marker gives
+        // (ASC-FR-JWPH, ASC-FR-QVCN).
+        let marker_free = matches!(t, ArtifactType::Doc | ArtifactType::Architecture);
+        let expected = (!marker_free).then_some(t);
         assert_eq!(ArtifactType::from_marker(t.as_str()), expected);
     }
     // Distinct, so no two types can be told apart in one vocabulary and not

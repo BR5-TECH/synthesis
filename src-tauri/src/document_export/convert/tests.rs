@@ -5,21 +5,21 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use super::diagrams::{DiagramFailure, FailedDiagram};
-use super::model::{classify_marker_line, parse, Align, Block, Inline, Marker};
+use super::model::{classify_marker_line, parse, Align, Block, DiagramKind, Inline, Marker};
 use super::*;
 
-pub(crate) fn render_ok(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+pub(crate) fn render_ok(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
     let image = image::RgbaImage::new(40, 20);
     let mut out = std::io::Cursor::new(Vec::new());
     image.write_to(&mut out, image::ImageFormat::Png).map_err(|_| DiagramFailure::Invalid)?;
     Ok(out.into_inner())
 }
 
-fn render_fail(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+fn render_fail(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
     Err(DiagramFailure::Invalid)
 }
 
-fn render_past_deadline(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+fn render_past_deadline(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
     Err(DiagramFailure::Deadline)
 }
 
@@ -39,6 +39,20 @@ pub(crate) fn dir_writer(dir: &Path) -> impl Fn(&str, &[u8]) -> Option<PathBuf> 
 /// The bytes of the file at `path`.
 pub(crate) fn read_file(path: &Path) -> Vec<u8> {
     std::fs::read(path).expect("the file reads")
+}
+
+/// Writes `bytes` to `path` in a test folder.
+pub(crate) fn write_test_file(path: &Path, bytes: &[u8]) {
+    std::fs::write(path, bytes).expect("the file writes");
+}
+
+/// The count of PNG files in `dir`.
+pub(crate) fn png_files_in(dir: &Path) -> usize {
+    std::fs::read_dir(dir)
+        .expect("the folder reads")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|x| x == "png"))
+        .count()
 }
 
 /// Convert `text` with the given renderer, writing pictures into `dir`.

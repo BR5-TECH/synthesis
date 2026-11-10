@@ -19,6 +19,7 @@ import {
 } from "../../state/exportDialog";
 import { dispatchDecision } from "../DraftDiscussion/decisionDispatch";
 import { Icon } from "../icons";
+import { drawCalmPictures } from "./calmPictures";
 import type {
   ExportFormat,
   ExportOutcome,
@@ -96,8 +97,24 @@ const KNOWN_CODES = new Set([
   "write_failed",
 ]);
 
-/** EXD-FR-QWZO: the progress text of one event. */
-export function progressText(progress: ExportProgress | null, format: ExportFormat): string {
+/** EXD-FR-QWZO: the count of CALM sources drawn, while the dialog draws them. */
+export interface DrawingProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * EXD-FR-QWZO: the progress text of one event, or of the drawing of the CALM
+ * pictures (EXD-FR-UKLK) before the export starts in the backend.
+ */
+export function progressText(
+  progress: ExportProgress | null,
+  format: ExportFormat,
+  drawing: DrawingProgress | null = null,
+): string {
+  if (progress === null && drawing !== null && drawing.total > 0) {
+    return `Drawing CALM diagrams ${drawing.done} of ${drawing.total}…`;
+  }
   if (progress === null) return "Starting the export…";
   switch (progress.stage) {
     case "reading":
@@ -208,6 +225,7 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
   const [destination, setDestination] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<ExportProgress | null>(null);
+  const [drawing, setDrawing] = useState<DrawingProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<ExportWarning[]>([]);
   const [written, setWritten] = useState<string | null>(null);
@@ -328,6 +346,7 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
     const id = newExportId();
     exportId.current = id;
     setProgress(null);
+    setDrawing(null);
     setError(null);
     setPhase("running");
     runningRef.current = true;
@@ -338,12 +357,17 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
       fromRequest: opening.request !== null,
     });
     try {
+      // EXD-FR-UKLK: the CALM pictures come first, from the saved file.
+      const calmPictures = await drawCalmPictures(opening.path, (done, total) =>
+        setDrawing({ done, total }),
+      );
       const result = await exportDocument({
         path: opening.path,
         format,
         includeFrontmatter,
         destination,
         exportId: id,
+        calmPictures,
       });
       runningRef.current = false;
       writtenRef.current = result.destination;
@@ -490,7 +514,7 @@ export function ExportDialog({ opening }: { opening: ExportDialogRequest }) {
               {running && (
                 <div className="export-dialog__progress" role="status" aria-live="polite">
                   <span className="export-dialog__spinner" aria-hidden="true" />
-                  {progressText(progress, format)}
+                  {progressText(progress, format, drawing)}
                 </div>
               )}
               {error !== null && !running && (

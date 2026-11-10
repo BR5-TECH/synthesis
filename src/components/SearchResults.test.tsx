@@ -50,7 +50,7 @@ afterEach(cleanup);
 const TARGET = { query: "needle", mode: "literal_insensitive" as const };
 
 describe("Search results tab (SCH-FR-08 / SCH-FR-18)", () => {
-  it("SCH-FR-03, SCC-FR-08: the type filter offers the eight artifact subtypes and no Document", async () => {
+  it("SCH-FR-03, SCC-FR-08: the type filter offers the nine artifact subtypes and no Document", async () => {
     render(
       <SearchResults
         tabId="search:1"
@@ -69,6 +69,7 @@ describe("Search results tab (SCH-FR-08 / SCH-FR-18)", () => {
       "Prompt",
       "Spec",
       "Flow",
+      "Architecture",
       "Instructions",
       "Scenario",
       "Scratchpad",

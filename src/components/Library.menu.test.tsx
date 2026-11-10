@@ -145,10 +145,57 @@ describe("Library filesystem tree", () => {
     expect(within(sub).getByText("Clear Type")).toBeInTheDocument();
 
     // Clear Type is the very last entry in the submenu, after a divider that
-    // separates it from the nine type rows.
+    // separates it from the ten type rows.
     const items = Array.from(sub.querySelectorAll(".menu-item"));
     expect(items[items.length - 1].textContent).toContain("Clear Type");
     expect(sub.querySelector(".menu-sep")).toBeInTheDocument();
+  });
+
+  // LCM-FR-04, LCM-FR-07, ASC-FR-02: the submenu lists the ten built-in types
+  // in the order of the type table, Architecture after Flow, each with its
+  // icon and tag, and choosing Architecture assigns it with scope = file.
+  it("LCM-FR-04, LCM-FR-07: lists the ten types with Architecture after Flow and assigns it", async () => {
+    mockInvoke(
+      {
+        load_project_tree: () => baseTree(),
+        assign_artifact_type: () => baseTree(),
+      },
+      expandedAll(baseTree()),
+    );
+    renderLibrary();
+
+    fireEvent.contextMenu(await screen.findByText("onboarding.md"));
+    const menu = document.querySelector(".menu") as HTMLElement;
+    fireEvent.click(within(menu).getByText("Artifact Type"));
+    const sub = menu.querySelector(".menu--sub") as HTMLElement;
+    const labels = Array.from(sub.querySelectorAll<HTMLElement>(".menu-item")).map(
+      (item) => item.textContent?.trim(),
+    );
+    // Each type row reads its tag (LIB-FR-08) and then its label.
+    expect(labels).toEqual([
+      "SKL Skill",
+      "AGT Agent",
+      "PRO Prompt",
+      "SPC Spec",
+      "FLW Flow",
+      "ARC Architecture",
+      "INS Instructions",
+      "SCN Scenario",
+      "SCR Scratchpad",
+      "DOC Document",
+      "Clear Type",
+    ]);
+    const architecture = within(sub).getByText("Architecture").closest(".menu-item")!;
+    expect(architecture.firstElementChild).toHaveClass("icon");
+
+    fireEvent.click(within(sub).getByText("Architecture"));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("assign_artifact_type", {
+        path: ".claude/skills/onboarding.md",
+        artifactType: "architecture",
+        scope: "file",
+      }),
+    );
   });
 
   // LCM-FR-01: a folder menu and an artifact file menu expose the right entry
@@ -420,15 +467,15 @@ describe("Library filesystem tree", () => {
     setLoadTree(baseTree());
     renderLibrary();
 
-    // Open a skill menu, then expand the Artifact Type submenu so its nine type
+    // Open a skill menu, then expand the Artifact Type submenu so its ten type
     // rows and Clear Type are present too.
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
     const menu = document.querySelector(".menu") as HTMLElement;
     fireEvent.click(within(menu).getByText("Artifact Type"));
 
     const items = Array.from(menu.querySelectorAll<HTMLElement>(".menu-item"));
-    // Sanity: top-level actions + parent + 8 types + Clear Type are all present.
-    expect(items.length).toBeGreaterThanOrEqual(5 + 8 + 1);
+    // Sanity: top-level actions + parent + 10 types + Clear Type are all present.
+    expect(items.length).toBeGreaterThanOrEqual(5 + 10 + 1);
     for (const item of items) {
       // The icon is the LEADING element of each entry (the parent row also has a
       // trailing caret, so assert the *first* element child is the icon — a bare

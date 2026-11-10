@@ -14,6 +14,7 @@ export type ArtifactType =
   | "prompt"
   | "spec"
   | "flow"
+  | "architecture"
   | "instructions"
   | "scenario"
   | "scratchpad"

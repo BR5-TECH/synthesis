@@ -42,6 +42,9 @@ import {
 } from "./regions";
 import { ActionCluster } from "./toolbar";
 import { insertDiagramFence, type DiagramTemplate } from "./diagramTemplates";
+import { ArchitectureDiagramView, useArchitectureView } from "./ArchitectureView";
+import type { CalmTemplate } from "../../calm/templates";
+import { CALM_LANGUAGE } from "../diagramKind";
 import type { DocumentOutline } from "./useDocumentOutline";
 import { logDebug, logWarn } from "../../logging";
 import { holdEdit } from "../../state/mainBranchWrite";
@@ -143,6 +146,18 @@ export function EditorView(props: EditorViewProps) {
     replaceAll,
   } = props.findGroup;
   const { comments, control, dismissControl, split, showColumn } = props.railGroup;
+  // CAD-FR-RBYK: an Architecture artifact that is a source file has a
+  // Diagram view beside its Source view.
+  const architecture = useArchitectureView({
+    architecture: props.artifactType === "architecture" && !props.isMarkdown,
+    loaded: props.doc.loaded,
+    buffer: props.session.buffer,
+    findActive: props.findGroup.find.form !== null,
+    focusedThread: props.focusedThread,
+    reviewing: props.review !== undefined && props.review !== null,
+    sourceRef: props.findGroup.sourceRef,
+  });
+  const showDiagram = architecture.active && architecture.view === "diagram";
   // CMT-FR-02 / ESH-FR-SSDV: a source file marks its fragments on its source.
   const railOnSource = !props.isMarkdown;
   const { bodyScrollRef, identityBlock, revealFragment } = props.anchorGroup;
@@ -220,6 +235,20 @@ export function EditorView(props: EditorViewProps) {
       chartType: template.key,
       inserted,
     });
+  };
+
+  /** CAD-FR-KTWD: the insert of a CALM fence, one step of the history of its own. */
+  const insertCalm = (template: CalmTemplate) => {
+    if (!editor) {
+      logWarn(["frontend"], "CALM fence not inserted: no editing surface", {
+        template: template.key,
+      });
+      return;
+    }
+    sealBurst(session.history);
+    const inserted = insertDiagramFence(editor, template.source, CALM_LANGUAGE);
+    sealBurst(session.history);
+    logDebug(["frontend"], "CALM fence inserted", { template: template.key, inserted });
   };
 
   /**
@@ -460,10 +489,17 @@ export function EditorView(props: EditorViewProps) {
       {mode === "text" && !isMarkdown && review && (
         <SourceReview text={sourceText} review={review} />
       )}
+      {showDiagram && (
+        <ArchitectureDiagramView
+          sourceText={sourceText}
+          onShowSource={architecture.showSource}
+        />
+      )}
       {mode === "text" && !(!isMarkdown && review) && (
         <div
           className="editor__source-wrap"
           ref={sourceWrapRef}
+          style={showDiagram ? { display: "none" } : undefined}
           /* ESH-FR-YTNN: while the layer is showing, the textarea's own glyphs
              give way to it and only the caret and the selection remain visible
              — so this says whether there is a layer, not which of the reasons
@@ -598,6 +634,7 @@ export function EditorView(props: EditorViewProps) {
                 editor={editor}
                 editable={!blocked}
                 onInsertDiagram={insertDiagram}
+                onInsertCalm={insertCalm}
                 onMarkupEdit={markupEdit}
               />
             )
@@ -630,6 +667,11 @@ export function EditorView(props: EditorViewProps) {
              move between. */
           mode={isMarkdown ? mode : undefined}
           onToggleMode={isMarkdown ? toggleMode : undefined}
+          architecture={
+            architecture.active
+              ? { view: architecture.view, onToggle: architecture.toggle }
+              : undefined
+          }
           modeLocked={modeLocked}
           // EDT-FR-LGQA: a Markdown file's, directly before the mode toggle.
           outline={outline}

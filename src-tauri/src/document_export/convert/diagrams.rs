@@ -1,20 +1,22 @@
-//! Diagram fences rendered to PNG images with `merman` (DXP-FR-RKJC,
+//! Diagram fences rendered to PNG images (DXP-FR-RKJC, DXP-FR-WGLT,
 //! DXP-FR-IOFM).
 //!
-//! The render runs in the backend and with no webview. A diagram that does not
-//! render keeps its source, and the export reports it as a warning.
+//! A Mermaid fence renders with `merman`, in the backend and with no webview.
+//! A CALM fence is rasterised from the drawing the frontend gives
+//! (`calm_raster`). A diagram that does not render keeps its source, and the
+//! export reports it as a warning.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
 
 use merman::{OperationControl, PngRequest, RenderOutput, RenderRequest, Renderer, SvgRequest};
 
-use super::model::{Block, Document};
+use super::model::{Block, DiagramKind, Document};
 
 /// The largest diagram source the export renders, in bytes.
 const MAX_SOURCE_BYTES: usize = 256 * 1024;
 
-/// DXP-FR-QCEB: the time one diagram may take to render.
+/// DXP-FR-QCEB: the time one Mermaid diagram may take to render.
 pub const RENDER_DEADLINE: Duration = Duration::from_secs(20);
 
 /// The raster scale: a PNG at twice its layout size stays sharp on a page.
@@ -45,8 +47,8 @@ pub struct FailedDiagram {
     pub reason: DiagramFailure,
 }
 
-/// The renderer of one diagram: its PNG bytes, or why it failed.
-pub type DiagramRenderer<'a> = &'a dyn Fn(&str) -> Result<Vec<u8>, DiagramFailure>;
+/// The renderer of one diagram of a kind: its PNG bytes, or why it failed.
+pub type DiagramRenderer<'a> = &'a dyn Fn(DiagramKind, &str) -> Result<Vec<u8>, DiagramFailure>;
 
 /// DXP-FR-RKJC: the PNG bytes of one diagram, or the reason it stays as code
 /// (DXP-FR-IOFM). The render stops at its deadline (DXP-FR-QCEB).
@@ -107,7 +109,7 @@ fn visit(
     report: &mut dyn FnMut(Option<FailedDiagram>),
 ) {
     match block {
-        Block::Diagram { index, source, png } => match render(source) {
+        Block::Diagram { index, kind, source, png } => match render(*kind, source) {
             Ok(bytes) => {
                 *png = Some(bytes);
                 report(None);
@@ -122,6 +124,31 @@ fn visit(
             .iter_mut()
             .flat_map(|i| i.blocks.iter_mut())
             .for_each(|b| visit(b, render, report)),
+        _ => {}
+    }
+}
+
+/// DXP-FR-TQCQ: the sources of the CALM fences of `doc`, each one time, in
+/// the document order of its first fence.
+pub fn calm_sources(doc: &Document) -> Vec<String> {
+    let mut sources: Vec<String> = Vec::new();
+    for top in &doc.blocks {
+        collect_calm(&top.block, &mut sources);
+    }
+    sources
+}
+
+fn collect_calm(block: &Block, sources: &mut Vec<String>) {
+    match block {
+        Block::Diagram { kind: DiagramKind::Calm, source, .. }
+            if !sources.iter().any(|s| s == source) =>
+        {
+            sources.push(source.clone());
+        }
+        Block::Quote(inner) => inner.iter().for_each(|b| collect_calm(b, sources)),
+        Block::List { items, .. } => {
+            items.iter().flat_map(|i| i.blocks.iter()).for_each(|b| collect_calm(b, sources))
+        }
         _ => {}
     }
 }

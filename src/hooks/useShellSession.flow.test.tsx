@@ -129,7 +129,7 @@ describe("Flow tab lifecycle (TAB-FR-12 / FLO-FR-28)", () => {
     });
     act(() =>
       result.current.flows.applyEdit(FLOW_ID, (d) =>
-        docOrUnchanged(d, addItem(d, "deliverable", { x: 120, y: 80 })),
+        docOrUnchanged(d, addItem(d, "milestone", { x: 120, y: 80 })),
       ),
     );
     return result;

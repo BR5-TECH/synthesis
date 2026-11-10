@@ -4,7 +4,18 @@ import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
 import { resetToasts } from "../state/toasts";
-import { clearFlowStores, flowBackend, planOf, renderFlow } from "../test/flowCanvasHarness";
+import { AUTOSAVE_DELAY_MS } from "../state/writeSchedule";
+import { MAGNET_RADIUS } from "./Flow/geometry";
+import { DELIVERY_REST_MS } from "./Flow/useDeliveryState";
+import {
+  advance,
+  callsOf,
+  clearFlowStores,
+  endFakeTimers,
+  flowBackend,
+  planOf,
+  renderFlow,
+} from "../test/flowCanvasHarness";
 import { canvas, client, connectItems, ID, itemEl } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
 import { blocks, item, plan, relates, samplePlan } from "../test/flowPlanFixtures";
@@ -22,7 +33,8 @@ beforeEach(() => {
   resetListeners();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await endFakeTimers();
   cleanup();
   clearFlowStores();
 });
@@ -106,6 +118,32 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
     expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
   });
 
+  it("FLO-FR-33: an item snaps within the snap distance of its border, and not beyond it", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
+
+    // x1's card covers (40, 460)–(210, 556). m1 holds the point but holds t1 too,
+    // so the rules refuse it and only x1 can snap.
+    const port = within(itemEl("t1")).getByLabelText("Connect from T1");
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS + 10 }) });
+    expect(itemEl("x1")).toHaveAttribute("data-magnet", "false");
+    expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS - 10 }) });
+    expect(itemEl("x1")).toHaveAttribute("data-magnet", "true");
+    // Out of reach again: the snap goes, and a release there makes no edge.
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS + 10 }) });
+    expect(itemEl("x1")).toHaveAttribute("data-magnet", "false");
+    fireEvent.pointerUp(canvas(), { pointerId: 1 });
+    expect(planOf(flows).edges).toEqual([]);
+
+    // A release in reach, outside the card, completes the connection.
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS - 10 }) });
+    fireEvent.pointerUp(canvas(), { pointerId: 1 });
+    expect(planOf(flows).edges).toEqual([blocks("e1", "t1", "x1")]);
+  });
+
   it("FLO-FR-33: a release the canvas never sees abandons the drag", async () => {
     const b = flowBackend(samplePlan());
     const { flows } = await renderFlow(b);
@@ -150,6 +188,19 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
     expect(refusal()).toHaveTextContent("An item cannot connect to an item that holds it or that it holds.");
   });
 
+  it("FLO-FR-ZEPI: a connection from a container to an item it holds, at any depth, is refused", async () => {
+    const b = flowBackend(samplePlan());
+    const { flows } = await renderFlow(b);
+
+    for (const [from, to] of [["F1", "t1"], ["M1", "t3"]] as const) {
+      fireEvent.pointerDown(screen.getByLabelText(`Connect from ${from}`), { pointerId: 1, buttons: 1, ...client({ x: 0, y: 0 }) });
+      fireEvent.pointerUp(itemEl(to), { pointerId: 1 });
+      expect(refusal()).toHaveTextContent("An item cannot connect to an item that holds it or that it holds.");
+    }
+    expect(planOf(flows).edges).toEqual([]);
+    expect(flows.get(ID)!.dirty).toBe(false);
+  });
+
   it("FLO-FR-GZCH: a connection that closes a cycle is refused, and the feedback names the cycle in blocking order", async () => {
     const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]));
     const { flows } = await renderFlow(b);
@@ -174,14 +225,22 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
     expect(refusal()).toHaveTextContent("F1");
   });
 
-  it("FLO-FR-46: a refusal costs no backend call", async () => {
+  it("FLO-FR-46: a refusal costs no backend call, now or after the rests an edit would start", async () => {
     const b = flowBackend(samplePlan());
-    await renderFlow(b);
+    const { flows } = await renderFlow(b);
+    expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1);
     const before = b.calls.length;
+    vi.useFakeTimers();
 
     connectItems("t1", "t1");
     connectItems("t1", "f1");
-    expect(b.calls.slice(before).filter((c) => c.cmd !== "append_log_records")).toEqual([]);
+    expect(refusal()).toBeInTheDocument();
+    await advance(Math.max(AUTOSAVE_DELAY_MS, DELIVERY_REST_MS) + 100);
+    const after = b.calls.slice(before).filter((c) => c.cmd !== "append_log_records");
+    expect(after).toEqual([]);
+    expect(callsOf(b, "save_artifact_contents")).toEqual([]);
+    expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1);
+    expect(flows.hasPendingWrite(ID)).toBe(false);
   });
 });
 
@@ -228,7 +287,7 @@ describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
     await userEvent.click(edgeHandle("e1"));
     await userEvent.click(within(edgePanel()).getByRole("button", { name: "Remove edge" }));
     expect(planOf(flows).edges).toEqual([blocks("e2", "t1", "x1")]);
-    expect(planOf(flows).items).toHaveLength(9);
+    expect(planOf(flows).items).toHaveLength(8);
   });
 
   it("FLO-FR-CEVI: a press on an edge's path selects it", async () => {
@@ -271,9 +330,9 @@ describe("how an edge is drawn (FLO-FR-48, FLO-FR-39)", () => {
 
   it("FLO-FR-39: an edge to a container lands on the container's border", async () => {
     const b = flowBackend(plan([
-      item("d1", "deliverable", { size: { width: 300, height: 200 } }),
-      item("d2", "deliverable", { position: { x: 500, y: 0 }, size: { width: 300, height: 200 } }),
-    ], [blocks("e1", "d1", "d2")]));
+      item("m1", "milestone", { size: { width: 300, height: 200 } }),
+      item("m2", "milestone", { position: { x: 500, y: 0 }, size: { width: 300, height: 200 } }),
+    ], [blocks("e1", "m1", "m2")]));
     await renderFlow(b);
 
     expect(screen.getByTestId("flow-edge-path-e1").getAttribute("d")).toBe(

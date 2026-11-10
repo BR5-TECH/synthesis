@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import * as api from "../../api";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
@@ -13,7 +13,7 @@ import {
   type FlowItemKind,
 } from "../../state/flowDocument";
 import type { DraftSummary, ItemDeliveryState } from "../../types";
-import type { Reference } from "./geometry";
+import type { PanelPlacement, Reference } from "./geometry";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { ArtifactPicker, ReferenceRows } from "./references";
 
@@ -27,7 +27,9 @@ export interface SelectionPanelProps {
   paths: string[];
   treeLoaded: boolean;
   inert: boolean;
-  at: { left: number; top: number; maxHeight?: number };
+  at: PanelPlacement;
+  /** The height of the panel's content, which decides where it opens. */
+  onMeasure?: (height: number) => void;
   onRename: () => void;
   onRemove: () => void;
   onDescribe: (text: string) => void;
@@ -129,6 +131,15 @@ export function SelectionPanel(props: SelectionPanelProps) {
   const kinds = allowedKinds(doc, item.id);
   const link = syncLinkOf(doc, item.id);
   const [drafts, setDrafts] = useState<DraftSummary[] | null>(null);
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  const { onMeasure } = props;
+
+  // FLO layout notes: the content's full height, also while the panel is
+  // bound and scrolls, so the canvas can open the panel where it fits.
+  useLayoutEffect(() => {
+    const el = fieldsRef.current;
+    if (el && el.scrollHeight > 0) onMeasure?.(el.scrollHeight + 2);
+  });
 
   // FLO-FR-RMVR: the worktree's drafts, read when a task or a defect is selected.
   useEffect(() => {
@@ -162,9 +173,15 @@ export function SelectionPanel(props: SelectionPanelProps) {
       role="region"
       aria-label={`Edit ${kindLabel(item.kind).toLowerCase()} ${item.name}`}
       data-testid="flow-selection-panel"
-      style={{ left: props.at.left, top: props.at.top, maxHeight: props.at.maxHeight }}
+      data-placement={props.at.placement}
+      style={{
+        left: props.at.left,
+        top: props.at.top,
+        bottom: props.at.bottom,
+        maxHeight: props.at.maxHeight,
+      }}
     >
-      <div className="flow-panel__fields">
+      <div className="flow-panel__fields" ref={fieldsRef}>
         <fieldset className="flow-panel__fieldset" disabled={inert}>
           <div className="flow-panel__row flow-panel__row--head">
             <span className="flow-panel__title">

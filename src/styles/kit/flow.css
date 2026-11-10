@@ -241,7 +241,7 @@ button.flow-ref:hover { border-color: var(--border-3); color: var(--fg-1); }
   border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--bg-sunken) 55%, transparent);
 }
-.flow-ctr[data-kind="deliverable"] {
+.flow-ctr[data-kind="milestone"] {
   border-width: 1.5px;
   border-color: var(--border-3);
   background: color-mix(in srgb, var(--bg-sunken) 30%, transparent);
@@ -552,11 +552,27 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
   border-top: 1px solid var(--accent);
   transform: rotate(45deg);
 }
+/* Opened above the item when the room below is short: the pointer is at the foot. */
+.flow-panel[data-placement="above"]::before {
+  top: auto;
+  bottom: -6px;
+  transform: rotate(225deg);
+}
 .flow-panel__fields {
   padding: 9px 10px 10px;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  /* A bound panel scrolls inside itself (FLO layout notes). A soft edge shows
+     at the top or the bottom while more of the panel is past that edge: the
+     covers scroll with the content and hide each edge at its own end. */
+  background:
+    linear-gradient(var(--bg-elevated) 40%, transparent) top / 100% 24px no-repeat local,
+    linear-gradient(transparent, var(--bg-elevated) 60%) bottom / 100% 24px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--fg-1) 20%, transparent), transparent) top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--fg-1) 20%, transparent), transparent) bottom / 100% 10px no-repeat scroll;
+  border-radius: inherit;
   display: flex;
   flex-direction: column;
   gap: 6px;

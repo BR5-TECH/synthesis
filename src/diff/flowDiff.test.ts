@@ -25,7 +25,7 @@ function flow(doc: {
   });
 }
 
-const CONTAINERS = new Set(["deliverable", "milestone", "epic", "feature"]);
+const CONTAINERS = new Set(["milestone", "epic", "feature"]);
 
 const it_ = (id: string, kind: string, name: string, extra: Obj = {}): Obj => ({
   id,
@@ -40,9 +40,8 @@ const task = (id: string, name: string, extra: Obj = {}) =>
   it_(id, "task", name, { parentId: "f1", ...extra });
 
 const feature = it_("f1", "feature", "Capture", { parentId: "m1" });
-const milestone = it_("m1", "milestone", "Beta", { parentId: "d1" });
-const deliverable = it_("d1", "deliverable", "Payments");
-const frame = [deliverable, milestone, feature];
+const milestone = it_("m1", "milestone", "Beta");
+const frame = [milestone, feature];
 
 const edge = (id: string, from: string, to: string, type = "blocks") => ({ id, from, to, type });
 
@@ -106,7 +105,7 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
       flow({ items: [...frame, task("t1", "Tokenize")] }),
       flow({ items: [...frame, task("t1", "Tokenize cards")] }),
     );
-    expect(list.filter((e) => e.kind === "item")).toHaveLength(4);
+    expect(list.filter((e) => e.kind === "item")).toHaveLength(3);
     expect(byKey(list, "item:t1")).toMatchObject({
       status: "changed",
       facts: [{ label: "Name", status: "changed", before: "Tokenize", after: "Tokenize cards" }],
@@ -180,11 +179,10 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
 
   it("DFV-FR-RGBK: the draft link, the due date and the local-only flag are facts", () => {
     const list = entries(
-      flow({ items: [deliverable, it_("m1", "milestone", "Beta", { parentId: "d1" }), feature, task("t1", "A", { draftId: "dr1" })] }),
+      flow({ items: [milestone, feature, task("t1", "A", { draftId: "dr1" })] }),
       flow({
         items: [
-          deliverable,
-          it_("m1", "milestone", "Beta", { parentId: "d1", due: "2027-03-31" }),
+          it_("m1", "milestone", "Beta", { due: "2027-03-31" }),
           feature,
           task("t1", "A", { draftId: "dr2", localOnly: true }),
         ],
@@ -270,24 +268,25 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     ]);
   });
 
-  it("DFV-FR-RGBK: a move to the top level names the top level", () => {
+  it("DFV-FR-RGBK: a move to another container names both containers", () => {
+    const other = it_("m2", "milestone", "Other");
     const list = entries(
-      flow({ items: [deliverable, it_("d2", "deliverable", "Other"), it_("m1", "milestone", "Beta", { parentId: "d1" })] }),
-      flow({ items: [deliverable, it_("d2", "deliverable", "Other"), it_("m1", "milestone", "Beta", { parentId: "d2" })] }),
+      flow({ items: [milestone, other, it_("ep1", "epic", "Checkout", { parentId: "m1" })] }),
+      flow({ items: [milestone, other, it_("ep1", "epic", "Checkout", { parentId: "m2" })] }),
     );
-    expect(byKey(list, "item:m1").facts).toEqual([
-      { label: "Container", status: "changed", before: "Payments", after: "Other" },
+    expect(byKey(list, "item:ep1").facts).toEqual([
+      { label: "Container", status: "changed", before: "Beta", after: "Other" },
     ]);
   });
 
-  it("DFV-FR-RGBK: a deliverable that loses its parent names the top level", () => {
-    // A deliverable never has a parent in a valid plan; the diff reads any revision.
+  it("DFV-FR-RGBK: a milestone that loses its parent names the top level", () => {
+    // A milestone never has a parent in a valid plan; the diff reads any revision.
     const list = entries(
-      flow({ items: [deliverable, it_("d2", "deliverable", "Other", { parentId: "d1" })] }),
-      flow({ items: [deliverable, it_("d2", "deliverable", "Other")] }),
+      flow({ items: [milestone, it_("m2", "milestone", "Other", { parentId: "m1" })] }),
+      flow({ items: [milestone, it_("m2", "milestone", "Other")] }),
     );
-    expect(byKey(list, "item:d2").facts).toEqual([
-      { label: "Container", status: "changed", before: "Payments", after: "(top level)" },
+    expect(byKey(list, "item:m2").facts).toEqual([
+      { label: "Container", status: "changed", before: "Beta", after: "(top level)" },
     ]);
   });
 
@@ -304,22 +303,22 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
   });
 
   it("DFV-FR-RGBK: a due date changed and removed, and a local-only flag removed", () => {
-    const due = (d?: string) => it_("m1", "milestone", "Beta", { parentId: "d1", ...(d ? { due: d } : {}) });
-    expect(byKey(entries(flow({ items: [deliverable, due("2027-01-01")] }), flow({ items: [deliverable, due("2027-02-01")] })), "item:m1").facts).toEqual([
+    const due = (d?: string) => it_("m1", "milestone", "Beta", d ? { due: d } : {});
+    expect(byKey(entries(flow({ items: [due("2027-01-01")] }), flow({ items: [due("2027-02-01")] })), "item:m1").facts).toEqual([
       { label: "Due", status: "changed", before: "2027-01-01", after: "2027-02-01" },
     ]);
-    expect(byKey(entries(flow({ items: [deliverable, due("2027-01-01")] }), flow({ items: [deliverable, due()] })), "item:m1").facts).toEqual([
+    expect(byKey(entries(flow({ items: [due("2027-01-01")] }), flow({ items: [due()] })), "item:m1").facts).toEqual([
       { label: "Due", status: "removed", before: "2027-01-01" },
     ]);
     expect(
-      byKey(entries(flow({ items: [it_("d1", "deliverable", "P", { localOnly: true })] }), flow({ items: [deliverable] })), "item:d1").facts,
+      byKey(entries(flow({ items: [it_("m1", "milestone", "P", { localOnly: true })] }), flow({ items: [milestone] })), "item:m1").facts,
     ).toContainEqual({ label: "Local only", status: "removed", before: "Yes" });
   });
 
   it("DFV-FR-33: a revision with two items of one id or two edges on one pair is reported, not paired", () => {
-    const twice = flow({ items: [deliverable, it_("d1", "deliverable", "Again")] });
+    const twice = flow({ items: [milestone, it_("m1", "milestone", "Again")] });
     const r = flowDiff(twice, flow({}));
-    expect(r.ok ? "" : r.error).toMatch(/^old revision: more than one item carries the id "d1"/);
+    expect(r.ok ? "" : r.error).toMatch(/^old revision: more than one item carries the id "m1"/);
     const items = [...frame, task("t1", "A"), task("t2", "B")];
     const pair = flow({ items, edges: [edge("e1", "t1", "t2"), edge("e2", "t2", "t1", "relates")] });
     const p = flowDiff(flow({ items }), pair);
@@ -355,7 +354,7 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
       { label: "Container", status: "unchanged", before: "Capture" },
     ]);
     // A top-level item has no container fact.
-    expect(byKey(entries(flow({ items: [deliverable] }), flow({})), "item:d1").facts).toEqual([]);
+    expect(byKey(entries(flow({ items: [milestone] }), flow({})), "item:m1").facts).toEqual([]);
   });
 
   it("DFV-FR-33: a revision that is not a version 2 Flow is reported, not compared", () => {
@@ -484,14 +483,14 @@ describe("flowDiff: the Flow's own fields (DFV-FR-33, DFV-FR-RGBK)", () => {
   });
 
     it("DFV-FR-33: a missing revision reads as an empty plan, and the Flow's entry goes with the file", () => {
-    const added = entries(null, flow({ name: "New", items: [deliverable] }));
+    const added = entries(null, flow({ name: "New", items: [milestone] }));
     expect(byKey(added, "flow")).toMatchObject({
       status: "added",
       titleBefore: null,
       titleAfter: "Flow",
       facts: [{ label: "Name", status: "unchanged", after: "New" }],
     });
-    expect(byKey(added, "item:d1").status).toBe("added");
+    expect(byKey(added, "item:m1").status).toBe("added");
     const removed = entries(flow({ name: "Old" }), null);
     expect(byKey(removed, "flow")).toMatchObject({
       status: "removed",
@@ -521,7 +520,7 @@ describe("what each mode shows (DFV-FR-34)", () => {
 
   it("DFV-FR-34: unified shows only what changed, and only the facts that differ", () => {
     const list = entries(before, after);
-    expect(list.map((e) => e.key)).toEqual(["flow", "item:d1", "item:m1", "item:f1", "item:t1"]);
+    expect(list.map((e) => e.key)).toEqual(["flow", "item:m1", "item:f1", "item:t1"]);
     const changed = changedOnly(list);
     expect(changed.map((e) => e.key)).toEqual(["item:t1"]);
     expect(changedFacts(changed[0])).toEqual([
@@ -541,7 +540,6 @@ describe("what each mode shows (DFV-FR-34)", () => {
       flow({ items: [...frame, task("t1", "A"), task("t3", "C")] }),
     );
     expect(list.filter((e) => e.kind === "item").map((e) => e.key)).toEqual([
-      "item:d1",
       "item:m1",
       "item:f1",
       "item:t1",

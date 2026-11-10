@@ -15,9 +15,8 @@ import { githubPollingErrorMessage, refusalCode } from "../state/githubPolling";
 import type { FlowTrackerSettings, MetadataList, PublicationIssueType } from "../types";
 import { KIND_GLYPHS } from "./Flow/kindGlyphs";
 
-/** SET-FR-ZJRC: the five issue kinds, in hierarchy order. */
-const KINDS: { key: keyof FlowTrackerSettings; kind: "deliverable" | "epic" | "feature" | "task" | "defect"; label: string }[] = [
-  { key: "deliverableType", kind: "deliverable", label: "Deliverable" },
+/** SET-FR-ZJRC: the four issue kinds, in hierarchy order. */
+const KINDS: { key: keyof FlowTrackerSettings; kind: "epic" | "feature" | "task" | "defect"; label: string }[] = [
   { key: "epicType", kind: "epic", label: "Epic" },
   { key: "featureType", kind: "feature", label: "Feature" },
   { key: "taskType", kind: "task", label: "Task" },
@@ -27,6 +26,14 @@ const KINDS: { key: keyof FlowTrackerSettings; kind: "deliverable" | "epic" | "f
 type TypeRead = { kind: "loading" } | { kind: "loaded"; names: string[] } | { kind: "unavailable" };
 
 const sameType = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** FTS-FR-ALOJ: the write carries the four Types and no other field. */
+const fourTypes = (s: FlowTrackerSettings): FlowTrackerSettings => ({
+  epicType: s.epicType,
+  featureType: s.featureType,
+  taskType: s.taskType,
+  defectType: s.defectType,
+});
 
 export function FlowSyncSettingsGroup() {
   const [settings, setSettings] = useState<FlowTrackerSettings | null>(null);
@@ -113,7 +120,7 @@ export function FlowSyncSettingsGroup() {
                   className="input input--sm"
                   value={stored}
                   disabled={saving}
-                  onChange={(e) => void save({ ...settings, [key]: e.target.value })}
+                  onChange={(e) => void save({ ...fourTypes(settings), [key]: e.target.value })}
                 >
                   {choices.map((name) => (
                     <option key={name} value={name}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ancestorsOf,
@@ -16,7 +16,7 @@ import { ActionControl } from "../ActionControl";
 import { Icon } from "../icons";
 import { Band } from "./Band";
 import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges } from "./edges";
-import { edgeMidpoint, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
+import { edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
 import { CardView, ContainerView, type ItemFacts, type ItemHandlers } from "./items";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { SelectionPanel } from "./SelectionPanel";
@@ -65,6 +65,18 @@ export function FlowCanvas(props: FlowCanvasProps) {
   const c = useFlowCanvas(props);
   const a = useItemActions(c, props);
   const { doc, session, sync, delivery, project, frames, view, inert } = c;
+  /** The measured height of the selected item's panel content. */
+  const [panelHeight, setPanelHeight] = useState<{ id: string; height: number } | null>(null);
+  const selectedId = c.selected?.id ?? null;
+  const onPanelMeasure = useCallback(
+    (height: number) => {
+      if (!selectedId) return;
+      setPanelHeight((prev) =>
+        prev?.id === selectedId && prev.height === height ? prev : { id: selectedId, height },
+      );
+    },
+    [selectedId],
+  );
 
   const byId = useMemo(
     () => new Map(project.artifacts.map((x) => [x.id, x])),
@@ -152,16 +164,14 @@ export function FlowCanvas(props: FlowCanvasProps) {
     const r = frames.rectOf(item.id);
     if (!r) return null;
     const below = isContainerKind(item.kind) ? r.y + CONTAINER_HEADER_H : r.y + r.height;
-    const at = toScreen(r.x, below);
+    const head = toScreen(r.x, r.y);
+    const foot = toScreen(r.x, below);
     const el = c.surfaceRef.current;
-    const width = el?.clientWidth ?? 0;
-    const height = el?.clientHeight ?? 0;
-    const top = at.top + 10;
-    return {
-      left: width > 0 ? Math.max(8, Math.min(at.left, width - 316)) : at.left,
-      top,
-      maxHeight: height > 0 ? Math.max(160, height - top - 52) : undefined,
-    };
+    return panelPlacement(
+      { left: head.left, top: head.top, bottom: foot.top },
+      { width: el?.clientWidth ?? 0, height: el?.clientHeight ?? 0 },
+      panelHeight?.id === item.id ? panelHeight.height : undefined,
+    );
   })();
 
   const edgeSelected = doc && c.selectedEdge ? doc.edges.find((e) => e.id === c.selectedEdge) : undefined;
@@ -344,6 +354,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
               treeLoaded={project.loaded}
               inert={inert}
               at={panelAt}
+              onMeasure={onPanelMeasure}
               onRename={() => c.setEditingName(c.selected!.id)}
               onRemove={() => a.requestRemove(c.selected!.id)}
               onDescribe={(text) => a.describe(c.selected!.id, text)}
@@ -384,7 +395,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
             />
           )}
 
-          {/* FLO-FR-07: one add affordance, a menu of the six kinds. */}
+          {/* FLO-FR-07: one add affordance, a menu of the five kinds. */}
           <div
             className="flow-addmenu"
             onKeyDown={(e) => {
@@ -495,7 +506,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
   );
 }
 
-/** FLO-FR-07: the six kinds, each with its glyph, in the action menu's treatment. */
+/** FLO-FR-07: the five kinds, each with its glyph, in the action menu's treatment. */
 function AddMenu({ onPick }: { onPick: (kind: (typeof ITEM_KINDS)[number]) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {

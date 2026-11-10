@@ -29,11 +29,11 @@ export const FLOW_BODY = JSON.stringify({
   name: "",
   items: [
     {
-      id: "d1",
-      kind: "deliverable",
+      id: "m1",
+      kind: "milestone",
       name: "A",
       position: { x: 0, y: 0 },
-      size: { width: 760, height: 480 },
+      size: { width: 640, height: 380 },
     },
   ],
   edges: [],

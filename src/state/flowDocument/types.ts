@@ -15,9 +15,8 @@ export interface FlowSize {
   height: number;
 }
 
-/** FLO-FR-06: the six kinds of a plan item. */
+/** FLO-FR-06: the five kinds of a plan item. */
 export type FlowItemKind =
-  | "deliverable"
   | "milestone"
   | "epic"
   | "feature"
@@ -26,7 +25,6 @@ export type FlowItemKind =
 
 /** The order the add menu offers the kinds in (FLO-FR-07). */
 export const ITEM_KINDS: readonly FlowItemKind[] = [
-  "deliverable",
   "milestone",
   "epic",
   "feature",
@@ -45,8 +43,7 @@ export function isContainerKind(kind: FlowItemKind): boolean {
 export const PERMITTED_PARENTS: Readonly<
   Record<FlowItemKind, readonly (FlowItemKind | null)[]>
 > = {
-  deliverable: [null],
-  milestone: ["deliverable"],
+  milestone: [null],
   epic: ["milestone"],
   feature: ["milestone", "epic"],
   task: ["feature"],
@@ -123,6 +120,11 @@ export interface SyncLink {
 export interface FlowSync {
   tracker: "github";
   links: SyncLink[];
+  /**
+   * FTS-FR-YHVD: the tracker items a sync never creates or pulls. Absent from
+   * the file when empty (FGV-FR-01).
+   */
+  ignored?: TrackerRef[];
 }
 
 export interface FlowDocument {
@@ -144,7 +146,6 @@ export const FLOW_VERSION = 2;
 
 /** FLO-FR-07: what a freshly added item of each kind is called. */
 export const DEFAULT_ITEM_NAMES: Readonly<Record<FlowItemKind, string>> = {
-  deliverable: "New deliverable",
   milestone: "New milestone",
   epic: "New epic",
   feature: "New feature",
@@ -154,9 +155,8 @@ export const DEFAULT_ITEM_NAMES: Readonly<Record<FlowItemKind, string>> = {
 
 /** FLO-FR-07: the size a new, empty container of each kind arrives at. */
 export const DEFAULT_CONTAINER_SIZES: Readonly<
-  Record<"deliverable" | "milestone" | "epic" | "feature", FlowSize>
+  Record<"milestone" | "epic" | "feature", FlowSize>
 > = {
-  deliverable: { width: 760, height: 480 },
   milestone: { width: 640, height: 380 },
   epic: { width: 520, height: 300 },
   feature: { width: 400, height: 220 },

@@ -123,6 +123,27 @@ export function flowBackend(doc: FlowDocument | string): FlowBackend {
   return b;
 }
 
+/** Advance the fake clock, and let the promises its timers start settle. */
+export async function advance(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+/**
+ * Run what the fake clock still holds, then go back to real timers. Call in
+ * `afterEach`, before `cleanup`, so no timer that a test started under the
+ * fake clock is left behind, never to run.
+ */
+export async function endFakeTimers() {
+  for (let round = 0; round < 5 && vi.isFakeTimers() && vi.getTimerCount() > 0; round += 1) {
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+  }
+  vi.useRealTimers();
+}
+
 /** The calls of one command, in order. */
 export const callsOf = (b: FlowBackend, cmd: string) =>
   b.calls.filter((c) => c.cmd === cmd).map((c) => c.args);

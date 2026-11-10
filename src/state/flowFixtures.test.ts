@@ -65,5 +65,6 @@ describe("every committed Flow fixture (FGV-FR-01, FLO-FR-03)", () => {
     expect(new Set(links.map((l) => l.ref.kind))).toEqual(new Set(["issue", "milestone"]));
     expect(links.some((l) => l.base.parent)).toBe(true);
     expect(links.some((l) => (l.base.blockedBy ?? []).length > 0)).toBe(true);
+    expect(docs.some((d) => (d.sync?.ignored ?? []).length > 0), "sync.ignored").toBe(true);
   });
 });

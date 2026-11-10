@@ -42,7 +42,7 @@ afterEach(() => {
 const refusal = () => screen.getByTestId("flow-refusal");
 
 describe("the add menu (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
-  it("FLO-FR-07: the add affordance opens a menu of the six kinds, each with its glyph", async () => {
+  it("FLO-FR-07: the add affordance opens a menu of the five kinds, each with its glyph", async () => {
     const b = flowBackend("");
     await renderFlow(b);
 
@@ -50,7 +50,6 @@ describe("the add menu (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
     const menu = screen.getByTestId("flow-add-menu");
     const entries = within(menu).getAllByRole("menuitem");
     expect(entries.map((e) => e.textContent)).toEqual([
-      `${KIND_GLYPHS.deliverable}Deliverable`,
       `${KIND_GLYPHS.milestone}Milestone`,
       `${KIND_GLYPHS.epic}Epic`,
       `${KIND_GLYPHS.feature}Feature`,
@@ -62,14 +61,14 @@ describe("the add menu (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
     expect(screen.queryByTestId("flow-add-menu")).toBeNull();
   });
 
-  it("FLO-FR-07, FLO-FR-42: a deliverable added to an empty plan is a top-level item, and it is selected", async () => {
+  it("FLO-FR-07, FLO-FR-42: a milestone added to an empty plan is a top-level item, and it is selected", async () => {
     const b = flowBackend("");
     const { flows } = await renderFlow(b);
 
-    await addFromMenu("deliverable");
+    await addFromMenu("milestone");
     const added = planOf(flows).items;
     expect(added).toHaveLength(1);
-    expect(added[0]).toMatchObject({ kind: "deliverable", name: "New deliverable" });
+    expect(added[0]).toMatchObject({ kind: "milestone", name: "New milestone" });
     expect(added[0].parentId).toBeUndefined();
     expect(itemEl(added[0].id)).toHaveAttribute("data-selected", "true");
   });
@@ -168,7 +167,7 @@ describe("moving items (FLO-FR-21, FLO-FR-42, FLO-FR-OAOZ, FLO-FR-GZCH)", () => 
 
 describe("containers (FLO-FR-38, FLO-FR-44, FLO-FR-45, FLO-FR-ZASL)", () => {
   it("FLO-FR-38: a container renders its header with glyph, name, due date, status chip, and its members' region", async () => {
-    const b = flowBackend(plan([item("d1", "deliverable"), item("m1", "milestone", { parentId: "d1", due: "2099-01-31", position: { x: 20, y: 60 } })]));
+    const b = flowBackend(plan([item("m1", "milestone", { due: "2099-01-31", position: { x: 20, y: 60 } })]));
     b.delivery = { items: [itemState("m1", "in_progress")] };
     await renderFlow(b);
 
@@ -218,12 +217,13 @@ describe("containers (FLO-FR-38, FLO-FR-44, FLO-FR-45, FLO-FR-ZASL)", () => {
   });
 
   it("FLO-FR-45: a container that holds nothing is removed with its edges, with no question", async () => {
-    const b = flowBackend(plan([item("d1", "deliverable"), item("d2", "deliverable", { position: { x: 900, y: 0 } })], [blocks("e1", "d1", "d2")]));
+    const b = flowBackend(plan([item("m1", "milestone"), item("m2", "milestone", { position: { x: 900, y: 0 } })], [blocks("e1", "m1", "m2")]));
     const { flows } = await renderFlow(b);
 
-    selectItem("d1");
+    selectItem("m1");
     await userEvent.click(within(panel()).getByRole("button", { name: "Remove" }));
-    expect(planOf(flows).items.map((i) => i.id)).toEqual(["d2"]);
+    expect(screen.queryByTestId("flow-remove-confirm")).toBeNull();
+    expect(planOf(flows).items.map((i) => i.id)).toEqual(["m2"]);
     expect(planOf(flows).edges).toEqual([]);
   });
 
@@ -236,12 +236,28 @@ describe("containers (FLO-FR-38, FLO-FR-44, FLO-FR-45, FLO-FR-ZASL)", () => {
     const ask = screen.getByTestId("flow-remove-confirm");
     expect(ask).toHaveTextContent("Remove M1 and the 7 items under it?");
     await userEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
-    expect(planOf(flows).items).toHaveLength(9);
+    expect(planOf(flows).items).toHaveLength(8);
+    expect(planOf(flows).edges).toHaveLength(1);
 
     await userEvent.click(within(panel()).getByRole("button", { name: "Remove" }));
     await userEvent.click(within(screen.getByTestId("flow-remove-confirm")).getByRole("button", { name: "Remove" }));
-    expect(planOf(flows).items.map((i) => i.id)).toEqual(["d1"]);
+    expect(planOf(flows).items).toEqual([]);
     expect(planOf(flows).edges).toEqual([]);
+  });
+
+  it("FLO-FR-45: removing a container that holds one item says \"1 item\", and an edge from outside it to that item goes", async () => {
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), blocks("e2", "t1", "x1")]));
+    const { flows } = await renderFlow(b);
+
+    selectItem("f2");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Remove" }));
+    const ask = screen.getByTestId("flow-remove-confirm");
+    expect(ask).toHaveTextContent("Remove F2 and the 1 item under it?");
+    await userEvent.click(within(ask).getByRole("button", { name: "Remove" }));
+    const doc = planOf(flows);
+    expect(doc.items.map((i) => i.id)).toEqual(["m1", "f1", "t1", "t2", "ep1", "x1"]);
+    // t1 is outside f2, and its edge to t3 went with t3; its other edge stays.
+    expect(doc.edges).toEqual([blocks("e2", "t1", "x1")]);
   });
 
   it("FLO-FR-08: removing a task removes every edge it is an end of", async () => {
@@ -320,7 +336,43 @@ describe("kind changes (FLO-FR-HGIY)", () => {
     expect(kinds).toEqual(["epic", "feature", "defect"]);
   });
 
-  it("FLO-FR-HGIY: a task with a draft and a footprint asks before it becomes a feature; confirm removes them", async () => {
+  it("FLO-FR-HGIY: the kind choice of a container offers only the kinds its members can sit in", async () => {
+    const b = flowBackend(samplePlan());
+    await renderFlow(b);
+    const kindsOf = (id: string) => {
+      selectItem(id);
+      return within(within(panel()).getByRole("combobox", { name: "Kind" }))
+        .getAllByRole("option")
+        .map((o) => (o as HTMLOptionElement).value);
+    };
+
+    // f1 holds tasks, which only a feature holds.
+    expect(kindsOf("f1")).toEqual(["feature"]);
+    // ep1 holds a feature, which a feature cannot hold; an epic is all that is left.
+    expect(kindsOf("ep1")).toEqual(["epic"]);
+  });
+
+  it("FLO-FR-HGIY: Cancel on the question keeps the kind, the draft link, and the footprint", async () => {
+    const b = flowBackend(plan([
+      item("m1", "milestone"),
+      item("x1", "defect", { parentId: "m1", draftId: "d-1", footprint: ["src/"], position: { x: 20, y: 60 } }),
+    ]));
+    const { flows } = await renderFlow(b);
+    const before = planOf(flows);
+
+    selectItem("x1");
+    await userEvent.selectOptions(within(panel()).getByRole("combobox", { name: "Kind" }), "epic");
+    const ask = screen.getByTestId("flow-kind-confirm");
+    expect(ask).toHaveTextContent("Change X1 to epic? This removes its draft link and its footprint.");
+    await userEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByTestId("flow-kind-confirm")).toBeNull();
+    expect(planOf(flows)).toBe(before);
+    expect(findItem(planOf(flows), "x1")).toMatchObject({ kind: "defect", draftId: "d-1", footprint: ["src/"] });
+    expect(within(panel()).getByRole("combobox", { name: "Kind" })).toHaveValue("defect");
+    expect(flows.get(ID)!.dirty).toBe(false);
+  });
+
+  it("FLO-FR-HGIY: a defect with a draft and a footprint asks before it becomes a feature; confirm removes them", async () => {
     const b = flowBackend(plan([
       item("m1", "milestone"),
       item("x1", "defect", { parentId: "m1", draftId: "d-1", footprint: ["src/"], position: { x: 20, y: 60 } }),
@@ -358,7 +410,14 @@ describe("a pointer that leaves the canvas", () => {
 
     fireEvent.pointerDown(itemEl("t1"), { pointerId: 1, buttons: 1, ...client({ x: 70, y: 190 }) });
     fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 90, y: 200 }) });
+    // The drag is in flight: the card follows the pointer.
+    expect(itemEl("t1").style.left).toBe("80px");
+    // A move with no button held means the release happened outside the canvas.
     fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 0, ...client({ x: 95, y: 205 }) });
+    expect(itemEl("t1").style.left).toBe("60px");
+    // A later release lands nothing: the drag was abandoned, not held.
+    fireEvent.pointerUp(canvas(), { pointerId: 1, ...client({ x: 95, y: 205 }) });
     expect(findItem(planOf(flows), "t1")!.position).toEqual({ x: 20, y: 60 });
+    expect(flows.get(ID)!.dirty).toBe(false);
   });
 });

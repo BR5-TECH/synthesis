@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
@@ -10,11 +10,12 @@ import {
   callsOf,
   clearFlowStores,
   emptyResult,
+  endFakeTimers,
   flowBackend,
   planOf,
   renderFlow,
 } from "../test/flowCanvasHarness";
-import { ID, itemEl, panel, selectItem } from "../test/flowFixtures";
+import { canvas, client, dragItem, ID, itemEl, panel, selectItem } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
 import { issueBase, issueRef, samplePlan } from "../test/flowPlanFixtures";
 
@@ -31,7 +32,8 @@ beforeEach(() => {
   resetListeners();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await endFakeTimers();
   cleanup();
   clearFlowStores();
 });
@@ -61,17 +63,26 @@ describe("the Sync control (FLO-FR-AKMV)", () => {
 
   it("FLO-FR-AKMV: a synced Flow offers Sync, and a sync first writes the pending changes", async () => {
     const b = flowBackend(synced());
-    b.on.sync_flow_with_tracker = () => emptyResult();
-    await renderFlow(b);
-
+    /** What was on disk when the sync started. */
+    let onDisk: string[] | null = null;
+    b.on.sync_flow_with_tracker = () => {
+      onDisk = [...b.writes];
+      return emptyResult();
+    };
+    const { flows } = await renderFlow(b);
     expect(within(band()).getByRole("button", { name: "Sync" })).toBeInTheDocument();
     expect(within(band()).getByText("acme/payments")).toBeInTheDocument();
-    await userEvent.type(screen.getByRole("textbox", { name: "Flow description" }), "Q3");
-    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
-    await waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(1));
-    const order = b.calls.map((c) => c.cmd);
-    expect(order.lastIndexOf("save_artifact_contents")).toBeLessThan(order.indexOf("sync_flow_with_tracker"));
-    expect(JSON.parse(b.writes[b.writes.length - 1]).description).toBe("Q3");
+    // The clock is held below the rest, so only the sync can write the edit.
+    vi.useFakeTimers();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "Q3" } });
+    expect(flows.hasPendingWrite(ID)).toBe(true);
+    expect(b.writes).toEqual([]);
+    fireEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await vi.waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(1));
+    expect(onDisk).toHaveLength(1);
+    expect(JSON.parse(onDisk![0]).description).toBe("Q3");
+    expect(flows.hasPendingWrite(ID)).toBe(false);
   });
 
   it("FLO-FR-AKMV, FLO-FR-47: a write that is refused before the sync starts no sync", async () => {
@@ -115,6 +126,55 @@ describe("while a sync runs (FLO-FR-KHBY)", () => {
     expect(screen.getByRole("textbox", { name: "Flow name" })).toBeEnabled();
   });
 
+  it("FLO-FR-KHBY: while a sync runs, a drag, a connection and a resize do nothing", async () => {
+    const b = flowBackend(synced());
+    b.on.sync_flow_with_tracker = () => new Promise(() => {});
+    const { flows } = await renderFlow(b);
+
+    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await within(band()).findByRole("button", { name: /Syncing/ });
+    const before = planOf(flows);
+
+    dragItem("t1", { x: 70, y: 190 }, { x: 620, y: 300 });
+    fireEvent.pointerDown(within(itemEl("t1")).getByLabelText("Connect from T1"), { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
+    expect(screen.queryByTestId("flow-connection")).toBeNull();
+    fireEvent.pointerUp(itemEl("t3"), { pointerId: 1 });
+    // A container offers no resize handle while the tab is inert.
+    expect(screen.queryByTestId("flow-resize-f1-se")).toBeNull();
+    fireEvent.pointerDown(itemEl("f1").querySelector(".flow-ctr__head") as HTMLElement, { pointerId: 1, buttons: 1, clientX: 500, clientY: 500 });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, clientX: 700, clientY: 700 });
+    fireEvent.pointerUp(canvas(), { pointerId: 1 });
+    expect(itemEl("f1").style.width).toBe("420px");
+
+    expect(planOf(flows)).toBe(before);
+    expect(itemEl("t1").style.left).toBe("60px");
+    expect(flows.get(ID)!.dirty).toBe(false);
+  });
+
+  it("FLO-FR-KHBY: after a sync error, every edit affordance returns", async () => {
+    const b = flowBackend(synced());
+    let fail!: (e: unknown) => void;
+    b.on.sync_flow_with_tracker = () => new Promise((_, rej) => (fail = rej));
+    const { flows } = await renderFlow(b);
+    selectItem("t1");
+
+    await userEvent.click(within(band()).getByRole("button", { name: "Sync" }));
+    await within(band()).findByRole("button", { name: /Syncing/ });
+    expect(screen.getByRole("button", { name: "Add to plan" })).toBeDisabled();
+    await act(async () => fail({ code: "github_unreachable", message: "GitHub did not answer." }));
+    await screen.findByTestId("flow-sync-error");
+
+    await waitFor(() => expect(within(band()).getByRole("button", { name: "Sync" })).toBeEnabled());
+    expect(screen.getByRole("textbox", { name: "Flow name" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add to plan" })).toBeEnabled();
+    expect(within(panel()).getByRole("textbox", { name: "Description" })).toBeEnabled();
+    expect(within(itemEl("t2")).getByRole("button", { name: "Create draft" })).toBeEnabled();
+    expect(screen.getByTestId("flow-resize-f1-se")).toBeInTheDocument();
+    // A drag lands again.
+    dragItem("t1", { x: 70, y: 190 }, { x: 80, y: 220 }, 4);
+    expect(findItem(planOf(flows), "t1")!.position).toEqual({ x: 30, y: 90 });
+  });
+
   it("FLO-FR-KHBY, FLO-FR-31: when the sync returns, the tab reloads the plan the sync wrote", async () => {
     const b = flowBackend(synced());
     b.on.sync_flow_with_tracker = () => {
@@ -149,7 +209,14 @@ describe("the result of a sync (FLO-FR-WLHA)", () => {
             url: null,
           },
         ],
-        skipped: [{ number: 58, title: "Load test plan", reason: "no_kind_fits" }],
+        skipped: [
+          {
+            number: 58,
+            title: "Load test plan",
+            url: "https://github.com/acme/payments/issues/58",
+            reason: "no_kind_fits",
+          },
+        ],
       });
     await renderFlow(b);
 

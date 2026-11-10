@@ -57,10 +57,10 @@ describe("moveItem (FLO-FR-21, FLO-FR-42, FLO-FR-OAOZ)", () => {
     expect(findItem(doc, "t1")).toBe(findItem(before, "t1"));
   });
 
-  it("FLO-FR-42: a drop of a deliverable on open canvas keeps it at the top level", () => {
-    const doc = ok(moveItem(samplePlan(), "d1", { x: 5, y: 6 }));
-    expect(findItem(doc, "d1")).toMatchObject({ position: { x: 5, y: 6 } });
-    expect("parentId" in findItem(doc, "d1")!).toBe(false);
+  it("FLO-FR-42: a drop of a milestone on open canvas keeps it at the top level", () => {
+    const doc = ok(moveItem(samplePlan(), "m1", { x: 5, y: 6 }));
+    expect(findItem(doc, "m1")).toMatchObject({ position: { x: 5, y: 6 } });
+    expect("parentId" in findItem(doc, "m1")!).toBe(false);
   });
 
   it("FLO-FR-42: a drop changes no edge", () => {
@@ -78,7 +78,7 @@ describe("moveItem (FLO-FR-21, FLO-FR-42, FLO-FR-OAOZ)", () => {
       code: "invalid_parent_kind",
       permitted: ["feature"],
     });
-    expect(refusal(moveItem(samplePlan(), "f2", { x: 0, y: 0 }, "d1"))).toEqual({
+    expect(refusal(moveItem(samplePlan(), "f2", { x: 0, y: 0 }))).toEqual({
       code: "invalid_parent_kind",
       permitted: ["milestone", "epic"],
     });
@@ -244,6 +244,16 @@ describe("the tracker connection (FLO-FR-AKMV, FLO-FR-TYEZ, FLO-FR-ULEM)", () =>
     });
     // The same number in another repository is another reference.
     expect(setSyncLink(doc, "f2", issueRef(42, "billing"), issueBase("B")).ok).toBe(true);
+  });
+
+  it("FLO-FR-TYEZ, FGV-FR-TLMV: a link to an ignored tracker item takes it off the ignored list", () => {
+    const doc = { ...connectSync(samplePlan()) };
+    doc.sync = { tracker: "github", links: [], ignored: [issueRef(47), issueRef(48)] };
+    const next = ok(setSyncLink(doc, "f1", issueRef(47), issueBase("A")));
+    expect(next.sync?.ignored).toEqual([issueRef(48)]);
+    const last = ok(setSyncLink(next, "f2", issueRef(48), issueBase("B")));
+    // An empty list is absent (FGV-FR-01).
+    expect(last.sync && "ignored" in last.sync).toBe(false);
   });
 
   it("FLO-FR-TYEZ: an item with a link, a Flow with no sync section, or an unknown item is refused", () => {

@@ -154,7 +154,15 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
       .catch((e) => {
         logWarn(["frontend"], "flow reference did not open", {
           artifact: artifact.id,
-          reason: String(e),
+          code: (e as { code?: string })?.code ?? "",
+        });
+        // FLO-FR-12: a reference that does not open says why (NTF-FR-TSRL).
+        showToast({
+          key: `flow-reference:${artifact.id}`,
+          level: "Error",
+          title: `${artifact.displayName} not opened`,
+          body: errorText(e),
+          address: null,
         });
       });
   };
@@ -223,7 +231,20 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
     }
     void Promise.resolve()
       .then(() => api.openDraft(draftId))
-      .catch((e) => logWarn(["frontend"], "flow draft did not open", { reason: String(e) }));
+      .catch((e) => {
+        logWarn(["frontend"], "flow draft did not open", {
+          draft: draftId,
+          code: (e as { code?: string })?.code ?? "",
+        });
+        // A draft that does not open says why (NTF-FR-TSRL).
+        showToast({
+          key: `flow-draft:${draftId}`,
+          level: "Error",
+          title: "Draft not opened",
+          body: errorText(e),
+          address: null,
+        });
+      });
   };
 
   /** FLO-FR-RMVR: link a draft, or unlink with null. The draft is not changed. */

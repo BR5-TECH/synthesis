@@ -47,8 +47,15 @@ export const FLOW_PLAN = {
   description: "Card payments for the EU launch.",
   references: ["flows/payments-hld.md", "specifications/ui/LIB-library.md"],
   items: [
-    { id: "d1", kind: "deliverable", name: "Card payments", position: { x: 0, y: 0 }, size: { width: 1330, height: 590 } },
-    { id: "m1", kind: "milestone", name: "Beta", parentId: "d1", due: "2027-03-31", position: { x: 16, y: 48 }, size: { width: 928, height: 526 } },
+    {
+      id: "m1",
+      kind: "milestone",
+      name: "Beta",
+      description: "Accept **Visa** and **Mastercard**.",
+      due: "2027-03-31",
+      position: { x: 16, y: 48 },
+      size: { width: 928, height: 526 },
+    },
     { id: "ep1", kind: "epic", name: "Checkout", parentId: "m1", position: { x: 16, y: 48 }, size: { width: 600, height: 462 } },
     { id: "f1", kind: "feature", name: "Card capture", parentId: "ep1", position: { x: 16, y: 48 }, size: { width: 568, height: 230 } },
     {
@@ -103,7 +110,7 @@ export const FLOW_PLAN = {
       footprint: ["specifications/ui/LIB-library.md"],
       position: { x: 55, y: 48 },
     },
-    { id: "m2", kind: "milestone", name: "GA", parentId: "d1", due: "2027-06-30", position: { x: 960, y: 48 }, size: { width: 354, height: 300 } },
+    { id: "m2", kind: "milestone", name: "GA", due: "2027-06-30", position: { x: 976, y: 48 }, size: { width: 354, height: 300 } },
     { id: "f4", kind: "feature", name: "Payouts", parentId: "m2", position: { x: 16, y: 48 }, size: { width: 322, height: 236 } },
     { id: "t8", kind: "task", name: "Payout schedule", parentId: "f4", draftId: "d-payout", position: { x: 16, y: 48 } },
   ],
@@ -116,7 +123,6 @@ export const FLOW_PLAN = {
   sync: {
     tracker: "github",
     links: [
-      link("d1", 40, "Card payments"),
       link("m1", 3, "Beta", "milestone"),
       link("ep1", 41, "Checkout"),
       link("f1", 42, "Card capture"),
@@ -128,6 +134,8 @@ export const FLOW_PLAN = {
       link("t7", 55, "Velocity check"),
       link("t9", 49, "Old spike"),
     ],
+    // FTS-FR-YHVD: a tracker item an earlier Unlink keeps out of every sync.
+    ignored: [ref(60)],
   },
 };
 
@@ -264,7 +272,7 @@ const SYNC_RESULT = {
       field: "parent",
       base: ref(42),
       flow: ref(42),
-      tracker: ref(40),
+      tracker: ref(41),
       choices: ["keep_flow", "unlink"],
       url: "https://github.com/acme/payments/issues/51",
     },
@@ -285,8 +293,15 @@ const SYNC_RESULT = {
     {
       number: 58,
       title: "Load test plan",
-      reason: "no_kind_fits",
       url: "https://github.com/acme/payments/issues/58",
+      reason: "no_kind_fits",
+    },
+    {
+      number: null,
+      title: "Payout schedule",
+      url: null,
+      itemId: "t8",
+      reason: "issue_type_unavailable",
     },
   ],
   stale: [],

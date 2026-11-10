@@ -286,7 +286,7 @@ export interface ContainerViewProps extends ItemViewBase {
 }
 
 /**
- * FLO-FR-38: a deliverable, a milestone, an epic, or a feature, drawn around
+ * FLO-FR-38: a milestone, an epic, or a feature, drawn around
  * what it holds: a header with its glyph, name, due date, markers, status chip,
  * and tracker tag, and a region for its members. Only the header drags it; a
  * press on its region is a press on the canvas.

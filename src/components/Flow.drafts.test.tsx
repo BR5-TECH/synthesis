@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
 import { findItem } from "../state/flowDocument";
-import { resetToasts } from "../state/toasts";
+import { resetToasts, visibleToasts } from "../state/toasts";
 import type { DraftSummary } from "../types";
 import {
   callsOf,
@@ -96,6 +96,46 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     expect(flows.get("plans/payments.flow")!.dirty).toBe(false);
   });
 
+  it("FLO-FR-NRBV: a creation the shell's route refuses stores nothing and shows its error; a cancelled one shows nothing", async () => {
+    const b = flowBackend(twoTasks());
+    const onCreateDraft = vi
+      .fn<(name: string) => Promise<{ ok: false; error: string | null }>>()
+      .mockResolvedValueOnce({ ok: false, error: "The draft was not created. The name is in use." })
+      .mockResolvedValueOnce({ ok: false, error: null });
+    const onOpenDraft = vi.fn();
+    const { flows } = await renderFlow(b, { onCreateDraft, onOpenDraft });
+
+    await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Create draft" }));
+    expect(await within(itemEl("t1")).findByRole("alert")).toHaveTextContent("The name is in use.");
+    await userEvent.click(within(itemEl("t2")).getByRole("button", { name: "Create draft" }));
+    await waitFor(() => expect(onCreateDraft).toHaveBeenCalledTimes(2));
+    expect(within(itemEl("t2")).queryByRole("alert")).toBeNull();
+    expect(findItem(planOf(flows), "t1")!.draftId).toBeUndefined();
+    expect(findItem(planOf(flows), "t2")!.draftId).toBeUndefined();
+    expect(onOpenDraft).not.toHaveBeenCalled();
+    expect(callsOf(b, "create_draft")).toEqual([]);
+  });
+
+  it("FLO-FR-NRBV: a defect with no draft link offers Create draft, which stores the new draft on the defect", async () => {
+    const b = flowBackend(
+      plan([
+        item("m1", "milestone"),
+        item("x1", "defect", { parentId: "m1", name: "Decline message", position: { x: 20, y: 60 } }),
+      ]),
+    );
+    b.on.create_draft = (args) => ({
+      draft: { id: "d-5", name: String(args.name), status: "active" },
+      file: "Decline message.md",
+    });
+    const onOpenDraft = vi.fn();
+    const { flows } = await renderFlow(b, { onOpenDraft });
+
+    await userEvent.click(within(itemEl("x1")).getByRole("button", { name: "Create draft" }));
+    await waitFor(() => expect(onOpenDraft).toHaveBeenCalledWith({ id: "d-5", name: "Decline message" }));
+    expect(callsOf(b, "create_draft")).toEqual([{ name: "Decline message", folder: null }]);
+    expect(findItem(planOf(flows), "x1")!.draftId).toBe("d-5");
+  });
+
   it("FLO-FR-NRBV: a task with a draft link offers no Create draft, and a container never does", async () => {
     const b = flowBackend(twoTasks(true));
     await renderFlow(b);
@@ -117,6 +157,31 @@ describe("the draft row (FLO-FR-QZUR)", () => {
     const row = await within(itemEl("t1")).findByRole("button", { name: "Open draft tokenize-cards" });
     await userEvent.click(row);
     await waitFor(() => expect(callsOf(b, "open_draft")).toEqual([{ id: "d-1" }]));
+  });
+
+  it("FLO-FR-QZUR: a defect with a draft renders its row; an open that is refused shows the error and changes nothing", async () => {
+    const b = flowBackend(
+      plan([
+        item("m1", "milestone"),
+        item("x1", "defect", { parentId: "m1", draftId: "d-4", position: { x: 20, y: 60 } }),
+      ]),
+    );
+    b.delivery = {
+      items: [itemState("x1", "drafting", { draft: { id: "d-4", name: "decline-message", status: "active" } })],
+    };
+    b.on.open_draft = () => Promise.reject({ code: "draft_not_found", message: "The draft d-4 is not in this worktree." });
+    const { flows } = await renderFlow(b);
+
+    await userEvent.click(await within(itemEl("x1")).findByRole("button", { name: "Open draft decline-message" }));
+    await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+    expect(callsOf(b, "open_draft")).toEqual([{ id: "d-4" }]);
+    expect(visibleToasts()[0]).toMatchObject({
+      level: "Error",
+      title: "Draft not opened",
+      body: "The draft d-4 is not in this worktree.",
+    });
+    expect(findItem(planOf(flows), "x1")!.draftId).toBe("d-4");
+    expect(flows.get("plans/payments.flow")!.dirty).toBe(false);
   });
 
   it("FLO-FR-QZUR: the shell's open route is used when the tab is given one", async () => {

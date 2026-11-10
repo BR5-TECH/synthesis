@@ -26,7 +26,7 @@ import {
   subtreeOf,
   type FlowDocument,
 } from "./flowDocument";
-import { item, plan, samplePlan, withItems } from "../test/flowPlanFixtures";
+import { issueRef, item, plan, samplePlan, withItems } from "../test/flowPlanFixtures";
 
 function parsed(body: string): FlowDocument {
   const r = parseFlowDocument(body);
@@ -54,32 +54,18 @@ const FULL_BODY = `{
   ],
   "items": [
     {
-      "id": "d1",
-      "kind": "deliverable",
-      "name": "Card payments",
+      "id": "m1",
+      "kind": "milestone",
+      "name": "Beta",
       "description": "Accept **Visa**.",
       "artifactIds": [
         "specifications/core/PAY-payments.md"
       ],
-      "position": {
-        "x": 40,
-        "y": 40
-      },
-      "size": {
-        "width": 1200,
-        "height": 700
-      }
-    },
-    {
-      "id": "m1",
-      "kind": "milestone",
-      "name": "Beta",
-      "parentId": "d1",
       "localOnly": true,
       "due": "2027-03-31",
       "position": {
-        "x": 20,
-        "y": 60
+        "x": 40,
+        "y": 40
       },
       "size": {
         "width": 900,
@@ -188,6 +174,16 @@ const FULL_BODY = `{
           "due": null
         }
       }
+    ],
+    "ignored": [
+      {
+        "kind": "issue",
+        "host": "github.com",
+        "owner": "acme",
+        "repo": "payments",
+        "number": 47,
+        "url": "https://github.com/acme/payments/issues/47"
+      }
     ]
   }
 }
@@ -248,6 +244,28 @@ describe("deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
     expect(parsed(s({ tracker: "github", links: [link] })).sync?.links).toHaveLength(1);
   });
 
+  it("FGV-FR-01, FTS-FR-YHVD: sync.ignored is a list of references, and an empty list reads as absent", () => {
+    const s = (sync: unknown) => JSON.stringify({ version: 2, items: [], edges: [], sync });
+    expect(parseError(s({ tracker: "github", links: [], ignored: {} }))).toMatch(
+      /`sync.ignored` must be an array/,
+    );
+    expect(parseError(s({ tracker: "github", links: [], ignored: [{ kind: "pr" }] }))).toMatch(
+      /sync ignored 0 has no kind/,
+    );
+    expect(parsed(s({ tracker: "github", links: [], ignored: [] })).sync).toEqual({
+      tracker: "github",
+      links: [],
+    });
+    expect(parsed(s({ tracker: "github", links: [], ignored: [issueRef(47)] })).sync?.ignored).toEqual([
+      issueRef(47),
+    ]);
+  });
+
+  it("FGV-FR-01: an empty sync.ignored is not written", () => {
+    const body = serializeFlowDocument({ ...emptyFlow(), sync: { tracker: "github", links: [], ignored: [] } });
+    expect(JSON.parse(body).sync).toEqual({ tracker: "github", links: [] });
+  });
+
   it("FLO-FR-05: items or edges that are not lists are an error", () => {
     expect(parseError('{"version":2,"items":{},"edges":[]}')).toMatch(
       /`items` must be an array/,
@@ -257,7 +275,7 @@ describe("deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
     );
   });
 
-  it("FLO-FR-05: an item with no kind of the six, or an edge with no type, is an error", () => {
+  it("FLO-FR-05: an item with no kind of the five, or an edge with no type, is an error", () => {
     const badKind = { version: 2, items: [{ id: "a", kind: "node", name: "", position: { x: 0, y: 0 } }] };
     expect(parseError(JSON.stringify(badKind))).toMatch(/item "a" has no item kind/);
     const badEdge = {
@@ -294,15 +312,14 @@ describe("deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
     const doc = parsed(FULL_BODY);
     expect(doc.name).toBe("Payments v2");
     expect(doc.references).toEqual(["docs/payments-hld.md"]);
-    expect(doc.items.map((i) => i.kind)).toEqual([
-      "deliverable",
-      "milestone",
-      "feature",
-      "task",
-      "defect",
-    ]);
-    expect(doc.items[1]).toMatchObject({ due: "2027-03-31", localOnly: true });
-    expect(doc.items[3]).toMatchObject({
+    expect(doc.items.map((i) => i.kind)).toEqual(["milestone", "feature", "task", "defect"]);
+    expect(doc.items[0]).toMatchObject({
+      due: "2027-03-31",
+      localOnly: true,
+      artifactIds: ["specifications/core/PAY-payments.md"],
+    });
+    expect("parentId" in doc.items[0]).toBe(false);
+    expect(doc.items[2]).toMatchObject({
       draftId: "dr_7f3a",
       footprint: ["src-tauri/src/payments/", "specifications/core/PAY-payments.md"],
     });
@@ -314,6 +331,7 @@ describe("deserialization (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
       state: "closed",
       due: null,
     });
+    expect(doc.sync?.ignored?.map((r) => r.number)).toEqual([47]);
   });
 });
 
@@ -324,7 +342,7 @@ describe("serialization (FLO-FR-03, FLO NFR on round-trips)", () => {
 
   it("FLO NFR: the key order is the schema's, whatever order the object was built in", () => {
     const scrambled = {
-      sync: { links: [], tracker: "github" as const },
+      sync: { ignored: [issueRef(47)], links: [], tracker: "github" as const },
       edges: [{ type: "blocks" as const, to: "b", from: "a", id: "e1" }],
       items: [
         {
@@ -355,7 +373,7 @@ describe("serialization (FLO-FR-03, FLO NFR on round-trips)", () => {
             },
           ],
           edges: [{ id: "e1", from: "a", to: "b", type: "blocks" }],
-          sync: { tracker: "github", links: [] },
+          sync: { tracker: "github", links: [], ignored: [issueRef(47)] },
         },
         null,
         2,
@@ -388,8 +406,8 @@ describe("hierarchy helpers (FLO-FR-42, FGV-FR-YHFX, FGV-FR-KBLT)", () => {
   const doc = samplePlan();
 
   it("FLO-FR-42: ancestorsOf gives the chain of containers, the nearest first", () => {
-    expect(ancestorsOf(doc, "t3")).toEqual(["f2", "ep1", "m1", "d1"]);
-    expect(ancestorsOf(doc, "d1")).toEqual([]);
+    expect(ancestorsOf(doc, "t3")).toEqual(["f2", "ep1", "m1"]);
+    expect(ancestorsOf(doc, "m1")).toEqual([]);
     expect(ancestorsOf(doc, "nope")).toEqual([]);
   });
 
@@ -422,8 +440,8 @@ describe("hierarchy helpers (FLO-FR-42, FGV-FR-YHFX, FGV-FR-KBLT)", () => {
   });
 
   it("FGV-FR-KBLT: isAncestor and inLineage see ancestors at any depth, in both orders", () => {
-    expect(isAncestor(doc, "d1", "t3")).toBe(true);
-    expect(isAncestor(doc, "t3", "d1")).toBe(false);
+    expect(isAncestor(doc, "m1", "t3")).toBe(true);
+    expect(isAncestor(doc, "t3", "m1")).toBe(false);
     expect(inLineage(doc, "t3", "ep1")).toBe(true);
     expect(inLineage(doc, "ep1", "t3")).toBe(true);
     expect(inLineage(doc, "t1", "t3")).toBe(false);
@@ -431,11 +449,17 @@ describe("hierarchy helpers (FLO-FR-42, FGV-FR-YHFX, FGV-FR-KBLT)", () => {
   });
 
   it("FGV-FR-YHFX: permitsParent holds the containers each kind may sit in", () => {
-    expect(permitsParent("deliverable", null)).toBe(true);
-    expect(permitsParent("milestone", "deliverable")).toBe(true);
-    expect(permitsParent("milestone", null)).toBe(false);
+    expect(permitsParent("milestone", null)).toBe(true);
+    expect(permitsParent("milestone", "milestone")).toBe(false);
+    expect(permitsParent("milestone", "epic")).toBe(false);
     expect(permitsParent("epic", "milestone")).toBe(true);
-    expect(permitsParent("epic", "deliverable")).toBe(false);
+    expect(permitsParent("epic", null)).toBe(false);
+    expect(permitsParent("epic", "epic")).toBe(false);
+    expect(permitsParent("feature", "milestone")).toBe(true);
+    expect(permitsParent("feature", null)).toBe(false);
+    expect(permitsParent("task", null)).toBe(false);
+    expect(permitsParent("defect", "feature")).toBe(true);
+    expect(permitsParent("defect", null)).toBe(false);
     expect(permitsParent("feature", "epic")).toBe(true);
     expect(permitsParent("feature", "feature")).toBe(false);
     expect(permitsParent("task", "feature")).toBe(true);
@@ -451,7 +475,7 @@ describe("geometry helpers (FLO-FR-21, FLO-FR-42, FLO-FR-44)", () => {
 
   it("FLO-FR-21: absolutePosition adds the position of every container", () => {
     expect(absolutePosition(doc, "t3")).toEqual({ x: 520, y: 240 });
-    expect(absolutePosition(doc, "d1")).toEqual({ x: 0, y: 0 });
+    expect(absolutePosition(doc, "m1")).toEqual({ x: 20, y: 60 });
     expect(absolutePosition(doc, "nope")).toEqual({ x: 0, y: 0 });
   });
 
@@ -468,14 +492,15 @@ describe("geometry helpers (FLO-FR-21, FLO-FR-42, FLO-FR-44)", () => {
   it("FLO-FR-42: innermostContainerAt gives the deepest container that holds the point", () => {
     expect(innermostContainerAt(doc, { x: 530, y: 250 })).toBe("f2");
     expect(innermostContainerAt(doc, { x: 45, y: 125 })).toBe("f1");
-    expect(innermostContainerAt(doc, { x: 5, y: 5 })).toBe("d1");
+    expect(innermostContainerAt(doc, { x: 25, y: 65 })).toBe("m1");
+    expect(innermostContainerAt(doc, { x: 5, y: 5 })).toBeUndefined();
     expect(innermostContainerAt(doc, { x: -10, y: -10 })).toBeUndefined();
   });
 
   it("FLO-FR-42: a point on the border of a container is inside it", () => {
     expect(innermostContainerAt(doc, { x: 500, y: 180 })).toBe("f2");
-    expect(innermostContainerAt(doc, { x: 1200, y: 800 })).toBe("d1");
-    expect(innermostContainerAt(doc, { x: 1201, y: 800 })).toBeUndefined();
+    expect(innermostContainerAt(doc, { x: 1020, y: 760 })).toBe("m1");
+    expect(innermostContainerAt(doc, { x: 1021, y: 760 })).toBeUndefined();
   });
 
   it("FLO-FR-42: an excluded container and every container under it are not the answer", () => {
@@ -485,10 +510,10 @@ describe("geometry helpers (FLO-FR-21, FLO-FR-42, FLO-FR-44)", () => {
 
   it("FLO-FR-42: where two sibling containers overlap, the first in document order wins", () => {
     const doc = plan([
-      item("d1", "deliverable", { size: { width: 100, height: 100 } }),
-      item("d2", "deliverable", { position: { x: 50, y: 50 }, size: { width: 100, height: 100 } }),
+      item("m1", "milestone", { size: { width: 100, height: 100 } }),
+      item("m2", "milestone", { position: { x: 50, y: 50 }, size: { width: 100, height: 100 } }),
     ]);
-    expect(innermostContainerAt(doc, { x: 75, y: 75 })).toBe("d1");
+    expect(innermostContainerAt(doc, { x: 75, y: 75 })).toBe("m1");
   });
 
     it("FLO-FR-42: a leaf card is never the container at a point", () => {

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
 import { findItem } from "../state/flowDocument";
-import { resetToasts } from "../state/toasts";
+import { resetToasts, visibleToasts } from "../state/toasts";
 import { callsOf, clearFlowStores, flowBackend, planOf, renderFlow } from "../test/flowCanvasHarness";
 import { HLD_ID, itemEl, panel, selectItem, SKILL_ID } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
@@ -77,6 +77,38 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
     expect(onOpenArtifact).toHaveBeenCalledWith({ id: SKILL_ID, name: "Code review", artifactType: "skill" });
     await userEvent.click(within(itemEl("t1")).getByTestId("flow-ref-unresolved"));
     expect(callsOf(b, "open_artifact_by_id")).toHaveLength(1);
+  });
+});
+
+describe("opening a reference (FLO-FR-12)", () => {
+  const OTHER_FLOW = "flows/other.flow";
+  const withRef = (id: string) =>
+    plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [id], position: { x: 20, y: 60 } })]);
+
+  it("FLO-FR-12: a reference to another Flow opens it in a Flow tab", async () => {
+    const b = flowBackend(withRef(OTHER_FLOW));
+    const { onOpenArtifact } = await renderFlow(b);
+
+    await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Open other.flow" }));
+    await waitFor(() => expect(onOpenArtifact).toHaveBeenCalledTimes(1));
+    expect(callsOf(b, "open_artifact_by_id")).toEqual([{ id: OTHER_FLOW }]);
+    expect(onOpenArtifact).toHaveBeenCalledWith(expect.objectContaining({ id: OTHER_FLOW, artifactType: "flow" }));
+  });
+
+  it("FLO-FR-12: a refused open opens nothing and shows the error", async () => {
+    const b = flowBackend(withRef(HLD_ID));
+    b.on.open_artifact_by_id = () => Promise.reject({ code: "not_found", message: "The file is not in the project." });
+    const { flows, onOpenArtifact } = await renderFlow(b);
+
+    await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Open payments-hld.md" }));
+    await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+    expect(visibleToasts()[0]).toMatchObject({
+      level: "Error",
+      title: "payments-hld.md not opened",
+      body: "The file is not in the project.",
+    });
+    expect(onOpenArtifact).not.toHaveBeenCalled();
+    expect(flows.get("plans/payments.flow")!.dirty).toBe(false);
   });
 });
 

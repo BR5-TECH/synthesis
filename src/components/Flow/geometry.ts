@@ -209,3 +209,69 @@ export function errorText(e: unknown): string {
   }
   return String(e);
 }
+
+/** The panel's width and the room it keeps from the edges of the canvas. */
+export const PANEL_W = 300;
+const PANEL_GAP = 10;
+const PANEL_MARGIN = 8;
+/** The bottom line of the canvas: the readout, the action control, the view controls. */
+const PANEL_FOOT = 52;
+/**
+ * The height the panel wants before it has been measured. With less room
+ * below the item, it opens above the item where there is more room.
+ */
+export const PANEL_ROOM_WANTED = 360;
+/** The panel never gets less height than this, so its first rows always show. */
+const PANEL_MIN_H = 120;
+
+/**
+ * Where the selection panel sits, in the coordinates of the canvas element.
+ * `top` is set when it opens below the item, `bottom` when it opens above it.
+ */
+export interface PanelPlacement {
+  left: number;
+  top?: number;
+  bottom?: number;
+  maxHeight?: number;
+  placement: "below" | "above";
+}
+
+/**
+ * FLO layout notes: the selection panel attaches below the item's card or
+ * header. Its height is bound to the room left in the canvas, and its fields
+ * scroll inside it, so its last section stays reachable. When the room below
+ * is short and the room above is larger, it opens above the item. It changes
+ * no item's size (FLO-FR-44).
+ *
+ * `item` is the screen rectangle of the card or header the panel attaches
+ * to. `surface` is the size of the canvas element; a size of zero (no layout
+ * yet) gives the plain place below the item with no bound. `wanted` is the
+ * height of the panel's content, once it is measured.
+ */
+export function panelPlacement(
+  item: { left: number; top: number; bottom: number },
+  surface: { width: number; height: number },
+  wanted: number = PANEL_ROOM_WANTED,
+): PanelPlacement {
+  const { width, height } = surface;
+  const left =
+    width > 0
+      ? Math.max(PANEL_MARGIN, Math.min(item.left, width - PANEL_W - 2 * PANEL_MARGIN))
+      : item.left;
+  if (height <= 0) return { left, top: item.bottom + PANEL_GAP, placement: "below" };
+  const floor = height - PANEL_FOOT;
+  // An item outside the view still gets a panel inside it.
+  const top = Math.min(Math.max(item.bottom + PANEL_GAP, PANEL_MARGIN), floor - PANEL_MIN_H);
+  const roomBelow = floor - top;
+  const above = Math.max(Math.min(item.top - PANEL_GAP, floor), PANEL_MARGIN + PANEL_MIN_H);
+  const roomAbove = above - PANEL_MARGIN;
+  if (roomBelow < wanted && roomAbove > roomBelow) {
+    return {
+      left,
+      bottom: height - above,
+      maxHeight: Math.max(PANEL_MIN_H, roomAbove),
+      placement: "above",
+    };
+  }
+  return { left, top, maxHeight: Math.max(PANEL_MIN_H, roomBelow), placement: "below" };
+}

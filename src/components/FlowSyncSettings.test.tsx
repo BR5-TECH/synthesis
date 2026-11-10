@@ -16,9 +16,9 @@ import { FlowSyncSettingsGroup } from "./FlowSyncSettings";
 import { resetLogBufferForTest } from "../logging";
 import type { FlowTrackerSettings, MetadataList, PublicationIssueType } from "../types";
 
+/** FTS-FR-LMBE: what the backend reads for unset values. */
 const DEFAULTS: FlowTrackerSettings = {
-  deliverableType: "Feature",
-  epicType: "Feature",
+  epicType: "Epic",
   featureType: "Feature",
   taskType: "Task",
   defectType: "Bug",
@@ -66,8 +66,7 @@ afterEach(cleanup);
 describe("the Flow sync group of GitHub Project settings", () => {
   it("SET-FR-ZJRC, SET-FR-UFXD: one Type selector per issue kind, showing the stored defaults and the offered Types", async () => {
     render(<FlowSyncSettingsGroup />);
-    await waitFor(() => expect(select("Deliverable").value).toBe("Feature"));
-    expect(select("Epic").value).toBe("Feature");
+    await waitFor(() => expect(select("Epic").value).toBe("Epic"));
     expect(select("Feature").value).toBe("Feature");
     expect(select("Task").value).toBe("Task");
     expect(select("Defect").value).toBe("Bug");
@@ -75,6 +74,9 @@ describe("the Flow sync group of GitHub Project settings", () => {
       expect([...select("Task").options].map((o) => o.value)).toEqual(["Task", "Feature", "Bug", "Epic"]),
     );
     expect(screen.queryByLabelText("Milestone")).toBeNull();
+    // The plan has no deliverable kind (FLO-FR-07), so the group offers four selectors.
+    expect(screen.queryByLabelText("Deliverable")).toBeNull();
+    expect(screen.getAllByRole("combobox")).toHaveLength(4);
     expect(calls("get_flow_tracker_settings")).toHaveLength(1);
   });
 
@@ -94,12 +96,21 @@ describe("the Flow sync group of GitHub Project settings", () => {
     expect(calls("set_flow_tracker_settings")).toHaveLength(0);
   });
 
-  it("SET-FR-PQWW: a change persists at once with all five Types", async () => {
+  it("SET-FR-PQWW: a change persists at once with all four Types", async () => {
     render(<FlowSyncSettingsGroup />);
     await waitFor(() => expect(select("Epic").options.length).toBe(4));
-    await userEvent.selectOptions(select("Epic"), "Epic");
-    await waitFor(() => expect(select("Epic").value).toBe("Epic"));
-    expect(calls("set_flow_tracker_settings")[0][1]).toEqual({ ...DEFAULTS, epicType: "Epic" });
+    await userEvent.selectOptions(select("Epic"), "Feature");
+    await waitFor(() => expect(select("Epic").value).toBe("Feature"));
+    expect(calls("set_flow_tracker_settings")[0][1]).toEqual({ ...DEFAULTS, epicType: "Feature" });
+  });
+
+  it("SET-FR-PQWW, FTS-FR-ALOJ: a write sends only the four Types, also when the read held another field", async () => {
+    stored = { ...DEFAULTS, deliverableType: "Feature" } as FlowTrackerSettings;
+    render(<FlowSyncSettingsGroup />);
+    await waitFor(() => expect(select("Defect").options.length).toBe(4));
+    await userEvent.selectOptions(select("Defect"), "Task");
+    await waitFor(() => expect(calls("set_flow_tracker_settings")).toHaveLength(1));
+    expect(calls("set_flow_tracker_settings")[0][1]).toEqual({ ...DEFAULTS, defectType: "Task" });
   });
 
   it("SET-FR-PQWW: a refused write keeps the previous value and shows the error", async () => {

@@ -77,13 +77,13 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
       2,
     )}\n`;
 
-  /** A top-level deliverable, so a test needs no hierarchy around it. */
+  /** A top-level milestone, so a test needs no hierarchy around it. */
   const node = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
     id,
-    kind: "deliverable",
+    kind: "milestone",
     name,
     position: { x: 0, y: 0 },
-    size: { width: 760, height: 480 },
+    size: { width: 640, height: 380 },
     ...extra,
   });
 
@@ -142,7 +142,7 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
     expect(factsOf("Collect")).toEqual(["added:+Referencespecs/gather.md"]);
     // An item entry names its own kind.
     expect(entryEl("Collect")?.querySelector(".diff-flow__kind")?.textContent).toBe(
-      "deliverable",
+      "milestone",
     );
     // The edge is named by its endpoints and states both types.
     expect(entryEl("Collect — Draft")).toHaveAttribute("data-mark", "changed");
@@ -153,15 +153,15 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
 
   // DFV-FR-RGBK, DFV-FR-35: each side names the kind its own revision holds.
   it("DFV-FR-RGBK, DFV-FR-35: a changed kind shows the old kind left and the new kind right", async () => {
-    const milestone = { id: "m1", kind: "milestone", name: "Beta", parentId: "n1", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } };
+    const epic = { id: "ep1", kind: "epic", name: "Checkout", parentId: "n1", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } };
     await renderFlow(
       {
         isBinary: false,
         old: flow({
-          items: [node("n1", "Payments"), milestone, { id: "x1", kind: "defect", name: "Bug", parentId: "m1", position: { x: 0, y: 0 } }],
+          items: [node("n1", "Payments"), epic, { id: "x1", kind: "defect", name: "Bug", parentId: "ep1", position: { x: 0, y: 0 } }],
         }),
         new: flow({
-          items: [node("n1", "Payments"), milestone, { id: "x1", kind: "feature", name: "Bug", parentId: "m1", position: { x: 0, y: 0 }, size: { width: 400, height: 220 } }],
+          items: [node("n1", "Payments"), epic, { id: "x1", kind: "feature", name: "Bug", parentId: "ep1", position: { x: 0, y: 0 }, size: { width: 400, height: 220 } }],
         }),
       },
       "side_by_side",

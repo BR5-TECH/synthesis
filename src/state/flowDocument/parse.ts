@@ -206,7 +206,17 @@ function readSync(v: unknown): FlowSync | undefined {
       base: readBase(entry.base, `sync link ${i} base`),
     };
   });
-  return { tracker: "github", links };
+  let ignored: TrackerRef[] | undefined;
+  if (v.ignored !== undefined && v.ignored !== null) {
+    if (!Array.isArray(v.ignored)) fail("`sync.ignored` must be an array");
+    ignored = v.ignored.map((r, i) => readRef(r, `sync ignored ${i}`));
+  }
+  // FGV-FR-01: an empty list reads as absent.
+  return {
+    tracker: "github",
+    links,
+    ...(ignored && ignored.length > 0 ? { ignored } : {}),
+  };
 }
 
 function readDocument(raw: unknown): FlowDocument {

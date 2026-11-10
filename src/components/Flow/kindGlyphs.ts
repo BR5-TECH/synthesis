@@ -5,7 +5,6 @@
 import type { FlowItemKind } from "../../state/flowDocument/types";
 
 export const KIND_GLYPHS: Readonly<Record<FlowItemKind, string>> = {
-  deliverable: "◆",
   milestone: "⚑",
   epic: "◈",
   feature: "▣",

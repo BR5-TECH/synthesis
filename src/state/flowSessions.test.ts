@@ -13,9 +13,9 @@ import {
   type FlowPosition,
 } from "./flowDocument";
 
-/** Add a deliverable at `at`; the edits these tests make never refuse. */
+/** Add a milestone at `at`; the edits these tests make never refuse. */
 const addOne = (d: FlowDocument, at: FlowPosition) =>
-  docOrUnchanged(d, addItem(d, "deliverable", at));
+  docOrUnchanged(d, addItem(d, "milestone", at));
 /** Move a top-level item, where canvas and stored coordinates agree. */
 const moveTo = (d: FlowDocument, id: string, at: FlowPosition) =>
   docOrUnchanged(d, moveItem(d, id, at));
@@ -104,8 +104,8 @@ const TWO_NODES = `{
   "version": 2,
   "name": "",
   "items": [
-    { "id": "n1", "kind": "deliverable", "name": "A", "position": { "x": 0, "y": 0 }, "size": { "width": 760, "height": 480 } },
-    { "id": "n2", "kind": "deliverable", "name": "B", "position": { "x": 900, "y": 0 }, "size": { "width": 760, "height": 480 } }
+    { "id": "n1", "kind": "milestone", "name": "A", "position": { "x": 0, "y": 0 }, "size": { "width": 760, "height": 480 } },
+    { "id": "n2", "kind": "milestone", "name": "B", "position": { "x": 900, "y": 0 }, "size": { "width": 760, "height": 480 } }
   ],
   "edges": [{ "id": "e1", "from": "n1", "to": "n2", "type": "blocks" }]
 }`;
@@ -390,7 +390,7 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
 
     disk["f.flow"] = {
-      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"deliverable","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
+      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"milestone","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
       checksum: "ck2",
     };
     fireExternal("f.flow", "ck2");
@@ -430,7 +430,7 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
 
     disk["f.flow"] = {
-      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"deliverable","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
+      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"milestone","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
       checksum: "ck2",
     };
     fireExternal("f.flow", "ck2");

@@ -4,12 +4,17 @@ import userEvent from "@testing-library/user-event";
 
 import { FlowCanvas } from "./Flow";
 import { FlowSessionStore } from "../state/flowSessions";
-import { parseFlowDocument } from "../state/flowDocument";
+import { parseFlowDocument, serializeFlowDocument } from "../state/flowDocument";
 import { resetLogBufferForTest } from "../logging";
 import { resetToasts } from "../state/toasts";
+import { AUTOSAVE_DELAY_MS } from "../state/writeSchedule";
+import type { Discussion } from "../types";
+import { DELIVERY_REST_MS } from "./Flow/useDeliveryState";
 import {
   callsOf,
+  advance,
   clearFlowStores,
+  endFakeTimers,
   flowBackend,
   planOf,
   renderFlow,
@@ -31,10 +36,20 @@ beforeEach(() => {
   resetListeners();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await endFakeTimers();
   cleanup();
   clearFlowStores();
 });
+
+const viewport = () => document.querySelector(".flow-viewport") as HTMLElement;
+
+/** Press on `el`, move as a pan would, and release on the canvas. */
+function pressAndDrag(el: HTMLElement) {
+  fireEvent.pointerDown(el, { pointerId: 1, buttons: 1, clientX: 900, clientY: 900 });
+  fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, clientX: 980, clientY: 940 });
+  fireEvent.pointerUp(canvas(), { pointerId: 1, clientX: 980, clientY: 940 });
+}
 
 describe("opening a Flow", () => {
   it("FLO-FR-01, FLO-FR-03, FLO-FR-46: renders the items and edges of a body that the validation calls valid", async () => {
@@ -45,11 +60,11 @@ describe("opening a Flow", () => {
     expect(order.indexOf("load_artifact_contents_by_id")).toBeLessThan(
       order.indexOf("validate_flow_document"),
     );
-    for (const id of ["d1", "m1", "f1", "t1", "t2", "ep1", "f2", "t3", "x1"]) {
+    for (const id of ["m1", "f1", "t1", "t2", "ep1", "f2", "t3", "x1"]) {
       expect(itemEl(id)).toBeInTheDocument();
     }
     expect(screen.getByTestId("flow-edge-path-e1")).toBeInTheDocument();
-    expect(screen.getByTestId("flow-status")).toHaveTextContent("9 items · 1 edge");
+    expect(screen.getByTestId("flow-status")).toHaveTextContent("8 items · 1 edge");
   });
 
   it("FLO-FR-04: an empty body opens as an empty plan, ready to edit", async () => {
@@ -97,6 +112,29 @@ describe("opening a Flow", () => {
 
     expect(screen.getByTestId("flow-violations")).toHaveTextContent("unknown Flow version 1");
     expect(canvas()).toBeNull();
+  });
+
+  it("FLO-FR-46: nothing of the plan renders, and nothing can be edited, before the validation answers", async () => {
+    const b = flowBackend(samplePlan());
+    let answer: (r: typeof b.validation) => void = () => {};
+    b.on.validate_flow_document = () => new Promise((res) => (answer = res));
+    const flows = new FlowSessionStore();
+    try {
+      act(() => flows.openTab(ID));
+      render(<FlowCanvas flowId={ID} flows={flows} />);
+      await waitFor(() => expect(callsOf(b, "validate_flow_document")).toHaveLength(1));
+
+      expect(queryItem("t1")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add to plan" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(callsOf(b, "load_flow_delivery_state")).toEqual([]);
+
+      await act(async () => answer({ valid: true, violations: [] }));
+      expect(await screen.findByTestId("flow-item-t1")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add to plan" })).toBeEnabled();
+    } finally {
+      flows.clear();
+    }
   });
 
   it("FLO-FR-06, FLO-FR-14: an item with only a kind and a name renders and takes a connection", async () => {
@@ -153,26 +191,48 @@ describe("unsaved changes and writes (FLO-FR-26, FLO-FR-27, FLO-FR-47)", () => {
   it("FLO-FR-26, FLO-FR-27: an edit makes the Flow dirty and writes it a short rest later", async () => {
     const b = flowBackend(samplePlan());
     const { flows } = await renderFlow(b);
+    vi.useFakeTimers();
 
-    await userEvent.type(screen.getByRole("textbox", { name: "Flow description" }), "Q3");
+    const field = screen.getByRole("textbox", { name: "Flow description" });
+    fireEvent.change(field, { target: { value: "Q" } });
+    await advance(AUTOSAVE_DELAY_MS - 100);
+    // A further edit restarts the rest, so a burst of typing is one write.
+    fireEvent.change(field, { target: { value: "Q3" } });
     expect(flows.get(ID)!.dirty).toBe(true);
-    await waitFor(() => expect(b.writes).toHaveLength(1), { timeout: 3000 });
+    await advance(AUTOSAVE_DELAY_MS - 1);
+    expect(b.writes).toEqual([]);
+    await advance(1);
+    await vi.waitFor(() => expect(b.writes).toHaveLength(1));
     expect(flows.get(ID)!.dirty).toBe(false);
     const written = parseFlowDocument(b.writes[0]);
     expect(written.ok && written.doc.description).toBe("Q3");
+    expect(flows.hasPendingWrite(ID)).toBe(false);
   });
 
   it("FLO-FR-26, FLO-FR-22: selecting, collapsing, panning, and zooming are not edits", async () => {
     const b = flowBackend(samplePlan());
     const { flows } = await renderFlow(b);
+    const body = b.body;
+    vi.useFakeTimers();
 
     selectItem("t1");
-    await userEvent.click(screen.getByRole("button", { name: "Collapse F1" }));
+    expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse F1" }));
+    expect(screen.getByRole("button", { name: "Expand F1" })).toBeInTheDocument();
     panCanvas(40, 30);
-    await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    await userEvent.click(screen.getByRole("button", { name: "Fit" }));
+    expect(viewport().style.transform).toContain("translate(64px, 54px)");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(screen.getByTestId("flow-zoom")).toHaveTextContent("110%");
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+
+    // Each of them took effect, and none is an edit: past both rests, nothing
+    // was written and the state was not asked again.
+    await advance(AUTOSAVE_DELAY_MS + DELIVERY_REST_MS);
     expect(flows.get(ID)!.dirty).toBe(false);
     expect(flows.hasPendingWrite(ID)).toBe(false);
+    expect(b.writes).toEqual([]);
+    expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1);
+    expect(serializeFlowDocument(planOf(flows))).toBe(body);
   });
 
   it("FLO-FR-47: a write the validation refuses lists every violation, keeps the plan dirty, and writes nothing", async () => {
@@ -204,15 +264,22 @@ describe("the view (FLO-FR-22, FLO-FR-23)", () => {
 
     selectItem("t1");
     expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
-    const viewport = document.querySelector(".flow-viewport") as HTMLElement;
-    const before = viewport.style.transform;
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Zoom in" }), { buttons: 1 });
+    const before = viewport().style.transform;
+    // A press and a drag that would pan the view if they began on the canvas.
+    for (const name of ["Zoom in", "Zoom out", "Fit"]) {
+      pressAndDrag(screen.getByRole("button", { name }));
+      expect(viewport().style.transform).toBe(before);
+      expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
+    }
+
     await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     expect(screen.getByTestId("flow-zoom")).toHaveTextContent("110%");
-    expect(viewport.style.transform).not.toBe(before);
-    expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
+    expect(viewport().style.transform).toBe("translate(24px, 24px) scale(1.1)");
     await userEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     expect(screen.getByTestId("flow-zoom")).toHaveTextContent("100%");
+    await userEvent.click(screen.getByRole("button", { name: "Fit" }));
+    expect(viewport().style.transform).not.toBe(before);
+    expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
   });
 
   it("FLO-FR-22: a press on empty canvas pans the view and clears the selection", async () => {
@@ -220,9 +287,9 @@ describe("the view (FLO-FR-22, FLO-FR-23)", () => {
     await renderFlow(b);
 
     selectItem("t1");
-    const viewport = document.querySelector(".flow-viewport") as HTMLElement;
+    expect(viewport().style.transform).toContain("translate(24px, 24px)");
     panCanvas(50, 20);
-    expect(viewport.style.transform).toContain("translate(74px, 44px)");
+    expect(viewport().style.transform).toContain("translate(74px, 44px)");
     expect(itemEl("t1")).toHaveAttribute("data-selected", "false");
   });
 
@@ -259,6 +326,61 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
     await waitFor(() =>
       expect(callsOf(b, "list_discussions").some((a) => JSON.stringify(a).includes(ID))).toBe(true),
     );
+  });
+
+  it("FLO-FR-34: a press on the action control neither pans the view nor clears the selection", async () => {
+    const b = flowBackend(samplePlan());
+    await renderFlow(b);
+
+    selectItem("t1");
+    const before = viewport().style.transform;
+    pressAndDrag(within(canvas()).getByRole("button", { name: "Actions" }));
+    expect(viewport().style.transform).toBe(before);
+    expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
+    await userEvent.click(within(canvas()).getByRole("button", { name: "Actions" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
+    expect(viewport().style.transform).toBe(before);
+  });
+
+  it("FLO-FR-35: the Flow's discussions are read in the floating panel, shown and hidden by the discussions control", async () => {
+    const opened: Discussion = {
+      id: "dsc1",
+      target: { kind: "artifact", artifactId: ID },
+      fragmentTarget: null,
+      comments: [
+        {
+          id: "c1",
+          author: { kind: "human", login: "raver119" },
+          body: "Is the order of the refunds right?",
+          quotes: [],
+          attachments: [],
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+      resolved: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const b = flowBackend(samplePlan());
+    b.on.list_discussions = () => [opened];
+    b.on.list_project_agents = () => [];
+    b.on.list_agent_turns = () => [];
+    const { flows } = await renderFlow(b);
+
+    // No discussion column: the panel is closed until the control opens it.
+    expect(screen.queryByRole("dialog", { name: "Discussion" })).toBeNull();
+    expect(document.querySelector(".comment-rail")).toBeNull();
+    const control = await within(canvas()).findByRole("button", { name: "Show discussion (1)" });
+    await userEvent.click(control);
+    const floating = screen.getByRole("dialog", { name: "Discussion" });
+    expect(canvas()).toContainElement(floating);
+    expect(within(floating).getByText("Is the order of the refunds right?")).toBeInTheDocument();
+
+    await userEvent.click(within(canvas()).getByRole("button", { name: "Hide discussion" }));
+    expect(screen.queryByRole("dialog", { name: "Discussion" })).toBeNull();
+    expect(flows.get(ID)!.dirty).toBe(false);
+    expect(b.writes).toEqual([]);
   });
 
   it("FLO-FR-35, FLO-FR-07: the add menu and the action control share one transient surface", async () => {

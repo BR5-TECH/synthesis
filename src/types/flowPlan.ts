@@ -95,9 +95,12 @@ export interface SyncConflict {
 }
 
 export interface SkippedIssue {
-  /** Absent for an item the sync could not create, which has no number yet. */
+  /** `null` for an item the sync could not create, which has no number yet. */
   number: number | null;
   title: string;
+  /** The tracker item's URL, or `null` where it has none (FSR-FR-KDMM). */
+  url: string | null;
+  /** The Flow item, where the skip is about one. */
   itemId?: string;
   reason: "no_kind_fits" | "issue_type_unavailable" | "foreign_repository";
 }
@@ -133,7 +136,6 @@ export interface TrackerItemSnapshot {
 
 /** FTS-FR-LMBE. */
 export interface FlowTrackerSettings {
-  deliverableType: string;
   epicType: string;
   featureType: string;
   taskType: string;

@@ -37,7 +37,6 @@ export interface RefusalMessage {
 }
 
 const KIND_NAMES: Record<FlowItemKind, string> = {
-  deliverable: "a deliverable",
   milestone: "a milestone",
   epic: "an epic",
   feature: "a feature",

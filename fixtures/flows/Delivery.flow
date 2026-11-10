@@ -7,31 +7,17 @@
   ],
   "items": [
     {
-      "id": "d1",
-      "kind": "deliverable",
-      "name": "Card payments",
+      "id": "m1",
+      "kind": "milestone",
+      "name": "Beta",
       "description": "Accept **Visa** and **Mastercard**.",
       "artifactIds": [
         "specifications/core/PAY-payments.md"
       ],
+      "due": "2027-03-31",
       "position": {
         "x": 40,
         "y": 40
-      },
-      "size": {
-        "width": 1200,
-        "height": 760
-      }
-    },
-    {
-      "id": "m1",
-      "kind": "milestone",
-      "name": "Beta",
-      "parentId": "d1",
-      "due": "2027-03-31",
-      "position": {
-        "x": 20,
-        "y": 60
       },
       "size": {
         "width": 1100,
@@ -255,6 +241,16 @@
           "state": "open",
           "due": "2027-03-31"
         }
+      }
+    ],
+    "ignored": [
+      {
+        "kind": "issue",
+        "host": "github.com",
+        "owner": "acme",
+        "repo": "payments",
+        "number": 47,
+        "url": "https://github.com/acme/payments/issues/47"
       }
     ]
   }

@@ -58,23 +58,20 @@ export function plan(
  * The sample plan, with these canvas positions:
  *
  * ```
- * d1 (0,0) 1200×800
- *   m1 (20,60) 1000×700                     -> canvas (20,60)
- *     f1 (20,60) 420×300                     -> canvas (40,120)
- *       t1 (20,60)                           -> canvas (60,180)
- *       t2 (220,60)                          -> canvas (260,180)
- *     ep1 (460,60) 500×400                   -> canvas (480,120)
- *       f2 (20,60) 400×220                   -> canvas (500,180)
- *         t3 (20,60)                         -> canvas (520,240)
- *     x1 (20,400)                            -> canvas (40,460)
+ * m1 (20,60) 1000×700                       -> canvas (20,60)
+ *   f1 (20,60) 420×300                       -> canvas (40,120)
+ *     t1 (20,60)                             -> canvas (60,180)
+ *     t2 (220,60)                            -> canvas (260,180)
+ *   ep1 (460,60) 500×400                     -> canvas (480,120)
+ *     f2 (20,60) 400×220                     -> canvas (500,180)
+ *       t3 (20,60)                           -> canvas (520,240)
+ *   x1 (20,400)                              -> canvas (40,460)
  * ```
  */
 export function samplePlan(edges: FlowEdge[] = []): FlowDocument {
   return plan(
     [
-      item("d1", "deliverable", { size: { width: 1200, height: 800 } }),
       item("m1", "milestone", {
-        parentId: "d1",
         position: { x: 20, y: 60 },
         size: { width: 1000, height: 700 },
       }),

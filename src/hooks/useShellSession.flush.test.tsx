@@ -503,7 +503,7 @@ describe("File menu Save / Save All (SNV-FR-28..31)", () => {
       await result.current.flows.get(id)?.pendingLoad;
     });
     act(() =>
-      result.current.flows.applyEdit(id, (d) => docOrUnchanged(d, addItem(d, "deliverable", { x: 40, y: 40 }))),
+      result.current.flows.applyEdit(id, (d) => docOrUnchanged(d, addItem(d, "milestone", { x: 40, y: 40 }))),
     );
   };
 

@@ -8,13 +8,15 @@ import { resetToasts } from "../state/toasts";
 import type { FlowDeliveryState } from "../types";
 import {
   callsOf,
+  advance,
   clearFlowStores,
+  endFakeTimers,
   flowBackend,
   itemState,
   planOf,
   renderFlow,
 } from "../test/flowCanvasHarness";
-import { itemEl, panel, selectItem } from "../test/flowFixtures";
+import { ID, itemEl, panel, selectItem } from "../test/flowFixtures";
 import { emitEvent, resetListeners } from "../test/flowMocks";
 import {
   blocks,
@@ -25,6 +27,8 @@ import {
   plan,
   samplePlan,
 } from "../test/flowPlanFixtures";
+import { AUTOSAVE_DELAY_MS } from "../state/writeSchedule";
+import type { FlowOverlapReport } from "../types";
 import { DELIVERY_REST_MS } from "./Flow/useDeliveryState";
 import { STATE_LOOK } from "./Flow/chips";
 
@@ -41,8 +45,8 @@ beforeEach(() => {
   resetListeners();
 });
 
-afterEach(() => {
-  vi.useRealTimers();
+afterEach(async () => {
+  await endFakeTimers();
   cleanup();
   clearFlowStores();
 });
@@ -76,7 +80,8 @@ describe("the status chip (FLO-FR-KQCE)", () => {
       expect(chip).toHaveAttribute("data-state", state);
       expect(chip).toHaveTextContent(`${STATE_LOOK[state].shape}${STATE_LOOK[state].word}`);
     }
-    expect(chipOf("d1")).toBeNull();
+    // m1 has no answer, so it shows no chip.
+    expect(chipOf("m1")).toBeNull();
   });
 
   it("FLO-FR-KQCE: an item with no answer yet renders no chip, and the canvas is usable before the answer", async () => {
@@ -143,6 +148,18 @@ describe("the Overlap marker (FLO-FR-KWFH)", () => {
     expect(screen.getByTestId("flow-status")).toHaveTextContent("1 overlap");
   });
 
+  it("FLO-FR-KWFH: a container never carries the Overlap marker, also when an overlap names it", async () => {
+    const b = flowBackend(samplePlan());
+    b.overlaps = { overlaps: [{ items: ["f1", "t3"], paths: ["src/a"] }, { items: ["t1", "t2"], paths: ["src/b"] }] };
+    await renderFlow(b);
+
+    // The marker on t1 proves that the answer has arrived.
+    expect(await within(itemEl("t1")).findByRole("button", { name: /^Overlaps with T2/ })).toBeInTheDocument();
+    const head = itemEl("f1").querySelector(".flow-ctr__head") as HTMLElement;
+    expect(within(head).queryByRole("button", { name: /^Overlaps/ })).toBeNull();
+    expect(head).not.toHaveTextContent("Overlap");
+  });
+
   it("FLO-FR-KWFH: activating the marker selects the other items of the overlap", async () => {
     const b = flowBackend(samplePlan());
     b.overlaps = {
@@ -179,17 +196,21 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
     selectItem("t1");
     const field = within(panel()).getByRole("textbox", { name: "Description" });
     fireEvent.change(field, { target: { value: "a" } });
-    act(() => vi.advanceTimersByTime(DELIVERY_REST_MS - 50));
+    await advance(DELIVERY_REST_MS - 50);
     fireEvent.change(field, { target: { value: "ab" } });
-    act(() => vi.advanceTimersByTime(DELIVERY_REST_MS - 50));
+    await advance(DELIVERY_REST_MS - 50);
     expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1);
-    act(() => vi.advanceTimersByTime(60));
-    vi.useRealTimers();
-    await waitFor(() => expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(2));
+    await advance(60);
+    expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(2);
     expect(callsOf(b, "load_flow_delivery_state")[1]).toEqual({
       body: serializeFlowDocument(planOf(flows)),
     });
     expect(callsOf(b, "analyze_flow_overlap")).toHaveLength(2);
+    // Let the scheduled write run under the fake clock, so no timer of this
+    // test is left behind when the real timers return.
+    await advance(AUTOSAVE_DELAY_MS);
+    expect(b.writes).toHaveLength(1);
+    expect(flows.hasPendingWrite(ID)).toBe(false);
   });
 
   it("FLO-FR-STUN: a \"drafts changed\" or a \"graduation run changed\" event asks again", async () => {
@@ -219,39 +240,90 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
     expect(chipOf("t1")).toHaveAttribute("data-state", "done");
   });
 
+  it("FLO-FR-STUN: an older overlap answer that arrives last is discarded", async () => {
+    const b = flowBackend(samplePlan());
+    const pending: Array<(r: FlowOverlapReport) => void> = [];
+    b.on.analyze_flow_overlap = () => new Promise((res) => pending.push(res));
+    await renderFlow(b);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    act(() => emitEvent("drafts-changed"));
+    await waitFor(() => expect(pending).toHaveLength(2));
+
+    await act(async () => pending[1]({ overlaps: [{ items: ["t1", "t3"], paths: ["src/a"] }] }));
+    expect(within(itemEl("t1")).getByRole("button", { name: /^Overlaps with T3/ })).toBeInTheDocument();
+    await act(async () => pending[0]({ overlaps: [] }));
+    expect(within(itemEl("t1")).getByRole("button", { name: /^Overlaps with T3/ })).toBeInTheDocument();
+    expect(screen.getByTestId("flow-status")).toHaveTextContent("1 overlap");
+  });
+
   it("FLO-FR-STUN: an answer for a body that an edit superseded is discarded", async () => {
     const b = flowBackend(samplePlan());
     const pending: Array<(s: FlowDeliveryState) => void> = [];
     b.on.load_flow_delivery_state = () => new Promise((res) => pending.push(res));
-    await renderFlow(b);
+    const { flows } = await renderFlow(b);
     await waitFor(() => expect(pending).toHaveLength(1));
+    vi.useFakeTimers();
 
-    await userEvent.type(screen.getByRole("textbox", { name: "Flow description" }), "x");
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "x" } });
+    // The clock is held below the rest, so no newer question was asked: the
+    // answer is discarded because its body is not the plan's body.
     await act(async () => pending[0]({ items: [itemState("t1", "done")] }));
+    expect(pending).toHaveLength(1);
     expect(chipOf("t1")).toBeNull();
+
+    // The question for the edited body comes after the rest, and its answer applies.
+    await advance(DELIVERY_REST_MS);
+    expect(pending).toHaveLength(2);
+    expect(callsOf(b, "load_flow_delivery_state")[1]).toEqual({ body: serializeFlowDocument(planOf(flows)) });
+    await act(async () => pending[1]({ items: [itemState("t1", "drafting")] }));
+    expect(chipOf("t1")).toHaveAttribute("data-state", "drafting");
+    await advance(AUTOSAVE_DELAY_MS);
+    expect(flows.hasPendingWrite(ID)).toBe(false);
   });
 });
 
 describe("milestones, local-only items, and tracker tags", () => {
   const milestones = () =>
     plan([
-      item("d1", "deliverable", { size: { width: 1400, height: 500 } }),
-      item("m1", "milestone", { parentId: "d1", due: "2000-01-31", position: { x: 20, y: 60 } }),
-      item("m2", "milestone", { parentId: "d1", due: "2000-01-31", position: { x: 700, y: 60 } }),
+      item("m1", "milestone", { due: "2000-01-31", position: { x: 20, y: 60 } }),
+      item("m2", "milestone", { due: "2000-01-31", position: { x: 700, y: 60 } }),
+      item("ep1", "epic", { parentId: "m1", position: { x: 20, y: 60 } }),
     ]);
 
-  it("FLO-FR-XAPK: a milestone shows its due date, marked as past when it is before today and not done", async () => {
-    const b = flowBackend(milestones());
-    b.delivery = { items: [itemState("m1", "in_progress"), itemState("m2", "done")] };
+  it("FLO-FR-XAPK: a milestone is past only when its due date is before today and it is not done", async () => {
+    // Midday of 2027-03-15, in local time: the canvas reads "today" in local time.
+    vi.setSystemTime(new Date(2027, 2, 15, 12, 0, 0));
+    const at = (n: number) => ({ x: n * 700, y: 0 });
+    const b = flowBackend(
+      plan([
+        item("m1", "milestone", { due: "2027-03-14", position: at(0) }),
+        item("m2", "milestone", { due: "2027-03-14", position: at(1) }),
+        item("m3", "milestone", { due: "2027-03-15", position: at(2) }),
+        item("m4", "milestone", { due: "2027-03-16", position: at(3) }),
+      ]),
+    );
+    b.delivery = {
+      items: [
+        itemState("m1", "in_progress"),
+        itemState("m2", "done"),
+        itemState("m3", "in_progress"),
+        itemState("m4", "not_started"),
+      ],
+    };
     await renderFlow(b);
-    await waitFor(() => expect(chipOf("m1")).not.toBeNull());
+    await waitFor(() => expect(chipOf("m4")).not.toBeNull());
 
-    const past = within(itemEl("m1")).getByTestId("flow-due");
-    expect(past).toHaveAttribute("data-past", "true");
-    expect(past).toHaveTextContent("due 2000-01-31 · past");
-    const done = within(itemEl("m2")).getByTestId("flow-due");
-    expect(done).toHaveAttribute("data-past", "false");
-    expect(done).toHaveTextContent("due 2000-01-31");
+    const due = (id: string) => within(itemEl(id)).getByTestId("flow-due");
+    expect(due("m1")).toHaveAttribute("data-past", "true");
+    expect(due("m1")).toHaveTextContent("due 2027-03-14 · past");
+    // Done: not past, whatever the date.
+    expect(due("m2")).toHaveAttribute("data-past", "false");
+    expect(due("m2")).toHaveTextContent(/^.*due 2027-03-14$/);
+    // Today is not before today.
+    expect(due("m3")).toHaveAttribute("data-past", "false");
+    // A future date that is not done is not past.
+    expect(due("m4")).toHaveAttribute("data-past", "false");
+    expect(due("m4")).not.toHaveTextContent("past");
   });
 
   it("FLO-FR-XAPK: a selected milestone offers a Due field that stores a date or nothing", async () => {
@@ -264,7 +336,7 @@ describe("milestones, local-only items, and tracker tags", () => {
     expect(findItem(planOf(flows), "m1")!.due).toBe("2031-12-24");
     fireEvent.change(due, { target: { value: "" } });
     expect(findItem(planOf(flows), "m1")!.due).toBeUndefined();
-    selectItem("d1");
+    selectItem("ep1");
     expect(within(panel()).queryByLabelText("Due")).toBeNull();
   });
 

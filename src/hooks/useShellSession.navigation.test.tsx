@@ -250,7 +250,7 @@ describe("useShellSession.goHome (SNV-FR-41 / TAB-FR-08)", () => {
     });
     act(() =>
       result.current.flows.applyEdit(FLOW_ID, (d) =>
-        docOrUnchanged(d, addItem(d, "deliverable", { x: 10, y: 10 })),
+        docOrUnchanged(d, addItem(d, "milestone", { x: 10, y: 10 })),
       ),
     );
     await act(async () => {

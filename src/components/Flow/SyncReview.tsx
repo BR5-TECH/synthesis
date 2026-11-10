@@ -29,16 +29,6 @@ const SKIP_REASONS: Record<string, string> = {
   foreign_repository: "It is in another repository",
 };
 
-/**
- * A skipped issue. The wrapper type has no URL and a non-null number; the
- * backend sends a null number for an item whose issue was not created, and a
- * link is shown only where the record carries a URL (FSR-FR-KDMM).
- */
-type SkippedRecord = Omit<SkippedIssue, "number"> & {
-  number: number | null;
-  url?: string | null;
-};
-
 export interface SyncReviewProps {
   doc: FlowDocument;
   sync: FlowSyncState;
@@ -162,16 +152,21 @@ function ConflictRow({
   );
 }
 
-function SkippedRow({ issue, onOpenLink }: { issue: SkippedRecord; onOpenLink: (url: string) => void }) {
+/**
+ * FSR-FR-CSOT / FSR-FR-KDMM: a skipped issue. It links to the tracker through
+ * its URL, and an item whose issue was not created has neither number nor URL.
+ */
+function SkippedRow({ issue, onOpenLink }: { issue: SkippedIssue; onOpenLink: (url: string) => void }) {
+  const url = issue.url;
   const label = issue.number !== null ? `#${issue.number} ${issue.title}` : issue.title;
   return (
     <li className="flow-review__skipped">
-      {issue.url ? (
+      {url ? (
         <button
           type="button"
           className="flow-review__link"
           aria-label={`Open ${label} on GitHub`}
-          onClick={() => onOpenLink(issue.url!)}
+          onClick={() => onOpenLink(url)}
         >
           {label} <span aria-hidden="true">↗</span>
         </button>
@@ -210,7 +205,7 @@ export function SyncReview({
   const open = sync.conflicts.filter((c) => !c.stale);
   const chosen = open.filter((c) => choices[c.id] !== undefined);
   const stale = sync.conflicts.some((c) => c.stale);
-  const skipped = sync.skipped as SkippedRecord[];
+  const skipped = sync.skipped;
   const inSync = sync.settled && sync.conflicts.length === 0 && skipped.length === 0;
   const summary = [
     `${sync.conflicts.length} ${sync.conflicts.length === 1 ? "conflict" : "conflicts"}`,

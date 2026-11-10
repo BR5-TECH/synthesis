@@ -80,6 +80,8 @@ function sync(s: FlowSync): Record<string, unknown> {
       ref: ref(l.ref),
       base: base(l.base),
     })),
+    // FGV-FR-01: written after `links`, and absent when empty.
+    ...(s.ignored && s.ignored.length > 0 ? { ignored: s.ignored.map(ref) } : {}),
   };
 }
 

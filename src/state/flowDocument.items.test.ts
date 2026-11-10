@@ -63,20 +63,20 @@ function refusal(r: FlowEditResult) {
 }
 
 describe("addItem (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
-  it("FLO-FR-07: a new deliverable gets its default name and default size", () => {
-    const { doc, itemId } = added(addItem(emptyFlow(), "deliverable", { x: 40, y: 50 }));
-    expect(itemId).toBe("d1");
+  it("FLO-FR-07: a new milestone gets its default name and default size", () => {
+    const { doc, itemId } = added(addItem(emptyFlow(), "milestone", { x: 40, y: 50 }));
+    expect(itemId).toBe("m1");
     expect(doc.items).toEqual([
       {
-        id: "d1",
-        kind: "deliverable",
-        name: "New deliverable",
+        id: "m1",
+        kind: "milestone",
+        name: "New milestone",
         position: { x: 40, y: 50 },
-        size: { width: 760, height: 480 },
+        size: { width: 640, height: 380 },
       },
     ]);
     // The size is a copy, so an edit to it cannot change the default.
-    expect(doc.items[0].size).not.toBe(DEFAULT_CONTAINER_SIZES.deliverable);
+    expect(doc.items[0].size).not.toBe(DEFAULT_CONTAINER_SIZES.milestone);
   });
 
   it("FLO-FR-07, FLO-FR-42: a task added in a feature stores its position in the feature's coordinates", () => {
@@ -93,7 +93,7 @@ describe("addItem (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
   it("FLO-FR-07: each kind gets its own default name, and only a container gets a size", () => {
     const base = samplePlan();
     const cases = [
-      ["milestone", "d1", "New milestone", true],
+      ["milestone", undefined, "New milestone", true],
       ["epic", "m1", "New epic", true],
       ["feature", "ep1", "New feature", true],
       ["defect", "ep1", "New defect", false],
@@ -113,11 +113,15 @@ describe("addItem (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
     });
     expect(refusal(addItem(samplePlan(), "milestone", { x: 0, y: 0 }, "f1"))).toEqual({
       code: "invalid_parent_kind",
-      permitted: ["deliverable"],
+      permitted: [null],
     });
-    expect(refusal(addItem(samplePlan(), "deliverable", { x: 0, y: 0 }, "d1")).code).toBe(
+    expect(refusal(addItem(samplePlan(), "milestone", { x: 0, y: 0 }, "m1")).code).toBe(
       "invalid_parent_kind",
     );
+    expect(refusal(addItem(samplePlan(), "epic", { x: 0, y: 0 }))).toEqual({
+      code: "invalid_parent_kind",
+      permitted: ["milestone"],
+    });
   });
 
   it("FLO-FR-OAOZ: a placement in a leaf or in an item that is not there is refused", () => {
@@ -174,13 +178,13 @@ describe("removeItem (FLO-FR-08, FLO-FR-45)", () => {
 
   it("FLO-FR-45: a container goes with every item under it and all their edges", () => {
     const doc = removeItem(samplePlan(edges), "ep1");
-    expect(ids(doc)).toEqual(["d1", "m1", "f1", "t1", "t2", "x1"]);
+    expect(ids(doc)).toEqual(["m1", "f1", "t1", "t2", "x1"]);
     expect(doc.edges.map((e) => e.id)).toEqual(["e1"]);
   });
 
   it("FLO-FR-45: removalScope counts the items under a container and every edge that goes", () => {
     expect(removalScope(samplePlan(edges), "ep1")).toEqual({ itemCount: 2, edgeCount: 3 });
-    expect(removalScope(samplePlan(edges), "d1")).toEqual({ itemCount: 8, edgeCount: 4 });
+    expect(removalScope(samplePlan(edges), "m1")).toEqual({ itemCount: 7, edgeCount: 4 });
     expect(removalScope(samplePlan(edges), "t2")).toEqual({ itemCount: 0, edgeCount: 1 });
     expect(removalScope(samplePlan(edges), "nope")).toEqual({ itemCount: 0, edgeCount: 0 });
   });
@@ -266,14 +270,14 @@ describe("names, descriptions and references (FLO-FR-09, FLO-FR-10, FLO-FR-13, F
 describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
   it("FLO-FR-HGIY: a task becomes a defect and keeps its draft and footprint", () => {
     const doc = samplePlan();
-    doc.items[3] = { ...doc.items[3], draftId: "dr1", footprint: ["src/"] };
+    doc.items[2] = { ...doc.items[2], draftId: "dr1", footprint: ["src/"] };
     const next = ok(setItemKind(doc, "t1", "defect"));
     expect(findItem(next, "t1")).toMatchObject({ kind: "defect", draftId: "dr1", footprint: ["src/"] });
   });
 
   it("FLO-FR-HGIY, FGV-FR-MZIA: a leaf that becomes a container loses its draft and footprint and gets a default size", () => {
     const doc = samplePlan();
-    doc.items[8] = { ...doc.items[8], draftId: "dr1", footprint: ["src/"] };
+    doc.items[7] = { ...doc.items[7], draftId: "dr1", footprint: ["src/"] };
     expect(kindChangeDrops(doc, "x1", "feature")).toEqual(["draftId", "footprint"]);
     const next = ok(setItemKind(doc, "x1", "feature"));
     const x1 = findItem(next, "x1")!;
@@ -348,7 +352,7 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
     expect(allowedKinds(doc, "x1")).toEqual(["epic", "feature", "defect"]);
     expect(allowedKinds(doc, "t1")).toEqual(["task", "defect"]);
     expect(allowedKinds(doc, "f1")).toEqual(["feature"]);
-    expect(allowedKinds(doc, "d1")).toEqual(["deliverable"]);
+    expect(allowedKinds(doc, "m1")).toEqual(["milestone"]);
     expect(allowedKinds(doc, "nope")).toEqual([]);
   });
 });
@@ -493,7 +497,7 @@ describe("local only (FLO-FR-TZSU)", () => {
   });
 
   it("FLO-FR-TZSU: a `false` read from a file is cleared by an off", () => {
-    const doc = plan([item("d1", "deliverable", { localOnly: false })]);
-    expect("localOnly" in findItem(setLocalOnly(doc, "d1", false), "d1")!).toBe(false);
+    const doc = plan([item("m1", "milestone", { localOnly: false })]);
+    expect("localOnly" in findItem(setLocalOnly(doc, "m1", false), "m1")!).toBe(false);
   });
 });

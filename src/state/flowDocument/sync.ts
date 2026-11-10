@@ -63,8 +63,15 @@ export function setSyncLink(
       ...(base.description !== "" ? { description: base.description } : {}),
     };
   });
+  // FGV-FR-TLMV: a reference is never both linked and ignored, so a link to
+  // an ignored tracker item takes it off the ignored list.
+  const ignored = (doc.sync.ignored ?? []).filter((r) => !sameTrackerRef(r, ref));
   return accept({
     ...named,
-    sync: { ...doc.sync, links: [...doc.sync.links, { itemId, ref, base }] },
+    sync: {
+      tracker: doc.sync.tracker,
+      links: [...doc.sync.links, { itemId, ref, base }],
+      ...(ignored.length > 0 ? { ignored } : {}),
+    },
   });
 }

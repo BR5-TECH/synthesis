@@ -65,7 +65,7 @@ describe("connect (FLO-FR-15 to FLO-FR-17, FLO-FR-CEVI, FLO-FR-ZEPI)", () => {
   it("FLO-FR-ZEPI: a connection between an item and its ancestor or descendant is refused", () => {
     const doc = samplePlan();
     expect(refusal(connect(doc, "t1", "f1")).code).toBe("edge_within_lineage");
-    expect(refusal(connect(doc, "d1", "t3")).code).toBe("edge_within_lineage");
+    expect(refusal(connect(doc, "m1", "t3")).code).toBe("edge_within_lineage");
     expect(refusal(connect(doc, "ep1", "f2")).code).toBe("edge_within_lineage");
   });
 

@@ -4,17 +4,18 @@ import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
 import { resetToasts } from "../state/toasts";
-import type { SyncConflict, SyncResult } from "../types";
+import type { Discussion, SyncConflict, SyncResult } from "../types";
 import {
   callsOf,
   clearFlowStores,
   emptyResult,
+  endFakeTimers,
   flowBackend,
   renderFlow,
 } from "../test/flowCanvasHarness";
 import { ID, itemEl } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
-import { issueBase, issueRef, samplePlan } from "../test/flowPlanFixtures";
+import { issueBase, issueRef, milestoneRef, samplePlan } from "../test/flowPlanFixtures";
 
 vi.mock("@tauri-apps/api/core", async () => ({
   invoke: (await import("../test/flowMocks")).invoke,
@@ -29,7 +30,8 @@ beforeEach(() => {
   resetListeners();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await endFakeTimers();
   cleanup();
   clearFlowStores();
 });
@@ -42,7 +44,9 @@ const synced = () => {
       { itemId: "f1", ref: issueRef(42), base: issueBase("F1") },
       { itemId: "t1", ref: issueRef(51), base: issueBase("T1") },
       { itemId: "gone", ref: issueRef(47), base: issueBase("Old spike") },
-      { itemId: "d1", ref: issueRef(40), base: issueBase("D1") },
+      { itemId: "ep1", ref: issueRef(41), base: issueBase("EP1") },
+      { itemId: "x1", ref: issueRef(45), base: issueBase("X1") },
+      { itemId: "m1", ref: milestoneRef(3), base: { name: "M1", description: "", state: "open", due: null } },
     ],
   };
   return doc;
@@ -69,7 +73,7 @@ const invalidConflict: SyncConflict = {
   field: "parent",
   base: issueRef(42),
   flow: issueRef(42),
-  tracker: issueRef(40),
+  tracker: issueRef(41),
   choices: ["keep_flow", "unlink"],
   url: "https://github.com/acme/payments/issues/51",
 };
@@ -90,8 +94,8 @@ const goneConflict: SyncConflict = {
 const removedConflict: SyncConflict = {
   id: "c-removed",
   kind: "removed_on_tracker",
-  itemId: "d1",
-  itemName: "D1",
+  itemId: "x1",
+  itemName: "X1",
   field: null,
   base: null,
   flow: null,
@@ -106,9 +110,9 @@ const RESULT = emptyResult({
     {
       number: 58,
       title: "Load test plan",
-      reason: "no_kind_fits",
       url: "https://github.com/acme/payments/issues/58",
-    } as unknown as SyncResult["skipped"][number],
+      reason: "no_kind_fits",
+    },
   ],
 });
 
@@ -153,6 +157,58 @@ describe("opening and closing the review (FSR-FR-KGOY, FSR-FR-ODJL)", () => {
     expect(within(again).getAllByRole("radio").every((r) => !(r as HTMLInputElement).checked)).toBe(true);
     expect(within(again).getByRole("button", { name: "Apply" })).toBeDisabled();
   });
+
+  it("FSR-FR-ODJL: Escape while focus is outside the panel keeps it open, with its choices", async () => {
+    const { review } = await openReview();
+
+    const keep = within(review).getAllByRole("radio", { name: "Keep Flow" })[0];
+    await userEvent.click(keep);
+    const name = screen.getByRole("textbox", { name: "Flow name" });
+    name.focus();
+    fireEvent.keyDown(name, { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.getByTestId("flow-sync-review")).toBeInTheDocument();
+    expect(keep).toBeChecked();
+  });
+
+  it("FSR-FR-KGOY: opening the review closes no floating overlay", async () => {
+    const opened: Discussion = {
+      id: "dsc1",
+      target: { kind: "artifact", artifactId: ID },
+      fragmentTarget: null,
+      comments: [
+        {
+          id: "c1",
+          author: { kind: "human", login: "raver119" },
+          body: "Check the refunds.",
+          quotes: [],
+          attachments: [],
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+      resolved: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const b = flowBackend(synced());
+    b.on.sync_flow_with_tracker = () => RESULT;
+    b.on.list_discussions = () => [opened];
+    b.on.list_project_agents = () => [];
+    b.on.list_agent_turns = () => [];
+    await renderFlow(b);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Show discussion (1)" }));
+    expect(screen.getByRole("dialog", { name: "Discussion" })).toBeInTheDocument();
+    // A sync opens the review with its result.
+    await userEvent.click(screen.getByRole("button", { name: "Sync" }));
+    await screen.findByTestId("flow-sync-review");
+    expect(screen.getByRole("dialog", { name: "Discussion" })).toBeInTheDocument();
+    // The count on the Sync control opens it again.
+    await userEvent.click(screen.getByRole("button", { name: "Close sync review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Review 4 sync items" }));
+    expect(screen.getByTestId("flow-sync-review")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Discussion" })).toBeInTheDocument();
+  });
 });
 
 describe("the rows (FSR-FR-RDZI, FSR-FR-IFQE, FSR-FR-BRIA, FSR-FR-QAKW)", () => {
@@ -187,7 +243,7 @@ describe("the rows (FSR-FR-RDZI, FSR-FR-IFQE, FSR-FR-BRIA, FSR-FR-QAKW)", () => 
       emptyResult({
         conflicts: [
           { ...nameConflict, id: "c-desc", field: "description", flow: "Short", tracker: long },
-          { ...nameConflict, id: "c-par", field: "parent", flow: issueRef(40), tracker: null },
+          { ...nameConflict, id: "c-par", field: "parent", flow: issueRef(41), tracker: null },
           { ...nameConflict, id: "c-type", field: "type", flow: "Feature", tracker: "Epic" },
         ],
       }),
@@ -198,9 +254,29 @@ describe("the rows (FSR-FR-RDZI, FSR-FR-IFQE, FSR-FR-BRIA, FSR-FR-QAKW)", () => 
     await userEvent.click(within(desc).getByRole("button", { name: "Show all" }));
     expect(desc.querySelector("[data-clamped='true']")).toBeNull();
     const parent = within(review).getByTestId("flow-conflict-c-par");
-    expect(parent).toHaveTextContent("In this FlowD1 (#40)");
+    expect(parent).toHaveTextContent("In this FlowEP1 (#41)");
     expect(parent).toHaveTextContent("On GitHubNone");
     expect(within(review).getByTestId("flow-conflict-c-type")).toHaveTextContent("On GitHubEpic");
+  });
+
+  it("FSR-FR-IFQE: a milestone shows the milestone item's name and number, or the number alone when no item links it", async () => {
+    const { review } = await openReview(
+      emptyResult({
+        conflicts: [
+          { ...nameConflict, id: "c-ms", field: "milestone", base: 3, flow: 3, tracker: 4 },
+          { ...nameConflict, id: "c-ms2", itemId: "t1", itemName: "T1", field: "milestone", base: null, flow: null, tracker: 3 },
+        ],
+      }),
+    );
+
+    const row = within(review).getByTestId("flow-conflict-c-ms");
+    expect(row).toHaveTextContent("Milestone");
+    expect(row).toHaveTextContent("In this FlowM1 (milestone 3)");
+    expect(row).toHaveTextContent("On GitHubmilestone 4");
+    const other = within(review).getByTestId("flow-conflict-c-ms2");
+    expect(other).toHaveTextContent("In this FlowNone");
+    expect(other).toHaveTextContent("On GitHubM1 (milestone 3)");
+    expect(within(review).getByRole("radiogroup", { name: "F1: Milestone" })).toBeInTheDocument();
   });
 
   it("FSR-FR-BRIA: each kind of conflict reads in words, and an invalid value names the rule it breaks", async () => {
@@ -212,7 +288,7 @@ describe("the rows (FSR-FR-RDZI, FSR-FR-IFQE, FSR-FR-BRIA, FSR-FR-QAKW)", () => 
     expect(within(review).getByTestId("flow-conflict-c-removed")).toHaveTextContent("Not found on GitHub");
     const invalid = within(review).getByTestId("flow-conflict-c-parent");
     expect(invalid).toHaveTextContent("Not valid in this plan");
-    expect(invalid).toHaveTextContent("GitHub sets its parent to D1 (#40). A task can sit only in a feature.");
+    expect(invalid).toHaveTextContent("GitHub sets its parent to EP1 (#41). A task can sit only in a feature.");
   });
 
   it("FSR-FR-QAKW: each row offers exactly its choices, as one group of options, none chosen", async () => {
@@ -253,14 +329,46 @@ describe("the rows (FSR-FR-RDZI, FSR-FR-IFQE, FSR-FR-BRIA, FSR-FR-QAKW)", () => 
   });
 });
 
+describe("the review by keyboard alone (FSR-FR-MMVF)", () => {
+  it("FSR-FR-MMVF: from the Sync control, the keyboard alone opens the review, makes a choice, and applies it", async () => {
+    const b = flowBackend(synced());
+    b.on.sync_flow_with_tracker = () => RESULT;
+    b.on.resolve_flow_sync_conflicts = () => emptyResult({ conflicts: [goneConflict, invalidConflict] });
+    await renderFlow(b);
+
+    within(screen.getByTestId("flow-band")).getByRole("button", { name: "Sync" }).focus();
+    await userEvent.keyboard("{Enter}");
+    const review = await screen.findByTestId("flow-sync-review");
+    await waitFor(() => expect(review).toHaveFocus());
+
+    const group = within(review).getByRole("radiogroup", { name: "F1: Title" });
+    for (let i = 0; i < 30 && !group.contains(document.activeElement); i += 1) await userEvent.tab();
+    expect(group).toContainElement(document.activeElement as HTMLElement);
+    await userEvent.keyboard(" ");
+    expect(within(group).getByRole("radio", { name: "Keep Flow" })).toBeChecked();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(within(group).getByRole("radio", { name: "Take GitHub" })).toBeChecked();
+
+    const apply = within(review).getByRole("button", { name: "Apply" });
+    for (let i = 0; i < 30 && document.activeElement !== apply; i += 1) await userEvent.tab();
+    expect(apply).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(callsOf(b, "resolve_flow_sync_conflicts")).toHaveLength(1));
+    expect(callsOf(b, "resolve_flow_sync_conflicts")[0]).toEqual({
+      flowId: ID,
+      resolutions: [{ conflictId: "c-name", choice: "take_tracker" }],
+    });
+  });
+});
+
 describe("skipped issues and links (FSR-FR-CSOT, FSR-FR-KDMM, FSR-FR-PGBX)", () => {
   it("FSR-FR-CSOT: a Skipped section lists each skipped issue with its number, title, and reason, and offers no choice", async () => {
     const { review } = await openReview(
       emptyResult({
         skipped: [
-          { number: 58, title: "Load test plan", reason: "no_kind_fits" },
-          { number: 61, title: "Vendor", reason: "foreign_repository" },
-          { number: 62, title: "Spike", reason: "issue_type_unavailable" },
+          { number: 58, title: "Load test plan", url: "https://github.com/acme/payments/issues/58", reason: "no_kind_fits" },
+          { number: 61, title: "Vendor", url: "https://github.com/acme/vendor/issues/61", reason: "foreign_repository" },
+          { number: null, title: "Spike", url: null, itemId: "t2", reason: "issue_type_unavailable" },
         ],
       }),
     );
@@ -268,11 +376,16 @@ describe("skipped issues and links (FSR-FR-CSOT, FSR-FR-KDMM, FSR-FR-PGBX)", () 
     const skipped = within(review).getByRole("heading", { name: "Skipped" }).parentElement!;
     const rows = within(skipped).getAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
-      "#58 Load test planNo kind fits its Type",
-      "#61 VendorIt is in another repository",
-      "#62 SpikeIts Type is not available in the repository",
+      "#58 Load test plan ↗No kind fits its Type",
+      "#61 Vendor ↗It is in another repository",
+      "SpikeIts Type is not available in the repository",
     ]);
     expect(within(skipped).queryByRole("radio")).toBeNull();
+    // FSR-FR-KDMM: a skipped issue links through its URL; an item whose issue
+    // was not created has no URL and no link.
+    expect(within(rows[0]).getByRole("button", { name: "Open #58 Load test plan on GitHub" })).toBeInTheDocument();
+    expect(within(rows[1]).getByRole("button", { name: "Open #61 Vendor on GitHub" })).toBeInTheDocument();
+    expect(within(rows[2]).queryByRole("button")).toBeNull();
   });
 
   it("FSR-FR-KDMM: a group's link and a skipped issue's link invoke \"open tracker link\" with their URL", async () => {
@@ -316,22 +429,31 @@ describe("skipped issues and links (FSR-FR-CSOT, FSR-FR-KDMM, FSR-FR-PGBX)", () 
 
 describe("Apply (FSR-FR-IDRR, FSR-FR-AUWG, FSR-FR-UHAM, FSR-FR-BXJJ)", () => {
   it("FSR-FR-IDRR: Apply is enabled once a row has a choice, writes pending changes first, and sends the chosen rows alone", async () => {
-    const { review, b } = await openReview();
-    b.on.resolve_flow_sync_conflicts = () => emptyResult({ conflicts: [invalidConflict, goneConflict] });
+    const { review, b, flows } = await openReview();
+    /** What was on disk when the resolve call came. */
+    let onDisk: string[] | null = null;
+    b.on.resolve_flow_sync_conflicts = () => {
+      onDisk = [...b.writes];
+      return emptyResult({ conflicts: [invalidConflict, goneConflict] });
+    };
+    const before = b.writes.length;
+    // The clock is held below the rest, so only Apply can write the edit.
+    vi.useFakeTimers();
 
     const apply = within(review).getByRole("button", { name: "Apply" });
     expect(apply).toBeDisabled();
-    await userEvent.type(screen.getByRole("textbox", { name: "Flow description" }), "Q3");
-    await userEvent.click(within(within(review).getByTestId("flow-conflict-c-name")).getByRole("radio", { name: "Take GitHub" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "Q3" } });
+    expect(flows.hasPendingWrite(ID)).toBe(true);
+    fireEvent.click(within(within(review).getByTestId("flow-conflict-c-name")).getByRole("radio", { name: "Take GitHub" }));
     expect(apply).toBeEnabled();
-    await userEvent.click(apply);
-    await waitFor(() => expect(callsOf(b, "resolve_flow_sync_conflicts")).toHaveLength(1));
+    fireEvent.click(apply);
+    await vi.waitFor(() => expect(callsOf(b, "resolve_flow_sync_conflicts")).toHaveLength(1));
     expect(callsOf(b, "resolve_flow_sync_conflicts")[0]).toEqual({
       flowId: ID,
       resolutions: [{ conflictId: "c-name", choice: "take_tracker" }],
     });
-    const order = b.calls.map((c) => c.cmd);
-    expect(order.lastIndexOf("save_artifact_contents")).toBeLessThan(order.indexOf("resolve_flow_sync_conflicts"));
+    expect(onDisk).toHaveLength(before + 1);
+    expect(JSON.parse(onDisk![before]).description).toBe("Q3");
   });
 
   it("FSR-FR-IDRR: the tab is inert while the call runs", async () => {
@@ -362,6 +484,29 @@ describe("Apply (FSR-FR-IDRR, FSR-FR-AUWG, FSR-FR-UHAM, FSR-FR-BXJJ)", () => {
     expect(within(review).getByTestId("flow-conflict-c-gone")).toBeInTheDocument();
     await userEvent.click(within(review).getByRole("button", { name: "Sync again" }));
     await waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(2));
+  });
+
+  it("FSR-FR-AUWG, FLO-FR-AKMV: Sync again first writes the pending changes", async () => {
+    const { review, b, flows } = await openReview();
+    b.on.resolve_flow_sync_conflicts = () => emptyResult({ conflicts: [goneConflict], stale: ["c-name"] });
+    await userEvent.click(within(within(review).getByTestId("flow-conflict-c-name")).getByRole("radio", { name: "Keep Flow" }));
+    await userEvent.click(within(review).getByRole("button", { name: "Apply" }));
+    const again = await within(review).findByRole("button", { name: "Sync again" });
+    let onDisk: string[] | null = null;
+    b.on.sync_flow_with_tracker = () => {
+      onDisk = [...b.writes];
+      return emptyResult({ conflicts: [goneConflict] });
+    };
+    const before = b.writes.length;
+    // The clock is held below the rest, so only Sync again can write the edit.
+    vi.useFakeTimers();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Flow description" }), { target: { value: "Q4" } });
+    expect(flows.hasPendingWrite(ID)).toBe(true);
+    fireEvent.click(again);
+    await vi.waitFor(() => expect(callsOf(b, "sync_flow_with_tracker")).toHaveLength(2));
+    expect(onDisk).toHaveLength(before + 1);
+    expect(JSON.parse(onDisk![before]).description).toBe("Q4");
   });
 
   it("FSR-FR-UHAM: a result with nothing left shows Everything is in sync, and the Sync control loses its count", async () => {

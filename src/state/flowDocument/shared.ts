@@ -15,7 +15,6 @@ export function mintId(prefix: string, taken: ReadonlySet<string>, from: number)
 
 /** The id prefix of each kind, as in the FGV-FR-01 example. */
 export const ITEM_ID_PREFIX: Readonly<Record<FlowItemKind, string>> = {
-  deliverable: "d",
   milestone: "m",
   epic: "ep",
   feature: "f",

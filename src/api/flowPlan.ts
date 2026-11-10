@@ -53,6 +53,6 @@ export const openTrackerLink = (url: string) =>
 export const getFlowTrackerSettings = () =>
   invoke<FlowTrackerSettings>("get_flow_tracker_settings");
 
-/** FTS-FR-ALOJ: `"set flow tracker settings (deliverable type, epic type, feature type, task type, defect type)"`. */
+/** FTS-FR-ALOJ: `"set flow tracker settings (epic type, feature type, task type, defect type)"`. */
 export const setFlowTrackerSettings = (settings: FlowTrackerSettings) =>
   invoke<FlowTrackerSettings>("set_flow_tracker_settings", { ...settings });

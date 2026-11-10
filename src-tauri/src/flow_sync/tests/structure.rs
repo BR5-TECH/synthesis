@@ -89,21 +89,32 @@ fn a_milestone_the_tracker_changed_moves_the_item() {
     assert!(!again.doc_changed);
 }
 
-/// FTS-FR-EGJL / FTS-FR-SZGF: a milestone is never under a parent item, so a
-/// tracker milestone that differs from the one the parent's item gives is
-/// `invalid_on_tracker`, and the item stays in its parent.
+/// FTS-FR-EGJL / FTS-FR-SZGF / FTS-FR-AONJ: a milestone is never under a
+/// parent item, so a tracker milestone that differs from the one the
+/// parent's item gives is `invalid_on_tracker` with the choices `keep_flow`
+/// and `unlink`, and the item stays in its parent. The next sync reports the
+/// same conflict with the same id.
 #[test]
 fn a_milestone_the_parent_does_not_give_is_invalid_on_tracker() {
     let (tracker, d) = wide_plan();
     tracker.edit(2, |i| i.milestone = Some(7));
     let out = sync(&tracker, d);
+    assert_eq!(out.result.conflicts.len(), 1, "{:?}", out.result.conflicts);
     let c = &out.result.conflicts[0];
     assert_eq!(
         (c.kind, c.field, c.item_id.as_str()),
         (ConflictKind::InvalidOnTracker, Some("milestone"), "f1")
     );
+    assert_eq!(c.choices, vec![Choice::KeepFlow, Choice::Unlink]);
+    assert_eq!((c.flow.clone(), c.tracker.clone()), (json!(5), json!(7)));
     assert_eq!(find(&out.doc, "f1").parent_id.as_deref(), Some("ep1"));
+    assert_eq!(link_of(&out.doc, "f1").base.milestone, Some(Some(5)));
     assert!(tracker.writes().is_empty());
+    tracker.clear_calls();
+    let again = sync(&tracker, out.doc.clone());
+    assert_eq!(again.result.conflicts, out.result.conflicts);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert_eq!(find(&again.doc, "f1").parent_id.as_deref(), Some("ep1"));
 }
 
 /// FTS-FR-AIJM / FTS-FR-EGJL: a parent and a milestone that the tracker
@@ -350,26 +361,54 @@ fn keep_flow_of_an_invalid_type_writes_the_flow_type_back() {
     assert!(again.result.conflicts.is_empty());
 }
 
-/// FTS-FR-SZGF / FTS-FR-YHVD: `unlink` on an `invalid_on_tracker` Type
-/// removes the link, ignores the issue, and makes the item local only. The
-/// item keeps its kind, and the tracker is not written.
+/// FTS-FR-SZGF / FTS-FR-YHVD / FTS-FR-HLVJ / FTS-FR-EGJL: `unlink` on an
+/// `invalid_on_tracker` Type removes the link, ignores the issue, and makes
+/// the item local only. The item keeps its kind, and the resolve writes
+/// nothing to the tracker. A later sync does not pull issue 2 back.
+///
+/// Today's behaviour, pinned for a later decision of the user: the unlinked
+/// container `f1` has no link now, so the nearest linked ancestor of its
+/// member `t1` is the epic `ep1` (FTS-FR-HLVJ). The resolve does not see
+/// this, but the next plain sync does: it moves issue 3 on the tracker from
+/// parent 2 to parent 1 (`set_parent 3 2->1`) and sets the base of `t1` to
+/// parent 1. The sync after that writes nothing.
 #[test]
 fn unlink_of_an_invalid_type_ignores_the_issue() {
     let (tracker, d, c) = type_conflict();
     let out = resolve(&tracker, d, &[choose(&c, Choice::Unlink)]);
-    assert!(
-        !tracker.writes().iter().any(|w| w.starts_with("update_issue 2")),
-        "{:?}",
-        tracker.writes()
-    );
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
     assert_eq!(tracker.issue(2).issue_type.as_deref(), Some("Task"));
     assert!(!has_link(&out.doc, "f1"));
     let f1 = find(&out.doc, "f1");
     assert_eq!((f1.kind, f1.local_only), (Kind::Feature, Some(true)));
     let ignored = &out.doc.sync.as_ref().unwrap().ignored;
     assert_eq!(ignored.iter().map(|r| r.number).collect::<Vec<_>>(), vec![2]);
+    assert_eq!(link_of(&out.doc, "t1").base.parent.clone().flatten().map(|p| p.number), Some(2));
     assert!(out.result.conflicts.is_empty());
     assert_valid(&out.doc);
+
+    // The next sync: issue 2 stays out of the Flow, and the member of the
+    // unlinked container moves to the epic's issue on the tracker.
+    tracker.clear_calls();
+    let again = sync(&tracker, out.doc);
+    assert_eq!(tracker.writes(), vec!["set_parent 3 2->1"]);
+    assert_eq!(tracker.issue(3).parent.map(|k| k.number), Some(1));
+    assert_eq!((again.result.added, again.result.updated), (0, 1));
+    assert!(again.result.conflicts.is_empty(), "{:?}", again.result.conflicts);
+    assert!(again.result.skipped.is_empty(), "{:?}", again.result.skipped);
+    assert_eq!(again.doc.items.iter().filter(|i| i.name == "Card capture").count(), 1);
+    assert!(!has_link(&again.doc, "f1"));
+    assert_eq!(find(&again.doc, "t1").parent_id.as_deref(), Some("f1"));
+    let base = &link_of(&again.doc, "t1").base;
+    assert_eq!(base.parent.clone().flatten().map(|p| p.number), Some(1));
+    assert_valid(&again.doc);
+
+    // The sync after it finds both sides in sync.
+    tracker.clear_calls();
+    let last = sync(&tracker, again.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(last.result.conflicts.is_empty());
+    assert!(!last.doc_changed);
 }
 
 /// FTS-FR-ARHM: `take_tracker` is not a choice of an `invalid_on_tracker`

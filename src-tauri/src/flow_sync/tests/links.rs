@@ -216,8 +216,9 @@ fn the_sync_result_serializes_in_the_contract_shape() {
     );
 }
 
-/// FTS contract: each error carries displayable text, and the refusals of
-/// the repository and token resolutions keep their codes.
+/// FTS-FR-ZLFX / FTS-FR-AIDI (FTS contract, errors): each error carries
+/// displayable text, and the refusals of the repository and token
+/// resolutions (GHP-FR-YDAN, GTS-FR-13) keep their codes.
 #[test]
 fn each_error_code_carries_its_text() {
     for code in [

@@ -416,8 +416,9 @@ fn a_repository_without_types_gets_plain_issues() {
     assert!(!again.doc_changed);
 }
 
-/// FTS-FR-LTMW: a read of the milestones, of the sub-issues, or of the
-/// Types that fails returns its code, and no write is made.
+/// FTS-FR-ARMD / FTS-FR-VFNM: a read of the milestones, of the sub-issues,
+/// or of the Types through the adapter that fails returns its code, and no
+/// write is made.
 #[test]
 fn a_failed_read_of_any_kind_returns_its_code_and_writes_nothing() {
     for operation in ["read_milestones", "read_sub_issues", "list_issue_types"] {

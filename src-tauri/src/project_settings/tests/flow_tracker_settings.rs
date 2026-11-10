@@ -133,14 +133,21 @@ fn a_stored_deliverable_type_is_ignored() {
 }
 
 /// PSS-FR-VGWF / PSS-FR-DNVN: a save where no `project.toml` exists yet
-/// creates it with the settings table alone.
+/// creates it with the settings table alone: the file holds no other table
+/// and no other key.
 #[test]
 fn a_save_without_a_project_file_creates_it() {
     let (dir, root) = fresh();
     assert!(!dir.path().join(".synthesis/project.toml").exists());
     save_flow_tracker_settings_to(&root, &custom()).unwrap();
     assert_eq!(load_flow_tracker_settings_from(&root).unwrap(), custom());
-    assert!(project_toml(&dir).contains("[flowTracker]"));
+    let text = project_toml(&dir);
+    let written: toml::Table = text.parse().unwrap_or_else(|e| panic!("{e}: {text}"));
+    assert_eq!(written.keys().collect::<Vec<_>>(), vec!["flowTracker"], "{text}");
+    let table = written["flowTracker"].as_table().expect("a table");
+    let mut keys: Vec<&String> = table.keys().collect();
+    keys.sort();
+    assert_eq!(keys, vec!["defectType", "epicType", "featureType", "taskType"], "{text}");
 }
 
 /// PSS-FR-VGWF: a Type with quotes, a backslash, and text that is not ASCII

@@ -378,3 +378,48 @@ fn a_conflict_serializes_in_the_contract_shape() {
         serde_json::from_value(json!({ "conflictId": c.id, "choice": "take_tracker" })).unwrap();
     assert_eq!(r.choice, Choice::TakeTracker);
 }
+
+/// FTS-FR-VXMN / FTS-FR-YHVD / FTS-FR-AIJM: `unlink` of a milestone link
+/// whose milestone was deleted (GitHub then clears the milestone of its
+/// issues) keeps the milestone item as a local-only item, removes the link,
+/// and ignores the milestone's reference. The members' bases take the
+/// cleared milestone, nothing is written, and no later sync creates a
+/// milestone for the item.
+#[test]
+fn unlink_of_a_missing_milestone_keeps_it_and_no_sync_creates_it() {
+    let (tracker, d) = plan();
+    tracker.state.borrow_mut().milestones.remove(&5);
+    for n in 1..=3 {
+        tracker.edit(n, |i| i.milestone = None);
+    }
+    let first = sync(&tracker, d.clone());
+    assert_eq!(first.result.conflicts.len(), 1, "{:?}", first.result.conflicts);
+    let c = first.result.conflicts[0].clone();
+    assert_eq!(
+        (c.kind, c.item_id.as_str(), c.choices.clone()),
+        (ConflictKind::RemovedOnTracker, "m1", vec![Choice::RemoveItem, Choice::Unlink])
+    );
+    tracker.clear_calls();
+    let out = resolve(&tracker, d, &[choose(&c, Choice::Unlink)]);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(out.result.conflicts.is_empty(), "{:?}", out.result.conflicts);
+    assert_eq!((out.result.created, out.result.changed), (0, 1));
+    assert!(!has_link(&out.doc, "m1"));
+    let m1 = find(&out.doc, "m1");
+    assert_eq!((m1.kind, m1.local_only), (Kind::Milestone, Some(true)));
+    assert_eq!(find(&out.doc, "ep1").parent_id.as_deref(), Some("m1"));
+    let ignored = &out.doc.sync.as_ref().unwrap().ignored;
+    assert_eq!(ignored, &vec![link_of(&plan().1, "m1").reference.clone()]);
+    for id in ["ep1", "f1", "t1"] {
+        assert_eq!(link_of(&out.doc, id).base.milestone, Some(None), "{id}");
+    }
+    assert_valid(&out.doc);
+
+    tracker.clear_calls();
+    let next = sync(&tracker, out.doc);
+    assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(next.result.conflicts.is_empty(), "{:?}", next.result.conflicts);
+    assert_eq!(next.result.created, 0);
+    assert!(!has_link(&next.doc, "m1"));
+    assert!(!next.doc_changed);
+}

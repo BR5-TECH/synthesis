@@ -103,30 +103,90 @@ fn a_flow_nothing_changed_is_not_written() {
     assert_eq!(result, SyncResult::default());
 }
 
-/// FTS-FR-VFNM / FTS-FR-AIDI: a tracker write that failed is returned with
-/// its code and the created URLs after the Flow is written.
-#[test]
-fn a_tracker_write_error_is_returned_after_the_flow_write() {
+/// A sync that creates issue 100 for the new task `t9` and then fails on
+/// `set_parent`, and the body it read.
+fn failing_sync() -> (String, SyncOutcome) {
     let (tracker, mut d) = plan();
     let tracker = tracker.failing("set_parent", 0);
     d.items.push(serde_json::from_value(item("t9", "task", "Card form", Some("f1"))).unwrap());
     let read = write_flow(&d);
     let out = sync(&tracker, d);
-    let saved = Cell::new(false);
+    assert_eq!(out.write_error.as_deref(), Some(ERR_GITHUB_UNREACHABLE));
+    assert!(out.doc_changed);
+    (read, out)
+}
+
+/// FTS-FR-VFNM / FTS-FR-AIDI: a tracker write that failed is returned with
+/// its code and the created URLs after the Flow is written. The written
+/// Flow holds the link to the created issue 100.
+#[test]
+fn a_tracker_write_error_is_returned_after_the_flow_write() {
+    let (read, out) = failing_sync();
+    let saved = RefCell::new(Vec::new());
     let error = FlowWrite {
         read: &read,
         reread: || Some(read.clone()),
-        save: |_: &str| {
-            saved.set(true);
+        save: |body: &str| {
+            saved.borrow_mut().push(body.to_string());
             true
         },
         changed: || panic!("the Flow did not change"),
     }
     .finish(out)
     .unwrap_err();
-    assert!(saved.get(), "the link of the created issue is kept");
     assert_eq!(
         (error.code.as_str(), error.created_urls.clone()),
         (ERR_GITHUB_UNREACHABLE, vec![url_of(100)])
     );
+    let saved = saved.into_inner();
+    assert_eq!(saved.len(), 1, "the Flow is written once");
+    let written = parse_valid(&saved[0]).unwrap_or_else(|r| panic!("{r:?}"));
+    let t9 = link_of(&written, "t9");
+    assert_eq!((t9.reference.number, t9.reference.url.as_str()), (100, url_of(100).as_str()));
+}
+
+/// FTS-FR-AIDI: a Flow that changed on disk during a sync whose tracker
+/// write failed is not overwritten. The call returns `write_failed`, not the
+/// code of the tracker write, with the URL of each created item.
+#[test]
+fn a_disk_change_with_a_tracker_write_error_is_write_failed() {
+    let (read, out) = failing_sync();
+    let reported = Cell::new(false);
+    let error = FlowWrite {
+        read: &read,
+        reread: || Some("{\"version\":2,\"name\":\"edited\"}\n".to_string()),
+        save: |_: &str| panic!("nothing is written"),
+        changed: || reported.set(true),
+    }
+    .finish(out)
+    .unwrap_err();
+    assert_eq!(
+        (error.code.as_str(), error.created_urls.clone()),
+        (ERR_WRITE_FAILED, vec![url_of(100)])
+    );
+    assert!(reported.get());
+}
+
+/// FTS-FR-VFNM: a tracker write that failed in a sync that did not change
+/// the Flow writes nothing, reads nothing again, and returns the code of
+/// the write.
+#[test]
+fn a_tracker_write_error_without_a_flow_change_saves_nothing() {
+    let (tracker, mut d) = plan();
+    let tracker = tracker.failing("update_issue", 0);
+    d.items.iter_mut().find(|i| i.id == "t1").unwrap().name = "Tokenize cards".into();
+    let read = write_flow(&d);
+    let out = sync(&tracker, d);
+    assert_eq!(tracker.writes(), vec!["update_issue 3 title FAILED"]);
+    assert!(!out.doc_changed);
+    let error = FlowWrite {
+        read: &read,
+        reread: || panic!("no second read"),
+        save: |_: &str| panic!("no write"),
+        changed: || panic!("no change"),
+    }
+    .finish(out)
+    .unwrap_err();
+    assert_eq!(error.code, ERR_GITHUB_UNREACHABLE);
+    assert!(error.created_urls.is_empty());
 }

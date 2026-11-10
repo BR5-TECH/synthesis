@@ -44,6 +44,10 @@ pub struct GithubAdapter {
     /// GitHub's numeric id of each issue read or created, which the
     /// relation endpoints name.
     ids: Mutex<HashMap<u64, u64>>,
+    /// True where the requests go directly to their address and never
+    /// through a proxy that the environment names. The adapter of a test
+    /// sets it, so a local server answers the test on every machine.
+    direct: bool,
 }
 
 impl GithubAdapter {
@@ -56,6 +60,7 @@ impl GithubAdapter {
             api: crate::github_tokens::github_api_base(host),
             graphql: crate::github_tokens::github_graphql_url(host),
             ids: Mutex::new(HashMap::new()),
+            direct: false,
         }
     }
 
@@ -66,6 +71,7 @@ impl GithubAdapter {
         Self {
             api: api.to_string(),
             graphql: graphql.to_string(),
+            direct: true,
             ..Self::new("github.com", owner, repo, "test-secret".to_string())
         }
     }
@@ -76,8 +82,13 @@ impl GithubAdapter {
         self.remember(number, id);
     }
 
-    fn agent() -> ureq::Agent {
-        crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
+    /// The HTTP agent of one request. `ureq` reads a proxy from
+    /// `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` by default; a direct
+    /// adapter uses no proxy.
+    pub(super) fn agent(&self) -> ureq::Agent {
+        let config = crate::tls::ureq_config().timeout_global(Some(TIMEOUT));
+        let config = if self.direct { config.proxy(None) } else { config };
+        config.build().into()
     }
 
     fn fail(&self, error: &ureq::Error, url: &str) -> String {
@@ -96,7 +107,8 @@ impl GithubAdapter {
     /// The `data` of one GraphQL request.
     fn graphql_data(&self, query: &str, variables: Value) -> Result<Value, String> {
         let payload = json!({ "query": query, "variables": variables });
-        let response = Self::agent()
+        let response = self
+            .agent()
             .post(&self.graphql)
             .header("Authorization", &format!("Bearer {}", self.secret))
             .header("Accept", "application/vnd.github+json")
@@ -171,7 +183,7 @@ impl GithubAdapter {
     /// with a body of `null` is refused by GitHub.
     fn rest(&self, method: &str, path: &str, payload: Option<Value>) -> Result<Value, String> {
         let url = format!("{}{path}", self.api);
-        let agent = Self::agent();
+        let agent = self.agent();
         let auth = format!("Bearer {}", self.secret);
         let version = crate::github_tokens::GITHUB_API_VERSION;
         let result = match (method, payload) {

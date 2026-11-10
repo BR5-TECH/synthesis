@@ -345,7 +345,8 @@ fn ignored(number: u64) -> Value {
 }
 
 /// FGV-FR-TLMV / FGV-FR-04: an ignored reference that repeats an earlier
-/// one, or that a sync link names, is `duplicate_tracker_link`. It is a
+/// one, or that a sync link names, is `duplicate_tracker_link`; one of
+/// another kind, repository, or owner repeats nothing. It is a
 /// violation of the sync section as a whole: it carries no item, edge, or
 /// link index, its message names the entry, and it comes after the
 /// violations of the links.
@@ -362,7 +363,27 @@ fn ignored_references_repeat_nothing() {
     // The same number as a milestone is another reference.
     let mut milestone = ignored(1);
     milestone["kind"] = json!("milestone");
-    assert!(validate(&body(json!([link("f1", "issue", 1)]), json!([milestone]))).valid);
+    assert!(validate(&body(json!([link("f1", "issue", 1)]), json!([milestone.clone()]))).valid);
+    // The same number in another repository, or of another owner, is
+    // another reference.
+    let mut other_repo = ignored(1);
+    other_repo["repo"] = json!("other");
+    other_repo["url"] = json!("https://github.com/o/other/issues/1");
+    let mut other_owner = ignored(1);
+    other_owner["owner"] = json!("someone");
+    other_owner["url"] = json!("https://github.com/someone/r/issues/1");
+    assert!(
+        validate(&body(json!([link("f1", "issue", 1)]), json!([other_repo, other_owner]))).valid
+    );
+    // An ignored milestone that a milestone link names repeats it.
+    let report = validate(&body(json!([link("m1", "milestone", 1)]), json!([milestone])));
+    let got: Vec<_> = report
+        .violations
+        .iter()
+        .map(|v| (v.code, v.link_index, v.element_id.clone(), v.edge_id.clone()))
+        .collect();
+    assert_eq!(got, vec![("duplicate_tracker_link", None, None, None)]);
+    assert!(report.violations[0].message.contains("sync link"), "{:?}", report.violations[0]);
 
     let report = validate(&body(
         json!([link("f1", "issue", 1), link("f2", "issue", 1)]),

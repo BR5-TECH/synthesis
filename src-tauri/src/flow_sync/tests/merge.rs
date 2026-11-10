@@ -393,14 +393,17 @@ fn a_blocker_of_another_repository_is_ignored() {
     assert!(out.doc.edges.is_empty());
     assert!(link_of(&out.doc, "t1").base.blocked_by.as_ref().unwrap().is_empty());
     assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(out.result.conflicts.is_empty(), "{:?}", out.result.conflicts);
     assert!(!out.doc_changed);
+    tracker.clear_calls();
     let again = sync(&tracker, out.doc);
     assert!(tracker.writes().is_empty(), "{:?}", tracker.writes());
+    assert!(again.result.conflicts.is_empty(), "{:?}", again.result.conflicts);
     assert_eq!(tracker.issue(3).blocked_by.len(), 1);
     assert!(!again.doc_changed);
 }
 
-/// FTS-FR-VFNM / FTS-FR-AIDI: an `update_issue` that fails during the merge
+/// FTS-FR-VFNM: an `update_issue` that fails during the merge
 /// stops the writes after it and keeps the base of its field, so the next
 /// sync writes it again without a conflict.
 #[test]

@@ -99,7 +99,11 @@ pub(super) async fn execute<R: tauri::Runtime>(
     // GRD-FR-UTTX: the turn's execution time counts against the run's total.
     time_budget::charge(run, started, &outcome, bound);
     recorder.finish(app, run);
-    outcome
+    // OPU-FR-RFFH: a turn that may not give a plan update has one refused.
+    if super::plan_turns::admits_plan_update(run, part) {
+        return outcome;
+    }
+    outcome.map(crate::graduation::plan_updates::refuse_plan_update)
 }
 
 /// GXD-FR-IOZU: the live activity sink one turn of this run reports through.

@@ -27,6 +27,11 @@ mod activity_stream;
 mod blocking;
 mod change_action_requests;
 mod change_apply;
+mod change_plan_continue;
+mod change_plan_decisions;
+mod change_plan_recovery;
+mod change_plan_sessions;
+mod change_plan_updates;
 mod change_rework;
 mod change_rework_finish;
 mod change_runs;
@@ -664,7 +669,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
             // EAC-FR-25: the executor honours the cancellation token, so a turn
             // stopped while it ran reports that rather than an answer.
             if cancellation.is_cancelled() && !turn.ignores_cancellation {
-                return Ok(execution(ProcessOutcome::Cancelled, None, false));
+                return Ok(execution(ProcessOutcome::Cancelled, None, None));
             }
 
             let mut summary = "scripted".to_string();
@@ -692,7 +697,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 Answer::ResumeUnavailable => {
                     return Ok(AgentExecution {
                         resume_unavailable: true,
-                        ..execution(ProcessOutcome::Terminated, None, false)
+                        ..execution(ProcessOutcome::Terminated, None, None)
                     })
                 }
                 Answer::FromAFreshSession => {
@@ -714,7 +719,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                                 session: None,
                                 metadata: None,
                             }),
-                            false,
+                            None,
                         )
                     })
                 }
@@ -753,6 +758,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     AgentOutcome::EscalationRequired,
                     None,
                     Some(AgentEscalation {
+                        kind: None,
                         reason,
                         questions: questions
                             .into_iter()
@@ -763,10 +769,14 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                             .collect(),
                     }),
                 ),
+                Answer::PlanUpdate(escalation) => {
+                    (AgentOutcome::EscalationRequired, None, Some(escalation))
+                }
                 Answer::Escalate(questions) => (
                     AgentOutcome::EscalationRequired,
                     None,
                     Some(AgentEscalation {
+                        kind: None,
                         reason: "Only the author can settle this.".to_string(),
                         questions: questions
                             .into_iter()
@@ -787,13 +797,13 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     result,
                     failure: reported,
                     escalation,
-                    session: turn.session.then(|| SessionRef {
-                        session_id: Some("s1".to_string()),
-                        continuation_token: None,
-                    }),
+                    session: turn
+                        .session
+                        .clone()
+                        .map(|id| SessionRef { session_id: Some(id), continuation_token: None }),
                     metadata: None,
                 }),
-                turn.session,
+                turn.session.clone(),
             );
             completed.duration_ms = turn.duration_ms;
             Ok(completed)
@@ -824,7 +834,7 @@ fn object_of(value: serde_json::Value) -> Option<serde_json::Map<String, serde_j
 fn execution(
     process_outcome: ProcessOutcome,
     response: Option<AgentResponseEnvelope>,
-    session: bool,
+    session: Option<String>,
 ) -> AgentExecution {
     // A process that was stopped has no exit code, and one that exited with an
     // error has a code other than zero, as the real executor reports them.
@@ -842,8 +852,7 @@ fn execution(
         duration_ms: 0,
         resume_unavailable: false,
         refusal: None,
-        session: session
-            .then(|| SessionRef { session_id: Some("s1".to_string()), continuation_token: None }),
+        session: session.map(|id| SessionRef { session_id: Some(id), continuation_token: None }),
         container_removed: true,
     }
 }

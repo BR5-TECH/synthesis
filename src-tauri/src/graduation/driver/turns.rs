@@ -33,6 +33,10 @@ pub(super) fn record_turn_end<R: tauri::Runtime>(
     // rest of the run.
     run.checkpoint.pending_escalation_answers.clear();
     run.checkpoint.resume = None;
+    // OPU-FR-SKTV: the plan update context went into this turn alone.
+    if run.checkpoint.plan.next_turn.take().is_some() {
+        crate::graduation::plan_updates::forget_reads(&run.id);
+    }
     // GRL-FR-QZFB: the turn ran, so whatever blocked the run before it is
     // behind the run rather than in front of it.
     transitions::clear_block_count(run);
@@ -56,6 +60,23 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
     origin: GraduationEscalationOrigin,
     bound: TurnBound,
 ) -> Option<AgentExecution> {
+    settle_execution_with(app, run, worktree, outcome, origin, bound, true)
+}
+
+/// [`settle_execution`], where `escalations` says whether an ordinary
+/// escalation is recorded. A plan correction turn records none: its every
+/// answer but a plan update rests the run on `plan_findings` (OPU-FR-QKLX).
+/// A plan update is never recorded here: the work turn reads it in place of
+/// the check gate (OPU-FR-MBIY).
+pub(super) fn settle_execution_with<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+    worktree: &Path,
+    outcome: Result<AgentExecution, AgentExecutionError>,
+    origin: GraduationEscalationOrigin,
+    bound: TurnBound,
+    escalations: bool,
+) -> Option<AgentExecution> {
     let limit_ms = bound.limit_ms;
     // GRD-FR-EWTN: a run discarded while its turn ran takes nothing of what the
     // turn answered, and nothing is saved over the discarded record.
@@ -77,7 +98,9 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
             ProcessOutcome::Completed => {
                 let response = execution.response.as_ref();
                 // GRL-FR-VBCL: an escalation ends the turn without a review.
-                if let Some(escalation) = response.and_then(|r| r.escalation.as_ref()) {
+                let escalation = response.and_then(|r| r.escalation.as_ref());
+                if let Some(escalation) = escalation.filter(|e| escalations && !e.is_plan_update())
+                {
                     let questions = escalation
                         .questions
                         .iter()
@@ -660,8 +683,9 @@ pub(super) fn hidden_paths(worktree: &PathBuf, run: &GraduationRun) -> (Vec<Stri
             paths.push(path.to_string_lossy().into_owned());
         }
     }
-    // GRL-FR-DCKG: the check folder is not authored work, so it is not named.
-    paths.retain(|path| !super::checks_folder::is_check_path(path));
+    // GRL-FR-DCKG, OPU-FR-WINO: the check folder and the scratch folder are
+    // not authored work, so they are not named.
+    paths.retain(|path| !super::checks_folder::is_check_path(path) && !is_scratch(path));
     paths.sort();
     paths.dedup();
     let omitted = paths.len().saturating_sub(BOUND) as u32;
@@ -696,11 +720,16 @@ pub(super) fn changed_paths(worktree: &PathBuf, run: &GraduationRun) -> Vec<Stri
             }
         }
     }
-    // GRL-FR-DCKG: the check folder is never part of the change set.
-    paths.retain(|path| !super::checks_folder::is_check_path(path));
+    // GRL-FR-DCKG, OPU-FR-WINO: neither folder is ever part of the change set.
+    paths.retain(|path| !super::checks_folder::is_check_path(path) && !is_scratch(path));
     paths.sort();
     paths.dedup();
     paths
+}
+
+/// OPU-FR-WINO: whether a path is the scratch folder of a plan update.
+fn is_scratch(path: &str) -> bool {
+    crate::graduation::plan_updates::scratch::is_scratch_path(path)
 }
 
 /// The working copy the run's stream owns.
@@ -713,6 +742,14 @@ pub(super) fn stream_worktree<R: tauri::Runtime>(
 
 /// GRL-FR-ISIL: why this turn is running.
 pub(super) fn purpose_for(run: &GraduationRun) -> &'static str {
+    // OPU-FR-WPSR, OPU-FR-TZBD, OPU-FR-VKBO: the turn that Continue from a
+    // plan rest dispatches names its own purpose.
+    if let Some(next) = run.checkpoint.plan.next_turn.as_ref() {
+        if next.purpose == task_input::PURPOSE_ESCALATION_ANSWER {
+            return task_input::PURPOSE_ESCALATION_ANSWER;
+        }
+        return task_input::PURPOSE_RESUME;
+    }
     if !run.checkpoint.pending_escalation_answers.is_empty() {
         task_input::PURPOSE_ESCALATION_ANSWER
     } else if run.checkpoint.loop_instruction.is_some() {
@@ -783,7 +820,7 @@ pub(super) fn read_run_summary<R: tauri::Runtime>(
 }
 
 /// GRL-FR-GQAB: the findings, in the order the review returned them.
-pub(super) fn compose_instruction(verdict: &ReviewVerdict) -> String {
+pub(crate) fn compose_instruction(verdict: &ReviewVerdict) -> String {
     let mut out = String::from("The review asked for these changes.\n");
     for (index, finding) in verdict.findings.iter().enumerate() {
         out.push_str(&format!(

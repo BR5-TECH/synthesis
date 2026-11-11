@@ -12,6 +12,7 @@ import type {
 } from "../../types/graduation";
 import { interruptionCause, isFailureStop } from "./stages";
 import { checksNotPassedRestOf, totalTimeLimitRestOf } from "./rest";
+import { planRaiseStatement, planRestOf } from "./planRest";
 import type { NotificationLevel } from "../toasts";
 import type { QuestionDraftAnswer } from "../questionAnswerDrafts";
 
@@ -113,6 +114,45 @@ export function raiseKey(run: GraduationRun): string {
 }
 
 /**
+ * GRU-FR-BLSS / GRU-FR-KWQX: what identifies one entry of a run into the state
+ * it raises for. A run raises when it enters a state, not on each change while
+ * it stays there: a resting run that the backend saves again (an answer handed
+ * over, a field written) keeps the same entry. A new rest, a new escalation, a
+ * new blocker attempt, or a new stop is a new entry.
+ */
+export function raiseEntry(run: GraduationRun): string {
+  return JSON.stringify([
+    run.id,
+    run.state,
+    run.rest?.reason ?? null,
+    run.rest?.at ?? null,
+    run.escalation?.raisedAt ?? null,
+    run.blocker?.code ?? null,
+    run.blocker?.attempt ?? null,
+    run.interruption?.reason ?? null,
+    run.interruption?.at ?? null,
+  ]);
+}
+
+/**
+ * GRU-FR-BLSS: the runs a project holds in a raising state when it opens are
+ * no news to this session, so their present entry counts as raised. A later
+ * save of the same rest then raises nothing, and a new entry still raises.
+ */
+export function seedRaisedEntries(
+  raised: Map<string, string>,
+  runs: readonly GraduationRun[],
+): number {
+  let seeded = 0;
+  for (const run of runs) {
+    if (!raisesForRun(run) || raised.has(run.id)) continue;
+    raised.set(run.id, raiseEntry(run));
+    seeded += 1;
+  }
+  return seeded;
+}
+
+/**
  * GRU-FR-BLSS: the title the notification carries.
  *
  * A merge run's reads as a merge, and no wording of it calls it a graduation
@@ -150,6 +190,9 @@ function awaitingStatement(run: GraduationRun, title: string): string {
   if (totalTimeLimitRestOf(run)) return `“${title}” stopped at its total time limit.`;
   // GRU-FR-WVDV: a run whose required checks did not pass says so.
   if (checksNotPassedRestOf(run)) return `“${title}” stopped: its required checks did not pass.`;
+  // GRU-FR-KWQX: a plan rest names the change, and says where it is decided.
+  const plan = planRestOf(run);
+  if (plan) return planRaiseStatement(plan, title, run.openspec?.change ?? title);
   return `“${title}” is waiting for your decision.`;
 }
 

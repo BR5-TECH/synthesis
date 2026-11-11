@@ -257,6 +257,24 @@ pub struct ReviewFinding {
     pub affected_files: Vec<String>,
     /// Directly actionable by the next work turn.
     pub correction: String,
+    /// OPU-FR-EPXL: `work` or `plan`, and `work` where absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<FindingKind>,
+}
+
+/// OPU-FR-EPXL: whether a finding is about the work or about the plan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingKind {
+    Work,
+    Plan,
+}
+
+impl ReviewFinding {
+    /// OPU-FR-EPXL: a finding of the kind `plan`.
+    pub fn is_plan(&self) -> bool {
+        self.kind == Some(FindingKind::Plan)
+    }
 }
 
 /// GRL-FR-VIAT: what a review turn answers with.
@@ -499,6 +517,12 @@ pub struct GraduationCheckpoint {
     /// from `checks_not_passed` carries. Cleared once that turn has answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continue_check_correction: Option<GraduationCheckCause>,
+    /// OPU-FR-BKZX: the plan update state of an apply run.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::graduation::plan_updates::PlanCheckpoint::is_empty"
+    )]
+    pub plan: crate::graduation::plan_updates::PlanCheckpoint,
 }
 
 /// GRL-FR-QKDC / GRL-FR-HWLD: one refused answer that is asked again.

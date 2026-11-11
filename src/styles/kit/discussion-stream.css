@@ -429,6 +429,13 @@
 .dds-change__state[data-tone="danger"] { color: var(--danger); }
 .dds-change__state[data-tone="warn"]   { color: var(--warn); }
 .dds-change__state[data-tone="quiet"]  { color: var(--fg-3); }
+/* OCW-FR-KZDG: the hint line under a plan proposal, in the tone of the
+   meta text of the column. */
+.dds-change__hint {
+  margin: var(--sp-1) var(--sp-3) 0;
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+}
 
 /* ---------- the card the column renders the conversation in ---------- */
 

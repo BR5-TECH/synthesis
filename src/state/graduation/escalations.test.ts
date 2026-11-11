@@ -6,6 +6,8 @@ import { markPullRequestWindowOpen } from "../pullRequestSessions";
 import type { GraduationEscalation } from "../../types";
 import {
   composeEscalationAnswers,
+  raiseEntry,
+  seedRaisedEntries,
   raisesForRun,
   shownInOpenPullRequestWindow,
 } from "./escalations";
@@ -121,5 +123,63 @@ describe("the completion of a PR summary run under its open window (CPR-FR-VOEB)
     expect(shownInOpenPullRequestWindow(makeRun("g-draft", "completed"))).toBe(false);
     close();
     expect(shownInOpenPullRequestWindow(done)).toBe(false);
+  });
+});
+
+describe("raiseEntry (GRU-FR-BLSS, GRU-FR-KWQX)", () => {
+  const AT = "2026-11-08T09:00:00Z";
+  const resting = (over: Parameters<typeof makeRun>[2] = {}) =>
+    makeRun("r1", "awaiting_author", {
+      rest: { reason: "plan_update", at: AT, threadId: "pt-1", setId: "qs-1" },
+      ...over,
+    });
+
+  it("GRU-FR-BLSS, GRU-FR-KWQX: a change of a run that stays in its rest is the same entry", () => {
+    const first = resting();
+    const handedOver = resting({
+      rest: {
+        reason: "plan_update",
+        at: AT,
+        threadId: "pt-1",
+        setId: "qs-1",
+        answers: [{ questionPosition: 1, ownAnswer: "The header." }],
+      },
+      updatedAt: "2026-11-08T09:05:00Z",
+    });
+    expect(raiseEntry(handedOver)).toBe(raiseEntry(first));
+  });
+
+  it("GRU-FR-BLSS, GRU-FR-KWQX: a new rest, a new escalation, a new blocker attempt, or another state is a new entry", () => {
+    const first = resting();
+    expect(raiseEntry(resting({ rest: { reason: "plan_findings", at: AT } }))).not.toBe(raiseEntry(first));
+    expect(raiseEntry(resting({ rest: { reason: "plan_update", at: "2026-11-08T10:00:00Z" } }))).not.toBe(
+      raiseEntry(first),
+    );
+    const escalated = (raisedAt: string) =>
+      makeRun("r1", "awaiting_author", { escalation: makeEscalation({ raisedAt }) });
+    expect(raiseEntry(escalated(AT))).toBe(raiseEntry(escalated(AT)));
+    expect(raiseEntry(escalated(AT))).not.toBe(raiseEntry(escalated("2026-11-08T10:00:00Z")));
+    const blocked = (attempt: number) =>
+      makeRun("r1", "blocked", { blocker: { code: "stream_dirty", message: "m", clearsBy: "c", attempt } });
+    expect(raiseEntry(blocked(1))).not.toBe(raiseEntry(blocked(2)));
+    expect(raiseEntry(makeRun("r1", "failed"))).not.toBe(raiseEntry(makeRun("r1", "completed")));
+    expect(raiseEntry(makeRun("r2", "failed"))).not.toBe(raiseEntry(makeRun("r1", "failed")));
+  });
+});
+
+describe("seedRaisedEntries (GRU-FR-BLSS)", () => {
+  it("GRU-FR-BLSS: the runs that rest when a project opens count as raised, and a raised entry is kept", () => {
+    const resting = makeRun("r1", "awaiting_author", {
+      rest: { reason: "plan_update", at: "2026-11-08T09:00:00Z", threadId: "t", setId: "s" },
+    });
+    const working = makeRun("r2", "working");
+    const raised = new Map<string, string>([["r3", "kept"]]);
+    const again = makeRun("r3", "awaiting_author", {
+      rest: { reason: "plan_findings", at: "2026-11-08T09:00:00Z", threadId: "t" },
+    });
+    expect(seedRaisedEntries(raised, [resting, working, again])).toBe(1);
+    expect(raised.get("r1")).toBe(raiseEntry(resting));
+    expect(raised.has("r2")).toBe(false);
+    expect(raised.get("r3")).toBe("kept");
   });
 });

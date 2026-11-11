@@ -9,6 +9,12 @@
 import type { GraduationObservability } from "./graduationObservability";
 import type { GraduationLogStream } from "./graduationLogs";
 import type { DraftOpenspecChange, GraduationOpenspec } from "./openspec";
+import type {
+  PlanRestFields,
+  PlanRestReason,
+  PlanUpdateRefusalCause,
+  ReviewFindingKind,
+} from "./planUpdates";
 
 /** GRD-FR-QJHM: the nine states a run stands in. */
 export type GraduationRunState =
@@ -119,6 +125,8 @@ export interface ReviewFinding {
   /** Project-relative; may name a path that does not exist yet. */
   affectedFiles: string[];
   correction: string;
+  /** OPU-FR-EPXL: `work` or `plan`; `work` where it is absent. */
+  kind?: ReviewFindingKind | null;
 }
 
 /** GRL-FR-VIAT: the two verdicts. */
@@ -169,7 +177,7 @@ export interface GraduationBlocker {
  * an escalation or a blocker. A run with a rest is not a run whose pass budget
  * is spent.
  */
-export type GraduationRestReason = "total_time_limit" | "checks_not_passed";
+export type GraduationRestReason = "total_time_limit" | "checks_not_passed" | PlanRestReason;
 
 /** GRL-FR-CPXI / GRL-FR-TYRV: why the check gate refused a work answer. */
 export type GraduationCheckCause =
@@ -186,8 +194,11 @@ export interface GraduationRestCheck {
   exitStatus: number | null;
 }
 
-/** GRD-FR-SKLO / GRD-FR-PYJN: the record of a rest for the author. */
-export interface GraduationRest {
+/**
+ * GRD-FR-SKLO / GRD-FR-PYJN / OPU-FR-UOYJ: the record of a rest for the
+ * author. The plan fields stand on the plan rests alone.
+ */
+export interface GraduationRest extends PlanRestFields {
   reason: GraduationRestReason;
   /** When the run came to rest. */
   at: string;
@@ -195,10 +206,15 @@ export interface GraduationRest {
   limitMs?: number;
   /** `total_time_limit`: the used total time when the run came to rest, in milliseconds. */
   usedMs?: number;
-  /** `checks_not_passed`: the cause of the last refusal of the check gate. */
-  cause?: GraduationCheckCause;
+  /**
+   * `checks_not_passed`: the cause of the last refusal of the check gate.
+   * `plan_update_invalid`: the cause of the last refusal of a plan update.
+   */
+  cause?: GraduationCheckCause | PlanUpdateRefusalCause;
   /** `checks_not_passed`: each check that did not pass; empty where the answer held no record. */
   checks?: GraduationRestCheck[];
+  /** OPU-FR-UOYJ: origin `review`: every finding of the verdict, in order. */
+  findings?: ReviewFinding[] | null;
 }
 
 /** GRD-FR-SKLO: a rest on the total time limit, with its two times. */

@@ -404,6 +404,50 @@ pub(super) fn delete_question_set(
     }
 }
 
+/// CMS-FR-ECWC: delete the set the discussion holds where its id is
+/// `set_id`, and emit `"discussion question set changed"` with null. It
+/// appends no comment. A discussion that holds no set, or another set, is left
+/// as it is, and the call reports success. Registered as no Tauri command: the
+/// discard of a run at rest on a plan update is its one caller (OPU-FR-ZBXF).
+pub fn delete_discussion_question_set<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    discussion_id: &str,
+    set_id: &str,
+) -> Result<bool, String> {
+    let deleted = delete_question_set_record(root, worktree, discussion_id, set_id)?;
+    if deleted {
+        emit_question_set_changed(app, discussion_id, None);
+    }
+    Ok(deleted)
+}
+
+/// [`delete_discussion_question_set`] without the event. Answers whether a set
+/// was deleted.
+pub fn delete_question_set_record(
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    discussion_id: &str,
+    set_id: &str,
+) -> Result<bool, String> {
+    let _guard = question_set_lock(discussion_id);
+    let Some(set) = read_question_set(root, worktree, discussion_id) else {
+        return Ok(false);
+    };
+    if set.set_id != set_id {
+        return Ok(false);
+    }
+    let Some(thread) = read_discussion_by_id(root, worktree, discussion_id) else {
+        return Ok(false);
+    };
+    let Some(discussion) = discussion_ref_of(&thread) else {
+        return Ok(false);
+    };
+    delete_question_set(root, discussion.thread_ref(), discussion_id)?;
+    Ok(true)
+}
+
 // ---------------------------------------------------------------------------
 // The event (CMS-FR-BQEN)
 // ---------------------------------------------------------------------------

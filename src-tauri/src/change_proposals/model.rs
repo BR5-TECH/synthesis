@@ -41,6 +41,10 @@ pub const ERR_HUNK_WITHDRAWN: &str = "hunk_withdrawn";
 pub const ERR_WRITE_FAILED: &str = "write_failed";
 /// CEP-FR-OIZT: a rework run of the change is not terminal.
 pub const ERR_REWORK_RUNNING: &str = "rework_running";
+/// CEP-FR-YYZZ.
+pub const ERR_APPLY_RUNNING: &str = "apply_running";
+/// CEP-FR-KGOL.
+pub const ERR_PLAN_QUESTIONS_PENDING: &str = "plan_questions_pending";
 /// PCP-FR-14: another acceptance of this proposal is in flight.
 pub const ERR_ACCEPTANCE_IN_PROGRESS: &str = "acceptance_in_progress";
 /// PCP-FR-14: the acceptance landed and its decision comment is still owed.
@@ -163,6 +167,9 @@ pub struct ChangeEditProposal {
     /// CEP-FR-IYHP: a commit of this proposal's files failed.
     #[serde(default)]
     pub commit_owed: bool,
+    /// CEP-FR-DQAJ: the revision of the close commit, once it lands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     #[serde(default)]
     pub hunk_count: u32,
     pub created_at: String,
@@ -292,6 +299,8 @@ pub enum RecordRefusal {
     ProposalPending,
     /// CEP-FR-OIZT.
     ReworkRunning,
+    /// CEP-FR-YYZZ.
+    ApplyRunning,
     UnknownStream,
     ChangeNotFound,
     PathOutsideChange {
@@ -327,6 +336,7 @@ impl RecordRefusal {
         match self {
             Self::ProposalPending => ERR_PROPOSAL_PENDING,
             Self::ReworkRunning => ERR_REWORK_RUNNING,
+            Self::ApplyRunning => ERR_APPLY_RUNNING,
             Self::UnknownStream => ERR_UNKNOWN_STREAM,
             Self::ChangeNotFound => ERR_CHANGE_NOT_FOUND,
             Self::PathOutsideChange { .. } => ERR_PATH_OUTSIDE_CHANGE,

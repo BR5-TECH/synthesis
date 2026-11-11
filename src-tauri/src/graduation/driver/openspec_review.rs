@@ -110,6 +110,7 @@ pub fn gate_verdict(
             data.change
         ),
         findings: vec![ReviewFinding {
+            kind: None,
             severity: ReviewSeverity::Critical,
             description: format!(
                 "The OpenSpec change {} does not validate: {} issue(s) stand.",
@@ -171,6 +172,7 @@ mod tests {
             verdict: ReviewOutcome::Revise,
             rationale: "Small things.".into(),
             findings: vec![ReviewFinding {
+                kind: None,
                 severity: ReviewSeverity::Minor,
                 description: "Typo.".into(),
                 affected_files: vec![],

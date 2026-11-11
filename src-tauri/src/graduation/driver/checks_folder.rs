@@ -37,6 +37,12 @@ pub fn is_check_path(path: &str) -> bool {
 /// application's shared instance, so the write goes through an instance rooted
 /// at it, on the terms `worktree.rs` writes a linked worktree's `commondir`.
 pub fn ensure_excluded(worktree: &Path) -> Result<bool, String> {
+    ensure_exclude_line(worktree, EXCLUDE_LINE)
+}
+
+/// GRL-FR-LXWU, OPU-FR-WINO: make sure the repository's `info/exclude` holds
+/// `line`. Answers whether the line was added.
+pub fn ensure_exclude_line(worktree: &Path, line: &str) -> Result<bool, String> {
     let repo = git2::Repository::open(worktree).map_err(|e| e.to_string())?;
     let common = repo.commondir().to_path_buf();
     let fs = FsAccess::builder().allow_root(&common).build().map_err(|e| e.to_string())?;
@@ -50,14 +56,14 @@ pub fn ensure_excluded(worktree: &Path) -> Result<bool, String> {
         Err(FsError::NotFound { .. }) => String::new(),
         Err(error) => return Err(error.to_string()),
     };
-    if existing.lines().any(|line| line.trim() == EXCLUDE_LINE) {
+    if existing.lines().any(|held| held.trim() == line) {
         return Ok(false);
     }
     let mut updated = existing;
     if !updated.is_empty() && !updated.ends_with('\n') {
         updated.push('\n');
     }
-    updated.push_str(EXCLUDE_LINE);
+    updated.push_str(line);
     updated.push('\n');
     fs.write_text_atomic(&exclude, &updated).map_err(|e| e.to_string())?;
     Ok(true)

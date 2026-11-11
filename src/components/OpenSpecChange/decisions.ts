@@ -41,6 +41,10 @@ export function changeDecisionMessage(code: string): string {
   if (code.includes(E.discussionResolved)) {
     return "The discussion this proposal was posted in is resolved. Reopen it to decide this change. Nothing was changed.";
   }
+  // OCW-FR-XJMR / CEP-FR-KGOL: the questions of the plan update stand.
+  if (code.includes(E.planQuestionsPending)) {
+    return "Answer the questions in the plan thread first. Nothing was changed.";
+  }
   if (code.includes(E.writeFailed)) return "The file could not be written. Nothing was changed.";
   if (code.includes(E.acceptanceInProgress)) {
     return "Another change to this proposal is still being applied. Try again in a moment.";

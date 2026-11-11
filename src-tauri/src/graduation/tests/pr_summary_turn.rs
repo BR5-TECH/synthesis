@@ -294,7 +294,7 @@ fn a_refused_answer_is_corrected_once_in_its_session() {
         Turn::answering(Answer::Refused(
             crate::tools::agent_exec::protocol::EnvelopeInvalid::Malformed,
         ))
-        .with_session(),
+        .with_session("s1"),
         summary_answer("Add the panel", "Adds it."),
     ]);
 
@@ -315,7 +315,7 @@ fn a_refused_answer_is_corrected_once_in_its_session() {
         Turn::answering(Answer::Refused(
             crate::tools::agent_exec::protocol::EnvelopeInvalid::Malformed,
         ))
-        .with_session()
+        .with_session("s1")
     };
     let done = fx.drive(&run, ScriptedDispatch::new(vec![refused(), refused()]));
     assert_eq!(done.state, GraduationRunState::Failed);
@@ -330,7 +330,7 @@ fn a_paused_turn_rests_the_run_and_continue_starts_the_turn_again() {
     let (run, tip, _) = summary_run(&fx, PrSummaryMode::Diff);
     let app = fx.app.clone();
     let id = run.id.clone();
-    let paused = Turn::answering(Answer::Success).with_session().doing(move || {
+    let paused = Turn::answering(Answer::Success).with_session("s1").doing(move || {
         crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
     });
 
@@ -416,7 +416,7 @@ fn an_unreadable_summary_is_asked_for_again_once_in_its_session() {
             "title": "a\nb",
             "description": "d",
         })))
-        .with_session()
+        .with_session("s1")
     };
     let dispatch =
         ScriptedDispatch::new(vec![two_lines(), summary_answer("Add the panel", "Adds it.")]);
@@ -455,7 +455,7 @@ fn continue_drops_a_correction_the_paused_turn_left() {
     let refused_and_paused = Turn::answering(Answer::Refused(
         crate::tools::agent_exec::protocol::EnvelopeInvalid::Malformed,
     ))
-    .with_session()
+    .with_session("s1")
     .ignoring_cancellation()
     .doing(move || {
         crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");

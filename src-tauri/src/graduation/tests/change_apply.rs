@@ -27,7 +27,8 @@ fn implementing() -> Turn {
     )
 }
 
-// GRL-FR-DXLU, GRL-FR-EUSF, GRL-FR-SZQK, GRL-FR-NWSC, GRL-FR-YFGA, GRL-FR-GADT:
+// GRL-FR-DXLU, GRL-FR-EUSF, GRL-FR-SZQK, GRL-FR-OEFM, GRL-FR-NWSC,
+// GRL-FR-NZMK, GRL-FR-YFGA, GRL-FR-GADT:
 // the work turn carries `work.md` and then the apply work block, and the
 // review turn `review.md` and then the apply review block, with the change
 // name filled in.
@@ -44,7 +45,14 @@ fn the_turns_of_an_apply_run_carry_their_blocks() {
     assert!(work.contains(&format!("openspec instructions apply --change {CHANGE} --json")));
     assert!(work.contains("mark done in `tasks.md`") || work.contains("mark each one done"));
     assert!(work.contains("other than `tasks.md`"));
-    assert!(work.contains("Escalate to the author"));
+    // GRL-FR-SZQK, GRL-FR-OEFM: a wrong plan is a plan update, written whole
+    // into the scratch folder, with up to eight questions; a question not
+    // about the plan is an ordinary escalation.
+    assert!(work.contains("Give a plan update"));
+    assert!(work.contains(&format!("`.synthesis-plan/openspec/changes/{CHANGE}/<file>`")));
+    assert!(work.contains("`kind: \"plan_update\"`"));
+    assert!(work.contains("between 0 and 8 `questions`"));
+    assert!(work.contains("ordinary escalation"));
     assert!(!work.contains("{{ change-name }}"));
     assert!(!work.contains("Completeness"), "the review block is not the work block");
 
@@ -58,6 +66,8 @@ fn the_turns_of_an_apply_run_carry_their_blocks() {
     assert!(review.contains("SUGGESTION is `minor`"));
     assert!(review.contains("input.openspec_apply_progress"));
     assert!(review.contains("input.openspec_validation"));
+    // GRL-FR-NZMK: a finding about the plan is `kind: "plan"`.
+    assert!(review.contains("`kind: \"plan\"`") && review.contains("`kind: \"work\"`"));
     assert!(!review.contains("Propose"), "no propose block");
 }
 

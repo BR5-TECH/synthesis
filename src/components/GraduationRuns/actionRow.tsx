@@ -16,9 +16,11 @@ import {
   actionsFor,
   canRestart,
   changeRunPhase,
+  continueRefusalMessage,
   isChangeRun,
   isResume,
   isTerminalRun,
+  planThreadOf,
   removalStatement,
   runsRemovedByDiscard,
   runTitle,
@@ -35,15 +37,18 @@ export interface PressedAction {
 }
 
 /**
- * One act on a run. `pressed` names the row control that issued it, and
- * `onRefused` hands a refusal to a control that renders it itself. The answer
- * says whether the act was accepted.
+ * One act on a run. `pressed` names the row control that issued it,
+ * `onRefused` hands a refusal to a control that renders it itself, and `words`
+ * turns a refusal into the words the author reads, where the default words of
+ * `graduationErrorMessage` are not the right ones. The answer says whether the
+ * act was accepted.
  */
 export type RunAct = (
   what: string,
   action: () => Promise<unknown>,
   pressed?: PressedAction,
   onRefused?: (message: string) => void,
+  words?: (raw: string) => string,
 ) => Promise<boolean>;
 
 /** GRU-FR-PVXD: the control that takes another's place in the row. */
@@ -175,6 +180,9 @@ export function RunActionRow({
                       "Continued the run.",
                       () => api.continueGraduationRun(run.id),
                       from(action),
+                      undefined,
+                      // GRU-FR-BPNJ: a plan rest states its own refusals.
+                      (raw) => continueRefusalMessage(run, raw),
                     )
                   }
                 >
@@ -249,7 +257,8 @@ export function RunActionRow({
         {/* GRU-FR-LTWN: a completed propose run opens the change it wrote, on
             its stream, and an apply run or a rework run opens its change in
             every state. It only navigates, so it stays enabled. GRU-FR-IKEQ:
-            a rework run opens it with its request thread selected. */}
+            a rework run opens it with its request thread selected, and a run
+            at rest on a plan rest with its plan thread (GRU-FR-TCSM). */}
         {run.openspec &&
           (run.state === "completed" || isChangeRun(run)) &&
           run.streamId && (
@@ -265,7 +274,11 @@ export function RunActionRow({
                   streamName: run.streamName || undefined,
                   ...(changeRunPhase(run) === "rework"
                     ? { thread: run.openspec!.threadId ?? null }
-                    : {}),
+                    : // GRU-FR-TCSM / GRU-FR-TVDF: a plan rest opens it with
+                      // the plan thread selected (OCW-FR-QSZP).
+                      planThreadOf(run)
+                      ? { thread: planThreadOf(run) }
+                      : {}),
                 },
               )
             }

@@ -59,6 +59,7 @@ mod idle_sandbox;
 mod landings;
 mod merge_run;
 pub mod openspec_start;
+pub mod plan_updates;
 mod pr_summary;
 mod queue;
 mod read_failure;

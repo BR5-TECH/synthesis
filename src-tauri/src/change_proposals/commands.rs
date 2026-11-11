@@ -330,6 +330,11 @@ pub(crate) fn hold_in_process<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    // CEP-FR-KGOL: the plan proposal waits while its questions stand.
+    if (AppSites { app }).plan_questions_pending(proposal_id) {
+        log_refusal(app, "hold_hunk", ERR_PLAN_QUESTIONS_PENDING, Subject::Proposal(proposal_id));
+        return Err(ERR_PLAN_QUESTIONS_PENDING.to_string());
+    }
     let proposal = hold_hunk_impl(store, proposal_id, hunk_id, discussing)
         .inspect_err(|e| log_refusal(app, "hold_hunk", e, Subject::Proposal(proposal_id)))?;
     announce(app, &proposal, ChangeProposalCause::Held);
@@ -352,6 +357,11 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let store = require_store(&project)?;
+    // CEP-FR-KGOL: the plan proposal waits while its questions stand.
+    if (AppSites { app: &app }).plan_questions_pending(&proposal_id) {
+        log_refusal(&app, "edit_hunk", ERR_PLAN_QUESTIONS_PENDING, Subject::Proposal(&proposal_id));
+        return Err(ERR_PLAN_QUESTIONS_PENDING.to_string());
+    }
     let saved = edit_hunk_impl(&store, &proposal_id, &hunk_id, &after, &baseline_checksum)
         .inspect_err(|e| log_refusal(&app, "edit_hunk", e, Subject::Proposal(&proposal_id)))?;
     logging::log_debug(

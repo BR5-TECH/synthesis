@@ -82,6 +82,31 @@ pub trait SiteResolver {
     /// CEP-FR-OIZT: the id of a rework run of the change that is not
     /// terminal, if one stands (`OCR-openspec-change-runs.md` OCR-FR-OXVH).
     fn rework_run(&self, stream_id: &str, change: &str) -> Option<String>;
+
+    /// CEP-FR-YYZZ: the apply run of the change that is not terminal, if one
+    /// stands (`OPU-openspec-plan-updates.md` OPU-FR-DEEB).
+    fn apply_run(&self, _stream_id: &str, _change: &str) -> Option<ApplyRunGate> {
+        None
+    }
+
+    /// OPU-FR-WOKJ: write the id of an admitted plan proposal on the rest of
+    /// its run.
+    fn admit_plan_proposal(&self, _run_id: &str, _proposal_id: &str) {}
+
+    /// CEP-FR-KGOL: whether the proposal is the plan proposal of a plan update
+    /// whose question set still stands.
+    fn plan_questions_pending(&self, _proposal_id: &str) -> bool {
+        false
+    }
+}
+
+/// CEP-FR-YYZZ: an apply run of a change that is not terminal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApplyRunGate {
+    pub run_id: String,
+    /// OPU-FR-WOKJ: the plan thread whose recording the run admits as its
+    /// plan proposal, where it rests on `plan_findings` with none.
+    pub admits_thread: Option<String>,
 }
 
 /// The resolver of the running application: the stream registry and the run
@@ -124,6 +149,18 @@ impl<R: tauri::Runtime> SiteResolver for AppSites<'_, R> {
 
     fn rework_run(&self, stream_id: &str, change: &str) -> Option<String> {
         crate::graduation::rework_run_on_change(self.app, stream_id, change)
+    }
+
+    fn apply_run(&self, stream_id: &str, change: &str) -> Option<ApplyRunGate> {
+        crate::graduation::plan_updates::apply_run_gate(self.app, stream_id, change)
+    }
+
+    fn admit_plan_proposal(&self, run_id: &str, proposal_id: &str) {
+        crate::graduation::plan_updates::admit_plan_proposal(self.app, run_id, proposal_id);
+    }
+
+    fn plan_questions_pending(&self, proposal_id: &str) -> bool {
+        crate::graduation::plan_updates::plan_questions_stand(self.app, proposal_id)
     }
 }
 

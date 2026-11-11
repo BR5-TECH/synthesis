@@ -37,6 +37,7 @@ fn pr_summary_input_fields() -> Vec<String> {
 /// optional field of a work turn is present.
 fn earlier_findings() -> Vec<ReviewHistoryEntry> {
     let finding = |description: &str| ReviewFinding {
+        kind: None,
         severity: ReviewSeverity::Major,
         description: description.into(),
         affected_files: Vec::new(),

@@ -16,6 +16,7 @@
 import { NOT_HANDLED } from "./mock-github-polling";
 import { SPLIT_DISCUSSION, openspecSplitInvoke } from "./mock-openspec-split";
 import { REQUEST_DISCUSSION } from "./mock-openspec-runs";
+import { PLAN_THREAD_ID, planDiscussion, planMode, planSetStands } from "./mock-openspec-plan";
 
 export const OPENSPEC_DEMO_CHANGE = "add-logout-3f2a";
 export const OPENSPEC_DEMO_DRAFT_ID = "d-os";
@@ -299,8 +300,9 @@ function proposalRecord() {
     streamId: OPENSPEC_DEMO_STREAM.id,
     change: OPENSPEC_DEMO_CHANGE,
     rationale: "Name the window, and tell the user when the session ends.",
-    threadId: "ocd-1",
-    commentId: "ocd-1-c2",
+    // OPU-FR-OQRA: with `?openspecPlan=update`, `cep-1` is the plan proposal.
+    threadId: planMode() === "update" ? PLAN_THREAD_ID : "ocd-1",
+    commentId: planMode() === "update" ? `${PLAN_THREAD_ID}-c2` : "ocd-1-c2",
     state: undecided ? "pending" : accepted > 0 ? "accepted" : "rejected",
     candidateEdited: ledger.some((h) => h.edited),
     commentOwed: false,
@@ -408,6 +410,15 @@ const discussions: any[] = [
     ],
   },
 ];
+// OPU-FR-QXUE / OPU-FR-MCSG: the plan thread, where `?openspecPlan=` seeds
+// one. With `update`, the proposal comment of `cep-1` stands in it alone.
+{
+  const plan = planDiscussion();
+  if (plan) {
+    discussions.push(plan);
+    if (planMode() === "update") discussions[0].comments[1].attachments = [];
+  }
+}
 // NCP / OCW-FR-BGDN: the discussion that holds the pending new-change proposal.
 discussions.push(SPLIT_DISCUSSION);
 // CAR / OCW-FR-QCPB: the discussion that holds the pending request card.
@@ -441,8 +452,15 @@ function ownDiscussion(id: unknown) {
   return discussions.find((d) => d.id === id);
 }
 
+/** CEP-FR-KGOL: a decision on the plan proposal while its question set stands. */
+function refuseWhilePlanQuestions() {
+  // eslint-disable-next-line no-throw-literal
+  if (planSetStands()) throw "plan_questions_pending";
+}
+
 /** CEP-FR-RWTQ / CEP-FR-FOJW: a decision, and the close it may make. */
 function decide(hunkId: string, state: "accepted" | "rejected") {
+  refuseWhilePlanQuestions();
   const row = ledger.find((h) => h.id === hunkId);
   // eslint-disable-next-line no-throw-literal
   if (!row) throw "hunk_not_found";
@@ -460,8 +478,9 @@ function decide(hunkId: string, state: "accepted" | "rejected") {
   let commentId: string | undefined;
   if (resolved) {
     const anyAccepted = ledger.some((h) => h.state === "accepted");
-    commentId = `ocd-1-c${discussions[0].comments.length + 1}`;
-    discussions[0].comments.push({
+    const home = ownDiscussion(proposalRecord().threadId) ?? discussions[0];
+    commentId = `${home.id}-c${home.comments.length + 1}`;
+    home.comments.push({
       id: commentId,
       author: ME,
       body: `Decided: ${ledger.map((h) => `${h.path} ${h.state}`).join(", ")}.`,
@@ -469,7 +488,7 @@ function decide(hunkId: string, state: "accepted" | "rejected") {
       attachments: [],
       createdAt: new Date().toISOString(),
     });
-    fire("discussion-changed", discussions[0]);
+    fire("discussion-changed", home);
     if (anyAccepted) {
       committed = query("changeCommit") !== "fail";
       commitOwed = !committed;
@@ -544,6 +563,7 @@ export function openspecDiscussionInvoke(cmd: string, a: Record<string, any>): u
     case "reject_change_edit_hunk":
       return decide(String(a.hunkId), "rejected");
     case "set_change_edit_hunk_discussing": {
+      refuseWhilePlanQuestions();
       const row = ledger.find((h) => h.id === a.hunkId);
       // eslint-disable-next-line no-throw-literal
       if (!row) throw "hunk_not_found";
@@ -551,12 +571,14 @@ export function openspecDiscussionInvoke(cmd: string, a: Record<string, any>): u
       return proposalRecord();
     }
     case "edit_change_edit_hunk": {
+      refuseWhilePlanQuestions();
       afterText[String(a.hunkId)] = String(a.after ?? "");
       const row = ledger.find((h) => h.id === a.hunkId);
       if (row) row.edited = true;
       return { checksum: `ck-edit-${Date.now()}` };
     }
     case "decline_change_edit_proposal": {
+      refuseWhilePlanQuestions();
       for (const row of ledger) if (row.state === "pending" || row.state === "discussing") row.state = "rejected";
       return { proposal: proposalRecord(), committed: false, resolved: true, originKind: "change_discussion" };
     }

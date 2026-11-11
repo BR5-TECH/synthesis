@@ -228,7 +228,7 @@ impl TurnScript {
 
     /// The turn answers with a vendor session the next turn can resume.
     pub(crate) fn leaves_a_session(mut self) -> Self {
-        self.inner = self.inner.with_session();
+        self.inner = self.inner.with_session("s1");
         self
     }
 
@@ -315,6 +315,7 @@ impl TurnScript {
 /// A review finding at the named severity.
 pub(crate) fn finding(severity: ReviewSeverity, description: &str) -> ReviewFinding {
     ReviewFinding {
+        kind: None,
         severity,
         description: description.to_string(),
         affected_files: vec!["src/panel.ts".to_string()],

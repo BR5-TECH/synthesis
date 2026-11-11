@@ -638,3 +638,75 @@ fn a_discarded_metadata_key_reaches_no_caller_and_no_boundary_record() {
         "the activity channel stopped carrying the vendor's own line"
     );
 }
+
+fn plan_update_document(kind: serde_json::Value, questions: serde_json::Value) -> String {
+    json!({
+        "protocol_version": 1,
+        "outcome": "escalation_required",
+        "summary": "the plan is wrong",
+        "escalation": { "kind": kind, "reason": "The design names a table that does not exist.", "questions": questions },
+    })
+    .to_string()
+}
+
+// EAC-FR-18, ESU-FR-VTAZ, ESU-FR-ATVP: an escalation of the kind
+// `plan_update` may hold no question, and every other escalation holds one at
+// least. A kind other than `plan_update` is an escalation rule broken.
+#[test]
+fn a_plan_update_may_ask_no_question_and_an_ordinary_escalation_may_not() {
+    let update = decode_envelope(&plan_update_document(json!("plan_update"), json!([])))
+        .expect("a plan update with no question is read")
+        .escalation
+        .expect("the escalation");
+    assert!(update.is_plan_update());
+    assert!(update.questions.is_empty());
+
+    let eight: Vec<_> =
+        (0..MAX_ESCALATION_QUESTIONS).map(|i| json!({ "question": format!("q{i}") })).collect();
+    let full = decode_envelope(&plan_update_document(json!("plan_update"), json!(eight)))
+        .expect("eight questions are read")
+        .escalation
+        .expect("the escalation");
+    assert_eq!(full.questions.len(), MAX_ESCALATION_QUESTIONS);
+    let nine: Vec<_> =
+        (0..=MAX_ESCALATION_QUESTIONS).map(|i| json!({ "question": format!("q{i}") })).collect();
+    assert_eq!(
+        decode_envelope(&plan_update_document(json!("plan_update"), json!(nine))).unwrap_err(),
+        EnvelopeInvalid::EscalationShape
+    );
+
+    let ordinary = json!({
+        "protocol_version": 1,
+        "outcome": "escalation_required",
+        "summary": "stopped",
+        "escalation": { "reason": "r", "questions": [] },
+    });
+    assert_eq!(
+        decode_envelope(&ordinary.to_string()).unwrap_err(),
+        EnvelopeInvalid::EscalationShape
+    );
+    assert!(decode_envelope(&plan_update_document(json!("other"), json!([{ "question": "q" }])))
+        .is_err());
+
+    let plain =
+        decode_envelope(&escalation_document(json!([]))).expect("an escalation with no kind");
+    assert!(!plain.escalation.expect("the escalation").is_plan_update());
+}
+
+// EAC-FR-18, CCP-FR-07: the vendor schema states the kind and the question
+// count of a plan update: none to eight with the kind, one to eight without.
+#[test]
+fn the_vendor_schema_states_the_plan_update_kind_and_its_question_count() {
+    let schema: serde_json::Value =
+        serde_json::from_str(crate::tools::agent_exec::descriptor::claude_code::ENVELOPE_SCHEMA)
+            .expect("the vendor schema parses");
+    let escalation = &schema["properties"]["escalation"];
+    assert_eq!(escalation["properties"]["kind"]["enum"], json!(["plan_update"]));
+    assert_eq!(escalation["properties"]["questions"]["minItems"], json!(0));
+    assert_eq!(escalation["properties"]["questions"]["maxItems"], json!(MAX_ESCALATION_QUESTIONS));
+    assert_eq!(escalation["if"], json!({ "required": ["kind"] }));
+    assert_eq!(
+        escalation["else"]["properties"]["questions"]["minItems"],
+        json!(MIN_ESCALATION_QUESTIONS)
+    );
+}

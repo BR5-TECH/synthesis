@@ -1,7 +1,7 @@
 /**
  * The review of a change edit proposal in the change workspace
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-COLR,
- * OCW-FR-DTRX, OCW-FR-TAZJ, OCW-FR-MLXJ, OCW-FR-EJGH).
+ * OCW-FR-DTRX, OCW-FR-TAZJ, OCW-FR-MLXJ, OCW-FR-EJGH, OCW-FR-XJMR).
  *
  * The review is the shared one (`../DraftDiscussion/useProposalReview.tsx`):
  * the same decorations, chip, hunk edits, and focus. What is the change's own
@@ -16,6 +16,7 @@ import { onChangeEditProposalsChanged } from "../../events";
 import { logInfo, logWarn } from "../../logging";
 import { changeHunkCandidateBuffers } from "../../state/candidateBuffers";
 import { rereadHunks } from "../../state/proposalHunks";
+import { usePlanProposal } from "../../state/openspec/planProposal";
 import {
   asReviewable,
   changeReviewKey,
@@ -66,7 +67,16 @@ export interface ChangeReview {
    * the refusal in words when it did not.
    */
   rejectAll: () => Promise<string | null>;
+  /**
+   * OCW-FR-XJMR: the pending proposal is the plan proposal of a plan update
+   * whose question set stands, so no hunk of it takes a decision.
+   */
+  planHeld: boolean;
 }
+
+/** OCW-FR-XJMR: the one sentence the review bar says while the plan questions stand. */
+export const PLAN_QUESTIONS_FIRST =
+  "Answer the questions in the plan thread first. Then decide these edits.";
 
 export function useChangeReview(input: {
   streamId: string;
@@ -82,6 +92,8 @@ export function useChangeReview(input: {
   const proposals = useChangeProposals(streamId, change);
   const pending = proposals.find((p) => p.state === "pending");
   const [refusal, setRefusal] = useState<HunkRefusal | null>(null);
+  // OCW-FR-XJMR: while the plan questions stand, the chips are unavailable.
+  const planHeld = usePlanProposal(streamId, change, pending?.id ?? null).held;
 
   /**
    * OCW-FR-TAZJ: the tab follows the event for its stream and its change, and
@@ -244,13 +256,28 @@ export function useChangeReview(input: {
   );
 
   const reviewable = useMemo(() => (pending ? asReviewable(pending) : undefined), [pending]);
-  const review = useProposalReview({
+  const shared = useProposalReview({
     kind,
     proposal: reviewable,
-    locked: false,
+    locked: planHeld,
     viewingVersion: true,
     onDiscussHunk,
   });
+  // OCW-FR-XJMR: accept, reject, and discuss are disabled through `busy`, and
+  // the edit of a hunk's proposed text is not offered.
+  const review = useMemo<EditorReview | undefined>(() => {
+    if (!shared || !planHeld) return shared;
+    const none = () => {};
+    return {
+      ...shared,
+      busy: true,
+      hunks: shared.hunks.map((hunk) => ({ ...hunk, editable: false })),
+      onAccept: none,
+      onReject: none,
+      onDiscuss: none,
+      onEdit: none,
+    };
+  }, [shared, planHeld]);
 
   const pathOf = useCallback(
     (hunkId: string) => pending?.hunks.find((h) => h.id === hunkId)?.path,
@@ -269,6 +296,7 @@ export function useChangeReview(input: {
    */
   const rejectAll = useCallback(async (): Promise<string | null> => {
     if (!pending) return null;
+    if (planHeld) return PLAN_QUESTIONS_FIRST;
     try {
       const outcome = await api.declineChangeEditProposal(pending.id);
       settle(outcome, "declined");
@@ -285,7 +313,7 @@ export function useChangeReview(input: {
         ? streamBusyMessage(streamId)
         : changeDecisionMessage(code);
     }
-  }, [pending, settle, streamId]);
+  }, [pending, settle, streamId, planHeld]);
 
-  return { pending, review, pathOf, refusal, undecided, rejectAll };
+  return { pending, review, pathOf, refusal, undecided, rejectAll, planHeld };
 }

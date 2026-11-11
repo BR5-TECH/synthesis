@@ -27,6 +27,7 @@ import {
   aheadOf,
   coalesce,
   graduationErrorMessage,
+  continueRefusalMessage,
   readableCapacity,
   waitsForSlot,
   raiseStatement,
@@ -534,13 +535,15 @@ export function GraduationRuns({
    * focus returns to that row when the act settles (GRU-FR-ZMHB). An act issued
    * from anywhere else is refused against the run region as a whole
    * (GRU-FR-XQVG). `onRefused` hands the refusal to a control that renders it
-   * itself. The answer says whether the act was accepted.
+   * itself. `words` turns the refusal into the words the author reads. The
+   * answer says whether the act was accepted.
    */
   const act = async (
     what: string,
     action: () => Promise<unknown>,
     pressed?: PressedAction,
     onRefused?: (message: string) => void,
+    words: (raw: string) => string = graduationErrorMessage,
   ): Promise<boolean> => {
     if (busy) return false;
     pressedRef.current = pressed ?? null;
@@ -554,7 +557,7 @@ export function GraduationRuns({
       return true;
     } catch (reason) {
       logError(["frontend"], "a graduation act was refused", {});
-      const message = graduationErrorMessage(String(reason));
+      const message = words(String(reason));
       // GRU-FR-KQPE: one refusal alert at most, and a refusal renders only
       // while the run it belongs to is selected.
       if (onRefused) {
@@ -648,8 +651,13 @@ export function GraduationRuns({
           void act("Paused the run.", () => api.pauseGraduationRun(entry.id))
         }
         onContinue={(entry) =>
-          void act("Continued the run.", () =>
-            api.continueGraduationRun(entry.id),
+          void act(
+            "Continued the run.",
+            () => api.continueGraduationRun(entry.id),
+            undefined,
+            undefined,
+            // GRU-FR-BPNJ: a plan rest states its own refusals.
+            (raw) => continueRefusalMessage(entry, raw),
           )
         }
         onAutoStart={(entry, enabled) =>

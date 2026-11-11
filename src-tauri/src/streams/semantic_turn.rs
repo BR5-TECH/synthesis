@@ -227,7 +227,11 @@ async fn execute<R: tauri::Runtime>(
         activity: update_activity_sink(app, attempt_id),
         durable_output: None,
     };
-    dispatch.dispatch_graduation_turn(app, project_key, request).await
+    // OPU-FR-RFFH: a semantic rebase turn gives no plan update.
+    dispatch
+        .dispatch_graduation_turn(app, project_key, request)
+        .await
+        .map(crate::graduation::plan_updates::refuse_plan_update)
 }
 
 /// GXD-FR-IOZU: the activity sink one update turn reports through.

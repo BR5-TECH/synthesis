@@ -29,9 +29,12 @@
  *   finish with that blocker code, for example `proposal_pending` (GRU-FR-NGQE).
  * - `?openspecRequestState=failed` seeds the request as failed with the code
  *   `change_not_found`, and `declined` seeds it as declined (OCW-FR-CTWP).
+ * - `?openspecPlan=update|findings|invalid` makes `g-51` rest on a plan rest
+ *   (see mock-openspec-plan.ts).
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
+import { planRestFields } from "./mock-openspec-plan";
 
 const STREAM = { id: "s-1", name: "editor-work" };
 const CHANGE = "add-logout-3f2a";
@@ -105,6 +108,8 @@ export function applyRunFields(): Record<string, unknown> {
     },
     createdAt: "2026-09-08T09:00:00Z",
     updatedAt: "2026-09-08T09:10:00Z",
+    // OPU-FR-UOYJ: `?openspecPlan=` makes the run rest on a plan rest.
+    ...(planRestFields() ?? {}),
   };
 }
 

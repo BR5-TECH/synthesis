@@ -143,17 +143,39 @@ where
     record_logged(app, store, sites, &new, Some(run_id))
 }
 
+/// CEP-FR-QDJH, CEP-FR-YYZZ: the recording of the plan proposal of the apply
+/// run `run_id` (`OPU-openspec-plan-updates.md` OPU-FR-OQRA). The
+/// `apply_running` refusal does not stop the run it names.
+pub fn record_plan_proposal<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &fs::RootFs,
+    sites: &dyn SiteResolver,
+    new: NewChangeProposal<'_>,
+    run_id: &str,
+) -> Result<ChangeEditProposal, RecordRefusal>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    record_logged(app, store, sites, &new, Some(run_id))
+}
+
 fn record_logged<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     store: &fs::RootFs,
     sites: &dyn SiteResolver,
     new: &NewChangeProposal<'_>,
-    rework_run_id: Option<&str>,
+    own_run_id: Option<&str>,
 ) -> Result<ChangeEditProposal, RecordRefusal>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let outcome = record_locked(app, store, sites, new, rework_run_id);
+    let mut admitted = None;
+    let outcome = record_locked(app, store, sites, new, own_run_id, &mut admitted);
+    // OPU-FR-WOKJ: the run writes the id of an admitted plan proposal on its
+    // rest. The change lock is released first.
+    if let (Ok(record), Some(run_id)) = (&outcome, admitted) {
+        sites.admit_plan_proposal(&run_id, &record.id);
+    }
     match &outcome {
         Ok(record) => log_recorded(app, record),
         Err(refusal) => log_refusal(
@@ -171,7 +193,8 @@ fn record_locked<R: tauri::Runtime>(
     store: &fs::RootFs,
     sites: &dyn SiteResolver,
     new: &NewChangeProposal<'_>,
-    rework_run_id: Option<&str>,
+    own_run_id: Option<&str>,
+    admitted: &mut Option<String>,
 ) -> Result<ChangeEditProposal, RecordRefusal>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -182,11 +205,22 @@ where
         _ => RecordRefusal::ChangeNotFound,
     })?;
     // CEP-FR-OIZT: while a rework run of the change is not terminal, only the
-    // finish of that run records a proposal on it.
+    // finish of that run records a proposal on it. `own_run_id` names the run
+    // whose own recording this is.
     if let Some(running) = sites.rework_run(new.stream_id, new.change) {
-        if rework_run_id != Some(running.as_str()) {
+        if own_run_id != Some(running.as_str()) {
             return Err(RecordRefusal::ReworkRunning);
         }
+    }
+    // CEP-FR-YYZZ / OPU-FR-DEEB: while an apply run of the change is not
+    // terminal, only its own plan proposal and the plan proposal it admits at
+    // a `plan_findings` rest (OPU-FR-WOKJ) are recorded.
+    let gate = sites.apply_run(new.stream_id, new.change);
+    if let Some(gate) = gate.filter(|gate| own_run_id != Some(gate.run_id.as_str())) {
+        if gate.admits_thread.as_deref() != Some(new.thread_id) {
+            return Err(RecordRefusal::ApplyRunning);
+        }
+        *admitted = Some(gate.run_id);
     }
     let of = new.hunks.len();
     if of == 0 {
@@ -241,6 +275,7 @@ where
         candidate_edited: false,
         comment_owed: false,
         commit_owed: false,
+        commit: None,
         hunk_count: 0,
         created_at: now.clone(),
         decided_at: None,

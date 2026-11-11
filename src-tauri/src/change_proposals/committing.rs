@@ -56,8 +56,8 @@ where
                     &commit_message(&record.change),
                     &rels,
                 ) {
-                    Ok(_) => Ok(true),
-                    Err(e) if e == crate::git::ERR_NOTHING_TO_COMMIT => Ok(false),
+                    Ok(outcome) => Ok(Some(outcome.commit_id)),
+                    Err(e) if e == crate::git::ERR_NOTHING_TO_COMMIT => Ok(None),
                     Err(e) => Err(e),
                 }
             })
@@ -65,11 +65,17 @@ where
     };
 
     match outcome {
-        Ok(landed) => {
+        Ok(revision) => {
+            let landed = revision.is_some();
             for mut proposal in owing {
                 let was_owed = proposal.commit_owed;
-                if was_owed {
+                // CEP-FR-DQAJ: each proposal the commit holds records its revision.
+                let commits = landed && (was_owed || proposal.id == record.id);
+                if was_owed || commits {
                     proposal.commit_owed = false;
+                    if commits {
+                        proposal.commit.clone_from(&revision);
+                    }
                     let _ = write_record(store, &dir, &proposal);
                 }
                 if was_owed || proposal.id == record.id {

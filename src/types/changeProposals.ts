@@ -40,6 +40,8 @@ export interface ChangeEditProposal {
   commentOwed: boolean;
   /** CEP-FR-IYHP: a commit at the close failed, and the files wait for one. */
   commitOwed: boolean;
+  /** CEP-FR-DQAJ: the revision of its close commit, once it landed. */
+  commit?: string | null;
   hunkCount: number;
   createdAt: string;
   decidedAt?: string | null;
@@ -123,4 +125,6 @@ export const CHANGE_PROPOSAL_ERRORS = {
   acceptanceInProgress: "acceptance_in_progress",
   acceptanceIncomplete: "acceptance_incomplete",
   discussionResolved: "discussion_resolved",
+  /** CEP-FR-KGOL: the question set of a plan update stands. */
+  planQuestionsPending: "plan_questions_pending",
 } as const;

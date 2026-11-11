@@ -55,6 +55,10 @@ where
     if record.state != ChangeProposalState::Pending {
         return Err(ERR_ALREADY_DECIDED.to_string());
     }
+    // CEP-FR-KGOL: the plan proposal waits while its questions stand.
+    if sites.plan_questions_pending(proposal_id) {
+        return Err(ERR_PLAN_QUESTIONS_PENDING.to_string());
+    }
     if let Some(hunk_id) = hunk {
         let row = record.row(hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
         if row.state == HunkState::Withdrawn {
@@ -98,6 +102,7 @@ where
         if settles {
             row.state = HunkState::Rejected;
             row.decided_at = Some(now.clone());
+            row.feedback = feedback.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
         }
     }
     record.comment_owed = false;
@@ -211,6 +216,7 @@ where
     if let Some(row) = decided.row_mut(hunk_id) {
         row.state = HunkState::Accepted;
         row.decided_at = Some(now_rfc3339());
+        row.feedback = feedback.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
     }
     let path_was_written = decided.written_paths.contains(&file.path);
     if !path_was_written {

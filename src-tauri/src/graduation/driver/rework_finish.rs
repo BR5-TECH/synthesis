@@ -313,7 +313,7 @@ fn compare<R: tauri::Runtime>(
 /// OCR-FR-UTFI: the line hunks of PCP-FR-CNVT, or one hunk over the whole
 /// file where those cannot each be found once. A file the working copy does
 /// not hold is one new-file hunk (CEP-FR-HRCX). Equal texts give none.
-fn hunks_of(current: Option<&str>, next: &str) -> Vec<ProposedHunk> {
+pub(crate) fn hunks_of(current: Option<&str>, next: &str) -> Vec<ProposedHunk> {
     let Some(current) = current else {
         return text::whole_document("", next);
     };

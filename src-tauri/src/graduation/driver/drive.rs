@@ -229,6 +229,8 @@ fn drive_blocking<R: tauri::Runtime>(
         crate::graduation::reclaim_ended_pr_summary_run(app, &run);
         // OCR-FR-FJFI: the same for the worktree of an ended rework run.
         crate::graduation::reclaim_ended_rework_run(app, &run);
+        // OPU-FR-FSCV: and the plan base of an ended apply run.
+        crate::graduation::plan_updates::reclaim_plan_base(app, &run);
     }
 }
 
@@ -396,9 +398,10 @@ async fn drive<R: tauri::Runtime>(
     let mut resume_at_apply =
         run.is_merge() && run.checkpoint.resume_part.as_deref() == Some(phases::PART_APPLY);
     // OCR-FR-PBKH: a rework run whose finish was blocked resumes at the
-    // finish, with no turn and no pass.
-    let resume_at_record = run.is_change_rework()
-        && run.checkpoint.resume_part.as_deref() == Some(phases::PART_RECORD);
+    // finish, with no turn and no pass. OPU-FR-BKZX: so does an apply run
+    // whose plan update recording was blocked.
+    let resume_at_record =
+        run.is_change_run() && run.checkpoint.resume_part.as_deref() == Some(phases::PART_RECORD);
     // The pointer is spent the moment it is read. Leaving it set would make a
     // later interruption of this same run skip a work turn it never stopped in.
     if run.checkpoint.resume_part.is_some() {
@@ -418,7 +421,11 @@ async fn drive<R: tauri::Runtime>(
             }
         }
         if resume_at_record {
-            super::rework_finish::finish_again(app, &mut run, &worktree);
+            if run.is_change_apply() {
+                super::plan_record::record_again(app, &mut run, &worktree);
+            } else {
+                super::rework_finish::finish_again(app, &mut run, &worktree);
+            }
             return;
         }
         if !resume_at_review {
@@ -724,7 +731,10 @@ async fn review_turn<R: tauri::Runtime>(
         };
         // GRL-FR-ECES: the verdict is read without the summary, and the summary
         // on its own after it, so a bad summary never refuses a verdict.
-        if let Some(verdict) = read_verdict(&execution) {
+        // OPU-FR-EPXL: a `plan` finding counts only in an apply review.
+        if let Some(verdict) =
+            read_verdict(&execution).map(|v| super::plan_turns::normalized(run, v))
+        {
             let summary = read_run_summary(app, run, &verdict, &execution);
             break (verdict, summary);
         }
@@ -793,7 +803,10 @@ async fn review_turn<R: tauri::Runtime>(
     //
     // GRL-FR-MRVK: the rule does not apply to a merge review. Every `revise`
     // verdict of one starts another pass or rests the run for the author.
+    // OPU-FR-FDCW: nor to a verdict that holds a `plan` finding.
+    let plans = super::plan_turns::holds_plan_finding(run, &verdict);
     let advisory = !run.is_merge()
+        && !plans
         && verdict.verdict == ReviewOutcome::Revise
         && verdict.findings.len() <= 2
         && verdict.findings.iter().all(|f| f.severity == ReviewSeverity::Minor);
@@ -827,6 +840,10 @@ async fn review_turn<R: tauri::Runtime>(
         );
     }
 
+    // OPU-FR-FDCW: plan findings start no pass, and get a plan correction turn.
+    if plans {
+        return super::plan_turns::route_plan_findings(app, run, &verdict);
+    }
     if verdict.verdict == ReviewOutcome::Ready || advisory {
         run.observability.settle_pass(&verdict, None, crate::notes::now_rfc3339());
         // GRD-FR-AQNW: the counterpart of the commit of a draft run, for a merge

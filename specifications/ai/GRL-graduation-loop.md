@@ -26,7 +26,9 @@ The agent loop a graduation run is driven by. It holds two phases and no more: a
 7. **GRL-FR-KDYL** A validation or an apply-progress read that cannot run before a review, because OpenSpec mode is inactive, the CLI is not usable, or the read failed, dispatches no review turn. The run rests `blocked` with the code `openspec_validation_unavailable` (per `../core/GRD-graduation.md` GRD-FR-UJII).
 7. **GRL-FR-MXXA** Every turn of an OpenSpec run carries `openspec` in its task input, with its phase (`propose`, `apply`, or `rework`), the change name, and, for a rework run, the author's instruction as `instruction`. `graduation_input_version` stays `1`.
 7. **GRL-FR-EUSF** An apply run's work turn carries `work.md` followed by the work block of `openspec-apply.md`, with the change name filled in. The block names the tasks of the change as the task. It tells the agent to read them with `openspec instructions apply --change <name> --json`, to implement them in order, and to mark each one done in `tasks.md`.
-7. **GRL-FR-SZQK** The apply work block tells the agent to change no file of the change folder other than `tasks.md`. Where the proposal, the deltas, or the design are wrong, or cannot be built as they are written, it tells the agent to escalate to the author (per `../tools/ESU-escalate-to-user-tool.md`) and not to edit them.
+7. **GRL-FR-SZQK** The apply work block tells the agent to change no file of the change folder other than `tasks.md`. Where the proposal, the deltas, the design, or the tasks are wrong, or cannot be built as they are written, it tells the agent to give a plan update (per `../core/OPU-openspec-plan-updates.md` OPU-FR-YBLE) and not to edit them.
+7. **GRL-FR-OEFM** The apply work block tells the agent how to give a plan update: write each planning file it proposes, whole, at `.synthesis-plan/openspec/changes/<name>/<file>`, then answer `escalation_required` with `kind: "plan_update"`, its reason, and 0 to 8 questions. It says that a question not about the plan is an ordinary escalation.
+7. **GRL-FR-NZMK** The apply review block tells the agent to give a finding `kind: "plan"` where the proposal, the deltas, the design, or the tasks are wrong or cannot be built as written, and `kind: "work"` otherwise (per `../core/OPU-openspec-plan-updates.md` OPU-FR-EPXL).
 7. **GRL-FR-NWSC** An apply run's review turn carries `review.md` followed by the review block of `openspec-apply.md`. The block tells the agent to verify the work against the change for **completeness** (every task done and every delta requirement implemented), **correctness** (the code does what each requirement and scenario states), and **coherence** (the code follows the design).
 7. **GRL-FR-YFGA** The apply review block maps the levels of a verification issue to finding severities: CRITICAL to `critical`, WARNING to `major`, and SUGGESTION to `minor`. It tells the agent that `input.openspec_apply_progress` and `input.openspec_validation` describe the tree it judges, and that it runs no check (GRL-FR-RTNC).
 7. **GRL-FR-BHGJ** Before each review turn of an apply run, the application runs `apply_instructions` (per `../core/OSM-openspec-mode.md` OSM-FR-QLRW) and `validate_change` on the review checkout, and carries the results as `openspec_apply_progress` and `openspec_validation` in the task input. A read that cannot run rests the run by GRL-FR-KDYL.
@@ -60,7 +62,7 @@ The agent loop a graduation run is driven by. It holds two phases and no more: a
 13. **GRL-FR-PTCE** No answer correction turn is dispatched where the run is cancelled, a merge branch has moved, or no total time is left: the first turn then settles as it ended. Where the vendor does not honour the resume, the first turn also settles as it ended, and the answer of the correction turn is discarded.
 13. **GRL-FR-HWLD** The loop saves the pending correction in the checkpoint's `answer_correction`, and clears it only when a correction turn has ended with an answer. Otherwise it stays, also after a launch error, a stop, or no dispatch, so the next turn of that part after Continue is the correction. A work turn that runs first drops a pending review correction.
 13. **GRL-FR-NSEY** A correction turn counts as one turn of its part and is charged to the time limits. It changes neither the pass nor the pass history, and it does not raise the count of GRL-FR-TVXI.
-14. **GRL-FR-UQNV** A `revise` verdict of two findings or fewer, all of severity `minor`, ends the loop as `ready` does. The findings are recorded as advisory remarks and no further work turn is composed. This rule does not apply to a merge review (GRL-FR-MRVK).
+14. **GRL-FR-UQNV** A `revise` verdict of two findings or fewer, all of severity `minor`, ends the loop as `ready` does. The findings are recorded as advisory remarks and no further work turn is composed. This rule does not apply to a merge review (GRL-FR-MRVK), or to a verdict that holds a `plan` finding (per `../core/OPU-openspec-plan-updates.md` OPU-FR-FDCW).
 15. **GRL-FR-GQAB** A `revise` verdict that starts another pass carries its findings whole into the next work turn's instruction, in the order the review returned them.
 16. **GRL-FR-NVBZ** The loop never treats an agent response envelope as evidence about the filesystem. It reads from the envelope the outcome the agent reported, the account of GRL-FR-DNKA, and the check record of GRL-FR-IJTT, and it reads what changed from the working copy. The account reaches the review as a **claim**, never as a finding of fact.
 17. **GRL-FR-DNKA** A work turn's own **account** of what it did and did not do, its success summary, goes to the review that judges what it wrote, on every turn the check gate accepts (GRL-FR-XWNQ). The review turn is told that the account is there and whose words it is (GRL-FR-CKBL). No work turn is given an account, in any pass.
@@ -131,10 +133,12 @@ The agent loop a graduation run is driven by. It holds two phases and no more: a
 50. **GRL-FR-CHDT** Where the check gate refuses an answer, the loop dispatches one **check correction** turn of the same part. It carries `check_correction`, the fixed `refusals.md` text of the cause: `checks_not_passing` for `checks_unfinished` and `checks_red`, `checks_record_missing` for `record_missing`, and `work_failed` for `work_failed`. The turn may change files.
 50. **GRL-FR-SMQK** A check correction turn resumes the session that the refused turn reported, in the same working copy. Where no session was reported, or the vendor does not resume, it runs as a fresh turn in that working copy. Its effective timeout is read before its dispatch (GRL-FR-EFTM).
 50. **GRL-FR-IPNO** A task input carries `check_correction` only on the part `work` or `merge_work`, and never beside `correction`. An input that breaks this rule is invalid before dispatch.
-50. **GRL-FR-LAVF** The loop dispatches at most one check correction in each **gate episode**. An episode starts with each `work` or `merge_work` turn that the gate did not ask for: the first work turn of a pass, the turn that takes escalation answers, and the turn that Continue from `checks_not_passed` dispatches (GRL-FR-FGWT).
+50. **GRL-FR-LAVF** The loop dispatches at most one check correction in each **gate episode**. An episode starts with each `work` or `merge_work` turn that the gate did not ask for: the first work turn of a pass, the turn that takes escalation answers or the decisions of a plan update, and the turn that Continue from `checks_not_passed` dispatches (GRL-FR-FGWT).
 50. **GRL-FR-SUBP** Where the check gate refuses the answer of the check correction, the loop dispatches one **escalate correction** turn of the same part, on the session terms of GRL-FR-SMQK. It carries the `checks_escalate` text of `refusals.md` as `correction`: the turn changes no file, may not report success, and answers `escalation_required` with its questions for the author.
 50. **GRL-FR-BOHV** A check correction turn and an escalate correction turn each add one to `work_turns` and are charged to the time limits. Neither changes the pass or the pass history, and neither counts against the bound of GRL-FR-JVNB.
 50. **GRL-FR-FGWT** An escalate correction turn whose answer is not a recorded escalation, a green success included, rests the run in `awaiting_author` with the reason `checks_not_passed`, the cause of the last refusal, and each check of the last record that did not pass (per `../core/GRD-graduation.md` GRD-FR-PYJN). No review runs, and nothing is committed.
+50. **GRL-FR-RXJF** An apply run's plan update and plan findings follow `../core/OPU-openspec-plan-updates.md`. A plan update rests the run by OPU-FR-RMZN in place of GRL-FR-VBCL, and the check gate does not read it (OPU-FR-MBIY). A verdict that holds a `plan` finding is routed by OPU-FR-FDCW in place of GRL-FR-ARPX and GRL-FR-GQAB.
+50. **GRL-FR-QSMY** `refusals.md` holds the `plan_update_invalid` and `plan_correction` texts (per `../core/OPU-openspec-plan-updates.md` OPU-FR-XSRD, OPU-FR-DTYE). Each tells the turn to change no file outside `.synthesis-plan/` and to answer a plan update. `plan_correction` names `loop_instruction` as the plan findings; `plan_update_invalid` states the rules of OPU-FR-XLVF.
 50. **GRL-FR-BVTS** The loop saves `check_gate` in the checkpoint, with the cause, the next step (`correct` or `escalate`) and the session to resume, before it dispatches that step. Continue after a pause, a shutdown or an interruption dispatches the saved step. Where no total time is left, the run rests on `total_time_limit` and keeps `check_gate`.
 50. **GRL-FR-LNIZ** The loop clears `check_gate` when the check gate accepts an answer, when the backend accepts the answers to an escalation, and when Continue from `checks_not_passed` dispatches its turn. An escalation raised while the checkpoint holds `check_gate` goes to the author whole (per `../tools/ESU-escalate-to-user-tool.md` ESU-FR-18).
 34. **GRL-FR-OPRK** A model downgrade is checked only on a call of this loop to an AI API provider through the completion seam. Such a call compares the two ids as `../core/AGC-agent-conversations.md` AGC-FR-BXOS says, and the run emits `"model downgrade detected"` once for each pair, with `source` `graduation` and the run id. A turn of an agentic CLI is not checked.
@@ -144,7 +148,7 @@ The agent loop a graduation run is driven by. It holds two phases and no more: a
 50. **GRL-FR-BZMH** The milestone block asks for a plan of 3 to 5 high-level milestones. It tells the agent to write each marker on its own line in a text message and never inside the final result document.
 50. **GRL-FR-DJPE** The milestone block gives the exact marker format of `../tools/EAC-execute-agent-cli.md` and the title limits of EAC-FR-VCBJ. Its one example is the full marker sequence of a plan of 3 milestones: the plan, then the start marker and the done marker of each milestone in plan order.
 51. **GRL-FR-NDRY** The milestone block names no deliverable (GRL-FR-DAIB). It says that the author depends on the markers to see progress, and that the agent writes every marker. It says that markers are for display only, that the application ignores a bad marker, and that a marker changes no state, no stage, and no verdict.
-52. **GRL-FR-LCSB** An answer correction turn (GRL-FR-QKDC) and an escalate correction turn (GRL-FR-SUBP) carry their instruction without the milestone block, and `refusals.md` carries none. A check correction turn carries the block. `rebase.md` and `pr-summary.md` carry no block, so a `semantic_rebase` turn and a `pr_maintenance` turn announce no milestones.
+52. **GRL-FR-LCSB** An answer correction turn (GRL-FR-QKDC), an escalate correction turn (GRL-FR-SUBP), a plan update correction turn, and a plan correction turn (per `../core/OPU-openspec-plan-updates.md` OPU-FR-XSRD, OPU-FR-DTYE) carry their instruction without the milestone block, and `refusals.md` carries none. A check correction turn carries the block. `rebase.md` and `pr-summary.md` carry no block, so a `semantic_rebase` turn and a `pr_maintenance` turn announce no milestones.
 
 ## Contract surface
 
@@ -192,7 +196,8 @@ GraduationTaskInput {
   pass,                       // 1 .. the pass limit of the run's budget window
   part,                       // "work" | "review" | "semantic_merge"
                               //   | "merge_work" | "merge_review" | "pr_summary"
-  loop_instruction?,          // the review findings a revise pass carries
+  loop_instruction?,          // the review findings a revise pass carries; the plan findings of a
+                              //   plan correction turn (OPU-FR-DTYE)
   review_history?,            // work and merge_work turns alone (GRL-FR-VHIS): the findings of
                               //   the passes before the latest review, [{ pass, finding }],
                               //   probably fixed already; the latest findings are loop_instruction
@@ -210,9 +215,13 @@ GraduationTaskInput {
   pr_summary?,                // PrSummaryTaskContext; on the turn of a PR summary run (GRL-FR-SNHR)
   openspec?,                  // { phase: "propose" | "apply" | "rework", change, instruction? }; on every
                               //   turn of an OpenSpec run; instruction on a rework run alone (GRL-FR-MXXA)
-  openspec_validation?,       // ChangeValidation of OSM; review turns of an OpenSpec run alone
-                              //   (GRL-FR-CDNI, GRL-FR-BHGJ, GRL-FR-HSNY)
-  openspec_apply_progress?,   // ApplyInstructions of OSM; review turns of an apply run alone (GRL-FR-BHGJ)
+  openspec_validation?,       // ChangeValidation of OSM; review turns of an OpenSpec run, and the turn that
+                              //   Continue from a plan rest dispatches (GRL-FR-CDNI, GRL-FR-BHGJ,
+                              //   GRL-FR-HSNY, OPU-FR-SKTV)
+  openspec_apply_progress?,   // ApplyInstructions of OSM; review turns of an apply run, and the turn that
+                              //   Continue from a plan rest dispatches (GRL-FR-BHGJ, OPU-FR-SKTV)
+  plan_update?,               // PlanUpdateTaskContext of OPU; the turn that takes the decisions of a
+                              //   plan update alone (OPU-FR-SKTV)
   checks?,                    // GRL-FR-FESZ: review and merge_review alone; the path
                               //   ".synthesis-checks/report.md", or "missing"
   agent_account?,             // GRL-FR-DNKA: the work turn's own account of
@@ -277,7 +286,8 @@ ReviewFinding {
   severity,                   // "critical" | "major" | "minor"
   description,                // one problem, once
   affected_files,             // project-relative; may name a path that does not exist yet
-  correction                  // directly actionable by the next work turn
+  correction,                 // directly actionable by the next work turn
+  kind?                       // "work" | "plan"; "work" where absent; "plan" from an apply review alone (OPU-FR-EPXL)
 }
 ```
 

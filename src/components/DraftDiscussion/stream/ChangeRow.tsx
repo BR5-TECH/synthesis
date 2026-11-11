@@ -32,6 +32,7 @@ import {
   showChangeProposal,
   useChangeProposalReference,
 } from "../../../state/openspec/changeProposals";
+import { usePlanProposal } from "../../../state/openspec/planProposal";
 import { formatRelative } from "../../ProjectPicker";
 import { TypeChip } from "./TypeChip";
 import type { ProposalState, ProposalUpdateCounts } from "../../../types";
@@ -70,8 +71,17 @@ export function ChangeRow(props: ChangeRowProps) {
 }
 
 /**
+ * OCW-FR-KZDG: the hint line under the plan proposal of a plan thread that
+ * holds no question set.
+ */
+export const PLAN_DECISION_HINT =
+  "Decide these edits with the chips in the change, or by voice or comment: address an agent, for example “@arch accept the first two edits”.";
+
+/**
  * OCW-FR-COLR / CMT-FR-48: the edits proposed to an OpenSpec change. The row
  * opens or focuses the change workspace tab, at the first undecided hunk.
+ * OCW-FR-KZDG: under a pending plan proposal whose plan thread holds no
+ * question set, one hint line says how the edits are decided.
  */
 function OpenSpecChangeRow({
   reference,
@@ -86,18 +96,27 @@ function OpenSpecChangeRow({
     reference.proposalId,
   );
   const proposal = read.kind === "known" ? read.proposal : null;
+  const plan = usePlanProposal(reference.streamId, reference.change, reference.proposalId);
+  const hint = proposal?.state === "pending" && plan.threadId !== null && plan.threadIdle;
   return (
-    <Row
-      path={reference.change}
-      changes={proposal ? reviewedHunkTotal(asReviewable(proposal)) : 0}
-      update={reference.update}
-      state={proposal?.state ?? null}
-      gone={read.kind === "gone"}
-      createdAt={createdAt}
-      onOpen={() =>
-        showChangeProposal(reference.streamId, reference.change, reference.proposalId)
-      }
-    />
+    <>
+      <Row
+        path={reference.change}
+        changes={proposal ? reviewedHunkTotal(asReviewable(proposal)) : 0}
+        update={reference.update}
+        state={proposal?.state ?? null}
+        gone={read.kind === "gone"}
+        createdAt={createdAt}
+        onOpen={() =>
+          showChangeProposal(reference.streamId, reference.change, reference.proposalId)
+        }
+      />
+      {hint && (
+        <p className="dds-change__hint t-ui-xs" data-testid="dds-plan-hint">
+          {PLAN_DECISION_HINT}
+        </p>
+      )}
+    </>
   );
 }
 

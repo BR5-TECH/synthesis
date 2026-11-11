@@ -52,6 +52,8 @@ import {
   onSettingsWindowChanged,
 } from "../events";
 import {
+  raiseEntry,
+  seedRaisedEntries,
   raiseKey,
   raiseLevel,
   raiseStatement,
@@ -450,6 +452,19 @@ export function useAppNotifications(deps: AppNotificationDeps) {
    */
   const rootRef = useRef({ projectKey, worktree });
   rootRef.current = { projectKey, worktree };
+  // GRU-FR-BLSS: the runs that already rest when a project opens count as raised.
+  const raisedEntriesRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    if (!projectKey || !worktree) return;
+    void api.listGraduationQueue().then(
+      (queue) => {
+        const runs = Array.isArray(queue?.runs) ? queue.runs : [];
+        const seeded = seedRaisedEntries(raisedEntriesRef.current, runs);
+        logDebug(["frontend"], "the resting runs of the project count as raised", { seeded });
+      },
+      () => {},
+    );
+  }, [projectKey, worktree]);
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -688,6 +703,9 @@ export function useAppNotifications(deps: AppNotificationDeps) {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
+    // GRU-FR-BLSS: the entry each run last raised for, so a change of a run
+    // that stays in the same rest raises nothing again.
+    const raisedEntries = raisedEntriesRef.current;
     void onGraduationRunChanged((payload) => {
       // DRP-FR-35 / NAW-FR-44: every surface showing a draft's lock re-reads it
       // on the same signal, so the panel and any open tab follow the run.
@@ -699,7 +717,26 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         .then((run) => {
           // GRU-FR-BLSS: `interrupted` is the one state the run itself has to be
           // read to decide — a stop the author caused is not news to them.
-          if (!raisesForRun(run) || shownInOpenPullRequestWindow(run)) return;
+          if (!raisesForRun(run)) {
+            // The run left the state it raised for, so its next entry raises.
+            if (raisedEntries.delete(run.id)) {
+              logDebug(["frontend"], "a run left the state it raised for", {
+                runId: run.id,
+                state: run.state,
+              });
+            }
+            return;
+          }
+          if (shownInOpenPullRequestWindow(run)) return;
+          const entry = raiseEntry(run);
+          if (raisedEntries.get(run.id) === entry) {
+            logDebug(["frontend"], "a run changed in the state it raised for", {
+              runId: run.id,
+              state: run.state,
+            });
+            return;
+          }
+          raisedEntries.set(run.id, entry);
           void raiseNotification({
             key: raiseKey(run),
             // GRU-FR-BLSS: Warn, Info, or Error by the state the run rests in.

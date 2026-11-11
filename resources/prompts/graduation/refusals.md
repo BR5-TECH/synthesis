@@ -4,6 +4,8 @@
   GRL-FR-CHDT, GRL-FR-SUBP and GRL-FR-XSFA: the check corrections `checks_not_passing`,
   `checks_record_missing` and `work_failed` let the turn change files, and the escalate
   correction `checks_escalate` does not. None names a failed value or holds agent text.
+  OPU-FR-XSRD, OPU-FR-DTYE and GRL-FR-QSMY: `plan_update_invalid` and `plan_correction` let
+  the turn write the scratch folder alone, and ask for a plan update.
   One section per refusal this loop answers. Each names what could not be read and what to
   send instead, so a turn is told the correction rather than the fault.
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
@@ -68,3 +70,11 @@ The application did not accept your last answer: it reported `failure`. A work t
 ## checks_escalate
 
 The application did not accept your answers: your work did not end with every check the project requires passed, and a correction did not change that. You may not report success, and you may not report failure. Change no file. Answer `escalation_required`, with a `reason` that says which checks did not pass and why, and between one and eight `questions` that ask the author what to do, for example whether a check may fail or what to change.
+
+## plan_update_invalid
+
+The application did not accept your plan update. Change no file outside `.synthesis-plan/`. Give the plan update again: write each planning file that you propose, whole, at `.synthesis-plan/openspec/changes/<change>/<file>`, then answer `escalation_required` with `kind: "plan_update"`, a `reason`, and between 0 and 8 `questions`. Each entry below `.synthesis-plan/` must be a regular file below `openspec/changes/<change>/`, and must be UTF-8 text. A file must not be empty where the change holds that file, because a plan update cannot delete a file. The plan update must propose at least one change to a file or ask at least one question. Where you have a question that is not about the plan, answer `escalation_required` with no `kind` instead.
+
+## plan_correction
+
+The review found that the plan of the change is wrong. `input.loop_instruction` holds the findings about the plan, in order. Change no file outside `.synthesis-plan/`, and do not continue the work. Answer with a plan update that corrects the plan: write each planning file that you propose, whole, at `.synthesis-plan/openspec/changes/<change>/<file>`, then answer `escalation_required` with `kind: "plan_update"`, a `reason`, and between 0 and 8 `questions`. Each entry below `.synthesis-plan/` must be a UTF-8 text file below `openspec/changes/<change>/`, and must not be empty where the change holds that file. No other answer is accepted.

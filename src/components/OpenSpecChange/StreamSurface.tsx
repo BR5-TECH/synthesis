@@ -2,7 +2,7 @@
  * What a stream location adds to the change workspace
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-TRLG,
  * OCW-FR-COLR, OCW-FR-EJGH, OCW-FR-RKCC, OCW-FR-DRQD, OCW-FR-BGDN,
- * OCW-FR-ANKT, OCW-FR-TZRT, OCW-FR-JHAB, OCW-FR-NWRS).
+ * OCW-FR-ANKT, OCW-FR-TZRT, OCW-FR-JHAB, OCW-FR-NWRS, OCW-FR-XJMR).
  *
  * The discussion column beside the reading pane, the review of the pending
  * edit proposal with its bar, the History rail and the version it shows, and
@@ -19,7 +19,7 @@ import { ChangeHistoryRail } from "./ChangeHistoryRail";
 import { ChangeReviewBar } from "./ChangeReviewBar";
 import { ConfirmSplitBar, SplitMarker, offersConfirmSplit, useChangeSplit } from "./ChangeSplit";
 import { useChangeHistory } from "./useChangeHistory";
-import { useChangeReview } from "./useChangeReview";
+import { PLAN_QUESTIONS_FIRST, useChangeReview } from "./useChangeReview";
 import { VersionView } from "./VersionView";
 
 /** What a stream location lends its reading pane. */
@@ -138,7 +138,12 @@ export function StreamSurface({
             <>
               {/* OCW-FR-EJGH: the review bar above the reading pane. */}
               {reviewShown && (
-                <ChangeReviewBar undecided={review.undecided} onRejectAll={review.rejectAll} />
+                <ChangeReviewBar
+                  undecided={review.undecided}
+                  onRejectAll={review.rejectAll}
+                  // OCW-FR-XJMR: the plan questions are answered first.
+                  held={review.planHeld ? PLAN_QUESTIONS_FIRST : null}
+                />
               )}
               {/* OCW-FR-ANKT: Confirm split, while the split waits for it. */}
               {splitShown && (

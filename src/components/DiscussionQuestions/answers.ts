@@ -70,7 +70,9 @@ export function composeAnswers(
   const answers: QuestionAnswerInput[] = [];
   for (const question of set.questions) {
     const draft = recallAnswer(set.setId, question.position);
-    if (draft.ownWords) {
+    // DQA-FR-ZNOQ: a question with no option is answered in the author's own
+    // words alone, whether or not a row was ever pressed (CMS-FR-CSCD).
+    if (draft.ownWords || question.options.length === 0) {
       // DQA-FR-JJON: own words carry no note. The note the author may have
       // written against an option stays in the draft and is not sent, so a
       // submission never asks the reader which of the two was meant.

@@ -184,7 +184,7 @@ fn red_turn() -> Turn {
         "finished": true,
         "exit_status": 1,
     }] })))
-    .with_session()
+    .with_session("s1")
 }
 
 /// The result contract each dispatch named, in dispatch order, by part.

@@ -142,7 +142,7 @@ impl Fixture {
 
     pub(super) fn decider(
         &self,
-        sites: Box<FixedSites>,
+        sites: Box<dyn cep::SiteResolver + Send + Sync>,
         buffer: &'static LogBuffer,
     ) -> DecideChangeEditsTool<tauri::test::MockRuntime> {
         let origin = self.origin();
@@ -652,4 +652,81 @@ fn dce_refuses_other_actions_and_a_missing_instruction() {
 /// thread (CAR-FR-AQHX), so it needs an executor and not one poll.
 fn decide_now<F: std::future::Future>(future: F) -> F::Output {
     tauri::async_runtime::block_on(future)
+}
+
+/// A resolver that stands an apply run on the change, and the questions of a
+/// plan update over its proposal.
+struct GatedSites {
+    inner: FixedSites,
+    apply: Option<cep::ApplyRunGate>,
+    questions: bool,
+}
+
+impl cep::SiteResolver for GatedSites {
+    fn site(&self, stream_id: &str, change: &str) -> Result<cep::ChangeSite, String> {
+        self.inner.site(stream_id, change)
+    }
+    fn busy_run(&self, stream_id: &str) -> Option<String> {
+        self.inner.busy_run(stream_id)
+    }
+    fn rework_run(&self, stream_id: &str, change: &str) -> Option<String> {
+        self.inner.rework_run(stream_id, change)
+    }
+    fn apply_run(&self, _stream_id: &str, _change: &str) -> Option<cep::ApplyRunGate> {
+        self.apply.clone()
+    }
+    fn plan_questions_pending(&self, _proposal_id: &str) -> bool {
+        self.questions
+    }
+}
+
+impl Fixture {
+    fn gated(&self, apply: Option<cep::ApplyRunGate>, questions: bool) -> Box<GatedSites> {
+        Box::new(GatedSites { inner: *self.sites(), apply, questions })
+    }
+}
+
+// PCE-FR-ITEV, CEP-FR-YYZZ: while an apply run of the change is not
+// terminal, a new proposal is the `apply_running` refusal:
+// `PermissionDenied`, not retryable, with the fixed text, and nothing is
+// recorded.
+#[test]
+fn pce_a_running_apply_refuses_a_new_proposal() {
+    let f = Fixture::new();
+    let gate = cep::ApplyRunGate { run_id: "g-apply".into(), admits_thread: None };
+    let tool = ProposeChangeEditsTool::new(
+        f.open.handle(),
+        f.roots(),
+        f.origin(),
+        agent(),
+        Arc::clone(&f.proposed),
+    )
+    .for_test(f.gated(Some(gate), false), &QUIET);
+    let refused = block_on(tool.call(two_files())).unwrap_err();
+    assert_eq!(refused.reason(), "apply_running");
+    assert_eq!(refused.kind(), ToolErrorKind::PermissionDenied);
+    assert!(!refused.retryable());
+    assert!(matches!(
+        refused,
+        ToolRefusal::Fixed { message, .. } if message == propose_change_edits::CHANGE_APPLY_RUNNING
+    ));
+    assert!(cep::list_proposals_impl(&f.store(), STREAM, CHANGE).is_empty());
+}
+
+// DCE-FR-JCHG, CEP-FR-KGOL: an entry refused with `plan_questions_pending`
+// is a retryable row, and nothing is decided.
+#[test]
+fn dce_a_plan_proposal_waits_on_its_questions() {
+    let f = Fixture::new();
+    f.propose(two_files()).expect("recorded");
+    let record = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
+    let tasks = record.ledger[0].id.clone();
+    let out =
+        decide_now(f.decider(f.gated(None, true), &QUIET).call(decisions(&[(&tasks, "reject")])))
+            .expect("answered");
+    let refusal = out.decisions[0].refusal.as_ref().expect("refused");
+    assert_eq!(refusal.error.as_deref(), Some(cep::ERR_PLAN_QUESTIONS_PENDING));
+    assert!(refusal.retryable);
+    let reread = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
+    assert_eq!(reread.ledger[0].state, record.ledger[0].state);
 }

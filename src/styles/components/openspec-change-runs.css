@@ -3,7 +3,8 @@
 
 /* OCW-FR-NNRY / OCW-FR-BNGB: an unavailable action keeps its focus stop, and
    the line under the header says why. */
-.openspec-change__head .btn[aria-disabled="true"] {
+.openspec-change__head .btn[aria-disabled="true"],
+.openspec-runstrip__head .btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: default;
 }
@@ -46,15 +47,32 @@
   background: var(--bg-panel);
 }
 .openspec-runstrip[data-terminal="true"] { background: var(--bg-sunken); }
+/* OCW-FR-NWRS: the title and the state take the first line. The actions
+   stay beside them where the line holds them, and go to a line of their own
+   where it does not, so no action is cut or drawn outside the strip. */
 .openspec-runstrip__head {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  gap: var(--sp-1-5) var(--sp-2);
   min-width: 0;
 }
-.openspec-runstrip__title {
+.openspec-runstrip__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+.openspec-runstrip__title {
+  /* The line break measures the title at a few letters, so the title gives
+     way before the actions leave the line. It grows back to its whole text. */
+  flex: 1 1 3em;
+  max-width: max-content;
+  min-width: 3em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -63,7 +81,7 @@
   font-size: var(--fs-ui-sm);
 }
 .openspec-runstrip__state { flex: 0 0 auto; white-space: nowrap; }
-.openspec-runstrip__head .btn { flex: 0 0 auto; }
+.openspec-runstrip__actions .btn { flex: 0 0 auto; }
 .openspec-runstrip__detail {
   display: flex;
   flex-direction: column;
@@ -80,21 +98,20 @@
   white-space: nowrap;
 }
 .openspec-runstrip__sentence { margin: 0; }
-/* OCW-FR-NWRS: narrower than 560 px, the head keeps one line. The title gives
-   way first, down to a few letters, then the state, and the actions last.
-   Each one that is cut has its whole text as its tooltip. */
+/* OCW-FR-NWRS: narrower than 560 px, the title gives way first, down to a
+   few letters, then the state. Each one that is cut has its whole text as its
+   tooltip. */
 @container (max-width: 560px) {
   .openspec-runstrip__head { gap: var(--sp-1-5); }
-  .openspec-runstrip__title { flex: 0 1000 auto; min-width: 3em; }
+  .openspec-runstrip__actions { gap: var(--sp-1-5); }
   /* The title gives way alone: a state that shrinks at all draws an ellipsis. */
   .openspec-runstrip__state {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
     max-width: 100%;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .openspec-runstrip__head .spacer { flex: 1 1 0; min-width: 0; }
 }
 
 /* OCW-FR-LWFQ: the Rework… dialog. */
@@ -162,3 +179,10 @@
 .graduation__check-state { margin: 0; }
 .openspec-runstrip__checks { margin: 0; color: var(--fg-2); }
 .openspec-rework__body { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+/* OCW-FR-ZPDC: a refused Continue of a plan rest, in the strip. */
+.openspec-runstrip__refusal {
+  margin: 0;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}

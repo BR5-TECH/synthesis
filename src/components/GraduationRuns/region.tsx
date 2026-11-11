@@ -52,6 +52,7 @@ import {
   totalTimeLimitHeadline,
   totalTimeLimitRestOf,
   checksNotPassedRestOf,
+  planRestOf,
   changeRunPhase,
   checkStateOf,
   tasksSentence,
@@ -67,6 +68,7 @@ import type {
 import { RunProgress } from "../RunProgress";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
 import { ChecksNotPassedRest } from "./checksRest";
+import { PlanRestNotice } from "./planRest";
 import { RunEscalationForm } from "./escalation";
 import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
@@ -83,15 +85,16 @@ import { PrSummaryResult } from "./prSummary";
 const SAYS_ITSELF = ["blocked", "interrupted", "failed", "discarded"];
 
 /**
- * GRU-FR-CKOB / GRU-FR-WKTL / GRU-FR-WVDV: whether the run's own paragraph
- * says what it is doing. A run at rest on the total time limit or on checks
- * that did not pass has one too.
+ * GRU-FR-CKOB / GRU-FR-WKTL / GRU-FR-WVDV / GRU-FR-TCSM: whether the run's
+ * own paragraph says what it is doing. A run at rest on the total time limit,
+ * on checks that did not pass, or on a plan rest has one too.
  */
 function saysItself(run: GraduationRun): boolean {
   return (
     SAYS_ITSELF.includes(run.state) ||
     totalTimeLimitRestOf(run) !== null ||
-    checksNotPassedRestOf(run) !== null
+    checksNotPassedRestOf(run) !== null ||
+    planRestOf(run) !== null
   );
 }
 
@@ -355,6 +358,11 @@ export function RunRegion({
           each check that did not pass, and says that nothing went to review
           and nothing was committed. */}
       <ChecksNotPassedRest run={run} />
+
+      {/* GRU-FR-TCSM / GRU-FR-TVDF / GRU-FR-PZJY: an apply run at rest on a
+          plan rest says what it asks, and where the author answers it. It
+          holds no escalation, so no question form renders (GRU-FR-FZCN). */}
+      <PlanRestNotice run={run} />
 
       {/* GRU-FR-TFEZ: a push the remote did not take, said once. */}
       {pushRefusalStatement(run) && (

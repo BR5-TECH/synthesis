@@ -5,6 +5,7 @@
 
 import type { GraduationRun, ReviewSeverity } from "../../types/graduation";
 import { MERGE_BRANCH_MOVED_STATEMENT } from "./merge";
+import { planContinueRefusal, planRestOf } from "./planRest";
 
 /**
  * GSD-FR-BXKR: the sentence a start or a merge refused for a missing Docker
@@ -14,6 +15,24 @@ import { MERGE_BRANCH_MOVED_STATEMENT } from "./merge";
 export function dockerSocketUnavailableMessage(path: string | null): string {
   const where = path ? `at ${path}` : "at the configured path";
   return `The Docker socket is not available ${where}. Start Docker or restore the socket at that path, or correct the Docker-in-Docker socket path in Project settings, in the Docker section. Then start the run again.`;
+}
+
+/**
+ * GRU-FR-BPNJ: the words of a refused Continue of a run at a plan rest. A
+ * code that is no plan refusal keeps the words of every other run.
+ */
+export function planContinueMessage(raw: string): string {
+  const [code, detail] = splitTyped(raw);
+  return planContinueRefusal(code, detail) ?? graduationErrorMessage(raw);
+}
+
+/**
+ * GRU-FR-BPNJ: the words of a refused Continue of `run`. Only a run at a plan
+ * rest gets the plan words; every other run keeps the words of
+ * `graduationErrorMessage`.
+ */
+export function continueRefusalMessage(run: GraduationRun, raw: string): string {
+  return planRestOf(run) ? planContinueMessage(raw) : graduationErrorMessage(raw);
 }
 
 /**

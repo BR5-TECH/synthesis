@@ -159,13 +159,19 @@ pub struct GraduationTaskInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openspec: Option<OpenSpecTaskContext>,
     /// GRL-FR-CDNI, GRL-FR-BHGJ, GRL-FR-HSNY: the validation of the reviewed
-    /// tree, on the review turns of an OpenSpec run alone.
+    /// tree, on the review turns of an OpenSpec run, and on the turn that
+    /// Continue from a plan rest dispatches (OPU-FR-SKTV).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openspec_validation: Option<crate::openspec::ChangeValidation>,
     /// GRL-FR-BHGJ: the task progress of the reviewed tree, on the review
-    /// turns of an apply run alone.
+    /// turns of an apply run, and on the turn that Continue from a plan rest
+    /// dispatches (OPU-FR-SKTV).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openspec_apply_progress: Option<crate::openspec::ApplyInstructions>,
+    /// OPU-FR-SKTV: the decisions of a plan update, on the turn that takes
+    /// them alone. It holds no file text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_update: Option<crate::graduation::plan_updates::PlanUpdateTaskContext>,
     /// GRL-FR-FESZ: where a `review` or `merge_review` turn finds the check
     /// report the work turn wrote, or `missing`. No other turn carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -374,6 +380,8 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
         openspec_validation: None,
         // GRL-FR-BHGJ: set by the review of an apply run alone.
         openspec_apply_progress: None,
+        // OPU-FR-SKTV: set by the work turn after Continue from a plan rest.
+        plan_update: None,
         graduation_input_version: GRADUATION_INPUT_VERSION,
         run_id: run.id.clone(),
         part: input_part.to_string(),

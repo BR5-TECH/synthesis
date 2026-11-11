@@ -61,7 +61,11 @@ pub fn run_tree(worktree: &Path, base_commit: &str) -> Result<Option<RunTree>, S
     }
     // GRL-FR-DCKG: the check folder is never part of the change set, also
     // where the repository's `info/exclude` does not hide it.
-    paths.retain(|path| !super::driver::checks_folder::is_check_path(path));
+    // OPU-FR-WINO: and the scratch folder of a plan update likewise.
+    paths.retain(|path| {
+        !super::driver::checks_folder::is_check_path(path)
+            && !super::plan_updates::scratch::is_scratch_path(path)
+    });
     paths.sort();
     paths.dedup();
     if paths.is_empty() {

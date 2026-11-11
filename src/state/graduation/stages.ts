@@ -20,6 +20,7 @@ import {
   totalTimeLimitRestOf,
 } from "./rest";
 import { SLOT_WAIT_HEADLINE } from "./slotWait";
+import { planRestHeadline, planRestOf } from "./planRest";
 import type {
   GraduationObservability,
   GraduationVisualStage,
@@ -200,6 +201,12 @@ export function conditionSentence(
       // GRU-FR-WVDV: a run whose required checks did not pass says so. It
       // spent no pass budget either.
       if (checksNotPassedRestOf(run)) return CHECKS_NOT_PASSED_HEADLINE;
+      {
+        // GRU-FR-TCSM / GRU-FR-TVDF / GRU-FR-PZJY: a plan rest says what it
+        // waits for. It spent no pass budget, so it states none.
+        const plan = planRestOf(run);
+        if (plan) return planRestHeadline(plan);
+      }
       // GRU-FR-FZCN: a review that did not settle before the budget was spent
       // says what it spent, so the author reads a bound rather than a run that
       // stopped for no stated reason. The findings themselves stand in the pass

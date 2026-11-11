@@ -6,6 +6,7 @@ use super::*;
 
 fn finding(description: &str) -> ReviewFinding {
     ReviewFinding {
+        kind: None,
         severity: ReviewSeverity::Major,
         description: description.into(),
         affected_files: vec!["src/panel.ts".into()],

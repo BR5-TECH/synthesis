@@ -27,6 +27,9 @@ pub struct ChangeHunkRow {
     pub revision: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_at: Option<String>,
+    /// OPU-FR-ZNRR: the author's feedback on the decision of this hunk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback: Option<String>,
 }
 
 fn pending() -> HunkState {
@@ -44,6 +47,7 @@ impl ChangeHunkRow {
             edited: false,
             revision: hunk.revision,
             decided_at: None,
+            feedback: None,
         }
     }
 }

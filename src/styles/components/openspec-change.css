@@ -416,6 +416,11 @@
 .openspec-split { background: var(--accent-soft); }
 .openspec-review__count { min-width: 0; color: var(--fg-1); }
 .openspec-review__error { flex: 1 0 100%; margin: 0; color: var(--danger); }
+/* OCW-FR-XJMR: why no hunk takes a decision while the plan questions stand. */
+.openspec-review__held { min-width: 0; color: var(--fg-2); overflow-wrap: anywhere; }
+/* Reject all stays at the end of its line, also when it wraps to a line of
+   its own. */
+.openspec-review__reject-all { margin-inline-start: auto; }
 
 /* OCW-FR-TZRT: the changes a confirmed split made. */
 .openspec-change__split-marker {

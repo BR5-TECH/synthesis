@@ -118,8 +118,10 @@ pub fn get_draft_graduation<R: tauri::Runtime>(
     Ok(queue::latest_run_for(&queue, &draft_id).cloned())
 }
 
-/// GRD-FR-CYIB: the one operation behind both Continue and Resume.
-#[tauri::command]
+/// GRD-FR-CYIB: the one operation behind both Continue and Resume. Off the main
+/// thread, because Continue from a plan rest runs the OpenSpec CLI
+/// (OPU-FR-PXDY).
+#[tauri::command(async)]
 pub fn continue_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -146,7 +148,11 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
     }
     // GRD-FR-XHSE: a merge run does not resume over a branch that moved. The
     // check comes first, so a refusal changes nothing.
-    refuse_moved_tips(&app, &run)?;
+    continue_rest::refuse_moved_tips(&app, &run)?;
+    // OPU-FR-THOZ … OPU-FR-TZBD: a plan rest is checked and cleared on its own
+    // terms, and its Continue resets no pass budget (OPU-FR-EUZU).
+    let plan_rest =
+        plan_updates::continue_plan_rest(&app, &mut run)? == plan_updates::PlanContinue::Continued;
     // GRD-FR-ZJHD: questions that a run outside `awaiting_author` still holds
     // are offered by no surface. They are dropped, so they neither block the
     // run nor reach its next turn.
@@ -217,6 +223,7 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
         && run.escalation.is_none()
         && run.blocker.is_none()
         && run.rest.is_none()
+        && !plan_rest
         && run.pass_budget_spent(window);
     // GRL-FR-SPRE / GRD-FR-OERK: a rest is cleared by every Continue, and
     // what that Continue resets depends on the rest's reason.
@@ -375,7 +382,7 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
         return Err(ERR_RUN_STATE_NOT_PERMITTED.to_string());
     };
     // GRD-FR-XHSE: answering resumes the run, so a moved tip refuses it first.
-    refuse_moved_tips(&app, &run)?;
+    continue_rest::refuse_moved_tips(&app, &run)?;
     // An ordered set covering every question and nothing else. A set that does
     // not cover them all records nothing.
     let mut positions: Vec<u32> = answers.iter().map(|a| a.position).collect();
@@ -555,11 +562,14 @@ fn end_discarded<R: tauri::Runtime>(
     // held its queue.
     let held = run.holds_queue();
     let removed = cascade::remove_behind_discarded(app, run, held)?;
+    // OPU-FR-ZBXF: the question set of a plan update goes with the run.
+    plan_updates::delete_plan_question_set(app, run);
     let ended = transitions::transition(app, run, GraduationRunState::Discarded);
     if !removed.is_empty() {
         cascade::announce_removed(app, run, &removed);
     }
     ended?;
+    plan_updates::reclaim_plan_base(app, run);
     drop(_pass);
     // GRD-FR-NYSH: a run at rest held a slot and has no loop behind it to offer
     // the slot on, so the discard offers it. A discarded working run offers it
@@ -676,52 +686,6 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
-
-/// GRD-FR-XHSE: refuse to resume a merge run whose pinned tip moved.
-///
-/// Read-only: nothing is written to a branch, a worktree or the run.
-fn refuse_moved_tips<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run: &GraduationRun,
-) -> Result<(), String> {
-    let Some(data) = run.merge.as_ref() else {
-        return Ok(());
-    };
-    // GLG-FR-QNLC: the tip check of a Continue or of an answer is a record,
-    // whether it lets the request through or refuses it.
-    // A merge already applied moved the base branch itself, and the run is
-    // completed by its next dispatch rather than refused.
-    let moved = data.result.is_none() && crate::streams::merge_tips_moved(app, data);
-    log_merge_boundary(
-        app,
-        run,
-        MergeBoundary {
-            level: if moved {
-                crate::logging::LogLevel::Warn
-            } else {
-                crate::logging::LogLevel::Info
-            },
-            domains: &[Domain::Ai, Domain::Backend],
-            message: if moved {
-                "graduation refused to resume a merge run: a pinned tip moved"
-            } else {
-                "graduation checked the pinned tips of a merge run"
-            },
-            boundary: "tip_check",
-            outcome: if moved { crate::streams::ERR_MERGE_BRANCH_MOVED } else { "ok" },
-            pass: Some(run.pass()),
-            paths: None,
-            extra: log_fields! {
-                "checked_at" => "resume",
-                "state" => run.state.as_str().to_string(),
-            },
-        },
-    );
-    if !moved {
-        return Ok(());
-    }
-    Err(crate::streams::ERR_MERGE_BRANCH_MOVED.to_string())
-}
 
 /// GSU-FR-RNOM / `PST-project-storage.md` PST-FR-DQZT: ask for the
 /// graduation-start draft commit of the run's draft, against the active

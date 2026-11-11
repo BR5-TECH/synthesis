@@ -127,6 +127,7 @@ pub fn gate_change_verdict(
             data.change
         ),
         findings: vec![ReviewFinding {
+            kind: None,
             severity: ReviewSeverity::Critical,
             description: causes.join(" "),
             affected_files: vec![folder],

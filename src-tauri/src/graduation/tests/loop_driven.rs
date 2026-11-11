@@ -266,7 +266,7 @@ fn an_agent_reported_failure_gets_a_check_correction_before_any_review() {
             "The test runner is not installed here.".to_string(),
         ))
         .writing("src/panel.ts", "half\n")
-        .with_session(),
+        .with_session("s1"),
         Turn::work_saying("The second turn finished it.").writing("src/panel.ts", "whole\n"),
         Turn::ready(),
     ]);
@@ -476,7 +476,7 @@ fn an_escalation_records_the_session_its_answers_continue() {
     let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Escalate(vec![
         "Which limit stands?".to_string(),
     ]))
-    .with_session()]);
+    .with_session("s1")]);
     let run = fx.drive(&run, dispatch);
 
     let escalation = run.escalation.expect("the questions");

@@ -22,6 +22,12 @@ import {
   validChangeName,
 } from "./mock-openspec";
 import { applyRunFields, openspecRunsInvoke, reworkRunFields } from "./mock-openspec-runs";
+import {
+  PLAN_THREAD_ID,
+  notePlanSubmission,
+  planContinue,
+  planQuestionSet,
+} from "./mock-openspec-plan";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
@@ -2398,6 +2404,9 @@ const SEEDED_QUESTION_SET: any = {
 const questionSetsByThread: Record<string, any> = harnessFlag("noSeededSet")
   ? {}
   : { "disc-1": SEEDED_QUESTION_SET };
+
+// OPU-FR-VXVO: `?openspecPlan=update` seeds the Synthesis set of the plan thread.
+if (planQuestionSet()) questionSetsByThread[PLAN_THREAD_ID] = planQuestionSet();
 
 let raisedSets = 0;
 
@@ -9597,6 +9606,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "continue_graduation_run": {
       await graduationActDelay();
       const run = findRun(String(a.runId ?? ""));
+      // OPU-FR-THOZ: a plan rest refuses Continue while its questions or its
+      // edits are undecided (mock-openspec-plan.ts).
+      if (planContinue(run, demoProposalHold)) return graduationChanged(run);
       run.state = "running";
       // GRD-FR-SKLO: Continue from a total time limit rest clears the rest and
       // resets the used total time alone.
@@ -10791,7 +10803,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (String(a.setId ?? "") !== set.setId) throw "question_set_not_found";
       const answers = Array.isArray(a.answers) ? (a.answers as any[]) : [];
       if (answers.length !== set.questions.length) throw "question_answers_incomplete";
-      const held = allDiscussions().find((t: any) => t.id === threadId);
+      // OPU-FR-TPYT: the plan thread is a change discussion (mock-openspec.ts).
+      const held =
+        allDiscussions().find((t: any) => t.id === threadId) ??
+        changeDiscussionList().find((t: any) => t.id === threadId);
       if (!held) throw "thread_not_found";
       let finalAnswerCommentId = "";
       for (const question of set.questions) {
@@ -10859,6 +10874,11 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           attachments: [],
           createdAt: new Date().toISOString(),
         });
+      }
+      // OPU-FR-TPYT: a set of a plan update hands its answers to the run.
+      notePlanSubmission(threadId, answers, graduationRuns);
+      if (threadId === PLAN_THREAD_ID) {
+        fireBus("graduation-run-changed", { runId: "g-51", state: "awaiting_author" });
       }
       // CMS-FR-OKMU: the set is deleted only after the append.
       delete questionSetsByThread[threadId];

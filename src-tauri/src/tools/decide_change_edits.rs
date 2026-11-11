@@ -33,8 +33,12 @@ pub const DESCRIPTION: &str = "Decide hunks of the open proposal of the OpenSpec
 const ACTION_DESCRIPTION: &str = "`accept` to write the hunk into its file of the change or to create the proposed new change, `reject` to decline it or to decline the request, `discuss` to open a new discussion about it, or `confirm` with the id of the split to end it or with the id of the request to start its run.";
 
 /// DCE-FR-JCHG / DPC-FR-JEXJ: the typed errors worth a retry.
-const RETRYABLE_ERRORS: [&str; 3] =
-    [cep::ERR_WRITE_FAILED, cep::ERR_ACCEPTANCE_IN_PROGRESS, cep::ERR_STREAM_BUSY];
+const RETRYABLE_ERRORS: [&str; 4] = [
+    cep::ERR_WRITE_FAILED,
+    cep::ERR_ACCEPTANCE_IN_PROGRESS,
+    cep::ERR_STREAM_BUSY,
+    cep::ERR_PLAN_QUESTIONS_PENDING,
+];
 
 /// The `id` of an entry: a hunk, the proposed new change, the split, or the
 /// pending action request.

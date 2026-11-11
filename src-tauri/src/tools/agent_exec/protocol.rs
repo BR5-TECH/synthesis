@@ -445,7 +445,9 @@ pub const REVIEW_VERDICT_SCHEMA: &str = concat!(
     // the empty one, and a schema that refused it would refuse in the run what
     // the application accepts after it.
     r#""affected_files":{"type":["array","null"],"items":{"type":"string"}},"#,
-    r#""correction":{"type":"string","minLength":1,"pattern":"\\S"}},"#,
+    r#""correction":{"type":"string","minLength":1,"pattern":"\\S"},"#,
+    // OPU-FR-EPXL: optional, and `work` where absent.
+    r#""kind":{"type":"string","enum":["work","plan"]}},"#,
     r#""required":["severity","description","correction"]}}},"#,
     r#""required":["verdict","rationale","findings"]},"#,
     // The escalation branch, on the terms `escalate_to_user` is decoded under:

@@ -126,6 +126,11 @@ pub fn read_change_proposal_change(
         .find(|change| change.id == hunk_id)
 }
 
+/// One proposal's record by id, or `None` where it cannot be read.
+pub fn read_change_proposal(store: &fs::RootFs, proposal_id: &str) -> Option<ChangeEditProposal> {
+    read_proposal(store, proposal_id).ok().map(|(record, _)| record)
+}
+
 /// The pending proposal of a change, if it has one, for a turn's input.
 pub fn pending_change_proposal(
     store: &fs::RootFs,

@@ -65,6 +65,10 @@ pub const UPDATE_PATH_MISSING: &str =
 pub const CHANGE_PROPOSAL_PENDING: &str = "A proposal of yours on this change is still waiting on the author. Wait for their decision, or change the open proposal with `updates`. Say so plainly in your reply, and do not describe these edits as proposed, because they were not.";
 /// PCE-FR-MVKT: a rework run of the change is not terminal.
 pub const CHANGE_REWORK_RUNNING: &str = "A rework run of this change is running, and its result comes to the author as a proposal. Nothing was recorded. Answer with what you have.";
+/// PCE-FR-ITEV: the refusal of a new proposal while an apply run of the change
+/// is not terminal.
+pub const CHANGE_APPLY_RUNNING: &str =
+    "An apply run of this change is running. Nothing was recorded. Answer with what you have.";
 /// PCE-FR-FEAK: no proposal is open, so there is nothing to update.
 pub const CHANGE_NO_OPEN: &str = "No proposal is open on this change, so there is nothing to update. Send your edits as a new proposal in `hunks`.";
 /// PCE-FR-FVPF: the conversation is not about a change.
@@ -207,6 +211,16 @@ fn rework_running_refusal() -> ToolRefusal {
     }
 }
 
+/// PCE-FR-ITEV: `PermissionDenied`, not retryable.
+fn apply_running_refusal() -> ToolRefusal {
+    ToolRefusal::Fixed {
+        kind: FixedKind::PermissionDenied,
+        message: CHANGE_APPLY_RUNNING,
+        code: "apply_running",
+        retryable: false,
+    }
+}
+
 fn gone_refusal() -> ToolRefusal {
     ToolRefusal::Fixed {
         kind: FixedKind::NotFound,
@@ -226,6 +240,7 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
     match refusal {
         RecordRefusal::ProposalPending => pending_refusal(),
         RecordRefusal::ReworkRunning => rework_running_refusal(),
+        RecordRefusal::ApplyRunning => apply_running_refusal(),
         RecordRefusal::UnknownStream | RecordRefusal::ChangeNotFound => gone_refusal(),
         RecordRefusal::PathOutsideChange { at: n, of } => at(PATH_OUTSIDE_CHANGE, n, of),
         RecordRefusal::NoChange => ToolRefusal::InvalidArguments(PROPOSAL_NO_CHANGE),

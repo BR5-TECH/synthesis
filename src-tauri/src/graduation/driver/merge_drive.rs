@@ -332,6 +332,7 @@ pub(super) fn finish_merge<R: tauri::Runtime>(
                 rationale: "A conflict marker still stands in a path Git could not merge, so the merge was not applied."
                     .to_string(),
                 findings: vec![ReviewFinding {
+                    kind: None,
                     severity: ReviewSeverity::Critical,
                     description: format!(
                         "A conflict marker still stands in {}.",

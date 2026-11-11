@@ -6,7 +6,8 @@
  * `CST-change-statistics.md`, and `NCP-new-change-proposals.md`. An edit of a
  * hunk answers the checksum `ck-2`. It also answers the apply progress of
  * `OSM-openspec-mode.md`, the starts of `OCR-openspec-change-runs.md`, and the
- * commands of `CAR-change-action-requests.md`.
+ * commands of `CAR-change-action-requests.md`, the question sets of the
+ * discussions with their submission, and Continue of a run.
  */
 import { vi, type Mock } from "vitest";
 import { render } from "@testing-library/react";
@@ -27,6 +28,7 @@ import { resetChangeRunQueue } from "../state/openspec/changeRunQueue";
 import { resetChangeViewsForTest } from "../state/openspec/changeView";
 import { resetNewChangeProposals } from "../state/openspec/newChangeProposals";
 import { resetProposalHunks } from "../state/proposalHunks";
+import { clearQuestionSets } from "../state/questionSets";
 import { resetToasts } from "../state/toasts";
 import type {
   ApplyProgress,
@@ -41,6 +43,7 @@ import type {
   ChangeVersionList,
   NewChangeDecisionOutcome,
   NewChangeProposal,
+  PendingQuestionSet,
   ChangeEditHunks,
   ChangeEditProposal,
   Discussion,
@@ -299,6 +302,10 @@ export interface ChangeBackend {
   /** CAR: the requests of the change, and what a decision answers. */
   requests: ChangeActionRequest[];
   decideAction: (cmd: string, args: Record<string, unknown>) => ChangeActionOutcome | { reject: unknown };
+  /** CMS-FR-JWVH: the question set each discussion holds, by discussion id. */
+  questionSets: Record<string, PendingQuestionSet>;
+  /** GRD: what a Continue answers, or a code it rejects with. */
+  continueRun: (runId: string) => GraduationRun | { reject: unknown };
   unknown: string[];
 }
 
@@ -357,6 +364,8 @@ export function changeBackend(over: Partial<ChangeBackend> = {}): ChangeBackend 
     startRework: () => ({ reject: "write_failed" }),
     requests: [],
     decideAction: () => ({ reject: "write_failed" }),
+    questionSets: {},
+    continueRun: () => ({ reject: "run_state_not_permitted" }),
     unknown: [],
     ...over,
   };
@@ -387,7 +396,21 @@ export function wireChangeBackend(invokeMock: Mock, b: ChangeBackend): void {
       case "list_recoverable_agent_turn_failures":
         return [];
       case "read_discussion_question_set":
-        return null;
+        return b.questionSets[String(args.discussionId ?? "")] ?? null;
+      case "submit_discussion_question_answers": {
+        const id = String(args.discussionId ?? "");
+        const set = b.questionSets[id];
+        if (!set || set.setId !== args.setId) throw "question_set_not_found";
+        delete b.questionSets[id];
+        const discussion = b.discussions.find((d) => d.id === id);
+        if (!discussion) throw "discussion_not_found";
+        return { discussion, finalAnswerCommentId: `${set.setId}:01-2a` };
+      }
+      case "continue_graduation_run": {
+        const answer = b.continueRun(String(args.runId ?? ""));
+        if ("reject" in answer) throw answer.reject;
+        return answer;
+      }
       case "estimate_discussion_context":
         return null;
       case "list_change_edit_proposals":
@@ -510,6 +533,7 @@ export function resetChangeWorkspaceStores(): void {
   resetChangeActionRequests();
   resetChangeRunQueue();
   resetAgentRegistry();
+  clearQuestionSets();
   changeHunkCandidateBuffers.clear();
 }
 

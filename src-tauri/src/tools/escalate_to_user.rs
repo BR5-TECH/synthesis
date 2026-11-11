@@ -54,7 +54,7 @@ const REASON_TOO_LONG: &str =
     "The reason is longer than 4096 characters, which is its limit. Say the same thing more briefly.";
 const QUESTION_TOO_LONG: &str =
     "The question is longer than 2048 characters, which is its limit. Ask one thing, more briefly.";
-const WRONG_QUESTION_COUNT: &str = "This call must carry between one and eight questions, and it carried a number outside that. Ask everything you are stuck on, in that many entries or fewer.";
+const WRONG_QUESTION_COUNT: &str = "This call must carry between one and eight questions, or between none and eight for a plan update, and it carried a number outside that. Ask everything you are stuck on, in that many entries or fewer.";
 const TOO_MANY_OPTIONS: &str =
     "This question carries more than three proposed responses, which is the limit. Offer the choices that actually differ.";
 const OPTION_ANSWER_BLANK: &str =

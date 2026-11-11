@@ -230,6 +230,7 @@ impl crate::graduation::driver::GraduationDispatch<tauri::test::MockRuntime> for
                 Script::Escalate => (
                     AgentOutcome::EscalationRequired,
                     Some(AgentEscalation {
+                        kind: None,
                         reason: "Two requirements contradict each other.".to_string(),
                         questions: vec![AgentEscalationQuestion {
                             question: "Which limit stands?".to_string(),

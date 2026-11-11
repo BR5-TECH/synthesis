@@ -16,6 +16,7 @@ export * from "./changeHistory";
 export * from "./publication";
 export * from "./statistics";
 export * from "./graduation";
+export * from "./planUpdates";
 export * from "./graduationLogs";
 export * from "./streams";
 export * from "./voice";

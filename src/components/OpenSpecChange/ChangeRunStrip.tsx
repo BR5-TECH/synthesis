@@ -1,14 +1,25 @@
 /**
  * The run strip of a change workspace on a stream
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-JHAB,
- * OCW-FR-YTGJ, OCW-FR-BTSI, OCW-FR-FAEL, OCW-FR-LYIX, OCW-FR-NWRS).
+ * OCW-FR-YTGJ, OCW-FR-BTSI, OCW-FR-FAEL, OCW-FR-LYIX, OCW-FR-NWRS,
+ * OCW-FR-YRZK, OCW-FR-ZPDC).
  *
  * The newest apply run or rework run of the change on this stream: its title,
  * its state in words, and its stage row through `RPV-run-progress.md`, with the
  * words of its phase (GOB-FR-CAXV). It takes the full width of the document
- * column, so the discussion column gives it no width.
+ * column, so the discussion column gives it no width. An apply run at rest on
+ * a plan rest states it in words, offers Show thread for its plan thread, and
+ * offers Continue, whose refusal it states itself.
  */
+import { useEffect, useRef, useState } from "react";
+
+import * as api from "../../api";
+import { logInfo, logWarn } from "../../logging";
 import {
+  PLAN_REST_STRIP_WORDS,
+  planContinueMessage,
+  planRestOf,
+  planThreadOf,
   changeRunPhase,
   checkStateOf,
   conditionOf,
@@ -26,11 +37,18 @@ import {
   taskCounts,
 } from "../../state/graduation";
 import { openGraduationRunRoute } from "../../state/graduation/runRoute";
-import type { ApplyProgress, GraduationRun } from "../../types";
+import { rereadChangeRunQueue } from "../../state/openspec/changeRunQueue";
+import { requestChangeDiscussion } from "../../state/openspec/changeRoutes";
+import { discussionTargetKey, type ApplyProgress, type GraduationRun } from "../../types";
 import { RunProgress } from "../RunProgress";
 
-/** OCW-FR-JHAB: the state of the run in words, with its pass while it works. */
+/**
+ * OCW-FR-JHAB: the state of the run in words, with its pass while it works.
+ * OCW-FR-YRZK: a plan rest states the words of that rest.
+ */
 function stateWords(run: GraduationRun): string {
+  const plan = planRestOf(run);
+  if (plan) return PLAN_REST_STRIP_WORDS[plan.reason];
   const state = stateLabelOf(run);
   return run.state === "working" || run.state === "reviewing"
     ? `${state}, pass ${passOf(run)}`
@@ -59,6 +77,9 @@ export function ChangeRunStrip({
   const terminal = isTerminalRun(run.state);
   const next = tasks?.nextTask?.trim() || null;
   const state = stateWords(run);
+  const plan = planRestOf(run);
+  const planThread = planThreadOf(run);
+  const continuing = useContinue(run);
   return (
     <section
       className="openspec-runstrip"
@@ -81,21 +102,65 @@ export function ChangeRunStrip({
         >
           {state}
         </span>
-        <span className="spacer" />
-        <button
-          type="button"
-          className="btn btn--sm btn--ghost"
-          onClick={() => openGraduationRunRoute(run.id)}
-        >
-          Open run
-        </button>
-        {/* OCW-FR-YTGJ: a terminal run stays until the author closes it. */}
-        {terminal && (
-          <button type="button" className="btn btn--sm btn--ghost" onClick={onClose}>
-            Close
+        {/* OCW-FR-NWRS: the actions stand together at the end of the head.
+            Where the head cannot hold them beside the title and the state,
+            they go to a line of their own, so each one stays in the strip. */}
+        <span className="openspec-runstrip__actions">
+          {/* OCW-FR-YRZK: a run at rest on plan_update or plan_findings selects
+              its plan thread in the discussion column. */}
+          {planThread && run.openspec && (
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              onClick={() => {
+                logInfo(["frontend"], "the run strip selected the plan thread", { runId: run.id });
+                requestChangeDiscussion(
+                  discussionTargetKey({ kind: "change", streamId: run.streamId, change: run.openspec!.change }),
+                  planThread,
+                );
+              }}
+            >
+              Show thread
+            </button>
+          )}
+          {/* OCW-FR-ZPDC: a plan rest offers Continue. */}
+          {plan && (
+            <button
+              type="button"
+              className="btn btn--sm btn--primary"
+              // A disabled button drops the keyboard focus to the page, so the
+              // act in flight is marked and guarded instead.
+              aria-disabled={continuing.busy ? "true" : undefined}
+              onClick={() => void continuing.go()}
+            >
+              Continue
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={() => openGraduationRunRoute(run.id)}
+          >
+            Open run
           </button>
-        )}
+          {/* OCW-FR-YTGJ: a terminal run stays until the author closes it. */}
+          {terminal && (
+            <button type="button" className="btn btn--sm btn--ghost" onClick={onClose}>
+              Close
+            </button>
+          )}
+        </span>
       </div>
+      {/* OCW-FR-ZPDC / GRU-FR-BPNJ: a refused Continue, in words, in the strip. */}
+      {plan && continuing.refusal && (
+        <p
+          className="openspec-runstrip__refusal t-ui-sm"
+          role="alert"
+          data-testid="openspec-run-strip-refusal"
+        >
+          {continuing.refusal}
+        </p>
+      )}
       {hasReadableProgress(run.observability) ? (
         <RunProgress
           stages={stageDescriptorsFor(run)}
@@ -136,4 +201,44 @@ export function ChangeRunStrip({
       )}
     </section>
   );
+}
+
+/**
+ * OCW-FR-ZPDC: Continue of a plan rest, through `continue_graduation_run`.
+ * A refusal is kept for the run it was about, and goes when the run moves on.
+ */
+function useContinue(run: GraduationRun) {
+  const [busy, setBusy] = useState(false);
+  // The guard of the act in flight. A ref, so a second press before the
+  // next render is refused too.
+  const inFlight = useRef(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  useEffect(() => {
+    setRefusal(null);
+  }, [run.id, run.state, run.rest?.reason]);
+  const go = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setRefusal(null);
+    logInfo(["frontend"], "the run strip continues a plan rest", {
+      runId: run.id,
+      reason: run.rest?.reason ?? null,
+    });
+    try {
+      await api.continueGraduationRun(run.id);
+      void rereadChangeRunQueue();
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      logWarn(["frontend"], "the run strip could not continue a plan rest", {
+        runId: run.id,
+        code: raw.split(":")[0].trim().slice(0, 60),
+      });
+      setRefusal(planContinueMessage(raw));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  };
+  return { busy, refusal, go };
 }

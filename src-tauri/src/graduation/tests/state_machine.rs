@@ -234,6 +234,7 @@ fn a_pass_records_its_task_its_verdict_and_its_findings_whole() {
         verdict: ReviewOutcome::Revise,
         rationale: "one thing is missing".into(),
         findings: vec![ReviewFinding {
+            kind: None,
             severity: ReviewSeverity::Major,
             description: "the empty state is not implemented".into(),
             affected_files: vec!["src/panel.tsx".into()],

@@ -1,12 +1,14 @@
 /**
  * The review bar of a change
- * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-EJGH).
+ * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-EJGH,
+ * OCW-FR-XJMR).
  *
  * While the change holds a pending edit proposal, the bar above the reading
  * pane states how many hunks are still undecided across all the files of the
  * change, and offers Reject all. Each hunk is decided in the Source of its
  * file, so the bar has no control that moves between hunks: the artifact list
- * already marks where they are (OCW-FR-RRXG).
+ * already marks where they are (OCW-FR-RRXG). While the questions of a plan
+ * update stand, Reject all is unavailable and one sentence says why.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -20,9 +22,12 @@ function changes(count: number): string {
 export function ChangeReviewBar({
   undecided,
   onRejectAll,
+  held = null,
 }: {
   /** OCW-FR-EJGH: the count of undecided hunks across the change. */
   undecided: number;
+  /** OCW-FR-XJMR: why no hunk takes a decision now, or null. */
+  held?: string | null;
   /** Resolves null when the decline landed, or the refusal in words. */
   onRejectAll: () => Promise<string | null>;
 }) {
@@ -62,12 +67,19 @@ export function ChangeReviewBar({
           ? "Every proposed change is decided."
           : `${changes(undecided)} in this change. Decide each one in the Source of its file.`}
       </span>
+      {/* OCW-FR-XJMR: the held sentence follows the count, so Reject all
+          keeps its place at the end of the bar in every state. */}
+      {held !== null && (
+        <span className="openspec-review__held t-ui-sm" data-testid="openspec-review-held">
+          {held}
+        </span>
+      )}
       <span className="spacer" />
       <button
         ref={opener}
         type="button"
-        className="btn btn--sm"
-        disabled={busy || undecided === 0}
+        className="btn btn--sm openspec-review__reject-all"
+        disabled={busy || undecided === 0 || held !== null}
         onClick={() => setConfirming(true)}
       >
         Reject all
@@ -77,7 +89,7 @@ export function ChangeReviewBar({
           {error}
         </p>
       )}
-      {confirming && (
+      {confirming && held === null && (
         <Modal label="Reject all" returnFocus={opener.current} onClose={() => setConfirming(false)}>
           <div className="modal__head">
             <div className="modal__title">Reject all</div>

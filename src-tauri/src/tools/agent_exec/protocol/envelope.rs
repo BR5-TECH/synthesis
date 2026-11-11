@@ -65,12 +65,29 @@ pub struct AgentEscalationQuestion {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AgentEscalation {
+    /// EAC-FR-18 / ESU-FR-VTAZ: `plan_update` for a plan update of an apply
+    /// run, absent for an ordinary escalation (ESU-FR-ATVP).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<EscalationKind>,
     pub reason: String,
-    /// 1 to 8, in the order they are to be answered.
+    /// 1 to 8, in the order they are to be answered; 0 to 8 for a plan update.
     pub questions: Vec<AgentEscalationQuestion>,
 }
 
+/// EAC-FR-18: the one kind an escalation may name.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EscalationKind {
+    /// OPU-FR-YBLE: the apply agent asks the author to change the plan.
+    PlanUpdate,
+}
+
 impl AgentEscalation {
+    /// ESU-FR-VTAZ: whether this escalation is a plan update.
+    pub fn is_plan_update(&self) -> bool {
+        self.kind == Some(EscalationKind::PlanUpdate)
+    }
+
     /// EAC-FR-18 / EAC-FR-36: whole or not at all.
     ///
     /// One malformed question or one malformed proposed response refuses the
@@ -82,7 +99,9 @@ impl AgentEscalation {
         if self.reason.trim().is_empty() {
             return Err(EnvelopeInvalid::EscalationShape);
         }
-        if !(MIN_ESCALATION_QUESTIONS..=MAX_ESCALATION_QUESTIONS).contains(&self.questions.len()) {
+        // ESU-FR-VTAZ: a plan update may ask no question at all.
+        let min = if self.is_plan_update() { 0 } else { MIN_ESCALATION_QUESTIONS };
+        if !(min..=MAX_ESCALATION_QUESTIONS).contains(&self.questions.len()) {
             return Err(EnvelopeInvalid::EscalationShape);
         }
         for question in &self.questions {

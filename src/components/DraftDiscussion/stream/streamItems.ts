@@ -17,6 +17,7 @@ import {
   isProposalAttachment,
   type Attachment,
   type Comment,
+  type NewChangeProposalReference,
   type NewDraftProposalReference,
 } from "../../../types";
 import type { PairedHalf } from "../../discussion/questionPairs";
@@ -52,6 +53,13 @@ export type StreamItem =
       key: string;
       comment: Comment;
       reference: NewDraftProposalReference;
+    }
+  /** OCW-FR-BGDN: a new-change card, below the comment that carries it. */
+  | {
+      kind: "newChange";
+      key: string;
+      comment: Comment;
+      reference: NewChangeProposalReference;
     };
 
 export interface StreamInput {
@@ -195,13 +203,18 @@ export function streamItems(input: StreamInput): StreamItem[] {
       body !== "" ||
       comment.quotes.length > 0 ||
       comment.attachments.some(
-        (a) => !isProposalAttachment(a) && a.kind !== "newDraftProposal",
+        (a) =>
+          !isProposalAttachment(a) &&
+          a.kind !== "newDraftProposal" &&
+          a.kind !== "newChangeProposal",
       );
 
     // CMT-FR-15: the comment the thread opens with carries the thread's own
     // actions, whatever it holds — so it always gets a block to carry them on,
     // exactly as it did when every comment was drawn the same way.
-    const cards = comment.attachments.some((a) => a.kind === "newDraftProposal");
+    const cards = comment.attachments.some(
+      (a) => a.kind === "newDraftProposal" || a.kind === "newChangeProposal",
+    );
     if (carries || (references.length === 0 && !cards) || at === 0) {
       if (
         open !== null &&
@@ -240,6 +253,17 @@ export function streamItems(input: StreamInput): StreamItem[] {
         reference,
       });
     }
+    // OCW-FR-BGDN: the new-change card stands below the comment's body.
+    for (const reference of comment.attachments) {
+      if (reference.kind !== "newChangeProposal") continue;
+      open = null;
+      items.push({
+        kind: "newChange",
+        key: `${comment.id}:newChange:${reference.proposalId}`,
+        comment,
+        reference,
+      });
+    }
   }
 
   return items;
@@ -263,6 +287,8 @@ export function coveredBy(item: StreamItem): string[] {
   if (item.kind === "question") {
     return item.answer ? [item.question.id, item.answer.id] : [item.question.id];
   }
-  if (item.kind === "change" || item.kind === "newDraft") return [item.comment.id];
+  if (item.kind === "change" || item.kind === "newDraft" || item.kind === "newChange") {
+    return [item.comment.id];
+  }
   return [];
 }

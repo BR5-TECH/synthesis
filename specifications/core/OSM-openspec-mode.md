@@ -41,6 +41,9 @@ OpenSpec mode is the optional mode in which the application works with a project
 30. **OSM-FR-APVF** `validate_change(location, name)` runs `openspec validate <name> --type change --strict --json --no-interactive` and returns whether the change is valid, with each issue's level, path, and message.
 31. **OSM-FR-XDRN** For `validate`, an exit status of 1 whose output decodes as the expected shape is an answer that the change is not valid. Any other status other than zero fails the validation with `cli_failed` (OSM-FR-WWWK).
 32. **OSM-FR-MBTI** `"read openspec change"` is the Tauri command over `read_change`. It runs on a blocking thread and returns the `ChangeDetail` or the error code of the read.
+33. **OSM-FR-BLEY** `"read change image"` (`read_change_image(stream_id, change, path)`) returns the bytes of one image file of `openspec/changes/<change>/` in the stream's working copy, base64-encoded, with its media type. `path` is change-relative and follows the rule of `CEP-change-edit-proposals.md` CEP-FR-WJKY. The file is read through `FSA-filesystem-access.md`, and no CLI process runs.
+34. **OSM-FR-LVGN** The media type is decided by the file's extension from the image kinds of `DAS-draft-assets.md` DAS-FR-03. `"read change image"` refuses `path_outside_change` for a path that fails CEP-FR-WJKY, `not_an_image` for any other extension, `image_too_large` for a file larger than the attachment bound of `CMS-comments-storage.md` CMS-FR-47, `file_not_found` where no file stands at the path, `unknown_stream` where the stream is not live, `invalid_change_name` where the name fails OSM-FR-IHUO, and `no_project_open` where no project is open.
+35. **OSM-FR-UJPT** Each `"read change image"` emits under the `backend` domain a `DEBUG` record with the stream id, the change name, the change-relative path, and the size, or a `WARN` record with the refusal code. No record holds the bytes.
 
 ## Contract surface
 The module owns one Tauri command and an internal Rust API. The internal API has no Tauri command, and the tools of `../tools/` and `../ai/CVL-conversation-loop.md` are its consumers.
@@ -48,6 +51,7 @@ The module owns one Tauri command and an internal Rust API. The internal API has
 ### Tauri commands
 - `"get openspec status"` → `get_openspec_status()` → `OpenSpecStatus`. Read-only. It changes no setting and writes no file (OSM-FR-YXUC).
 - `"read openspec change"` → `read_openspec_change(location, name)` → `ChangeDetail`, or the code of an `OpenSpecReadError`. Read-only (OSM-FR-MBTI).
+- `"read change image"` → `read_change_image(stream_id, change, path)` → `{ data, media_type }`, `data` being the base64 of the file's bytes. Read-only (OSM-FR-BLEY).
 
 ```
 OpenSpecModeSetting = "auto" | "off"

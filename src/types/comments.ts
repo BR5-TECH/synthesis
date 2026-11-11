@@ -5,6 +5,7 @@
 // resolves to the same set and no import site moved.
 
 import type { NewDraftProposalReference, NewDraftSubjectReference } from "./newDraftProposals";
+import type { NewChangeProposalReference, NewChangeSubjectReference } from "./newChangeProposals";
 import type { ExportRequestReference } from "./documentExport";
 import { GITHUB_TOKEN_ERRORS } from "./github";
 import type { AdvisorsList, SynthesisMark } from "./groupAttachments";
@@ -206,6 +207,9 @@ export type Attachment =
   /** CMS-FR-YKGI / CMS-FR-KAXQ: the two new-draft references. */
   | NewDraftProposalReference
   | NewDraftSubjectReference
+  /** CMS-FR-QYGP / CMS-FR-MTUL: the two new-change references. */
+  | NewChangeProposalReference
+  | NewChangeSubjectReference
   /** CMS-FR-OKDW: an export an agent asked the author for. */
   | ExportRequestReference
   /** CMS-FR-TUHL: the comment is the Synthesis of an agent group. */
@@ -231,8 +235,9 @@ export type AttachmentInput =
     }
   /** CMS-FR-43: both append paths take a reference to one change. */
   | ProposalHunkReference
-  /** CMS-FR-KAXQ: and a reference to one new-draft proposal. */
-  | NewDraftSubjectReference;
+  /** CMS-FR-KAXQ / CMS-FR-MTUL: and a reference to one new-draft or new-change proposal. */
+  | NewDraftSubjectReference
+  | NewChangeSubjectReference;
 
 /** CMS-FR-48: what `read_comment_attachment` serves back. */
 export interface AttachmentContent {
@@ -251,6 +256,7 @@ export interface AttachmentContent {
 export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
   if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
+  if (a.kind === "newChangeProposal" || a.kind === "newChangeSubject") return "Proposed change";
   if (a.kind === "exportRequest") return a.path;
   if (a.kind === "synthesis") return "Synthesis";
   if (a.kind === "advisors") return "Advisors";
@@ -272,6 +278,8 @@ export function isImageAttachment(a: Attachment): boolean {
     a.kind === "proposalHunk" ||
     a.kind === "newDraftProposal" ||
     a.kind === "newDraftSubject" ||
+    a.kind === "newChangeProposal" ||
+    a.kind === "newChangeSubject" ||
     a.kind === "exportRequest" ||
     a.kind === "synthesis" ||
     a.kind === "advisors"

@@ -26,18 +26,18 @@ use crate::tools::propose_change_edits::{
 use crate::tools::tests::{block_on, mounted};
 use crate::tools::ToolRefusal;
 
-const STREAM: &str = "s1";
-const CHANGE: &str = "add-auth";
+pub(super) const STREAM: &str = "s1";
+pub(super) const CHANGE: &str = "add-auth";
 const TASKS: &str = "## 1. Login\n\n- [ ] 1.1 Add the form\n";
-const RATIONALE: &str = "Add logout. <spoken>Add logout.</spoken>";
+pub(super) const RATIONALE: &str = "Add logout. <spoken>Add logout.</spoken>";
 
-static QUIET: LogBuffer = LogBuffer::new();
+pub(super) static QUIET: LogBuffer = LogBuffer::new();
 
-fn human() -> Participant {
+pub(super) fn human() -> Participant {
     Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
-fn agent() -> Participant {
+pub(super) fn agent() -> Participant {
     Participant::Agent {
         agent_id: "agent-1".into(),
         handle: "arch".into(),
@@ -46,17 +46,17 @@ fn agent() -> Participant {
     }
 }
 
-struct Fixture {
-    open: super::Fixture,
+pub(super) struct Fixture {
+    pub(super) open: super::Fixture,
     store_path: std::path::PathBuf,
     _wc_dir: TempDir,
-    wc: crate::fs::RootFs,
-    thread_id: String,
-    proposed: Arc<AtomicBool>,
+    pub(super) wc: crate::fs::RootFs,
+    pub(super) thread_id: String,
+    pub(super) proposed: Arc<AtomicBool>,
 }
 
 impl Fixture {
-    fn new() -> Fixture {
+    pub(super) fn new() -> Fixture {
         let dir = TempDir::new().expect("tempdir");
         let store_path = crate::changes::canonicalize_lenient(dir.path());
         let wc_dir = TempDir::new().expect("tempdir");
@@ -96,22 +96,22 @@ impl Fixture {
         }
     }
 
-    fn store(&self) -> crate::fs::RootFs {
+    pub(super) fn store(&self) -> crate::fs::RootFs {
         crate::fs::RootFs::for_root(&self.store_path)
     }
 
-    fn roots(&self) -> OwnedRoots {
+    pub(super) fn roots(&self) -> OwnedRoots {
         OwnedRoots { worktree: self.store(), store: self.store() }
     }
 
-    fn sites(&self) -> Box<FixedSites> {
+    pub(super) fn sites(&self) -> Box<FixedSites> {
         Box::new(FixedSites {
             sites: vec![(STREAM.into(), self.wc.clone())],
             busy: Mutex::new(None),
         })
     }
 
-    fn origin(&self) -> ConversationOrigin {
+    pub(super) fn origin(&self) -> ConversationOrigin {
         let target = DiscussionTarget::Change { stream_id: STREAM.into(), change: CHANGE.into() };
         let found = comments::locate_discussion_of(&self.store(), &target, &self.thread_id)
             .expect("thread");
@@ -139,7 +139,7 @@ impl Fixture {
         block_on(self.proposer(&QUIET).call(args))
     }
 
-    fn decider(
+    pub(super) fn decider(
         &self,
         sites: Box<FixedSites>,
         buffer: &'static LogBuffer,
@@ -183,7 +183,7 @@ fn two_files() -> ProposeChangeEditsArgs {
     }
 }
 
-fn decisions(entries: &[(&str, &str)]) -> DecideChangesArgs {
+pub(super) fn decisions(entries: &[(&str, &str)]) -> DecideChangesArgs {
     DecideChangesArgs {
         instruction: Some(super::DECISION_INSTRUCTION.into()),
         decisions: Some(

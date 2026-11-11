@@ -102,9 +102,9 @@ fn a_hunk_whose_text_left_its_file_is_anchor_lost() {
     assert_eq!(f.file("tasks.md").as_deref(), Some("## 1. Other\n"));
 }
 
-// CEP-FR-UCVO / CEP-FR-RWTQ: rejecting the last undecided hunk closes the
-// proposal, writes nothing into the working copy, and appends exactly one
-// decision comment.
+// CEP-FR-UCVO / CEP-FR-RWTQ / CEP-FR-FBVC: rejecting the last undecided hunk
+// closes the proposal, writes nothing into the working copy, and appends
+// exactly one decision comment, whose id and origin kind the outcome names.
 #[test]
 fn rejecting_every_hunk_closes_with_one_comment_and_no_write() {
     let f = Fixture::new();

@@ -53,26 +53,34 @@ export function changeDecisionMessage(code: string): string {
 }
 
 /**
- * OCW-FR-DTRX / CEP-FR-ESQR: the statement of `stream_busy`, with the name of
- * the run that holds the stream. The run is the one of the stream that is
- * working or reviewing. A list that fails, or that holds no such run, gives the
- * statement with no name.
+ * CEP-FR-ESQR: the title of the run that holds a stream, or "". The run is the
+ * one of the stream that is working or reviewing. A list that fails, or that
+ * holds no such run, gives "".
  */
-export async function streamBusyMessage(streamId: string): Promise<string> {
+export async function runHoldingStream(streamId: string): Promise<string> {
   try {
     const queue = await api.listGraduationQueue();
     const run = (queue?.runs ?? []).find(
       (r) => r.streamId === streamId && (r.state === "working" || r.state === "reviewing"),
     );
-    const title = run ? runTitle(run) : "";
-    if (title !== "") {
-      return `The run “${title}” holds this stream, so this change was not applied. Try again when the run stops working.`;
-    }
+    return run ? runTitle(run) : "";
   } catch (e) {
     logWarn(["frontend"], "the runs could not be listed to name the run that holds a stream", {
       streamId,
       error: refusalCode(e),
     });
+    return "";
+  }
+}
+
+/**
+ * OCW-FR-DTRX / CEP-FR-ESQR: the statement of `stream_busy`, with the name of
+ * the run that holds the stream where it is known.
+ */
+export async function streamBusyMessage(streamId: string): Promise<string> {
+  const title = await runHoldingStream(streamId);
+  if (title !== "") {
+    return `The run “${title}” holds this stream, so this change was not applied. Try again when the run stops working.`;
   }
   return "A graduation run holds this stream, so this change was not applied. Try again when the run stops working.";
 }

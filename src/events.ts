@@ -23,6 +23,8 @@ import type {
   AgentActivityState,
   ChangesUpdatedPayload,
   ChangeProposalsChangedPayload,
+  ChangeStatisticsChangedPayload,
+  NewChangeProposalsChangedPayload,
   Discussion,
   PendingQuestionSet,
   DashboardRefreshFailedPayload,
@@ -441,6 +443,28 @@ export const onChangeEditProposalsChanged = (
   handler: (payload: ChangeProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
   listen<ChangeProposalsChangedPayload>(CHANGE_EDIT_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** CST-FR-PSUF: events for one change were appended to its statistics log. */
+export const CHANGE_STATISTICS_CHANGED = "change-statistics-changed";
+
+/** CST-FR-PSUF / OCW-FR-ZZCS: subscribe to [`CHANGE_STATISTICS_CHANGED`]. */
+export const onChangeStatisticsChanged = (
+  handler: (payload: ChangeStatisticsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<ChangeStatisticsChangedPayload>(CHANGE_STATISTICS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** NCP-FR-VLOO: a new-change proposal of one change, or its split, moved on. */
+export const NEW_CHANGE_PROPOSALS_CHANGED = "new-change-proposals-changed";
+
+/** NCP-FR-VLOO / OCW-FR-BGDN: subscribe to [`NEW_CHANGE_PROPOSALS_CHANGED`]. */
+export const onNewChangeProposalsChanged = (
+  handler: (payload: NewChangeProposalsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<NewChangeProposalsChangedPayload>(NEW_CHANGE_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 

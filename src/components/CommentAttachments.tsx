@@ -24,6 +24,7 @@ import { Icon } from "./icons";
 import { ProposalHunkControl } from "./ProposalHunkControl";
 import { ChangeProposalAttachmentView } from "./ChangeProposalAttachment";
 import { NewDraftReferenceControl } from "./NewDraftReferenceControl";
+import { NewChangeReferenceControl } from "./NewChangeReferenceControl";
 import {
   openReview,
   reviewedHunkTotal,
@@ -744,7 +745,17 @@ function AttachmentView({
   draftId?: string;
   attachment: Exclude<
     Attachment,
-    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" | "synthesis" | "advisors" | "changeProposal" }
+    {
+      kind:
+        | "newDraftProposal"
+        | "newDraftSubject"
+        | "newChangeProposal"
+        | "newChangeSubject"
+        | "exportRequest"
+        | "synthesis"
+        | "advisors"
+        | "changeProposal";
+    }
   >;
 }) {
   const name = attachmentName(attachment);
@@ -890,7 +901,10 @@ export function CommentAttachmentList({
         ) : a.kind === "newDraftProposal" ? (
           // CMT-FR-MPKL: a reference control that shows the card.
           <NewDraftReferenceControl key={i} attachment={a} />
-        ) : a.kind === "newDraftSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
+        ) : a.kind === "newChangeProposal" ? (
+          // OCW-FR-BGDN: a reference control that opens the original change.
+          <NewChangeReferenceControl key={i} attachment={a} />
+        ) : a.kind === "newDraftSubject" || a.kind === "newChangeSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
           // CVP-FR-HRGH: the collapsed Advisors list of a Meta reply.
           <AdvisorsListView key={i} attachment={a} />
         ) : a.kind === "exportRequest" ? (

@@ -37,15 +37,22 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
         .split_once("\n}")
         .expect("its body")
         .0;
-    // CMS-FR-43 / CMS-FR-TQVB / CMS-FR-KAXQ / CMS-FR-LIBT: `proposal_hunk` and
-    // `new_draft_subject` are the reference kinds a caller may supply, and
-    // neither is a proposal reference.
+    // CMS-FR-43 / CMS-FR-TQVB / CMS-FR-KAXQ / CMS-FR-LIBT / CMS-FR-MTUL:
+    // `proposal_hunk`, `new_draft_subject`, and `new_change_subject` are the
+    // reference kinds a caller may supply, and none is a proposal reference.
     let variants = input_variants(input);
-    assert_eq!(variants, vec!["Url", "Inline", "ProposalHunk", "NewDraftSubject"], "{input}");
+    assert_eq!(
+        variants,
+        vec!["Url", "Inline", "ProposalHunk", "NewDraftSubject", "NewChangeSubject"],
+        "{input}"
+    );
+    // CMS-FR-QLMV / CMS-FR-QYGP: nor a change proposal reference.
     assert!(
-        !variants
-            .iter()
-            .any(|v| *v == "Proposal" || *v == "PromptProposal" || *v == "NewDraftProposal"),
+        !variants.iter().any(|v| *v == "Proposal"
+            || *v == "PromptProposal"
+            || *v == "NewDraftProposal"
+            || *v == "ChangeProposal"
+            || *v == "NewChangeProposal"),
         "AttachmentInput has no proposal variant (CMS-FR-60): {input}",
     );
 }

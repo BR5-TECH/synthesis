@@ -102,9 +102,12 @@ export function Modal({
   onClose,
   returnFocus,
   closeOnScrim = true,
+  className,
   children,
 }: {
   label: string;
+  /** A class the dialog adds to its own, for a dialog with a layout of its own. */
+  className?: string;
   onClose: () => void;
   /**
    * Where focus goes when the dialog closes. Supplied rather than read from
@@ -174,7 +177,13 @@ export function Modal({
       className="scrim"
       onClick={(e) => closeOnScrim && e.target === e.currentTarget && onClose()}
     >
-      <div ref={ref} className="modal drafts-overlay" role="dialog" aria-modal="true" aria-label={label}>
+      <div
+        ref={ref}
+        className={className ? `modal drafts-overlay ${className}` : "modal drafts-overlay"}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+      >
         {children}
       </div>
     </div>

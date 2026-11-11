@@ -29,15 +29,21 @@ pub const NAME: &str = "decide_change_edits";
 pub const DESCRIPTION: &str = "Decide hunks of the open proposal of the OpenSpec change under discussion, on the author's explicit instruction in the latest comment. Use this only when the author tells you which hunks to accept, reject, or discuss, and copy their words into `instruction`. Name a hunk by its id, or by its place counted from 1. Do not read the decision back and wait for a confirmation. This never creates or changes a hunk.";
 
 /// The parameter text of `action`.
-const ACTION_DESCRIPTION: &str = "`accept` to write the hunk into its file of the change, `reject` to decline it, or `discuss` to open a new discussion about it.";
+const ACTION_DESCRIPTION: &str = "`accept` to write the hunk into its file of the change or to create the proposed new change, `reject` to decline it, `discuss` to open a new discussion about it, or `confirm` with the id of the split to end it.";
 
 /// DCE-FR-JCHG / DPC-FR-JEXJ: the typed errors worth a retry.
 const RETRYABLE_ERRORS: [&str; 3] =
     [cep::ERR_WRITE_FAILED, cep::ERR_ACCEPTANCE_IN_PROGRESS, cep::ERR_STREAM_BUSY];
 
-/// TLC-FR-06: the JSON Schema of the arguments (DCE-FR-ILCP).
+/// The `id` of an entry: a hunk, the proposed new change, or the split.
+const ID_DESCRIPTION: &str = "The id of a hunk of the open proposal, of the proposed new change that waits on the author, or of the split, as your input lists it.";
+
+/// DCE-FR-PHSU: the actions of an entry.
+const ACTIONS: [&str; 4] = ["accept", "reject", "discuss", "confirm"];
+
+/// TLC-FR-06: the JSON Schema of the arguments (DCE-FR-ILCP, DCE-FR-PHSU).
 pub fn parameters() -> serde_json::Value {
-    decide_changes::parameters(ACTION_DESCRIPTION)
+    decide_changes::parameters_with(ACTION_DESCRIPTION, ID_DESCRIPTION, &ACTIONS)
 }
 
 /// DCE-FR-QIKC: `decide_change_edits` as a `rig` portable tool.
@@ -147,6 +153,7 @@ where
             sites,
             author: self.author(),
             line: decide_changes::instruction_line(&self.agent, instruction),
+            split: split::split_of(&self.roots.store, stream_id, change),
         };
         let mut output = decide_changes::run_entries(&backend, args)?;
         // DCE contract surface: each row names its hunk's change-relative path.
@@ -173,6 +180,8 @@ struct ChangeBackend<'a, R: tauri::Runtime> {
     sites: &'a dyn SiteResolver,
     author: Result<Participant, String>,
     line: String,
+    /// DCE-FR-UZDN: the split as the call found it when it began.
+    split: Option<split::SplitView>,
 }
 
 impl<R: tauri::Runtime> ChangeBackend<'_, R> {
@@ -313,7 +322,25 @@ where
     fn retryable_error(&self, error: &str) -> bool {
         RETRYABLE_ERRORS.contains(&error)
     }
+
+    /// DCE-FR-PHSU: a pending new-change proposal, or a split that can be
+    /// confirmed, lets a call run.
+    fn side_open(&self) -> bool {
+        self.split.as_ref().is_some_and(|s| s.pending.is_some() || s.confirmable)
+    }
+
+    fn side_entry(
+        &self,
+        id: &str,
+        action: &str,
+        place: usize,
+        total: usize,
+    ) -> Option<decide_changes::DecisionRow> {
+        split::side_entry(self, id, action, place, total)
+    }
 }
+
+mod split;
 
 impl<R: tauri::Runtime> rig::tool::PortableTool for DecideChangeEditsTool<R>
 where

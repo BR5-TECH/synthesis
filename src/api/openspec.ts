@@ -13,3 +13,7 @@ export const getOpenspecStatus = () => invoke<OpenSpecStatus>("get_openspec_stat
  */
 export const readOpenspecChange = (location: ChangeLocation, name: string) =>
   invoke<ChangeDetail>("read_openspec_change", { location, name });
+
+/** OSM-FR-BLEY: one image of a change folder in its stream's working copy. */
+export const readChangeImage = (streamId: string, change: string, path: string) =>
+  invoke<{ data: string; mediaType: string }>("read_change_image", { streamId, change, path });

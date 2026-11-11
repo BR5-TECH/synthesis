@@ -152,9 +152,10 @@ pub(super) fn record_refinement_usage<R: tauri::Runtime>(
 ) where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
 {
-    let Some(draft_id) = plan.origin.draft_id() else {
+    let owner = StatisticsOwner::of(&plan.origin);
+    if owner.is_none() {
         return;
-    };
+    }
     let tokens = crate::statistics::ReportedTokens {
         input_tokens: reply.prompt_tokens,
         cached_input_tokens: reply.input_tokens.map(|split| split.cached),
@@ -183,7 +184,37 @@ pub(super) fn record_refinement_usage<R: tauri::Runtime>(
         &plan.turn_id,
         std::slice::from_ref(&record),
     );
-    crate::statistics::record_statistics_events(app, draft_id, events);
+    match owner {
+        Some(StatisticsOwner::Draft(draft_id)) => {
+            crate::statistics::record_statistics_events(app, draft_id, events)
+        }
+        // AGC-FR-YFLJ: a change turn's usage goes to the change's own log.
+        Some(StatisticsOwner::Change(stream_id, change)) => {
+            crate::change_statistics::record_change_statistics_events(
+                app, stream_id, change, events,
+            )
+        }
+        None => {}
+    }
+}
+
+/// Whose statistics log a turn's events go to: a draft's (AGC-FR-YQMD) or a
+/// change's (AGC-FR-YFLJ). A turn of any other target records none.
+enum StatisticsOwner<'a> {
+    Draft(&'a str),
+    Change(&'a str, &'a str),
+}
+
+impl<'a> StatisticsOwner<'a> {
+    fn of(origin: &'a ConversationOrigin) -> Option<StatisticsOwner<'a>> {
+        if let Some(draft_id) = origin.draft_id() {
+            return Some(StatisticsOwner::Draft(draft_id));
+        }
+        origin
+            .target
+            .change_owner()
+            .map(|(stream_id, change)| StatisticsOwner::Change(stream_id, change))
+    }
 }
 
 /// AGC-FR-YQMD: the one durable line a draft-scoped turn leaves behind.
@@ -209,26 +240,31 @@ pub(super) fn record_refinement_lifecycle<R: tauri::Runtime>(
 ) where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
 {
-    let Some(draft_id) = turn.origin.draft_id() else {
+    let Some(owner) = StatisticsOwner::of(&turn.origin) else {
         return;
     };
     let Some(ended_at) = turn.ended_at.clone() else {
         return;
     };
-    crate::statistics::record_statistics_event(
-        app,
-        draft_id,
-        crate::statistics::EventBody::ConversationTurn {
-            turn_id: turn.id.clone(),
-            discussion_id: turn.origin.discussion_id().to_string(),
-            fragment_targeted: turn.origin.fragment_target.is_some(),
-            origin_kind: None,
-            reached_model,
-            started_at: turn.started_at.clone(),
-            ended_at,
-            outcome: turn.state.as_str().to_string(),
-        },
-    );
+    let event = crate::statistics::EventBody::ConversationTurn {
+        turn_id: turn.id.clone(),
+        discussion_id: turn.origin.discussion_id().to_string(),
+        fragment_targeted: turn.origin.fragment_target.is_some(),
+        origin_kind: None,
+        reached_model,
+        started_at: turn.started_at.clone(),
+        ended_at,
+        outcome: turn.state.as_str().to_string(),
+    };
+    match owner {
+        StatisticsOwner::Draft(draft_id) => {
+            crate::statistics::record_statistics_event(app, draft_id, event)
+        }
+        // AGC-FR-YFLJ: keyed by the stream id and the change name of the target.
+        StatisticsOwner::Change(stream_id, change) => {
+            crate::change_statistics::record_change_statistics_event(app, stream_id, change, event)
+        }
+    }
 }
 
 /// How a turn ended: the terminal state that [`finish`] stamps, and what the

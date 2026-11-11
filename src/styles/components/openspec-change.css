@@ -1,6 +1,15 @@
 /* openspec-change: the change workspace tab (OCW). */
 
 .openspec-change {
+  /* OCW-FR-GCME: the document column keeps the artifact list and a 360 px
+     reading pane, and the discussion column gives up width first, down to
+     280 px (see `changeGridTemplate`). The widths agree with
+     `ArtifactNav.tsx`. */
+  --ocw-list-w: 200px;
+  --ocw-rail-w: 220px;
+  --ocw-reading-min: 360px;
+  --ocw-doc-min: calc(var(--ocw-list-w) + var(--ocw-reading-min));
+  --ocw-discussion-min: 280px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -83,7 +92,8 @@
   display: flex;
 }
 .openspec-change__list {
-  flex: 0 0 200px;
+  box-sizing: border-box;
+  flex: 0 0 var(--ocw-list-w);
   display: flex;
   flex-direction: column;
   gap: var(--sp-0-5);
@@ -141,12 +151,19 @@
 .openspec-file + .openspec-file { margin-top: var(--sp-8); }
 .openspec-file__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
   padding-bottom: var(--sp-1-5);
   border-bottom: 1px solid var(--border-1);
 }
-.openspec-file__path { font-family: var(--font-mono); overflow-wrap: anywhere; }
+/* OCW-FR-GCME: a path wraps, but never to one letter a line. */
+.openspec-file__path {
+  flex: 1 1 auto;
+  min-width: min(16ch, 100%);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
 .openspec-file__text { color: var(--fg-2); max-width: 760px; }
 .openspec-file__unreadable { color: var(--fg-3); font-style: italic; }
 
@@ -270,6 +287,12 @@
 /* DDS-FR-POJC / OCW-FR-TRLG: on a stream, the reading pane is the document
    column of the discussion split. */
 .openspec-change__split { flex: 1 1 auto; }
+/* OCW-FR-GCME: while the History rail is open, the document column also
+   keeps the width of the rail, so the discussion column gives up width
+   before the rail moves above the document. */
+.openspec-change__split[data-history="open"] {
+  --ocw-doc-min: calc(var(--ocw-rail-w) + var(--ocw-list-w) + var(--ocw-reading-min));
+}
 .openspec-change__doc {
   min-width: 0;
   min-height: 0;
@@ -326,6 +349,9 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   tab-size: 2;
+  /* OCW-FR-GCME: the text scrolls with the pane rather than wrap to one
+     letter a line. */
+  min-width: 32ch;
 }
 /* OCW-FR-JBFZ: the offer to discuss the selected passage. */
 .openspec-source__comment { display: flex; justify-content: flex-end; margin-bottom: var(--sp-1-5); }
@@ -338,3 +364,175 @@
   color: var(--fg-1);
   font-size: var(--fs-ui-sm);
 }
+
+/* OCW-FR-RKCC: the History rail beside the document, and the document. */
+.openspec-change__stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.openspec-change__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.openspec-history {
+  box-sizing: border-box;
+  width: var(--ocw-rail-w);
+  flex: 0 0 var(--ocw-rail-w);
+  background: var(--bg-panel);
+}
+.openspec-history .draft-rail__header { border-top: 0; }
+/* OCW-FR-GCME: where the reading pane beside the rail would be narrower than
+   360 px, the rail moves above the document and takes the whole width. Its
+   versions scroll inside a capped height, so the reading pane keeps the rest.
+   The legend gives its height to the versions there. */
+.openspec-change__stage[data-rail="above"] { flex-direction: column; }
+.openspec-change__stage[data-rail="above"] .openspec-history {
+  width: auto;
+  flex: 0 0 auto;
+  max-height: 40%;
+  border-right: 0;
+  border-bottom: 1px solid var(--border-1);
+}
+.openspec-change__stage[data-rail="above"] .openspec-history__legend { display: none; }
+.openspec-change__stage[data-rail="above"] .draft-rail__versions { min-height: 3.5rem; }
+
+/* OCW-FR-EJGH / OCW-FR-ANKT: the review bar and the split bar above the
+   reading pane. */
+.openspec-review {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-1-5) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--warn-soft);
+}
+.openspec-split { background: var(--accent-soft); }
+.openspec-review__count { min-width: 0; color: var(--fg-1); }
+.openspec-review__error { flex: 1 0 100%; margin: 0; color: var(--danger); }
+
+/* OCW-FR-TZRT: the changes a confirmed split made. */
+.openspec-change__split-marker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-0-5);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+.openspec-change__split-link { font-family: var(--font-mono); }
+
+/* OCW-FR-GCME: the artifact list as a menu above the reading pane. */
+.openspec-change__stacked {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.openspec-change__menu {
+  flex: 0 0 auto;
+  padding: var(--sp-1-5) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.openspec-change__menu-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-3);
+}
+.openspec-change__menu-select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+
+/* OCW-FR-DRQD: a version, read-only, with its own artifact list. */
+.openspec-version {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.openspec-version__banner { flex: 0 0 auto; flex-wrap: wrap; background: var(--bg-sunken); }
+.openspec-version__name { min-width: 0; overflow-wrap: anywhere; }
+.openspec-version > .openspec-change__state { padding: var(--sp-4) var(--sp-6); }
+
+/* OCW-FR-ABAR: one file of the comparison, as a line diff. */
+.openspec-compare + .openspec-compare { margin-top: var(--sp-6); }
+.openspec-compare__mark {
+  padding: 0 var(--sp-1-5);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-ui-2xs);
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+}
+.openspec-compare__mark[data-mark="added"] { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+.openspec-compare__mark[data-mark="removed"] { background: var(--diff-del-bg); color: var(--diff-del-fg); }
+.openspec-compare__mark[data-mark="changed"] { background: var(--warn-soft); color: var(--fg-1); }
+.openspec-compare__table {
+  width: 100%;
+  margin-top: var(--sp-2);
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+}
+.openspec-compare__table th {
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border-1);
+}
+.openspec-compare__table td {
+  padding: 0 var(--sp-2);
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-inline-end: 1px solid var(--border-1);
+}
+.openspec-compare__table tr[data-changed] td[data-side="old"]:not([data-empty]) { background: var(--diff-del-bg); }
+.openspec-compare__table tr[data-changed] td[data-side="new"]:not([data-empty]) { background: var(--diff-add-bg); }
+.openspec-compare__table td[data-empty] { background: var(--bg-sunken); }
+
+/* OCW-FR-FMDZ: an image of a change, as its alt text and its destination. */
+.openspec-image {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-1-5);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+}
+.openspec-image__alt { font-style: italic; }
+.openspec-image__link { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-ui-xs); }
+
+/* OCW-FR-BGDN: the paths and the files of a proposed new change. */
+/* OCW-FR-BGDN: the new-change card takes the draft card's frame. */
+.openspec-newchange { max-width: 100%; }
+/* OCW-FR-FMDZ: an image read from the working copy fits the pane. */
+.openspec-image__img { display: block; max-width: 100%; height: auto; margin: 8px 0; }
+.openspec-newchange__paths {
+  margin: 0;
+  padding: 0 12px 6px 28px;
+  color: var(--fg-2);
+}
+.openspec-newchange__paths li { overflow-wrap: anywhere; }
+.openspec-newchange__created { font-family: var(--font-mono); }
+.openspec-newchange__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0 12px 10px;
+}
+.openspec-newchange__file { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.openspec-newchange__file-path { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.openspec-newchange__file .openspec-source__text { min-width: 0; max-height: 320px; overflow: auto; }

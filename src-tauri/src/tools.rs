@@ -67,6 +67,7 @@ pub mod openspec_shared;
 pub mod proposal_updates;
 pub mod propose_change_edits;
 pub mod propose_draft_changes;
+pub mod propose_new_change;
 pub mod propose_new_draft;
 pub mod propose_prompt_changes;
 pub mod read_graduation_file;

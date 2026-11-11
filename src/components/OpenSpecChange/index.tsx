@@ -16,6 +16,9 @@
  * The viewport mounts the active tab alone, so each mount is an open or a
  * reactivation, and each mount reads the change (OCW-FR-LABL). What the last
  * read gave stays in `changeView`, so it shows while the tab reads again.
+ *
+ * On a stream, the header also offers History (OCW-FR-RKCC) and Information
+ * (OCW-FR-ZZCS), and names the changes a confirmed split made (OCW-FR-TZRT).
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -23,7 +26,6 @@ import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
 import { formatSectionAddress } from "../../settingsWindow";
 import { changeViewOf, keepChangeView } from "../../state/openspec/changeView";
-import { pendingChangeProposalOf } from "../../state/openspec/changeProposals";
 import { noteOwnerDeleted } from "../../voice/voiceController";
 import type {
   ChangeArtifact,
@@ -34,10 +36,10 @@ import type {
   OpenSpecChangeTabTarget,
 } from "../../types";
 import { ChangeBody } from "./ChangeBody";
-import { ChangeDiscussionSplit, useChangeDiscussion } from "./ChangeDiscussion";
 import { artifactOfPath, type FileMode } from "./changeFiles";
 import { failureStatement, readErrorCode, routesToSettings } from "./failure";
-import { useChangeReview } from "./useChangeReview";
+import { ChangeInformationModal } from "./ChangeInformationModal";
+import { StreamSplitMarker, StreamSurface, type StreamReview } from "./StreamSurface";
 
 const STATUS_LABEL: Record<ChangeArtifact["status"], string> = {
   done: "done",
@@ -83,6 +85,11 @@ export function OpenSpecChangeWorkspace({
   );
   const live = useRef(true);
   const readSeq = useRef(0);
+  /** OCW-FR-RKCC: the History rail of a stream location. */
+  const [historyOpen, setHistoryOpen] = useState(false);
+  /** OCW-FR-ZZCS: the Information modal of a stream location. */
+  const [informationOpen, setInformationOpen] = useState(false);
+  const informationOpener = useRef<HTMLButtonElement | null>(null);
 
   /** OCW-FR-LABL / OCW-FR-HPHM: one read, and one record of how it went. */
   const read = useCallback(async () => {
@@ -239,7 +246,30 @@ export function OpenSpecChangeWorkspace({
               {detail.completedTasks} of {detail.totalTasks} tasks
             </span>
           )}
+          {location.kind === "stream" && (
+            <StreamSplitMarker streamId={location.streamId} change={name} />
+          )}
           <span className="spacer" />
+          {location.kind === "stream" && (
+            <>
+              <button
+                type="button"
+                className="btn btn--sm btn--ghost"
+                aria-pressed={historyOpen}
+                onClick={() => setHistoryOpen((open) => !open)}
+              >
+                History
+              </button>
+              <button
+                ref={informationOpener}
+                type="button"
+                className="btn btn--sm btn--ghost"
+                onClick={() => setInformationOpen(true)}
+              >
+                Information
+              </button>
+            </>
+          )}
           <button
             type="button"
             className="btn btn--sm btn--ghost"
@@ -280,6 +310,8 @@ export function OpenSpecChangeWorkspace({
         <StreamSurface
           streamId={location.streamId}
           change={name}
+          detail={detail}
+          historyOpen={historyOpen}
           onDecided={readAgain}
           onFocusFragment={showFragment}
           render={(stream) => readingPane(stream)}
@@ -293,6 +325,14 @@ export function OpenSpecChangeWorkspace({
           </p>
           {readingPane(null)}
         </>
+      )}
+      {location.kind === "stream" && informationOpen && (
+        <ChangeInformationModal
+          streamId={location.streamId}
+          change={name}
+          returnFocus={informationOpener.current}
+          onClose={() => setInformationOpen(false)}
+        />
       )}
     </section>
   );
@@ -323,53 +363,5 @@ function FirstFailure({
         </button>
       )}
     </div>
-  );
-}
-
-/** What a stream location lends its reading pane. */
-interface StreamReview {
-  review: ReturnType<typeof useChangeReview>;
-  onComment: ReturnType<typeof useChangeDiscussion>["commentOn"];
-}
-
-/**
- * OCW-FR-TRLG / DDS-FR-POJC: a stream location's discussion column beside the
- * reading pane, and the review of its pending proposal (OCW-FR-COLR).
- */
-function StreamSurface({
-  streamId,
-  change,
-  onDecided,
-  onFocusFragment,
-  render,
-}: {
-  streamId: string;
-  change: string;
-  onDecided: () => void;
-  onFocusFragment: (fragment: FragmentTarget) => void;
-  render: (stream: StreamReview) => ReactNode;
-}) {
-  const discussion = useChangeDiscussion(streamId, change);
-  const { discussHunk } = discussion;
-  const onDiscussHunk = useCallback(
-    (hunkId: string) => discussHunk(pendingChangeProposalOf(streamId, change), hunkId),
-    [discussHunk, streamId, change],
-  );
-  const review = useChangeReview({
-    streamId,
-    change,
-    onDecided,
-    onDiscussHunk,
-    agents: discussion.discussions.agents,
-  });
-  return (
-    <ChangeDiscussionSplit
-      discussion={discussion}
-      change={change}
-      pending={review.pending}
-      onFocusFragment={onFocusFragment}
-    >
-      {render({ review, onComment: discussion.commentOn })}
-    </ChangeDiscussionSplit>
   );
 }

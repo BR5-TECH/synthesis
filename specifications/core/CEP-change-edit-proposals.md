@@ -33,6 +33,8 @@ The persistence home for the **edits an agent proposes to an OpenSpec change**: 
 24. **CEP-FR-TFOY** Every command errors with `no_project_open` when no project is open, and with `proposal_not_found` when `proposal_id` names no proposal of the open project.
 25. **CEP-FR-MZFF** Every operation logs through `LGC-logging.md` under the `backend` domain: an `INFO` record when a proposal is recorded, updated, or decided, or a commit is made, and a `WARN` record on every refusal and failed commit. A record names the stream id, the change name, the proposal id, and counts. It holds no hunk text and no file text.
 26. **CEP-FR-EODY** Every filesystem operation goes through `FSA-filesystem-access.md`, on the terms of `PCP-prompt-change-proposals.md` PCP-FR-25. Nothing in this module reaches the network.
+27. **CEP-FR-FBVC** A decision's outcome states whether the decision closed the proposal, the id of the decision comment it appended where it appended one, and the origin kind of the proposal's conversation, so the surface dispatches the decision's own turns on the terms of `../ui/PCR-prompt-change-review.md` PCR-FR-14.
+27. **CEP-FR-QVLO** A proposal that closes contributes exactly one `proposal_decision` event to its change's statistics log (per `CST-change-statistics.md` CST-FR-OXGK), after the closing decision has committed and never before: `accepted` where at least one hunk is accepted, `rejected` otherwise. A recording, an update, a hold, an edit, and a decision that leaves the proposal open contribute none.
 
 ## Contract surface
 
@@ -70,7 +72,10 @@ ChangeEditHunk {
 
 ChangeDecisionOutcome {
   proposal: ChangeEditProposal,
-  committed: boolean    // true where this decision closed the proposal and its commit landed
+  committed: boolean,   // true where this decision closed the proposal and its commit landed
+  resolved: boolean,    // true where this decision left no hunk undecided (CEP-FR-RWTQ)
+  comment_id?,          // the decision comment; absent where none was appended
+  origin_kind           // "change_discussion" | "change_comment" (AGC-FR-05)
 }
 ```
 

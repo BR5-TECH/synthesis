@@ -349,3 +349,28 @@ describe("new-draft cards (DCR-FR-RDLK)", () => {
     expect(coveredBy(card)).toEqual(["nd1"]);
   });
 });
+
+describe("a new-change card (OCW-FR-BGDN)", () => {
+  const NEW_CHANGE: Attachment = { kind: "newChangeProposal", proposalId: "n1", streamId: "s-1", change: "c" };
+
+  it("OCW-FR-BGDN: a comment that carries only a new-change proposal is one card below the message before it", () => {
+    const items = streamItems({
+      comments: [comment("c1", ME, "Split it."), comment("c2", HELGA, "", undefined, [NEW_CHANGE])],
+      pairing: NO_PAIRS,
+      isOwn: mine,
+    });
+    const kinds = items.filter((i) => i.kind !== "date").map((i) => i.kind);
+    expect(kinds).toEqual(["message", "newChange"]);
+    const card = items.find((i) => i.kind === "newChange")!;
+    expect(coveredBy(card)).toEqual(["c2"]);
+  });
+
+  it("OCW-FR-BGDN: a body with the reference is a message and then the card", () => {
+    const items = streamItems({
+      comments: [comment("c1", HELGA, "The UI part stands alone.", undefined, [NEW_CHANGE])],
+      pairing: NO_PAIRS,
+      isOwn: mine,
+    });
+    expect(items.filter((i) => i.kind !== "date").map((i) => i.kind)).toEqual(["message", "newChange"]);
+  });
+});

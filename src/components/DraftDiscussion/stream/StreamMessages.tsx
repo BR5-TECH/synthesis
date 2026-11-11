@@ -17,6 +17,7 @@ import { MessageBlock } from "./MessageBlock";
 import { QuestionCard } from "./QuestionCard";
 import { ChangeRow } from "./ChangeRow";
 import { NewDraftCard } from "./NewDraftCard";
+import { NewChangeCard } from "../../OpenSpecChange/NewChangeCard";
 import { questionCardOf } from "./questionParse";
 import { coveredBy, streamItems, type StreamItem } from "./streamItems";
 import { activityStatus } from "../../../state/agentActivity";
@@ -209,6 +210,17 @@ function StreamRow({
         comment={item.comment}
         comments={props.comments}
         pendingTurns={props.pendingTurns}
+      />
+    );
+  }
+
+  // OCW-FR-BGDN: the new-change card, below the comment that carries it.
+  if (item.kind === "newChange") {
+    return (
+      <NewChangeCard
+        reference={item.reference}
+        comment={item.comment}
+        comments={props.comments}
       />
     );
   }

@@ -1,12 +1,13 @@
 /**
  * The artifact list and the reading pane of a change workspace
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-QIZW,
- * OCW-FR-ABUR, OCW-FR-COLR, OCW-FR-RRXG).
+ * OCW-FR-ABUR, OCW-FR-COLR, OCW-FR-RRXG, OCW-FR-GCME).
  */
 import { useMemo } from "react";
 
 import type { EditorReview } from "../Editor/props";
 import type { ChangeArtifact, ChangeDetail, ChangeEditProposal, ChangeFile } from "../../types";
+import { ArtifactNav, NavLayout, useCollapsedList, type NavItem } from "./ArtifactNav";
 import { ArtifactView, type FileViewing } from "./ArtifactView";
 import type { ChangeSelection } from "./ChangeDiscussion";
 import {
@@ -77,50 +78,35 @@ export function ChangeBody({
     onOpenFile,
   };
 
+  // OCW-FR-GCME: the list collapses to a menu where the pane would be narrow.
+  const { collapsed, ref: bodyRef } = useCollapsedList();
+  // OCW-FR-QIZW / OCW-FR-RRXG: the artifacts of the schema, in order, with
+  // their states and the count of the undecided hunks each holds.
+  const items: NavItem[] = detail.artifacts.map((a) => ({
+    id: a.id,
+    detail: STATUS_LABEL[a.status],
+    status: a.status,
+    undecided: counts.get(a.id) ?? 0,
+  }));
+
   return (
-    <div className="openspec-change__body">
-      {/* OCW-FR-QIZW: the artifacts of the schema, in order, with their states. */}
-      <nav className="openspec-change__list" aria-label="Artifacts">
-        {detail.artifacts.map((a) => {
-          const undecided = counts.get(a.id) ?? 0;
-          return (
-            <button
-              key={a.id}
-              type="button"
-              className="openspec-change__item"
-              aria-current={a.id === shown ? "true" : undefined}
-              data-testid="openspec-artifact"
-              onClick={() => onChoose(a.id)}
-            >
-              <span className="openspec-change__item-id">{a.id}</span>
-              {/* OCW-FR-RRXG: the count of the undecided hunks it holds. */}
-              {undecided > 0 && (
-                <span
-                  className="openspec-change__item-hunks"
-                  data-testid="openspec-artifact-hunks"
-                  aria-label={`${undecided} undecided ${undecided === 1 ? "change" : "changes"}`}
-                >
-                  {undecided}
-                </span>
-              )}
-              <span className="openspec-change__item-state" data-status={a.status}>
-                {STATUS_LABEL[a.status]}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
-      <div
-        className="openspec-change__reading"
-        role="region"
-        aria-label="Reading pane"
-        tabIndex={0}
-        data-testid="openspec-reading"
+    <div className="openspec-change__body" ref={bodyRef} data-collapsed={collapsed || undefined}>
+      <NavLayout
+        collapsed={collapsed}
+        nav={<ArtifactNav items={items} shown={shown} onChoose={onChoose} collapsed={collapsed} />}
       >
-        {artifact && (
-          <ArtifactView artifact={artifact} detail={detail} files={files} viewing={viewing} />
-        )}
-      </div>
+        <div
+          className="openspec-change__reading"
+          role="region"
+          aria-label="Reading pane"
+          tabIndex={0}
+          data-testid="openspec-reading"
+        >
+          {artifact && (
+            <ArtifactView artifact={artifact} detail={detail} files={files} viewing={viewing} />
+          )}
+        </div>
+      </NavLayout>
     </div>
   );
 }

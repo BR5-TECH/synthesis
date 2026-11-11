@@ -19,6 +19,12 @@ pub(super) use pending_questions::*;
 /// CEP-FR-XXMW: the reads of a change edit proposal.
 mod change_reads;
 pub(super) use change_reads::*;
+/// AGC-FR-JNOS / AGC-FR-LTLT: the split of a change.
+mod split;
+pub(super) use split::*;
+/// AGC-FR-DKHT: a prompt proposal's hunk in a draft hunk's shape.
+mod prompt_view;
+pub(super) use prompt_view::*;
 
 // ---------------------------------------------------------------------------
 // Input builders (AGC-FR-05)
@@ -198,6 +204,10 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         | comments::Attachment::NewDraftSubject { .. } => {
             new_draft_line(attachment, &reads.new_drafts)
         }
+        comments::Attachment::NewChangeProposal { .. }
+        | comments::Attachment::NewChangeSubject { .. } => {
+            new_change_line(attachment, &reads.new_changes)
+        }
         // CMS-FR-OKDW: an export request names the document it asked the author
         // to export. Its outcome comes back as a comment of its own (DXP-FR-VFFP).
         comments::Attachment::ExportRequest { path, format, .. } => match format {
@@ -313,6 +323,8 @@ pub(super) struct AttachmentReads {
     hunks: HunkReads,
     /// AGC-FR-ZZWP: the new-draft proposals of the thread's draft, by id.
     new_drafts: NewDraftReads,
+    /// AGC-FR-LTLT: the new-change proposals of the thread's change, by id.
+    new_changes: NewChangeReads,
 }
 
 /// AGC-FR-RVQP / AGC-FR-DKHT: read every proposal the thread's `proposal`
@@ -494,29 +506,8 @@ fn attachment_reads(
             digests.insert(proposal_id.to_string(), digest);
         }
     }
-    AttachmentReads { digests, hunks, new_drafts: new_draft_reads(roots, thread) }
-}
-
-/// AGC-FR-DKHT: a prompt proposal's hunk in the shape a draft's renders from,
-/// so the two read identically in a turn's input.
-fn prompt_change_view(
-    change: crate::prompt_proposals::PromptProposalChange,
-) -> crate::draft_proposals::ProposalChange {
-    use crate::draft_proposals::hunks::HunkState as Draft;
-    use crate::prompt_proposals::HunkState as Prompt;
-    crate::draft_proposals::ProposalChange {
-        id: change.id,
-        kind: change.kind,
-        state: match change.state {
-            Prompt::Pending => Draft::Pending,
-            Prompt::Accepted => Draft::Accepted,
-            Prompt::Rejected => Draft::Rejected,
-            Prompt::Discussing => Draft::Discussing,
-            Prompt::Withdrawn => Draft::Withdrawn,
-        },
-        before: change.before,
-        after: change.after,
-    }
+    let new_changes = new_change_reads(roots, thread);
+    AttachmentReads { digests, hunks, new_drafts: new_draft_reads(roots, thread), new_changes }
 }
 
 /// AGC-FR-RVQP: one proposal's changes and how each was decided.
@@ -872,6 +863,7 @@ pub(super) fn discussion_history_with_status(
     };
     let tail: String = [
         decomposition_text(roots, &thread.target),
+        split_text(roots, &thread.target),
         open_proposal_text(roots, &thread.target),
         questions,
     ]

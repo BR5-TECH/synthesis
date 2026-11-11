@@ -22,6 +22,7 @@ use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink};
 
 pub mod change;
+pub mod change_image;
 pub mod cli;
 pub mod detection;
 pub mod reads;

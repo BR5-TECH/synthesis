@@ -244,6 +244,20 @@ pub enum Attachment {
     /// CMS-FR-KAXQ: the comment is about one new-draft proposal.
     #[serde(rename_all = "camelCase")]
     NewDraftSubject { proposal_id: String, draft_id: String },
+    /// CMS-FR-QYGP: a reference to a new OpenSpec change an agent proposed
+    /// during a split. Identity alone, appended through `append_as` alone.
+    #[serde(rename_all = "camelCase")]
+    NewChangeProposal {
+        proposal_id: String,
+        stream_id: String,
+        change: String,
+        /// The action of the update that appended it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<NewDraftUpdateAction>,
+    },
+    /// CMS-FR-MTUL: the comment is about one new-change proposal.
+    #[serde(rename_all = "camelCase")]
+    NewChangeSubject { proposal_id: String, stream_id: String, change: String },
     /// CMS-FR-OKDW: a reference to an export an agent asked the author for
     /// (`DXP-document-export.md` DXP-FR-XZVZ). Identity alone, appended
     /// through `append_as` alone; no [`AttachmentInput`] produces one.
@@ -346,6 +360,9 @@ pub enum AttachmentInput {
     /// CMS-FR-KAXQ: stored verbatim as an [`Attachment::NewDraftSubject`].
     #[serde(rename_all = "camelCase")]
     NewDraftSubject { proposal_id: String, draft_id: String },
+    /// CMS-FR-MTUL: stored verbatim as an [`Attachment::NewChangeSubject`].
+    #[serde(rename_all = "camelCase")]
+    NewChangeSubject { proposal_id: String, stream_id: String, change: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

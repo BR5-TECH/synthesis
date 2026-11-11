@@ -14,6 +14,7 @@
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
+import { SPLIT_DISCUSSION, openspecSplitInvoke } from "./mock-openspec-split";
 
 export const OPENSPEC_DEMO_CHANGE = "add-logout-3f2a";
 export const OPENSPEC_DEMO_DRAFT_ID = "d-os";
@@ -119,7 +120,9 @@ function demoDetail(location: unknown) {
         files: [
           {
             path: "design.md",
-            text: "## Context\n\nThe session store already keeps the last activity time.\n\n## Decisions\n\n1. The idle limit is a setting with a default of 30 minutes.\n2. Log out clears the session on the server first.",
+            // OCW-FR-FMDZ: one image inside the change folder that reads, one
+            // inside that refuses (not .png), one outside, and one remote.
+            text: "## Context\n\nThe session store already keeps the last activity time.\n\n![The session flow](diagram.png)\n\n![The old flow](images/flow.svg)\n\n![Outside the change](../../logo.png)\n\n![Remote image](https://example.com/flow.png)\n\n## Decisions\n\n1. The idle limit is a setting with a default of 30 minutes.\n2. Log out clears the session on the server first.",
             unreadable: false,
           },
           { path: "diagram.png", text: null, unreadable: true },
@@ -393,6 +396,8 @@ const discussions: any[] = [
     ],
   },
 ];
+// NCP / OCW-FR-BGDN: the discussion that holds the pending new-change proposal.
+discussions.push(SPLIT_DISCUSSION);
 let nextDiscussion = 2;
 
 function fire(name: string, payload: unknown) {
@@ -544,6 +549,7 @@ export function openspecDiscussionInvoke(cmd: string, a: Record<string, any>): u
       return { proposal: proposalRecord(), committed: committedOnce, resolved: true, originKind: "change_discussion" };
     }
     default:
-      return NOT_HANDLED;
+      // CVH, CST, and NCP: the History, the statistics, and the split.
+      return openspecSplitInvoke(cmd, a);
   }
 }

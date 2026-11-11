@@ -71,6 +71,7 @@ where
     announce(app, &settled, ChangeProposalCause::Reconciled);
     if journal.resolves {
         commit_close(app, store, Some(&site), proposal_id);
+        record_close_statistics(app, store, proposal_id);
     }
     Ok(())
 }

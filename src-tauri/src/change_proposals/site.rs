@@ -91,6 +91,11 @@ impl<R: tauri::Runtime> SiteResolver for AppSites<'_, R> {
         if !comments::is_change_owner(stream_id, change) {
             return Err(ERR_CHANGE_NOT_FOUND.to_string());
         }
+        // A test gives its streams to the lookup, not to the application.
+        #[cfg(test)]
+        if let Ok((_, site)) = change_site_now(stream_id, change) {
+            return Ok(site);
+        }
         let location =
             crate::openspec::change::ChangeLocation::Stream { stream_id: stream_id.to_string() };
         let working_copy =

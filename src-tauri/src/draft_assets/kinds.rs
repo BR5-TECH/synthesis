@@ -119,6 +119,12 @@ pub(super) fn kind_of(media_type: &str) -> Option<&'static ImageKind> {
 }
 
 /// The kind this filename extension names, if this module stores it.
+/// AGC-FR-WMIY: the media type of an image file by its extension, from the
+/// table of DAS-FR-03, for a caller outside this module.
+pub fn image_media_type_for_extension(extension: &str) -> Option<&'static str> {
+    kind_of_extension(extension).map(|k| k.media_type)
+}
+
 pub(super) fn kind_of_extension(extension: &str) -> Option<&'static ImageKind> {
     let lower = extension.to_ascii_lowercase();
     IMAGE_KINDS.iter().find(|k| k.extension == lower)

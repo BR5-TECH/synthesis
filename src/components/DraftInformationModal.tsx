@@ -228,8 +228,11 @@ function Figure({
   );
 }
 
-/** One labelled row of the body. Nothing in it is a control (DFI-FR-LTJA). */
-function Row({
+/**
+ * One labelled row of the body. Nothing in it is a control (DFI-FR-LTJA).
+ * The change Information modal draws its rows with it too (OCW-FR-ZZCS).
+ */
+export function Row({
   label,
   measure,
   format,

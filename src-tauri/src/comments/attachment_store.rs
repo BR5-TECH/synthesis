@@ -115,6 +115,17 @@ pub(super) fn stage_attachment(
                 bytes: None,
             })
         }
+        // CMS-FR-MTUL: recorded verbatim; every part names something, and the
+        // stream and the change name a valid change owner.
+        AttachmentInput::NewChangeSubject { proposal_id, stream_id, change } => {
+            if proposal_id.trim().is_empty() || !is_change_owner(&stream_id, &change) {
+                return Err(ERR_MALFORMED_ATTACHMENT.to_string());
+            }
+            Ok(StagedAttachment {
+                attachment: Attachment::NewChangeSubject { proposal_id, stream_id, change },
+                bytes: None,
+            })
+        }
         // CMS-FR-KAXQ: recorded verbatim; both ids must name something.
         AttachmentInput::NewDraftSubject { proposal_id, draft_id } => {
             if proposal_id.trim().is_empty() || draft_id.trim().is_empty() {

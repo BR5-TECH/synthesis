@@ -2,7 +2,7 @@
  * The selected artifact of a change, in the reading pane
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-QIZW,
  * OCW-FR-NOTT, OCW-FR-OUXA, OCW-FR-WXFK, OCW-FR-UOKM, OCW-FR-ABUR,
- * OCW-FR-COLR, OCW-FR-RRXG).
+ * OCW-FR-COLR, OCW-FR-RRXG, OCW-FR-FMDZ).
  *
  * Each file offers Rich and Source. Rich is the Markdown rendering, or the
  * deltas for `specs`. Source is the text as stored, with the hunks of the
@@ -10,11 +10,11 @@
  */
 import type { ReactNode } from "react";
 
-import { DocumentMarkdown } from "../DocumentViewer/DocumentMarkdown";
 import type { EditorReview } from "../Editor/props";
 import type { ChangeArtifact, ChangeDetail, ChangeFile } from "../../types";
 import type { ChangeSelection } from "./ChangeDiscussion";
 import type { FileMode, ShownFile } from "./changeFiles";
+import { ChangeImages, ChangeMarkdown, type ChangeImageSource } from "./ChangeMarkdown";
 import { DeltaList, capabilityFile } from "./Deltas";
 import { SourceView } from "./SourceView";
 
@@ -76,7 +76,15 @@ function sourceOf(file: ShownFile, viewing: FileViewing): ReactNode {
   );
 }
 
-function FileArticle({ file, viewing }: { file: ShownFile; viewing: FileViewing }) {
+function FileArticle({
+  file,
+  viewing,
+  source,
+}: {
+  file: ShownFile;
+  viewing: FileViewing;
+  source?: ChangeImageSource;
+}) {
   const unreadable = file.unreadable || file.text === null;
   const mode = viewing.modeOf(file);
   return (
@@ -110,7 +118,7 @@ function FileArticle({ file, viewing }: { file: ShownFile; viewing: FileViewing 
         sourceOf(file, viewing)
       ) : (
         <div className="doc openspec-file__text">
-          <DocumentMarkdown text={file.text ?? ""} />
+          <ChangeMarkdown text={file.text ?? ""} path={file.path} source={source} />
         </div>
       )}
     </article>
@@ -129,6 +137,11 @@ export function ArtifactView({
   files: ShownFile[];
   viewing: FileViewing;
 }) {
+  // OCW-FR-FMDZ: images read from the working copy of a stream location.
+  const source: ChangeImageSource | undefined =
+    detail.location.kind === "stream"
+      ? { streamId: detail.location.streamId, change: detail.name }
+      : undefined;
   if (artifact.id === SPECS_ARTIFACT && (detail.deltas.length > 0 || files.length > 0)) {
     const byPath = new Map(files.map((f) => [f.path, f]));
     const covered = new Set(detail.deltas.map((d) => capabilityFile(d.capability)));
@@ -136,7 +149,7 @@ export function ArtifactView({
     // after the groups as a file of its own.
     const rest = files.filter((f) => !covered.has(f.path) && !f.unreadable && f.text !== null);
     return (
-      <>
+      <ChangeImages dir={SPECS_ARTIFACT} source={source}>
         <DeltaList
           deltas={detail.deltas}
           files={artifact.files}
@@ -153,9 +166,9 @@ export function ArtifactView({
           }}
         />
         {rest.map((file) => (
-          <FileArticle key={file.path} file={file} viewing={viewing} />
+          <FileArticle key={file.path} file={file} viewing={viewing} source={source} />
         ))}
-      </>
+      </ChangeImages>
     );
   }
   if (files.length === 0) {
@@ -168,7 +181,7 @@ export function ArtifactView({
   return (
     <>
       {files.map((file) => (
-        <FileArticle key={file.path} file={file} viewing={viewing} />
+        <FileArticle key={file.path} file={file} viewing={viewing} source={source} />
       ))}
     </>
   );

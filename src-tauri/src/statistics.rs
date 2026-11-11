@@ -267,7 +267,7 @@ pub fn delete_draft_statistics(root: &fsa::RootFs, draft_id: &str) -> Result<(),
 /// events still coming are the ones a reader is waiting on.
 const QUEUE_BOUND: usize = 1024;
 
-type Task = Box<dyn FnOnce() + Send + 'static>;
+pub(crate) type Task = Box<dyn FnOnce() + Send + 'static>;
 
 /// This module's own writer: one thread, one bounded queue.
 ///
@@ -330,7 +330,7 @@ fn ensure_thread() {
 
 /// Hand a batch to the writer and return. Reports how many batches the bound has
 /// dropped so far, so the caller can name them in a `WARN`.
-fn enqueue(task: Task) -> u64 {
+pub(crate) fn enqueue(task: Task) -> u64 {
     ensure_thread();
     let writer = writer();
     let mut queue = writer.queue.lock().unwrap_or_else(|e| e.into_inner());

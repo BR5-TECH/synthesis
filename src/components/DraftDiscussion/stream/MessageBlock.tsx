@@ -194,7 +194,10 @@ export function MessageBlock({
                 a.kind !== "changeProposal" &&
                 // DCR-FR-RDLK: the new-draft card is an item of its own.
                 a.kind !== "newDraftProposal" &&
-                a.kind !== "newDraftSubject",
+                a.kind !== "newDraftSubject" &&
+                // OCW-FR-BGDN: and so is the new-change card.
+                a.kind !== "newChangeProposal" &&
+                a.kind !== "newChangeSubject",
             )}
           />
           {/* CTA-FR-RFQB: the saved activity row follows its comment. */}

@@ -31,6 +31,7 @@ export * from "./library";
 export * from "./modelDowngrades";
 export * from "./openspec";
 export * from "./changeProposals";
+export * from "./changeHistory";
 export * from "./panels";
 export * from "./project";
 export * from "./streams";

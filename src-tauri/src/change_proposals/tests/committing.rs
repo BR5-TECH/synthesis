@@ -137,3 +137,89 @@ fn the_next_close_commits_what_an_earlier_proposal_owes() {
     );
     assert!(!f.reread(&first.id).commit_owed);
 }
+
+// CEP-FR-QVLO / CST-FR-OXGK: a proposal that closes contributes one
+// `proposal_decision` event to the change's statistics, and a decision that
+// leaves it open contributes none.
+#[test]
+fn a_close_records_one_decision_in_the_change_statistics() {
+    use tauri::Manager;
+    let f = Fixture::new();
+    f.app.manage(crate::project::ProjectState::default());
+    f.app.state::<crate::project::ProjectState>().set_root(f.store.path().to_path_buf());
+    let record = f.pending();
+    f.accept(&record.id, &row_id(&record, "tasks.md")).expect("accepted");
+    crate::statistics::wait_for_writer();
+    let read = |f: &Fixture| {
+        crate::change_statistics::read_change_statistics_impl(&f.store, STREAM, CHANGE, Ok(0))
+            .expect("stats")
+    };
+    assert_eq!(read(&f).accepted_proposals.value, None, "still open");
+    f.reject(&record.id, &row_id(&record, "specs/auth/spec.md")).expect("rejected");
+    crate::statistics::wait_for_writer();
+    let stats = read(&f);
+    assert_eq!(stats.accepted_proposals.value, Some(1));
+    assert_eq!(stats.rejected_proposals.value, Some(0));
+    assert_eq!(decision_lines(&f), 1, "one raw `proposal_decision` line");
+}
+
+/// The raw `proposal_decision` lines of the change's statistics log.
+fn decision_lines(f: &Fixture) -> usize {
+    let log = f.store.path().join(format!("changes/{STREAM}/{CHANGE}/statistics.jsonl"));
+    std::fs::read_to_string(log)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| line.contains("\"type\":\"proposal_decision\""))
+        .count()
+}
+
+// CEP-FR-QVLO / CST-FR-OXGK / CEP-FR-OPGW: an acceptance that closes the
+// proposal and is settled forward by the reconcile records one
+// `proposal_decision` line, and a second reconcile records none.
+#[test]
+fn a_reconciled_close_records_one_decision() {
+    use tauri::Manager;
+    let f = Fixture::new();
+    f.app.manage(crate::project::ProjectState::default());
+    f.app.state::<crate::project::ProjectState>().set_root(f.store.path().to_path_buf());
+    let record = f.pending();
+    f.reject(&record.id, &row_id(&record, "specs/auth/spec.md")).expect("rejected");
+    let tasks = row_id(&record, "tasks.md");
+    let (_, dir) = read_proposal(&f.store, &record.id).expect("record");
+    // The write landed before the interruption: the file holds the candidate.
+    let text = "## 1. Login\n\n- [ ] 1.1 Add the form\n- [ ] 1.2 Add logout\n";
+    let path = f.wc.path().join(format!("openspec/changes/{CHANGE}/tasks.md"));
+    let prior = std::fs::read(&path).expect("prior");
+    std::fs::write(&path, text).expect("candidate");
+    let journal = Journal {
+        operation_id: "op".into(),
+        proposal_id: record.id.clone(),
+        hunk_id: tasks.clone(),
+        path: "tasks.md".into(),
+        prior_sha256: Some(fs::sha256_bytes(&prior)),
+        candidate_sha256: fs::sha256_bytes(text.as_bytes()),
+        prior_state: HunkState::Pending,
+        prior_decided_at: None,
+        path_was_written: false,
+        resolves: true,
+        comment_id: "c".into(),
+        event_id: "e".into(),
+        thread_id: f.thread_id.clone(),
+        comment_body: "Accepted.".into(),
+        comment_by: human(),
+    };
+    let mut marked = f.reread(&record.id);
+    marked.row_mut(&tasks).expect("row").state = HunkState::Accepted;
+    // As the acceptance writes it: the record is settled before the file write.
+    super::super::ledger::resettle(&mut marked);
+    write_record(&f.store, &dir, &marked).expect("record");
+    f.store.write_toml_atomic(at(&dir, &record.id, JOURNAL_EXT), &journal).expect("journal");
+    {
+        let _guard = change_lock(STREAM, CHANGE);
+        reconcile_locked(&f.handle(), &f.store, &f.sites, &record.id).expect("reconciled");
+        reconcile_locked(&f.handle(), &f.store, &f.sites, &record.id).expect("again");
+    }
+    crate::statistics::wait_for_writer();
+    assert_eq!(state_of(&f.reread(&record.id), &tasks), HunkState::Accepted);
+    assert_eq!(decision_lines(&f), 1);
+}

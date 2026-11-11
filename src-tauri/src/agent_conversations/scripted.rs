@@ -477,6 +477,7 @@ impl CompletionSeam for ScriptedCompletion {
                 // CVL-FR-EZKH: a change turn has the change tools.
                 let mut with_change = base.clone();
                 with_change.push(crate::tools::propose_change_edits::NAME);
+                with_change.push(crate::tools::propose_new_change::NAME);
                 with_change.push(crate::tools::decide_change_edits::NAME);
                 [base, with_draft, with_prompt, with_change]
             })

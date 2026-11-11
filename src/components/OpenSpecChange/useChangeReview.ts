@@ -1,7 +1,7 @@
 /**
  * The review of a change edit proposal in the change workspace
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-COLR,
- * OCW-FR-DTRX, OCW-FR-TAZJ, OCW-FR-MLXJ).
+ * OCW-FR-DTRX, OCW-FR-TAZJ, OCW-FR-MLXJ, OCW-FR-EJGH).
  *
  * The review is the shared one (`../DraftDiscussion/useProposalReview.tsx`):
  * the same decorations, chip, hunk edits, and focus. What is the change's own
@@ -15,6 +15,7 @@ import * as api from "../../api";
 import { onChangeEditProposalsChanged } from "../../events";
 import { logInfo, logWarn } from "../../logging";
 import { changeHunkCandidateBuffers } from "../../state/candidateBuffers";
+import { rereadHunks } from "../../state/proposalHunks";
 import {
   asReviewable,
   changeReviewKey,
@@ -31,6 +32,7 @@ import {
 import type { EditorReview } from "../Editor/props";
 import {
   CHANGE_PROPOSAL_ERRORS,
+  isUndecided,
   type ChangeDecisionOutcome,
   type ChangeEditProposal,
   type ProjectAgent,
@@ -57,6 +59,13 @@ export interface ChangeReview {
   pathOf: (hunkId: string) => string | undefined;
   /** OCW-FR-DTRX: the last refusal, at its hunk. */
   refusal: HunkRefusal | null;
+  /** OCW-FR-EJGH: the count of the undecided hunks across the change. */
+  undecided: number;
+  /**
+   * OCW-FR-EJGH: Reject all. It resolves null when the decline landed, and
+   * the refusal in words when it did not.
+   */
+  rejectAll: () => Promise<string | null>;
 }
 
 export function useChangeReview(input: {
@@ -248,5 +257,35 @@ export function useChangeReview(input: {
     [pending],
   );
 
-  return { pending, review, pathOf, refusal };
+  const undecided = useMemo(
+    () => (pending ? pending.hunks.filter((h) => isUndecided(h.state)).length : 0),
+    [pending],
+  );
+
+  /**
+   * OCW-FR-EJGH: decline the pending proposal, after the bar's confirmation.
+   * A decline that lands settles as every decision does, so the tab reads the
+   * change and the proposals again.
+   */
+  const rejectAll = useCallback(async (): Promise<string | null> => {
+    if (!pending) return null;
+    try {
+      const outcome = await api.declineChangeEditProposal(pending.id);
+      settle(outcome, "declined");
+      rereadHunks(pending.id, "change");
+      return null;
+    } catch (error) {
+      const code = refusalCode(error);
+      logWarn(["frontend"], "Reject all of a change edit proposal was refused", {
+        streamId,
+        proposalId: pending.id,
+        code,
+      });
+      return code.includes(CHANGE_PROPOSAL_ERRORS.streamBusy)
+        ? streamBusyMessage(streamId)
+        : changeDecisionMessage(code);
+    }
+  }, [pending, settle, streamId]);
+
+  return { pending, review, pathOf, refusal, undecided, rejectAll };
 }

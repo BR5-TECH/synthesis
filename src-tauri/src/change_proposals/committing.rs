@@ -113,3 +113,29 @@ where
         }
     }
 }
+
+/// CEP-FR-QVLO: a proposal that closed contributes one `proposal_decision`
+/// event to its change's statistics, after the closing decision committed.
+/// A proposal that is still pending contributes none.
+pub(super) fn record_close_statistics<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &fs::RootFs,
+    proposal_id: &str,
+) where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let Ok((record, _)) = read_proposal(store, proposal_id) else {
+        return;
+    };
+    let decision = match record.state {
+        ChangeProposalState::Pending => return,
+        ChangeProposalState::Accepted => crate::statistics::Decision::Accepted,
+        ChangeProposalState::Rejected => crate::statistics::Decision::Rejected,
+    };
+    crate::change_statistics::record_change_statistics_event(
+        app,
+        &record.stream_id,
+        &record.change,
+        crate::statistics::EventBody::ProposalDecision { proposal_id: record.id.clone(), decision },
+    );
+}

@@ -28,7 +28,7 @@ const CLASSIFIER_INSTRUCTIONS_CHARS: usize = 2_000;
 
 /// CVL-FR-HNGB: the tools an advisor turn does not carry — the tools that end a
 /// turn on a contribution, and the tools that decide a proposal.
-pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 10] = [
+pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 11] = [
     crate::tools::ask_user_comment::NAME,
     crate::tools::request_document_export::NAME,
     crate::tools::ask_discussion_questions::NAME,
@@ -39,6 +39,7 @@ pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 10] = [
     crate::tools::decide_prompt_changes::NAME,
     crate::tools::propose_change_edits::NAME,
     crate::tools::decide_change_edits::NAME,
+    crate::tools::propose_new_change::NAME,
 ];
 
 static NEXT_GROUP: AtomicU64 = AtomicU64::new(1);
@@ -718,6 +719,7 @@ pub(super) fn capture_contributions(
             } else if name == crate::tools::propose_draft_changes::NAME
                 || name == crate::tools::propose_prompt_changes::NAME
                 || name == crate::tools::propose_change_edits::NAME
+                || name == crate::tools::propose_new_change::NAME
             {
                 (Arc::clone(proposed), false)
             } else {

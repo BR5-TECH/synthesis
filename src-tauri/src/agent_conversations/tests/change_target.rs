@@ -137,7 +137,7 @@ fn the_document_language_reads_the_proposal_or_the_fragment_file() {
     assert!(part.expect("text").starts_with("## 1. Login"));
 }
 
-// AGC-FR-05 / CVL-FR-FGGI / CVL-FR-EZKH / CVL-FR-06: a whole-change turn is
+// AGC-FR-05 / CVL-FR-FGGI / CVL-FR-EZKH / CVL-FR-PEFM / CVL-FR-06: a whole-change turn is
 // answered under `discuss-change.md`, carries the change tools and
 // `ask_discussion_questions`, no other proposal tool, and its prompt names the
 // tags its builder emits.
@@ -154,6 +154,7 @@ fn a_whole_change_turn_uses_the_change_prompt_and_tools() {
     let tools: Vec<String> = request.tools.iter().map(|t| t.name.to_string()).collect();
     for name in [
         crate::tools::propose_change_edits::NAME,
+        crate::tools::propose_new_change::NAME,
         crate::tools::decide_change_edits::NAME,
         crate::tools::ask_discussion_questions::NAME,
         crate::tools::ask_user_comment::NAME,
@@ -195,6 +196,8 @@ fn a_change_fragment_turn_uses_the_comment_prompt() {
     let request = first_request(&h, &thread);
     let tools: Vec<String> = request.tools.iter().map(|t| t.name.to_string()).collect();
     assert!(tools.iter().any(|t| t == crate::tools::propose_change_edits::NAME));
+    // CVL-FR-PEFM: a fragment turn on a change has the split tool too.
+    assert!(tools.iter().any(|t| t == crate::tools::propose_new_change::NAME));
     assert!(!tools.iter().any(|t| t == crate::tools::ask_discussion_questions::NAME));
     assert!(COMMENT_PROMPT_TEMPLATE.contains("<openspec_change>"));
 }
@@ -234,4 +237,162 @@ fn a_group_on_a_change_proposes_with_the_change_tool() {
         source.contains("|| name == crate::tools::propose_change_edits::NAME"),
         "a call of `propose_change_edits` counts as the turn's proposal"
     );
+}
+
+// AGC-FR-35 / AGC-FR-WMIY / AGC-FR-DLZE: the change section carries an image
+// that a file references inside the change folder as image content after its
+// reference; a reference out of the folder, a URL, and a missing file are
+// metadata alone.
+#[test]
+fn the_change_section_carries_the_images_its_files_reference() {
+    let h = Harness::new(vec![]);
+    let wc = working_copy("ct-img");
+    let base = wc.path().join(format!("openspec/changes/{CHANGE}"));
+    std::fs::create_dir_all(base.join("images")).expect("dir");
+    std::fs::write(base.join("images/flow.png"), [0x89, b'P', b'N', b'G']).expect("png");
+    std::fs::write(wc.path().join("outside.png"), [0x89, b'P']).expect("outside");
+    std::fs::write(
+        base.join("design.md"),
+        "Flow:\n\n![flow](images/flow.png)\n\n![out](../../../outside.png) ![web](https://x.test/a.png) ![gone](images/none.png)\n",
+    )
+    .expect("design");
+    let thread = open(&h, "ct-img", None);
+    let input = build_input(
+        Roots::same(&h.root()),
+        &ConversationOrigin::of(&thread),
+        &thread.comments[0].id,
+    );
+    let parts = &input[0].parts;
+    let images: Vec<&InputImage> = parts
+        .iter()
+        .filter_map(|p| match p {
+            InputPart::Image(image) => Some(image),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(images.len(), 1, "one image resolves inside the change folder");
+    assert_eq!(images[0].media_type, "image/png");
+    assert!(
+        images[0].context.contains("design.md") && images[0].context.contains("images/flow.png")
+    );
+    let text: String = parts
+        .iter()
+        .filter_map(|p| match p {
+            InputPart::Text(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    let flow_ref = text.find("![flow](images/flow.png)").expect("reference kept");
+    assert!(text.contains("[image: design.md: ![out](../../../outside.png), not resolved]"));
+    assert!(text.contains("![web](https://x.test/a.png), not resolved]"));
+    assert!(text.contains("![gone](images/none.png), not resolved]"));
+    assert!(flow_ref < text.find("[image: design.md: ![out]").unwrap());
+}
+
+// AGC-FR-DLZE: a file left out under the bound contributes no image.
+#[test]
+fn a_file_too_large_contributes_no_image() {
+    let h = Harness::new(vec![]);
+    let wc = working_copy("ct-big");
+    let base = wc.path().join(format!("openspec/changes/{CHANGE}"));
+    std::fs::write(base.join("flow.png"), [0x89, b'P', b'N', b'G']).expect("png");
+    std::fs::write(base.join("design.md"), format!("![flow](flow.png)\n{}", "x".repeat(400)))
+        .expect("design");
+    let thread = open(&h, "ct-big", None);
+    let tiny = DocumentBudget { window: 100, percent: 1 };
+    let input = build_input_within(
+        Roots::same(&h.root()),
+        &ConversationOrigin::of(&thread),
+        &thread.comments[0].id,
+        &tiny,
+    );
+    assert!(!input.sections[0].parts.iter().any(|p| matches!(p, InputPart::Image(_))));
+}
+
+// AGC-FR-JNOS / AGC-FR-LTLT: the history of a change turn ends with the split,
+// and the proposal's comment names the proposed change and its state.
+#[test]
+fn the_history_of_a_change_turn_ends_with_the_split() {
+    let h = Harness::new(vec![]);
+    let wc = working_copy("ct-split");
+    let thread = open(&h, "ct-split", None);
+    let sites = crate::change_proposals::FixedSites {
+        sites: vec![("ct-split".into(), crate::fs::RootFs::for_root(wc.path()))],
+        busy: std::sync::Mutex::new(None),
+    };
+    let record = crate::new_change_proposals::record_new_change_proposal(
+        &h.app.handle().clone(),
+        &h.root(),
+        &sites,
+        crate::new_change_proposals::NewChange {
+            stream_id: "ct-split",
+            change: CHANGE,
+            name: "part-one",
+            files: &[crate::new_change_proposals::ProposedFile {
+                path: "proposal.md".into(),
+                text: "## Why\n\nPart one only.\n".into(),
+            }],
+            position: 1,
+            total: 2,
+            rationale: "Split. <spoken>Split.</spoken>",
+            agent: &Participant::Agent {
+                agent_id: "a".into(),
+                handle: "arch".into(),
+                model: None,
+                title: None,
+            },
+            thread_id: &thread.id,
+        },
+    )
+    .expect("recorded");
+    // The author answers after the proposal, which puts the proposal's comment
+    // in the history of the turn the answer triggers.
+    let answer = crate::comments::add_comment_with_id(
+        &h.root(),
+        open_again(&h, "ct-split", &thread.id).log_ref(),
+        &thread.id,
+        "answer-1".into(),
+        "@arch why part one?".into(),
+        &Participant::Human { login: "raver119".into(), display_name: None, email: None },
+        "2999-01-01T00:00:00Z",
+    )
+    .expect("answer");
+    let input = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&answer), "answer-1");
+    let history = input.iter().find(|s| s.tag == TAG_DISCUSSION_HISTORY).expect("history");
+    assert!(history
+        .body
+        .contains(&format!("The split {} of this change, not confirmed", record.set_id)));
+    assert!(history.body.contains("Part one only."), "the pending files are shown");
+    assert!(history
+        .body
+        .contains(&format!("[proposed a new OpenSpec change: {} — 1 of 2 — part-one", record.id)));
+}
+
+fn open_again(h: &Harness, stream: &str, id: &str) -> Discussion {
+    crate::comments::locate_discussion_of(&h.root(), &target(stream), id).expect("thread")
+}
+
+// AGC-FR-YFLJ / CST-FR-VJNQ: a change turn records its `conversation_turn`
+// into the change's statistics log and into no draft log.
+#[test]
+fn a_change_turn_records_into_the_change_statistics() {
+    let h = Harness::new(vec![Ok("ok <spoken>ok</spoken>".into())]);
+    h.app.state::<crate::project::ProjectState>().set_root(h.root.path().to_path_buf());
+    let _wc = working_copy("ct-stats");
+    let thread = open(&h, "ct-stats", None);
+    first_request(&h, &thread);
+    h.settle();
+    crate::statistics::wait_for_writer();
+    let log = h.root.path().join(format!("changes/ct-stats/{CHANGE}/statistics.jsonl"));
+    let text = std::fs::read_to_string(log).expect("change log");
+    assert!(text.contains("\"type\":\"conversation_turn\""));
+    assert!(text.contains(&thread.id));
+    assert!(!h.root.path().join("statistics").exists(), "no draft log");
+}
+
+// CVL-FR-BOFI: the change prompt says how a split is made.
+#[test]
+fn the_change_prompt_explains_the_split() {
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Splitting the change"));
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("one new change at a time"));
 }

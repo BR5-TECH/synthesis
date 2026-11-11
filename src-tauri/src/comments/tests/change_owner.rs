@@ -224,3 +224,43 @@ fn a_change_fragment_moves_like_an_artifact_fragment() {
         Some(10)
     );
 }
+
+// CMS-FR-MTUL / CMS-FR-42: a `new_change_subject` input is stored verbatim and
+// names a valid change owner; a blank or invalid one is malformed. Its wire
+// kind is `newChangeSubject`, beside `newChangeProposal` (CMS-FR-QYGP).
+#[test]
+fn a_new_change_subject_names_a_valid_change() {
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let input = |proposal: &str, change: &str| AttachmentInput::NewChangeSubject {
+        proposal_id: proposal.into(),
+        stream_id: STREAM.into(),
+        change: change.into(),
+    };
+    let opened = open_on(&root, None, vec![input("p1", CHANGE)]).expect("opened");
+    let stored = opened.comments[0].attachments[0].clone();
+    assert_eq!(
+        stored,
+        Attachment::NewChangeSubject {
+            proposal_id: "p1".into(),
+            stream_id: STREAM.into(),
+            change: CHANGE.into()
+        }
+    );
+    assert_eq!(serde_json::to_value(&stored).expect("json")["kind"], "newChangeSubject");
+    for bad in [input(" ", CHANGE), input("p1", "Not Valid")] {
+        assert_eq!(
+            open_on(&root, None, vec![bad]).map(|_| ()),
+            Err(ERR_MALFORMED_ATTACHMENT.to_string())
+        );
+    }
+    let reference = Attachment::NewChangeProposal {
+        proposal_id: "p1".into(),
+        stream_id: STREAM.into(),
+        change: CHANGE.into(),
+        update: Some(NewDraftUpdateAction::Withdraw),
+    };
+    let json = serde_json::to_value(&reference).expect("json");
+    assert_eq!(json["kind"], "newChangeProposal");
+    assert_eq!(json["update"], "withdraw");
+}

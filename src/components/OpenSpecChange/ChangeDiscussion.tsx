@@ -44,9 +44,9 @@ import {
 import {
   DiscussionColumn,
   Splitter,
-  gridTemplate,
   useDiscussionSplit,
 } from "../DraftDiscussion";
+import { documentFraction, type SplitRatio } from "../DraftDiscussion/ratio";
 import { hunkDiscussionOf, openingHunkOf } from "../DraftDiscussion/hunkDiscussion";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
 import { seededBody } from "../NewArtifactWorkspace/useHunkDiscussion";
@@ -57,6 +57,7 @@ import {
   type Discussion,
   type DiscussionTarget,
   type FragmentTarget,
+  type NewChangeProposal,
 } from "../../types";
 
 /** CMT-FR-AYSL: a range in the source of one file of the change. */
@@ -173,6 +174,42 @@ export function useChangeDiscussion(streamId: string, change: string) {
   );
 
   /**
+   * OCW-FR-BGDN: Discuss on a proposed change. A discussion about it is shown
+   * where one exists. Otherwise the composer of a new discussion opens, seeded
+   * with the proposing agent's tag, whose opening comment carries one
+   * `new_change_subject` (CMS-FR-MTUL).
+   */
+  const discussNewChange = useCallback(
+    (proposal: NewChangeProposal) => {
+      const existing = columnDiscussions.find((d) =>
+        (d.comments[0]?.attachments ?? []).some(
+          (a) => a.kind === "newChangeSubject" && a.proposalId === proposal.id,
+        ),
+      );
+      if (existing) {
+        setHunkOpening(null);
+        setFocusedThreadId(existing.id);
+        setFocusSignal((n) => n + 1);
+        return;
+      }
+      const handle = proposal.agent.kind === "agent" ? proposal.agent.handle : "";
+      setComposerBody(targetKey, seededBody(handle, getDiscussionSession(targetKey).body));
+      setOpeningFragment(null);
+      setHunkOpening({
+        reference: { kind: "newChangeSubject", proposalId: proposal.id, streamId, change },
+        position: proposal.position,
+        total: proposal.total,
+      });
+      setFocusSignal((n) => n + 1);
+      logInfo(["frontend"], "a discussion of a proposed change is being opened", {
+        streamId,
+        proposalId: proposal.id,
+      });
+    },
+    [streamId, change, targetKey, columnDiscussions],
+  );
+
+  /**
    * DCR-FR-JTXE: the discussion of a hunk exists, so an undecided hunk is held
    * for it. A rejected hunk keeps its rejection.
    */
@@ -216,11 +253,35 @@ export function useChangeDiscussion(streamId: string, change: string) {
     split,
     commentOn,
     discussHunk,
+    discussNewChange,
     holdOpenedHunk,
   };
 }
 
 export type ChangeDiscussion = ReturnType<typeof useChangeDiscussion>;
+
+/**
+ * OCW-FR-GCME: the grid of the reading pane, the splitter, and the discussion
+ * column. The two columns keep the author's proportion where the width allows
+ * it. Where it does not, the discussion column gives up width first, down to
+ * its minimum of 280 px, and the document column keeps the width of the
+ * artifact list and a reading pane of 360 px until only that minimum is left
+ * for the discussion. While the History rail is open, the document column
+ * also keeps the width of the rail (`data-history`). The two minimums are custom properties of
+ * `openspec-change.css`.
+ *
+ * Each flex factor is a percentage, so it is never less than 1. Where one
+ * column stops at its minimum, the grid gives the other column the free
+ * space times its factor, and a factor less than 1 leaves a part of the width
+ * empty.
+ */
+export function changeGridTemplate(ratio: SplitRatio): string {
+  const doc = Math.round(documentFraction(ratio) * 10000) / 100;
+  const discussion = Math.round((100 - doc) * 100) / 100;
+  const docMin =
+    "min(var(--ocw-doc-min), calc(100% - var(--ocw-discussion-min) - var(--dds-splitter-w)))";
+  return `minmax(${docMin}, ${doc}fr) var(--dds-splitter-w) minmax(var(--ocw-discussion-min), ${discussion}fr)`;
+}
 
 /**
  * DDS-FR-POJC / OCW-FR-TRLG: the reading pane as the document column, the
@@ -230,12 +291,15 @@ export function ChangeDiscussionSplit({
   discussion,
   change,
   pending,
+  historyOpen,
   onFocusFragment,
   children,
 }: {
   discussion: ChangeDiscussion;
   change: string;
   pending: ChangeEditProposal | undefined;
+  /** OCW-FR-GCME: the History rail is open, so the document column is wider. */
+  historyOpen: boolean;
   /** CMT-FR-28: the quote of a fragment discussion was activated. */
   onFocusFragment: (fragment: FragmentTarget) => void;
   children: ReactNode;
@@ -247,9 +311,10 @@ export function ChangeDiscussionSplit({
       className="dds-split openspec-change__split"
       ref={split.splitRef}
       style={{
-        gridTemplateColumns: split.view.hidden ? "1fr" : gridTemplate(split.view.ratio),
+        gridTemplateColumns: split.view.hidden ? "1fr" : changeGridTemplate(split.view.ratio),
       }}
       data-discussion={split.view.hidden ? "hidden" : "shown"}
+      data-history={historyOpen ? "open" : undefined}
       data-testid="openspec-change-split"
     >
       <div className="openspec-change__doc">{children}</div>

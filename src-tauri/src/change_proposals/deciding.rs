@@ -146,6 +146,7 @@ where
     // CEP-FR-FOJW: a close with an earlier accepted hunk commits its files.
     let site = sites.site(&record.stream_id, &record.change).ok();
     let committed = commit_close(app, store, site.as_ref(), &record.id);
+    record_close_statistics(app, store, &record.id);
     let (record, _) = read_proposal(store, proposal_id)?;
     Ok(ChangeDecisionOutcome {
         proposal: record,
@@ -292,6 +293,7 @@ where
             announce(app, &settled, ChangeProposalCause::Decided);
             // CEP-FR-FOJW: the close commits the files of the accepted hunks.
             let committed = commit_close(app, store, Some(site), &record.id);
+            record_close_statistics(app, store, &record.id);
             let proposal = read_proposal(store, &record.id).map(|(r, _)| r).unwrap_or(settled);
             Ok(ChangeDecisionOutcome {
                 proposal,

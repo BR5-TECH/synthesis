@@ -11,6 +11,8 @@ export * from "./search";
 export * from "./embeddings";
 export * from "./drafts";
 export * from "./newDraftProposals";
+export * from "./newChangeProposals";
+export * from "./changeHistory";
 export * from "./publication";
 export * from "./statistics";
 export * from "./graduation";

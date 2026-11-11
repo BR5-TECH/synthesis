@@ -666,6 +666,14 @@ fn conversation_tools<R: tauri::Runtime>(
             author.clone(),
             Arc::clone(proposed),
         )));
+        // CVL-FR-PEFM: and proposes one new change of a split.
+        tools.push(erase_tool(crate::tools::propose_new_change::ProposeNewChangeTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(proposed),
+        )));
     }
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool, by the same
     // rule. Never both, none on a note, and neither ends the turn (CVL-FR-15).

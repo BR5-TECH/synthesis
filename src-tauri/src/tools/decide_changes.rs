@@ -246,6 +246,9 @@ pub struct DecisionRow {
     /// DCE contract surface: the change-relative path of a change edit hunk.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// DCE-FR-IZTA: the run a confirmed change action request started.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
 }
 
 impl DecisionRow {
@@ -263,6 +266,7 @@ impl DecisionRow {
             new_draft_state: None,
             created_draft_id: None,
             path: None,
+            run_id: None,
         }
     }
 
@@ -287,6 +291,10 @@ pub enum Outcome {
     DiscussionOpened,
     /// DDC-FR-VEKP: a `confirm` entry confirmed the decomposition.
     Confirmed,
+    /// DCE-FR-IZTA: a `confirm` entry started the run of an action request.
+    Started,
+    /// DCE-FR-IZTA: a `reject` entry declined an action request.
+    Declined,
     Refused,
 }
 
@@ -297,6 +305,8 @@ impl Outcome {
             Outcome::Rejected => "rejected",
             Outcome::DiscussionOpened => "discussion_opened",
             Outcome::Confirmed => "confirmed",
+            Outcome::Started => "started",
+            Outcome::Declined => "declined",
             Outcome::Refused => "refused",
         }
     }
@@ -692,6 +702,7 @@ fn run_entry<B: ProposalBackend>(
         new_draft_state: None,
         created_draft_id: None,
         path: None,
+        run_id: None,
     };
     let refuse = |row: &mut DecisionRow, code: RefusalCode, action: Option<Action>| {
         row.refusal = Some(EntryRefusal {
@@ -845,6 +856,8 @@ pub fn log_call_with<S: LogSink + Clone + Send + 'static>(
                 Outcome::Rejected,
                 Outcome::DiscussionOpened,
                 Outcome::Confirmed,
+                Outcome::Started,
+                Outcome::Declined,
                 Outcome::Refused,
             ] {
                 fields.insert(outcome.as_str().to_string(), serde_json::json!(count(outcome)));

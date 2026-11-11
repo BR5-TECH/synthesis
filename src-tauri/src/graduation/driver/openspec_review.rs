@@ -1,5 +1,5 @@
-//! The review stage of a propose run (`GRL-graduation-loop.md` GRL-FR-CDNI,
-//! GRL-FR-HSZD, GRL-FR-KDYL).
+//! The review stage of an OpenSpec run (`GRL-graduation-loop.md` GRL-FR-CDNI,
+//! GRL-FR-HSZD, GRL-FR-KDYL, GRL-FR-BHGJ, GRL-FR-HSNY).
 //!
 //! Before each review turn the application validates the change in the
 //! review checkout, which is the tree a `ready` verdict commits
@@ -83,9 +83,10 @@ pub async fn validation<R: tauri::Runtime>(
     }
 }
 
-/// GRL-FR-HSZD: a `ready` verdict, or one that ends the loop as `ready` under
-/// GRL-FR-UQNV, on a change that does not validate becomes a `revise` verdict
-/// with one critical finding that names the change. `ends_as_ready` says
+/// GRL-FR-HSZD, GRL-FR-HSNY: a `ready` verdict, or one that ends the loop as
+/// `ready` under GRL-FR-UQNV, of a propose run or a rework run on a change that
+/// does not validate becomes a `revise` verdict with one critical finding that
+/// names the change. `ends_as_ready` says
 /// whether the verdict would end the loop.
 pub fn gate_verdict(
     run: &GraduationRun,
@@ -96,7 +97,9 @@ pub fn gate_verdict(
     let (Some(data), Some(validation)) = (run.openspec.as_ref(), validation) else {
         return verdict;
     };
-    if validation.valid || !ends_as_ready {
+    // GRL-FR-EQDL: the gate of an apply run names the validation among its
+    // other causes, in one finding.
+    if run.is_change_apply() || validation.valid || !ends_as_ready {
         return verdict;
     }
     let folder = format!("openspec/changes/{}/", data.change);

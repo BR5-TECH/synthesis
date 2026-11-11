@@ -28,6 +28,12 @@ static REFUSALS_SOURCE: &str = include_str!("../../../../resources/prompts/gradu
 /// GRL-FR-GADT, GRL-FR-FYKL, GRL-FR-APHV: the two blocks of a propose run.
 static OPENSPEC_PROPOSE_SOURCE: &str =
     include_str!("../../../../resources/prompts/graduation/openspec-propose.md");
+/// GRL-FR-GADT, GRL-FR-EUSF, GRL-FR-NWSC: the two blocks of an apply run.
+static OPENSPEC_APPLY_SOURCE: &str =
+    include_str!("../../../../resources/prompts/graduation/openspec-apply.md");
+/// GRL-FR-GADT, GRL-FR-CWSA: the two blocks of a rework run.
+static OPENSPEC_REWORK_SOURCE: &str =
+    include_str!("../../../../resources/prompts/graduation/openspec-rework.md");
 
 /// GRL-FR-YIJG: a prompt file's instruction text is its content with every
 /// authoring comment removed. The files carry comments naming the requirements
@@ -46,6 +52,10 @@ pub static PR_SUMMARY_PROMPT: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(PR_SUMMARY_SOURCE));
 pub static OPENSPEC_PROPOSE: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(OPENSPEC_PROPOSE_SOURCE));
+pub static OPENSPEC_APPLY: LazyLock<String> =
+    LazyLock::new(|| crate::prompts::instruction_text(OPENSPEC_APPLY_SOURCE));
+pub static OPENSPEC_REWORK: LazyLock<String> =
+    LazyLock::new(|| crate::prompts::instruction_text(OPENSPEC_REWORK_SOURCE));
 pub static REFUSALS: LazyLock<String> =
     LazyLock::new(|| crate::prompts::instruction_text(REFUSALS_SOURCE));
 
@@ -81,36 +91,42 @@ pub fn instruction_for_run(run: &crate::graduation::GraduationRun, part: &str) -
     instruction_for(part)
 }
 
-/// The heading of the milestone block of GRL-FR-KWPT.
-/// GRL-FR-DXLU, GRL-FR-FYKL, GRL-FR-APHV: the whole instruction of a turn. A
-/// propose run's work and review turns carry their block after the standing
+/// GRL-FR-DXLU, GRL-FR-FYKL, GRL-FR-APHV, GRL-FR-EUSF, GRL-FR-NWSC,
+/// GRL-FR-CWSA: the whole instruction of a turn. The work and review turns of
+/// an OpenSpec run carry the block of their phase after the standing
 /// instruction, with the change name filled in.
 pub fn instruction_text_for_run(run: &crate::graduation::GraduationRun, part: &str) -> String {
     let base = instruction_for_run(run, part).to_string();
     let Some(data) = run.openspec.as_ref() else {
         return base;
     };
+    let (source, stem): (&str, &str) = match data.phase.as_str() {
+        crate::graduation::change_runs::PHASE_APPLY => (&OPENSPEC_APPLY, "Apply"),
+        crate::graduation::change_runs::PHASE_REWORK => (&OPENSPEC_REWORK, "Rework"),
+        _ => (&OPENSPEC_PROPOSE, "Propose"),
+    };
+    let (work, review) = (format!("{stem} work"), format!("{stem} review"));
     let key = match part {
-        super::phases::PART_WORK => "Propose work",
-        super::phases::PART_REVIEW => "Propose review",
+        super::phases::PART_WORK => &work,
+        super::phases::PART_REVIEW => &review,
         _ => return base,
     };
-    let block = propose_block(key).replace("{{ change-name }}", &data.change);
+    let block =
+        phase_block(source, key, [&work, &review]).replace("{{ change-name }}", &data.change);
     format!("{}\n\n{}\n", base.trim_end(), block)
 }
 
-/// One block of `openspec-propose.md`: the text below its `# ` heading line
-/// and up to the next one.
-fn propose_block(key: &str) -> String {
-    let text = OPENSPEC_PROPOSE.as_str();
+/// One block of an OpenSpec phase file: the text below its `## <key>` heading
+/// line and up to the heading of the other block of the file.
+fn phase_block(text: &str, key: &str, keys: [&str; 2]) -> String {
     let head = format!("## {key}\n");
     let Some(start) = text.find(&head).map(|at| at + head.len()) else {
         return String::new();
     };
     let rest = &text[start..];
-    let end = ["## Propose work\n", "## Propose review\n"]
+    let end = keys
         .iter()
-        .filter_map(|marker| rest.find(marker))
+        .filter_map(|marker| rest.find(&format!("## {marker}\n")))
         .min()
         .unwrap_or(rest.len());
     rest[..end].trim().to_string()

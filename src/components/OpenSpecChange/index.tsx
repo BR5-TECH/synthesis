@@ -19,6 +19,9 @@
  *
  * On a stream, the header also offers History (OCW-FR-RKCC) and Information
  * (OCW-FR-ZZCS), and names the changes a confirmed split made (OCW-FR-TZRT).
+ * It offers Apply and Rework… (OCW-FR-DTJD, OCW-FR-LWFQ), and a run strip
+ * under it shows the newest apply run or rework run of the change
+ * (OCW-FR-JHAB).
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -40,6 +43,12 @@ import { artifactOfPath, type FileMode } from "./changeFiles";
 import { failureStatement, readErrorCode, routesToSettings } from "./failure";
 import { ChangeInformationModal } from "./ChangeInformationModal";
 import { StreamSplitMarker, StreamSurface, type StreamReview } from "./StreamSurface";
+import { ChangeRunButtons, ChangeRunNotes, useReworkDialog } from "./ChangeRunActions";
+import { ChangeRunStrip } from "./ChangeRunStrip";
+import { ReworkDialog } from "./ReworkDialog";
+import { useChangeRuns } from "./useChangeRuns";
+import { requestChangeDiscussion } from "../../state/openspec/changeRoutes";
+import { discussionTargetKey } from "../../types";
 
 const STATUS_LABEL: Record<ChangeArtifact["status"], string> = {
   done: "done",
@@ -90,6 +99,18 @@ export function OpenSpecChangeWorkspace({
   /** OCW-FR-ZZCS: the Information modal of a stream location. */
   const [informationOpen, setInformationOpen] = useState(false);
   const informationOpener = useRef<HTMLButtonElement | null>(null);
+  const streamId = location.kind === "stream" ? location.streamId : null;
+  /** OCW-FR-DTJD through OCW-FR-SFYL: the runs of the change on this stream. */
+  const runs = useChangeRuns({ tabId, streamId, change: name });
+  const rework = useReworkDialog();
+  /** OCW-FR-FEOA / OCW-FR-SCIA: select a thread in the discussion column. */
+  const selectThread = (threadId: string) => {
+    if (streamId === null) return;
+    requestChangeDiscussion(
+      discussionTargetKey({ kind: "change", streamId, change: name }),
+      threadId,
+    );
+  };
 
   /** OCW-FR-LABL / OCW-FR-HPHM: one read, and one record of how it went. */
   const read = useCallback(async () => {
@@ -268,17 +289,27 @@ export function OpenSpecChangeWorkspace({
               >
                 Information
               </button>
+              <ChangeRunButtons
+                runs={runs}
+                notes={rework.notes}
+                onRework={() => rework.setOpen(true)}
+                reworkRef={rework.opener}
+              />
             </>
           )}
           <button
             type="button"
             className="btn btn--sm btn--ghost"
             disabled={reading}
-            onClick={() => void read()}
+            onClick={() => {
+              void read();
+              if (streamId !== null) runs.rereadProgress();
+            }}
           >
             Refresh
           </button>
         </div>
+        {location.kind === "stream" && <ChangeRunNotes runs={runs} notes={rework.notes} />}
         {/* OCW-FR-LSFO: one chip per artifact, in the build order of the schema. */}
         {detail && (
           <ul className="openspec-change__chips" aria-label="Artifact states">
@@ -312,6 +343,11 @@ export function OpenSpecChangeWorkspace({
           change={name}
           detail={detail}
           historyOpen={historyOpen}
+          strip={
+            runs.strip ? (
+              <ChangeRunStrip run={runs.strip} progress={runs.progress} onClose={runs.closeStrip} />
+            ) : null
+          }
           onDecided={readAgain}
           onFocusFragment={showFragment}
           render={(stream) => readingPane(stream)}
@@ -332,6 +368,16 @@ export function OpenSpecChangeWorkspace({
           change={name}
           returnFocus={informationOpener.current}
           onClose={() => setInformationOpen(false)}
+        />
+      )}
+      {location.kind === "stream" && rework.open && (
+        <ReworkDialog
+          streamId={location.streamId}
+          streamName={target.streamName ?? location.streamId}
+          change={name}
+          returnFocus={rework.opener.current}
+          onClose={() => rework.setOpen(false)}
+          onThread={selectThread}
         />
       )}
     </section>

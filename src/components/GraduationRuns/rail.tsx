@@ -169,6 +169,7 @@ function RailRow({
         selected ? "graduation__row graduation__row--selected" : "graduation__row"
       }
       data-archived={filed ? "true" : undefined}
+      data-run-id={run.id}
     >
       <button
         type="button"

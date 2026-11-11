@@ -1,5 +1,7 @@
 // OpenSpec mode (OSM-openspec-mode.md, contract surface)
 
+import type { Participant } from "./comments";
+
 /** PSS-FR-IMDN: the stored OpenSpec mode setting. `auto` is the unset state. */
 export type OpenSpecModeSetting = "auto" | "off";
 
@@ -94,10 +96,21 @@ export type OpenSpecChangeReadError =
   | "cli_failed"
   | "cli_output_unreadable";
 
-/** GRD-FR-LKGC: the `openspec` data of a propose run. */
+/**
+ * GRD-FR-LKGC / OCR contract (`OpenSpecRunData`): the `openspec` data of a
+ * propose run, an apply run, or a rework run.
+ */
 export interface GraduationOpenspec {
-  phase: "propose";
+  phase: "propose" | "apply" | "rework";
   change: string;
+  /** OCR-FR-TBGA: a rework run's instruction. */
+  instruction?: string | null;
+  /** OCR-FR-TBGA: a rework run's request thread. */
+  threadId?: string | null;
+  /** OCR-FR-TBGA: the participant a rework run's finish writes as. */
+  requester?: Participant | null;
+  /** OCR-FR-GWGE: the proposal a rework run's finish recorded. */
+  proposalId?: string | null;
 }
 
 /** DRS-FR-VHMB: the change a draft's propose run writes, and its stream. */

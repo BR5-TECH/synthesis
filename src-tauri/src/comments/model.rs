@@ -55,6 +55,18 @@ impl Participant {
             email: None,
         }
     }
+
+    /// CMS-FR-MKEV: the fixed agent participant the application writes as
+    /// where no agent is the author. No record is kept for it, and no agent of
+    /// the registry has its id (AGR-FR-03).
+    pub fn synthesis() -> Self {
+        Participant::Agent {
+            agent_id: SYNTHESIS_AGENT_ID.to_string(),
+            handle: SYNTHESIS_HANDLE.to_string(),
+            model: None,
+            title: Some(String::new()),
+        }
+    }
 }
 
 impl From<GithubIdentity> for Participant {
@@ -269,6 +281,18 @@ pub enum Attachment {
         /// `pdf` or `docx`: the format the agent gave.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         format: Option<String>,
+    },
+    /// CMS-FR-QVZP: a reference to a run an agent asked the author to start
+    /// on an OpenSpec change (`CAR-change-action-requests.md` CAR-FR-KZOZ).
+    /// Identity alone, appended through `append_as` alone; no
+    /// [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    ChangeActionRequest {
+        request_id: String,
+        stream_id: String,
+        change: String,
+        /// `apply` or `rework`.
+        action: String,
     },
     /// CMS-FR-TUHL: the comment is the Synthesis of an agent group
     /// (`AGC-agent-conversations.md` AGC-FR-CZCU). Holds no content, and appears

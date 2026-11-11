@@ -12,13 +12,15 @@
  * `--accent-soft` for a question, `--ok` on `--ok-soft` for a change — so the
  * chip follows the theme with everything around it (DDS-FR-RJEV).
  */
-export type StreamChipKind = "question" | "change" | "newDraft";
+export type StreamChipKind = "question" | "change" | "newDraft" | "run";
 
 const LABELS: Record<StreamChipKind, string> = {
   question: "QST",
   change: "CHG",
   // DCR-FR-LFDJ.
   newDraft: "NEW",
+  // OCW-FR-QCPB: a request that a run be started.
+  run: "RUN",
 };
 
 export function TypeChip({ kind }: { kind: StreamChipKind }) {

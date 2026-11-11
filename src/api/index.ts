@@ -30,6 +30,7 @@ export * from "./integrations";
 export * from "./library";
 export * from "./modelDowngrades";
 export * from "./openspec";
+export * from "./changeRuns";
 export * from "./changeProposals";
 export * from "./changeHistory";
 export * from "./panels";

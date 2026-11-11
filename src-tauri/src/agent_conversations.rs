@@ -674,6 +674,16 @@ fn conversation_tools<R: tauri::Runtime>(
             author.clone(),
             Arc::clone(proposed),
         )));
+        // CVL-FR-XHKB / RCA-FR-KZIJ: and asks the author to apply or rework the
+        // change. A posted request asks the author for a decision, so it ends
+        // the turn on the flag a posted question sets (CVL-FR-15).
+        tools.push(erase_tool(crate::tools::request_change_action::RequestChangeActionTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(asked),
+        )));
     }
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool, by the same
     // rule. Never both, none on a note, and neither ends the turn (CVL-FR-15).

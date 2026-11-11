@@ -5,6 +5,7 @@
 
 import type { GraduationBlocker, GraduationRun } from "../../types/graduation";
 import { MERGE_BLOCKER_SENTENCES, MERGE_BLOCKER_TAIL, mergeBlockerSentence } from "./merge";
+import { reworkBlockerSentence } from "./openspecRuns";
 
 /**
  * GRU-FR-LBPR: what each blocker code means, in the author's terms.
@@ -47,8 +48,11 @@ function blockerOf(run: GraduationRun): GraduationBlocker | null {
 export function blockerStatement(run: GraduationRun): string | null {
   const blocker = blockerOf(run);
   if (!blocker) return null;
+  // GRU-FR-NGQE: a rework run's finish says why its proposal was not recorded.
   const sentence =
-    mergeBlockerSentence(run, blocker.code) ?? blockerSentence(blocker);
+    mergeBlockerSentence(run, blocker.code) ??
+    reworkBlockerSentence(run, blocker.code) ??
+    blockerSentence(blocker);
   const attempt = blockerAttemptStatement(blocker);
   // GRU-FR-DBUS: an apply blocker says that nothing was written to either
   // branch, that no new pass is spent, and that Continue retries the apply.

@@ -28,7 +28,7 @@ const CLASSIFIER_INSTRUCTIONS_CHARS: usize = 2_000;
 
 /// CVL-FR-HNGB: the tools an advisor turn does not carry — the tools that end a
 /// turn on a contribution, and the tools that decide a proposal.
-pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 11] = [
+pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 12] = [
     crate::tools::ask_user_comment::NAME,
     crate::tools::request_document_export::NAME,
     crate::tools::ask_discussion_questions::NAME,
@@ -40,6 +40,9 @@ pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 11] = [
     crate::tools::propose_change_edits::NAME,
     crate::tools::decide_change_edits::NAME,
     crate::tools::propose_new_change::NAME,
+    // CVL-FR-HNGB / AGC-FR-UFAY: a change action request ends a turn on a
+    // contribution.
+    crate::tools::request_change_action::NAME,
 ];
 
 static NEXT_GROUP: AtomicU64 = AtomicU64::new(1);

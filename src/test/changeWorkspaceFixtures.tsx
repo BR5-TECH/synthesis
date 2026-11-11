@@ -4,7 +4,9 @@
  * change read, the discussion commands of a change owner, the commands of
  * `CEP-change-edit-proposals.md`, and those of `CVH-change-version-history.md`,
  * `CST-change-statistics.md`, and `NCP-new-change-proposals.md`. An edit of a
- * hunk answers the checksum `ck-2`.
+ * hunk answers the checksum `ck-2`. It also answers the apply progress of
+ * `OSM-openspec-mode.md`, the starts of `OCR-openspec-change-runs.md`, and the
+ * commands of `CAR-change-action-requests.md`.
  */
 import { vi, type Mock } from "vitest";
 import { render } from "@testing-library/react";
@@ -20,11 +22,17 @@ import { clearAllDiscussionSessions } from "../state/discussionSession";
 import { resetDraftDiscussions } from "../state/draftDiscussion";
 import { resetChangeProposals } from "../state/openspec/changeProposals";
 import { resetChangeDiscussionRequests } from "../state/openspec/changeRoutes";
+import { resetChangeActionRequests } from "../state/openspec/changeActionRequests";
+import { resetChangeRunQueue } from "../state/openspec/changeRunQueue";
 import { resetChangeViewsForTest } from "../state/openspec/changeView";
 import { resetNewChangeProposals } from "../state/openspec/newChangeProposals";
 import { resetProposalHunks } from "../state/proposalHunks";
 import { resetToasts } from "../state/toasts";
 import type {
+  ApplyProgress,
+  ChangeActionOutcome,
+  ChangeActionRequest,
+  ChangeReworkStart,
   ChangeDecisionOutcome,
   ChangeDetail,
   ChangeSplit,
@@ -202,6 +210,8 @@ export function changeStatistics(over: Partial<ChangeStatistics> = {}): ChangeSt
     acceptedProposals: m(2),
     rejectedProposals: m(1),
     conversationTokens: { input: m(12_345), output: m(678) },
+    runTimeMs: m(25 * 60_000),
+    runTokens: { input: m(54_321), output: m(4_321) },
     unreadableLines: 0,
     ...over,
   };
@@ -281,7 +291,48 @@ export interface ChangeBackend {
   images: Record<string, { data: string; mediaType: string }>;
   /** The paths `read_change_image` was asked for, in order. */
   imageReads: string[];
+  /** OSM-FR-PEAK: what each apply progress read answers, or a code it rejects with. */
+  applyProgress: ApplyProgress | { reject: string };
+  /** OCR: what a start answers, or a code (or an object) it rejects with. */
+  startApply: () => GraduationRun | { reject: unknown };
+  startRework: (instruction: string) => ChangeReworkStart | { reject: unknown };
+  /** CAR: the requests of the change, and what a decision answers. */
+  requests: ChangeActionRequest[];
+  decideAction: (cmd: string, args: Record<string, unknown>) => ChangeActionOutcome | { reject: unknown };
   unknown: string[];
+}
+
+/** OSM-FR-PEAK: an apply progress that admits a start. */
+export function applyProgress(over: Partial<ApplyProgress> = {}): ApplyProgress {
+  return {
+    state: "ready",
+    total: 4,
+    complete: 2,
+    nextTask: "Add the logout route",
+    missingArtifacts: [],
+    ...over,
+  };
+}
+
+/** CAR-FR-TJAD: a pending request of the change. */
+export function actionRequest(over: Partial<ChangeActionRequest> = {}): ChangeActionRequest {
+  return {
+    id: "q1",
+    streamId: STREAM_ID,
+    change: CHANGE,
+    action: "apply",
+    instruction: null,
+    rationale: "The tasks are ready.",
+    threadId: "t1",
+    commentId: "t1-c9",
+    agent: AGENT,
+    state: "pending",
+    runId: null,
+    lastRefusal: null,
+    createdAt: "2026-01-03T00:00:00Z",
+    decidedAt: null,
+    ...over,
+  };
 }
 
 export function changeBackend(over: Partial<ChangeBackend> = {}): ChangeBackend {
@@ -301,6 +352,11 @@ export function changeBackend(over: Partial<ChangeBackend> = {}): ChangeBackend 
     split: null,
     decideNew: () => ({ reject: "write_failed" }),
     confirm: () => ({ reject: "nothing_accepted" }),
+    applyProgress: applyProgress(),
+    startApply: () => ({ reject: "write_failed" }),
+    startRework: () => ({ reject: "write_failed" }),
+    requests: [],
+    decideAction: () => ({ reject: "write_failed" }),
     unknown: [],
     ...over,
   };
@@ -388,6 +444,27 @@ export function wireChangeBackend(invokeMock: Mock, b: ChangeBackend): void {
         if ("reject" in answer) throw answer.reject;
         return answer;
       }
+      case "read_apply_progress":
+        if ("reject" in b.applyProgress) throw b.applyProgress.reject;
+        return b.applyProgress;
+      case "start_change_apply": {
+        const answer = b.startApply();
+        if ("reject" in answer) throw answer.reject;
+        return answer;
+      }
+      case "start_change_rework": {
+        const answer = b.startRework(String(args.instruction ?? ""));
+        if ("reject" in answer) throw answer.reject;
+        return answer;
+      }
+      case "list_change_action_requests":
+        return b.requests;
+      case "confirm_change_action_request":
+      case "decline_change_action_request": {
+        const answer = b.decideAction(cmd, args);
+        if ("reject" in answer) throw answer.reject;
+        return answer;
+      }
       case "open_discussion": {
         const created: Discussion = {
           id: "t-new",
@@ -430,6 +507,8 @@ export function resetChangeWorkspaceStores(): void {
   resetDiscussionFocus();
   resetToasts();
   resetChangeDiscussionRequests();
+  resetChangeActionRequests();
+  resetChangeRunQueue();
   resetAgentRegistry();
   changeHunkCandidateBuffers.clear();
 }

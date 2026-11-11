@@ -70,7 +70,7 @@ fn an_acceptance_needs_a_live_stream_and_the_change_folder() {
     let f = Fixture::new();
     let record = f.pending();
     let tasks = row_id(&record, "tasks.md");
-    let gone = FixedSites { sites: Vec::new(), busy: Mutex::new(None) };
+    let gone = FixedSites { sites: Vec::new(), busy: Mutex::new(None), rework: Mutex::new(None) };
     let refused = decide(
         &f.handle(),
         &f.store,

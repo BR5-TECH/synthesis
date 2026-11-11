@@ -134,6 +134,51 @@ fn a_duplicate_line_folds_once_and_tokens_are_summed() {
     assert_eq!(stats.conversation_tokens.output.value, Some(20));
 }
 
+// CST-FR-RJPT, CST-FR-HJGG, CST-FR-CGRU: the `agent_operation` events of a
+// change run sum into the run time, and its `token_usage` events of scope
+// `graduation` into the run tokens, apart from the conversation tokens.
+#[test]
+fn run_operations_sum_into_run_time_and_run_tokens() {
+    let (_d, root) = store();
+    let operation = |id: &str, from: i64, to: i64| {
+        Pending::at(
+            at(from),
+            EventBody::AgentOperation {
+                operation_id: id.into(),
+                bucket: crate::statistics::Bucket::Authoring,
+                run_id: "g1".into(),
+                started_at: at(from),
+                ended_at: at(to),
+            },
+        )
+    };
+    let mut pending = vec![operation("op1", 0, 4_000), operation("op2", 5_000, 6_000)];
+    pending.extend(crate::statistics::usage_events(
+        &at(0),
+        UsageScope::Graduation,
+        crate::statistics::Bucket::Authoring,
+        "op1",
+        &[UsageRecord {
+            usage_id: "op1:0:0".into(),
+            round: 0,
+            attempt: 0,
+            representation: Representation::PerCall,
+            tokens: ReportedTokens {
+                input_tokens: Some(300),
+                cached_input_tokens: None,
+                uncached_input_tokens: None,
+                output_tokens: Some(40),
+            },
+        }],
+    ));
+    append_change_events(&root, STREAM, CHANGE, &pending).expect("append");
+    let stats = read(&root);
+    assert_eq!(stats.run_time_ms.value, Some(5_000));
+    assert_eq!(stats.run_tokens.input.value, Some(300));
+    assert_eq!(stats.run_tokens.output.value, Some(40));
+    assert_eq!(stats.conversation_tokens.input.availability, Availability::Unavailable);
+}
+
 // CST-FR-WPHC / CST-FR-BLIF / CST-FR-PUAN: a change with no log answers with
 // no boundary and every statistic unavailable; a refused version count is
 // unavailable; a bad name is refused.

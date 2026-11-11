@@ -62,9 +62,9 @@ pub(super) enum TurnEnd {
 }
 
 /// CVL-FR-15: whether a tool ends the turn on its call — a posted question, a
-/// recorded question set, a proposal, a new draft, a prompt change, or an
-/// export request. The artifact origins' proposal tool is never attached with
-/// the two draft tools (CVL-FR-08).
+/// recorded question set, a proposal, a new draft, a prompt change, an export
+/// request, or a change action request. The artifact origins' proposal tool is
+/// never attached with the two draft tools (CVL-FR-08).
 pub(super) fn ends_turn(name: &str) -> bool {
     [
         crate::tools::ask_user_comment::NAME,
@@ -75,6 +75,7 @@ pub(super) fn ends_turn(name: &str) -> bool {
         crate::tools::propose_change_edits::NAME,
         crate::tools::propose_new_change::NAME,
         crate::tools::request_document_export::NAME,
+        crate::tools::request_change_action::NAME,
     ]
     .contains(&name)
 }
@@ -525,6 +526,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::propose_prompt_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::request_document_export::NAME {
                 Some(crate::tools::request_document_export::ONE_AT_A_TIME)
+            } else if call.function.name == crate::tools::request_change_action::NAME {
+                // RCA-FR-ABXT: one turn records at most one request.
+                Some(crate::tools::request_change_action::ONE_AT_A_TIME)
             } else {
                 None
             };

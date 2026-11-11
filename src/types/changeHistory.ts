@@ -65,6 +65,10 @@ export interface ChangeStatistics {
   acceptedProposals: Measure;
   rejectedProposals: Measure;
   conversationTokens: TokenPair;
+  /** CST-FR-HJGG: the agent time of the apply and rework runs on the change. */
+  runTimeMs: Measure;
+  /** CST-FR-CGRU: the tokens of the apply and rework runs on the change. */
+  runTokens: TokenPair;
   unreadableLines: number;
 }
 

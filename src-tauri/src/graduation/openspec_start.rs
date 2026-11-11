@@ -46,6 +46,21 @@ fn check<R: tauri::Runtime>(
     name: &str,
     check_exists: bool,
 ) -> Result<(), String> {
+    require_mode_and_cli(app)?;
+    if !crate::openspec::change::valid_change_name(name) {
+        return Err(ERR_INVALID_CHANGE_NAME.to_string());
+    }
+    if check_exists && change_exists(app, stream, name) {
+        return Err(ERR_OPENSPEC_CHANGE_EXISTS.to_string());
+    }
+    Ok(())
+}
+
+/// GSU-FR-MTDA, OCR-FR-GTOM: OpenSpec mode is active on the active worktree,
+/// and the CLI is usable, in that order.
+pub(super) fn require_mode_and_cli<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<(), String> {
     let active = app.try_state::<ProjectState>().and_then(|state| state.require_root().ok());
     let seam = app.try_state::<crate::openspec::OpenSpec>();
     let (Some(active), Some(seam)) = (active, seam) else {
@@ -57,28 +72,18 @@ fn check<R: tauri::Runtime>(
     if !seam.cli_state_in(app, &crate::logging::BUFFER, Some(&active)).is_available() {
         return Err(ERR_OPENSPEC_CLI_UNAVAILABLE.to_string());
     }
-    if !crate::openspec::change::valid_change_name(name) {
-        return Err(ERR_INVALID_CHANGE_NAME.to_string());
-    }
-    if check_exists && change_exists(app, stream, name) {
-        return Err(ERR_OPENSPEC_CHANGE_EXISTS.to_string());
-    }
     Ok(())
 }
 
 /// GSU-FR-UIDE: the folder stands in the stream's working copy, or a
-/// non-terminal propose run of that stream names the same change.
+/// non-terminal OpenSpec run of any phase on that stream names the same
+/// change (OCR-FR-VHQW).
 fn change_exists<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream: &crate::streams::WorkStream,
     name: &str,
 ) -> bool {
-    let folder = app
-        .try_state::<crate::fs::FsAccessState>()
-        .and_then(|state| state.get())
-        .map(|access| crate::fs::RootFs::new(stream.worktree(), access))
-        .and_then(|copy| copy.file_info(copy.path().join("openspec/changes").join(name)).ok())
-        .is_some_and(|info| info.kind == crate::fs::EntryKind::Dir);
+    let folder = change_folder_stands(app, stream, name);
     let queued = queue::project_queue(app).is_some_and(|queue| {
         queue.runs.iter().any(|run| {
             run.stream_id == stream.id
@@ -89,7 +94,21 @@ fn change_exists<R: tauri::Runtime>(
     folder || queued
 }
 
+/// OCR-FR-GTOM: whether `openspec/changes/<name>/` is a folder in the stream's
+/// working copy.
+pub(super) fn change_folder_stands<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    stream: &crate::streams::WorkStream,
+    name: &str,
+) -> bool {
+    app.try_state::<crate::fs::FsAccessState>()
+        .and_then(|state| state.get())
+        .map(|access| crate::fs::RootFs::new(stream.worktree(), access))
+        .and_then(|copy| copy.file_info(copy.path().join("openspec/changes").join(name)).ok())
+        .is_some_and(|info| info.kind == crate::fs::EntryKind::Dir)
+}
+
 /// GRD-FR-LKGC: the data a propose run of `name` carries.
 pub fn propose_data(name: &str) -> RunOpenSpec {
-    RunOpenSpec { phase: PHASE_PROPOSE.to_string(), change: name.to_string() }
+    RunOpenSpec::of_phase(PHASE_PROPOSE, name)
 }

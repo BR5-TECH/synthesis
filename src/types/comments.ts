@@ -12,16 +12,9 @@ import type { AdvisorsList, SynthesisMark } from "./groupAttachments";
 
 export type { AdvisorEntry, AdvisorsList, SynthesisMark } from "./groupAttachments";
 export { PROMPT_PROPOSAL_ERRORS } from "./promptProposalErrors";
-import type {
-  ChangeProposalReference,
-  ProposalHunkReference,
-  ProposalUpdateCounts,
-} from "./proposalReferences";
-export type {
-  ChangeProposalReference,
-  ProposalHunkReference,
-  ProposalUpdateCounts,
-} from "./proposalReferences";
+import type { ChangeProposalReference, ProposalHunkReference, ProposalUpdateCounts } from "./proposalReferences";
+export type { ChangeProposalReference, ProposalHunkReference, ProposalUpdateCounts } from "./proposalReferences";
+import type { ChangeActionRequestReference } from "./changeRuns";
 
 // --- Comments (CMS-comments-storage.md / CMT-comments.md) -----------------
 
@@ -212,6 +205,8 @@ export type Attachment =
   | NewChangeSubjectReference
   /** CMS-FR-OKDW: an export an agent asked the author for. */
   | ExportRequestReference
+  /** CMS-FR-QVZP: a run an agent asked the author to start on a change. */
+  | ChangeActionRequestReference
   /** CMS-FR-TUHL: the comment is the Synthesis of an agent group. */
   | SynthesisMark
   /** CMS-FR-KVDV: the advisors of a Meta reply. */
@@ -258,6 +253,7 @@ export function attachmentName(a: Attachment): string {
   if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
   if (a.kind === "newChangeProposal" || a.kind === "newChangeSubject") return "Proposed change";
   if (a.kind === "exportRequest") return a.path;
+  if (a.kind === "changeActionRequest") return a.change;
   if (a.kind === "synthesis") return "Synthesis";
   if (a.kind === "advisors") return "Advisors";
   if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
@@ -281,6 +277,7 @@ export function isImageAttachment(a: Attachment): boolean {
     a.kind === "newChangeProposal" ||
     a.kind === "newChangeSubject" ||
     a.kind === "exportRequest" ||
+    a.kind === "changeActionRequest" ||
     a.kind === "synthesis" ||
     a.kind === "advisors"
   ) {

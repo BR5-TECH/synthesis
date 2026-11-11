@@ -113,14 +113,18 @@ impl OperationRecorder {
     }
 
     /// Close the interval and append the operation's lines to the run's source
-    /// draft (GRD-FR-NHRY).
+    /// draft (GRD-FR-NHRY), or to the log of an OpenSpec change run's change
+    /// (OCR-FR-XIBE, CST-FR-RJPT).
     pub fn finish<R: tauri::Runtime>(self, app: &tauri::AppHandle<R>, run: &GraduationRun)
     where
         tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
     {
+        // OCR-FR-XIBE / GXD-FR-CYIW: an OpenSpec change run counts against its
+        // change, and writes no line to the log of a draft.
+        let change = run.openspec.as_ref().filter(|_| run.is_change_run()).map(|d| &d.change);
         // GRD-FR-VCTH: a merge run has no source draft, so no line is written
         // for what its turns cost.
-        if run.input.draft_id.is_empty() {
+        if change.is_none() && run.input.draft_id.is_empty() {
             return;
         }
         let ended_at = now_rfc3339_millis();
@@ -138,6 +142,14 @@ impl OperationRecorder {
             &self.operation_id,
             &self.usage,
         ));
-        statistics::record_statistics_events(app, &run.input.draft_id, pending);
+        match change {
+            Some(change) => crate::change_statistics::record_change_statistics_events(
+                app,
+                &run.stream_id,
+                change,
+                pending,
+            ),
+            None => statistics::record_statistics_events(app, &run.input.draft_id, pending),
+        }
     }
 }

@@ -100,6 +100,7 @@ impl Fixture {
             sites: FixedSites {
                 sites: vec![(STREAM.to_string(), wc.clone())],
                 busy: Mutex::new(None),
+                rework: Mutex::new(None),
             },
             _wc_dir: wc_dir,
             _store_dir: store_dir,

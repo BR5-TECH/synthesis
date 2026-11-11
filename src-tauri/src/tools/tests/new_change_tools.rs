@@ -224,7 +224,7 @@ fn dce_accepts_a_new_change_and_confirms_the_split() {
     let f = Fixture::new();
     propose(&f, args("part-one")).expect("recorded");
     let record = ncp::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
-    let out = block_on(
+    let out = decide_now(
         f.decider(f.sites(), &QUIET)
             .call(decisions(&[(&record.id, "accept"), (&record.set_id, "confirm")])),
     )
@@ -254,7 +254,7 @@ fn dce_discusses_a_new_change_once() {
     let f = Fixture::new();
     propose(&f, args("part-one")).expect("recorded");
     let record = ncp::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
-    let out = block_on(f.decider(f.sites(), &QUIET).call(decisions(&[(&record.id, "discuss")])))
+    let out = decide_now(f.decider(f.sites(), &QUIET).call(decisions(&[(&record.id, "discuss")])))
         .expect("decided");
     let opened = out.decisions[0].discussion_id.clone().expect("discussion");
     let target = DiscussionTarget::Change { stream_id: STREAM.into(), change: CHANGE.into() };
@@ -267,8 +267,9 @@ fn dce_discusses_a_new_change_once() {
             change: CHANGE.into(),
         }]
     );
-    let again = block_on(f.decider(f.sites(), &QUIET).call(decisions(&[(&record.id, "discuss")])))
-        .expect("answered");
+    let again =
+        decide_now(f.decider(f.sites(), &QUIET).call(decisions(&[(&record.id, "discuss")])))
+            .expect("answered");
     assert_eq!(
         again.decisions[0].refusal.as_ref().map(|r| r.code),
         Some(RefusalCode::AlreadyInState)
@@ -285,8 +286,9 @@ fn dce_split_refusals() {
     let busy = Box::new(crate::change_proposals::FixedSites {
         sites: vec![(STREAM.into(), f.wc.clone())],
         busy: std::sync::Mutex::new(Some("run-1".into())),
+        rework: std::sync::Mutex::new(None),
     });
-    let out = block_on(f.decider(busy, &QUIET).call(decisions(&[
+    let out = decide_now(f.decider(busy, &QUIET).call(decisions(&[
         (&record.id, "accept"),
         ("not-the-split", "confirm"),
         (&record.set_id, "confirm"),
@@ -309,7 +311,7 @@ fn pnc_refuses_a_proposal_and_an_update_after_the_split_is_confirmed() {
     let f = Fixture::new();
     propose(&f, args("part-one")).expect("recorded");
     let record = ncp::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
-    block_on(
+    decide_now(
         f.decider(f.sites(), &QUIET)
             .call(decisions(&[(&record.id, "accept"), (&record.set_id, "confirm")])),
     )
@@ -347,4 +349,10 @@ fn pnc_refuses_a_proposal_in_a_resolved_discussion() {
     let refused = propose(&f, args("part-one")).unwrap_err();
     assert!(matches!(refused, ToolRefusal::ProposalConversationResolved), "{refused:?}");
     assert!(ncp::list_proposals_impl(&f.store(), STREAM, CHANGE).is_empty());
+}
+
+/// A call of `decide_change_edits`, which runs its decisions on a blocking
+/// thread (CAR-FR-AQHX), so it needs an executor and not one poll.
+fn decide_now<F: std::future::Future>(future: F) -> F::Output {
+    tauri::async_runtime::block_on(future)
 }

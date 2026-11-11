@@ -383,11 +383,14 @@ pub(super) fn commit_stopped_turn<R: tauri::Runtime>(
     }
     let mut committed = None;
     // A merge run commits nothing at all: what its turn wrote stays in the merge
-    // worktree the run owns, and Continue resumes from it (GRD-FR-KZPT).
-    if let Some(base) = run.base_commit.clone().filter(|_| pinned && !run.is_merge()) {
+    // worktree the run owns, and Continue resumes from it (GRD-FR-KZPT). A
+    // rework run does the same in its rework worktree (OCR-FR-HFLI).
+    let owns_worktree = run.is_merge() || run.is_change_rework();
+    if let Some(base) = run.base_commit.clone().filter(|_| pinned && !owns_worktree) {
+        // OCR-FR-IWOW: an apply run has no draft, so its title names it.
         let message = format!(
             "{ABANDONED_TITLE}\n\nThis turn of \"{}\" stopped before it was reviewed.",
-            run.input.draft_name
+            run.listing_name()
         );
         match commit::commit_run_work(worktree, &base, &message) {
             Ok(Some(made)) => {
@@ -800,10 +803,15 @@ pub(super) fn compose_instruction(verdict: &ReviewVerdict) -> String {
 /// GRD-FR-PQMX: the message of the commit a `ready` verdict makes, and the
 /// message an abandoned-turn commit is rewritten to (GRD-FR-WQTN).
 ///
-/// A direct run commits under its own name alone. Every other run commits
-/// under the first line of its prompt, with the draft named in the body.
+/// A direct run commits under its own name alone, and an apply run under the
+/// message of OCR-FR-UZNC. Every other run commits under the first line of its
+/// prompt, with the draft named in the body.
 pub(super) fn graduation_message(run: &GraduationRun) -> String {
     const FALLBACK: &str = "Graduation run";
+    // OCR-FR-UZNC: one line, with no body.
+    if let Some(data) = run.openspec.as_ref().filter(|_| run.is_change_apply()) {
+        return format!("Apply OpenSpec change {}", data.change);
+    }
     if run.is_direct() {
         // A control character, a line break above all, would open a body.
         let name: String =

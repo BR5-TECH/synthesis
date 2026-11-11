@@ -658,7 +658,8 @@ pub struct GraduationRun {
     /// PR summary run alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_summary: Option<PrSummaryData>,
-    /// GRD-FR-LKGC: the phase and the change of a propose run alone.
+    /// GRD-FR-LKGC, GRD-FR-KZBS: the phase and the change of a propose run
+    /// and of an OpenSpec change run (`OCR-openspec-change-runs.md`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openspec: Option<RunOpenSpec>,
     /// GRD-FR-UUGP: the run summary of the `ready` review a completed draft run
@@ -942,13 +943,6 @@ pub struct GraduationQueue {
     pub project_key: String,
     /// Every run the project has made, in the project's run order.
     pub runs: Vec<GraduationRun>,
-}
-
-/// GRD-FR-LKGC: what a propose run records about the change it writes.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RunOpenSpec {
-    pub phase: String,
-    pub change: String,
 }
 
 /// DRS-FR-VHMB: the change a draft's propose run writes, and its stream.

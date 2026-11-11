@@ -78,6 +78,10 @@ pub trait SiteResolver {
     /// CEP-FR-ESQR: the id of a run of the stream that is `working` or
     /// `reviewing`, if one stands.
     fn busy_run(&self, stream_id: &str) -> Option<String>;
+
+    /// CEP-FR-OIZT: the id of a rework run of the change that is not
+    /// terminal, if one stands (`OCR-openspec-change-runs.md` OCR-FR-OXVH).
+    fn rework_run(&self, stream_id: &str, change: &str) -> Option<String>;
 }
 
 /// The resolver of the running application: the stream registry and the run
@@ -117,6 +121,10 @@ impl<R: tauri::Runtime> SiteResolver for AppSites<'_, R> {
     fn busy_run(&self, stream_id: &str) -> Option<String> {
         crate::graduation::agent_work_run_on_stream(self.app, stream_id)
     }
+
+    fn rework_run(&self, stream_id: &str, change: &str) -> Option<String> {
+        crate::graduation::rework_run_on_change(self.app, stream_id, change)
+    }
 }
 
 /// A resolver over fixed working copies, for a test.
@@ -124,6 +132,8 @@ impl<R: tauri::Runtime> SiteResolver for AppSites<'_, R> {
 pub struct FixedSites {
     pub sites: Vec<(String, fs::RootFs)>,
     pub busy: std::sync::Mutex<Option<String>>,
+    /// CEP-FR-OIZT: the rework run a test says is not terminal.
+    pub rework: std::sync::Mutex<Option<String>>,
 }
 
 #[cfg(test)]
@@ -147,6 +157,10 @@ impl SiteResolver for FixedSites {
 
     fn busy_run(&self, _stream_id: &str) -> Option<String> {
         self.busy.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn rework_run(&self, _stream_id: &str, _change: &str) -> Option<String> {
+        self.rework.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 

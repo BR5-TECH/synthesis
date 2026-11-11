@@ -478,6 +478,8 @@ impl CompletionSeam for ScriptedCompletion {
                 let mut with_change = base.clone();
                 with_change.push(crate::tools::propose_change_edits::NAME);
                 with_change.push(crate::tools::propose_new_change::NAME);
+                // CVL-FR-XHKB: and asks the author for a run.
+                with_change.push(crate::tools::request_change_action::NAME);
                 with_change.push(crate::tools::decide_change_edits::NAME);
                 [base, with_draft, with_prompt, with_change]
             })

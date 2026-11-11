@@ -20,9 +20,17 @@ export interface ChangeViewState {
   appliedSeq: number;
   /** OCW-FR-ABUR: the Rich or Source choice of each file, by its path. */
   modes: Readonly<Record<string, "rich" | "source">>;
+  /** OCW-FR-YTGJ: the run whose strip the author closed, or null. */
+  closedRunId: string | null;
 }
 
-const EMPTY: ChangeViewState = { detail: null, selected: null, appliedSeq: 0, modes: {} };
+const EMPTY: ChangeViewState = {
+  detail: null,
+  selected: null,
+  appliedSeq: 0,
+  modes: {},
+  closedRunId: null,
+};
 
 const views = new Map<string, ChangeViewState>();
 

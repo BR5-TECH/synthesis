@@ -174,6 +174,13 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "get_work_stream_uncommitted_paths",
     "start_graduation",
     "start_direct_graduation",
+    // OCR-openspec-change-runs.md OCR-FR-IDFC.
+    "start_change_apply",
+    "start_change_rework",
+    // CAR-change-action-requests.md.
+    "list_change_action_requests",
+    "confirm_change_action_request",
+    "decline_change_action_request",
     "start_pull_request_summary",
     "list_branch_completed_runs",
     "preflight_direct_graduation",
@@ -410,6 +417,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // OpenSpec mode (OSM-openspec-mode.md OSM-FR-YXUC).
     "get_openspec_status",
     "read_openspec_change",
+    // OSM-FR-PEAK.
+    "read_apply_progress",
     "save_project_vendor_image",
     "build_project_vendor_image",
     "cancel_project_vendor_image_build",

@@ -23,6 +23,7 @@ import type {
   AgentActivityState,
   ChangesUpdatedPayload,
   ChangeProposalsChangedPayload,
+  ChangeActionRequestsChangedPayload,
   ChangeStatisticsChangedPayload,
   NewChangeProposalsChangedPayload,
   Discussion,
@@ -465,6 +466,17 @@ export const onNewChangeProposalsChanged = (
   handler: (payload: NewChangeProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
   listen<NewChangeProposalsChangedPayload>(NEW_CHANGE_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** CAR-FR-ZSIQ: a change action request of one change was recorded or decided. */
+export const CHANGE_ACTION_REQUESTS_CHANGED = "change-action-requests-changed";
+
+/** CAR-FR-ZSIQ / OCW-FR-GDZT: subscribe to [`CHANGE_ACTION_REQUESTS_CHANGED`]. */
+export const onChangeActionRequestsChanged = (
+  handler: (payload: ChangeActionRequestsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<ChangeActionRequestsChangedPayload>(CHANGE_ACTION_REQUESTS_CHANGED, (event) =>
     handler(event.payload),
   );
 

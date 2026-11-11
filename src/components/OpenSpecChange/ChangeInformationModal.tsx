@@ -9,7 +9,7 @@
  * retry and keeps the figures before it (DFI-FR-CVAX), the footer states where
  * the record begins (DFI-FR-NTPG), and dismissing it changes nothing
  * (DFI-FR-EBIL). It re-reads on each `"change statistics changed"` for its
- * change.
+ * change. Run time and Run tokens count the apply and rework runs on it.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -21,6 +21,9 @@ import { formatBoundary, formatCount, formatDuration, Row } from "../DraftInform
 import { Modal } from "../DraftsPanelParts";
 import { Icon } from "../icons";
 import { refusalCode } from "./decisions";
+
+/** DFI-FR-HSYB: a figure the read does not carry is one that was not captured. */
+const NOT_CAPTURED = { value: null, availability: "unavailable" } as const;
 
 export function ChangeInformationModal({
   streamId,
@@ -113,6 +116,16 @@ export function ChangeInformationModal({
             <div className="draft-info__group t-ui-sm">Conversation tokens</div>
             <Row label="Input" measure={statistics.conversationTokens.input} format={formatCount} indent />
             <Row label="Output" measure={statistics.conversationTokens.output} format={formatCount} indent />
+            {/* OCW-FR-ZZCS / CST-FR-HJGG / CST-FR-CGRU: the agent time and the
+                tokens of the apply and rework runs on the change. A record
+                from before these figures reads as not captured. The run
+                figures stand apart from the conversation tokens above them. */}
+            <div className="draft-info__section" data-testid="change-information-runs">
+              <Row label="Run time" measure={statistics.runTimeMs ?? NOT_CAPTURED} format={formatDuration} />
+            </div>
+            <div className="draft-info__group t-ui-sm">Run tokens</div>
+            <Row label="Input" measure={statistics.runTokens?.input ?? NOT_CAPTURED} format={formatCount} indent />
+            <Row label="Output" measure={statistics.runTokens?.output ?? NOT_CAPTURED} format={formatCount} indent />
             {/* DFI-FR-NTPG: where the captured record begins, or that it is empty. */}
             <div className="draft-info__footer t-ui-xs">
               {statistics.boundaryAt

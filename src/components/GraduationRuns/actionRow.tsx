@@ -15,6 +15,8 @@ import * as api from "../../api";
 import {
   actionsFor,
   canRestart,
+  changeRunPhase,
+  isChangeRun,
   isResume,
   isTerminalRun,
   removalStatement,
@@ -245,8 +247,12 @@ export function RunActionRow({
           }
         })}
         {/* GRU-FR-LTWN: a completed propose run opens the change it wrote, on
-            its stream. It only navigates, so it stays enabled. */}
-        {run.openspec && run.state === "completed" && run.streamId && (
+            its stream, and an apply run or a rework run opens its change in
+            every state. It only navigates, so it stays enabled. GRU-FR-IKEQ:
+            a rework run opens it with its request thread selected. */}
+        {run.openspec &&
+          (run.state === "completed" || isChangeRun(run)) &&
+          run.streamId && (
           <button
             type="button"
             className="btn btn--sm btn--default"
@@ -255,7 +261,12 @@ export function RunActionRow({
               openOpenSpecChange(
                 { kind: "stream", streamId: run.streamId },
                 run.openspec!.change,
-                { streamName: run.streamName || undefined },
+                {
+                  streamName: run.streamName || undefined,
+                  ...(changeRunPhase(run) === "rework"
+                    ? { thread: run.openspec!.threadId ?? null }
+                    : {}),
+                },
               )
             }
           >

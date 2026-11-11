@@ -50,6 +50,10 @@ pub struct ChangeStatistics {
     pub accepted_proposals: Measure,
     pub rejected_proposals: Measure,
     pub conversation_tokens: TokenPair,
+    /// CST-FR-HJGG: the agent time of the apply and rework runs on the change.
+    pub run_time_ms: Measure,
+    /// CST-FR-CGRU: the tokens those runs reported.
+    pub run_tokens: TokenPair,
     pub unreadable_lines: u32,
 }
 
@@ -161,6 +165,11 @@ pub fn read_change_statistics_impl(
         accepted_proposals: totals.accepted_proposals,
         rejected_proposals: totals.rejected_proposals,
         conversation_tokens: totals.conversation_tokens,
+        // CST-FR-HJGG, CST-FR-CGRU: the `agent_operation` and `token_usage`
+        // events of scope `graduation` (CST-FR-RJPT), folded as DSS folds the
+        // bucket totals of a draft.
+        run_time_ms: totals.agent_time_ms.total,
+        run_tokens: totals.agent_tokens.total,
         unreadable_lines: folded.unreadable_lines,
     })
 }

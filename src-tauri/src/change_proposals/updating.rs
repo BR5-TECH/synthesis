@@ -29,19 +29,52 @@ pub struct ChangeProposalUpdate<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateRefusal {
     NoOpenProposal,
+    /// CEP-FR-OIZT, PCE-FR-MVKT.
+    ReworkRunning,
     NoUpdates,
     UnknownStream,
     ChangeNotFound,
-    PathOutsideChange { at: usize, of: usize },
-    PathMissing { at: usize, of: usize },
-    HunkNotFound { at: usize, of: usize },
-    HunkNotUpdatable { at: usize, of: usize },
-    HunkNamedTwice { at: usize, of: usize },
-    NoChange { at: usize, of: usize },
-    HunkAnchorLost { at: usize, of: usize },
-    HunkAmbiguous { at: usize, of: usize },
-    HunkOverlap { at: usize, of: usize },
-    HunkContextTooLong { at: usize, of: usize, side: ContextSide },
+    PathOutsideChange {
+        at: usize,
+        of: usize,
+    },
+    PathMissing {
+        at: usize,
+        of: usize,
+    },
+    HunkNotFound {
+        at: usize,
+        of: usize,
+    },
+    HunkNotUpdatable {
+        at: usize,
+        of: usize,
+    },
+    HunkNamedTwice {
+        at: usize,
+        of: usize,
+    },
+    NoChange {
+        at: usize,
+        of: usize,
+    },
+    HunkAnchorLost {
+        at: usize,
+        of: usize,
+    },
+    HunkAmbiguous {
+        at: usize,
+        of: usize,
+    },
+    HunkOverlap {
+        at: usize,
+        of: usize,
+    },
+    HunkContextTooLong {
+        at: usize,
+        of: usize,
+        side: ContextSide,
+    },
     ThreadResolved,
     NotRecorded,
 }
@@ -68,6 +101,7 @@ impl UpdateRefusal {
     pub fn code(self) -> &'static str {
         match self {
             Self::NoOpenProposal => "no_open_proposal",
+            Self::ReworkRunning => ERR_REWORK_RUNNING,
             Self::NoUpdates => "no_updates",
             Self::UnknownStream => ERR_UNKNOWN_STREAM,
             Self::ChangeNotFound => ERR_CHANGE_NOT_FOUND,
@@ -133,6 +167,11 @@ where
         ERR_UNKNOWN_STREAM => UpdateRefusal::UnknownStream,
         _ => UpdateRefusal::ChangeNotFound,
     })?;
+    // CEP-FR-OIZT / PCE-FR-MVKT: a rework run of the change gives its result
+    // to the author as its own proposal, so no other write reaches the change.
+    if sites.rework_run(update.stream_id, update.change).is_some() {
+        return Err(UpdateRefusal::ReworkRunning);
+    }
     if let Some(open) = pending_for(store, update.stream_id, update.change) {
         reconcile_locked(app, store, sites, &open.id).map_err(|_| UpdateRefusal::NotRecorded)?;
     }

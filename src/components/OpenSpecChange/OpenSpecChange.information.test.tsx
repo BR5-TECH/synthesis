@@ -75,7 +75,7 @@ function valueOf(dialog: HTMLElement, label: string): string {
 }
 
 describe("Information (OCW-FR-ZZCS)", () => {
-  it("OCW-FR-ZZCS: a stream location offers Information, a centred modal of the six statistics in order with a footer", async () => {
+  it("OCW-FR-ZZCS: a stream location offers Information, a centred modal of the eight statistics in order with a footer", async () => {
     const { dialog } = await openInformation();
     await waitFor(() => expect(within(dialog).getByText("Working time")).toBeInTheDocument());
     expect(calls("read_change_statistics")[0][1]).toEqual({ streamId: STREAM_ID, change: CHANGE });
@@ -89,12 +89,40 @@ describe("Information (OCW-FR-ZZCS)", () => {
       "Conversation tokens",
       "Input",
       "Output",
+      "Run time",
+      "Run tokens",
+      "Input",
+      "Output",
     ]);
     expect(valueOf(dialog, "Working time")).toBe("1h 30m");
     expect(valueOf(dialog, "Versions")).toBe("3");
     expect(valueOf(dialog, "Input")).toBe("12 345");
     expect(within(dialog).getByText(/Statistics cover activity captured since/)).toBeInTheDocument();
     expect(dialog.closest(".scrim")).not.toBeNull();
+  });
+
+  it("OCW-FR-ZZCS / CST-FR-HJGG / CST-FR-CGRU: Run time and Run tokens show the run figures, and a record without them reads not captured", async () => {
+    const { dialog } = await openInformation();
+    await waitFor(() => expect(within(dialog).getByText("Run time")).toBeInTheDocument());
+    const values = [...dialog.querySelectorAll(".draft-info__value")].map((el) => el.textContent);
+    expect(valueOf(dialog, "Run time")).toBe("25m");
+    // Run time starts a group of its own: it has a divider and stands outside the conversation tokens.
+    const runTime = within(dialog).getByText("Run time").closest(".draft-info__row")!;
+    expect(runTime.parentElement).toHaveClass("draft-info__section");
+    expect(runTime.parentElement).toBe(within(dialog).getByTestId("change-information-runs"));
+    // The two token groups each have an Input and an Output row; the run pair is the second.
+    expect(values.slice(-2)).toEqual(["54 321", "4 321"]);
+    cleanup();
+
+    const old = changeStatistics() as Partial<ReturnType<typeof changeStatistics>>;
+    delete old.runTimeMs;
+    delete old.runTokens;
+    backend.statistics = old as ReturnType<typeof changeStatistics>;
+    const again = await openInformation();
+    await waitFor(() => expect(within(again.dialog).getByText("Run time")).toBeInTheDocument());
+    expect(valueOf(again.dialog, "Run time")).toBe("not captured");
+    const later = [...again.dialog.querySelectorAll(".draft-info__value")].map((el) => el.textContent);
+    expect(later.slice(-2)).toEqual(["not captured", "not captured"]);
   });
 
   it("OCW-FR-ZZCS / DFI-FR-HSYB: an unavailable figure reads not captured, never 0, and an incomplete one carries the partial marker", async () => {

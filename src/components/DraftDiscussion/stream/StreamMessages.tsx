@@ -18,6 +18,7 @@ import { QuestionCard } from "./QuestionCard";
 import { ChangeRow } from "./ChangeRow";
 import { NewDraftCard } from "./NewDraftCard";
 import { NewChangeCard } from "../../OpenSpecChange/NewChangeCard";
+import { ChangeActionCard } from "../../OpenSpecChange/ChangeActionCard";
 import { questionCardOf } from "./questionParse";
 import { coveredBy, streamItems, type StreamItem } from "./streamItems";
 import { activityStatus } from "../../../state/agentActivity";
@@ -223,6 +224,11 @@ function StreamRow({
         comments={props.comments}
       />
     );
+  }
+
+  // OCW-FR-QCPB: the request card, below the comment that carries it.
+  if (item.kind === "changeAction") {
+    return <ChangeActionCard reference={item.reference} comment={item.comment} />;
   }
 
   if (item.kind === "change") {

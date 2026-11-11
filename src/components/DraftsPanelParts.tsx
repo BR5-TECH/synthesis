@@ -10,6 +10,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { announceModalOpening } from "../state/modalOpening";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import { folderName, type MenuAnchor, type TreeItem } from "./draftsTree";
 import { ROOT, ROOT_OPTION } from "./draftsTree";
@@ -131,6 +132,8 @@ export function Modal({
 
   useEffect(() => {
     const opener = returnFocus ?? (document.activeElement as HTMLElement | null);
+    // SNV-FR-56: the dialog is a floating overlay, so every other one closes.
+    announceModalOpening();
     const focusables = () =>
       Array.from(
         ref.current?.querySelectorAll<HTMLElement>(

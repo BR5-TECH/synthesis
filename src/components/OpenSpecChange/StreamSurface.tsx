@@ -2,7 +2,7 @@
  * What a stream location adds to the change workspace
  * (`../../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-TRLG,
  * OCW-FR-COLR, OCW-FR-EJGH, OCW-FR-RKCC, OCW-FR-DRQD, OCW-FR-BGDN,
- * OCW-FR-ANKT, OCW-FR-TZRT).
+ * OCW-FR-ANKT, OCW-FR-TZRT, OCW-FR-JHAB, OCW-FR-NWRS).
  *
  * The discussion column beside the reading pane, the review of the pending
  * edit proposal with its bar, the History rail and the version it shows, and
@@ -60,6 +60,7 @@ export function StreamSurface({
   change,
   detail,
   historyOpen,
+  strip,
   onDecided,
   onFocusFragment,
   render,
@@ -70,6 +71,11 @@ export function StreamSurface({
   detail: ChangeDetail | null;
   /** OCW-FR-RKCC: the History rail is open. */
   historyOpen: boolean;
+  /**
+   * OCW-FR-JHAB / OCW-FR-NWRS: the run strip, over the full width of the
+   * document column, or null.
+   */
+  strip: ReactNode;
   onDecided: () => void;
   onFocusFragment: (fragment: FragmentTarget) => void;
   render: (stream: StreamReview) => ReactNode;
@@ -117,6 +123,7 @@ export function StreamSurface({
       historyOpen={historyOpen}
       onFocusFragment={onFocusFragment}
     >
+      {strip}
       <div
         className="openspec-change__stage"
         ref={stageRef}

@@ -10,8 +10,13 @@ pub const PART_SEMANTIC_MERGE: &str = "semantic_merge";
 pub const PART_MERGE_WORK: &str = "merge_work";
 pub const PART_MERGE_REVIEW: &str = "merge_review";
 /// GXD-FR-GMDI: the phase a merge run resumes at when its apply was blocked.
+/// OCR-FR-CXPK: it is not the phase `apply` of an OpenSpec change run, and
+/// only a merge run reads it.
 /// No turn is dispatched and no pass is spent at this phase.
 pub const PART_APPLY: &str = "apply";
+/// GXD-FR-GMDI / OCR-FR-PBKH: the phase a rework run resumes at when its
+/// finish was blocked. No turn is dispatched and no pass is spent at it.
+pub const PART_RECORD: &str = "record";
 /// GRL-FR-UNKD: the one turn of a PR summary run.
 pub const PART_PR_SUMMARY: &str = "pr_summary";
 

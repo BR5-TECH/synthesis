@@ -124,7 +124,36 @@ pub fn record_change_proposal<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let outcome = record_locked(app, store, sites, &new);
+    record_logged(app, store, sites, &new, None)
+}
+
+/// CEP-FR-QDJH, CEP-FR-OIZT: the recording of the finish of the rework run
+/// `run_id` (`OCR-openspec-change-runs.md` OCR-FR-WBZX). The `rework_running`
+/// refusal does not stop the run it names.
+pub fn record_rework_proposal<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &fs::RootFs,
+    sites: &dyn SiteResolver,
+    new: NewChangeProposal<'_>,
+    run_id: &str,
+) -> Result<ChangeEditProposal, RecordRefusal>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    record_logged(app, store, sites, &new, Some(run_id))
+}
+
+fn record_logged<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &fs::RootFs,
+    sites: &dyn SiteResolver,
+    new: &NewChangeProposal<'_>,
+    rework_run_id: Option<&str>,
+) -> Result<ChangeEditProposal, RecordRefusal>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let outcome = record_locked(app, store, sites, new, rework_run_id);
     match &outcome {
         Ok(record) => log_recorded(app, record),
         Err(refusal) => log_refusal(
@@ -142,6 +171,7 @@ fn record_locked<R: tauri::Runtime>(
     store: &fs::RootFs,
     sites: &dyn SiteResolver,
     new: &NewChangeProposal<'_>,
+    rework_run_id: Option<&str>,
 ) -> Result<ChangeEditProposal, RecordRefusal>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -151,6 +181,13 @@ where
         ERR_UNKNOWN_STREAM => RecordRefusal::UnknownStream,
         _ => RecordRefusal::ChangeNotFound,
     })?;
+    // CEP-FR-OIZT: while a rework run of the change is not terminal, only the
+    // finish of that run records a proposal on it.
+    if let Some(running) = sites.rework_run(new.stream_id, new.change) {
+        if rework_run_id != Some(running.as_str()) {
+            return Err(RecordRefusal::ReworkRunning);
+        }
+    }
     let of = new.hunks.len();
     if of == 0 {
         return Err(RecordRefusal::NoHunks);

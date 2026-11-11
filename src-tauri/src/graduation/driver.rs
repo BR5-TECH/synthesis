@@ -34,6 +34,7 @@ use super::{
     ReviewVerdict,
 };
 
+pub mod change_review;
 pub mod check_gate;
 pub mod checks_folder;
 pub mod corrections;
@@ -47,6 +48,8 @@ pub mod pr_summary_checkout;
 mod pr_summary_drive;
 pub mod prompts;
 pub mod review_checkout;
+mod rework_finish;
+pub mod rework_workspace;
 pub mod seams;
 pub mod settings;
 pub mod stops;

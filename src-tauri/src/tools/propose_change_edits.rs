@@ -63,6 +63,8 @@ pub const UPDATE_PATH_MISSING: &str =
     "An `add` update names the `path` of its file, relative to the change folder.";
 /// PCE-FR-FEAK (as PPC-FR-09): the change's one slot is taken.
 pub const CHANGE_PROPOSAL_PENDING: &str = "A proposal of yours on this change is still waiting on the author. Wait for their decision, or change the open proposal with `updates`. Say so plainly in your reply, and do not describe these edits as proposed, because they were not.";
+/// PCE-FR-MVKT: a rework run of the change is not terminal.
+pub const CHANGE_REWORK_RUNNING: &str = "A rework run of this change is running, and its result comes to the author as a proposal. Nothing was recorded. Answer with what you have.";
 /// PCE-FR-FEAK: no proposal is open, so there is nothing to update.
 pub const CHANGE_NO_OPEN: &str = "No proposal is open on this change, so there is nothing to update. Send your edits as a new proposal in `hunks`.";
 /// PCE-FR-FVPF: the conversation is not about a change.
@@ -195,6 +197,16 @@ fn pending_refusal() -> ToolRefusal {
     }
 }
 
+/// PCE-FR-MVKT: `PermissionDenied`, not retryable.
+fn rework_running_refusal() -> ToolRefusal {
+    ToolRefusal::Fixed {
+        kind: FixedKind::PermissionDenied,
+        message: CHANGE_REWORK_RUNNING,
+        code: "rework_running",
+        retryable: false,
+    }
+}
+
 fn gone_refusal() -> ToolRefusal {
     ToolRefusal::Fixed {
         kind: FixedKind::NotFound,
@@ -213,6 +225,7 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
     };
     match refusal {
         RecordRefusal::ProposalPending => pending_refusal(),
+        RecordRefusal::ReworkRunning => rework_running_refusal(),
         RecordRefusal::UnknownStream | RecordRefusal::ChangeNotFound => gone_refusal(),
         RecordRefusal::PathOutsideChange { at: n, of } => at(PATH_OUTSIDE_CHANGE, n, of),
         RecordRefusal::NoChange => ToolRefusal::InvalidArguments(PROPOSAL_NO_CHANGE),
@@ -235,6 +248,7 @@ fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
     };
     match refusal {
         UpdateRefusal::NoOpenProposal => ToolRefusal::InvalidArguments(CHANGE_NO_OPEN),
+        UpdateRefusal::ReworkRunning => rework_running_refusal(),
         UpdateRefusal::NoUpdates => ToolRefusal::InvalidArguments(UPDATE_NONE),
         UpdateRefusal::UnknownStream | UpdateRefusal::ChangeNotFound => gone_refusal(),
         UpdateRefusal::PathOutsideChange { at: n, of } => at(PATH_OUTSIDE_CHANGE, n, of),

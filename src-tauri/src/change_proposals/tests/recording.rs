@@ -52,6 +52,80 @@ fn a_second_recording_while_one_is_pending_is_refused() {
     assert_eq!(again, Err(RecordRefusal::ProposalPending));
 }
 
+// CEP-FR-OIZT, OCR-FR-OXVH: while a rework run of the change is not
+// terminal, a recording is refused with `rework_running` and nothing is
+// recorded; the finish of that run is not refused for it.
+#[test]
+fn a_recording_is_refused_while_a_rework_run_stands() {
+    let f = Fixture::new();
+    *f.sites.rework.lock().unwrap() = Some("g-rework".into());
+    let hunks = [replace("proposal.md", "Users need to log in.", "Users log in.")];
+    assert_eq!(f.record(&hunks), Err(RecordRefusal::ReworkRunning));
+    assert_eq!(RecordRefusal::ReworkRunning.code(), "rework_running");
+    assert!(list_proposals_impl(&f.store, STREAM, CHANGE).is_empty());
+
+    let new = |thread_id: &str| -> Result<ChangeEditProposal, RecordRefusal> {
+        record_rework_proposal(
+            &f.handle(),
+            &f.store,
+            &f.sites,
+            NewChangeProposal {
+                stream_id: STREAM,
+                change: CHANGE,
+                hunks: &hunks,
+                rationale: "Shorter.",
+                agent: &agent(),
+                thread_id,
+            },
+            "g-other",
+        )
+    };
+    assert_eq!(new(&f.thread_id), Err(RecordRefusal::ReworkRunning), "another run is refused");
+    let own = record_rework_proposal(
+        &f.handle(),
+        &f.store,
+        &f.sites,
+        NewChangeProposal {
+            stream_id: STREAM,
+            change: CHANGE,
+            hunks: &hunks,
+            rationale: "Shorter.",
+            agent: &agent(),
+            thread_id: &f.thread_id,
+        },
+        "g-rework",
+    )
+    .expect("the run's own finish records");
+    assert_eq!(own.thread_id, f.thread_id);
+}
+
+// CEP-FR-OIZT, PCE-FR-MVKT: an update is refused the same way.
+#[test]
+fn an_update_is_refused_while_a_rework_run_stands() {
+    let f = Fixture::new();
+    let record = f.pending();
+    *f.sites.rework.lock().unwrap() = Some("g-rework".into());
+    let refused = update_change_proposal(
+        &f.handle(),
+        &f.store,
+        &f.sites,
+        ChangeProposalUpdate {
+            stream_id: STREAM,
+            change: CHANGE,
+            updates: &[ChangeUpdateEntry {
+                entry: crate::text_hunks::updates::UpdateEntry::Withdraw {
+                    id: record.ledger[0].id.clone(),
+                },
+                path: None,
+            }],
+            rationale: "Withdraw.",
+            agent: &agent(),
+            thread_id: &f.thread_id,
+        },
+    );
+    assert_eq!(refused.unwrap_err(), UpdateRefusal::ReworkRunning);
+}
+
 // CEP-FR-WJKY: a path that is absolute, holds `..`, or leaves the change
 // folder is refused with its place, and nothing is recorded.
 #[test]

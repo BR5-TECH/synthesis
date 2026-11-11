@@ -39,6 +39,8 @@ pub const ERR_HUNK_ALREADY_DECIDED: &str = "hunk_already_decided";
 pub const ERR_HUNK_WITHDRAWN: &str = "hunk_withdrawn";
 /// PCP-FR-14: a failure at or before the commit point. No file was written.
 pub const ERR_WRITE_FAILED: &str = "write_failed";
+/// CEP-FR-OIZT: a rework run of the change is not terminal.
+pub const ERR_REWORK_RUNNING: &str = "rework_running";
 /// PCP-FR-14: another acceptance of this proposal is in flight.
 pub const ERR_ACCEPTANCE_IN_PROGRESS: &str = "acceptance_in_progress";
 /// PCP-FR-14: the acceptance landed and its decision comment is still owed.
@@ -288,15 +290,33 @@ pub(super) struct Journal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordRefusal {
     ProposalPending,
+    /// CEP-FR-OIZT.
+    ReworkRunning,
     UnknownStream,
     ChangeNotFound,
-    PathOutsideChange { at: usize, of: usize },
+    PathOutsideChange {
+        at: usize,
+        of: usize,
+    },
     NoChange,
     NoHunks,
-    HunkAnchorLost { at: usize, of: usize },
-    HunkAmbiguous { at: usize, of: usize },
-    HunkOverlap { at: usize, of: usize },
-    HunkContextTooLong { at: usize, of: usize, side: crate::text_hunks::hunks::ContextSide },
+    HunkAnchorLost {
+        at: usize,
+        of: usize,
+    },
+    HunkAmbiguous {
+        at: usize,
+        of: usize,
+    },
+    HunkOverlap {
+        at: usize,
+        of: usize,
+    },
+    HunkContextTooLong {
+        at: usize,
+        of: usize,
+        side: crate::text_hunks::hunks::ContextSide,
+    },
     ThreadResolved,
     NotRecorded,
 }
@@ -306,6 +326,7 @@ impl RecordRefusal {
     pub fn code(&self) -> &'static str {
         match self {
             Self::ProposalPending => ERR_PROPOSAL_PENDING,
+            Self::ReworkRunning => ERR_REWORK_RUNNING,
             Self::UnknownStream => ERR_UNKNOWN_STREAM,
             Self::ChangeNotFound => ERR_CHANGE_NOT_FOUND,
             Self::PathOutsideChange { .. } => ERR_PATH_OUTSIDE_CHANGE,

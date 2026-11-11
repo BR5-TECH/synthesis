@@ -411,6 +411,8 @@ export function GraduationRuns({
   const [notFound, setNotFound] = useState<string | null>(null);
   /** The request whose one reload is under way, so it asks for no second. */
   const reloadingFor = useRef<object | null>(null);
+  /** GRU-FR-PAHN: the row a request selected, which the rail scrolls to once. */
+  const [routedRow, setRoutedRow] = useState<{ runId: string } | null>(null);
 
   useEffect(() => {
     if (!selectRun) return;
@@ -482,6 +484,7 @@ export function GraduationRuns({
     // the row the author is routed to is one they can see beside the run they
     // are reading.
     reveal(target, { view: viewRef.current, text: filterRef.current });
+    setRoutedRow({ runId: selectRun.runId });
   }, [selectRun, queue, runs, reveal]);
 
   // GRH-FR-MCHQ: the rail's width, as the author last set it. It is read once
@@ -489,6 +492,15 @@ export function GraduationRuns({
   // than one per frame.
   const [railFraction, setRailFraction] = useState(DEFAULT_RAIL_FRACTION);
   const sectionRef = useRef<HTMLDivElement | null>(null);
+
+  // GRU-FR-PAHN: the rail's view shows the selected row: a route scrolls it in
+  // as little as it can. jsdom has no `scrollIntoView`, so it is optional.
+  useEffect(() => {
+    if (!routedRow) return;
+    const rows = sectionRef.current?.querySelectorAll<HTMLElement>("[data-run-id]") ?? [];
+    const row = [...rows].find((el) => el.dataset.runId === routedRow.runId);
+    row?.scrollIntoView?.({ block: "nearest" });
+  }, [routedRow]);
   const draggingRef = useRef(false);
   /** Where the gesture under way has put the boundary. */
   const draggedRef = useRef(DEFAULT_RAIL_FRACTION);

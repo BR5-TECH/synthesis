@@ -7,7 +7,9 @@
  * escalation it waits on, the paths it changed, the pass history, how it ended,
  * and the foot bar of actions. A merge run renders on the same terms as every
  * run, with its own title, provenance, publication, unresolved paths and
- * result added (GRU-FR-CXLB).
+ * result added (GRU-FR-CXLB). An apply run and a rework run render with the
+ * words of their phase, their change, and, for an apply run, the task counts
+ * and the check state (GRU-FR-SOFY, GRU-FR-PXCW, GRU-FR-HZLV).
  */
 
 import type { MutableRefObject } from "react";
@@ -50,9 +52,14 @@ import {
   totalTimeLimitHeadline,
   totalTimeLimitRestOf,
   checksNotPassedRestOf,
+  changeRunPhase,
+  checkStateOf,
+  tasksSentence,
 } from "../../state/graduation";
+import { useApplyProgress } from "../../state/openspec/applyProgress";
 import { stagesWithLogAccess } from "../../state/graduation/logScopes";
 import type {
+  ApplyProgress,
   GraduationCapacity,
   GraduationQueue,
   GraduationRun,
@@ -112,6 +119,23 @@ export interface RunRegionProps {
   onRestartOpened: () => void;
 }
 
+/**
+ * GRU-FR-PXCW: the sentence of the current stage. The Tasks stage of an apply
+ * run that works states the task counts and the next open task, where the
+ * last read of its apply progress answered.
+ */
+function stageSentence(
+  run: GraduationRun,
+  progress: ApplyProgress | null,
+  queue: GraduationQueue | null,
+  capacity: GraduationCapacity | null,
+): string {
+  if (progress && run.state === "working" && changeRunPhase(run) === "apply") {
+    return tasksSentence(progress);
+  }
+  return conditionSentence(run, queue ? aheadOf(queue, run.id) : null, waitsForSlot(run, capacity));
+}
+
 export function RunRegion({
   run,
   runs,
@@ -130,6 +154,17 @@ export function RunRegion({
   onRestartOpened,
 }: RunRegionProps) {
   const title = runTitle(run);
+  const phase = changeRunPhase(run);
+  // GRU-FR-PXCW: read when the run is selected and on each change of it. A
+  // read that fails leaves the stage on its ordinary sentence.
+  const { progress } = useApplyProgress({
+    streamId: run.streamId,
+    change: run.openspec?.change ?? "",
+    runId: run.id,
+    enabled: phase === "apply" && Boolean(run.streamId),
+    keepOnFailure: false,
+  });
+  const checkState = checkStateOf(run);
   return (
     <>
       <div className="graduation__head">
@@ -137,7 +172,8 @@ export function RunRegion({
             name does. */}
         <span className="graduation__name">{title}</span>
         {/* GRU-FR-YHFQ: a propose run names the change it writes, beside its
-            source draft, in every state. */}
+            source draft, in every state. An apply run and a rework run name
+            their change in the place of a source draft (GRU-FR-HABG). */}
         {run.openspec && (
           <span className="graduation__change t-meta" data-testid="graduation-openspec-change">
             Change {run.openspec.change}
@@ -159,6 +195,14 @@ export function RunRegion({
       <p className="t-meta graduation__provenance" data-testid="graduation-provenance">
         {provenanceLine(run, Boolean(run.streamId))}
       </p>
+      {/* GRU-FR-YHFQ: a rework run renders the author's instruction as
+          escaped plain text. */}
+      {phase === "rework" && run.openspec?.instruction && (
+        <p className="graduation__instruction" data-testid="graduation-rework-instruction">
+          <span className="t-eyebrow">Instruction</span>
+          <span className="graduation__instruction-text">{run.openspec.instruction}</span>
+        </p>
+      )}
       {/* GRU-FR-NWEC: the publication choice a merge run holds. */}
       <MergePublication run={run} />
       {/* GRU-FR-PFBY: a queued direct run whose pinned branch is not checked
@@ -195,11 +239,7 @@ export function RunRegion({
             onActivateStage={onActivateStage}
             currentStage={stageOf(run) ?? "queued"}
             condition={conditionOf(run)}
-            conditionSentence={conditionSentence(
-              run,
-              queue ? aheadOf(queue, run.id) : null,
-              waitsForSlot(run, capacity),
-            )}
+            conditionSentence={stageSentence(run, progress, queue, capacity)}
             iterationLabel={iterationLabel(run)}
             history={stageHistory(run)}
             // RPV-FR-10: the host renders the moves itself — the review's
@@ -209,6 +249,14 @@ export function RunRegion({
             showLoops={false}
             outcome={outcomeStatement(run)}
             label={`Progress of ${title}`}
+            // GRU-FR-HZLV: the check state of an apply run, in words.
+            detail={
+              checkState ? (
+                <p className="t-meta graduation__check-state" data-testid="graduation-check-state">
+                  {checkState}
+                </p>
+              ) : undefined
+            }
           />
           {/* GRU-FR-LBPR: an author repeating a Continue can otherwise see
               nothing that says they are repeating it. */}

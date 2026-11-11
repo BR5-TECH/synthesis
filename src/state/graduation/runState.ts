@@ -7,6 +7,7 @@ import type { GraduationRun, GraduationRunState } from "../../types/graduation";
 import { holdsQueue, isAgentWork, isTerminalRun } from "../../types/graduation";
 import { isMergeRun, mergeProvenanceLine } from "./merge";
 import { isPrSummaryRun, prSummaryProvenanceLine } from "./prSummary";
+import { isChangeRun } from "./openspecRuns";
 
 export { holdsQueue, isAgentWork, isTerminalRun };
 
@@ -90,7 +91,9 @@ export function actionsFor(run: GraduationRun): RunAction[] {
   // and no Revert.
   const prSummary = isPrSummaryRun(run);
   const draftless = merge || prSummary;
-  const offered = new Set<RunAction>(draftless ? [] : ["open-draft"]);
+  // GRU-FR-HABG: an apply run and a rework run have no draft either, but
+  // they restart and an apply run reverts like a draft run.
+  const offered = new Set<RunAction>(draftless || isChangeRun(run) ? [] : ["open-draft"]);
   switch (run.state) {
     case "queued":
       // GRU-FR-PFBY: a held direct run offers Continue, which offers it a

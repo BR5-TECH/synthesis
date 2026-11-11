@@ -197,7 +197,9 @@ export function MessageBlock({
                 a.kind !== "newDraftSubject" &&
                 // OCW-FR-BGDN: and so is the new-change card.
                 a.kind !== "newChangeProposal" &&
-                a.kind !== "newChangeSubject",
+                a.kind !== "newChangeSubject" &&
+                // OCW-FR-QCPB: and so is the request card.
+                a.kind !== "changeActionRequest",
             )}
           />
           {/* CTA-FR-RFQB: the saved activity row follows its comment. */}

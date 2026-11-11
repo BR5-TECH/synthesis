@@ -108,6 +108,7 @@ impl Fixture {
         Box::new(FixedSites {
             sites: vec![(STREAM.into(), self.wc.clone())],
             busy: Mutex::new(None),
+            rework: Mutex::new(None),
         })
     }
 
@@ -136,7 +137,7 @@ impl Fixture {
         &self,
         args: ProposeChangeEditsArgs,
     ) -> Result<propose_change_edits::ProposeChangeEditsOutput, ToolRefusal> {
-        block_on(self.proposer(&QUIET).call(args))
+        decide_now(self.proposer(&QUIET).call(args))
     }
 
     pub(super) fn decider(
@@ -274,6 +275,57 @@ fn pce_refusals_carry_the_kinds_of_ppc() {
     assert_eq!(pending.reason(), "proposal_pending");
     assert_eq!(pending.kind(), ToolErrorKind::PermissionDenied);
     assert!(pending.retryable());
+}
+
+// PCE-FR-MVKT, CEP-FR-OIZT: while a rework run of the change is not
+// terminal, a call with hunks and a call with updates are each the
+// `rework_running` refusal: `PermissionDenied`, not retryable, with the fixed
+// text, and nothing is recorded.
+#[test]
+fn pce_a_running_rework_refuses_every_call() {
+    let f = Fixture::new();
+    let running = || {
+        Box::new(FixedSites {
+            sites: vec![(STREAM.into(), f.wc.clone())],
+            busy: Mutex::new(None),
+            rework: Mutex::new(Some("g-rework".into())),
+        })
+    };
+    let proposer = |sites: Box<FixedSites>| {
+        ProposeChangeEditsTool::new(
+            f.open.handle(),
+            f.roots(),
+            f.origin(),
+            agent(),
+            Arc::clone(&f.proposed),
+        )
+        .for_test(sites, &QUIET)
+    };
+    let refused = block_on(proposer(running()).call(two_files())).unwrap_err();
+    assert_eq!(refused.reason(), "rework_running");
+    assert_eq!(refused.kind(), ToolErrorKind::PermissionDenied);
+    assert!(!refused.retryable());
+    assert!(matches!(
+        refused,
+        ToolRefusal::Fixed { message, .. } if message == propose_change_edits::CHANGE_REWORK_RUNNING
+    ));
+    assert!(cep::list_proposals_impl(&f.store(), STREAM, CHANGE).is_empty());
+
+    let updates = ProposeChangeEditsArgs {
+        hunks: None,
+        updates: Some(vec![propose_change_edits::ChangeUpdateArg {
+            update: crate::tools::proposal_updates::UpdateArg {
+                action: Some("withdraw".into()),
+                id: Some("h1".into()),
+                ..Default::default()
+            },
+            path: None,
+        }]),
+        rationale: RATIONALE.into(),
+    };
+    let refused = block_on(proposer(running()).call(updates)).unwrap_err();
+    assert_eq!(refused.reason(), "rework_running");
+    assert!(!f.proposed.load(Ordering::SeqCst));
 }
 
 // PCE-FR-OXMY: `updates` changes the open proposal, an `add` names its path,
@@ -424,7 +476,7 @@ fn dce_accepts_and_rejects_and_the_close_commits() {
     f.propose(two_files()).expect("recorded");
     let record = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
     let (tasks, design) = (record.ledger[0].id.clone(), record.ledger[1].id.clone());
-    let out = block_on(
+    let out = decide_now(
         f.decider(f.sites(), &QUIET).call(decisions(&[(&tasks, "accept"), (&design, "reject")])),
     )
     .expect("decided");
@@ -465,8 +517,9 @@ fn dce_a_busy_stream_refuses_the_row_and_the_rest_run() {
     let busy = Box::new(FixedSites {
         sites: vec![(STREAM.into(), f.wc.clone())],
         busy: Mutex::new(Some("run-1".into())),
+        rework: Mutex::new(None),
     });
-    let out = block_on(
+    let out = decide_now(
         f.decider(busy, &QUIET).call(decisions(&[(&tasks, "accept"), (&design, "reject")])),
     )
     .expect("answered");
@@ -486,7 +539,7 @@ fn dce_discuss_opens_a_hunk_discussion_of_the_change() {
     f.propose(two_files()).expect("recorded");
     let record = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
     let tasks = record.ledger[0].id.clone();
-    let out = block_on(f.decider(f.sites(), &QUIET).call(decisions(&[(&tasks, "discuss")])))
+    let out = decide_now(f.decider(f.sites(), &QUIET).call(decisions(&[(&tasks, "discuss")])))
         .expect("decided");
     let opened = out.decisions[0].discussion_id.clone().expect("discussion");
     let target = DiscussionTarget::Change { stream_id: STREAM.into(), change: CHANGE.into() };
@@ -518,10 +571,10 @@ fn dce_refuses_other_conversations_and_a_change_with_no_proposal() {
     let tool = DecideChangeEditsTool::new(f.open.handle(), f.roots(), other, agent(), "turn")
         .for_test(human(), f.sites(), &QUIET);
     assert!(matches!(
-        block_on(tool.call(decisions(&[("x", "accept")]))),
+        decide_now(tool.call(decisions(&[("x", "accept")]))),
         Err(crate::tools::decide_changes::CallRefusal::WrongConversation(_))
     ));
-    let none = block_on(f.decider(f.sites(), &QUIET).call(decisions(&[("x", "accept")])));
+    let none = decide_now(f.decider(f.sites(), &QUIET).call(decisions(&[("x", "accept")])));
     assert!(matches!(none, Err(crate::tools::decide_changes::CallRefusal::NoOpenProposal(_))));
     assert!(cep::list_proposals_impl(&f.store(), STREAM, CHANGE).is_empty());
 }
@@ -535,7 +588,7 @@ fn dce_logs_the_stream_the_change_and_the_counts() {
     let f = Fixture::new();
     f.propose(two_files()).expect("recorded");
     let record = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
-    block_on(f.decider(f.sites(), &BUFFER).call(decisions(&[(&record.ledger[1].id, "reject")])))
+    decide_now(f.decider(f.sites(), &BUFFER).call(decisions(&[(&record.ledger[1].id, "reject")])))
         .expect("decided");
     let records = BUFFER
         .query(
@@ -580,7 +633,7 @@ fn dce_refuses_other_actions_and_a_missing_instruction() {
     let f = Fixture::new();
     f.propose(two_files()).expect("recorded");
     let record = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
-    let out = block_on(
+    let out = decide_now(
         f.decider(f.sites(), &QUIET).call(decisions(&[(&record.ledger[0].id, "confirm")])),
     )
     .expect("answered");
@@ -588,9 +641,15 @@ fn dce_refuses_other_actions_and_a_missing_instruction() {
     let mut wrong = decisions(&[(&record.ledger[0].id, "accept")]);
     wrong.instruction = Some("words the author never wrote".into());
     assert!(matches!(
-        block_on(f.decider(f.sites(), &QUIET).call(wrong)),
+        decide_now(f.decider(f.sites(), &QUIET).call(wrong)),
         Err(crate::tools::decide_changes::CallRefusal::Authority(_))
     ));
     let now = cep::list_proposals_impl(&f.store(), STREAM, CHANGE).remove(0);
     assert!(now.ledger.iter().all(|row| row.state == crate::prompt_proposals::HunkState::Pending));
+}
+
+/// A call of `decide_change_edits`, which runs its decisions on a blocking
+/// thread (CAR-FR-AQHX), so it needs an executor and not one poll.
+fn decide_now<F: std::future::Future>(future: F) -> F::Output {
+    tauri::async_runtime::block_on(future)
 }

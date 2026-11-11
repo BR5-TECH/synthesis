@@ -512,6 +512,7 @@ pub(crate) fn tree_snapshot(root: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     out
 }
 
+mod change_action_tools;
 mod change_edit_tools;
 mod conventions;
 mod native;

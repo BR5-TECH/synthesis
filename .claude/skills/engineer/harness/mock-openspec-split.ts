@@ -109,6 +109,9 @@ function statistics() {
     acceptedProposals: m(1),
     rejectedProposals: { value: 0, availability: mode === "unavailable" ? "unavailable" : "incomplete" },
     conversationTokens: { input: m(48_210), output: m(6_031) },
+    // CST-FR-HJGG / CST-FR-CGRU: the apply and rework runs on the change.
+    runTimeMs: m(18 * 60_000),
+    runTokens: { input: m(121_400), output: m(9_870) },
     unreadableLines: 0,
   };
 }

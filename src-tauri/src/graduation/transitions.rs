@@ -90,6 +90,11 @@ pub fn transition<R: tauri::Runtime>(
     if run.is_pr_summary() && next.is_terminal() {
         crate::graduation::reclaim_ended_pr_summary_run(app, run);
     }
+    // OCR-FR-FJFI, OCR-FR-AWDH: a rework run that ended and is not driven by
+    // this process has what it owns removed now.
+    if run.is_change_rework() && next.is_terminal() {
+        crate::graduation::reclaim_ended_rework_run(app, run);
+    }
     Ok(())
 }
 

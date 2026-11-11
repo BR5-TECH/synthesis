@@ -15,6 +15,7 @@
 
 import { NOT_HANDLED } from "./mock-github-polling";
 import { SPLIT_DISCUSSION, openspecSplitInvoke } from "./mock-openspec-split";
+import { REQUEST_DISCUSSION } from "./mock-openspec-runs";
 
 export const OPENSPEC_DEMO_CHANGE = "add-logout-3f2a";
 export const OPENSPEC_DEMO_DRAFT_ID = "d-os";
@@ -134,7 +135,7 @@ function demoDetail(location: unknown) {
         files: [
           {
             path: "tasks.md",
-            text: "## 1. Implementation\n\n- [x] 1.1 Add the idle limit setting\n- [ ] 1.2 Add the Log out entry\n- [ ] 1.3 Remove Remember me\n- [ ] 1.4 Update the docs",
+            text: "## 1. Implementation\n\n- [x] 1.1 Add the idle limit setting\n- [x] 1.2 Add the Log out entry\n- [ ] 1.3 Add the logout route to every page of the main window, with its keyboard shortcut\n- [ ] 1.4 Update the docs",
             unreadable: false,
           },
         ],
@@ -278,6 +279,17 @@ const afterText: Record<string, string> = { h1: EDIT_AFTER, h2: NEW_TEXT };
 let commitOwed = false;
 let committedOnce = false;
 
+/**
+ * OCR-FR-LNKQ / OCR-FR-TCFQ: what the edit proposal of the demo change holds a
+ * start for: `pending` holds an apply start and a rework start, and
+ * `commit_owed` holds an apply start alone.
+ */
+export function demoProposalHold(): "pending" | "commit_owed" | null {
+  const record = proposalRecord();
+  if (record.state === "pending") return "pending";
+  return record.commitOwed ? "commit_owed" : null;
+}
+
 function proposalRecord() {
   const count = (state: string) => ledger.filter((h) => h.state === state).length;
   const undecided = ledger.some((h) => h.state === "pending" || h.state === "discussing");
@@ -398,6 +410,13 @@ const discussions: any[] = [
 ];
 // NCP / OCW-FR-BGDN: the discussion that holds the pending new-change proposal.
 discussions.push(SPLIT_DISCUSSION);
+// CAR / OCW-FR-QCPB: the discussion that holds the pending request card.
+discussions.push(REQUEST_DISCUSSION);
+
+/** OCR-FR-UAWO / CAR-FR-TQJZ: the discussions of the demo change, for the run stand-in. */
+export function changeDiscussionList(): any[] {
+  return discussions;
+}
 let nextDiscussion = 2;
 
 function fire(name: string, payload: unknown) {

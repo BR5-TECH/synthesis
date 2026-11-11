@@ -205,6 +205,14 @@ fn a_failed_file_write_removes_the_written_files() {
 #[test]
 fn a_failed_record_write_removes_the_folder() {
     use std::os::unix::fs::PermissionsExt;
+    // A chmod does not bind root (a Docker CI image): there the write does
+    // not fail, and this test has nothing to check.
+    if crate::fs::permission_probe::skip_without_enforcement(
+        "a_failed_record_write_removes_the_folder",
+        crate::fs::permission_probe::Injection::Write,
+    ) {
+        return;
+    }
     let f = Fixture::new();
     let record = f.record_named("part-one", 1, 2).expect("recorded");
     let dir = f.store.path().join(format!("changes/{STREAM}/{CHANGE}/new-changes"));

@@ -48,6 +48,7 @@ pub mod statistics;
 
 mod arrangement;
 mod cascade;
+pub mod change_runs;
 mod commands;
 mod commit;
 mod continue_rest;
@@ -73,6 +74,7 @@ mod transitions;
 mod write_check;
 
 pub use arrangement::*;
+pub use change_runs::*;
 pub use commands::*;
 pub use commit::*;
 pub use direct::*;
@@ -197,6 +199,8 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
         // GRD-FR-TYVT: the disposable checkout of an ended PR summary run goes
         // on the same terms.
         reclaim_ended_pr_summary_run(app, run);
+        // OCR-FR-FJFI: and what an ended rework run owns.
+        reclaim_ended_rework_run(app, run);
     }
     for summary in &queue.runs {
         // GRD-FR-XVUD: `working` and `reviewing` alone. A `blocked` run also

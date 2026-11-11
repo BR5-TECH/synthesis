@@ -463,7 +463,8 @@ pub fn revert_graduation_run<R: tauri::Runtime>(
     // GRD-FR-YTCR: a merge run holds a merge, and a merge commit is not undone
     // by replaying commits in reverse.
     // GRD-FR-CQGB: a PR summary run makes no commit.
-    if run.is_merge() || run.is_pr_summary() {
+    // OCR-FR-GWGE: a rework run makes no commit either.
+    if run.is_merge() || run.is_pr_summary() || run.is_change_rework() {
         return Err(ERR_RUN_NOT_REVERTABLE.to_string());
     }
     // A run still doing agent work has a working copy that holds uncommitted
@@ -592,6 +593,11 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
     }
     if discarded.state != GraduationRunState::Discarded {
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", discarded.state.as_str()));
+    }
+    // OCR-FR-SAVO: an OpenSpec change run restarts on its own stream, and the
+    // stream and standing-work arguments are not read.
+    if discarded.is_change_run() {
+        return change_runs::restart_change_run(&app, &discarded);
     }
     queue::require_unlocked_draft(&app, &discarded.input.draft_id)?;
     write_check::require_restart_write(&app, &discarded)?;

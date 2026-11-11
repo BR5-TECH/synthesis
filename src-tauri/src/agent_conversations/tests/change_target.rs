@@ -137,7 +137,8 @@ fn the_document_language_reads_the_proposal_or_the_fragment_file() {
     assert!(part.expect("text").starts_with("## 1. Login"));
 }
 
-// AGC-FR-05 / CVL-FR-FGGI / CVL-FR-EZKH / CVL-FR-PEFM / CVL-FR-06: a whole-change turn is
+// AGC-FR-05 / CVL-FR-FGGI / CVL-FR-EZKH / CVL-FR-PEFM / CVL-FR-XHKB / RCA-FR-KZIJ /
+// CVL-FR-06: a whole-change turn is
 // answered under `discuss-change.md`, carries the change tools and
 // `ask_discussion_questions`, no other proposal tool, and its prompt names the
 // tags its builder emits.
@@ -156,6 +157,7 @@ fn a_whole_change_turn_uses_the_change_prompt_and_tools() {
         crate::tools::propose_change_edits::NAME,
         crate::tools::propose_new_change::NAME,
         crate::tools::decide_change_edits::NAME,
+        crate::tools::request_change_action::NAME,
         crate::tools::ask_discussion_questions::NAME,
         crate::tools::ask_user_comment::NAME,
         crate::tools::request_document_export::NAME,
@@ -198,6 +200,8 @@ fn a_change_fragment_turn_uses_the_comment_prompt() {
     assert!(tools.iter().any(|t| t == crate::tools::propose_change_edits::NAME));
     // CVL-FR-PEFM: a fragment turn on a change has the split tool too.
     assert!(tools.iter().any(|t| t == crate::tools::propose_new_change::NAME));
+    // CVL-FR-XHKB / RCA-FR-KZIJ: and the request tool, with a fragment too.
+    assert!(tools.iter().any(|t| t == crate::tools::request_change_action::NAME));
     assert!(!tools.iter().any(|t| t == crate::tools::ask_discussion_questions::NAME));
     assert!(COMMENT_PROMPT_TEMPLATE.contains("<openspec_change>"));
 }
@@ -319,6 +323,7 @@ fn the_history_of_a_change_turn_ends_with_the_split() {
     let sites = crate::change_proposals::FixedSites {
         sites: vec![("ct-split".into(), crate::fs::RootFs::for_root(wc.path()))],
         busy: std::sync::Mutex::new(None),
+        rework: std::sync::Mutex::new(None),
     };
     let record = crate::new_change_proposals::record_new_change_proposal(
         &h.app.handle().clone(),
@@ -395,4 +400,13 @@ fn a_change_turn_records_into_the_change_statistics() {
 fn the_change_prompt_explains_the_split() {
     assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Splitting the change"));
     assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("one new change at a time"));
+}
+
+// CVL-FR-NTUH: the change prompt says how an action is asked for, that only
+// the author's confirmation starts a run, and when the agent may confirm.
+#[test]
+fn the_change_prompt_explains_the_change_actions() {
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Applying or reworking the change"));
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("Only the author's confirmation starts a run"));
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("latest comment says explicitly to go ahead"));
 }

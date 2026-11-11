@@ -11,6 +11,7 @@
 
 export * from "./runState";
 export * from "./merge";
+export * from "./openspecRuns";
 export * from "./prSummary";
 export * from "./blockers";
 export * from "./escalations";

@@ -7,7 +7,7 @@ The rail down the side of the graduation section that lists the project's runs a
 
 ## Functional requirements
 1. **GRH-FR-NCJK** The rail lists every run the project has made, in the project's own run order, newest insertion last. Nothing in the rail sorts by a timestamp.
-2. **GRH-FR-FYTH** Each row names the run's source draft, the work stream it runs in, and its state in words. The row of a merge run has no source draft and names its title, `Merge <stream name>`, in the place of the draft. A row of a run in a queue also carries its position in that stream's queue.
+2. **GRH-FR-FYTH** Each row names the run's source draft, the work stream it runs in, and its state in words. The row of a merge run or of an OpenSpec change run has no source draft and names its title, `Merge <stream name>`, `Apply <change>`, or `Rework <change>`, in the place of the draft. A row of a run in a queue also carries its position in that stream's queue.
 3. **GRH-FR-WIMY** The rail offers a **view selector** with four positions, in this order: **In-flight**, **Completed**, **Archived**, and **All**. Exactly one position is active at a time, and **In-flight** is the resting position.
 4. **GRH-FR-KZTP** **In-flight** admits every run that has not ended: the runs waiting in a queue and the runs under way together. **Completed** admits every run in the `completed` state and no other state. **All** admits every run the project has made.
    - *Why:* A run that failed and a run the author discarded are not completions, so **All** is the only position that lists them.

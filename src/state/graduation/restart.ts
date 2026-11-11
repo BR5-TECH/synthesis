@@ -4,7 +4,8 @@
  */
 
 import type { GraduationRun } from "../../types/graduation";
-import { isMergeRun } from "./merge";
+import { isMergeRun, runTitle } from "./merge";
+import { changeRunPhase } from "./openspecRuns";
 
 /** GRT-FR-CTNO: Restart is offered for a discarded run and no other state. */
 export function canRestart(run: GraduationRun): boolean {
@@ -18,7 +19,7 @@ export function canRestart(run: GraduationRun): boolean {
  * because the rail draws one control per row.
  */
 export function restartLabel(run: GraduationRun): string {
-  return `Restart “${run.input.draftName}”`;
+  return `Restart “${runTitle(run)}”`;
 }
 
 /** GRT-FR-AMHS: the tooltip both **Restart** controls carry. */
@@ -40,6 +41,17 @@ export function restartRefusal(message: string): string {
  * discarded run stays discarded and unchanged.
  */
 export function restartConfirmation(run: GraduationRun): string {
+  // GRT-FR-GLLN: an OpenSpec change run names its title and its stream, and
+  // restarts on the same change there.
+  const phase = changeRunPhase(run);
+  if (phase !== null) {
+    const same = phase === "rework" ? ", with the same instruction" : "";
+    return (
+      `Start a new run of “${runTitle(run)}” on the work stream “${run.streamName}”. ` +
+      `It works on the same change there${same}. ` +
+      "The discarded run stays discarded and unchanged."
+    );
+  }
   return (
     `Start a new run over the prompt “${run.input.draftName}” was captured from. ` +
     "The discarded run stays discarded and unchanged."

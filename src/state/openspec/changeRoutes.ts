@@ -7,13 +7,18 @@
  * New Artifact tab sit several layers below the tab strip.
  */
 import { logDebug } from "../../logging";
-import type { ChangeLocation } from "../../types";
+import { discussionTargetKey, type ChangeLocation } from "../../types";
 
 export interface OpenChangeOptions {
   /** OCW-FR-IAPK: the change-relative path of the file to select. */
   file?: string | null;
   /** OCW-FR-XUJN: the stream name, where the caller knows it. */
   streamName?: string;
+  /**
+   * OCW-FR-QSZP: the thread of the change to select in the discussion column.
+   * A stream location alone has one.
+   */
+  thread?: string | null;
 }
 
 export interface OpenSpecChangeRoutes {
@@ -38,6 +43,14 @@ export function openOpenSpecChange(
       locationKind: location.kind,
     });
     return;
+  }
+  // OCW-FR-QSZP: the tab takes the thread when it mounts or, where it is
+  // open, at once.
+  if (options.thread && location.kind === "stream") {
+    requestChangeDiscussion(
+      discussionTargetKey({ kind: "change", streamId: location.streamId, change: name }),
+      options.thread,
+    );
   }
   routes.open(location, name, options);
 }

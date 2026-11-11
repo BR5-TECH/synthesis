@@ -6,8 +6,9 @@
 //! parses no OpenSpec Markdown: the CLI of the project does, so the OpenSpec
 //! version and the schemas of the project decide what a change contains.
 //!
-//! The seam runs only `--version`, `list`, `show`, and `status`, and never a
-//! subcommand that writes (OSM-FR-VALR). Each call to the CLI is blocking and
+//! The seam runs only `--version`, `list`, `show`, `status`, `validate`, and
+//! `instructions` with the artifact `apply` alone, and never a subcommand that
+//! writes (OSM-FR-VALR). Each call to the CLI is blocking and
 //! bounded; a caller on an async path runs the seam on a blocking thread.
 
 use std::collections::HashMap;
@@ -21,6 +22,7 @@ use crate::fs::RootFs;
 use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink};
 
+pub mod apply;
 pub mod change;
 pub mod change_image;
 pub mod cli;
@@ -30,6 +32,7 @@ pub mod reads;
 #[cfg(test)]
 pub(crate) mod tests;
 
+pub use apply::{ApplyInstructions, ApplyProgress, ApplyTask};
 pub use change::{
     ChangeArtifact, ChangeDelta, ChangeDetail, ChangeFile, ChangeLocation, ChangeValidation,
     ValidationIssue,

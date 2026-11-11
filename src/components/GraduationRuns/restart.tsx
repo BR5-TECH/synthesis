@@ -16,6 +16,7 @@ import {
   DEFAULT_STANDING_WORK,
   defaultStreamFor,
   graduationErrorMessage,
+  isChangeRun,
   isOccupied,
   RESTART_TOOLTIP,
   restartConfirmation,
@@ -74,8 +75,9 @@ export function RestartRegionControl({
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   // GRT-FR-NPDC: a discarded direct run restarts where it was pinned, so it
-  // asks for no stream and no standing-work choice.
-  const direct = Boolean(run.directTarget);
+  // asks for no stream and no standing-work choice. GRT-FR-GLLN: neither does
+  // a discarded OpenSpec change run, which restarts on its own stream.
+  const direct = Boolean(run.directTarget) || isChangeRun(run);
   const occupied =
     !direct && isOccupied(streams.find((s) => s.stream.id === streamId));
   const commits = occupied && standingWorkCommits(standingWork);
@@ -172,6 +174,7 @@ export function RestartRegionControl({
         run.id,
         // GRT-FR-NPDC: the backend restarts a direct run on its pinned
         // worktree whatever stream is named, so the run's own is sent.
+        // GRT-FR-GLLN: an OpenSpec change run sends its own stream too.
         direct ? run.streamId : streamId,
         occupied ? standingWork : DEFAULT_STANDING_WORK,
         // GSD-FR-MZTB: a choice that makes no commit carries no message.
@@ -229,7 +232,7 @@ export function RestartRegionControl({
   return (
     <div className="graduation-restart" data-testid="graduation-restart-confirm">
       <p className="graduation-restart__ask">{restartConfirmation(run)}</p>
-      {direct && (
+      {direct && restartDirectStatement(run) && (
         <p className="t-ui-sm" data-testid="graduation-restart-direct">
           {restartDirectStatement(run)}
         </p>

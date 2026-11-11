@@ -293,6 +293,11 @@ export interface GraduationCheckpoint {
   blockedCode?: string | null;
   /** GRL-FR-QZFB: how many times in a row that code was raised. */
   blockAttempts: number;
+  /**
+   * GRL-FR-BVTS: the check gate the loop saved before it dispatched its next
+   * step. Present while a check correction is under way.
+   */
+  checkGate?: Record<string, unknown> | null;
 }
 
 /** GRS-FR-WFWD: how far one of a run's two log streams stands. */

@@ -1,0 +1,164 @@
+/* openspec-change-runs: the runs of a change in its workspace (OCW-FR-DTJD
+   through OCW-FR-NWRS), and the words a run region adds for them (GRU). */
+
+/* OCW-FR-NNRY / OCW-FR-BNGB: an unavailable action keeps its focus stop, and
+   the line under the header says why. */
+.openspec-change__head .btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+.openspec-change__run-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.openspec-change__run-note {
+  margin: 0;
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+}
+/* OCW-FR-EKYF: a refused start, beside the action that started it. */
+.openspec-change__run-refusal,
+.openspec-rework__refusal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1-5) var(--sp-2);
+  min-width: 0;
+  color: var(--danger);
+  font-size: var(--fs-ui-sm);
+}
+.openspec-change__run-refusal > span,
+.openspec-rework__refusal > span { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
+
+/* OCW-FR-JHAB / OCW-FR-NWRS: the run strip over the whole document column.
+   It is a container, so its own width decides its layout. */
+.openspec-runstrip {
+  flex: 0 0 auto;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1-5);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.openspec-runstrip[data-terminal="true"] { background: var(--bg-sunken); }
+.openspec-runstrip__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.openspec-runstrip__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semi);
+  font-size: var(--fs-ui-sm);
+}
+.openspec-runstrip__state { flex: 0 0 auto; white-space: nowrap; }
+.openspec-runstrip__head .btn { flex: 0 0 auto; }
+.openspec-runstrip__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+  min-width: 0;
+}
+.openspec-runstrip__detail p { margin: 0; }
+/* OCW-FR-NWRS: the next task is cut with an ellipsis; its whole text is its
+   tooltip and its accessible name. */
+.openspec-runstrip__next {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.openspec-runstrip__sentence { margin: 0; }
+/* OCW-FR-NWRS: narrower than 560 px, the head keeps one line. The title gives
+   way first, down to a few letters, then the state, and the actions last.
+   Each one that is cut has its whole text as its tooltip. */
+@container (max-width: 560px) {
+  .openspec-runstrip__head { gap: var(--sp-1-5); }
+  .openspec-runstrip__title { flex: 0 1000 auto; min-width: 3em; }
+  /* The title gives way alone: a state that shrinks at all draws an ellipsis. */
+  .openspec-runstrip__state {
+    flex: 0 0 auto;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .openspec-runstrip__head .spacer { flex: 1 1 0; min-width: 0; }
+}
+
+/* OCW-FR-LWFQ: the Rework… dialog. */
+.openspec-rework { width: min(560px, calc(100vw - 48px)); }
+.openspec-rework__what { margin: 0; color: var(--fg-2); }
+.openspec-rework__name { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.openspec-rework__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.openspec-rework__instruction {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 7.5rem;
+  resize: vertical;
+  font-family: var(--font-sans);
+  line-height: var(--lh-normal);
+}
+
+/* OCW-FR-QCPB: the request card. */
+.dds-stream-chip[data-kind="run"] {
+  background: var(--warn-soft);
+  color: var(--fg-1);
+}
+.openspec-action { max-width: 100%; }
+/* OCW-FR-QCPB / OCW-FR-CTWP: the rows of the card take the 12 px side inset
+   and the bottom space of the sibling `.dds-newdraft__*` rows. */
+.openspec-action__instruction {
+  margin: 0 12px 8px;
+  padding: var(--sp-1-5) var(--sp-2);
+  border-left: 2px solid var(--border-2);
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.openspec-action__run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1-5) var(--sp-2);
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: var(--fs-ui-sm);
+}
+.openspec-action .dds-newdraft__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1-5) var(--sp-2);
+}
+
+/* GRU-FR-YHFQ: a rework run's instruction, as plain text. */
+.graduation__instruction {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+  margin: 0;
+}
+.graduation__instruction-text {
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.graduation__check-state { margin: 0; }
+.openspec-runstrip__checks { margin: 0; color: var(--fg-2); }
+.openspec-rework__body { display: flex; flex-direction: column; gap: var(--sp-3); }

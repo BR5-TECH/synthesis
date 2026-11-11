@@ -14,6 +14,7 @@ use tempfile::TempDir;
 use super::*;
 use crate::logging::{BufferState, LogBuffer, LogFilter, LogLevel, LogRecord};
 
+mod apply;
 mod change;
 mod cli;
 mod mode;

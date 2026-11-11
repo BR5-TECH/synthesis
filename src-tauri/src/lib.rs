@@ -19,6 +19,7 @@ pub mod ai_openrouter;
 pub mod ai_shared;
 pub mod artifacts;
 pub mod bm25_index;
+pub mod change_action_requests;
 pub mod change_history;
 pub mod change_proposals;
 pub mod change_statistics;
@@ -243,6 +244,8 @@ pub fn run() {
             voice_ai::start_watchdog(app.handle().clone());
             // AGC-FR-NBZN: the turn builders find a stream's working copy.
             change_proposals::install_stream_lookup(app.handle().clone());
+            // CAR-FR-IFGR: the turn builders read the state of a requested run.
+            change_action_requests::install_run_state_lookup(app.handle().clone());
             // VOP-FR-MNTN: WebKitGTK denies capture without a handler.
             #[cfg(target_os = "linux")]
             voice_ai::linux_media::install(app.handle());
@@ -446,6 +449,11 @@ pub fn run() {
             streams::get_work_stream_uncommitted_paths,
             graduation::start_graduation,
             graduation::start_direct_graduation,
+            graduation::start_change_apply,
+            graduation::start_change_rework,
+            change_action_requests::list_change_action_requests,
+            change_action_requests::confirm_change_action_request,
+            change_action_requests::decline_change_action_request,
             graduation::start_pull_request_summary,
             graduation::list_branch_completed_runs,
             graduation::preflight_direct_graduation,
@@ -630,6 +638,7 @@ pub fn run() {
             project_settings::load_project_docker_images,
             openspec::get_openspec_status,
             openspec::change::read_openspec_change,
+            openspec::apply::read_apply_progress,
             project_settings::save_project_vendor_image,
             project_settings::build_project_vendor_image,
             project_settings::cancel_project_vendor_image_build,

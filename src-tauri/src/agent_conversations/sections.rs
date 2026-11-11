@@ -19,6 +19,9 @@ pub(super) use pending_questions::*;
 /// CEP-FR-XXMW: the reads of a change edit proposal.
 mod change_reads;
 pub(super) use change_reads::*;
+/// AGC-FR-KRMV: the action requests of a change.
+mod action_requests;
+pub(super) use action_requests::*;
 /// AGC-FR-JNOS / AGC-FR-LTLT: the split of a change.
 mod split;
 pub(super) use split::*;
@@ -214,6 +217,7 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
             Some(format) => format!("[asked the author to export {path} to {format}]"),
             None => format!("[asked the author to export {path}]"),
         },
+        comments::Attachment::ChangeActionRequest { .. } => action_request_line(attachment),
         // CMS-FR-TUHL, CMS-FR-KVDV: the group marks name who took part and show
         // none of what the advisors said, which the reply already used.
         comments::Attachment::Synthesis => {
@@ -854,8 +858,9 @@ pub(super) fn discussion_history_with_status(
         parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
         parts.push(InputPart::Text("\n".to_string()));
     }
-    // AGC-FR-EPNB / AGC-FR-TCCV / AGC-FR-QSWD: the open proposal, then the
-    // pending question set, end the section. The bound of AGC-FR-11 cuts the
+    // AGC-FR-KRMV / AGC-FR-JNOS / AGC-FR-EPNB / AGC-FR-TCCV / AGC-FR-QSWD: the
+    // action requests, the split, the open proposal, then the pending question
+    // set, end the section. The bound of AGC-FR-11 cuts the
     // comments before them rather than either of them.
     let (questions, unreadable) = match pending_questions_text(roots, &thread.id) {
         Ok(text) => (text, None),
@@ -863,6 +868,7 @@ pub(super) fn discussion_history_with_status(
     };
     let tail: String = [
         decomposition_text(roots, &thread.target),
+        action_requests_text(roots, &thread.target),
         split_text(roots, &thread.target),
         open_proposal_text(roots, &thread.target),
         questions,

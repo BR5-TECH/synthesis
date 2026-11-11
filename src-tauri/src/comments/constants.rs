@@ -52,6 +52,11 @@ pub const DISCUSSION_CHANGED: &str = "discussion-changed";
 /// CMS-FR-HTOA: the display name of the local participant.
 pub const LOCAL_PARTICIPANT_NAME: &str = "Me";
 
+/// CMS-FR-MKEV: the agent id of the Synthesis participant.
+pub const SYNTHESIS_AGENT_ID: &str = "synthesis";
+/// CMS-FR-MKEV: the handle of the Synthesis participant.
+pub const SYNTHESIS_HANDLE: &str = "Synthesis";
+
 /// CMS-FR-BQEN: the event a reserved or deleted question set announces itself
 /// on.
 ///

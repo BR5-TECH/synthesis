@@ -15,10 +15,13 @@ import {
   OPENSPEC_DEMO_DRAFT_ID,
   OPENSPEC_DEMO_RECORD,
   OPENSPEC_DEMO_RUN_FIELDS,
+  changeDiscussionList,
+  demoProposalHold,
   openspecDiscussionInvoke,
   openspecInvoke,
   validChangeName,
 } from "./mock-openspec";
+import { applyRunFields, openspecRunsInvoke, reworkRunFields } from "./mock-openspec-runs";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
@@ -6603,6 +6606,9 @@ function makeStreamRun(over: any) {
 // GRD-FR-LKGC / GRU-FR-LTWN: a completed propose run, and the graduated draft
 // it was made from (DRP-FR-YGOU, NAW-FR-XDDQ). See mock-openspec.ts.
 graduationRuns.push(makeStreamRun(OPENSPEC_DEMO_RUN_FIELDS));
+// OCR-FR-VHQW / OCW-FR-JHAB: a completed rework run and a working apply run of
+// the demo change. See mock-openspec-runs.ts.
+graduationRuns.push(makeStreamRun(reworkRunFields()), makeStreamRun(applyRunFields()));
 (drafts as any[]).push({ ...OPENSPEC_DEMO_DRAFT });
 draftRecords[OPENSPEC_DEMO_DRAFT_ID] = { ...OPENSPEC_DEMO_RECORD };
 draftFiles[OPENSPEC_DEMO_DRAFT_ID] = [String(OPENSPEC_DEMO_RECORD.promptPath)];
@@ -8149,6 +8155,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // OCW-openspec-change-workspace.md: the one demo change.
   const openspec = openspecInvoke(cmd, a);
   if (openspec !== NOT_HANDLED) return openspec;
+  // OCR / CAR: the runs of the demo change and its action requests.
+  const changeRuns = openspecRunsInvoke(cmd, a, {
+    runs: graduationRuns,
+    makeRun: makeStreamRun,
+    discussions: changeDiscussionList(),
+    proposalHold: demoProposalHold,
+  });
+  if (changeRuns !== NOT_HANDLED) return changeRuns;
   // FLO-flow.md / FSR-flow-sync-review.md: the delivery plan's state, its
   // overlaps, and the tracker sync.
   const flowPlan = flowPlanInvoke(cmd, a);
@@ -11529,8 +11543,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       // AGC-FR-05: Tauri reads `origin` with serde before the command runs, so
       // an origin in another shape fails the call with an argument error.
       const o = a.origin as Record<string, any> | undefined;
-      const idField = { draft: "draftId", artifact: "artifactId", note: "noteId" }[
-        String(o?.target?.kind) as "draft" | "artifact" | "note"
+      // OCW-FR-GDZT: a change discussion names its change (CMS-FR-UEXD).
+      const idField = { draft: "draftId", artifact: "artifactId", note: "noteId", change: "change" }[
+        String(o?.target?.kind) as "draft" | "artifact" | "note" | "change"
       ];
       if (typeof o?.discussionId !== "string" || !idField || typeof o.target[idField] !== "string") {
         throw "invalid args `origin` for command `dispatch_agent_turn`: missing field `discussionId`";

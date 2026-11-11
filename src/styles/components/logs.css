@@ -537,6 +537,13 @@
   padding-top: 10px;
   border-top: 1px solid var(--border-1);
 }
+/* OCW-FR-ZZCS: a row that starts a group of its own has the divider of a
+   group head, without the heading. */
+.draft-info__section {
+  margin-top: 12px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-1);
+}
 .draft-info__footer {
   color: var(--fg-3);
   margin-top: 12px;

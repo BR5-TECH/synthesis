@@ -25,6 +25,7 @@ import { ProposalHunkControl } from "./ProposalHunkControl";
 import { ChangeProposalAttachmentView } from "./ChangeProposalAttachment";
 import { NewDraftReferenceControl } from "./NewDraftReferenceControl";
 import { NewChangeReferenceControl } from "./NewChangeReferenceControl";
+import { ChangeActionReferenceControl } from "./OpenSpecChange/ChangeActionCard";
 import {
   openReview,
   reviewedHunkTotal,
@@ -752,6 +753,7 @@ function AttachmentView({
         | "newChangeProposal"
         | "newChangeSubject"
         | "exportRequest"
+        | "changeActionRequest"
         | "synthesis"
         | "advisors"
         | "changeProposal";
@@ -910,6 +912,9 @@ export function CommentAttachmentList({
         ) : a.kind === "exportRequest" ? (
           // CMT-FR-HFXL / EXD-FR-UQUD: the export request card.
           <ExportRequestCard key={i} attachment={a} />
+        ) : a.kind === "changeActionRequest" ? (
+          // OCW-FR-QCPB: a reference control that opens the change.
+          <ChangeActionReferenceControl key={i} attachment={a} />
         ) : (
           <AttachmentView
             key={i}

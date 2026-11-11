@@ -824,6 +824,28 @@ describe("selecting a run by its id (GRU-FR-PAHN)", () => {
     ).toBe(true);
   });
 
+  it("GRU-FR-PAHN: it scrolls the selected row into the rail's view", async () => {
+    // jsdom has no layout and no `scrollIntoView`; the stub records which
+    // element asked to be shown.
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      queue = two();
+      await open({ selectRun: { runId: "m1", nonce: 106 } });
+      await waitFor(() => expect(region()).toHaveAttribute("data-run", "m1"));
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" }));
+      const shown = scrollIntoView.mock.contexts as Element[];
+      const row = screen
+        .getAllByTestId("graduation-row")
+        .find((el) => el.getAttribute("aria-label") === "Merge docs-pass")!
+        .closest("[role='listitem']");
+      expect(shown).toContain(row);
+      expect(shown.every((el) => el === row || !el.closest("[role='listitem']"))).toBe(true);
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it("GRU-FR-PAHN: it selects a draft run by its id as well", async () => {
     queue = two();
     await open({ selectRun: { runId: "r1", nonce: 103 } });

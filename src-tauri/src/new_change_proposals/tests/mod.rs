@@ -74,7 +74,11 @@ impl Fixture {
         )
         .expect("discussion");
         Fixture {
-            sites: FixedSites { sites: vec![(STREAM.into(), wc.clone())], busy: Mutex::new(None) },
+            sites: FixedSites {
+                sites: vec![(STREAM.into(), wc.clone())],
+                busy: Mutex::new(None),
+                rework: Mutex::new(None),
+            },
             _wc_dir: wc_dir,
             _store_dir: store_dir,
             app: crate::tools::tests::mock_app(),

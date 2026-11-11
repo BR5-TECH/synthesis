@@ -537,6 +537,23 @@ fn validate_draft(
         .map_err(|e| map_selection_error(&e).to_string())
 }
 
+/// AGR-FR-03: a new opaque agent id. It is never `synthesis`, the id of the
+/// Synthesis participant (CMS-FR-MKEV).
+pub fn new_agent_id() -> String {
+    agent_id_from(new_note_id)
+}
+
+/// AGR-FR-03: the first id of `next` that is not `synthesis`. A seam, so a
+/// test can make the generator answer `synthesis`.
+fn agent_id_from(mut next: impl FnMut() -> String) -> String {
+    loop {
+        let id = next();
+        if id != crate::comments::SYNTHESIS_AGENT_ID {
+            return id;
+        }
+    }
+}
+
 /// AGR-FR-09: validate the whole draft before writing anything, so a rejected
 /// creation leaves the store byte-for-byte as it was.
 pub fn create_agent_impl(
@@ -556,7 +573,7 @@ pub fn create_agent_impl(
             validate_draft(store, project_key, &agents, draft, None)?;
             let now = now_rfc3339();
             let agent = Agent {
-                id: new_note_id(),
+                id: new_agent_id(),
                 nickname: draft.nickname.clone(),
                 title,
                 model_id: draft.model_id.clone(),
@@ -581,7 +598,7 @@ pub fn create_agent_impl(
             let root = require_worktree(worktree)?;
             let existing = project_store::list(root)?.agents;
             validate_draft(store, project_key, &existing, draft, None)?;
-            let id = new_note_id();
+            let id = new_agent_id();
             let skills = normalise_skills(&draft.skills);
             let disabled_skills = normalise_skills(&draft.disabled_skills);
             project_store::write(root, &id, draft, &title, &skills, &disabled_skills)?;

@@ -12,15 +12,19 @@
  *                              s-1 (editor-work) and s-2 (registry-migration)
  *   ?openspecMap=unavailable   the same index with `validation: "unavailable"`
  *                              and one unread location (SMP-FR-KVKD)
- *   ?openspecMap=cli_unavailable
- *                              every load rejects with `cli_unavailable`
- *                              (SMP-FR-KBXW); any other value rejects with it
+ *   ?openspecMap=<failure>     every load rejects with that OpenSpec failure,
+ *                              for example `cli_unavailable:not_found` or
+ *                              `cli_timed_out` (SMP-FR-KBXW)
+ *   ?openspecMap=unavailable&openspecValidation=<failure>
+ *                              the index carries that `validationFailure`
+ *                              (SMP-FR-KVKD), for example `cli_rejected`
  *
  * Open the Map tab with View map in the Project panel. The chip
  * `add-logout-3f2a` on editor-work opens the demo change of `mock-openspec.ts`.
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
+import { failureFlag, failureOf } from "./mock-openspec-failures";
 import { OPENSPEC_DEMO_CHANGE, OPENSPEC_DEMO_STREAM } from "./mock-openspec";
 
 const LEVELS = [
@@ -158,6 +162,7 @@ function openspecIndex(unavailable: boolean) {
     dependencies: [],
     validation: unavailable ? "unavailable" : "invalid",
     unreadLocations: unavailable ? 1 : 0,
+    ...(unavailable && validationFlag() ? { validationFailure: failureOf(validationFlag()!) } : {}),
   };
 }
 
@@ -165,11 +170,18 @@ function openspecIndex(unavailable: boolean) {
 export function specMapInvoke(cmd: string): unknown {
   if (cmd !== "load_specification_map") return NOT_HANDLED;
   const params = typeof location === "undefined" ? null : new URLSearchParams(location.search);
-  if (!params?.has("openspecMap")) return { source: "demo" };
-  const mode = params.get("openspecMap") ?? "";
+  const fail = failureFlag("openspecMap");
+  if (!params?.has("openspecMap") && !fail) return { source: "demo" };
+  const mode = params?.get("openspecMap") ?? fail ?? "";
   if (mode === "" || mode === "unavailable") {
     return { source: "openspec", index: openspecIndex(mode === "unavailable") };
   }
   // eslint-disable-next-line no-throw-literal
-  throw "cli_unavailable";
+  throw failureOf(mode);
+}
+
+/** SMP-FR-KVKD: the failure of an unavailable validation. */
+function validationFlag(): string | null {
+  if (typeof location === "undefined") return null;
+  return new URLSearchParams(location.search).get("openspecValidation");
 }

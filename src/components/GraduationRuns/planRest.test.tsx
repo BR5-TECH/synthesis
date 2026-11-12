@@ -40,7 +40,7 @@ const WRITE_FAILED_WORDS =
 
 let queue: GraduationQueue;
 /** What `continue_graduation_run` rejects with, or null where it is accepted. */
-let continueRefusal: string | null;
+let continueRefusal: unknown;
 
 const UPDATE: GraduationRest = {
   reason: "plan_update",
@@ -199,10 +199,6 @@ describe("Graduation runs — plan rests", () => {
       "proposal_pending",
       "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.",
     ],
-    [
-      "openspec_validation_unavailable: cli_failed",
-      "OpenSpec could not be read (cli_failed), so the run did not continue.",
-    ],
     ["write_failed", WRITE_FAILED_WORDS],
   ])("GRU-FR-BPNJ: a Continue refused with %s is stated in words beside the action row", async (code, words) => {
     continueRefusal = code;
@@ -214,6 +210,35 @@ describe("Graduation runs — plan rests", () => {
     expect(alert.textContent).toBe(words);
     // A refused Continue changes nothing: the rest still stands.
     expect(within(region).getByTestId("graduation-plan-rest")).toBeInTheDocument();
+  });
+
+  it("GRU-FR-BPNJ, OFN-FR-RLSO, OFN-FR-DPIJ: a Continue refused with openspec_validation_unavailable renders its notice beside the action row, with Open change and no Retry", async () => {
+    continueRefusal = {
+      code: "openspec_validation_unavailable",
+      cause: "cli_rejected",
+      change: CHANGE,
+      diagnostics: [{ severity: "error", code: "missing_scenario", message: "A requirement has no scenario" }],
+    };
+    const region = await selectedRegion();
+    await userEvent.click(within(region).getByRole("button", { name: "Continue" }));
+    const refusal = await screen.findByTestId("graduation-action-refusal");
+    expect(within(refusal).getByRole("alert").textContent).toBe(
+      "OpenSpec reported a problem in the OpenSpec files of this change. The run did not continue.",
+    );
+    // OFN-FR-DPIJ: the Continue of the region is the retry.
+    expect(within(refusal).queryByRole("button", { name: "Retry" })).toBeNull();
+    await userEvent.click(within(refusal).getByRole("button", { name: "Open change" }));
+    expect(openChange).toHaveBeenCalledWith(
+      { kind: "stream", streamId: queue.runs[0].streamId },
+      CHANGE,
+      expect.objectContaining({ thread: null }),
+    );
+    await userEvent.click(within(refusal).getByRole("button", { name: /Details/ }));
+    expect(within(refusal).getByTestId("openspec-failure-diagnostic")).toHaveTextContent(
+      "error missing_scenario: A requirement has no scenario",
+    );
+    // One statement of the failure: no other sentence of the same failure.
+    expect(screen.getAllByText(/OpenSpec reported a problem/)).toHaveLength(1);
   });
 
   it("GRU-FR-BPNJ, GRU-FR-XQVG: a refused Continue from the rail of a run at a plan rest states the plan words, with no prefix", async () => {

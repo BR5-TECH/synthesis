@@ -122,11 +122,12 @@ describe("plan rests", () => {
     expect(planContinueMessage("proposal_pending")).toBe(
       "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.",
     );
+    // OFN-FR-QZEC: the sentence of the notice of its cause.
     expect(planContinueMessage("openspec_validation_unavailable: cli_failed")).toBe(
-      "OpenSpec could not be read (cli_failed), so the run did not continue.",
+      "The OpenSpec CLI stopped before it answered, also after one more try. The run did not continue.",
     );
     expect(planContinueMessage("Error: openspec_validation_unavailable")).toBe(
-      "OpenSpec could not be read, so the run did not continue.",
+      "The OpenSpec validation could not run, so the run did not continue.",
     );
     expect(planContinueRefusal("stream_busy", null)).toBeNull();
   });
@@ -180,7 +181,7 @@ describe("GRU-FR-BPNJ: write_failed and the plan Continue message", () => {
     expect(words).toMatch(/try Continue again/);
     expect(planContinueMessage("Error: write_failed")).toBe(words);
     expect(planContinueMessage("openspec_validation_unavailable:cli_timed_out")).toBe(
-      "OpenSpec could not be read (cli_timed_out), so the run did not continue.",
+      "The OpenSpec CLI did not finish in time, also after one more try. The run did not continue.",
     );
     expect(planContinueMessage("unknown_run")).toBe("That run is not there any more.");
   });

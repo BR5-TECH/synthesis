@@ -130,7 +130,7 @@ fn an_archive_that_times_out_refuses_with_cli_timed_out() {
     let (fx, runner, _) = archive_fixture(ALL_DONE);
     let stream = stream_with_changes(&fx, "editor", &["add-logout"]);
     completed_apply(&fx, &stream, "add-logout", "2026-11-10T10:00:00Z");
-    runner.set_archive("add-logout", Archive::Answer(Err(ProcessError::TimedOut)));
+    runner.set_archive("add-logout", Archive::Answer(Err(ProcessError::timed_out())));
     let tip_before = tip(&fx, &stream.branch);
 
     let refusal = merge(&fx, &stream, commit_publication()).unwrap_err();
@@ -140,11 +140,11 @@ fn an_archive_that_times_out_refuses_with_cli_timed_out() {
     assert!(dirty(&stream.worktree()).is_empty());
 }
 
-// OAR-FR-EUXZ, OAR-FR-IAKL: where the CLI stops being usable after the check
-// passed, here because the mode goes off, the archive refuses with
-// `cli_failed`, and no archive process starts.
+// OAR-FR-EUXZ, OAR-FR-IAKL: where the mode goes off after the check passed,
+// the archive refuses with `openspec_mode_inactive`, and no archive process
+// starts.
 #[test]
-fn a_cli_that_is_not_ready_after_the_check_refuses_with_cli_failed() {
+fn a_mode_that_goes_off_after_the_check_refuses_the_archive() {
     let (fx, runner, _) = archive_fixture(ALL_DONE);
     let stream = stream_with_changes(&fx, "editor", &["add-logout"]);
     completed_apply(&fx, &stream, "add-logout", "2026-11-10T10:00:00Z");
@@ -157,7 +157,75 @@ fn a_cli_that_is_not_ready_after_the_check_refuses_with_cli_failed() {
 
     let refusal = merge(&fx, &stream, commit_publication()).unwrap_err();
 
-    assert_eq!(refusal, "archive_failed: add-logout: cli_failed");
+    assert_eq!(refusal, "archive_failed: add-logout: openspec_mode_inactive");
     assert!(runner.archive_calls().is_empty());
     assert_eq!(tip(&fx, &stream.branch), tip_before);
+}
+
+// OFP-FR-IJYA, OFP-FR-PQNS, OFP-FR-MJZU, OAR-FR-KBDD: a transient archive
+// that wrote files runs once more only after its restore is complete: the
+// second archive moves the change folder to the archive folder that the first
+// wrote into, which only works where the restore removed what the first
+// wrote. One wait, two archive processes, and the archive commit holds none
+// of the writes of the first.
+#[test]
+fn a_transient_archive_runs_again_only_after_a_real_restore() {
+    let (fx, runner, _) = archive_fixture(ALL_DONE);
+    let stream = stream_with_changes(&fx, "editor", &["add-logout"]);
+    completed_apply(&fx, &stream, "add-logout", "2026-11-10T10:00:00Z");
+    runner.set_archive(
+        "add-logout",
+        Archive::Then(
+            Box::new(Archive::FailWriting { status: 2, stdout: String::new() }),
+            Box::new(Archive::Succeed),
+        ),
+    );
+
+    let merged = merge(&fx, &stream, commit_publication()).expect("the merge goes on");
+
+    assert!(matches!(merged, crate::streams::StreamMergeResult::Merged { .. }), "{merged:?}");
+    assert_eq!(runner.archive_calls().len(), 2, "one archive, run once more");
+    assert_eq!(super::change_runs::waits(&fx), vec![2_000], "one wait of 2 seconds");
+    let repo = fx.repo();
+    let mut walk = repo.revwalk().unwrap();
+    walk.push(tip(&fx, &stream.base_branch)).unwrap();
+    let archive_commit = walk
+        .flatten()
+        .find(|oid| {
+            repo.find_commit(*oid).unwrap().summary().ok().flatten()
+                == Some("Archive OpenSpec change add-logout")
+        })
+        .expect("the archive commit");
+    let paths = commit_paths(&fx, archive_commit);
+    assert!(paths.iter().any(|p| p.contains("/archive/")), "{paths:?}");
+    assert!(
+        !paths.iter().any(|p| p.ends_with("stray.md") || p.ends_with("new-cap.md")),
+        "{paths:?}"
+    );
+    assert!(dirty(&stream.worktree()).is_empty(), "{:?}", dirty(&stream.worktree()));
+}
+
+// OFP-FR-IJYA: a transient archive whose restore cannot clean a path, here a
+// folder that stands where the live spec file is, ends with its first outcome
+// and does not run again.
+#[test]
+fn a_restore_that_fails_ends_the_archive_with_its_first_outcome() {
+    let (fx, runner, _) = archive_fixture(ALL_DONE);
+    let stream = stream_with_changes(&fx, "editor", &["add-logout"]);
+    completed_apply(&fx, &stream, "add-logout", "2026-11-10T10:00:00Z");
+    runner.set_archive(
+        "add-logout",
+        Archive::Then(Box::new(Archive::FolderForSpec { status: 2 }), Box::new(Archive::Succeed)),
+    );
+    let tip_before = tip(&fx, &stream.branch);
+
+    let refusal = merge(&fx, &stream, commit_publication()).unwrap_err();
+
+    assert_eq!(refusal, "archive_failed: add-logout: cli_failed");
+    assert_eq!(runner.archive_calls().len(), 1, "no second archive after a failed restore");
+    assert!(super::change_runs::waits(&fx).is_empty(), "no wait");
+    assert_eq!(tip(&fx, &stream.branch), tip_before);
+    let record = one_record(&stream, "openspec archive could not restore the working copy");
+    assert_eq!(record.level, crate::logging::LogLevel::Warn);
+    assert_eq!(record.fields["code"], "restore_failed");
 }

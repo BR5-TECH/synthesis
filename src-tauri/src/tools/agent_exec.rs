@@ -52,6 +52,7 @@ pub mod sandbox;
 // The parts this file was split into. They hold no surface of their own: every
 // item they carry is named through this module, exactly as before.
 mod docker_in_docker;
+pub mod image_probe;
 mod launch;
 mod launch_env;
 mod milestone;

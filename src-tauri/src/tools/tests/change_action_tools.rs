@@ -369,9 +369,13 @@ impl Starter {
 }
 
 impl RunStarter for Starter {
-    fn start_apply(&self, _stream_id: &str, change: &str) -> Result<GraduationRun, String> {
+    fn start_apply(
+        &self,
+        _stream_id: &str,
+        change: &str,
+    ) -> Result<GraduationRun, crate::openspec::Refusal> {
         self.calls.lock().unwrap().push(format!("apply {change}"));
-        self.answer("apply")
+        Ok(self.answer("apply")?)
     }
 
     fn start_rework(
@@ -381,9 +385,9 @@ impl RunStarter for Starter {
         _instruction: &str,
         _thread_id: &str,
         _requester: &Participant,
-    ) -> Result<GraduationRun, String> {
+    ) -> Result<GraduationRun, crate::openspec::Refusal> {
         self.calls.lock().unwrap().push(format!("rework {change}"));
-        self.answer("rework")
+        Ok(self.answer("rework")?)
     }
 }
 

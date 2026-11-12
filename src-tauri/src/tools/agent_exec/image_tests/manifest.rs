@@ -476,3 +476,47 @@ fn the_manifest_parses_and_holds_an_entry_per_executable_vendor() {
         assert!(descriptor::manifest_entry(vendor).is_none());
     }
 }
+
+/// AVI-FR-BTPR — `verify.sh` runs `openspec --version` in each image under the
+/// launch conditions of EAC-FR-13 and EAC-FR-14, compares the version with the
+/// one the Dockerfile pins, and fails on a status other than zero. Read from
+/// the code lines only, so a check the comments name and the script does not
+/// make cannot pass.
+#[test]
+fn verify_confirms_the_pinned_openspec_cli_of_each_image() {
+    let code: Vec<&str> =
+        VERIFY_SH.lines().map(str::trim).filter(|line| !line.starts_with('#')).collect();
+    let start = code
+        .iter()
+        .position(|line| line.contains("--entrypoint openspec"))
+        .expect("verify.sh does not run openspec in the image");
+    let window = code[start.saturating_sub(6)..start + 1].join("\n");
+    for condition in ["--user \"$foreign_uid\"", "--cap-drop ALL", "no-new-privileges"] {
+        assert!(window.contains(condition), "the openspec check does not run with {condition}");
+    }
+    assert!(code[start].contains("--version"));
+    assert!(code.iter().any(|line| line.contains("build_arg \"$vendor\" OPENSPEC_VERSION")));
+    let failures: Vec<usize> = code
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains("openspec --version") && line.contains("FAIL"))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(failures.len(), 2, "a wrong version and a failed start each fail verify.sh");
+    for at in failures {
+        assert_eq!(code[at + 1], "status=1");
+    }
+}
+
+/// AVI-FR-GSSF — the README states what a project's own image must hold for
+/// OpenSpec runs.
+#[test]
+fn the_readme_states_what_a_project_image_needs_for_openspec() {
+    for needle in [
+        "Node 22.12.0 or later",
+        "OpenSpec CLI 1.0 or later",
+        "`openspec` on the `PATH` of the launching user",
+    ] {
+        assert!(README.contains(needle), "the README does not state {needle:?}");
+    }
+}

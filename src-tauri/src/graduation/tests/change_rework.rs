@@ -404,7 +404,7 @@ fn a_ready_on_an_invalid_rework_starts_another_pass() {
         "validate",
         Ok(crate::openspec::ProcessOutput {
             exit_status: Some(1),
-            stdout: br#"{ "items": [ { "valid": false, "issues": [ { "level": "ERROR", "path": "tasks.md", "message": "x" } ] } ] }"#.to_vec(),
+            stdout: br#"{ "items": [ { "valid": false, "issues": [ { "level": "ERROR", "path": "tasks.md", "message": "x" } ] } ] }"#.to_vec(), stderr: Vec::new(),
         }),
     );
     let stream = change_stream(&fx, "editor");

@@ -140,7 +140,11 @@ fn a_ready_apply_review_commits_under_its_own_message() {
 fn invalid() -> Result<ProcessOutput, crate::openspec::ProcessError> {
     const INVALID: &str = r#"{ "items": [ { "id": "add-logout-3f2a", "type": "change", "valid": false,
   "issues": [ { "level": "ERROR", "path": "specs/auth/spec.md", "message": "No scenario" } ] } ] }"#;
-    Ok(ProcessOutput { exit_status: Some(1), stdout: INVALID.as_bytes().to_vec() })
+    Ok(ProcessOutput {
+        exit_status: Some(1),
+        stdout: INVALID.as_bytes().to_vec(),
+        stderr: Vec::new(),
+    })
 }
 
 /// The three causes of the apply gate, as its finding names them.
@@ -234,7 +238,10 @@ fn a_progress_read_that_fails_blocks_the_review() {
     let (fx, runner, _) = change_fixture(ALL_DONE);
     let stream = change_stream(&fx, "editor");
     let run = apply_run(&fx, &stream);
-    runner.set("instructions", Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() }));
+    runner.set(
+        "instructions",
+        Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new(), stderr: Vec::new() }),
+    );
     let dispatch = ScriptedDispatch::new(vec![implementing(), Turn::ready()]);
     let run = fx.drive(&run, dispatch.clone());
     assert_eq!(run.state, GraduationRunState::Blocked);

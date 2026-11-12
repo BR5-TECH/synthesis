@@ -259,3 +259,10 @@ describe("state styles of controls", () => {
     ]);
   });
 });
+
+describe("the failure notice of a failed load (SMP-FR-KBXW)", () => {
+  it("SMP-FR-KBXW, OFN-FR-IHSQ: the notice stands from the top, so Details opens downward and its toggle stays put", () => {
+    const rule = only(".smap-state--notice");
+    expect(decl(rule, "justify-content")).toBe("flex-start");
+  });
+});

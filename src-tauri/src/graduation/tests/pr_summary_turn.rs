@@ -69,7 +69,10 @@ pub(super) fn commit_on_branch(
 
 /// A fixture with a head branch one commit ahead of `main`, and a PR summary
 /// run for it, enqueued through the command.
-fn summary_run(fx: &Fixture, mode: PrSummaryMode) -> (GraduationRun, git2::Oid, git2::Oid) {
+pub(super) fn summary_run(
+    fx: &Fixture,
+    mode: PrSummaryMode,
+) -> (GraduationRun, git2::Oid, git2::Oid) {
     fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
     let repo = fx.repo();
     let base = repo.head().unwrap().peel_to_commit().unwrap().id();
@@ -96,7 +99,7 @@ fn summary_run(fx: &Fixture, mode: PrSummaryMode) -> (GraduationRun, git2::Oid, 
     (run, tip, base)
 }
 
-fn summary_answer(title: &str, description: &str) -> Turn {
+pub(super) fn summary_answer(title: &str, description: &str) -> Turn {
     Turn::answering(Answer::RawResult(serde_json::json!({
         "title": title,
         "description": description,

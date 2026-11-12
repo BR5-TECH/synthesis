@@ -186,3 +186,5 @@
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+/* OFN: a failure notice inside a refusal line takes the line's whole width. */
+.openspec-change__notice { flex: 1 1 100%; min-width: 0; }

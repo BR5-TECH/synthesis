@@ -12,10 +12,11 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+const { logWarn } = vi.hoisted(() => ({ logWarn: vi.fn() }));
 vi.mock("../../logging", () => ({
   logDebug: vi.fn(),
   logInfo: vi.fn(),
-  logWarn: vi.fn(),
+  logWarn,
   logError: vi.fn(),
 }));
 
@@ -37,10 +38,14 @@ beforeEach(() => {
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) => {
     if (cmd === "open_settings_window" || cmd === "append_log_records") return undefined;
+    if (cmd === "get_openspec_status") {
+      return { setting: "auto", usesOpenspec: true, active: true, cli: { state: "not_found" } };
+    }
     unknown.push(cmd);
     throw new Error(`unexpected invoke ${cmd}`);
   });
   openRoute.mockReset();
+  logWarn.mockReset();
   configureOpenSpecChangeRoutes({ open: openRoute });
 });
 afterEach(() => {
@@ -104,27 +109,145 @@ describe("the frame (SMP-FR-MNZW, SMP-FR-KVKD, SMP-FR-KBXW)", () => {
     expect(notices[0]).toHaveTextContent("The changes of 3 locations could not be read.");
   });
 
-  it("SMP-FR-KBXW, SMP-FR-ONSD: cli_unavailable says OpenSpec cannot be read, routes to its settings, and keeps Retry", async () => {
-    const load = vi.fn().mockRejectedValueOnce("cli_unavailable").mockResolvedValue(openspecIndex());
+  it("SMP-FR-KBXW, SMP-FR-ONSD, OFN-FR-EPIG, OFN-FR-HEVB: an OpenSpec failure renders its notice in place of the statement, routes to its settings, and keeps Retry", async () => {
+    const load = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "cli_unavailable", detail: "not_found", diagnostics: [] })
+      .mockResolvedValue(openspecIndex());
     const { store } = await renderMap({ ops: { load } });
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("The specification map could not be loaded.");
-    expect(alert).toHaveTextContent("OpenSpec cannot be read");
-    fireEvent.click(within(alert).getByRole("button", { name: "Open OpenSpec settings" }));
+    const notice = screen.getByTestId("openspec-failure-notice");
+    expect(within(notice).getByRole("alert")).toHaveTextContent(
+      "The OpenSpec CLI is not installed on this machine.",
+    );
+    expect(screen.queryByText("The specification map could not be loaded.")).toBeNull();
+    fireEvent.click(within(notice).getByRole("button", { name: "Open OpenSpec settings" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("open_settings_window", { section: "project/openspec" }),
     );
-    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    // OFN-FR-DPIJ: the notice adds no Retry of its own; the state keeps one.
+    expect(within(notice).queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Retry" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(store.snapshot().status).toBe("ready"));
     expect(load).toHaveBeenCalledTimes(2);
   });
 
-  it("SMP-FR-KBXW: any other failure code offers Retry and no route to the settings", async () => {
-    await renderMap({ ops: { load: vi.fn().mockRejectedValue(new Error("cli_failed: exit 1")) } });
+  it("SMP-FR-KBXW, OFN-FR-DPIJ: Retry after a transient failure re-checks the CLI before the load, and the notice offers no Retry", async () => {
+    const order: string[] = [];
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "append_log_records") return undefined;
+      if (cmd === "get_openspec_status") {
+        order.push(`status ${JSON.stringify(args)}`);
+        return { setting: "auto", usesOpenspec: true, active: true, cli: { state: "not_found" } };
+      }
+      unknown.push(cmd);
+      throw new Error(`unexpected invoke ${cmd}`);
+    });
+    const load = vi.fn(async () => {
+      order.push("load");
+      if (order.length === 1) throw { code: "cli_timed_out", diagnostics: [{ message: "slow" }] };
+      return openspecIndex();
+    });
+    const { store } = await renderMap({ ops: { load } });
+    const notice = screen.getByTestId("openspec-failure-notice");
+    expect(notice).toHaveTextContent("The OpenSpec CLI did not finish in time, also after one more try.");
+    expect(within(notice).queryByRole("button", { name: "Retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(store.snapshot().status).toBe("ready"));
+    expect(order).toEqual(["load", 'status {"recheck":true}', "load"]);
+  });
+
+  it("SMP-FR-KBXW: a Retry whose load fails again puts the focus on the new Retry, not on the page", async () => {
+    const load = vi.fn().mockRejectedValue({ code: "cli_timed_out", diagnostics: [] });
+    const { store } = await renderMap({ ops: { load } });
+    const first = screen.getByRole("button", { name: "Retry" });
+    first.focus();
+    fireEvent.click(first);
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(store.snapshot().status).toBe("error"));
+    const again = await screen.findByRole("button", { name: "Retry" });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+  });
+
+  it("SMP-FR-KBXW, SMP-FR-ONSD: a failure that is not an OpenSpec failure keeps the statement and Retry, and re-checks nothing", async () => {
+    const load = vi.fn().mockRejectedValueOnce(new Error("no_open_project")).mockResolvedValue(openspecIndex());
+    const { store } = await renderMap({ ops: { load } });
     const alert = screen.getByRole("alert");
-    expect(alert).not.toHaveTextContent("OpenSpec cannot be read");
+    expect(alert).toHaveTextContent("The specification map could not be loaded.");
     expect(within(alert).queryByRole("button", { name: "Open OpenSpec settings" })).toBeNull();
-    expect(within(alert).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(store.snapshot().status).toBe("ready"));
+    expect(invokeMock.mock.calls.filter((c) => c[0] === "get_openspec_status")).toHaveLength(0);
+  });
+
+  it("SMP-FR-KVKD, OFN-FR-IHSQ: an unavailable validation states the sentence of its failure in the line, with its Details", async () => {
+    await renderMap({
+      index: openspecIndex({
+        validation: "unavailable",
+        validationFailure: {
+          code: "cli_rejected",
+          diagnostics: [{ severity: "error", path: "specs/auth/spec.md", message: "Requirement has no scenario" }],
+        },
+      }),
+    });
+    const notice = screen.getByTestId("spec-map-notice");
+    expect(notice).toHaveTextContent(
+      "The OpenSpec validation could not run, so no requirement shows as a gap. OpenSpec reported a problem in the OpenSpec files of this change.",
+    );
+    // The line holds the sentence once, and no action but Details.
+    expect(screen.getAllByText(/OpenSpec reported a problem/)).toHaveLength(1);
+    const details = within(notice).getByRole("button", { name: /Details/ });
+    expect(within(notice).getAllByRole("button")).toEqual([details]);
+    fireEvent.click(details);
+    expect(within(notice).getByTestId("openspec-failure-diagnostic")).toHaveTextContent(
+      "error specs/auth/spec.md: Requirement has no scenario",
+    );
+    // OFN-FR-ONNF: the sentence alone is live; the line and its Details are not.
+    expect(notice).not.toHaveAttribute("role");
+    const live = within(notice).getAllByRole("status").find((el) => el.tagName === "SPAN" && !el.closest(".ofn"));
+    expect(live).toHaveTextContent("OpenSpec reported a problem in the OpenSpec files of this change.");
+    expect(live!.contains(within(notice).getByTestId("openspec-failure-details"))).toBe(false);
+    expect(within(notice).getByTestId("openspec-failure-details")).toHaveAttribute("aria-live", "off");
+  });
+});
+
+describe("the log record of the validation line (OFN-FR-LKAT)", () => {
+  const noticeRecords = () =>
+    logWarn.mock.calls.filter((c) => c[1] === "an openspec failure notice appeared");
+
+  it("OFN-FR-LKAT, SMP-FR-KVKD: the sentence in the line emits one WARN record, also with no Details", async () => {
+    const { store } = await renderMap({
+      index: openspecIndex({ validation: "unavailable", validationFailure: { code: "cli_timed_out", diagnostics: [] } }),
+    });
+    expect(screen.getByTestId("spec-map-notice")).toHaveTextContent("did not finish in time");
+    expect(noticeRecords()).toHaveLength(1);
+    expect(noticeRecords()[0][2]).toEqual({
+      surface: "spec_map_validation",
+      code: "cli_timed_out",
+      cause: "",
+      class: "transient",
+    });
+    // A render with the same failure is the same notice.
+    act(() => store.toggleGaps());
+    expect(noticeRecords()).toHaveLength(1);
+  });
+
+  it("OFN-FR-LKAT: a line with Details emits one record, not one for the line and one for its Details", async () => {
+    await renderMap({
+      index: openspecIndex({
+        validation: "unavailable",
+        validationFailure: { code: "cli_rejected", diagnostics: [{ message: "private message" }] },
+      }),
+    });
+    fireEvent.click(within(screen.getByTestId("spec-map-notice")).getByRole("button", { name: /Details/ }));
+    expect(noticeRecords()).toHaveLength(1);
+    expect(JSON.stringify(logWarn.mock.calls)).not.toContain("private message");
+  });
+
+  it("OFN-FR-LKAT: a line with no validation failure emits no notice record", async () => {
+    await renderMap({ index: openspecIndex({ validation: "unavailable" }) });
+    expect(screen.getByTestId("spec-map-notice")).toBeInTheDocument();
+    expect(noticeRecords()).toHaveLength(0);
   });
 });
 

@@ -11,6 +11,7 @@
  */
 
 import type { GraduationRest, GraduationRun } from "../../types/graduation";
+import { shortForm } from "../openspec/failureNotice";
 import {
   PLAN_CONTINUE_ERRORS,
   type PlanRestReason,
@@ -140,10 +141,13 @@ export function planContinueRefusal(code: string, detail: string | null): string
       return "Answer the questions in the change discussion first, then continue the run.";
     case PLAN_CONTINUE_ERRORS.proposalPending:
       return "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.";
-    case PLAN_CONTINUE_ERRORS.validationUnavailable:
-      return detail
-        ? `OpenSpec could not be read (${detail}), so the run did not continue.`
-        : "OpenSpec could not be read, so the run did not continue.";
+    case PLAN_CONTINUE_ERRORS.validationUnavailable: {
+      // GRU-FR-BPNJ: the sentence of the notice of its cause (OFN-FR-QZEC).
+      const sentence = shortForm({ code, cause: detail, diagnostics: [] });
+      return sentence
+        ? `${sentence} The run did not continue.`
+        : "The OpenSpec validation could not run, so the run did not continue.";
+    }
     case PLAN_CONTINUE_ERRORS.writeFailed:
       return "The run could not be made ready to continue. Nothing changed; try Continue again.";
     default:

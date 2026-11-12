@@ -120,3 +120,41 @@ export interface DraftOpenspecChange {
   name: string;
   streamId: string;
 }
+
+/**
+ * OFP contract surface: the class of an OpenSpec failure. `none` is a code
+ * that is not an OpenSpec failure (OFP-FR-FKRV).
+ */
+export type FailureClass = "environment" | "transient" | "content" | "none";
+
+/** OFP-FR-OFLU: one message of the OpenSpec CLI, as the CLI gives it. */
+export interface CliDiagnostic {
+  severity?: string | null;
+  code?: string | null;
+  path?: string | null;
+  message: string;
+  fix?: string | null;
+}
+
+/**
+ * OFP-FR-QLQJ: the object an OpenSpec failure rejects with, camelCase on the
+ * wire. The diagnostics reach the author alone, so no log record holds them
+ * (OFP-FR-WRDX).
+ */
+export interface OpenSpecFailure {
+  /** The refusal code of the operation. */
+  code: string;
+  /** OFP-FR-ZDEE: the OpenSpec code under a wrapping refusal. */
+  cause?: string | null;
+  /** The change the refusal names. */
+  change?: string | null;
+  /** OFP-FR-EOAD: the CLI state, the missing artifacts, an exit status, or an archive folder. */
+  detail?: string | null;
+  /** OFP-FR-MQGG: the thread of a merge notice. */
+  threadId?: string | null;
+  /** OFP-FR-XQDY: the repair run of a merge notice. */
+  repairRunId?: string | null;
+  /** OFP-FR-PCQY: the code that refused the repair start. */
+  repairRefusal?: string | null;
+  diagnostics: CliDiagnostic[];
+}

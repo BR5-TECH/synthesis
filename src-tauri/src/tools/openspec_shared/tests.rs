@@ -252,15 +252,36 @@ fn each_tool_refuses_as_unavailable_when_the_mode_or_the_cli_is_missing() {
     assert_eq!(no_cli.runner.calls().len(), 0);
 }
 
-// LOS-FR-IEDQ, LOS-FR-GPCY, ROS-FR-MOFU, LOC-FR-YEQH, LOC-FR-UBZT: a timeout,
-// a failed exit, and unreadable output each give the tool's read-failed
-// refusal, and no CLI output reaches it.
+// LOS-FR-SBNB, LOS-FR-IEDQ, LOS-FR-GPCY, ROS-FR-MOFU, LOC-FR-YEQH,
+// LOC-FR-UBZT, OFP-FR-WRDX: a timeout and a failed exit give the OpenSpec
+// did not answer refusal, CLI JSON on exit 1 gives the tool's read-failed
+// refusal, and unreadable output gives the unavailable refusal. None is
+// retryable, and no CLI output, standard error, or diagnostic reaches a
+// refusal or a record.
 #[test]
 fn each_tool_refuses_a_failed_read_with_its_own_sentence() {
-    for answer in [
-        Err(ProcessError::TimedOut),
-        Ok(ProcessOutput { exit_status: Some(1), stdout: b"SECRET-OUTPUT".to_vec() }),
-        Ok(ok("SECRET-OUTPUT not json")),
+    let shared = crate::tools::openspec_shared::NO_ANSWER;
+    let unavailable = crate::tools::openspec_shared::UNAVAILABLE;
+    let rejected = r#"{ "status": [ { "code": "x", "message": "SECRET-OUTPUT" } ] }"#;
+    for (answer, messages) in [
+        (Err(ProcessError::TimedOut { stderr: b"SECRET-OUTPUT".to_vec() }), [shared; 3]),
+        (
+            Ok(ProcessOutput {
+                exit_status: Some(1),
+                stdout: b"SECRET-OUTPUT".to_vec(),
+                stderr: b"SECRET-OUTPUT".to_vec(),
+            }),
+            [shared; 3],
+        ),
+        (
+            Ok(ProcessOutput {
+                exit_status: Some(1),
+                stdout: rejected.as_bytes().to_vec(),
+                stderr: Vec::new(),
+            }),
+            [los::READ_FAILED, ros::READ_FAILED, loc::READ_FAILED],
+        ),
+        (Ok(ok("SECRET-OUTPUT not json")), [unavailable; 3]),
     ] {
         let p = project(
             FakeRunner::default()
@@ -271,11 +292,11 @@ fn each_tool_refuses_a_failed_read_with_its_own_sentence() {
         p.write("openspec/specs/auth/spec.md", "# Auth\n");
         let buffer = buffer();
         let a = list_specs(&p, buffer).unwrap_err();
-        assert_refusal(&a, ToolErrorKind::Other, false, los::READ_FAILED);
+        assert_refusal(&a, ToolErrorKind::Other, false, messages[0]);
         let b = read_spec(&p, buffer, "auth", None).unwrap_err();
-        assert_refusal(&b, ToolErrorKind::Other, false, ros::READ_FAILED);
+        assert_refusal(&b, ToolErrorKind::Other, false, messages[1]);
         let c = list_changes(&p, buffer).unwrap_err();
-        assert_refusal(&c, ToolErrorKind::Other, false, loc::READ_FAILED);
+        assert_refusal(&c, ToolErrorKind::Other, false, messages[2]);
         let all = serde_json::to_string(&records(buffer)).unwrap();
         assert!(!all.contains("SECRET-OUTPUT"));
     }

@@ -11,6 +11,8 @@
  */
 import { specMapOps, type OrganizationEdit, type SpecMapOps } from "../../api/specMap";
 import { logError, logInfo, logWarn } from "../../logging";
+import type { OpenSpecFailure } from "../../types";
+import { hasNotice, toOpenSpecFailure } from "../openspec/failureNotice";
 import { applyEdit, deleteOutcome } from "./organize";
 import { buildTree, refExists, type TreeIndex } from "./tree";
 import { isOpenSpecIndex, type MapEdit, type MapRef, type SpecificationIndex } from "./types";
@@ -48,14 +50,12 @@ const OPENSPEC_EDITS: ReadonlySet<MapEdit["kind"]> = new Set([
 ]);
 
 /**
- * SMP-FR-KBXW: the code a load failed with. The backend rejects with one
- * string code, or `code: detail`.
+ * SMP-FR-KBXW: the code a load failed with. The backend rejects with an
+ * `OpenSpecFailure` (OFP-FR-QLQJ); a string code, or `code: detail`, reads
+ * as its code.
  */
 export function loadFailureCode(error: unknown): string {
-  let raw = error instanceof Error ? error.message : String(error);
-  if (raw.startsWith("Error: ")) raw = raw.slice(7);
-  const at = raw.indexOf(":");
-  return (at === -1 ? raw : raw.slice(0, at)).trim();
+  return toOpenSpecFailure(error).code;
 }
 
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -64,6 +64,8 @@ export interface SpecMapState {
   status: LoadStatus;
   /** SMP-FR-KBXW: the code of the load that failed, or null. */
   errorCode: string | null;
+  /** SMP-FR-KBXW: the OpenSpec failure of that load, for its notice, or null. */
+  errorFailure: OpenSpecFailure | null;
   index: SpecificationIndex | null;
   view: MapView;
   focusId: string | null;
@@ -81,6 +83,7 @@ function initialState(): SpecMapState {
   return {
     status: "idle",
     errorCode: null,
+    errorFailure: null,
     index: null,
     view: INITIAL_VIEW,
     focusId: null,
@@ -138,7 +141,7 @@ export class SpecMapSessionStore {
     try {
       const index = await this.ops.load();
       if (generation !== this.generation) return;
-      this.set({ status: "ready", errorCode: null, index });
+      this.set({ status: "ready", errorCode: null, errorFailure: null, index });
       const tree = this.tree()!;
       logInfo(["frontend"], "specification map loaded", {
         source: index.source ?? "demo",
@@ -156,9 +159,17 @@ export class SpecMapSessionStore {
       if (generation !== this.generation) return;
       // SMP-FR-ONSD / SMP-FR-KBXW: the error state names a code it routes on,
       // and the log holds the code alone.
-      const code = loadFailureCode(e);
-      logError(["frontend"], "specification map could not be loaded", { code });
-      this.set({ status: "error", errorCode: code });
+      const failure = toOpenSpecFailure(e);
+      const code = failure.code;
+      logError(["frontend"], "specification map could not be loaded", {
+        code,
+        cause: failure.cause ?? "",
+      });
+      this.set({
+        status: "error",
+        errorCode: code,
+        errorFailure: hasNotice(failure) ? failure : null,
+      });
     }
   };
 

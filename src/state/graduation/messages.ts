@@ -6,6 +6,7 @@
 import type { GraduationRun, ReviewSeverity } from "../../types/graduation";
 import { MERGE_BRANCH_MOVED_STATEMENT } from "./merge";
 import { planContinueRefusal, planRestOf } from "./planRest";
+import { shortForm, toOpenSpecFailure } from "../openspec/failureNotice";
 
 /**
  * GSD-FR-BXKR: the sentence a start or a merge refused for a missing Docker
@@ -119,11 +120,9 @@ export function graduationErrorMessage(error: string): string {
       // GRU-FR-EMNV / GEA-FR-HBCF: a Continue or an answer refused because a
       // branch moved says so, and says that nothing was written.
       return MERGE_BRANCH_MOVED_STATEMENT;
-    // GSU-FR-MTDA / GSU-FR-CZEP / GSU-FR-UIDE: the refusals of a propose start.
-    case "openspec_mode_inactive":
-      return "OpenSpec mode is not active for this project, so a change cannot be proposed.";
-    case "openspec_cli_unavailable":
-      return "The OpenSpec CLI is not available on this machine, so a change cannot be proposed.";
+    // GSU-FR-CZEP / GSU-FR-UIDE: the refusals of a propose start that are
+    // not OpenSpec failures. An OpenSpec failure takes the sentence of its
+    // notice (OFN-FR-RNWG), below.
     case "invalid_change_name":
       return "That is not a valid change name.";
     case "openspec_change_exists":
@@ -131,7 +130,9 @@ export function graduationErrorMessage(error: string): string {
     case "direct graduation active":
       return "A graduation run is working in the active worktree. Switching waits until the run ends.";
     default:
-      return error;
+      // OFN-FR-QZEC: an OpenSpec failure in a typed string reads as the
+      // short form of its notice.
+      return shortForm(toOpenSpecFailure(error)) ?? error;
   }
 }
 

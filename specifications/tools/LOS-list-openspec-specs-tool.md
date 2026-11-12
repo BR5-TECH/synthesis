@@ -13,9 +13,9 @@ The tool an agent uses to see which capabilities an OpenSpec project has specifi
 5. **LOS-FR-XHLX** The output holds one entry for each capability that `list_capabilities()` returns, in the same order, with the same `id` and `requirement_count`.
 6. **LOS-FR-GHCZ** A project with no capability is a success with an empty `capabilities` list (per TLC-FR-12).
 7. **LOS-FR-VOAB** With no project open, the tool gives the shared no-open-project refusal (per TLC-FR-13).
-8. **LOS-FR-SBNB** A read that fails with `openspec_mode_inactive` or `cli_unavailable` gives the **OpenSpec unavailable** refusal of the contract surface.
-9. **LOS-FR-IEDQ** A read that fails with `cli_timed_out`, `cli_failed`, or `cli_output_unreadable` gives the **OpenSpec read failed** refusal of the contract surface. No CLI output reaches the message.
-10. **LOS-FR-GPCY** Every refusal of this tool is not retryable, because the tool takes no argument that could change the answer (per TLC-FR-11).
+8. **LOS-FR-SBNB** A read that fails with `openspec_mode_inactive`, `cli_unavailable`, or `cli_output_unreadable` gives the **OpenSpec unavailable** refusal of the contract surface.
+9. **LOS-FR-IEDQ** A read that fails with `cli_timed_out` or `cli_failed` gives the **OpenSpec did not answer** refusal, and a read that fails with `cli_rejected` gives the **OpenSpec read failed** refusal of the contract surface. No CLI output and no diagnostic reaches the message (per `../core/OFP-openspec-failure-policy.md` OFP-FR-WRDX).
+10. **LOS-FR-GPCY** Every refusal of this tool is not retryable, because the tool takes no argument that could change the answer (per TLC-FR-11), and the seam already ran a transient read twice (per `../core/OFP-openspec-failure-policy.md` OFP-FR-PQNS).
 11. **LOS-FR-POAE** The tool is read-only (per TLC-FR-17). It changes no file, no setting, no index, and no other state.
 12. **LOS-FR-PAFH** Each call emits under the `ai` and `backend` domains (per TLC-FR-14): an `INFO` record that names the tool and the number of capabilities it returned, or a `WARN` record that names the tool and the refusal.
 
@@ -47,8 +47,9 @@ ListOpenSpecSpecsOutput {
 
 ### Refusals
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
-- **OpenSpec unavailable** — kind `Other`, not retryable: *"OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI is not installed on this machine."*
-- **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI could not list the specs of this project. The OpenSpec files may be malformed."*
+- **OpenSpec unavailable** — kind `Other`, not retryable: *"OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI on this machine is missing, too old, or does not work."*
+- **OpenSpec did not answer** — kind `Other`, not retryable: *"The OpenSpec CLI did not finish, also after one more try. Do not call this tool again in this turn."*
+- **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI refused to list the specs of this project. The OpenSpec files may be malformed."*
 
 ## Non-functional requirements
 - A call costs one `list_capabilities()` read of `../core/OSM-openspec-mode.md`, which is one CLI process.

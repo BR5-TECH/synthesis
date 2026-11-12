@@ -7,6 +7,7 @@
  * log all say the same thing about the same code.
  */
 
+import { shortForm, toOpenSpecFailure } from "../../state/openspec/failureNotice";
 import { STREAM_ERRORS } from "../../types";
 
 export function splitRefusal(text: string): [string, string | null] {
@@ -102,13 +103,13 @@ const PENDING_KIND: Record<string, string> = {
   action_request: "an action request that is not decided",
 };
 
-/** OAR-FR-QTBK: each reason a change cannot be archived, in words. */
-const NOT_ARCHIVABLE: Record<string, string> = {
-  openspec_mode_inactive: "OpenSpec mode is not active for this project",
-  openspec_cli_unavailable: "the OpenSpec CLI is not available on this machine",
-  apply_progress_unavailable: "its task progress could not be read",
-  tasks_incomplete: "not all of its tasks are done",
-};
+/**
+ * WSS-FR-NTGC: the frame sentence of a merge refused by its archive step.
+ * Archive commits of changes before the refused one stay on the stream
+ * (OAR-FR-OQVF).
+ */
+export const ARCHIVE_REFUSAL_FRAME =
+  "The base branch did not move, and the archive commits stay on the stream.";
 
 /** Join the parts of a list as a sentence does. */
 function listed(parts: string[]): string {
@@ -117,33 +118,32 @@ function listed(parts: string[]): string {
 }
 
 /**
- * WSS-FR-NTGC: a merge refused by its archive step. The detail is
- * `<change>: <kinds>`, `<change>: <reason>`, or `<change>: <code>`
- * (OAR-FR-BEIK, OAR-FR-QTBK, OAR-FR-EUXZ). Nothing was archived and nothing was
- * merged, so the sentence says so. Null for every other code.
+ * WSS-FR-NTGC: a merge refused by its archive step. `change_has_pending`
+ * names the change and each kind of pending item; its detail is
+ * `<change>: <kinds>` (OAR-FR-BEIK). `change_not_archivable` and
+ * `archive_failed` render the failure notice of `OFN-openspec-failure-notices.md`
+ * where they arrive as an `OpenSpecFailure`; a typed string of them reads as
+ * the short form of the notice. Null for every other code.
  */
 function archiveRefusalText(code: string, detail: string | null): string | null {
-  if (
-    code !== STREAM_ERRORS.changeHasPending &&
-    code !== STREAM_ERRORS.changeNotArchivable &&
-    code !== STREAM_ERRORS.archiveFailed
-  ) {
-    return null;
+  if (code === STREAM_ERRORS.changeNotArchivable || code === STREAM_ERRORS.archiveFailed) {
+    const failure = toOpenSpecFailure(detail ? `${code}: ${detail}` : code);
+    const sentence = shortForm(failure);
+    if (sentence) return `${sentence} ${ARCHIVE_REFUSAL_FRAME}`;
+    // A cause that is not an OpenSpec failure, such as `commit_failed`, is
+    // named as it came (OFN-FR-PVYE).
+    const name = failure.change ? `“${failure.change}”` : "of this stream";
+    const what = code === STREAM_ERRORS.archiveFailed ? "archive" : "check";
+    return `The ${what} of the OpenSpec change ${name} failed with ${failure.cause ?? "an unknown code"}. ${ARCHIVE_REFUSAL_FRAME}`;
   }
+  if (code !== STREAM_ERRORS.changeHasPending) return null;
   const [change, rest] = detail ? splitRefusal(detail) : ["", null];
   const name = change ? `“${change}”` : "of this stream";
-  if (code === STREAM_ERRORS.changeHasPending) {
-    const kinds = (rest ?? "")
-      .split(",")
-      .map((k) => k.trim())
-      .filter((k) => k !== "")
-      .map((k) => PENDING_KIND[k] ?? k);
-    const what = kinds.length > 0 ? listed(kinds) : "an item that is not decided";
-    return `The OpenSpec change ${name} holds ${what}. Decide ${kinds.length > 1 ? "them" : "it"} first, then merge again. Nothing was archived or merged.`;
-  }
-  if (code === STREAM_ERRORS.changeNotArchivable) {
-    const why = rest ? (NOT_ARCHIVABLE[rest] ?? rest) : "it cannot be archived";
-    return `The OpenSpec change ${name} cannot be archived: ${why}. Nothing was archived or merged.`;
-  }
-  return `The archive of the OpenSpec change ${name} failed with ${rest ?? "an unknown code"}. The base branch was not written.`;
+  const kinds = (rest ?? "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k) => k !== "")
+    .map((k) => PENDING_KIND[k] ?? k);
+  const what = kinds.length > 0 ? listed(kinds) : "an item that is not decided";
+  return `The OpenSpec change ${name} holds ${what}. Decide ${kinds.length > 1 ? "them" : "it"} first, then merge again. ${ARCHIVE_REFUSAL_FRAME}`;
 }

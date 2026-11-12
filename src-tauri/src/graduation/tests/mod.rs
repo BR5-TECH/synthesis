@@ -71,6 +71,10 @@ mod openspec_archive;
 mod openspec_archive_candidates;
 mod openspec_archive_refusals;
 mod openspec_archive_restore;
+mod openspec_failures;
+mod openspec_image_probe;
+mod openspec_merge_notice;
+mod openspec_merge_notice_starts;
 mod openspec_spec_index;
 mod pr_summary;
 mod pr_summary_turn;
@@ -469,6 +473,38 @@ struct ScriptedDispatch {
     seen: Mutex<Vec<Seen>>,
     /// What the turn dispatched last does once its verdict is durable.
     after_verdict: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// OFP-FR-BZDP: the answers of the image probe, in order. An empty list
+    /// answers an image with OpenSpec 1.17.0.
+    probes: Mutex<std::collections::VecDeque<ProbeAnswer>>,
+    /// How many image probes the loop made.
+    probed: Mutex<usize>,
+}
+
+/// What one image probe answers.
+pub(super) type ProbeAnswer = Result<
+    crate::tools::agent_exec::image_probe::ImageProbeOutcome,
+    crate::tools::agent_exec::AgentExecutionError,
+>;
+
+/// An image probe that exited with `status` and printed `stdout`.
+pub(super) fn probe_answer(status: Option<i32>, stdout: &str) -> ProbeAnswer {
+    probe_ended(crate::tools::agent_exec::runtime::RunEnd::Exited, status, stdout)
+}
+
+/// An image probe that ended by `end` with `status` and printed `stdout`.
+pub(super) fn probe_ended(
+    end: crate::tools::agent_exec::runtime::RunEnd,
+    status: Option<i32>,
+    stdout: &str,
+) -> ProbeAnswer {
+    Ok(crate::tools::agent_exec::image_probe::ImageProbeOutcome::Ran(
+        crate::tools::agent_exec::image_probe::ImageProbe {
+            end,
+            exit_status: status,
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        },
+    ))
 }
 
 impl ScriptedDispatch {
@@ -477,7 +513,19 @@ impl ScriptedDispatch {
             turns: Mutex::new(turns.into_iter().collect()),
             seen: Mutex::new(Vec::new()),
             after_verdict: Mutex::new(None),
+            probes: Mutex::new(std::collections::VecDeque::new()),
+            probed: Mutex::new(0),
         })
+    }
+
+    /// OFP-FR-BZDP: the answers of the next image probes.
+    pub(super) fn script_probes(&self, answers: Vec<ProbeAnswer>) {
+        self.probes.lock().unwrap().extend(answers);
+    }
+
+    /// How many image probes the loop made.
+    pub(super) fn probes_taken(&self) -> usize {
+        *self.probed.lock().unwrap()
     }
 
     fn seen(&self) -> Vec<Seen> {
@@ -557,6 +605,22 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
 }
 
 impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch {
+    fn probe_graduation_image<'a>(
+        &'a self,
+        _app: &'a tauri::AppHandle<Runtime>,
+        _project_key: &'a str,
+        _request: crate::tools::agent_exec::image_probe::ImageProbeRequest,
+    ) -> crate::graduation::driver::seams::ProbeFuture<'a> {
+        *self.probed.lock().unwrap() += 1;
+        let answer = self
+            .probes
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| probe_answer(Some(0), "1.17.0\n"));
+        Box::pin(async move { answer })
+    }
+
     fn review_verdict_recorded(&self) {
         // Taken before it runs: an act can reach the store and this seam again.
         let act = self.after_verdict.lock().unwrap().take();

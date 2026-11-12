@@ -116,10 +116,14 @@ fn the_version_check_is_kept_until_the_executable_changes() {
 #[test]
 fn each_failure_of_the_version_check_has_its_reason() {
     for (answer, reason) in [
-        (Err(ProcessError::TimedOut), CliFailure::TimedOut),
+        (Err(ProcessError::timed_out()), CliFailure::TimedOut),
         (Err(ProcessError::NotExecutable), CliFailure::NotExecutable),
         (
-            Ok(ProcessOutput { exit_status: Some(3), stdout: b"1.17.0".to_vec() }),
+            Ok(ProcessOutput {
+                exit_status: Some(3),
+                stdout: b"1.17.0".to_vec(),
+                stderr: Vec::new(),
+            }),
             CliFailure::NoVersion,
         ),
         (Ok(ok("openspec")), CliFailure::NoVersion),

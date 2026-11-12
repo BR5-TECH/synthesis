@@ -104,12 +104,13 @@ export function useChangeRuns({
   // and on Refresh. A read that fails keeps the last answer. Each read starts
   // one OpenSpec CLI process, so a read of the change alone does not ask for
   // one.
-  const { progress, reread } = useApplyProgress({
+  const { progress, failure: progressFailure, reread } = useApplyProgress({
     streamId: streamId ?? "",
     change,
     runId: strip?.id ?? null,
     enabled: streamId !== null,
     keepOnFailure: true,
+    surface: "change_run_strip",
   });
 
   // OCW-FR-SFYL: a fresh read on mount, and one on each event for the stream.
@@ -205,6 +206,8 @@ export function useChangeRuns({
     strip: strip && strip.id !== closedRunId ? strip : null,
     closeStrip,
     progress,
+    /** OCW-FR-BTSI: the short form of a failed progress read, or null. */
+    progressFailure,
     starting,
     startApply,
     applyBlock,

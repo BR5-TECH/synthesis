@@ -6,7 +6,7 @@ import { ProjectAiIntegrations } from "./AiIntegrations";
 import { ProjectAgents, type AgentEditorRequest } from "./Agents";
 import { ProjectAgentGroupSettings } from "./ProjectAgentGroupSettings";
 import { DraftTemplateSection } from "./DraftTemplateSection";
-import { OpenSpecSection } from "./OpenSpecSection";
+import { OpenSpecImageRequirement, OpenSpecSection } from "./OpenSpecSection";
 import { GithubPollingSection } from "./GithubPollingSection";
 import { FlowSyncSettingsGroup } from "./FlowSyncSettings";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
@@ -424,7 +424,14 @@ export function Settings({
       {/* SET-FR-21 through SET-FR-27, SET-FR-KDRP, SET-FR-FPCX, SET-FR-HYTR: the Docker section. Every field in it
           persists at once, so it holds no dirty state and takes no part in
           the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
-      {section === "docker" && <ProjectDockerImages contentRoot={contentRoot} />}
+      {/* SET-FR-GFHV: the OpenSpec line stands above the Docker section's own
+          controls. */}
+      {section === "docker" && (
+        <>
+          <OpenSpecImageRequirement />
+          <ProjectDockerImages contentRoot={contentRoot} />
+        </>
+      )}
 
       {/* SET-FR-QCUJ through SET-FR-VGQB: the Indexing section persists at
           once, so it takes no part in the save-before-close sweep. */}

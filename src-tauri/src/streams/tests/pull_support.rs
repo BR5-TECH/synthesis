@@ -125,6 +125,7 @@ pub(super) fn pull_data(
             worktree_path: fx.root().to_string_lossy().into_owned(),
             strategy,
         }),
+        openspec_gate: false,
     }
 }
 

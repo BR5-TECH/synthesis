@@ -169,6 +169,10 @@ describe("the code of an archived read (OSM-FR-GMKV)", () => {
     expect(archivedAsOfError(ARCHIVED)).toBe("2026-11-11-add-logout-3f2a");
     expect(archivedAsOfError(new Error(ARCHIVED))).toBe("2026-11-11-add-logout-3f2a");
     expect(archivedAsOfError({ code: ARCHIVED })).toBe("2026-11-11-add-logout-3f2a");
+    // OSM-FR-GMKV: on the wire, `{ code: "change_archived", detail: <archived_as> }`.
+    expect(
+      archivedAsOfError({ code: "change_archived", detail: "2026-11-11-add-logout-3f2a", diagnostics: [] }),
+    ).toBe("2026-11-11-add-logout-3f2a");
     expect(archivedAsOfError("change_not_found")).toBeNull();
     expect(archivedAsOfError("cli_failed: change_archived: x")).toBeNull();
   });

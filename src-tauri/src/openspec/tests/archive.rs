@@ -42,7 +42,7 @@ fn an_archived_change_reads_as_archived_with_its_newest_folder() {
             "{location:?}"
         );
         assert_eq!(error.code(), "change_archived");
-        assert_eq!(error.wire_code(), format!("change_archived: 2026-11-10-{NAME}"));
+        assert_eq!(error.to_failure().detail, Some(format!("2026-11-10-{NAME}")));
     }
     assert_eq!(runner.calls().len(), before, "no process started");
 }
@@ -59,7 +59,7 @@ fn a_change_with_no_archive_folder_is_not_found() {
         .read_change(&Silent, buffer(), Some(&root), &root, ChangeLocation::ActiveWorktree, NAME)
         .unwrap_err();
     assert_eq!(error, OpenSpecReadError::ChangeNotFound);
-    assert_eq!(error.wire_code(), "change_not_found");
+    assert_eq!(error.to_failure().code, "change_not_found");
 }
 
 // OAR-FR-XTLB, OSM-FR-KWWM: an archive folder is one path segment of the
@@ -104,8 +104,9 @@ fn an_invalid_archived_as_is_unreadable_output() {
 
 // OAR-FR-EUXZ, OAR-FR-NEEI: a null `archive` gives the code of its first
 // `status` entry alone; a status code that is not an identifier is
-// unreadable output; other output gives `cli_failed` or
-// `cli_output_unreadable` by the exit status.
+// unreadable output; exit 1 with CLI JSON and no status code is
+// `cli_rejected`, exit 1 with other output `cli_failed`, and exit 0 with no
+// status code `cli_output_unreadable`.
 #[test]
 fn a_refused_archive_gives_the_code_of_its_first_status_entry() {
     assert_eq!(
@@ -122,7 +123,7 @@ fn a_refused_archive_gives_the_code_of_its_first_status_entry() {
         "cli_output_unreadable"
     );
     let empty = r#"{ "archive": null, "status": [] }"#;
-    assert_eq!(parse_archive(NAME, 1, empty.as_bytes()).unwrap_err().code(), "cli_failed");
+    assert_eq!(parse_archive(NAME, 1, empty.as_bytes()).unwrap_err().code(), "cli_rejected");
     assert_eq!(
         parse_archive(NAME, 0, empty.as_bytes()).unwrap_err().code(),
         "cli_output_unreadable"
@@ -130,7 +131,7 @@ fn a_refused_archive_gives_the_code_of_its_first_status_entry() {
     assert_eq!(parse_archive(NAME, 1, b"Error: boom").unwrap_err().code(), "cli_failed");
     assert_eq!(parse_archive(NAME, 0, b"not json").unwrap_err().code(), "cli_output_unreadable");
     let late = archive_json(NAME, "2026-11-11-add-logout");
-    assert_eq!(parse_archive(NAME, 1, late.as_bytes()).unwrap_err().code(), "cli_failed");
+    assert_eq!(parse_archive(NAME, 1, late.as_bytes()).unwrap_err().code(), "cli_rejected");
     // OAR-FR-NEEI: 64 characters are an identifier, and 65 are not.
     for (length, expected) in [(64, "a".repeat(64)), (65, "cli_output_unreadable".into())] {
         let long = format!(
@@ -142,7 +143,11 @@ fn a_refused_archive_gives_the_code_of_its_first_status_entry() {
     // A first entry with no code gives no code, so the exit status decides,
     // and a code of a later entry is not read.
     let first = r#"{ "archive": null, "status": [ { "message": "m" }, { "code": "second" } ] }"#;
-    assert_eq!(parse_archive(NAME, 1, first.as_bytes()).unwrap_err().code(), "cli_failed");
+    let rejected = parse_archive(NAME, 1, first.as_bytes()).unwrap_err();
+    assert_eq!(rejected.code(), "cli_rejected");
+    // OFP-FR-NJSO: every status entry is a diagnostic, in order.
+    assert_eq!(rejected.diagnostics().len(), 2);
+    assert_eq!(rejected.diagnostics()[0].message, "m");
     assert_eq!(
         parse_archive(NAME, 0, first.as_bytes()).unwrap_err().code(),
         "cli_output_unreadable"
@@ -182,12 +187,15 @@ fn the_archive_runs_on_the_process_terms_of_the_seam() {
 #[test]
 fn an_archive_process_that_fails_gives_the_code_of_the_read() {
     let (seam, runner, _) =
-        seam_with(FakeRunner::default().answering("archive", Err(ProcessError::TimedOut)));
+        seam_with(FakeRunner::default().answering("archive", Err(ProcessError::timed_out())));
     let (_dir, root) = openspec_project();
     let at = root.path();
     let timed_out = seam.archive_change(&Silent, buffer(), Path::new(CLI), at, NAME);
     assert_eq!(timed_out.unwrap_err().code(), "cli_timed_out");
-    runner.set("archive", Ok(ProcessOutput { exit_status: Some(3), stdout: REFUSED.into() }));
+    runner.set(
+        "archive",
+        Ok(ProcessOutput { exit_status: Some(3), stdout: REFUSED.into(), stderr: Vec::new() }),
+    );
     let failed = seam.archive_change(&Silent, buffer(), Path::new(CLI), at, NAME);
     assert_eq!(failed.unwrap_err().code(), "cli_failed");
     let invalid = seam.archive_change(&Silent, buffer(), Path::new(CLI), at, "Not A Name");

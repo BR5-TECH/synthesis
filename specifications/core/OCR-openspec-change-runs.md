@@ -13,16 +13,16 @@ An **OpenSpec change run** is a graduation run on a change that already stands o
 5. **OCR-FR-FZVF** The title of a run is `Apply <change>` for an apply run and `Rework <change>` for a rework run. It is the label of the run's in-flight operation (per `GRD-graduation.md` GRD-FR-ZHNV), and every listing of runs carries it as the run's name.
 6. **OCR-FR-TBGA** A rework run also records the author's instruction, the id of its **request thread**, and its **requester**, the participant that its finish writes as. `start_change_rework` records the Synthesis participant (per `CMS-comments-storage.md` CMS-FR-MKEV), and a confirmed action request records the agent of the request (per `CAR-change-action-requests.md` CAR-FR-MMPV).
 7. **OCR-FR-IDFC** `start_change_apply(stream_id, change)` and `start_change_rework(stream_id, change, instruction)` each capture the input, run every check of this spec, and enqueue the run as one all-or-nothing operation, on the terms of `GSU-graduation-start.md` GSU-FR-ELZO and GSU-FR-DPSY. A refusal leaves no run record, no queue entry, and no dispatched turn.
-8. **OCR-FR-GTOM** A start checks in this order and is refused by the first check that fails: `no_project_open`; `unknown_stream` where the stream is not live; `openspec_mode_inactive`; `openspec_cli_unavailable`; `invalid_change_name`; `change_not_found` where `openspec/changes/<change>/` is not a folder in the stream's working copy; the checks of its phase (OCR-FR-MGPU through OCR-FR-TCFQ); the image preflight; and the write check.
+8. **OCR-FR-GTOM** A start checks in this order and is refused by the first check that fails: `no_project_open`; `unknown_stream` where the stream is not live; `openspec_mode_inactive`; `cli_unavailable`, with the CLI state (per `OFP-openspec-failure-policy.md` OFP-FR-GPCO); `invalid_change_name`; `change_not_found` where `openspec/changes/<change>/` is not a folder in the stream's working copy; the checks of its phase (OCR-FR-MGPU through OCR-FR-TCFQ); the image preflight; and the write check.
 9. **OCR-FR-MGPU** A start is refused with `openspec_run_active` where a non-terminal OpenSpec run of any phase on the same stream names the same change. The refusal carries the id of that run.
-10. **OCR-FR-LNKQ** An apply start reads `apply_instructions` in the stream's working copy (per `OSM-openspec-mode.md` OSM-FR-QLRW). It is refused with `change_not_ready`, which carries the missing artifacts, where the state is `blocked`, and with `apply_progress_unavailable`, which carries the read's error code, where the read fails. The states `ready` and `all_done` admit the start. An apply start is also refused with `proposal_pending` where the change holds a pending change edit proposal, or a closed one whose commit is still owed (per `CEP-change-edit-proposals.md` CEP-FR-ZOIG, CEP-FR-IYHP).
+10. **OCR-FR-LNKQ** An apply start reads `apply_instructions` in the stream's working copy (per `OSM-openspec-mode.md` OSM-FR-QLRW). It is refused with `change_not_ready`, with the missing artifacts and their diagnostics (`OFP-openspec-failure-policy.md` OFP-FR-BWML), where the state is `blocked`, and with `apply_progress_unavailable`, whose cause is the read's code, where the read fails. The states `ready` and `all_done` admit the start. An apply start is also refused with `proposal_pending` where the change holds a pending change edit proposal, or a closed one whose commit is still owed (per `CEP-change-edit-proposals.md` CEP-FR-ZOIG, CEP-FR-IYHP).
    - *Why:* The accepted files of such a proposal stand uncommitted in the working copy, enter the run's change set, and make the planning gate of `../ai/GRL-graduation-loop.md` GRL-FR-EQDL refuse every `ready`.
 11. **OCR-FR-TCFQ** A rework start is refused with `blank_instruction` where the instruction is empty once trimmed, with `proposal_pending` where the change holds a pending change edit proposal (per `CEP-change-edit-proposals.md` CEP-FR-ZOIG), and with `discussion_resolved` where its request thread is resolved.
 12. **OCR-FR-QBIF** The image preflight is the one of `GSU-graduation-start.md` GSU-FR-GLVQ and GSU-FR-RQDS, with its refusals. The write check is the main branch write check of `GTC-git.md` GTC-FR-JWOL on the stream branch (per `GRD-graduation.md` GRD-FR-WJLO).
 13. **OCR-FR-VUXZ** An OpenSpec change run records `standing_work` as `keep` with no message, is enqueued with `auto_start` enabled at the latest end of the run order (per `GSU-graduation-start.md` GSU-FR-NCJN), and belongs to its stream's queue on the terms of every stream run. No start asks the author a standing-work choice.
 14. **OCR-FR-UAWO** `start_change_rework` makes its own request thread. After every check passes, it opens a new whole-change discussion of the change whose first comment is the instruction, appended in the author's name through the human write path (per `CMS-comments-storage.md` CMS-FR-11). Then it enqueues the run with that thread and returns the run and the thread id.
 15. **OCR-FR-SFDE** A discussion that cannot be opened refuses the start with its typed error, and nothing is enqueued. An enqueue that fails after the discussion is open leaves the discussion as it is, and the start returns the failure with the suffix `; thread: <thread-id>` after its code and detail, for example `write_failed; thread: <thread-id>`.
-16. **OCR-FR-TWDK** `start_change_rework_in_thread(stream_id, change, instruction, thread_id, requester)` starts a rework run in an existing thread. It runs the checks of OCR-FR-GTOM, opens no discussion, and is called by `CAR-change-action-requests.md` alone. A thread that is not a discussion of the change refuses the start with `discussion_not_found`. `start_change_apply` is also called in-process by that module.
+16. **OCR-FR-TWDK** `start_change_rework_in_thread(stream_id, change, instruction, thread_id, requester)` starts a rework run in an existing thread. It runs the checks of OCR-FR-GTOM, opens no discussion, and is called by `CAR-change-action-requests.md` and by the merge notice of `OFP-openspec-failure-policy.md` OFP-FR-XQDY alone. A thread that is not a discussion of the change refuses the start with `discussion_not_found`. `start_change_apply` is also called in-process by that module.
 17. **OCR-FR-XKTV** An apply run works in the stream's working copy. Its work turns, its check gate, its review turns, and its pass budget are those of every run that is not a merge run, with the instructions of an apply run (per `../ai/GRL-graduation-loop.md` GRL-FR-EUSF, GRL-FR-NWSC).
 18. **OCR-FR-UZNC** A `ready` review of an apply run commits the work onto the stream branch on the terms of `GRD-graduation.md` GRD-FR-ARLT. The commit message is `Apply OpenSpec change <change>`, on one line with no body.
 19. **OCR-FR-QMCG** A completed apply run records the run summary of its `ready` review (per `GRD-graduation.md` GRD-FR-UUGP). When its stream merges into the base branch, it records a landing on the terms of GRD-FR-UXXF, and `list_branch_completed_runs` returns it with the kind `change_apply`.
@@ -58,13 +58,13 @@ Both are registered by this module. The run they return has the shape of `GRD-gr
 
 ### Internal (Rust API)
 - `start_change_apply(stream_id, change)` — also called in-process by `CAR-change-action-requests.md` (CAR-FR-MMPV).
-- `start_change_rework_in_thread(stream_id, change, instruction, thread_id, requester)` — called by `CAR-change-action-requests.md` alone (OCR-FR-TWDK).
+- `start_change_rework_in_thread(stream_id, change, instruction, thread_id, requester)` — called by `CAR-change-action-requests.md` and by the merge notice of `OFP-openspec-failure-policy.md` alone (OCR-FR-TWDK).
 - The finish of a rework run (OCR-FR-ZNJT), called by the loop when a rework review answers `ready`, and by `continue_graduation_run` at the resume phase `record`.
 
 ### Typed refusals
 ```text
 no_project_open              unknown_stream
-openspec_mode_inactive       openspec_cli_unavailable
+openspec_mode_inactive       cli_unavailable
 invalid_change_name          change_not_found
 openspec_run_active          change_not_ready
 apply_progress_unavailable   blank_instruction
@@ -75,7 +75,9 @@ vendor_execution_unsupported docker_backend_unverified
 docker_socket_unavailable    main_branch_write_unconfirmed
 ```
 
-`openspec_run_active` carries the run id after a colon: `openspec_run_active: <run-id>`. `change_not_ready` carries the missing artifacts after a colon, separated by commas. `apply_progress_unavailable` carries the read's error code after a colon.
+`openspec_run_active` carries the run id after a colon: `openspec_run_active: <run-id>`. `change_not_ready` carries the missing artifacts after a colon, separated by commas. `apply_progress_unavailable` carries the read's error code after a colon. On the wire, `openspec_mode_inactive`, `cli_unavailable`, `change_not_ready`, and `apply_progress_unavailable` are each an `OpenSpecFailure` of `OFP-openspec-failure-policy.md`, with the artifacts as `detail` and the read's code as `cause`.
+
+A propose, apply, or rework run whose image holds no usable OpenSpec CLI rests `blocked` with `openspec_image_cli_unavailable` before its first turn (per `OFP-openspec-failure-policy.md` OFP-FR-XBNJ).
 
 The blocker codes of a rework run's finish are `proposal_pending`, `discussion_resolved`, and `write_failed` (OCR-FR-PBKH).
 

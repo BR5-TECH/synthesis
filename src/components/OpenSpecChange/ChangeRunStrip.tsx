@@ -39,6 +39,14 @@ import {
 import { openGraduationRunRoute } from "../../state/graduation/runRoute";
 import { rereadChangeRunQueue } from "../../state/openspec/changeRunQueue";
 import { requestChangeDiscussion } from "../../state/openspec/changeRoutes";
+import { openSpecBlockerFailure } from "../../state/graduation/blockers";
+import {
+  logFailureNotice,
+  noticeFailureOf,
+  refusalString,
+  shortForm,
+} from "../../state/openspec/failureNotice";
+import { useShortFormLog } from "../../state/openspec/useShortFormLog";
 import { discussionTargetKey, type ApplyProgress, type GraduationRun } from "../../types";
 import { RunProgress } from "../RunProgress";
 
@@ -58,11 +66,14 @@ function stateWords(run: GraduationRun): string {
 export function ChangeRunStrip({
   run,
   progress,
+  progressFailure = null,
   onClose,
 }: {
   run: GraduationRun;
   /** OCW-FR-BTSI: the last answer of `"read apply progress"`. */
   progress: ApplyProgress | null;
+  /** OCW-FR-BTSI: the short form of the failure of the last read (OFN-FR-QZEC). */
+  progressFailure?: string | null;
   onClose: () => void;
 }) {
   const title = runTitle(run);
@@ -71,7 +82,16 @@ export function ChangeRunStrip({
   // the next open task stands under it (OCW-FR-NWRS). The stage row keeps the
   // counts whole at every width (RPV-FR-16), and the next task alone is cut.
   const tasks = phase === "apply" && run.state === "working" && progress ? progress : null;
+  // OCW-FR-BTSI: a failed read keeps the last answer and adds the short form
+  // of its notice to the sentence of the Tasks stage.
+  const failed = phase === "apply" && run.state === "working" ? progressFailure : null;
   const sentence = tasks ? taskCounts(tasks) : conditionSentence(run);
+  // OFN-FR-LKAT: a blocked run states the short form of its OpenSpec blocker
+  // in its stage sentence (GRU-FR-LBPR), so the strip logs that notice once.
+  useShortFormLog(
+    "change_run_strip_blocker",
+    run.state === "blocked" ? openSpecBlockerFailure(run) : null,
+  );
   // OCW-FR-FAEL: the check state of an apply run. A rework run states nothing.
   const checks = checkStateOf(run);
   const terminal = isTerminalRun(run.state);
@@ -167,6 +187,7 @@ export function ChangeRunStrip({
           currentStage={stageOf(run) ?? "queued"}
           condition={conditionOf(run)}
           conditionSentence={sentence}
+          conditionNote={failed}
           iterationLabel={iterationLabel(run)}
           history={stageHistory(run)}
           showLoops={false}
@@ -197,7 +218,9 @@ export function ChangeRunStrip({
           }
         />
       ) : (
-        <p className="t-meta openspec-runstrip__sentence">{sentence}</p>
+        <p className="t-meta openspec-runstrip__sentence">
+          {[sentence, failed].filter(Boolean).join(" · ")}
+        </p>
       )}
     </section>
   );
@@ -229,12 +252,22 @@ function useContinue(run: GraduationRun) {
       await api.continueGraduationRun(run.id);
       void rereadChangeRunQueue();
     } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error);
+      const raw = error instanceof Error ? error.message : refusalString(error);
       logWarn(["frontend"], "the run strip could not continue a plan rest", {
         runId: run.id,
         code: raw.split(":")[0].trim().slice(0, 60),
       });
-      setRefusal(planContinueMessage(raw));
+      // OFP-FR-QLQJ / GRU-FR-BPNJ: an OpenSpec failure is read from the
+      // object, so its cause and its CLI state stay apart. The strip has no
+      // room for actions, so it states the short form (OFN-FR-QZEC).
+      const failure = noticeFailureOf(error);
+      const sentence = failure ? shortForm(failure, run.openspec?.change ?? null) : null;
+      if (failure && sentence) {
+        logFailureNotice("change_run_strip_continue", failure);
+        setRefusal(`${sentence} The run did not continue.`);
+      } else {
+        setRefusal(planContinueMessage(raw));
+      }
     } finally {
       inFlight.current = false;
       setBusy(false);

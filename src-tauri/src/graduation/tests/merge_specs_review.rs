@@ -20,7 +20,7 @@ const VALID_SPECS: &str =
 fn openspec_merge_run(
     validation: Result<ProcessOutput, crate::openspec::ProcessError>,
 ) -> (Fixture, std::sync::Arc<ArchivingRunner>, GraduationRun) {
-    let (fx, runner, run, _) = openspec_merge_run_probed(validation);
+    let (fx, runner, run, _) = merge_run_in_mode(validation, true);
     (fx, runner, run)
 }
 
@@ -33,9 +33,41 @@ fn openspec_merge_run_probed(
     GraduationRun,
     std::sync::Arc<crate::openspec::tests::FakeProbe>,
 ) {
+    merge_run_in_mode(validation, true)
+}
+
+/// The project setting of OpenSpec mode (PSS-FR-IMDN), in the base worktree.
+/// The other settings of the file stay, and the key comes before every table.
+fn set_mode(fx: &Fixture, mode: &str) {
+    let path = fx.root().join(".synthesis/project.toml");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let kept: String = std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.starts_with("openspecMode"))
+        .map(|line| format!("{line}\n"))
+        .collect();
+    std::fs::write(&path, format!("openspecMode = \"{mode}\"\n{kept}")).unwrap();
+}
+
+/// A conflict merge handed to a run, with OpenSpec mode on or off, committed
+/// on the base, when the merge creates the run.
+fn merge_run_in_mode(
+    validation: Result<ProcessOutput, crate::openspec::ProcessError>,
+    active: bool,
+) -> (
+    Fixture,
+    std::sync::Arc<ArchivingRunner>,
+    GraduationRun,
+    std::sync::Arc<crate::openspec::tests::FakeProbe>,
+) {
     let (fx, runner, probe) = archive_fixture(ALL_DONE);
     runner.inner.set("validate", validation);
     fx.allow_execution();
+    if !active {
+        set_mode(&fx, "off");
+        super::change_runs::commit_all(&fx.root(), "Turn OpenSpec mode off");
+    }
     let stream = fx.stream("feature");
     std::fs::write(stream.worktree().join("README.md"), "stream side\n").unwrap();
     super::change_runs::commit_all(&stream.worktree(), "stream edit");
@@ -57,6 +89,7 @@ fn a_ready_merge_review_over_invalid_specs_is_not_applied() {
     let (fx, runner, run) = openspec_merge_run(Ok(ProcessOutput {
         exit_status: Some(1),
         stdout: INVALID_SPECS.into(),
+        stderr: Vec::new(),
     }));
     let flip = runner.clone();
     let dispatch = ScriptedDispatch::new(vec![
@@ -68,6 +101,9 @@ fn a_ready_merge_review_over_invalid_specs_is_not_applied() {
     let done = fx.drive(&run, dispatch.clone());
 
     assert_eq!(done.state, GraduationRunState::Completed, "{done:?}");
+    // OFP-FR-BZDP: a merge run in OpenSpec mode runs no image probe.
+    assert_eq!(dispatch.probes_taken(), 0);
+    assert!(done.checkpoint.openspec_image_cli.is_none());
     let reviews = dispatch.of_part("merge_review");
     assert_eq!(reviews.len(), 2);
     assert_eq!(reviews[0].input["openspec_specs_validation"]["valid"], false);
@@ -99,8 +135,11 @@ fn a_ready_merge_review_over_invalid_specs_is_not_applied() {
 // blocked run keeps its slot, and Continue validates and reviews again.
 #[test]
 fn a_specs_validation_that_cannot_run_blocks_the_merge_run() {
-    let (fx, runner, run) =
-        openspec_merge_run(Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() }));
+    let (fx, runner, run) = openspec_merge_run(Ok(ProcessOutput {
+        exit_status: Some(2),
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+    }));
     let dispatch = ScriptedDispatch::new(vec![
         Turn::work().writing("README.md", "both sides\n"),
         Turn::ready(),
@@ -169,4 +208,85 @@ fn a_merge_review_outside_the_mode_carries_no_specs_validation() {
     assert_eq!(done.state, GraduationRunState::Completed);
     assert!(dispatch.of_part("merge_review")[0].input.get("openspec_specs_validation").is_none());
     assert_eq!(runner.calls_of("validate"), 0);
+}
+
+// OFP-FR-AQDH, GRL-FR-ZDNL: a merge run made while OpenSpec mode is active
+// records `openspecGate: true`, and one made while it is off records false
+// and runs no specs gate, also where the mode is active at its review.
+#[test]
+fn the_specs_gate_follows_the_mode_at_the_creation_of_the_merge_run() {
+    let (_fx, _runner, run) = openspec_merge_run(Ok(ok(VALID_SPECS)));
+    assert!(run.merge.as_ref().unwrap().openspec_gate);
+    let wire = serde_json::to_value(run.merge.as_ref().unwrap()).unwrap();
+    assert_eq!(wire["openspecGate"], true);
+
+    // The merge runs while the mode is off, and the mode is on again at the
+    // review: the run made while it was off records false and runs no gate.
+    let (fx, runner, run, _) = merge_run_in_mode(Ok(ok(VALID_SPECS)), false);
+    assert!(!run.merge.as_ref().unwrap().openspec_gate, "made while the mode is off");
+    let wire = serde_json::to_value(run.merge.as_ref().unwrap()).unwrap();
+    assert_eq!(wire["openspecGate"], false);
+    // The mode is on again at the review. The change stays uncommitted: a
+    // commit would move the base branch that the merge run pinned.
+    set_mode(&fx, "auto");
+    let active = fx.app.state::<crate::project::ProjectState>().require_root().ok();
+    assert!(crate::openspec::OpenSpec::mode_active(active.as_ref()), "the mode is on");
+    let mut run = run;
+    let checkout = fx.root();
+    let gated = tauri::async_runtime::block_on(
+        crate::graduation::driver::merge_specs_review::specs_validation(
+            &fx.app, &mut run, &checkout,
+        ),
+    );
+    assert!(matches!(gated, Ok(None)), "a run made while the mode was off runs no gate");
+    assert_eq!(runner.inner.calls_of("validate"), 0);
+    assert_ne!(fx.reload(&run.id).state, GraduationRunState::Blocked);
+}
+
+// OFP-FR-NQPY, OFP-FR-AQDH, OFP-FR-TBHX, GRL-FR-AGOA: a merge run whose
+// merge data holds `openspecGate: true` does not skip the gate when the mode
+// is off at its review: it rests `blocked` with the cause
+// `openspec_mode_inactive`, and no review turn may be dispatched.
+#[test]
+fn a_mode_that_turns_off_during_a_merge_run_rests_it() {
+    let (fx, runner, mut run) = openspec_merge_run(Ok(ok(VALID_SPECS)));
+    // The gate of a run made in the mode, in a project whose mode is off now.
+    std::fs::remove_dir_all(fx.root().join("openspec")).unwrap();
+    run.state = GraduationRunState::Reviewing;
+    crate::graduation::save_run(&fx.app, &mut run).unwrap();
+    let checkout = fx.root();
+    let gated = tauri::async_runtime::block_on(
+        crate::graduation::driver::merge_specs_review::specs_validation(
+            &fx.app, &mut run, &checkout,
+        ),
+    );
+    assert!(gated.is_err(), "no review turn may be dispatched");
+    let run = fx.reload(&run.id);
+    assert_eq!(run.state, GraduationRunState::Blocked, "{run:?}");
+    let blocker = run.blocker.as_ref().unwrap();
+    assert_eq!(blocker.code, "openspec_validation_unavailable");
+    assert_eq!(blocker.cause.as_deref(), Some("openspec_mode_inactive"));
+    assert_eq!(runner.inner.calls_of("validate"), 0);
+}
+
+// OFP-FR-TBHX, OFP-FR-PQNS, OFP-FR-WNVO: a specs validation that fails after
+// its retry rests the run with the cause `cli_failed` and the standard error
+// of the last process as its diagnostic.
+#[test]
+fn a_failed_specs_validation_carries_its_cause_and_diagnostic() {
+    let (fx, runner, run) = openspec_merge_run(Ok(ProcessOutput {
+        exit_status: Some(2),
+        stdout: Vec::new(),
+        stderr: b"Error: cannot read specs".to_vec(),
+    }));
+    let dispatch = ScriptedDispatch::new(vec![
+        Turn::work().writing("README.md", "both sides\n"),
+        Turn::ready(),
+    ]);
+    let run = fx.drive(&run, dispatch.clone());
+    let blocker = run.blocker.as_ref().unwrap();
+    assert_eq!(blocker.cause.as_deref(), Some("cli_failed"));
+    assert_eq!(blocker.detail.as_deref(), Some("2"));
+    assert_eq!(blocker.diagnostics[0].message, "Error: cannot read specs");
+    assert_eq!(runner.inner.calls_of("validate"), 2, "the validation ran once more");
 }

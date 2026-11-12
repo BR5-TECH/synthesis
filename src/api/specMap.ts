@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { logDebug } from "../logging";
 import { DEMO_SPECIFICATION_INDEX } from "../state/specMap/fixture";
 import { cloneIndex } from "../state/specMap/organize";
+import { toOpenSpecFailure } from "../state/openspec/failureNotice";
 import type {
   ChangeChip,
   IndexNode,
@@ -42,6 +43,8 @@ export interface OpenSpecMapIndex {
   roots: OpenSpecWireNode[];
   dependencies: SpecificationIndex["dependencies"];
   validation: "valid" | "invalid" | "unavailable";
+  /** OSI-FR-OIOB / SMP-FR-KVKD: the failure of a validation that is unavailable. */
+  validationFailure?: unknown;
   unreadLocations: number;
 }
 
@@ -92,14 +95,19 @@ export function fromOpenSpecIndex(index: OpenSpecMapIndex): SpecificationIndex {
     dependencies: index.dependencies.map((d) => ({ ...d })),
     source: "openspec",
     validation: index.validation,
+    // SMP-FR-KVKD: the failure of a validation that could not run, for the
+    // sentence of its notice and its Details.
+    ...(index.validation === "unavailable" && index.validationFailure
+      ? { validationFailure: toOpenSpecFailure(index.validationFailure) }
+      : {}),
     unreadLocations: index.unreadLocations,
   };
 }
 
 /**
  * SMP-FR-HWIC / SMP-FR-MNZW: load the index. For `demo` the UI serves a fresh
- * copy of its built-in demo index on every load. A failure rejects with the
- * code of the load (OSI-FR-PJJO).
+ * copy of its built-in demo index on every load. A failure rejects with an
+ * `OpenSpecFailure` (OSI-FR-PJJO, OFP-FR-QLQJ).
  */
 export async function loadSpecificationMap(): Promise<SpecificationIndex> {
   const answer = await invoke<SpecificationMapLoad>("load_specification_map");

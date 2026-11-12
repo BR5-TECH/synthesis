@@ -26,7 +26,8 @@ import {
   runTitle,
 } from "../../state/graduation";
 import type { RunAction } from "../../state/graduation/runState";
-import type { GraduationQueue, GraduationRun } from "../../types";
+import type { GraduationQueue, GraduationRun, OpenSpecFailure } from "../../types";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { RestartRegionControl } from "./restart";
 import { openOpenSpecChange } from "../../state/openspec/changeRoutes";
 
@@ -68,6 +69,11 @@ export interface RunActionRowProps {
   onRestarted: (created: GraduationRun) => void;
   /** The refusal of this run's last row act, where it was refused. */
   refusal: string | null;
+  /**
+   * GRU-FR-BPNJ: the OpenSpec failure of that refusal, which renders its
+   * failure notice in place of the words.
+   */
+  refusalFailure?: OpenSpecFailure | null;
   /** The row control the act in flight was issued from. */
   pressedRef: MutableRefObject<PressedAction | null>;
   /** GRT-FR-AMHS: the rail's Restart asks this run's confirmation to open. */
@@ -83,12 +89,13 @@ export function RunActionRow({
   onOpenDraft,
   onRestarted,
   refusal,
+  refusalFailure = null,
   pressedRef,
   openRestart,
   onRestartOpened,
 }: RunActionRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const refusalRef = useRef<HTMLParagraphElement>(null);
+  const refusalRef = useRef<HTMLDivElement & HTMLParagraphElement>(null);
   // GRU-FR-CLFA: the act that waits for the author's confirmation, where it
   // would remove runs queued behind this one.
   const [confirming, setConfirming] = useState<"discard" | "revert" | null>(null);
@@ -338,7 +345,25 @@ export function RunActionRow({
       )}
       {/* GRU-FR-KQPE: beside the row that issued it, where the author is
           looking, rather than at the top of a region they scrolled down. */}
-      {refusal && (
+      {/* GRU-FR-BPNJ / OFN-FR-DPIJ: an OpenSpec refusal in its notice. The
+          row's Continue is its retry, so the notice offers none. */}
+      {refusal && refusalFailure && (
+        <div
+          className="graduation__error graduation__warning"
+          data-testid="graduation-action-refusal"
+          ref={refusalRef}
+        >
+          <OpenSpecFailureNotice
+            failure={refusalFailure}
+            surface="graduation_run_continue"
+            change={run.openspec?.change ?? null}
+            location={run.streamId ? { kind: "stream", streamId: run.streamId } : null}
+            streamName={run.streamName || undefined}
+            frame="The run did not continue."
+          />
+        </div>
+      )}
+      {refusal && !refusalFailure && (
         <p
           className="graduation__error graduation__warning"
           role="alert"

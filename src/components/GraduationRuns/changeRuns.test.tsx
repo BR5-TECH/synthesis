@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { resetLogBufferForTest } from "../../logging";
+import { flushLogs, resetLogBufferForTest } from "../../logging";
 import { configureOpenSpecChangeRoutes } from "../../state/openspec/changeRoutes";
 import { makeObservability, makeQueue, makeRun, type RunOverrides } from "../../test/graduationFixtures";
 import type { ApplyProgress, GraduationRun, GraduationRunState } from "../../types";
@@ -197,7 +197,7 @@ describe("the stage row of an OpenSpec change run", () => {
     expect(calls("read_apply_progress")).toHaveLength(2);
   });
 
-  it("GRU-FR-PXCW: a read that fails after a read that succeeded puts the stage back on its ordinary sentence", async () => {
+  it("GRU-FR-PXCW, OFN-FR-QZEC: a read that fails after a read that succeeded puts the stage back on its ordinary sentence, with the short form of its notice", async () => {
     region(changeRun("apply", "working"));
     await waitFor(() =>
       expect(screen.getByTestId("run-progress")).toHaveTextContent("2 of 4 tasks · next: Add the logout route"),
@@ -207,6 +207,129 @@ describe("the stage row of an OpenSpec change run", () => {
     await waitFor(() => expect(screen.getByTestId("run-progress")).not.toHaveTextContent("of 4 tasks"));
     expect(calls("read_apply_progress")).toHaveLength(2);
     expect(screen.getByTestId("run-progress")).toHaveTextContent(/Tasks · pass 1 of/);
+    const note = screen.getByTestId("run-progress-note");
+    expect(note.textContent).toBe("The OpenSpec CLI stopped before it answered, also after one more try.");
+    expect(note).toHaveAttribute("title", note.textContent);
+    // The stage keeps its ordinary sentence, and the short form stands apart.
+    expect(
+      screen.getByTestId("run-progress").querySelector(".run-progress__stage[data-status='current'] .run-progress__condition"),
+    ).not.toHaveTextContent("stopped before it answered");
+    // OFN-FR-QZEC: the short form has no action and no Details.
+    expect(screen.queryByTestId("openspec-failure-notice")).toBeNull();
+    // A read that answers again takes the short form away.
+    progress = { state: "ready", total: 4, complete: 3, nextTask: "Test it", missingArtifacts: [] };
+    act(() => emit("graduation-run-changed", { runId: "r1", state: "working" }));
+    await waitFor(() => expect(screen.getByTestId("run-progress")).toHaveTextContent("3 of 4 tasks"));
+    expect(screen.getByTestId("run-progress")).not.toHaveTextContent("stopped before it answered");
+    expect(screen.queryByTestId("run-progress-note")).toBeNull();
+  });
+
+  it("GRU-FR-LBPR, OFN-FR-EPIG, OFN-FR-DPIJ, OFN-FR-HEVB: a run at rest on the image probe states its blocker once, in its notice, with Open Docker settings and no Retry", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "append_log_records" || cmd === "open_settings_window") return undefined;
+      if (cmd === "read_apply_progress") return progress;
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
+    });
+    region(
+      changeRun("apply", "blocked", {
+        blocker: {
+          code: "openspec_image_cli_unavailable",
+          detail: "failed",
+          message: "openspec_image_cli_unavailable: failed",
+          clearsBy: "Fix the agent image, then continue the run.",
+          attempt: 1,
+          diagnostics: [],
+        },
+      }),
+    );
+    const blocker = screen.getByTestId("graduation-blocker");
+    expect(within(blocker).getByRole("alert").textContent).toBe(
+      "The OpenSpec CLI in the agent image of this project does not start. The image needs Node 22.12.0 or later. " +
+        "This is the first time it stopped here. Nothing was committed. Fix the agent image, then continue the run.",
+    );
+    expect(screen.queryByTestId("graduation-blocker-detail")).toBeNull();
+    // OFN-FR-PFYW: no other sentence of the region states the failure.
+    expect(screen.queryByText(/openspec_image_cli_unavailable/)).toBeNull();
+    expect(screen.getAllByText(/does not start\. The image needs Node/)).toHaveLength(1);
+    expect(within(blocker).queryByRole("button", { name: "Retry" })).toBeNull();
+    await userEvent.click(within(blocker).getByRole("button", { name: "Open Docker settings" }));
+    await waitFor(() =>
+      expect(calls("open_settings_window")[0][1]).toEqual({ section: "project/docker" }),
+    );
+  });
+
+  it("GRU-FR-LBPR, OFN-FR-LKAT: a reload of the same blocked run states the notice again with no new log record", async () => {
+    const blocked = () =>
+      changeRun("apply", "blocked", {
+        blocker: {
+          code: "openspec_validation_unavailable",
+          cause: "cli_timed_out",
+          message: "openspec_validation_unavailable: cli_timed_out",
+          clearsBy: "Continue the run to run the gate again.",
+          attempt: 1,
+          diagnostics: [{ message: "private stderr" }],
+        },
+      });
+    const view = region(blocked());
+    const props = (run: GraduationRun) => (
+      <RunRegion
+        run={run}
+        runs={[run]}
+        queue={makeQueue([run])}
+        capacity={null}
+        busy={false}
+        act={act$}
+        onActivateStage={() => {}}
+        onAnswered={() => {}}
+        onRestarted={() => {}}
+        refusal={null}
+        pressedRef={pressedRef}
+        openRestart={false}
+        onRestartOpened={() => {}}
+      />
+    );
+    view.rerender(props(blocked()));
+    view.rerender(props(blocked()));
+    expect(screen.getByTestId("graduation-blocker")).toHaveTextContent("did not finish in time");
+    flushLogs();
+    const records = calls("append_log_records").flatMap(
+      (c) => (c[1] as { records: Array<{ message: string; fields: Record<string, unknown> }> }).records,
+    );
+    const notices = records.filter((r) => r.message === "an openspec failure notice appeared");
+    expect(notices).toHaveLength(1);
+    expect(notices[0].fields).toEqual({
+      surface: "graduation_run_blocker",
+      code: "openspec_validation_unavailable",
+      cause: "cli_timed_out",
+      class: "transient",
+    });
+    expect(JSON.stringify(records)).not.toContain("private stderr");
+  });
+
+  it("GRU-FR-LBPR, OFN-FR-RLSO, OFN-FR-IHSQ: a gate blocker of the class content offers Open change on the run's stream and the CLI messages", async () => {
+    region(
+      changeRun("apply", "blocked", {
+        blocker: {
+          code: "openspec_validation_unavailable",
+          cause: "cli_rejected",
+          message: "openspec_validation_unavailable: cli_rejected",
+          clearsBy: "Continue the run to run the gate again.",
+          attempt: 0,
+          diagnostics: [{ severity: "error", code: "bad_delta", message: "Delta has no header" }],
+        },
+      }),
+    );
+    const blocker = screen.getByTestId("graduation-blocker");
+    expect(blocker).toHaveTextContent("OpenSpec reported a problem in the OpenSpec files of this change.");
+    await userEvent.click(within(blocker).getByRole("button", { name: "Open change" }));
+    expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: "s-7" }, CHANGE, {
+      thread: null,
+      streamName: "auth-work",
+    });
+    await userEvent.click(within(blocker).getByRole("button", { name: /Details/ }));
+    expect(within(blocker).getByTestId("openspec-failure-diagnostic")).toHaveTextContent(
+      "error bad_delta: Delta has no header",
+    );
   });
 
   it("GRU-FR-HZLV: the detail slot states checks running while a work turn is in flight", () => {

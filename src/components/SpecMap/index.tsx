@@ -7,11 +7,10 @@
  * needs while it runs: the hover, the drag, the open dialog, and the measured
  * canvas.
  */
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as api from "../../api";
 import { typeChip } from "../../artifactTypes";
 import { logInfo, logWarn } from "../../logging";
-import { formatSectionAddress } from "../../settingsWindow";
 import { openOpenSpecChange } from "../../state/openspec/changeRoutes";
 import {
   INITIAL_VIEW,
@@ -43,6 +42,9 @@ import { centerScale, centeredOn, firstPaintView, topAlignedView } from "./zoom"
 import { useMapDrag } from "./useMapDrag";
 import { useElementSize, useWindowWidth } from "./useElementSize";
 import { Icon } from "../icons";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
+import { noticeSentence } from "../../state/openspec/failureNotice";
+import { useShortFormLog } from "../../state/openspec/useShortFormLog";
 
 export interface SpecMapProps {
   store: SpecMapSessionStore;
@@ -66,13 +68,16 @@ export const DOCKED_INSPECTOR_WIDTH = 1160;
 
 /**
  * SMP-FR-KVKD: what the notice line of an OpenSpec index says, or null where
- * the validation ran and every location was read.
+ * the validation ran and every location was read. The sentence of the notice
+ * of `validationFailure` stands in the line, and its Details beside it.
  */
 export function openSpecNotice(index: SpecificationIndex): string | null {
   if (!isOpenSpecIndex(index)) return null;
   const parts: string[] = [];
   if (index.validation === "unavailable") {
     parts.push("The OpenSpec validation could not run, so no requirement shows as a gap.");
+    const sentence = index.validationFailure ? noticeSentence(index.validationFailure) : null;
+    if (sentence) parts.push(sentence);
   }
   const unread = index.unreadLocations ?? 0;
   if (unread > 0) {
@@ -83,13 +88,21 @@ export function openSpecNotice(index: SpecificationIndex): string | null {
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
-/** SMP-FR-KBXW: the OpenSpec section of Project settings. */
-function openOpenSpecSettings(): void {
-  void api.openSettingsWindow(formatSectionAddress("project", "openspec")).catch((e) => {
-    logWarn(["frontend"], "Settings window could not be opened", {
-      reason: e instanceof Error ? e.message : String(e),
-    });
-  });
+/**
+ * SMP-FR-KBXW: Retry of the error state. After an OpenSpec failure it first
+ * re-checks the CLI (`"get openspec status"` with `recheck`), then loads.
+ */
+async function retryLoad(store: SpecMapSessionStore): Promise<void> {
+  if (store.snapshot().errorFailure) {
+    try {
+      await api.getOpenspecStatus(true);
+    } catch (e) {
+      logWarn(["frontend"], "the openspec status re-check of the map retry failed", {
+        reason: e instanceof Error ? e.name : typeof e,
+      });
+    }
+  }
+  await store.retry();
 }
 
 /** SMI-FR-UKIV: open the change of a chip in the location of the chip. */
@@ -241,33 +254,61 @@ export function SpecMap({
     });
   };
 
+  // SMP-FR-KBXW: Retry replaces the error state with the loading state, so
+  // its button leaves the page. Where the load fails again, the focus goes
+  // back to the new Retry, and does not fall to the page.
+  const retryButton = useRef<HTMLButtonElement | null>(null);
+  const retried = useRef(false);
+  useEffect(() => {
+    if (state.status === "loading") return;
+    if (retried.current && state.status === "error") retryButton.current?.focus();
+    retried.current = false;
+  }, [state.status]);
+
   const ready = state.status === "ready" && tree !== null && scope !== null && layout !== null;
+  // OFN-FR-LKAT: the line of SMP-FR-KVKD states the sentence of the
+  // validation failure, so the map logs that notice once when it appears.
+  useShortFormLog(
+    "spec_map_validation",
+    ready && tree.index.validation === "unavailable" ? (tree.index.validationFailure ?? null) : null,
+  );
   const empty = ready && tree.index.roots.length === 0;
   const docked = windowWidth >= DOCKED_INSPECTOR_WIDTH;
   const inspectorOpen = state.inspectorOpen ?? docked;
 
   let content;
   if (state.status === "error") {
-    // SMP-FR-KBXW: a missing CLI also says that OpenSpec cannot be read, and
-    // routes to where the author sets it up.
-    const cli = state.errorCode === "cli_unavailable";
+    // SMP-FR-KBXW: an OpenSpec failure renders its notice in place of the
+    // statement. The Retry of the error state stays, so the notice offers
+    // none (OFN-FR-DPIJ). The map knows no location of a change, so the
+    // notice offers no Open change.
+    const failure = state.errorFailure;
     content = (
-      <div className="smap-state" role="alert">
-        <p className="smap-state__line">The specification map could not be loaded.</p>
-        {cli && (
-          <p className="smap-state__line">
-            OpenSpec cannot be read: the OpenSpec CLI is not available on this machine.
-          </p>
+      <div
+        className={failure ? "smap-state smap-state--notice" : "smap-state"}
+        role={failure ? undefined : "alert"}
+      >
+        {failure ? (
+          <OpenSpecFailureNotice
+            failure={failure}
+            surface="spec_map_load"
+            className="smap-state__notice"
+          />
+        ) : (
+          <p className="smap-state__line">The specification map could not be loaded.</p>
         )}
         <div className="smap-state__actions">
-          <button type="button" className="btn btn--sm" onClick={() => void store.retry()}>
+          <button
+            ref={retryButton}
+            type="button"
+            className="btn btn--sm"
+            onClick={() => {
+              retried.current = true;
+              void retryLoad(store);
+            }}
+          >
             Retry
           </button>
-          {cli && (
-            <button type="button" className="btn btn--sm" onClick={openOpenSpecSettings}>
-              Open OpenSpec settings
-            </button>
-          )}
         </div>
       </div>
     );
@@ -342,10 +383,16 @@ export function SpecMap({
           stands outside the body, so the inspector that overlays the body
           below the docking width (SMI-FR-QWOP) does not cover it. */}
       {notice && (
-        <p className="smap-notice" role="status" data-testid="spec-map-notice">
+        <div className="smap-notice" data-testid="spec-map-notice">
           <Icon.Warning size={12} />
-          <span>{notice}</span>
-        </p>
+          {/* OFN-FR-ONNF: the sentence alone is live, so opening Details does
+              not announce the list. */}
+          <span role="status">{notice}</span>
+          {/* SMP-FR-KVKD: the Details of the validation failure, in the line. */}
+          {ready && tree.index.validationFailure && (
+            <ValidationDetails failure={tree.index.validationFailure} />
+          )}
+        </div>
       )}
       <div className="smap-body">
         <div className="smap-main">
@@ -455,5 +502,24 @@ function MapDialog({
         onClose();
       }}
     />
+  );
+}
+
+/**
+ * SMP-FR-KVKD: the Details of the failure of a validation that could not
+ * run. The line states the sentence itself, so this holds Details alone.
+ */
+function ValidationDetails({ failure }: { failure: NonNullable<SpecificationIndex["validationFailure"]> }) {
+  if ((failure.diagnostics ?? []).length === 0) return null;
+  return (
+    <div className="smap-notice__details">
+      <OpenSpecFailureNotice
+        failure={failure}
+        surface="spec_map_validation"
+        actions={false}
+        withSentence={false}
+        log={false}
+      />
+    </div>
   );
 }

@@ -6,7 +6,7 @@
 use std::time::Instant;
 
 use super::*;
-use crate::openspec::ArchiveCliFailure;
+use crate::openspec::OpenSpecReadError;
 
 /// OAR-FR-BLBJ: whether `path` is below one of the three folders an archive
 /// of `change` writes.
@@ -86,7 +86,10 @@ fn prune_emptied(at: &RootFs, change: &str, removed: &[String]) -> usize {
 /// cannot be written, for example while Git's own `index.lock` is held, is
 /// told, and is no failure where the working copy reads clean, because the
 /// failed commit did not write the index either.
-fn restore<R: tauri::Runtime>(cx: &ArchiveContext<'_, R>, change: &str) {
+///
+/// It answers whether the working copy reads clean below the three folders
+/// after it (OFP-FR-IJYA).
+fn restore<R: tauri::Runtime>(cx: &ArchiveContext<'_, R>, change: &str) -> bool {
     let started = Instant::now();
     let mut index_written = true;
     let mut pruned = 0;
@@ -105,41 +108,53 @@ fn restore<R: tauri::Runtime>(cx: &ArchiveContext<'_, R>, change: &str) {
     let left = archive_writes(&cx.at, change, None).map(|paths| paths.len());
     let millis = started.elapsed().as_millis() as u64;
     match (rolled, left) {
-        (Ok(paths), Ok(0)) => logging::log_info(
-            cx.app,
-            &BUFFER,
-            &[Domain::Backend],
-            "openspec archive restored the working copy",
-            log_fields! {
-                "stream_id" => cx.stream_id.to_string(),
-                "change" => change.to_string(),
-                "paths" => paths,
-                "folders" => pruned,
-                "indexWritten" => index_written,
-                "durationMs" => millis,
-            },
-        ),
-        (rolled, left) => logging::log_warn(
-            cx.app,
-            &BUFFER,
-            &[Domain::Backend],
-            "openspec archive could not restore the working copy",
-            log_fields! {
-                "stream_id" => cx.stream_id.to_string(),
-                "change" => change.to_string(),
-                "code" => "restore_failed",
-                "paths" => rolled.unwrap_or(0),
-                "left" => left.ok(),
-                "indexWritten" => index_written,
-                "durationMs" => millis,
-            },
-        ),
+        (Ok(paths), Ok(0)) => {
+            logging::log_info(
+                cx.app,
+                &BUFFER,
+                &[Domain::Backend],
+                "openspec archive restored the working copy",
+                log_fields! {
+                    "stream_id" => cx.stream_id.to_string(),
+                    "change" => change.to_string(),
+                    "paths" => paths,
+                    "folders" => pruned,
+                    "indexWritten" => index_written,
+                    "durationMs" => millis,
+                },
+            );
+            true
+        }
+        (rolled, left) => {
+            logging::log_warn(
+                cx.app,
+                &BUFFER,
+                &[Domain::Backend],
+                "openspec archive could not restore the working copy",
+                log_fields! {
+                    "stream_id" => cx.stream_id.to_string(),
+                    "change" => change.to_string(),
+                    "code" => "restore_failed",
+                    "paths" => rolled.unwrap_or(0),
+                    "left" => left.ok(),
+                    "indexWritten" => index_written,
+                    "durationMs" => millis,
+                },
+            );
+            false
+        }
     }
 }
 
-/// OAR-FR-EUXZ: a refusal of the merge after the archive of `change` failed
-/// with `code`, once the working copy is restored (OAR-FR-KBDD).
-fn fail<R: tauri::Runtime>(cx: &ArchiveContext<'_, R>, change: &str, code: &str) -> String {
+/// OAR-FR-EUXZ: the refusal `archive_failed` of `change` with `code` as its
+/// cause and the diagnostics of the failure (OFP-FR-ZDEE). The record holds
+/// the code and no diagnostic.
+fn refusal<R: tauri::Runtime>(
+    cx: &ArchiveContext<'_, R>,
+    change: &str,
+    code: &str,
+    diagnostics: &[crate::openspec::CliDiagnostic],
+) -> Refusal {
     logging::log_warn(
         cx.app,
         &BUFFER,
@@ -151,8 +166,45 @@ fn fail<R: tauri::Runtime>(cx: &ArchiveContext<'_, R>, change: &str, code: &str)
             "code" => code.to_string(),
         },
     );
+    let mut failure = OpenSpecFailure::new(ERR_ARCHIVE_FAILED).for_change(change);
+    failure.cause = Some(code.to_string());
+    failure.diagnostics = diagnostics.to_vec();
+    failure.into()
+}
+
+/// OAR-FR-EUXZ, OAR-FR-KBDD: a refusal of the merge once the working copy is
+/// restored.
+fn fail<R: tauri::Runtime>(
+    cx: &ArchiveContext<'_, R>,
+    change: &str,
+    code: &str,
+    diagnostics: &[crate::openspec::CliDiagnostic],
+) -> Refusal {
+    let refused = refusal(cx, change, code, diagnostics);
     restore(cx, change);
-    format!("{ERR_ARCHIVE_FAILED}: {change}: {code}")
+    refused
+}
+
+/// OAR-FR-IAKL, OFP-FR-IJYA: the archive process, and where its outcome is
+/// transient, one more after the restore of the first is complete. A restore
+/// that fails ends the archive with its first outcome.
+fn run_archive<R: tauri::Runtime>(
+    cx: &ArchiveContext<'_, R>,
+    seam: &OpenSpec,
+    exe: &std::path::Path,
+    change: &str,
+) -> Result<crate::openspec::ArchiveAnswer, Refusal> {
+    let first = match seam.archive_change(cx.app, &BUFFER, exe, cx.at.path(), change) {
+        Ok(answer) => return Ok(answer),
+        Err(failure) => failure,
+    };
+    let restored = restore(cx, change);
+    if !first.is_transient() || !restored {
+        return Err(refusal(cx, change, &first.code(), first.diagnostics()));
+    }
+    seam.pause_before_archive_retry(cx.app, &BUFFER, &first);
+    seam.archive_change(cx.app, &BUFFER, exe, cx.at.path(), change)
+        .map_err(|second| fail(cx, change, &second.code(), second.diagnostics()))
 }
 
 /// OAR-FR-IAKL through OAR-FR-MSOM: archive `change`, commit what the archive
@@ -161,29 +213,23 @@ pub(super) fn archive_one<R: tauri::Runtime>(
     cx: &ArchiveContext<'_, R>,
     seam: &OpenSpec,
     change: &str,
-) -> Result<ArchivedChange, String> {
+) -> Result<ArchivedChange, Refusal> {
     let started = Instant::now();
-    // OAR-FR-IAKL: the CLI that OSM-FR-EZKW resolves now.
+    // OAR-FR-IAKL, OAR-FR-EUXZ: the CLI that OSM-FR-EZKW resolves now. A mode
+    // that went off and a CLI that is not usable start no archive process.
     let exe = match seam.ready_in(cx.app, &BUFFER, cx.active.as_ref(), &cx.at) {
         Ok(exe) => exe,
         Err(error) => {
-            let code = match error {
-                crate::openspec::OpenSpecReadError::CliTimedOut => "cli_timed_out",
-                _ => "cli_failed",
-            };
-            return Err(fail(cx, change, code));
-        }
-    };
-    let answer = match seam.archive_change(cx.app, &BUFFER, &exe, cx.at.path(), change) {
-        Ok(answer) => answer,
-        Err(failure) => {
-            let code = match &failure {
-                ArchiveCliFailure::Status(code) => code.clone(),
+            let code = match &error {
+                OpenSpecReadError::NoOpenProject | OpenSpecReadError::OpenSpecModeInactive => {
+                    REASON_MODE_INACTIVE
+                }
                 other => other.code(),
             };
-            return Err(fail(cx, change, &code));
+            return Err(fail(cx, change, code, error.diagnostics()));
         }
     };
+    let answer = run_archive(cx, seam, &exe, change)?;
     logging::log_info(
         cx.app,
         &BUFFER,
@@ -202,7 +248,7 @@ pub(super) fn archive_one<R: tauri::Runtime>(
         .and_then(|paths| crate::git::commit_exact_paths(&cx.at, &commit_message(change), &paths));
     let commit = match committed {
         Ok(commit) => commit,
-        Err(_) => return Err(fail(cx, change, CODE_COMMIT_FAILED)),
+        Err(_) => return Err(fail(cx, change, CODE_COMMIT_FAILED, &[])),
     };
     logging::log_info(
         cx.app,
@@ -219,8 +265,9 @@ pub(super) fn archive_one<R: tauri::Runtime>(
         },
     );
 
-    // OAR-FR-MSOM, OAR-FR-KSZI: the records move with the change. A move
-    // that fails is told and keeps the commit.
+    // OAR-FR-MSOM, OAR-FR-KSZI: the records move with the change, the notice
+    // record of OFP-FR-HVHV included. A move that fails is told and keeps the
+    // commit.
     move_change_records(cx.app, cx.stream_id, change, &answer.archived_as);
     Ok(ArchivedChange { change: change.to_string(), archived_as: answer.archived_as })
 }

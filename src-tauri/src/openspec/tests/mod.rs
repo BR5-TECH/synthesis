@@ -21,6 +21,7 @@ mod cli;
 mod mode;
 mod project_validation;
 mod reads;
+mod retry;
 #[cfg(unix)]
 mod runner;
 
@@ -59,6 +60,9 @@ pub(crate) struct FakeRunner {
     answers: Mutex<HashMap<String, Result<ProcessOutput, ProcessError>>>,
     /// Answers chosen by the leading arguments, tried before `answers`.
     by_prefix: Mutex<Vec<(Vec<String>, Answer)>>,
+    /// Answers given once each, in order, by the first argument, before
+    /// every other answer.
+    queued: Mutex<HashMap<String, std::collections::VecDeque<Answer>>>,
     pub(crate) calls: Mutex<Vec<Call>>,
 }
 
@@ -69,6 +73,13 @@ impl FakeRunner {
         answer: Result<ProcessOutput, ProcessError>,
     ) -> Self {
         self.answers.lock().unwrap().insert(first_arg.to_string(), answer);
+        self
+    }
+
+    /// The next calls with `first_arg` answer `answers`, one each, in order;
+    /// later calls answer as before.
+    pub(crate) fn then(self, first_arg: &str, answers: Vec<Answer>) -> Self {
+        self.queued.lock().unwrap().entry(first_arg.to_string()).or_default().extend(answers);
         self
     }
 
@@ -120,23 +131,25 @@ impl OpenSpecRunner for FakeRunner {
             cwd: cwd.to_path_buf(),
             timeout,
         });
+        let key = args.first().copied().unwrap_or_default();
+        if let Some(answer) = self.queued.lock().unwrap().get_mut(key).and_then(|q| q.pop_front()) {
+            return answer;
+        }
         if let Some((_, answer)) = self.by_prefix.lock().unwrap().iter().find(|(prefix, _)| {
             prefix.iter().zip(args.iter()).all(|(p, a)| p == a) && prefix.len() <= args.len()
         }) {
             return answer.clone();
         }
-        let key = args.first().copied().unwrap_or_default();
-        self.answers
-            .lock()
-            .unwrap()
-            .get(key)
-            .cloned()
-            .unwrap_or(Ok(ProcessOutput { exit_status: Some(1), stdout: Vec::new() }))
+        self.answers.lock().unwrap().get(key).cloned().unwrap_or(Ok(ProcessOutput {
+            exit_status: Some(1),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }))
     }
 }
 
 pub(crate) fn ok(stdout: &str) -> ProcessOutput {
-    ProcessOutput { exit_status: Some(0), stdout: stdout.as_bytes().to_vec() }
+    ProcessOutput { exit_status: Some(0), stdout: stdout.as_bytes().to_vec(), stderr: Vec::new() }
 }
 
 /// A probe over a fixed set of executables, modification times, and folders.

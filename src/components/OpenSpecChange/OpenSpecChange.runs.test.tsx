@@ -240,27 +240,79 @@ describe("Apply (OCW-FR-DTJD, OCW-FR-NNRY, OCW-FR-EKYF)", () => {
     );
   });
 
-  it("OCW-FR-EKYF: change_not_ready names the missing artifacts", async () => {
-    backend.startApply = () => ({ reject: "change_not_ready: design,tasks" });
+  it("OCW-FR-EKYF, OFN-FR-RNWG: a refusal that names no change takes the change of the tab in its sentence", async () => {
+    backend.startApply = () => ({ reject: { code: "tasks_incomplete", diagnostics: [] } });
     await opened();
     await userEvent.click(apply());
-    expect(await screen.findByTestId("openspec-apply-refusal")).toHaveTextContent(
-      "It is missing artifacts: design, tasks. No run started.",
+    const refusal = await screen.findByTestId("openspec-apply-refusal");
+    expect(within(refusal).getByRole("alert")).toHaveTextContent(
+      `The change "${CHANGE}" has tasks that are not done. No run started.`,
     );
+    expect(refusal).not.toHaveTextContent("this change");
   });
 
-  it.each(["openspec_mode_inactive", "openspec_cli_unavailable"])(
-    "OCW-FR-EKYF: %s routes to the OpenSpec section of Project settings",
-    async (code) => {
-      backend.startApply = () => ({ reject: code });
+  it("OCW-FR-EKYF, OFN-FR-IHSQ: change_not_ready renders its notice with the missing artifacts, that no run started, and its Details", async () => {
+    backend.startApply = () => ({
+      reject: {
+        code: "change_not_ready",
+        detail: "design,tasks",
+        diagnostics: [
+          { severity: "error", message: "Missing artifact: design" },
+          { severity: "info", message: "Write the design first." },
+        ],
+      },
+    });
+    await opened();
+    await userEvent.click(apply());
+    const refusal = await screen.findByTestId("openspec-apply-refusal");
+    expect(within(refusal).getByRole("alert")).toHaveTextContent(
+      "The change misses these artifacts: design, tasks. Complete them before Apply. No run started.",
+    );
+    // OFN-FR-RLSO: the tab of the change offers no Open change.
+    expect(within(refusal).queryByRole("button", { name: "Open change" })).toBeNull();
+    await userEvent.click(within(refusal).getByRole("button", { name: /Details/ }));
+    expect(within(refusal).getAllByTestId("openspec-failure-diagnostic").map((d) => d.textContent)).toEqual([
+      "error: Missing artifact: design",
+      "info: Write the design first.",
+    ]);
+  });
+
+  it.each<[unknown]>([
+    [{ code: "openspec_mode_inactive", diagnostics: [] }],
+    [{ code: "cli_unavailable", detail: "unsupported", diagnostics: [] }],
+  ])(
+    "OCW-FR-EKYF, OFN-FR-EPIG: an environment refusal %# routes to the OpenSpec section of Project settings",
+    async (reject) => {
+      backend.startApply = () => ({ reject });
       await opened();
       await userEvent.click(apply());
       const refusal = await screen.findByTestId("openspec-apply-refusal");
+      expect(refusal).toHaveTextContent("No run started.");
       await userEvent.click(within(refusal).getByRole("button", { name: "Open OpenSpec settings" }));
       await waitFor(() => expect(calls("open_settings_window")).toHaveLength(1));
-      expect(JSON.stringify(calls("open_settings_window")[0][1])).toContain("openspec");
+      expect(calls("open_settings_window")[0][1]).toEqual({ section: "project/openspec" });
     },
   );
+
+  it("OCW-FR-EKYF, OFN-FR-CBLG, OFP-FR-BYYT: apply_progress_unavailable takes the class of its cause, and Retry re-checks the CLI and starts again", async () => {
+    let starts = 0;
+    backend.startApply = () => {
+      starts += 1;
+      return starts === 1
+        ? { reject: { code: "apply_progress_unavailable", cause: "cli_timed_out", diagnostics: [] } }
+        : changeRun("g-9", "apply", "working");
+    };
+    await opened();
+    await userEvent.click(apply());
+    const refusal = await screen.findByTestId("openspec-apply-refusal");
+    expect(within(refusal).getByRole("alert")).toHaveTextContent(
+      "The OpenSpec CLI did not finish in time, also after one more try. No run started.",
+    );
+    await userEvent.click(within(refusal).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(starts).toBe(2));
+    expect(backend.statusChecks).toEqual([true]);
+    await waitFor(() => expect(screen.queryByTestId("openspec-apply-refusal")).toBeNull());
+  });
 
   it("OCW-FR-EKYF: an image preflight refusal states what the author configures", async () => {
     backend.startApply = () => ({ reject: "vendor_image_unconfigured" });
@@ -272,11 +324,11 @@ describe("Apply (OCW-FR-DTJD, OCW-FR-NNRY, OCW-FR-EKYF)", () => {
   });
 
   it("OCW-FR-EKYF: every other code states the code and that no run started", async () => {
-    backend.startApply = () => ({ reject: "apply_progress_unavailable: cli_failed" });
+    backend.startApply = () => ({ reject: "invalid_change_name" });
     await opened();
     await userEvent.click(apply());
     expect(await screen.findByTestId("openspec-apply-refusal")).toHaveTextContent(
-      "The run could not start (apply_progress_unavailable). No run started.",
+      "The run could not start (invalid_change_name). No run started.",
     );
   });
 });
@@ -350,6 +402,35 @@ describe("the run strip (OCW-FR-JHAB, OCW-FR-YTGJ, OCW-FR-BTSI, OCW-FR-FAEL)", (
     await waitFor(() => expect(calls("read_apply_progress").length).toBeGreaterThan(failedFrom));
     expect(strip()).toHaveTextContent("3 of 4 tasks");
     expect(within(strip()).getByTestId("openspec-run-strip-next")).toHaveTextContent("Test the route");
+  });
+
+  it("OCW-FR-BTSI, OFN-FR-QZEC: a read that fails keeps the last answer and adds the short form of its notice, with no action and no Details", async () => {
+    backend.runs = [changeRun("g-1", "apply", "working")];
+    await opened();
+    await waitFor(() => expect(strip()).toHaveTextContent("2 of 4 tasks"));
+    backend.applyProgress = { reject: { code: "cli_timed_out", diagnostics: [{ message: "slow" }] } as never };
+    act(() => emit("graduation-run-changed", { runId: "g-1", state: "working" }));
+    const SHORT = "The OpenSpec CLI did not finish in time, also after one more try.";
+    // The short form stands on one line of its own under the stage row, with
+    // its whole text as its tooltip, so the sentence of the stage stays short.
+    const note = await within(strip()).findByTestId("run-progress-note");
+    expect(note.textContent).toBe(SHORT);
+    expect(note).toHaveAttribute("title", SHORT);
+    expect(strip().querySelector(".run-progress__stage[data-status='current'] .run-progress__condition")).toHaveTextContent(
+      /^2 of 4 tasks$/,
+    );
+    // The announcement reads the sentence, then the short form, each closed once.
+    const spoken = within(strip()).getByRole("status").textContent ?? "";
+    expect(spoken).toContain(`2 of 4 tasks. ${SHORT}`);
+    expect(spoken).not.toContain("..");
+    expect(within(strip()).queryByTestId("openspec-failure-notice")).toBeNull();
+    expect(within(strip()).queryByRole("button", { name: /Details|Retry/ })).toBeNull();
+    // A read that answers again takes the short form away.
+    backend.applyProgress = applyProgress({ complete: 3 });
+    act(() => emit("graduation-run-changed", { runId: "g-1", state: "working" }));
+    await waitFor(() => expect(strip()).toHaveTextContent("3 of 4 tasks"));
+    expect(strip()).not.toHaveTextContent("did not finish in time");
+    expect(within(strip()).queryByTestId("run-progress-note")).toBeNull();
   });
 
   it("OCW-FR-FAEL: the detail slot of an apply run states the check state in words", async () => {

@@ -64,6 +64,7 @@ pub(super) fn bare_merge_run() -> GraduationRun {
             }],
             result: None,
             pull: None,
+            openspec_gate: false,
         }),
         pr_summary: None,
         openspec: None,

@@ -15,7 +15,7 @@ pub(super) fn continue_of(fx: &Fixture, run: &GraduationRun) -> Result<Graduatio
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone());
     fx.app.state::<GraduationState>().set_loop_enabled(true);
-    continued
+    continued.map_err(String::from)
 }
 
 pub(super) fn answers() -> Vec<QuestionAnswer> {
@@ -185,10 +185,22 @@ fn continue_from_a_plan_update_takes_the_decisions_on_the_plan_base() {
     let close = closed.commit.clone().expect("the close commit is recorded");
     assert_eq!(head_of(&stream.worktree()), close);
 
-    runner.set("validate", Err(crate::openspec::ProcessError::TimedOut));
+    // OPU-FR-PXDY, OFP-FR-QLQJ, OFP-FR-ZDEE: a read that fails refuses
+    // Continue with an `OpenSpecFailure` whose cause is the read's code and
+    // whose diagnostics are the read's.
+    let stalled = b"Node stalled".to_vec();
+    runner.set("validate", Err(crate::openspec::ProcessError::TimedOut { stderr: stalled }));
     let before = record(&fx);
-    let refused = continue_of(&fx, &rested).unwrap_err();
-    assert!(refused.starts_with("openspec_validation_unavailable:"), "{refused}");
+    fx.app.state::<GraduationState>().set_loop_enabled(false);
+    let refused =
+        crate::graduation::continue_graduation_run(fx.app.clone(), rested.id.clone()).unwrap_err();
+    fx.app.state::<GraduationState>().set_loop_enabled(true);
+    assert!(refused.to_string().starts_with("openspec_validation_unavailable:"), "{refused}");
+    let failure = refused.openspec().expect("an OpenSpec failure");
+    assert_eq!(failure.code, "openspec_validation_unavailable");
+    assert_eq!(failure.cause.as_deref(), Some("cli_timed_out"));
+    assert_eq!(failure.change.as_deref(), Some(CHANGE));
+    assert_eq!(failure.diagnostics[0].message, "Node stalled");
     assert_eq!(record(&fx), before, "a refusal changes nothing");
     runner.set("validate", Ok(crate::openspec::tests::ok(VALID)));
 

@@ -12,14 +12,14 @@ pub fn start_graduation<R: tauri::Runtime>(
     standing_work: StandingWork,
     standing_work_message: Option<String>,
     openspec_change: Option<String>,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, crate::openspec::Refusal> {
     write_check::prime_start_write(&app, &queue::project_key(&app), None);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let project_key = queue::project_key(&app);
     if project_key.is_empty() {
-        return Err(ERR_NO_PROJECT_OPEN.to_string());
+        return Err(ERR_NO_PROJECT_OPEN.into());
     }
     // GSU-FR-IJEE: a draft a non-terminal run already holds is refused.
     queue::require_unlocked_draft(&app, &draft_id)?;
@@ -28,6 +28,8 @@ pub fn start_graduation<R: tauri::Runtime>(
     let stream = crate::streams::stream_of(&app, &stream_id)
         .ok_or_else(|| ERR_UNKNOWN_STREAM.to_string())?;
     // GSU-FR-MIVF, GSU-FR-MTDA: a propose start checks OpenSpec before the image.
+    // OFP-FR-QLQJ: `openspec_mode_inactive` and `cli_unavailable` reject as an
+    // `OpenSpecFailure`.
     if let Some(name) = openspec_change.as_deref() {
         openspec_start::preflight(&app, &stream, name, true)?;
     }
@@ -125,14 +127,18 @@ pub fn get_draft_graduation<R: tauri::Runtime>(
 pub fn continue_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, crate::openspec::Refusal> {
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let mut run = runs::load_run(&app, &run_id)?;
     if run.state.is_terminal() {
-        return Err(ERR_RUN_STATE_NOT_PERMITTED.to_string());
+        return Err(ERR_RUN_STATE_NOT_PERMITTED.into());
     }
+    // OFP-FR-ITUD, OFP-FR-TBHX: Continue of a run that rests on an OpenSpec
+    // failure clears a kept `failed` CLI check, so the step runs again on a
+    // fresh check.
+    driver::clear_failed_check_for(&app, &run);
     // GRD-FR-ZJHD: a run that waits on its questions moves on only by the
     // answers or by a discard. A Continue would run the turn that asked again,
     // without the answers, and that turn asks the same questions again.
@@ -144,7 +150,7 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
             "graduation refused to continue a run that waits on its questions",
             log_fields! { "run_id" => run.id.clone(), "state" => run.state.as_str().to_string() },
         );
-        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()).into());
     }
     // GRD-FR-XHSE: a merge run does not resume over a branch that moved. The
     // check comes first, so a refusal changes nothing.
@@ -180,7 +186,8 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
     if !crate::graduation::logs::retry_pending(&app, &mut run) {
         return Err(format!(
             "{ERR_RUN_STATE_NOT_PERMITTED}: the run's log stream still cannot be written"
-        ));
+        )
+        .into());
     }
     run.auto_start = true;
     // GOB-FR-BTXN: the return to the queue is a backward move, so the author
@@ -238,7 +245,7 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
     }
     transitions::transition(&mut_app(&app), &mut run, GraduationRunState::Queued)?;
     dispatch_pending(&app);
-    runs::load_run(&app, &run_id)
+    Ok(runs::load_run(&app, &run_id)?)
 }
 
 /// GRD-FR-MDQZ: the author's own stop, accepted only while the run is doing

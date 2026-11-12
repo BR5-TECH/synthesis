@@ -364,7 +364,7 @@ describe("working directly", () => {
     await chooseDirectly();
     await screen.findByTestId("graduation-direct-target");
     await userEvent.click(graduate());
-    expect(graduate()).toBeDisabled();
+    expect(graduate()).toHaveAttribute("aria-disabled", "true");
     expect(radio("New stream")).toBeDisabled();
     await userEvent.click(graduate());
     expect(calls("start_direct_graduation")).toHaveLength(1);

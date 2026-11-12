@@ -35,7 +35,7 @@ export const CHANGE_RUN_ERRORS = {
   noProjectOpen: "no_project_open",
   unknownStream: "unknown_stream",
   modeInactive: "openspec_mode_inactive",
-  cliUnavailable: "openspec_cli_unavailable",
+  cliUnavailable: "cli_unavailable",
   invalidName: "invalid_change_name",
   changeNotFound: "change_not_found",
   runActive: "openspec_run_active",

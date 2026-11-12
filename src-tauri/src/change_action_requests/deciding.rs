@@ -3,12 +3,13 @@
 
 use super::*;
 use crate::graduation::GraduationRun;
+use crate::openspec::Refusal;
 
 /// CAR-FR-MMPV: the two starts of `OCR-openspec-change-runs.md` that a
 /// confirmation calls. A seam, so a test can stand in for the run queue.
 pub trait RunStarter {
     /// `start_change_apply` (OCR-FR-IDFC).
-    fn start_apply(&self, stream_id: &str, change: &str) -> Result<GraduationRun, String>;
+    fn start_apply(&self, stream_id: &str, change: &str) -> Result<GraduationRun, Refusal>;
 
     /// `start_change_rework_in_thread` (OCR-FR-TWDK).
     fn start_rework(
@@ -18,7 +19,7 @@ pub trait RunStarter {
         instruction: &str,
         thread_id: &str,
         requester: &Participant,
-    ) -> Result<GraduationRun, String>;
+    ) -> Result<GraduationRun, Refusal>;
 }
 
 /// The starts of the running application. Each takes the graduation write
@@ -31,7 +32,7 @@ impl<R: tauri::Runtime> RunStarter for AppStarter<'_, R>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    fn start_apply(&self, stream_id: &str, change: &str) -> Result<GraduationRun, String> {
+    fn start_apply(&self, stream_id: &str, change: &str) -> Result<GraduationRun, Refusal> {
         crate::graduation::start_change_apply_in_process(self.app, stream_id, change)
     }
 
@@ -42,7 +43,7 @@ where
         instruction: &str,
         thread_id: &str,
         requester: &Participant,
-    ) -> Result<GraduationRun, String> {
+    ) -> Result<GraduationRun, Refusal> {
         crate::graduation::start_change_rework_in_thread(
             self.app,
             stream_id,
@@ -149,7 +150,7 @@ pub fn confirm_action_request<R: tauri::Runtime>(
     starter: &dyn RunStarter,
     request_id: &str,
     by: &Participant,
-) -> Result<ChangeActionOutcome, String>
+) -> Result<ChangeActionOutcome, Refusal>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
@@ -161,7 +162,7 @@ where
     let outcome = confirm_locked(app, store, starter, request_id, by);
     match &outcome {
         Ok(done) => log_record(app, "confirmed", &done.request),
-        Err(code) => log_refusal(app, "confirm", code, Subject::of(&held)),
+        Err(refusal) => log_refusal(app, "confirm", refusal.code(), Subject::of(&held)),
     }
     outcome
 }
@@ -172,13 +173,13 @@ fn confirm_locked<R: tauri::Runtime>(
     starter: &dyn RunStarter,
     request_id: &str,
     by: &Participant,
-) -> Result<ChangeActionOutcome, String>
+) -> Result<ChangeActionOutcome, Refusal>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let (mut record, dir) = read_request(store, request_id)?;
     if record.state != ChangeActionRequestState::Pending {
-        return Err(ERR_ALREADY_DECIDED.to_string());
+        return Err(ERR_ALREADY_DECIDED.into());
     }
     let started = match record.action {
         ChangeAction::Apply => starter.start_apply(&record.stream_id, &record.change),
@@ -220,7 +221,7 @@ where
         }
         // CAR-FR-ARMK.
         Err(refusal) => {
-            let code = refusal_code(&refusal).to_string();
+            let code = refusal.code().to_string();
             record.last_refusal = Some(code.clone());
             if is_final_refusal(&code) {
                 record.state = ChangeActionRequestState::Failed;

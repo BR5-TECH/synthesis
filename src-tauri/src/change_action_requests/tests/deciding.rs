@@ -90,6 +90,33 @@ fn a_refused_start_keeps_the_request_pending() {
     assert!(outcome.request.last_refusal.is_none());
 }
 
+// OFP-FR-QLQJ, CAR-FR-ARMK: a start refused with an `OpenSpecFailure` makes
+// the confirmation reject with that object whole, on the wire too. The request
+// stays pending with the code, and no comment carries a diagnostic.
+#[test]
+fn a_start_refused_with_an_openspec_failure_rejects_with_the_object() {
+    let f = Fixture::new();
+    let record = f.record(ChangeAction::Apply, None).expect("recorded");
+    let mut failure = crate::openspec::OpenSpecFailure::new("change_not_ready").for_change(CHANGE);
+    failure.detail = Some("design".into());
+    failure.diagnostics =
+        vec![crate::openspec::CliDiagnostic::of("error", "SECRET-DIAGNOSTIC design")];
+    let comments_before = f.thread().comments.len();
+    let refused = f.confirm(&FakeStarter::failing(failure.clone()), &record.id).unwrap_err();
+    assert_eq!(refused.openspec(), Some(&failure));
+    let wire = serde_json::to_value(&refused).unwrap();
+    assert!(wire.is_object(), "{wire}");
+    assert_eq!(wire["code"], "change_not_ready");
+    assert_eq!(wire["diagnostics"][0]["message"], "SECRET-DIAGNOSTIC design");
+    let held = f.requests().remove(0);
+    assert_eq!(held.state, ChangeActionRequestState::Pending);
+    assert_eq!(held.last_refusal.as_deref(), Some("change_not_ready"));
+    let thread = f.thread();
+    assert_eq!(thread.comments.len(), comments_before, "a refusal that is not final posts nothing");
+    assert!(thread.comments.iter().all(|c| !c.body.contains("SECRET")));
+    assert!(super::backend_records("SECRET").is_empty(), "a record holds a diagnostic");
+}
+
 // CAR-FR-ARMK / CAR-FR-TQJZ / CAR-FR-KYJU: `unknown_stream` and
 // `change_not_found` write the request `failed` with the code, append the
 // decision comment that names the code, and the request takes no decision
@@ -171,7 +198,11 @@ struct HeldStarter {
 }
 
 impl RunStarter for HeldStarter {
-    fn start_apply(&self, stream_id: &str, change: &str) -> Result<GraduationRun, String> {
+    fn start_apply(
+        &self,
+        stream_id: &str,
+        change: &str,
+    ) -> Result<GraduationRun, crate::openspec::Refusal> {
         let first = {
             let mut calls = self.calls.lock().unwrap();
             calls.push(format!("apply {stream_id} {change}"));
@@ -193,7 +224,7 @@ impl RunStarter for HeldStarter {
         _instruction: &str,
         _thread_id: &str,
         _requester: &Participant,
-    ) -> Result<GraduationRun, String> {
+    ) -> Result<GraduationRun, crate::openspec::Refusal> {
         Err("not_expected".into())
     }
 }
@@ -207,7 +238,7 @@ fn while_a_start_is_held<T: Send>(
     f: &Fixture,
     id: &str,
     other: impl FnOnce(&HeldStarter) -> T + Send,
-) -> (Result<ChangeActionOutcome, String>, T, &'static str, Vec<String>) {
+) -> (Result<ChangeActionOutcome, crate::openspec::Refusal>, T, &'static str, Vec<String>) {
     let (events_tx, events) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let starter = HeldStarter {

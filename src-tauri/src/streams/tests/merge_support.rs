@@ -232,6 +232,7 @@ pub(super) fn merge_data_for(
         conflicts: snapshot.conflicts.clone(),
         result: None,
         pull: None,
+        openspec_gate: false,
     }
 }
 

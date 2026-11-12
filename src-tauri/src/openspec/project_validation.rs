@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{OpenSpec, OpenSpecReadError, ValidationIssue};
+use super::{CliDiagnostic, OnExitOne, OpenSpec, OpenSpecReadError, ValidationIssue};
 use crate::fs::RootFs;
 use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink};
@@ -57,6 +57,13 @@ pub struct ProjectValidationItem {
 }
 
 impl ProjectValidation {
+    /// OFP-FR-RUOP: the issues of every item that is not valid, in order.
+    pub fn diagnostics(&self) -> Vec<CliDiagnostic> {
+        let issues: Vec<ValidationIssue> =
+            self.items.iter().filter(|i| !i.valid).flat_map(|i| i.issues.clone()).collect();
+        super::failure::issue_diagnostics(&issues)
+    }
+
     /// GRL-FR-ZFMZ: the id of the first spec item that is not valid.
     pub fn first_invalid_spec(&self) -> Option<&ProjectValidationItem> {
         self.items.iter().find(|item| item.kind == "spec" && !item.valid)
@@ -116,8 +123,12 @@ impl OpenSpec {
     ) -> Result<ProjectValidation, OpenSpecReadError> {
         let result = self.ready_in(sink, buffer, active, at).and_then(|exe| {
             let args = ["validate", scope.flag(), "--strict", "--json", "--no-interactive"];
-            let out = self
-                .run_accepting(sink, buffer, &exe, "validate", &args, at.path(), &[0, 1])
+            // OSM-FR-XDRN: exit 1 with the expected shape says an item is not
+            // valid.
+            let answers: fn(&[u8]) -> bool = |out| parse_project_validation(out).is_ok();
+            let on_one = OnExitOne::AnswerWhen(answers);
+            let (_, out) = self
+                .run_read(sink, buffer, &exe, "validate", &args, at.path(), on_one)
                 .map_err(OpenSpecReadError::from)?;
             parse_project_validation(&out)
         });

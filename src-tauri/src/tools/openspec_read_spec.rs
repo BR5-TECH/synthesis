@@ -28,7 +28,7 @@ pub const INVALID_CAPABILITY: &str = "The capability must be an id that `list_op
 pub const UNKNOWN_CAPABILITY: &str = "No capability with that id exists in this project. Call `list_openspec_specs` to see the ids that exist.";
 pub const UNKNOWN_REQUIREMENT: &str = "That capability has no requirement with that name. Call again without `requirement` to see the names of its requirements.";
 pub const READ_FAILED: &str =
-    "The OpenSpec CLI could not read this capability. Its spec file may be malformed.";
+    "The OpenSpec CLI refused to read this capability. Its spec file may be malformed.";
 
 /// ROS-FR-PRDW: the longest `capability` a log record carries whole.
 const LOGGED_CAPABILITY_CHARS: usize = 512;

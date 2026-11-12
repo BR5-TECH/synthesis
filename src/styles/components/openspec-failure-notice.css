@@ -1,0 +1,71 @@
+/* OFN: the OpenSpec failure notice. The sentence wraps, the actions stand on
+   one line below it where they fit and wrap where they do not, and Details
+   opens below the actions at the full width of the notice. */
+.ofn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1-5);
+  min-width: 0;
+  /* The notice takes the full width of its host, also in a host that centres
+     or shrinks its children. So its width does not change when Details opens,
+     and the Details button stays under the pointer. */
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: start;
+  font-size: var(--fs-ui-sm);
+}
+.ofn__sentence {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+.ofn__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1-5) var(--sp-2);
+}
+/* Details stands at the end of the action line. */
+.ofn__toggle { margin-left: auto; }
+.ofn__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 12rem;
+  padding: var(--sp-1-5) var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+}
+.ofn__details-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+/* OFN-FR-UNEF: the list scrolls on its own above a height of 12 lines. A
+   long diagnostic wraps at a word, and breaks a word only where one word is
+   wider than the list. */
+.ofn__diagnostics {
+  --ofn-line: 1.5;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: calc(12 * var(--ofn-line) * 1em);
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--ofn-line);
+  overflow-wrap: break-word;
+  word-break: normal;
+  user-select: text;
+}
+/* Each line keeps its spaces. The newline between two lines stands in the
+   diagnostic, whose white space collapses, so it adds no empty line. */
+.ofn__line { display: block; white-space: pre-wrap; }
+.ofn__line + .ofn__line { padding-left: var(--sp-3); }
+/* OFN-FR-DZSQ: the short statement after Copy. */
+.ofn__copied { color: var(--fg-2); }
+/* OFN-FR-IHSQ: one diagnostic, its fix on the line after it. */
+.ofn__diagnostic { display: block; white-space: normal; }
+.ofn__diagnostic + .ofn__diagnostic { margin-top: var(--sp-1); }

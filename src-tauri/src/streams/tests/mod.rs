@@ -179,6 +179,25 @@ fn files_under(root: &Path) -> Vec<String> {
 }
 
 impl crate::graduation::driver::GraduationDispatch<tauri::test::MockRuntime> for ScriptedDispatch {
+    /// OFP-FR-BZDP: every image of these tests holds OpenSpec 1.17.0.
+    fn probe_graduation_image<'a>(
+        &'a self,
+        _app: &'a tauri::AppHandle<tauri::test::MockRuntime>,
+        _project_key: &'a str,
+        _request: crate::tools::agent_exec::image_probe::ImageProbeRequest,
+    ) -> crate::graduation::driver::seams::ProbeFuture<'a> {
+        Box::pin(async {
+            Ok(crate::tools::agent_exec::image_probe::ImageProbeOutcome::Ran(
+                crate::tools::agent_exec::image_probe::ImageProbe {
+                    end: crate::tools::agent_exec::runtime::RunEnd::Exited,
+                    exit_status: Some(0),
+                    stdout: b"1.17.0\n".to_vec(),
+                    stderr: Vec::new(),
+                },
+            ))
+        })
+    }
+
     fn dispatch_graduation_turn<'a>(
         &'a self,
         _app: &'a tauri::AppHandle<tauri::test::MockRuntime>,
@@ -273,7 +292,7 @@ fn merge(
     stream_id: &str,
     publication: StreamMergePublication,
 ) -> Result<StreamMergeResult, String> {
-    merge_work_stream_blocking(&fx.app, stream_id, publication)
+    merge_work_stream_blocking(&fx.app, stream_id, publication).map_err(String::from)
 }
 
 fn worktree_names(repo: &git2::Repository) -> Vec<String> {

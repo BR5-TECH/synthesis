@@ -5,6 +5,8 @@
  * boundary). A spec node is a leaf; every other node is an index node.
  */
 
+import type { OpenSpecFailure } from "../../types/openspec";
+
 /** SMP-FR-TGYU: the one completeness state every spec node carries. */
 export type CompletenessState = "verified" | "built" | "drafted" | "gap";
 
@@ -102,6 +104,8 @@ export interface SpecificationIndex {
   source?: MapSource;
   /** OSI-FR-OIOB: the result of the validation of an OpenSpec index. */
   validation?: "valid" | "invalid" | "unavailable";
+  /** SMP-FR-KVKD: the failure of a validation that is `unavailable`, or null. */
+  validationFailure?: OpenSpecFailure | null;
   /** OSI-FR-DENT: the locations whose changes could not be read. */
   unreadLocations?: number;
 }

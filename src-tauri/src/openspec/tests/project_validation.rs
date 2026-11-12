@@ -15,8 +15,10 @@ const ALL: &str = r#"{ "items": [
 // validity, and issues, and whether every item is valid.
 #[test]
 fn a_project_validation_of_all_reads_each_item() {
-    let runner = FakeRunner::default()
-        .answering("validate", Ok(ProcessOutput { exit_status: Some(1), stdout: ALL.into() }));
+    let runner = FakeRunner::default().answering(
+        "validate",
+        Ok(ProcessOutput { exit_status: Some(1), stdout: ALL.into(), stderr: Vec::new() }),
+    );
     let (seam, runner, _) = seam_with(runner);
     let (_dir, root) = openspec_project();
     let validation =
@@ -53,14 +55,16 @@ fn a_project_validation_of_specs_with_no_item_is_valid() {
 // output of another shape, an item of another type included, is unreadable.
 #[test]
 fn a_project_validation_fails_on_other_statuses_and_shapes() {
-    let runner = FakeRunner::default()
-        .answering("validate", Ok(ProcessOutput { exit_status: Some(2), stdout: ALL.into() }));
+    let runner = FakeRunner::default().answering(
+        "validate",
+        Ok(ProcessOutput { exit_status: Some(2), stdout: ALL.into(), stderr: Vec::new() }),
+    );
     let (seam, runner, _) = seam_with(runner);
     let (_dir, root) = openspec_project();
     let scope = ValidationScope::All;
     assert_eq!(
         seam.validate_project(&Silent, buffer(), Some(&root), &root, scope),
-        Err(OpenSpecReadError::CliFailed { exit_status: 2 })
+        Err(OpenSpecReadError::CliFailed { exit_status: Some(2), diagnostics: Vec::new() })
     );
     runner.set(
         "validate",

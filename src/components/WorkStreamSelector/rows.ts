@@ -9,7 +9,24 @@
  * they run.
  */
 
-import type { StreamMergeResult, WorkStreamUpdateProgress } from "../../types";
+import type { OpenSpecFailure, StreamMergeResult, WorkStreamUpdateProgress } from "../../types";
+
+/**
+ * WSS-FR-NTGC: a merge refused by its archive step with an OpenSpec failure.
+ * The row renders its failure notice. `retry` merges again with the same
+ * publication (OFN-FR-CBLG).
+ */
+export interface RowFailure {
+  failure: OpenSpecFailure;
+  retry: (() => void) | null;
+}
+
+/** WSS-FR-CRJD / WSS-FR-YCAL: a refusal rendered on the row it is about. */
+export interface RowError {
+  id: string;
+  text: string;
+  failure?: RowFailure | null;
+}
 
 /**
  * WSS-FR-HGWL: a merge call this surface started and is waiting on.

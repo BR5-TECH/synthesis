@@ -416,6 +416,17 @@
   color: var(--fg-1);
   font-weight: 600;
 }
+/* The note of the current stage (OFN-FR-QZEC): one line under the row, cut
+   with an ellipsis where it is too long. Its whole text is its tooltip. */
+.run-progress__note {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg-2);
+}
 .run-progress__condition {
   font-size: var(--fs-ui-xs);
   color: var(--fg-3);

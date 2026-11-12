@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { resetLogBufferForTest } from "../logging";
+import { flushLogs, resetLogBufferForTest } from "../logging";
 import type { OpenSpecCliState, OpenSpecStatus } from "../types";
 
 const invokeMock = vi.fn();
@@ -10,7 +10,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-import { OPENSPEC_INSTALL_COMMAND, OpenSpecSection, cliStatement } from "./OpenSpecSection";
+import {
+  OPENSPEC_IMAGE_REQUIREMENT,
+  OPENSPEC_INSTALL_COMMAND,
+  OpenSpecImageRequirement,
+  OpenSpecSection,
+  cliStatement,
+} from "./OpenSpecSection";
 
 let status: OpenSpecStatus;
 let refuseSave: string | null;
@@ -68,15 +74,53 @@ describe("Project OpenSpec section", () => {
     expect(cliStatement({ state: "unsupported", path: "/x/openspec", version: "0.9.1" })).toBe(
       "OpenSpec CLI 0.9.1 at /x/openspec is a version that is not supported.",
     );
-    expect(cliStatement({ state: "failed", path: "/x/openspec", reason: "timed_out" })).toContain(
-      "did not answer in time",
+  });
+
+  it("SET-FR-QERY: a failed CLI states its reason in words", () => {
+    expect(cliStatement({ state: "failed", path: "/x/openspec", reason: "not_executable" })).toBe(
+      "The OpenSpec CLI at /x/openspec failed: the file at the path cannot be run.",
     );
-    expect(cliStatement({ state: "failed", path: "/x/openspec", reason: "not_executable" })).toContain(
-      "could not be started",
+    expect(cliStatement({ state: "failed", path: "/x/openspec", reason: "timed_out" })).toBe(
+      "The OpenSpec CLI at /x/openspec failed: the CLI did not answer --version in time, also after one more try.",
     );
-    expect(cliStatement({ state: "failed", path: "/x/openspec", reason: "no_version" })).toContain(
-      "did not report a version",
+    expect(cliStatement({ state: "failed", path: "/x/openspec", reason: "no_version" })).toBe(
+      "The OpenSpec CLI at /x/openspec failed: the CLI did not report a version.",
     );
+  });
+
+  it("SET-FR-YRWU: Check again re-checks the CLI, is disabled while the call is in flight, and shows the state it returns", async () => {
+    const user = userEvent.setup();
+    status = { ...status, cli: { state: "failed", path: "/x/openspec", reason: "timed_out" } };
+    render(<OpenSpecSection />);
+    expect(await screen.findByTestId("openspec-cli")).toHaveTextContent("also after one more try");
+    const check = screen.getByRole("button", { name: "Check again" });
+    await waitFor(() => expect(check).not.toHaveAttribute("aria-disabled"));
+    let release: () => void = () => {};
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: unknown) =>
+      cmd === "get_openspec_status"
+        ? new Promise((resolve) => {
+            release = () => resolve(base(cmd, args));
+          })
+        : base(cmd, args),
+    );
+    status = { ...status, cli: AVAILABLE };
+    // By keyboard: the button keeps the focus while the call is in flight.
+    check.focus();
+    await user.keyboard("{Enter}");
+    expect(check).toHaveAttribute("aria-disabled", "true");
+    expect(document.activeElement).toBe(check);
+    const statusCalls = calls("get_openspec_status");
+    expect(statusCalls[statusCalls.length - 1]).toEqual(["get_openspec_status", { recheck: true }]);
+    // A second press while the call is in flight asks nothing more.
+    await user.click(check);
+    expect(calls("get_openspec_status")).toHaveLength(statusCalls.length);
+    release();
+    expect(await screen.findByText(`OpenSpec CLI 1.17.0 is installed at ${AVAILABLE.path}.`)).toBeInTheDocument();
+    await waitFor(() => expect(check).not.toHaveAttribute("aria-disabled"));
+    expect(document.activeElement).toBe(check);
+    // The read when the section mounts names no recheck.
+    expect(calls("get_openspec_status")[0]).toEqual(["get_openspec_status"]);
   });
 
   it("SET-FR-QVUP: the checkbox is selected while the setting is auto", async () => {
@@ -184,5 +228,49 @@ describe("Project OpenSpec section", () => {
     render(<OpenSpecSection />);
     expect(await screen.findByRole("alert")).toHaveTextContent("no project open");
     expect(screen.getByRole("checkbox", { name: "Use OpenSpec mode" })).toBeDisabled();
+  });
+});
+
+describe("the OpenSpec line of the Docker section", () => {
+  it("SET-FR-GFHV: while OpenSpec mode is active, the Docker section states what the image must hold", async () => {
+    render(<OpenSpecImageRequirement />);
+    expect(await screen.findByTestId("openspec-image-requirement")).toHaveTextContent(
+      OPENSPEC_IMAGE_REQUIREMENT,
+    );
+    expect(OPENSPEC_IMAGE_REQUIREMENT).toContain("Node 22.12.0 or later");
+    expect(OPENSPEC_IMAGE_REQUIREMENT).toContain("the OpenSpec CLI 1.0 or later as openspec on the PATH of the launching user");
+  });
+
+  it("SET-FR-GFHV: while OpenSpec mode is not active, the line is absent after the status arrives", async () => {
+    // The test answers the read itself, so the absence is checked only after
+    // the component has handled the answer.
+    let answer: (value: OpenSpecStatus) => void = () => {};
+    const read = new Promise<OpenSpecStatus>((resolve) => {
+      answer = resolve;
+    });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: unknown) =>
+      cmd === "get_openspec_status" ? read : base(cmd, args),
+    );
+    render(<OpenSpecImageRequirement />);
+    await waitFor(() => expect(calls("get_openspec_status")).toHaveLength(1));
+    await act(async () => {
+      answer({ ...status, active: false });
+      await read;
+    });
+    expect(screen.queryByTestId("openspec-image-requirement")).toBeNull();
+  });
+
+  it("SET-FR-GFHV: where the status cannot be read, the line is absent and the failure is logged", async () => {
+    refuseRead = "no_open_project";
+    render(<OpenSpecImageRequirement />);
+    // The WARN record is the sign that the component has handled the rejection.
+    await waitFor(() => {
+      flushLogs();
+      expect(JSON.stringify(calls("append_log_records"))).toContain(
+        "the docker section could not read the openspec status",
+      );
+    });
+    expect(screen.queryByTestId("openspec-image-requirement")).toBeNull();
   });
 });

@@ -4,12 +4,19 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { ChangeDetail, ChangeLocation, OpenSpecStatus } from "../types";
 
-/** OSM-FR-YXUC: the setting, the detection, the mode, and the CLI state. */
-export const getOpenspecStatus = () => invoke<OpenSpecStatus>("get_openspec_status");
+/**
+ * OSM-FR-YXUC: the setting, the detection, the mode, and the CLI state. With
+ * `recheck`, the backend first clears a kept `failed` CLI check
+ * (OFP-FR-ITUD). Without it, the call names no argument.
+ */
+export const getOpenspecStatus = (recheck = false) =>
+  recheck
+    ? invoke<OpenSpecStatus>("get_openspec_status", { recheck: true })
+    : invoke<OpenSpecStatus>("get_openspec_status");
 
 /**
- * OSM-FR-MBTI: read one change in one location. It rejects with one code of
- * `OpenSpecChangeReadError`.
+ * OSM-FR-MBTI: read one change in one location. It rejects with an
+ * `OpenSpecFailure` (OFP-FR-QLQJ).
  */
 export const readOpenspecChange = (location: ChangeLocation, name: string) =>
   invoke<ChangeDetail>("read_openspec_change", { location, name });

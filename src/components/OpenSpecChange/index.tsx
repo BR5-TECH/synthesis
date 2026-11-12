@@ -34,7 +34,6 @@ import {
 
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
-import { formatSectionAddress } from "../../settingsWindow";
 import {
   archivedAsOf,
   changeViewOf,
@@ -49,10 +48,13 @@ import type {
   FragmentTarget,
   OpenableArtifact,
   OpenSpecChangeTabTarget,
+  OpenSpecFailure,
 } from "../../types";
 import { ChangeBody } from "./ChangeBody";
 import { artifactOfPath, type FileMode } from "./changeFiles";
-import { archivedAsOfError, failureStatement, readErrorCode, routesToSettings } from "./failure";
+import { archivedAsOfError, failureStatement, readFailureOf } from "./failure";
+import { hasNotice } from "../../state/openspec/failureNotice";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { ArchivedChange } from "./ArchivedChange";
 import { useFocusOnOpen } from "./focusOnOpen";
 import { ChangeInformationModal } from "./ChangeInformationModal";
@@ -128,7 +130,8 @@ function ChangeWorkspace({
   const { location, name } = target;
   const [detail, setDetail] = useState<ChangeDetail | null>(() => changeViewOf(tabId).detail);
   const [selected, setSelected] = useState<string | null>(() => changeViewOf(tabId).selected);
-  const [error, setError] = useState<string | null>(null);
+  /** OCW-FR-RFGG / OCW-FR-PFUQ: the failure of the last read, or null. */
+  const [error, setError] = useState<OpenSpecFailure | null>(null);
   const [reading, setReading] = useState(false);
   const [modes, setModes] = useState<Readonly<Record<string, FileMode>>>(
     () => changeViewOf(tabId).modes,
@@ -176,7 +179,8 @@ function ChangeWorkspace({
       });
     } catch (e) {
       if (!live.current || seq !== readSeq.current) return;
-      const code = readErrorCode(e);
+      const failure = readFailureOf(e);
+      const code = failure.code;
       // OCW-FR-AKVG: an archived change, first or later, replaces the content
       // of the tab with its statement. The wrapper takes it from here.
       const archivedAs = archivedAsOfError(e);
@@ -185,7 +189,7 @@ function ChangeWorkspace({
         keepChangeView(tabId, { archivedAs, detail: null });
         return;
       }
-      setError(code);
+      setError(failure);
       // VOM-FR-NTKT: the stream or the change folder is gone, so voice mode on
       // the change discussion ends.
       if (location.kind === "stream" && OWNER_GONE.has(code)) {
@@ -242,14 +246,6 @@ function ChangeWorkspace({
     chooseMode(fragment.path, "source");
   };
 
-  const openSettings = () => {
-    void api.openSettingsWindow(formatSectionAddress("project", "openspec")).catch((e) => {
-      logWarn(["frontend"], "Settings window could not be opened", {
-        reason: e instanceof Error ? e.message : String(e),
-      });
-    });
-  };
-
   const readAgain = useCallback(() => void read(), [read]);
 
   // OCW-FR-UOKM: only the active worktree offers Open in editor.
@@ -281,12 +277,7 @@ function ChangeWorkspace({
     !detail ? (
       <div className="openspec-change__reading openspec-change__reading--alone">
         {error ? (
-          <FirstFailure
-            code={error}
-            statement={failureStatement(error, name, location)}
-            onRetry={() => void read()}
-            onOpenSettings={openSettings}
-          />
+          <FirstFailure failure={error} name={name} location={location} onRetry={read} />
         ) : (
           // OCW-FR-LABL: the loading state until the first answer arrives.
           <p className="openspec-change__state" role="status" data-testid="openspec-change-loading">
@@ -364,7 +355,7 @@ function ChangeWorkspace({
             Refresh
           </button>
         </div>
-        {streamId !== null && <ChangeRunNotes runs={runs} notes={rework.notes} />}
+        {streamId !== null && <ChangeRunNotes runs={runs} notes={rework.notes} change={name} />}
         {/* OCW-FR-LSFO: one chip per artifact, in the build order of the schema. */}
         {detail && (
           <ul className="openspec-change__chips" aria-label="Artifact states">
@@ -382,10 +373,23 @@ function ChangeWorkspace({
         )}
       </header>
 
-      {/* OCW-FR-PFUQ: a later failure keeps the content and states itself above it. */}
-      {detail && error && (
+      {/* OCW-FR-PFUQ: a later failure keeps the content and states itself
+          above it: an OpenSpec failure in its notice, every other code with
+          Retry. The tab is the tab of the change, so no notice offers Open
+          change (OFN-FR-RLSO). */}
+      {detail && error && hasNotice(error) && (
+        <div className="openspec-change__failure" data-testid="openspec-change-stale">
+          <OpenSpecFailureNotice
+            failure={error}
+            surface="change_workspace_read"
+            change={name}
+            onRetry={read}
+          />
+        </div>
+      )}
+      {detail && error && !hasNotice(error) && (
         <div className="openspec-change__failure" role="alert" data-testid="openspec-change-stale">
-          <span>{failureStatement(error, name, location)}</span>
+          <span>{failureStatement(error.code, name, location)}</span>
           <button type="button" className="btn btn--sm btn--default" onClick={() => void read()}>
             Retry
           </button>
@@ -400,7 +404,12 @@ function ChangeWorkspace({
           historyOpen={historyOpen}
           strip={
             runs.strip ? (
-              <ChangeRunStrip run={runs.strip} progress={runs.progress} onClose={runs.closeStrip} />
+              <ChangeRunStrip
+                run={runs.strip}
+                progress={runs.progress}
+                progressFailure={runs.progressFailure}
+                onClose={runs.closeStrip}
+              />
             ) : null
           }
           onDecided={readAgain}
@@ -443,27 +452,39 @@ function ChangeWorkspace({
   );
 }
 
-/** OCW-FR-RFGG: the failure of a first read, in the reading pane. */
+/**
+ * OCW-FR-RFGG: the failure of a first read, in the reading pane. An OpenSpec
+ * failure renders its notice. `change_not_found` offers nothing, and every
+ * other code offers Retry.
+ */
 function FirstFailure({
-  code,
-  statement,
+  failure,
+  name,
+  location,
   onRetry,
-  onOpenSettings,
 }: {
-  code: string;
-  statement: string;
-  onRetry: () => void;
-  onOpenSettings: () => void;
+  failure: OpenSpecFailure;
+  name: string;
+  location: OpenSpecChangeTabTarget["location"];
+  onRetry: () => Promise<void>;
 }) {
+  if (hasNotice(failure)) {
+    return (
+      <div className="openspec-change__state" data-testid="openspec-change-failure">
+        <OpenSpecFailureNotice
+          failure={failure}
+          surface="change_workspace_read"
+          change={name}
+          onRetry={onRetry}
+        />
+      </div>
+    );
+  }
   return (
     <div className="openspec-change__state" role="alert" data-testid="openspec-change-failure">
-      <p>{statement}</p>
-      {routesToSettings(code) ? (
-        <button type="button" className="btn btn--sm btn--default" onClick={onOpenSettings}>
-          Open OpenSpec settings
-        </button>
-      ) : code === "change_not_found" ? null : (
-        <button type="button" className="btn btn--sm btn--default" onClick={onRetry}>
+      <p>{failureStatement(failure.code, name, location)}</p>
+      {failure.code === "change_not_found" ? null : (
+        <button type="button" className="btn btn--sm btn--default" onClick={() => void onRetry()}>
           Retry
         </button>
       )}

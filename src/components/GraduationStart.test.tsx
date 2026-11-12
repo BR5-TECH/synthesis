@@ -463,7 +463,10 @@ describe("a start in flight", () => {
 
     // One enqueue is all-or-nothing, so a second activation must not start a
     // second one, and nothing may be dismissed out from under it.
-    await waitFor(() => expect(graduate()).toBeDisabled());
+    // The button is disabled but keeps its focus stop, so the focus stays in
+    // the dialog.
+    await waitFor(() => expect(graduate()).toHaveAttribute("aria-disabled", "true"));
+    expect(document.activeElement).toBe(graduate());
     expect(graduate()).toHaveTextContent("Starting…");
     expect(picker()).toBeDisabled();
     expect(position("keep")).toBeDisabled();
@@ -497,7 +500,7 @@ describe("a start in flight", () => {
     const { onStarted } = draw();
     await waitFor(() => expect(picker()).toBeInTheDocument());
     await userEvent.click(graduate());
-    await waitFor(() => expect(graduate()).toBeDisabled());
+    await waitFor(() => expect(graduate()).toHaveAttribute("aria-disabled", "true"));
     expect(onStarted).not.toHaveBeenCalled();
     accept!({ id: "g-7" });
     await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: "g-7" }));

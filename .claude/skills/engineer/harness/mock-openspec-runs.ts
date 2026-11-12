@@ -31,10 +31,14 @@
  *   `change_not_found`, and `declined` seeds it as declined (OCW-FR-CTWP).
  * - `?openspecPlan=update|findings|invalid` makes `g-51` rest on a plan rest
  *   (see mock-openspec-plan.ts).
+ * - Each refusal flag also takes an OpenSpec failure, which rejects as an
+ *   `OpenSpecFailure` object, and `?openspecBlocker=<failure>` makes `g-51`
+ *   rest `blocked` on an OpenSpec blocker (see mock-openspec-failures.ts).
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
 import { planRestFields } from "./mock-openspec-plan";
+import { failureFlag, failureOf, openspecBlocker } from "./mock-openspec-failures";
 
 const STREAM = { id: "s-1", name: "editor-work" };
 const CHANGE = "add-logout-3f2a";
@@ -110,6 +114,25 @@ export function applyRunFields(): Record<string, unknown> {
     updatedAt: "2026-09-08T09:10:00Z",
     // OPU-FR-UOYJ: `?openspecPlan=` makes the run rest on a plan rest.
     ...(planRestFields() ?? {}),
+    // GRU-FR-LBPR / OFP-FR-TBHX: `?openspecBlocker=` rests the run on an
+    // OpenSpec blocker, such as the image probe.
+    ...openspecBlockedFields(),
+  };
+}
+
+function openspecBlockedFields(): Record<string, unknown> {
+  const blocker = openspecBlocker();
+  if (!blocker) return {};
+  return {
+    state: "blocked",
+    blocker,
+    observability: {
+      observabilityVersion: 1,
+      currentStage: "working",
+      stageCondition: "blocked",
+      stageHistory: [],
+      passes: [],
+    },
   };
 }
 
@@ -245,8 +268,9 @@ function checkStart(
   const active = activeRunOf(ctx);
   // eslint-disable-next-line no-throw-literal
   if (active) throw `openspec_run_active: ${active.id}`;
+  // OFP-FR-QLQJ: a refusal flag rejects as an `OpenSpecFailure` object.
   // eslint-disable-next-line no-throw-literal
-  if (refusal) throw refusal;
+  if (refusal) throw failureOf(refusal);
   // OCR-FR-LNKQ: a pending proposal, or a closed one whose commit is owed,
   // holds an apply start. OCR-FR-TCFQ: a pending one alone holds a rework.
   const hold = ctx.proposalHold();
@@ -306,9 +330,12 @@ function decided(request: any, cause: string) {
 export function openspecRunsInvoke(cmd: string, a: Record<string, any>, ctx: OpenspecRunsContext): unknown {
   switch (cmd) {
     case "read_apply_progress": {
-      const mode = query("openspecProgress");
+      const mode = failureFlag("openspecProgress");
       // eslint-disable-next-line no-throw-literal
-      if (mode === "fail") throw "cli_failed";
+      if (mode === "fail") throw failureOf("cli_failed");
+      // OCW-FR-BTSI / GRU-FR-PXCW: any other failure, for the short form.
+      // eslint-disable-next-line no-throw-literal
+      if (mode && mode !== "blocked") throw failureOf(mode);
       if (mode === "blocked") {
         return { state: "blocked", total: 4, complete: 0, nextTask: null, missingArtifacts: ["design", "tasks"] };
       }
@@ -322,12 +349,12 @@ export function openspecRunsInvoke(cmd: string, a: Record<string, any>, ctx: Ope
       };
     }
     case "start_change_apply":
-      checkStart(ctx, a, query("openspecApply"), "apply");
+      checkStart(ctx, a, failureFlag("openspecApply"), "apply");
       return enqueue(ctx, "apply", {});
     case "start_change_rework": {
       // eslint-disable-next-line no-throw-literal
       if (String(a.instruction ?? "").trim() === "") throw "blank_instruction";
-      checkStart(ctx, a, query("openspecRework"), "rework");
+      checkStart(ctx, a, failureFlag("openspecRework"), "rework");
       const threadId = `ocd-rw-${seq + 1}`;
       const at = new Date().toISOString();
       const thread = {
@@ -363,11 +390,16 @@ export function openspecRunsInvoke(cmd: string, a: Record<string, any>, ctx: Ope
         checkStart(
           ctx,
           { streamId: request.streamId, change: request.change },
-          query("openspecRequest"),
+          failureFlag("openspecRequest"),
           request.action,
         );
       } catch (code) {
-        request.lastRefusal = String(code);
+        // CAR-FR-ARMK: the request records the code, as a typed string.
+        const failure = code as { code?: string; cause?: string; detail?: string };
+        request.lastRefusal =
+          typeof code === "object" && code && failure.code
+            ? [failure.code, failure.cause ?? failure.detail].filter(Boolean).join(": ")
+            : String(code);
         decided(request, "refused");
         throw code;
       }

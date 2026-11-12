@@ -186,6 +186,28 @@ pub fn block<R: tauri::Runtime>(
     clears_by: impl Into<String>,
     resume_part: &str,
 ) -> Result<(), String> {
+    block_with(app, run, code, message, clears_by, resume_part, BlockerOpenSpec::default())
+}
+
+/// GRD-FR-UJII, OFP-FR-TBHX: what an OpenSpec blocker holds beside its code.
+#[derive(Clone, Debug, Default)]
+pub struct BlockerOpenSpec {
+    pub cause: Option<String>,
+    pub detail: Option<String>,
+    pub diagnostics: Vec<crate::openspec::CliDiagnostic>,
+}
+
+/// The same, with the cause, the detail, and the diagnostics of an OpenSpec
+/// failure on the blocker.
+pub fn block_with<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+    code: impl Into<String>,
+    message: impl Into<String>,
+    clears_by: impl Into<String>,
+    resume_part: &str,
+    openspec: BlockerOpenSpec,
+) -> Result<(), String> {
     let code = code.into();
     let attempt = if run.checkpoint.blocked_code.as_deref() == Some(code.as_str()) {
         run.checkpoint.block_attempts.saturating_add(1)
@@ -200,6 +222,9 @@ pub fn block<R: tauri::Runtime>(
         message: message.into(),
         clears_by: clears_by.into(),
         attempt,
+        cause: openspec.cause,
+        detail: openspec.detail,
+        diagnostics: openspec.diagnostics,
     });
     // GRD-FR-WKMD: the run keeps its blocker in either state. What tells the
     // two apart is the state, not the absence of the record.

@@ -133,8 +133,14 @@
   color: var(--fg-2);
   font-size: var(--fs-ui-xs);
   line-height: var(--lh-snug);
+  /* The line wraps, so the Details of the validation failure open below its
+     sentence at the full width of the line. */
+  flex-wrap: wrap;
 }
 .smap-notice > svg { flex: none; color: var(--warn); }
+.smap-notice__details { flex: 1 1 12rem; min-width: 0; }
+/* SMP-FR-KBXW: the notice of a failed load stands where the statement stood. */
+.smap-state__notice { max-width: 36rem; margin-inline: auto; }
 
 /* SMP-FR-ONSD / SMP-FR-LRAX: loading, error, and empty replace the canvas. */
 .smap-state {
@@ -150,6 +156,9 @@
   text-align: center;
 }
 .smap-state__line { margin: 0; }
+/* OFN-FR-IHSQ: a failure notice stands from the top, so its Details open
+   downward and the Details toggle stays under the pointer. */
+.smap-state--notice { justify-content: flex-start; padding-top: 72px; }
 /* SMP-FR-KBXW: Retry and the route to the settings stand side by side. */
 .smap-state__actions { display: flex; gap: 8px; }
 

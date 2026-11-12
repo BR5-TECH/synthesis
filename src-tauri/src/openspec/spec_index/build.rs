@@ -219,6 +219,7 @@ pub fn build_index(
             Some(v) if v.valid => "valid",
             Some(_) => "invalid",
         },
+        validation_failure: None,
         unread_locations: locations.iter().filter(|read| read.changes.is_none()).count() as u64,
     }
 }

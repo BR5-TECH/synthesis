@@ -19,14 +19,14 @@ In OpenSpec mode the specification map (per `../ui/SMP-specification-map.md`) sh
 11. **OSI-FR-OJRE** A requirement node is `gap` where an issue of level `ERROR` or `WARNING` belongs to it or to its capability, and `built` otherwise. The index gives no node the state `verified` or `drafted`.
     - *Why:* OpenSpec records whether a requirement is valid, and nothing that says a test verifies it or that it is only drafted.
 12. **OSI-FR-SBVF** Each node holds in `issues` the issues that belong to it, each with its level and its message, in the order the CLI gives them. An issue of a spec item whose id names no live capability belongs to no node.
-13. **OSI-FR-OIOB** A validation that fails gives every requirement node the state `built` and no issue, and the index then holds `validation: "unavailable"`. A validation that answers gives `valid` where every item is valid, and `invalid` otherwise.
+13. **OSI-FR-OIOB** A validation that fails gives every requirement node the state `built` and no issue, and the index then holds `validation: "unavailable"` and the `OpenSpecFailure` of the validation as `validationFailure`. A validation that answers gives `valid` where every item is valid, and `invalid` otherwise.
 14. **OSI-FR-QELX** The active changes are read with `list_changes` (per OSM-FR-OPZF) in the active worktree and in the working copy of each live work stream of the project (per `WKS-work-streams.md` WKS-FR-SGCM). Where the active worktree is the working copy of a stream, it is read once, as the location of that stream.
 15. **OSI-FR-ALQI** Each active change gives one **change chip** on the capability node of each id in its `capabilities` (per OSM-FR-FCMY). A chip names the change and its location: the active worktree, or a stream with its id and its name. The chips of a node are ordered by change name, then the active worktree first, then by stream name.
 16. **OSI-FR-VOOS** A capability id of a change that names no live capability gives one **planned capability node** under its group (OSI-FR-MAUQ), with `planned` true, the capability id as its label, an empty summary, and no requirement node. It holds the chips of every change that names that id.
 17. **OSI-FR-DENT** A location whose `list_changes` fails gives no chip, and the load does not fail for it. The index holds in `unreadLocations` the count of such locations.
 18. **OSI-FR-GRCV** An issue of a change item of the validation belongs to the chip of that change at the location the validation ran in: the active worktree location, or the stream whose working copy the active worktree is (OSI-FR-QELX). That chip holds it in `issues`. A chip of any other location holds no issue.
 19. **OSI-FR-VTAD** `"load specification map"` runs on a blocking thread, and its CLI processes are bounded by OSM-FR-QHRV. This module keeps no result between two loads, and the map session holds the index (per `../ui/SMP-specification-map.md` SMP-FR-QNUH).
-20. **OSI-FR-PJJO** The load fails with `no_project_open` where no project is open. Every other failure of the load is the code of the read of OSI-FR-SJNC that failed, `cli_unavailable` included.
+20. **OSI-FR-PJJO** The load fails with `no_project_open` where no project is open. Every other failure of the load is the failure of the read of OSI-FR-SJNC that failed, `cli_unavailable` included. The load rejects each failure as an `OpenSpecFailure` (per `OFP-openspec-failure-policy.md` OFP-FR-QLQJ).
 21. **OSI-FR-YVZW** Each load emits through `LGC-logging.md` under the `backend` domain an `INFO` record with the counts of groups, capabilities, requirements, chips, issues, and unread locations, and the duration, or a `WARN` record with the failure code. No record holds a label, a summary, a text, an issue message, a change name, or a capability id.
 22. **OSI-FR-QLCS** Every behaviour of this module is exercisable with no OpenSpec CLI and no network, through the process seam of `OSM-openspec-mode.md`.
 
@@ -35,7 +35,7 @@ In OpenSpec mode the specification map (per `../ui/SMP-specification-map.md`) sh
 ### Tauri commands
 Names match `../ui/SMP-specification-map.md` byte-for-byte:
 
-- `"load specification map"` → `load_specification_map()` → `SpecificationMapLoad`, or the failure code of OSI-FR-PJJO. Read-only.
+- `"load specification map"` → `load_specification_map()` → `SpecificationMapLoad`, or the `OpenSpecFailure` of OSI-FR-PJJO. Read-only.
 
 ### Payload shapes
 ```text
@@ -50,6 +50,7 @@ OpenSpecMapIndex {
   roots,               // [IndexNode], the groups (OSI-FR-MAUQ)
   dependencies,        // [], always (OSI-FR-JIJM)
   validation,          // "valid" | "invalid" | "unavailable" (OSI-FR-OIOB)
+  validationFailure?,  // OpenSpecFailure of OFP-openspec-failure-policy.md; where validation is "unavailable"
   unreadLocations      // integer (OSI-FR-DENT)
 }
 

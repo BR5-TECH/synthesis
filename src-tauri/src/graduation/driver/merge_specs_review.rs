@@ -10,30 +10,28 @@
 
 use std::path::Path;
 
-use super::turns::note_blocked;
 use super::*;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
 use crate::graduation::{ReviewFinding, ReviewOutcome, ReviewSeverity, ReviewVerdict};
 use crate::openspec::{OpenSpec, OpenSpecReadError, ProjectValidation, ValidationScope};
 
-/// GRL-FR-ZDNL, GRL-FR-AGOA: the strict validation of the specifications of
-/// the review checkout of a merge run in OpenSpec mode, `Ok(None)` for every
-/// other run and while the mode is not active, or `Err` where the run now
-/// rests `blocked` with `openspec_validation_unavailable` and no review turn
-/// may be dispatched.
+/// GRL-FR-ZDNL, GRL-FR-AGOA, OFP-FR-AQDH, OFP-FR-NQPY: the strict validation
+/// of the specifications of the review checkout of a merge run whose merge
+/// data holds `openspecGate: true`, `Ok(None)` for every other run, or `Err`
+/// where the run now rests `blocked` with `openspec_validation_unavailable`
+/// and no review turn may be dispatched. A mode that went off during the run
+/// rests it too, with the cause `openspec_mode_inactive`: the gate is not
+/// skipped.
 pub async fn specs_validation<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
     checkout: &Path,
 ) -> Result<Option<ProjectValidation>, ()> {
-    if !run.is_merge() {
+    if !run.merge.as_ref().is_some_and(|merge| merge.openspec_gate) {
         return Ok(None);
     }
     let active =
         app.try_state::<crate::project::ProjectState>().and_then(|state| state.require_root().ok());
-    if !OpenSpec::mode_active(active.as_ref()) {
-        return Ok(None);
-    }
     let owned = app.clone();
     let root = checkout.to_path_buf();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
@@ -63,8 +61,6 @@ pub async fn specs_validation<R: tauri::Runtime>(
             );
             Ok(Some(validation))
         }
-        // The mode went off between the two reads: the input carries none.
-        Err(OpenSpecReadError::OpenSpecModeInactive) => Ok(None),
         Err(error) => {
             let _ = logs::emit(
                 app,
@@ -76,18 +72,15 @@ pub async fn specs_validation<R: tauri::Runtime>(
                 .at_level(GraduationLogLevel::Warn)
                 .with("code", error.code()),
             );
-            let code = super::openspec_review::BLOCKER_VALIDATION_UNAVAILABLE;
-            note_blocked(app, run, code);
-            let _ = crate::graduation::transitions::block(
+            super::openspec_block::block_on_read(
                 app,
                 run,
-                code,
+                &error,
                 format!(
                     "The OpenSpec specifications of the merge could not be validated: {}.",
                     error.code()
                 ),
                 "Continue the run to validate the specifications and review the merge again.",
-                phases::PART_REVIEW,
             );
             Err(())
         }
@@ -155,6 +148,7 @@ mod tests {
             changed_paths: vec![],
             unresolved_paths: vec![],
             conflicts: vec![],
+            openspec_gate: true,
             result: None,
             pull: None,
         });

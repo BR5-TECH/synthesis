@@ -306,6 +306,8 @@ export interface ChangeBackend {
   questionSets: Record<string, PendingQuestionSet>;
   /** GRD: what a Continue answers, or a code it rejects with. */
   continueRun: (runId: string) => GraduationRun | { reject: unknown };
+  /** OFN-FR-CBLG: the `recheck` of each `get_openspec_status`, in order. */
+  statusChecks: boolean[];
   unknown: string[];
 }
 
@@ -366,6 +368,7 @@ export function changeBackend(over: Partial<ChangeBackend> = {}): ChangeBackend 
     decideAction: () => ({ reject: "write_failed" }),
     questionSets: {},
     continueRun: () => ({ reject: "run_state_not_permitted" }),
+    statusChecks: [],
     unknown: [],
     ...over,
   };
@@ -470,6 +473,17 @@ export function wireChangeBackend(invokeMock: Mock, b: ChangeBackend): void {
       case "read_apply_progress":
         if ("reject" in b.applyProgress) throw b.applyProgress.reject;
         return b.applyProgress;
+      // OFN-FR-CBLG: the re-check of a Retry, and the routes of a notice.
+      case "get_openspec_status":
+        b.statusChecks.push(args.recheck === true);
+        return {
+          setting: "auto",
+          usesOpenspec: true,
+          active: true,
+          cli: { state: "available", path: "/usr/bin/openspec", version: "1.2.0" },
+        };
+      case "open_settings_window":
+        return undefined;
       case "start_change_apply": {
         const answer = b.startApply();
         if ("reject" in answer) throw answer.reject;

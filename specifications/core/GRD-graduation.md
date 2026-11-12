@@ -24,7 +24,7 @@ The backend module that turns a finished draft prompt into committed work. A dra
 15. **GRD-FR-JGEC** A GitHub-shadow draft (per `DRS-draft-storage.md` DRS-FR-XDWS) graduates on the terms of every other draft. A run that commits makes it report `graduated` (DRS-FR-EZDB), and no run changes, closes, or reads the GitHub issue the draft names (per `GPP-github-polling.md` GPP-FR-CRWY).
 15. **GRD-FR-LKGC** A **propose run** is a stream draft run whose record carries `openspec` data: the phase `propose` and the name of the OpenSpec change it writes, taken at enqueue from `openspec_change` (per `GSU-graduation-start.md` GSU-FR-MIVF). Every requirement of a draft run holds for it, except where `../ai/GRL-graduation-loop.md` names a propose run.
 15. **GRD-FR-SYHE** A completed propose run commits like every draft run (GRD-FR-ARLT), so its draft reports `graduated` (per `DRS-draft-storage.md` DRS-FR-20). `get_draft_graduation` returns that run with its `openspec` data, which is the link from the draft to its change.
-15. **GRD-FR-UJII** A propose run, an OpenSpec change run, or a merge run that rests `blocked` with the code `openspec_validation_unavailable` (per `../ai/GRL-graduation-loop.md` GRL-FR-KDYL, GRL-FR-AGOA) keeps its queue and its project slot, and the author's Continue dispatches its review again.
+15. **GRD-FR-UJII** A run that rests `blocked` on an OpenSpec failure keeps its queue and its project slot. Its blocker codes are `openspec_validation_unavailable` (per `../ai/GRL-graduation-loop.md` GRL-FR-KDYL, GRL-FR-AGOA) and `openspec_image_cli_unavailable` (per `OFP-openspec-failure-policy.md` OFP-FR-XBNJ). Continue clears a kept `failed` CLI check and repeats the step: the review gate or the image probe (OFP-FR-TBHX).
 15. **GRD-FR-KZBS** An **OpenSpec change run** (per `OCR-openspec-change-runs.md` OCR-FR-VHQW) is a stream run with no draft. It takes no draft lock (GRD-FR-DXWL), makes no draft report `graduated` (GRD-FR-SYHE), and has no standing-work message (GRD-FR-RJFC). Its commit message, statistics, run summary, landing, restart, and label are those of OCR, in place of GRD-FR-PQMX, GRD-FR-NHRY, GRD-FR-UUGP, GRD-FR-UXXF, GRD-FR-ZAMI, and GRD-FR-ZHNV.
 15. **GRD-FR-YBUM** The run records the stream branch's revision as its **base commit** when its first turn is dispatched, before the container starts. Every commit of the run is measured from it. A merge run records its merge snapshot commit (GRD-FR-KZPT), a rework run its seed commit (`OCR-openspec-change-runs.md` OCR-FR-SSAI), and an apply run after a plan update its plan base (`OPU-openspec-plan-updates.md` OPU-FR-NQBK).
 16. **GRD-FR-HQPD** What a run does with work standing uncommitted in its stream when it is dispatched is the `standing_work` choice recorded when the run was enqueued. `keep` commits nothing. `commit` commits those paths as the author's own commit, which becomes the run's base commit. `commit_and_push` commits them the same way. A merge run's choice is `keep` and it runs no standing-work step.
@@ -241,7 +241,8 @@ GraduationRun {
   state,
   input,                         // CapturedGraduationInput
   standing_work,                 // GRD-FR-HQPD; chosen when the run was enqueued
-  merge?,                        // GraduationMergeData; present on a merge run alone (GRD-FR-MRNQ)
+  merge?,                        // GraduationMergeData; present on a merge run alone (GRD-FR-MRNQ); holds
+                                 //   openspecGate (OFP-openspec-failure-policy.md OFP-FR-AQDH)
   standing_work_message?,        // GRD-FR-RJFC; null takes the run's own name
   standing_work_outcome?,        // GRD-FR-KDWA; written at the first dispatch
   base_commit,                   // GRD-FR-YBUM; null before the first dispatch; the snapshot of a merge run
@@ -253,11 +254,14 @@ GraduationRun {
   rest?,                         // GraduationRest; GRD-FR-SKLO, GRD-FR-PYJN, OPU-FR-UOYJ
   checkpoint,                    // GraduationCheckpoint; holds the optional answer_correction { part, reason, resume } of GRL-FR-HWLD,
                                  //   the optional check_gate { cause, step, resume } of GRL-FR-BVTS,
+                                 //   the optional openspec_image_cli { version } of OFP-FR-WACS,
                                  //   and the run's decisions (GraduationDecision[], GXD-FR-NWSL) and
                                  //   review_history (ReviewHistoryEntry[], GXD-FR-WRVH), both append-only
   observability,                 // per GOB-graduation-observability.md
   escalation?,                   // the questions waiting on the author
-  blocker?,                      // what blocks it and the act that clears it
+  blocker?,                      // what blocks it and the act that clears it; an OpenSpec blocker also holds
+                                 //   its cause, its detail (the CLI state of `cli_unavailable` and
+                                 //   `openspec_image_cli_unavailable`), and its diagnostics (OFP-openspec-failure-policy.md OFP-FR-TBHX)
   interruption?,                 // GraduationInterruption; why it stopped
   restarted_from_run_id?,
   failure?,                      // { code, message, retryable }
@@ -346,7 +350,7 @@ The fields of `GraduationMergeData`, `GraduationMergeResult`, and `PrSummaryData
 
 A PR summary run's errors are `pr_summary_active` and `no_run_summaries` (GRD-FR-JAUJ, GRD-FR-MACY). The run-start operations also return `main_branch_write_unconfirmed` (GRD-FR-WJLO).
 
-A merge run's failure code is `merge_branch_moved` (GRD-FR-XHSE). Its blocker codes are `merge_dirty_side`, `merge_guard_held` and `merge_apply_failed` (GRD-FR-JSBE).
+A merge run's failure code is `merge_branch_moved` (GRD-FR-XHSE). Its blocker codes are `merge_dirty_side`, `merge_guard_held` and `merge_apply_failed` (GRD-FR-JSBE). The OpenSpec blocker codes of every run are `openspec_validation_unavailable` and `openspec_image_cli_unavailable` (GRD-FR-UJII).
 
 Typed errors: `merge_branch_moved`, `direct_target_changed`, `run_state_not_permitted`, `queue_position_stale`, `queue_position_out_of_range`, `run_archived`, `run_not_revertable`, `unknown_run`, `draft_locked_by_graduation`, `draft_not_single_file`, `stream_busy`, `unknown_stream`.
 

@@ -8,8 +8,8 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::openspec::tests::{env, ok, FakeProbe, FakeRunner, CLI};
-use crate::openspec::{OpenSpec, OpenSpecRunner, ProcessError, ProcessOutput};
+use crate::openspec::tests::{ok, FakeProbe, FakeRunner, CLI};
+use crate::openspec::{OpenSpecRunner, ProcessError, ProcessOutput};
 use crate::streams::{StreamMergePublication, StreamMergeResult, WorkStream};
 
 /// The date the fake CLI archives under.
@@ -40,6 +40,12 @@ pub(super) enum Archive {
     SucceedWritingOutside,
     /// Answer `answer` and write nothing.
     Answer(Result<ProcessOutput, ProcessError>),
+    /// Put a folder that holds one file where the tracked live spec is, then
+    /// answer `status` with no output. A restore cannot put the spec back,
+    /// because it does not remove a folder that stands at a tracked path.
+    FolderForSpec { status: i32 },
+    /// Do the first at this archive, and the second at the next.
+    Then(Box<Archive>, Box<Archive>),
 }
 
 /// The process seam: answers by first argument as `FakeRunner` does, and
@@ -89,7 +95,12 @@ impl OpenSpecRunner for ArchivingRunner {
             hook();
         }
         let change = args[1].to_string();
-        let plan = self.archives.lock().unwrap().get(&change).cloned().unwrap_or(Archive::Succeed);
+        let mut plan =
+            self.archives.lock().unwrap().get(&change).cloned().unwrap_or(Archive::Succeed);
+        if let Archive::Then(now, next) = plan {
+            self.archives.lock().unwrap().insert(change.clone(), *next);
+            plan = *now;
+        }
         let spec = cwd.join("openspec/specs/auth/spec.md");
         let target = cwd.join(format!("openspec/changes/archive/{DATE}-{change}"));
         let archive_all = || {
@@ -116,7 +127,11 @@ impl OpenSpecRunner for ArchivingRunner {
                 let folder = cwd.join("openspec/changes").join(&change);
                 std::fs::rename(folder.join("proposal.md"), target.join("proposal.md")).unwrap();
                 std::fs::write(&spec, "half merged\n").unwrap();
-                Ok(ProcessOutput { exit_status: Some(status), stdout: stdout.into_bytes() })
+                Ok(ProcessOutput {
+                    exit_status: Some(status),
+                    stdout: stdout.into_bytes(),
+                    stderr: Vec::new(),
+                })
             }
             Archive::Answer(answer) => answer,
             Archive::FailWriting { status, stdout } => {
@@ -125,9 +140,24 @@ impl OpenSpecRunner for ArchivingRunner {
                 std::fs::write(stray, "half\n").unwrap();
                 std::fs::write(&spec, "broken by a half archive\n").unwrap();
                 std::fs::write(cwd.join("openspec/specs/new-cap.md"), "new\n").unwrap();
-                Ok(ProcessOutput { exit_status: Some(status), stdout: stdout.into_bytes() })
+                Ok(ProcessOutput {
+                    exit_status: Some(status),
+                    stdout: stdout.into_bytes(),
+                    stderr: Vec::new(),
+                })
             }
             Archive::SucceedWritingNothing => Ok(ok(&success_json(&change))),
+            Archive::FolderForSpec { status } => {
+                std::fs::remove_file(&spec).unwrap();
+                std::fs::create_dir_all(&spec).unwrap();
+                std::fs::write(spec.join("part.md"), "a folder, not a file\n").unwrap();
+                Ok(ProcessOutput {
+                    exit_status: Some(status),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+            Archive::Then(..) => unreachable!("a sequence is taken apart above"),
         }
     }
 }
@@ -151,7 +181,7 @@ pub(super) fn archive_fixture(progress: &str) -> (Fixture, Arc<ArchivingRunner>,
         after_instructions: Mutex::new(None),
     });
     let probe = Arc::new(FakeProbe::default().with_executable(CLI));
-    let seam = OpenSpec::new(runner.clone(), probe.clone(), env());
+    let seam = super::change_runs::recorded_seam(&fx, runner.clone(), probe.clone());
     seam.cli_state(&crate::openspec::tests::Silent, crate::openspec::tests::buffer());
     fx.app.manage(seam);
     (fx, runner, probe)
@@ -222,7 +252,17 @@ pub(super) fn merge(
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let result = crate::streams::merge_work_stream_blocking(&fx.app, &stream.id, publication);
     fx.app.state::<GraduationState>().set_loop_enabled(true);
-    result
+    result.map_err(String::from)
+}
+
+/// A merge of the stream that is refused, with the refusal as the command
+/// rejects it, so a test can read its form (OFP-FR-QLQJ).
+pub(super) fn merge_refusal(fx: &Fixture, stream: &WorkStream) -> crate::openspec::Refusal {
+    fx.app.state::<GraduationState>().set_loop_enabled(false);
+    let result =
+        crate::streams::merge_work_stream_blocking(&fx.app, &stream.id, commit_publication());
+    fx.app.state::<GraduationState>().set_loop_enabled(true);
+    result.expect_err("the merge is refused")
 }
 
 pub(super) fn commit_publication() -> StreamMergePublication {

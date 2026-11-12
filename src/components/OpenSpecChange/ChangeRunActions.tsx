@@ -9,44 +9,71 @@
  */
 import { useId, useRef, useState } from "react";
 
-import * as api from "../../api";
-import { logWarn } from "../../logging";
-import { formatSectionAddress } from "../../settingsWindow";
 import { openGraduationRunRoute } from "../../state/graduation/runRoute";
-import type { StartRefusal } from "./changeRunStart";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
+import { NO_RUN_STARTED, type StartRefusal } from "./changeRunStart";
 import type { ChangeRuns } from "./useChangeRuns";
 
-/** OCW-FR-EKYF: the routes a refusal offers: the run that holds the change, or the settings. */
+/** OCW-FR-EKYF: the route a refusal offers: the run that holds the change. */
 export function RefusalRoutes({ refusal }: { refusal: StartRefusal }) {
+  if (!refusal.runId) return null;
   return (
-    <>
-      {refusal.runId && (
-        <button
-          type="button"
-          className="btn btn--sm btn--ghost"
-          onClick={() => openGraduationRunRoute(refusal.runId!)}
-        >
-          Open run
-        </button>
-      )}
-      {refusal.settings && (
-        <button
-          type="button"
-          className="btn btn--sm btn--ghost"
-          onClick={() => {
-            void api
-              .openSettingsWindow(formatSectionAddress("project", "openspec"))
-              .catch((e: unknown) =>
-                logWarn(["frontend"], "Settings window could not be opened", {
-                  reason: e instanceof Error ? e.message : String(e),
-                }),
-              );
-          }}
-        >
-          Open OpenSpec settings
-        </button>
-      )}
-    </>
+    <button
+      type="button"
+      className="btn btn--sm btn--ghost"
+      onClick={() => openGraduationRunRoute(refusal.runId!)}
+    >
+      Open run
+    </button>
+  );
+}
+
+/**
+ * OCW-FR-EKYF: a refused start, as the surface states it. An OpenSpec
+ * failure renders its notice and states that no run started. The tab is the
+ * tab of the change, so the notice offers no Open change (OFN-FR-RLSO).
+ * `onRetry` starts the same run again (OFN-FR-CBLG).
+ */
+export function RefusalStatement({
+  refusal,
+  surface,
+  change,
+  onRetry,
+  className,
+  testId,
+  children,
+}: {
+  refusal: StartRefusal;
+  surface: string;
+  /** The change of the tab, where the failure names none. */
+  change: string;
+  onRetry: () => Promise<unknown> | void;
+  className: string;
+  testId: string;
+  /** The other actions of the surface, such as Dismiss. */
+  children?: React.ReactNode;
+}) {
+  if (refusal.failure) {
+    return (
+      <div className={className} data-testid={testId}>
+        <OpenSpecFailureNotice
+          failure={refusal.failure}
+          surface={surface}
+          change={change}
+          onRetry={onRetry}
+          frame={NO_RUN_STARTED}
+          className="openspec-change__notice"
+        />
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className={className} role="alert" data-testid={testId}>
+      <span>{refusal.sentence}</span>
+      <RefusalRoutes refusal={refusal} />
+      {children}
+    </div>
   );
 }
 
@@ -104,9 +131,12 @@ export function ChangeRunButtons({
 export function ChangeRunNotes({
   runs,
   notes,
+  change,
 }: {
   runs: ChangeRuns;
   notes: { apply: string; rework: string };
+  /** The change of the tab, for the sentence of a refusal. */
+  change: string;
 }) {
   const applyNote = notes.apply;
   const reworkNote = notes.rework;
@@ -129,13 +159,18 @@ export function ChangeRunNotes({
         </p>
       )}
       {runs.applyRefusal && (
-        <div className="openspec-change__run-refusal" role="alert" data-testid="openspec-apply-refusal">
-          <span>{runs.applyRefusal.sentence}</span>
-          <RefusalRoutes refusal={runs.applyRefusal} />
+        <RefusalStatement
+          refusal={runs.applyRefusal}
+          surface="change_workspace_apply"
+          change={change}
+          onRetry={runs.startApply}
+          className="openspec-change__run-refusal"
+          testId="openspec-apply-refusal"
+        >
           <button type="button" className="btn btn--sm btn--ghost" onClick={runs.clearApplyRefusal}>
             Dismiss
           </button>
-        </div>
+        </RefusalStatement>
       )}
     </div>
   );

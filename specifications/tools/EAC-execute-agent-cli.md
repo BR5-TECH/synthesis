@@ -16,7 +16,14 @@ async fn execute_agent_cli(request: AgentExecutionRequest)
     -> Result<AgentExecution, AgentExecutionError>
 ```
 
-One call is one container. There is no other entry point, no batch form, and no handle a caller keeps between calls.
+One call is one container. The image probe below is the one other entry point. There is no batch form and no handle a caller keeps between calls.
+
+```
+async fn probe_agent_image(request: ImageProbeRequest)
+    -> Result<ImageProbeOutcome, AgentExecutionError>   // Ran(ImageProbe) | Skipped (OFP-FR-RKMB)
+```
+
+`ImageProbeRequest` carries the probe command, which is `openspec --version` alone, and a cancellation token. `ImageProbe` carries the exit status, the standard output up to 4 KiB, and the last 4 KiB of the standard error (EAC-FR-WYYZ).
 
 ### The caller request
 
@@ -516,6 +523,8 @@ Production binds it to the embedded microsandbox runtime (EAC-FR-HMBJ). A test b
 78. **EAC-FR-HUXS** The process of EAC-FR-ZIYG runs the image's entrypoint with the vendor's argument vector after it, as `docker run` places them. A boot that cannot read the image's entrypoint, or that finds none, logs the cause, stops the VM, and returns `SandboxLaunchFailed` with `boot_failed`. A vendor argument is never run as the program.
 79. **EAC-FR-WQNH** A Claude Code launch, in a container and in a sandbox, sets `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to `900000` as executor-set variables, except a variable that the launch environment of EAC-FR-15 names. A Codex launch sets neither. The values do not depend on the image or on the project.
     - *Why:* the full checks of a project can run longer than the ten minutes the CLI allows by default, and a command that stops making progress must give the turn back within 15 minutes.
+80. **EAC-FR-WYYZ** `probe_agent_image` runs its probe command in one container of the image of EAC-FR-38, under the runtime, the isolation, and the launch conditions of EAC-FR-13 and EAC-FR-14. It mounts no execution directory, no credential, no session state, and no supplementary mount, stops the command after 30 seconds, and removes the container.
+    - *Why:* The image probe of `../core/OFP-openspec-failure-policy.md` OFP-FR-BZDP must see the image as a turn sees it, and it needs no project file and no secret.
 
 ## Non-functional requirements
 

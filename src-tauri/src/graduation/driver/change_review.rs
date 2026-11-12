@@ -10,7 +10,6 @@
 
 use std::path::Path;
 
-use super::turns::note_blocked;
 use super::*;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
 use crate::graduation::{ReviewFinding, ReviewOutcome, ReviewSeverity, ReviewVerdict};
@@ -75,18 +74,15 @@ pub async fn apply_progress<R: tauri::Runtime>(
                 .at_level(GraduationLogLevel::Warn)
                 .with("code", error.code()),
             );
-            let code = super::openspec_review::BLOCKER_VALIDATION_UNAVAILABLE;
-            note_blocked(app, run, code);
-            let _ = crate::graduation::transitions::block(
+            super::openspec_block::block_on_read(
                 app,
                 run,
-                code,
+                &error,
                 format!(
                     "The task progress of the OpenSpec change {change} could not be read: {}.",
                     error.code()
                 ),
                 "Continue the run to read the task progress and review the change again.",
-                phases::PART_REVIEW,
             );
             Err(())
         }
@@ -259,6 +255,8 @@ mod tests {
                 .map(|(i, d)| ApplyTask { description: format!("task {i}"), done: *d })
                 .collect(),
             missing_artifacts: vec![],
+            warnings: vec![],
+            instruction: None,
         }
     }
 

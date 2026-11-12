@@ -346,13 +346,23 @@ describe("a read that fails", () => {
     await waitFor(() => expect(refresh()).not.toBeDisabled());
   });
 
-  it.each(["openspec_mode_inactive", "cli_unavailable"])(
-    "OCW-FR-RFGG: %s states that OpenSpec cannot be read, with a route to Project settings",
-    async (code) => {
-      answers = [{ reject: code }];
+  it.each<[unknown, string]>([
+    [{ code: "openspec_mode_inactive", diagnostics: [] }, "OpenSpec mode is off for this project."],
+    [
+      { code: "cli_unavailable", detail: "not_found", diagnostics: [] },
+      "The OpenSpec CLI is not installed on this machine.",
+    ],
+  ])(
+    "OCW-FR-RFGG, OFN-FR-EPIG: an environment failure %# renders its notice with a route to Project settings",
+    async (reject, sentence) => {
+      answers = [{ reject } as never];
       draw();
       const failure = await screen.findByTestId("openspec-change-failure");
-      expect(failure).toHaveTextContent("OpenSpec cannot be read");
+      expect(within(failure).getByRole("alert")).toHaveTextContent(sentence);
+      // OFN-FR-RLSO: the tab of the change offers no Open change, and an
+      // environment failure no Retry.
+      expect(within(failure).queryByRole("button", { name: "Open change" })).toBeNull();
+      expect(within(failure).queryByRole("button", { name: "Retry" })).toBeNull();
       await userEvent.click(within(failure).getByRole("button", { name: "Open OpenSpec settings" }));
       await waitFor(() =>
         expect(calls("open_settings_window")[0][1]).toEqual({ section: "project/openspec" }),
@@ -360,24 +370,61 @@ describe("a read that fails", () => {
     },
   );
 
-  it("OCW-FR-RFGG: every other code states that the read failed, and Retry reads again", async () => {
-    answers = [{ reject: "cli_failed: 2" }, demoChange()];
+  it("OCW-FR-RFGG, OFN-FR-CBLG, OFN-FR-HEVB: a transient failure renders its notice, and Retry re-checks the CLI and reads again", async () => {
+    answers = [{ reject: { code: "cli_failed", detail: "2", diagnostics: [] } } as never, demoChange()];
     draw();
     const failure = await screen.findByTestId("openspec-change-failure");
-    expect(failure).toHaveTextContent("The change could not be read");
+    expect(failure).toHaveTextContent(
+      "The OpenSpec CLI stopped before it answered, also after one more try.",
+    );
     await userEvent.click(within(failure).getByRole("button", { name: "Retry" }));
     expect(await screen.findByTestId("openspec-reading")).toBeInTheDocument();
+    expect(backend.statusChecks).toEqual([true]);
+    expect(calls("read_openspec_change")).toHaveLength(2);
+    // The re-check comes before the read again.
+    const order = invokeMock.mock.calls.map((c) => c[0]);
+    expect(order.lastIndexOf("get_openspec_status")).toBeLessThan(
+      order.lastIndexOf("read_openspec_change"),
+    );
+  });
+
+  it("OCW-FR-RFGG: a code that is not an OpenSpec failure states that the read failed, and Retry reads again", async () => {
+    answers = [{ reject: "no_open_project" }, demoChange()];
+    draw();
+    const failure = await screen.findByTestId("openspec-change-failure");
+    expect(failure).toHaveTextContent("The change could not be read: no project is open.");
+    await userEvent.click(within(failure).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByTestId("openspec-reading")).toBeInTheDocument();
+    // A plain Retry re-checks nothing.
+    expect(backend.statusChecks).toEqual([]);
     expect(calls("read_openspec_change")).toHaveLength(2);
   });
 
-  it("OCW-FR-PFUQ: a failure after a read that succeeded keeps the content and states the failure above it, with Retry", async () => {
+  it("OCW-FR-PFUQ: a failure after a read that succeeded keeps the content and states the failure above it, in its notice", async () => {
     answers = [demoChange(), { reject: "cli_output_unreadable" }, demoChange()];
     draw();
     await screen.findByTestId("openspec-reading");
     await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
     const stale = await screen.findByTestId("openspec-change-stale");
-    expect(stale).toHaveTextContent("could not be read");
+    expect(stale).toHaveTextContent(
+      "The OpenSpec CLI gave an answer that the application cannot read.",
+    );
     expect(screen.getByTestId("openspec-reading")).toHaveTextContent("Why");
+    // OFN-FR-EPIG: an environment failure routes to the settings, and offers no Retry.
+    expect(within(stale).queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(within(stale).getByRole("button", { name: "Open OpenSpec settings" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.queryByTestId("openspec-change-stale")).not.toBeInTheDocument());
+    expect(calls("read_openspec_change")).toHaveLength(3);
+  });
+
+  it("OCW-FR-PFUQ: a later failure that is not an OpenSpec failure keeps the content, with Retry", async () => {
+    answers = [demoChange(), { reject: "no_open_project" }, demoChange()];
+    draw();
+    await screen.findByTestId("openspec-reading");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    const stale = await screen.findByTestId("openspec-change-stale");
+    expect(stale).toHaveTextContent("The change could not be read: no project is open.");
     await userEvent.click(within(stale).getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(screen.queryByTestId("openspec-change-stale")).not.toBeInTheDocument());
     expect(calls("read_openspec_change")).toHaveLength(3);
@@ -393,7 +440,7 @@ describe("a read after a reactivation", () => {
     answers = [{ reject: "cli_failed" }, demoChange({ completedTasks: 3 })];
     draw();
     const stale = await screen.findByTestId("openspec-change-stale");
-    expect(stale).toHaveTextContent("The change could not be read: the OpenSpec CLI failed.");
+    expect(stale).toHaveTextContent("The OpenSpec CLI stopped before it answered");
     // The failure stands above the kept content, not in its place.
     expect(screen.queryByTestId("openspec-change-failure")).toBeNull();
     expect(screen.getByTestId("openspec-reading")).toHaveTextContent("Why");
@@ -445,7 +492,9 @@ describe("reads that overlap", () => {
     await userEvent.click(refresh());
     await waitFor(() => expect(pending).toHaveLength(2));
     await act(async () => {
-      pending[1].settle({ reject: "cli_timed_out" });
+      // A code that is not an OpenSpec failure: its Retry stays offered while
+      // a read is in progress. The Retry of a notice does not (OFN-FR-CBLG).
+      pending[1].settle({ reject: "no_open_project" });
       await pending[1].answer.catch(() => {});
     });
     const stale = screen.getByTestId("openspec-change-stale");
@@ -469,7 +518,7 @@ describe("reads that overlap", () => {
       // The screen still shows the state before the two reads, and a read in progress.
       expect(screen.getByTestId("openspec-change-tasks")).toHaveTextContent("1 of 4 tasks");
       expect(screen.getByTestId("openspec-change-stale")).toHaveTextContent(
-        "the OpenSpec CLI did not answer in time",
+        "The change could not be read: no project is open.",
       );
       expect(refresh()).toBeDisabled();
       await act(async () => {

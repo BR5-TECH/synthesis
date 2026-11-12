@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
@@ -45,7 +45,7 @@ const ACTIVE: OpenSpecStatus = {
 
 /** What `get_openspec_status` answers, or a code it rejects with. */
 let status: OpenSpecStatus | { reject: string };
-let refusal: string | null;
+let refusal: unknown;
 let streams: WorkStreamSummary[];
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
@@ -83,6 +83,8 @@ beforeEach(() => {
         };
       case "create_work_stream":
         return { id: "made", name: "made" };
+      case "open_settings_window":
+        return undefined;
       case "start_graduation":
         if (refusal) throw refusal;
         return { id: "g-1" };
@@ -297,15 +299,32 @@ describe("what the run makes while OpenSpec mode is active", () => {
     expect(calls("start_graduation")).toHaveLength(0);
   });
 
-  it("GSD-FR-ZAFX: a mode refusal of the start is read in words in the dialog", async () => {
-    refusal = "openspec_cli_unavailable";
-    draw();
-    await settled();
-    await userEvent.click(confirm());
-    expect(await screen.findByTestId("graduation-start-error")).toHaveTextContent(
-      "The OpenSpec CLI is not available",
-    );
-  });
+  it.each<[unknown, string]>([
+    [{ code: "cli_unavailable", detail: "not_found", diagnostics: [] }, "The OpenSpec CLI is not installed on this machine."],
+    [
+      { code: "cli_unavailable", detail: "failed", diagnostics: [] },
+      "The OpenSpec CLI on this machine does not start or does not report its version.",
+    ],
+    [{ code: "openspec_mode_inactive", diagnostics: [] }, "OpenSpec mode is off for this project."],
+  ])(
+    "GSD-FR-RFIG, OFN-FR-EPIG, OFN-FR-HEVB: a propose start refused with %# renders its notice, its settings route, and that no run started",
+    async (reject, sentence) => {
+      refusal = reject;
+      draw();
+      await settled();
+      await userEvent.click(confirm());
+      const error = await screen.findByTestId("graduation-start-error");
+      expect(within(error).getByRole("alert")).toHaveTextContent(`${sentence} No run started.`);
+      await userEvent.click(within(error).getByRole("button", { name: "Open OpenSpec settings" }));
+      await waitFor(() =>
+        expect(invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")?.[1]).toEqual({
+          section: "project/openspec",
+        }),
+      );
+      // The dialog stays open, with no other sentence of the same failure.
+      expect(screen.getAllByText(sentence, { exact: false })).toHaveLength(1);
+    },
+  );
 });
 
 describe("a status that arrives late", () => {

@@ -25,17 +25,24 @@ import { MergeStatus } from "./MergeStatus";
 import {
   namedPaths,
   type MergeOutcome,
+  type RowFailure,
   type RowSurface,
   type RunningMerge,
   type RunningUpdate,
 } from "./rows";
 import { UpdateWindow, type UpdateDirtyRefusal } from "./UpdateWindow";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 
 export interface StreamRowProps {
   summary: WorkStreamSummary;
   surface: RowSurface;
   busy: boolean;
   error: string | null;
+  /**
+   * WSS-FR-NTGC: the OpenSpec failure of a merge refused by its archive step.
+   * The row then renders its failure notice, with `error` as its frame.
+   */
+  failure?: RowFailure | null;
   /** WSS-FR-PSXK: the name of the draft the run holding the stream works on. */
   busyDraftName: string | null;
   /** WSS-FR-HGWL: the merge call this surface is waiting on, if one is out. */
@@ -69,6 +76,11 @@ export interface StreamRowProps {
   onOpenRun: (runId: string) => void;
   /** WSS-FR-GTQL: open the resolution window against the update record. */
   onResolveUpdate: () => void;
+  /**
+   * WSS-FR-NTGC / SNV-FR-56: the merge notice opens a change or a run, so the
+   * dropdown closes first.
+   */
+  onLeave: () => void;
   onOpenChanges: () => void;
   /** WSS-FR-KHGP: open the Create a PR window for this stream. */
   onCreatePullRequest: (summary: WorkStreamSummary) => void;
@@ -83,6 +95,7 @@ export function StreamRow({
   surface,
   busy,
   error,
+  failure = null,
   busyDraftName,
   merge,
   mergeOutcome,
@@ -100,6 +113,7 @@ export function StreamRow({
   onCancelUpdate,
   onOpenRun,
   onResolveUpdate,
+  onLeave,
   onOpenChanges,
   onCreatePullRequest,
   openPullRequest = null,
@@ -118,6 +132,37 @@ export function StreamRow({
     // jsdom has no scrollIntoView.
     rowRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [merge, mergeOutcome]);
+  // WSS-FR-NTGC / WSS-FR-NPXC: a refusal is said on this row too, so the row
+  // comes back into view when a refusal arrives. A refusal the row already
+  // showed when it mounted moves nothing.
+  const shownRefusal = useRef<unknown>(failure ?? error);
+  useEffect(() => {
+    const refusal = failure ?? error;
+    if (!refusal || refusal === shownRefusal.current) {
+      shownRefusal.current = refusal;
+      return;
+    }
+    shownRefusal.current = refusal;
+    // jsdom has no scrollIntoView.
+    rowRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [failure, error]);
+  // A merge that starts closes its confirmation, and an answer removes the
+  // merging status, so the control that held the focus leaves the page. The
+  // row then takes the focus, so it does not fall to the page.
+  // A row that mounts takes nothing: only a change of these states does.
+  const focusStates = [merge, mergeOutcome, failure, error, surface.kind] as const;
+  const lastFocusStates = useRef<readonly unknown[]>(focusStates);
+  useEffect(() => {
+    const changed = focusStates.some((value, at) => value !== lastFocusStates.current[at]);
+    lastFocusStates.current = focusStates;
+    if (!changed) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    if (!rowRef.current?.isConnected) return;
+    rowRef.current.focus({ preventScroll: true });
+    // The states above are the dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merge, mergeOutcome, failure, error, surface.kind]);
   const held = Boolean(stream.busyRunId);
   const missing = stream.isMissing;
   // WSS-FR-PSXK / WSS-FR-OQYG: both disable the row's acts, and each says why
@@ -197,7 +242,7 @@ export function StreamRow({
   // Open in Runs…, which the status renders.
 
   return (
-    <div ref={rowRef} className="stream-select__row" data-testid={`stream-row-${stream.id}`}>
+    <div ref={rowRef} tabIndex={-1} className="stream-select__row" data-testid={`stream-row-${stream.id}`}>
       <button
         type="button"
         role="menuitem"
@@ -424,7 +469,23 @@ export function StreamRow({
         />
       )}
 
-      {error && (
+      {/* WSS-FR-NTGC: an archive refusal in its notice. Open change opens the
+          change on this stream with the notice's thread, and Open run its
+          repair run. */}
+      {failure && (
+        <div className="stream-select__error" data-testid={`stream-failure-${stream.id}`}>
+          <OpenSpecFailureNotice
+            failure={failure.failure}
+            surface="stream_row_merge"
+            location={{ kind: "stream", streamId: stream.id }}
+            streamName={stream.name}
+            onRetry={failure.retry}
+            onLeave={onLeave}
+            frame={error}
+          />
+        </div>
+      )}
+      {error && !failure && (
         <p className="stream-select__error" role="alert">
           {error}
         </p>

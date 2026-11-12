@@ -307,7 +307,11 @@ fn a_validation_reads_exit_one_as_an_answer() {
 
     let (seam, _, _) = seam_with(FakeRunner::default().answering(
         "validate",
-        Ok(ProcessOutput { exit_status: Some(1), stdout: invalid.as_bytes().to_vec() }),
+        Ok(ProcessOutput {
+            exit_status: Some(1),
+            stdout: invalid.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        }),
     ));
     let not_valid = seam.validate_change(&Silent, buffer(), Some(&root), &root, NAME).unwrap();
     assert!(!not_valid.valid);
@@ -316,20 +320,39 @@ fn a_validation_reads_exit_one_as_an_answer() {
 
     let (seam, _, _) = seam_with(FakeRunner::default().answering(
         "validate",
-        Ok(ProcessOutput { exit_status: Some(2), stdout: valid.as_bytes().to_vec() }),
+        Ok(ProcessOutput {
+            exit_status: Some(2),
+            stdout: valid.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        }),
     ));
     assert_eq!(
         seam.validate_change(&Silent, buffer(), Some(&root), &root, NAME),
-        Err(OpenSpecReadError::CliFailed { exit_status: 2 })
+        Err(OpenSpecReadError::CliFailed { exit_status: Some(2), diagnostics: Vec::new() })
     );
     let (seam, _, _) = seam_with(FakeRunner::default().answering(
         "validate",
-        Ok(ProcessOutput { exit_status: Some(1), stdout: b"oops".to_vec() }),
+        Ok(ProcessOutput { exit_status: Some(1), stdout: b"oops".to_vec(), stderr: Vec::new() }),
     ));
+    // OSM-FR-XDRN, OSM-FR-WWWK: exit 1 with output that is not CLI JSON is
+    // `cli_failed`, and exit 1 with CLI JSON of another shape is
+    // `cli_rejected`.
     assert_eq!(
         seam.validate_change(&Silent, buffer(), Some(&root), &root, NAME),
-        Err(OpenSpecReadError::CliOutputUnreadable)
+        Err(OpenSpecReadError::CliFailed { exit_status: Some(1), diagnostics: Vec::new() })
     );
+    let (seam, _, _) = seam_with(FakeRunner::default().answering(
+        "validate",
+        Ok(ProcessOutput {
+            exit_status: Some(1),
+            stdout:
+                br#"{ "status": [ { "severity": "error", "message": "No change" } ] }"#.to_vec(),
+            stderr: Vec::new(),
+        }),
+    ));
+    let rejected = seam.validate_change(&Silent, buffer(), Some(&root), &root, NAME).unwrap_err();
+    assert_eq!(rejected.code(), "cli_rejected");
+    assert_eq!(rejected.diagnostics()[0].message, "No change");
 }
 
 // OSM-FR-ZNVZ: a failed check is kept for 30 seconds at most; after that the
@@ -338,14 +361,15 @@ fn a_validation_reads_exit_one_as_an_answer() {
 fn a_failed_check_is_kept_for_thirty_seconds_at_most() {
     assert_eq!(crate::openspec::cli::FAILED_CHECK_TTL, Duration::from_secs(30));
     let failing =
-        || Arc::new(FakeRunner::default().answering("--version", Err(ProcessError::TimedOut)));
+        || Arc::new(FakeRunner::default().answering("--version", Err(ProcessError::timed_out())));
 
+    // OFP-FR-FETF: one check is two processes, the second after the wait.
     let runner = failing();
     let kept =
         OpenSpec::new(runner.clone(), Arc::new(FakeProbe::default().with_executable(CLI)), env());
     kept.cli_state(&Silent, buffer());
     kept.cli_state(&Silent, buffer());
-    assert_eq!(runner.calls_of("--version"), 1, "inside 30 seconds the failure stands");
+    assert_eq!(runner.calls_of("--version"), 2, "inside 30 seconds the failure stands");
 
     let runner = failing();
     let expired =
@@ -354,7 +378,7 @@ fn a_failed_check_is_kept_for_thirty_seconds_at_most() {
     expired.cli_state(&Silent, buffer());
     assert_eq!(expired.kept_cli_state(), None, "an expired failure is no kept check");
     expired.cli_state(&Silent, buffer());
-    assert_eq!(runner.calls_of("--version"), 2);
+    assert_eq!(runner.calls_of("--version"), 4);
 
     let (usable, runner, _) = seam_with(FakeRunner::default());
     let usable = usable.with_failed_ttl(Duration::ZERO);

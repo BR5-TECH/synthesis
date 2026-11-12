@@ -86,6 +86,11 @@ pub struct GraduationMergeData {
     /// GRD-FR-PLSB: present on a pull run alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull: Option<PullMergeSubject>,
+    /// OFP-FR-AQDH: OpenSpec mode was active when the merge run was created,
+    /// so the specs gate of GRL-FR-ZDNL runs before each merge review. A
+    /// record written before this field existed reads as false.
+    #[serde(default)]
+    pub openspec_gate: bool,
 }
 
 /// What the stream merge handoff gives this module.
@@ -189,6 +194,12 @@ pub fn enqueue_merge_run<R: tauri::Runtime>(
         conflicts: request.conflicts,
         result: None,
         pull: request.pull.map(|(subject, _)| subject),
+        // OFP-FR-AQDH: the mode at the creation of the run, read once.
+        openspec_gate: crate::openspec::OpenSpec::mode_active(
+            app.try_state::<crate::project::ProjectState>()
+                .and_then(|state| state.require_root().ok())
+                .as_ref(),
+        ),
     });
     // GRS-FR-KDOY: both log streams are created in the write that creates the
     // run, so a run that has emitted nothing still has two readable ones.

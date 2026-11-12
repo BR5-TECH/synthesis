@@ -123,14 +123,14 @@ fn refusals_of_the_apply_read_start_no_process() {
 #[test]
 fn a_failing_apply_read_is_cli_failed_and_logged_by_code() {
     let (_dir, root) = project_with_change();
-    let (seam, _, _) = seam_with(
-        FakeRunner::default()
-            .answering("instructions", Ok(ProcessOutput { exit_status: Some(1), stdout: vec![] })),
-    );
+    let (seam, _, _) = seam_with(FakeRunner::default().answering(
+        "instructions",
+        Ok(ProcessOutput { exit_status: Some(1), stdout: vec![], stderr: Vec::new() }),
+    ));
     let log = buffer();
     assert_eq!(
         seam.apply_instructions(&Silent, log, Some(&root), &root, NAME).unwrap_err(),
-        OpenSpecReadError::CliFailed { exit_status: 1 }
+        OpenSpecReadError::CliFailed { exit_status: Some(1), diagnostics: Vec::new() }
     );
     let warned = records(log)
         .into_iter()

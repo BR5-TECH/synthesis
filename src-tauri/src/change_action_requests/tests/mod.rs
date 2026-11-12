@@ -57,19 +57,24 @@ pub(super) fn fake_run(phase: &str) -> GraduationRun {
 #[derive(Default)]
 pub(super) struct FakeStarter {
     pub(super) calls: Mutex<Vec<String>>,
-    pub(super) refusal: Mutex<Option<String>>,
+    pub(super) refusal: Mutex<Option<crate::openspec::Refusal>>,
 }
 
 impl FakeStarter {
     pub(super) fn refusing(code: &str) -> FakeStarter {
-        FakeStarter { calls: Mutex::default(), refusal: Mutex::new(Some(code.to_string())) }
+        FakeStarter { calls: Mutex::default(), refusal: Mutex::new(Some(code.into())) }
+    }
+
+    /// A queue that refuses each start with one `OpenSpecFailure` object.
+    pub(super) fn failing(failure: crate::openspec::OpenSpecFailure) -> FakeStarter {
+        FakeStarter { calls: Mutex::default(), refusal: Mutex::new(Some(failure.into())) }
     }
 
     pub(super) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
     }
 
-    fn answer(&self, phase: &str) -> Result<GraduationRun, String> {
+    fn answer(&self, phase: &str) -> Result<GraduationRun, crate::openspec::Refusal> {
         match self.refusal.lock().unwrap().clone() {
             Some(code) => Err(code),
             None => Ok(fake_run(phase)),
@@ -78,7 +83,11 @@ impl FakeStarter {
 }
 
 impl RunStarter for FakeStarter {
-    fn start_apply(&self, stream_id: &str, change: &str) -> Result<GraduationRun, String> {
+    fn start_apply(
+        &self,
+        stream_id: &str,
+        change: &str,
+    ) -> Result<GraduationRun, crate::openspec::Refusal> {
         self.calls.lock().unwrap().push(format!("apply {stream_id} {change}"));
         self.answer(crate::graduation::PHASE_APPLY)
     }
@@ -90,7 +99,7 @@ impl RunStarter for FakeStarter {
         instruction: &str,
         thread_id: &str,
         requester: &Participant,
-    ) -> Result<GraduationRun, String> {
+    ) -> Result<GraduationRun, crate::openspec::Refusal> {
         let handle = match requester {
             Participant::Agent { handle, .. } => handle.clone(),
             Participant::Human { .. } => "human".into(),
@@ -181,11 +190,12 @@ impl Fixture {
         )
     }
 
+    /// The refusal keeps the form the command rejects with (OFP-FR-QLQJ).
     pub(super) fn confirm(
         &self,
         starter: &FakeStarter,
         id: &str,
-    ) -> Result<ChangeActionOutcome, String> {
+    ) -> Result<ChangeActionOutcome, crate::openspec::Refusal> {
         confirm_action_request(&self.handle(), &self.store, starter, id, &human())
     }
 

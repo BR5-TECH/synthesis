@@ -383,3 +383,10 @@ mod tests {
         assert!(!rest.is_checks_not_passed());
     }
 }
+
+/// OFP-FR-WACS, GXD-FR-GMDI: what a passing image probe recorded in the
+/// checkpoint. No later dispatch of the run probes again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenSpecImageCli {
+    pub version: String,
+}

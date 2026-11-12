@@ -58,7 +58,8 @@ app_data_dir()/repositories/<slug>-<digest>/
   drafts/<draft-id>/publication.toml         // DRS-draft-storage.md DRS-FR-EJBM
   stacks.toml                                // GTC-git.md GTC-FR-RNXK
   changes/<stream-id>/<change>/              // the records of an OpenSpec change: comments/, proposals/,
-                                             //   new-changes/, action-requests/, split.toml, statistics.jsonl
+                                             //   new-changes/, action-requests/, split.toml, statistics.jsonl,
+                                             //   merge-notice.toml (OFP-openspec-failure-policy.md OFP-FR-HVHV)
   changes/<stream-id>/archive/<archivedAs>/  // the same records after an archive (OAR-openspec-archive.md OAR-FR-MSOM)
 ```
 

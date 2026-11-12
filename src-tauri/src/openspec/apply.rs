@@ -29,6 +29,13 @@ pub struct ApplyInstructions {
     pub tasks: Vec<ApplyTask>,
     /// Empty where the CLI names none.
     pub missing_artifacts: Vec<String>,
+    /// OFP-FR-BWML: the CLI's warnings, for the diagnostics of
+    /// `change_not_ready`. Not part of a task input.
+    #[serde(default, skip_serializing)]
+    pub warnings: Vec<String>,
+    /// OFP-FR-BWML: the CLI's instruction text. Not part of a task input.
+    #[serde(default, skip_serializing)]
+    pub instruction: Option<String>,
 }
 
 /// One task of a change.
@@ -42,6 +49,15 @@ impl ApplyInstructions {
     /// OSM-FR-PEAK: the description of the first task that is not done.
     pub fn next_task(&self) -> Option<String> {
         self.tasks.iter().find(|task| !task.done).map(|task| task.description.clone())
+    }
+
+    /// OFP-FR-BWML: the diagnostics of `change_not_ready`.
+    pub fn not_ready_diagnostics(&self) -> Vec<super::CliDiagnostic> {
+        super::failure::not_ready_diagnostics(
+            &self.missing_artifacts,
+            &self.warnings,
+            self.instruction.as_deref(),
+        )
     }
 
     /// OSM-FR-PEAK: what `"read apply progress"` returns.
@@ -80,6 +96,19 @@ struct InstructionsOutput {
     tasks: Vec<TaskOutput>,
     #[serde(default)]
     missing_artifacts: Option<Vec<String>>,
+    #[serde(default)]
+    warnings: Vec<serde_json::Value>,
+    #[serde(default)]
+    instruction: Option<serde_json::Value>,
+}
+
+/// OFP-FR-BWML: a warning or an instruction is a text, or an object whose
+/// `message` is one. Any other value gives no text.
+fn text_of(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_str()
+        .or_else(|| value.get("message").and_then(serde_json::Value::as_str))
+        .map(str::to_string)
 }
 
 /// OSM-FR-WIQF: a count that is not an integer of 0 or more does not decode.
@@ -115,6 +144,8 @@ pub fn parse_apply_instructions(bytes: &[u8]) -> Result<ApplyInstructions, OpenS
             .map(|task| ApplyTask { description: task.description, done: task.done })
             .collect(),
         missing_artifacts: out.missing_artifacts.unwrap_or_default(),
+        warnings: out.warnings.iter().filter_map(text_of).collect(),
+        instruction: out.instruction.as_ref().and_then(text_of),
     })
 }
 
@@ -203,18 +234,19 @@ pub fn read_apply_progress_now<R: tauri::Runtime>(
     seam.apply_instructions(app, &logging::BUFFER, active.as_ref(), &at, name)
 }
 
-/// OSM-FR-PEAK: `"read apply progress"`, on a blocking thread.
+/// OSM-FR-PEAK, OFP-FR-QLQJ: `"read apply progress"`, on a blocking thread.
+/// Every failure rejects as an `OpenSpecFailure`.
 #[tauri::command]
 pub async fn read_apply_progress<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     change: String,
-) -> Result<ApplyProgress, String> {
+) -> Result<ApplyProgress, Box<super::OpenSpecFailure>> {
     tauri::async_runtime::spawn_blocking(move || {
         read_apply_progress_now(&app, &stream_id, &change)
             .map(|read| read.progress())
-            .map_err(|e| e.code().to_string())
+            .map_err(|e| Box::new(e.to_failure()))
     })
     .await
-    .map_err(|e| format!("openspec apply progress read failed: {e}"))?
+    .map_err(|_| Box::new(super::OpenSpecFailure::new(super::failure::CODE_FAILED)))?
 }

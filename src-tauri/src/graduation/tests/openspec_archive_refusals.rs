@@ -8,13 +8,48 @@ use super::*;
 use crate::openspec::ProcessOutput;
 use crate::streams::StreamMergeResult;
 
+type Snapshot = (String, String, Vec<String>);
+
 /// Everything a refused merge must leave as it was: both tips, the stream's
-/// files and status, and the store.
-fn snapshot(fx: &Fixture, stream: &crate::streams::WorkStream) -> (String, String, Vec<String>) {
+/// files and status, and the whole store, with no notice in it.
+fn snapshot(fx: &Fixture, stream: &crate::streams::WorkStream) -> Snapshot {
+    snapshot_where(fx, stream, |_| true)
+}
+
+/// The same, with the merge notice left out.
+///
+/// OAR-FR-CCIN, OFP-FR-YKGQ: the merge notice of `OFP-openspec-failure-policy.md`
+/// OFP-FR-ETEN is the one write of a refused check whose cause is of the class
+/// `content`, so its discussion and its record are not part of this snapshot.
+/// The notice tests read them.
+fn snapshot_but_notice(fx: &Fixture, stream: &crate::streams::WorkStream) -> Snapshot {
+    snapshot_where(fx, stream, |path| {
+        !path.contains("/comments/") && !path.ends_with("merge-notice.toml")
+    })
+}
+
+fn snapshot_where(
+    fx: &Fixture,
+    stream: &crate::streams::WorkStream,
+    keep: impl Fn(&str) -> bool,
+) -> Snapshot {
     let mut files = super::tree_under(&stream.worktree()).into_iter().collect::<Vec<_>>();
-    files.extend(super::tree_under(records_store(fx).path()));
+    files.extend(super::tree_under(records_store(fx).path()).into_iter().filter(|(p, _)| keep(p)));
     let files = files.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
     (tip(fx, &stream.branch).to_string(), tip(fx, &stream.base_branch).to_string(), files)
+}
+
+/// The discussions of `change` on the stream.
+fn discussions_of(
+    fx: &Fixture,
+    stream: &crate::streams::WorkStream,
+    change: &str,
+) -> Vec<crate::comments::Discussion> {
+    let target = crate::comments::DiscussionTarget::Change {
+        stream_id: stream.id.clone(),
+        change: change.to_string(),
+    };
+    crate::comments::list_discussions_in(&records_store(fx), &target)
 }
 
 // OAR-FR-BEIK, OAR-FR-GTGQ, OAR-FR-CCIN, OAR-FR-HQAI, WKS-FR-YTJY,
@@ -135,7 +170,7 @@ fn the_first_refusal_in_archive_order_refuses_the_merge() {
         &edit_proposal(&stream, "late", "pending", false),
     );
     runner.inner.set("instructions", Ok(crate::openspec::tests::ok(READY)));
-    let before = snapshot(&fx, &stream);
+    let before = snapshot_but_notice(&fx, &stream);
 
     let refusal = merge(&fx, &stream, commit_publication()).unwrap_err();
     assert_eq!(refusal, "change_not_archivable: early: tasks_incomplete");
@@ -143,20 +178,23 @@ fn the_first_refusal_in_archive_order_refuses_the_merge() {
     runner.inner.set("instructions", Ok(crate::openspec::tests::ok(ALL_DONE)));
     let refusal = merge(&fx, &stream, commit_publication()).unwrap_err();
     assert_eq!(refusal, "change_has_pending: late: edit_proposal");
-    assert_eq!(snapshot(&fx, &stream), before);
+    assert_eq!(snapshot_but_notice(&fx, &stream), before);
     assert!(runner.archive_calls().is_empty());
 }
 
-// OAR-FR-QTBK, OAR-FR-AEOK, OAR-FR-HQAI: the reasons a change cannot be
-// archived: the mode is off, the CLI is not usable, the progress read fails,
-// the tasks are not all done. Each refuses before any archive, and is told as
-// a WARN record with its code and reason.
+// OAR-FR-QTBK, OAR-FR-AEOK, OAR-FR-HQAI, OFP-FR-YKGQ, OFP-FR-ETEN,
+// OFP-FR-GPCO: the reasons a change cannot be archived: the mode is off, the
+// CLI is not usable, the progress read fails, the tasks are not all done. Each
+// refuses before any archive with the reason's own code, changes no state, and
+// is told as a WARN record with its code and reason. A reason of the class
+// `environment` or `transient` gives no merge notice: no discussion and no
+// notice record. Only the `content` reason `tasks_incomplete` gives one.
 #[test]
 fn a_change_that_cannot_be_archived_refuses_with_its_reason() {
     for (case, expected) in [
         ("mode", "openspec_mode_inactive"),
-        ("cli", "openspec_cli_unavailable"),
-        ("progress", "apply_progress_unavailable"),
+        ("cli", "cli_unavailable"),
+        ("progress", "cli_failed"),
         ("tasks", "tasks_incomplete"),
     ] {
         let (fx, runner, probe) = archive_fixture(ALL_DONE);
@@ -176,14 +214,30 @@ fn a_change_that_cannot_be_archived_refuses_with_its_reason() {
             "cli" => probe.executables.lock().unwrap().clear(),
             "progress" => runner.inner.set(
                 "instructions",
-                Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() }),
+                Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new(), stderr: Vec::new() }),
             ),
             _ => runner.inner.set("instructions", Ok(crate::openspec::tests::ok(READY))),
         }
-        let before = snapshot(&fx, &stream);
-        let refusal = merge(&fx, &stream, commit_publication()).unwrap_err();
+        let content = case == "tasks";
+        let before =
+            if content { snapshot_but_notice(&fx, &stream) } else { snapshot(&fx, &stream) };
+        let refusal = merge_refusal(&fx, &stream);
         assert_eq!(refusal, format!("change_not_archivable: add-logout: {expected}"), "{case}");
-        assert_eq!(snapshot(&fx, &stream), before, "{case}");
+        let after =
+            if content { snapshot_but_notice(&fx, &stream) } else { snapshot(&fx, &stream) };
+        assert_eq!(after, before, "{case}");
+        let notice = crate::openspec_archive::read_notice_record(
+            &records_store(&fx),
+            &stream.id,
+            "add-logout",
+        );
+        assert_eq!(
+            discussions_of(&fx, &stream, "add-logout").len(),
+            usize::from(content),
+            "{case}"
+        );
+        assert_eq!(notice.is_some(), content, "{case}: a notice record for content alone");
+        assert_eq!(refusal.openspec().unwrap().thread_id.is_some(), content, "{case}");
         assert!(runner.archive_calls().is_empty(), "{case}");
         // OAR-FR-HQAI: the last refusal record of the stream is this one.
         let record = stream_records(&stream)

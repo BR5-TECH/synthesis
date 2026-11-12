@@ -22,6 +22,7 @@ import {
   validChangeName,
 } from "./mock-openspec";
 import { applyRunFields, openspecRunsInvoke, reworkRunFields } from "./mock-openspec-runs";
+import { mergeFailure, throwFailureFlag } from "./mock-openspec-failures";
 import { specMapInvoke } from "./mock-openspec-map";
 import {
   PLAN_THREAD_ID,
@@ -8480,20 +8481,32 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // Seed http://localhost:5199/?openspecCli=not_found to see the install
     // statement (SET-FR-ABXE).
     case "get_openspec_status": {
+      // OSM-FR-YXUC / OFP-FR-ITUD: `recheck` clears a kept failure; the
+      // harness keeps none, so it answers the same state either way.
       const cliSeed =
         typeof location === "undefined" ? null : new URLSearchParams(location.search).get("openspecCli");
+      // SET-FR-QERY: `?openspecCli=failed:<reason>` seeds a `failed` CLI with
+      // the reason `not_executable`, `timed_out`, or `no_version`.
       const cli =
         cliSeed === "not_found"
           ? { state: "not_found" }
           : cliSeed === "unsupported"
             ? { state: "unsupported", path: "/opt/homebrew/bin/openspec", version: "0.16.0" }
-            : { state: "available", path: "/opt/homebrew/bin/openspec", version: "1.17.0" };
-      return {
+            : cliSeed?.startsWith("failed")
+              ? { state: "failed", path: "/opt/homebrew/bin/openspec", reason: cliSeed.split(":")[1] || "no_version" }
+              : { state: "available", path: "/opt/homebrew/bin/openspec", version: "1.17.0" };
+      const status = {
         setting: projectConfig.openspecMode,
         usesOpenspec: true,
         active: projectConfig.openspecMode === "auto",
         cli,
       };
+      // SET-FR-YRWU / OFN-FR-CBLG: `?openspecStatusDelay=<ms>` holds every
+      // answer, so the disabled state of Check again and Retry is visible.
+      const delay = Number(
+        typeof location === "undefined" ? 0 : new URLSearchParams(location.search).get("openspecStatusDelay") ?? 0,
+      );
+      return delay > 0 ? new Promise((done) => setTimeout(() => done(status), delay)) : status;
     }
 
     // ---- plugins ---------------------------------------------------------
@@ -9306,6 +9319,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const refused = new URLSearchParams(location.search).get("mergeRefused");
       // eslint-disable-next-line no-throw-literal
       if (refused) throw refused;
+      // WSS-FR-NTGC / OFP-FR-MQGG: `?openspecMerge=` refuses with an archive
+      // failure and its merge notice (mock-openspec-failures.ts).
+      const archive = mergeFailure();
+      if (archive) throw archive;
       if (harnessFlag("mergeNothing")) return { kind: "nothing_to_merge" };
       if (harnessFlag("mergeConflicts")) {
         const run = enqueueMergeRun(stream, a.publication);
@@ -9451,6 +9468,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         // eslint-disable-next-line no-throw-literal
         throw "graduation_worktree_creation_failed";
       }
+      // GSD-FR-RFIG: `?openspecPropose=` refuses a propose start with an
+      // OpenSpec failure (mock-openspec-failures.ts).
+      if (a.openspecChange) throwFailureFlag("openspecPropose");
       if (harnessFlag("graduationInPlace") && !a.inPlaceAcknowledged) {
         // eslint-disable-next-line no-throw-literal
         throw "in_place_acknowledgement_required";
@@ -9685,6 +9705,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     }
     case "continue_graduation_run": {
       await graduationActDelay();
+      // GRU-FR-BPNJ: `?openspecContinue=` refuses with an OpenSpec failure.
+      throwFailureFlag("openspecContinue");
       const run = findRun(String(a.runId ?? ""));
       // OPU-FR-THOZ: a plan rest refuses Continue while its questions or its
       // edits are undecided (mock-openspec-plan.ts).

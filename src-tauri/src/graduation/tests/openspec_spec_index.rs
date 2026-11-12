@@ -34,7 +34,11 @@ fn index_runner_listing(
         .json("status", r#"{ "changes": [] }"#)
         .answering(
             "validate",
-            Ok(ProcessOutput { exit_status: Some(1), stdout: validation.into() }),
+            Ok(ProcessOutput {
+                exit_status: Some(1),
+                stdout: validation.into(),
+                stderr: Vec::new(),
+            }),
         )
 }
 
@@ -42,7 +46,7 @@ fn index_runner_listing(
 fn failing_list() -> FakeRunner {
     index_runner_listing(
         r#"{ "items": [] }"#,
-        Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() }),
+        Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new(), stderr: Vec::new() }),
     )
 }
 
@@ -103,7 +107,11 @@ impl OpenSpecRunner for FailingIn {
         timeout: std::time::Duration,
     ) -> Result<ProcessOutput, ProcessError> {
         if args.starts_with(&["list", "--changes"]) && canonical(cwd) == self.cwd {
-            return Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() });
+            return Ok(ProcessOutput {
+                exit_status: Some(2),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            });
         }
         self.inner.run(executable, args, cwd, timeout)
     }
@@ -159,7 +167,8 @@ fn a_project_outside_the_mode_loads_the_demo_index() {
 fn a_load_with_no_project_open_fails() {
     let app = tauri::test::mock_app();
     app.handle().manage(crate::project::ProjectState::default());
-    assert_eq!(load_specification_map_now(app.handle()), Err("no_project_open".to_string()));
+    let failure = load_specification_map_now(app.handle()).unwrap_err();
+    assert_eq!(failure.code, "no_project_open");
 }
 
 // OSI-FR-QELX, OSI-FR-ALQI, OSI-FR-VOOS: the changes are read in the active
@@ -299,15 +308,20 @@ fn a_location_that_cannot_be_read_is_counted() {
     );
 }
 
-// OSI-FR-PJJO: with no usable CLI the load fails with `cli_unavailable`, and a
-// failing `list --specs` fails it with the code of that read.
+// OSI-FR-PJJO, OFP-FR-QLQJ: with no usable CLI the load fails with
+// `cli_unavailable` and the CLI state, and a failing `list --specs` fails it
+// with the failure of that read.
 #[test]
 fn a_load_with_no_cli_or_a_failing_list_fails_with_its_code() {
     let fx = fixture_with(index_runner(r#"{ "items": [] }"#), false);
-    assert_eq!(load_specification_map_now(&fx.app), Err("cli_unavailable".to_string()));
+    let failure = load_specification_map_now(&fx.app).unwrap_err();
+    assert_eq!(failure.code, "cli_unavailable");
+    assert_eq!(failure.detail.as_deref(), Some("not_found"));
 
     let fx = fixture_with(failing_list(), true);
-    assert_eq!(load_specification_map_now(&fx.app), Err("cli_failed".to_string()));
+    let failure = load_specification_map_now(&fx.app).unwrap_err();
+    assert_eq!(failure.code, "cli_failed");
+    assert_eq!(failure.detail.as_deref(), Some("2"));
 }
 
 /// The records of the application's diagnostic buffer. nextest runs each

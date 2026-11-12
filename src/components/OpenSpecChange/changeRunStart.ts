@@ -5,10 +5,16 @@
  * `../../../specifications/core/OCR-openspec-change-runs.md`).
  *
  * The same words stand beside Apply, in the Rework dialog, and on a request
- * card whose confirmation was refused.
+ * card whose confirmation was refused. An OpenSpec failure renders the
+ * failure notice of `../../../specifications/ui/OFN-openspec-failure-notices.md`,
+ * and the refusal then carries the failure.
  */
 import { graduationErrorMessage, splitTyped } from "../../state/graduation";
-import { CHANGE_RUN_ERRORS, type ChangeAction } from "../../types";
+import { hasNotice, noticeSentence, toOpenSpecFailure } from "../../state/openspec/failureNotice";
+import { CHANGE_RUN_ERRORS, type ChangeAction, type OpenSpecFailure } from "../../types";
+
+/** OCW-FR-EKYF: the frame sentence of a refused start. */
+export const NO_RUN_STARTED = "No run started.";
 
 /** A refused start, as a surface states it. */
 export interface StartRefusal {
@@ -16,10 +22,13 @@ export interface StartRefusal {
   sentence: string;
   /** `openspec_run_active`: the run that holds the change, for its route. */
   runId: string | null;
-  /** `openspec_mode_inactive` and `openspec_cli_unavailable` route to Project settings. */
-  settings: boolean;
   /** OCR-FR-SFDE / OCW-FR-SCIA: the thread a failed enqueue left open, if any. */
   threadId: string | null;
+  /**
+   * OCW-FR-EKYF: the OpenSpec failure, which renders its notice with
+   * `NO_RUN_STARTED` as its frame. Null for every other refusal.
+   */
+  failure: OpenSpecFailure | null;
 }
 
 /** The refusals of the image preflight (per `GSU-graduation-start.md` GSU-FR-GLVQ). */
@@ -94,7 +103,17 @@ export function startRefusal(
 ): StartRefusal {
   const { code, detail, threadId } = parseStartError(error);
   const E = CHANGE_RUN_ERRORS;
-  const base = { code, runId: null, settings: false, threadId };
+  const base = { code, runId: null, threadId, failure: null };
+  // OCW-FR-EKYF: an OpenSpec failure, `change_not_ready` and `cli_unavailable`
+  // included, takes its sentence and its actions from the notice table.
+  const failure = openSpecFailureOf(error);
+  if (failure) {
+    return {
+      ...base,
+      failure,
+      sentence: `${noticeSentence(failure)} ${NO_RUN_STARTED}`,
+    };
+  }
   switch (code) {
     case E.runActive: {
       const runId = detail ?? null;
@@ -106,29 +125,6 @@ export function startRefusal(
         sentence: `${who} of this change on this stream has not ended, so no run started.`,
       };
     }
-    case E.notReady: {
-      const missing = (detail ?? "")
-        .split(",")
-        .map((a) => a.trim())
-        .filter(Boolean);
-      const named = missing.length > 0 ? `: ${missing.join(", ")}` : "";
-      return {
-        ...base,
-        sentence: `The change is not ready to apply. It is missing artifacts${named}. No run started.`,
-      };
-    }
-    case E.modeInactive:
-      return {
-        ...base,
-        settings: true,
-        sentence: "OpenSpec mode is not active for this project, so no run started.",
-      };
-    case E.cliUnavailable:
-      return {
-        ...base,
-        settings: true,
-        sentence: "The OpenSpec CLI is not available on this machine, so no run started.",
-      };
     case E.proposalPending:
       return {
         ...base,
@@ -151,4 +147,19 @@ export function startRefusal(
     };
   }
   return { ...base, sentence: `The run could not start (${code || "unknown"}). No run started.` };
+}
+
+/**
+ * The OpenSpec failure of a refusal that gets a notice, or null. A typed
+ * string loses its `; thread: <id>` suffix (OCR-FR-SFDE) before it is read.
+ */
+function openSpecFailureOf(error: unknown): OpenSpecFailure | null {
+  let source = error;
+  if (error === null || typeof error !== "object" || error instanceof Error) {
+    const text = (error instanceof Error ? error.message : String(error)).trim();
+    const marker = text.lastIndexOf(THREAD_SUFFIX);
+    source = marker >= 0 ? text.slice(0, marker) : text;
+  }
+  const failure = toOpenSpecFailure(source);
+  return hasNotice(failure) ? failure : null;
 }

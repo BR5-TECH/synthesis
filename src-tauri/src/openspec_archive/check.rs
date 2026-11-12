@@ -53,34 +53,46 @@ pub fn pending_kinds(store: &RootFs, stream_id: &str, change: &str) -> Vec<Pendi
     kinds
 }
 
-/// OAR-FR-QTBK: the reason of a read of `apply_instructions` that failed.
+/// OAR-FR-QTBK: the reason of a read of `apply_instructions` that failed: the
+/// mode, or the read's own code (OFP-FR-GPCO).
 fn reason_of(error: &OpenSpecReadError) -> &'static str {
     match error {
         OpenSpecReadError::NoOpenProject | OpenSpecReadError::OpenSpecModeInactive => {
             REASON_MODE_INACTIVE
         }
-        OpenSpecReadError::CliUnavailable(_) => REASON_CLI_UNAVAILABLE,
-        _ => REASON_PROGRESS_UNAVAILABLE,
+        other => other.code(),
     }
 }
 
-/// OAR-FR-QTBK, OAR-FR-AEOK: why the change cannot be archived, or `None`
-/// where it can. One `apply_instructions` runs, and no other CLI process.
+/// OAR-FR-QTBK, OAR-FR-AEOK: why the change cannot be archived, as the
+/// `change_not_archivable` failure with its reason as the cause and the
+/// read's diagnostics, or `None` where it can. One `apply_instructions` runs,
+/// and no other CLI process.
 fn not_archivable<R: tauri::Runtime>(
     cx: &ArchiveContext<'_, R>,
     seam: Option<&OpenSpec>,
     change: &str,
-) -> Option<&'static str> {
+) -> Option<OpenSpecFailure> {
+    let refusal = |reason: &str| {
+        let mut failure = OpenSpecFailure::new(ERR_CHANGE_NOT_ARCHIVABLE).for_change(change);
+        failure.cause = Some(reason.to_string());
+        failure
+    };
     if !OpenSpec::mode_active(cx.active.as_ref()) {
-        return Some(REASON_MODE_INACTIVE);
+        return Some(refusal(REASON_MODE_INACTIVE));
     }
     let Some(seam) = seam else {
-        return Some(REASON_CLI_UNAVAILABLE);
+        return Some(refusal(REASON_CLI_UNAVAILABLE));
     };
     match seam.apply_instructions(cx.app, &BUFFER, cx.active.as_ref(), &cx.at, change) {
         Ok(read) if read.state == "all_done" => None,
-        Ok(_) => Some(REASON_TASKS_INCOMPLETE),
-        Err(error) => Some(reason_of(&error)),
+        Ok(_) => Some(refusal(REASON_TASKS_INCOMPLETE)),
+        Err(error) => Some(OpenSpecFailure {
+            cause: Some(reason_of(&error).to_string()),
+            detail: error.detail(),
+            diagnostics: error.diagnostics().to_vec(),
+            ..refusal(reason_of(&error))
+        }),
     }
 }
 
@@ -91,7 +103,7 @@ pub(super) fn check_all<R: tauri::Runtime>(
     cx: &ArchiveContext<'_, R>,
     seam: Option<&OpenSpec>,
     changes: &[String],
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     use tauri::Manager;
     let store = cx
         .app
@@ -111,15 +123,19 @@ pub(super) fn check_all<R: tauri::Runtime>(
         let started = Instant::now();
         let kinds =
             store.as_ref().map(|s| pending_kinds(s, cx.stream_id, change)).unwrap_or_default();
-        let refusal = if !kinds.is_empty() {
+        let refusal: Option<(&str, String, Refusal)> = if !kinds.is_empty() {
             let names: Vec<&str> = kinds.iter().map(|k| k.as_str()).collect();
-            Some((ERR_CHANGE_HAS_PENDING, names.join(",")))
+            let detail = names.join(",");
+            let text = format!("{ERR_CHANGE_HAS_PENDING}: {change}: {detail}");
+            Some((ERR_CHANGE_HAS_PENDING, detail, Refusal::Code(text)))
         } else {
-            not_archivable(cx, seam, change)
-                .map(|reason| (ERR_CHANGE_NOT_ARCHIVABLE, reason.to_string()))
+            not_archivable(cx, seam, change).map(|failure| {
+                let reason = failure.cause.clone().unwrap_or_default();
+                (ERR_CHANGE_NOT_ARCHIVABLE, reason, failure.into())
+            })
         };
         let millis = started.elapsed().as_millis() as u64;
-        if let Some((code, detail)) = refusal {
+        if let Some((code, detail, refusal)) = refusal {
             logging::log_warn(
                 cx.app,
                 &BUFFER,
@@ -129,11 +145,11 @@ pub(super) fn check_all<R: tauri::Runtime>(
                     "stream_id" => cx.stream_id.to_string(),
                     "change" => change.clone(),
                     "code" => code,
-                    "reason" => detail.clone(),
+                    "reason" => detail,
                     "durationMs" => millis,
                 },
             );
-            return Err(format!("{code}: {change}: {detail}"));
+            return Err(refusal);
         }
         logging::log_info(
             cx.app,

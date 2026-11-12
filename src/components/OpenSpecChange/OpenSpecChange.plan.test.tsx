@@ -6,7 +6,7 @@
  * DQA-FR-XFEE).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const invokeMock = vi.fn();
@@ -48,6 +48,7 @@ vi.mock("../Editor/ReviewOverlay", async () => {
 
 import { flushLogs } from "../../logging";
 import { configureRunRoute } from "../../state/graduation/runRoute";
+import { rereadChangeRunQueue } from "../../state/openspec/changeRunQueue";
 import { publishSet } from "../../state/questionSets";
 import { projectAgent } from "../../test/editorAgentsFixtures";
 import { makeRun, type RunOverrides } from "../../test/graduationFixtures";
@@ -271,6 +272,89 @@ describe("the strip of a plan rest (OCW-FR-YRZK, OCW-FR-ZPDC)", () => {
     expect(within(shown).getByTestId("openspec-run-strip-state")).toHaveTextContent(
       "waiting for plan decisions",
     );
+  });
+});
+
+describe("a refused Continue that is an OpenSpec failure (OCW-FR-ZPDC, GRU-FR-BPNJ)", () => {
+  /** The OFN-FR-LKAT records sent so far. */
+  const noticeRecords = () => {
+    flushLogs();
+    return calls("append_log_records")
+      .flatMap((c) => (c[1] as { records: Array<{ message: string; fields: Record<string, unknown> }> }).records)
+      .filter((r) => r.message === "an openspec failure notice appeared");
+  };
+
+  it("OCW-FR-ZPDC, GRU-FR-BPNJ, OFN-FR-QZEC: a wrapper with a cause and a detail states the CLI state of its cause, not the validation", async () => {
+    backend.continueRun = () => ({
+      reject: {
+        code: "openspec_validation_unavailable",
+        cause: "cli_unavailable",
+        detail: "failed",
+        diagnostics: [],
+      },
+    });
+    const shown = await openedStrip();
+    await userEvent.click(within(shown).getByRole("button", { name: "Continue" }));
+    const refusal = await within(shown).findByTestId("openspec-run-strip-refusal");
+    expect(refusal.textContent).toBe(
+      "The OpenSpec CLI on this machine does not start or does not report its version. The run did not continue.",
+    );
+    expect(refusal).not.toHaveTextContent("validation could not run");
+  });
+
+  it("OFN-FR-LKAT: the short form of a refused Continue emits one WARN record with the surface, the code, the cause, and the class", async () => {
+    backend.continueRun = () => ({
+      reject: { code: "openspec_validation_unavailable", cause: "cli_timed_out", change: CHANGE, diagnostics: [{ message: "secret" }] },
+    });
+    const shown = await openedStrip();
+    await userEvent.click(within(shown).getByRole("button", { name: "Continue" }));
+    await within(shown).findByTestId("openspec-run-strip-refusal");
+    const records = noticeRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0].fields).toEqual({
+      surface: "change_run_strip_continue",
+      code: "openspec_validation_unavailable",
+      cause: "cli_timed_out",
+      class: "transient",
+    });
+    expect(JSON.stringify(records)).not.toContain("secret");
+  });
+
+  it("OFN-FR-LKAT, GRU-FR-LBPR: a blocked run states the short form of its OpenSpec blocker, and the strip logs it once", async () => {
+    backend.runs = [
+      restingRun(UPDATE, {
+        state: "blocked",
+        rest: null,
+        blocker: { code: "cli_timed_out", message: "x", clearsBy: "", attempt: 1, diagnostics: [{ message: "secret" }] },
+      }),
+    ];
+    const shown = await openedStrip();
+    await waitFor(() =>
+      expect(shown).toHaveTextContent("The OpenSpec CLI did not finish in time, also after one more try."),
+    );
+    await waitFor(() => expect(noticeRecords()).toHaveLength(1));
+    // A read again gives a new run object with the same blocker: the same notice.
+    const reads = calls("list_graduation_queue").length;
+    await act(async () => {
+      await rereadChangeRunQueue();
+    });
+    expect(calls("list_graduation_queue").length).toBeGreaterThan(reads);
+    const records = noticeRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0].fields).toEqual({
+      surface: "change_run_strip_blocker",
+      code: "cli_timed_out",
+      cause: "",
+      class: "transient",
+    });
+  });
+
+  it("OCW-FR-ZPDC: a typed refusal that is not an OpenSpec failure keeps its words and emits no notice record", async () => {
+    backend.continueRun = () => ({ reject: "plan_questions_pending" });
+    const shown = await openedStrip();
+    await userEvent.click(within(shown).getByRole("button", { name: "Continue" }));
+    await within(shown).findByTestId("openspec-run-strip-refusal");
+    expect(noticeRecords()).toHaveLength(0);
   });
 });
 

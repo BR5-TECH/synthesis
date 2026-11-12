@@ -35,6 +35,7 @@ impl Fixture {
             None,
             None,
         )
+        .map_err(String::from)
     }
 }
 

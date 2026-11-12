@@ -57,6 +57,23 @@ fn the_real_runner_reports_the_exit_status() {
     assert_eq!(out.stdout, b"partial\n");
 }
 
+// OFP-FR-WNVO: the real runner keeps the last 4 KiB of standard error, and
+// standard error does not mix into standard output.
+#[test]
+fn the_real_runner_keeps_the_last_four_kib_of_standard_error() {
+    let dir = TempDir::new().unwrap();
+    let exe = script(
+        &dir,
+        "i=0; while [ $i -lt 700 ]; do printf 'xxxxxxxxxx' >&2; i=$((i+1)); done\n\
+         printf 'END' >&2\necho out\nexit 3",
+    );
+    let out = RealRunner.run(&exe, &[], dir.path(), Duration::from_secs(20)).unwrap();
+    assert_eq!(out.exit_status, Some(3));
+    assert_eq!(out.stdout, b"out\n");
+    assert_eq!(out.stderr.len(), crate::openspec::failure::STDERR_KEEP);
+    assert!(out.stderr.ends_with(b"END"));
+}
+
 // OSM-FR-ZIMO: a process that runs past its limit is stopped.
 #[test]
 fn the_real_runner_stops_a_process_past_its_limit() {
@@ -64,7 +81,7 @@ fn the_real_runner_stops_a_process_past_its_limit() {
     let exe = script(&dir, "sleep 30");
     let started = std::time::Instant::now();
     let out = RealRunner.run(&exe, &[], dir.path(), Duration::from_millis(200));
-    assert_eq!(out, Err(ProcessError::TimedOut));
+    assert_eq!(out, Err(ProcessError::timed_out()));
     assert!(started.elapsed() < Duration::from_secs(20), "the process was not stopped");
 }
 

@@ -63,8 +63,15 @@ import type {
   GraduationCapacity,
   GraduationQueue,
   GraduationRun,
+  OpenSpecFailure,
 } from "../../types";
 import { GraduationLogWindow } from "../GraduationLogWindow";
+import {
+  logFailureNotice,
+  noticeFailureOf,
+  refusalString,
+  shortForm,
+} from "../../state/openspec/failureNotice";
 import { awaitsLiveSegment, stagesWithLogAccess } from "../../state/graduation/logScopes";
 import { type PressedAction } from "./actionRow";
 import { RunRegion } from "./region";
@@ -135,6 +142,8 @@ export function GraduationRuns({
   const [actionRefusal, setActionRefusal] = useState<{
     runId: string;
     message: string;
+    /** GRU-FR-BPNJ: the OpenSpec failure of the refusal, for its notice. */
+    failure?: OpenSpecFailure | null;
   } | null>(null);
   // GRU-FR-ZMHB: the action row control an act in flight was issued from.
   const pressedRef = useRef<PressedAction | null>(null);
@@ -557,15 +566,23 @@ export function GraduationRuns({
       return true;
     } catch (reason) {
       logError(["frontend"], "a graduation act was refused", {});
-      const message = words(String(reason));
+      // OFP-FR-QLQJ: an OpenSpec failure is an object with its notice.
+      const failure = noticeFailureOf(reason);
+      const message = failure
+        ? (shortForm(failure) ?? failure.code)
+        : words(refusalString(reason));
       // GRU-FR-KQPE: one refusal alert at most, and a refusal renders only
       // while the run it belongs to is selected.
+      // OFN-FR-LKAT: a control or the region error states the short form of
+      // an OpenSpec failure, so its record is emitted here. The action row
+      // renders the notice itself, and the notice emits its own record.
+      if (failure && (onRefused || !pressed)) logFailureNotice("graduation_runs_act", failure);
       if (onRefused) {
         setActionRefusal(null);
         onRefused(message);
       } else if (pressed) {
         if (selectedRef.current === pressed.runId) {
-          setActionRefusal({ runId: pressed.runId, message });
+          setActionRefusal({ runId: pressed.runId, message, failure });
         }
       } else {
         setActionRefusal(null);
@@ -794,6 +811,7 @@ export function GraduationRuns({
               reveal(created, { view: viewRef.current, text: filterRef.current });
             }}
             refusal={actionRefusal?.runId === run.id ? actionRefusal.message : null}
+            refusalFailure={actionRefusal?.runId === run.id ? (actionRefusal.failure ?? null) : null}
             pressedRef={pressedRef}
             openRestart={restartAsk === run.id}
             onRestartOpened={() => setRestartAsk(null)}

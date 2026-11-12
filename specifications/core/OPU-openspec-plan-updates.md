@@ -44,7 +44,7 @@ A **plan update** is how an apply run (per `OCR-openspec-change-runs.md`) asks t
 32. **OPU-FR-DMCX** A hunk of the plan proposal may edit `tasks.md`. The close commit of the plan proposal holds each accepted file as it stands in the working copy (CEP-FR-XVXQ), so the tasks that the run marked done before the plan update land in that commit.
 33. **OPU-FR-THOZ** `continue_graduation_run` against a run at rest on `plan_update` is refused with `plan_questions_pending` while the rest holds a set id and no answers. Against a rest on `plan_update` or `plan_findings`, it is refused with `proposal_pending` while the plan proposal is pending or holds `commit_owed` (CEP-FR-IYHP). A refused Continue changes nothing.
 34. **OPU-FR-JBIU** An apply run at rest on a plan update holds its stream, so a merge of that stream is refused with `stream_busy` (per `WKS-work-streams.md` WKS-FR-GKPX) and archives nothing. When a stream merge archives the change, its plan threads move with the change's conversation logs (per `CMS-comments-storage.md` CMS-FR-ZILU).
-34. **OPU-FR-PXDY** Before it dispatches, Continue from `plan_update` or `plan_findings` runs `validate_change` and `apply_instructions` on the stream's working copy (per `OSM-openspec-mode.md` OSM-FR-APVF, OSM-FR-QLRW). A read that cannot run refuses Continue with `openspec_validation_unavailable` and the read's code, and the run stays at rest.
+34. **OPU-FR-PXDY** Before it dispatches, Continue from `plan_update` or `plan_findings` runs `validate_change` and `apply_instructions` on the stream's working copy (per `OSM-openspec-mode.md` OSM-FR-APVF, OSM-FR-QLRW). Continue first clears a kept `failed` CLI check (per `OFP-openspec-failure-policy.md` OFP-FR-ITUD). A read that fails refuses Continue with `openspec_validation_unavailable`, whose cause is the read's code, and the run stays at rest.
 35. **OPU-FR-CAGI** Continue from `plan_update` appends one ledger entry for each question, in position order: the question, the chosen option's `answer` or the author's own words as the answer, the chosen option's `summary` or the own words as the summary, the note, the turn `work`, and the pass (per `GXD-graduation-execution.md` GXD-FR-NWSL).
 36. **OPU-FR-ZNRR** Continue then appends one ledger entry for each hunk of the plan proposal that is not withdrawn, in proposal order. Its question is `<path> edit <n>`, where `n` is the 1-based position of the hunk among the hunks of its path. Its answer and its summary are `accepted`, `edited`, or `rejected`, and its note is the feedback of the decision.
 37. **OPU-FR-NQBK** Where the plan proposal closed with a commit, Continue moves the run's base commit to a **plan base** before it dispatches (per `GRD-graduation.md` GRD-FR-YBUM).
@@ -90,7 +90,7 @@ plan_questions_pending      proposal_pending
 openspec_validation_unavailable    write_failed
 ```
 
-`openspec_validation_unavailable` carries the read's error code after a colon. The blocker codes of a recording step are the codes of the store that refused it (OPU-FR-BKZX).
+`openspec_validation_unavailable` carries the read's error code after a colon, and rejects on the wire as an `OpenSpecFailure` of `OFP-openspec-failure-policy.md` with that code as `cause` and the read's diagnostics. The blocker codes of a recording step are the codes of the store that refused it (OPU-FR-BKZX).
 
 ### Payload shapes
 ```text

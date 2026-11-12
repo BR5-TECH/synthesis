@@ -35,7 +35,7 @@ pub enum SpecificationMapLoad {
     /// OSI-FR-OSWD: the UI shows its demo index.
     Demo,
     Openspec {
-        index: OpenSpecMapIndex,
+        index: Box<OpenSpecMapIndex>,
     },
 }
 
@@ -49,6 +49,9 @@ pub struct OpenSpecMapIndex {
     pub dependencies: Vec<serde_json::Value>,
     /// OSI-FR-OIOB: `valid`, `invalid`, or `unavailable`.
     pub validation: &'static str,
+    /// OSI-FR-OIOB: the failure of a validation that is `unavailable`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_failure: Option<super::OpenSpecFailure>,
     /// OSI-FR-DENT.
     pub unread_locations: u64,
 }
@@ -186,7 +189,9 @@ impl OpenSpec {
         let capabilities = read.into_iter().collect::<Result<Vec<_>, _>>()?;
         // OSI-FR-OIOB: a validation that fails is no failure of the load.
         let validation =
-            self.validate_project(sink, buffer, Some(active), active, ValidationScope::All).ok();
+            self.validate_project(sink, buffer, Some(active), active, ValidationScope::All);
+        let validation_failure = validation.as_ref().err().map(OpenSpecReadError::to_failure);
+        let validation = validation.ok();
         let reads = in_parallel(locations, |location| LocationRead {
             location: location.location.clone(),
             validated: location.validated,
@@ -195,7 +200,9 @@ impl OpenSpec {
                 .as_ref()
                 .and_then(|at| self.list_changes_at(sink, buffer, Some(active), at).ok()),
         });
-        Ok(build_index(&capabilities, validation.as_ref(), &reads))
+        let mut index = build_index(&capabilities, validation.as_ref(), &reads);
+        index.validation_failure = validation_failure;
+        Ok(index)
     }
 }
 
@@ -235,13 +242,13 @@ fn index_locations<R: tauri::Runtime>(
 /// OSI-FR-OSWD, OSI-FR-PJJO: the whole load, on the calling thread.
 pub fn load_specification_map_now<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-) -> Result<SpecificationMapLoad, String> {
+) -> Result<SpecificationMapLoad, Box<super::OpenSpecFailure>> {
     use tauri::Manager;
     let started = Instant::now();
     let active =
         app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
     let outcome = match active {
-        None => Err(ERR_NO_PROJECT_OPEN.to_string()),
+        None => Err(Box::new(super::OpenSpecFailure::new(ERR_NO_PROJECT_OPEN))),
         Some(active) if !OpenSpec::mode_active(Some(&active)) => Ok(SpecificationMapLoad::Demo),
         Some(active) => {
             let locations = index_locations(app, &active);
@@ -251,8 +258,8 @@ pub fn load_specification_map_now<R: tauri::Runtime>(
                     OpenSpec::default().load_spec_index(app, &logging::BUFFER, &active, &locations)
                 }
             }
-            .map(|index| SpecificationMapLoad::Openspec { index })
-            .map_err(|error| error.code().to_string())
+            .map(|index| SpecificationMapLoad::Openspec { index: Box::new(index) })
+            .map_err(|error| Box::new(error.to_failure()))
         }
     };
     let millis = started.elapsed().as_millis() as u64;
@@ -284,12 +291,12 @@ pub fn load_specification_map_now<R: tauri::Runtime>(
                 },
             )
         }
-        Err(code) => logging::log_warn(
+        Err(failure) => logging::log_warn(
             app,
             &logging::BUFFER,
             &[Domain::Backend],
             "specification map load failed",
-            log_fields! { "code" => code.clone(), "durationMs" => millis },
+            log_fields! { "code" => failure.code.clone(), "durationMs" => millis },
         ),
     }
     outcome
@@ -299,8 +306,8 @@ pub fn load_specification_map_now<R: tauri::Runtime>(
 #[tauri::command]
 pub async fn load_specification_map<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-) -> Result<SpecificationMapLoad, String> {
+) -> Result<SpecificationMapLoad, Box<super::OpenSpecFailure>> {
     tauri::async_runtime::spawn_blocking(move || load_specification_map_now(&app))
         .await
-        .map_err(|e| format!("specification map load failed: {e}"))?
+        .map_err(|_| Box::new(super::OpenSpecFailure::new(super::failure::CODE_FAILED)))?
 }

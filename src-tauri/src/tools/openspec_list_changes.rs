@@ -19,7 +19,7 @@ pub const NAME: &str = "list_openspec_changes";
 pub const DESCRIPTION: &str = "List the changes in progress in this OpenSpec project, from `openspec/changes/`. Each entry gives the change name, its schema, the state of each artifact (proposal, specs, design, tasks, or those of its schema), the tasks done and the tasks in total, and the capabilities it holds deltas for. Use this to find planned work that touches the same capabilities, or to say how far a change has got. Read an artifact with `read_file` below the folder `path` names, for example `<path>proposal.md`. Archived changes are not listed. This changes nothing.";
 
 /// LOC-FR-YEQH: the tool's sentence of the **OpenSpec read failed** refusal.
-pub const READ_FAILED: &str = "The OpenSpec CLI could not list the changes of this project. The OpenSpec files may be malformed.";
+pub const READ_FAILED: &str = "The OpenSpec CLI refused to list the changes of this project. The OpenSpec files may be malformed.";
 
 /// The arguments: none.
 #[derive(Debug, Clone, Default, Deserialize)]

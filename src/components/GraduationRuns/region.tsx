@@ -12,7 +12,7 @@
  * and the check state (GRU-FR-SOFY, GRU-FR-PXCW, GRU-FR-HZLV).
  */
 
-import type { MutableRefObject } from "react";
+import { useMemo, type MutableRefObject } from "react";
 
 import { logInfo } from "../../logging";
 import { formatSectionAddress } from "../../settingsWindow";
@@ -25,6 +25,8 @@ import {
   aheadOf,
   blockerStatement,
   blockerDetail,
+  blockerFrame,
+  openSpecBlockerFailure,
   pushRefusalStatement,
   commitSummary,
   conditionOf,
@@ -64,8 +66,10 @@ import type {
   GraduationCapacity,
   GraduationQueue,
   GraduationRun,
+  OpenSpecFailure,
 } from "../../types";
 import { RunProgress } from "../RunProgress";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
 import { ChecksNotPassedRest } from "./checksRest";
 import { PlanRestNotice } from "./planRest";
@@ -117,6 +121,8 @@ export interface RunRegionProps {
   onRestarted: (created: GraduationRun) => void;
   /** GRU-FR-KQPE: the refusal of this run's last row act. */
   refusal: string | null;
+  /** GRU-FR-BPNJ: the OpenSpec failure of that refusal, for its notice. */
+  refusalFailure?: OpenSpecFailure | null;
   pressedRef: MutableRefObject<PressedAction | null>;
   openRestart: boolean;
   onRestartOpened: () => void;
@@ -133,10 +139,28 @@ function stageSentence(
   queue: GraduationQueue | null,
   capacity: GraduationCapacity | null,
 ): string {
-  if (progress && run.state === "working" && changeRunPhase(run) === "apply") {
+  const tasksStage = run.state === "working" && changeRunPhase(run) === "apply";
+  if (progress && tasksStage) {
     return tasksSentence(progress);
   }
-  return conditionSentence(run, queue ? aheadOf(queue, run.id) : null, waitsForSlot(run, capacity));
+  // GRU-FR-LBPR / OFN-FR-PFYW: the notice below states an OpenSpec blocker,
+  // so the stage row states no sentence of its own for it.
+  if (openSpecBlockerFailure(run)) return "Blocked";
+  return conditionSentence(
+    run,
+    queue ? aheadOf(queue, run.id) : null,
+    waitsForSlot(run, capacity),
+  );
+}
+
+/**
+ * GRU-FR-PXCW: a failed read adds the short form of its notice
+ * (OFN-FR-QZEC) to the ordinary sentence of the Tasks stage. It is read after
+ * the sentence and shows as one line under the stage row.
+ */
+function stageNote(run: GraduationRun, progressFailure: string | null): string | null {
+  const tasksStage = run.state === "working" && changeRunPhase(run) === "apply";
+  return tasksStage ? progressFailure : null;
 }
 
 export function RunRegion({
@@ -152,6 +176,7 @@ export function RunRegion({
   onAnswered,
   onRestarted,
   refusal,
+  refusalFailure = null,
   pressedRef,
   openRestart,
   onRestartOpened,
@@ -159,15 +184,28 @@ export function RunRegion({
   const title = runTitle(run);
   const phase = changeRunPhase(run);
   // GRU-FR-PXCW: read when the run is selected and on each change of it. A
-  // read that fails leaves the stage on its ordinary sentence.
-  const { progress } = useApplyProgress({
+  // read that fails leaves the stage on its ordinary sentence, with the short
+  // form of its notice.
+  const { progress, failure: progressFailure } = useApplyProgress({
     streamId: run.streamId,
     change: run.openspec?.change ?? "",
     runId: run.id,
     enabled: phase === "apply" && Boolean(run.streamId),
     keepOnFailure: false,
+    surface: "graduation_run_tasks",
   });
   const checkState = checkStateOf(run);
+  // GRU-FR-LBPR: an OpenSpec blocker is stated in its failure notice. A
+  // reload gives a new run object with the same blocker, so the failure is
+  // read once for each blocker, by its content, and its notice appears once
+  // (OFN-FR-LKAT).
+  const blockerKey = `${run.state}|${JSON.stringify(run.blocker ?? null)}`;
+  const openspecBlocker = useMemo(
+    () => openSpecBlockerFailure(run),
+    // The key holds everything the failure is read from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [blockerKey, run.openspec?.change],
+  );
   return (
     <>
       <div className="graduation__head">
@@ -243,6 +281,7 @@ export function RunRegion({
             currentStage={stageOf(run) ?? "queued"}
             condition={conditionOf(run)}
             conditionSentence={stageSentence(run, progress, queue, capacity)}
+            conditionNote={stageNote(run, progressFailure)}
             iterationLabel={iterationLabel(run)}
             history={stageHistory(run)}
             // RPV-FR-10: the host renders the moves itself — the review's
@@ -312,6 +351,25 @@ export function RunRegion({
             </span>
           )}
         </p>
+      )}
+
+      {/* GRU-FR-LBPR / OFN-FR-DPIJ: an OpenSpec blocker in its notice. The
+          Continue of the action row is its retry, so the notice offers none.
+          Open change opens the change of the run on its stream. */}
+      {openspecBlocker && (
+        <div
+          className="graduation__blocker graduation__warning"
+          data-testid="graduation-blocker"
+        >
+          <OpenSpecFailureNotice
+            failure={openspecBlocker}
+            surface="graduation_run_blocker"
+            change={run.openspec?.change ?? null}
+            location={run.streamId ? { kind: "stream", streamId: run.streamId } : null}
+            streamName={run.streamName || undefined}
+            frame={blockerFrame(run)}
+          />
+        </div>
       )}
 
       {/* GRU-FR-BHJO: a headline that names why it stopped, and then what the
@@ -449,6 +507,7 @@ export function RunRegion({
           onOpenDraft={onOpenDraft}
           onRestarted={onRestarted}
           refusal={refusal}
+          refusalFailure={refusalFailure}
           pressedRef={pressedRef}
           openRestart={openRestart}
           onRestartOpened={onRestartOpened}

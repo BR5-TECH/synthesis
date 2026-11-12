@@ -22,13 +22,19 @@ use serde::Serialize;
 use crate::fs::RootFs;
 use crate::log_fields;
 use crate::logging::{self, Domain, BUFFER};
-use crate::openspec::{ChangeLocation, OpenSpec};
+use crate::openspec::{ChangeLocation, OpenSpec, OpenSpecFailure, Refusal};
 
 mod check;
+mod digest;
+pub mod notice;
+mod notice_record;
 mod step;
 mod store_move;
 
 pub use check::{pending_kinds, PendingKind};
+pub use digest::change_folder_digest;
+pub use notice::{give_merge_notice, MergeNotice};
+pub use notice_record::{read_notice_record, NoticeRecord, NOTICE_RECORD_FILENAME};
 pub use store_move::{move_change_records, store_target};
 
 /// OAR-FR-BEIK: carries `<change>: <kinds>` after a colon.
@@ -38,11 +44,11 @@ pub const ERR_CHANGE_NOT_ARCHIVABLE: &str = "change_not_archivable";
 /// OAR-FR-EUXZ: carries `<change>: <code>` after a colon.
 pub const ERR_ARCHIVE_FAILED: &str = "archive_failed";
 
-/// OAR-FR-QTBK: the reasons a change cannot be archived.
-pub const REASON_MODE_INACTIVE: &str = "openspec_mode_inactive";
-pub const REASON_CLI_UNAVAILABLE: &str = "openspec_cli_unavailable";
-pub const REASON_PROGRESS_UNAVAILABLE: &str = "apply_progress_unavailable";
-pub const REASON_TASKS_INCOMPLETE: &str = "tasks_incomplete";
+/// OAR-FR-QTBK: the reasons a change cannot be archived. A read of
+/// `apply_instructions` that fails gives its own code (OFP-FR-GPCO).
+pub const REASON_MODE_INACTIVE: &str = crate::openspec::failure::CODE_MODE_INACTIVE;
+pub const REASON_CLI_UNAVAILABLE: &str = crate::openspec::failure::CODE_CLI_UNAVAILABLE;
+pub const REASON_TASKS_INCOMPLETE: &str = crate::openspec::failure::CODE_TASKS_INCOMPLETE;
 
 /// OAR-FR-EUXZ: the code of an archive whose commit failed.
 pub const CODE_COMMIT_FAILED: &str = "commit_failed";
@@ -53,6 +59,14 @@ pub const CODE_STORE_MOVE_FAILED: &str = "store_move_failed";
 /// OAR contract surface, fixed text: the archive commit message.
 pub fn commit_message(change: &str) -> String {
     format!("Archive OpenSpec change {change}")
+}
+
+/// OAR-FR-QTBK, OFP-FR-ZDEE: `change_not_archivable` for `change`, with its
+/// reason as the cause.
+pub(crate) fn refuse_not_archivable(change: &str, reason: &str) -> Refusal {
+    let mut failure = OpenSpecFailure::new(ERR_CHANGE_NOT_ARCHIVABLE).for_change(change);
+    failure.cause = Some(reason.to_string());
+    failure.into()
 }
 
 /// OAR contract surface `ArchivedChange`, in `StreamMergeResult.archived`.
@@ -143,7 +157,7 @@ fn refuse_writes_outside<R: tauri::Runtime>(
 pub fn archive_stream_changes<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream: &crate::streams::WorkStream,
-) -> Result<Vec<ArchivedChange>, String> {
+) -> Result<Vec<ArchivedChange>, Refusal> {
     use tauri::Manager;
     let started = Instant::now();
     let location = ChangeLocation::Stream { stream_id: stream.id.clone() };
@@ -174,9 +188,7 @@ pub fn archive_stream_changes<R: tauri::Runtime>(
 
     // OAR-FR-CCIN, OAR-FR-GJVM: every change is checked before any archive.
     check::check_all(&cx, seam.as_deref(), &changes)?;
-    let seam = seam.ok_or_else(|| {
-        format!("{ERR_CHANGE_NOT_ARCHIVABLE}: {}: {REASON_CLI_UNAVAILABLE}", changes[0])
-    })?;
+    let seam = seam.ok_or_else(|| refuse_not_archivable(&changes[0], REASON_CLI_UNAVAILABLE))?;
 
     // OAR-FR-IAKL: the archives, in archive order. One that fails ends the
     // step; the commits before it stay (OAR-FR-OQVF).

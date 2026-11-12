@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::comments::Participant;
+use crate::openspec::{OpenSpecFailure, Refusal};
 
 /// OCR contract surface `ChangeReworkStart`.
 #[derive(Clone, Debug, Serialize)]
@@ -42,7 +43,7 @@ pub fn start_change_apply<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     change: String,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, Refusal> {
     start_change_apply_in_process(&app, &stream_id, &change)
 }
 
@@ -52,12 +53,14 @@ pub fn start_change_apply_in_process<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream_id: &str,
     change: &str,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, Refusal> {
     prime_stream_write(app, stream_id);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
-    let outcome = checked(app, stream_id, change, &Phase::Apply, "start_change_apply")
-        .and_then(|stream| enqueue(app, &stream, RunOpenSpec::of_phase(PHASE_APPLY, change), None));
+    let outcome =
+        checked(app, stream_id, change, &Phase::Apply, "start_change_apply").and_then(|stream| {
+            Ok(enqueue(app, &stream, RunOpenSpec::of_phase(PHASE_APPLY, change), None)?)
+        });
     log_start(app, stream_id, change, PHASE_APPLY, &outcome);
     let run = outcome?;
     dispatch_pending(app);
@@ -72,23 +75,24 @@ pub fn start_change_rework<R: tauri::Runtime>(
     stream_id: String,
     change: String,
     instruction: String,
-) -> Result<ChangeReworkStart, String> {
+) -> Result<ChangeReworkStart, Refusal> {
     prime_stream_write(&app, &stream_id);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let phase = Phase::Rework { instruction: &instruction, thread_id: None };
-    let stream = checked(&app, &stream_id, &change, &phase, "start_change_rework")
-        .inspect_err(|code| log_refusal(&app, &stream_id, &change, PHASE_REWORK, code))?;
+    let stream = checked(&app, &stream_id, &change, &phase, "start_change_rework").inspect_err(
+        |refusal| log_refusal(&app, &stream_id, &change, PHASE_REWORK, refusal.code()),
+    )?;
     // OCR-FR-SFDE: a discussion that cannot be opened refuses the start.
     let thread_id = open_request_thread(&app, &stream_id, &change, &instruction)
         .inspect_err(|code| log_refusal(&app, &stream_id, &change, PHASE_REWORK, code))?;
     let data =
         rework_data(&change, &instruction, &thread_id, crate::comments::Participant::synthesis());
-    let outcome = enqueue(&app, &stream, data, None);
+    let outcome = enqueue(&app, &stream, data, None).map_err(Refusal::from);
     log_start(&app, &stream_id, &change, PHASE_REWORK, &outcome);
     // OCR-FR-SFDE: an enqueue that fails leaves the thread, and names it
     // after the failure's own code and detail.
-    let run = outcome.map_err(|failure| with_thread(&failure, &thread_id))?;
+    let run = outcome.map_err(|failure| with_thread(&failure.to_string(), &thread_id))?;
     dispatch_pending(&app);
     Ok(ChangeReworkStart { run, thread_id })
 }
@@ -108,7 +112,7 @@ pub fn start_change_rework_in_thread<R: tauri::Runtime>(
     instruction: &str,
     thread_id: &str,
     requester: &Participant,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, Refusal> {
     prime_stream_write(app, stream_id);
     let state = app.try_state::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
@@ -116,7 +120,7 @@ pub fn start_change_rework_in_thread<R: tauri::Runtime>(
     let outcome =
         checked(app, stream_id, change, &phase, "start_change_rework").and_then(|stream| {
             let data = rework_data(change, instruction, thread_id, requester.clone());
-            enqueue(app, &stream, data, None)
+            Ok(enqueue(app, &stream, data, None)?)
         });
     log_start(app, stream_id, change, PHASE_REWORK, &outcome);
     let run = outcome?;
@@ -144,10 +148,11 @@ pub(crate) fn restart_change_run<R: tauri::Runtime>(
         checked(app, &discarded.stream_id, &data.change, &phase, "restart_graduation_run")
             .and_then(|stream| {
                 let fresh = RunOpenSpec { proposal_id: None, ..data.clone() };
-                enqueue(app, &stream, fresh, Some(discarded))
+                Ok(enqueue(app, &stream, fresh, Some(discarded))?)
             });
     log_start(app, &discarded.stream_id, &data.change, phase.name(), &outcome);
-    let run = outcome?;
+    // A restart keeps the text form of its refusals.
+    let run = outcome.map_err(String::from)?;
     dispatch_pending(app);
     Ok(run)
 }
@@ -175,23 +180,23 @@ fn checked<R: tauri::Runtime>(
     change: &str,
     phase: &Phase<'_>,
     operation: &str,
-) -> Result<crate::streams::WorkStream, String> {
+) -> Result<crate::streams::WorkStream, Refusal> {
     if queue::project_key(app).is_empty() {
-        return Err(ERR_NO_PROJECT_OPEN.to_string());
+        return Err(ERR_NO_PROJECT_OPEN.into());
     }
     let stream =
         crate::streams::stream_of(app, stream_id).ok_or_else(|| ERR_UNKNOWN_STREAM.to_string())?;
     openspec_start::require_mode_and_cli(app)?;
     if !crate::openspec::change::valid_change_name(change) {
-        return Err(openspec_start::ERR_INVALID_CHANGE_NAME.to_string());
+        return Err(openspec_start::ERR_INVALID_CHANGE_NAME.into());
     }
     if !openspec_start::change_folder_stands(app, &stream, change) {
-        return Err(ERR_CHANGE_NOT_FOUND.to_string());
+        return Err(ERR_CHANGE_NOT_FOUND.into());
     }
     // OCR-FR-MGPU: a restart's own run is discarded, so it is not counted.
     let queue = queue::project_queue(app).ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     if let Some(run_id) = active_openspec_run(&queue, &stream.id, change) {
-        return Err(format!("{ERR_OPENSPEC_RUN_ACTIVE}: {run_id}"));
+        return Err(format!("{ERR_OPENSPEC_RUN_ACTIVE}: {run_id}").into());
     }
     match phase {
         Phase::Apply => check_apply(app, &stream, change)?,
@@ -211,20 +216,26 @@ fn checked<R: tauri::Runtime>(
     Ok(stream)
 }
 
-/// OCR-FR-LNKQ: `blocked` refuses with the missing artifacts, a read that
-/// fails refuses with its code, and `ready` and `all_done` admit the start.
-/// Then a change edit proposal that holds files of the change refuses it.
+/// OCR-FR-LNKQ, OFP-FR-SJML: `blocked` refuses with the missing artifacts and
+/// their diagnostics, a read that fails refuses with its code as the cause,
+/// and `ready` and `all_done` admit the start. Then a change edit proposal
+/// that holds files of the change refuses it.
 fn check_apply<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream: &crate::streams::WorkStream,
     change: &str,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     match crate::openspec::apply::read_apply_progress_now(app, &stream.id, change) {
         Ok(read) if read.state == "blocked" => {
-            Err(format!("{ERR_CHANGE_NOT_READY}: {}", read.missing_artifacts.join(",")))
+            let mut failure = OpenSpecFailure::new(ERR_CHANGE_NOT_READY).for_change(change);
+            failure.detail = Some(read.missing_artifacts.join(","));
+            failure.diagnostics = read.not_ready_diagnostics();
+            Err(Refusal::from(failure))
         }
         Ok(_) => Ok(()),
-        Err(error) => Err(format!("{ERR_APPLY_PROGRESS_UNAVAILABLE}: {}", error.code())),
+        Err(error) => Err(OpenSpecFailure::wrapping(ERR_APPLY_PROGRESS_UNAVAILABLE, &error)
+            .for_change(change)
+            .into()),
     }?;
     // OCR-FR-LNKQ: a pending change edit proposal, or a closed one whose
     // commit is still owed, holds uncommitted files of the change.
@@ -236,7 +247,7 @@ fn check_apply<R: tauri::Runtime>(
         },
     );
     if held {
-        return Err(ERR_PROPOSAL_PENDING.to_string());
+        return Err(ERR_PROPOSAL_PENDING.into());
     }
     Ok(())
 }
@@ -249,16 +260,16 @@ fn check_rework<R: tauri::Runtime>(
     change: &str,
     instruction: &str,
     thread_id: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if instruction.trim().is_empty() {
-        return Err(ERR_BLANK_INSTRUCTION.to_string());
+        return Err(ERR_BLANK_INSTRUCTION.into());
     }
     let store = machine_store(app)?;
     let pending = crate::change_proposals::list_proposals_impl(&store, &stream.id, change)
         .iter()
         .any(|proposal| proposal.state == crate::change_proposals::ChangeProposalState::Pending);
     if pending {
-        return Err(ERR_PROPOSAL_PENDING.to_string());
+        return Err(ERR_PROPOSAL_PENDING.into());
     }
     if let Some(thread_id) = thread_id {
         let target = crate::comments::DiscussionTarget::Change {
@@ -268,7 +279,7 @@ fn check_rework<R: tauri::Runtime>(
         let thread = crate::comments::locate_discussion_of(&store, &target, thread_id)
             .ok_or_else(|| crate::comments::ERR_DISCUSSION_NOT_FOUND.to_string())?;
         if thread.resolved {
-            return Err(ERR_DISCUSSION_RESOLVED.to_string());
+            return Err(ERR_DISCUSSION_RESOLVED.into());
         }
     }
     Ok(())
@@ -394,7 +405,7 @@ fn log_start<R: tauri::Runtime>(
     stream_id: &str,
     change: &str,
     phase: &str,
-    outcome: &Result<GraduationRun, String>,
+    outcome: &Result<GraduationRun, Refusal>,
 ) {
     match outcome {
         Ok(run) => logging::log_info(
@@ -409,7 +420,7 @@ fn log_start<R: tauri::Runtime>(
                 "phase" => phase,
             },
         ),
-        Err(code) => log_refusal(app, stream_id, change, phase, code),
+        Err(refusal) => log_refusal(app, stream_id, change, phase, refusal.code()),
     }
 }
 

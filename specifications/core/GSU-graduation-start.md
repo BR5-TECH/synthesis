@@ -11,7 +11,7 @@ What has to be true before a graduation run exists. `start_graduation` settles w
 3. **GSU-FR-TTAY** A GitHub-shadow draft (per `DRS-draft-storage.md` DRS-FR-XDWS) is admitted on the terms of every other draft. Its `github_shadow` status refuses no start, and a refused start leaves it `github_shadow` with nothing changed on GitHub.
 3. **GSU-FR-JBKZ** A `stream_id` naming no live stream of the project returns `unknown_stream`. The run is assigned to that stream for its whole life (per `GRD-graduation.md` GRD-FR-PZAK).
 3. **GSU-FR-MIVF** A `start_graduation` that names an `openspec_change` makes a **propose run**: a stream run that writes the OpenSpec change of that name on the stream (per `GRD-graduation.md` GRD-FR-LKGC). A start that names none makes a draft run on the terms of every other requirement here.
-3. **GSU-FR-MTDA** A propose start is refused with `openspec_mode_inactive` while OpenSpec mode is not active, and with `openspec_cli_unavailable` while the OpenSpec CLI is not `available` (per `OSM-openspec-mode.md` OSM-FR-UILN, OSM-FR-SKUP). These checks come after the stream check of GSU-FR-JBKZ and before the image preflight.
+3. **GSU-FR-MTDA** A propose start is refused with `openspec_mode_inactive` while OpenSpec mode is not active, and with `cli_unavailable`, which carries the CLI state, while the OpenSpec CLI is not `available` (per `OSM-openspec-mode.md` OSM-FR-UILN, OSM-FR-SKUP, and `OFP-openspec-failure-policy.md` OFP-FR-GPCO). These checks come after the stream check of GSU-FR-JBKZ and before the image preflight.
 3. **GSU-FR-CZEP** A propose start whose `openspec_change` is not a valid change name (per `OSM-openspec-mode.md` OSM-FR-IHUO) is refused with `invalid_change_name`.
 3. **GSU-FR-UIDE** A propose start is refused with `openspec_change_exists` where `openspec/changes/<name>/` is a folder in the stream's working copy, or where a non-terminal OpenSpec run of any phase on the same stream names the same change (per `OCR-openspec-change-runs.md` OCR-FR-VHQW).
 3. **GSU-FR-ZYXC** `start_direct_graduation` makes no propose run, and it takes no change name.
@@ -49,7 +49,7 @@ preflight_direct_graduation() → DirectGraduationPreflight
 ### The typed refusals
 ```text
 draft_not_single_file        draft_locked_by_graduation
-openspec_mode_inactive       openspec_cli_unavailable
+openspec_mode_inactive       cli_unavailable
 invalid_change_name          openspec_change_exists
 unknown_stream               vendor_image_unconfigured
 vendor_image_invalid         vendor_execution_unsupported
@@ -60,7 +60,7 @@ direct_worktree_dirty        direct_worktree_missing
 not_a_git_repository
 ```
 
-`docker_socket_unavailable` carries the socket path after a colon: `docker_socket_unavailable: <path>`.
+`docker_socket_unavailable` carries the socket path after a colon: `docker_socket_unavailable: <path>`. `openspec_mode_inactive` and `cli_unavailable` reject as an `OpenSpecFailure` of `OFP-openspec-failure-policy.md`, with the CLI state as `detail`.
 
 ### Payload shapes
 ```text
@@ -79,6 +79,6 @@ DirectGraduationPreflight {
 - The capture of `CapturedGraduationInput`, whose shape `GRD-graduation.md` holds.
 
 ## Non-functional requirements
-- The preflight opens no container, boots no VM, contacts no daemon or registry and resolves no credential. Where Docker-in-Docker is enabled and the effective isolation is not Microsandbox, it reads the metadata of one path and no content. It does not inspect the image for a Docker daemon.
+- The preflight opens no container, boots no VM, contacts no daemon or registry and resolves no credential. Where Docker-in-Docker is enabled and the effective isolation is not Microsandbox, it reads the metadata of one path and no content. It does not inspect the image for a Docker daemon or for the OpenSpec CLI: the image probe of `OFP-openspec-failure-policy.md` OFP-FR-BZDP checks the CLI at the first dispatch of the run.
 - A refusal costs no branch, no working copy and no draft lock.
 - `preflight_direct_graduation` opens one repository and reads its status once. It contacts no remote.

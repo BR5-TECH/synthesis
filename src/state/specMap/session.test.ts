@@ -54,7 +54,9 @@ describe("loading the index", () => {
     const store = new SpecMapSessionStore(ops);
     await store.load();
     expect(store.snapshot().status).toBe("error");
-    expect(logError).toHaveBeenCalledWith(["frontend"], "specification map could not be loaded", { code: "boom" });
+    expect(logError).toHaveBeenCalledWith(["frontend"], "specification map could not be loaded", { code: "boom", cause: "" });
+    // A code that is not an OpenSpec failure gets no notice.
+    expect(store.snapshot().errorFailure).toBeNull();
     await store.retry();
     expect(store.snapshot().status).toBe("ready");
     expect(ops.load).toHaveBeenCalledTimes(2);

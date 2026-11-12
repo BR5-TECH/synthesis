@@ -14,8 +14,8 @@ The tool an agent uses to see which changes an OpenSpec project has in progress.
 6. **LOC-FR-XTUV** Each entry carries a `path`, which is `openspec/changes/<name>/`, so that the model can read an artifact of the change with `read_file`.
 7. **LOC-FR-UJOO** A project with no active change is a success with an empty `changes` list (per TLC-FR-12).
 8. **LOC-FR-XPNP** With no project open, the tool gives the shared no-open-project refusal (per TLC-FR-13).
-9. **LOC-FR-YEQH** A read that fails with `openspec_mode_inactive` or `cli_unavailable` gives the **OpenSpec unavailable** refusal, and a read that fails with `cli_timed_out`, `cli_failed`, or `cli_output_unreadable` gives the **OpenSpec read failed** refusal. No CLI output reaches the message.
-10. **LOC-FR-UBZT** Every refusal of this tool is not retryable, because the tool takes no argument that could change the answer (per TLC-FR-11).
+9. **LOC-FR-YEQH** A read that fails with `openspec_mode_inactive`, `cli_unavailable`, or `cli_output_unreadable` gives the **OpenSpec unavailable** refusal. `cli_timed_out` and `cli_failed` give the **OpenSpec did not answer** refusal, and `cli_rejected` gives the **OpenSpec read failed** refusal. No CLI output and no diagnostic reaches the message.
+10. **LOC-FR-UBZT** Every refusal of this tool is not retryable, because the tool takes no argument that could change the answer (per TLC-FR-11), and the seam already ran a transient read twice (per `../core/OFP-openspec-failure-policy.md` OFP-FR-PQNS).
 11. **LOC-FR-IIQY** The tool is read-only (per TLC-FR-17). It changes no file, no setting, no index, and no other state.
 12. **LOC-FR-KZDF** Each call emits under the `ai` and `backend` domains (per TLC-FR-14): an `INFO` record that names the tool and the number of changes it returned, or a `WARN` record that names the tool and the refusal.
 
@@ -54,8 +54,9 @@ ListOpenSpecChangesOutput {
 
 ### Refusals
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
-- **OpenSpec unavailable** — kind `Other`, not retryable: *"OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI is not installed on this machine."*
-- **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI could not list the changes of this project. The OpenSpec files may be malformed."*
+- **OpenSpec unavailable** — kind `Other`, not retryable: *"OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI on this machine is missing, too old, or does not work."*
+- **OpenSpec did not answer** — kind `Other`, not retryable: *"The OpenSpec CLI did not finish, also after one more try. Do not call this tool again in this turn."*
+- **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI refused to list the changes of this project. The OpenSpec files may be malformed."*
 
 ## Non-functional requirements
 - A call costs one `list_changes(location)` read of `../core/OSM-openspec-mode.md`: two CLI processes and one directory listing for each change.

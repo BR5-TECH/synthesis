@@ -461,7 +461,7 @@ fn a_direct_run_on_a_stream_worktree_yields_to_a_merge_and_holds_one_off() {
         crate::streams::StreamMergePublication::Uncommitted,
     )
     .unwrap_err();
-    assert!(refused.starts_with(crate::streams::ERR_STREAM_BUSY), "{refused}");
+    assert!(refused.to_string().starts_with(crate::streams::ERR_STREAM_BUSY), "{refused}");
 }
 
 /// GRD-FR-KKKN: stream runs and direct runs share the project's limit, and a

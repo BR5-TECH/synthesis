@@ -30,6 +30,8 @@ pub mod change;
 pub mod change_image;
 pub mod cli;
 pub mod detection;
+pub mod failure;
+mod process;
 pub mod project_validation;
 pub mod reads;
 pub mod spec_index;
@@ -43,7 +45,13 @@ pub use change::{
     ChangeArtifact, ChangeDelta, ChangeDetail, ChangeFile, ChangeLocation, ChangeValidation,
     ValidationIssue,
 };
-pub use cli::{CliEnvironment, CliProbe, OpenSpecRunner, ProcessError, ProcessOutput};
+pub use cli::{
+    CliEnvironment, CliProbe, OpenSpecRunner, ProcessError, ProcessOutput, RecordedWait, RetryWait,
+};
+pub use failure::{
+    classify_openspec_failure, CliDiagnostic, FailureClass, OpenSpecFailure, Refusal,
+};
+pub(crate) use process::{OnExitOne, RunFailure};
 pub use project_validation::{ProjectValidation, ProjectValidationItem, ValidationScope};
 pub use reads::{ArtifactState, Capability, CapabilitySpec, ChangeSummary, Requirement, Scenario};
 
@@ -104,9 +112,19 @@ pub enum OpenSpecReadError {
     CliUnavailable(OpenSpecCliState),
     InvalidCapabilityId,
     CapabilityNotFound,
-    CliTimedOut,
+    /// OSM-FR-ZIMO, OFP-FR-WNVO.
+    CliTimedOut {
+        diagnostics: Vec<CliDiagnostic>,
+    },
+    /// OSM-FR-WWWK: `None` for an exit by a signal, and for a process that
+    /// could not start.
     CliFailed {
-        exit_status: i32,
+        exit_status: Option<i32>,
+        diagnostics: Vec<CliDiagnostic>,
+    },
+    /// OSM-FR-WWWK, OFP-FR-NJSO: exit 1 with CLI JSON.
+    CliRejected {
+        diagnostics: Vec<CliDiagnostic>,
     },
     CliOutputUnreadable,
     /// OSM-FR-MFVN.
@@ -126,13 +144,14 @@ impl OpenSpecReadError {
     pub fn code(&self) -> &'static str {
         match self {
             OpenSpecReadError::NoOpenProject => "no_open_project",
-            OpenSpecReadError::OpenSpecModeInactive => "openspec_mode_inactive",
-            OpenSpecReadError::CliUnavailable(_) => "cli_unavailable",
+            OpenSpecReadError::OpenSpecModeInactive => failure::CODE_MODE_INACTIVE,
+            OpenSpecReadError::CliUnavailable(_) => failure::CODE_CLI_UNAVAILABLE,
             OpenSpecReadError::InvalidCapabilityId => "invalid_capability_id",
             OpenSpecReadError::CapabilityNotFound => "capability_not_found",
-            OpenSpecReadError::CliTimedOut => "cli_timed_out",
-            OpenSpecReadError::CliFailed { .. } => "cli_failed",
-            OpenSpecReadError::CliOutputUnreadable => "cli_output_unreadable",
+            OpenSpecReadError::CliTimedOut { .. } => failure::CODE_TIMED_OUT,
+            OpenSpecReadError::CliFailed { .. } => failure::CODE_FAILED,
+            OpenSpecReadError::CliRejected { .. } => failure::CODE_REJECTED,
+            OpenSpecReadError::CliOutputUnreadable => failure::CODE_OUTPUT_UNREADABLE,
             OpenSpecReadError::UnknownStream => "unknown_stream",
             OpenSpecReadError::InvalidChangeName => "invalid_change_name",
             OpenSpecReadError::ChangeNotFound => "change_not_found",
@@ -140,47 +159,47 @@ impl OpenSpecReadError {
         }
     }
 
-    /// The error as a Tauri command returns it: the code, or for
-    /// `change_archived` the code with the archive folder after a colon
-    /// (OSM-FR-GMKV).
-    pub fn wire_code(&self) -> String {
+    /// OFP-FR-EOAD: the CLI state of `cli_unavailable`, the exit status of
+    /// `cli_failed` (empty for a signal), and the archive folder of
+    /// `change_archived`.
+    pub fn detail(&self) -> Option<String> {
         match self {
-            OpenSpecReadError::ChangeArchived { archived_as } => {
-                format!("change_archived: {archived_as}")
+            OpenSpecReadError::CliUnavailable(state) => Some(state.code().to_string()),
+            OpenSpecReadError::CliFailed { exit_status, .. } => {
+                Some(exit_status.map(|status| status.to_string()).unwrap_or_default())
             }
-            other => other.code().to_string(),
+            OpenSpecReadError::ChangeArchived { archived_as } => Some(archived_as.clone()),
+            _ => None,
         }
     }
-}
 
-/// How one CLI process failed, before a read decides what that means.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum RunFailure {
-    /// The executable could not be started.
-    Spawn,
-    /// OSM-FR-ZIMO.
-    TimedOut,
-    /// OSM-FR-WWWK: an exit status other than zero, or `-1` for a signal.
-    Exit(i32),
-}
-
-impl From<RunFailure> for OpenSpecReadError {
-    fn from(failure: RunFailure) -> Self {
-        match failure {
-            RunFailure::TimedOut => OpenSpecReadError::CliTimedOut,
-            RunFailure::Spawn => OpenSpecReadError::CliFailed { exit_status: -1 },
-            RunFailure::Exit(exit_status) => OpenSpecReadError::CliFailed { exit_status },
-        }
-    }
-}
-
-impl RunFailure {
-    fn code(self) -> &'static str {
+    /// OFP-FR-OFLU: the diagnostics of a transient or a content failure, and
+    /// none for every other.
+    pub fn diagnostics(&self) -> &[CliDiagnostic] {
         match self {
-            RunFailure::Spawn => "cli_not_started",
-            RunFailure::TimedOut => "cli_timed_out",
-            RunFailure::Exit(_) => "cli_failed",
+            OpenSpecReadError::CliTimedOut { diagnostics }
+            | OpenSpecReadError::CliFailed { diagnostics, .. }
+            | OpenSpecReadError::CliRejected { diagnostics } => diagnostics,
+            _ => &[],
         }
+    }
+
+    /// OFP-FR-QLQJ: the failure as a command rejects it.
+    pub fn to_failure(&self) -> OpenSpecFailure {
+        OpenSpecFailure::of_read(self)
+    }
+}
+
+/// OFP-FR-MJZU: production waits for real; a build under test records the
+/// delay and waits for nothing, so no test of the crate depends on time.
+fn default_wait() -> Arc<dyn RetryWait> {
+    #[cfg(test)]
+    {
+        Arc::new(cli::RecordedWait::default())
+    }
+    #[cfg(not(test))]
+    {
+        Arc::new(cli::RealWait)
     }
 }
 
@@ -206,7 +225,9 @@ pub struct OpenSpec {
     checks: Mutex<HashMap<PathBuf, KeptCheck>>,
     /// OSM-FR-ZNVZ: how long a `failed` check is kept.
     failed_ttl: std::time::Duration,
-    slots: cli::Slots,
+    slots: Arc<cli::Slots>,
+    /// OFP-FR-MJZU: the wait before a transient process runs once more.
+    wait: Arc<dyn RetryWait>,
 }
 
 impl Default for OpenSpec {
@@ -231,8 +252,44 @@ impl OpenSpec {
             env,
             checks: Mutex::new(HashMap::new()),
             failed_ttl: cli::FAILED_CHECK_TTL,
-            slots: cli::Slots::new(cli::MAX_CONCURRENT),
+            slots: Arc::new(cli::Slots::new(cli::MAX_CONCURRENT)),
+            wait: default_wait(),
         }
+    }
+
+    /// The same seam with another wait seam (OFP-FR-MJZU).
+    pub fn with_wait(mut self, wait: Arc<dyn RetryWait>) -> Self {
+        self.wait = wait;
+        self
+    }
+
+    /// The slot gate of the seam, so a test can look at it during a wait.
+    #[cfg(test)]
+    pub(crate) fn slots(&self) -> Arc<cli::Slots> {
+        self.slots.clone()
+    }
+
+    /// OFP-FR-ITUD, OSM-FR-NQBE: an explicit act of the author clears every
+    /// kept `failed` check, so the next check runs at once. A kept
+    /// `available` or `unsupported` result stays.
+    pub fn clear_failed_checks<S: LogSink + Clone + Send + 'static>(
+        &self,
+        sink: &S,
+        buffer: &'static LogBuffer,
+    ) {
+        let cleared = {
+            let mut checks = self.lock_checks();
+            let before = checks.len();
+            checks.retain(|_, kept| !matches!(kept.state, OpenSpecCliState::Failed { .. }));
+            before - checks.len()
+        };
+        logging::log_info(
+            sink,
+            buffer,
+            &[Domain::Backend],
+            "openspec cli check cleared",
+            log_fields! { "cleared" => cleared },
+        );
     }
 
     // -- Mode ------------------------------------------------------------
@@ -324,6 +381,21 @@ impl OpenSpec {
         buffer: &'static LogBuffer,
         root: Option<&RootFs>,
     ) -> OpenSpecStatus {
+        self.status_checked(sink, buffer, root, false)
+    }
+
+    /// OSM-FR-YXUC, OFP-FR-ITUD: the same, where `recheck` first clears a
+    /// kept `failed` check.
+    pub fn status_checked<S: LogSink + Clone + Send + 'static>(
+        &self,
+        sink: &S,
+        buffer: &'static LogBuffer,
+        root: Option<&RootFs>,
+        recheck: bool,
+    ) -> OpenSpecStatus {
+        if recheck {
+            self.clear_failed_checks(sink, buffer);
+        }
         let setting = root
             .map(Self::setting)
             .unwrap_or_else(|| crate::project_settings::openspec_mode::AUTO.to_string());
@@ -379,7 +451,9 @@ impl OpenSpec {
     }
 
     /// OSM-FR-ZNVZ: `openspec --version` exits zero and prints a version whose
-    /// major number is `MIN_MAJOR` or more.
+    /// major number is `MIN_MAJOR` or more. OFP-FR-FETF: a process that times
+    /// out, ends by a signal, or exits with a status other than zero runs once
+    /// more before the check records `failed`.
     fn check_version<S: LogSink + Clone + Send + 'static>(
         &self,
         sink: &S,
@@ -388,18 +462,27 @@ impl OpenSpec {
         cwd: &Path,
     ) -> OpenSpecCliState {
         let shown = path.to_string_lossy().to_string();
-        let outcome = self.run_logged(sink, buffer, path, "--version", &["--version"], cwd);
+        let run = || {
+            self.run_once(sink, buffer, path, "--version", &["--version"], cwd, OnExitOne::Failed)
+        };
+        let outcome = match run() {
+            Err(first) if !matches!(first, RunFailure::Spawn) => {
+                self.pause_before_retry(sink, buffer, "--version", first.code());
+                run()
+            }
+            other => other,
+        };
         let state = match outcome {
-            Err(RunFailure::TimedOut) => {
+            Err(RunFailure::TimedOut { .. }) => {
                 OpenSpecCliState::Failed { path: shown, reason: CliFailure::TimedOut }
             }
-            Err(RunFailure::Exit(_)) => {
+            Err(RunFailure::Exit { .. } | RunFailure::Rejected { .. }) => {
                 OpenSpecCliState::Failed { path: shown, reason: CliFailure::NoVersion }
             }
             Err(RunFailure::Spawn) => {
                 OpenSpecCliState::Failed { path: shown, reason: CliFailure::NotExecutable }
             }
-            Ok(stdout) => match cli::parse_version(&String::from_utf8_lossy(&stdout)) {
+            Ok((_, stdout)) => match cli::parse_version(&String::from_utf8_lossy(&stdout)) {
                 None => OpenSpecCliState::Failed { path: shown, reason: CliFailure::NoVersion },
                 Some((version, major)) if major >= cli::MIN_MAJOR => {
                     OpenSpecCliState::Available { path: shown, version }
@@ -415,100 +498,6 @@ impl OpenSpec {
             log_fields! { "state" => state.code() },
         );
         state
-    }
-
-    /// OSM-FR-HHUD, OSM-FR-ZIMO, OSM-FR-WWWK, OSM-FR-QHRV, OSM-FR-IFWM: one CLI
-    /// process in a free slot, logged by subcommand, exit status, duration, and
-    /// output size. No argument value and no output reaches a record.
-    fn run_logged<S: LogSink + Clone + Send + 'static>(
-        &self,
-        sink: &S,
-        buffer: &'static LogBuffer,
-        executable: &Path,
-        subcommand: &'static str,
-        args: &[&str],
-        cwd: &Path,
-    ) -> Result<Vec<u8>, RunFailure> {
-        self.run_accepting(sink, buffer, executable, subcommand, args, cwd, &[0])
-    }
-
-    /// The same, with the exit statuses whose output is an answer
-    /// (OSM-FR-XDRN: `validate` answers with 1 for a change that is not valid).
-    // Each argument is one fact of one process; a struct would be read here alone.
-    #[allow(clippy::too_many_arguments)]
-    fn run_accepting<S: LogSink + Clone + Send + 'static>(
-        &self,
-        sink: &S,
-        buffer: &'static LogBuffer,
-        executable: &Path,
-        subcommand: &'static str,
-        args: &[&str],
-        cwd: &Path,
-        accepted: &[i32],
-    ) -> Result<Vec<u8>, RunFailure> {
-        self.run_with_status(sink, buffer, executable, subcommand, args, cwd, accepted)
-            .map(|(_, stdout)| stdout)
-    }
-
-    /// The same, with the exit status of an accepted process beside its
-    /// output (OAR-FR-EUXZ reads the output of an `archive` that failed).
-    // Each argument is one fact of one process; a struct would be read here alone.
-    #[allow(clippy::too_many_arguments)]
-    fn run_with_status<S: LogSink + Clone + Send + 'static>(
-        &self,
-        sink: &S,
-        buffer: &'static LogBuffer,
-        executable: &Path,
-        subcommand: &'static str,
-        args: &[&str],
-        cwd: &Path,
-        accepted: &[i32],
-    ) -> Result<(i32, Vec<u8>), RunFailure> {
-        let started = Instant::now();
-        let outcome = {
-            let _slot = self.slots.acquire();
-            self.runner.run(executable, args, cwd, cli::CLI_TIMEOUT)
-        };
-        let millis = started.elapsed().as_millis() as u64;
-        let failure = match outcome {
-            Err(ProcessError::TimedOut) => RunFailure::TimedOut,
-            Err(ProcessError::NotExecutable) => RunFailure::Spawn,
-            Ok(ProcessOutput { exit_status: Some(status), stdout })
-                if accepted.contains(&status) =>
-            {
-                logging::log_info(
-                    sink,
-                    buffer,
-                    &[Domain::Backend],
-                    "openspec cli ran",
-                    log_fields! {
-                        "subcommand" => subcommand,
-                        "exitStatus" => status,
-                        "durationMs" => millis,
-                        "outputBytes" => stdout.len(),
-                    },
-                );
-                return Ok((status, stdout));
-            }
-            Ok(ProcessOutput { exit_status, .. }) => RunFailure::Exit(exit_status.unwrap_or(-1)),
-        };
-        let exit = match failure {
-            RunFailure::Exit(status) => status,
-            _ => -1,
-        };
-        logging::log_warn(
-            sink,
-            buffer,
-            &[Domain::Backend],
-            "openspec cli failed",
-            log_fields! {
-                "subcommand" => subcommand,
-                "code" => failure.code(),
-                "exitStatus" => exit,
-                "durationMs" => millis,
-            },
-        );
-        Err(failure)
     }
 
     // -- The reads -------------------------------------------------------
@@ -657,20 +646,27 @@ impl OpenSpec {
 
 /// OSM-FR-YXUC: `"get openspec status"`. Read-only. It runs on a blocking
 /// thread, because the first CLI check of a session starts a Node process.
+/// `recheck`, false where absent, first clears a kept `failed` check
+/// (OFP-FR-ITUD).
 #[tauri::command]
 pub async fn get_openspec_status<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
+    recheck: Option<bool>,
 ) -> Result<OpenSpecStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || status_now(&app))
+    let recheck = recheck.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || status_now(&app, recheck))
         .await
         .map_err(|e| format!("openspec status failed: {e}"))
 }
 
-fn status_now<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> OpenSpecStatus {
+pub(crate) fn status_now<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    recheck: bool,
+) -> OpenSpecStatus {
     use tauri::Manager;
     let root = app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
     let status = match app.try_state::<OpenSpec>() {
-        Some(seam) => seam.status(app, &logging::BUFFER, root.as_ref()),
+        Some(seam) => seam.status_checked(app, &logging::BUFFER, root.as_ref(), recheck),
         None => OpenSpec::default().status(app, &logging::BUFFER, root.as_ref()),
     };
     logging::log_info(
@@ -683,6 +679,7 @@ fn status_now<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> OpenSpecStatus {
             "usesOpenspec" => status.uses_openspec,
             "active" => status.active,
             "cli" => status.cli.code(),
+            "recheck" => recheck,
         },
     );
     status

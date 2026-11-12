@@ -15,7 +15,7 @@ The tool an agent uses to read what one capability of an OpenSpec project requir
 7. **ROS-FR-GNFU** A `requirement` that matches no requirement of the capability gives the retryable **unknown requirement** refusal.
 8. **ROS-FR-FQHM** A `capability` that is blank once trimmed, or that `read_capability(id)` refuses with `invalid_capability_id`, gives the retryable **invalid capability** refusal.
 9. **ROS-FR-RZRC** A read that fails with `capability_not_found` gives the retryable **unknown capability** refusal.
-10. **ROS-FR-MOFU** A read that fails with `openspec_mode_inactive` or `cli_unavailable` gives the **OpenSpec unavailable** refusal, and a read that fails with `cli_timed_out`, `cli_failed`, or `cli_output_unreadable` gives the **OpenSpec read failed** refusal. No CLI output reaches the message.
+10. **ROS-FR-MOFU** A read that fails with `openspec_mode_inactive`, `cli_unavailable`, or `cli_output_unreadable` gives the **OpenSpec unavailable** refusal. `cli_timed_out` and `cli_failed` give the **OpenSpec did not answer** refusal, and `cli_rejected` gives the **OpenSpec read failed** refusal. No CLI output and no diagnostic reaches the message.
 11. **ROS-FR-QSEO** With no project open, the tool gives the shared no-open-project refusal (per TLC-FR-13).
 12. **ROS-FR-SSKT** The output carries the text of each requirement and scenario whole. There is no size limit, no truncation, and no summary.
 13. **ROS-FR-PZWT** The tool is read-only (per TLC-FR-17). It changes no file, no setting, no index, and no other state.
@@ -66,8 +66,9 @@ ReadOpenSpecSpecOutput {
 - **invalid capability** — kind `InvalidArgs`, retryable: *"The capability must be an id that `list_openspec_specs` returned, such as `auth` or `ui/theme`. Call again with such an id."*
 - **unknown capability** — kind `NotFound`, retryable: *"No capability with that id exists in this project. Call `list_openspec_specs` to see the ids that exist."*
 - **unknown requirement** — kind `NotFound`, retryable: *"That capability has no requirement with that name. Call again without `requirement` to see the names of its requirements."*
-- **OpenSpec unavailable** — kind `Other`, not retryable: *"OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI is not installed on this machine."*
-- **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI could not read this capability. Its spec file may be malformed."*
+- **OpenSpec unavailable** — kind `Other`, not retryable: *"OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI on this machine is missing, too old, or does not work."*
+- **OpenSpec did not answer** — kind `Other`, not retryable: *"The OpenSpec CLI did not finish, also after one more try. Do not call this tool again in this turn."*
+- **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI refused to read this capability. Its spec file may be malformed."*
 
 ## Non-functional requirements
 - A call costs one `read_capability(id)` read of `../core/OSM-openspec-mode.md`, which is one CLI process, whether or not a `requirement` is given.

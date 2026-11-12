@@ -1,5 +1,7 @@
 /**
- * Project settings → **OpenSpec** (SET-FR-FZKL, SET-FR-QVUP, SET-FR-ABXE).
+ * Project settings → **OpenSpec** (SET-FR-FZKL, SET-FR-QVUP, SET-FR-ABXE,
+ * SET-FR-QERY, SET-FR-YRWU), and the OpenSpec line of the Docker section
+ * (SET-FR-GFHV).
  *
  * Whether the project uses OpenSpec, whether OpenSpec mode is active, the
  * state of the OpenSpec CLI on this machine, and the one **Use OpenSpec mode**
@@ -11,7 +13,12 @@ import { useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
 import { logInfo, logWarn } from "../logging";
-import type { OpenSpecCliState, OpenSpecModeSetting, OpenSpecStatus } from "../types";
+import type {
+  OpenSpecCliFailure,
+  OpenSpecCliState,
+  OpenSpecModeSetting,
+  OpenSpecStatus,
+} from "../types";
 
 /** SET-FR-ABXE: the install command the section shows. */
 export const OPENSPEC_INSTALL_COMMAND = "npm install -g @fission-ai/openspec";
@@ -29,15 +36,20 @@ export function cliStatement(cli: OpenSpecCliState): string {
       return "The OpenSpec CLI is not installed on this machine.";
     case "unsupported":
       return `OpenSpec CLI ${cli.version} at ${cli.path} is a version that is not supported.`;
-    case "failed": {
-      const why =
-        cli.reason === "timed_out"
-          ? "it did not answer in time"
-          : cli.reason === "not_executable"
-            ? "it could not be started"
-            : "it did not report a version";
-      return `The OpenSpec CLI at ${cli.path} failed: ${why}.`;
-    }
+    case "failed":
+      return `The OpenSpec CLI at ${cli.path} failed: ${failedReason(cli.reason)}.`;
+  }
+}
+
+/** SET-FR-QERY: the reason of a `failed` CLI state, in words. */
+export function failedReason(reason: OpenSpecCliFailure): string {
+  switch (reason) {
+    case "not_executable":
+      return "the file at the path cannot be run";
+    case "timed_out":
+      return "the CLI did not answer --version in time, also after one more try";
+    case "no_version":
+      return "the CLI did not report a version";
   }
 }
 
@@ -45,19 +57,26 @@ export function OpenSpecSection() {
   const [status, setStatus] = useState<OpenSpecStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** SET-FR-YRWU: a Check again in flight. */
+  const [checking, setChecking] = useState(false);
+  /** The guard of the check in flight, so a second press before the next render does nothing. */
+  const inFlight = useRef(false);
   const mounted = useRef(true);
 
-  const read = () =>
+  /** SET-FR-FZKL / SET-FR-YRWU: read the status; `recheck` clears a kept `failed` check. */
+  const read = (recheck = false) =>
     api
-      .getOpenspecStatus()
+      .getOpenspecStatus(recheck)
       .then((next) => {
         if (!mounted.current) return;
         setStatus(next);
+        setError(null);
         logInfo(["frontend"], "openspec status read", {
           setting: next.setting,
           usesOpenspec: next.usesOpenspec,
           active: next.active,
           cli: next.cli.state,
+          recheck,
         });
       })
       .catch((e) => {
@@ -65,6 +84,17 @@ export function OpenSpecSection() {
         setError(errorText(e));
         logWarn(["frontend"], "openspec status could not be read", { error: errorText(e) });
       });
+
+  /** SET-FR-YRWU: Check again, disabled while the call is in flight. */
+  const checkAgain = () => {
+    if (inFlight.current || status === null) return;
+    inFlight.current = true;
+    setChecking(true);
+    void read(true).finally(() => {
+      inFlight.current = false;
+      if (mounted.current) setChecking(false);
+    });
+  };
 
   // SET-FR-FZKL: read when the section mounts.
   useEffect(() => {
@@ -143,6 +173,19 @@ export function OpenSpecSection() {
         </div>
       )}
 
+      {/* SET-FR-YRWU: a re-check of the CLI, which clears a kept failure.
+          While the call is in flight it is disabled but keeps its focus stop,
+          so a check by keyboard keeps the focus. */}
+      <button
+        type="button"
+        className="btn btn--sm btn--default"
+        style={{ marginTop: 8 }}
+        aria-disabled={checking || status === null ? "true" : undefined}
+        onClick={checkAgain}
+      >
+        Check again
+      </button>
+
       {/* SET-FR-ABXE: what the mode needs, and how to get it. */}
       {needsInstall && (
         <div data-testid="openspec-install" style={{ marginTop: 12 }}>
@@ -159,5 +202,41 @@ export function OpenSpecSection() {
         </p>
       )}
     </div>
+  );
+}
+
+/** SET-FR-GFHV: what the project's image must hold for OpenSpec runs. */
+export const OPENSPEC_IMAGE_REQUIREMENT =
+  "OpenSpec runs need Node 22.12.0 or later in the agent image of this project, and the OpenSpec CLI 1.0 or later as openspec on the PATH of the launching user.";
+
+/**
+ * SET-FR-GFHV: the OpenSpec line of the Docker section. It reads "get
+ * openspec status" when it mounts, and it states the requirement while
+ * OpenSpec mode is active.
+ */
+export function OpenSpecImageRequirement() {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api
+      .getOpenspecStatus()
+      .then((status) => {
+        if (live) setActive(status?.active === true);
+      })
+      .catch((e: unknown) => {
+        if (!live) return;
+        logWarn(["frontend"], "the docker section could not read the openspec status", {
+          reason: e instanceof Error ? e.name : typeof e,
+        });
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!active) return null;
+  return (
+    <p className="t-ui-xs" data-testid="openspec-image-requirement" style={{ maxWidth: 560, marginBottom: 12 }}>
+      {OPENSPEC_IMAGE_REQUIREMENT}
+    </p>
   );
 }

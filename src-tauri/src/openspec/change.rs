@@ -13,7 +13,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::{detection, reads, OpenSpec, OpenSpecReadError, Requirement, Scenario};
+use super::{
+    detection, reads, OnExitOne, OpenSpec, OpenSpecFailure, OpenSpecReadError, Requirement,
+    Scenario,
+};
 use crate::fs::{EntryKind, RootFs};
 use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink};
@@ -108,6 +111,17 @@ pub struct ValidationIssue {
 pub struct ChangeValidation {
     pub valid: bool,
     pub issues: Vec<ValidationIssue>,
+}
+
+impl ChangeValidation {
+    /// OFP-FR-RUOP: the issues of a validation that answers not valid, as
+    /// diagnostics. A valid change has none.
+    pub fn diagnostics(&self) -> Vec<super::CliDiagnostic> {
+        if self.valid {
+            return Vec::new();
+        }
+        super::failure::issue_diagnostics(&self.issues)
+    }
 }
 
 /// OSM-FR-IHUO: 1 to 64 characters of `a-z` and `0-9` in groups joined by one
@@ -474,8 +488,19 @@ impl OpenSpec {
         let result = self.ready_at(sink, buffer, active, at, name).and_then(|exe| {
             let args =
                 ["validate", name, "--type", "change", "--strict", "--json", "--no-interactive"];
-            let out = self
-                .run_accepting(sink, buffer, &exe, "validate", &args, at.path(), &[0, 1])
+            // OSM-FR-XDRN: exit 1 whose output decodes as the expected shape is
+            // the answer that the change is not valid.
+            let answers: fn(&[u8]) -> bool = |out| parse_validation(out).is_ok();
+            let (_, out) = self
+                .run_read(
+                    sink,
+                    buffer,
+                    &exe,
+                    "validate",
+                    &args,
+                    at.path(),
+                    OnExitOne::AnswerWhen(answers),
+                )
                 .map_err(OpenSpecReadError::from)?;
             parse_validation(&out)
         });
@@ -531,24 +556,33 @@ pub fn working_copy<R: tauri::Runtime>(
     }
 }
 
-/// OSM-FR-MBTI: `"read openspec change"`, on a blocking thread.
+/// OSM-FR-MBTI, OSM-FR-GMKV, OFP-FR-QLQJ: `"read openspec change"`, on a
+/// blocking thread. Every failure rejects as an `OpenSpecFailure`.
 #[tauri::command]
 pub async fn read_openspec_change<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     location: ChangeLocation,
     name: String,
-) -> Result<ChangeDetail, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use tauri::Manager;
-        let seam =
-            app.try_state::<OpenSpec>().ok_or_else(|| "openspec_mode_inactive".to_string())?;
-        let active =
-            app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
-        let at = working_copy(&app, &location).map_err(|e| e.code().to_string())?;
-        // OSM-FR-GMKV: `change_archived` carries its archive folder.
-        seam.read_change(&app, &logging::BUFFER, active.as_ref(), &at, location, &name)
-            .map_err(|e| e.wire_code())
-    })
-    .await
-    .map_err(|e| format!("openspec change read failed: {e}"))?
+) -> Result<ChangeDetail, Box<OpenSpecFailure>> {
+    tauri::async_runtime::spawn_blocking(move || read_openspec_change_now(&app, location, &name))
+        .await
+        .map_err(|_| Box::new(OpenSpecFailure::new(super::failure::CODE_FAILED)))?
+}
+
+/// The read of `"read openspec change"`, on the calling thread.
+pub(crate) fn read_openspec_change_now<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    location: ChangeLocation,
+    name: &str,
+) -> Result<ChangeDetail, Box<OpenSpecFailure>> {
+    use tauri::Manager;
+    let seam = app
+        .try_state::<OpenSpec>()
+        .ok_or_else(|| Box::new(OpenSpecFailure::new(super::failure::CODE_MODE_INACTIVE)))?;
+    let active =
+        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let at = working_copy(app, &location).map_err(|e| Box::new(e.to_failure()))?;
+    // OSM-FR-GMKV: `change_archived` carries its archive folder as `detail`.
+    seam.read_change(app, &logging::BUFFER, active.as_ref(), &at, location, name)
+        .map_err(|e| Box::new(e.to_failure()))
 }

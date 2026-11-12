@@ -326,7 +326,7 @@ fn the_load_answers_its_source() {
     );
     let index = build_index(&[], None, &[]);
     assert_eq!(
-        serde_json::to_value(SpecificationMapLoad::Openspec { index }).unwrap(),
+        serde_json::to_value(SpecificationMapLoad::Openspec { index: Box::new(index) }).unwrap(),
         json!({ "source": "openspec", "index": {
             "levels": [
                 { "plural": "groups", "singular": "group" },
@@ -412,11 +412,14 @@ fn a_load_reads_the_capabilities_the_validation_and_each_location() {
 }
 
 // OSI-FR-SJNC, OSI-FR-PJJO, OSI-FR-OIOB: a read of a capability that fails
-// fails the load with its code; a validation that fails does not.
+// fails the load with its code; a validation that fails does not, and the
+// index carries its `OpenSpecFailure` as `validationFailure`.
 #[test]
 fn a_failed_capability_read_fails_the_load_and_a_failed_validation_does_not() {
-    let runner = index_runner()
-        .answering("validate", Ok(ProcessOutput { exit_status: Some(9), stdout: vec![] }));
+    let runner = index_runner().answering(
+        "validate",
+        Ok(ProcessOutput { exit_status: Some(9), stdout: vec![], stderr: Vec::new() }),
+    );
     let (seam, _, _) = seam_with(runner);
     let (_dir, root) = index_project();
     let locations = [IndexLocation {
@@ -426,14 +429,19 @@ fn a_failed_capability_read_fails_the_load_and_a_failed_validation_does_not() {
     }];
     let index = seam.load_spec_index(&Silent, buffer(), &root, &locations).unwrap();
     assert_eq!(index.validation, "unavailable");
+    let failure = index.validation_failure.as_ref().expect("the validation failure");
+    assert_eq!(failure.code, "cli_failed");
+    assert_eq!(failure.detail.as_deref(), Some("9"));
+    let wire = serde_json::to_value(&index).unwrap();
+    assert_eq!(wire["validationFailure"]["code"], "cli_failed");
     let (seam2, _, _) = seam_with(
         crate::openspec::tests::FakeRunner::default()
             .answering_prefix(&["list", "--specs"], Ok(ok(LIST_SPECS)))
-            .answering("show", Err(crate::openspec::ProcessError::TimedOut)),
+            .answering("show", Err(crate::openspec::ProcessError::timed_out())),
     );
     assert_eq!(
         seam2.load_spec_index(&Silent, buffer(), &root, &locations),
-        Err(OpenSpecReadError::CliTimedOut)
+        Err(OpenSpecReadError::CliTimedOut { diagnostics: Vec::new() })
     );
 }
 

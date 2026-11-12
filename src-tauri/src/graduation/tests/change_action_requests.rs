@@ -6,7 +6,9 @@
 //! The OpenSpec CLI is faked and the loop is off, so each run waits in its
 //! queue (OCR-FR-HNXC).
 
-use super::change_runs::{change_fixture, change_stream, set_resolved, start_apply, CHANGE, READY};
+use super::change_runs::{
+    assert_object, change_fixture, change_stream, set_resolved, start_apply, BLOCKED, CHANGE, READY,
+};
 use super::*;
 use crate::change_action_requests::{self as car, ChangeAction, ChangeActionRequestState};
 
@@ -68,7 +70,8 @@ fn record(
     .expect("recorded")
 }
 
-fn confirm(fx: &Fixture, id: &str) -> Result<car::ChangeActionOutcome, String> {
+/// The refusal keeps the form the command rejects with (OFP-FR-QLQJ).
+fn confirm(fx: &Fixture, id: &str) -> Result<car::ChangeActionOutcome, crate::openspec::Refusal> {
     car::confirm_action_request(
         &fx.app,
         &store(fx),
@@ -168,6 +171,29 @@ fn a_refused_start_keeps_the_request_pending() {
     assert_eq!(held.state, ChangeActionRequestState::Pending);
     assert_eq!(held.last_refusal.as_deref(), Some("openspec_run_active"));
     assert_eq!(queue_len(&fx), 1);
+}
+
+// OFP-FR-QLQJ, OFP-FR-SJML, CAR-FR-ARMK: a confirmation whose apply start
+// is refused with `change_not_ready` rejects with one `OpenSpecFailure`
+// object, with the missing artifacts and the diagnostics, and keeps the
+// request pending with the code.
+#[test]
+fn a_confirmation_rejects_an_openspec_failure_as_an_object() {
+    let (fx, _, _) = change_fixture(BLOCKED);
+    fx.allow_execution();
+    fx.app.state::<GraduationState>().set_loop_enabled(false);
+    let stream = change_stream(&fx, "editor");
+    let thread_id = open_thread(&fx, &stream.id, CHANGE);
+    let request = record(&fx, &stream.id, &thread_id, ChangeAction::Apply);
+    let refused = confirm(&fx, &request.id).unwrap_err();
+    assert_object(&refused, "change_not_ready");
+    let failure = refused.openspec().unwrap();
+    assert_eq!(failure.detail.as_deref(), Some("design,tasks"));
+    assert!(!failure.diagnostics.is_empty());
+    let held = car::list_requests_impl(&store(&fx), &stream.id, CHANGE).remove(0);
+    assert_eq!(held.state, ChangeActionRequestState::Pending);
+    assert_eq!(held.last_refusal.as_deref(), Some("change_not_ready"));
+    assert_eq!(queue_len(&fx), 0);
 }
 
 // OCR-FR-LNKQ / OCR-FR-GTOM: an apply start is refused with
@@ -273,6 +299,7 @@ fn a_failed_enqueue_after_the_thread_opened_names_the_thread() {
 
     let refused =
         super::change_runs::start_rework(&fx, &stream, "Drop the second task.").unwrap_err();
+    let refused = refused.to_string();
     let (failure, thread_id) = refused.split_once("; thread: ").expect("the suffix");
     let (code, detail) = failure.split_once(": ").expect("a code and a detail");
     assert_eq!(code, "write_failed");

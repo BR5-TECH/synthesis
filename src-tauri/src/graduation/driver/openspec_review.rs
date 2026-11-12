@@ -8,7 +8,6 @@
 
 use std::path::Path;
 
-use super::turns::note_blocked;
 use super::*;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
 use crate::graduation::{ReviewFinding, ReviewOutcome, ReviewSeverity, ReviewVerdict};
@@ -69,14 +68,12 @@ pub async fn validation<R: tauri::Runtime>(
                 .at_level(GraduationLogLevel::Warn)
                 .with("code", error.code()),
             );
-            note_blocked(app, run, BLOCKER_VALIDATION_UNAVAILABLE);
-            let _ = crate::graduation::transitions::block(
+            super::openspec_block::block_on_read(
                 app,
                 run,
-                BLOCKER_VALIDATION_UNAVAILABLE,
+                &error,
                 format!("The OpenSpec change {change} could not be validated: {}.", error.code()),
                 "Continue the run to validate the change and review it again.",
-                phases::PART_REVIEW,
             );
             Err(())
         }

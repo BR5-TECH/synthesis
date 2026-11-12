@@ -8,7 +8,7 @@
 
 import type { GraduationObservability } from "./graduationObservability";
 import type { GraduationLogStream } from "./graduationLogs";
-import type { DraftOpenspecChange, GraduationOpenspec } from "./openspec";
+import type { CliDiagnostic, DraftOpenspecChange, GraduationOpenspec } from "./openspec";
 import type {
   PlanRestFields,
   PlanRestReason,
@@ -170,6 +170,12 @@ export interface GraduationBlocker {
    * which renders as no attempt at all.
    */
   attempt: number;
+  /** OFP-FR-TBHX: the OpenSpec code under an OpenSpec blocker. */
+  cause?: string | null;
+  /** OFP-FR-EOAD: the CLI state of an OpenSpec blocker, where it carries one. */
+  detail?: string | null;
+  /** OFP-FR-TBHX: the CLI diagnostics of an OpenSpec blocker. Never logged. */
+  diagnostics?: CliDiagnostic[] | null;
 }
 
 /**

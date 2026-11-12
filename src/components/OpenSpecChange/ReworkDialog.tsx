@@ -8,7 +8,7 @@
  * stays in the dialog with the instruction kept. The instruction is the
  * author's text, so no record holds it.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
@@ -16,7 +16,7 @@ import { noteStartedRun, rereadChangeRunQueue } from "../../state/openspec/chang
 import { Modal } from "../DraftsPanelParts";
 import { startRefusal, type StartRefusal } from "./changeRunStart";
 import { knownRunTitle } from "./useChangeRuns";
-import { RefusalRoutes } from "./ChangeRunActions";
+import { RefusalStatement } from "./ChangeRunActions";
 
 export function ReworkDialog({
   streamId,
@@ -38,6 +38,8 @@ export function ReworkDialog({
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<StartRefusal | null>(null);
+  /** The guard of the start in flight, so a second press before the next render does nothing. */
+  const inFlight = useRef(false);
   const blank = instruction.trim() === "";
 
   // OCW-FR-FEBP: Escape and Cancel start nothing; while a start is in flight
@@ -47,7 +49,8 @@ export function ReworkDialog({
   };
 
   const start = async () => {
-    if (blank || busy) return;
+    if (blank || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setRefusal(null);
     logInfo(["frontend"], "a rework run is being started", { streamId });
@@ -57,6 +60,7 @@ export function ReworkDialog({
       logInfo(["frontend"], "a rework run was started", { streamId, runId: started.run.id });
       void rereadChangeRunQueue();
       onThread(started.threadId);
+      inFlight.current = false;
       onClose();
     } catch (e) {
       const refused = startRefusal(e, knownRunTitle);
@@ -68,6 +72,7 @@ export function ReworkDialog({
         code: refused.code,
         withThread: refused.threadId !== null,
       });
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -104,20 +109,27 @@ export function ReworkDialog({
           />
         </label>
         {refusal && (
-          <div className="openspec-rework__refusal" role="alert" data-testid="openspec-rework-refusal">
-            <span>{refusal.sentence}</span>
-            <RefusalRoutes refusal={refusal} />
-          </div>
+          <RefusalStatement
+            refusal={refusal}
+            surface="change_workspace_rework"
+            change={change}
+            onRetry={start}
+            className="openspec-rework__refusal"
+            testId="openspec-rework-refusal"
+          />
         )}
       </div>
       <div className="modal__actions">
         <button type="button" className="btn btn--sm btn--ghost" disabled={busy} onClick={close}>
           Cancel
         </button>
+        {/* While the start is in flight, Start rework is disabled but keeps
+            its focus stop, so the focus stays in the dialog. */}
         <button
           type="button"
           className="btn btn--sm btn--primary"
-          disabled={blank || busy}
+          disabled={blank}
+          aria-disabled={busy ? "true" : undefined}
           onClick={() => void start()}
         >
           Start rework

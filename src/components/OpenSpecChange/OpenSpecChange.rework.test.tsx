@@ -123,8 +123,13 @@ describe("the Rework… dialog (OCW-FR-LWFQ, OCW-FR-FEBP)", () => {
     await user.type(field(), "Split task 2");
     await user.click(startButton());
     await waitFor(() => expect(field()).toBeDisabled());
-    expect(startButton()).toBeDisabled();
+    // Start rework keeps its focus stop, so the focus stays in the dialog.
+    expect(startButton()).toHaveAttribute("aria-disabled", "true");
+    expect(document.activeElement).toBe(startButton());
     expect(within(dialog()).getByRole("button", { name: "Cancel" })).toBeDisabled();
+    // A second press while the start is in flight starts nothing more.
+    await user.click(startButton());
+    expect(calls("start_change_rework")).toHaveLength(1);
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await act(async () => release({ run: reworkRun("g-5"), threadId: "t2" }));
@@ -162,10 +167,29 @@ describe("starting a rework (OCW-FR-FEOA, OCW-FR-SCIA)", () => {
     await user.type(field(), "Split task 2.");
     await user.click(startButton());
     const refusal = await within(dialog()).findByTestId("openspec-rework-refusal");
-    expect(refusal).toHaveTextContent("OpenSpec mode is not active for this project, so no run started.");
+    expect(refusal).toHaveTextContent("OpenSpec mode is off for this project. No run started.");
     expect(within(refusal).getByRole("button", { name: "Open OpenSpec settings" })).toBeInTheDocument();
     expect(field()).toHaveValue("Split task 2.");
     expect(field()).toBeEnabled();
+  });
+
+  it("OCW-FR-EKYF, OFN-FR-CBLG: Retry of a transient refusal re-checks the CLI and starts the rework again with the same instruction", async () => {
+    const instructions: string[] = [];
+    backend.startRework = (instruction) => {
+      instructions.push(instruction);
+      return { reject: { code: "apply_progress_unavailable", cause: "cli_failed", diagnostics: [] } };
+    };
+    const user = await openDialog();
+    await user.type(field(), "Split task 2.");
+    await user.click(startButton());
+    const refusal = await within(dialog()).findByTestId("openspec-rework-refusal");
+    expect(within(refusal).getByRole("alert")).toHaveTextContent(
+      "The OpenSpec CLI stopped before it answered, also after one more try. No run started.",
+    );
+    await user.click(within(refusal).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(instructions).toEqual(["Split task 2.", "Split task 2."]));
+    expect(backend.statusChecks).toEqual([true]);
+    expect(await within(dialog()).findByTestId("openspec-rework-refusal")).toBeInTheDocument();
   });
 
   it("OCW-FR-SCIA: proposal_pending states that the change holds a pending edit proposal that the author decides first", async () => {

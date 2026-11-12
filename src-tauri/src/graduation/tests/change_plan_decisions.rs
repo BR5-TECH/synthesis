@@ -172,7 +172,7 @@ fn every_refused_continue_changes_nothing() {
     let proposal_id = rested.rest.clone().unwrap().proposal_id.unwrap();
     let before = snapshot(&fx, &rested.id);
 
-    runner.set("validate", Err(crate::openspec::ProcessError::TimedOut));
+    runner.set("validate", Err(crate::openspec::ProcessError::timed_out()));
     assert_eq!(continue_of(&fx, &rested).unwrap_err(), "proposal_pending");
     assert_eq!(snapshot(&fx, &rested.id), before);
     runner.set("validate", Ok(crate::openspec::tests::ok(VALID)));
@@ -195,7 +195,7 @@ fn every_refused_continue_changes_nothing() {
     .expect("the commit is made");
     assert!(plan_proposal(&fx, rested.rest.as_ref().unwrap()).commit.is_some());
 
-    runner.set("instructions", Err(crate::openspec::ProcessError::TimedOut));
+    runner.set("instructions", Err(crate::openspec::ProcessError::timed_out()));
     let refused = continue_of(&fx, &rested).unwrap_err();
     assert!(refused.starts_with("openspec_validation_unavailable:"), "{refused}");
     assert_eq!(snapshot(&fx, &rested.id), before);

@@ -56,6 +56,7 @@ mod envelope;
 mod final_event_launch;
 mod final_event_runs;
 mod gateway_env;
+mod image_probe;
 mod merge_turns;
 mod milestones;
 mod observers;

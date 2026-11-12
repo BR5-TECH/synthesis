@@ -110,7 +110,7 @@ pub(super) fn request(
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let result = crate::streams::merge_work_stream_blocking(&fx.app, &stream.id, publication);
     fx.app.state::<GraduationState>().set_loop_enabled(true);
-    result
+    result.map_err(String::from)
 }
 
 pub(super) fn handed_off(

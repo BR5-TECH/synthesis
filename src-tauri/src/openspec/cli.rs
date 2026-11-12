@@ -167,13 +167,17 @@ pub fn parse_version(text: &str) -> Option<(String, u64)> {
 // The child process, behind a trait (OSM-FR-HHUD, OSM-FR-ZIMO)
 // ---------------------------------------------------------------------------
 
-/// What a finished CLI process gave back. Standard error is not kept: no part
-/// of it is read, and no part of it may reach a log record (OSM-FR-IFWM).
+/// What a finished CLI process gave back. Standard error is kept up to its
+/// last 4 KiB for the diagnostics of a transient failure
+/// (`OFP-openspec-failure-policy.md` OFP-FR-WNVO); no part of it may reach a
+/// log record (OSM-FR-IFWM).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProcessOutput {
     /// `None` when the process ended on a signal.
     pub exit_status: Option<i32>,
     pub stdout: Vec<u8>,
+    /// OFP-FR-WNVO: at most the last 4 KiB.
+    pub stderr: Vec<u8>,
 }
 
 /// Why a CLI process gave no output.
@@ -181,8 +185,63 @@ pub struct ProcessOutput {
 pub enum ProcessError {
     /// The executable could not be started.
     NotExecutable,
-    /// OSM-FR-ZIMO: it ran too long and was stopped.
-    TimedOut,
+    /// OSM-FR-ZIMO: it ran too long and was stopped. OFP-FR-WNVO: with the
+    /// last 4 KiB of what it wrote to standard error until then.
+    TimedOut { stderr: Vec<u8> },
+}
+
+impl ProcessError {
+    /// OSM-FR-ZIMO: a timeout with no standard error.
+    pub fn timed_out() -> Self {
+        ProcessError::TimedOut { stderr: Vec::new() }
+    }
+}
+
+/// OFP-FR-MJZU: the wait before a transient process runs once more. It
+/// receives the requested delay; production sleeps, and a test records it.
+pub trait RetryWait: Send + Sync {
+    fn wait(&self, delay_ms: u64);
+}
+
+/// The production wait: the calling thread sleeps. The seam runs on a
+/// blocking thread, so no async runtime thread is held.
+pub struct RealWait;
+
+impl RetryWait for RealWait {
+    fn wait(&self, delay_ms: u64) {
+        std::thread::sleep(Duration::from_millis(delay_ms));
+    }
+}
+
+/// OFP-FR-MJZU, OFP-FR-XDXA: a wait that records each requested delay and
+/// does not wait. Every seam a test builds uses one, so no test waits for
+/// real time.
+#[derive(Default)]
+pub struct RecordedWait {
+    delays: Mutex<Vec<u64>>,
+    /// Called at each wait, so a test can look at the seam during it.
+    during: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+}
+
+impl RecordedWait {
+    /// The delays requested so far, in order.
+    pub fn delays(&self) -> Vec<u64> {
+        self.delays.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// Run `probe` at each later wait.
+    pub fn during(&self, probe: impl Fn() + Send + Sync + 'static) {
+        *self.during.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(probe));
+    }
+}
+
+impl RetryWait for RecordedWait {
+    fn wait(&self, delay_ms: u64) {
+        self.delays.lock().unwrap_or_else(|e| e.into_inner()).push(delay_ms);
+        if let Some(probe) = self.during.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            probe();
+        }
+    }
 }
 
 /// One bounded CLI process, run to its end.
@@ -250,7 +309,7 @@ impl OpenSpecRunner for RealRunner {
             .current_dir(cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
@@ -268,6 +327,10 @@ impl OpenSpecRunner for RealRunner {
             }
             bytes
         });
+        // OFP-FR-WNVO: standard error is read on its own thread too, and only
+        // its last 4 KiB is kept.
+        let stderr = child.stderr.take();
+        let errors = std::thread::spawn(move || read_tail(stderr, super::failure::STDERR_KEEP));
         let started = std::time::Instant::now();
         let status = loop {
             match child.try_wait() {
@@ -277,22 +340,47 @@ impl OpenSpecRunner for RealRunner {
                     let _ = child.kill();
                     let _ = child.wait();
                     let _ = reader.join();
-                    return Err(ProcessError::TimedOut);
+                    let stderr = errors.join().unwrap_or_default();
+                    return Err(ProcessError::TimedOut { stderr });
                 }
                 Ok(None) => std::thread::sleep(Duration::from_millis(20)),
                 Err(_) => {
                     let _ = child.kill();
                     let _ = reader.join();
+                    let _ = errors.join();
                     return Err(ProcessError::NotExecutable);
                 }
             }
         };
         // A process the CLI started can outlive it and keep the pipe open, so
-        // the rest of the group stops before the reader is joined.
+        // the rest of the group stops before the readers are joined.
         kill_group(&child);
         let stdout = reader.join().unwrap_or_default();
-        Ok(ProcessOutput { exit_status: status.code(), stdout })
+        let stderr = errors.join().unwrap_or_default();
+        Ok(ProcessOutput { exit_status: status.code(), stdout, stderr })
     }
+}
+
+/// OFP-FR-WNVO: read `stream` to its end and keep its last `keep` bytes, so a
+/// CLI that writes much to standard error cannot grow the buffer.
+fn read_tail(stream: Option<impl std::io::Read>, keep: usize) -> Vec<u8> {
+    let Some(mut stream) = stream else {
+        return Vec::new();
+    };
+    let mut tail: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                tail.extend_from_slice(&chunk[..n]);
+                if tail.len() > keep {
+                    tail.drain(..tail.len() - keep);
+                }
+            }
+        }
+    }
+    tail
 }
 
 /// Stop every process of the child's group. The child was made the leader of

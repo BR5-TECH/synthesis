@@ -387,6 +387,10 @@ async fn drive<R: tauri::Runtime>(
     if !logs::emit(app, &mut run, dispatched) {
         return;
     }
+    // OFP-FR-BZDP: an OpenSpec run's image is probed before its first turn.
+    if !super::image_probe::probe_before_dispatch(app, &mut run, &cancellation, dispatch).await {
+        return;
+    }
 
     // GXD-FR-TJRV: a run that stopped in the review resumes there. The work did
     // not change while the run rested, so a work turn would spend a container to

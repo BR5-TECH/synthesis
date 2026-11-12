@@ -9,7 +9,7 @@
  * request names from `../../state/openspec/changeRunQueue.ts`. It decides
  * nothing but on Confirm and Decline.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
@@ -23,6 +23,8 @@ import {
   useChangeActionRequests,
 } from "../../state/openspec/changeActionRequests";
 import { openOpenSpecChange } from "../../state/openspec/changeRoutes";
+import { noticeFailureOf, shortForm, toOpenSpecFailure } from "../../state/openspec/failureNotice";
+import { useShortFormLog } from "../../state/openspec/useShortFormLog";
 import {
   changeRunById,
   noteStartedRun,
@@ -43,7 +45,7 @@ import { dispatchDecision } from "../DraftDiscussion/decisionDispatch";
 import { TypeChip } from "../DraftDiscussion/stream/TypeChip";
 import { formatRelative } from "../ProjectPicker";
 import { startRefusal, type StartRefusal } from "./changeRunStart";
-import { RefusalRoutes } from "./ChangeRunActions";
+import { RefusalStatement } from "./ChangeRunActions";
 import { refusalCode } from "./decisions";
 import { knownRunTitle } from "./useChangeRuns";
 
@@ -62,8 +64,14 @@ function actionWords(request: Pick<ChangeActionRequest, "action" | "change">): s
     : `Rework the change ${request.change}`;
 }
 
-/** OCW-FR-CTWP: why a request failed, in words. */
+/**
+ * OCW-FR-CTWP: why a request failed, in words. An OpenSpec failure takes the
+ * short form of its notice (`OFN-openspec-failure-notices.md` OFN-FR-QZEC).
+ */
 export function failureWords(code: string | null | undefined): string {
+  const failure = code ? toOpenSpecFailure(code) : null;
+  const sentence = failure ? shortForm(failure) : null;
+  if (sentence) return `${sentence} No run started.`;
   switch (code) {
     case "unknown_stream":
       return "The work stream is gone, so no run started.";
@@ -81,8 +89,8 @@ function decisionRefusal(error: unknown, action: ChangeAction): StartRefusal {
     code,
     sentence,
     runId: null,
-    settings: false,
     threadId: null,
+    failure: null,
   });
   if (code.includes(CHANGE_ACTION_ERRORS.alreadyDecided)) {
     return words("This request has already been decided.");
@@ -144,8 +152,23 @@ export function ChangeActionCard({
   const request = changeActionRequestOf(reference.streamId, reference.change, reference.requestId);
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
+  /** The guard of the decision in flight, so a second press before the next render does nothing. */
+  const inFlight = useRef(false);
   const [refusal, setRefusal] = useState<StartRefusal | null>(null);
   const cardRef = useRef<HTMLElement | null>(null);
+  // OCW-FR-CTWP: the last refused confirmation stays stated after a re-read.
+  // It is read once for each recorded code, so its notice appears once.
+  const recorded =
+    request?.state === "pending" && request.lastRefusal ? request.lastRefusal : null;
+  const action = request?.action ?? reference.action;
+  const recordedRefusal = useMemo(
+    () => (recorded ? startRefusal(recorded, knownRunTitle, action) : null),
+    [recorded, action],
+  );
+  // OFN-FR-LKAT: a failed request states the short form of its OpenSpec
+  // failure (OCW-FR-CTWP), so the card logs that notice once.
+  const failedCode = request?.state === "failed" ? (request.lastRefusal ?? null) : null;
+  useShortFormLog("change_action_card", failedCode ? noticeFailureOf(failedCode) : null);
 
   if (!request) {
     return (
@@ -156,6 +179,8 @@ export function ChangeActionCard({
   }
 
   const decide = (confirm: boolean) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setRefusal(null);
     const sent = feedback.trim();
@@ -164,6 +189,7 @@ export function ChangeActionCard({
       : api.declineChangeActionRequest(request.id, sent === "" ? null : sent);
     call.then(
       (outcome) => {
+        inFlight.current = false;
         setBusy(false);
         setFeedback("");
         settleDecision(outcome, confirm ? "" : sent);
@@ -176,6 +202,7 @@ export function ChangeActionCard({
           requestId: request.id,
           code: refused.code.slice(0, 80),
         });
+        inFlight.current = false;
         setBusy(false);
         setRefusal(refused);
         // CAR-FR-ARMK: a refused confirmation is recorded on the request.
@@ -186,12 +213,7 @@ export function ChangeActionCard({
 
   const state = STATE[request.state];
   const run = request.runId ? changeRunById(request.runId) : undefined;
-  // OCW-FR-CTWP: the last refused confirmation stays stated after a re-read.
-  const shownRefusal =
-    refusal ??
-    (request.state === "pending" && request.lastRefusal
-      ? startRefusal(request.lastRefusal, knownRunTitle, request.action)
-      : null);
+  const shownRefusal = refusal ?? recordedRefusal;
 
   return (
     <article
@@ -260,25 +282,36 @@ export function ChangeActionCard({
             onChange={(e) => setFeedback(e.target.value)}
           />
           <div className="dds-newdraft__actions">
+            {/* While a decision is in flight both are disabled but keep their
+                focus stop, so a decision by keyboard keeps the focus. */}
             <button
               type="button"
               className="btn btn--primary btn--sm"
-              disabled={busy}
+              aria-disabled={busy ? "true" : undefined}
               onClick={() => decide(true)}
             >
               Confirm
             </button>
-            <button type="button" className="btn btn--sm" disabled={busy} onClick={() => decide(false)}>
+            <button
+              type="button"
+              className="btn btn--sm"
+              aria-disabled={busy ? "true" : undefined}
+              onClick={() => decide(false)}
+            >
               Decline
             </button>
           </div>
         </div>
       )}
       {shownRefusal && (
-        <div className="dds-newdraft__error" role="alert" data-testid="change-action-refusal">
-          <span>{shownRefusal.sentence}</span>
-          <RefusalRoutes refusal={shownRefusal} />
-        </div>
+        <RefusalStatement
+          refusal={shownRefusal}
+          surface="change_action_card"
+          change={request.change}
+          onRetry={() => decide(true)}
+          className="dds-newdraft__error"
+          testId="change-action-refusal"
+        />
       )}
     </article>
   );

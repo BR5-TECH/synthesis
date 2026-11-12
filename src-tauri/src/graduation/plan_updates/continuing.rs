@@ -11,7 +11,9 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use super::*;
-use crate::openspec::{ApplyInstructions, ChangeValidation};
+use crate::openspec::{
+    ApplyInstructions, ChangeValidation, OpenSpecFailure, OpenSpecReadError, Refusal,
+};
 
 /// OPU-FR-PXDY / OPU-FR-SKTV: the reads Continue made, for the turn it
 /// dispatches. Held in memory, so the run record holds no text of a project
@@ -55,7 +57,7 @@ pub enum PlanContinue {
 pub fn continue_plan_rest<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-) -> Result<PlanContinue, String> {
+) -> Result<PlanContinue, Refusal> {
     let Some(rest) = run.rest.clone().filter(GraduationRest::is_plan_rest) else {
         return Ok(PlanContinue::NotPlan);
     };
@@ -74,7 +76,7 @@ pub fn continue_plan_rest<R: tauri::Runtime>(
     }
     // OPU-FR-THOZ: the questions are answered first.
     if rest.reason == REST_PLAN_UPDATE && rest.set_id.is_some() && rest.answers.is_none() {
-        return Err(refuse(app, run, &change, ERR_PLAN_QUESTIONS_PENDING));
+        return Err(refuse(app, run, &change, ERR_PLAN_QUESTIONS_PENDING).into());
     }
     // OPU-FR-THOZ: and the edits are decided, and their commit has landed.
     let proposal = match rest.proposal_id.as_deref() {
@@ -87,14 +89,23 @@ pub fn continue_plan_rest<R: tauri::Runtime>(
             if proposal.state == crate::change_proposals::ChangeProposalState::Pending
                 || proposal.commit_owed
             {
-                return Err(refuse(app, run, &change, ERR_PROPOSAL_PENDING));
+                return Err(refuse(app, run, &change, ERR_PROPOSAL_PENDING).into());
             }
             Some(proposal)
         }
     };
-    // OPU-FR-PXDY: one validation and one apply-progress read of the stream.
-    let plan_reads = read_change(app, run, &change).map_err(|code| {
-        refuse(app, run, &change, &format!("{ERR_OPENSPEC_VALIDATION_UNAVAILABLE}:{code}"))
+    // OPU-FR-PXDY, OFP-FR-ITUD: Continue clears a kept `failed` CLI check,
+    // then reads the change once for its validation and once for its
+    // progress. A read that fails refuses with its code as the cause and its
+    // diagnostics (OFP-FR-QLQJ).
+    if let Some(seam) = app.try_state::<crate::openspec::OpenSpec>() {
+        seam.clear_failed_checks(app, &BUFFER);
+    }
+    let plan_reads = read_change(app, run, &change).map_err(|error| {
+        let failure = OpenSpecFailure::wrapping(ERR_OPENSPEC_VALIDATION_UNAVAILABLE, &error)
+            .for_change(&change);
+        refuse(app, run, &change, &failure.to_string());
+        Refusal::from(failure)
     })?;
     // OPU-FR-NQBK / OPU-FR-YNXV: the plan base, where the proposal committed.
     let plan_base = match proposal.as_ref().and_then(|p| p.commit.clone()) {
@@ -216,23 +227,20 @@ fn log_continued<R: tauri::Runtime>(
 }
 
 /// OPU-FR-PXDY: `validate_change` and `apply_instructions` on the stream's
-/// working copy, or the code of the read that could not run.
+/// working copy, or the error of the read that failed.
 fn read_change<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &GraduationRun,
     change: &str,
-) -> Result<PlanReads, &'static str> {
+) -> Result<PlanReads, OpenSpecReadError> {
     let seam = app
         .try_state::<crate::openspec::OpenSpec>()
-        .ok_or(crate::openspec::OpenSpecReadError::OpenSpecModeInactive.code())?;
+        .ok_or(OpenSpecReadError::OpenSpecModeInactive)?;
     let active = app.try_state::<ProjectState>().and_then(|state| state.require_root().ok());
     let location = crate::openspec::ChangeLocation::Stream { stream_id: run.stream_id.clone() };
-    let at = crate::openspec::change::working_copy(app, &location).map_err(|e| e.code())?;
-    let validation =
-        seam.validate_change(app, &BUFFER, active.as_ref(), &at, change).map_err(|e| e.code())?;
-    let progress = seam
-        .apply_instructions(app, &BUFFER, active.as_ref(), &at, change)
-        .map_err(|e| e.code())?;
+    let at = crate::openspec::change::working_copy(app, &location)?;
+    let validation = seam.validate_change(app, &BUFFER, active.as_ref(), &at, change)?;
+    let progress = seam.apply_instructions(app, &BUFFER, active.as_ref(), &at, change)?;
     Ok(PlanReads { validation, progress })
 }
 

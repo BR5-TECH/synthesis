@@ -85,7 +85,12 @@ export interface WorkStreamSelectorProps {
 }
 
 import { StreamUpdateResolution, updateSubject } from "./StreamUpdateResolution";
-import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
+import {
+  ARCHIVE_REFUSAL_FRAME,
+  refusalText,
+  splitRefusal,
+} from "./WorkStreamSelector/refusals";
+import { noticeFailureOf, refusalString } from "../state/openspec/failureNotice";
 import { reportDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { NewStreamDialog } from "./WorkStreamSelector/NewStreamDialog";
 import { StreamRow } from "./WorkStreamSelector/StreamRow";
@@ -99,6 +104,7 @@ import { streamPullRequestSource } from "./WorkStreamSelector/pullRequestSource"
 import { openPullRequestFor, useOpenPullRequestList } from "../state/openPullRequests";
 import type {
   MergeOutcome,
+  RowError,
   RowSurface,
   RunningMerge,
   RunningUpdate,
@@ -155,9 +161,7 @@ export function WorkStreamSelector({
     text: string;
   } | null>(null);
   /** WSS-FR-CRJD / WSS-FR-YCAL: a refusal is rendered on the row it is about. */
-  const [rowError, setRowError] = useState<{ id: string; text: string } | null>(
-    null,
-  );
+  const [rowError, setRowError] = useState<RowError | null>(null);
   /** WSS-FR-KDVU: the stream whose update resolution window stands open. */
   const [resolvingStream, setResolvingStream] = useState<string | null>(null);
   /** True while a call the resolution window made is still out. */
@@ -424,7 +428,8 @@ export function WorkStreamSelector({
       .catch((reason) => {
         if (!mounted.current) return;
         settleMerge(id);
-        reportRefusal(summary, reason);
+        // OFN-FR-CBLG: a Retry merges again with the same publication.
+        reportRefusal(summary, reason, () => startMerge(summary, publication));
       });
   };
 
@@ -577,9 +582,9 @@ export function WorkStreamSelector({
   };
 
   /** WSS-FR-NPXC: every typed refusal renders on the stream's own row. */
-  const reportRefusal = (summary: WorkStreamSummary, reason: unknown) => {
+  const reportRefusal = (summary: WorkStreamSummary, reason: unknown, retry: () => void) => {
     const id = summary.stream.id;
-    const text = String(reason instanceof Error ? reason.message : reason);
+    const text = reason instanceof Error ? reason.message : refusalString(reason);
     const [code, detail] = splitRefusal(text);
     logWarn(["frontend"], "work stream merge refused", {
       streamId: id,
@@ -601,8 +606,14 @@ export function WorkStreamSelector({
     }
     // GRB-FR-MWTC: a cancellation reads as what the author did rather than as a
     // failure they did not cause; `refusalText` carries that wording with every
-    // other typed refusal.
-    setRowError({ id, text: refusalText(text) });
+    // other typed refusal. WSS-FR-NTGC: an OpenSpec failure of the archive
+    // step renders its notice.
+    const failure = noticeFailureOf(reason);
+    setRowError(
+      failure
+        ? { id, text: ARCHIVE_REFUSAL_FRAME, failure: { failure, retry } }
+        : { id, text: refusalText(text) },
+    );
   };
 
   /**
@@ -783,6 +794,7 @@ export function WorkStreamSelector({
                     ? rowError.text
                     : (deleteRefusals[summary.stream.id] ?? null)
                 }
+                failure={rowError?.id === summary.stream.id ? (rowError.failure ?? null) : null}
                 busyDraftName={
                   draftNames[summary.stream.busyRunId ?? ""] ?? null
                 }
@@ -825,6 +837,14 @@ export function WorkStreamSelector({
                   });
                   close();
                   onOpenRun(runId);
+                }}
+                onLeave={() => {
+                  // WSS-FR-NTGC / SNV-FR-56: the merge notice opens the change
+                  // or its repair run behind the dropdown, so it closes first.
+                  logInfo(["frontend"], "a merge notice left the work stream selector", {
+                    streamId: summary.stream.id,
+                  });
+                  close();
                 }}
                 onResolveUpdate={() => {
                   setResolveError(null);

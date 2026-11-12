@@ -9,14 +9,16 @@
  *
  * Open the change from the Runs panel (select run g-50, then Open change) or
  * from the Drafts panel (the row "Add logout everywhere", then Open change).
- * `?openspecRead=<code>` makes every read reject with that code, for example
- * `?openspecRead=change_not_found` or `?openspecRead=cli_unavailable`.
+ * `?openspecRead=<failure>` makes every read reject with that failure, for
+ * example `?openspecRead=change_not_found` or
+ * `?openspecRead=cli_unavailable:not_found` (see mock-openspec-failures.ts).
  * `?openspecArchived` makes every read of the demo change reject with
  * `change_archived: 2026-11-11-add-logout-3f2a`, so the tab states that the
  * change is archived (OCW-FR-AKVG, OCW-FR-GVZT).
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
+import { failureFlag, failureOf } from "./mock-openspec-failures";
 import { SPLIT_DISCUSSION, openspecSplitInvoke } from "./mock-openspec-split";
 import { REQUEST_DISCUSSION } from "./mock-openspec-runs";
 import { PLAN_THREAD_ID, planDiscussion, planMode, planSetStands } from "./mock-openspec-plan";
@@ -217,9 +219,20 @@ export function validChangeName(name: string): boolean {
   return name.length >= 1 && name.length <= 64 && name !== "archive" && VALID.test(name);
 }
 
-function readFailure(): string | null {
-  if (typeof location === "undefined") return null;
-  return new URLSearchParams(location.search).get("openspecRead");
+/** The reads served so far, for `?openspecReadAfter`. */
+let reads = 0;
+
+/**
+ * OCW-FR-RFGG / OCW-FR-PFUQ: the failure of a read, as an `OpenSpecFailure`
+ * (mock-openspec-failures.ts). `?openspecReadAfter=<n>` serves the first `n`
+ * reads, so the failure stands above the content.
+ */
+function readFailure(): Record<string, unknown> | null {
+  const value = failureFlag("openspecRead");
+  if (!value) return null;
+  reads += 1;
+  const after = Number(new URLSearchParams(location.search).get("openspecReadAfter") ?? "0");
+  return reads > after ? failureOf(value) : null;
 }
 
 /** Handle one OpenSpec change command, or answer NOT_HANDLED. */

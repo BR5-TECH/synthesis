@@ -87,7 +87,9 @@ fn a_built_change_is_archived_on_the_stream_and_merged() {
         crate::openspec::ChangeLocation::Stream { stream_id: stream.id.clone() },
         "add-logout".into(),
     ));
-    assert_eq!(read.unwrap_err(), format!("change_archived: {DATE}-add-logout"));
+    let failure = read.unwrap_err();
+    assert_eq!(failure.code, "change_archived");
+    assert_eq!(failure.detail, Some(format!("{DATE}-add-logout")));
     // WKS-FR-PZKD: the archive commit is no record of the merge: no merge run.
     let key = fx.project_key();
     let fs = fx.app.state::<crate::fs::FsAccessState>().get().unwrap();

@@ -5,11 +5,13 @@
 use tauri::Manager;
 
 use super::*;
+use crate::openspec::{OpenSpecFailure, Refusal};
 
 /// GSU-FR-MTDA.
 pub const ERR_OPENSPEC_MODE_INACTIVE: &str = "openspec_mode_inactive";
-/// GSU-FR-MTDA.
-pub const ERR_OPENSPEC_CLI_UNAVAILABLE: &str = "openspec_cli_unavailable";
+/// GSU-FR-MTDA, OFP-FR-GPCO: the one code for a CLI that is not usable, with
+/// the CLI state as its detail.
+pub const ERR_CLI_UNAVAILABLE: &str = crate::openspec::failure::CODE_CLI_UNAVAILABLE;
 /// GSU-FR-CZEP.
 pub const ERR_INVALID_CHANGE_NAME: &str = "invalid_change_name";
 /// GSU-FR-UIDE.
@@ -26,15 +28,15 @@ pub fn preflight<R: tauri::Runtime>(
     stream: &crate::streams::WorkStream,
     name: &str,
     check_exists: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     let result = check(app, stream, name, check_exists);
-    if let Err(code) = &result {
+    if let Err(refusal) = &result {
         crate::logging::log_warn(
             app,
             &crate::logging::BUFFER,
             &[crate::logging::Domain::Backend],
             "propose start refused",
-            crate::log_fields! { "code" => code.clone() },
+            crate::log_fields! { "code" => refusal.to_string() },
         );
     }
     result
@@ -45,32 +47,37 @@ fn check<R: tauri::Runtime>(
     stream: &crate::streams::WorkStream,
     name: &str,
     check_exists: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     require_mode_and_cli(app)?;
     if !crate::openspec::change::valid_change_name(name) {
-        return Err(ERR_INVALID_CHANGE_NAME.to_string());
+        return Err(ERR_INVALID_CHANGE_NAME.into());
     }
     if check_exists && change_exists(app, stream, name) {
-        return Err(ERR_OPENSPEC_CHANGE_EXISTS.to_string());
+        return Err(ERR_OPENSPEC_CHANGE_EXISTS.into());
     }
     Ok(())
 }
 
-/// GSU-FR-MTDA, OCR-FR-GTOM: OpenSpec mode is active on the active worktree,
-/// and the CLI is usable, in that order.
+/// GSU-FR-MTDA, OCR-FR-GTOM, OFP-FR-GPCO: OpenSpec mode is active on the
+/// active worktree, and the CLI is usable, in that order. Each refusal is an
+/// `OpenSpecFailure`; `cli_unavailable` carries the CLI state as its detail.
 pub(super) fn require_mode_and_cli<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     let active = app.try_state::<ProjectState>().and_then(|state| state.require_root().ok());
     let seam = app.try_state::<crate::openspec::OpenSpec>();
+    let inactive = || Refusal::from(OpenSpecFailure::new(ERR_OPENSPEC_MODE_INACTIVE));
     let (Some(active), Some(seam)) = (active, seam) else {
-        return Err(ERR_OPENSPEC_MODE_INACTIVE.to_string());
+        return Err(inactive());
     };
     if !crate::openspec::OpenSpec::mode_active(Some(&active)) {
-        return Err(ERR_OPENSPEC_MODE_INACTIVE.to_string());
+        return Err(inactive());
     }
-    if !seam.cli_state_in(app, &crate::logging::BUFFER, Some(&active)).is_available() {
-        return Err(ERR_OPENSPEC_CLI_UNAVAILABLE.to_string());
+    let state = seam.cli_state_in(app, &crate::logging::BUFFER, Some(&active));
+    if !state.is_available() {
+        let mut failure = OpenSpecFailure::new(ERR_CLI_UNAVAILABLE);
+        failure.detail = Some(state.code().to_string());
+        return Err(failure.into());
     }
     Ok(())
 }

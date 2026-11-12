@@ -56,7 +56,9 @@ ChangeActionRequest {
   agent: Participant,
   state: ChangeActionRequestState,
   run_id?,                   // started alone
-  last_refusal?,             // the code of the last refused confirmation, or of the failure
+  last_refusal?,             // the code of the last refused confirmation, or of the failure, as a typed
+                             //   string `code: detail`; it carries no diagnostics, which only the refusal
+                             //   that a confirmation answers holds (OFP-openspec-failure-policy.md)
   created_at, decided_at?
 }
 

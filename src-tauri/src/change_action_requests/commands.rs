@@ -180,7 +180,7 @@ pub fn list_change_action_requests(
 pub async fn confirm_change_action_request<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request_id: String,
-) -> Result<ChangeActionOutcome, String>
+) -> Result<ChangeActionOutcome, crate::openspec::Refusal>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
@@ -191,7 +191,7 @@ where
         confirm_action_request(&app, &store, &AppStarter { app: &app }, &request_id, &by)
     })
     .await
-    .map_err(|_| ERR_WRITE_FAILED.to_string())?
+    .map_err(|_| crate::openspec::Refusal::from(ERR_WRITE_FAILED))?
 }
 
 /// CAR-FR-WXDA: `"decline change action request"`.

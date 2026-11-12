@@ -12,7 +12,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use super::{change, OpenSpec, RunFailure};
+use super::failure::{self, CliDiagnostic};
+use super::{change, OnExitOne, OpenSpec, OpenSpecReadError};
 use crate::logging::{LogBuffer, LogSink};
 
 /// OAR-FR-VAGH: what an archive that succeeded gives.
@@ -23,25 +24,61 @@ pub struct ArchiveAnswer {
 }
 
 /// OAR-FR-EUXZ: why an archive did not succeed, as the code the refusal
-/// carries.
+/// carries, with the diagnostics of `OFP-openspec-failure-policy.md`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArchiveCliFailure {
     /// The `code` of the first `status` entry of an answer whose `archive` is
-    /// null. It is a fixed identifier of the CLI (OAR-FR-NEEI).
-    Status(String),
-    TimedOut,
-    Failed,
+    /// null. It is a fixed identifier of the CLI (OAR-FR-NEEI). The
+    /// diagnostics are every `status` entry (OFP-FR-NJSO).
+    Status {
+        code: String,
+        diagnostics: Vec<CliDiagnostic>,
+    },
+    /// OFP-FR-WNVO: with the kept standard error.
+    TimedOut {
+        diagnostics: Vec<CliDiagnostic>,
+    },
+    /// OFP-FR-WNVO: with the kept standard error.
+    Failed {
+        diagnostics: Vec<CliDiagnostic>,
+    },
+    /// Exit 1 with CLI JSON and no `status` code (OAR-FR-EUXZ).
+    Rejected {
+        diagnostics: Vec<CliDiagnostic>,
+    },
     OutputUnreadable,
 }
 
 impl ArchiveCliFailure {
     pub fn code(&self) -> String {
         match self {
-            ArchiveCliFailure::Status(code) => code.clone(),
-            ArchiveCliFailure::TimedOut => "cli_timed_out".to_string(),
-            ArchiveCliFailure::Failed => "cli_failed".to_string(),
-            ArchiveCliFailure::OutputUnreadable => "cli_output_unreadable".to_string(),
+            ArchiveCliFailure::Status { code, .. } => code.clone(),
+            ArchiveCliFailure::TimedOut { .. } => failure::CODE_TIMED_OUT.to_string(),
+            ArchiveCliFailure::Failed { .. } => failure::CODE_FAILED.to_string(),
+            ArchiveCliFailure::Rejected { .. } => failure::CODE_REJECTED.to_string(),
+            ArchiveCliFailure::OutputUnreadable => failure::CODE_OUTPUT_UNREADABLE.to_string(),
         }
+    }
+
+    /// OFP-FR-OFLU: the diagnostics of the failure.
+    pub fn diagnostics(&self) -> &[CliDiagnostic] {
+        match self {
+            ArchiveCliFailure::Status { diagnostics, .. }
+            | ArchiveCliFailure::TimedOut { diagnostics }
+            | ArchiveCliFailure::Failed { diagnostics }
+            | ArchiveCliFailure::Rejected { diagnostics } => diagnostics,
+            ArchiveCliFailure::OutputUnreadable => &[],
+        }
+    }
+
+    /// OFP-FR-IJYA: an outcome of the class `transient`.
+    pub fn is_transient(&self) -> bool {
+        matches!(self, ArchiveCliFailure::TimedOut { .. } | ArchiveCliFailure::Failed { .. })
+    }
+
+    /// A `cli_failed` with no diagnostic.
+    pub fn failed() -> Self {
+        ArchiveCliFailure::Failed { diagnostics: Vec::new() }
     }
 }
 
@@ -80,24 +117,41 @@ fn identifier(code: &str) -> bool {
 }
 
 /// OAR-FR-VAGH, OAR-FR-XTLB, OAR-FR-EUXZ: the answer of `archive <change>
-/// --json --yes` with exit status `status`.
+/// --json --yes` with exit status `status`. The process seam gives an exit 1
+/// here only with CLI JSON.
 pub fn parse_archive(
     change: &str,
     status: i32,
     bytes: &[u8],
 ) -> Result<ArchiveAnswer, ArchiveCliFailure> {
-    let unreadable =
-        if status == 0 { ArchiveCliFailure::OutputUnreadable } else { ArchiveCliFailure::Failed };
-    let Ok(out) = serde_json::from_slice::<ArchiveOutput>(bytes) else {
-        return Err(unreadable);
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Err(if status == 0 {
+            ArchiveCliFailure::OutputUnreadable
+        } else {
+            ArchiveCliFailure::failed()
+        });
+    };
+    let diagnostics = failure::status_diagnostics(&json);
+    // Exit 1 with CLI JSON that names no status code is a rejection.
+    let rejected = || {
+        if status == 0 {
+            ArchiveCliFailure::OutputUnreadable
+        } else {
+            ArchiveCliFailure::Rejected { diagnostics: diagnostics.clone() }
+        }
+    };
+    let Ok(out) = serde_json::from_value::<ArchiveOutput>(json.clone()) else {
+        return Err(rejected());
     };
     match out.archive {
         None => match out.status.into_iter().next().and_then(|entry| entry.code) {
-            Some(code) if identifier(&code) => Err(ArchiveCliFailure::Status(code)),
+            Some(code) if identifier(&code) => {
+                Err(ArchiveCliFailure::Status { code, diagnostics: diagnostics.clone() })
+            }
             Some(_) => Err(ArchiveCliFailure::OutputUnreadable),
-            None => Err(unreadable),
+            None => Err(rejected()),
         },
-        Some(_) if status != 0 => Err(ArchiveCliFailure::Failed),
+        Some(_) if status != 0 => Err(rejected()),
         Some(archive) => {
             if archive.change != change || !change::archive_folder_of(&archive.archived_as, change)
             {
@@ -122,13 +176,37 @@ impl OpenSpec {
         change: &str,
     ) -> Result<ArchiveAnswer, ArchiveCliFailure> {
         if !change::valid_change_name(change) {
-            return Err(ArchiveCliFailure::Failed);
+            return Err(ArchiveCliFailure::failed());
         }
         let args = ["archive", change, "--json", "--yes"];
-        match self.run_with_status(sink, buffer, executable, "archive", &args, cwd, &[0, 1]) {
+        // OFP-FR-IJYA: one process alone. The step runs it again, once the
+        // working copy is restored.
+        match self.run_once(sink, buffer, executable, "archive", &args, cwd, OnExitOne::Raw) {
             Ok((status, stdout)) => parse_archive(change, status, &stdout),
-            Err(RunFailure::TimedOut) => Err(ArchiveCliFailure::TimedOut),
-            Err(RunFailure::Spawn | RunFailure::Exit(_)) => Err(ArchiveCliFailure::Failed),
+            Err(failure) => Err(match OpenSpecReadError::from(failure) {
+                OpenSpecReadError::CliTimedOut { diagnostics } => {
+                    ArchiveCliFailure::TimedOut { diagnostics }
+                }
+                OpenSpecReadError::CliRejected { diagnostics } => {
+                    ArchiveCliFailure::Rejected { diagnostics }
+                }
+                other => ArchiveCliFailure::Failed { diagnostics: other.diagnostics().to_vec() },
+            }),
         }
+    }
+
+    /// OFP-FR-IJYA, OFP-FR-ZQNU: the record and the wait before an archive
+    /// runs once more.
+    pub fn pause_before_archive_retry<S: LogSink + Clone + Send + 'static>(
+        &self,
+        sink: &S,
+        buffer: &'static LogBuffer,
+        failure: &ArchiveCliFailure,
+    ) {
+        let code = match failure {
+            ArchiveCliFailure::TimedOut { .. } => failure::CODE_TIMED_OUT,
+            _ => failure::CODE_FAILED,
+        };
+        self.pause_before_retry(sink, buffer, "archive", code);
     }
 }

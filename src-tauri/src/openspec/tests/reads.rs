@@ -88,10 +88,17 @@ fn a_read_with_no_usable_cli_carries_the_cli_state() {
 fn process_failures_fail_the_read_with_their_codes() {
     let (_dir, root) = openspec_project();
     for (answer, expected) in [
-        (Err(ProcessError::TimedOut), OpenSpecReadError::CliTimedOut),
         (
-            Ok(ProcessOutput { exit_status: Some(2), stdout: SPECS.as_bytes().to_vec() }),
-            OpenSpecReadError::CliFailed { exit_status: 2 },
+            Err(ProcessError::timed_out()),
+            OpenSpecReadError::CliTimedOut { diagnostics: Vec::new() },
+        ),
+        (
+            Ok(ProcessOutput {
+                exit_status: Some(2),
+                stdout: SPECS.as_bytes().to_vec(),
+                stderr: Vec::new(),
+            }),
+            OpenSpecReadError::CliFailed { exit_status: Some(2), diagnostics: Vec::new() },
         ),
         (Ok(ok("not json")), OpenSpecReadError::CliOutputUnreadable),
         (Ok(ok(r#"{ "specs": [ { "id": 3 } ] }"#)), OpenSpecReadError::CliOutputUnreadable),
@@ -238,10 +245,10 @@ fn records_name_the_subcommand_and_never_an_argument_path_or_output() {
     let buffer = buffer();
     let (seam, _, _) = seam_with(full_runner());
     seam.read_capability(&Silent, buffer, Some(&root), "auth").unwrap();
-    let (failing, _, _) = seam_with(
-        FakeRunner::default()
-            .answering("list", Ok(ProcessOutput { exit_status: Some(7), stdout: vec![] })),
-    );
+    let (failing, _, _) = seam_with(FakeRunner::default().answering(
+        "list",
+        Ok(ProcessOutput { exit_status: Some(7), stdout: vec![], stderr: Vec::new() }),
+    ));
     let _ = failing.list_capabilities(&Silent, buffer, Some(&root));
 
     let all = records(buffer);

@@ -15,7 +15,11 @@ use crate::openspec::{OpenSpec, OpenSpecReadError};
 mod tests;
 
 /// LOS, ROS, LOC: the **OpenSpec unavailable** refusal.
-pub const UNAVAILABLE: &str = "OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI is not installed on this machine.";
+pub const UNAVAILABLE: &str = "OpenSpec cannot be read in this project now. The OpenSpec mode is off, or the OpenSpec CLI on this machine is missing, too old, or does not work.";
+
+/// LOS-FR-IEDQ, ROS-FR-MOFU, LOC-FR-YEQH: the **OpenSpec did not answer**
+/// refusal.
+pub const NO_ANSWER: &str = "The OpenSpec CLI did not finish, also after one more try. Do not call this tool again in this turn.";
 
 /// LOS, ROS, LOC: the **OpenSpec unavailable** refusal, kind `Other`, not
 /// retryable.
@@ -24,6 +28,18 @@ pub fn unavailable() -> ToolRefusal {
         kind: FixedKind::Other,
         message: UNAVAILABLE,
         code: "openspec_unavailable",
+        retryable: false,
+    }
+}
+
+/// LOS-FR-IEDQ, ROS-FR-MOFU, LOC-FR-YEQH: the **OpenSpec did not answer**
+/// refusal, kind `Other`, not retryable: the seam already ran the read twice
+/// (LOS-FR-GPCY, LOC-FR-UBZT).
+pub fn no_answer() -> ToolRefusal {
+    ToolRefusal::Fixed {
+        kind: FixedKind::Other,
+        message: NO_ANSWER,
+        code: "openspec_no_answer",
         retryable: false,
     }
 }
@@ -39,21 +55,23 @@ pub fn read_failed(message: &'static str) -> ToolRefusal {
     }
 }
 
-/// The refusal of a seam error that reads the same in the three tools, or
-/// `None` for an error that only `read_openspec_spec` can meet. No CLI output
-/// reaches a message: the error carries none.
+/// LOS-FR-SBNB, LOS-FR-IEDQ, ROS-FR-MOFU, LOC-FR-YEQH: the refusal of a seam
+/// error that reads the same in the three tools, or `None` for an error that
+/// only `read_openspec_spec` can meet. No CLI output and no diagnostic reaches
+/// a message (OFP-FR-WRDX): every message is fixed text.
 pub fn common_refusal(
     error: &OpenSpecReadError,
     read_failed_message: &'static str,
 ) -> Option<ToolRefusal> {
     match error {
         OpenSpecReadError::NoOpenProject => Some(ToolRefusal::NoProjectOpen),
-        OpenSpecReadError::OpenSpecModeInactive | OpenSpecReadError::CliUnavailable(_) => {
-            Some(unavailable())
+        OpenSpecReadError::OpenSpecModeInactive
+        | OpenSpecReadError::CliUnavailable(_)
+        | OpenSpecReadError::CliOutputUnreadable => Some(unavailable()),
+        OpenSpecReadError::CliTimedOut { .. } | OpenSpecReadError::CliFailed { .. } => {
+            Some(no_answer())
         }
-        OpenSpecReadError::CliTimedOut
-        | OpenSpecReadError::CliFailed { .. }
-        | OpenSpecReadError::CliOutputUnreadable => Some(read_failed(read_failed_message)),
+        OpenSpecReadError::CliRejected { .. } => Some(read_failed(read_failed_message)),
         OpenSpecReadError::InvalidCapabilityId | OpenSpecReadError::CapabilityNotFound => None,
         // No read tool names a change or a stream, so none of these reach a tool.
         OpenSpecReadError::UnknownStream

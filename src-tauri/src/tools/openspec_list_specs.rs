@@ -20,7 +20,7 @@ pub const DESCRIPTION: &str = "List the capabilities this OpenSpec project has s
 
 /// LOS-FR-IEDQ: the tool's sentence of the **OpenSpec read failed** refusal.
 pub const READ_FAILED: &str =
-    "The OpenSpec CLI could not list the specs of this project. The OpenSpec files may be malformed.";
+    "The OpenSpec CLI refused to list the specs of this project. The OpenSpec files may be malformed.";
 
 /// The arguments: none (LOS-FR-UPKL). Not `deny_unknown_fields`, so a model
 /// that sent a field it invented is still answered.

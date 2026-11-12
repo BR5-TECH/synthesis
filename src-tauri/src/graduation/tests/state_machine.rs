@@ -561,6 +561,9 @@ fn the_new_fields_cross_the_seam_under_the_names_the_frontend_reads() {
         message: "symlink refused".to_string(),
         clears_by: "Continue the run.".to_string(),
         attempt: 2,
+        cause: None,
+        detail: None,
+        diagnostics: Vec::new(),
     };
     let value = serde_json::to_value(&blocker).expect("serialized");
     assert_eq!(value.get("attempt").and_then(|v| v.as_u64()), Some(2));

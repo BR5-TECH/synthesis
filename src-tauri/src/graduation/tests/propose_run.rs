@@ -16,7 +16,11 @@ const INVALID: &str = r#"{ "items": [ { "id": "add-logout-3f2a", "type": "change
   "issues": [ { "level": "ERROR", "path": "specs/auth/spec.md", "message": "No scenario" } ] } ] }"#;
 
 fn invalid() -> Result<ProcessOutput, crate::openspec::ProcessError> {
-    Ok(ProcessOutput { exit_status: Some(1), stdout: INVALID.as_bytes().to_vec() })
+    Ok(ProcessOutput {
+        exit_status: Some(1),
+        stdout: INVALID.as_bytes().to_vec(),
+        stderr: Vec::new(),
+    })
 }
 
 /// The fixture in OpenSpec mode, with a seam whose CLI is found and whose
@@ -57,7 +61,7 @@ fn start(
     draft: &str,
     stream: &crate::streams::WorkStream,
     change: Option<&str>,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, crate::openspec::Refusal> {
     crate::graduation::start_graduation(
         fx.app.clone(),
         draft.to_string(),
@@ -104,7 +108,9 @@ fn a_propose_start_is_refused_without_the_mode_the_cli_or_a_valid_name() {
         env(),
     ));
     // No OpenSpec in the project, and no image configured: the mode refuses first.
-    assert_eq!(start(&fx, &draft, &stream, Some(CHANGE)).unwrap_err(), "openspec_mode_inactive");
+    let refused = start(&fx, &draft, &stream, Some(CHANGE)).unwrap_err();
+    // OFP-FR-QLQJ: an object, and not the typed code of the same text.
+    super::change_runs::assert_object(&refused, "openspec_mode_inactive");
 
     let (fx, _) = openspec_fixture(Ok(ok(VALID)));
     let stream = fx.stream("editor");
@@ -122,7 +128,9 @@ fn a_propose_start_is_refused_without_the_mode_the_cli_or_a_valid_name() {
     ));
     let stream = fx.stream("editor");
     let draft = fx.draft("logout");
-    assert_eq!(start(&fx, &draft, &stream, Some(CHANGE)).unwrap_err(), "openspec_cli_unavailable");
+    let refused = start(&fx, &draft, &stream, Some(CHANGE)).unwrap_err();
+    assert_eq!(refused, "cli_unavailable: not_found");
+    super::change_runs::assert_object(&refused, "cli_unavailable");
     assert!(crate::graduation::queue::project_queue(&fx.app).unwrap().runs.is_empty());
 }
 
@@ -291,8 +299,11 @@ fn a_ready_on_an_invalid_change_starts_another_pass() {
 // turn and blocks the run with its code; Continue validates and reviews again.
 #[test]
 fn a_validation_that_cannot_run_blocks_the_run_until_continue() {
-    let (fx, runner) =
-        openspec_fixture(Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() }));
+    let (fx, runner) = openspec_fixture(Ok(ProcessOutput {
+        exit_status: Some(2),
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+    }));
     let stream = fx.stream("editor");
     let run = propose_run(&fx, &stream);
     let dispatch = ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]);
@@ -328,25 +339,44 @@ fn an_advisory_revise_on_an_invalid_change_does_not_complete() {
     assert_eq!(dispatch.of_part("review").len(), 2);
 }
 
-// GRL-FR-KDYL, GRD-FR-UJII: OpenSpec mode that is no longer active, and a CLI
-// that is no longer usable, each block the run before any review turn; the
-// blocked run keeps its queue and its project slot.
+// GRL-FR-KDYL, GRD-FR-UJII, OFP-FR-TBHX, OFP-FR-NQPY: OpenSpec mode that is
+// no longer active, and a CLI that is no longer usable, each block the run
+// before any review turn, with the read's code as the cause; a mode that is
+// off before the first turn rests the run at its image probe. The blocked
+// run keeps its queue and its project slot.
 #[test]
 fn a_validation_without_the_mode_or_the_cli_blocks_and_keeps_the_slot() {
-    for take_away in ["mode", "cli"] {
+    for take_away in ["mode", "mode after the probe", "cli"] {
         let (fx, _, probe) = openspec_fixture_probed(Ok(ok(VALID)));
         let stream = fx.stream("editor");
-        let run = propose_run(&fx, &stream);
-        if take_away == "mode" {
-            std::fs::remove_file(fx.root().join("openspec/config.yaml")).unwrap();
-        } else {
+        let mut run = propose_run(&fx, &stream);
+        if take_away == "cli" {
             probe.executables.lock().unwrap().clear();
+        } else {
+            std::fs::remove_file(fx.root().join("openspec/config.yaml")).unwrap();
+        }
+        if take_away == "mode after the probe" {
+            run.checkpoint.openspec_image_cli =
+                Some(crate::graduation::OpenSpecImageCli { version: "1.17.0".into() });
+            crate::graduation::save_run(&fx.app, &mut run).unwrap();
         }
         let dispatch = ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]);
         let run = fx.drive(&run, dispatch.clone());
         assert_eq!(run.state, GraduationRunState::Blocked, "{take_away}");
-        assert_eq!(run.blocker.as_ref().unwrap().code, "openspec_validation_unavailable");
+        let blocker = run.blocker.as_ref().unwrap();
+        let (code, cause) = match take_away {
+            "mode" => ("openspec_image_cli_unavailable", "openspec_mode_inactive"),
+            "cli" => ("openspec_validation_unavailable", "cli_unavailable"),
+            _ => ("openspec_validation_unavailable", "openspec_mode_inactive"),
+        };
+        assert_eq!(blocker.code, code, "{take_away}");
+        assert_eq!(blocker.cause.as_deref(), Some(cause), "{take_away}");
+        assert!(blocker.diagnostics.is_empty(), "{take_away}");
         assert!(dispatch.of_part("review").is_empty(), "{take_away}");
+        if take_away == "mode" {
+            assert_eq!(dispatch.turns_taken(), 0, "the probe dispatches no turn");
+            assert_eq!(dispatch.probes_taken(), 0, "a mode that is off runs no probe");
+        }
 
         let queue = crate::graduation::queue::project_queue(&fx.app).unwrap();
         assert!(queue.runs.iter().any(|r| r.id == run.id && !r.state.is_terminal()));
@@ -477,7 +507,7 @@ fn a_change_is_read_on_a_live_stream_and_an_unknown_stream_is_refused() {
         location,
         CHANGE.into(),
     ));
-    assert_eq!(refused.unwrap_err(), "unknown_stream");
+    assert_eq!(refused.unwrap_err().code, "unknown_stream");
     assert!(runner.calls().iter().all(|c| c.args[0] == "--version"), "no read process for it");
 
     let stream = fx.stream("editor");

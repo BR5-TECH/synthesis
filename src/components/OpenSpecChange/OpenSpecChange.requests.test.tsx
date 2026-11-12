@@ -21,6 +21,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+import { flushLogs } from "../../logging";
 import { originKind } from "../../state/discussionOrigin";
 import { configureRunRoute } from "../../state/graduation/runRoute";
 import { makeRun } from "../../test/graduationFixtures";
@@ -201,14 +202,39 @@ describe("the states of the card (OCW-FR-CTWP)", () => {
   });
 
   it("OCW-FR-CTWP: a refused confirmation is stated on the card on the terms of OCW-FR-EKYF, and the card still offers Confirm", async () => {
-    backend.decideAction = () => ({ reject: "change_not_ready: tasks" });
+    backend.decideAction = () => ({
+      reject: { code: "change_not_ready", detail: "tasks", diagnostics: [] },
+    });
     const shown = await card();
     await userEvent.click(await within(shown).findByRole("button", { name: "Confirm" }));
     expect(await within(shown).findByTestId("change-action-refusal")).toHaveTextContent(
-      "The change is not ready to apply. It is missing artifacts: tasks. No run started.",
+      "The change misses these artifacts: tasks. Complete them before Apply. No run started.",
     );
-    expect(within(shown).getByRole("button", { name: "Confirm" })).toBeEnabled();
+    expect(within(shown).getByRole("button", { name: "Confirm" })).not.toHaveAttribute("aria-disabled");
     expect(calls("dispatch_agent_turn")).toHaveLength(0);
+  });
+
+  it("OCW-FR-CTWP: while a confirmation is in flight, Confirm keeps the focus, and a second press sends nothing", async () => {
+    let refuse: (reason: unknown) => void = () => {};
+    const rest = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: Record<string, unknown>) =>
+      cmd === "confirm_change_action_request"
+        ? new Promise((_, reject) => (refuse = reject))
+        : rest(cmd, args),
+    );
+    const shown = await card();
+    const confirm = await within(shown).findByRole("button", { name: "Confirm" });
+    confirm.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(confirm).toHaveAttribute("aria-disabled", "true"));
+    expect(document.activeElement).toBe(confirm);
+    await userEvent.click(confirm);
+    await userEvent.click(within(shown).getByRole("button", { name: "Decline" }));
+    expect(calls("confirm_change_action_request")).toHaveLength(1);
+    expect(calls("decline_change_action_request")).toHaveLength(0);
+    await act(async () => refuse({ code: "change_not_ready", detail: "tasks", diagnostics: [] }));
+    await within(shown).findByTestId("change-action-refusal");
+    expect(confirm).not.toHaveAttribute("aria-disabled");
   });
 
   it("OCW-FR-CTWP, OCW-FR-EKYF: proposal_pending on the card of an apply request states the proposal to decide or the edits to commit", async () => {
@@ -235,8 +261,60 @@ describe("the states of the card (OCW-FR-CTWP)", () => {
     backend.requests = [actionRequest({ lastRefusal: "openspec_mode_inactive" })];
     const shown = await card();
     const refusal = await within(shown).findByTestId("change-action-refusal");
-    expect(refusal).toHaveTextContent("OpenSpec mode is not active for this project");
+    expect(refusal).toHaveTextContent("OpenSpec mode is off for this project. No run started.");
     expect(within(refusal).getByRole("button", { name: "Open OpenSpec settings" })).toBeInTheDocument();
+  });
+
+  it("OCW-FR-CTWP, OFN-FR-QZEC: a failed card states an OpenSpec code in the short form of its notice", async () => {
+    backend.requests = [actionRequest({ state: "failed", lastRefusal: "cli_unavailable: not_found" })];
+    const shown = await card();
+    const failed = await within(shown).findByTestId("change-action-failed");
+    expect(failed).toHaveTextContent(
+      "The OpenSpec CLI is not installed on this machine. No run started.",
+    );
+    expect(within(failed).queryByRole("button")).toBeNull();
+    // OFN-FR-LKAT: the short form on the card emits one WARN record.
+    const records = () => {
+      flushLogs();
+      return invokeMock.mock.calls
+        .filter((c) => c[0] === "append_log_records")
+        .flatMap((c) => (c[1] as { records: Array<{ message: string; fields: unknown }> }).records)
+        .filter((r) => r.message === "an openspec failure notice appeared");
+    };
+    await waitFor(() => expect(records()).toHaveLength(1));
+    expect(records()[0].fields).toEqual({
+      surface: "change_action_card",
+      code: "cli_unavailable",
+      cause: "",
+      class: "environment",
+      state: "not_found",
+    });
+  });
+
+  it("OFN-FR-LKAT: a failed card whose code is not an OpenSpec failure emits no notice record", async () => {
+    backend.requests = [actionRequest({ state: "failed", lastRefusal: "unknown_stream" })];
+    const shown = await card();
+    expect(await within(shown).findByTestId("change-action-failed")).toHaveTextContent(
+      "The work stream is gone, so no run started.",
+    );
+    flushLogs();
+    expect(JSON.stringify(invokeMock.mock.calls)).not.toContain("an openspec failure notice appeared");
+  });
+
+  it("OCW-FR-CTWP, OFN-FR-CBLG: Retry of a transient refusal re-checks the CLI and confirms again", async () => {
+    let tries = 0;
+    backend.decideAction = (cmd) => {
+      if (cmd === "confirm_change_action_request") tries += 1;
+      return { reject: { code: "apply_progress_unavailable", cause: "cli_failed", diagnostics: [] } };
+    };
+    const shown = await card();
+    await userEvent.click(await within(shown).findByRole("button", { name: "Confirm" }));
+    const refusal = await within(shown).findByTestId("change-action-refusal");
+    expect(refusal).toHaveTextContent("The OpenSpec CLI stopped before it answered");
+    await userEvent.click(within(refusal).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(tries).toBe(2));
+    expect(backend.statusChecks).toEqual([true]);
+    expect(await within(shown).findByTestId("change-action-refusal")).toBeInTheDocument();
   });
 });
 

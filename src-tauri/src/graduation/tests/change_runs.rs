@@ -48,10 +48,31 @@ pub(super) fn change_fixture(progress: &str) -> (Fixture, Arc<FakeRunner>, Arc<F
             .json("instructions", progress),
     );
     let probe = Arc::new(FakeProbe::default().with_executable(CLI));
-    let seam = OpenSpec::new(runner.clone(), probe.clone(), env());
+    let seam = recorded_seam(&fx, runner.clone(), probe.clone());
     seam.cli_state(&crate::openspec::tests::Silent, crate::openspec::tests::buffer());
     fx.app.manage(seam);
     (fx, runner, probe)
+}
+
+/// OFP-FR-MJZU, OFP-FR-ITUD: a seam over `runner` whose wait is recorded and
+/// managed, so a test reads the requested delays with [`waits`]. A kept
+/// `failed` check stands for an hour, so a test that asserts a clear fails
+/// without it, also on a slow runner.
+pub(super) fn recorded_seam(
+    fx: &Fixture,
+    runner: Arc<dyn crate::openspec::OpenSpecRunner>,
+    probe: Arc<FakeProbe>,
+) -> OpenSpec {
+    let wait = Arc::new(crate::openspec::RecordedWait::default());
+    fx.app.manage(wait.clone());
+    OpenSpec::new(runner, probe, env())
+        .with_wait(wait)
+        .with_failed_ttl(std::time::Duration::from_secs(3600))
+}
+
+/// OFP-FR-MJZU: the delays the seam of [`recorded_seam`] was asked to wait.
+pub(super) fn waits(fx: &Fixture) -> Vec<u64> {
+    fx.app.state::<Arc<crate::openspec::RecordedWait>>().delays()
 }
 
 /// Commit every file of a working copy onto its branch.
@@ -91,25 +112,37 @@ pub(super) fn change_stream(fx: &Fixture, name: &str) -> crate::streams::WorkStr
 }
 
 /// The apply start, with the loop off so the run waits in its queue.
+/// The refusal keeps the form the command rejects with (OFP-FR-QLQJ).
 pub(super) fn start_apply(
     fx: &Fixture,
     stream: &crate::streams::WorkStream,
-) -> Result<GraduationRun, String> {
+) -> Result<GraduationRun, crate::openspec::Refusal> {
     crate::graduation::start_change_apply(fx.app.clone(), stream.id.clone(), CHANGE.into())
 }
 
-/// The rework start.
+/// The rework start. The refusal keeps the form the command rejects with
+/// (OFP-FR-QLQJ).
 pub(super) fn start_rework(
     fx: &Fixture,
     stream: &crate::streams::WorkStream,
     instruction: &str,
-) -> Result<crate::graduation::ChangeReworkStart, String> {
+) -> Result<crate::graduation::ChangeReworkStart, crate::openspec::Refusal> {
     crate::graduation::start_change_rework(
         fx.app.clone(),
         stream.id.clone(),
         CHANGE.into(),
         instruction.into(),
     )
+}
+
+/// OFP-FR-QLQJ: the refusal is one `OpenSpecFailure` object on the wire, with
+/// `code`, and not a typed code.
+pub(super) fn assert_object(refusal: &crate::openspec::Refusal, code: &str) {
+    let failure = refusal.openspec().unwrap_or_else(|| panic!("not an object: {refusal}"));
+    assert_eq!(failure.code, code);
+    let wire = serde_json::to_value(refusal).unwrap();
+    assert!(wire.is_object(), "{wire}");
+    assert_eq!(wire["code"], code);
 }
 
 /// The request thread of a change, read from the machine store.
@@ -222,7 +255,10 @@ fn an_apply_start_is_refused_in_the_order_of_the_checks() {
         fresh_stream.id.clone(),
         "Bad".into(),
     );
-    assert_eq!(refused.unwrap_err(), "openspec_cli_unavailable");
+    // OFP-FR-GPCO, OFP-FR-QLQJ: the one code, with the CLI state.
+    let refusal = refused.unwrap_err();
+    assert_eq!(refusal, "cli_unavailable: not_found");
+    assert_eq!(refusal.openspec().unwrap().detail.as_deref(), Some("not_found"));
 
     std::fs::remove_file(fresh.root().join("openspec/config.yaml")).unwrap();
     let refused = crate::graduation::start_change_apply(
@@ -230,9 +266,32 @@ fn an_apply_start_is_refused_in_the_order_of_the_checks() {
         fresh_stream.id.clone(),
         "Bad".into(),
     );
-    assert_eq!(refused.unwrap_err(), "openspec_mode_inactive");
+    // OFP-FR-QLQJ: an object, and not the typed code of the same text.
+    assert_object(&refused.unwrap_err(), "openspec_mode_inactive");
     assert_eq!(queue_len(&fx), 0);
     assert_eq!(queue_len(&fresh), 0);
+}
+
+// OFP-FR-QLQJ, OFP-FR-GPCO, OCR-FR-GTOM: a rework start rejects
+// `openspec_mode_inactive` and `cli_unavailable` with one `OpenSpecFailure`
+// object each, and a refusal that is no OpenSpec failure keeps its typed code.
+#[test]
+fn a_rework_start_rejects_an_openspec_failure_as_an_object() {
+    let (fx, _, probe) = change_fixture(READY);
+    fx.allow_execution();
+    let stream = change_stream(&fx, "editor");
+    let blank = start_rework(&fx, &stream, " ").unwrap_err();
+    assert!(blank.openspec().is_none(), "{blank}");
+    assert_eq!(serde_json::to_value(&blank).unwrap(), serde_json::json!("blank_instruction"));
+
+    probe.executables.lock().unwrap().clear();
+    let refused = start_rework(&fx, &stream, "Drop it.").unwrap_err();
+    assert_object(&refused, "cli_unavailable");
+    assert_eq!(refused.openspec().unwrap().detail.as_deref(), Some("not_found"));
+
+    std::fs::remove_file(fx.root().join("openspec/config.yaml")).unwrap();
+    assert_object(&start_rework(&fx, &stream, "Drop it.").unwrap_err(), "openspec_mode_inactive");
+    assert_eq!(queue_len(&fx), 0);
 }
 
 // OCR-FR-LNKQ: a `blocked` change refuses with its missing artifacts, a read
@@ -243,7 +302,9 @@ fn an_apply_start_reads_the_progress_of_the_change() {
     fx.allow_execution();
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let stream = change_stream(&fx, "editor");
-    assert_eq!(start_apply(&fx, &stream).unwrap_err(), "change_not_ready: design,tasks");
+    let refused = start_apply(&fx, &stream).unwrap_err();
+    assert_eq!(refused, "change_not_ready: design,tasks");
+    assert_object(&refused, "change_not_ready");
     let read = runner.calls().into_iter().find(|c| c.args[0] == "instructions").unwrap();
     assert_eq!(read.args, ["instructions", "apply", "--change", CHANGE, "--json"]);
     assert_eq!(
@@ -252,8 +313,14 @@ fn an_apply_start_reads_the_progress_of_the_change() {
         "read in the stream's working copy"
     );
 
-    runner.set("instructions", Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new() }));
-    assert_eq!(start_apply(&fx, &stream).unwrap_err(), "apply_progress_unavailable: cli_failed");
+    runner.set(
+        "instructions",
+        Ok(ProcessOutput { exit_status: Some(2), stdout: Vec::new(), stderr: Vec::new() }),
+    );
+    let refused = start_apply(&fx, &stream).unwrap_err();
+    assert_eq!(refused, "apply_progress_unavailable: cli_failed");
+    assert_object(&refused, "apply_progress_unavailable");
+    assert_eq!(refused.openspec().unwrap().cause.as_deref(), Some("cli_failed"));
     assert_eq!(queue_len(&fx), 0, "a refusal leaves no run");
 
     runner.set("instructions", Ok(ok(ALL_DONE)));
@@ -301,7 +368,7 @@ fn an_apply_start_takes_the_image_preflight() {
     let (fx, _, _) = change_fixture(READY);
     let stream = change_stream(&fx, "editor");
     let refused = start_apply(&fx, &stream).unwrap_err();
-    assert!(refused.starts_with("vendor_"), "an image preflight refusal: {refused}");
+    assert!(refused.to_string().starts_with("vendor_"), "an image preflight refusal: {refused}");
     assert_eq!(queue_len(&fx), 0);
 }
 
@@ -355,9 +422,9 @@ fn a_change_run_start_takes_the_write_check_of_its_branch() {
     let stream = change_stream(&fx, "editor");
     on_the_main_branch(&fx, &stream);
     let refused = start_apply(&fx, &stream).unwrap_err();
-    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(refused.code() == crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED, "{refused}");
     let refused = start_rework(&fx, &stream, "Drop it.").unwrap_err();
-    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(refused.code() == crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED, "{refused}");
     assert_eq!(queue_len(&fx), 0);
 }
 
@@ -370,7 +437,7 @@ fn the_checks_of_the_phase_and_the_image_come_before_the_write_check() {
     on_the_main_branch(&fx, &stream);
     // No agent can execute and the branch is not confirmed: the image wins.
     let refused = start_apply(&fx, &stream).unwrap_err();
-    assert!(refused.starts_with("vendor_"), "the image preflight first: {refused}");
+    assert!(refused.to_string().starts_with("vendor_"), "the image preflight first: {refused}");
     // A change that is not ready wins over both.
     runner.set("instructions", Ok(ok(BLOCKED)));
     assert_eq!(start_apply(&fx, &stream).unwrap_err(), "change_not_ready: design,tasks");
@@ -718,7 +785,7 @@ fn the_apply_progress_command_reads_a_stream_change() {
             CHANGE.to_string(),
         ))
     };
-    assert_eq!(read("no-such-stream").unwrap_err(), "unknown_stream");
+    assert_eq!(read("no-such-stream").unwrap_err().code, "unknown_stream");
     assert_eq!(runner.calls_of("instructions"), 0);
 
     let progress = read(&stream.id).expect("the progress");
@@ -735,5 +802,5 @@ fn the_apply_progress_command_reads_a_stream_change() {
         "instructions",
         Ok(ok(r#"{ "state": "odd", "progress": { "total": 0, "complete": 0 } }"#)),
     );
-    assert_eq!(read(&stream.id).unwrap_err(), "cli_output_unreadable");
+    assert_eq!(read(&stream.id).unwrap_err().code, "cli_output_unreadable");
 }

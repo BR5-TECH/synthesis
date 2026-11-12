@@ -9,17 +9,24 @@
  * run, and the change workspace for its change, each on its own terms. It
  * reads when it mounts and on each `"graduation run changed"` for the run it
  * follows. An older answer that lands after a newer read is dropped.
+ *
+ * A read that fails keeps its failure, so the surface adds the short form of
+ * its notice to its stage sentence
+ * (`../../../specifications/ui/OFN-openspec-failure-notices.md` OFN-FR-QZEC).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readApplyProgress } from "../../api";
 import { onGraduationRunChanged } from "../../events";
 import { logDebug, logWarn } from "../../logging";
-import type { ApplyProgress } from "../../types";
+import type { ApplyProgress, OpenSpecFailure } from "../../types";
+import { logFailureNotice, shortForm, toOpenSpecFailure } from "./failureNotice";
 
 export interface ApplyProgressFollow {
   /** The last answer, or null where none is held. */
   progress: ApplyProgress | null;
+  /** OFN-FR-QZEC: the short form of the failure of the last read, or null. */
+  failure: string | null;
   /** Read again now. */
   reread: () => void;
 }
@@ -30,6 +37,7 @@ export function useApplyProgress({
   runId,
   enabled,
   keepOnFailure,
+  surface,
 }: {
   streamId: string;
   change: string;
@@ -43,8 +51,13 @@ export function useApplyProgress({
    * ordinary sentence.
    */
   keepOnFailure: boolean;
+  /** OFN-FR-LKAT: the surface of the short form, for its log record. */
+  surface: string;
 }): ApplyProgressFollow {
   const [progress, setProgress] = useState<ApplyProgress | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  /** The code of the failure on show, so a repeated failure logs once. */
+  const shownCode = useRef<string | null>(null);
   const seq = useRef(0);
   const live = useRef(true);
 
@@ -55,6 +68,8 @@ export function useApplyProgress({
       (answer) => {
         if (!live.current || mine !== seq.current) return;
         setProgress(answer ?? null);
+        setFailure(null);
+        shownCode.current = null;
         logDebug(["frontend"], "the apply progress of a change was read", {
           streamId,
           state: answer?.state ?? "",
@@ -65,13 +80,22 @@ export function useApplyProgress({
       (error: unknown) => {
         if (!live.current || mine !== seq.current) return;
         if (!keepOnFailure) setProgress(null);
-        logWarn(["frontend"], "the apply progress of a change could not be read", {
-          streamId,
-          code: String(error).slice(0, 80),
-        });
+        const read: OpenSpecFailure = toOpenSpecFailure(error);
+        const words = shortForm(read, change);
+        setFailure(words);
+        const key = `${read.code}/${read.cause ?? ""}`;
+        // OFN-FR-LKAT: the short form appears once for one failure.
+        if (words !== null && shownCode.current !== key) logFailureNotice(surface, read);
+        else if (words === null) {
+          logWarn(["frontend"], "the apply progress of a change could not be read", {
+            streamId,
+            code: read.code.slice(0, 80),
+          });
+        }
+        shownCode.current = key;
       },
     );
-  }, [enabled, streamId, change, keepOnFailure]);
+  }, [enabled, streamId, change, keepOnFailure, surface]);
 
   useEffect(() => {
     live.current = true;
@@ -84,6 +108,8 @@ export function useApplyProgress({
   useEffect(() => {
     if (!enabled) {
       setProgress(null);
+      setFailure(null);
+      shownCode.current = null;
       return;
     }
     read();
@@ -112,5 +138,5 @@ export function useApplyProgress({
     };
   }, [enabled, runId, read]);
 
-  return { progress, reread: read };
+  return { progress, failure, reread: read };
 }

@@ -33,7 +33,7 @@ where
             return row;
         }
     };
-    let ran = backend.author.clone().and_then(|by| {
+    let ran = backend.author.clone().map_err(crate::openspec::Refusal::from).and_then(|by| {
         if confirm {
             car::confirm_action_request(
                 &backend.tool.app,
@@ -44,6 +44,7 @@ where
             )
         } else {
             car::decline_action_request(&backend.tool.app, backend.store(), id, None, &by)
+                .map_err(crate::openspec::Refusal::from)
         }
     });
     match ran {
@@ -52,9 +53,9 @@ where
             row.run_id = outcome.run.map(|run| run.id);
         }
         Err(refusal) => {
-            // DCE-FR-UVUT: the code alone, so no detail of a start reaches the
-            // model or the log.
-            let code = car::refusal_code(&refusal).to_string();
+            // DCE-FR-UVUT, OFP-FR-WRDX: the code alone, so no detail and no
+            // diagnostic of a start reaches the model or the log.
+            let code = refusal.code().to_string();
             let retryable = code != car::ERR_UNKNOWN_STREAM && code != car::ERR_CHANGE_NOT_FOUND;
             let text = format!("the decision could not be made ({code}).");
             row.refuse(RefusalCode::DecisionFailed, total, &text, Some(code));

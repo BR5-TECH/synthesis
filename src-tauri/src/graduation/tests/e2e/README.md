@@ -16,6 +16,13 @@ The one thing a scenario substitutes is the dispatch seam
 provider record selects between the production seam and the scripted one, so a
 substitution is the test's own act rather than a configuration.
 
+An OpenSpec scenario substitutes one thing more: the process seam of
+`OSM-openspec-mode.md`, where a fake OpenSpec CLI answers each subcommand from
+what the working copy it runs in holds (GTE-FR-QPMA). Its retry wait is the
+recorded wait seam of `OFP-openspec-failure-policy.md` OFP-FR-MJZU, and the
+image probe answers through the dispatch seam, so no OpenSpec scenario starts a
+real CLI, a container or a real wait (GTE-FR-ZDCH).
+
 ## The harness boundary
 
 ```
@@ -87,6 +94,9 @@ The language stands in several files, each under a thousand lines:
 | `merge_acts.rs` | the author's Merge, driving the merge run, another author's commits, the apply obstructions and the relaunch |
 | `merge_assert.rs` | the assertions on the answer of a merge, on the run it was handed to, and on what it wrote |
 | `dispatch_assert.rs` | `DispatchAssert`, the assertions on one recorded dispatch |
+| `openspec_cli.rs` | the fake OpenSpec CLI that answers from the working copy and records every process |
+| `openspec_arrange.rs` | OpenSpec mode, the changes a stream holds, the OpenSpec run starts, and the acts on an OpenSpec run |
+| `openspec_assert.rs` | the assertions on the CLI processes, the waits, the image probe, the plan rest, the proposal, the archive and the merge notice |
 
 ### Arrange
 
@@ -335,6 +345,49 @@ The dispatches: `expect_dispatch_order`, `expect_dispatch_count`, and
 `changed_paths`, `hidden_paths`, `list_len`, `decision_answers`, `resumes_session`,
 `resumes_no_session`, `semantic_turn` and the merge reads above.
 
+### The OpenSpec language
+
+```rust
+Scenario::named("openspec apply")
+    .in_openspec_mode()                            // arrange: the mode, the fake CLI, the recorded wait
+    .with_change("add-logout")                     // the stream holds the change
+    .applying("add-logout")                        // the author's apply start
+    .work_turn(Script::reports_success()
+        .writes("openspec/changes/add-logout/tasks.md", "- [x] Add the button\n- [x] Wire the call\n"))
+    .review_turn(Script::answers_ready("Every task is done."))
+    .run()
+    .expect_dispatch(1, |d| d.apply_progress("all_done", 2, 2))
+    .expect_commits(1);
+```
+
+The arrangement: `in_openspec_mode()`, `with_change(name)`, `proposing(name)`,
+`applying(name)`, `reworking(name, instruction)`, `with_image_probes(answers)`
+and `with_cli_timing_out(subcommand, count)`. A propose run is enqueued on the
+production record shape, as every draft run is. An apply run and a rework run
+start through their production commands with the queue's own dispatch off.
+
+The answer `gives_plan_update(reason, questions)` is the plan update of an
+apply run's work turn. The acts: `applying_another(name, scripts)`,
+`continuing_with_image_probes(answers, scripts)`,
+`answering_the_plan_questions()`, `answering_one_of_the_plan_questions()`,
+`refusing_continue_and_changing_nothing(code)`,
+`refusing_the_next_archive(cause)`, `timing_out_the_next_archives(count)` and
+`discarding_the_repair_run()`. A scenario fails at its end where the fake CLI
+met a read that no journey makes.
+
+The assertions: `expect_cli_processes`, `expect_cli_read_the_directory_of`,
+`expect_waits`, `expect_blocker_cause`, `expect_blocker_detail`,
+`expect_blocker_diagnostic`, `expect_image_probes`, `expect_image_cli`,
+`expect_draft_graduated_into`, `expect_turns_stood_off_the_stream`,
+`expect_work_turns_stood_in_the_stream`, `expect_one_change_edit_proposal`,
+`expect_reviews_stood_in_checkouts_of_the_rework`, `expect_proposal_hunks_of`,
+`expect_stream_untouched`, `expect_plan_rest`, `expect_no_plan_answers`,
+`expect_changes_archived`, `expect_archive_commits_before_the_merge`,
+`expect_merge_notice`, `expect_no_merge_notice`,
+`expect_refusal_carries_the_notice_record`, `expect_refusal_without_a_notice`,
+`expect_queue_offered_the_repair_run_alone` and `expect_queue_offered_no_run`.
+A dispatch reads `openspec_validation` and `apply_progress`.
+
 ## Adding a journey
 
 1. Add a line to the coverage matrix below and to the one in
@@ -402,6 +455,13 @@ control is the thing to add.
 | 43 | A refused answer is asked again once in its own session, a second refusal rests the run with one commit, an uncorrectable refusal stops at once, and a correction stopped by a pause or a launch error is sent after Continue, a review correction after Continue in a new review checkout, and a correction keeps the check record of the turn it corrects | `a_refused_work_answer_is_corrected_in_its_session`, `a_second_refused_answer_rests_the_run_with_one_commit`, `an_uncorrectable_refusal_stops_at_once`, `a_refused_review_answer_is_corrected_in_the_review_session`, `a_correction_does_not_raise_the_verdict_refusal_count`, `a_paused_correction_is_sent_after_continue`, `a_correction_that_could_not_launch_is_sent_after_continue`, `a_correction_that_cannot_resume_settles_the_refused_turn`, `a_refused_merge_work_answer_is_corrected`, `a_correction_answered_from_a_fresh_session_is_discarded`, `a_pause_during_the_refused_turn_keeps_the_correction`, `a_correction_sent_after_continue_is_not_corrected_again`, `a_work_turn_drops_a_pending_review_correction`, `a_refused_merge_review_answer_is_corrected`, `a_review_correction_after_continue_stands_in_a_new_checkout`, `a_review_correction_after_continue_that_cannot_resume_settles_the_refused_turn`, `a_paused_correction_keeps_the_check_record_for_the_review` |
 | 44 | A red, unfinished or missing check record gets one check correction in its session and one escalate correction, then rests on checks not passed, unreviewed and uncommitted; a waiver that names a recorded decision passes; Continue starts a new gate episode; a paused, shut down, abandoned or time-bound gate step is sent after Continue; a merge work answer passes the same gate, and a merge run passes the whole gate; an escalate correction that answers green still rests; an escalation that is not recorded is a missing record; an unreadable check correction is asked again and then escalated; the turn after the answers starts a new episode; no log names a check or its command | `a_red_check_gets_one_check_correction_and_one_escalate_correction_then_rests`, `an_unfinished_check_and_a_missing_record_are_corrected_before_the_review`, `a_red_check_waived_by_a_recorded_decision_passes_the_gate`, `continue_from_checks_not_passed_starts_a_new_gate_episode`, `a_paused_check_correction_is_sent_after_continue`, `a_check_correction_with_no_total_time_left_rests_and_keeps_the_gate`, `a_check_correction_the_vendor_cannot_resume_runs_as_a_fresh_turn`, `a_merge_work_answer_passes_the_same_gate`, `a_green_success_from_the_escalate_correction_still_rests_the_run`, `an_escalation_that_is_not_recorded_is_gated_as_a_missing_record`, `a_pause_during_the_continued_turn_keeps_its_check_correction`, `a_check_correction_abandoned_by_a_relaunch_is_sent_again_after_continue`, `a_stopped_escalate_correction_is_sent_again_after_continue`, `continue_from_a_total_time_rest_sends_the_saved_escalate_correction`, `a_checks_rest_with_no_time_left_keeps_the_continued_correction_through_a_time_rest`, `no_log_names_a_check_or_its_command`, `a_merge_run_passes_the_whole_gate_and_is_applied_after_continue`, `an_unreadable_check_correction_is_asked_again_and_then_escalated`, `a_red_answer_after_a_gate_escalation_gets_a_check_correction` |
 | 45 | Every answer enters the run's decision ledger and every later turn carries it; a repeated question adds an entry; a work turn carries the findings of the earlier passes | `every_later_turn_carries_the_whole_decision_ledger`, `a_repeated_question_adds_a_new_ledger_entry`, `a_refused_answer_set_adds_no_ledger_entry`, `a_work_turn_carries_the_findings_of_the_earlier_passes` |
+| 46 | A propose run writes its change, the validate gate reads it as valid in the review checkout before the review, and one commit holds the change files alone | `a_propose_run_writes_its_change_and_commits_the_change_files_alone`, `a_change_the_validate_gate_reads_as_invalid_goes_to_another_pass` |
+| 47 | A `ready` rework review records one change edit proposal with the hunks of each changed file, and no branch and no working copy is written | `a_ready_rework_records_one_change_edit_proposal_and_writes_no_branch` |
+| 48 | The task counts of an apply run are read from `instructions apply` over the working copy, one commit lands, a plan update rests the run and Continue carries the answers | `an_apply_run_reads_its_task_counts_from_the_working_copy_and_lands_one_commit`, `a_plan_update_rests_the_run_and_continue_carries_the_answers`, `continue_with_one_of_two_plan_questions_answered_is_refused` |
+| 49 | A merge makes one archive commit for each landed change, in archive order, before the merge, and the merge result names each change | `a_merge_archives_each_landed_change_before_it_merges` |
+| 50 | An archive refused for a repair cause refuses the merge with one notice and one repair run, the same change files give no second notice, and new change files give a new one; another content cause gives a notice with no run, and a transient failure gives none | `an_archive_refused_for_a_repair_cause_gives_one_notice_and_one_repair_run`, `an_archive_refused_for_another_content_cause_gives_a_notice_and_no_repair_run`, `an_archive_that_times_out_twice_refuses_the_merge_with_no_notice` |
+| 51 | A CLI step runs once more after one recorded wait of 2000 ms, and two timeouts block the run with its diagnostics | `a_cli_step_that_times_out_once_runs_again_after_one_recorded_wait`, `a_cli_step_that_times_out_twice_blocks_the_run_with_its_diagnostics` |
+| 52 | A passing image probe is kept in the checkpoint and not run again, and a missing CLI blocks the run before the first turn | `a_passing_image_probe_is_kept_in_the_checkpoint_and_not_run_again`, `an_image_with_no_cli_blocks_the_run_before_the_first_turn` |
 
 The settings journeys stand beside 11 in `budget.rs`, because they are the same
 contract read from the other end: `a_setting_changed_between_two_turns_reaches_the_second_of_them`,

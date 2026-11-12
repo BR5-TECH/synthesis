@@ -10,7 +10,9 @@ use crate::graduation::{
     GraduationInterruptionReason, GraduationLogStream, ReviewFinding, ReviewOutcome,
     ReviewSeverity, ReviewVerdict,
 };
-use crate::tools::agent_exec::protocol::EnvelopeInvalid;
+use crate::tools::agent_exec::protocol::{
+    AgentEscalation, AgentEscalationQuestion, EnvelopeInvalid, EscalationKind,
+};
 use crate::tools::agent_exec::{AgentExecutionError, ProcessOutcome};
 
 /// GTE-FR-HWQM: something a turn does to the application while it runs.
@@ -134,6 +136,18 @@ impl TurnScript {
             reason: reason.to_string(),
             questions: questions.iter().map(|q| q.to_string()).collect(),
         })
+    }
+
+    /// OPU-FR-YBLE: the work turn of an apply run gives a plan update with
+    /// the reason and the questions, in a session the turn that takes the
+    /// answers resumes.
+    pub(crate) fn gives_plan_update(reason: &str, questions: Vec<AgentEscalationQuestion>) -> Self {
+        Self::of(Answer::PlanUpdate(AgentEscalation {
+            kind: Some(EscalationKind::PlanUpdate),
+            reason: reason.to_string(),
+            questions,
+        }))
+        .leaves_a_session()
     }
 
     /// GRL-FR-ZDKP: the turn was stopped where it stood. Deterministic — the

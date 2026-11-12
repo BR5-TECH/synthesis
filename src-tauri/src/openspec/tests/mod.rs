@@ -24,6 +24,7 @@ mod reads;
 mod retry;
 #[cfg(unix)]
 mod runner;
+mod uat;
 
 #[derive(Clone, Default)]
 pub(crate) struct Silent;

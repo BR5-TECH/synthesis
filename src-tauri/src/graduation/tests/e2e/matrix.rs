@@ -28,7 +28,7 @@ fn read(name: &str) -> String {
 /// The files of the scenario language itself. Every other `.rs` file of this
 /// directory holds journeys, so a journey file added later is read without
 /// being named here.
-const HARNESS_FILES: [&str; 15] = [
+const HARNESS_FILES: [&str; 18] = [
     "acts.rs",
     "dispatch_assert.rs",
     "hooks.rs",
@@ -37,6 +37,9 @@ const HARNESS_FILES: [&str; 15] = [
     "merge_assert.rs",
     "matrix.rs",
     "mod.rs",
+    "openspec_arrange.rs",
+    "openspec_assert.rs",
+    "openspec_cli.rs",
     "outcome.rs",
     "reconcile.rs",
     "repository_assert.rs",

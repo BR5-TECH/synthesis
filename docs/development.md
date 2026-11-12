@@ -15,7 +15,7 @@ Specification:
 [`specifications/infra/TSK-taskfile.md`](../specifications/infra/TSK-taskfile.md).
 
 Install the [Task](https://taskfile.dev) runner, then run `task --list` to see
-the thirteen tasks:
+the fifteen tasks:
 
 ```bash
 task build            # bundle the desktop application for this host
@@ -31,9 +31,11 @@ task specs            # check the specification corpus for broken references
 task tests            # run every verification lane the pipeline runs
 task tests:backend    # run the application backend lane alone
 task uat:dind         # run the Docker-in-Docker acceptance test on this machine
+task uat:openspec     # run the OpenSpec acceptance tests against the real CLI
+task uat:openspec-image # check that the agent image holds a usable OpenSpec CLI
 ```
 
-There are thirteen tasks and no others. Every task names the directory its commands
+There are fifteen tasks and no others. Every task names the directory its commands
 run in, so a task gives the same result whatever directory `task` was started
 from. Every task runs without a prompt, reads no interactive input, and reports
 its outcome as its exit status: zero when every command it ran succeeded,
@@ -344,6 +346,42 @@ cannot run it prints a skip. `task tests` does not run this task, and no pipelin
 lane runs it. See
 [`specifications/tools/EAC-execute-agent-cli.md`](../specifications/tools/EAC-execute-agent-cli.md)
 EAC-FR-UDQN.
+
+### `task uat:openspec`
+
+| Property | Value |
+| --- | --- |
+| Commands | `TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture openspec_uat_cli` |
+| Working directory | `src-tauri/` |
+| Output | one line for each test, and for a failed test the CLI version, the subcommand, and the compared value |
+| Supported hosts | macOS and Linux |
+| Prerequisites | the OpenSpec CLI (`npm install -g @fission-ai/openspec`), version 1 or later, on `PATH` or named by `OPENSPEC_UAT_BIN`, and `git` |
+| Failure | non-zero when a test fails. A missing CLI stops the task before any test runs |
+
+The OpenSpec acceptance tests run the application's OpenSpec reads, validation,
+apply progress, Spec Map index, archive, and failure classes against the real
+CLI, on projects that the CLI makes with `openspec init` in temporary folders.
+Set `OPENSPEC_UAT_BIN` to the path of another `openspec` executable to test a
+second CLI version before users update to it. `task tests` does not run this
+task, and no pipeline lane runs it. See
+[`specifications/infra/OAT-openspec-acceptance-tests.md`](../specifications/infra/OAT-openspec-acceptance-tests.md).
+
+### `task uat:openspec-image`
+
+| Property | Value |
+| --- | --- |
+| Commands | `TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture openspec_uat_image` |
+| Working directory | `src-tauri/` |
+| Output | one line for each test |
+| Supported hosts | macOS and Linux |
+| Prerequisites | a `docker` executable on `PATH`, a Docker daemon that answers, and access to the base image of the agent Dockerfile |
+| Failure | non-zero when a test fails. A missing `docker` executable or a daemon that does not answer stops the task before any test runs, and the message names which one |
+
+The image test builds `docker/agent-images/claude-code/Dockerfile` as a project
+image and runs the application's image probe against it. The probe must find
+the OpenSpec version that the Dockerfile pins. Two small images from the same
+base prove that an image with no CLI and an image with a CLI below version 1
+are refused. `task tests` does not run this task, and no pipeline lane runs it.
 
 ## Development
 

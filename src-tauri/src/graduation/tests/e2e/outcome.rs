@@ -52,6 +52,9 @@ pub(crate) struct Outcome {
     pub(super) offered: Vec<(String, bool)>,
     /// GTE-FR-TNZF: what the last request of a merge answered.
     pub(super) merge_answer: Option<Result<crate::streams::StreamMergeResult, String>>,
+    /// OFP-FR-MQGG: the `OpenSpecFailure` of the last merge refusal, where it
+    /// was one.
+    pub(super) merge_failure: Option<crate::openspec::OpenSpecFailure>,
 }
 
 impl Outcome {
@@ -614,6 +617,19 @@ impl Drop for Outcome {
         assert!(
             attempts.is_empty(),
             "[{}] the production queue tried to dispatch {attempts:?}",
+            self.name
+        );
+        // GTE-FR-QPMA: every process of an OpenSpec scenario was a read the
+        // fake CLI answers from the working copy.
+        let unknown = self
+            .fx
+            .app
+            .try_state::<Arc<super::openspec_cli::WorkingCopyCli>>()
+            .map(|cli| cli.unknown_calls())
+            .unwrap_or_default();
+        assert!(
+            unknown.is_empty(),
+            "[{}] the fake OpenSpec CLI met reads no journey makes: {unknown:?}",
             self.name
         );
     }

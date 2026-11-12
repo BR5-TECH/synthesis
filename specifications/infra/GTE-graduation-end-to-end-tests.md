@@ -46,6 +46,16 @@ The backend end-to-end suite for graduation, and the scenario language it is wri
 36. **GTE-FR-TKTJ** A scenario proves the **cascade** of a discard. Runs B and C queue behind a held run A, B with auto-start off and C a direct run or a merge run. A discard of A, a revert of an interrupted A, and a discard of a `failed` A each remove B and C from the run store, the run order index and the listing. A run ahead of A stays. Each removed run's draft is unlocked with no run-state tag.
 37. **GTE-FR-MRFT** A scenario proves the **failed run**. A `failed` run keeps its queue held and holds no project slot, the runs behind it stay `queued` and dispatch under no pass, `restart_graduation_run` against it is refused with `run_state_not_permitted` (per GTE-FR-RZKC), and the discard of the run releases the queue and removes the runs behind it.
 38. **GTE-FR-KVYE** A scripted review turn may name one **act after its verdict**. The loop runs the act through the dispatch seam (per `../core/GXD-graduation-execution.md` GXD-FR-TBOW), once the `review verdict` record is durable and before the verdict has any effect. The act checks that record first. No act or hook waits for a Tauri event.
+39. **GTE-FR-QPMA** An OpenSpec scenario drives the production loop with OpenSpec mode active and a fake OpenSpec CLI behind the process seam of `../core/OSM-openspec-mode.md`. The fake answers each subcommand from what the scenario's working copy holds, records every process, and is the only substitution beside the dispatch seam (GTE-FR-QVHM).
+40. **GTE-FR-ZDCH** The fake OpenSpec CLI and the image probe seam answer at once, and the retry wait goes through the recorded wait seam of `../core/OFP-openspec-failure-policy.md` OFP-FR-MJZU. No OpenSpec scenario starts a real CLI, a container, or a real wait (per GTE-FR-RSQD).
+41. **GTE-FR-WRPN** A scenario proves the **propose run** (per `../core/GRD-graduation.md` GRD-FR-LKGC, GRD-FR-SYHE): a work turn writes a change below `openspec/changes/<change>/`, the validate gate of `../ai/GRL-graduation-loop.md` GRL-FR-CDNI reads it as valid before the review, and the run completes with one commit that holds the change files alone.
+42. **GTE-FR-BXHS** A scenario proves the **rework run** (per `../core/OCR-openspec-change-runs.md` OCR-FR-ZNJT, OCR-FR-WBZX): its turns stand in the rework worktree, its `ready` review records one change edit proposal with the hunks of each changed file, and the stream branch, the stream's working copy, and the change files are unchanged.
+43. **GTE-FR-NFYK** A scenario proves the **apply run** (per `../core/OCR-openspec-change-runs.md` OCR-FR-XKTV, OCR-FR-UZNC): the work turn ticks tasks in `tasks.md`, the task counts are read from the fake CLI's `instructions apply` over the working copy and not from the answer, and the `ready` review lands one commit on the stream branch.
+44. **GTE-FR-HAQO** A scenario proves the **plan update** (per `../core/OPU-openspec-plan-updates.md` OPU-FR-YBLE, OPU-FR-QXUE, OPU-FR-THOZ, OPU-FR-CAGI): the run rests `awaiting_author` on `plan_update` with its stream and slot held, Continue is refused while the questions are open, and Continue after the answers dispatches a work turn whose ledger holds them.
+45. **GTE-FR-LOGE** A scenario proves the **archive at merge** (per `../core/OAR-openspec-archive.md` OAR-FR-IAKL, OAR-FR-LZLS, OAR-FR-SOFQ): a stream with two landed changes merges with one archive commit for each change, in archive order, before the merge, and the merge result names each archived change.
+46. **GTE-FR-SBVT** A scenario proves the **archive conflict** (per `../core/OFP-openspec-failure-policy.md` OFP-FR-ETEN, OFP-FR-XQDY, OFP-FR-PSVR): an archive that the fake CLI refuses with a repair cause refuses the merge, writes no branch, opens one change discussion, and enqueues one repair rework run. A second merge with the same change files gives no second notice.
+47. **GTE-FR-RTKU** A scenario proves the **transient retry** on a run path (per `../core/OFP-openspec-failure-policy.md` OFP-FR-PQNS, OFP-FR-TBHX): a CLI step whose first process times out runs once more after one recorded wait of 2000 ms and the run goes on; a step whose both processes time out rests the run `blocked` with its diagnostics and dispatches no turn.
+48. **GTE-FR-YMEC** A scenario proves the **image probe** (per `../core/OFP-openspec-failure-policy.md` OFP-FR-BZDP, OFP-FR-XBNJ, OFP-FR-WACS): a probe that passes is recorded in the checkpoint and does not run again on Continue; a probe that finds no CLI rests the run `blocked` with `openspec_image_cli_unavailable` before the first turn.
 
 ## Contract surface
 
@@ -180,6 +190,13 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 41  total time limit          awaiting_author with total_time_limit, work committed, stream and slot held, Continue resets the used time alone
 43  answer corrections        a refused answer is corrected once in its session, a second refusal rests the run, an uncorrectable refusal stops at once, a restart keeps the correction
 44  check gate                a red, unfinished or missing check record gets one check correction and one escalate correction, then checks_not_passed; a waiver passes
+46  openspec propose          a change written by the work turn passes the validate gate, one commit holds the change files alone
+47  openspec rework           a ready review records one change edit proposal, no branch and no working copy written
+48  openspec apply            ticks read from instructions apply over the working copy, one commit lands, a plan update rests and Continue carries the answers
+49  openspec archive          one archive commit per landed change before the merge, the merge result names each change
+50  openspec archive conflict a repair cause refuses the merge, one notice and one repair run, no second notice for the same files
+51  openspec retry            one retry after a recorded 2000 ms wait, two timeouts block the run with diagnostics
+52  openspec image probe      a passing probe is kept in the checkpoint, a missing CLI blocks before the first turn
 ```
 
 ## Non-functional requirements

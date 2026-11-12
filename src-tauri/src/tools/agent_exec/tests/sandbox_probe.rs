@@ -807,3 +807,5 @@ fn sandbox_real_a_pinned_gateway_is_reached_and_other_hosts_are_denied() {
 mod dind_uat;
 #[path = "sandbox_probe_docker.rs"]
 mod docker;
+#[path = "openspec_image_uat.rs"]
+mod openspec_image_uat;

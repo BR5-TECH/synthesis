@@ -2,7 +2,7 @@
  * What a stream's row says about a merge
  * (`../../../specifications/ui/WSS-work-stream-selector.md` WSS-FR-HGWL,
  * WSS-FR-OFCU, WSS-FR-RJTN, WSS-FR-GBWE, WSS-FR-KMHD, WSS-FR-PLVE,
- * WSS-FR-AWRS, WSS-FR-DTYB).
+ * WSS-FR-AWRS, WSS-FR-DTYB, WSS-FR-BFJZ).
  *
  * Three things stand here, and each comes from a different place:
  *
@@ -19,7 +19,7 @@
  * (WSS-FR-NRCQ).
  */
 
-import type { StreamMergeRunLink, WorkStreamSummary } from "../../types";
+import type { ArchivedChange, StreamMergeRunLink, WorkStreamSummary } from "../../types";
 import { shortCommit } from "../../state/graduation";
 import { namedPaths, type MergeOutcome, type RunningMerge } from "./rows";
 
@@ -77,6 +77,10 @@ export function MergeStatus({ summary, call, outcome, onOpenRun }: MergeStatusPr
 
       {/* WSS-FR-KMHD / WSS-FR-PLVE: the answer to a call that settled. */}
       {!call && outcome && <OutcomeLine summary={summary} outcome={outcome} />}
+      {/* WSS-FR-BFJZ: the OpenSpec changes the merge archived on the stream. */}
+      {!call && outcome && outcome.kind !== "nothing_to_merge" && (
+        <ArchivedLine summary={summary} archived={outcome.archived ?? []} />
+      )}
 
       {/* WSS-FR-OFCU / WSS-FR-DTYB: the merge run, from the listing alone. */}
       {run && (
@@ -101,8 +105,11 @@ export function MergeStatus({ summary, call, outcome, onOpenRun }: MergeStatusPr
           )}
           {run.state === "failed" && (
             <p className="stream-select__meta t-muted">
-              {run.name} failed. Neither branch was written. The cause is in
-              Runs.
+              {/* WSS-FR-GBWE: archive commits made before the merge stay on
+                  the stream (OAR). */}
+              {run.name} failed. The base branch was not written, and the
+              stream branch holds no change but its archive commits. The cause
+              is in Runs.
             </p>
           )}
           <div className="stream-select__row-actions">
@@ -168,7 +175,7 @@ function OutcomeLine({
         <>
           <p className="stream-select__meta" role="status" data-testid={testId}>
             Git could not settle {count} {count === 1 ? "path" : "paths"}.
-            Neither branch was written.
+            The base branch was not written.
           </p>
           {count > 0 && (
             <p
@@ -183,4 +190,34 @@ function OutcomeLine({
       );
     }
   }
+}
+
+/**
+ * WSS-FR-BFJZ: each OpenSpec change the merge archived on the stream branch,
+ * with its archive name, in the order of the result.
+ */
+function ArchivedLine({
+  summary,
+  archived,
+}: {
+  summary: WorkStreamSummary;
+  archived: ArchivedChange[];
+}) {
+  if (archived.length === 0) return null;
+  const { stream } = summary;
+  return (
+    <div className="stream-select__meta" data-testid={`stream-merge-archived-${stream.id}`}>
+      <p className="stream-select__archived-head">
+        Archived {archived.length} OpenSpec{" "}
+        {archived.length === 1 ? "change" : "changes"} on {stream.name}:
+      </p>
+      <ul className="stream-select__archived" aria-label="Archived OpenSpec changes">
+        {archived.map((a) => (
+          <li key={a.archivedAs}>
+            {a.change} <span className="t-muted">as</span> <code>{a.archivedAs}</code>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

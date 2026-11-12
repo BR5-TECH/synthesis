@@ -82,6 +82,13 @@ export type StreamMergePublication =
   | { kind: "uncommitted" }
   | { kind: "commit"; message: string };
 
+/** OAR-FR-SOFQ: one OpenSpec change that a merge archived on the stream branch. */
+export interface ArchivedChange {
+  change: string;
+  /** OAR-FR-XTLB: `<YYYY-MM-DD>-<change>`, the name of the archive folder. */
+  archivedAs: string;
+}
+
 /**
  * WKS-FR-QNHF: what `"merge work stream (id, publication)"` returns.
  *
@@ -97,13 +104,17 @@ export type StreamMergeResult =
       mergedPaths: string[];
       /** The merge commit, where the publication committed. */
       commit?: string | null;
+      /** OAR-FR-SOFQ: the changes the merge archived, in archive order. */
+      archived: ArchivedChange[];
     }
   | {
       kind: "conflicted";
       /** The merge run the conflict was handed to. */
       runId: string;
-      /** What Git could not settle. Nothing was written. */
+      /** What Git could not settle. The base branch was not written. */
       conflictedPaths: string[];
+      /** OAR-FR-SOFQ: the changes the merge archived, in archive order. */
+      archived: ArchivedChange[];
     };
 
 /**
@@ -347,6 +358,12 @@ export const STREAM_ERRORS = {
   updateInterrupted: "update_interrupted",
   /** WKS-FR-DPNM / WKS-FR-CBXW: the update does not rest where the request needs it. */
   updateStateNotPermitted: "update_state_not_permitted",
+  /** OAR-FR-BEIK: a change to archive holds an item the author did not decide. */
+  changeHasPending: "change_has_pending",
+  /** OAR-FR-QTBK: a change to archive cannot be archived. */
+  changeNotArchivable: "change_not_archivable",
+  /** OAR-FR-EUXZ: the archive of a change, or its commit, failed. */
+  archiveFailed: "archive_failed",
 } as const;
 
 /** WKS-FR-MFDW: whether a branch is a work stream's. */

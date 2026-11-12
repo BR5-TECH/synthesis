@@ -15,11 +15,16 @@
  * `change_discussion` for that change. The caller reduces them to the changes
  * they are about, so two surfaces of one change hold one interval.
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { recordChangeWorkingInterval } from "../api";
 import { DraftEditingObserver } from "../draftEditingObserver";
 import { logWarn } from "../logging";
+import {
+  archivedAsOf,
+  archivedChangeViewsVersion,
+  subscribeChangeViews,
+} from "../state/openspec/changeView";
 import type { Tab } from "../types";
 
 /** One change on its stream. */
@@ -34,17 +39,38 @@ export interface ObservedChange {
  * discussion column, or a conversation tab whose owner is a change. No other
  * tab is a surface the author is at.
  */
-export function visibleChangesOf(tabs: readonly Tab[], activeTab: string | null): ObservedChange[] {
+export function visibleChangesOf(
+  tabs: readonly Tab[],
+  activeTab: string | null,
+  /** OCW-FR-GVZT: whether a change workspace tab states an archived change. */
+  isArchived: (tabId: string) => boolean = () => false,
+): ObservedChange[] {
   const tab = tabs.find((t) => t.id === activeTab);
   if (!tab) return [];
   const target = tab.openspecChange;
   if (tab.kind === "openspecChange" && target?.location.kind === "stream") {
+    if (isArchived(tab.id)) return [];
     return [{ streamId: target.location.streamId, change: target.name }];
   }
   if (tab.kind === "conversation" && tab.ownerTarget?.kind === "change") {
     return [{ streamId: tab.ownerTarget.streamId, change: tab.ownerTarget.change }];
   }
   return [];
+}
+
+/**
+ * OCW-FR-MIEY / OCW-FR-GVZT: `visibleChangesOf` over the tab strip, with the
+ * tabs that state an archived change left out. A read that names a change
+ * archived, or that finds it active again, changes the result.
+ */
+export function useVisibleChanges(tabs: readonly Tab[], activeTab: string | null): ObservedChange[] {
+  const archivedVersion = useSyncExternalStore(subscribeChangeViews, archivedChangeViewsVersion);
+  return useMemo(
+    () => visibleChangesOf(tabs, activeTab, (tabId) => archivedAsOf(tabId) !== null),
+    // The version stands for the archived set that `archivedAsOf` reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tabs, activeTab, archivedVersion],
+  );
 }
 
 /** The key the observer counts a change by. */

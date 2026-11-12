@@ -6,7 +6,11 @@
  * one — so a tree built from it never goes stale.
  */
 import {
+  changeChipKey,
+  changeIdentity,
+  isOpenSpecIndex,
   isSpecNode,
+  type ChangeChip,
   type IndexNode,
   type MapRef,
   type PlannedDraft,
@@ -17,6 +21,15 @@ import {
 /** A spec node's path is relative to this folder of the project. */
 export const SPEC_ROOT = "specifications/";
 
+/**
+ * SMI-FR-CEVL / SMI-FR-GAJD: the project-relative path of a spec node. The demo
+ * index names a path below `specifications/`, and an OpenSpec index names a
+ * path relative to the project root (OSI-FR-CWLE).
+ */
+export function projectPath(index: SpecificationIndex, spec: SpecNode): string {
+  return isOpenSpecIndex(index) ? spec.path : SPEC_ROOT + spec.path;
+}
+
 export type NodeRole = "root" | "branch" | "leafGroup";
 
 export interface TreeIndex {
@@ -26,8 +39,13 @@ export interface TreeIndex {
   depth: Map<string, number>;
   specs: Map<string, SpecNode>;
   specParent: Map<string, string>;
-  /** Keyed by the project-relative path, `specifications/<path>`. */
+  /** Keyed by the project-relative path (`projectPath`). */
   specByPath: Map<string, string>;
+  /** SMI-FR-QCUC: the index node whose spec nodes have a project-relative path. */
+  holderByPath: Map<string, string>;
+  /** OSI-FR-ALQI: the change chips, by `changeChipKey`. */
+  changes: Map<string, ChangeChip>;
+  changeParent: Map<string, string>;
   planned: Map<string, PlannedDraft>;
   plannedParent: Map<string, string>;
   /** SMP-FR-FEJV: the depth of every leaf group; spec nodes sit one deeper. */
@@ -45,6 +63,9 @@ export function buildTree(index: SpecificationIndex): TreeIndex {
     specs: new Map(),
     specParent: new Map(),
     specByPath: new Map(),
+    holderByPath: new Map(),
+    changes: new Map(),
+    changeParent: new Map(),
     planned: new Map(),
     plannedParent: new Map(),
     leafDepth: Math.max(index.levels.length - 2, 0),
@@ -59,11 +80,18 @@ export function buildTree(index: SpecificationIndex): TreeIndex {
       tree.planned.set(draft.draftId, draft);
       tree.plannedParent.set(draft.draftId, node.id);
     }
+    for (const chip of node.changes ?? []) {
+      const key = changeChipKey(node.id, chip);
+      tree.changes.set(key, chip);
+      tree.changeParent.set(key, node.id);
+    }
     for (const child of node.children) {
       if (isSpecNode(child)) {
         tree.specs.set(child.code, child);
         tree.specParent.set(child.code, node.id);
-        tree.specByPath.set(SPEC_ROOT + child.path, child.code);
+        const path = projectPath(index, child);
+        tree.specByPath.set(path, child.code);
+        tree.holderByPath.set(path, node.id);
       } else {
         walk(child, node.id, depth + 1);
       }
@@ -117,6 +145,22 @@ export function plannedUnder(tree: TreeIndex, id: string): number {
   return count;
 }
 
+/**
+ * SMN-FR-YEVY: how many distinct changes, each in its location, sit on a node
+ * or beneath it.
+ */
+export function changesUnder(tree: TreeIndex, id: string): number {
+  const node = tree.nodes.get(id);
+  if (!node) return 0;
+  const keys = new Set<string>();
+  const walk = (n: IndexNode) => {
+    for (const chip of n.changes ?? []) keys.add(changeIdentity(chip));
+    for (const child of indexChildren(n)) walk(child);
+  };
+  walk(node);
+  return keys.size;
+}
+
 /** The index node a ref is, or sits in. */
 export function nodeOfRef(tree: TreeIndex, ref: MapRef): string | null {
   switch (ref.kind) {
@@ -126,6 +170,8 @@ export function nodeOfRef(tree: TreeIndex, ref: MapRef): string | null {
       return tree.specParent.get(ref.code) ?? null;
     case "planned":
       return tree.plannedParent.get(ref.draftId) ?? null;
+    case "change":
+      return tree.changeParent.get(ref.key) ?? null;
   }
 }
 
@@ -137,6 +183,8 @@ export function refExists(tree: TreeIndex, ref: MapRef): boolean {
       return tree.specs.has(ref.code);
     case "planned":
       return tree.planned.has(ref.draftId);
+    case "change":
+      return tree.changes.has(ref.key);
   }
 }
 

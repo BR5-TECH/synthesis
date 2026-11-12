@@ -8,8 +8,10 @@
 //!
 //! The seam runs only `--version`, `list`, `show`, `status`, `validate`, and
 //! `instructions` with the artifact `apply` alone, and never a subcommand that
-//! writes (OSM-FR-VALR). Each call to the CLI is blocking and
-//! bounded; a caller on an async path runs the seam on a blocking thread.
+//! writes (OSM-FR-VALR). The one write is `archive`, which only
+//! `crate::openspec_archive` runs, on the process terms of this module
+//! (OSM-FR-XKQB). Each call to the CLI is blocking and bounded; a caller on an
+//! async path runs the seam on a blocking thread.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,21 +25,26 @@ use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink};
 
 pub mod apply;
+pub mod archive_cli;
 pub mod change;
 pub mod change_image;
 pub mod cli;
 pub mod detection;
+pub mod project_validation;
 pub mod reads;
+pub mod spec_index;
 
 #[cfg(test)]
 pub(crate) mod tests;
 
 pub use apply::{ApplyInstructions, ApplyProgress, ApplyTask};
+pub use archive_cli::{ArchiveAnswer, ArchiveCliFailure};
 pub use change::{
     ChangeArtifact, ChangeDelta, ChangeDetail, ChangeFile, ChangeLocation, ChangeValidation,
     ValidationIssue,
 };
 pub use cli::{CliEnvironment, CliProbe, OpenSpecRunner, ProcessError, ProcessOutput};
+pub use project_validation::{ProjectValidation, ProjectValidationItem, ValidationScope};
 pub use reads::{ArtifactState, Capability, CapabilitySpec, ChangeSummary, Requirement, Scenario};
 
 // ---------------------------------------------------------------------------
@@ -108,6 +115,10 @@ pub enum OpenSpecReadError {
     InvalidChangeName,
     /// OSM-FR-BCJO.
     ChangeNotFound,
+    /// OSM-FR-KWWM: the change folder moved to `openspec/changes/archive/`.
+    ChangeArchived {
+        archived_as: String,
+    },
 }
 
 impl OpenSpecReadError {
@@ -125,6 +136,19 @@ impl OpenSpecReadError {
             OpenSpecReadError::UnknownStream => "unknown_stream",
             OpenSpecReadError::InvalidChangeName => "invalid_change_name",
             OpenSpecReadError::ChangeNotFound => "change_not_found",
+            OpenSpecReadError::ChangeArchived { .. } => "change_archived",
+        }
+    }
+
+    /// The error as a Tauri command returns it: the code, or for
+    /// `change_archived` the code with the archive folder after a colon
+    /// (OSM-FR-GMKV).
+    pub fn wire_code(&self) -> String {
+        match self {
+            OpenSpecReadError::ChangeArchived { archived_as } => {
+                format!("change_archived: {archived_as}")
+            }
+            other => other.code().to_string(),
         }
     }
 }
@@ -422,6 +446,24 @@ impl OpenSpec {
         cwd: &Path,
         accepted: &[i32],
     ) -> Result<Vec<u8>, RunFailure> {
+        self.run_with_status(sink, buffer, executable, subcommand, args, cwd, accepted)
+            .map(|(_, stdout)| stdout)
+    }
+
+    /// The same, with the exit status of an accepted process beside its
+    /// output (OAR-FR-EUXZ reads the output of an `archive` that failed).
+    // Each argument is one fact of one process; a struct would be read here alone.
+    #[allow(clippy::too_many_arguments)]
+    fn run_with_status<S: LogSink + Clone + Send + 'static>(
+        &self,
+        sink: &S,
+        buffer: &'static LogBuffer,
+        executable: &Path,
+        subcommand: &'static str,
+        args: &[&str],
+        cwd: &Path,
+        accepted: &[i32],
+    ) -> Result<(i32, Vec<u8>), RunFailure> {
         let started = Instant::now();
         let outcome = {
             let _slot = self.slots.acquire();
@@ -446,7 +488,7 @@ impl OpenSpec {
                         "outputBytes" => stdout.len(),
                     },
                 );
-                return Ok(stdout);
+                return Ok((status, stdout));
             }
             Ok(ProcessOutput { exit_status, .. }) => RunFailure::Exit(exit_status.unwrap_or(-1)),
         };
@@ -548,28 +590,64 @@ impl OpenSpec {
         Self::logged(sink, buffer, "read_capability", result)
     }
 
-    /// OSM-FR-OPZF, OSM-FR-FCMY: `list --changes --json` and `status --all
-    /// --json` once each, and one directory listing for each change.
+    /// OSM-FR-OPZF, OSM-FR-FCMY, LOC-FR-DSMK: `list_changes(location)` in the
+    /// active worktree location.
     pub fn list_changes<S: LogSink + Clone + Send + 'static>(
         &self,
         sink: &S,
         buffer: &'static LogBuffer,
         root: Option<&RootFs>,
     ) -> Result<Vec<ChangeSummary>, OpenSpecReadError> {
-        let result = self.ready(sink, buffer, root).and_then(|exe| {
-            let root = root.ok_or(OpenSpecReadError::NoOpenProject)?;
+        match root {
+            Some(at) => self.list_changes_at(sink, buffer, root, at),
+            None => {
+                Self::logged(sink, buffer, "list_changes", Err(OpenSpecReadError::NoOpenProject))
+            }
+        }
+    }
+
+    /// OSM-FR-OPZF, OSM-FR-FCMY, OSM-FR-DDHL: `list --changes --json` and
+    /// `status --all --json` once each in the working copy `at` of a location,
+    /// and one directory listing for each change. The mode is decided on the
+    /// active worktree.
+    pub fn list_changes_at<S: LogSink + Clone + Send + 'static>(
+        &self,
+        sink: &S,
+        buffer: &'static LogBuffer,
+        active: Option<&RootFs>,
+        at: &RootFs,
+    ) -> Result<Vec<ChangeSummary>, OpenSpecReadError> {
+        let result = self.ready_in(sink, buffer, active, at).and_then(|exe| {
             let list_args = ["list", "--changes", "--json"];
-            let list = self.run_logged(sink, buffer, &exe, "list", &list_args, root.path())?;
+            let list = self.run_logged(sink, buffer, &exe, "list", &list_args, at.path())?;
             let status_args = ["status", "--all", "--json"];
-            let status =
-                self.run_logged(sink, buffer, &exe, "status", &status_args, root.path())?;
+            let status = self.run_logged(sink, buffer, &exe, "status", &status_args, at.path())?;
             let mut changes = reads::parse_changes(&list, &status)?;
             for change in &mut changes {
-                change.capabilities = reads::delta_capabilities(root, &change.name);
+                change.capabilities = reads::delta_capabilities(at, &change.name);
             }
             Ok(changes)
         });
         Self::logged(sink, buffer, "list_changes", result)
+    }
+
+    /// OSM-FR-XSOC, OSM-FR-DDHL: an open project, an active mode on the active
+    /// worktree, and a usable CLI checked in the working copy `at`.
+    pub(crate) fn ready_in<S: LogSink + Clone + Send + 'static>(
+        &self,
+        sink: &S,
+        buffer: &'static LogBuffer,
+        active: Option<&RootFs>,
+        at: &RootFs,
+    ) -> Result<PathBuf, OpenSpecReadError> {
+        let active = active.ok_or(OpenSpecReadError::NoOpenProject)?;
+        if !Self::mode_active(Some(active)) {
+            return Err(OpenSpecReadError::OpenSpecModeInactive);
+        }
+        match self.cli_state_in(sink, buffer, Some(at)) {
+            OpenSpecCliState::Available { path, .. } => Ok(PathBuf::from(path)),
+            other => Err(OpenSpecReadError::CliUnavailable(other)),
+        }
     }
 }
 

@@ -49,6 +49,8 @@ function refLabel(tree: TreeIndex, ref: MapRef): string {
       return ref.code;
     case "planned":
       return tree.planned.get(ref.draftId)?.name ?? "";
+    case "change":
+      return tree.changes.get(ref.key)?.change ?? "";
   }
 }
 

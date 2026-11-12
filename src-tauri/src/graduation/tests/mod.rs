@@ -24,6 +24,7 @@ use crate::tools::agent_exec::{
 };
 
 mod activity_stream;
+mod archive_support;
 mod blocking;
 mod change_action_requests;
 mod change_apply;
@@ -64,7 +65,13 @@ mod merge_passes;
 mod merge_prompts;
 mod merge_records;
 mod merge_run;
+mod merge_specs_review;
 mod milestone_prompts;
+mod openspec_archive;
+mod openspec_archive_candidates;
+mod openspec_archive_refusals;
+mod openspec_archive_restore;
+mod openspec_spec_index;
 mod pr_summary;
 mod pr_summary_turn;
 mod prompts;

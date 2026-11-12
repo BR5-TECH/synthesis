@@ -16,7 +16,12 @@ import {
   type NodeRole,
   type TreeIndex,
 } from "../../state/specMap/tree";
-import type { IndexNode, LevelName, MapRef } from "../../state/specMap/types";
+import {
+  changeChipKey,
+  type IndexNode,
+  type LevelName,
+  type MapRef,
+} from "../../state/specMap/types";
 
 export const CHIP_W = 96;
 export const CHIP_H = 22;
@@ -57,8 +62,8 @@ export interface LayoutBox {
 }
 
 export interface LayoutChip {
-  kind: "spec" | "planned";
-  /** The spec code, or the draft id. */
+  kind: "spec" | "planned" | "change";
+  /** The spec code, the draft id, or the change chip key. */
   key: string;
   parentId: string;
   x: number;
@@ -181,13 +186,25 @@ export function layoutMap(
 
     const planned = node.planned ?? [];
     if (role === "leafGroup") {
-      // SMN-FR-ISBE / SMD-FR-CGNW: spec chips, then planned chips, in one grid.
+      // SMN-FR-ISBE / SMD-FR-CGNW / SMN-FR-ZOUZ: spec chips, then planned
+      // chips, then change chips, in one grid.
       const specs = specChildren(node);
+      const changes = node.changes ?? [];
       specs.forEach((s, i) => chipAt("spec", s.code, node.id, x + INSET, y + CHIP_TOP, i));
       planned.forEach((p, i) =>
         chipAt("planned", p.draftId, node.id, x + INSET, y + CHIP_TOP, specs.length + i),
       );
-      const rows = Math.ceil((specs.length + planned.length) / CHIPS_PER_ROW);
+      changes.forEach((c, i) =>
+        chipAt(
+          "change",
+          changeChipKey(node.id, c),
+          node.id,
+          x + INSET,
+          y + CHIP_TOP,
+          specs.length + planned.length + i,
+        ),
+      );
+      const rows = Math.ceil((specs.length + planned.length + changes.length) / CHIPS_PER_ROW);
       box.h = LEAF_COLLAPSED_H + rows * CHIP_ROW + 4;
       return box.h;
     }
@@ -252,7 +269,8 @@ export function holderRect(
   ref: MapRef,
 ): (Rect & { key: string }) | null {
   if (ref.kind !== "index") {
-    const key = ref.kind === "spec" ? ref.code : ref.draftId;
+    const key =
+      ref.kind === "spec" ? ref.code : ref.kind === "planned" ? ref.draftId : ref.key;
     const chip = layout.chip.get(key);
     if (chip) return { ...chip, key: `chip:${key}` };
   }

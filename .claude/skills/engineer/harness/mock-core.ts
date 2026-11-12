@@ -22,6 +22,7 @@ import {
   validChangeName,
 } from "./mock-openspec";
 import { applyRunFields, openspecRunsInvoke, reworkRunFields } from "./mock-openspec-runs";
+import { specMapInvoke } from "./mock-openspec-map";
 import {
   PLAN_THREAD_ID,
   notePlanSubmission,
@@ -51,6 +52,15 @@ const now = "2026-07-28T11:24:00Z";
  */
 /** GTC-FR-YWRZ: the branches confirmed in this harness session. */
 const confirmedMainWrites = new Set<string>();
+
+/** OAR-FR-SOFQ: the changes a merge archived, with `?mergeArchives`. */
+function mergeArchived(): { change: string; archivedAs: string }[] {
+  if (!harnessFlag("mergeArchives")) return [];
+  return [
+    { change: "add-logout-3f2a", archivedAs: "2026-11-11-add-logout-3f2a" },
+    { change: "add-refunds", archivedAs: "2026-11-11-add-refunds" },
+  ];
+}
 
 function harnessFlag(name: string): boolean {
   return new URLSearchParams(location.search).has(name);
@@ -439,6 +449,38 @@ function seededTree(): any {
           },
         ],
       },
+      // SMI-FR-QCUC: with `?openspecMap`, the spec files of the OpenSpec index
+      // of mock-openspec-map.ts, so a Spec row click while the Map tab is
+      // active selects the capability node of that file.
+      ...(harnessFlag("openspecMap")
+        ? [
+            {
+              id: "openspec/specs",
+              name: "openspec/specs",
+              path: "openspec/specs",
+              nodeKind: "folder",
+              hasArtifacts: true,
+              children: [
+                {
+                  id: "openspec/specs/auth/spec.md",
+                  name: "auth/spec.md",
+                  path: "openspec/specs/auth/spec.md",
+                  nodeKind: "file",
+                  artifactType: "spec",
+                  typeSource: "inferred",
+                },
+                {
+                  id: "openspec/specs/billing/payments/spec.md",
+                  name: "billing/payments/spec.md",
+                  path: "openspec/specs/billing/payments/spec.md",
+                  nodeKind: "file",
+                  artifactType: "spec",
+                  typeSource: "inferred",
+                },
+              ],
+            },
+          ]
+        : []),
       // LIB-FR-OKIZ / OCW-FR-ZZHS: the demo change in the active worktree, so
       // a click on its file opens the change workspace tab of a worktree
       // location (see mock-openspec.ts).
@@ -7196,6 +7238,30 @@ function mergeRunHolds(streamId: string) {
   return Boolean(link) && link!.state !== "completed" && link!.state !== "failed";
 }
 
+// WSS-FR-GBWE: with `?mergeRunFailed`, the newest merge run of docs-refresh
+// (s-4) is `failed`, so the row's failed-merge-run wording is reachable.
+if (harnessFlag("mergeRunFailed")) {
+  graduationRuns.push(
+    makeMergeRunSeed({
+      id: "g-33",
+      streamId: "s-4",
+      streamName: "docs-refresh",
+      state: "failed",
+      workTurns: 1,
+      merge: {
+        name: "Merge docs-refresh",
+        streamBranch: "synthesis/stream/docs-refresh",
+        publication: { kind: "uncommitted" },
+        changedPaths: ["docs/guides/overview.md"],
+        unresolvedPaths: ["docs/guides/overview.md"],
+        conflicts: [
+          { path: "docs/guides/overview.md", baseChange: "updated", streamChange: "updated" },
+        ],
+      },
+    }),
+  );
+}
+
 /** WKS-FR-ZLWT: a merge a conflict handed off, as the queue holds it. */
 function enqueueMergeRun(stream: any, publication: any) {
   const run = makeMergeRunSeed({
@@ -8161,6 +8227,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // PPK-project-picker.md: the recent list, with Pin, Unpin, and Hide state.
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
+  // OSI-openspec-spec-index.md: the specification map, demo or OpenSpec.
+  const specMap = specMapInvoke(cmd);
+  if (specMap !== NOT_HANDLED) return specMap;
   // OCW-openspec-change-workspace.md: the one demo change.
   const openspec = openspecInvoke(cmd, a);
   if (openspec !== NOT_HANDLED) return openspec;
@@ -9209,6 +9278,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      *   http://localhost:5199/?mergeDelay      -> the call stays out for 4s, so
      *                                             the running state is visible
      *   http://localhost:5199/?mergeRefused=merge_branch_moved
+     *   http://localhost:5199/?mergeArchives   -> a merged or conflicted answer
+     *                                             names two archived OpenSpec
+     *                                             changes (WSS-FR-BFJZ)
+     *
+     * The archive refusals of WSS-FR-NTGC are `mergeRefused` values, URL-encoded:
+     *
+     *   ?mergeRefused=change_has_pending%3A%20add-logout-3f2a%3A%20edit_proposal%2Caction_request
+     *   ?mergeRefused=change_not_archivable%3A%20add-logout-3f2a%3A%20tasks_incomplete
+     *   ?mergeRefused=archive_failed%3A%20add-logout-3f2a%3A%20cli_timed_out
      *
      * A conflict enqueues a real run in the seeded queue, so Open in Runs
      * lands on it.
@@ -9243,6 +9321,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           kind: "conflicted",
           runId: run.id,
           conflictedPaths: run.merge.unresolvedPaths,
+          archived: mergeArchived(),
         };
       }
       return {
@@ -9252,6 +9331,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           a.publication?.kind === "commit"
             ? "9f2c1ab4d5e6f708192a3b4c5d6e7f8091a2b3c4"
             : null,
+        archived: mergeArchived(),
       };
     }
 

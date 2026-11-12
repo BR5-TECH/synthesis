@@ -24,6 +24,7 @@ The durable record of what an OpenSpec change cost to refine: the foreground tim
 13. **CST-FR-HDJD** No event of this log carries file text, a hunk, a rationale, feedback, a comment body, or conversation content, on the terms of DSS-FR-XRDM.
 14. **CST-FR-PSUF** `"change statistics changed"` is emitted when one or more events for a change have been appended. It carries the stream id and the change name, and no totals.
 15. **CST-FR-OZBY** Nothing in this module deletes a log. A log stays when the change is archived or removed and when its stream is removed.
+15. **CST-FR-YKGS** When a stream merge archives the change, its log moves with the change's store folder to `changes/<stream-id>/archive/<archivedAs>/statistics.jsonl` (per `OAR-openspec-archive.md` OAR-FR-MSOM). A later change of the same name on that stream starts a new log.
 16. **CST-FR-BLIF** `read_change_statistics` refuses `no_project_open` where no project is open and `invalid_change_name` where the name fails OSM-FR-IHUO. A stream that is no longer live still reads its log, with **versions** `unavailable`.
 17. **CST-FR-AHLL** Every write goes through `FSA-filesystem-access.md`, and every operation logs under the `backend` domain on the terms of DSS-FR-ZMHT, naming the stream id and the change name. Nothing in this module reaches the network.
 

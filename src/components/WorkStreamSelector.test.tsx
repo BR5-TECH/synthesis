@@ -343,7 +343,7 @@ describe("merging a stream (WSS-FR-YPDA, WSS-FR-VMNV, WSS-FR-OMAP)", () => {
     expect(within(row).getByRole("button", { name: "Commit…" })).toBeInTheDocument();
   });
 
-  it("WSS-FR-VMNV: it says Git merges first, where a conflict goes, and that no branch changes before approval", async () => {
+  it("WSS-FR-VMNV: it says Git merges first, where a conflict goes, and that the base branch changes only after approval", async () => {
     backend([summary({}, { aheadOfBase: 1 })]);
     renderSelector();
     const row = await openMerge();
@@ -351,7 +351,7 @@ describe("merging a stream (WSS-FR-YPDA, WSS-FR-VMNV, WSS-FR-OMAP)", () => {
     expect(row.textContent).toMatch(/completes at once and makes no run/);
     expect(row.textContent).toMatch(/handed to a merge run named “Merge editor work” in the Runs panel/);
     expect(row.textContent).toMatch(
-      /Neither branch changes until a review of the reconciled result has judged it ready/,
+      /The base branch changes only after a review of the reconciled result has judged it ready/,
     );
   });
 

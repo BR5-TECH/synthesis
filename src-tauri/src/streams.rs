@@ -40,7 +40,7 @@ mod updating;
 pub use artifact::MergeConflict;
 pub use commands::*;
 pub use conflict_types::{StreamMergeConflict, StreamMergeDecision, SEMANTIC_REBASE_TURN};
-pub use lookup::{stream_at_path, stream_by_id, stream_on_branch};
+pub use lookup::{live_streams, stream_at_path, stream_by_id, stream_on_branch};
 pub use merge_apply::{apply_merge_run, merge_tips_moved, MergeApplied, MergeApplyFailure};
 pub use merge_handoff::*;
 pub(crate) use merge_snapshot::{has_ref as has_snapshot_ref, release_ref as release_snapshot_ref};
@@ -112,6 +112,12 @@ pub const ERR_UPDATE_INTERRUPTED: &str = "update_interrupted";
 /// it to. An escalated update is answered or cleared, never retried.
 pub const ERR_UPDATE_STATE_NOT_PERMITTED: &str = "update_state_not_permitted";
 pub const ERR_NO_PROJECT_OPEN: &str = "no project open";
+/// WKS-FR-YTJY / OAR-FR-BEIK: carries `<change>: <kinds>` after a colon.
+pub const ERR_CHANGE_HAS_PENDING: &str = crate::openspec_archive::ERR_CHANGE_HAS_PENDING;
+/// WKS-FR-YTJY / OAR-FR-QTBK: carries `<change>: <reason>` after a colon.
+pub const ERR_CHANGE_NOT_ARCHIVABLE: &str = crate::openspec_archive::ERR_CHANGE_NOT_ARCHIVABLE;
+/// WKS-FR-YTJY / OAR-FR-EUXZ: carries `<change>: <code>` after a colon.
+pub const ERR_ARCHIVE_FAILED: &str = crate::openspec_archive::ERR_ARCHIVE_FAILED;
 
 /// WKS-FR-WULF: tell every reader of the project's streams to reload.
 ///
@@ -240,6 +246,8 @@ pub enum StreamMergeResult {
         merged_paths: Vec<String>,
         /// The merge commit, where the publication made one.
         commit: Option<String>,
+        /// OAR-FR-SOFQ: the changes the merge archived, in archive order.
+        archived: Vec<crate::openspec_archive::ArchivedChange>,
     },
     /// Git could not settle these paths. Both branches and both working copies
     /// are as they were, and a merge run carries the merge on.
@@ -248,6 +256,8 @@ pub enum StreamMergeResult {
         run_id: String,
         #[serde(rename = "conflictedPaths")]
         conflicted_paths: Vec<String>,
+        /// OAR-FR-SOFQ: the changes the merge archived, in archive order.
+        archived: Vec<crate::openspec_archive::ArchivedChange>,
     },
 }
 

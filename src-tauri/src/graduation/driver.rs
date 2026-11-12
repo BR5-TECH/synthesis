@@ -41,6 +41,7 @@ pub mod corrections;
 mod dispatch;
 pub mod drive;
 pub mod merge_drive;
+pub mod merge_specs_review;
 pub mod merge_workspace;
 pub mod openspec_review;
 pub mod phases;

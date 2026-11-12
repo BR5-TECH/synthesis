@@ -2,8 +2,8 @@
 //!
 //! Each active change of `openspec/changes/` with the state of each artifact,
 //! its task progress, and the capabilities it holds deltas for. It answers
-//! through `OSM-openspec-mode.md`'s `list_changes()` and runs no process of its
-//! own (LOC-FR-DSMK).
+//! through `OSM-openspec-mode.md`'s `list_changes(location)` in the active
+//! worktree location and runs no process of its own (LOC-FR-DSMK).
 
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +87,8 @@ fn run<R: tauri::Runtime>(
     buffer: &'static LogBuffer,
 ) -> Result<ListOpenSpecChangesOutput, ToolRefusal> {
     let outcome = resolve(app, session).and_then(|(root, seam)| {
-        seam.list_changes(app, buffer, Some(&root))
+        // LOC-FR-DSMK: the active worktree location.
+        seam.list_changes_at(app, buffer, Some(&root), &root)
             .map(|changes| {
                 let mut changes: Vec<ChangeEntry> = changes
                     .into_iter()

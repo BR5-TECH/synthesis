@@ -1,6 +1,7 @@
 //! One change, read whole or validated, at a location (`OSM-openspec-mode.md`
 //! OSM-FR-MFVN, OSM-FR-DDHL, OSM-FR-IHUO, OSM-FR-BCJO, OSM-FR-LLIO,
-//! OSM-FR-NMHS, OSM-FR-PYHP, OSM-FR-APVF, OSM-FR-XDRN, OSM-FR-MBTI).
+//! OSM-FR-NMHS, OSM-FR-PYHP, OSM-FR-APVF, OSM-FR-XDRN, OSM-FR-MBTI,
+//! OSM-FR-KWWM, OSM-FR-GMKV).
 //!
 //! A location is the active worktree, the working copy of a stream, or, for
 //! the graduation loop alone, a review checkout. Whether the mode is active is
@@ -220,6 +221,36 @@ pub fn parse_validation(bytes: &[u8]) -> Result<ChangeValidation, OpenSpecReadEr
     Ok(ChangeValidation { valid: item.valid, issues: item.issues })
 }
 
+/// OSM-FR-KWWM: the name of the newest folder `<YYYY-MM-DD>-<name>` of
+/// `openspec/changes/archive/` in the working copy, by its date, or `None`
+/// where none stands. A listing that fails reads as none.
+pub fn archived_as(at: &RootFs, name: &str) -> Option<String> {
+    let archive = at.path().join("openspec/changes/archive");
+    let entries = at.list_dir(archive).ok()?;
+    entries
+        .into_iter()
+        .filter(|entry| entry.kind == EntryKind::Dir)
+        .filter(|entry| archive_folder_of(&entry.name, name))
+        .map(|entry| entry.name)
+        // The date leads the name and is of fixed width, so the text order is
+        // the date order.
+        .max()
+}
+
+/// OAR-FR-XTLB, OSM-FR-KWWM: whether `folder` is one path segment of the form
+/// `<YYYY-MM-DD>-<name>`.
+pub fn archive_folder_of(folder: &str, name: &str) -> bool {
+    let Some(date) = folder.strip_suffix(name).and_then(|rest| rest.strip_suffix('-')) else {
+        return false;
+    };
+    let bytes = date.as_bytes();
+    bytes.len() == 10
+        && bytes.iter().enumerate().all(|(i, b)| match i {
+            4 | 7 => *b == b'-',
+            _ => b.is_ascii_digit(),
+        })
+}
+
 /// OSM-FR-LLIO: a path the CLI reports, relative to the change folder, or
 /// `None` where it lies outside that folder.
 fn change_relative(path: &str, change_dir: &std::path::Path) -> Option<String> {
@@ -256,6 +287,19 @@ impl OpenSpec {
         }
     }
 
+    /// OSM-FR-XSOC, OSM-FR-IHUO: an open project, an active mode, and a valid
+    /// name, before any probe of the working copy.
+    fn mode_and_name(&self, active: Option<&RootFs>, name: &str) -> Result<(), OpenSpecReadError> {
+        let active = active.ok_or(OpenSpecReadError::NoOpenProject)?;
+        if !Self::mode_active(Some(active)) {
+            return Err(OpenSpecReadError::OpenSpecModeInactive);
+        }
+        if !valid_change_name(name) {
+            return Err(OpenSpecReadError::InvalidChangeName);
+        }
+        Ok(())
+    }
+
     /// OSM-FR-BCJO, OSM-FR-LLIO, OSM-FR-NMHS, OSM-FR-PYHP: one change, whole.
     pub fn read_change<S: LogSink + Clone + Send + 'static>(
         &self,
@@ -266,15 +310,28 @@ impl OpenSpec {
         location: ChangeLocation,
         name: &str,
     ) -> Result<ChangeDetail, OpenSpecReadError> {
-        let result = self.ready_at(sink, buffer, active, at, name).and_then(|exe| {
-            let rel = PathBuf::from("openspec/changes").join(name);
+        // OSM-FR-BCJO, OSM-FR-KWWM: the folder is checked before the CLI, so
+        // a change that is not there, or that an archive moved, starts no
+        // process.
+        let rel = PathBuf::from("openspec/changes").join(name);
+        let folder = || -> Result<(), OpenSpecReadError> {
             let is_folder = at
                 .file_info(at.path().join(&rel))
                 .map(|info| info.kind == EntryKind::Dir)
                 .unwrap_or(false);
-            if !is_folder {
-                return Err(OpenSpecReadError::ChangeNotFound);
+            if is_folder {
+                return Ok(());
             }
+            Err(match archived_as(at, name) {
+                Some(archived_as) => OpenSpecReadError::ChangeArchived { archived_as },
+                None => OpenSpecReadError::ChangeNotFound,
+            })
+        };
+        let result = self
+            .mode_and_name(active, name)
+            .and_then(|()| folder())
+            .and_then(|()| self.ready_at(sink, buffer, active, at, name));
+        let result = result.and_then(|exe| {
             let status_args = ["status", "--change", name, "--json"];
             let status: StatusChange =
                 decode(&self.run_logged(sink, buffer, &exe, "status", &status_args, at.path())?)?;
@@ -488,8 +545,9 @@ pub async fn read_openspec_change<R: tauri::Runtime>(
         let active =
             app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
         let at = working_copy(&app, &location).map_err(|e| e.code().to_string())?;
+        // OSM-FR-GMKV: `change_archived` carries its archive folder.
         seam.read_change(&app, &logging::BUFFER, active.as_ref(), &at, location, &name)
-            .map_err(|e| e.code().to_string())
+            .map_err(|e| e.wire_code())
     })
     .await
     .map_err(|e| format!("openspec change read failed: {e}"))?

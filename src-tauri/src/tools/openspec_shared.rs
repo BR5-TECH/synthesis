@@ -58,7 +58,8 @@ pub fn common_refusal(
         // No read tool names a change or a stream, so none of these reach a tool.
         OpenSpecReadError::UnknownStream
         | OpenSpecReadError::InvalidChangeName
-        | OpenSpecReadError::ChangeNotFound => Some(read_failed(read_failed_message)),
+        | OpenSpecReadError::ChangeNotFound
+        | OpenSpecReadError::ChangeArchived { .. } => Some(read_failed(read_failed_message)),
     }
 }
 

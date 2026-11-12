@@ -13,6 +13,10 @@
 
   GRL-FR-BNDD: the recorded decisions are binding.
 
+  GRL-FR-ZXOE: `input.openspec_specs_validation`, where the input carries it, is the strict
+  validation of the OpenSpec specifications of the tree the turn judges, and a specification
+  that is not valid is a finding.
+
   Every comment here is stripped before an agent reads this file (GRL-FR-YIJG).
 -->
 
@@ -60,6 +64,7 @@ A test that is absent is not a finding by itself. Whether the merge has the test
 - `input.agent_account` — the work turn's **own account** of what it did and did not do, in its words. It is a claim rather than evidence: the working copy is what says whether it is true. Present where the turn said anything about its own work.
 - `input.decisions` — the author's recorded decisions: every question the author answered during this run, with the answer, any note, the turn that asked and the pass, in the order they were given. They are **binding**. Do not contradict one, and do not ask the author again about a decision recorded here. Judge the merge against them.
 - `input.correction` — present only where your own answer could not be read last time. It says what to send instead.
+- `input.openspec_specs_validation` — present only where the project uses OpenSpec. It is the result of `openspec validate --specs --strict` on the tree you judge: `valid`, and one item for each specification of `openspec/specs/` with its `id`, whether it is `valid`, and its `issues`. Do not run it yourself. **A specification that is not valid is a finding**: name the file `openspec/specs/<id>/spec.md` and each issue the item reports. Never return `ready` while `input.openspec_specs_validation.valid` is false.
 
 ## One pass, and it covers every path of the merge
 

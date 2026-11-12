@@ -20,6 +20,8 @@ interface DragOptions {
   tree: TreeIndex | null;
   layout: MapLayout | null;
   view: MapView;
+  /** SMO-FR-RVAV: false where no drag starts at all. */
+  enabled: boolean;
   onDrop: (ref: MapRef, target: DropTarget) => void;
 }
 
@@ -54,6 +56,8 @@ export function useMapDrag(options: DragOptions) {
       e.stopPropagation();
       suppressClick.current = false;
       detach.current?.();
+      // SMO-FR-RVAV: the press stays a click.
+      if (!latest.current.enabled) return;
       press.current = { ref, x: e.clientX, y: e.clientY, active: false, target: null };
 
       const end = () => {

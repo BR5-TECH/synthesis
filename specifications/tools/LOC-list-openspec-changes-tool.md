@@ -9,8 +9,8 @@ The tool an agent uses to see which changes an OpenSpec project has in progress.
 1. **LOC-FR-ZDJW** The tool exists as a `rig` portable tool named `list_openspec_changes` and conforms to `TLC-tool-conventions.md` in full.
 2. **LOC-FR-YVDP** Its `description()` returns the fixed text of the contract surface, and its `parameters()` returns a JSON Schema for an object with no properties (per TLC-FR-05).
 3. **LOC-FR-DHDA** The tool is attached to a conversational turn only while OpenSpec mode is active and its CLI is usable (per `../ai/CVL-conversation-loop.md` CVL-FR-DPWP).
-4. **LOC-FR-DSMK** The tool answers through `../core/OSM-openspec-mode.md`'s `list_changes()` (OSM-FR-OPZF) at the moment of the call. It runs no CLI process of its own and reads no file of its own.
-5. **LOC-FR-MGXX** The output holds one entry for each `ChangeSummary` that `list_changes()` returns, ordered by `last_modified` with the most recent first, and with every field of that summary.
+4. **LOC-FR-DSMK** The tool answers through `../core/OSM-openspec-mode.md`'s `list_changes(location)` (OSM-FR-OPZF) in the active worktree location, at the moment of the call. It runs no CLI process of its own and reads no file of its own.
+5. **LOC-FR-MGXX** The output holds one entry for each `ChangeSummary` that `list_changes(location)` returns, ordered by `last_modified` with the most recent first, and with every field of that summary.
 6. **LOC-FR-XTUV** Each entry carries a `path`, which is `openspec/changes/<name>/`, so that the model can read an artifact of the change with `read_file`.
 7. **LOC-FR-UJOO** A project with no active change is a success with an empty `changes` list (per TLC-FR-12).
 8. **LOC-FR-XPNP** With no project open, the tool gives the shared no-open-project refusal (per TLC-FR-13).
@@ -58,6 +58,6 @@ ListOpenSpecChangesOutput {
 - **OpenSpec read failed** — kind `Other`, not retryable: *"The OpenSpec CLI could not list the changes of this project. The OpenSpec files may be malformed."*
 
 ## Non-functional requirements
-- A call costs one `list_changes()` read of `../core/OSM-openspec-mode.md`: two CLI processes and one directory listing for each change.
+- A call costs one `list_changes(location)` read of `../core/OSM-openspec-mode.md`: two CLI processes and one directory listing for each change.
 - The first sentence of the description tells it apart from `list_openspec_specs`, `read_openspec_spec`, and `search_drafts`.
 - Nothing in this tool needs network access.

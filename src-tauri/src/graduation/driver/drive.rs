@@ -575,6 +575,8 @@ async fn review_turn<R: tauri::Runtime>(
     let mut validation: Option<crate::openspec::ChangeValidation>;
     // GRL-FR-BHGJ: the task progress of an apply run, for the gate.
     let mut progress: Option<crate::openspec::ApplyInstructions>;
+    // GRL-FR-ZFMZ: the specs validation of a merge review, for the gate.
+    let mut specs: Option<crate::openspec::ProjectValidation>;
     let (verdict, summary) = loop {
         let settings = settings_for_dispatch(app, run, phases::PART_REVIEW);
         // A budget the author lowered while the work turn ran rests the run,
@@ -677,6 +679,17 @@ async fn review_turn<R: tauri::Runtime>(
             Ok(result) => {
                 input.openspec_apply_progress.clone_from(&result);
                 progress = result;
+            }
+            Err(()) => {
+                let _ = review_checkout::release(app, run, worktree);
+                return Step::Stop;
+            }
+        }
+        // GRL-FR-ZDNL, GRL-FR-AGOA: and a merge review's specs validation.
+        match merge_specs_review::specs_validation(app, run, &checkout).await {
+            Ok(result) => {
+                input.openspec_specs_validation.clone_from(&result);
+                specs = result;
             }
             Err(()) => {
                 let _ = review_checkout::release(app, run, worktree);
@@ -824,6 +837,12 @@ async fn review_turn<R: tauri::Runtime>(
             validation.as_ref(),
             progress.as_ref(),
         )
+    } else {
+        gated
+    };
+    // GRL-FR-ZFMZ: the gate of a merge review in OpenSpec mode.
+    let gated = if gated == verdict {
+        merge_specs_review::gate_merge_verdict(run, gated, specs.as_ref())
     } else {
         gated
     };

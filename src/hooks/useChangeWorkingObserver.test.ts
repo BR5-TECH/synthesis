@@ -2,7 +2,7 @@
  * The working-activity observer of OpenSpec changes
  * (`../../specifications/ui/OCW-openspec-change-workspace.md` OCW-FR-MIEY, on
  * the terms of `DFI-draft-information.md` DFI-FR-XKRM, DFI-FR-UKFR, and
- * DFI-FR-JDWS).
+ * DFI-FR-JDWS; OCW-FR-GVZT for an archived change).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
@@ -14,10 +14,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { IDLE_THRESHOLD_MS } from "../draftEditingObserver";
 import { flushLogs, resetLogBufferForTest } from "../logging";
+import { keepChangeView, resetChangeViewsForTest } from "../state/openspec/changeView";
 import type { Tab } from "../types";
 import {
   changeObserverKey,
   useChangeWorkingObserver,
+  useVisibleChanges,
   visibleChangesOf,
   type ObservedChange,
 } from "./useChangeWorkingObserver";
@@ -31,6 +33,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(START);
   resetLogBufferForTest();
+  resetChangeViewsForTest();
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) => {
     if (cmd === "append_log_records" || cmd === "record_change_working_interval") return null;
@@ -176,6 +179,83 @@ describe("the intervals (OCW-FR-MIEY)", () => {
         }),
       ]),
     );
+    hook.unmount();
+  });
+});
+
+describe("an archived change tab (OCW-FR-GVZT, OCW-FR-MIEY)", () => {
+  const changeTab = (id: string, streamId: string): Tab =>
+    ({
+      id,
+      label: "add-logout",
+      kind: "openspecChange",
+      openspecChange: { location: { kind: "stream", streamId }, name: "add-logout", file: null, openSeq: 1 },
+    }) as Tab;
+  const T1 = changeTab("c-1", "s-1");
+  const T2 = changeTab("c-2", "s-2");
+
+  /** The shell's wiring: the visible changes of the tab strip go to the observer. */
+  function shell(tabs: readonly Tab[], active: string) {
+    return renderHook(({ active }) => useChangeWorkingObserver(useVisibleChanges(tabs, active)), {
+      initialProps: { active },
+    });
+  }
+  const blurAndFocus = () => {
+    act(() => void window.dispatchEvent(new Event("blur")));
+    act(() => void window.dispatchEvent(new Event("focus")));
+  };
+
+  it("OCW-FR-GVZT, OCW-FR-MIEY: the active tab of an archived change records no interval, and a read that clears the archive starts one again", () => {
+    const hook = shell([T1], "c-1");
+    act(() => keepChangeView("c-1", { archivedAs: "2026-11-11-add-logout" }));
+    interact();
+    advance(90_000);
+    blurAndFocus();
+    advance(IDLE_THRESHOLD_MS * 2);
+    expect(calls()).toHaveLength(0);
+
+    // A reactivation read finds the change active again.
+    act(() => keepChangeView("c-1", { archivedAs: null }));
+    interact();
+    advance(30_000);
+    act(() => void window.dispatchEvent(new Event("blur")));
+    expect(calls()).toHaveLength(1);
+    expect(calls()[0][1]).toMatchObject({ streamId: "s-1", change: "add-logout" });
+    hook.unmount();
+  });
+
+  it("OCW-FR-GVZT, OCW-FR-MIEY: a read that names the change archived settles the open interval at that moment", () => {
+    const hook = shell([T1], "c-1");
+    interact();
+    advance(20_000);
+    act(() => keepChangeView("c-1", { archivedAs: "2026-11-11-add-logout" }));
+    expect(calls()).toHaveLength(1);
+    expect(calls()[0][1]).toMatchObject({
+      startedAt: "2026-01-01T10:00:00.000Z",
+      endedAt: "2026-01-01T10:00:20.000Z",
+    });
+    interact();
+    advance(IDLE_THRESHOLD_MS * 2);
+    expect(calls()).toHaveLength(1);
+    hook.unmount();
+  });
+
+  it("OCW-FR-GVZT, OCW-FR-MIEY: a second tab of the same change in another location is not affected by the archive of the first", () => {
+    const hook = shell([T1, T2], "c-2");
+    act(() => keepChangeView("c-1", { archivedAs: "2026-11-11-add-logout" }));
+    interact();
+    advance(10_000);
+    act(() => void window.dispatchEvent(new Event("blur")));
+    expect(calls()).toHaveLength(1);
+    expect(calls()[0][1]).toMatchObject({ streamId: "s-2", change: "add-logout" });
+    act(() => void window.dispatchEvent(new Event("focus")));
+
+    // The archived tab, made active, records nothing.
+    hook.rerender({ active: "c-1" });
+    interact();
+    advance(10_000);
+    act(() => void window.dispatchEvent(new Event("blur")));
+    expect(calls()).toHaveLength(1);
     hook.unmount();
   });
 });

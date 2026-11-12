@@ -15,9 +15,11 @@ use super::*;
 use crate::logging::{BufferState, LogBuffer, LogFilter, LogLevel, LogRecord};
 
 mod apply;
+mod archive;
 mod change;
 mod cli;
 mod mode;
+mod project_validation;
 mod reads;
 #[cfg(unix)]
 mod runner;

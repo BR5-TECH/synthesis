@@ -10,15 +10,31 @@ import type { ChangeLocation } from "../../types";
  * `code: detail`. An `Error` and an object with a `code` carry the same code.
  */
 export function readErrorCode(error: unknown): string {
+  const raw = rejectionText(error);
+  const at = raw.indexOf(":");
+  return (at === -1 ? raw : raw.slice(0, at)).trim();
+}
+
+/** The text a read rejected with, without the `Error: ` an `Error` adds. */
+function rejectionText(error: unknown): string {
   let raw: string;
   if (typeof error === "string") raw = error;
   else if (error instanceof Error) raw = error.message;
   else if (error && typeof error === "object" && "code" in error)
     raw = String((error as { code: unknown }).code);
   else raw = String(error);
-  if (raw.startsWith("Error: ")) raw = raw.slice(7);
+  return raw.startsWith("Error: ") ? raw.slice(7) : raw;
+}
+
+/**
+ * OCW-FR-AKVG / OSM-FR-GMKV: the archive folder name of a `change_archived`
+ * failure, `change_archived: <archived_as>`, or null for every other failure.
+ */
+export function archivedAsOfError(error: unknown): string | null {
+  if (readErrorCode(error) !== "change_archived") return null;
+  const raw = rejectionText(error);
   const at = raw.indexOf(":");
-  return (at === -1 ? raw : raw.slice(0, at)).trim();
+  return at === -1 ? "" : raw.slice(at + 1).trim();
 }
 
 /** OCW-FR-RFGG: the codes that route to the OpenSpec section of Project settings. */

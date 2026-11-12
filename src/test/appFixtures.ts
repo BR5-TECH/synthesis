@@ -65,6 +65,9 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
     // nothing to do with what it is testing.
     case "post_notification":
       return { id: `n${(postCounter += 1)}` };
+    // SMP-FR-HWIC / OSI-FR-OSWD: a project not in OpenSpec mode gets the demo index.
+    case "load_specification_map":
+      return { source: "demo" };
     case "list_recent_projects":
       return [
         {

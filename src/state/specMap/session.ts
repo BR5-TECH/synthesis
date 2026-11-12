@@ -13,7 +13,7 @@ import { specMapOps, type OrganizationEdit, type SpecMapOps } from "../../api/sp
 import { logError, logInfo, logWarn } from "../../logging";
 import { applyEdit, deleteOutcome } from "./organize";
 import { buildTree, refExists, type TreeIndex } from "./tree";
-import type { MapEdit, MapRef, SpecificationIndex } from "./types";
+import { isOpenSpecIndex, type MapEdit, type MapRef, type SpecificationIndex } from "./types";
 
 export interface MapView {
   level: number;
@@ -36,12 +36,34 @@ export const INITIAL_VIEW: MapView = Object.freeze({
 export interface ZoomRequest {
   ref: MapRef;
   nonce: number;
+  /** SMI-FR-QCUC: show the last level, whatever the depth of the node. */
+  lastLevel?: boolean;
+}
+
+/** SMO-FR-RVAV / SMD-FR-YQSR: the edits an OpenSpec index takes. */
+const OPENSPEC_EDITS: ReadonlySet<MapEdit["kind"]> = new Set([
+  "attachDraft",
+  "renameDraft",
+  "detachDraft",
+]);
+
+/**
+ * SMP-FR-KBXW: the code a load failed with. The backend rejects with one
+ * string code, or `code: detail`.
+ */
+export function loadFailureCode(error: unknown): string {
+  let raw = error instanceof Error ? error.message : String(error);
+  if (raw.startsWith("Error: ")) raw = raw.slice(7);
+  const at = raw.indexOf(":");
+  return (at === -1 ? raw : raw.slice(0, at)).trim();
 }
 
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
 
 export interface SpecMapState {
   status: LoadStatus;
+  /** SMP-FR-KBXW: the code of the load that failed, or null. */
+  errorCode: string | null;
   index: SpecificationIndex | null;
   view: MapView;
   focusId: string | null;
@@ -58,6 +80,7 @@ export interface SpecMapState {
 function initialState(): SpecMapState {
   return {
     status: "idle",
+    errorCode: null,
     index: null,
     view: INITIAL_VIEW,
     focusId: null,
@@ -115,11 +138,13 @@ export class SpecMapSessionStore {
     try {
       const index = await this.ops.load();
       if (generation !== this.generation) return;
-      this.set({ status: "ready", index });
+      this.set({ status: "ready", errorCode: null, index });
       const tree = this.tree()!;
       logInfo(["frontend"], "specification map loaded", {
+        source: index.source ?? "demo",
         roots: index.roots.length,
         specs: tree.specs.size,
+        changes: tree.changes.size,
         dependencies: index.dependencies.length,
       });
       const pending = this.state.pendingPath;
@@ -129,11 +154,11 @@ export class SpecMapSessionStore {
       }
     } catch (e) {
       if (generation !== this.generation) return;
-      // SMP-FR-ONSD: the error state carries no detail of its own; the log does.
-      logError(["frontend"], "specification map could not be loaded", {
-        reason: e instanceof Error ? e.message : String(e),
-      });
-      this.set({ status: "error" });
+      // SMP-FR-ONSD / SMP-FR-KBXW: the error state names a code it routes on,
+      // and the log holds the code alone.
+      const code = loadFailureCode(e);
+      logError(["frontend"], "specification map could not be loaded", { code });
+      this.set({ status: "error", errorCode: code });
     }
   };
 
@@ -152,6 +177,12 @@ export class SpecMapSessionStore {
     const { index } = this.state;
     const tree = this.tree();
     if (!index || !tree) return false;
+    if (isOpenSpecIndex(index) && !OPENSPEC_EDITS.has(edit.kind)) {
+      logWarn(["frontend"], "specification map edit refused for an openspec index", {
+        kind: edit.kind,
+      });
+      return false;
+    }
     const siblingId =
       edit.kind === "delete" ? deleteOutcome(tree, edit.nodeId).siblingId : null;
     const next = applyEdit(index, edit);
@@ -218,6 +249,15 @@ export class SpecMapSessionStore {
       this.set({ pendingPath: path });
       return;
     }
+    if (isOpenSpecIndex(tree.index)) {
+      // SMI-FR-QCUC: every requirement of a capability has its spec file as
+      // its path, so the file names the capability node.
+      const holder = tree.holderByPath.get(path);
+      if (!holder) return;
+      const ref: MapRef = { kind: "index", id: holder };
+      this.set({ selection: ref, zoom: { ref, nonce: ++this.nonce, lastLevel: true } });
+      return;
+    }
     const code = tree.specByPath.get(path);
     if (!code) return;
     const ref: MapRef = { kind: "spec", code };
@@ -279,7 +319,7 @@ export function toOrganizationEdit(edit: MapEdit): OrganizationEdit | null {
     case "delete":
       return { kind: "delete", nodeId: edit.nodeId };
     case "move":
-      if (edit.ref.kind === "planned") return null;
+      if (edit.ref.kind === "planned" || edit.ref.kind === "change") return null;
       return {
         kind: "move",
         nodeId: edit.ref.kind === "spec" ? edit.ref.code : edit.ref.id,

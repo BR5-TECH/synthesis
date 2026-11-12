@@ -1,5 +1,10 @@
 /* openspec-change: the change workspace tab (OCW). */
 
+/* OCW-FR-DMGL: the tab takes focus when it opens (`focusOnOpen.ts`). The
+   focus is a place for the keyboard to start, not a control, so it shows no
+   ring. */
+.openspec-change:focus { outline: none; }
+
 .openspec-change {
   /* OCW-FR-GCME: the document column keeps the artifact list and a 360 px
      reading pane, and the discussion column gives up width first, down to

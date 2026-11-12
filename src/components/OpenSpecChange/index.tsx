@@ -23,12 +23,24 @@
  * under it shows the newest apply run or rework run of the change
  * (OCW-FR-JHAB).
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import * as api from "../../api";
 import { logInfo, logWarn } from "../../logging";
 import { formatSectionAddress } from "../../settingsWindow";
-import { changeViewOf, keepChangeView } from "../../state/openspec/changeView";
+import {
+  archivedAsOf,
+  changeViewOf,
+  keepChangeView,
+  subscribeChangeViews,
+} from "../../state/openspec/changeView";
 import { noteOwnerDeleted } from "../../voice/voiceController";
 import type {
   ChangeArtifact,
@@ -40,7 +52,9 @@ import type {
 } from "../../types";
 import { ChangeBody } from "./ChangeBody";
 import { artifactOfPath, type FileMode } from "./changeFiles";
-import { failureStatement, readErrorCode, routesToSettings } from "./failure";
+import { archivedAsOfError, failureStatement, readErrorCode, routesToSettings } from "./failure";
+import { ArchivedChange } from "./ArchivedChange";
+import { useFocusOnOpen } from "./focusOnOpen";
 import { ChangeInformationModal } from "./ChangeInformationModal";
 import { StreamSplitMarker, StreamSurface, type StreamReview } from "./StreamSurface";
 import { ChangeRunButtons, ChangeRunNotes, useReworkDialog } from "./ChangeRunActions";
@@ -79,11 +93,38 @@ export interface OpenSpecChangeWorkspaceProps {
   onOpenArtifact: (item: OpenableArtifact) => void;
 }
 
-export function OpenSpecChangeWorkspace({
+/**
+ * OCW-FR-AKVG / OCW-FR-GVZT: a tab whose change is archived states that alone.
+ * The workspace of a change that is not archived mounts its runs, its
+ * discussion and its proposals; the statement mounts none of them.
+ */
+export function OpenSpecChangeWorkspace(props: OpenSpecChangeWorkspaceProps) {
+  const archivedAs = useSyncExternalStore(subscribeChangeViews, () => archivedAsOf(props.tabId));
+  // OCW-FR-LABL: one read for each mount. The part that shows first makes it.
+  // A part that a read of this mount put in its place shows that answer and
+  // does not read again.
+  const [firstPart] = useState(() =>
+    archivedAsOf(props.tabId) !== null ? "archived" : "workspace",
+  );
+  if (archivedAs !== null) {
+    return (
+      <ArchivedChange
+        tabId={props.tabId}
+        target={props.target}
+        archivedAs={archivedAs}
+        readOnMount={firstPart === "archived"}
+      />
+    );
+  }
+  return <ChangeWorkspace {...props} readOnMount={firstPart === "workspace"} />;
+}
+
+function ChangeWorkspace({
   tabId,
   target,
   onOpenArtifact,
-}: OpenSpecChangeWorkspaceProps) {
+  readOnMount,
+}: OpenSpecChangeWorkspaceProps & { readOnMount: boolean }) {
   const { location, name } = target;
   const [detail, setDetail] = useState<ChangeDetail | null>(() => changeViewOf(tabId).detail);
   const [selected, setSelected] = useState<string | null>(() => changeViewOf(tabId).selected);
@@ -99,10 +140,16 @@ export function OpenSpecChangeWorkspace({
   /** OCW-FR-ZZCS: the Information modal of a stream location. */
   const [informationOpen, setInformationOpen] = useState(false);
   const informationOpener = useRef<HTMLButtonElement | null>(null);
-  const streamId = location.kind === "stream" ? location.streamId : null;
+  // OCW-FR-GVZT: the parts that read other stores (the runs, the discussion
+  // column, the proposals, the requests, the versions) wait for the first
+  // answer of the change read. A change that answers archived then reads none
+  // of them. A kept read is an answer, so a reactivation shows them at once.
+  const answered = detail !== null || error !== null;
+  const streamId = location.kind === "stream" && answered ? location.streamId : null;
   /** OCW-FR-DTJD through OCW-FR-SFYL: the runs of the change on this stream. */
   const runs = useChangeRuns({ tabId, streamId, change: name });
   const rework = useReworkDialog();
+  const root = useFocusOnOpen<HTMLElement>(target.openSeq);
   /** OCW-FR-FEOA / OCW-FR-SCIA: select a thread in the discussion column. */
   const selectThread = (threadId: string) => {
     if (streamId === null) return;
@@ -130,6 +177,14 @@ export function OpenSpecChangeWorkspace({
     } catch (e) {
       if (!live.current || seq !== readSeq.current) return;
       const code = readErrorCode(e);
+      // OCW-FR-AKVG: an archived change, first or later, replaces the content
+      // of the tab with its statement. The wrapper takes it from here.
+      const archivedAs = archivedAsOfError(e);
+      if (archivedAs !== null) {
+        logInfo(["frontend"], "openspec change is archived", { locationKind: location.kind });
+        keepChangeView(tabId, { archivedAs, detail: null });
+        return;
+      }
       setError(code);
       // VOM-FR-NTKT: the stream or the change folder is gone, so voice mode on
       // the change discussion ends.
@@ -150,10 +205,12 @@ export function OpenSpecChangeWorkspace({
   // OCW-FR-LABL: read on each mount, which is an open or a reactivation.
   useEffect(() => {
     live.current = true;
-    void read();
+    if (readOnMount) void read();
     return () => {
       live.current = false;
     };
+    // The first render decides; a later one does not read again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [read]);
 
   // OCW-FR-IAPK / TAB-FR-KOTW: apply the selection of each open once, as soon
@@ -254,7 +311,7 @@ export function OpenSpecChangeWorkspace({
     );
 
   return (
-    <section className="openspec-change" data-testid="openspec-change">
+    <section ref={root} className="openspec-change" data-testid="openspec-change" tabIndex={-1}>
       <header className="openspec-change__head">
         <div className="openspec-change__facts">
           <h2 className="openspec-change__name">{name}</h2>
@@ -267,11 +324,9 @@ export function OpenSpecChangeWorkspace({
               {detail.completedTasks} of {detail.totalTasks} tasks
             </span>
           )}
-          {location.kind === "stream" && (
-            <StreamSplitMarker streamId={location.streamId} change={name} />
-          )}
+          {streamId !== null && <StreamSplitMarker streamId={streamId} change={name} />}
           <span className="spacer" />
-          {location.kind === "stream" && (
+          {streamId !== null && (
             <>
               <button
                 type="button"
@@ -309,7 +364,7 @@ export function OpenSpecChangeWorkspace({
             Refresh
           </button>
         </div>
-        {location.kind === "stream" && <ChangeRunNotes runs={runs} notes={rework.notes} />}
+        {streamId !== null && <ChangeRunNotes runs={runs} notes={rework.notes} />}
         {/* OCW-FR-LSFO: one chip per artifact, in the build order of the schema. */}
         {detail && (
           <ul className="openspec-change__chips" aria-label="Artifact states">
@@ -337,9 +392,9 @@ export function OpenSpecChangeWorkspace({
         </div>
       )}
 
-      {location.kind === "stream" ? (
+      {streamId !== null ? (
         <StreamSurface
-          streamId={location.streamId}
+          streamId={streamId}
           change={name}
           detail={detail}
           historyOpen={historyOpen}
@@ -352,6 +407,10 @@ export function OpenSpecChangeWorkspace({
           onFocusFragment={showFragment}
           render={(stream) => readingPane(stream)}
         />
+      ) : location.kind === "stream" ? (
+        // OCW-FR-LABL: a stream location shows the loading state alone until
+        // the first answer.
+        readingPane(null)
       ) : (
         <>
           {/* OCW-FR-ZZHS: a worktree that is not a stream's working copy

@@ -87,12 +87,62 @@ fn subtree_id(tree: &Tree<'_>, dir: &str) -> Option<Oid> {
     tree.get_path(Path::new(dir)).ok().map(|e| e.id())
 }
 
+/// CVH-FR-SJIF: whether the version from `parent` to `tree` moves the change
+/// folder to `openspec/changes/archive/`: the folder is gone from `tree`, and
+/// `tree` holds an archive folder `<YYYY-MM-DD>-<change>` that `parent` does
+/// not hold as it is.
+fn is_archive_version(
+    repo: &Repository,
+    tree: &Tree<'_>,
+    parent: Option<&Tree<'_>>,
+    dir: &str,
+    change: &str,
+) -> bool {
+    if subtree_id(tree, dir).is_some() || parent.and_then(|t| subtree_id(t, dir)).is_none() {
+        return false;
+    }
+    let archive_dir = match dir.rsplit_once('/') {
+        Some((changes, _)) => format!("{changes}/archive"),
+        None => "archive".to_string(),
+    };
+    let Some(archive) = subtree(repo, tree, &archive_dir) else {
+        return false;
+    };
+    archive.iter().any(|entry| {
+        let Ok(name) = entry.name() else {
+            return false;
+        };
+        crate::openspec::change::archive_folder_of(name, change)
+            && entry.kind() == Some(git2::ObjectType::Tree)
+            && parent.and_then(|t| subtree_id(t, &format!("{archive_dir}/{name}")))
+                != Some(entry.id())
+    })
+}
+
+/// CVH-FR-SJIF: the newest archive version of `change` reachable from
+/// `HEAD`, by the order of the list.
+fn newest_archive_version(repo: &Repository, dir: &str, change: &str) -> Option<Oid> {
+    let mut walk = repo.revwalk().ok()?;
+    walk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME).ok()?;
+    walk.push_head().ok()?;
+    for oid in walk.flatten() {
+        let commit = repo.find_commit(oid).ok()?;
+        let tree = commit.tree().ok()?;
+        let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+        if is_archive_version(repo, &tree, parent_tree.as_ref(), dir, change) {
+            return Some(oid);
+        }
+    }
+    None
+}
+
 fn rfc3339(time: git2::Time) -> String {
     crate::notes::format_rfc3339_utc(time.seconds())
 }
 
-/// CVH-FR-HDTA / CVH-FR-VZGR / CVH-FR-URCF / CVH-FR-ITHO / CVH-FR-DAAQ: every
-/// version reachable from `HEAD`, most recent first by the commit graph.
+/// CVH-FR-HDTA / CVH-FR-VZGR / CVH-FR-URCF / CVH-FR-ITHO / CVH-FR-DAAQ /
+/// CVH-FR-SJIF: every version reachable from `HEAD` and newer than the newest
+/// archive version, most recent first by the commit graph.
 pub fn list_versions_in(root: &Path, change: &str) -> Result<ChangeVersions, String> {
     list_versions_limited(root, change, MAX_VERSIONS)
 }
@@ -123,6 +173,11 @@ pub(crate) fn list_versions_limited(
         let before = parent_tree.as_ref().and_then(|t| subtree_id(t, &dir));
         if now == before {
             continue;
+        }
+        // CVH-FR-SJIF: the versions older than the newest archive version
+        // belong to an archived change of the same name.
+        if is_archive_version(&repo, &tree, parent_tree.as_ref(), &dir, change) {
+            break;
         }
         if versions.len() == limit {
             truncated = true;
@@ -160,7 +215,8 @@ pub(crate) fn list_versions_limited(
             deleted,
         });
     }
-    // CVH-FR-HXVV: refused only where the branch holds no version at all.
+    // CVH-FR-HXVV: refused only where the branch holds no version newer than
+    // its newest archive version.
     if versions.is_empty() {
         return Err(ERR_CHANGE_NOT_FOUND.to_string());
     }
@@ -190,6 +246,13 @@ pub fn read_version_in(
         subtree_id(&tree, &dir) != parent_tree.as_ref().and_then(|t| subtree_id(t, &dir));
     if !reachable || !changes_folder {
         return Err(ERR_UNKNOWN_VERSION.to_string());
+    }
+    // CVH-FR-SJIF / CVH-FR-VSQD: a version at or before the newest archive
+    // version is one the list does not return.
+    if let Some(archive) = newest_archive_version(&repo, &dir, change) {
+        if archive == oid || repo.graph_descendant_of(archive, oid).unwrap_or(false) {
+            return Err(ERR_UNKNOWN_VERSION.to_string());
+        }
     }
     let mut files = Vec::new();
     if let Some(sub) = subtree(&repo, &tree, &dir) {

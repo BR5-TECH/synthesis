@@ -13,6 +13,8 @@
  * this stream (WSS-FR-XRHT).
  */
 
+import { useEffect, useRef } from "react";
+
 import { openPullRequestReason } from "../../state/openPullRequests";
 import type { PullRequestSummary, StreamMergePublication, WorkStreamSummary } from "../../types";
 import { canUpdateStream, mergeRunBlocksStream } from "../../types";
@@ -104,6 +106,18 @@ export function StreamRow({
   readingStack = false,
 }: StreamRowProps) {
   const { stream, aheadOfBase, behindBase, queuedRunCount } = summary;
+  // WSS-FR-KMHD / WSS-FR-PLVE: the answer of a merge is said on this row. The
+  // confirmation can scroll the list (the base branch write section), so the
+  // row comes back into view when an answer arrives. An answer the row
+  // already showed when it mounted moves nothing.
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const shownOutcome = useRef(mergeOutcome);
+  useEffect(() => {
+    if (merge || !mergeOutcome || mergeOutcome === shownOutcome.current) return;
+    shownOutcome.current = mergeOutcome;
+    // jsdom has no scrollIntoView.
+    rowRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [merge, mergeOutcome]);
   const held = Boolean(stream.busyRunId);
   const missing = stream.isMissing;
   // WSS-FR-PSXK / WSS-FR-OQYG: both disable the row's acts, and each says why
@@ -183,7 +197,7 @@ export function StreamRow({
   // Open in Runs…, which the status renders.
 
   return (
-    <div className="stream-select__row" data-testid={`stream-row-${stream.id}`}>
+    <div ref={rowRef} className="stream-select__row" data-testid={`stream-row-${stream.id}`}>
       <button
         type="button"
         role="menuitem"

@@ -11,6 +11,9 @@
  * from the Drafts panel (the row "Add logout everywhere", then Open change).
  * `?openspecRead=<code>` makes every read reject with that code, for example
  * `?openspecRead=change_not_found` or `?openspecRead=cli_unavailable`.
+ * `?openspecArchived` makes every read of the demo change reject with
+ * `change_archived: 2026-11-11-add-logout-3f2a`, so the tab states that the
+ * change is archived (OCW-FR-AKVG, OCW-FR-GVZT).
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
@@ -235,6 +238,10 @@ export function openspecInvoke(cmd: string, a: Record<string, any>): unknown {
   }
   // eslint-disable-next-line no-throw-literal
   if (name !== OPENSPEC_DEMO_CHANGE) throw "change_not_found";
+  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("openspecArchived")) {
+    // eslint-disable-next-line no-throw-literal
+    throw `change_archived: 2026-11-11-${OPENSPEC_DEMO_CHANGE}`;
+  }
   return demoDetail(where);
 }
 

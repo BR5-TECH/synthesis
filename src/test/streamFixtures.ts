@@ -162,6 +162,7 @@ export function mergedResult(
     kind: "merged",
     mergedPaths: ["README.md", "src/a.ts"],
     commit: null,
+    archived: [],
     ...over,
   };
 }
@@ -174,6 +175,7 @@ export function conflictedResult(
     kind: "conflicted",
     runId: "run-merge-1",
     conflictedPaths: ["README.md", "docs/a.md"],
+    archived: [],
     ...over,
   };
 }

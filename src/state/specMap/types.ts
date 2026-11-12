@@ -16,16 +16,42 @@ export const COMPLETENESS_STATES: readonly CompletenessState[] = [
   "gap",
 ];
 
+/** SMP UI contract boundary: one issue the OpenSpec validation reported. */
+export interface MapIssue {
+  level: "ERROR" | "WARNING" | "INFO";
+  message: string;
+}
+
+/** OSI-FR-ALQI: where the change of a change chip lives. */
+export type ChangeChipLocation =
+  | { kind: "active_worktree" }
+  | { kind: "stream"; streamId: string; streamName: string };
+
+/** OSI-FR-ALQI: one active change on one capability, in one location. */
+export interface ChangeChip {
+  change: string;
+  location: ChangeChipLocation;
+  /** OSI-FR-GRCV: the issues of the change, in the active worktree alone. */
+  issues?: MapIssue[];
+}
+
 export interface SpecNode {
-  /** The spec code, for example `STB`. */
+  /** The spec code, for example `STB`, or `<capability-id>#<n>` in OpenSpec mode. */
   code: string;
-  /** Relative to `specifications/`, for example `ui/STB-status-bar.md`. */
+  /** SMN-FR-PMZM: the text of the code badge, where it is not the code. */
+  badge?: string;
+  /**
+   * Relative to `specifications/` in the demo index, for example
+   * `ui/STB-status-bar.md`, and to the project root in an OpenSpec index.
+   */
   path: string;
   label: string;
   summary: string;
   requirements: number;
   scenarios: number;
   state: CompletenessState;
+  /** OSI-FR-SBVF: the issues of an OpenSpec requirement. */
+  issues?: MapIssue[];
 }
 
 /** SMD-FR-OYLC: a draft placed on an index node, named by its id. */
@@ -42,6 +68,15 @@ export interface IndexNode {
   hue?: string;
   children: IndexNode[] | SpecNode[];
   planned?: PlannedDraft[];
+  /**
+   * OSI-FR-VOOS: a capability that a change names and the live specs do not
+   * hold. The wire field is `planned: true`; `planned` here holds the drafts.
+   */
+  plannedCapability?: boolean;
+  /** OSI-FR-SBVF: the issues of an OpenSpec capability. */
+  issues?: MapIssue[];
+  /** OSI-FR-ALQI: the change chips of an OpenSpec capability. */
+  changes?: ChangeChip[];
 }
 
 /** SMP-FR-QMRE: the names the index gives one level. */
@@ -57,17 +92,51 @@ export interface Dependency {
   unresolved?: boolean;
 }
 
+/** SMP-FR-HWIC: where the index came from. Absent means the demo index. */
+export type MapSource = "demo" | "openspec";
+
 export interface SpecificationIndex {
   levels: LevelName[];
   roots: IndexNode[];
   dependencies: Dependency[];
+  source?: MapSource;
+  /** OSI-FR-OIOB: the result of the validation of an OpenSpec index. */
+  validation?: "valid" | "invalid" | "unavailable";
+  /** OSI-FR-DENT: the locations whose changes could not be read. */
+  unreadLocations?: number;
+}
+
+/** SMP-FR-MNZW: whether the index is the index of the project's OpenSpec specs. */
+export const isOpenSpecIndex = (index: SpecificationIndex): boolean =>
+  index.source === "openspec";
+
+/** SMI-FR-ZMZB: the location of a change chip, as the author reads it. */
+export function changeLocationLabel(chip: ChangeChip): string {
+  return chip.location.kind === "stream" ? chip.location.streamName : "active worktree";
+}
+
+/** SMN-FR-YEVY: one change in one location, whichever capability shows it. */
+export function changeIdentity(chip: ChangeChip): string {
+  const where =
+    chip.location.kind === "stream" ? `stream:${chip.location.streamId}` : "active_worktree";
+  return `${chip.change}@${where}`;
+}
+
+/**
+ * SMI-FR-ZMZB: the stable key of a change chip, unique in one index. A change
+ * that touches two capabilities gives one chip on each, so the key names the
+ * capability node too.
+ */
+export function changeChipKey(nodeId: string, chip: ChangeChip): string {
+  return `change:${nodeId}|${changeIdentity(chip)}`;
 }
 
 /** What a selection, a hover, or a drag names. */
 export type MapRef =
   | { kind: "index"; id: string }
   | { kind: "spec"; code: string }
-  | { kind: "planned"; draftId: string };
+  | { kind: "planned"; draftId: string }
+  | { kind: "change"; key: string };
 
 /** Every change the map session applies to its index. */
 export type MapEdit =
@@ -96,6 +165,8 @@ export function refKey(ref: MapRef): string {
       return `spec:${ref.code}`;
     case "planned":
       return `planned:${ref.draftId}`;
+    case "change":
+      return ref.key;
   }
 }
 

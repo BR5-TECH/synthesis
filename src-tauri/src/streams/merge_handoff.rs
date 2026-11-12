@@ -10,6 +10,9 @@
 //! graduation run, which is the only durable record of that merge. Everything
 //! after the handoff is the run's: its queue, its passes, its review and its
 //! apply.
+//!
+//! In OpenSpec mode the request first archives, on the stream branch, each
+//! OpenSpec change that the stream built (WKS-FR-PXYH, `OAR-openspec-archive.md`).
 
 use tauri::Manager;
 
@@ -172,6 +175,17 @@ fn check<R: tauri::Runtime>(
         return Ok(StreamMergeResult::NothingToMerge);
     }
 
+    // WKS-FR-PXYH, OAR-FR-SEQU: the archive step, after the clean check and
+    // after the merge found work to merge, and before the merge is prepared.
+    // A refusal of the step is a refusal of the merge (WKS-FR-YTJY), and an
+    // archive commit stays on the stream on every later outcome (OAR-FR-OQVF).
+    let archived = crate::openspec_archive::archive_stream_changes(app, stream)?;
+    if !archived.is_empty() {
+        // The stream branch holds the archive commits now, so the merge is
+        // prepared from its new tip.
+        prepared = merge::prepare(&main, stream)?;
+    }
+
     if prepared.conflicted_paths.is_empty() {
         let commit = merge::apply(&main, base_repo.as_ref(), stream, &mut prepared, publication)?;
         // WKS-FR-JXPV / GRD-FR-UXXF: the stream's completed draft runs land on
@@ -193,6 +207,7 @@ fn check<R: tauri::Runtime>(
         return Ok(StreamMergeResult::Merged {
             merged_paths: prepared.merged_paths.clone(),
             commit,
+            archived,
         });
     }
 
@@ -247,6 +262,7 @@ fn check<R: tauri::Runtime>(
             Ok(StreamMergeResult::Conflicted {
                 run_id: run.id,
                 conflicted_paths: snapshot.unresolved_paths,
+                archived,
             })
         }
         Err(reason) => {

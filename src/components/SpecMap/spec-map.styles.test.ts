@@ -28,6 +28,22 @@ describe("the tab frame (SMP)", () => {
   });
 });
 
+describe("the notice line (SMP-FR-KVKD)", () => {
+  it("SMP-FR-KVKD: the notice takes its own height above the canvas, so it hides no node", () => {
+    const notice = only(".smap-notice");
+    expect(decl(notice, "flex")).toBe("none");
+    expect(decl(notice, "position")).toBeNull();
+    expect(decl(only(".smap"), "flex-direction")).toBe("column");
+  });
+
+  it("SMP-FR-KVKD, SMI-FR-QWOP: the overlay inspector covers the body alone, which the notice stands outside of", () => {
+    expect(decl(only(".smap-body"), "position")).toBe("relative");
+    const overlay = only(".smap-inspector[data-overlay]");
+    expect(decl(overlay, "position")).toBe("absolute");
+    expect(decl(overlay, "top")).toBe("0");
+  });
+});
+
 describe("the canvas (SMZ)", () => {
   it("SMZ-FR-DPWC: a 16px dot grid of --border-2 on --bg-canvas, and one stage transformed from its origin", () => {
     const canvas = only(".smap-canvas");
@@ -43,6 +59,27 @@ describe("the canvas (SMZ)", () => {
 });
 
 describe("nodes (SMN)", () => {
+  it("SMN-FR-QHVM, SMN-FR-YEVY: a long meta line gives way before the label of its card or box: it truncates, and the label keeps its width", () => {
+    for (const [label, meta] of [
+      [".smap-root__label", ".smap-root__meta"],
+      [".smap-box__label", ".smap-box__meta"],
+    ]) {
+      const l = only(label);
+      const m = only(meta);
+      // The label is sized by its text, so a short label is never squeezed.
+      expect(decl(l, "flex")).toBe("1 1 auto");
+      expect(decl(l, "text-overflow")).toBe("ellipsis");
+      // The meta shrinks first, far more than the label, and truncates.
+      const [grow, shrink, basis] = decl(m, "flex")!.split(/\s+/);
+      expect([grow, basis]).toEqual(["0", "auto"]);
+      expect(Number(shrink)).toBeGreaterThanOrEqual(100);
+      expect(decl(m, "min-width")).toMatch(/ch$/);
+      expect(decl(m, "overflow")).toBe("hidden");
+      expect(decl(m, "text-overflow")).toBe("ellipsis");
+      expect(decl(m, "white-space")).toBe("nowrap");
+    }
+  });
+
   it("SMN-FR-CMLN: bars and dots use the four state tokens", () => {
     const tokens = { verified: "--ok", built: "--accent", drafted: "--fg-4", gap: "--danger" };
     for (const [state, token] of Object.entries(tokens)) {
@@ -52,8 +89,8 @@ describe("nodes (SMN)", () => {
     }
   });
 
-  it("SMN-FR-WAGD: each of the six folders has a badge colour pair in both themes", () => {
-    for (const folder of ["ui", "core", "ai", "tools", "infra", "server"]) {
+  it("SMN-FR-WAGD: each of the six folders and openspec has a badge colour pair in both themes", () => {
+    for (const folder of ["ui", "core", "ai", "tools", "infra", "server", "openspec"]) {
       for (const selector of [
         `.smap-code[data-folder="${folder}"]`,
         `[data-theme="dark"] .smap-code[data-folder="${folder}"]`,
@@ -63,6 +100,24 @@ describe("nodes (SMN)", () => {
         expect(decl(block, "color"), selector).toMatch(/^#[0-9A-F]{6}$/i);
       }
     }
+  });
+
+  it("SMN-FR-ZOUZ: a change chip has a dashed accent border and an accent change badge", () => {
+    const chip = only(".smap-chip--change");
+    expect(decl(chip, "border-style")).toBe("dashed");
+    expect(decl(chip, "border-color")).toBe("var(--accent)");
+    const badge = only(".smap-code--change");
+    expect([decl(badge, "background"), decl(badge, "color")]).toEqual([
+      "var(--accent-soft)",
+      "var(--accent)",
+    ]);
+  });
+
+  it("SMN-FR-VNTJ: a planned capability node has a dashed --border-2 border, and keeps the accent when selected", () => {
+    const planned = only(".smap-box[data-planned]");
+    expect(decl(planned, "border-style")).toBe("dashed");
+    expect(decl(planned, "border-color")).toBe("var(--border-2)");
+    expect(decl(only(".smap-box[data-planned][data-selected]"), "border-color")).toBe("var(--accent)");
   });
 
   it("SMN-FR-EYRV: a selected root card has an accent border and a 3px ring", () => {

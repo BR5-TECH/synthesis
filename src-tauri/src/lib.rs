@@ -60,6 +60,7 @@ pub mod notes;
 pub mod notifications;
 mod onnx_runtime;
 pub mod openspec;
+pub mod openspec_archive;
 pub mod progress;
 pub mod project;
 pub mod project_settings;
@@ -639,6 +640,8 @@ pub fn run() {
             openspec::get_openspec_status,
             openspec::change::read_openspec_change,
             openspec::apply::read_apply_progress,
+            // OSI-openspec-spec-index.md OSI-FR-OSWD.
+            openspec::spec_index::load_specification_map,
             project_settings::save_project_vendor_image,
             project_settings::build_project_vendor_image,
             project_settings::cancel_project_vendor_image_build,

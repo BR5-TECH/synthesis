@@ -97,20 +97,64 @@ fn the_versions_are_the_commits_that_change_the_folder() {
     assert_eq!(rename.deleted, vec!["proposal.md".to_string()]);
 }
 
-// CVH-FR-URCF / CVH-FR-HXVV: archiving moves the folder, which is a version
-// that deletes every file, and the versions stay listed with no folder.
+/// Move the change folder below `openspec/changes/archive/` as `openspec
+/// archive` does, and commit it.
+fn archive(r: &Repo, dir: &str, folder: &str) -> String {
+    let source = r.path().join(dir);
+    let target = r.path().join(format!("openspec/changes/archive/{folder}"));
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::rename(source, target).unwrap();
+    r.commit(&format!("Archive OpenSpec change {CHANGE}"))
+}
+
+// CVH-FR-SJIF, CVH-FR-HXVV, CVH-FR-URCF: the archive version moves the folder
+// to `openspec/changes/archive/`, and the list reads only the versions newer
+// than it, so an archived change with no later version is refused.
 #[test]
-fn an_archived_change_keeps_its_versions() {
+fn an_archived_change_lists_no_version() {
+    let r = Repo::new();
+    let (created, _, _, dir) = base(&r);
+    let archived = archive(&r, &dir, &format!("2026-11-11-{CHANGE}"));
+    assert_eq!(list_versions_in(r.path(), CHANGE), Err(ERR_CHANGE_NOT_FOUND.to_string()));
+    // CVH-FR-VSQD: neither the archive version nor an older one reads.
+    assert_eq!(read_version_in(r.path(), CHANGE, &archived), Err(ERR_UNKNOWN_VERSION.to_string()));
+    assert_eq!(read_version_in(r.path(), CHANGE, &created), Err(ERR_UNKNOWN_VERSION.to_string()));
+}
+
+// CVH-FR-SJIF: a later change of the same name starts with no version, and
+// lists only its own versions, newer than the newest archive version.
+#[test]
+fn a_later_change_of_the_same_name_lists_its_own_versions() {
     let r = Repo::new();
     let (_, _, _, dir) = base(&r);
-    r.write(&format!("openspec/changes/archive/2026-11-11-{CHANGE}/why.md"), b"## Why\n");
-    r.write(&format!("openspec/changes/archive/2026-11-11-{CHANGE}/tasks.md"), b"- [x] 1.1\n");
-    r.remove(&dir);
-    let archived = r.commit("Archive add-auth");
+    archive(&r, &dir, &format!("2026-11-10-{CHANGE}"));
+    r.write(&format!("{dir}/proposal.md"), b"## Why again\n");
+    let first = r.commit("Propose add-auth again");
+    archive(&r, &dir, &format!("2026-11-11-{CHANGE}"));
+    r.write(&format!("{dir}/proposal.md"), b"## Why a third time\n");
+    let third = r.commit("Propose add-auth a third time");
+    r.write(&format!("{dir}/tasks.md"), b"- [ ] 1.1\n");
+    let edit = r.commit("Add the tasks");
     let listed = list_versions_in(r.path(), CHANGE).expect("versions");
-    assert_eq!(listed.versions[0].commit_id, archived);
+    let ids: Vec<&str> = listed.versions.iter().map(|v| v.commit_id.as_str()).collect();
+    assert_eq!(ids, [edit.as_str(), third.as_str()]);
+    assert_eq!(read_version_in(r.path(), CHANGE, &first), Err(ERR_UNKNOWN_VERSION.to_string()));
+    assert_eq!(read_version_in(r.path(), CHANGE, &third).expect("read").files.len(), 1);
+}
+
+// CVH-FR-SJIF: a commit that deletes the folder with no archive folder is no
+// archive version, so the older versions stay listed (CVH-FR-HXVV).
+#[test]
+fn a_deleted_folder_with_no_archive_keeps_its_versions() {
+    let r = Repo::new();
+    let (created, _, _, dir) = base(&r);
+    r.remove(&dir);
+    let deleted = r.commit("Remove add-auth");
+    let listed = list_versions_in(r.path(), CHANGE).expect("versions");
+    assert_eq!(listed.versions[0].commit_id, deleted);
     assert_eq!(listed.versions[0].deleted, vec!["tasks.md".to_string(), "why.md".to_string()]);
-    assert_eq!(read_version_in(r.path(), CHANGE, &archived).expect("read").files, Vec::new());
+    assert_eq!(listed.versions.last().unwrap().commit_id, created);
+    assert_eq!(read_version_in(r.path(), CHANGE, &deleted).expect("read").files, Vec::new());
 }
 
 // CVH-FR-ITHO / CVH-FR-HCOJ / CVH-FR-VSQD: an uncommitted edit and a commit
@@ -181,6 +225,29 @@ fn a_commit_that_is_not_a_version_is_refused() {
 fn a_long_history_is_truncated_at_the_bound() {
     let r = Repo::new();
     base(&r);
+    let listed = list_versions_limited(r.path(), CHANGE, 2).expect("versions");
+    assert_eq!(listed.versions.len(), 2);
+    assert!(listed.truncated);
+}
+
+// CVH-FR-DAAQ, CVH-FR-SJIF: where the versions newer than the archive version
+// fill the bound exactly, the list is not truncated, because the archive
+// version and the versions older than it are no versions of the change; one
+// more version newer than the archive version truncates it.
+#[test]
+fn the_archive_version_at_the_bound_does_not_truncate_the_list() {
+    let r = Repo::new();
+    let (_, _, _, dir) = base(&r);
+    archive(&r, &dir, &format!("2026-11-11-{CHANGE}"));
+    r.write(&format!("{dir}/proposal.md"), b"## Why again\n");
+    r.commit("Propose add-auth again");
+    r.write(&format!("{dir}/tasks.md"), b"- [ ] 1.1\n");
+    r.commit("Add the tasks");
+    let listed = list_versions_limited(r.path(), CHANGE, 2).expect("versions");
+    assert_eq!(listed.versions.len(), 2);
+    assert!(!listed.truncated);
+    r.write(&format!("{dir}/tasks.md"), b"- [x] 1.1\n");
+    r.commit("Do the task");
     let listed = list_versions_limited(r.path(), CHANGE, 2).expect("versions");
     assert_eq!(listed.versions.len(), 2);
     assert!(listed.truncated);

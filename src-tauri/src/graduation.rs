@@ -46,6 +46,7 @@ pub mod logs;
 pub mod observability;
 pub mod statistics;
 
+mod archive_candidates;
 mod arrangement;
 mod cascade;
 pub mod change_runs;
@@ -74,6 +75,7 @@ mod store;
 mod transitions;
 mod write_check;
 
+pub use archive_candidates::{stream_archive_candidates, ArchiveCandidate};
 pub use arrangement::*;
 pub use change_runs::*;
 pub use commands::*;

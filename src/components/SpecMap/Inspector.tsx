@@ -1,4 +1,4 @@
-import type { MapRef } from "../../state/specMap/types";
+import type { ChangeChip, MapRef } from "../../state/specMap/types";
 import { Icon } from "../icons";
 import { CompletenessBar } from "./CompletenessBar";
 import type { InspectorModel, InspectorRow } from "./inspectorModel";
@@ -14,6 +14,26 @@ export interface InspectorActions {
   onNewDraft: (id: string) => void;
   onOpenSpec: (code: string) => void;
   onOpenDraft: (draftId: string, name: string) => void;
+  /** SMI-FR-UKIV: open the change of a change chip in its location. */
+  onOpenChange: (chip: ChangeChip) => void;
+}
+
+/** SMI-FR-ZLOA / SMI-FR-BXET: the card of the lines that need attention. */
+function Attention({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="smap-attention" role="note">
+      <div className="smap-attention__title">
+        <span className="smap-dot" data-state="gap" />
+        Needs attention
+      </div>
+      {lines.map((line, i) => (
+        <div key={`${i}:${line}`} className="smap-attention__line">
+          {line}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function Row({ row, onSelect }: { row: InspectorRow; onSelect: (ref: MapRef) => void }) {
@@ -84,9 +104,40 @@ function InspectorBody({ model, actions }: { model: InspectorModel; actions: Ins
     return (
       <>
         <p className="smap-inspector__hint">Select a node to inspect it.</p>
+        {model.newRootLabel && (
+          <div className="smap-actions">
+            <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onCreate(null)}>
+              <Icon.Plus size={12} /> {model.newRootLabel}
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (model.kind === "change") {
+    // SMI-FR-ZMZB / SMI-FR-UKIV / SMD-FR-YQSR: no New draft for a change chip.
+    return (
+      <>
+        <div className="smap-inspector__crumbs" data-testid="spec-map-change-holder">On {model.holderLabel}</div>
+        <div className="smap-inspector__heading">
+          <span className="smap-code smap-code--change">change</span>
+          <span className="smap-inspector__name">{model.chip.change}</span>
+        </div>
+        <div className="smap-section-label">Location</div>
+        <div className="smap-rows">
+          <div className="smap-row" data-testid="spec-map-change-location">
+            <span className="smap-row__label">{model.locationLabel}</span>
+          </div>
+        </div>
+        <Attention lines={model.attention} />
         <div className="smap-actions">
-          <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onCreate(null)}>
-            <Icon.Plus size={12} /> {model.newRootLabel}
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => actions.onOpenChange(model.chip)}
+          >
+            Open change
           </button>
         </div>
       </>
@@ -144,26 +195,19 @@ function InspectorBody({ model, actions }: { model: InspectorModel; actions: Ins
         ))}
       </div>
 
-      <div className="smap-section-label">Depends on</div>
-      <div className="smap-rows">
-        {model.dependsOn.map((row) => (
-          <Row key={row.key} row={row} onSelect={actions.onSelect} />
-        ))}
-      </div>
-
-      {model.attention.length > 0 && (
-        <div className="smap-attention" role="note">
-          <div className="smap-attention__title">
-            <span className="smap-dot" data-state="gap" />
-            Needs attention
+      {/* SMI-FR-BWIY: an OpenSpec index holds no dependency. */}
+      {model.dependsOn && (
+        <>
+          <div className="smap-section-label">Depends on</div>
+          <div className="smap-rows">
+            {model.dependsOn.map((row) => (
+              <Row key={row.key} row={row} onSelect={actions.onSelect} />
+            ))}
           </div>
-          {model.attention.map((line) => (
-            <div key={line} className="smap-attention__line">
-              {line}
-            </div>
-          ))}
-        </div>
+        </>
       )}
+
+      <Attention lines={model.attention} />
 
       {model.kind === "spec" ? (
         <div className="smap-actions">
@@ -184,25 +228,28 @@ function InspectorBody({ model, actions }: { model: InspectorModel; actions: Ins
               Zoom to
             </button>
           </div>
-          <div className="smap-actions">
-            {model.newChildLabel && (
-              <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onCreate(model.id)}>
-                <Icon.Plus size={12} /> {model.newChildLabel}
+          {/* SMO-FR-RVAV: an OpenSpec index offers no organization. */}
+          {model.organize && (
+            <div className="smap-actions">
+              {model.newChildLabel && (
+                <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onCreate(model.id)}>
+                  <Icon.Plus size={12} /> {model.newChildLabel}
+                </button>
+              )}
+              <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onEdit(model.id)}>
+                Rename
               </button>
-            )}
-            <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onEdit(model.id)}>
-              Rename
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger btn--sm"
-              disabled={!model.canDelete}
-              title={model.canDelete ? undefined : "Move the children out first"}
-              onClick={() => actions.onDelete(model.id)}
-            >
-              Delete
-            </button>
-          </div>
+              <button
+                type="button"
+                className="btn btn--danger btn--sm"
+                disabled={!model.canDelete}
+                title={model.canDelete ? undefined : "Move the children out first"}
+                onClick={() => actions.onDelete(model.id)}
+              >
+                Delete
+              </button>
+            </div>
+          )}
           <div className="smap-actions">
             <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onNewDraft(model.id)}>
               <Icon.Plus size={12} /> New draft

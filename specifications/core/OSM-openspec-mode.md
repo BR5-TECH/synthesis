@@ -3,7 +3,7 @@
 **Spec code:** `OSM`
 
 ## Intent
-OpenSpec mode is the optional mode in which the application works with a project that uses OpenSpec on the terms of OpenSpec. OpenSpec keeps the live specifications of a project in `openspec/specs/<capability>/spec.md` and each planned change in `openspec/changes/<name>/`, and its CLI reads both and reports them as JSON. This module decides whether the open project is in OpenSpec mode, finds the OpenSpec CLI on this machine, and gives the rest of the backend one typed seam that reads capabilities, requirements, changes, and the task progress of a change through that CLI, and validates a change. A read runs in a **location**: the active worktree, or the working copy of one work stream of the project, because a change that a graduation run proposes lives on its stream before the author activates that stream. It parses no OpenSpec Markdown itself, so the OpenSpec version and the schemas of the project decide what a capability and a change contain. A project that does not use OpenSpec, and a project whose author sets the mode to off, work as if this module did not exist. Out of scope: the classification of OpenSpec files, which is `ASC-artifact-scanning.md`'s; the storage of the mode setting, which is `PSS-project-settings-storage.md`'s; the tools that give these reads to an agent, which are `../tools/LOS-list-openspec-specs-tool.md`, `../tools/ROS-read-openspec-spec-tool.md`, and `../tools/LOC-list-openspec-changes-tool.md`; and any write to a capability or a change, which this module never makes: the apply run of `OCR-openspec-change-runs.md` writes a change, and this module only reads its progress.
+OpenSpec mode is the optional mode in which the application works with a project that uses OpenSpec on the terms of OpenSpec. OpenSpec keeps the live specifications of a project in `openspec/specs/<capability>/spec.md` and each planned change in `openspec/changes/<name>/`, and its CLI reads both and reports them as JSON. This module decides whether the open project is in OpenSpec mode, finds the OpenSpec CLI on this machine, and gives the rest of the backend one typed seam that reads capabilities, requirements, changes, and the task progress of a change through that CLI, and validates a change or the whole project. A read runs in a **location**: the active worktree, or the working copy of one work stream of the project, because a change that a graduation run proposes lives on its stream before the author activates that stream. It parses no OpenSpec Markdown itself, so the OpenSpec version and the schemas of the project decide what a capability and a change contain. A project that does not use OpenSpec, and a project whose author sets the mode to off, work as if this module did not exist. Out of scope: the classification of OpenSpec files, which is `ASC-artifact-scanning.md`'s; the storage of the mode setting, which is `PSS-project-settings-storage.md`'s; the tools that give these reads to an agent, which are `../tools/LOS-list-openspec-specs-tool.md`, `../tools/ROS-read-openspec-spec-tool.md`, and `../tools/LOC-list-openspec-changes-tool.md`; and any write to a capability or a change, which this module never makes: the apply run of `OCR-openspec-change-runs.md` writes a change, and this module only reads its progress; and the archive of a change, which is the one write subcommand the application runs, and which `OAR-openspec-archive.md` owns.
 
 ## Functional requirements
 1. **OSM-FR-LLRV** The open project **uses OpenSpec** when its active worktree holds `openspec/config.yaml` as a regular file, or holds at least one regular file named `spec.md` below `openspec/specs/`.
@@ -18,7 +18,7 @@ OpenSpec mode is the optional mode in which the application works with a project
 9. **OSM-FR-HHUD** Each CLI process runs in the root of the working copy of its location (OSM-FR-MFVN), the active worktree where none is named, with its standard input closed, with `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1`, and `NO_COLOR=1` set, and with the directory of the executable first on its `PATH`.
    - *Why:* The CLI is a Node script that finds Node through `PATH`, and an application started from the desktop inherits a short `PATH`.
 10. **OSM-FR-ITZI** A CLI process gets no credential and no variable that the application keeps for an agent launch. It gets the environment of the application, changed only as OSM-FR-HHUD states.
-11. **OSM-FR-VALR** The seam runs only the CLI subcommands `--version`, `list`, `show`, `status`, `validate`, and `instructions` with the artifact `apply` alone. It never runs a subcommand that writes, such as `init`, `update`, `new`, `archive`, or `config set`.
+11. **OSM-FR-VALR** The seam runs only the CLI subcommands `--version`, `list`, `show`, `status`, `validate`, and `instructions` with the artifact `apply` alone. It never runs a subcommand that writes, such as `init`, `update`, `new`, `archive`, or `config set`. The one write that the application runs is the archive of OSM-FR-XKQB.
 12. **OSM-FR-ZIMO** A CLI process that runs for more than 30 seconds is stopped, and its read fails with `cli_timed_out`.
 13. **OSM-FR-WWWK** A CLI process that exits with a status other than zero fails its read with `cli_failed`, which carries the exit status. Output that does not decode as JSON of the expected shape fails the read with `cli_output_unreadable`. A field that the expected shape does not name is ignored.
 14. **OSM-FR-XSOC** A read while OpenSpec mode is inactive fails with `openspec_mode_inactive` and starts no process. A read while the CLI is not usable fails with `cli_unavailable`, which carries the CLI state.
@@ -26,14 +26,14 @@ OpenSpec mode is the optional mode in which the application works with a project
 16. **OSM-FR-JTOQ** `list_capabilities()` runs `openspec list --specs --json` and returns one `Capability` for each entry, ordered by id.
 17. **OSM-FR-JAIC** `read_capability(id)` refuses an id that is empty, absolute, holds a `..` segment, or holds a character outside `A-Z`, `a-z`, `0-9`, `.`, `_`, `-`, and `/`, with `invalid_capability_id`. It runs no process for that id.
 18. **OSM-FR-SIBT** `read_capability(id)` fails with `capability_not_found` when `openspec/specs/<id>/spec.md` is not a regular file in the active worktree. Otherwise it runs `openspec show <id> --type spec --json --no-interactive` and returns the `CapabilitySpec`.
-19. **OSM-FR-OPZF** `list_changes()` returns one `ChangeSummary` for each active change. It runs `openspec list --changes --json` and `openspec status --all --json` once each, and does not include a change below `openspec/changes/archive/`.
+19. **OSM-FR-OPZF** `list_changes(location)` returns one `ChangeSummary` for each active change in the working copy of its location. It runs `openspec list --changes --json` and `openspec status --all --json` once each, and does not include a change below `openspec/changes/archive/`.
 20. **OSM-FR-FCMY** The `capabilities` of a `ChangeSummary` are the ids of the capabilities that the change holds delta files for: each folder path below `openspec/changes/<name>/specs/` that holds a `spec.md`, ordered by id. The list comes from the directory listing alone.
 21. **OSM-FR-YXUC** `get_openspec_status()` returns the stored setting, whether the project uses OpenSpec, whether the mode is active, and the CLI state. It checks the CLI also while the mode is inactive, and it fails for no CLI state.
 22. **OSM-FR-IFWM** Every read emits through `LGC-logging.md` under the `backend` domain. An `INFO` record names the subcommand, the exit status, the duration, and the byte count of the output. A failure emits a `WARN` record with its code. No record holds an argument value, a path inside the project, or any CLI output.
 23. **OSM-FR-MFVN** A read names a **location**: the active worktree, or a work stream of the project and its working copy (per `WKS-work-streams.md` WKS-FR-JGCA). A stream that is not live fails the read with `unknown_stream` and starts no process. Only the graduation loop names a third kind, the **review checkout** of a run (per `../ai/GRL-graduation-loop.md` GRL-FR-YKRI).
 24. **OSM-FR-DDHL** Whether OpenSpec mode is active is decided on the active worktree for every location (OSM-FR-UILN). Files of a change are read through `FSA-filesystem-access.md` in the working copy of its location.
 25. **OSM-FR-IHUO** A **change name** is valid when it is 1 to 64 characters of lowercase `a-z` and `0-9` in groups joined by single `-`, and is not `archive`. `valid_change_name(name)` answers this, and every read that takes a change name refuses an invalid one with `invalid_change_name` and starts no process.
-26. **OSM-FR-BCJO** `read_change(location, name)` fails with `change_not_found` when `openspec/changes/<name>/` is not a folder in the working copy of its location. Otherwise it runs `openspec status --change <name> --json` and `openspec show <name> --type change --json --deltas-only --no-interactive` once each.
+26. **OSM-FR-BCJO** `read_change(location, name)` fails with `change_not_found` when `openspec/changes/<name>/` is not a folder in the working copy of its location and OSM-FR-KWWM does not apply. Otherwise it runs `openspec status --change <name> --json` and `openspec show <name> --type change --json --deltas-only --no-interactive` once each.
 27. **OSM-FR-LLIO** `read_change` returns each artifact of the change's schema in the build order of the schema, with its status and the change-relative paths of its files. Each file carries its whole text, read in the working copy. A file that cannot be read as UTF-8 text carries no text and is marked `unreadable`.
 28. **OSM-FR-NMHS** `read_change` returns each delta with its capability, its operation (`ADDED`, `MODIFIED`, `REMOVED`, or `RENAMED`), and the requirement it carries, or the names of a rename. For a delta of a capability that exists in the working copy, it carries the **live requirement** of the same name, read through `read_capability` (OSM-FR-SIBT) once for each capability.
    - *Why:* A requirement diff needs the text the change replaces, and OpenSpec matches a delta to a live requirement by name.
@@ -48,9 +48,14 @@ OpenSpec mode is the optional mode in which the application works with a project
 37. **OSM-FR-ODHE** `apply_instructions` refuses an invalid name with `invalid_change_name` (OSM-FR-IHUO), and fails with `change_not_found` where `openspec/changes/<name>/` is not a folder in the working copy of its location. Neither starts a process.
 38. **OSM-FR-PEAK** `"read apply progress"` (`read_apply_progress(stream_id, change)`) is the Tauri command over `apply_instructions` in the stream's location. It runs on a blocking thread and returns the `ApplyProgress`: the state, the total and complete counts, the description of the first task that is not done or null where none is, and the missing artifacts. It fails with the error code of the read.
 39. **OSM-FR-WIQF** The state of `ApplyInstructions` is the CLI's `state`: `blocked`, `ready`, or `all_done`. A state outside these three, or a `progress` whose counts are not integers of 0 or more, fails the read with `cli_output_unreadable`.
+40. **OSM-FR-KWWM** `read_change` fails with `change_archived`, which carries `archived_as`, where `openspec/changes/<name>/` is not a folder in the working copy of its location and `openspec/changes/archive/` holds a folder named `<YYYY-MM-DD>-<name>`. `archived_as` is the name of the newest such folder by its date. No process starts.
+41. **OSM-FR-GMKV** `"read openspec change"` returns a `change_archived` failure as the code `change_archived: <archived_as>`.
+42. **OSM-FR-BXIF** `validate_project(location, scope)` runs `openspec validate --all --strict --json --no-interactive` for the scope `all`, or `openspec validate --specs --strict --json --no-interactive` for the scope `specs`. It returns the `ProjectValidation`: each item with its id, its kind `change` or `spec`, whether it is valid, and its issues, and whether every item is valid.
+43. **OSM-FR-DXHP** For `validate_project`, an exit status of 1 whose output decodes as the expected shape is an answer that an item is not valid, on the terms of OSM-FR-XDRN. An answer that holds no item is valid.
+44. **OSM-FR-XKQB** `openspec archive` is run by `OAR-openspec-archive.md` alone, on the process terms of this module (OSM-FR-EZKW, OSM-FR-HHUD, OSM-FR-ITZI, OSM-FR-ZIMO). Its process counts toward the limit of OSM-FR-QHRV, and its log records follow OSM-FR-IFWM.
 
 ## Contract surface
-The module owns four Tauri commands and an internal Rust API. The internal API has no Tauri command, and the tools of `../tools/`, `../ai/CVL-conversation-loop.md`, `../ai/GRL-graduation-loop.md`, and `OCR-openspec-change-runs.md` are its consumers.
+The module owns four Tauri commands and an internal Rust API. The internal API has no Tauri command, and the tools of `../tools/`, `../ai/CVL-conversation-loop.md`, `../ai/GRL-graduation-loop.md`, `OCR-openspec-change-runs.md`, `OAR-openspec-archive.md`, and `OSI-openspec-spec-index.md` are its consumers.
 
 ### Tauri commands
 - `"get openspec status"` → `get_openspec_status()` → `OpenSpecStatus`. Read-only. It changes no setting and writes no file (OSM-FR-YXUC).
@@ -82,11 +87,12 @@ openspec_mode_active() -> bool                     // OSM-FR-UILN
 openspec_cli_state() -> OpenSpecCliState           // OSM-FR-ZNVZ
 list_capabilities() -> Result<[Capability], OpenSpecReadError>
 read_capability(id: string) -> Result<CapabilitySpec, OpenSpecReadError>
-list_changes() -> Result<[ChangeSummary], OpenSpecReadError>
+list_changes(location: ChangeLocation) -> Result<[ChangeSummary], OpenSpecReadError>
 valid_change_name(name: string) -> bool                                         // OSM-FR-IHUO
 read_change(location: ChangeLocation, name: string) -> Result<ChangeDetail, OpenSpecReadError>
 validate_change(location: ChangeLocation, name: string) -> Result<ChangeValidation, OpenSpecReadError>
 apply_instructions(location: ChangeLocation, name: string) -> Result<ApplyInstructions, OpenSpecReadError>   // OSM-FR-QLRW
+validate_project(location: ChangeLocation, scope: ValidationScope) -> Result<ProjectValidation, OpenSpecReadError>   // OSM-FR-BXIF
 
 ChangeLocation =
   | { kind: "active_worktree" }
@@ -141,6 +147,18 @@ ChangeValidation {
   issues:  [{ level: "ERROR" | "WARNING" | "INFO", path: string, message: string }]
 }
 
+ValidationScope = "all" | "specs"
+
+ProjectValidation {                      // OSM-FR-BXIF
+  valid:  boolean,                       // every item is valid; true where there is no item
+  items:  [{
+    id:      string,                     // the change name or the capability id
+    kind:    "change" | "spec",
+    valid:   boolean,
+    issues:  [{ level: "ERROR" | "WARNING" | "INFO", path: string, message: string }]
+  }]
+}
+
 Capability {
   id:                 string,     // "auth", "ui/theme"
   requirement_count:  integer
@@ -192,6 +210,7 @@ OpenSpecReadError =
   | "unknown_stream"                     // OSM-FR-MFVN
   | "invalid_change_name"                // OSM-FR-IHUO
   | "change_not_found"                   // OSM-FR-BCJO
+  | { code: "change_archived", archived_as: string }   // OSM-FR-KWWM
 ```
 
 ### CLI fields read
@@ -203,6 +222,7 @@ OpenSpecReadError =
 - `show <name> --type change --json --deltas-only`: `deltas[].spec`, `deltas[].operation`, `deltas[].requirement` (`name`, `text`, `scenarios[].name`, `scenarios[].rawText`), `deltas[].rename.from`, `deltas[].rename.to`.
 - `instructions apply --change <name> --json`: `state`, `progress.total`, `progress.complete`, `tasks[].description`, `tasks[].done`, `missingArtifacts` (absent reads as empty).
 - `validate <name> --type change --strict --json`: `items[0].valid`, `items[0].issues[].level`, `items[0].issues[].path`, `items[0].issues[].message`.
+- `validate --all --strict --json` and `validate --specs --strict --json`: `items[].id`, `items[].type`, `items[].valid`, `items[].issues[].level`, `items[].issues[].path`, `items[].issues[].message`.
 
 ### Per-user Node directories
 Searched after the directories of `AIC-agentic-integrations.md` AIC-FR-03, in this order:
@@ -212,6 +232,6 @@ Searched after the directories of `AIC-agentic-integrations.md` AIC-FR-03, in th
 
 ## Non-functional requirements
 - No read needs network access. The CLI runs with its telemetry off.
-- A read costs one CLI process for each subcommand it names, plus file probes. The cost of `list_changes()` does not grow with the number of changes beyond one directory listing for each change.
+- A read costs one CLI process for each subcommand it names, plus file probes. The cost of `list_changes(location)` does not grow with the number of changes beyond one directory listing for each change.
 - The seam works with any OpenSpec schema that a project defines, because it reads artifact ids and states from the CLI and names no artifact itself.
 - Every requirement here can be tested without the OpenSpec CLI, through a process seam that returns fixed output.

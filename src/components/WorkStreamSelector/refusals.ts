@@ -22,6 +22,8 @@ export function splitRefusal(text: string): [string, string | null] {
  */
 export function refusalText(text: string): string {
   const [code, detail] = splitRefusal(text);
+  const archive = archiveRefusalText(code, detail);
+  if (archive !== null) return archive;
   // GSU-FR-RQDS / WSS-FR-NPXC: the path is the refusal's detail, so the sentence
   // names it rather than appending it.
   if (code === STREAM_ERRORS.dockerSocketUnavailable) {
@@ -91,4 +93,57 @@ export function refusalText(text: string): string {
   // its first colon would leave the author the front half of a sentence.
   if (!sentence) return detail ? `${code}: ${detail}` : code || text;
   return detail ? `${sentence} ${detail}` : sentence;
+}
+
+/** OAR-FR-BEIK: each kind of pending item, in words. */
+const PENDING_KIND: Record<string, string> = {
+  edit_proposal: "an edit proposal that is not decided or not committed",
+  new_change_proposal: "a new-change proposal that is not decided or not committed",
+  action_request: "an action request that is not decided",
+};
+
+/** OAR-FR-QTBK: each reason a change cannot be archived, in words. */
+const NOT_ARCHIVABLE: Record<string, string> = {
+  openspec_mode_inactive: "OpenSpec mode is not active for this project",
+  openspec_cli_unavailable: "the OpenSpec CLI is not available on this machine",
+  apply_progress_unavailable: "its task progress could not be read",
+  tasks_incomplete: "not all of its tasks are done",
+};
+
+/** Join the parts of a list as a sentence does. */
+function listed(parts: string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * WSS-FR-NTGC: a merge refused by its archive step. The detail is
+ * `<change>: <kinds>`, `<change>: <reason>`, or `<change>: <code>`
+ * (OAR-FR-BEIK, OAR-FR-QTBK, OAR-FR-EUXZ). Nothing was archived and nothing was
+ * merged, so the sentence says so. Null for every other code.
+ */
+function archiveRefusalText(code: string, detail: string | null): string | null {
+  if (
+    code !== STREAM_ERRORS.changeHasPending &&
+    code !== STREAM_ERRORS.changeNotArchivable &&
+    code !== STREAM_ERRORS.archiveFailed
+  ) {
+    return null;
+  }
+  const [change, rest] = detail ? splitRefusal(detail) : ["", null];
+  const name = change ? `“${change}”` : "of this stream";
+  if (code === STREAM_ERRORS.changeHasPending) {
+    const kinds = (rest ?? "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter((k) => k !== "")
+      .map((k) => PENDING_KIND[k] ?? k);
+    const what = kinds.length > 0 ? listed(kinds) : "an item that is not decided";
+    return `The OpenSpec change ${name} holds ${what}. Decide ${kinds.length > 1 ? "them" : "it"} first, then merge again. Nothing was archived or merged.`;
+  }
+  if (code === STREAM_ERRORS.changeNotArchivable) {
+    const why = rest ? (NOT_ARCHIVABLE[rest] ?? rest) : "it cannot be archived";
+    return `The OpenSpec change ${name} cannot be archived: ${why}. Nothing was archived or merged.`;
+  }
+  return `The archive of the OpenSpec change ${name} failed with ${rest ?? "an unknown code"}. The base branch was not written.`;
 }

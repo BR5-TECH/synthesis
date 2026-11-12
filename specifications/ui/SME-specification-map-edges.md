@@ -16,6 +16,7 @@ Dependency edges show how the areas of the specification map depend on each othe
 8. **SME-FR-VAEC** An unresolved dependency draws at every level, outside the limits of SME-FR-LBVO: a 1.6px dashed curve with a 6px dash and a 5px gap in `--danger`, opacity 0.9, and a `--danger` arrowhead. It joins the rendered nodes that hold its two specs, and does not draw when one node holds both.
 9. **SME-FR-OKUH** The **dependencies** toggle is on by default. While it is off, no resolved dependency draws. It uses `--bg-active` and `--accent` when on, and `--bg-sunken` and `--fg-3` when off.
 10. **SME-FR-JRCY** Aggregation reads the current tree, so after an organization edit of `SMO-specification-map-organization.md` every link joins the nodes that now hold its specs.
+11. **SME-FR-XLUQ** For the source `openspec` (per `SMP-specification-map.md` SMP-FR-MNZW), the **dependencies** toggle is hidden and no edge draws, because that index holds no dependency.
 
 ## UI contract boundary
 - **Owned by the UI**: link aggregation, limits, weight classes, edge geometry, edge styles, and the **dependencies** toggle.

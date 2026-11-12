@@ -419,6 +419,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "read_openspec_change",
     // OSM-FR-PEAK.
     "read_apply_progress",
+    // OSI-openspec-spec-index.md OSI-FR-OSWD.
+    "load_specification_map",
     "save_project_vendor_image",
     "build_project_vendor_image",
     "cancel_project_vendor_image_build",

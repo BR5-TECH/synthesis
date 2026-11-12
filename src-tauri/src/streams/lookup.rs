@@ -48,3 +48,13 @@ pub fn stream_by_id<R: tauri::Runtime>(
     let key = project_key_of(app);
     store::list_streams(&fs, &store, &key).into_iter().find(|stream| stream.id == stream_id)
 }
+
+/// WKS-FR-SGCM, OSI-FR-QELX: every live stream of the open project, in the
+/// order of their ids.
+pub fn live_streams<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<WorkStream> {
+    let (Some(store), Some(fs)) = (store_for(app), access_for(app)) else {
+        return Vec::new();
+    };
+    let key = project_key_of(app);
+    store::list_streams(&fs, &store, &key)
+}

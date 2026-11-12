@@ -92,6 +92,8 @@ export type OpenSpecChangeReadError =
   | "unknown_stream"
   | "invalid_change_name"
   | "change_not_found"
+  /** OSM-FR-GMKV: rejected as `change_archived: <archived_as>`. */
+  | "change_archived"
   | "cli_timed_out"
   | "cli_failed"
   | "cli_output_unreadable";

@@ -119,7 +119,9 @@ pub(super) fn handed_off(
     publication: StreamMergePublication,
 ) -> (String, Vec<String>) {
     match request(fx, stream, publication).expect("the check settled") {
-        StreamMergeResult::Conflicted { run_id, conflicted_paths } => (run_id, conflicted_paths),
+        StreamMergeResult::Conflicted { run_id, conflicted_paths, .. } => {
+            (run_id, conflicted_paths)
+        }
         other => panic!("expected a handoff, got {other:?}"),
     }
 }

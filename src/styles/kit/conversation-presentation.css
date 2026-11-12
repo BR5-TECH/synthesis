@@ -271,3 +271,11 @@
    Monospaced against the summary beside it, so the two read as a column. */
 .stream-select__path { color: var(--fg-1); font-family: var(--font-mono); }
 .stream-select__error { color: var(--danger); font-size: var(--fs-ui-xs); }
+/* WSS-FR-BFJZ: the OpenSpec changes a merge archived, one to a line. The list
+   scrolls within itself, so the row does not grow past the listing. */
+.stream-select__archived-head { margin: 0; }
+.stream-select__archived {
+  max-height: 96px; margin: 2px 0 0; padding-left: 16px; overflow-y: auto;
+  color: var(--fg-2);
+}
+.stream-select__archived code { font-family: var(--font-mono); color: var(--fg-1); }

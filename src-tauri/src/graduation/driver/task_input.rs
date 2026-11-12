@@ -168,6 +168,11 @@ pub struct GraduationTaskInput {
     /// dispatches (OPU-FR-SKTV).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openspec_apply_progress: Option<crate::openspec::ApplyInstructions>,
+    /// GRL-FR-ZDNL: the strict validation of the OpenSpec specifications of
+    /// the reviewed tree, on the `merge_review` turns of a merge run in
+    /// OpenSpec mode alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_specs_validation: Option<crate::openspec::ProjectValidation>,
     /// OPU-FR-SKTV: the decisions of a plan update, on the turn that takes
     /// them alone. It holds no file text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -380,6 +385,8 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
         openspec_validation: None,
         // GRL-FR-BHGJ: set by the review of an apply run alone.
         openspec_apply_progress: None,
+        // GRL-FR-ZDNL: set by the review of a merge run alone.
+        openspec_specs_validation: None,
         // OPU-FR-SKTV: set by the work turn after Continue from a plan rest.
         plan_update: None,
         graduation_input_version: GRADUATION_INPUT_VERSION,

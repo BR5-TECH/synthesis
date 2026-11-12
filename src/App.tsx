@@ -9,7 +9,7 @@ import { AboutPanel } from "./components/AboutPanel";
 import { AppShell } from "./AppShell";
 import { GitTransferProvider, useGitTransferState } from "./hooks/useGitTransfer";
 import { useDraftEditingObserver } from "./hooks/useDraftEditingObserver";
-import { useChangeWorkingObserver, visibleChangesOf } from "./hooks/useChangeWorkingObserver";
+import { useChangeWorkingObserver, useVisibleChanges } from "./hooks/useChangeWorkingObserver";
 import { useMainWindowState } from "./hooks/useMainWindowState";
 import { useAppOverlays } from "./hooks/useAppOverlays";
 import { useAppNotifications } from "./hooks/useAppNotifications";
@@ -96,11 +96,8 @@ function App() {
    * discussion column, and the active conversation tab where its owner is a
    * change.
    */
-  const visibleChanges = useMemo(
-    () => visibleChangesOf(s.tabs, s.activeTab),
-    [s.tabs, s.activeTab],
-  );
-  useChangeWorkingObserver(visibleChanges);
+  // OCW-FR-GVZT: a tab that states an archived change records no interval.
+  useChangeWorkingObserver(useVisibleChanges(s.tabs, s.activeTab));
 
 
   // STB-FR-15: the in-flight operation set the centre region and its overlay

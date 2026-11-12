@@ -80,3 +80,27 @@ fn the_real_runner_reports_a_file_it_cannot_start() {
         Err(ProcessError::NotExecutable)
     );
 }
+
+// OSM-FR-XKQB, OSM-FR-HHUD, OAR-FR-IAKL: the archive runs through the real
+// runner on the terms of every other process: in the root of the working
+// copy, with the fixed variables and the executable directory first on
+// `PATH`.
+#[test]
+fn the_archive_runs_with_the_fixed_variables_through_the_real_runner() {
+    let dir = TempDir::new().unwrap();
+    let work = TempDir::new().unwrap();
+    let exe = script(
+        &dir,
+        "echo \"$OPENSPEC_TELEMETRY $DO_NOT_TRACK $NO_COLOR\" > vars.txt\n\
+         echo \"$PATH\" | cut -d: -f1 >> vars.txt\n\
+         echo '{ \"archive\": { \"change\": \"add-logout\", \"archivedAs\": \"2026-11-11-add-logout\" } }'",
+    );
+    let probe = Arc::new(FakeProbe::default().with_executable(exe.to_str().unwrap()));
+    let seam = OpenSpec::new(Arc::new(RealRunner), probe, env());
+    let answer = seam.archive_change(&Silent, buffer(), &exe, work.path(), "add-logout").unwrap();
+    assert_eq!(answer.archived_as, "2026-11-11-add-logout");
+    let vars = std::fs::read_to_string(work.path().join("vars.txt")).unwrap();
+    let lines: Vec<&str> = vars.lines().collect();
+    assert_eq!(lines[0], "0 1 1");
+    assert_eq!(Path::new(lines[1]), exe.parent().unwrap());
+}

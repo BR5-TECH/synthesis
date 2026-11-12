@@ -91,6 +91,9 @@ fn merge_input_fields(part: &str) -> Vec<String> {
     // sets `correction`, so the review part is given it here.
     if part == driver::PART_REVIEW {
         input.checks = Some(driver::checks_folder::REPORT_PATH.into());
+        // GRL-FR-ZDNL: the review sets the specs validation in OpenSpec mode.
+        input.openspec_specs_validation =
+            Some(crate::openspec::ProjectValidation { valid: true, items: Vec::new() });
     }
     input.to_map().keys().cloned().collect()
 }

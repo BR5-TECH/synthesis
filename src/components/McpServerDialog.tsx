@@ -2,6 +2,9 @@
  * The add and edit dialog of an MCP server (`MSS-mcp-servers-settings.md`
  * MSS-FR-MWAV through MSS-FR-GHDO).
  *
+ * On add, the author chooses who uses the server (MSS-FR-SCDK). A team record
+ * has its default `enabled` as a check box (MSS-FR-ENMX).
+ *
  * The dialog holds the unsaved edits. `Cancel` and Escape drop them
  * (MSS-FR-GMHC). `Save` writes the record, then each typed secret, then each
  * cleared secret (MSS-FR-UWZQ). A refusal keeps the dialog open with every
@@ -11,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "../api";
 import { logInfo, logWarn } from "../logging";
-import { AUTH_LABEL, errorCode, refusalText } from "../state/mcpServerText";
+import { AUTH_LABEL, errorCode, logCode, refusalText, SCOPE_LABEL } from "../state/mcpServerText";
 import {
   buildRecord,
   emptyForm,
@@ -24,7 +27,7 @@ import {
   type McpListRow,
   type McpServerForm,
 } from "../state/mcpValidation";
-import type { McpAuthMode, McpSecretPresence, McpServerEntry } from "../types";
+import type { McpAuthMode, McpScope, McpSecretPresence, McpServerEntry } from "../types";
 import { Modal } from "./DraftsPanelParts";
 import { Field, KeyValueList, ProblemLine, SecretField } from "./McpDialogFields";
 
@@ -40,6 +43,8 @@ export interface McpServerDialogProps {
   /** The entry of the server after the last step of a save. */
   onSaved: (entry: McpServerEntry) => void;
 }
+
+const SCOPE_CHOICES: McpScope[] = ["team", "personal_project", "personal_all"];
 
 const AUTH_CHOICES: [McpAuthMode, string][] = (["none", "bearer", "oauth2"] as const).map(
   (mode) => [mode, AUTH_LABEL[mode]],
@@ -65,6 +70,10 @@ export function McpServerDialog({
   /** The ID that a save of this dialog stored. From then on, the ID is fixed. */
   const [savedId, setSavedId] = useState<string | null>(entry ? entry.id : null);
   const [presence, setPresence] = useState<McpSecretPresence[]>(entry?.secrets ?? []);
+  /** MSS-FR-SCDK: the team first on add; the scope of the record on edit. */
+  const [scope, setScope] = useState<McpScope>(entry?.scope ?? "team");
+  /** MSS-FR-ENMX: the default of a team record, on for a new one. */
+  const [teamDefault, setTeamDefault] = useState<boolean>(entry?.record?.enabled ?? true);
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   const [refusals, setRefusals] = useState<McpFormProblems>({});
   const [topError, setTopError] = useState<string | null>(null);
@@ -148,19 +157,22 @@ export function McpServerDialog({
     setSaving(true);
     setRefusals({});
     setTopError(null);
-    const record = buildRecord(form, entry?.record ?? null);
+    const built = buildRecord(form, entry?.record ?? null);
+    // MSS-FR-ENMX: a personal record keeps its `enabled`, and a new one is on.
+    const record = scope === "team" ? { ...built, enabled: teamDefault } : built;
     const action = isNew ? "add" : "edit";
     logInfo(["frontend"], "mcp server save started", {
       id: record.id,
       action,
+      scope,
       transport: record.transport.kind,
     });
     let latest: McpServerEntry;
     try {
-      latest = await api.saveMcpServer(record);
+      latest = await api.saveMcpServer(record, scope);
     } catch (e) {
       const code = errorCode(e);
-      logWarn(["frontend"], "mcp server save refused", { id: record.id, action, error: code });
+      logWarn(["frontend"], "mcp server save refused", { id: record.id, action, error: logCode(code) });
       if (!alive.current) return;
       // MSS-FR-STXZ: every field stays as the author typed it.
       const field = refusalField(code, form);
@@ -190,7 +202,7 @@ export function McpServerDialog({
         logWarn(["frontend"], `mcp server secret ${step.kind} refused`, {
           id: record.id,
           slot: step.slot,
-          error: code,
+          error: logCode(code),
         });
         failed[step.field] =
           step.kind === "set"
@@ -262,6 +274,44 @@ export function McpServerDialog({
             />
           )}
         </Field>
+
+        {isNew ? (
+          <fieldset className="mcp-dialog__choice">
+            <legend className="mcp-dialog__label">Who uses it</legend>
+            <div className="mcp-dialog__radios mcp-dialog__radios--column">
+              {SCOPE_CHOICES.map((value) => (
+                <label key={value} className="mcp-dialog__radio">
+                  <input
+                    type="radio"
+                    name="mcp-scope"
+                    value={value}
+                    checked={scope === value}
+                    onChange={() => setScope(value)}
+                  />
+                  {SCOPE_LABEL[value]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : (
+          <div className="mcp-dialog__field">
+            <span className="mcp-dialog__label">Who uses it</span>
+            <span className="t-ui-sm mcp-dialog__value" data-testid="mcp-dialog-scope">
+              {SCOPE_LABEL[scope]}
+            </span>
+          </div>
+        )}
+
+        {scope === "team" && (
+          <label className="mcp-dialog__check t-ui-sm">
+            <input
+              type="checkbox"
+              checked={teamDefault}
+              onChange={(event) => setTeamDefault(event.target.checked)}
+            />
+            On for the team by default
+          </label>
+        )}
 
         <fieldset className="mcp-dialog__choice">
           <legend className="mcp-dialog__label">Transport</legend>

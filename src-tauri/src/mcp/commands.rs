@@ -3,12 +3,13 @@
 //! Each command builds a [`Context`] and calls one operation. A refusal is the
 //! code of the contract surface, as a string.
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use super::config::{McpAuth, McpServer, McpTransport};
 use super::manager::McpManager;
 use super::oauth::{self, SignInRequest, SIGN_IN_LIMIT};
 use super::operations::{self, run_test, Context, NOT_OAUTH2, SIGN_IN_IN_PROGRESS};
+use super::scope::McpScope;
 use super::status::{McpFailure, McpServerEntry, McpTestResult};
 use crate::global_settings::GlobalSettingsStore;
 use crate::logging::{self, Domain};
@@ -23,14 +24,23 @@ fn context<'a>(
 }
 
 /// Log a refusal with its code alone (MCS-FR-MABN).
-fn refused<T>(app: &AppHandle, operation: &str, result: Result<T, String>) -> Result<T, String> {
+fn refused<T>(
+    app: &AppHandle,
+    operation: &str,
+    id: &str,
+    result: Result<T, String>,
+) -> Result<T, String> {
     if let Err(error) = &result {
         logging::log_warn(
             app,
             &logging::BUFFER,
             &[Domain::Backend],
             "mcp operation refused",
-            crate::log_fields! { "operation" => operation, "error" => operations::error_code(error) },
+            crate::log_fields! {
+                "operation" => operation,
+                "server" => id,
+                "error" => operations::error_code(error),
+            },
         );
     }
     result
@@ -45,7 +55,7 @@ pub async fn list_mcp_servers(
     manager: State<'_, McpManager>,
 ) -> Result<Vec<McpServerEntry>, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.list());
-    refused(&app, "list", result)
+    refused(&app, "list", "", result)
 }
 
 /// MCS-FR-XCOS.
@@ -56,9 +66,11 @@ pub async fn save_mcp_server(
     store: State<'_, GlobalSettingsStore>,
     manager: State<'_, McpManager>,
     server: McpServer,
+    scope: McpScope,
 ) -> Result<McpServerEntry, String> {
-    let result = context(&project, &store, &manager).and_then(|c| c.save(server));
-    refused(&app, "save", result)
+    let id = server.id.clone();
+    let result = context(&project, &store, &manager).and_then(|c| c.save(server, scope));
+    refused(&app, "save", &id, result)
 }
 
 /// MCS-FR-UOIO.
@@ -69,9 +81,24 @@ pub async fn remove_mcp_server(
     store: State<'_, GlobalSettingsStore>,
     manager: State<'_, McpManager>,
     id: String,
+    scope: McpScope,
 ) -> Result<(), String> {
-    let result = context(&project, &store, &manager).and_then(|c| c.remove(&id));
-    refused(&app, "remove", result)
+    let result = context(&project, &store, &manager).and_then(|c| c.remove(&id, scope));
+    refused(&app, "remove", &id, result)
+}
+
+/// MCS-FR-MKDH.
+#[tauri::command]
+pub async fn set_mcp_server_enabled(
+    app: AppHandle,
+    project: State<'_, ProjectState>,
+    store: State<'_, GlobalSettingsStore>,
+    manager: State<'_, McpManager>,
+    id: String,
+    enabled: bool,
+) -> Result<McpServerEntry, String> {
+    let result = context(&project, &store, &manager).and_then(|c| c.set_enabled(&id, enabled));
+    refused(&app, "set_enabled", &id, result)
 }
 
 /// MCS-FR-IXHD.
@@ -86,7 +113,7 @@ pub async fn set_mcp_server_secret(
     value: String,
 ) -> Result<McpServerEntry, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.set_secret(&id, &slot, &value));
-    refused(&app, "set_secret", result)
+    refused(&app, "set_secret", &id, result)
 }
 
 /// MCS-FR-WBDV.
@@ -100,7 +127,7 @@ pub async fn clear_mcp_server_secret(
     slot: String,
 ) -> Result<McpServerEntry, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.clear_secret(&id, &slot));
-    refused(&app, "clear_secret", result)
+    refused(&app, "clear_secret", &id, result)
 }
 
 /// MCS-FR-EVRS.
@@ -114,7 +141,7 @@ pub async fn trust_mcp_server(
     shown: McpServer,
 ) -> Result<McpServerEntry, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.trust(&id, &shown));
-    refused(&app, "trust", result)
+    refused(&app, "trust", &id, result)
 }
 
 /// MCS-FR-ETIS.
@@ -126,8 +153,12 @@ pub async fn test_mcp_server(
     manager: State<'_, McpManager>,
     id: String,
 ) -> Result<McpTestResult, String> {
-    let plan =
-        refused(&app, "test", context(&project, &store, &manager).and_then(|c| c.test_plan(&id)))?;
+    let plan = refused(
+        &app,
+        "test",
+        &id,
+        context(&project, &store, &manager).and_then(|c| c.test_plan(&id)),
+    )?;
     Ok(run_test(&manager, plan).await)
 }
 
@@ -141,7 +172,7 @@ pub async fn reconnect_mcp_server(
     id: String,
 ) -> Result<(), String> {
     let result = context(&project, &store, &manager).and_then(|c| c.reconnect(&id));
-    refused(&app, "reconnect", result)
+    refused(&app, "reconnect", &id, result)
 }
 
 /// MCS-FR-YWVC: start a sign-in and return. Its result arrives as a status
@@ -156,27 +187,24 @@ pub async fn start_mcp_sign_in(
 ) -> Result<(), String> {
     let prepared = context(&project, &store, &manager)
         .and_then(|c| Ok((c.key.clone(), c.signing_in_record(&id)?, c.root.clone())));
-    let (key, record, root) = refused(&app, "start_sign_in", prepared)?;
+    let (key, (owner, record), root) = refused(&app, "start_sign_in", &id, prepared)?;
     let started_with = crate::mcp::config::trust_fingerprint(&record);
     let http = match &record.transport {
         McpTransport::Http(http) if http.auth == McpAuth::Oauth2 => http.clone(),
-        _ => return refused(&app, "start_sign_in", Err(NOT_OAUTH2.to_string())),
+        _ => return refused(&app, "start_sign_in", &id, Err(NOT_OAUTH2.to_string())),
     };
     let cancelled = manager.begin_sign_in(&id).map_err(|_| SIGN_IN_IN_PROGRESS.to_string());
-    let mut cancelled = refused(&app, "start_sign_in", cancelled)?;
+    let mut cancelled = refused(&app, "start_sign_in", &id, cancelled)?;
     let manager = manager.inner().clone();
     let server_id = id.clone();
+    let settings = app.clone();
     let still_current = Box::new(move || {
-        crate::mcp::config::list_records(&root)
-            .ok()
-            .and_then(|records| records.into_iter().find(|listed| listed.id == server_id))
-            .and_then(|listed| listed.record.ok())
-            .as_ref()
-            .and_then(crate::mcp::config::trust_fingerprint)
-            == started_with
+        let Some(store) = settings.try_state::<GlobalSettingsStore>() else { return false };
+        operations::current_fingerprint(&root, &store, &key, &server_id)
+            == Some(started_with.clone())
     });
     let request = SignInRequest {
-        project_key: key,
+        owner,
         server_id: id.clone(),
         http,
         secrets: manager.secrets(),
@@ -220,5 +248,5 @@ pub async fn sign_out_mcp_server(
     id: String,
 ) -> Result<McpServerEntry, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.sign_out(&id));
-    refused(&app, "sign_out", result)
+    refused(&app, "sign_out", &id, result)
 }

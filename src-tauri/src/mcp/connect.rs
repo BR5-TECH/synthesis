@@ -15,7 +15,7 @@ use rmcp::{ClientHandler, RoleClient};
 use tokio::sync::mpsc;
 
 use super::config::{HttpTransport, McpAuth, McpServer, McpTransport, StdioTransport};
-use super::secrets::{env_slot, header_slot, McpSecrets, BEARER_SLOT};
+use super::secrets::{env_slot, header_slot, McpSecrets, SecretOwner, BEARER_SLOT};
 use super::status::McpFailure;
 use crate::openspec::cli::{search_directories, CliEnvironment, CliProbe, RealCliProbe};
 
@@ -122,7 +122,8 @@ impl StderrTail {
 
 /// What one connection attempt is given.
 pub struct ConnectRequest {
-    pub project_key: String,
+    /// Where the secrets of the server are (MCS-FR-SBND, MCS-FR-VHBK).
+    pub owner: SecretOwner,
     /// The active worktree (MCS-FR-KLQS).
     pub root: PathBuf,
     pub server: McpServer,
@@ -161,7 +162,7 @@ impl Connector for RealConnector {
 }
 
 fn secret(request: &ConnectRequest, slot: &str) -> Result<String, ConnectError> {
-    match request.secrets.get(&request.project_key, &request.server.id, slot) {
+    match request.secrets.get(&request.owner, &request.server.id, slot) {
         Ok(Some(value)) => Ok(value),
         Ok(None) => Err(ConnectError::NeedsSecret),
         Err(_) => Err(ConnectError::Failure(McpFailure::KeychainUnavailable)),

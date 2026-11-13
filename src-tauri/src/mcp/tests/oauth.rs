@@ -142,39 +142,39 @@ async fn the_credential_store_keeps_the_registration() {
     let secrets = Arc::new(MemoryMcpSecrets::default());
     let store = VaultCredentialStore {
         secrets: secrets.clone(),
-        project: "/repo".into(),
+        owner: "/repo".into(),
         server: "t".into(),
     };
     assert!(store.load().await.unwrap().is_none());
-    assert!(!read_slot(secrets.as_ref(), "/repo", "t").unwrap().signed_in());
+    assert!(!read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap().signed_in());
 
     let slot = OAuthSlot {
         registration: Some(Registration { client_id: "c".into(), redirect_uri: REDIRECT.into() }),
         ..Default::default()
     };
-    secrets.set("/repo", "t", "oauth", &serde_json::to_string(&slot).unwrap()).unwrap();
+    secrets.set(&"/repo".into(), "t", "oauth", &serde_json::to_string(&slot).unwrap()).unwrap();
     store.save(credentials("c", "secret-token")).await.unwrap();
-    let read = read_slot(secrets.as_ref(), "/repo", "t").unwrap();
+    let read = read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap();
     assert!(read.signed_in());
     assert_eq!(read.registration.as_ref().unwrap().client_id, "c");
     assert_eq!(store.load().await.unwrap().unwrap().client_id, "c");
 
     store.on_refresh_token_rejected(&credentials("c", "secret-token")).await.unwrap();
-    let read = read_slot(secrets.as_ref(), "/repo", "t").unwrap();
+    let read = read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap();
     assert!(!read.signed_in());
     assert!(read.registration.is_some(), "the registered client stays");
 
     store.save(credentials("c", "again")).await.unwrap();
     store.clear().await.unwrap();
-    assert!(!read_slot(secrets.as_ref(), "/repo", "t").unwrap().signed_in());
+    assert!(!read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap().signed_in());
 
-    secrets.set("/repo", "t", "oauth", "not json").unwrap();
+    secrets.set(&"/repo".into(), "t", "oauth", "not json").unwrap();
     assert!(
-        !read_slot(secrets.as_ref(), "/repo", "t").unwrap().signed_in(),
+        !read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap().signed_in(),
         "a damaged slot reads as empty"
     );
     secrets.unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
-    assert!(read_slot(secrets.as_ref(), "/repo", "t").is_err());
+    assert!(read_slot(secrets.as_ref(), &"/repo".into(), "t").is_err());
 }
 
 // MCS-FR-MGCJ, MCS-FR-PXRJ: the facts of an oauth2 record read the slot, and a
@@ -196,7 +196,7 @@ fn the_facts_read_the_vault() {
     let facts = crate::mcp::facts_for(&record, "/repo", &trust, &secrets);
     assert!(!facts.signed_in && facts.secrets_present && facts.trusted && !facts.vault_unavailable);
     let slot = OAuthSlot { credentials: Some(credentials("c", "t")), ..Default::default() };
-    secrets.set("/repo", "t", "oauth", &serde_json::to_string(&slot).unwrap()).unwrap();
+    secrets.set(&"/repo".into(), "t", "oauth", &serde_json::to_string(&slot).unwrap()).unwrap();
     assert!(crate::mcp::facts_for(&record, "/repo", &trust, &secrets).signed_in);
 
     let bearer = http_record("b", McpAuth::Bearer);

@@ -11,7 +11,7 @@ An **MCP tool** is a tool of one of the project's MCP servers, lent to a convers
 1. **MCT-FR-GPCO** A turn is offered one MCP tool for each tool that `mcp_tools_now` returns for the project when the turn's plan is built (per `../core/MCS-mcp-server-connections.md` MCS-FR-ENII). A tool in its server's `disabledTools` is not offered.
 2. **MCT-FR-RDUX** The MCP tools of a turn are fixed when its plan is built. A change to a server's tools during the turn does not add, remove, or change a definition of that turn.
    - *Why:* Each call of a turn presents the same tool definitions, so that the provider cache holds (per `../ai/CVL-conversation-loop.md` CVL-FR-23).
-3. **MCT-FR-JEFK** A turn is offered at most 100 MCP tools: the tools of the servers in file order, and the tools of one server in the order the server listed them. The tools after the hundredth are not offered, and the loop logs one `WARN` record that names each server id that lost tools and the count it lost.
+3. **MCT-FR-JEFK** A turn is offered at most 100 MCP tools: the tools of the servers in the order of `../core/MCS-mcp-server-connections.md` MCS-FR-FIEE, and the tools of one server in the order the server listed them. The tools after the hundredth are not offered, and the loop logs one `WARN` record that names each server id that lost tools and the count it lost.
    - *Why:* Some providers refuse a request with more than 128 tools, and the application's own tools take part of that limit.
 
 ### The definition

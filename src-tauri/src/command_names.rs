@@ -521,4 +521,5 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "start_mcp_sign_in",
     "cancel_mcp_sign_in",
     "sign_out_mcp_server",
+    "set_mcp_server_enabled",
 ];

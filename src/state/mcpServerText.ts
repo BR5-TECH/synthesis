@@ -10,6 +10,7 @@ import type {
   McpAuthMode,
   McpConfigError,
   McpFailure,
+  McpScope,
   McpServerEntry,
   McpServerState,
   McpServerStatus,
@@ -138,6 +139,14 @@ export function errorCode(e: unknown): string {
   return String(e);
 }
 
+/**
+ * MSS-FR-VSMZ: the code of an error for a log record. A text that is not a
+ * code of the contract surface can hold a path, so it is logged as `error`.
+ */
+export function logCode(code: string): string {
+  return /^[a-z_]{1,40}$/.test(code) ? code : "error";
+}
+
 const isFailure = (code: string): code is McpFailure => code in FAILURE_TEXT;
 const isConfigError = (code: string): code is McpConfigError => code in CONFIG_ERROR_TEXT;
 
@@ -160,6 +169,7 @@ export function refusalText(code: string): string {
       // MSS-FR-UVWX
       return RECORD_CHANGED_TEXT;
     case "no_credentials":
+    case "trust_not_needed":
       return "This server needs no trust step.";
     case "untrusted":
       return "Trust this server before you sign in.";
@@ -183,6 +193,10 @@ export function testResultText(result: McpTestResult): string {
 /** MSS-FR-YIMR: the line under a failed or an invalid row, or null. */
 export function rowProblemText(entry: McpServerEntry): string | null {
   if (entry.status.state === "failed") return FAILURE_TEXT[entry.status.failure];
+  // MSS-FR-RAYC: a personal record whose ID another server has.
+  if (entry.status.state === "invalid" && entry.scope !== "team" && entry.invalid === "duplicate_id") {
+    return SHADOWED_TEXT;
+  }
   if (entry.status.state === "invalid") {
     return entry.invalid ? CONFIG_ERROR_TEXT[entry.invalid] : INVALID_RECORD_TEXT;
   }
@@ -192,4 +206,61 @@ export function rowProblemText(entry: McpServerEntry): string | null {
 /** MSS-FR-QMTG: the first line of a tool description. */
 export function firstLine(text: string): string {
   return text.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? "";
+}
+
+/** MSS-FR-RAYC */
+export const SHADOWED_TEXT =
+  "A team server, or another server of yours, has this ID. Remove this one and add it again with another ID.";
+
+/** MSS-FR-POYD: the headings, the sentences, and the empty lines of the two groups. */
+export const TEAM_GROUP = {
+  heading: "Team servers",
+  sentence:
+    "Saved in the project and shared with everyone who works on it. You can turn each one off on this computer.",
+  empty: "No team servers.",
+} as const;
+
+export const PERSONAL_GROUP = {
+  heading: "Your servers",
+  sentence: "Saved on this computer only. Nobody else sees them.",
+  empty: "No servers of your own.",
+} as const;
+
+/** MSS-FR-SAKG: the scope badge of a personal row. */
+export const SCOPE_BADGE: Readonly<Record<Exclude<McpScope, "team">, string>> = {
+  personal_project: "This project",
+  personal_all: "All projects",
+};
+
+/** MSS-FR-SCDK: the `Who uses it` choice, and the text of the scope on edit. */
+export const SCOPE_LABEL: Readonly<Record<McpScope, string>> = {
+  team: "The team (saved in the project)",
+  personal_project: "Only me, in this project",
+  personal_all: "Only me, in all my projects",
+};
+
+/**
+ * MSS-FR-OOUI: the line of a team row whose switch on this computer is not
+ * the team's value. Null when they are the same, or when the row is not a
+ * team row with a record.
+ */
+export function switchNoteText(entry: McpServerEntry): string | null {
+  if (entry.scope !== "team" || !entry.record) return null;
+  if (entry.enabledHere === entry.record.enabled) return null;
+  return entry.enabledHere
+    ? "On on this computer. The team has it off."
+    : "Off on this computer. The team has it on.";
+}
+
+/** MSS-FR-UYFX: the text of the remove confirmation. */
+export function removeConfirmText(scope: McpScope, name: string): string {
+  const tail = "Its secrets and its sign-in on this computer are removed too.";
+  switch (scope) {
+    case "team":
+      return `Remove ${name} from the project for everyone? ${tail}`;
+    case "personal_all":
+      return `Remove ${name} from all your projects? ${tail}`;
+    default:
+      return `Remove ${name}? ${tail}`;
+  }
 }

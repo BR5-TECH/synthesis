@@ -15,7 +15,7 @@ import { useState } from "react";
 
 import * as api from "../api";
 import { logInfo, logWarn } from "../logging";
-import { AUTH_LABEL, errorCode, refusalText } from "../state/mcpServerText";
+import { AUTH_LABEL, errorCode, logCode, refusalText } from "../state/mcpServerText";
 import type { McpHttpTransport, McpServer, McpServerEntry, McpStdioTransport } from "../types";
 import { Modal } from "./DraftsPanelParts";
 
@@ -111,7 +111,7 @@ export function McpTrustDialog({ record, returnFocus, onClose, onTrusted }: McpT
       onClose();
     } catch (e) {
       const code = errorCode(e);
-      logWarn(["frontend"], "mcp server trust refused", { id, error: code });
+      logWarn(["frontend"], "mcp server trust refused", { id, error: logCode(code) });
       // MSS-FR-UVWX: `record_changed` reads its own text, and the dialog stays open.
       setError(refusalText(code));
       setBusy(false);

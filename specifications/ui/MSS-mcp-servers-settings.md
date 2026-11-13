@@ -3,16 +3,19 @@
 **Spec code:** `MSS`
 
 ## Intent
-The **MCP servers** section of the Project group of the Settings window (per `SET-project-settings.md` SET-FR-06). Here the author adds the MCP servers whose tools the agents of this project can use, gives each server the secrets it needs on this machine, trusts a local command before it runs, signs in to a remote server that asks for OAuth, and sees at a glance which servers are connected. The list of servers is committed with the project, so the section also tells the author clearly what a teammate's server needs on this machine before it can work. The records, connections, and sign-in are `../core/MCS-mcp-server-connections.md`'s.
+The **MCP servers** section of the Project group of the Settings window (per `SET-project-settings.md` SET-FR-06). Here the author adds the MCP servers whose tools the agents of this project can use, gives each server the secrets it needs on this machine, trusts a local command before it runs, signs in to a remote server that asks for OAuth, and sees at a glance which servers are connected. The team servers are committed with the project, so the section also tells the author clearly what a teammate's server needs on this machine before it can work, and lets the author turn off on this computer a team server they cannot use or do not want. The author can also add servers of their own, which nobody else sees. The records, connections, and sign-in are `../core/MCS-mcp-server-connections.md`'s.
 
 ## Functional requirements
 
 ### The list
 1. **MSS-FR-DZIQ** The section heading is followed by the sentence `The MCP servers whose tools the agents of this project can use.`
 2. **MSS-FR-XALV** The section lists every server that `list_mcp_servers` returns, in that order. Each row shows the server name, its id, a transport badge (`Local` for `stdio`, `Remote` for `http`), and a status chip.
-3. **MSS-FR-CSHM** With no server, the section shows `No MCP servers yet. Add one to give the agents of this project its tools.` and the `Add server` button.
+2. **MSS-FR-POYD** The list has two groups. `Team servers` holds the `team` entries, under the sentence `Saved in the project and shared with everyone who works on it. You can turn each one off on this computer.` `Your servers` holds the personal entries, under the sentence `Saved on this computer only. Nobody else sees them.` A group with no entry shows `No team servers.` or `No servers of your own.`
+2. **MSS-FR-SAKG** A row in `Your servers` has a scope badge: `This project` for `personal_project` and `All projects` for `personal_all`.
+3. **MSS-FR-CSHM** With no server of any scope, the section shows `No MCP servers yet. Add one to give the agents of this project its tools.` and the `Add server` button, and no group.
 4. **MSS-FR-PEGO** The status chip text is: `Off` (disabled), `Invalid` (invalid), `Not trusted` (untrusted), `Needs a secret` (needs_secret), `Sign in needed` (needs_sign_in), `Signing in…` (signing_in), `Connecting…` (connecting), `Connected · <n> tools` (ready), and `Failed` (failed).
 5. **MSS-FR-YIMR** A row with the status `failed` shows one line under it with the text of its failure class (MSS-FR-VUWB). A row with the status `invalid` shows the text of its validation code under it.
+5. **MSS-FR-RAYC** A personal row that is `invalid` with `duplicate_id` shows `A team server, or another server of yours, has this ID. Remove this one and add it again with another ID.` in place of the text of its validation code (per `../core/MCS-mcp-server-connections.md` MCS-FR-PQHI).
 6. **MSS-FR-VUWB** The failure class text is exactly this:
 
    ```
@@ -29,7 +32,8 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
 7. **MSS-FR-CLQR** The section subscribes to `mcp-server-status-changed` while it is open and updates the chip and the failure line of that row at once, with no reload of the list.
 
 ### Row actions
-8. **MSS-FR-GBOM** Each row has an `Enabled` switch, a `Test` button, an `Edit` button, and a `Remove` button. The switch saves the record with the new `enabled` value through `save_mcp_server`, and goes back to its last value when the save is refused.
+8. **MSS-FR-GBOM** Each row has an `On on this computer` switch, a `Test` button, an `Edit` button, and a `Remove` button. The switch shows `enabledHere`, calls `set_mcp_server_enabled` with the new value, and goes back to its last value when the call is refused. The switch of an `invalid` row is disabled. A personal row that is `invalid` with `duplicate_id` has the `Remove` button alone (MSS-FR-RAYC).
+8. **MSS-FR-OOUI** A `team` row whose switch is not the `enabled` value of its record shows one line under it: `Off on this computer. The team has it on.` or `On on this computer. The team has it off.`
 9. **MSS-FR-YFPL** A row with the status `untrusted` has a `Trust…` button, for a `Local command` and for a `Remote (HTTP)` server alike. It opens the trust dialog (MSS-FR-VJPZ, MSS-FR-SCFN).
 10. **MSS-FR-HXVP** A row with the status `needs_sign_in`, or `failed` with `oauth_failed` or `rejected` where `auth` is `oauth2`, has a `Sign in` button. It calls `start_mcp_sign_in`. A row with the status `signing_in` shows `Waiting for the browser…` and a `Cancel` button that calls `cancel_mcp_sign_in`.
 11. **MSS-FR-ANUU** A row of a server with `auth = oauth2` that is `ready` has a `Sign out` button that calls `sign_out_mcp_server`.
@@ -47,7 +51,16 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
     signing_in     The sign-in is not complete.
     connecting     The server is connecting.
     ```
-15. **MSS-FR-KQNF** `Remove` opens a confirmation: `Remove <name>? Its secrets and its sign-in on this computer are removed too.` with `Cancel` and `Remove`. `Remove` calls `remove_mcp_server` and removes the row.
+15. **MSS-FR-KQNF** `Remove` opens a confirmation with `Cancel` and `Remove`. `Remove` calls `remove_mcp_server` with the id and the scope of the row, and removes the row.
+15. **MSS-FR-UYFX** The confirmation text depends on the scope, exactly this:
+
+    ```
+    team              Remove <name> from the project for everyone? Its secrets and its sign-in on this computer are removed too.
+    personal_project  Remove <name>? Its secrets and its sign-in on this computer are removed too.
+    personal_all      Remove <name> from all your projects? Its secrets and its sign-in on this computer are removed too.
+    ```
+
+    A row with no record uses its id as `<name>`.
 
 ### Tools
 16. **MSS-FR-QMTG** A row of a `ready` server has a `Tools (<n>)` disclosure. Open, it lists each tool of the entry with its name, the first line of its description, and a switch.
@@ -55,6 +68,8 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
 
 ### The add and edit dialog
 18. **MSS-FR-MWAV** `Add server` opens the dialog empty, and `Edit` opens it with the record of the row. The dialog has `Name`, `ID`, and a transport choice of `Local command` and `Remote (HTTP)`.
+18. **MSS-FR-SCDK** On add, the dialog has a `Who uses it` choice of `The team (saved in the project)`, `Only me, in this project`, and `Only me, in all my projects`, for the scopes `team`, `personal_project`, and `personal_all`. The team is chosen first. On edit, the dialog shows the scope of the record as text, and the scope does not change.
+18. **MSS-FR-ENMX** For a `team` record, the dialog has an `On for the team by default` check box, which is the record's `enabled`, and is on for a new record. For a personal record, the dialog has no such check box: a new record is saved with `enabled = true`, and an edit keeps the `enabled` of the record.
 19. **MSS-FR-DVDX** On add, `ID` follows `Name` as a slug until the author edits `ID`. On edit, `ID` is read-only.
 20. **MSS-FR-XMNV** For `Local command`, the dialog has `Command`, `Arguments` (one argument on each line), `Working folder` (relative to the project, optional), and an environment list.
 21. **MSS-FR-HIWH** For `Remote (HTTP)`, the dialog has `URL`, an `Authentication` choice of `None`, `Bearer token`, and `OAuth 2`, and a header list. `Bearer token` shows a `Token` secret field. `OAuth 2` shows `Client ID` (optional), `Client secret` (optional secret field, shown only with a client ID), `Scopes` (separated by spaces, optional), and `Callback port` (optional).
@@ -79,7 +94,7 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
     invalid_callback_port          Enter a port from 1024 to 65535.
     invalid_auth                   Choose an authentication.
     ```
-25. **MSS-FR-UWZQ** `Save` calls `save_mcp_server`, then `set_mcp_server_secret` for each typed secret, then `clear_mcp_server_secret` for each cleared secret. A refusal shows its text under the field it names, or at the top of the dialog, and the dialog stays open.
+25. **MSS-FR-UWZQ** `Save` calls `save_mcp_server` with the record and its scope, then `set_mcp_server_secret` for each typed secret, then `clear_mcp_server_secret` for each cleared secret. A refusal shows its text under the field it names, or at the top of the dialog, and the dialog stays open.
 26. **MSS-FR-STXZ** A refusal of `save_mcp_server` keeps every field as the author typed it. A secret step that fails after a save keeps the dialog open and shows which secret was not stored.
 27. **MSS-FR-GHDO** A `Remote (HTTP)` `URL` that starts with `http://` and has a host other than `localhost`, `127.0.0.1`, or `::1` shows `Use https for a server on another computer.`
 
@@ -100,6 +115,8 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
 - As an author, I want to add our issue tracker's MCP server one time, so that every agent in the project can read and file issues.
 - As a teammate who pulls the project, I want to see which servers need a secret or a sign-in on my computer, so that I can make them work in one place.
 - As an author, I want to see the exact command before a local server runs, so that a pulled change cannot run a command I did not check.
+- As a teammate with no account for one of the team servers, I want to turn it off on my computer, so that it does not ask me for a secret it cannot use.
+- As an author, I want to add a server that only I use, in one project or in all of my projects, so that my own tools do not go into the project for everyone.
 
 ## Wireframes
 
@@ -107,6 +124,9 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
 MCP servers
 The MCP servers whose tools the agents of this project can use.
 
+Team servers
+Saved in the project and shared with everyone who works on it. You can turn
+each one off on this computer.
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ Issue tracker   tracker   Remote   ● Connected · 14 tools                │
 │   [on]  [ Test ] [ Edit ] [ Sign out ] [ Remove ]                        │
@@ -115,7 +135,18 @@ The MCP servers whose tools the agents of this project can use.
 │ Docs index      docs      Local    ● Not trusted                         │
 │   [on]  [ Trust… ] [ Test ] [ Edit ] [ Remove ]                          │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Metrics         metrics   Remote   ● Failed                              │
+│ Metrics         metrics   Remote   ● Off                                 │
+│   Off on this computer. The team has it on.                              │
+│   [off] [ Test ] [ Edit ] [ Remove ]                                     │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Your servers
+Saved on this computer only. Nobody else sees them.
+┌──────────────────────────────────────────────────────────────────────────┐
+│ My notes        notes     Local   All projects   ● Connected · 3 tools   │
+│   [on]  [ Test ] [ Edit ] [ Remove ]                                     │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Scratch DB      scratch   Remote  This project   ● Failed                │
 │   The server cannot be reached.                                          │
 │   [on]  [ Reconnect ] [ Test ] [ Edit ] [ Remove ]                       │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -126,6 +157,8 @@ The MCP servers whose tools the agents of this project can use.
 ┌─ Edit MCP server ──────────────────────────────────────────┐
 │ Name       [ Issue tracker                         ]       │
 │ ID         tracker                                         │
+│ Who uses it  The team (saved in the project)               │
+│ [x] On for the team by default                             │
 │ Transport  ( ) Local command  (•) Remote (HTTP)            │
 │                                                            │
 │ URL             [ https://mcp.tracker.example/mcp     ]    │
@@ -163,8 +196,8 @@ Layout notes:
 - The dialog uses the wide modal layout and scrolls its body when it is taller than the window.
 
 ## UI contract boundary
-- **Owned by the UI**: the list and its rows, the status chip text and colour, the failure texts, the dialog and its field checks, the slug of the ID, the trust dialog, the remove confirmation, the tools disclosure, the test result display, and the order of the save steps.
-- **Delegated to backend (abstract)**: `list_mcp_servers`, `save_mcp_server`, `remove_mcp_server`, `set_mcp_server_secret`, `clear_mcp_server_secret`, `trust_mcp_server`, `test_mcp_server`, `reconnect_mcp_server`, `start_mcp_sign_in`, `cancel_mcp_sign_in`, `sign_out_mcp_server`, and the event `mcp-server-status-changed`, each owned by `../core/MCS-mcp-server-connections.md`.
+- **Owned by the UI**: the list, its two groups, and its rows, the status chip text and colour, the failure texts, the dialog and its field checks, the slug of the ID, the trust dialog, the remove confirmation, the tools disclosure, the test result display, and the order of the save steps.
+- **Delegated to backend (abstract)**: `list_mcp_servers`, `save_mcp_server`, `remove_mcp_server`, `set_mcp_server_enabled`, `set_mcp_server_secret`, `clear_mcp_server_secret`, `trust_mcp_server`, `test_mcp_server`, `reconnect_mcp_server`, `start_mcp_sign_in`, `cancel_mcp_sign_in`, `sign_out_mcp_server`, and the event `mcp-server-status-changed`, each owned by `../core/MCS-mcp-server-connections.md`.
 
 ## Non-functional requirements
 - Each control has an accessible name, and each is operable from the keyboard.

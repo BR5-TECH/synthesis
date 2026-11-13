@@ -4,6 +4,12 @@
 .mcp-servers { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 680px; }
 .mcp-servers__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .mcp-servers__add { display: flex; justify-content: flex-end; }
+/* MSS-FR-POYD: the team group and the personal group, each with a heading
+   and one sentence over its cards. */
+.mcp-servers__group { display: flex; flex-direction: column; gap: var(--sp-2); }
+.mcp-servers__group + .mcp-servers__group { margin-top: var(--sp-3); }
+.mcp-servers__group-title { margin: 0; font-size: var(--fs-ui-md); font-weight: 600; color: var(--fg-1); }
+.mcp-servers__group-title + p { margin: 0 0 var(--sp-1); }
 .mcp-servers__load-error { display: flex; align-items: center; gap: var(--sp-3); color: var(--danger); }
 
 .mcp-server {
@@ -18,6 +24,8 @@
 .mcp-server__id { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
 /* The chip goes to the end of the line, where the eye reads a status. */
 .mcp-server__chip { margin-left: auto; }
+/* MSS-FR-SAKG: the scope badge reads quieter than the transport badge. */
+.mcp-server__scope { color: var(--fg-3); }
 .mcp-server__dot { width: 6px; height: 6px; border-radius: var(--r-full); background: currentColor; flex: none; }
 .mcp-server__note { margin: 0; font-size: var(--fs-ui-xs); color: var(--fg-2); }
 .mcp-server__note--danger { color: var(--danger); }
@@ -85,6 +93,15 @@
    fields stand, and the choices take the rest of the line. */
 .mcp-dialog__choice > legend { float: left; width: 130px; margin-right: var(--sp-3); padding: 6px 0 0; }
 .mcp-dialog__radios { display: flex; flex-wrap: wrap; gap: var(--sp-4); padding-top: 6px; min-height: 28px; }
+/* MSS-FR-SCDK: three long choices read best one under the other. */
+.mcp-dialog__radios--column { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: var(--sp-1-5); }
+/* The scope of an edit stands on the line of its label. */
+.mcp-dialog__value { padding-top: 6px; }
+/* MSS-FR-ENMX: the check box stands under the values, not under the labels. */
+.mcp-dialog__check {
+  display: flex; align-items: center; gap: var(--sp-1-5);
+  margin: 0 0 var(--sp-3) calc(130px + var(--sp-3));
+}
 .mcp-dialog__radio { display: inline-flex; align-items: center; gap: var(--sp-1-5); font-size: var(--fs-ui-sm); }
 .mcp-dialog__secret { display: flex; flex-direction: column; gap: var(--sp-1); }
 .mcp-dialog__secret-state { color: var(--fg-3); }

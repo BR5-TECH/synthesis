@@ -183,6 +183,7 @@ async fn ready_tools_become_dynamic_tools_that_call_the_server() {
     manager.reconcile(
         project,
         vec![crate::mcp::manager::ServerInput {
+            owner: "/repo".into(),
             listed: crate::mcp::config::ListedRecord { id: "docs".into(), record: Ok(record) },
             facts: crate::mcp::status::MachineFacts {
                 trusted: true,
@@ -239,8 +240,8 @@ async fn ready_tools_become_dynamic_tools_that_call_the_server() {
 async fn no_secret_reaches_a_tool_definition_or_refusal() {
     let (manager, _connector, secrets, _observer) = test_manager();
     use crate::mcp::secrets::McpSecrets;
-    secrets.set("/repo", "docs", "bearer", "tok-SECRET-1").unwrap();
-    secrets.set("/repo", "docs", "header:X-Key", "key-SECRET-2").unwrap();
+    secrets.set(&"/repo".into(), "docs", "bearer", "tok-SECRET-1").unwrap();
+    secrets.set(&"/repo".into(), "docs", "header:X-Key", "key-SECRET-2").unwrap();
     let mut record = http_record("docs", McpAuth::Bearer);
     if let McpTransport::Http(http) = &mut record.transport {
         http.secret_headers.push("X-Key".to_string());
@@ -249,6 +250,7 @@ async fn no_secret_reaches_a_tool_definition_or_refusal() {
     manager.reconcile(
         project,
         vec![crate::mcp::manager::ServerInput {
+            owner: "/repo".into(),
             listed: crate::mcp::config::ListedRecord { id: "docs".into(), record: Ok(record) },
             facts: crate::mcp::status::MachineFacts {
                 trusted: true,
@@ -278,6 +280,7 @@ async fn a_call_ends_at_the_deadline_of_its_dispatch() {
     manager.reconcile(
         project,
         vec![crate::mcp::manager::ServerInput {
+            owner: "/repo".into(),
             listed: crate::mcp::config::ListedRecord {
                 id: "docs".into(),
                 record: Ok(http_record("docs", McpAuth::None)),

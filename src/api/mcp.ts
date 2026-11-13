@@ -7,17 +7,25 @@
  * command refuses with `no_project_open` and `malformed_project_config`.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { McpServer, McpServerEntry, McpTestResult } from "../types";
+import type { McpScope, McpServer, McpServerEntry, McpTestResult } from "../types";
 
-/** MCS-FR-FIEE: every record of the project in file order, with its status. */
+/** MCS-FR-FIEE: the team records, then the personal ones, each with its status. */
 export const listMcpServers = () => invoke<McpServerEntry[]>("list_mcp_servers");
 
-/** MCS-FR-XCOS: validate and store one record. Rejects with a `McpConfigError`. */
-export const saveMcpServer = (server: McpServer) =>
-  invoke<McpServerEntry>("save_mcp_server", { server });
+/**
+ * MCS-FR-XCOS, MCS-FR-HWNC: validate and store one record in the list of its
+ * scope. Rejects with a `McpConfigError`.
+ */
+export const saveMcpServer = (server: McpServer, scope: McpScope) =>
+  invoke<McpServerEntry>("save_mcp_server", { server, scope });
 
-/** MCS-FR-UOIO: remove a record, its secrets, and its trust. Rejects with `not_found`. */
-export const removeMcpServer = (id: string) => invoke<void>("remove_mcp_server", { id });
+/** MCS-FR-UOIO: remove a record of one scope and what this computer holds for it. */
+export const removeMcpServer = (id: string, scope: McpScope) =>
+  invoke<void>("remove_mcp_server", { id, scope });
+
+/** MCS-FR-MKDH: turn a server on or off on this computer. Rejects with `not_found`. */
+export const setMcpServerEnabled = (id: string, enabled: boolean) =>
+  invoke<McpServerEntry>("set_mcp_server_enabled", { id, enabled });
 
 /**
  * MCS-FR-IXHD: store the value of one secret slot. Rejects with `unknown_slot`,
@@ -33,8 +41,8 @@ export const clearMcpServerSecret = (id: string, slot: string) =>
 /**
  * MCS-FR-EVRS: trust the record that the trust dialog showed (`shown`). Rejects
  * with `record_changed` when the record in the file is not that record now,
- * with `no_credentials` for a remote server that needs no trust, and with
- * `not_found`.
+ * with `no_credentials` for a remote server that needs no trust, with
+ * `trust_not_needed` for a personal server, and with `not_found`.
  */
 export const trustMcpServer = (id: string, shown: McpServer) =>
   invoke<McpServerEntry>("trust_mcp_server", { id, shown });

@@ -13,7 +13,17 @@ import {
 } from "./mcpServerText";
 
 function entry(status: McpServerStatus, over: Partial<McpServerEntry> = {}): McpServerEntry {
-  return { id: "docs", record: null, invalid: null, status, secrets: [], tools: [], ...over };
+  return {
+    id: "docs",
+    scope: "team",
+    enabledHere: false,
+    record: null,
+    invalid: null,
+    status,
+    secrets: [],
+    tools: [],
+    ...over,
+  };
 }
 
 describe("the words of the MCP servers section", () => {

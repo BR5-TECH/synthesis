@@ -54,6 +54,8 @@ export function mcpEntry(
 ): McpServerEntry {
   return {
     id: record?.id ?? "broken",
+    scope: "team",
+    enabledHere: record?.enabled ?? false,
     record,
     invalid: null,
     status,

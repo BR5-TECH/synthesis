@@ -79,6 +79,7 @@ fn write_server(dir: &Path) -> PathBuf {
 fn input(record: McpServer) -> ServerInput {
     let facts = MachineFacts { trusted: true, secrets_present: true, ..Default::default() };
     ServerInput {
+        owner: "/repo".into(),
         listed: crate::mcp::config::ListedRecord { id: record.id.clone(), record: Ok(record) },
         facts,
     }
@@ -99,7 +100,7 @@ async fn a_stdio_server_runs_with_its_environment() {
         stdio.secret_env.push("SECRET".to_string());
     }
     let secrets = Arc::new(MemoryMcpSecrets::default());
-    secrets.set("/repo", "py", "env:SECRET", "secret-value").unwrap();
+    secrets.set(&"/repo".into(), "py", "env:SECRET", "secret-value").unwrap();
     let (manager, observer) = manager_with(secrets);
     manager.reconcile(
         crate::mcp::project_context("/repo", dir.path().to_path_buf()),
@@ -156,8 +157,11 @@ async fn failures_of_a_process_are_classified() {
     if let McpTransport::Stdio(stdio) = &mut missing.transport {
         stdio.command = "synthesis-no-such-command-4711".to_string();
     }
-    let plan =
-        TestPlan::Run { key: "/repo".into(), root: dir.path().to_path_buf(), record: missing };
+    let plan = TestPlan::Run {
+        owner: "/repo".into(),
+        root: dir.path().to_path_buf(),
+        record: Box::new(missing),
+    };
     let McpTestResult::Refused { failure, .. } = run_test(&manager, plan).await else {
         panic!("refused")
     };
@@ -168,7 +172,11 @@ async fn failures_of_a_process_are_classified() {
         "crash",
         vec!["-c".into(), format!("import sys\n{}\nsys.exit(3)", lines.join("\n"))],
     );
-    let plan = TestPlan::Run { key: "/repo".into(), root: dir.path().to_path_buf(), record: crash };
+    let plan = TestPlan::Run {
+        owner: "/repo".into(),
+        root: dir.path().to_path_buf(),
+        record: Box::new(crash),
+    };
     let McpTestResult::Refused { failure, stderr_tail, .. } = run_test(&manager, plan).await else {
         panic!("refused")
     };

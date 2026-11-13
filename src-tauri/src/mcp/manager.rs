@@ -18,7 +18,7 @@ use super::config::{ListedRecord, McpConfigError, McpServer};
 use super::connect::{
     ClientEvent, ConnectError, ConnectRequest, Connector, McpClient, McpSession, StderrTail,
 };
-use super::secrets::McpSecrets;
+use super::secrets::{McpSecrets, SecretOwner};
 use super::status::{gate, MachineFacts, McpFailure, McpServerStatus, McpToolInfo};
 use crate::log_fields;
 use crate::logging::{Fields, LogLevel};
@@ -66,6 +66,9 @@ pub struct ProjectContext {
 pub struct ServerInput {
     pub listed: ListedRecord,
     pub facts: MachineFacts,
+    /// MCS-FR-SBND, MCS-FR-VHBK: the scope of the record and where its
+    /// secrets are.
+    pub owner: SecretOwner,
 }
 
 /// MCS-FR-ENII: one tool of a `ready` server.
@@ -245,7 +248,7 @@ impl McpManager {
             .unwrap_or_else(|_| Arc::new(NoopObserver))
     }
 
-    fn log(&self, level: LogLevel, message: &str, fields: Fields) {
+    pub(crate) fn log(&self, level: LogLevel, message: &str, fields: Fields) {
         self.observer().log(level, message, fields);
     }
 
@@ -318,6 +321,7 @@ impl McpManager {
                     Some(index) => previous.remove(index),
                     None => Server::new(&input.listed.id),
                 };
+                let owner = input.owner.clone();
                 match input.listed.record {
                     Err(code) => {
                         stopped.extend(stop_run(&mut server));
@@ -327,7 +331,8 @@ impl McpManager {
                     }
                     Ok(record) => {
                         server.invalid = None;
-                        let key = start_key(&record);
+                        // A record that moves to other secrets starts again.
+                        let key = format!("{}|{:?}", start_key(&record), owner);
                         match gate(&record, &input.facts) {
                             Err(status) => {
                                 stopped.extend(stop_run(&mut server));
@@ -361,6 +366,7 @@ impl McpManager {
                                         generation,
                                         &project,
                                         &record,
+                                        &owner,
                                         &server.stderr,
                                     ));
                                 }
@@ -426,13 +432,15 @@ impl McpManager {
         generation: u64,
         project: &ProjectContext,
         record: &McpServer,
+        owner: &SecretOwner,
         stderr: &StderrTail,
     ) -> Run {
         let (stop, stop_rx) = watch::channel(false);
         let manager = self.clone();
         let (project, record, stderr) = (project.clone(), record.clone(), stderr.clone());
+        let owner = owner.clone();
         let task = tauri::async_runtime::spawn(async move {
-            manager.supervise(generation, project, record, stderr, stop_rx).await;
+            manager.supervise(generation, project, record, owner, stderr, stop_rx).await;
         });
         let tauri::async_runtime::JoinHandle::Tokio(task) = task;
         Run { generation, stop, task }
@@ -484,12 +492,14 @@ impl McpManager {
         generation: u64,
         project: ProjectContext,
         record: McpServer,
+        owner: SecretOwner,
         stderr: StderrTail,
         mut stop: watch::Receiver<bool>,
     ) {
         let id = record.id.clone();
+        let scope = owner.scope().code();
         let fields = || {
-            log_fields! { "server" => &record.id, "transport" => record.transport_name(), "auth" => record.auth().as_str() }
+            log_fields! { "server" => &record.id, "scope" => scope, "transport" => record.transport_name(), "auth" => record.auth().as_str() }
         };
         let waits = self.inner.timing.reconnect_waits.clone();
         // `None` before the first session opened; afterwards the number of
@@ -506,7 +516,7 @@ impl McpManager {
             self.run_status(&id, generation, McpServerStatus::Connecting);
             let (client, mut events) = McpClient::new();
             let request = ConnectRequest {
-                project_key: project.key.clone(),
+                owner: owner.clone(),
                 root: project.root.clone(),
                 server: record.clone(),
                 secrets: Arc::clone(&self.inner.secrets),

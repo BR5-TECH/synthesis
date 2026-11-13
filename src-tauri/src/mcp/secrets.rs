@@ -1,14 +1,18 @@
 //! The secrets of the MCP servers of a project (MCS-FR-SBND to MCS-FR-PXRJ).
 //!
-//! A secret is stored in the vault at
-//! `["projects", <project key>, "mcp", <server id>, <slot>]` (ASV-FR-FFKB). No
-//! value leaves this module except to the connection that sends it, and no
-//! value is logged (MCS-FR-MABN).
+//! A secret of a team server is stored in the vault at
+//! `["projects", <project key>, "mcp", <server id>, <slot>]`, one of a personal
+//! server of the project at `["projects", <project key>, "personal_mcp", ...]`,
+//! and one of a personal server of all projects at
+//! `["mcp", "servers", <server id>, <slot>]` (MCS-FR-SBND, MCS-FR-VHBK,
+//! ASV-FR-FFKB, ASV-FR-FVSH). No value leaves this module except to the
+//! connection that sends it, and no value is logged (MCS-FR-MABN).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use super::config::{McpAuth, McpServer, McpTransport};
+use super::scope::McpScope;
 
 /// MCS-FR-MGCJ: the slot that holds the OAuth sign-in state. It is not
 /// settable through `set_mcp_server_secret`.
@@ -23,28 +27,84 @@ pub const OAUTH_CLIENT_SECRET_SLOT: &str = "oauth_client_secret";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecretsUnavailable;
 
+/// Where the secrets of one server are: the scope of the server and, for the
+/// scopes of one project, the project key (MCS-FR-SBND, MCS-FR-VHBK).
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SecretOwner {
+    /// A team server of the project with this key.
+    Team(String),
+    /// A personal server of the project with this key.
+    Project(String),
+    /// A personal server of every project.
+    All,
+}
+
+impl SecretOwner {
+    /// The owner of the secrets of a server of `scope` in the project `key`.
+    pub fn of(scope: McpScope, key: &str) -> Self {
+        match scope {
+            McpScope::Team => SecretOwner::Team(key.to_string()),
+            McpScope::PersonalProject => SecretOwner::Project(key.to_string()),
+            McpScope::PersonalAll => SecretOwner::All,
+        }
+    }
+
+    /// The scope of the servers of this owner.
+    pub fn scope(&self) -> McpScope {
+        match self {
+            SecretOwner::Team(_) => McpScope::Team,
+            SecretOwner::Project(_) => McpScope::PersonalProject,
+            SecretOwner::All => McpScope::PersonalAll,
+        }
+    }
+
+    /// The vault path of the objects of the servers of this owner.
+    fn prefix(&self) -> Vec<String> {
+        match self {
+            SecretOwner::Team(key) => vec!["projects".into(), key.clone(), "mcp".into()],
+            SecretOwner::Project(key) => {
+                vec!["projects".into(), key.clone(), "personal_mcp".into()]
+            }
+            SecretOwner::All => vec!["mcp".into(), "servers".into()],
+        }
+    }
+}
+
+/// The team servers of a project, from its key. A short form for the callers
+/// and the tests that work with team servers alone.
+impl From<&str> for SecretOwner {
+    fn from(key: &str) -> Self {
+        SecretOwner::Team(key.to_string())
+    }
+}
+
 /// The vault, as this module uses it. A seam so the tests run without the
 /// operating system keychain.
 pub trait McpSecrets: Send + Sync {
     fn get(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slot: &str,
     ) -> Result<Option<String>, SecretsUnavailable>;
     fn set(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slot: &str,
         value: &str,
     ) -> Result<(), SecretsUnavailable>;
-    fn remove(&self, project: &str, server: &str, slot: &str) -> Result<(), SecretsUnavailable>;
+    fn remove(
+        &self,
+        owner: &SecretOwner,
+        server: &str,
+        slot: &str,
+    ) -> Result<(), SecretsUnavailable>;
     /// MCS-FR-UOIO: remove every secret of one server.
-    fn remove_server(&self, project: &str, server: &str) -> Result<(), SecretsUnavailable>;
+    fn remove_server(&self, owner: &SecretOwner, server: &str) -> Result<(), SecretsUnavailable>;
     fn presence(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slots: &[String],
     ) -> Result<HashMap<String, bool>, SecretsUnavailable>;
@@ -110,13 +170,13 @@ impl VaultMcpSecrets {
         Self { vault }
     }
 
-    fn path(project: &str, server: &str, slot: Option<&str>) -> crate::secret_vault::SecretPath {
-        let mut path = vec![
-            "projects".to_string(),
-            project.to_string(),
-            "mcp".to_string(),
-            server.to_string(),
-        ];
+    fn path(
+        owner: &SecretOwner,
+        server: &str,
+        slot: Option<&str>,
+    ) -> crate::secret_vault::SecretPath {
+        let mut path = owner.prefix();
+        path.push(server.to_string());
         if let Some(slot) = slot {
             path.push(slot.to_string());
         }
@@ -127,54 +187,59 @@ impl VaultMcpSecrets {
 impl McpSecrets for VaultMcpSecrets {
     fn get(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slot: &str,
     ) -> Result<Option<String>, SecretsUnavailable> {
         self.vault
-            .read_secret(&Self::path(project, server, Some(slot)))
+            .read_secret(&Self::path(owner, server, Some(slot)))
             .map_err(|_| SecretsUnavailable)
     }
 
     fn set(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slot: &str,
         value: &str,
     ) -> Result<(), SecretsUnavailable> {
         self.vault
             .apply_secret_mutations(&[crate::secret_vault::Mutation::Set {
-                path: Self::path(project, server, Some(slot)),
+                path: Self::path(owner, server, Some(slot)),
                 secret: value.to_string(),
             }])
             .map_err(|_| SecretsUnavailable)
     }
 
-    fn remove(&self, project: &str, server: &str, slot: &str) -> Result<(), SecretsUnavailable> {
+    fn remove(
+        &self,
+        owner: &SecretOwner,
+        server: &str,
+        slot: &str,
+    ) -> Result<(), SecretsUnavailable> {
         self.vault
             .apply_secret_mutations(&[crate::secret_vault::Mutation::Remove {
-                path: Self::path(project, server, Some(slot)),
+                path: Self::path(owner, server, Some(slot)),
             }])
             .map_err(|_| SecretsUnavailable)
     }
 
-    fn remove_server(&self, project: &str, server: &str) -> Result<(), SecretsUnavailable> {
+    fn remove_server(&self, owner: &SecretOwner, server: &str) -> Result<(), SecretsUnavailable> {
         self.vault
             .apply_secret_mutations(&[crate::secret_vault::Mutation::Remove {
-                path: Self::path(project, server, None),
+                path: Self::path(owner, server, None),
             }])
             .map_err(|_| SecretsUnavailable)
     }
 
     fn presence(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slots: &[String],
     ) -> Result<HashMap<String, bool>, SecretsUnavailable> {
         let paths: Vec<_> =
-            slots.iter().map(|slot| Self::path(project, server, Some(slot))).collect();
+            slots.iter().map(|slot| Self::path(owner, server, Some(slot))).collect();
         let answers = self.vault.secret_presence(&paths).map_err(|_| SecretsUnavailable)?;
         Ok(slots
             .iter()
@@ -187,7 +252,7 @@ impl McpSecrets for VaultMcpSecrets {
 /// An in-memory store, for the tests of this module and of its callers.
 #[derive(Default)]
 pub struct MemoryMcpSecrets {
-    values: Mutex<HashMap<(String, String, String), String>>,
+    values: Mutex<HashMap<(SecretOwner, String, String), String>>,
     /// When set, every operation fails as an unavailable keychain does.
     pub unavailable: std::sync::atomic::AtomicBool,
 }
@@ -201,53 +266,58 @@ impl MemoryMcpSecrets {
         }
     }
 
-    fn key(project: &str, server: &str, slot: &str) -> (String, String, String) {
-        (project.to_string(), server.to_string(), slot.to_string())
+    fn key(owner: &SecretOwner, server: &str, slot: &str) -> (SecretOwner, String, String) {
+        (owner.clone(), server.to_string(), slot.to_string())
     }
 }
 
 impl McpSecrets for MemoryMcpSecrets {
     fn get(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slot: &str,
     ) -> Result<Option<String>, SecretsUnavailable> {
         self.check()?;
         let values = self.values.lock().map_err(|_| SecretsUnavailable)?;
-        Ok(values.get(&Self::key(project, server, slot)).cloned())
+        Ok(values.get(&Self::key(owner, server, slot)).cloned())
     }
 
     fn set(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slot: &str,
         value: &str,
     ) -> Result<(), SecretsUnavailable> {
         self.check()?;
         let mut values = self.values.lock().map_err(|_| SecretsUnavailable)?;
-        values.insert(Self::key(project, server, slot), value.to_string());
+        values.insert(Self::key(owner, server, slot), value.to_string());
         Ok(())
     }
 
-    fn remove(&self, project: &str, server: &str, slot: &str) -> Result<(), SecretsUnavailable> {
+    fn remove(
+        &self,
+        owner: &SecretOwner,
+        server: &str,
+        slot: &str,
+    ) -> Result<(), SecretsUnavailable> {
         self.check()?;
         let mut values = self.values.lock().map_err(|_| SecretsUnavailable)?;
-        values.remove(&Self::key(project, server, slot));
+        values.remove(&Self::key(owner, server, slot));
         Ok(())
     }
 
-    fn remove_server(&self, project: &str, server: &str) -> Result<(), SecretsUnavailable> {
+    fn remove_server(&self, owner: &SecretOwner, server: &str) -> Result<(), SecretsUnavailable> {
         self.check()?;
         let mut values = self.values.lock().map_err(|_| SecretsUnavailable)?;
-        values.retain(|(p, s, _), _| !(p == project && s == server));
+        values.retain(|(o, s, _), _| !(o == owner && s == server));
         Ok(())
     }
 
     fn presence(
         &self,
-        project: &str,
+        owner: &SecretOwner,
         server: &str,
         slots: &[String],
     ) -> Result<HashMap<String, bool>, SecretsUnavailable> {
@@ -255,7 +325,37 @@ impl McpSecrets for MemoryMcpSecrets {
         let values = self.values.lock().map_err(|_| SecretsUnavailable)?;
         Ok(slots
             .iter()
-            .map(|slot| (slot.clone(), values.contains_key(&Self::key(project, server, slot))))
+            .map(|slot| (slot.clone(), values.contains_key(&Self::key(owner, server, slot))))
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn path(owner: &SecretOwner) -> Vec<String> {
+        VaultMcpSecrets::path(owner, "docs", Some("bearer"))
+    }
+
+    // MCS-FR-SBND, MCS-FR-VHBK, ASV-FR-FFKB, ASV-FR-FVSH: the vault path of a
+    // secret of each scope.
+    #[test]
+    fn each_scope_has_its_vault_path() {
+        assert_eq!(
+            path(&SecretOwner::Team("k".into())),
+            ["projects", "k", "mcp", "docs", "bearer"]
+        );
+        assert_eq!(
+            path(&SecretOwner::Project("k".into())),
+            ["projects", "k", "personal_mcp", "docs", "bearer"]
+        );
+        assert_eq!(path(&SecretOwner::All), ["mcp", "servers", "docs", "bearer"]);
+        assert_eq!(
+            VaultMcpSecrets::path(&SecretOwner::All, "docs", None),
+            ["mcp", "servers", "docs"]
+        );
+        assert_eq!(SecretOwner::of(McpScope::PersonalAll, "k").scope(), McpScope::PersonalAll);
+        assert_eq!(SecretOwner::from("k"), SecretOwner::Team("k".into()));
     }
 }

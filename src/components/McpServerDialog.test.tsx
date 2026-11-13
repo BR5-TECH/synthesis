@@ -479,4 +479,73 @@ describe("MCP server dialog: checks and refusals", () => {
     expect(box(dialog, "Working folder")).toHaveValue("tools");
     expect(within(dialog).getByRole("textbox", { name: "Value of MODE" })).toHaveValue("fast");
   });
+
+  it("MSS-FR-SCDK, MSS-FR-ENMX: on add, the team is chosen first and the team default is on", async () => {
+    const { dialog, user } = setup();
+    const group = within(dialog).getByRole("group", { name: "Who uses it" });
+    const choices = within(group).getAllByRole("radio").map((r) => r.closest("label")?.textContent);
+    expect(choices).toEqual([
+      "The team (saved in the project)",
+      "Only me, in this project",
+      "Only me, in all my projects",
+    ]);
+    expect(within(group).getByRole("radio", { name: "The team (saved in the project)" })).toBeChecked();
+    const teamDefault = within(dialog).getByRole("checkbox", { name: "On for the team by default" });
+    expect(teamDefault).toBeChecked();
+    await user.click(teamDefault);
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
+    expect(calls("save_mcp_server")[0][1]).toMatchObject({ scope: "team" });
+    expect(savedServer().enabled).toBe(false);
+  });
+
+  it("MSS-FR-SCDK, MSS-FR-ENMX: a personal server has no team default and is saved on, in its scope", async () => {
+    const { dialog, user } = setup();
+    await user.click(within(dialog).getByRole("radio", { name: "Only me, in all my projects" }));
+    expect(within(dialog).queryByRole("checkbox", { name: "On for the team by default" })).toBeNull();
+    await user.type(box(dialog, "Name"), "Notes");
+    await user.type(box(dialog, "Command"), "notes-mcp");
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
+    expect(calls("save_mcp_server")[0][1]).toMatchObject({ scope: "personal_all" });
+    expect(savedServer().enabled).toBe(true);
+  });
+
+  it("MSS-FR-SCDK, MSS-FR-ENMX: on edit, the scope shows as text and a personal record keeps its enabled", async () => {
+    const mine = mcpRecord({ enabled: false });
+    const entry = mcpEntry(mine, { state: "disabled" }, { scope: "personal_project" });
+    const { dialog, user } = setup({ entry });
+    expect(within(dialog).queryByRole("group", { name: "Who uses it" })).toBeNull();
+    expect(within(dialog).getByTestId("mcp-dialog-scope")).toHaveTextContent("Only me, in this project");
+    expect(within(dialog).queryByRole("checkbox", { name: "On for the team by default" })).toBeNull();
+    await user.type(box(dialog, "Name"), " 2");
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
+    expect(calls("save_mcp_server")[0][1]).toMatchObject({ scope: "personal_project" });
+    expect(savedServer().enabled).toBe(false);
+  });
+
+  it("MSS-FR-SCDK, MSS-FR-ENMX: a server of this project is saved on, also after the team default was off", async () => {
+    const { dialog, user } = setup();
+    await user.click(within(dialog).getByRole("checkbox", { name: "On for the team by default" }));
+    await user.click(within(dialog).getByRole("radio", { name: "Only me, in this project" }));
+    await user.type(box(dialog, "Name"), "Mine");
+    await user.type(box(dialog, "Command"), "mine-mcp");
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
+    expect(calls("save_mcp_server")[0][1]).toMatchObject({ scope: "personal_project" });
+    expect(savedServer().enabled).toBe(true);
+  });
+
+  it("MSS-FR-ENMX: on edit of a team record, the check box is its enabled", async () => {
+    const { dialog, user } = setup({ entry: mcpEntry(TRACKER, { state: "disabled" }) });
+    const teamDefault = within(dialog).getByRole("checkbox", { name: "On for the team by default" });
+    expect(teamDefault).not.toBeChecked();
+    await user.click(teamDefault);
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
+    expect(savedServer().enabled).toBe(true);
+  });
 });

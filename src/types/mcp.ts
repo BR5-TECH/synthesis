@@ -103,9 +103,18 @@ export interface McpSecretPresence {
   present: boolean;
 }
 
+/**
+ * MCS-FR-ZSFL: where a record is stored. `team` is in the project file;
+ * `personal_project` and `personal_all` stay on this computer.
+ */
+export type McpScope = "team" | "personal_project" | "personal_all";
+
 /** MCS-FR-FIEE: one server of `"list MCP servers"`. */
 export interface McpServerEntry {
   id: string;
+  scope: McpScope;
+  /** MCS-FR-VKKF: whether the server is on on this computer. */
+  enabledHere: boolean;
   /** Null when the record is invalid (MCS-FR-HBOD). */
   record: McpServer | null;
   invalid: McpConfigError | null;

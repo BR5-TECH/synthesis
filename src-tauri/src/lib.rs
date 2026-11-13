@@ -732,6 +732,7 @@ pub fn run() {
             mcp::commands::start_mcp_sign_in,
             mcp::commands::cancel_mcp_sign_in,
             mcp::commands::sign_out_mcp_server,
+            mcp::commands::set_mcp_server_enabled,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

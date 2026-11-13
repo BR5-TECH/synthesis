@@ -4,6 +4,7 @@
 use serde::Serialize;
 
 use super::config::{McpAuth, McpConfigError, McpServer};
+use super::scope::McpScope;
 
 /// MCS-FR-JNXV: why a connection failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -122,6 +123,11 @@ pub struct McpToolInfo {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct McpServerEntry {
     pub id: String,
+    /// MCS-FR-ZSFL.
+    pub scope: McpScope,
+    /// MCS-FR-VKKF: whether the server is on on this computer.
+    #[serde(rename = "enabledHere")]
+    pub enabled_here: bool,
     pub record: Option<McpServer>,
     pub invalid: Option<McpConfigError>,
     pub status: McpServerStatus,

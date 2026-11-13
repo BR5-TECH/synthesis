@@ -89,6 +89,7 @@ fn input(record: McpServer) -> ServerInput {
         vault_unavailable: false,
     };
     ServerInput {
+        owner: "/repo".into(),
         listed: crate::mcp::config::ListedRecord { id: record.id.clone(), record: Ok(record) },
         facts,
     }
@@ -116,8 +117,8 @@ async fn settled(manager: &McpManager, id: &str) -> McpServerStatus {
 async fn a_bearer_server_gets_its_token_and_headers() {
     let server = local_server(Some("tok-123")).await;
     let secrets = Arc::new(MemoryMcpSecrets::default());
-    secrets.set("/repo", "remote", "bearer", "tok-123").unwrap();
-    secrets.set("/repo", "remote", "header:X-Key", "key-456").unwrap();
+    secrets.set(&"/repo".into(), "remote", "bearer", "tok-123").unwrap();
+    secrets.set(&"/repo".into(), "remote", "header:X-Key", "key-456").unwrap();
     let (manager, observer) = manager_with(secrets);
     let record = http_server("remote", &server.url, McpAuth::Bearer);
     manager.reconcile(
@@ -151,8 +152,8 @@ async fn a_bearer_server_gets_its_token_and_headers() {
 async fn refused_and_unreachable_servers_are_classified() {
     let server = local_server(Some("right")).await;
     let secrets = Arc::new(MemoryMcpSecrets::default());
-    secrets.set("/repo", "remote", "bearer", "wrong").unwrap();
-    secrets.set("/repo", "remote", "header:X-Key", "k").unwrap();
+    secrets.set(&"/repo".into(), "remote", "bearer", "wrong").unwrap();
+    secrets.set(&"/repo".into(), "remote", "header:X-Key", "k").unwrap();
     let (manager, _observer) = manager_with(secrets.clone());
     let project = crate::mcp::project_context("/repo", std::env::temp_dir());
     manager.reconcile(
@@ -168,7 +169,7 @@ async fn refused_and_unreachable_servers_are_classified() {
     let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://127.0.0.1:{}/mcp", closed.local_addr().unwrap().port());
     drop(closed);
-    secrets.set("/repo", "gone", "header:X-Key", "k").unwrap();
+    secrets.set(&"/repo".into(), "gone", "header:X-Key", "k").unwrap();
     manager.reconcile(project, vec![input(http_server("gone", &url, McpAuth::None))], None);
     assert_eq!(
         settled(&manager, "gone").await,
@@ -182,7 +183,7 @@ async fn refused_and_unreachable_servers_are_classified() {
 async fn an_oauth2_server_without_tokens_needs_a_sign_in() {
     let server = local_server(None).await;
     let secrets = Arc::new(MemoryMcpSecrets::default());
-    secrets.set("/repo", "oauth", "header:X-Key", "k").unwrap();
+    secrets.set(&"/repo".into(), "oauth", "header:X-Key", "k").unwrap();
     let (manager, _observer) = manager_with(secrets);
     let record = http_server("oauth", &server.url, McpAuth::Oauth2);
     manager.reconcile(

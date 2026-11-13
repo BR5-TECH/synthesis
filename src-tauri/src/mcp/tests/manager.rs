@@ -11,6 +11,7 @@ fn ok_facts() -> MachineFacts {
 
 fn input(record: McpServer) -> ServerInput {
     ServerInput {
+        owner: "/repo".into(),
         listed: ListedRecord { id: record.id.clone(), record: Ok(record) },
         facts: ok_facts(),
     }
@@ -51,10 +52,12 @@ async fn a_refused_server_takes_the_gate_status_and_does_not_connect() {
     let mut disabled = http_record("off", McpAuth::None);
     disabled.enabled = false;
     let untrusted = ServerInput {
+        owner: "/repo".into(),
         listed: ListedRecord { id: "local".into(), record: Ok(stdio_record("local")) },
         facts: MachineFacts { trusted: false, ..ok_facts() },
     };
     let invalid = ServerInput {
+        owner: "/repo".into(),
         listed: ListedRecord {
             id: "bad".into(),
             record: Err(crate::mcp::config::McpConfigError::InvalidUrl),
@@ -287,7 +290,11 @@ async fn sign_in_states() {
     let (manager, _connector, _secrets, _observer) = test_manager();
     let facts = MachineFacts { signed_in: false, ..ok_facts() };
     let record = http_record("t", McpAuth::Oauth2);
-    let input = ServerInput { listed: ListedRecord { id: "t".into(), record: Ok(record) }, facts };
+    let input = ServerInput {
+        owner: "/repo".into(),
+        listed: ListedRecord { id: "t".into(), record: Ok(record) },
+        facts,
+    };
     manager.reconcile(project(), vec![input.clone()], None);
     assert_eq!(status_of(&manager, "t"), Some(McpServerStatus::NeedsSignIn));
 
@@ -363,6 +370,7 @@ async fn concurrent_reconciles_start_a_server_once() {
 async fn a_duplicate_id_leaves_the_first_record_alone() {
     let (manager, _connector, _secrets, observer) = test_manager();
     let duplicate = ServerInput {
+        owner: "/repo".into(),
         listed: ListedRecord {
             id: "docs".into(),
             record: Err(crate::mcp::config::McpConfigError::DuplicateId),

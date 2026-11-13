@@ -11,6 +11,7 @@ mod manager;
 mod oauth;
 mod oauth_flow;
 mod operations;
+mod scopes;
 mod stdio;
 mod tool;
 
@@ -134,6 +135,8 @@ pub struct DuplexConnector {
     /// The server side of each open session, so a test can drop one.
     pub sessions: Arc<Mutex<Vec<RunningService<RoleServer, TestServer>>>>,
     pub attempts: Arc<Mutex<Vec<McpServer>>>,
+    /// The secret owner of each attempt, in the same order.
+    pub owners: Arc<Mutex<Vec<super::secrets::SecretOwner>>>,
 }
 
 impl DuplexConnector {
@@ -166,6 +169,7 @@ impl DuplexConnector {
 impl Connector for DuplexConnector {
     async fn connect(&self, request: ConnectRequest) -> Result<McpSession, ConnectError> {
         self.attempts.lock().unwrap().push(request.server.clone());
+        self.owners.lock().unwrap().push(request.owner.clone());
         let plan = self.plans.lock().unwrap().pop_front().unwrap_or(Plan::Serve);
         match plan {
             Plan::Fail(error) => return Err(error),

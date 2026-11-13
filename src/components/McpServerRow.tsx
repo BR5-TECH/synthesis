@@ -13,8 +13,10 @@ import {
   firstLine,
   NEEDS_SECRET_TEXT,
   rowProblemText,
+  SCOPE_BADGE,
   statusChipText,
   statusChipTone,
+  switchNoteText,
   testResultText,
   WAITING_FOR_BROWSER_TEXT,
 } from "../state/mcpServerText";
@@ -116,12 +118,17 @@ export function McpServerRow({ entry, test, error, busy = false, ...actions }: M
   const problem = rowProblemText(entry);
   const ready = status.state === "ready" ? status : null;
   const disabledTools = new Set(record?.disabledTools ?? []);
+  const switchNote = switchNoteText(entry);
+  // MSS-FR-GBOM, MSS-FR-RAYC: a personal record whose ID another server has
+  // can only be removed.
+  const removeOnly = entry.scope !== "team" && entry.invalid === "duplicate_id";
 
   return (
     <li
       className="mcp-server"
       data-testid="mcp-server-row"
       data-server-id={entry.id}
+      data-scope={entry.scope}
       aria-label={name}
       tabIndex={-1}
     >
@@ -131,6 +138,12 @@ export function McpServerRow({ entry, test, error, busy = false, ...actions }: M
         {transport && (
           <span className="badge" data-testid="mcp-transport-badge">
             {transport === "stdio" ? "Local" : "Remote"}
+          </span>
+        )}
+        {/* MSS-FR-SAKG */}
+        {entry.scope !== "team" && (
+          <span className="badge mcp-server__scope" data-testid="mcp-scope-badge">
+            {SCOPE_BADGE[entry.scope]}
           </span>
         )}
         <span
@@ -149,6 +162,12 @@ export function McpServerRow({ entry, test, error, busy = false, ...actions }: M
           {problem}
         </p>
       )}
+      {/* MSS-FR-OOUI */}
+      {switchNote && (
+        <p className="mcp-server__note" data-testid="mcp-switch-note">
+          {switchNote}
+        </p>
+      )}
       {/* MSS-FR-PDVK */}
       {status.state === "needs_secret" && (
         <p className="mcp-server__note" data-testid="mcp-needs-secret">
@@ -163,17 +182,19 @@ export function McpServerRow({ entry, test, error, busy = false, ...actions }: M
       )}
 
       <div className="mcp-server__actions">
-        {/* MSS-FR-GBOM: an invalid record has no record to save. */}
-        <label className="mcp-server__switch t-ui-sm">
-          <input
-            type="checkbox"
-            role="switch"
-            checked={record?.enabled ?? false}
-            disabled={record === null}
-            onChange={(event) => actions.onToggleEnabled(event.target.checked)}
-          />
-          Enabled
-        </label>
+        {/* MSS-FR-GBOM: an invalid record has no record to switch. */}
+        {!removeOnly && (
+          <label className="mcp-server__switch t-ui-sm">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={entry.enabledHere}
+              disabled={record === null}
+              onChange={(event) => actions.onToggleEnabled(event.target.checked)}
+            />
+            On on this computer
+          </label>
+        )}
         {status.state === "untrusted" && (
           <button type="button" className="btn btn--default btn--sm" disabled={busy} onClick={(e) => actions.onTrust(e.currentTarget)}>
             Trust…
@@ -199,17 +220,21 @@ export function McpServerRow({ entry, test, error, busy = false, ...actions }: M
             Reconnect
           </button>
         )}
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={test?.phase === "running"}
-          onClick={actions.onTest}
-        >
-          Test
-        </button>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={(e) => actions.onEdit(e.currentTarget)}>
-          Edit
-        </button>
+        {!removeOnly && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={test?.phase === "running"}
+            onClick={actions.onTest}
+          >
+            Test
+          </button>
+        )}
+        {!removeOnly && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={(e) => actions.onEdit(e.currentTarget)}>
+            Edit
+          </button>
+        )}
         {offersSignOut(entry) && (
           <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={actions.onSignOut}>
             Sign out

@@ -11,6 +11,7 @@ pub mod connect;
 pub mod manager;
 pub mod oauth;
 pub mod operations;
+pub mod scope;
 pub mod secrets;
 pub mod status;
 pub mod tool;
@@ -28,7 +29,8 @@ pub use manager::{McpManager, McpObserver};
 
 use config::{trust_fingerprint, ListedRecord, McpAuth, McpServer};
 use manager::{ProjectContext, ServerInput, Timing};
-use secrets::{required_slots, McpSecrets, VaultMcpSecrets};
+use scope::{enabled_here, ScopedRecord};
+use secrets::{required_slots, McpSecrets, SecretOwner, VaultMcpSecrets};
 use status::{MachineFacts, StatusChanged, STATUS_EVENT};
 
 impl Default for McpManager {
@@ -66,25 +68,34 @@ pub fn install<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 }
 
 /// What this machine knows about one record (MCS-FR-HQJQ, MCS-FR-PXRJ,
-/// MCS-FR-MGCJ).
+/// MCS-FR-MGCJ). `owner` names the scope of the record and where its secrets
+/// are (MCS-FR-SBND).
 pub fn facts_for(
     record: &McpServer,
-    project_key: &str,
+    owner: impl Into<SecretOwner>,
     trust: &BTreeMap<String, String>,
     secrets: &dyn McpSecrets,
 ) -> MachineFacts {
-    let trusted = match trust_fingerprint(record) {
-        Some(expected) => trust.get(&record.id).is_some_and(|fingerprint| *fingerprint == expected),
-        None => true,
+    let owner = owner.into();
+    // MCS-FR-ZHKZ: nothing of the vault is read for a server that is off.
+    if !record.enabled {
+        return MachineFacts::default();
+    }
+    // MCS-FR-MUVC: a personal record needs no trust record.
+    let trusted = match (&owner, trust_fingerprint(record)) {
+        (SecretOwner::Team(_), Some(expected)) => {
+            trust.get(&record.id).is_some_and(|fingerprint| *fingerprint == expected)
+        }
+        _ => true,
     };
     // MCS-FR-HQJQ: nothing of the vault is read for an untrusted record.
     if !trusted {
         return MachineFacts::default();
     }
     let required = required_slots(record);
-    let presence = secrets.presence(project_key, &record.id, &required);
-    let oauth = (record.auth() == McpAuth::Oauth2)
-        .then(|| oauth::read_slot(secrets, project_key, &record.id));
+    let presence = secrets.presence(&owner, &record.id, &required);
+    let oauth =
+        (record.auth() == McpAuth::Oauth2).then(|| oauth::read_slot(secrets, &owner, &record.id));
     let vault_unavailable = presence.is_err() || matches!(oauth, Some(Err(_)));
     MachineFacts {
         trusted,
@@ -95,21 +106,38 @@ pub fn facts_for(
     }
 }
 
-/// One input for each record of the file.
+/// The record a server of the manager runs: the listed record with `enabled`
+/// set to whether it is on on this computer (MCS-FR-VKKF).
+pub fn effective_record(
+    scoped: &ScopedRecord,
+    switches: &BTreeMap<String, bool>,
+) -> Result<McpServer, config::McpConfigError> {
+    let here = enabled_here(scoped, switches);
+    scoped.listed.record.clone().map(|mut record| {
+        record.enabled = here;
+        record
+    })
+}
+
+/// One input for each record of every scope, in the order of MCS-FR-FIEE.
 pub fn inputs_for(
-    listed: Vec<ListedRecord>,
+    records: &[ScopedRecord],
     project_key: &str,
+    switches: &BTreeMap<String, bool>,
     trust: &BTreeMap<String, String>,
     secrets: &dyn McpSecrets,
 ) -> Vec<ServerInput> {
-    listed
-        .into_iter()
-        .map(|listed| {
-            let facts = match &listed.record {
-                Ok(record) => facts_for(record, project_key, trust, secrets),
+    records
+        .iter()
+        .map(|scoped| {
+            let owner = SecretOwner::of(scoped.scope, project_key);
+            let record = effective_record(scoped, switches);
+            let facts = match &record {
+                Ok(record) => facts_for(record, owner.clone(), trust, secrets),
                 Err(_) => MachineFacts::default(),
             };
-            ServerInput { listed, facts }
+            let listed = ListedRecord { id: scoped.listed.id.clone(), record };
+            ServerInput { listed, facts, owner }
         })
         .collect()
 }

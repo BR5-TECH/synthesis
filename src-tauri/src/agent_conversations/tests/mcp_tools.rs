@@ -21,8 +21,11 @@ fn connect_docs(h: &Harness) {
         vault_unavailable: false,
     };
     let record = crate::mcp::tests::http_record("docs", McpAuth::None);
-    let input =
-        ServerInput { listed: ListedRecord { id: "docs".into(), record: Ok(record) }, facts };
+    let input = ServerInput {
+        owner: "/repo".into(),
+        listed: ListedRecord { id: "docs".into(), record: Ok(record) },
+        facts,
+    };
     manager.reconcile(
         crate::mcp::project_context(&key, h.root.path().to_path_buf()),
         vec![input],
@@ -105,8 +108,11 @@ fn a_server_that_is_not_ready_offers_no_tool() {
         vault_unavailable: false,
     };
     let record = crate::mcp::tests::http_record("docs", McpAuth::Bearer);
-    let input =
-        ServerInput { listed: ListedRecord { id: "docs".into(), record: Ok(record) }, facts };
+    let input = ServerInput {
+        owner: "/repo".into(),
+        listed: ListedRecord { id: "docs".into(), record: Ok(record) },
+        facts,
+    };
     manager.reconcile(
         crate::mcp::project_context(&key, h.root.path().to_path_buf()),
         vec![input],

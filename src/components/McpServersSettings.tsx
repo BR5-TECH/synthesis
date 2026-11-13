@@ -2,8 +2,9 @@
  * Project settings → **MCP servers** (`MSS-mcp-servers-settings.md`, per
  * `SET-project-settings.md` SET-FR-06).
  *
- * The list of the project's MCP servers with the status of each, the actions of
- * each row, and the add, edit, trust, and remove dialogs. Each action writes at
+ * The list of the project's MCP servers in two groups, the team servers and
+ * the author's own (MSS-FR-POYD), with the status of each, the actions of each
+ * row, and the add, edit, trust, and remove dialogs. Each action writes at
  * once, so the section holds no dirty state (MSS-FR-GMHC). The status of a row
  * follows `mcp-server-status-changed` while the section is open (MSS-FR-CLQR).
  *
@@ -15,8 +16,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { onMcpServerStatusChanged } from "../events";
 import { logInfo, logWarn } from "../logging";
-import { errorCode, refusalText } from "../state/mcpServerText";
-import type { McpServer, McpServerEntry, McpServerStatus } from "../types";
+import {
+  errorCode,
+  logCode,
+  PERSONAL_GROUP,
+  refusalText,
+  removeConfirmText,
+  TEAM_GROUP,
+} from "../state/mcpServerText";
+import type { McpScope, McpServer, McpServerEntry, McpServerStatus } from "../types";
 import { Modal } from "./DraftsPanelParts";
 import { McpServerDialog } from "./McpServerDialog";
 import { McpServerRow, type McpTestView } from "./McpServerRow";
@@ -37,6 +45,20 @@ interface IdRequest {
   since: number;
 }
 
+interface RemoveRequest extends IdRequest {
+  scope: McpScope;
+}
+
+/** MCS-FR-FIEE: the order of the scopes in the list. */
+const SCOPE_RANK: Record<McpScope, number> = { team: 0, personal_project: 1, personal_all: 2 };
+
+/** One row of the list: an ID can be in two rows when one of them is shadowed. */
+const rowKey = (entry: McpServerEntry) => `${entry.scope}:${entry.id}`;
+
+/** MCS-FR-PQHI: the active entry of an ID is the first listed entry of it. */
+const isActive = (entry: McpServerEntry, list: McpServerEntry[]) =>
+  list.find((e) => e.id === entry.id) === entry;
+
 export function McpServersSettings() {
   const [entries, setEntries] = useState<McpServerEntry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -45,7 +67,7 @@ export function McpServersSettings() {
   const [tests, setTests] = useState<Record<string, McpTestView>>({});
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
   const [trustFor, setTrustFor] = useState<IdRequest | null>(null);
-  const [removeFor, setRemoveFor] = useState<IdRequest | null>(null);
+  const [removeFor, setRemoveFor] = useState<RemoveRequest | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
@@ -97,10 +119,12 @@ export function McpServersSettings() {
     };
   }, []);
 
+  /** Keep the records of the active entries. A shadowed entry has no record. */
   const remember = (list: McpServerEntry[]) => {
+    const withRecord = new Set(list.filter((e) => e.record).map((e) => e.id));
     for (const entry of list) {
       if (entry.record) confirmed.current.set(entry.id, entry.record);
-      else confirmed.current.delete(entry.id);
+      else if (!withRecord.has(entry.id)) confirmed.current.delete(entry.id);
     }
   };
 
@@ -116,20 +140,36 @@ export function McpServersSettings() {
       .then((list) => {
         if (!alive.current || seq !== loadSeq.current) return;
         remember(list);
-        setEntries(list.map((entry) => withNewerStatus(entry, since)));
+        // MCS-FR-PQHI: an event is of the active entry of its ID.
+        setEntries(list.map((entry) => (isActive(entry, list) ? withNewerStatus(entry, since) : entry)));
         logInfo(["frontend"], "mcp servers loaded", { count: list.length });
       })
       .catch((e) => {
         if (!alive.current || seq !== loadSeq.current) return;
         const code = errorCode(e);
         setLoadError(refusalText(code));
-        logWarn(["frontend"], "mcp servers could not be loaded", { error: code });
+        logWarn(["frontend"], "mcp servers could not be loaded", { error: logCode(code) });
       });
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Read the list again with no loading line, after the active row of an ID changed. */
+  const refreshList = () => {
+    const since = eventSeq.current;
+    api
+      .listMcpServers()
+      .then((list) => {
+        if (!alive.current) return;
+        remember(list);
+        setEntries(list.map((entry) => (isActive(entry, list) ? withNewerStatus(entry, since) : entry)));
+      })
+      .catch((e) => {
+        logWarn(["frontend"], "mcp servers could not be read again", { error: logCode(errorCode(e)) });
+      });
+  };
 
   /** The section held tools that are older than the status. Read them again. */
   const refreshTools = useCallback((id: string) => {
@@ -140,11 +180,13 @@ export function McpServersSettings() {
         const fresh = list.find((e) => e.id === id);
         if (!fresh) return;
         setEntries((prev) =>
-          prev?.map((e) => (e.id === id ? { ...e, tools: fresh.tools, secrets: fresh.secrets } : e)) ?? prev,
+          prev?.map((e) =>
+            rowKey(e) === rowKey(fresh) ? { ...e, tools: fresh.tools, secrets: fresh.secrets } : e,
+          ) ?? prev,
         );
       })
       .catch((e) => {
-        logWarn(["frontend"], "mcp server tools could not be read", { id, error: errorCode(e) });
+        logWarn(["frontend"], "mcp server tools could not be read", { id, error: logCode(errorCode(e)) });
       });
   }, []);
 
@@ -157,7 +199,12 @@ export function McpServersSettings() {
       eventSeq.current += 1;
       lastEvent.current.set(id, { seq: eventSeq.current, status });
       const held = entriesRef.current?.find((entry) => entry.id === id);
-      setEntries((prev) => prev?.map((entry) => (entry.id === id ? { ...entry, status } : entry)) ?? prev);
+      // MCS-FR-PQHI: the event is of the active entry of the ID.
+      setEntries(
+        (prev) =>
+          prev?.map((entry) => (entry.id === id && isActive(entry, prev) ? { ...entry, status } : entry)) ??
+          prev,
+      );
       // A server that is ready now can offer other tools than the section holds.
       if (held && status.state === "ready" && held.tools.length !== status.toolCount) {
         refreshTools(id);
@@ -168,7 +215,7 @@ export function McpServersSettings() {
         else unlisten = fn;
       })
       .catch((e) => {
-        logWarn(["frontend"], "mcp server status events not available", { error: errorCode(e) });
+        logWarn(["frontend"], "mcp server status events not available", { error: logCode(errorCode(e)) });
       });
     return () => {
       cancelled = true;
@@ -190,20 +237,40 @@ export function McpServersSettings() {
     const entry = withNewerStatus(answer, since);
     setEntries((prev) => {
       if (!prev) return [entry];
-      return prev.some((e) => e.id === entry.id)
-        ? prev.map((e) => (e.id === entry.id ? entry : e))
+      const key = rowKey(entry);
+      return prev.some((e) => rowKey(e) === key)
+        ? prev.map((e) => (rowKey(e) === key ? entry : e))
         : [...prev, entry];
     });
   };
 
+  /** Show a record on the active row of its ID. A personal switch is its `enabled`. */
   const showRecord = (id: string, record: McpServer) =>
-    setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, record } : e)) ?? prev);
+    setEntries(
+      (prev) =>
+        prev?.map((e) =>
+          e.id === id && isActive(e, prev)
+            ? { ...e, record, enabledHere: e.scope === "team" ? e.enabledHere : record.enabled }
+            : e,
+        ) ?? prev,
+    );
+
+  const showEnabledHere = (id: string, enabledHere: boolean) =>
+    setEntries(
+      (prev) => prev?.map((e) => (e.id === id && isActive(e, prev) ? { ...e, enabledHere } : e)) ?? prev,
+    );
 
   /**
    * MSS-FR-GBOM, MSS-FR-MMLA: save a changed record at once. A refused save
    * puts the last stored record back.
    */
-  const writeRecord = (id: string, change: (record: McpServer) => McpServer, action: string) => {
+  const writeRecord = (
+    entry: McpServerEntry,
+    change: (record: McpServer) => McpServer,
+    action: string,
+    send: (next: McpServer) => Promise<McpServerEntry> = (next) => api.saveMcpServer(next, entry.scope),
+  ) => {
+    const { id } = entry;
     const base = latest.current.get(id) ?? confirmed.current.get(id);
     if (!base) return;
     const next = change(base);
@@ -216,7 +283,7 @@ export function McpServersSettings() {
       .catch(() => undefined)
       .then(() => {
         since = eventSeq.current;
-        return api.saveMcpServer(next);
+        return send(next);
       })
       .then((saved) => {
         if (saved.record) confirmed.current.set(id, saved.record);
@@ -226,13 +293,50 @@ export function McpServersSettings() {
       })
       .catch((e) => {
         const code = errorCode(e);
-        logWarn(["frontend"], "mcp server save refused", { id, action, error: code });
+        logWarn(["frontend"], "mcp server save refused", { id, action, error: logCode(code) });
         if (latest.current.get(id) === next) {
           latest.current.delete(id);
           const back = confirmed.current.get(id);
           if (back && alive.current) showRecord(id, back);
         }
         if (alive.current) setRowError(id, refusalText(code));
+      });
+  };
+
+  /**
+   * MSS-FR-GBOM: the switch on this computer. A team switch is no record
+   * field; a personal switch is the record's `enabled`, so it goes with the
+   * other record writes. A refusal puts the switch back.
+   */
+  const toggleHere = (entry: McpServerEntry, enabled: boolean) => {
+    const action = enabled ? "enable" : "disable";
+    if (entry.scope !== "team") {
+      writeRecord(entry, (r) => ({ ...r, enabled }), action, () =>
+        api.setMcpServerEnabled(entry.id, enabled),
+      );
+      return;
+    }
+    const { id } = entry;
+    const before = entry.enabledHere;
+    showEnabledHere(id, enabled);
+    setRowError(id, null);
+    logInfo(["frontend"], "mcp server switch started", { id, action });
+    let since = eventSeq.current;
+    writes.current = writes.current
+      .catch(() => undefined)
+      .then(() => {
+        since = eventSeq.current;
+        return api.setMcpServerEnabled(id, enabled);
+      })
+      .then((saved) => {
+        if (alive.current) placeEntry(saved, since);
+      })
+      .catch((e) => {
+        const code = errorCode(e);
+        logWarn(["frontend"], "mcp server switch refused", { id, action, error: logCode(code) });
+        if (!alive.current) return;
+        showEnabledHere(id, before);
+        setRowError(id, refusalText(code));
       });
   };
 
@@ -251,7 +355,7 @@ export function McpServersSettings() {
       if (result && alive.current) placeEntry(result, since);
     } catch (e) {
       const code = errorCode(e);
-      logWarn(["frontend"], "mcp server action refused", { id, action, error: code });
+      logWarn(["frontend"], "mcp server action refused", { id, action, error: logCode(code) });
       if (alive.current) setRowError(id, refusalText(code));
     } finally {
       if (alive.current) setBusy((prev) => ({ ...prev, [id]: false }));
@@ -272,7 +376,7 @@ export function McpServersSettings() {
       if (alive.current) setTests((prev) => ({ ...prev, [id]: { phase: "done", result } }));
     } catch (e) {
       const code = errorCode(e);
-      logWarn(["frontend"], "mcp server test refused", { id, error: code });
+      logWarn(["frontend"], "mcp server test refused", { id, error: logCode(code) });
       if (alive.current) {
         setTests((prev) => ({ ...prev, [id]: { phase: "refused", text: refusalText(code) } }));
       }
@@ -282,27 +386,34 @@ export function McpServersSettings() {
   /** MSS-FR-KQNF */
   const confirmRemove = async () => {
     if (!removeFor) return;
-    const { id } = removeFor;
+    const { id, scope } = removeFor;
+    const removed = entries?.find((e) => e.id === id && e.scope === scope) ?? null;
+    const wasActive = removed !== null && entries !== null && isActive(removed, entries);
     setRemoving(true);
     setRemoveError(null);
-    logInfo(["frontend"], "mcp server remove started", { id });
+    logInfo(["frontend"], "mcp server remove started", { id, scope });
     try {
-      await api.removeMcpServer(id);
+      await api.removeMcpServer(id, scope);
       if (!alive.current) return;
-      confirmed.current.delete(id);
-      latest.current.delete(id);
-      setEntries((prev) => prev?.filter((e) => e.id !== id) ?? prev);
-      setTests((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      setRowError(id, null);
+      setEntries((prev) => prev?.filter((e) => !(e.id === id && e.scope === scope)) ?? prev);
+      // A shadowed row shares its ID with the active row, which keeps its state.
+      if (wasActive) {
+        // MCS-FR-PQHI: a row of another scope with this ID is active now.
+        if (entries?.some((e) => e.id === id && e.scope !== scope)) refreshList();
+        confirmed.current.delete(id);
+        latest.current.delete(id);
+        setTests((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setRowError(id, null);
+      }
       setRemoveFor(null);
       setPendingFocus("add");
     } catch (e) {
       const code = errorCode(e);
-      logWarn(["frontend"], "mcp server remove refused", { id, error: code });
+      logWarn(["frontend"], "mcp server remove refused", { id, scope, error: logCode(code) });
       if (alive.current) setRemoveError(refusalText(code));
     } finally {
       if (alive.current) setRemoving(false);
@@ -310,7 +421,9 @@ export function McpServersSettings() {
   };
 
   const entryOf = (id: string) => entries?.find((e) => e.id === id) ?? null;
-  const removeEntry = removeFor ? entryOf(removeFor.id) : null;
+  const removeEntry = removeFor
+    ? (entries?.find((e) => e.id === removeFor.id && e.scope === removeFor.scope) ?? null)
+    : null;
   // MSS-FR-YFPL: a Local command and a Remote server alike.
   const trustRecord = trustFor ? (entryOf(trustFor.id)?.record ?? null) : null;
 
@@ -337,56 +450,65 @@ export function McpServersSettings() {
         </p>
       )}
 
-      {entries !== null && entries.length > 0 && (
-        <ul className="mcp-servers__list">
-          {entries.map((entry) => (
-            <McpServerRow
-              key={entry.id}
-              entry={entry}
-              test={tests[entry.id]}
-              error={rowErrors[entry.id] ?? null}
-              busy={busy[entry.id] ?? false}
-              onToggleEnabled={(enabled) =>
-                writeRecord(entry.id, (r) => ({ ...r, enabled }), enabled ? "enable" : "disable")
-              }
-              onToggleTool={(tool, enabled) =>
-                writeRecord(
-                  entry.id,
-                  (r) => ({
-                    ...r,
-                    disabledTools: enabled
-                      ? r.disabledTools.filter((name) => name !== tool)
-                      : r.disabledTools.includes(tool)
-                        ? r.disabledTools
-                        : [...r.disabledTools, tool],
-                  }),
-                  enabled ? "enable tool" : "disable tool",
-                )
-              }
-              onTest={() => void runTest(entry.id)}
-              onEdit={(opener) =>
-                setDialog({ entry, focusMissingSecret: false, opener, since: eventSeq.current })
-              }
-              onSetSecrets={(opener) =>
-                setDialog({ entry, focusMissingSecret: true, opener, since: eventSeq.current })
-              }
-              onRemove={(opener) => {
-                setRemoveError(null);
-                setRemoveFor({ id: entry.id, opener, since: eventSeq.current });
-              }}
-              onTrust={(opener) => setTrustFor({ id: entry.id, opener, since: eventSeq.current })}
-              onSignIn={() => void runAction(entry.id, "sign in", () => api.startMcpSignIn(entry.id))}
-              onCancelSignIn={() =>
-                void runAction(entry.id, "cancel sign in", () => api.cancelMcpSignIn(entry.id))
-              }
-              onSignOut={() => void runAction(entry.id, "sign out", () => api.signOutMcpServer(entry.id))}
-              onReconnect={() =>
-                void runAction(entry.id, "reconnect", () => api.reconnectMcpServer(entry.id))
-              }
-            />
-          ))}
-        </ul>
-      )}
+      {entries !== null && entries.length > 0 &&
+        groups(entries).map((group) => (
+          <div key={group.key} className="mcp-servers__group" data-testid={`mcp-group-${group.key}`}>
+            <h3 className="mcp-servers__group-title">{group.text.heading}</h3>
+            <p className="t-ui-sm t-muted">{group.text.sentence}</p>
+            {group.entries.length === 0 ? (
+              <p className="t-ui-sm t-muted" data-testid={`mcp-group-${group.key}-empty`}>
+                {group.text.empty}
+              </p>
+            ) : (
+              <ul className="mcp-servers__list" aria-label={group.text.heading}>
+                {group.entries.map((entry) => (
+                <McpServerRow
+                  key={rowKey(entry)}
+                  entry={entry}
+                  test={isActive(entry, entries) ? tests[entry.id] : undefined}
+                  error={isActive(entry, entries) ? (rowErrors[entry.id] ?? null) : null}
+                  busy={isActive(entry, entries) ? (busy[entry.id] ?? false) : false}
+                  onToggleEnabled={(enabled) => toggleHere(entry, enabled)}
+                  onToggleTool={(tool, enabled) =>
+                    writeRecord(
+                      entry,
+                      (r) => ({
+                        ...r,
+                        disabledTools: enabled
+                          ? r.disabledTools.filter((name) => name !== tool)
+                          : r.disabledTools.includes(tool)
+                            ? r.disabledTools
+                            : [...r.disabledTools, tool],
+                      }),
+                      enabled ? "enable tool" : "disable tool",
+                    )
+                  }
+                  onTest={() => void runTest(entry.id)}
+                  onEdit={(opener) =>
+                    setDialog({ entry, focusMissingSecret: false, opener, since: eventSeq.current })
+                  }
+                  onSetSecrets={(opener) =>
+                    setDialog({ entry, focusMissingSecret: true, opener, since: eventSeq.current })
+                  }
+                  onRemove={(opener) => {
+                    setRemoveError(null);
+                    setRemoveFor({ id: entry.id, scope: entry.scope, opener, since: eventSeq.current });
+                  }}
+                  onTrust={(opener) => setTrustFor({ id: entry.id, opener, since: eventSeq.current })}
+                  onSignIn={() => void runAction(entry.id, "sign in", () => api.startMcpSignIn(entry.id))}
+                  onCancelSignIn={() =>
+                    void runAction(entry.id, "cancel sign in", () => api.cancelMcpSignIn(entry.id))
+                  }
+                  onSignOut={() => void runAction(entry.id, "sign out", () => api.signOutMcpServer(entry.id))}
+                  onReconnect={() =>
+                    void runAction(entry.id, "reconnect", () => api.reconnectMcpServer(entry.id))
+                  }
+                />
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
 
       {entries !== null && (
         <div className="mcp-servers__add">
@@ -444,8 +566,7 @@ export function McpServersSettings() {
           </div>
           <div className="modal__body" data-testid="mcp-remove-dialog">
             <p className="t-ui-sm">
-              Remove {removeEntry?.record?.name ?? removeFor.id}? Its secrets and its sign-in on this
-              computer are removed too.
+              {removeConfirmText(removeFor.scope, removeEntry?.record?.name ?? removeFor.id)}
             </p>
             {removeError && (
               <p className="mcp-dialog__problem" role="alert">
@@ -470,4 +591,15 @@ export function McpServersSettings() {
       )}
     </section>
   );
+}
+
+/** MSS-FR-POYD: the team group and the personal group, each in list order. */
+function groups(entries: McpServerEntry[]) {
+  const personal = entries
+    .filter((e) => e.scope !== "team")
+    .sort((a, b) => SCOPE_RANK[a.scope] - SCOPE_RANK[b.scope]);
+  return [
+    { key: "team", text: TEAM_GROUP, entries: entries.filter((e) => e.scope === "team") },
+    { key: "personal", text: PERSONAL_GROUP, entries: personal },
+  ];
 }

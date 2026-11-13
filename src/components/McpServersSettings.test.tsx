@@ -81,6 +81,19 @@ beforeEach(() => {
         list = list.map((e) => (e.id === server.id ? saved : e));
         return saved;
       }
+      case "set_mcp_server_enabled": {
+        const enabled = args?.enabled as boolean;
+        const held = list.find((e) => e.id === id)!;
+        const record = held.scope === "team" ? held.record : { ...held.record!, enabled };
+        const answer: McpServerEntry = {
+          ...held,
+          record,
+          enabledHere: enabled,
+          status: enabled ? { state: "connecting" } : { state: "disabled" },
+        };
+        list = list.map((e) => (e === held ? answer : e));
+        return answer;
+      }
       case "trust_mcp_server":
       case "sign_out_mcp_server": {
         const held = list.find((e) => e.id === id)!;
@@ -235,48 +248,66 @@ describe("MCP servers section: the list", () => {
 });
 
 describe("MCP servers section: row actions", () => {
-  it("MSS-FR-GBOM: each row has the Enabled switch, Test, Edit, and Remove", async () => {
+  it("MSS-FR-GBOM: each row has the On on this computer switch, Test, Edit, and Remove", async () => {
     list = [mcpEntry(DOCS, { state: "connecting" })];
     render(<McpServersSettings />);
     const docs = await findRow("Docs index");
-    expect(within(docs).getByRole("switch", { name: "Enabled" })).toBeChecked();
+    expect(within(docs).getByRole("switch", { name: "On on this computer" })).toBeChecked();
     for (const name of ["Test", "Edit", "Remove"]) {
       expect(within(docs).getByRole("button", { name })).toBeInTheDocument();
     }
   });
 
-  it("MSS-FR-GBOM: the switch saves the record with the new enabled value", async () => {
+  it("MSS-FR-GBOM, MSS-FR-OOUI: the switch of a team row turns it off on this computer alone", async () => {
     list = [mcpEntry(DOCS, { state: "connecting" })];
     render(<McpServersSettings />);
     const docs = await findRow("Docs index");
-    await userEvent.click(within(docs).getByRole("switch", { name: "Enabled" }));
-    await waitFor(() => expect(savedRecords()).toEqual([{ ...DOCS, enabled: false }]));
+    expect(within(docs).queryByTestId("mcp-switch-note")).toBeNull();
+    await userEvent.click(within(docs).getByRole("switch", { name: "On on this computer" }));
+    await waitFor(() => expect(calls("set_mcp_server_enabled")).toHaveLength(1));
+    expect(calls("set_mcp_server_enabled")[0][1]).toEqual({ id: "docs", enabled: false });
+    expect(savedRecords()).toEqual([]);
     await waitFor(() => expect(chipOf(row("Docs index"))).toHaveTextContent("Off"));
-    expect(within(row("Docs index")).getByRole("switch", { name: "Enabled" })).not.toBeChecked();
+    expect(within(row("Docs index")).getByRole("switch", { name: "On on this computer" })).not.toBeChecked();
+    expect(within(row("Docs index")).getByTestId("mcp-switch-note")).toHaveTextContent(
+      "Off on this computer. The team has it on.",
+    );
   });
 
-  it("MSS-FR-GBOM: a refused save puts the switch back and shows the refusal in the row", async () => {
-    list = [mcpEntry(DOCS, { state: "connecting" })];
-    refuse.save_mcp_server = "malformed_project_config";
+  it("MSS-FR-OOUI: a team row that the team has off but this computer has on says so", async () => {
+    list = [mcpEntry({ ...DOCS, enabled: false }, { state: "connecting" }, { enabledHere: true })];
     render(<McpServersSettings />);
     const docs = await findRow("Docs index");
-    const toggle = within(docs).getByRole("switch", { name: "Enabled" });
+    expect(within(docs).getByTestId("mcp-switch-note")).toHaveTextContent(
+      "On on this computer. The team has it off.",
+    );
+  });
+
+  it("MSS-FR-GBOM: a refused switch goes back and shows the refusal in the row", async () => {
+    list = [mcpEntry(DOCS, { state: "connecting" })];
+    refuse.set_mcp_server_enabled = "malformed_project_config";
+    render(<McpServersSettings />);
+    const docs = await findRow("Docs index");
+    const toggle = within(docs).getByRole("switch", { name: "On on this computer" });
     await userEvent.click(toggle);
     expect(await within(docs).findByTestId("mcp-row-error")).toHaveTextContent(
       "The project settings file cannot be read.",
     );
-    expect(toggle).toBeChecked();
+    await waitFor(() => expect(toggle).toBeChecked());
   });
 
-  it("MSS-FR-GBOM: quick changes are saved one after the other, and each is kept", async () => {
+  it("MSS-FR-GBOM: quick changes of the switch are sent one after the other, and each is kept", async () => {
     list = [mcpEntry(DOCS, { state: "connecting" })];
     render(<McpServersSettings />);
     const docs = await findRow("Docs index");
-    const toggle = within(docs).getByRole("switch", { name: "Enabled" });
+    const toggle = within(docs).getByRole("switch", { name: "On on this computer" });
     await userEvent.click(toggle);
     await userEvent.click(toggle);
-    await waitFor(() => expect(savedRecords()).toHaveLength(2));
-    expect(savedRecords().map((r) => r.enabled)).toEqual([false, true]);
+    await waitFor(() => expect(calls("set_mcp_server_enabled")).toHaveLength(2));
+    expect(calls("set_mcp_server_enabled").map((c) => (c[1] as { enabled: boolean }).enabled)).toEqual([
+      false,
+      true,
+    ]);
     await waitFor(() => expect(toggle).toBeChecked());
   });
 
@@ -510,7 +541,7 @@ describe("MCP servers section: row actions", () => {
     await userEvent.click(within(docs).getByRole("button", { name: "Remove" }));
     const dialog = await screen.findByRole("dialog", { name: "Remove MCP server" });
     expect(dialog).toHaveTextContent(
-      "Remove Docs index? Its secrets and its sign-in on this computer are removed too.",
+      "Remove Docs index from the project for everyone? Its secrets and its sign-in on this computer are removed too.",
     );
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -526,7 +557,7 @@ describe("MCP servers section: row actions", () => {
     const dialog = await screen.findByRole("dialog", { name: "Remove MCP server" });
     await userEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByRole("listitem", { name: "Docs index" })).toBeNull());
-    expect(calls("remove_mcp_server")[0][1]).toEqual({ id: "docs" });
+    expect(calls("remove_mcp_server")[0][1]).toEqual({ id: "docs", scope: "team" });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(row("Issue tracker")).toBeInTheDocument();
   });
@@ -641,8 +672,8 @@ describe("MCP servers section: dialogs, state, and logs", () => {
     list = [mcpEntry(DOCS, { state: "ready", toolCount: 2 }, { tools: TOOLS })];
     render(<McpServersSettings />);
     const docs = await findRow("Docs index");
-    await userEvent.click(within(docs).getByRole("switch", { name: "Enabled" }));
-    await waitFor(() => expect(savedRecords()).toHaveLength(1));
+    await userEvent.click(within(docs).getByRole("switch", { name: "On on this computer" }));
+    await waitFor(() => expect(calls("set_mcp_server_enabled")).toHaveLength(1));
     await userEvent.click(within(docs).getByRole("button", { name: "Edit" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Name" }), " changed");
     expect(settingsSectionsPending()).toEqual([]);
@@ -656,18 +687,18 @@ describe("MCP servers section: dialogs, state, and logs", () => {
       }),
     });
     list = [mcpEntry(secretRecord, { state: "ready", toolCount: 0 })];
-    refuse.save_mcp_server = "invalid_cwd";
+    refuse.set_mcp_server_enabled = "invalid_cwd";
     render(<McpServersSettings />);
     const docs = await findRow("Docs index");
-    await userEvent.click(within(docs).getByRole("switch", { name: "Enabled" }));
+    await userEvent.click(within(docs).getByRole("switch", { name: "On on this computer" }));
     await within(docs).findByTestId("mcp-row-error");
     await userEvent.click(within(docs).getByRole("button", { name: "Test" }));
     await within(docs).findByTestId("mcp-test-result");
 
     const records = logRecords();
-    const started = records.find((r) => r.message === "mcp server save started");
+    const started = records.find((r) => r.message === "mcp server switch started");
     expect(started).toMatchObject({ level: "INFO", fields: { id: "docs" } });
-    const refused = records.find((r) => r.message === "mcp server save refused");
+    const refused = records.find((r) => r.message === "mcp server switch refused");
     expect(refused).toMatchObject({ level: "WARN", fields: { id: "docs", error: "invalid_cwd" } });
     expect(records.find((r) => r.message === "mcp server test started")).toMatchObject({
       level: "INFO",

@@ -5,6 +5,7 @@ use super::*;
 use crate::global_settings::GlobalSettingsStore;
 use crate::mcp::config::command_fingerprint;
 use crate::mcp::operations::{run_test, Context, TestPlan};
+use crate::mcp::scope::McpScope;
 use crate::mcp::secrets::McpSecrets;
 use crate::mcp::status::McpTestResult;
 
@@ -57,7 +58,7 @@ async fn a_saved_stdio_record_is_trusted_and_waits_for_its_secret() {
     let f = Fixture::new();
     let c = f.context();
     let server = with_secret_env(stdio_record("docs"), &["DOCS_KEY"]);
-    let entry = c.save(server.clone()).unwrap();
+    let entry = c.save(server.clone(), McpScope::Team).unwrap();
     assert_eq!(entry.status, McpServerStatus::NeedsSecret);
     assert_eq!(entry.secrets.len(), 1);
     assert!(!entry.secrets[0].present);
@@ -86,7 +87,7 @@ async fn a_saved_stdio_record_is_trusted_and_waits_for_its_secret() {
 async fn a_changed_command_needs_trust_again() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(stdio_record("docs")).unwrap();
+    c.save(stdio_record("docs"), McpScope::Team).unwrap();
     wait_until(|| matches!(status_of(&f.manager, "docs"), Some(McpServerStatus::Ready { .. })))
         .await;
 
@@ -105,7 +106,7 @@ async fn a_changed_command_needs_trust_again() {
     wait_until(|| matches!(status_of(&f.manager, "docs"), Some(McpServerStatus::Ready { .. })))
         .await;
 
-    c.save(http_record("tracker", McpAuth::None)).unwrap();
+    c.save(http_record("tracker", McpAuth::None), McpScope::Team).unwrap();
     let tracker = c.record("tracker").unwrap();
     assert_eq!(c.trust("tracker", &tracker).unwrap_err(), "no_credentials");
     assert_eq!(c.trust("nobody", &tracker).unwrap_err(), "not_found");
@@ -118,7 +119,7 @@ async fn a_changed_command_needs_trust_again() {
 async fn a_save_that_keeps_an_untrusted_command_keeps_it_untrusted() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(stdio_record("docs")).unwrap();
+    c.save(stdio_record("docs"), McpScope::Team).unwrap();
     let text = f.file().replace("command = \"npx\"", "command = \"curl\"");
     std::fs::write(f.dir.path().join(".synthesis/project.toml"), text).unwrap();
     assert_eq!(c.list().unwrap()[0].status, McpServerStatus::Untrusted);
@@ -126,17 +127,17 @@ async fn a_save_that_keeps_an_untrusted_command_keeps_it_untrusted() {
 
     let mut pulled = c.record("docs").unwrap();
     pulled.enabled = false;
-    c.save(pulled.clone()).unwrap();
+    c.save(pulled.clone(), McpScope::Team).unwrap();
     pulled.enabled = true;
     pulled.name = "Renamed".to_string();
-    let entry = c.save(pulled.clone()).unwrap();
+    let entry = c.save(pulled.clone(), McpScope::Team).unwrap();
     assert_eq!(entry.status, McpServerStatus::Untrusted);
     assert_eq!(f.connector.attempt_count(), attempts, "nothing ran");
 
     if let McpTransport::Stdio(stdio) = &mut pulled.transport {
         stdio.command = "uvx".to_string();
     }
-    c.save(pulled).unwrap();
+    c.save(pulled, McpScope::Team).unwrap();
     wait_until(|| f.connector.attempt_count() == attempts + 1).await;
 }
 
@@ -147,7 +148,7 @@ async fn a_save_that_keeps_an_untrusted_command_keeps_it_untrusted() {
 async fn credentials_are_bound_to_the_trusted_url() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("t", McpAuth::Bearer)).unwrap();
+    c.save(http_record("t", McpAuth::Bearer), McpScope::Team).unwrap();
     c.set_secret("t", "bearer", "token").unwrap();
     wait_until(|| matches!(status_of(&f.manager, "t"), Some(McpServerStatus::Ready { .. }))).await;
 
@@ -159,14 +160,14 @@ async fn credentials_are_bound_to_the_trusted_url() {
     assert_eq!(serde_json::to_value(refused).unwrap()["failure"], "untrusted");
     assert_eq!(f.connector.attempt_count(), attempts);
 
-    c.save(http_record("o", McpAuth::Oauth2)).unwrap();
+    c.save(http_record("o", McpAuth::Oauth2), McpScope::Team).unwrap();
     let text = f.file().replacen("https://mcp.example.com/mcp", "https://evil.example.org/mcp", 1);
     std::fs::write(f.dir.path().join(".synthesis/project.toml"), text).unwrap();
     c.list().unwrap();
     assert_eq!(c.signing_in_record("o").unwrap_err(), "untrusted");
 
     // An http record with no credential needs no trust.
-    c.save(http_record("open", McpAuth::None)).unwrap();
+    c.save(http_record("open", McpAuth::None), McpScope::Team).unwrap();
     let text = f.file().replacen("https://mcp.example.com/mcp", "https://moved.example.org/mcp", 1);
     std::fs::write(f.dir.path().join(".synthesis/project.toml"), text).unwrap();
     let open = c.list().unwrap().into_iter().find(|e| e.id == "open").unwrap();
@@ -179,7 +180,7 @@ async fn credentials_are_bound_to_the_trusted_url() {
 fn tests_of_refused_records_open_nothing() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("o", McpAuth::Oauth2)).unwrap();
+    c.save(http_record("o", McpAuth::Oauth2), McpScope::Team).unwrap();
     let TestPlan::Refused(refused) = c.test_plan("o").unwrap() else { panic!("refused") };
     assert_eq!(serde_json::to_value(refused).unwrap()["failure"], "needs_sign_in");
     std::fs::write(
@@ -199,7 +200,7 @@ fn tests_of_refused_records_open_nothing() {
 fn secret_operations_refuse_what_the_record_does_not_allow() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("tracker", McpAuth::Bearer)).unwrap();
+    c.save(http_record("tracker", McpAuth::Bearer), McpScope::Team).unwrap();
     assert_eq!(c.set_secret("tracker", "env:X", "v").unwrap_err(), "unknown_slot");
     assert_eq!(
         c.set_secret("tracker", "oauth", "v").unwrap_err(),
@@ -211,7 +212,10 @@ fn secret_operations_refuse_what_the_record_does_not_allow() {
     assert_eq!(c.set_secret("nobody", "bearer", "v").unwrap_err(), "not_found");
     assert!(c.clear_secret("tracker", "bearer").is_ok());
     c.set_secret("tracker", "bearer", "token").unwrap();
-    assert_eq!(f.secrets.get("/repo", "tracker", "bearer").unwrap().as_deref(), Some("token"));
+    assert_eq!(
+        f.secrets.get(&"/repo".into(), "tracker", "bearer").unwrap().as_deref(),
+        Some("token")
+    );
     let entry = c.clear_secret("tracker", "bearer").unwrap();
     assert!(!entry.secrets[0].present);
     assert_eq!(entry.status, McpServerStatus::NeedsSecret);
@@ -225,17 +229,17 @@ fn secret_operations_refuse_what_the_record_does_not_allow() {
 fn a_save_removes_the_secrets_of_dropped_slots() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(with_secret_env(stdio_record("docs"), &["A", "B"])).unwrap();
+    c.save(with_secret_env(stdio_record("docs"), &["A", "B"]), McpScope::Team).unwrap();
     c.set_secret("docs", "env:A", "a").unwrap();
     c.set_secret("docs", "env:B", "b").unwrap();
-    c.save(with_secret_env(stdio_record("docs"), &["A"])).unwrap();
-    assert_eq!(f.secrets.get("/repo", "docs", "env:A").unwrap().as_deref(), Some("a"));
-    assert_eq!(f.secrets.get("/repo", "docs", "env:B").unwrap(), None);
+    c.save(with_secret_env(stdio_record("docs"), &["A"]), McpScope::Team).unwrap();
+    assert_eq!(f.secrets.get(&"/repo".into(), "docs", "env:A").unwrap().as_deref(), Some("a"));
+    assert_eq!(f.secrets.get(&"/repo".into(), "docs", "env:B").unwrap(), None);
 
-    c.save(http_record("t", McpAuth::Oauth2)).unwrap();
-    f.secrets.set("/repo", "t", "oauth", "{}").unwrap();
-    c.save(http_record("t", McpAuth::Bearer)).unwrap();
-    assert_eq!(f.secrets.get("/repo", "t", "oauth").unwrap(), None);
+    c.save(http_record("t", McpAuth::Oauth2), McpScope::Team).unwrap();
+    f.secrets.set(&"/repo".into(), "t", "oauth", "{}").unwrap();
+    c.save(http_record("t", McpAuth::Bearer), McpScope::Team).unwrap();
+    assert_eq!(f.secrets.get(&"/repo".into(), "t", "oauth").unwrap(), None);
 }
 
 // MCS-FR-UOIO: remove removes the record, every secret, and the trust record.
@@ -243,15 +247,15 @@ fn a_save_removes_the_secrets_of_dropped_slots() {
 async fn remove_takes_the_record_its_secrets_and_its_trust() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(with_secret_env(stdio_record("docs"), &["A"])).unwrap();
+    c.save(with_secret_env(stdio_record("docs"), &["A"]), McpScope::Team).unwrap();
     c.set_secret("docs", "env:A", "a").unwrap();
-    f.secrets.set("/repo", "docs", "oauth", "{}").unwrap();
-    c.remove("docs").unwrap();
+    f.secrets.set(&"/repo".into(), "docs", "oauth", "{}").unwrap();
+    c.remove("docs", McpScope::Team).unwrap();
     assert!(c.list().unwrap().is_empty());
-    assert_eq!(f.secrets.get("/repo", "docs", "env:A").unwrap(), None);
-    assert_eq!(f.secrets.get("/repo", "docs", "oauth").unwrap(), None);
+    assert_eq!(f.secrets.get(&"/repo".into(), "docs", "env:A").unwrap(), None);
+    assert_eq!(f.secrets.get(&"/repo".into(), "docs", "oauth").unwrap(), None);
     assert!(f.store.load_mcp_trust("/repo").unwrap().is_empty());
-    assert_eq!(c.remove("docs").unwrap_err(), "not_found");
+    assert_eq!(c.remove("docs", McpScope::Team).unwrap_err(), "not_found");
     assert_eq!(status_of(&f.manager, "docs"), None);
 }
 
@@ -264,7 +268,7 @@ fn a_refused_save_changes_nothing() {
     if let McpTransport::Http(http) = &mut bad.transport {
         http.url = "http://example.com".to_string();
     }
-    assert_eq!(c.save(bad).unwrap_err(), "invalid_url");
+    assert_eq!(c.save(bad, McpScope::Team).unwrap_err(), "invalid_url");
     assert!(f.file().is_empty());
 }
 
@@ -277,7 +281,7 @@ async fn a_test_connects_on_its_own_and_changes_nothing() {
     let c = f.context();
     let mut off = http_record("off", McpAuth::None);
     off.enabled = false;
-    c.save(off).unwrap();
+    c.save(off, McpScope::Team).unwrap();
     let before = f.connector.attempt_count();
     let result = run_test(&f.manager, c.test_plan("off").unwrap()).await;
     let McpTestResult::Passed { ok, tools } = result else { panic!("the test passes") };
@@ -290,7 +294,7 @@ async fn a_test_connects_on_its_own_and_changes_nothing() {
         "the status is unchanged"
     );
 
-    c.save(http_record("bearer", McpAuth::Bearer)).unwrap();
+    c.save(http_record("bearer", McpAuth::Bearer), McpScope::Team).unwrap();
     let TestPlan::Refused(refused) = c.test_plan("bearer").unwrap() else { panic!("refused") };
     assert_eq!(serde_json::to_value(refused).unwrap()["failure"], "needs_secret");
 
@@ -315,7 +319,7 @@ async fn a_test_connects_on_its_own_and_changes_nothing() {
 async fn reconnect_opens_a_new_connection() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("docs", McpAuth::None)).unwrap();
+    c.save(http_record("docs", McpAuth::None), McpScope::Team).unwrap();
     wait_until(|| matches!(status_of(&f.manager, "docs"), Some(McpServerStatus::Ready { .. })))
         .await;
     let attempts = f.connector.attempt_count();
@@ -330,7 +334,7 @@ async fn reconnect_opens_a_new_connection() {
 fn sign_out_drops_the_tokens_and_keeps_the_client() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("t", McpAuth::Oauth2)).unwrap();
+    c.save(http_record("t", McpAuth::Oauth2), McpScope::Team).unwrap();
     let slot = serde_json::json!({
         "registration": { "clientId": "registered", "redirectUri": "http://127.0.0.1:5000/callback" },
         "credentials": {
@@ -338,13 +342,13 @@ fn sign_out_drops_the_tokens_and_keeps_the_client() {
             "token_response": { "access_token": "at", "token_type": "bearer" }
         }
     });
-    f.secrets.set("/repo", "t", "oauth", &slot.to_string()).unwrap();
+    f.secrets.set(&"/repo".into(), "t", "oauth", &slot.to_string()).unwrap();
     let entry = c.sign_out("t").unwrap();
     assert_eq!(entry.status, McpServerStatus::NeedsSignIn);
-    let stored = crate::mcp::oauth::read_slot(f.secrets.as_ref(), "/repo", "t").unwrap();
+    let stored = crate::mcp::oauth::read_slot(f.secrets.as_ref(), &"/repo".into(), "t").unwrap();
     assert!(stored.credentials.is_none());
     assert_eq!(stored.registration.unwrap().client_id, "registered");
-    c.save(http_record("b", McpAuth::Bearer)).unwrap();
+    c.save(http_record("b", McpAuth::Bearer), McpScope::Team).unwrap();
     assert_eq!(c.sign_out("b").unwrap_err(), "not_oauth2");
 }
 
@@ -354,18 +358,21 @@ fn sign_out_drops_the_tokens_and_keeps_the_client() {
 fn a_new_url_drops_the_oauth_state() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("t", McpAuth::Oauth2)).unwrap();
-    f.secrets.set("/repo", "t", "oauth", "{}").unwrap();
+    c.save(http_record("t", McpAuth::Oauth2), McpScope::Team).unwrap();
+    f.secrets.set(&"/repo".into(), "t", "oauth", "{}").unwrap();
     let mut same = http_record("t", McpAuth::Oauth2);
     same.name = "Renamed".to_string();
-    c.save(same).unwrap();
-    assert!(f.secrets.get("/repo", "t", "oauth").unwrap().is_some(), "a rename keeps the sign-in");
+    c.save(same, McpScope::Team).unwrap();
+    assert!(
+        f.secrets.get(&"/repo".into(), "t", "oauth").unwrap().is_some(),
+        "a rename keeps the sign-in"
+    );
     let mut moved = http_record("t", McpAuth::Oauth2);
     if let McpTransport::Http(http) = &mut moved.transport {
         http.url = "https://other.example.com/mcp".to_string();
     }
-    c.save(moved).unwrap();
-    assert_eq!(f.secrets.get("/repo", "t", "oauth").unwrap(), None);
+    c.save(moved, McpScope::Team).unwrap();
+    assert_eq!(f.secrets.get(&"/repo".into(), "t", "oauth").unwrap(), None);
 }
 
 // MCS-FR-UOIO: a remove stops the session also when the vault fails.
@@ -373,11 +380,11 @@ fn a_new_url_drops_the_oauth_state() {
 async fn a_remove_stops_the_session_when_the_vault_fails() {
     let f = Fixture::new();
     let c = f.context();
-    c.save(http_record("docs", McpAuth::None)).unwrap();
+    c.save(http_record("docs", McpAuth::None), McpScope::Team).unwrap();
     wait_until(|| matches!(status_of(&f.manager, "docs"), Some(McpServerStatus::Ready { .. })))
         .await;
     f.secrets.unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
-    assert_eq!(c.remove("docs").unwrap_err(), "keychain_unavailable");
+    assert_eq!(c.remove("docs", McpScope::Team).unwrap_err(), "keychain_unavailable");
     assert_eq!(status_of(&f.manager, "docs"), None);
     assert!(f.manager.mcp_tools_now("/repo").is_empty());
 }
@@ -390,20 +397,21 @@ fn the_vault_store_uses_the_project_mcp_namespace() {
     let vault = Arc::new(crate::secret_vault::Vault::new(Box::new(FakeKeyring::default())));
     vault.mark_migrated();
     let secrets = crate::mcp::secrets::VaultMcpSecrets::new(Arc::clone(&vault));
-    secrets.set("/repo", "docs", "env:A", "a").unwrap();
-    secrets.set("/repo", "docs", "bearer", "b").unwrap();
-    secrets.set("/other", "docs", "env:A", "kept").unwrap();
+    secrets.set(&"/repo".into(), "docs", "env:A", "a").unwrap();
+    secrets.set(&"/repo".into(), "docs", "bearer", "b").unwrap();
+    secrets.set(&"/other".into(), "docs", "env:A", "kept").unwrap();
     let path = |p: &str, slot: &str| {
         vec!["projects".to_string(), p.to_string(), "mcp".into(), "docs".into(), slot.to_string()]
     };
     assert_eq!(vault.read_secret(&path("/repo", "env:A")).unwrap().as_deref(), Some("a"));
-    let presence = secrets.presence("/repo", "docs", &["env:A".into(), "env:B".into()]).unwrap();
+    let presence =
+        secrets.presence(&"/repo".into(), "docs", &["env:A".into(), "env:B".into()]).unwrap();
     assert_eq!(presence.get("env:A"), Some(&true));
     assert_eq!(presence.get("env:B"), Some(&false));
-    secrets.remove_server("/repo", "docs").unwrap();
-    assert_eq!(secrets.get("/repo", "docs", "env:A").unwrap(), None);
-    assert_eq!(secrets.get("/repo", "docs", "bearer").unwrap(), None);
-    assert_eq!(secrets.get("/other", "docs", "env:A").unwrap().as_deref(), Some("kept"));
+    secrets.remove_server(&"/repo".into(), "docs").unwrap();
+    assert_eq!(secrets.get(&"/repo".into(), "docs", "env:A").unwrap(), None);
+    assert_eq!(secrets.get(&"/repo".into(), "docs", "bearer").unwrap(), None);
+    assert_eq!(secrets.get(&"/other".into(), "docs", "env:A").unwrap().as_deref(), Some("kept"));
 }
 
 // MCS-FR-LXLB: trusting a new destination of an http record removes the
@@ -416,17 +424,17 @@ async fn trusting_a_new_destination_removes_old_credentials() {
     if let McpTransport::Http(http) = &mut record.transport {
         http.secret_headers.push("X-Key".to_string());
     }
-    c.save(record).unwrap();
+    c.save(record, McpScope::Team).unwrap();
     c.set_secret("t", "bearer", "token-for-a").unwrap();
     c.set_secret("t", "header:X-Key", "key-for-a").unwrap();
-    f.secrets.set("/repo", "t", "oauth", "{}").unwrap();
+    f.secrets.set(&"/repo".into(), "t", "oauth", "{}").unwrap();
     let text = f.file().replace("https://mcp.example.com/mcp", "https://other.example.net/mcp");
     std::fs::write(f.dir.path().join(".synthesis/project.toml"), text).unwrap();
     assert_eq!(c.list().unwrap()[0].status, McpServerStatus::Untrusted);
     let shown = c.record("t").unwrap();
     let entry = c.trust("t", &shown).unwrap();
     for slot in ["bearer", "header:X-Key", "oauth"] {
-        assert_eq!(f.secrets.get("/repo", "t", slot).unwrap(), None, "{slot}");
+        assert_eq!(f.secrets.get(&"/repo".into(), "t", slot).unwrap(), None, "{slot}");
     }
     assert_eq!(entry.status, McpServerStatus::NeedsSecret);
 }
@@ -437,16 +445,16 @@ async fn trusting_a_new_destination_removes_old_credentials() {
 fn a_new_record_under_an_old_id_starts_with_no_secret() {
     let f = Fixture::new();
     let c = f.context();
-    f.secrets.set("/repo", "t", "bearer", "left-behind").unwrap();
-    f.secrets.set("/repo", "t", "oauth", "{}").unwrap();
-    let entry = c.save(http_record("t", McpAuth::Bearer)).unwrap();
-    assert_eq!(f.secrets.get("/repo", "t", "bearer").unwrap(), None);
-    assert_eq!(f.secrets.get("/repo", "t", "oauth").unwrap(), None);
+    f.secrets.set(&"/repo".into(), "t", "bearer", "left-behind").unwrap();
+    f.secrets.set(&"/repo".into(), "t", "oauth", "{}").unwrap();
+    let entry = c.save(http_record("t", McpAuth::Bearer), McpScope::Team).unwrap();
+    assert_eq!(f.secrets.get(&"/repo".into(), "t", "bearer").unwrap(), None);
+    assert_eq!(f.secrets.get(&"/repo".into(), "t", "oauth").unwrap(), None);
     assert!(!entry.secrets[0].present);
     // A save of a record the file holds keeps its secrets.
     c.set_secret("t", "bearer", "kept").unwrap();
     let mut renamed = http_record("t", McpAuth::Bearer);
     renamed.name = "Renamed".to_string();
-    c.save(renamed).unwrap();
-    assert_eq!(f.secrets.get("/repo", "t", "bearer").unwrap().as_deref(), Some("kept"));
+    c.save(renamed, McpScope::Team).unwrap();
+    assert_eq!(f.secrets.get(&"/repo".into(), "t", "bearer").unwrap().as_deref(), Some("kept"));
 }

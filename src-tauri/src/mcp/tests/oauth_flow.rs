@@ -217,7 +217,7 @@ async fn a_sign_in_registers_exchanges_and_connects() {
     let secrets = Arc::new(MemoryMcpSecrets::default());
     let page = Arc::new(Mutex::new(String::new()));
     let request = SignInRequest {
-        project_key: "/repo".into(),
+        owner: "/repo".into(),
         server_id: "t".into(),
         http: oauth_http(&server.base),
         secrets: secrets.clone(),
@@ -225,7 +225,7 @@ async fn a_sign_in_registers_exchanges_and_connects() {
     };
     sign_in(request, browser(Arc::clone(&server.seen), Arc::clone(&page), false)).await.unwrap();
 
-    let slot = read_slot(secrets.as_ref(), "/repo", "t").unwrap();
+    let slot = read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap();
     assert!(slot.signed_in());
     let registration = slot.registration.unwrap();
     assert_eq!(registration.client_id, "client-1");
@@ -258,6 +258,7 @@ async fn a_sign_in_registers_exchanges_and_connects() {
     let facts = crate::mcp::facts_for(&record, "/repo", &trust, secrets.as_ref());
     assert!(facts.signed_in);
     let input = ServerInput {
+        owner: "/repo".into(),
         listed: crate::mcp::config::ListedRecord { id: "t".into(), record: Ok(record) },
         facts,
     };
@@ -275,7 +276,7 @@ async fn a_sign_in_registers_exchanges_and_connects() {
     manager.shutdown().await;
 
     let again = SignInRequest {
-        project_key: "/repo".into(),
+        owner: "/repo".into(),
         server_id: "t".into(),
         http: oauth_http(&server.base),
         secrets: secrets.clone(),
@@ -297,7 +298,7 @@ async fn a_forged_state_is_refused_and_the_real_error_ends_the_sign_in() {
     let secrets = Arc::new(MemoryMcpSecrets::default());
     let page = Arc::new(Mutex::new(String::new()));
     let request = SignInRequest {
-        project_key: "/repo".into(),
+        owner: "/repo".into(),
         server_id: "t".into(),
         http: oauth_http(&server.base),
         secrets: secrets.clone(),
@@ -306,7 +307,7 @@ async fn a_forged_state_is_refused_and_the_real_error_ends_the_sign_in() {
     let outcome =
         sign_in(request, browser(Arc::clone(&server.seen), Arc::clone(&page), true)).await;
     assert_eq!(outcome, Err(McpFailure::OauthFailed));
-    assert!(!read_slot(secrets.as_ref(), "/repo", "t").unwrap().signed_in());
+    assert!(!read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap().signed_in());
     assert!(server.seen.lock().unwrap().token_requests.is_empty());
     wait_until(|| page.lock().unwrap().contains("Sign-in failed")).await;
 }
@@ -327,6 +328,7 @@ async fn no_tokens_need_a_sign_in() {
         vault_unavailable: false,
     };
     let input = ServerInput {
+        owner: "/repo".into(),
         listed: crate::mcp::config::ListedRecord { id: "t".into(), record: Ok(record) },
         facts,
     };
@@ -366,7 +368,7 @@ async fn connect_with(
 ) -> (McpServerStatus, Arc<MemoryMcpSecrets>) {
     use crate::mcp::secrets::McpSecrets;
     let secrets = Arc::new(MemoryMcpSecrets::default());
-    secrets.set("/repo", "t", "oauth", &slot).unwrap();
+    secrets.set(&"/repo".into(), "t", "oauth", &slot).unwrap();
     let manager = McpManager::new(secrets.clone(), Arc::new(RealConnector), fast_timing());
     let mut record = http_record("t", McpAuth::Oauth2);
     record.transport = McpTransport::Http(oauth_http(&server.base));
@@ -377,6 +379,7 @@ async fn connect_with(
         vault_unavailable: false,
     };
     let input = ServerInput {
+        owner: "/repo".into(),
         listed: crate::mcp::config::ListedRecord { id: "t".into(), record: Ok(record) },
         facts,
     };
@@ -408,7 +411,7 @@ async fn a_token_about_to_expire_is_refreshed() {
         .iter()
         .any(|r| r.get("grant_type").map(String::as_str) == Some("refresh_token")
             && r.get("refresh_token").map(String::as_str) == Some("rt-1")));
-    let stored = read_slot(secrets.as_ref(), "/repo", "t").unwrap();
+    let stored = read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap();
     let text = serde_json::to_string(&stored.credentials).unwrap();
     assert!(text.contains("at-2"), "the refreshed token is stored");
 }
@@ -430,7 +433,7 @@ async fn a_refused_refresh_needs_a_new_sign_in() {
     server.seen.lock().unwrap().refuse_refresh = true;
     let (status, secrets) = connect_with(&server, signed_in_slot(10)).await;
     assert_eq!(status, McpServerStatus::NeedsSignIn);
-    let stored = read_slot(secrets.as_ref(), "/repo", "t").unwrap();
+    let stored = read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap();
     assert!(!stored.signed_in());
     assert_eq!(stored.registration.unwrap().client_id, "client-1");
 }
@@ -445,7 +448,7 @@ async fn a_pre_registered_client_and_record_scopes_are_used() {
     http.client_id = Some("pre-1".into());
     http.scopes = vec!["read".into(), "write".into()];
     let request = SignInRequest {
-        project_key: "/repo".into(),
+        owner: "/repo".into(),
         server_id: "t".into(),
         http,
         secrets: secrets.clone(),
@@ -461,7 +464,7 @@ async fn a_pre_registered_client_and_record_scopes_are_used() {
     assert!(scopes.contains(&"read") && scopes.contains(&"write"), "{scopes:?}");
     assert!(!scopes.contains(&"tools"), "the record's scopes, not scopes_supported");
     assert_eq!(seen.token_requests[0]["client_id"], "pre-1");
-    let stored = read_slot(secrets.as_ref(), "/repo", "t").unwrap();
+    let stored = read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap();
     assert!(stored.signed_in());
     assert!(stored.registration.is_none(), "a pre-registered client is not kept as a registration");
 }
@@ -474,7 +477,7 @@ async fn a_record_that_changed_during_the_sign_in_gets_no_token() {
     let secrets = Arc::new(MemoryMcpSecrets::default());
     let page = Arc::new(Mutex::new(String::new()));
     let request = SignInRequest {
-        project_key: "/repo".into(),
+        owner: "/repo".into(),
         server_id: "t".into(),
         http: oauth_http(&server.base),
         secrets: secrets.clone(),
@@ -484,6 +487,6 @@ async fn a_record_that_changed_during_the_sign_in_gets_no_token() {
         sign_in(request, browser(Arc::clone(&server.seen), Arc::clone(&page), false)).await;
     assert_eq!(outcome, Err(McpFailure::OauthFailed));
     assert!(server.seen.lock().unwrap().token_requests.is_empty());
-    assert!(!read_slot(secrets.as_ref(), "/repo", "t").unwrap().signed_in());
+    assert!(!read_slot(secrets.as_ref(), &"/repo".into(), "t").unwrap().signed_in());
     wait_until(|| page.lock().unwrap().contains("Sign-in failed")).await;
 }

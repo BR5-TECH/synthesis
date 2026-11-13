@@ -16,7 +16,7 @@ use tokio::net::{TcpListener, TcpStream};
 
 use super::config::HttpTransport;
 use super::connect::{is_loopback, ConnectError, ConnectRequest};
-use super::secrets::{McpSecrets, OAUTH_CLIENT_SECRET_SLOT, OAUTH_SLOT};
+use super::secrets::{McpSecrets, SecretOwner, OAUTH_CLIENT_SECRET_SLOT, OAUTH_SLOT};
 use super::status::McpFailure;
 
 /// MCS-FR-CMWV: how long a sign-in waits for its redirect.
@@ -57,57 +57,61 @@ impl OAuthSlot {
 /// Read the `oauth` slot. A value that does not decode reads as empty.
 pub fn read_slot(
     secrets: &dyn McpSecrets,
-    project: &str,
+    owner: &SecretOwner,
     server: &str,
 ) -> Result<OAuthSlot, AuthError> {
     let text = secrets
-        .get(project, server, OAUTH_SLOT)
+        .get(owner, server, OAUTH_SLOT)
         .map_err(|_| AuthError::CredentialStoreError("keychain_unavailable".into()))?;
     Ok(text.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default())
 }
 
 fn write_slot(
     secrets: &dyn McpSecrets,
-    project: &str,
+    owner: &SecretOwner,
     server: &str,
     slot: &OAuthSlot,
 ) -> Result<(), AuthError> {
     let text = serde_json::to_string(slot)
         .map_err(|_| AuthError::CredentialStoreError("encode".into()))?;
     secrets
-        .set(project, server, OAUTH_SLOT, &text)
+        .set(owner, server, OAUTH_SLOT, &text)
         .map_err(|_| AuthError::CredentialStoreError("keychain_unavailable".into()))
 }
 
 /// MCS-FR-SQWD, MCS-FR-QRIB: remove the tokens and keep the registered client.
-pub fn drop_tokens(secrets: &dyn McpSecrets, project: &str, server: &str) -> Result<(), AuthError> {
-    let mut slot = read_slot(secrets, project, server)?;
+pub fn drop_tokens(
+    secrets: &dyn McpSecrets,
+    owner: &SecretOwner,
+    server: &str,
+) -> Result<(), AuthError> {
+    let mut slot = read_slot(secrets, owner, server)?;
     slot.credentials = None;
-    write_slot(secrets, project, server, &slot)
+    write_slot(secrets, owner, server, &slot)
 }
 
 /// The credential store `rmcp` reads and writes the tokens through.
 #[derive(Clone)]
 pub struct VaultCredentialStore {
     pub secrets: Arc<dyn McpSecrets>,
-    pub project: String,
+    pub owner: SecretOwner,
     pub server: String,
 }
 
 #[async_trait::async_trait]
 impl CredentialStore for VaultCredentialStore {
     async fn load(&self) -> Result<Option<StoredCredentials>, AuthError> {
-        Ok(read_slot(self.secrets.as_ref(), &self.project, &self.server)?.credentials)
+        Ok(read_slot(self.secrets.as_ref(), &self.owner, &self.server)?.credentials)
     }
 
     async fn save(&self, credentials: StoredCredentials) -> Result<(), AuthError> {
-        let mut slot = read_slot(self.secrets.as_ref(), &self.project, &self.server)?;
+        let mut slot = read_slot(self.secrets.as_ref(), &self.owner, &self.server)?;
         slot.credentials = Some(credentials);
-        write_slot(self.secrets.as_ref(), &self.project, &self.server, &slot)
+        write_slot(self.secrets.as_ref(), &self.owner, &self.server, &slot)
     }
 
     async fn clear(&self) -> Result<(), AuthError> {
-        drop_tokens(self.secrets.as_ref(), &self.project, &self.server)
+        drop_tokens(self.secrets.as_ref(), &self.owner, &self.server)
     }
 
     /// MCS-FR-SQWD: a refused refresh removes the tokens.
@@ -115,7 +119,7 @@ impl CredentialStore for VaultCredentialStore {
         &self,
         _credentials: &StoredCredentials,
     ) -> Result<(), AuthError> {
-        drop_tokens(self.secrets.as_ref(), &self.project, &self.server)
+        drop_tokens(self.secrets.as_ref(), &self.owner, &self.server)
     }
 }
 
@@ -144,7 +148,7 @@ pub async fn authorized_manager(
 ) -> Result<AuthorizationManager, ConnectError> {
     let store = VaultCredentialStore {
         secrets: Arc::clone(&request.secrets),
-        project: request.project_key.clone(),
+        owner: request.owner.clone(),
         server: request.server.id.clone(),
     };
     let mut manager = new_manager(&http.url, client, store)
@@ -159,14 +163,13 @@ pub async fn authorized_manager(
     if let Some(client_id) = &http.client_id {
         let secret = request
             .secrets
-            .get(&request.project_key, &request.server.id, OAUTH_CLIENT_SECRET_SLOT)
+            .get(&request.owner, &request.server.id, OAUTH_CLIENT_SECRET_SLOT)
             .map_err(|_| ConnectError::Failure(McpFailure::KeychainUnavailable))?;
         if let Some(secret) = secret {
-            let redirect =
-                read_slot(request.secrets.as_ref(), &request.project_key, &request.server.id)
-                    .ok()
-                    .and_then(|slot| slot.registration.map(|r| r.redirect_uri))
-                    .unwrap_or_else(|| format!("http://127.0.0.1{CALLBACK_PATH}"));
+            let redirect = read_slot(request.secrets.as_ref(), &request.owner, &request.server.id)
+                .ok()
+                .and_then(|slot| slot.registration.map(|r| r.redirect_uri))
+                .unwrap_or_else(|| format!("http://127.0.0.1{CALLBACK_PATH}"));
             let config = rmcp::transport::auth::OAuthClientConfig::new(client_id.clone(), redirect)
                 .with_client_secret(secret)
                 .with_scopes(http.scopes.clone());
@@ -362,7 +365,8 @@ pub fn state_of(auth_url: &str) -> Option<String> {
 
 /// What one sign-in is given.
 pub struct SignInRequest {
-    pub project_key: String,
+    /// Where the secrets of the server are (MCS-FR-SBND, MCS-FR-VHBK).
+    pub owner: SecretOwner,
     pub server_id: String,
     pub http: HttpTransport,
     pub secrets: Arc<dyn McpSecrets>,
@@ -379,8 +383,8 @@ pub async fn sign_in(
     open: impl FnOnce(&str) -> Result<(), ()>,
 ) -> Result<(), McpFailure> {
     let failed = |_| McpFailure::OauthFailed;
-    let SignInRequest { project_key, server_id, http, secrets, still_current } = request;
-    let slot = read_slot(secrets.as_ref(), &project_key, &server_id)
+    let SignInRequest { owner, server_id, http, secrets, still_current } = request;
+    let slot = read_slot(secrets.as_ref(), &owner, &server_id)
         .map_err(|_| McpFailure::KeychainUnavailable)?;
 
     // MCS-FR-PJNN: a registered client is reused on the port it was registered
@@ -404,7 +408,7 @@ pub async fn sign_in(
     let (client, _tls) = crate::tls::rig_http_client().map_err(|_| McpFailure::OauthFailed)?;
     let store = VaultCredentialStore {
         secrets: Arc::clone(&secrets),
-        project: project_key.clone(),
+        owner: owner.clone(),
         server: server_id.clone(),
     };
     let mut manager = new_manager(&http.url, client, store).await.map_err(|e| match e {
@@ -425,7 +429,7 @@ pub async fn sign_in(
     if let Some(client_id) = &http.client_id {
         authorization = authorization.with_preregistered_client(client_id.clone());
         let secret = secrets
-            .get(&project_key, &server_id, OAUTH_CLIENT_SECRET_SLOT)
+            .get(&owner, &server_id, OAUTH_CLIENT_SECRET_SLOT)
             .map_err(|_| McpFailure::KeychainUnavailable)?;
         if let Some(secret) = secret {
             authorization = authorization.with_client_secret(secret);
@@ -453,7 +457,7 @@ pub async fn sign_in(
         return Err(McpFailure::OauthFailed);
     }
     if !still_current() {
-        let _ = drop_tokens(secrets.as_ref(), &project_key, &server_id);
+        let _ = drop_tokens(secrets.as_ref(), &owner, &server_id);
         answer(stream, false).await;
         return Err(McpFailure::OauthFailed);
     }
@@ -461,12 +465,12 @@ pub async fn sign_in(
     // client is the record's, so nothing is kept for it.
     if http.client_id.is_none() {
         let client_id = session.get_credentials().await.map(|(client_id, _)| client_id).ok();
-        let mut slot = read_slot(secrets.as_ref(), &project_key, &server_id)
+        let mut slot = read_slot(secrets.as_ref(), &owner, &server_id)
             .map_err(|_| McpFailure::KeychainUnavailable)?;
         if let Some(client_id) = client_id {
             slot.registration = Some(Registration { client_id, redirect_uri });
         }
-        write_slot(secrets.as_ref(), &project_key, &server_id, &slot)
+        write_slot(secrets.as_ref(), &owner, &server_id, &slot)
             .map_err(|_| McpFailure::KeychainUnavailable)?;
     }
     answer(stream, true).await;

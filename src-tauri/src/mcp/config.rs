@@ -418,7 +418,7 @@ fn map_of(table: &toml::Table, key: &str) -> Result<BTreeMap<String, String>, ()
 }
 
 /// Read one table into a record, then validate it.
-fn from_toml(table: &toml::Table) -> Result<McpServer, McpConfigError> {
+pub(crate) fn from_toml(table: &toml::Table) -> Result<McpServer, McpConfigError> {
     let id = str_of(table, "id").ok_or(McpConfigError::InvalidId)?;
     let name = str_of(table, "name").ok_or(McpConfigError::InvalidName)?;
     // An absent `enabled` is true; a value that is not a boolean is false, so
@@ -471,7 +471,7 @@ fn map_value(map: &BTreeMap<String, String>) -> toml::Value {
 }
 
 /// One record as the file holds it. Empty optional values are left out.
-fn to_toml(server: &McpServer) -> toml::Table {
+pub(crate) fn to_toml(server: &McpServer) -> toml::Table {
     let mut table = toml::Table::new();
     table.insert("id".into(), toml::Value::String(server.id.clone()));
     table.insert("name".into(), toml::Value::String(server.name.clone()));
@@ -535,8 +535,14 @@ pub fn list_records(root: &crate::fs::RootFs) -> Result<Vec<ListedRecord>, Strin
 }
 
 pub fn records_of(public: &toml::Table) -> Vec<ListedRecord> {
+    records_of_tables(&tables_of(public))
+}
+
+/// The records of one list of tables, in order. A later record with the id of
+/// an earlier one is `duplicate_id` (MCS-FR-HBOD).
+pub fn records_of_tables(tables: &[toml::Table]) -> Vec<ListedRecord> {
     let mut seen = std::collections::HashSet::new();
-    tables_of(public)
+    tables
         .iter()
         .map(|table| {
             let id = str_of(table, "id").unwrap_or_default();

@@ -17,6 +17,8 @@ import { NOT_HANDLED } from "./mock-github-polling";
 type Tool = { name: string; description: string; disabled: boolean };
 type Entry = {
   id: string;
+  scope?: "team" | "personal_project" | "personal_all";
+  enabledHere?: boolean;
   record: any | null;
   invalid: string | null;
   status: any;
@@ -159,10 +161,44 @@ function seed(): Entry[] {
       secrets: [],
       tools: [],
     },
-  ];
+    // MSS-FR-POYD: the author's own servers, of this project and of all projects.
+    {
+      id: "notes",
+      scope: "personal_project",
+      record: record("notes", "My notes", stdio({ command: "notes-mcp", args: ["serve"] })),
+      invalid: null,
+      status: { state: "ready", toolCount: 2 },
+      secrets: [],
+      tools: [
+        { name: "find_note", description: "Find a note by its title.", disabled: false },
+        { name: "add_note", description: "Add a note.", disabled: false },
+      ],
+    },
+    {
+      id: "scratch",
+      scope: "personal_all",
+      record: record("scratch", "Scratch DB", http({ url: "http://localhost:7777/mcp" })),
+      invalid: null,
+      status: { state: "failed", failure: "unreachable" },
+      secrets: [],
+      tools: [],
+    },
+    // MSS-FR-RAYC: a personal record whose ID a team record has.
+    {
+      id: "tracker",
+      scope: "personal_all",
+      record: null,
+      invalid: "duplicate_id",
+      status: { state: "invalid" },
+      secrets: [],
+      tools: [],
+    },
+  ].map((e: Entry) => ({ ...e, scope: e.scope ?? "team", enabledHere: e.record?.enabled ?? false }));
 }
 
 let entries: Entry[] = seed();
+/** MCS-FR-KKDO: the switches of the team servers on this computer. */
+const switches = new Map<string, boolean>();
 
 function fire(id: string, status: unknown, delay = 400) {
   setTimeout(() => {
@@ -186,7 +222,7 @@ function slotsOf(rec: any): string[] {
 
 function statusOf(e: Entry): unknown {
   const rec = e.record;
-  if (!rec.enabled) return { state: "disabled" };
+  if (!e.enabledHere) return { state: "disabled" };
   const missing = e.secrets.some((s) => !s.present && s.slot !== "oauth_client_secret");
   if (missing) return { state: "needs_secret" };
   if (rec.transport.kind === "http" && rec.transport.auth === "oauth2" && e.status.state !== "ready") {
@@ -196,6 +232,7 @@ function statusOf(e: Entry): unknown {
   return { state: "connecting" };
 }
 
+/** MCS-FR-EBJL: the active entry of an ID is the first entry of it. */
 function find(id: string): Entry {
   const e = entries.find((x) => x.id === id);
   if (!e) throw "not_found";
@@ -213,10 +250,15 @@ export function mcpInvoke(cmd: string, a: Record<string, any>): unknown {
       return entries.map(copy);
     case "save_mcp_server": {
       const rec = a.server;
-      const held = entries.find((x) => x.id === rec.id);
+      const scope = a.scope ?? "team";
+      const held = entries.find((x) => x.id === rec.id && x.scope === scope);
+      // MCS-FR-HWNC: an ID is in one scope alone.
+      if (entries.some((x) => x.id === rec.id && x.scope !== scope)) return Promise.reject("duplicate_id");
       const present = new Set((held?.secrets ?? []).filter((s) => s.present).map((s) => s.slot));
       const entry: Entry = {
         id: rec.id,
+        scope,
+        enabledHere: scope === "team" ? (switches.get(rec.id) ?? rec.enabled) : rec.enabled,
         record: rec,
         invalid: null,
         status: held?.status ?? { state: "connecting" },
@@ -225,17 +267,34 @@ export function mcpInvoke(cmd: string, a: Record<string, any>): unknown {
       };
       entry.tools = entry.tools.map((t) => ({ ...t, disabled: rec.disabledTools.includes(t.name) }));
       entry.status = statusOf(entry);
-      if (held) entries = entries.map((x) => (x.id === rec.id ? entry : x));
+      if (held) entries = entries.map((x) => (x === held ? entry : x));
       else entries.push(entry);
       if (entry.status && (entry.status as any).state === "connecting") {
         fire(rec.id, { state: "ready", toolCount: entry.tools.length });
       }
       return copy(entry);
     }
-    case "remove_mcp_server":
-      find(a.id);
-      entries = entries.filter((x) => x.id !== a.id);
+    case "remove_mcp_server": {
+      const scope = a.scope ?? "team";
+      if (!entries.some((x) => x.id === a.id && x.scope === scope)) return Promise.reject("not_found");
+      entries = entries.filter((x) => !(x.id === a.id && x.scope === scope));
+      if (scope === "team") switches.delete(a.id);
       return undefined;
+    }
+    case "set_mcp_server_enabled": {
+      const e = find(a.id);
+      if (!e.record) return Promise.reject("not_found");
+      if (e.scope === "team") {
+        if (a.enabled === e.record.enabled) switches.delete(a.id);
+        else switches.set(a.id, a.enabled);
+      } else {
+        e.record = { ...e.record, enabled: a.enabled };
+      }
+      e.enabledHere = a.enabled;
+      e.status = statusOf(e);
+      if (e.status.state === "connecting") fire(e.id, { state: "ready", toolCount: e.tools.length });
+      return copy(e);
+    }
     case "set_mcp_server_secret":
     case "clear_mcp_server_secret": {
       const e = find(a.id);

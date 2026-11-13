@@ -10,7 +10,7 @@
  * when the proposal closes. The proposed text of a change stays editable, in a
  * plain text field in its block.
  */
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { findNearest } from "../../state/commentAnchors";
 import { HUNK_ATTR, HUNK_CLASS, hunkLabel, type DecoratedHunk } from "../DraftDiscussion";
@@ -88,6 +88,7 @@ export function SourceReview({
   text,
   review,
   note = SOURCE_REVIEW_NOTE,
+  segment,
 }: {
   /** The file text as the session holds it. */
   text: string;
@@ -97,6 +98,12 @@ export function SourceReview({
    * (OCW-FR-COLR) never edits its files, so it states nothing here.
    */
   note?: string | null;
+  /**
+   * CMT-FR-28: how a part of the file's own text is drawn: the text that no
+   * hunk changes, and the text a hunk strikes through. The change workspace
+   * marks its fragment discussions there. The default is the text itself.
+   */
+  segment?: (from: number, to: number) => ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const placed = useMemo(() => placeOnSource(text, review.hunks), [text, review.hunks]);
@@ -109,10 +116,12 @@ export function SourceReview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placedIds]);
 
+  const plain = (from: number, to: number): ReactNode =>
+    segment ? <Fragment key={`text:${from}`}>{segment(from, to)}</Fragment> : text.slice(from, to);
   const parts: ReactNode[] = [];
   let cursor = 0;
   for (const hunk of placed) {
-    if (hunk.from > cursor) parts.push(text.slice(cursor, hunk.from));
+    if (hunk.from > cursor) parts.push(plain(cursor, hunk.from));
     const isFocused = String(hunk.id === review.focused);
     // DCR-FR-07: the text a change removes, struck through where it stands.
     if (hunk.kind !== "add" && hunk.to > hunk.from) {
@@ -123,7 +132,7 @@ export function SourceReview({
           {...{ [HUNK_ATTR]: hunk.id }}
           data-focused={isFocused}
         >
-          {text.slice(hunk.from, hunk.to)}
+          {plain(hunk.from, hunk.to)}
         </span>,
       );
     }
@@ -170,7 +179,7 @@ export function SourceReview({
     }
     cursor = hunk.to;
   }
-  if (cursor < text.length) parts.push(text.slice(cursor));
+  if (cursor < text.length) parts.push(plain(cursor, text.length));
 
   return (
     <div

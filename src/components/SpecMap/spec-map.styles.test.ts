@@ -266,3 +266,11 @@ describe("the failure notice of a failed load (SMP-FR-KBXW)", () => {
     expect(decl(rule, "justify-content")).toBe("flex-start");
   });
 });
+
+describe("the validation notice line (SMP-FR-KVKD)", () => {
+  it("SMP-FR-KVKD, OFN-FR-IHSQ: Details takes a line of its own at the full width, so the sentence does not move when it opens", () => {
+    const rule = only(".smap-notice__details");
+    expect(decl(rule, "flex")).toBe("1 1 100%");
+    expect(decl(only(".smap-notice"), "flex-wrap")).toBe("wrap");
+  });
+});

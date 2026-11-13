@@ -230,6 +230,29 @@ describe("Details", () => {
     { message: "a\u0007bell" },
   ];
 
+
+  it("OFN-FR-KMPW: Details that open scroll into view in their container, and closed Details scroll nothing", async () => {
+    // jsdom has no scrollIntoView, so the test installs one and removes it.
+    const scrolled: Element[] = [];
+    const spy = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    const saved = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+    Object.defineProperty(Element.prototype, "scrollIntoView", { value: spy, configurable: true, writable: true });
+    try {
+      render(<OpenSpecFailureNotice failure={f({ code: "cli_rejected", diagnostics })} surface="test" />);
+      expect(scrolled).toEqual([]);
+      await userEvent.click(screen.getByRole("button", { name: /Details/ }));
+      expect(scrolled).toEqual([screen.getByTestId("openspec-failure-details")]);
+      expect(spy).toHaveBeenCalledWith({ block: "nearest" });
+      // Closing Details scrolls nothing.
+      await userEvent.click(screen.getByRole("button", { name: /Details/ }));
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      if (saved) Object.defineProperty(Element.prototype, "scrollIntoView", saved);
+      else delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
   it("OFN-FR-IHSQ, OFN-FR-ONNF: Details is a closed disclosure that carries its state, and lists each diagnostic on its own line", async () => {
     render(<OpenSpecFailureNotice failure={f({ code: "cli_rejected", diagnostics })} surface="test" />);
     const toggle = screen.getByRole("button", { name: /Details/ });

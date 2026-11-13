@@ -10,6 +10,7 @@ import type { ChangeArtifact, ChangeDetail, ChangeEditProposal, ChangeFile } fro
 import { ArtifactNav, NavLayout, useCollapsedList, type NavItem } from "./ArtifactNav";
 import { ArtifactView, type FileViewing } from "./ArtifactView";
 import type { ChangeSelection } from "./ChangeDiscussion";
+import type { FragmentMarks } from "./fragmentMarks";
 import {
   modeOf,
   pathsWithHunks,
@@ -37,6 +38,7 @@ export function ChangeBody({
   pathOf,
   refusal,
   onComment,
+  marks,
   onOpenFile,
 }: {
   detail: ChangeDetail;
@@ -52,6 +54,7 @@ export function ChangeBody({
   pathOf?: (hunkId: string) => string | undefined;
   refusal?: HunkRefusal | null;
   onComment?: (selection: ChangeSelection) => void;
+  marks?: FragmentMarks;
   onOpenFile?: (file: ChangeFile) => void;
 }) {
   const counts = useMemo(() => undecidedByArtifact(detail, pending), [detail, pending]);
@@ -75,6 +78,7 @@ export function ChangeBody({
     refusalFor: (path) =>
       refusal && pathOf && pathOf(refusal.hunkId) === path ? refusal.message : null,
     onComment,
+    marks,
     onOpenFile,
   };
 

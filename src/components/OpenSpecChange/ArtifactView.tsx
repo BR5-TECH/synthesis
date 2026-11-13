@@ -16,6 +16,7 @@ import type { ChangeSelection } from "./ChangeDiscussion";
 import type { FileMode, ShownFile } from "./changeFiles";
 import { ChangeImages, ChangeMarkdown, type ChangeImageSource } from "./ChangeMarkdown";
 import { DeltaList, capabilityFile } from "./Deltas";
+import type { FragmentMarks } from "./fragmentMarks";
 import { SourceView } from "./SourceView";
 
 /** OCW-FR-NOTT / OCW-FR-OUXA: the artifact that renders as deltas. */
@@ -30,6 +31,8 @@ export interface FileViewing {
   refusalFor: (path: string) => string | null;
   /** OCW-FR-JBFZ: present on a stream location alone. */
   onComment?: (selection: ChangeSelection) => void;
+  /** CMT-FR-28: the fragment discussions to mark, on a stream alone. */
+  marks?: FragmentMarks;
   /** OCW-FR-UOKM: present for the active worktree alone. */
   onOpenFile?: (file: ChangeFile) => void;
 }
@@ -72,6 +75,7 @@ function sourceOf(file: ShownFile, viewing: FileViewing): ReactNode {
       review={viewing.reviewFor(file.path)}
       refusal={viewing.refusalFor(file.path)}
       onComment={viewing.onComment}
+      marks={viewing.marks}
     />
   );
 }

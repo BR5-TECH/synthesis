@@ -10,12 +10,10 @@ import {
 } from "../state/toasts";
 
 /**
- * The shell's top-chrome row height, from `src/styles/kit.css`'s
- * `grid-template-rows: 44px 1fr auto`. Duplicated here rather than measured
- * because the stack must be positioned before its first paint; pinned by a test
- * so the two cannot drift apart silently.
+ * NTF-FR-LAWP: the height of the status bar (STB-FR-01), as its stylesheet
+ * gives it, so the stack stands immediately above it.
  */
-export const TOP_CHROME_HEIGHT_PX = 44;
+export const STATUS_BAR_HEIGHT = "calc(var(--font-ui-size) * 26 / 13)";
 
 const LEVEL_ICON = {
   Info: Icon.Info,
@@ -206,17 +204,18 @@ function ToastItem({
  * The toast stack of the notification facility (`NTF-notifications.md`
  * NTF-FR-HZNF, NTF-FR-LAWP, NTF-FR-BVCG).
  *
- * Anchored at the top-trailing corner of the shell, below the top chrome, so it
- * is clear of the tab strip's controls, of the band above an Editor's editing
- * surface (EFR-FR-AVML), and of the action control every tab carries in its
- * opposite corner (ACT-FR-01).
+ * Anchored at the bottom-trailing corner of the shell, immediately above the
+ * status bar (STB-FR-01), so it covers no tab header, no control of the tab
+ * strip, no band above an Editor's editing surface (EFR-FR-AVML), no action
+ * control of a tab (ACT-FR-01), and no control of the status bar. The newest
+ * toast is nearest the corner (NTF-FR-HZNF).
  *
  * It is **not** one of the main window's mutually-exclusive floating overlays
  * (SNV-FR-56): it takes no focus and may show while a modal or a dropdown is
  * open. `pointerEvents` is `none` on the region and `auto` on each toast, which
  * makes "intercepts no pointer event outside the toasts" a property of the
  * layout rather than a promise. `fixed` resolves against the viewport, which is
- * what "below the top chrome" means at the App root.
+ * what "above the status bar" means at the App root.
  */
 export function NotificationToasts({
   onActivate,
@@ -230,14 +229,15 @@ export function NotificationToasts({
       data-testid="notification-toast-stack"
       style={{
         position: "fixed",
-        top: TOP_CHROME_HEIGHT_PX + 8,
+        bottom: `calc(${STATUS_BAR_HEIGHT} + 8px)`,
         right: 12,
         zIndex: 250,
         pointerEvents: "none",
         width: 360,
         maxWidth: "40vw",
         display: "flex",
-        flexDirection: "column",
+        // NTF-FR-HZNF: the newest toast comes first, nearest the corner.
+        flexDirection: "column-reverse",
         gap: 8,
       }}
     >

@@ -8,7 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 
-import { NotificationToasts, TOP_CHROME_HEIGHT_PX } from "./NotificationToasts";
+import { NotificationToasts, STATUS_BAR_HEIGHT } from "./NotificationToasts";
+import { blocksFor, decl, sheet } from "../test/cssRules";
 import { readStylesheet } from "../test/readStylesheet";
 import {
   INFO_TOAST_MS,
@@ -202,7 +203,7 @@ describe("the Info timer (NTF-FR-YJAE) and the persistence of Warn and Error (NT
 });
 
 describe("the stack (NTF-FR-HZNF, NTF-FR-SXTI)", () => {
-  it("NTF-FR-HZNF: shows the newest toast on top and at most three", () => {
+  it("NTF-FR-HZNF: shows the newest toast nearest the corner and at most three", () => {
     renderStack();
     show(
       input("a", { level: "Warn" }),
@@ -215,6 +216,10 @@ describe("the stack (NTF-FR-HZNF, NTF-FR-SXTI)", () => {
       "b",
       "a",
     ]);
+    // The first toast in the DOM is drawn at the bottom, nearest the corner.
+    expect(screen.getByTestId("notification-toast-stack").style.flexDirection).toBe(
+      "column-reverse",
+    );
   });
 
   it("NTF-FR-SXTI: a queued toast shows when a slot frees", () => {
@@ -399,22 +404,20 @@ describe("accessibility (NTF-FR-BVCG, NTF-FR-OPCD)", () => {
 });
 
 describe("layout (NTF-FR-LAWP, NTF-FR-21, NTF-FR-BVCG)", () => {
-  it("NTF-FR-LAWP: anchors to the viewport's top-trailing corner below the top chrome", () => {
+  it("NTF-FR-LAWP: anchors to the viewport's bottom-trailing corner above the status bar", () => {
     renderStack();
     show(input("a"));
     const stack = screen.getByTestId("notification-toast-stack");
     expect(stack.style.position).toBe("fixed");
-    expect(parseInt(stack.style.top, 10)).toBeGreaterThanOrEqual(
-      TOP_CHROME_HEIGHT_PX,
-    );
+    expect(stack.style.bottom).toBe(`calc(${STATUS_BAR_HEIGHT} + 8px)`);
+    expect(stack.style.top).toBe("");
     expect(stack.style.right).not.toBe("");
   });
 
-  it("NTF-FR-LAWP: keeps its chrome-height constant in step with the stylesheet", () => {
-    const css = readStylesheet("kit.css");
-    expect(css).toContain(
-      `grid-template-rows: ${TOP_CHROME_HEIGHT_PX}px 1fr auto`,
-    );
+  it("NTF-FR-LAWP: keeps its status-bar height in step with the stylesheet", () => {
+    const [bar] = blocksFor(sheet("kit.css"), ".status-bar");
+    expect(bar, "no rule for .status-bar").toBeDefined();
+    expect(decl(bar, "min-height")).toBe(STATUS_BAR_HEIGHT);
   });
 
   it("NTF-FR-BVCG, NTF-FR-21: the region intercepts no pointer event; only the toasts do", () => {

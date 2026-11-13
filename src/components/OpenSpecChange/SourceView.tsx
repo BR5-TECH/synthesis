@@ -8,11 +8,12 @@
  * (`../Editor/SourceReview.tsx`). On a stream, a selection offers a fragment
  * discussion of the file, as a range in this text.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { SourceReview } from "../Editor/SourceReview";
 import type { EditorReview } from "../Editor/props";
 import type { ChangeSelection } from "./ChangeDiscussion";
+import { markedText, marksIn, type FragmentMarks } from "./fragmentMarks";
 
 /** What a decorated text draws that is not the file's own text. */
 const NOT_SOURCE = ".hunk--source-block, [role='note'], textarea";
@@ -46,6 +47,7 @@ export function SourceView({
   review,
   refusal,
   onComment,
+  marks,
 }: {
   /** The change-relative path of the file. */
   path: string;
@@ -56,7 +58,16 @@ export function SourceView({
   refusal?: string | null;
   /** OCW-FR-JBFZ: present on a stream location alone. */
   onComment?: (selection: ChangeSelection) => void;
+  /** CMT-FR-28: the fragment discussions of the change, on a stream alone. */
+  marks?: FragmentMarks;
 }) {
+  const placed = useMemo(
+    () => (marks ? marksIn(path, text, marks.discussions) : []),
+    [marks, path, text],
+  );
+  const segment = marks && placed.length > 0
+    ? (from: number, to: number) => markedText(text, from, to, placed, marks)
+    : undefined;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [selection, setSelection] = useState<ChangeSelection | null>(null);
 
@@ -106,10 +117,10 @@ export function SourceView({
       )}
       <div ref={hostRef} onMouseUp={readSelection} onKeyUp={readSelection}>
         {review ? (
-          <SourceReview text={text} review={review} note={null} />
+          <SourceReview text={text} review={review} note={null} segment={segment} />
         ) : (
           <pre className="openspec-source__text" data-testid="openspec-source-text">
-            {text}
+            {segment ? segment(0, text.length) : text}
           </pre>
         )}
       </div>

@@ -297,6 +297,7 @@ function ChangeWorkspace({
         pathOf={stream?.review.pathOf}
         refusal={stream?.review.refusal}
         onComment={stream?.onComment}
+        marks={stream?.marks}
         onOpenFile={onOpenFile}
       />
     );

@@ -23,6 +23,7 @@ The application writes to a main branch only when the author says so. A main bra
 15. **MBW-FR-QKVA** Opening, viewing, or listing a draft or an artifact never shows a confirmation or a block, also on a main branch and also on a branch that GitHub protects. Opening the next draft or artifact shows none either. The guard that an editing surface reads when it opens a file (per `EDT-editor.md` EDT-FR-QXEK) shows no interface. The confirmation shows at the first change of the author only.
 16. **MBW-FR-HXTE** The confirmation never shows for a pull of any kind, that is a plain pull and the merge or rebase that joins a diverged branch with its upstream, for a rollback, or for a discard. The author decided that a rollback and a discard are not confirmed. The pull dialog holds no inline confirmation section.
 17. **MBW-FR-ZLPC** A push that GitHub refuses on a confirmed protected branch shows the reason of GitHub in words, in the action that failed. The surface does not replace the reason with the text of the confirmation.
+18. **MBW-FR-UQXR** An inline section that appears inside a scrolled container, such as the stream list, scrolls into view in that container with its actions, so Confirm and Cancel are visible without a scroll by the author.
 
 ## Wireframes
 

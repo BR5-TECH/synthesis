@@ -62,3 +62,15 @@ describe("the review bar of a change", () => {
     expect(decl(button, "margin-inline-start")).toBe("auto");
   });
 });
+
+describe("the review of a file in Source", () => {
+  it("OCW-FR-GCME, OCW-FR-COLR: the review clips nothing, so a chip wider than a narrow file stands in the reading pane", () => {
+    const css = sheet("components.css");
+    const [review] = blocksFor(css, ".openspec-source .editor__source-review");
+    expect(review, "no rule for the review in the change workspace").toBeDefined();
+    expect(decl(review, "overflow")).toBe("visible");
+    const [text] = blocksFor(css, ".openspec-source .editor__source-review-text");
+    expect(text, "no rule for the review text in the change workspace").toBeDefined();
+    expect(decl(text, "padding-inline")).toBe("var(--sp-3)");
+  });
+});

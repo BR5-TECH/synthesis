@@ -138,7 +138,10 @@
   flex-wrap: wrap;
 }
 .smap-notice > svg { flex: none; color: var(--warn); }
-.smap-notice__details { flex: 1 1 12rem; min-width: 0; }
+/* OFN layout notes: Details stands on a line of its own below the sentence,
+   at the full width of the notice, so opening it grows the notice downward
+   and moves the sentence nowhere. */
+.smap-notice__details { flex: 1 1 100%; min-width: 0; }
 /* SMP-FR-KBXW: the notice of a failed load stands where the statement stood. */
 .smap-state__notice { max-width: 36rem; margin-inline: auto; }
 

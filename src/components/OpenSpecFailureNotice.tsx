@@ -96,6 +96,13 @@ export function OpenSpecFailureNotice({
   const [copied, setCopied] = useState(false);
   const live = useRef(true);
   const detailsId = useId();
+  const detailsRef = useRef<HTMLDivElement | null>(null);
+
+  // OFN-FR-KMPW: Details that open in a scrolled container, such as the
+  // merge confirmation of the stream list, come into view.
+  useEffect(() => {
+    if (open) detailsRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [open]);
 
   useEffect(() => {
     live.current = true;
@@ -269,7 +276,13 @@ export function OpenSpecFailureNotice({
       {open && diagnostics.length > 0 && (
         // OFN-FR-ONNF: Details is not live, also where a host region is, such
         // as the comment log of a discussion. Only "Copied." is announced.
-        <div className="ofn__details" id={detailsId} aria-live="off" data-testid="openspec-failure-details">
+        <div
+          ref={detailsRef}
+          className="ofn__details"
+          id={detailsId}
+          aria-live="off"
+          data-testid="openspec-failure-details"
+        >
           <div className="ofn__details-head">
             <span className="ofn__copied t-meta" role="status">
               {copied ? "Copied." : ""}

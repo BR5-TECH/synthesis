@@ -22,6 +22,7 @@ A **failure notice** is the one way the frontend states an OpenSpec failure. Eac
 14. **OFN-FR-ONNF** A notice that appears is announced once to assistive technology. Details is a button that carries its open state, and every action is reachable with the keyboard alone.
 15. **OFN-FR-LKAT** Each notice that appears emits through `../core/LGC-logging.md`'s frontend helpers under the `frontend` domain one `WARN` record with the surface, the code, the cause, and the class. No record holds a diagnostic, a `detail` other than a CLI state, or a change name.
 16. **OFN-FR-HEVB** The notice is used by these surfaces: the reads and the starts of the change workspace (per `OCW-openspec-change-workspace.md` OCW-FR-RFGG, OCW-FR-PFUQ, OCW-FR-EKYF, OCW-FR-CTWP, OCW-FR-BTSI), the propose start (per `GSD-graduation-start-dialog.md` GSD-FR-RFIG), the run region (per `GRU-graduation-runs.md` GRU-FR-LBPR, GRU-FR-BPNJ, GRU-FR-PXCW), the stream row (per `WSS-work-stream-selector.md` WSS-FR-NTGC), and the Spec Map (per `SMP-specification-map.md` SMP-FR-KBXW, SMP-FR-KVKD).
+17. **OFN-FR-KMPW** Details that open inside a scrolled container, such as the merge confirmation of the stream list, scroll into view in that container. Details that are already in view move nothing.
 
 ## Wireframes
 

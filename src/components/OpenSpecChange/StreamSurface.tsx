@@ -8,8 +8,10 @@
  * edit proposal with its bar, the History rail and the version it shows, and
  * the split of the change with its Confirm split.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { logDebug } from "../../logging";
+import { setColumnHidden } from "../../state/discussionColumn";
 import { pendingChangeProposalOf } from "../../state/openspec/changeProposals";
 import { useNewChangeProposals } from "../../state/openspec/newChangeProposals";
 import type { ChangeDetail, FragmentTarget } from "../../types";
@@ -17,6 +19,7 @@ import { railStacksAt, useWidthRule } from "./ArtifactNav";
 import { ChangeDiscussionSplit, useChangeDiscussion } from "./ChangeDiscussion";
 import { ChangeHistoryRail } from "./ChangeHistoryRail";
 import { ChangeReviewBar } from "./ChangeReviewBar";
+import type { FragmentMarks } from "./fragmentMarks";
 import { ConfirmSplitBar, SplitMarker, offersConfirmSplit, useChangeSplit } from "./ChangeSplit";
 import { useChangeHistory } from "./useChangeHistory";
 import { PLAN_QUESTIONS_FIRST, useChangeReview } from "./useChangeReview";
@@ -26,6 +29,8 @@ import { VersionView } from "./VersionView";
 export interface StreamReview {
   review: ReturnType<typeof useChangeReview>;
   onComment: ReturnType<typeof useChangeDiscussion>["commentOn"];
+  /** CMT-FR-28: the fragment discussions that the Source marks. */
+  marks: FragmentMarks;
 }
 
 /**
@@ -81,6 +86,27 @@ export function StreamSurface({
   render: (stream: StreamReview) => ReactNode;
 }) {
   const discussion = useChangeDiscussion(streamId, change);
+  const { columnDiscussions, focusedThreadId, setFocusedThreadId, column } = discussion;
+  /**
+   * CMT-FR-28: the open fragment discussions are marked in the Source. A mark
+   * that is activated shows the column where it is hidden and focuses its
+   * discussion there.
+   */
+  const marks = useMemo<FragmentMarks>(
+    () => ({
+      discussions: columnDiscussions,
+      focused: focusedThreadId,
+      onActivate: (threadId) => {
+        logDebug(["frontend"], "a fragment mark of a change selects its discussion", {
+          streamId,
+          threadId,
+        });
+        setColumnHidden(column, false);
+        setFocusedThreadId(threadId);
+      },
+    }),
+    [columnDiscussions, focusedThreadId, setFocusedThreadId, column, streamId],
+  );
   const { discussHunk, discussNewChange } = discussion;
   const onDiscussHunk = useCallback(
     (hunkId: string) => discussHunk(pendingChangeProposalOf(streamId, change), hunkId),
@@ -149,7 +175,7 @@ export function StreamSurface({
               {splitShown && (
                 <ConfirmSplitBar streamId={streamId} change={change} proposals={split.proposals} />
               )}
-              {render({ review, onComment: discussion.commentOn })}
+              {render({ review, onComment: discussion.commentOn, marks })}
             </>
           )}
         </div>

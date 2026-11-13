@@ -52,6 +52,7 @@ import {
   type ChangeBackend,
 } from "../../test/changeWorkspaceFixtures";
 import { sourceOffsets } from "./SourceView";
+import { changeColumn, setColumnHidden } from "../../state/discussionColumn";
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
@@ -146,6 +147,82 @@ describe("fragment discussions of a file", () => {
         end: start + "cannot log out".length,
         quote: "cannot log out",
       },
+    });
+  });
+
+  it("CMT-FR-28, CMT-FR-AYSL: the Source marks each open fragment discussion of the file, and a mark selects its discussion", async () => {
+    backend.proposals = [];
+    drawChange({ file: "proposal.md" });
+    await userEvent.click(await screen.findByRole("button", { name: "Source" }));
+    const mark = await screen.findByTestId("openspec-fragment-mark");
+    expect(mark).toHaveTextContent("# Why");
+    expect(mark).toHaveAttribute("aria-label", "Fragment of discussion t2");
+    expect(screen.getByTestId("openspec-source-text").textContent).toBe(PROPOSAL_TEXT);
+    await userEvent.click(mark);
+    const column = screen.getByTestId("openspec-change-discussion");
+    await waitFor(() =>
+      expect(within(column).getByRole("tab", { selected: true })).toHaveAttribute("data-target", "fragment"),
+    );
+    expect(screen.getByTestId("openspec-fragment-mark")).toHaveAttribute(
+      "aria-label",
+      "Fragment of discussion t2 (focused)",
+    );
+  });
+
+  it("CMT-FR-28, OCW-FR-COLR: a file that holds hunks marks its fragment discussions, also inside the text a hunk strikes through", async () => {
+    const [, t2] = backend.discussions;
+    const start = PROPOSAL_TEXT.indexOf("cannot log out");
+    backend.discussions.push({
+      ...t2,
+      id: "t3",
+      fragmentTarget: { owner: TARGET, path: "proposal.md", start, end: start + 14, quote: "cannot log out" },
+    });
+    drawChange({ file: "proposal.md" });
+    await userEvent.click(await screen.findByRole("button", { name: "Source" }));
+    await waitFor(() => expect(screen.getAllByTestId("openspec-fragment-mark")).toHaveLength(2));
+    const [heading, inside] = screen.getAllByTestId("openspec-fragment-mark");
+    expect(heading).toHaveAttribute("data-comment-thread", "t2");
+    expect(heading.closest(".hunk--del")).toBeNull();
+    expect(inside).toHaveAttribute("data-comment-thread", "t3");
+    expect(inside).toHaveTextContent("cannot log out");
+    // The struck text of hunk h1 holds the mark, and the hunk is still drawn.
+    expect(inside.closest(".hunk--del")).not.toBeNull();
+  });
+
+  it("CMT-FR-28: a mark activated while the column is hidden shows the column and focuses its discussion", async () => {
+    backend.proposals = [];
+    setColumnHidden(changeColumn(STREAM_ID, CHANGE), true);
+    drawChange({ file: "proposal.md" });
+    await userEvent.click(await screen.findByRole("button", { name: "Source" }));
+    const split = await screen.findByTestId("openspec-change-split");
+    expect(split).toHaveAttribute("data-discussion", "hidden");
+    await userEvent.click(await screen.findByTestId("openspec-fragment-mark"));
+    await waitFor(() => expect(split).toHaveAttribute("data-discussion", "shown"));
+    const column = screen.getByTestId("openspec-change-discussion");
+    expect(within(column).getByRole("tab", { selected: true })).toHaveAttribute("data-target", "fragment");
+  });
+
+  it("CMT-FR-AYSL, CMT-FR-28: a selection that starts inside a mark counts the file's own text", async () => {
+    backend.proposals = [];
+    drawChange({ file: "proposal.md" });
+    await userEvent.click(await screen.findByRole("button", { name: "Source" }));
+    const mark = await screen.findByTestId("openspec-fragment-mark");
+    const text = screen.getByTestId("openspec-source-text");
+    const after = mark.nextSibling!;
+    const range = document.createRange();
+    range.setStart(mark.firstChild!, 2);
+    range.setEnd(after, "\n\nUsers".length);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    act(() => {
+      text.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Discuss selection" }));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Discuss this change" }), "Why?");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    await waitFor(() => expect(calls("open_discussion")).toHaveLength(1));
+    expect(calls("open_discussion")[0][1]).toMatchObject({
+      fragmentTarget: { path: "proposal.md", start: 2, end: "# Why\n\nUsers".length, quote: "Why\n\nUsers" },
     });
   });
 

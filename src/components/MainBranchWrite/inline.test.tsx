@@ -119,6 +119,32 @@ describe("the commit message window (CMW-FR-RMCO)", () => {
     expect(calls("commit_paths")).toHaveLength(1);
   });
 
+  it("MBW-FR-UQXR: the section scrolls into view in its container, with its actions, once it can be confirmed", async () => {
+    // jsdom has no scrollIntoView, so the test installs one and removes it.
+    const scrolled: Element[] = [];
+    const spy = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    const saved = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+    Object.defineProperty(Element.prototype, "scrollIntoView", { value: spy, configurable: true, writable: true });
+    try {
+      scriptedReads(mainGuard());
+      commitWindow();
+      await userEvent.type(screen.getByLabelText("Commit message"), "a message");
+      const section = await screen.findByTestId("main-branch-write-section");
+      await screen.findByRole("button", { name: "Confirm write to main" });
+      await waitFor(() => expect(scrolled).toContain(section));
+      expect(spy).toHaveBeenCalledWith({ block: "nearest" });
+      // More typing renders the section again and scrolls nothing again.
+      const once = spy.mock.calls.length;
+      await userEvent.type(screen.getByLabelText("Commit message"), " more");
+      expect(spy.mock.calls.length).toBe(once);
+    } finally {
+      if (saved) Object.defineProperty(Element.prototype, "scrollIntoView", saved);
+      else delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it("MBW-FR-WCBQ, CMW-FR-04: a confirm by keyboard leaves focus in the window, on the message field", async () => {
     scriptedReads(mainGuard());
     commitWindow();

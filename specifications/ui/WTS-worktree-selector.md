@@ -128,7 +128,7 @@ Layout notes for the generator:
 - The pull control is an icon-only button sized to the chrome's control height, reading as a sibling of the selector rather than as part of it — it is outside the selector's activation area, so pressing it never opens the dropdown.
 - Its icon depicts material arriving from elsewhere — a downward arrow into a line, tray, or cloud — rather than the circular arrows of a generic reload, because what it does is reach the remote and bring back what is there (WTS-FR-37).
 - The pull control's busy state renders in place, within its own footprint, so the leading cluster does not reflow while a pull runs and the search bar does not shift.
-- A pull outcome shows in the toast stack at the top-trailing corner of the shell (per `NTF-notifications.md` NTF-FR-LAWP), not at the pull control and not inside the dropdown.
+- A pull outcome shows in the toast stack at the bottom-trailing corner of the shell (per `NTF-notifications.md` NTF-FR-LAWP), not at the pull control and not inside the dropdown.
 - The dropdown is anchored under the control. The filter input is the first focusable element inside it and is always the topmost row. Its label names what is on offer: worktrees and branches from the primary worktree, worktrees alone from a linked one.
 - Group headings (**Worktrees**, **Branches**) are non-interactive labels. Worktrees always precede Branches. Inside a linked worktree the **Branches** heading and its region are absent, and the **Worktrees** group runs straight into the divider above **New worktree…**.
 - A worktree row is two lines — branch (or detached marker) on the first, absolute path on the second. A branch row is one line.

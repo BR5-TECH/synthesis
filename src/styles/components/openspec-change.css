@@ -358,6 +358,13 @@
      letter a line. */
   min-width: 32ch;
 }
+/* OCW-FR-GCME, OCW-FR-COLR: in the change workspace the reading pane scrolls
+   the file, so the review of a file clips nothing of its own. A chip wider
+   than a narrow file then stands in the pane and not under its edge, and the
+   text keeps the inset of the plain Source in place of the editor's page
+   margins. */
+.openspec-source .editor__source-review { overflow: visible; }
+.openspec-source .editor__source-review-text { padding-inline: var(--sp-3); }
 /* OCW-FR-JBFZ: the offer to discuss the selected passage. */
 .openspec-source__comment { display: flex; justify-content: flex-end; margin-bottom: var(--sp-1-5); }
 /* OCW-FR-DTRX: a refused decision, stated at its hunk. */

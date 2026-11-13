@@ -34,6 +34,7 @@ ai api provider P    ->  ["ai_api",  "providers", P]
 voice ai provider P  ->  ["voice_ai", "providers", P]
 agentic vendor V     ->  ["agentic", "vendors",   V]
 project-scoped value ->  ["projects", <project_key>, <namespace>, <key>]
+mcp server I, slot S  ->  ["projects", <project_key>, "mcp", I, S]
 ```
 
 ### The process cache
@@ -82,6 +83,7 @@ VaultError = vault_unavailable
 6. **ASV-FR-06** A read-modify-write keeps every field it does not know. A namespace, an object, or a leaf that this version does not name is written back unchanged, so a build that adds a secret type does not destroy the secrets of a build that adds a different one.
 7. **ASV-FR-07** An absent namespace is empty rather than wrong. Reading a path whose namespace, intermediate object, or leaf is absent reports that the path holds no secret, and it is not an error. Writing to such a path creates every level it needs.
 8. **ASV-FR-08** The `projects` namespace holds a secret value only where that value belongs to one project. A project binding, an integration override, a model selection, and every other non-secret fact about a project stay in the user-global settings store (`GSS-global-settings-storage.md` GSS-FR-23, GSS-FR-26, GSS-FR-28), and no module writes one into this entry.
+8. **ASV-FR-FFKB** The `mcp` namespace of a project holds one object for each MCP server id, and that object holds one secret for each slot of that server (per `MCS-mcp-server-connections.md` MCS-FR-SBND, MCS-FR-QBFA). The `oauth` slot holds the sign-in state as one JSON string.
 9. **ASV-FR-09** One process-wide lock guards the entry and the process cache. Every read, every mutation, and every migration holds the lock for its whole sequence, so two sequences never touch the entry or the cache at the same time.
 10. **ASV-FR-10** A mutation is a modify-write of the whole object. The module applies every mutation of the request to a copy of the cached object, serializes the copy, and writes the complete object to the entry as one keyring value. It never writes a fragment of the object.
 11. **ASV-FR-11** A write is complete only after verification. The module reads the entry back inside the same held lock and compares the decoded result with the object it wrote. A mutation is successful only where the comparison succeeds. The read-back is the one keyring read that the cache does not replace.

@@ -18,6 +18,7 @@ import {
 import { ProjectDockerImages } from "./ProjectDockerImages";
 import { GraduationSettings } from "./GraduationSettings";
 import { ProjectIndexingSettings } from "./ProjectIndexingSettings";
+import { McpServersSettings } from "./McpServersSettings";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
 import { useGraduationConcurrencySetting } from "../state/graduationConcurrency";
 import type { ProjectSectionKey } from "../settingsWindow";
@@ -63,7 +64,9 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
     "Which GitHub Project the Git panel reads ready tasks from, how often, and how drafts are published as issues.",
   ],
   ["adapters", "Agent adapters", "The agent backends available to this project."],
-  ["mcp", "MCP servers", "The MCP servers this project exposes artifacts to."],
+  // SET-FR-06 / MSS-FR-DZIQ: the MCP servers section. Each action writes at
+  // once, so it holds no dirty state (MSS-FR-GMHC).
+  ["mcp", "MCP servers", "The MCP servers whose tools the agents of this project can use."],
   ["plugins", "Plugins", "Manage plugins for this project."],
   // SET-FR-15: the Project Agents section. A Project agent is a file of the
   // project, committed and shared by every contributor (AGT-FR-22).
@@ -433,6 +436,11 @@ export function Settings({
         </>
       )}
 
+      {/* SET-FR-06: the MCP servers section of MSS-mcp-servers-settings.md.
+          Each action writes at once, so it takes no part in the
+          save-before-close sweep (MSS-FR-GMHC). */}
+      {section === "mcp" && <McpServersSettings />}
+
       {/* SET-FR-QCUJ through SET-FR-VGQB: the Indexing section persists at
           once, so it takes no part in the save-before-close sweep. */}
       {section === "indexing" && <ProjectIndexingSettings />}
@@ -477,6 +485,7 @@ export function Settings({
         section !== "graduation" &&
         section !== "github-polling" &&
         section !== "agents" &&
+        section !== "mcp" &&
         section !== "indexing" && (
         <div
           className="card"

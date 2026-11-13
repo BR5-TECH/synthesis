@@ -154,7 +154,7 @@ mod slots;
 mod speech;
 mod steering;
 mod tool_dispatch;
-mod tool_wiring;
+pub(crate) mod tool_wiring;
 mod translation;
 mod turn_body;
 mod wire;
@@ -715,6 +715,8 @@ fn conversation_tools<R: tauri::Runtime>(
             session,
         )));
     }
+    // CVL-FR-TJZI: the tools of the ready MCP servers of the project, last.
+    tools.extend(crate::mcp::conversation_tools(app));
     tools
 }
 

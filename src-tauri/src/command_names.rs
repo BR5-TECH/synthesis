@@ -509,4 +509,16 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Model downgrade suppressions (GSS-global-settings-storage.md GSS-FR-PCPW, GSS-FR-UUET).
     "load_model_downgrade_suppressions",
     "save_model_downgrade_suppression",
+    // MCP servers (MCS-mcp-server-connections.md contract surface).
+    "list_mcp_servers",
+    "save_mcp_server",
+    "remove_mcp_server",
+    "set_mcp_server_secret",
+    "clear_mcp_server_secret",
+    "trust_mcp_server",
+    "test_mcp_server",
+    "reconnect_mcp_server",
+    "start_mcp_sign_in",
+    "cancel_mcp_sign_in",
+    "sign_out_mcp_server",
 ];

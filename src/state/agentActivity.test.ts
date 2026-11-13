@@ -5,6 +5,7 @@ import {
   WAITING_FOR_SPEECH,
   toolActivityStatus,
   TOOL_ACTIVITY_STATUS,
+  USING_MCP_TOOL,
   WORKING,
 } from "./agentActivity";
 import type { ActiveToolCall } from "../types";
@@ -81,6 +82,30 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
     expect(status).toBe(WORKING);
     expect(status).not.toContain("a_tool_this_surface_was_never_taught");
     expect(toolActivityStatus("a_tool_nobody_has_written_yet")).toBe("Working…");
+  });
+
+  it("CTA-FR-NIHS: an MCP tool reads Using an MCP tool…", () => {
+    // MCT-FR-TZMA: every MCP tool name starts with mcp__. The status names
+    // neither the server nor the tool (CTA-FR-VRJU).
+    const status = activityStatus({
+      activeToolCalls: [call("mcp__tracker__create_issue", 1)],
+    });
+    expect(status).toBe("Using an MCP tool…");
+    expect(status).toBe(USING_MCP_TOOL);
+    expect(status).not.toContain("tracker");
+    expect(toolActivityStatus("mcp__docs__search")).toBe("Using an MCP tool…");
+    // An advisor's MCP call names the advisor, as any other call does.
+    expect(
+      activityStatus({
+        activeToolCalls: [{ ...call("mcp__docs__search", 2), advisor: "Ana" }],
+      }),
+    ).toBe("@Ana: Using an MCP tool…");
+  });
+
+  it("CTA-FR-VSIM: a name that only holds mcp later, or a single underscore, reads Working…", () => {
+    expect(toolActivityStatus("read_mcp__file")).toBe("Working…");
+    expect(toolActivityStatus("mcp_tracker")).toBe("Working…");
+    expect(toolActivityStatus("MCP__tracker__x")).toBe("Working…");
   });
 
   it("takes its wording from this surface rather than from the tool", () => {

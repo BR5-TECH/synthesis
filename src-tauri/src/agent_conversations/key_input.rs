@@ -31,6 +31,10 @@ fn key_arguments(tool: &str) -> &'static [&'static str] {
 /// CVL-FR-DUUO: the key input of a call of `tool` with these arguments, or
 /// `None` where the tool has none or the argument is absent, empty, or not text.
 pub(super) fn key_input_of(tool: &str, arguments: &serde_json::Value) -> Option<String> {
+    // CVL-FR-FWZZ: an MCP tool names its server and its tool, and no argument.
+    if tool.starts_with(crate::mcp::tool::NAME_PREFIX) {
+        return crate::mcp::tool::key_input_for(tool).map(|value| cut_key_input(&value));
+    }
     key_arguments(tool)
         .iter()
         .filter_map(|name| arguments.get(*name).and_then(serde_json::Value::as_str))

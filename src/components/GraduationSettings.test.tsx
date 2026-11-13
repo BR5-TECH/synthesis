@@ -43,6 +43,8 @@ function backend(options: Backend = {}) {
       if (options.saveFails) throw new Error("disk is full");
       return undefined;
     }
+    // MSS-FR-RYEQ: the MCP servers section reads its list when it mounts.
+    if (cmd === "list_mcp_servers") return [];
     return undefined;
   });
 }

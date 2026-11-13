@@ -136,7 +136,8 @@ How an agent takes part in a conversation held in any discussion surface. An aut
      ```
 
      These are the tools a conversation turn is lent (per `../ai/CVL-conversation-loop.md` CVL-FR-08, CVL-FR-30) and the whole of the vocabulary a conversation needs: a tool no conversation turn carries has no status here, the graduation loop's own tools among them.
-103. **CTA-FR-VSIM** A call whose tool that table does not name reads **Working…** (per `../tools/TLC-tool-conventions.md` TLC-FR-27), so a status is never empty and a tool the discussion surface has not been taught still reads as work in progress.
+103. **CTA-FR-NIHS** A call whose tool name starts with `mcp__` reads **Using an MCP tool…** (per `../tools/MCT-mcp-tool.md` MCT-FR-TZMA). Its key input names the server and the tool in the tool list (per `../ai/CVL-conversation-loop.md` CVL-FR-FWZZ).
+103. **CTA-FR-VSIM** A call whose tool that table does not name, and that CTA-FR-NIHS does not cover, reads **Working…** (per `../tools/TLC-tool-conventions.md` TLC-FR-27), so a status is never empty and a tool the discussion surface has not been taught still reads as work in progress.
 104. **CTA-FR-VRJU** Every status is the discussion surface's own fixed text: none is composed from a tool's arguments, from its result, or from anything the model wrote. A call's key input shows in the tool list alone (CTA-FR-BJWN), and a tool's result and the model's text do not reach the discussion surface at all (per `../ai/CVL-conversation-loop.md` CVL-FR-26).
 105. **CTA-FR-PCNW** The status changes nothing else about the contribution — its shape, its position, the agent it is attributed to, its cancel control, and its absence from the conversation are the same whichever status it reads.
 106. **CTA-FR-IWOJ** A turn with several tool calls active at once reads the status of the **most recently activated** of them, that being the thing the agent turned to last and the thing it is still doing.

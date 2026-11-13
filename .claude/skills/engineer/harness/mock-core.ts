@@ -8,6 +8,7 @@ import {
 } from "./mock-github-polling";
 import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-documents";
 import { embeddingsInvoke } from "./mock-embeddings";
+import { mcpInvoke } from "./mock-mcp";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
 import {
@@ -8222,6 +8223,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // EMB-embeddings-index.md: the Indexing sections and the Semantic search mode.
   const embeddings = embeddingsInvoke(cmd, a);
   if (embeddings !== NOT_HANDLED) return embeddings;
+  // MCS-mcp-server-connections.md: the MCP servers section of the Project settings.
+  const mcp = mcpInvoke(cmd, a);
+  if (mcp !== NOT_HANDLED) return mcp;
   // GIT-git.md: the Git panel's history, branch and pull request commands.
   const gitPanel = gitPanelInvoke(cmd, a);
   if (gitPanel !== NOT_HANDLED) return gitPanel;

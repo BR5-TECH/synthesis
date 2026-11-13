@@ -143,6 +143,7 @@ Per-project slot (no UI consumer; read and written by other core modules):
 - `load_document_sources(project_key)` / `save_document_sources(project_key, sources)` — the source references of GSS-FR-CDYK, read and written by `DCL-documents-collection.md` (DCL-FR-HNRM).
 - `load_agent_group_settings(project_key)` / `save_agent_group_settings(project_key, settings)` — the agent group switch and join timeout of GSS-FR-ARIP, read and written by `PSS-project-settings-storage.md` (PSS-FR-CQML).
 - `load_embeddings_mode(project_key)` / `save_embeddings_mode(project_key, mode)` — the embeddings mode of GSS-FR-DSUG, read and written by `EMB-embeddings-index.md` (EMB-FR-DWJB).
+- `load_mcp_trust(project_key)` / `save_mcp_trust(project_key, server_id, fingerprint | null)` — the MCP trust records of GSS-FR-UTCM, read and written by `MCS-mcp-server-connections.md` (MCS-FR-PPPL). A `null` fingerprint removes the record of that server.
 
 Model downgrade suppressions (per `../ui/NTF-notifications.md` NTF-FR-CYTU and NTF-FR-LHVU):
 - `"load model downgrade suppressions"` → `load_model_downgrade_suppressions()` → `ModelDowngradeSuppression[]`, the rules of the open project that are in force (GSS-FR-PCPW), or the typed error `no_project_open`.
@@ -250,6 +251,7 @@ The MRU append on project open/create is performed by `PST-project-storage.md` (
 60. **GSS-FR-PCPW** `load_model_downgrade_suppressions` returns the rules whose `expires_at` is null or later than the current time. In the same call it removes every expired rule from the store. It writes the store only when it removed a rule.
 60. **GSS-FR-UUET** `save_model_downgrade_suppression` sets `expires_at` to now plus 1 hour, 1 day, or 7 days for `hour`, `day`, or `week`, and to null for `forever`. It replaces a rule of the same pair. A blank model id is refused with `invalid_model_id`, and nothing is written. No command removes a rule: a rule ends only by expiry.
 61. **GSS-FR-ARIP** The per-project slot records the project's **agent group settings**: the switch (`agent_group_enabled`) and the join timeout in seconds (`agent_group_join_timeout_secs`). They are unset until written, and unset reads as off and 60. They are user-global because the project's committed files never hold them.
+62. **GSS-FR-UTCM** The per-project slot records the project's **MCP trust records**: a map from an MCP server id to the trust fingerprint that the author trusted on this machine (per `MCS-mcp-server-connections.md` MCS-FR-PPPL, MCS-FR-KWCN). The map is empty until a server is trusted. It is never written into a repository or into `.synthesis/`.
 
 ## Non-functional requirements
 - All user-global settings load on app start without network access.

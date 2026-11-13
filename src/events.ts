@@ -33,6 +33,7 @@ import type {
   ExportProgress,
   ExportRequest,
   EmbeddingsStatus,
+  McpServerStatusChanged,
   DraftPromptChangedPayload,
   DraftStatisticsChangedPayload,
   GitOperationFinishedPayload,
@@ -247,6 +248,20 @@ export const onEmbeddingsStatusChanged = (
   handler: (status: EmbeddingsStatus) => void,
 ): Promise<UnlistenFn> =>
   listen<EmbeddingsStatus>(EMBEDDINGS_STATUS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** MCS-FR-NOKX: the status of one MCP server changed. */
+export const MCP_SERVER_STATUS_CHANGED = "mcp-server-status-changed";
+
+/**
+ * MCS-FR-NOKX: one MCP server has a new status. The payload names the server
+ * id and the status alone (MSS-FR-CLQR).
+ */
+export const onMcpServerStatusChanged = (
+  handler: (change: McpServerStatusChanged) => void,
+): Promise<UnlistenFn> =>
+  listen<McpServerStatusChanged>(MCP_SERVER_STATUS_CHANGED, (event) =>
     handler(event.payload),
   );
 

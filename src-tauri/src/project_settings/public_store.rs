@@ -33,7 +33,7 @@ use super::{
 /// would make every existing project unreadable rather than surfacing a real
 /// defect. The malformed case — the one that actually signals damage — keeps its
 /// typed error.
-pub(super) fn load_public(root: &crate::fs::RootFs) -> Result<toml::Table, String> {
+pub(crate) fn load_public(root: &crate::fs::RootFs) -> Result<toml::Table, String> {
     let path = project_toml_path(root);
     if !path.exists() {
         return Ok(toml::Table::new());
@@ -43,7 +43,7 @@ pub(super) fn load_public(root: &crate::fs::RootFs) -> Result<toml::Table, Strin
 
 /// Write `project.toml` atomically (PSS-FR-04). Unlike the project-local store
 /// this file is *committed*, so no ignore rule is written alongside it.
-pub(super) fn save_public(root: &crate::fs::RootFs, value: &toml::Table) -> Result<(), String> {
+pub(crate) fn save_public(root: &crate::fs::RootFs, value: &toml::Table) -> Result<(), String> {
     // Parents are created by the write itself (FSA-FR-05).
     root.write_toml_atomic(project_toml_path(root), value).map_err(|e| e.to_string())
 }

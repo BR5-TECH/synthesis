@@ -175,6 +175,9 @@ pub struct ProjectSlot {
     /// GSS-FR-DAKR: the model downgrade suppressions, an array of tables, so after the scalars.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub model_downgrade_suppressions: Vec<crate::model_downgrades::ModelDowngradeSuppression>,
+    /// GSS-FR-UTCM: MCP server id to trusted command fingerprint, a table, so after the scalars.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub mcp_trust: std::collections::BTreeMap<String, String>,
     /// Layout preferences (GSS-FR-17). `None` until the shell first persists.
     /// Skipped when absent — the TOML serialiser rejects a bare `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -322,6 +325,7 @@ mod agent_group;
 mod document_limit;
 mod embeddings;
 mod legacy;
+mod mcp_trust;
 mod model_downgrades;
 pub use model_downgrades::LoadedSuppressions;
 mod recents;

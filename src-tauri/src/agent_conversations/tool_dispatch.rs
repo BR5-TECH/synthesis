@@ -50,8 +50,11 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
         // AGC-FR-WBZN: the advisors tool is bound by the join timeout and by the
         // cancel of the turn, and not by the whole-turn deadline.
         let remaining = if is_advisors_call(&name) { ADVISORS_CALL_LIMIT } else { remaining };
-        let outcome =
-            block_on_with_timeout(async move { Ok(tool.execute(arguments).await) }, remaining);
+        // MCT-FR-NJNW: an MCP tool reads the time that remains from this scope.
+        let outcome = block_on_with_timeout(
+            async move { Ok(crate::mcp::tool::with_deadline(remaining, tool.execute(arguments)).await) },
+            remaining,
+        );
         if is_advisors_call(&name) {
             turns.restart_deadline(app, &plan.turn_id);
         }

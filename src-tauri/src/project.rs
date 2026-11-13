@@ -492,6 +492,8 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // and, on a change of active worktree, keeps its sources and runs one
     // refresh. Mounted after the index, whose `documents` part it feeds.
     crate::documents::lifecycle::on_content_root_mounted(app, &project.slot_key());
+    // MCS-FR-RYIK: the MCP servers of the incoming worktree connect.
+    crate::mcp::on_content_root_mounted(app);
 }
 
 /// DRS-FR-04: whether Git still excludes the active worktree's drafts root.
@@ -701,6 +703,8 @@ pub fn close_project<R: tauri::Runtime>(
     crate::documents::lifecycle::on_project_closed(&app);
     // EMB-FR-RMZH: stop every embedding job and close the store.
     crate::embeddings::on_project_closed(&app);
+    // MCS-FR-QTSW: every MCP session of the project ends.
+    crate::mcp::on_project_closed(&app);
     // PST-FR-30: closing a project schedules the draft-asset housekeeping pass
     // of `DAS-draft-assets.md` (DAS-FR-19), **before** the unmount below
     // releases the project's storage context — so it addresses drafts that

@@ -79,7 +79,23 @@ openrouter-rs = "0.13"
 # `select!` at that one call site.
 # EAC-FR-DWBS additionally needs `sync`: launches of one sandbox scope wait on
 # one asynchronous lock, so they run in the scope's VM one at a time.
-tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros", "sync"] }
+# MCS-FR-RBCD additionally needs `net`: the OAuth sign-in of an MCP server
+# listens for its redirect on a loopback TCP port.
+tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros", "sync", "net"] }
+# MCS-mcp-server-connections.md: the MCP client. It speaks MCP to a local
+# process (stdio) and to a remote server (Streamable HTTP), and its `auth`
+# module does the OAuth 2 discovery, registration, PKCE, and refresh of
+# MCS-FR-SAQY to MCS-FR-SQWD. It sends through the `reqwest013` client that
+# `tls` builds, so an MCP server is trusted as every other host is
+# (MCS-FR-LZBV). Pure Rust: it links no host library (NLL).
+rmcp = { version = "3.10", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "auth", "reqwest"] }
+# MCS-FR-BLBG: a stdio MCP server leads its own process group, so that ending
+# the session also stops every process the server started. The same version
+# `rmcp` wraps its child processes with.
+process-wrap = { version = "10", features = ["tokio1"] }
+# MCS-FR-PJNN: the credential store `rmcp` reads the OAuth state through is an
+# `async_trait` trait.
+async-trait = "0.1"
 # `ApiErrorContext.status` is an `http::StatusCode`, which the probe maps onto
 # the shared refused-versus-unreachable distinction.
 http = "1"
@@ -261,6 +277,13 @@ tauri = { version = "2", features = ["test"] }
 # GHP-FR-RVCL / GHP-FR-MSLY: the tests of the 30-minute timer and of the
 # refresh timeout run on paused Tokio time, so no test waits for real time.
 tokio = { version = "1", features = ["test-util"] }
+# MCS-FR-BYBA, MCT-FR-OSXG: the tests connect to a real MCP server that runs
+# in the test process, over an in-memory pipe and over Streamable HTTP.
+rmcp = { version = "3.10", default-features = false, features = ["client", "server", "macros", "transport-streamable-http-server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+hyper = { version = "1", features = ["server", "http1"] }
+http-body-util = "0.1"
+tower-service = "0.3"
 
 # NTD-notification-delivery.md: the OS notification centre this module posts
 # into. Deliberately NOT `tauri-plugin-notification`, whose desktop path drops

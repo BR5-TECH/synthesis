@@ -419,7 +419,18 @@ impl CompletionSeam for ScriptedCompletion {
         // nine or the nine followed by one proposal tool and never anything
         // else — which is what stops a tool being added to a turn without
         // anybody deciding it should be.
-        let offered: Vec<&str> = request.tools.iter().map(|tool| tool.name.as_str()).collect();
+        let mut offered: Vec<&str> = request.tools.iter().map(|tool| tool.name.as_str()).collect();
+        // CVL-FR-TJZI: the MCP tools of the project come after every tool of
+        // the application, and the rules below hold for what comes before them.
+        let first_mcp =
+            offered.iter().position(|name| name.starts_with(crate::mcp::tool::NAME_PREFIX));
+        if let Some(first) = first_mcp {
+            assert!(
+                offered[first..].iter().all(|name| name.starts_with(crate::mcp::tool::NAME_PREFIX)),
+                "the MCP tools come last: {offered:?}",
+            );
+            offered.truncate(first);
+        }
         // CVL-FR-08: the eleven every origin kind gets, in the order
         // `conversation_tools` names them.
         let common = vec![

@@ -10,6 +10,7 @@ import type {
   PointerEvent,
 } from "react";
 import {
+  changesUnder,
   indexChildren,
   isWithin,
   plannedUnder,
@@ -17,7 +18,7 @@ import {
   type TreeIndex,
 } from "../../state/specMap/tree";
 import { EMPTY_ROLLUP, type Rollup } from "../../state/specMap/rollups";
-import { sameRef, type MapRef } from "../../state/specMap/types";
+import { changeLocationLabel, sameRef, type MapRef } from "../../state/specMap/types";
 import type { LayoutBox, LayoutChip, MapLayout } from "./layout";
 import { CompletenessBar, Counts } from "./CompletenessBar";
 
@@ -121,7 +122,11 @@ function MapBox({
       : undefined;
   // SMD-FR-ULTF: a node that does not show its planned chips counts them.
   const planned = box.shape === "expanded" ? 0 : plannedUnder(tree, box.id);
-  const plannedMeta = planned > 0 ? ` · +${planned} planned` : "";
+  // SMN-FR-YEVY: and the changes beneath it, each in its location.
+  const changes = box.shape === "expanded" ? 0 : changesUnder(tree, box.id);
+  const plannedMeta =
+    (planned > 0 ? ` · +${planned} planned` : "") +
+    (changes > 0 ? ` · +${changes} ${changes === 1 ? "change" : "changes"}` : "");
   const attrs = {
     ...interaction(ref, `${node.label}, ${levels[box.depth]?.singular ?? ""}`, handlers),
     "data-shape": box.shape,
@@ -129,6 +134,8 @@ function MapBox({
     "data-context": context || undefined,
     "data-dim": dim,
     "data-drop": dropId === box.id || undefined,
+    // SMN-FR-VNTJ: a capability a change names and the live specs do not hold.
+    "data-planned": node.plannedCapability || undefined,
     style: { left: box.x, top: box.y, width: box.w, height: box.h },
   };
 
@@ -142,7 +149,7 @@ function MapBox({
         <div className="smap-root__head">
           <span className="smap-swatch" style={hueStyle(node.hue)} />
           <span className="smap-root__label">{node.label}</span>
-          <span className="smap-root__meta">
+          <span className="smap-root__meta" title={`${meta}${plannedMeta}`}>
             {meta}
             {plannedMeta}
           </span>
@@ -165,7 +172,7 @@ function MapBox({
       <div className="smap-node smap-box" data-role="branch" {...attrs}>
         <div className="smap-box__head">
           <span className="smap-box__label">{node.label}</span>
-          <span className="smap-box__meta">
+          <span className="smap-box__meta" title={`${r.specs} specs${plannedMeta}`}>
             {r.specs} specs
             {plannedMeta}
           </span>
@@ -182,8 +189,9 @@ function MapBox({
     <div className="smap-node smap-box" data-role="leaf" {...attrs}>
       <div className="smap-box__head">
         <span className="smap-box__label">{node.label}</span>
+        {node.plannedCapability && <span className="smap-box__planned">planned</span>}
         <CompletenessBar rollup={r} variant="mini" />
-        <span className="smap-box__meta">
+        <span className="smap-box__meta" title={`${r.specs}${plannedMeta}`}>
           {r.specs}
           {plannedMeta}
         </span>
@@ -203,6 +211,28 @@ function MapChip({
   handlers,
 }: NodeLayerProps & { chip: LayoutChip }) {
   const style = { left: chip.x, top: chip.y, width: chip.w };
+  if (chip.kind === "change") {
+    const change = tree.changes.get(chip.key)!;
+    const ref: MapRef = { kind: "change", key: chip.key };
+    const issue = (change.issues?.length ?? 0) > 0;
+    const holder = tree.nodes.get(chip.parentId)?.label ?? "";
+    return (
+      <div
+        className="smap-node smap-chip smap-chip--change"
+        {...interaction(
+          ref,
+          `change ${change.change}, ${changeLocationLabel(change)}, on ${holder}`,
+          handlers,
+        )}
+        data-selected={sameRef(selection, ref) || undefined}
+        style={style}
+      >
+        <span className="smap-code smap-code--change">change</span>
+        <span className="smap-chip__label">{change.change}</span>
+        {issue && <span className="smap-dot" data-state="gap" aria-label="has issues" />}
+      </div>
+    );
+  }
   if (chip.kind === "planned") {
     const draft = tree.planned.get(chip.key)!;
     const ref: MapRef = { kind: "planned", draftId: chip.key };
@@ -238,8 +268,9 @@ function MapChip({
       data-dim={dim}
       style={style}
     >
+      {/* SMN-FR-PMZM: the badge of the node where it carries one. */}
       <span className="smap-code" data-folder={specFolder(spec)}>
-        {spec.code}
+        {spec.badge ?? spec.code}
       </span>
       <span className="smap-chip__label">{spec.label}</span>
       <span className="smap-dot" data-state={spec.state} />

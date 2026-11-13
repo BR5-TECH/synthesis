@@ -166,9 +166,20 @@ pub fn question_set_lock(thread_id: &str) -> std::sync::MutexGuard<'static, ()> 
 /// borrowed scope on demand.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DiscussionRef {
-    Draft { draft_id: String },
-    Artifact { artifact_id: String },
-    Note { note_id: String },
+    Draft {
+        draft_id: String,
+    },
+    Artifact {
+        artifact_id: String,
+    },
+    Note {
+        note_id: String,
+    },
+    /// CMS-FR-UEXD: the whole-change discussion of an OpenSpec change.
+    Change {
+        stream_id: String,
+        change: String,
+    },
 }
 
 impl DiscussionRef {
@@ -178,6 +189,9 @@ impl DiscussionRef {
             DiscussionRef::Draft { draft_id } => ThreadRef::discussion(draft_id),
             DiscussionRef::Artifact { artifact_id } => ThreadRef::artifact_discussion(artifact_id),
             DiscussionRef::Note { note_id } => ThreadRef::note_discussion(note_id),
+            DiscussionRef::Change { stream_id, change } => {
+                ThreadRef::change_discussion(stream_id, change)
+            }
         }
     }
 }
@@ -198,6 +212,9 @@ pub fn discussion_ref_of(discussion: &Discussion) -> Option<DiscussionRef> {
         DiscussionTarget::Draft { draft_id } => DiscussionRef::Draft { draft_id: draft_id.clone() },
         DiscussionTarget::Artifact { artifact_id } => {
             DiscussionRef::Artifact { artifact_id: artifact_id.clone() }
+        }
+        DiscussionTarget::Change { stream_id, change } => {
+            DiscussionRef::Change { stream_id: stream_id.clone(), change: change.clone() }
         }
     })
 }
@@ -385,6 +402,50 @@ pub(super) fn delete_question_set(
         Err(crate::fs::FsError::NotFound { .. }) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// CMS-FR-ECWC: delete the set the discussion holds where its id is
+/// `set_id`, and emit `"discussion question set changed"` with null. It
+/// appends no comment. A discussion that holds no set, or another set, is left
+/// as it is, and the call reports success. Registered as no Tauri command: the
+/// discard of a run at rest on a plan update is its one caller (OPU-FR-ZBXF).
+pub fn delete_discussion_question_set<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    discussion_id: &str,
+    set_id: &str,
+) -> Result<bool, String> {
+    let deleted = delete_question_set_record(root, worktree, discussion_id, set_id)?;
+    if deleted {
+        emit_question_set_changed(app, discussion_id, None);
+    }
+    Ok(deleted)
+}
+
+/// [`delete_discussion_question_set`] without the event. Answers whether a set
+/// was deleted.
+pub fn delete_question_set_record(
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    discussion_id: &str,
+    set_id: &str,
+) -> Result<bool, String> {
+    let _guard = question_set_lock(discussion_id);
+    let Some(set) = read_question_set(root, worktree, discussion_id) else {
+        return Ok(false);
+    };
+    if set.set_id != set_id {
+        return Ok(false);
+    }
+    let Some(thread) = read_discussion_by_id(root, worktree, discussion_id) else {
+        return Ok(false);
+    };
+    let Some(discussion) = discussion_ref_of(&thread) else {
+        return Ok(false);
+    };
+    delete_question_set(root, discussion.thread_ref(), discussion_id)?;
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------

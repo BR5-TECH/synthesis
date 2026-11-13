@@ -87,7 +87,7 @@ impl Fixture {
         run
     }
 
-    fn start_direct(&self, draft: &str) -> Result<GraduationRun, String> {
+    pub(super) fn start_direct(&self, draft: &str) -> Result<GraduationRun, String> {
         crate::graduation::start_direct_graduation(
             self.app.clone(),
             draft.to_string(),
@@ -461,7 +461,7 @@ fn a_direct_run_on_a_stream_worktree_yields_to_a_merge_and_holds_one_off() {
         crate::streams::StreamMergePublication::Uncommitted,
     )
     .unwrap_err();
-    assert!(refused.starts_with(crate::streams::ERR_STREAM_BUSY), "{refused}");
+    assert!(refused.to_string().starts_with(crate::streams::ERR_STREAM_BUSY), "{refused}");
 }
 
 /// GRD-FR-KKKN: stream runs and direct runs share the project's limit, and a
@@ -954,6 +954,7 @@ fn a_refused_start_keeps_the_stream_that_stood_before_it() {
         draft.clone(),
         stream.id.clone(),
         StandingWork::Keep,
+        None,
         None,
     );
     assert!(refused.is_err());

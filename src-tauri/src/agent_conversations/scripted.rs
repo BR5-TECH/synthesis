@@ -400,6 +400,7 @@ impl CompletionSeam for ScriptedCompletion {
             DISCUSS_ARTIFACT_PROMPT_TEMPLATE,
             DISCUSS_DRAFT_PROMPT_TEMPLATE,
             DISCUSS_NOTE_PROMPT_TEMPLATE,
+            DISCUSS_CHANGE_PROMPT_TEMPLATE,
         ]
         .iter()
         .any(|template| carries_template(&request.instructions, template));
@@ -442,11 +443,25 @@ impl CompletionSeam for ScriptedCompletion {
         // two a turn is remains the origin kind's business and is asserted where
         // the origin is known; what is checkable here is that it never appears
         // anywhere but in this position.
-        let mut with_questions = common.clone();
-        with_questions.push(crate::tools::ask_discussion_questions::NAME);
+        // CVL-FR-DPWP: in OpenSpec mode the three OpenSpec read tools follow the
+        // common set, and in no other position.
+        let mut with_openspec = common.clone();
+        with_openspec.extend([
+            crate::tools::openspec_list_specs::NAME,
+            crate::tools::openspec_read_spec::NAME,
+            crate::tools::openspec_list_changes::NAME,
+        ]);
+        let bases: Vec<Vec<&str>> = [common.clone(), with_openspec]
+            .into_iter()
+            .flat_map(|base| {
+                let mut with_questions = base.clone();
+                with_questions.push(crate::tools::ask_discussion_questions::NAME);
+                [base, with_questions]
+            })
+            .collect();
         // CVL-FR-08: a draft origin gets one proposal tool and an artifact origin
         // the other, and the two are never offered together.
-        let permitted: Vec<Vec<&str>> = [common.clone(), with_questions.clone()]
+        let permitted: Vec<Vec<&str>> = bases
             .into_iter()
             .flat_map(|base| {
                 let mut with_draft = base.clone();
@@ -459,7 +474,14 @@ impl CompletionSeam for ScriptedCompletion {
                 let mut with_prompt = base.clone();
                 with_prompt.push(crate::tools::propose_prompt_changes::NAME);
                 with_prompt.push(crate::tools::decide_prompt_changes::NAME);
-                [base, with_draft, with_prompt]
+                // CVL-FR-EZKH: a change turn has the change tools.
+                let mut with_change = base.clone();
+                with_change.push(crate::tools::propose_change_edits::NAME);
+                with_change.push(crate::tools::propose_new_change::NAME);
+                // CVL-FR-XHKB: and asks the author for a run.
+                with_change.push(crate::tools::request_change_action::NAME);
+                with_change.push(crate::tools::decide_change_edits::NAME);
+                [base, with_draft, with_prompt, with_change]
             })
             .collect();
         assert!(

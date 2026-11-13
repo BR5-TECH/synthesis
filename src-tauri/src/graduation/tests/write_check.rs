@@ -42,10 +42,14 @@ fn a_start_on_an_unconfirmed_main_branch_enqueues_nothing() {
             stream.id.clone(),
             StandingWork::Keep,
             None,
+            None,
         )
     };
     let refused = start().unwrap_err();
-    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(
+        refused.to_string().starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED),
+        "{refused}"
+    );
     assert_eq!(fx.queued_runs(), 0, "a refused start made no run");
     let root = crate::fs::RootFs::for_root(fx.root());
     let started =
@@ -76,7 +80,10 @@ fn a_direct_start_on_an_unconfirmed_main_branch_is_refused() {
         )
     };
     let refused = start().unwrap_err();
-    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(
+        refused.to_string().starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED),
+        "{refused}"
+    );
     assert_eq!(fx.queued_runs(), 0);
 
     fx.confirm_main_write();
@@ -128,7 +135,10 @@ fn the_pinned_branch_is_checked_and_another_projects_worktree_is_not() {
         "start_direct_graduation",
     )
     .unwrap_err();
-    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(
+        refused.to_string().starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED),
+        "{refused}"
+    );
     assert!(refused.contains(&format!("\"branch\":\"{main}\"")));
 
     // The active branch is `feature`, which is no main branch, and a run of
@@ -177,7 +187,10 @@ fn a_restart_of_a_direct_run_pinned_to_an_unconfirmed_main_branch_is_refused() {
     };
 
     let refused = restart().unwrap_err();
-    assert!(refused.starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED), "{refused}");
+    assert!(
+        refused.to_string().starts_with(crate::git::ERR_MAIN_BRANCH_WRITE_UNCONFIRMED),
+        "{refused}"
+    );
     assert!(refused.contains(&format!("\"branch\":\"{pinned}\"")), "{refused}");
     assert_eq!(fx.queued_runs(), before, "a refused restart made no run");
 

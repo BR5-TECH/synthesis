@@ -34,18 +34,27 @@ use super::{
     ReviewVerdict,
 };
 
+pub mod change_review;
 pub mod check_gate;
 pub mod checks_folder;
 pub mod corrections;
 mod dispatch;
 pub mod drive;
+pub mod image_probe;
 pub mod merge_drive;
+pub mod merge_specs_review;
 pub mod merge_workspace;
+pub mod openspec_block;
+pub mod openspec_review;
 pub mod phases;
+mod plan_record;
+mod plan_turns;
 pub mod pr_summary_checkout;
 mod pr_summary_drive;
 pub mod prompts;
 pub mod review_checkout;
+mod rework_finish;
+pub mod rework_workspace;
 pub mod seams;
 pub mod settings;
 pub mod stops;
@@ -58,8 +67,10 @@ mod work_turn;
 #[cfg(test)]
 pub(crate) use drive::drive_for_test;
 pub use drive::{spawn, spawn_with};
+pub use openspec_block::{clear_failed_check_for, is_openspec_blocker};
 pub use phases::*;
 pub use prompts::*;
-pub use seams::{AgentCliDispatch, DispatchFuture, GraduationDispatch};
+pub(crate) use rework_finish::hunks_of;
+pub use seams::{AgentCliDispatch, DispatchFuture, GraduationDispatch, ProbeFuture};
 pub use settings::LoopSettings;
 pub use task_input::*;

@@ -16,6 +16,7 @@ import type { DiscussionColumnState } from "../../state/discussionColumn";
 import { setFocusedHunk } from "../../state/draftDiscussion";
 import { openReview, undecidedHunks } from "../../state/draftProposals";
 import { stateLabel } from "../../state/graduation";
+import { openOpenSpecChange } from "../../state/openspec/changeRoutes";
 import { Icon } from "../icons";
 import { SplitControls, type SplitRatio } from "../DraftDiscussion";
 import { DraftPublicationTag } from "../DraftPublication";
@@ -156,6 +157,23 @@ export function DraftChrome({
           <Icon.Diamond size={11} /> {stateLabel(graduation.state)}
         </button>
       )}
+      {/* NAW-FR-XDDQ: a graduated draft of a completed propose run opens the
+          change that run wrote, on its stream. */}
+      {graduation?.graduated &&
+        graduation.state === "completed" &&
+        graduation.openspecChange && (
+          <button
+            className="draft-workspace__graduation t-ui-xs"
+            data-testid="draft-open-change"
+            title="Open the OpenSpec change this run wrote"
+            onClick={() => {
+              const change = graduation.openspecChange!;
+              openOpenSpecChange({ kind: "stream", streamId: change.streamId }, change.name);
+            }}
+          >
+            <Icon.Diff size={11} /> Open change
+          </button>
+        )}
       {/* NAW-FR-CBUJ: the draft's publication, as a tag beside the draft's
           label on the same terms as the archived marker and the run state. A
           tag that names a record is the route to that issue (NAW-FR-XRLD);

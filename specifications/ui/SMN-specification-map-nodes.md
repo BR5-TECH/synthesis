@@ -13,7 +13,8 @@ Every node of the specification map shows what it is, what it is for, and how co
 5. **SMN-FR-PFYW** A collapsed branch node is 116px high. It shows the label at 13px weight 600, a monospace `N specs` count at 10px, the summary at 11px clipped to 46px, and a 4px completeness bar.
 6. **SMN-FR-UJRG** A collapsed leaf group is 64px high. It shows the label at 12px weight 500 in `--fg-2`, a 38 × 4px completeness bar, a monospace spec count at 10px, and the summary at 11px clipped to 32px.
 7. **SMN-FR-ISBE** An expanded leaf group is `64 + rows × 28 + 4` px high. Its spec chips are 96 × 22px, 3 per row with 6px gaps, starting 62px below its top and 10px inside its left edge. A chip shows the code badge, the label truncated with an ellipsis, and a 5px dot in the state colour.
-8. **SMN-FR-WAGD** A spec code badge takes the colour pair of the top-level folder of its spec under `specifications/`: `ui`, `core`, `ai`, `tools`, `infra`, or `server`. Each folder has one background and foreground pair for the light theme and one for the dark theme.
+8. **SMN-FR-WAGD** A spec code badge takes the colour pair of the top-level folder of its spec under `specifications/`: `ui`, `core`, `ai`, `tools`, `infra`, or `server`, or the `openspec` pair where its path is below `openspec/`. Each pair has one background and foreground pair for the light theme and one for the dark theme.
+8. **SMN-FR-PMZM** A spec code badge shows the `badge` of its spec node where the node carries one, and its `code` otherwise.
 9. **SMN-FR-CMLN** The state colours are `--ok` for verified, `--accent` for built, `--fg-4` for drafted, and `--danger` for gap. Every completeness bar, status dot, and count of the map uses them.
 10. **SMN-FR-OJAY** The spec count, the requirement and scenario totals, and the count per state of an index node are computed from the spec nodes beneath it in the current tree, including the effect of organization edits. Each completeness bar holds four segments in state order, each as wide as its share of those spec nodes.
 11. **SMN-FR-EYRV** A click on a node selects it. A selected root card has an `--accent` border and a 3px `--ring` shadow. A selected branch node or leaf group has an `--accent` border. A selected spec chip has an `--accent` border and an `--accent-soft` background.
@@ -22,6 +23,10 @@ Every node of the specification map shows what it is, what it is for, and how co
 14. **SMN-FR-MVWA** Hovering a node shows a hover card 280px wide. Its top-left corner sits 18px right of and 14px below the node's top-left corner in screen space, clamped to stay 8px inside the canvas. It shows a badge and the label, the summary, a 5px completeness bar, and a monospace meta line.
 15. **SMN-FR-FXRL** The hover card badge is the spec code for a spec node and `N specs` for an index node. The meta line reads `R reqs · S scenarios · cites C` for a spec node, where C is its count of outgoing dependencies, and `R reqs · S scenarios · G gaps` for an index node.
 16. **SMN-FR-YSKQ** The hover card ignores the pointer. It hides when the pointer leaves the node, and it does not show while a pan or a drag is in progress.
+17. **SMN-FR-ZOUZ** A **change chip** (per `../core/OSI-openspec-spec-index.md` OSI-FR-ALQI) is 96 × 22px with a 1px dashed `--accent` border. It shows a `change` badge in `--accent` on `--accent-soft`, the change name truncated with an ellipsis, and a 5px `--danger` dot where it holds an issue. In a capability node, change chips follow its spec chips and its planned chips in the same grid.
+18. **SMN-FR-VNTJ** A planned capability node renders as a leaf group with a 1px dashed `--border-2` border and the word `planned` after its label. It holds no spec chip, and its spec count is 0.
+19. **SMN-FR-YEVY** Change chips add nothing to spec counts, requirement totals, scenario totals, or completeness bars. A collapsed index node that holds change chips beneath it adds `+N changes` to its meta line, `N` counting the distinct changes and locations.
+20. **SMN-FR-EIDC** For the source `openspec`, the meta line of a spec node's hover card reads `S scenarios` and names no citation.
 
 ## Wireframes
 ```

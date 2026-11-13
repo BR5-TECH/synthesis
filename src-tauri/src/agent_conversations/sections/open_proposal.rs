@@ -45,6 +45,16 @@ fn open_hunks(roots: Roots<'_>, target: &DiscussionTarget) -> Option<(String, Ve
             Some((proposal.path, hunks))
         }
         DiscussionTarget::Note { .. } => None,
+        // CEP-FR-XXMW: the change's pending proposal, each hunk with its path.
+        DiscussionTarget::Change { stream_id, change } => {
+            let open =
+                crate::change_proposals::pending_change_proposal(roots.store, stream_id, change)?;
+            let proposal =
+                crate::change_proposals::read_change_proposal_changes(roots.store, &open.id)?;
+            let hunks =
+                proposal.changes.into_iter().map(|c| open_hunk(change_hunk_view(c))).collect();
+            Some((change_label(change), hunks))
+        }
     }
 }
 

@@ -42,6 +42,7 @@ fn run_at(state: GraduationRunState) -> GraduationRun {
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),
@@ -233,6 +234,7 @@ fn a_pass_records_its_task_its_verdict_and_its_findings_whole() {
         verdict: ReviewOutcome::Revise,
         rationale: "one thing is missing".into(),
         findings: vec![ReviewFinding {
+            kind: None,
             severity: ReviewSeverity::Major,
             description: "the empty state is not implemented".into(),
             affected_files: vec!["src/panel.tsx".into()],
@@ -559,6 +561,9 @@ fn the_new_fields_cross_the_seam_under_the_names_the_frontend_reads() {
         message: "symlink refused".to_string(),
         clears_by: "Continue the run.".to_string(),
         attempt: 2,
+        cause: None,
+        detail: None,
+        diagnostics: Vec::new(),
     };
     let value = serde_json::to_value(&blocker).expect("serialized");
     assert_eq!(value.get("attempt").and_then(|v| v.as_u64()), Some(2));

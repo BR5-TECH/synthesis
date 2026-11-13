@@ -14,8 +14,8 @@
 use tauri::State;
 
 use super::{
-    graduation_loop, loop_settings, project_toml_path, GraduationConcurrency, LineEndings,
-    ProjectConfig, ProjectState, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG,
+    graduation_loop, loop_settings, openspec_mode, project_toml_path, GraduationConcurrency,
+    LineEndings, ProjectConfig, ProjectState, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG,
     GRADUATION_CONCURRENCY_KEY, LEGACY_STREAM_CONCURRENCY_KEY, LINE_ENDINGS_KEY,
 };
 
@@ -93,6 +93,8 @@ pub fn load_project_config_from(root: &crate::fs::RootFs) -> Result<ProjectConfi
             &table,
             graduation_loop::TOTAL_TIME_LIMIT,
         ),
+        // PSS-FR-IMDN, PSS-FR-JXKK: always present, `auto` while unset.
+        openspec_mode: Some(openspec_mode::read(&table).to_string()),
     })
 }
 
@@ -112,6 +114,8 @@ pub fn save_project_config_to(
 ) -> Result<(), String> {
     // PSS-FR-LFUZ: a value that is not valid refuses the whole write first.
     graduation_loop::validate(&config)?;
+    // PSS-FR-HVUZ: so does an OpenSpec mode other than `auto` and `off`.
+    openspec_mode::validate(&config)?;
     let mut table = load_public(root)?;
     let value = toml::Value::try_from(config.line_endings)
         .map_err(|e| format!("failed to encode line endings: {e}"))?;
@@ -127,6 +131,7 @@ pub fn save_project_config_to(
     // separate section of the same whole-store write (PSS-FR-17).
     loop_settings::write_into(&mut table, &config);
     graduation_loop::write_into(&mut table, &config);
+    openspec_mode::write_into(&mut table, &config);
     match config.draft_template {
         None => {}
         Some(text) if text.is_empty() => {
@@ -172,6 +177,7 @@ pub fn save_project_config<R: tauri::Runtime>(
     let before =
         load_project_config_from(&root).ok().and_then(|stored| stored.graduation_concurrency_limit);
     let named = config.graduation_concurrency_limit;
+    let openspec_named = config.openspec_mode.clone();
     let loop_named = [
         config.graduation_pass_budget,
         config.graduation_stage_time_limit_ms,
@@ -186,6 +192,17 @@ pub fn save_project_config<R: tauri::Runtime>(
             crate::log_fields! { "reason" => reason.clone() },
         );
         return Err(reason);
+    }
+    // PSS-FR-HVUZ: a write that named the OpenSpec mode setting. The value is
+    // one of two fixed words, never project content.
+    if let Some(mode) = openspec_named {
+        crate::logging::log_info(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "openspec mode setting saved",
+            crate::log_fields! { "setting" => mode },
+        );
     }
     // PSS-FR-OWGI: what a write did to the graduation loop settings. `-1` is a
     // setting cleared to unset; a setting the payload did not name is absent.

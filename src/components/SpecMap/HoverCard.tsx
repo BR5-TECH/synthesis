@@ -1,6 +1,6 @@
 import { specFolder, type TreeIndex } from "../../state/specMap/tree";
 import { EMPTY_ROLLUP, rollupOfSpec, type Rollup } from "../../state/specMap/rollups";
-import type { MapRef } from "../../state/specMap/types";
+import { isOpenSpecIndex, type MapRef } from "../../state/specMap/types";
 import type { MapView } from "../../state/specMap/session";
 import type { MapLayout } from "./layout";
 import { placeHoverCard } from "./zoom";
@@ -37,12 +37,16 @@ export function HoverCard({ tree, layout, rollups, target, view, width, height }
       content = {
         x: chip.x,
         y: chip.y,
-        badge: spec.code,
+        // SMN-FR-PMZM: the badge of the node where it carries one.
+        badge: spec.badge ?? spec.code,
         folder: specFolder(spec),
         label: spec.label,
         summary: spec.summary,
         rollup: rollupOfSpec(spec),
-        meta: `${spec.requirements} reqs · ${spec.scenarios} scenarios · cites ${cites}`,
+        // SMN-FR-EIDC: an OpenSpec requirement cites nothing.
+        meta: isOpenSpecIndex(tree.index)
+          ? `${spec.scenarios} scenarios`
+          : `${spec.requirements} reqs · ${spec.scenarios} scenarios · cites ${cites}`,
       };
     }
   } else if (target.kind === "index") {

@@ -227,6 +227,10 @@ fn drive_blocking<R: tauri::Runtime>(
         crate::graduation::reclaim_ended_merge_run(app, &run);
         // GRD-FR-TYVT: the same for the checkout of an ended PR summary run.
         crate::graduation::reclaim_ended_pr_summary_run(app, &run);
+        // OCR-FR-FJFI: the same for the worktree of an ended rework run.
+        crate::graduation::reclaim_ended_rework_run(app, &run);
+        // OPU-FR-FSCV: and the plan base of an ended apply run.
+        crate::graduation::plan_updates::reclaim_plan_base(app, &run);
     }
 }
 
@@ -311,6 +315,13 @@ async fn drive<R: tauri::Runtime>(
             Some(path) => Some(path),
             None => return,
         }
+    } else if run.is_change_rework() {
+        // OCR-FR-QUSP: a rework run stands in a worktree of its own, measured
+        // from its seed commit.
+        match super::rework_workspace::prepare(app, &mut run) {
+            Some(path) => Some(path),
+            None => return,
+        }
     } else {
         None
     };
@@ -354,7 +365,7 @@ async fn drive<R: tauri::Runtime>(
     // GRD-FR-HQPD / GRD-FR-YBUM: work the author left standing becomes the
     // run's starting point, and the revision it lands on is the base every
     // commit this run makes is measured from.
-    if run.base_commit.is_none() && !run.is_merge() {
+    if run.base_commit.is_none() && !run.is_merge() && !run.is_change_rework() {
         if let Err(reason) = establish_base(app, &mut run, &worktree, &cancellation) {
             let _ = transitions::block(
                 app,
@@ -376,6 +387,10 @@ async fn drive<R: tauri::Runtime>(
     if !logs::emit(app, &mut run, dispatched) {
         return;
     }
+    // OFP-FR-BZDP: an OpenSpec run's image is probed before its first turn.
+    if !super::image_probe::probe_before_dispatch(app, &mut run, &cancellation, dispatch).await {
+        return;
+    }
 
     // GXD-FR-TJRV: a run that stopped in the review resumes there. The work did
     // not change while the run rested, so a work turn would spend a container to
@@ -386,6 +401,11 @@ async fn drive<R: tauri::Runtime>(
     // turn is dispatched and no pass is spent.
     let mut resume_at_apply =
         run.is_merge() && run.checkpoint.resume_part.as_deref() == Some(phases::PART_APPLY);
+    // OCR-FR-PBKH: a rework run whose finish was blocked resumes at the
+    // finish, with no turn and no pass. OPU-FR-BKZX: so does an apply run
+    // whose plan update recording was blocked.
+    let resume_at_record =
+        run.is_change_run() && run.checkpoint.resume_part.as_deref() == Some(phases::PART_RECORD);
     // The pointer is spent the moment it is read. Leaving it set would make a
     // later interruption of this same run skip a work turn it never stopped in.
     if run.checkpoint.resume_part.is_some() {
@@ -403,6 +423,14 @@ async fn drive<R: tauri::Runtime>(
                 Step::Stop => return,
                 Step::Continue => continue,
             }
+        }
+        if resume_at_record {
+            if run.is_change_apply() {
+                super::plan_record::record_again(app, &mut run, &worktree);
+            } else {
+                super::rework_finish::finish_again(app, &mut run, &worktree);
+            }
+            return;
         }
         if !resume_at_review {
             match super::work_turn::work_turn(app, &mut run, &worktree, &cancellation, dispatch)
@@ -547,6 +575,12 @@ async fn review_turn<R: tauri::Runtime>(
     // than falling out to a further work turn: the work has not changed, so a
     // work turn would spend a container and a pass re-deciding work nobody
     // reported a problem with.
+    // GRL-FR-CDNI: the validation of the last review checkout, for the gate.
+    let mut validation: Option<crate::openspec::ChangeValidation>;
+    // GRL-FR-BHGJ: the task progress of an apply run, for the gate.
+    let mut progress: Option<crate::openspec::ApplyInstructions>;
+    // GRL-FR-ZFMZ: the specs validation of a merge review, for the gate.
+    let mut specs: Option<crate::openspec::ProjectValidation>;
     let (verdict, summary) = loop {
         let settings = settings_for_dispatch(app, run, phases::PART_REVIEW);
         // A budget the author lowered while the work turn ran rests the run,
@@ -632,6 +666,40 @@ async fn review_turn<R: tauri::Runtime>(
             );
         }
         input.checks = Some(checks);
+        // GRL-FR-CDNI, GRL-FR-KDYL: a propose run's change is validated in this
+        // checkout before the review turn, which reads the result as evidence.
+        match openspec_review::validation(app, run, &checkout).await {
+            Ok(result) => {
+                input.openspec_validation.clone_from(&result);
+                validation = result;
+            }
+            Err(()) => {
+                let _ = review_checkout::release(app, run, worktree);
+                return Step::Stop;
+            }
+        }
+        // GRL-FR-BHGJ: and an apply run's task progress, in the same checkout.
+        match change_review::apply_progress(app, run, &checkout).await {
+            Ok(result) => {
+                input.openspec_apply_progress.clone_from(&result);
+                progress = result;
+            }
+            Err(()) => {
+                let _ = review_checkout::release(app, run, worktree);
+                return Step::Stop;
+            }
+        }
+        // GRL-FR-ZDNL, GRL-FR-AGOA: and a merge review's specs validation.
+        match merge_specs_review::specs_validation(app, run, &checkout).await {
+            Ok(result) => {
+                input.openspec_specs_validation.clone_from(&result);
+                specs = result;
+            }
+            Err(()) => {
+                let _ = review_checkout::release(app, run, worktree);
+                return Step::Stop;
+            }
+        }
         let bound = settings.turn_bound(run.turn_time_used_ms);
         let turn = TurnRequest {
             execution_directory: &checkout,
@@ -680,7 +748,10 @@ async fn review_turn<R: tauri::Runtime>(
         };
         // GRL-FR-ECES: the verdict is read without the summary, and the summary
         // on its own after it, so a bad summary never refuses a verdict.
-        if let Some(verdict) = read_verdict(&execution) {
+        // OPU-FR-EPXL: a `plan` finding counts only in an apply review.
+        if let Some(verdict) =
+            read_verdict(&execution).map(|v| super::plan_turns::normalized(run, v))
+        {
             let summary = read_run_summary(app, run, &verdict, &execution);
             break (verdict, summary);
         }
@@ -749,17 +820,64 @@ async fn review_turn<R: tauri::Runtime>(
     //
     // GRL-FR-MRVK: the rule does not apply to a merge review. Every `revise`
     // verdict of one starts another pass or rests the run for the author.
+    // OPU-FR-FDCW: nor to a verdict that holds a `plan` finding.
+    let plans = super::plan_turns::holds_plan_finding(run, &verdict);
     let advisory = !run.is_merge()
+        && !plans
         && verdict.verdict == ReviewOutcome::Revise
         && verdict.findings.len() <= 2
         && verdict.findings.iter().all(|f| f.severity == ReviewSeverity::Minor);
+    // GRL-FR-HSZD: a change that does not validate never ends the loop.
+    let ends_as_ready = verdict.verdict == ReviewOutcome::Ready || advisory;
+    let gated =
+        openspec_review::gate_verdict(run, verdict.clone(), ends_as_ready, validation.as_ref());
+    // GRL-FR-EQDL, GRL-FR-XNBQ: the gate of an OpenSpec change run.
+    let gated = if gated == verdict {
+        change_review::gate_change_verdict(
+            run,
+            worktree,
+            gated,
+            ends_as_ready,
+            validation.as_ref(),
+            progress.as_ref(),
+        )
+    } else {
+        gated
+    };
+    // GRL-FR-ZFMZ: the gate of a merge review in OpenSpec mode.
+    let gated = if gated == verdict {
+        merge_specs_review::gate_merge_verdict(run, gated, specs.as_ref())
+    } else {
+        gated
+    };
+    let replaced = gated != verdict;
+    let verdict = gated;
+    let advisory = advisory && !replaced;
+    if replaced {
+        let _ = logs::emit(
+            app,
+            run,
+            StructuredEvent::new(GraduationLogProducer::ReviewTurn, "openspec review replaced")
+                .at_level(GraduationLogLevel::Warn)
+                .with("findings", 1u64),
+        );
+    }
 
+    // OPU-FR-FDCW: plan findings start no pass, and get a plan correction turn.
+    if plans {
+        return super::plan_turns::route_plan_findings(app, run, &verdict);
+    }
     if verdict.verdict == ReviewOutcome::Ready || advisory {
         run.observability.settle_pass(&verdict, None, crate::notes::now_rfc3339());
         // GRD-FR-AQNW: the counterpart of the commit of a draft run, for a merge
         // run, is the apply of the merge onto the base branch.
         if run.is_merge() {
             return merge_drive::finish_merge(app, run, worktree);
+        }
+        // OCR-FR-ZNJT: the counterpart of the commit, for a rework run, is its
+        // finish.
+        if run.is_change_rework() {
+            return super::rework_finish::finish(app, run, worktree, summary, &verdict);
         }
         // GRD-FR-UUGP: a draft run that is not a direct run keeps the run
         // summary of its `ready` review. An advisory end is a `revise` verdict,

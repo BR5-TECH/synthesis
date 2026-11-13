@@ -37,6 +37,8 @@ export function hitTestDrop(
   dragged: MapRef,
   point: { x: number; y: number },
 ): DropTarget | null {
+  // SMO-FR-WGOF: a change chip names no node of the map's own, so it drops nowhere.
+  if (dragged.kind === "change") return null;
   if (dragged.kind === "index" && tree.depth.get(dragged.id) === 0) {
     return rootDrop(tree, layout, dragged.id, point);
   }
@@ -56,7 +58,7 @@ export function hitTestDrop(
 function dropInto(
   tree: TreeIndex,
   layout: MapLayout,
-  dragged: MapRef,
+  dragged: Exclude<MapRef, { kind: "change" }>,
   box: LayoutBox,
   point: { x: number; y: number },
 ): DropTarget {

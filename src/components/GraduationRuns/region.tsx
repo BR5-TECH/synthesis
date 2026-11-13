@@ -7,10 +7,12 @@
  * escalation it waits on, the paths it changed, the pass history, how it ended,
  * and the foot bar of actions. A merge run renders on the same terms as every
  * run, with its own title, provenance, publication, unresolved paths and
- * result added (GRU-FR-CXLB).
+ * result added (GRU-FR-CXLB). An apply run and a rework run render with the
+ * words of their phase, their change, and, for an apply run, the task counts
+ * and the check state (GRU-FR-SOFY, GRU-FR-PXCW, GRU-FR-HZLV).
  */
 
-import type { MutableRefObject } from "react";
+import { useMemo, type MutableRefObject } from "react";
 
 import { logInfo } from "../../logging";
 import { formatSectionAddress } from "../../settingsWindow";
@@ -23,6 +25,8 @@ import {
   aheadOf,
   blockerStatement,
   blockerDetail,
+  blockerFrame,
+  openSpecBlockerFailure,
   pushRefusalStatement,
   commitSummary,
   conditionOf,
@@ -50,16 +54,25 @@ import {
   totalTimeLimitHeadline,
   totalTimeLimitRestOf,
   checksNotPassedRestOf,
+  planRestOf,
+  changeRunPhase,
+  checkStateOf,
+  tasksSentence,
 } from "../../state/graduation";
+import { useApplyProgress } from "../../state/openspec/applyProgress";
 import { stagesWithLogAccess } from "../../state/graduation/logScopes";
 import type {
+  ApplyProgress,
   GraduationCapacity,
   GraduationQueue,
   GraduationRun,
+  OpenSpecFailure,
 } from "../../types";
 import { RunProgress } from "../RunProgress";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { RunActionRow, type PressedAction, type RunAct } from "./actionRow";
 import { ChecksNotPassedRest } from "./checksRest";
+import { PlanRestNotice } from "./planRest";
 import { RunEscalationForm } from "./escalation";
 import { EscalationsLog } from "./escalationsLog";
 import { RunColumns } from "./columns";
@@ -76,15 +89,16 @@ import { PrSummaryResult } from "./prSummary";
 const SAYS_ITSELF = ["blocked", "interrupted", "failed", "discarded"];
 
 /**
- * GRU-FR-CKOB / GRU-FR-WKTL / GRU-FR-WVDV: whether the run's own paragraph
- * says what it is doing. A run at rest on the total time limit or on checks
- * that did not pass has one too.
+ * GRU-FR-CKOB / GRU-FR-WKTL / GRU-FR-WVDV / GRU-FR-TCSM: whether the run's
+ * own paragraph says what it is doing. A run at rest on the total time limit,
+ * on checks that did not pass, or on a plan rest has one too.
  */
 function saysItself(run: GraduationRun): boolean {
   return (
     SAYS_ITSELF.includes(run.state) ||
     totalTimeLimitRestOf(run) !== null ||
-    checksNotPassedRestOf(run) !== null
+    checksNotPassedRestOf(run) !== null ||
+    planRestOf(run) !== null
   );
 }
 
@@ -107,9 +121,46 @@ export interface RunRegionProps {
   onRestarted: (created: GraduationRun) => void;
   /** GRU-FR-KQPE: the refusal of this run's last row act. */
   refusal: string | null;
+  /** GRU-FR-BPNJ: the OpenSpec failure of that refusal, for its notice. */
+  refusalFailure?: OpenSpecFailure | null;
   pressedRef: MutableRefObject<PressedAction | null>;
   openRestart: boolean;
   onRestartOpened: () => void;
+}
+
+/**
+ * GRU-FR-PXCW: the sentence of the current stage. The Tasks stage of an apply
+ * run that works states the task counts and the next open task, where the
+ * last read of its apply progress answered.
+ */
+function stageSentence(
+  run: GraduationRun,
+  progress: ApplyProgress | null,
+  queue: GraduationQueue | null,
+  capacity: GraduationCapacity | null,
+): string {
+  const tasksStage = run.state === "working" && changeRunPhase(run) === "apply";
+  if (progress && tasksStage) {
+    return tasksSentence(progress);
+  }
+  // GRU-FR-LBPR / OFN-FR-PFYW: the notice below states an OpenSpec blocker,
+  // so the stage row states no sentence of its own for it.
+  if (openSpecBlockerFailure(run)) return "Blocked";
+  return conditionSentence(
+    run,
+    queue ? aheadOf(queue, run.id) : null,
+    waitsForSlot(run, capacity),
+  );
+}
+
+/**
+ * GRU-FR-PXCW: a failed read adds the short form of its notice
+ * (OFN-FR-QZEC) to the ordinary sentence of the Tasks stage. It is read after
+ * the sentence and shows as one line under the stage row.
+ */
+function stageNote(run: GraduationRun, progressFailure: string | null): string | null {
+  const tasksStage = run.state === "working" && changeRunPhase(run) === "apply";
+  return tasksStage ? progressFailure : null;
 }
 
 export function RunRegion({
@@ -125,17 +176,50 @@ export function RunRegion({
   onAnswered,
   onRestarted,
   refusal,
+  refusalFailure = null,
   pressedRef,
   openRestart,
   onRestartOpened,
 }: RunRegionProps) {
   const title = runTitle(run);
+  const phase = changeRunPhase(run);
+  // GRU-FR-PXCW: read when the run is selected and on each change of it. A
+  // read that fails leaves the stage on its ordinary sentence, with the short
+  // form of its notice.
+  const { progress, failure: progressFailure } = useApplyProgress({
+    streamId: run.streamId,
+    change: run.openspec?.change ?? "",
+    runId: run.id,
+    enabled: phase === "apply" && Boolean(run.streamId),
+    keepOnFailure: false,
+    surface: "graduation_run_tasks",
+  });
+  const checkState = checkStateOf(run);
+  // GRU-FR-LBPR: an OpenSpec blocker is stated in its failure notice. A
+  // reload gives a new run object with the same blocker, so the failure is
+  // read once for each blocker, by its content, and its notice appears once
+  // (OFN-FR-LKAT).
+  const blockerKey = `${run.state}|${JSON.stringify(run.blocker ?? null)}`;
+  const openspecBlocker = useMemo(
+    () => openSpecBlockerFailure(run),
+    // The key holds everything the failure is read from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [blockerKey, run.openspec?.change],
+  );
   return (
     <>
       <div className="graduation__head">
         {/* GRU-FR-HDPQ: a merge run's title stands where a draft run's draft
             name does. */}
         <span className="graduation__name">{title}</span>
+        {/* GRU-FR-YHFQ: a propose run names the change it writes, beside its
+            source draft, in every state. An apply run and a rework run name
+            their change in the place of a source draft (GRU-FR-HABG). */}
+        {run.openspec && (
+          <span className="graduation__change t-meta" data-testid="graduation-openspec-change">
+            Change {run.openspec.change}
+          </span>
+        )}
         <span className="spacer" />
         {/* GRU-FR-NBRO: the state in words and in accessible semantics rather
             than by colour, and announced when it changes. */}
@@ -152,6 +236,14 @@ export function RunRegion({
       <p className="t-meta graduation__provenance" data-testid="graduation-provenance">
         {provenanceLine(run, Boolean(run.streamId))}
       </p>
+      {/* GRU-FR-YHFQ: a rework run renders the author's instruction as
+          escaped plain text. */}
+      {phase === "rework" && run.openspec?.instruction && (
+        <p className="graduation__instruction" data-testid="graduation-rework-instruction">
+          <span className="t-eyebrow">Instruction</span>
+          <span className="graduation__instruction-text">{run.openspec.instruction}</span>
+        </p>
+      )}
       {/* GRU-FR-NWEC: the publication choice a merge run holds. */}
       <MergePublication run={run} />
       {/* GRU-FR-PFBY: a queued direct run whose pinned branch is not checked
@@ -188,11 +280,8 @@ export function RunRegion({
             onActivateStage={onActivateStage}
             currentStage={stageOf(run) ?? "queued"}
             condition={conditionOf(run)}
-            conditionSentence={conditionSentence(
-              run,
-              queue ? aheadOf(queue, run.id) : null,
-              waitsForSlot(run, capacity),
-            )}
+            conditionSentence={stageSentence(run, progress, queue, capacity)}
+            conditionNote={stageNote(run, progressFailure)}
             iterationLabel={iterationLabel(run)}
             history={stageHistory(run)}
             // RPV-FR-10: the host renders the moves itself — the review's
@@ -202,6 +291,14 @@ export function RunRegion({
             showLoops={false}
             outcome={outcomeStatement(run)}
             label={`Progress of ${title}`}
+            // GRU-FR-HZLV: the check state of an apply run, in words.
+            detail={
+              checkState ? (
+                <p className="t-meta graduation__check-state" data-testid="graduation-check-state">
+                  {checkState}
+                </p>
+              ) : undefined
+            }
           />
           {/* GRU-FR-LBPR: an author repeating a Continue can otherwise see
               nothing that says they are repeating it. */}
@@ -256,6 +353,25 @@ export function RunRegion({
         </p>
       )}
 
+      {/* GRU-FR-LBPR / OFN-FR-DPIJ: an OpenSpec blocker in its notice. The
+          Continue of the action row is its retry, so the notice offers none.
+          Open change opens the change of the run on its stream. */}
+      {openspecBlocker && (
+        <div
+          className="graduation__blocker graduation__warning"
+          data-testid="graduation-blocker"
+        >
+          <OpenSpecFailureNotice
+            failure={openspecBlocker}
+            surface="graduation_run_blocker"
+            change={run.openspec?.change ?? null}
+            location={run.streamId ? { kind: "stream", streamId: run.streamId } : null}
+            streamName={run.streamName || undefined}
+            frame={blockerFrame(run)}
+          />
+        </div>
+      )}
+
       {/* GRU-FR-BHJO: a headline that names why it stopped, and then what the
           backend said about it. GRU-FR-QLRQ: a run stopped at its time limit
           routes to the setting that sets the limit, so the author can raise it
@@ -300,6 +416,11 @@ export function RunRegion({
           each check that did not pass, and says that nothing went to review
           and nothing was committed. */}
       <ChecksNotPassedRest run={run} />
+
+      {/* GRU-FR-TCSM / GRU-FR-TVDF / GRU-FR-PZJY: an apply run at rest on a
+          plan rest says what it asks, and where the author answers it. It
+          holds no escalation, so no question form renders (GRU-FR-FZCN). */}
+      <PlanRestNotice run={run} />
 
       {/* GRU-FR-TFEZ: a push the remote did not take, said once. */}
       {pushRefusalStatement(run) && (
@@ -386,6 +507,7 @@ export function RunRegion({
           onOpenDraft={onOpenDraft}
           onRestarted={onRestarted}
           refusal={refusal}
+          refusalFailure={refusalFailure}
           pressedRef={pressedRef}
           openRestart={openRestart}
           onRestartOpened={onRestartOpened}

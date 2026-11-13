@@ -10,6 +10,26 @@ import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-document
 import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
+import {
+  OPENSPEC_DEMO_DRAFT,
+  OPENSPEC_DEMO_DRAFT_ID,
+  OPENSPEC_DEMO_RECORD,
+  OPENSPEC_DEMO_RUN_FIELDS,
+  changeDiscussionList,
+  demoProposalHold,
+  openspecDiscussionInvoke,
+  openspecInvoke,
+  validChangeName,
+} from "./mock-openspec";
+import { applyRunFields, openspecRunsInvoke, reworkRunFields } from "./mock-openspec-runs";
+import { mergeFailure, throwFailureFlag } from "./mock-openspec-failures";
+import { specMapInvoke } from "./mock-openspec-map";
+import {
+  PLAN_THREAD_ID,
+  notePlanSubmission,
+  planContinue,
+  planQuestionSet,
+} from "./mock-openspec-plan";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
@@ -33,6 +53,15 @@ const now = "2026-07-28T11:24:00Z";
  */
 /** GTC-FR-YWRZ: the branches confirmed in this harness session. */
 const confirmedMainWrites = new Set<string>();
+
+/** OAR-FR-SOFQ: the changes a merge archived, with `?mergeArchives`. */
+function mergeArchived(): { change: string; archivedAs: string }[] {
+  if (!harnessFlag("mergeArchives")) return [];
+  return [
+    { change: "add-logout-3f2a", archivedAs: "2026-11-11-add-logout-3f2a" },
+    { change: "add-refunds", archivedAs: "2026-11-11-add-refunds" },
+  ];
+}
 
 function harnessFlag(name: string): boolean {
   return new URLSearchParams(location.search).has(name);
@@ -415,6 +444,58 @@ function seededTree(): any {
             id: "flows/payments-hld.md",
             name: "payments-hld.md",
             path: "flows/payments-hld.md",
+            nodeKind: "file",
+            artifactType: "doc",
+            typeSource: "inferred",
+          },
+        ],
+      },
+      // SMI-FR-QCUC: with `?openspecMap`, the spec files of the OpenSpec index
+      // of mock-openspec-map.ts, so a Spec row click while the Map tab is
+      // active selects the capability node of that file.
+      ...(harnessFlag("openspecMap")
+        ? [
+            {
+              id: "openspec/specs",
+              name: "openspec/specs",
+              path: "openspec/specs",
+              nodeKind: "folder",
+              hasArtifacts: true,
+              children: [
+                {
+                  id: "openspec/specs/auth/spec.md",
+                  name: "auth/spec.md",
+                  path: "openspec/specs/auth/spec.md",
+                  nodeKind: "file",
+                  artifactType: "spec",
+                  typeSource: "inferred",
+                },
+                {
+                  id: "openspec/specs/billing/payments/spec.md",
+                  name: "billing/payments/spec.md",
+                  path: "openspec/specs/billing/payments/spec.md",
+                  nodeKind: "file",
+                  artifactType: "spec",
+                  typeSource: "inferred",
+                },
+              ],
+            },
+          ]
+        : []),
+      // LIB-FR-OKIZ / OCW-FR-ZZHS: the demo change in the active worktree, so
+      // a click on its file opens the change workspace tab of a worktree
+      // location (see mock-openspec.ts).
+      {
+        id: "openspec/changes/add-logout-3f2a",
+        name: "add-logout-3f2a",
+        path: "openspec/changes/add-logout-3f2a",
+        nodeKind: "folder",
+        hasArtifacts: true,
+        children: [
+          {
+            id: "openspec/changes/add-logout-3f2a/proposal.md",
+            name: "proposal.md",
+            path: "openspec/changes/add-logout-3f2a/proposal.md",
             nodeKind: "file",
             artifactType: "doc",
             typeSource: "inferred",
@@ -2366,6 +2447,9 @@ const SEEDED_QUESTION_SET: any = {
 const questionSetsByThread: Record<string, any> = harnessFlag("noSeededSet")
   ? {}
   : { "disc-1": SEEDED_QUESTION_SET };
+
+// OPU-FR-VXVO: `?openspecPlan=update` seeds the Synthesis set of the plan thread.
+if (planQuestionSet()) questionSetsByThread[PLAN_THREAD_ID] = planQuestionSet();
 
 let raisedSets = 0;
 
@@ -4474,7 +4558,9 @@ let projectConfig: {
   graduationPassBudget: number | null;
   graduationStageTimeLimitMs: number | null;
   graduationTotalTimeLimitMs: number | null;
+  openspecMode: "auto" | "off";
 } = {
+  openspecMode: "auto",
   lineEndings: "lf",
   draftTemplate: null,
   // PSS-FR-JRWC: one is the resting limit. Seed another at
@@ -6569,6 +6655,16 @@ function makeStreamRun(over: any) {
   };
 }
 
+// GRD-FR-LKGC / GRU-FR-LTWN: a completed propose run, and the graduated draft
+// it was made from (DRP-FR-YGOU, NAW-FR-XDDQ). See mock-openspec.ts.
+graduationRuns.push(makeStreamRun(OPENSPEC_DEMO_RUN_FIELDS));
+// OCR-FR-VHQW / OCW-FR-JHAB: a completed rework run and a working apply run of
+// the demo change. See mock-openspec-runs.ts.
+graduationRuns.push(makeStreamRun(reworkRunFields()), makeStreamRun(applyRunFields()));
+(drafts as any[]).push({ ...OPENSPEC_DEMO_DRAFT });
+draftRecords[OPENSPEC_DEMO_DRAFT_ID] = { ...OPENSPEC_DEMO_RECORD };
+draftFiles[OPENSPEC_DEMO_DRAFT_ID] = [String(OPENSPEC_DEMO_RECORD.promptPath)];
+
 graduationRuns.push(
   // GRT-FR-CTNO: the one state Restart is offered for.
   makeStreamRun({
@@ -7143,6 +7239,30 @@ function mergeRunHolds(streamId: string) {
   return Boolean(link) && link!.state !== "completed" && link!.state !== "failed";
 }
 
+// WSS-FR-GBWE: with `?mergeRunFailed`, the newest merge run of docs-refresh
+// (s-4) is `failed`, so the row's failed-merge-run wording is reachable.
+if (harnessFlag("mergeRunFailed")) {
+  graduationRuns.push(
+    makeMergeRunSeed({
+      id: "g-33",
+      streamId: "s-4",
+      streamName: "docs-refresh",
+      state: "failed",
+      workTurns: 1,
+      merge: {
+        name: "Merge docs-refresh",
+        streamBranch: "synthesis/stream/docs-refresh",
+        publication: { kind: "uncommitted" },
+        changedPaths: ["docs/guides/overview.md"],
+        unresolvedPaths: ["docs/guides/overview.md"],
+        conflicts: [
+          { path: "docs/guides/overview.md", baseChange: "updated", streamChange: "updated" },
+        ],
+      },
+    }),
+  );
+}
+
 /** WKS-FR-ZLWT: a merge a conflict handed off, as the queue holds it. */
 function enqueueMergeRun(stream: any, publication: any) {
   const run = makeMergeRunSeed({
@@ -7275,7 +7395,14 @@ function draftGraduation(draftId: string): any {
     runId: run.id,
     state: run.state,
     locked: !GRADUATION_TERMINAL.includes(run.state),
-    graduated: run.publication != null || IMPLEMENTATION_PART.includes(run.state),
+    graduated:
+      run.publication != null ||
+      IMPLEMENTATION_PART.includes(run.state) ||
+      (run.state === "completed" && (run.commits?.length ?? 0) > 0),
+    // DRS-FR-VHMB: the change a propose run writes, and its stream.
+    openspecChange: run.openspec
+      ? { name: run.openspec.change, streamId: run.streamId }
+      : null,
   };
 }
 
@@ -8042,6 +8169,10 @@ function publicationMetadataMock() {
  * switch below (see `mock-unified-discussions.ts`).
  */
 export async function invoke(cmd: string, args?: Record<string, any>): Promise<any> {
+  // OCW-FR-TRLG / OCW-FR-COLR: the discussions and the edit proposal of the
+  // demo change on its stream (see mock-openspec.ts).
+  const change = openspecDiscussionInvoke(cmd, args ?? {});
+  if (change !== NOT_HANDLED) return change;
   return unifiedInvoke(cmd, args, legacyInvoke);
 }
 
@@ -8097,6 +8228,20 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // PPK-project-picker.md: the recent list, with Pin, Unpin, and Hide state.
   const recents = recentsInvoke(cmd, a);
   if (recents !== NOT_HANDLED) return recents;
+  // OSI-openspec-spec-index.md: the specification map, demo or OpenSpec.
+  const specMap = specMapInvoke(cmd);
+  if (specMap !== NOT_HANDLED) return specMap;
+  // OCW-openspec-change-workspace.md: the one demo change.
+  const openspec = openspecInvoke(cmd, a);
+  if (openspec !== NOT_HANDLED) return openspec;
+  // OCR / CAR: the runs of the demo change and its action requests.
+  const changeRuns = openspecRunsInvoke(cmd, a, {
+    runs: graduationRuns,
+    makeRun: makeStreamRun,
+    discussions: changeDiscussionList(),
+    proposalHold: demoProposalHold,
+  });
+  if (changeRuns !== NOT_HANDLED) return changeRuns;
   // FLO-flow.md / FSR-flow-sync-review.md: the delivery plan's state, its
   // overlaps, and the tracker sync.
   const flowPlan = flowPlanInvoke(cmd, a);
@@ -8326,8 +8471,42 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           patch.graduationTotalTimeLimitMs === undefined
             ? projectConfig.graduationTotalTimeLimitMs
             : patch.graduationTotalTimeLimitMs,
+        // PSS-FR-HVUZ: omitted leaves it as stored; `auto` and `off` store it.
+        openspecMode: patch.openspecMode === "off" ? "off" : patch.openspecMode === "auto" ? "auto" : projectConfig.openspecMode,
       };
       return undefined;
+    }
+
+    // OSM-FR-YXUC: the demo project uses OpenSpec and the CLI is found.
+    // Seed http://localhost:5199/?openspecCli=not_found to see the install
+    // statement (SET-FR-ABXE).
+    case "get_openspec_status": {
+      // OSM-FR-YXUC / OFP-FR-ITUD: `recheck` clears a kept failure; the
+      // harness keeps none, so it answers the same state either way.
+      const cliSeed =
+        typeof location === "undefined" ? null : new URLSearchParams(location.search).get("openspecCli");
+      // SET-FR-QERY: `?openspecCli=failed:<reason>` seeds a `failed` CLI with
+      // the reason `not_executable`, `timed_out`, or `no_version`.
+      const cli =
+        cliSeed === "not_found"
+          ? { state: "not_found" }
+          : cliSeed === "unsupported"
+            ? { state: "unsupported", path: "/opt/homebrew/bin/openspec", version: "0.16.0" }
+            : cliSeed?.startsWith("failed")
+              ? { state: "failed", path: "/opt/homebrew/bin/openspec", reason: cliSeed.split(":")[1] || "no_version" }
+              : { state: "available", path: "/opt/homebrew/bin/openspec", version: "1.17.0" };
+      const status = {
+        setting: projectConfig.openspecMode,
+        usesOpenspec: true,
+        active: projectConfig.openspecMode === "auto",
+        cli,
+      };
+      // SET-FR-YRWU / OFN-FR-CBLG: `?openspecStatusDelay=<ms>` holds every
+      // answer, so the disabled state of Check again and Retry is visible.
+      const delay = Number(
+        typeof location === "undefined" ? 0 : new URLSearchParams(location.search).get("openspecStatusDelay") ?? 0,
+      );
+      return delay > 0 ? new Promise((done) => setTimeout(() => done(status), delay)) : status;
     }
 
     // ---- plugins ---------------------------------------------------------
@@ -9112,6 +9291,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      *   http://localhost:5199/?mergeDelay      -> the call stays out for 4s, so
      *                                             the running state is visible
      *   http://localhost:5199/?mergeRefused=merge_branch_moved
+     *   http://localhost:5199/?mergeArchives   -> a merged or conflicted answer
+     *                                             names two archived OpenSpec
+     *                                             changes (WSS-FR-BFJZ)
+     *
+     * The archive refusals of WSS-FR-NTGC are `mergeRefused` values, URL-encoded:
+     *
+     *   ?mergeRefused=change_has_pending%3A%20add-logout-3f2a%3A%20edit_proposal%2Caction_request
+     *   ?mergeRefused=change_not_archivable%3A%20add-logout-3f2a%3A%20tasks_incomplete
+     *   ?mergeRefused=archive_failed%3A%20add-logout-3f2a%3A%20cli_timed_out
      *
      * A conflict enqueues a real run in the seeded queue, so Open in Runs
      * lands on it.
@@ -9131,6 +9319,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const refused = new URLSearchParams(location.search).get("mergeRefused");
       // eslint-disable-next-line no-throw-literal
       if (refused) throw refused;
+      // WSS-FR-NTGC / OFP-FR-MQGG: `?openspecMerge=` refuses with an archive
+      // failure and its merge notice (mock-openspec-failures.ts).
+      const archive = mergeFailure();
+      if (archive) throw archive;
       if (harnessFlag("mergeNothing")) return { kind: "nothing_to_merge" };
       if (harnessFlag("mergeConflicts")) {
         const run = enqueueMergeRun(stream, a.publication);
@@ -9146,6 +9338,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           kind: "conflicted",
           runId: run.id,
           conflictedPaths: run.merge.unresolvedPaths,
+          archived: mergeArchived(),
         };
       }
       return {
@@ -9155,6 +9348,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           a.publication?.kind === "commit"
             ? "9f2c1ab4d5e6f708192a3b4c5d6e7f8091a2b3c4"
             : null,
+        archived: mergeArchived(),
       };
     }
 
@@ -9254,6 +9448,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
     }
     case "get_draft_graduation":
+      // NAW-FR-XDDQ: the tab reads the run itself (GraduationRun).
+      if (a.draftId === OPENSPEC_DEMO_DRAFT_ID) {
+        return graduationRuns.find((r) => r.draftId === OPENSPEC_DEMO_DRAFT_ID) ?? null;
+      }
       return draftGraduation(String(a.draftId ?? ""));
     /**
      * GRV-FR-04: a project outside Git refuses the first attempt with the typed
@@ -9270,6 +9468,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         // eslint-disable-next-line no-throw-literal
         throw "graduation_worktree_creation_failed";
       }
+      // GSD-FR-RFIG: `?openspecPropose=` refuses a propose start with an
+      // OpenSpec failure (mock-openspec-failures.ts).
+      if (a.openspecChange) throwFailureFlag("openspecPropose");
       if (harnessFlag("graduationInPlace") && !a.inPlaceAcknowledged) {
         // eslint-disable-next-line no-throw-literal
         throw "in_place_acknowledgement_required";
@@ -9305,6 +9506,20 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         // eslint-disable-next-line no-throw-literal
         throw "draft_already_graduating";
       }
+      // GSU-FR-CZEP / GSU-FR-UIDE: the refusals of a propose start.
+      const openspecChange = a.openspecChange == null ? null : String(a.openspecChange);
+      if (openspecChange !== null) {
+        // eslint-disable-next-line no-throw-literal
+        if (!validChangeName(openspecChange)) throw "invalid_change_name";
+        const taken = graduationRuns.some(
+          (r) =>
+            r.openspec?.change === openspecChange &&
+            r.streamId === String(a.streamId ?? "") &&
+            (r.state === "completed" || !GRADUATION_TERMINAL.includes(r.state)),
+        );
+        // eslint-disable-next-line no-throw-literal
+        if (taken) throw "openspec_change_exists";
+      }
       const inPlace = harnessFlag("graduationInPlace");
       const id = `g-${graduationRuns.length + 1}`;
       // GSD-FR-VKLD / GSD-FR-WQPD / GSD-FR-MZTB: the four answers the start
@@ -9323,6 +9538,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         streamName: startStream?.name ?? null,
         standingWork: String(a.standingWork ?? "commit"),
         standingWorkMessage: a.standingWorkMessage ?? null,
+        // GRD-FR-LKGC: a propose run carries the change it writes.
+        openspec: openspecChange ? { phase: "propose", change: openspecChange } : null,
         input: {
           draftId,
           draftName: String(record.name ?? draftId),
@@ -9488,7 +9705,12 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     }
     case "continue_graduation_run": {
       await graduationActDelay();
+      // GRU-FR-BPNJ: `?openspecContinue=` refuses with an OpenSpec failure.
+      throwFailureFlag("openspecContinue");
       const run = findRun(String(a.runId ?? ""));
+      // OPU-FR-THOZ: a plan rest refuses Continue while its questions or its
+      // edits are undecided (mock-openspec-plan.ts).
+      if (planContinue(run, demoProposalHold)) return graduationChanged(run);
       run.state = "running";
       // GRD-FR-SKLO: Continue from a total time limit rest clears the rest and
       // resets the used total time alone.
@@ -10683,7 +10905,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (String(a.setId ?? "") !== set.setId) throw "question_set_not_found";
       const answers = Array.isArray(a.answers) ? (a.answers as any[]) : [];
       if (answers.length !== set.questions.length) throw "question_answers_incomplete";
-      const held = allDiscussions().find((t: any) => t.id === threadId);
+      // OPU-FR-TPYT: the plan thread is a change discussion (mock-openspec.ts).
+      const held =
+        allDiscussions().find((t: any) => t.id === threadId) ??
+        changeDiscussionList().find((t: any) => t.id === threadId);
       if (!held) throw "thread_not_found";
       let finalAnswerCommentId = "";
       for (const question of set.questions) {
@@ -10751,6 +10976,11 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           attachments: [],
           createdAt: new Date().toISOString(),
         });
+      }
+      // OPU-FR-TPYT: a set of a plan update hands its answers to the run.
+      notePlanSubmission(threadId, answers, graduationRuns);
+      if (threadId === PLAN_THREAD_ID) {
+        fireBus("graduation-run-changed", { runId: "g-51", state: "awaiting_author" });
       }
       // CMS-FR-OKMU: the set is deleted only after the append.
       delete questionSetsByThread[threadId];
@@ -11435,8 +11665,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       // AGC-FR-05: Tauri reads `origin` with serde before the command runs, so
       // an origin in another shape fails the call with an argument error.
       const o = a.origin as Record<string, any> | undefined;
-      const idField = { draft: "draftId", artifact: "artifactId", note: "noteId" }[
-        String(o?.target?.kind) as "draft" | "artifact" | "note"
+      // OCW-FR-GDZT: a change discussion names its change (CMS-FR-UEXD).
+      const idField = { draft: "draftId", artifact: "artifactId", note: "noteId", change: "change" }[
+        String(o?.target?.kind) as "draft" | "artifact" | "note" | "change"
       ];
       if (typeof o?.discussionId !== "string" || !idField || typeof o.target[idField] !== "string") {
         throw "invalid args `origin` for command `dispatch_agent_turn`: missing field `discussionId`";

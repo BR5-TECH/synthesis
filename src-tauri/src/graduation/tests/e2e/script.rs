@@ -10,7 +10,9 @@ use crate::graduation::{
     GraduationInterruptionReason, GraduationLogStream, ReviewFinding, ReviewOutcome,
     ReviewSeverity, ReviewVerdict,
 };
-use crate::tools::agent_exec::protocol::EnvelopeInvalid;
+use crate::tools::agent_exec::protocol::{
+    AgentEscalation, AgentEscalationQuestion, EnvelopeInvalid, EscalationKind,
+};
 use crate::tools::agent_exec::{AgentExecutionError, ProcessOutcome};
 
 /// GTE-FR-HWQM: something a turn does to the application while it runs.
@@ -136,6 +138,18 @@ impl TurnScript {
         })
     }
 
+    /// OPU-FR-YBLE: the work turn of an apply run gives a plan update with
+    /// the reason and the questions, in a session the turn that takes the
+    /// answers resumes.
+    pub(crate) fn gives_plan_update(reason: &str, questions: Vec<AgentEscalationQuestion>) -> Self {
+        Self::of(Answer::PlanUpdate(AgentEscalation {
+            kind: Some(EscalationKind::PlanUpdate),
+            reason: reason.to_string(),
+            questions,
+        }))
+        .leaves_a_session()
+    }
+
     /// GRL-FR-ZDKP: the turn was stopped where it stood. Deterministic — the
     /// harness produces the outcome rather than waiting for a clock
     /// (GTE-FR-RSQD).
@@ -228,7 +242,7 @@ impl TurnScript {
 
     /// The turn answers with a vendor session the next turn can resume.
     pub(crate) fn leaves_a_session(mut self) -> Self {
-        self.inner = self.inner.with_session();
+        self.inner = self.inner.with_session("s1");
         self
     }
 
@@ -315,6 +329,7 @@ impl TurnScript {
 /// A review finding at the named severity.
 pub(crate) fn finding(severity: ReviewSeverity, description: &str) -> ReviewFinding {
     ReviewFinding {
+        kind: None,
         severity,
         description: description.to_string(),
         affected_files: vec!["src/panel.ts".to_string()],

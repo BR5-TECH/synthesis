@@ -66,12 +66,56 @@ describe("TSK-FR-25 tests runs every lane", () => {
   });
 });
 
-// `cargo test` has no limit for one test (CIP-FR-VITB). `uat:dind` keeps it on
-// purpose: it is a manual acceptance test and is not part of `tests`.
+// `cargo test` has no limit for one test (CIP-FR-VITB). `uat:dind`,
+// `uat:openspec` and `uat:openspec-image` keep it on purpose: they are manual
+// acceptance tests and are not part of `tests`.
 describe("TSK-FR-24, TSK-FR-25 no verification task runs cargo test", () => {
   it.each(["tests", "tests:backend"])("%s runs no cargo test", (name) => {
     expect(linesOf(taskfile.tasks[name]).filter((line) => /\bcargo test\b/.test(line))).toEqual(
       [],
     );
+  });
+});
+
+describe("TSK-FR-01 the task file holds the fifteen tasks", () => {
+  it("names each task and no other", () => {
+    expect(Object.keys(taskfile.tasks).sort()).toEqual(
+      [
+        "build",
+        "build:linux",
+        "build:macos",
+        "build:windows",
+        "docker",
+        "lint",
+        "lint:backend",
+        "lint:mock",
+        "lint:server",
+        "specs",
+        "tests",
+        "tests:backend",
+        "uat:dind",
+        "uat:openspec",
+        "uat:openspec-image",
+      ].sort(),
+    );
+  });
+});
+
+describe("TSK-FR-NJQE, TSK-FR-HEXG the OpenSpec acceptance tasks", () => {
+  it.each([
+    ["uat:openspec", "openspec_uat_cli"],
+    ["uat:openspec-image", "openspec_uat_image"],
+  ])("%s runs the ignored %s tests from src-tauri/, one thread at a time", (name, filter) => {
+    const task = taskfile.tasks[name];
+    expect(task.dir).toBe("{{.ROOT_DIR}}/src-tauri");
+    expect(linesOf(task)).toEqual([
+      `TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture ${filter}`,
+    ]);
+  });
+
+  it("no verification task runs an OpenSpec acceptance test", () => {
+    for (const name of ["tests", "tests:backend"]) {
+      expect(JSON.stringify(taskfile.tasks[name])).not.toMatch(/openspec_uat|uat:openspec/);
+    }
   });
 });

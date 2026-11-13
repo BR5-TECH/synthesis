@@ -49,6 +49,13 @@ pub fn build_input_within(
     let Some(discussion) = resolve_origin(roots, origin) else {
         return BuiltInput::default();
     };
+    // AGC-FR-OYJX: a change whose stream or folder is gone has no context,
+    // which the caller turns into `context_unavailable`.
+    if let DiscussionTarget::Change { stream_id, change } = &discussion.target {
+        if crate::change_proposals::change_site_now(stream_id, change).is_err() {
+            return BuiltInput::default();
+        }
+    }
     let mut sections = Vec::new();
     let document = match &discussion.target {
         DiscussionTarget::Note { note_id } => {

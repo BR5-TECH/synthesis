@@ -110,7 +110,7 @@ pub(super) fn request(
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let result = crate::streams::merge_work_stream_blocking(&fx.app, &stream.id, publication);
     fx.app.state::<GraduationState>().set_loop_enabled(true);
-    result
+    result.map_err(String::from)
 }
 
 pub(super) fn handed_off(
@@ -119,7 +119,9 @@ pub(super) fn handed_off(
     publication: StreamMergePublication,
 ) -> (String, Vec<String>) {
     match request(fx, stream, publication).expect("the check settled") {
-        StreamMergeResult::Conflicted { run_id, conflicted_paths } => (run_id, conflicted_paths),
+        StreamMergeResult::Conflicted { run_id, conflicted_paths, .. } => {
+            (run_id, conflicted_paths)
+        }
         other => panic!("expected a handoff, got {other:?}"),
     }
 }

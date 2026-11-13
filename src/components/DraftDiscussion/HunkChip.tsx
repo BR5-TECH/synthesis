@@ -10,7 +10,7 @@
  * own that holds the space open — the head of the proposed text, and a block
  * below the struck passage of a deletion — and this is placed in that space.
  */
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { DecoratedHunk } from "./hunkDecorations";
 import { HUNK_ATTR } from "./hunkDecorations";
@@ -44,7 +44,12 @@ export function HunkChip({
   // Measured from the decorated element rather than from ProseMirror positions:
   // what the chip must sit over is the padding the decoration reserves, which is
   // a property of the rendered box and not of the document.
-  useLayoutEffect(() => {
+  //
+  // A passive effect, not a layout effect: when the chip and its host mount in
+  // one commit, a child's layout effect runs before the parent's ref is set, so
+  // the host is not there yet and the chip never shows. A passive effect runs
+  // after every ref of the commit is set.
+  useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const place = () => {
@@ -87,6 +92,16 @@ export function HunkChip({
     observer.observe(host);
     return () => observer.disconnect();
   }, [hunk.id, hunk.kind, hunk.state, hostRef]);
+
+  // The chip stays inside its host: in a narrow pane, a chip placed at the
+  // change's left edge would put its last control past the right edge.
+  useEffect(() => {
+    const host = hostRef.current;
+    const chip = ref.current;
+    if (box === null || !host || !chip) return;
+    const max = Math.max(0, host.clientWidth - chip.offsetWidth);
+    if (box.left > max) setBox({ top: box.top, left: max });
+  }, [box, hostRef]);
 
   if (box === null) return null;
 

@@ -387,6 +387,7 @@ fn discuss_opens_a_new_artifact_discussion_and_holds_a_pending_hunk() {
     assert_eq!(
         opened.comments[0].attachments,
         vec![Attachment::ProposalHunk {
+            change: None,
             proposal_id: f.proposal_id.clone(),
             hunk_id: f.hunk(2).to_string(),
             draft_id: None,

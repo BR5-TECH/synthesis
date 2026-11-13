@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { DEMO_SPECIFICATION_INDEX } from "./fixture";
 import { buildTree } from "./tree";
 import { COMPLETENESS_STATES } from "./types";
-import { loadSpecificationMap } from "../../api/specMap";
 
 vi.mock("../../logging", () => ({
   logDebug: vi.fn(),
@@ -61,12 +60,5 @@ describe("the demo index (SMP-FR-HWIC)", () => {
       expect(level.plural.length).toBeGreaterThan(0);
       expect(level.singular.length).toBeGreaterThan(0);
     }
-  });
-
-  it("SMP-FR-HWIC: the stub serves a fresh copy, so an edit to one load never reaches the next", async () => {
-    const first = await loadSpecificationMap();
-    first.roots[0].label = "changed";
-    const second = await loadSpecificationMap();
-    expect(second.roots[0].label).toBe(DEMO_SPECIFICATION_INDEX.roots[0].label);
   });
 });

@@ -36,7 +36,7 @@ use crate::streams::StreamMergePublication;
 /// when the scenario is dropped.
 pub(crate) struct Scenario {
     name: &'static str,
-    fx: Fixture,
+    pub(super) fx: Fixture,
     stream_name: String,
     prompt: String,
     scripts: Vec<TurnScript>,
@@ -58,6 +58,12 @@ pub(crate) struct Scenario {
     /// GTE-FR-YCQW: streams whose claims fill project slots for the whole
     /// scenario.
     slot_holders: Vec<String>,
+    /// GTE-FR-QPMA: the OpenSpec run the scenario starts in place of a draft
+    /// run.
+    pub(super) change_start: Option<super::openspec_arrange::ChangeStart>,
+    /// GTE-FR-YMEC: the answers of the image probes of the first drive, in
+    /// order. With none, a probe passes.
+    pub(super) probes: Vec<super::super::ProbeAnswer>,
 }
 
 /// One commit the arrangement makes on a branch as another author does.
@@ -89,6 +95,8 @@ impl Scenario {
             no_draft_run: false,
             merge: None,
             slot_holders: Vec::new(),
+            change_start: None,
+            probes: Vec::new(),
         }
     }
 
@@ -259,6 +267,8 @@ impl Scenario {
             no_draft_run,
             merge,
             slot_holders,
+            change_start,
+            probes,
         } = self;
         let mut streams: BTreeMap<String, crate::streams::WorkStream> = BTreeMap::new();
         let stream = fx.stream(&stream_name);
@@ -279,8 +289,13 @@ impl Scenario {
             };
             super::merge_arrange::commit_file(&repo, &commit.path, &commit.content);
         }
+        // An OpenSpec run starts on the change the arrangement committed, so
+        // the revision before it is the one after those commits.
+        let base = if change_start.is_some() { head_of(&worktree) } else { base };
         let run = if no_draft_run {
             super::merge_arrange::no_run()
+        } else if let Some(start) = &change_start {
+            start.enqueue(name, &fx, &stream, &prompt)
         } else {
             fx.enqueue_under(&stream, &prompt, "d1", standing_work, standing_message)
         };
@@ -344,6 +359,7 @@ impl Scenario {
             (ScriptedDispatch::new(Vec::new()), run, scripts)
         } else {
             let dispatch = bind(&ctx, scripts);
+            dispatch.script_probes(probes);
             let rested = fx.drive(&run, dispatch.clone());
             (dispatch, rested, Vec::new())
         };
@@ -366,6 +382,7 @@ impl Scenario {
             live_before: None,
             offered: Vec::new(),
             merge_answer: None,
+            merge_failure: None,
         };
         match merge {
             Some(publication) => {

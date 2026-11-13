@@ -154,6 +154,29 @@ pub struct GraduationTaskInput {
     /// GRL-FR-SNHR: the pull request the turn of a PR summary run describes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_summary: Option<PrSummaryTaskContext>,
+    /// GRL-FR-MXXA: the phase, the change, and a rework run's instruction, on
+    /// every turn of an OpenSpec run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec: Option<OpenSpecTaskContext>,
+    /// GRL-FR-CDNI, GRL-FR-BHGJ, GRL-FR-HSNY: the validation of the reviewed
+    /// tree, on the review turns of an OpenSpec run, and on the turn that
+    /// Continue from a plan rest dispatches (OPU-FR-SKTV).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_validation: Option<crate::openspec::ChangeValidation>,
+    /// GRL-FR-BHGJ: the task progress of the reviewed tree, on the review
+    /// turns of an apply run, and on the turn that Continue from a plan rest
+    /// dispatches (OPU-FR-SKTV).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_apply_progress: Option<crate::openspec::ApplyInstructions>,
+    /// GRL-FR-ZDNL: the strict validation of the OpenSpec specifications of
+    /// the reviewed tree, on the `merge_review` turns of a merge run in
+    /// OpenSpec mode alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_specs_validation: Option<crate::openspec::ProjectValidation>,
+    /// OPU-FR-SKTV: the decisions of a plan update, on the turn that takes
+    /// them alone. It holds no file text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_update: Option<crate::graduation::plan_updates::PlanUpdateTaskContext>,
     /// GRL-FR-FESZ: where a `review` or `merge_review` turn finds the check
     /// report the work turn wrote, or `missing`. No other turn carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -323,6 +346,28 @@ fn merge_context(run: &GraduationRun, part: &str) -> Option<MergeTaskContext> {
     })
 }
 
+/// GRL-FR-MXXA: what a turn of an OpenSpec run is told about its change. The
+/// request thread and the requester of a rework run are no part of it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenSpecTaskContext {
+    pub phase: String,
+    pub change: String,
+    /// GRL-FR-MXXA, GRL-FR-CWSA: the author's instruction, on a rework run
+    /// alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instruction: Option<String>,
+}
+
+impl OpenSpecTaskContext {
+    fn of(data: &crate::graduation::RunOpenSpec) -> Self {
+        OpenSpecTaskContext {
+            phase: data.phase.clone(),
+            change: data.change.clone(),
+            instruction: data.instruction.clone(),
+        }
+    }
+}
+
 /// Compose the input one turn carries.
 pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> GraduationTaskInput {
     let merge = merge_context(run, part);
@@ -334,6 +379,16 @@ pub fn compose_input(run: &GraduationRun, part: &str, purpose: &str) -> Graduati
     GraduationTaskInput {
         merge,
         pr_summary: None,
+        // GRL-FR-MXXA: every turn of an OpenSpec run names its change.
+        openspec: run.openspec.as_ref().map(OpenSpecTaskContext::of),
+        // GRL-FR-CDNI: set by the review alone, once its checkout stands.
+        openspec_validation: None,
+        // GRL-FR-BHGJ: set by the review of an apply run alone.
+        openspec_apply_progress: None,
+        // GRL-FR-ZDNL: set by the review of a merge run alone.
+        openspec_specs_validation: None,
+        // OPU-FR-SKTV: set by the work turn after Continue from a plan rest.
+        plan_update: None,
         graduation_input_version: GRADUATION_INPUT_VERSION,
         run_id: run.id.clone(),
         part: input_part.to_string(),

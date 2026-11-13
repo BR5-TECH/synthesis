@@ -229,7 +229,12 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
             .expect("the vendor schema parses");
     let escalation_schema = &schema["properties"]["escalation"];
     let questions_schema = &escalation_schema["properties"]["questions"];
-    assert_eq!(questions_schema["minItems"], json!(MIN_ESCALATION_QUESTIONS));
+    // ESU-FR-VTAZ: one at least without a kind, none at least for a plan
+    // update.
+    assert_eq!(
+        escalation_schema["else"]["properties"]["questions"]["minItems"],
+        json!(MIN_ESCALATION_QUESTIONS)
+    );
     assert_eq!(questions_schema["maxItems"], json!(MAX_ESCALATION_QUESTIONS));
     let question_schema = &questions_schema["items"];
     assert_eq!(question_schema["additionalProperties"], json!(false));
@@ -397,6 +402,7 @@ fn envelope_field_names() -> Vec<String> {
         result: Some(serde_json::Map::new()),
         failure: Some(AgentFailure { code: "c".into(), message: "m".into(), retryable: true }),
         escalation: Some(AgentEscalation {
+            kind: None,
             reason: "r".into(),
             questions: vec![AgentEscalationQuestion { question: "q".into(), options: Vec::new() }],
         }),

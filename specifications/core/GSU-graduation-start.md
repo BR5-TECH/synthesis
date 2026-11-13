@@ -3,19 +3,25 @@
 **Spec code:** `GSU`
 
 ## Intent
-What has to be true before a graduation run exists. `start_graduation` settles which work stream the run belongs to, takes an immutable copy of the prompt it answers, checks that the machine can actually execute an agent — and, where the project enables Docker-in-Docker and the effective isolation is not Microsandbox, that the Docker socket it names exists — and enqueues the run — all as one operation that either produces a run or produces nothing at all. `start_direct_graduation` does the same for a run that works directly in the worktree that is active when the author confirms: it pins that worktree and its branch, and it refuses a worktree that is detached or holds uncommitted work. Both refuse rather than repair: a missing vendor image is the author's to configure, a missing Docker socket is the author's to restore, and uncommitted work is the author's to commit. What a stream run does with work standing uncommitted in its stream, and under what message, is the author's choice, taken here and applied when the run's turn comes. The same checks stand between a restarted run and existence. Out of scope: everything the run then does, which is `GRD-graduation.md`'s; the stream itself, which is `WKS-work-streams.md`'s.
+What has to be true before a graduation run exists. `start_graduation` settles which work stream the run belongs to, takes an immutable copy of the prompt it answers, checks that the machine can actually execute an agent — and, where the project enables Docker-in-Docker and the effective isolation is not Microsandbox, that the Docker socket it names exists — and enqueues the run — all as one operation that either produces a run or produces nothing at all. `start_direct_graduation` does the same for a run that works directly in the worktree that is active when the author confirms: it pins that worktree and its branch, and it refuses a worktree that is detached or holds uncommitted work. Both refuse rather than repair: a missing vendor image is the author's to configure, a missing Docker socket is the author's to restore, and uncommitted work is the author's to commit. What a stream run does with work standing uncommitted in its stream, and under what message, is the author's choice, taken here and applied when the run's turn comes. The same checks stand between a restarted run and existence. The starts of an OpenSpec change run, which has no draft, take the image preflight of this module on the terms of `OCR-openspec-change-runs.md`. Out of scope: everything the run then does, which is `GRD-graduation.md`'s; the stream itself, which is `WKS-work-streams.md`'s.
 
 ## Functional requirements
-1. **GSU-FR-ELZO** `start_graduation(draft_id, stream_id, standing_work, standing_work_message)` captures the prompt, runs every check below, and enqueues the run as **one all-or-nothing operation**. A refusal leaves no run record, no queue entry, no draft lock and no dispatched turn.
+1. **GSU-FR-ELZO** `start_graduation(draft_id, stream_id, standing_work, standing_work_message, openspec_change?)` captures the prompt, runs every check below, and enqueues the run as **one all-or-nothing operation**. A refusal leaves no run record, no queue entry, no draft lock and no dispatched turn.
 2. **GSU-FR-IJEE** A draft that is not a single prompt file returns `draft_not_single_file` and enqueues nothing. A draft a non-terminal run already holds returns `draft_locked_by_graduation`.
 3. **GSU-FR-TTAY** A GitHub-shadow draft (per `DRS-draft-storage.md` DRS-FR-XDWS) is admitted on the terms of every other draft. Its `github_shadow` status refuses no start, and a refused start leaves it `github_shadow` with nothing changed on GitHub.
 3. **GSU-FR-JBKZ** A `stream_id` naming no live stream of the project returns `unknown_stream`. The run is assigned to that stream for its whole life (per `GRD-graduation.md` GRD-FR-PZAK).
+3. **GSU-FR-MIVF** A `start_graduation` that names an `openspec_change` makes a **propose run**: a stream run that writes the OpenSpec change of that name on the stream (per `GRD-graduation.md` GRD-FR-LKGC). A start that names none makes a draft run on the terms of every other requirement here.
+3. **GSU-FR-MTDA** A propose start is refused with `openspec_mode_inactive` while OpenSpec mode is not active, and with `cli_unavailable`, which carries the CLI state, while the OpenSpec CLI is not `available` (per `OSM-openspec-mode.md` OSM-FR-UILN, OSM-FR-SKUP, and `OFP-openspec-failure-policy.md` OFP-FR-GPCO). These checks come after the stream check of GSU-FR-JBKZ and before the image preflight.
+3. **GSU-FR-CZEP** A propose start whose `openspec_change` is not a valid change name (per `OSM-openspec-mode.md` OSM-FR-IHUO) is refused with `invalid_change_name`.
+3. **GSU-FR-UIDE** A propose start is refused with `openspec_change_exists` where `openspec/changes/<name>/` is a folder in the stream's working copy, or where a non-terminal OpenSpec run of any phase on the same stream names the same change (per `OCR-openspec-change-runs.md` OCR-FR-VHQW).
+3. **GSU-FR-ZYXC** `start_direct_graduation` makes no propose run, and it takes no change name.
+3. **GSU-FR-QSNE** A restart of a propose run is a propose run of the same change name. The checks of GSU-FR-MTDA and GSU-FR-CZEP apply to it afresh, and the check of GSU-FR-UIDE does not, the folder being the restarted run's own work.
 4. **GSU-FR-GLVQ** The **image preflight** runs before a run exists and probes no daemon. The project must commit an image for the resolved vendor, the machine's Docker backend must be verified, and, where the project enables Docker-in-Docker (per `PSS-project-settings-storage.md` PSS-FR-DIND) and the effective isolation is not Microsandbox (per `../tools/EAC-execute-agent-cli.md` EAC-FR-SNMS), the Docker socket must exist (GSU-FR-RQDS), or the start is refused.
 5. **GSU-FR-SQRC** The image preflight returns one of five typed refusals: `vendor_image_unconfigured`, `vendor_image_invalid`, `vendor_execution_unsupported`, `docker_backend_unverified`, or `docker_socket_unavailable`. Each names what the author must configure or restore.
 6. **GSU-FR-MLEJ** The start records the author's `standing_work` choice on the run, one of `keep`, `commit` or `commit_and_push`, with the `standing_work_message` that commit takes (per `GRD-graduation.md` GRD-FR-RJFC). The run applies both when it is dispatched. The start reads no working copy, and work standing in the stream refuses no start.
 7. **GSU-FR-RWYQ** The prompt is read through `DRS-draft-storage.md`'s `read_draft_prompt` and is captured whole, with the checksum of the captured bytes. It is captured once and never re-read for that run.
 8. **GSU-FR-NCJN** A run is enqueued with `auto_start` enabled and at the latest end of the project's run order (per `GRD-graduation.md` GRD-FR-VLFO). Enqueuing does not dispatch: the stream's queue decides when the run starts.
-8. **GSU-FR-RNOM** A start or a restart that enqueues a run asks for the graduation-start draft commit of the run's draft (per `PST-project-storage.md` PST-FR-DQZT). It asks after the enqueue, so a refused start commits nothing. The start does not wait for that commit and does not fail with it.
+8. **GSU-FR-RNOM** A start or a restart that enqueues a run with a draft asks for the graduation-start draft commit of the run's draft (per `PST-project-storage.md` PST-FR-DQZT). It asks after the enqueue, so a refused start commits nothing. The start does not wait for that commit and does not fail with it.
 9. **GSU-FR-RJRF** The queue, every run record and every captured prompt live under `FSA-filesystem-access.md`'s `short_data_dir()` and nowhere else. Nothing of it is written into a project's `.synthesis/`, and none of it is committed.
 10. **GSU-FR-IRAC** A restart takes these same checks afresh, at the moment it is taken, against the stream the restart names, and it records its own `standing_work` choice and message. It reads the discarded run's captured input and reads the draft's current prompt at no point.
 11. **GSU-FR-DPSY** A failure after the capture but before the enqueue reclaims whatever it created before it reports, and returns the typed failure rather than a half-made run.
@@ -33,7 +39,7 @@ What has to be true before a graduation run exists. `start_graduation` settles w
 
 ### The commands
 ```text
-start_graduation(draft_id, stream_id, standing_work, standing_work_message) → GraduationRun
+start_graduation(draft_id, stream_id, standing_work, standing_work_message, openspec_change?) → GraduationRun
 start_direct_graduation(draft_id, expected_worktree, expected_branch) → GraduationRun
 preflight_direct_graduation() → DirectGraduationPreflight
 ```
@@ -43,6 +49,8 @@ preflight_direct_graduation() → DirectGraduationPreflight
 ### The typed refusals
 ```text
 draft_not_single_file        draft_locked_by_graduation
+openspec_mode_inactive       cli_unavailable
+invalid_change_name          openspec_change_exists
 unknown_stream               vendor_image_unconfigured
 vendor_image_invalid         vendor_execution_unsupported
 docker_backend_unverified    docker_socket_unavailable
@@ -52,7 +60,7 @@ direct_worktree_dirty        direct_worktree_missing
 not_a_git_repository
 ```
 
-`docker_socket_unavailable` carries the socket path after a colon: `docker_socket_unavailable: <path>`.
+`docker_socket_unavailable` carries the socket path after a colon: `docker_socket_unavailable: <path>`. `openspec_mode_inactive` and `cli_unavailable` reject as an `OpenSpecFailure` of `OFP-openspec-failure-policy.md`, with the CLI state as `detail`.
 
 ### Payload shapes
 ```text
@@ -71,6 +79,6 @@ DirectGraduationPreflight {
 - The capture of `CapturedGraduationInput`, whose shape `GRD-graduation.md` holds.
 
 ## Non-functional requirements
-- The preflight opens no container, boots no VM, contacts no daemon or registry and resolves no credential. Where Docker-in-Docker is enabled and the effective isolation is not Microsandbox, it reads the metadata of one path and no content. It does not inspect the image for a Docker daemon.
+- The preflight opens no container, boots no VM, contacts no daemon or registry and resolves no credential. Where Docker-in-Docker is enabled and the effective isolation is not Microsandbox, it reads the metadata of one path and no content. It does not inspect the image for a Docker daemon or for the OpenSpec CLI: the image probe of `OFP-openspec-failure-policy.md` OFP-FR-BZDP checks the CLI at the first dispatch of the run.
 - A refusal costs no branch, no working copy and no draft lock.
 - `preflight_direct_graduation` opens one repository and reads its status once. It contacts no remote.

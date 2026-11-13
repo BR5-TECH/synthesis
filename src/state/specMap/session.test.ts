@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INITIAL_VIEW, SpecMapSessionStore } from "./session";
 import type { SpecMapOps } from "../../api/specMap";
+import type { MapEdit } from "./types";
 import { buildTree, specChildren } from "./tree";
-import { smallIndex } from "../../test/specMapFixtures";
+import { openspecIndex, smallIndex } from "../../test/specMapFixtures";
 
 const logWarn = vi.fn();
 const logError = vi.fn();
@@ -53,7 +54,9 @@ describe("loading the index", () => {
     const store = new SpecMapSessionStore(ops);
     await store.load();
     expect(store.snapshot().status).toBe("error");
-    expect(logError).toHaveBeenCalledWith(["frontend"], "specification map could not be loaded", { reason: "boom" });
+    expect(logError).toHaveBeenCalledWith(["frontend"], "specification map could not be loaded", { code: "boom", cause: "" });
+    // A code that is not an OpenSpec failure gets no notice.
+    expect(store.snapshot().errorFailure).toBeNull();
     await store.retry();
     expect(store.snapshot().status).toBe("ready");
     expect(ops.load).toHaveBeenCalledTimes(2);
@@ -213,5 +216,39 @@ describe("selection by project path (SMI-FR-PRSL)", () => {
     await store.load();
     expect(store.snapshot().selection).toEqual({ kind: "spec", code: "A2" });
     expect(store.snapshot().pendingPath).toBeNull();
+  });
+});
+
+describe("an OpenSpec index (SMO-FR-RVAV, SMD-FR-YQSR)", () => {
+  const refused: MapEdit[] = [
+    { kind: "create", parentId: "group:/", node: { id: "n-1", label: "New", summary: "" } },
+    { kind: "edit", nodeId: "capability:auth", label: "Renamed", summary: "" },
+    { kind: "delete", nodeId: "capability:auth" },
+    { kind: "move", ref: { kind: "index", id: "capability:auth" }, parentId: "group:billing", index: 0 },
+    { kind: "move", ref: { kind: "spec", code: "auth#1" }, parentId: "capability:billing/pay", index: 0 },
+  ];
+
+  for (const edit of refused) {
+    it(`SMO-FR-RVAV: a ${edit.kind} edit${edit.kind === "move" ? ` of a ${edit.ref.kind}` : ""} is refused, changes nothing, saves nothing, and is logged`, async () => {
+      const { store, ops } = await loaded(makeOps({ load: vi.fn(async () => openspecIndex()) }));
+      const before = store.snapshot();
+      expect(store.dispatch(edit)).toBe(false);
+      expect(store.snapshot()).toBe(before);
+      expect(ops.saveOrganization).not.toHaveBeenCalled();
+      expect(ops.attachDraft).not.toHaveBeenCalled();
+      expect(logWarn).toHaveBeenCalledWith(
+        ["frontend"],
+        "specification map edit refused for an openspec index",
+        { kind: edit.kind },
+      );
+    });
+  }
+
+  it("SMD-FR-YQSR: a draft edit is still applied to an OpenSpec index", async () => {
+    const { store, ops } = await loaded(makeOps({ load: vi.fn(async () => openspecIndex()) }));
+    expect(
+      store.dispatch({ kind: "attachDraft", nodeId: "capability:auth", draft: { draftId: "dr", name: "Plan" } }),
+    ).toBe(true);
+    expect(ops.attachDraft).toHaveBeenCalledWith({ draftId: "dr", nodeId: "capability:auth" });
   });
 });

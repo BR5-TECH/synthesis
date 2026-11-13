@@ -21,12 +21,23 @@ pub fn infer_from_path(rel: &str) -> Option<ArtifactType> {
     let base = segs.last().copied().unwrap_or("");
     let base_lower = base.to_ascii_lowercase();
 
+    // ASC-FR-YODA: an archived OpenSpec change gets no type from any path
+    // convention, the CALM suffix included.
+    if is_openspec_archive(&rel) {
+        return None;
+    }
+
     // ASC-FR-QVCN: a FINOS CALM architecture document. The suffix match does
     // not look at letter case, and the rule comes before all folder rules,
     // because it outranks each of them (`specifications/x.calm.json` is an
     // architecture, not a spec).
     if base_lower.ends_with(".calm.json") {
         return Some(ArtifactType::Architecture);
+    }
+
+    // ASC-FR-WOQW: the OpenSpec conventions, anchored at the project root.
+    if let Some(t) = infer_openspec(&segs, base) {
+        return Some(t);
     }
 
     // Directory-convention recognizers: a window of two consecutive path
@@ -93,6 +104,33 @@ pub fn infer_from_path(rel: &str) -> Option<ArtifactType> {
     }
 
     None
+}
+
+/// ASC-FR-WOQW: `openspec/specs/**/spec.md` and every Markdown file of an
+/// active change are specs, and `openspec/config.yaml` holds instructions.
+/// The rules apply whatever the OpenSpec mode is (ASC-FR-NBNP).
+fn infer_openspec(segs: &[&str], base: &str) -> Option<ArtifactType> {
+    if segs.first() != Some(&"openspec") {
+        return None;
+    }
+    match segs.get(1).copied() {
+        Some("specs") if segs.len() > 2 && base == "spec.md" => Some(ArtifactType::Spec),
+        Some("changes") if segs.len() > 2 && base.to_ascii_lowercase().ends_with(".md") => {
+            Some(ArtifactType::Spec)
+        }
+        Some("config.yaml") if segs.len() == 2 => Some(ArtifactType::Instructions),
+        _ => None,
+    }
+}
+
+/// ASC-FR-YODA: whether `rel` lies below `openspec/changes/archive/`.
+pub fn is_openspec_archive(rel: &str) -> bool {
+    let rel = normalize_rel(rel);
+    let mut segs = rel.split('/').filter(|s| !s.is_empty());
+    segs.next() == Some("openspec")
+        && segs.next() == Some("changes")
+        && segs.next() == Some("archive")
+        && segs.next().is_some()
 }
 
 /// True if `a` immediately followed by `b` appears as a consecutive segment

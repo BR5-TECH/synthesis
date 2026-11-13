@@ -158,6 +158,7 @@ fn an_event_line_is_one_flat_json_object_carrying_its_type() {
 #[test]
 fn a_proposal_hunk_attachment_has_the_declared_wire_shape() {
     let stored = Attachment::ProposalHunk {
+        change: None,
         proposal_id: "p1".into(),
         hunk_id: "h2".into(),
         draft_id: Some("d3".into()),
@@ -179,6 +180,7 @@ fn a_proposal_hunk_attachment_has_the_declared_wire_shape() {
     assert_eq!(
         input,
         AttachmentInput::ProposalHunk {
+            change: None,
             proposal_id: "p1".into(),
             hunk_id: "h2".into(),
             draft_id: Some("d3".into()),
@@ -194,6 +196,7 @@ fn a_proposal_hunk_attachment_has_the_declared_wire_shape() {
 #[test]
 fn an_artifact_proposal_hunk_and_a_stored_draft_one_both_parse() {
     let stored = Attachment::ProposalHunk {
+        change: None,
         proposal_id: "p1".into(),
         hunk_id: "h2".into(),
         draft_id: None,
@@ -218,6 +221,7 @@ fn an_artifact_proposal_hunk_and_a_stored_draft_one_both_parse() {
     assert_eq!(
         parsed,
         Attachment::ProposalHunk {
+            change: None,
             proposal_id: "p1".into(),
             hunk_id: "h2".into(),
             draft_id: Some("d3".into()),

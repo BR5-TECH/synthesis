@@ -52,6 +52,11 @@ pub const DISCUSSION_CHANGED: &str = "discussion-changed";
 /// CMS-FR-HTOA: the display name of the local participant.
 pub const LOCAL_PARTICIPANT_NAME: &str = "Me";
 
+/// CMS-FR-MKEV: the agent id of the Synthesis participant.
+pub const SYNTHESIS_AGENT_ID: &str = "synthesis";
+/// CMS-FR-MKEV: the handle of the Synthesis participant.
+pub const SYNTHESIS_HANDLE: &str = "Synthesis";
+
 /// CMS-FR-BQEN: the event a reserved or deleted question set announces itself
 /// on.
 ///
@@ -128,6 +133,15 @@ pub(super) const DRAFT_COMMENTS_ROOT: &str = crate::repository_store::DRAFTS_DIR
 
 /// The folder inside `drafts/<draft-id>/` the logs and attachments sit in.
 pub(super) const DRAFT_COMMENTS_SUBDIR: &str = "comments";
+
+/// CMS-FR-GJEY: the root of every change owner's folder in the store.
+pub(super) const CHANGE_COMMENTS_ROOT: &str = crate::repository_store::CHANGES_DIRNAME;
+
+/// CMS-FR-FACZ: the stream of a change owner is not a live stream of the project.
+pub const ERR_UNKNOWN_STREAM: &str = "unknown_stream";
+
+/// CMS-FR-FACZ: the change folder is not in the stream's working copy.
+pub const ERR_CHANGE_NOT_FOUND: &str = "change_not_found";
 
 /// The project's drafts root, project-relative — for asserting that this module
 /// writes nothing at all beneath it, and for nothing else.

@@ -82,6 +82,8 @@ function wholeNoun(discussion: Discussion): string {
       return "draft";
     case "note":
       return "note";
+    case "change":
+      return "change";
   }
 }
 

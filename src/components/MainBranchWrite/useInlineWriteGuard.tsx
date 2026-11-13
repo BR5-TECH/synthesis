@@ -105,6 +105,14 @@ export function useInlineWriteGuard(options: {
     if (at === null || at === document.body) onConfirmed.current?.();
   }, [confirmedAt]);
 
+  // MBW-FR-UQXR: the section that asks for the confirmation comes into view
+  // with its actions, also in a scrolled list such as the stream list.
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const hasActions = needed && guard !== null && guard !== undefined;
+  useEffect(() => {
+    if (hasActions) sectionRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [hasActions]);
+
   const confirm = async () => {
     if (!(await state.confirm())) return;
     setConfirmedAt((n) => n + 1);
@@ -124,6 +132,7 @@ export function useInlineWriteGuard(options: {
 
   const section = needed ? (
     <div
+      ref={sectionRef}
       className="main-branch-write-section"
       id={sectionId}
       role="alert"

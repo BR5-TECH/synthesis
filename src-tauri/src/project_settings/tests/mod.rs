@@ -69,5 +69,6 @@ mod legacy_keys;
 mod library_panel;
 mod line_endings;
 mod notes_panel;
+mod openspec_mode_setting;
 mod publication_settings;
 mod shared_loop_settings;

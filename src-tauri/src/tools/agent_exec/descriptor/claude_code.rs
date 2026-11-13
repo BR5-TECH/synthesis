@@ -62,7 +62,12 @@ pub const ENVELOPE_SCHEMA: &str = concat!(
     // proposed response's three fields keep. A question set composed to a shape
     // nobody stated is refused after a whole turn was spent on it, and an agent
     // that must guess how many questions it may ask asks one and loses the rest.
-    r#""escalation":{"type":["object","null"],"additionalProperties":false,"properties":{"#,
+    r#""escalation":{"type":["object","null"],"additionalProperties":false,"#,
+    // ESU-FR-VTAZ / EAC-FR-18: a plan update names its kind and may ask no
+    // question. Every other escalation asks one at least.
+    r#""if":{"required":["kind"]},"then":{"properties":{"questions":{"minItems":0}}},"#,
+    r#""else":{"properties":{"questions":{"minItems":1}}},"properties":{"#,
+    r#""kind":{"type":"string","enum":["plan_update"]},"#,
     // `pattern` rather than `minLength` alone: the decoder trims before it
     // tests for emptiness, so a schema that accepted `"   "` would let an agent
     // answer inside the schema and be refused by the decoder afterwards — the
@@ -73,7 +78,7 @@ pub const ENVELOPE_SCHEMA: &str = concat!(
     // inside the run. Word and sentence counts are guidance (EAC-FR-35), so this
     // schema does not state them and the decoder does not enforce them.
     r#""reason":{"type":"string","minLength":1,"maxLength":4096,"pattern":"\\S"},"#,
-    r#""questions":{"type":"array","minItems":1,"maxItems":8,"items":{"#,
+    r#""questions":{"type":"array","minItems":0,"maxItems":8,"items":{"#,
     r#""type":"object","additionalProperties":false,"properties":{"#,
     r#""question":{"type":"string","minLength":1,"maxLength":2048,"pattern":"\\S"},"#,
     // Not required: `AgentEscalationQuestion` defaults it, and a question with

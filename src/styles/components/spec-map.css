@@ -115,6 +115,35 @@
 .smap-dot { flex: none; width: 5px; height: 5px; border-radius: 50%; }
 
 .smap-body { flex: 1; min-height: 0; display: flex; position: relative; }
+/* The column of the canvas. The notice line of SMP-FR-KVKD stands above the
+   body, outside the containing block of the overlay inspector. */
+.smap-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.smap-main > .smap-canvas { min-height: 0; }
+
+/* SMP-FR-KVKD: one line that takes its own height, so it hides no node. */
+.smap-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--warn-soft);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+  /* The line wraps, so the Details of the validation failure open below its
+     sentence at the full width of the line. */
+  flex-wrap: wrap;
+}
+.smap-notice > svg { flex: none; color: var(--warn); }
+/* OFN layout notes: Details stands on a line of its own below the sentence,
+   at the full width of the notice, so opening it grows the notice downward
+   and moves the sentence nowhere. */
+.smap-notice__details { flex: 1 1 100%; min-width: 0; }
+/* SMP-FR-KBXW: the notice of a failed load stands where the statement stood. */
+.smap-state__notice { max-width: 36rem; margin-inline: auto; }
 
 /* SMP-FR-ONSD / SMP-FR-LRAX: loading, error, and empty replace the canvas. */
 .smap-state {
@@ -130,6 +159,11 @@
   text-align: center;
 }
 .smap-state__line { margin: 0; }
+/* OFN-FR-IHSQ: a failure notice stands from the top, so its Details open
+   downward and the Details toggle stays under the pointer. */
+.smap-state--notice { justify-content: flex-start; padding-top: 72px; }
+/* SMP-FR-KBXW: Retry and the route to the settings stand side by side. */
+.smap-state__actions { display: flex; gap: 8px; }
 
 /* SMZ-FR-DPWC: the dot grid and the one transformed stage. */
 .smap-canvas {
@@ -215,8 +249,12 @@
   background: var(--smap-hue-light);
 }
 [data-theme="dark"] .smap-swatch { background: var(--smap-hue); }
+/* SMN-FR-QHVM / SMN-FR-YEVY: the label keeps its own width and the meta line
+   gives way first: it truncates, and its title holds the whole line. The meta
+   keeps a few characters, and only a label longer than the rest of the head
+   truncates. */
 .smap-root__label {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -225,7 +263,16 @@
   font-weight: var(--fw-semi);
   color: var(--fg-1);
 }
-.smap-root__meta { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; }
+.smap-root__meta {
+  flex: 0 1000 auto;
+  min-width: 7ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
 .smap-root__summary {
   margin: 8px 14px 0;
   height: 54px;
@@ -248,8 +295,9 @@
 .smap-box[data-role="leaf"] { background: var(--bg-canvas); }
 .smap-box__head { display: flex; align-items: center; gap: 8px; padding: 9px 11px 0; }
 .smap-box[data-role="leaf"] .smap-box__head { padding: 7px 10px 0; }
+/* The same give-way order as a root card's head. */
 .smap-box__label {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,7 +307,27 @@
   color: var(--fg-1);
 }
 .smap-box[data-role="leaf"] .smap-box__label { font-size: var(--fs-ui-sm); font-weight: var(--fw-medium); color: var(--fg-2); }
-.smap-box__meta { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); color: var(--fg-4); white-space: nowrap; }
+/* SMN-FR-VNTJ: a planned capability node, with the word after its label. */
+.smap-box[data-planned] { border-style: dashed; border-color: var(--border-2); }
+.smap-box[data-planned][data-selected] { border-color: var(--accent); }
+.smap-box[data-planned] .smap-box__label { flex: 0 1 auto; }
+.smap-box__planned {
+  flex: none;
+  margin-right: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-4);
+}
+.smap-box__meta {
+  flex: 0 1000 auto;
+  min-width: 5ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-4);
+  white-space: nowrap;
+}
 .smap-box__summary {
   box-sizing: border-box;
   height: 46px;
@@ -289,6 +357,8 @@
 }
 .smap-chip[data-selected] { border-color: var(--accent); background: var(--accent-soft); }
 .smap-chip--planned { border-style: dashed; border-color: var(--border-2); }
+/* SMN-FR-ZOUZ: a change chip. */
+.smap-chip--change { border-style: dashed; border-color: var(--accent); }
 .smap-chip__label {
   flex: 1;
   min-width: 0;
@@ -330,6 +400,10 @@
 .smap-code[data-folder][data-danger],
 [data-theme="dark"] .smap-code[data-folder][data-danger] { background: var(--danger-soft); color: var(--danger); }
 .smap-code--draft { background: var(--live-soft); color: var(--live); }
+.smap-code--change { background: var(--accent-soft); color: var(--accent); }
+/* SMN-FR-WAGD: a spec below openspec/ takes the openspec pair. */
+.smap-code[data-folder="openspec"] { background: #DDF0F2; color: #0E7783; }
+[data-theme="dark"] .smap-code[data-folder="openspec"] { background: #0F2E31; color: #62CBD4; }
 
 /* SMO-FR-DKTM / SMO-FR-ARQV: the drag ghost and the insertion bar. */
 .smap-drop-bar { position: absolute; border-radius: 1px; background: var(--accent); pointer-events: none; }

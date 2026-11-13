@@ -48,7 +48,8 @@ export function checksNotPassedRestOf(run: GraduationRun): ChecksNotPassedRest |
   return {
     ...rest,
     reason: "checks_not_passed",
-    cause: rest.cause ?? "record_missing",
+    // GRD-FR-PYJN: a rest on checks holds a cause of the check gate alone.
+    cause: (rest.cause as GraduationCheckCause | undefined) ?? "record_missing",
     checks: rest.checks ?? [],
   };
 }

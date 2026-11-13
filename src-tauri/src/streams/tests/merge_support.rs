@@ -232,6 +232,7 @@ pub(super) fn merge_data_for(
         conflicts: snapshot.conflicts.clone(),
         result: None,
         pull: None,
+        openspec_gate: false,
     }
 }
 
@@ -313,6 +314,7 @@ pub(super) fn save_plain_run(
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),

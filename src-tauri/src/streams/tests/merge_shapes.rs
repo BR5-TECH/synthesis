@@ -5,8 +5,9 @@ use serde_json::json;
 
 use super::*;
 
-// WKS-FR-QNHF: the answer of a merge check is tagged with a snake_case `kind`,
-// and every other field is camelCase, for all three kinds.
+// WKS-FR-QNHF, OAR-FR-SOFQ: the answer of a merge check is tagged with a
+// snake_case `kind`, and every other field is camelCase, for all three kinds.
+// `merged` and `conflicted` carry `archived`, empty where nothing was archived.
 #[test]
 fn the_answer_of_a_merge_check_has_a_snake_case_kind_and_camel_case_fields() {
     assert_eq!(
@@ -17,16 +18,26 @@ fn the_answer_of_a_merge_check_has_a_snake_case_kind_and_camel_case_fields() {
     let committed = serde_json::to_value(StreamMergeResult::Merged {
         merged_paths: vec!["a.txt".into(), "dir/b.txt".into()],
         commit: Some("abc123".into()),
+        archived: vec![crate::openspec_archive::ArchivedChange {
+            change: "add-logout".into(),
+            archived_as: "2026-11-11-add-logout".into(),
+        }],
     })
     .unwrap();
     assert_eq!(
         committed,
-        json!({ "kind": "merged", "mergedPaths": ["a.txt", "dir/b.txt"], "commit": "abc123" })
+        json!({
+            "kind": "merged",
+            "mergedPaths": ["a.txt", "dir/b.txt"],
+            "commit": "abc123",
+            "archived": [{ "change": "add-logout", "archivedAs": "2026-11-11-add-logout" }]
+        })
     );
 
     let uncommitted = serde_json::to_value(StreamMergeResult::Merged {
         merged_paths: vec!["a.txt".into()],
         commit: None,
+        archived: Vec::new(),
     })
     .unwrap();
     assert_eq!(uncommitted["kind"], "merged");
@@ -39,9 +50,15 @@ fn the_answer_of_a_merge_check_has_a_snake_case_kind_and_camel_case_fields() {
         serde_json::to_value(StreamMergeResult::Conflicted {
             run_id: "g1".into(),
             conflicted_paths: vec!["README.md".into()],
+            archived: Vec::new(),
         })
         .unwrap(),
-        json!({ "kind": "conflicted", "runId": "g1", "conflictedPaths": ["README.md"] })
+        json!({
+            "kind": "conflicted",
+            "runId": "g1",
+            "conflictedPaths": ["README.md"],
+            "archived": []
+        })
     );
 }
 

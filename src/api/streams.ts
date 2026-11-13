@@ -177,12 +177,15 @@ export const startGraduation = (
   streamId: string,
   standingWork: StandingWork,
   standingWorkMessage: string | null,
+  // GSU-FR-MIVF: the change name of a propose run. `null` makes a draft run.
+  openspecChange: string | null,
 ) =>
   invoke<GraduationRun>("start_graduation", {
     draftId,
     streamId,
     standingWork,
     standingWorkMessage,
+    openspecChange,
   });
 
 /**

@@ -13,7 +13,11 @@
  */
 import { useSyncExternalStore } from "react";
 
-import { loadDraftChangeProposalHunks, loadPromptChangeProposalHunks } from "../api";
+import {
+  loadChangeEditProposalHunks,
+  loadDraftChangeProposalHunks,
+  loadPromptChangeProposalHunks,
+} from "../api";
 import { logDebug, logWarn } from "../logging";
 import type { ProposalHunks } from "../types";
 
@@ -28,11 +32,15 @@ export type HunkReading =
  * command reads its changes. A draft proposal and a prompt or DOC proposal hold
  * their changes in one shape (PCP-FR-LDHK), so one store holds both.
  */
-export type HunkSource = "draft" | "prompt";
+export type HunkSource = "draft" | "prompt" | "change";
 
 const LOADERS: Record<HunkSource, (proposalId: string) => Promise<ProposalHunks>> = {
   draft: loadDraftChangeProposalHunks,
   prompt: loadPromptChangeProposalHunks,
+  // OCW-FR-COLR / CEP-FR-HUFE: a change edit proposal holds its hunks in the
+  // same shape, with a path on each hunk. No change proposal is legacy.
+  change: (proposalId) =>
+    loadChangeEditProposalHunks(proposalId).then((read) => ({ ...read, legacy: false })),
 };
 
 let readings: ReadonlyMap<string, HunkReading> = new Map();

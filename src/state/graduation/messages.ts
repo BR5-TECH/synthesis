@@ -5,6 +5,8 @@
 
 import type { GraduationRun, ReviewSeverity } from "../../types/graduation";
 import { MERGE_BRANCH_MOVED_STATEMENT } from "./merge";
+import { planContinueRefusal, planRestOf } from "./planRest";
+import { shortForm, toOpenSpecFailure } from "../openspec/failureNotice";
 
 /**
  * GSD-FR-BXKR: the sentence a start or a merge refused for a missing Docker
@@ -14,6 +16,24 @@ import { MERGE_BRANCH_MOVED_STATEMENT } from "./merge";
 export function dockerSocketUnavailableMessage(path: string | null): string {
   const where = path ? `at ${path}` : "at the configured path";
   return `The Docker socket is not available ${where}. Start Docker or restore the socket at that path, or correct the Docker-in-Docker socket path in Project settings, in the Docker section. Then start the run again.`;
+}
+
+/**
+ * GRU-FR-BPNJ: the words of a refused Continue of a run at a plan rest. A
+ * code that is no plan refusal keeps the words of every other run.
+ */
+export function planContinueMessage(raw: string): string {
+  const [code, detail] = splitTyped(raw);
+  return planContinueRefusal(code, detail) ?? graduationErrorMessage(raw);
+}
+
+/**
+ * GRU-FR-BPNJ: the words of a refused Continue of `run`. Only a run at a plan
+ * rest gets the plan words; every other run keeps the words of
+ * `graduationErrorMessage`.
+ */
+export function continueRefusalMessage(run: GraduationRun, raw: string): string {
+  return planRestOf(run) ? planContinueMessage(raw) : graduationErrorMessage(raw);
 }
 
 /**
@@ -100,10 +120,19 @@ export function graduationErrorMessage(error: string): string {
       // GRU-FR-EMNV / GEA-FR-HBCF: a Continue or an answer refused because a
       // branch moved says so, and says that nothing was written.
       return MERGE_BRANCH_MOVED_STATEMENT;
+    // GSU-FR-CZEP / GSU-FR-UIDE: the refusals of a propose start that are
+    // not OpenSpec failures. An OpenSpec failure takes the sentence of its
+    // notice (OFN-FR-RNWG), below.
+    case "invalid_change_name":
+      return "That is not a valid change name.";
+    case "openspec_change_exists":
+      return "A change of that name is already on that stream, or a run is proposing it.";
     case "direct graduation active":
       return "A graduation run is working in the active worktree. Switching waits until the run ends.";
     default:
-      return error;
+      // OFN-FR-QZEC: an OpenSpec failure in a typed string reads as the
+      // short form of its notice.
+      return shortForm(toOpenSpecFailure(error)) ?? error;
   }
 }
 

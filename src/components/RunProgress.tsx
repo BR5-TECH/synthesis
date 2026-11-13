@@ -33,6 +33,14 @@ export interface RunProgressProps {
    * condition is never rendered without a word.
    */
   conditionSentence?: string | null;
+  /**
+   * A note that the host adds to the sentence of the current stage, such as
+   * the short form of a failed read (`OFN-openspec-failure-notices.md`
+   * OFN-FR-QZEC). It is read after the sentence, and it shows as one line
+   * under the row, cut where it is too long, with its whole text as its
+   * tooltip. So the sentence of the stage stays whole and short (RPV-FR-16).
+   */
+  conditionNote?: string | null;
   /** RPV-FR-09: rendered on the condition line; omitted entirely when absent. */
   iterationLabel?: string | null;
   /** RPV-FR-10: every move the work has made, in the host's own stage ids. */
@@ -61,11 +69,17 @@ export interface RunProgressProps {
   onActivateStage?: (stageId: string) => void;
 }
 
+/** A sentence with one closing mark: a period is added only where none ends it. */
+function closed(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 export function RunProgress({
   stages,
   currentStage,
   condition,
   conditionSentence,
+  conditionNote = null,
   iterationLabel,
   history = [],
   showLoops = true,
@@ -81,6 +95,7 @@ export function RunProgress({
   const sentence = conditionSentence?.trim()
     ? conditionSentence.trim()
     : conditionWord(condition);
+  const note = conditionNote?.trim() || null;
 
   // RPV-FR-15: one region naming, in order, the stages, which are complete,
   // which is current, its condition and sentence, the iteration, every loop,
@@ -91,7 +106,9 @@ export function RunProgress({
     ...view.stages.map((stage) => {
       const named = stage.description ?? stage.label;
       if (stage.status === "complete") return `${named}: done.`;
-      if (stage.status === "current") return `${named}: ${sentence}.`;
+      if (stage.status === "current") {
+        return [`${named}: ${closed(sentence)}`, note ? closed(note) : null].filter(Boolean).join(" ");
+      }
       return `${named}: not started.`;
     }),
     iterationLabel ? `${iterationLabel}.` : null,
@@ -171,8 +188,8 @@ export function RunProgress({
                   aria-disabled={disabled ? "true" : undefined}
                   aria-label={
                     disabled
-                      ? `${stage.label}. ${conditionWords}. ${stage.disabledReason}`
-                      : `${stage.label}. ${conditionWords}.`
+                      ? `${stage.label}. ${closed(conditionWords)} ${stage.disabledReason}`
+                      : `${stage.label}. ${closed(conditionWords)}`
                   }
                   onClick={() => {
                     if (disabled) return;
@@ -188,6 +205,19 @@ export function RunProgress({
           );
         })}
       </ol>
+
+      {/* The note of the current stage: one line, its whole text in the
+          tooltip. The region announcement above reads it. */}
+      {note && (
+        <p
+          className="run-progress__note t-meta"
+          title={note}
+          aria-hidden="true"
+          data-testid="run-progress-note"
+        >
+          {note}
+        </p>
+      )}
 
       {(iterationLabel || (view.showsOutcome && outcome)) && (
         <p className="run-progress__line t-meta" aria-hidden="true">

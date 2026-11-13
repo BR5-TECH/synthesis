@@ -53,6 +53,9 @@ export function canMove(
         parentId !== null &&
         tree.nodes.has(parentId)
       );
+    case "change":
+      // SMO-FR-RVAV: a change chip never moves.
+      return false;
     case "index": {
       const depth = tree.depth.get(ref.id);
       if (depth === undefined) return false;
@@ -179,6 +182,8 @@ export function applyEdit(
         target.planned = list;
         break;
       }
+      // `isValid` refuses every move of a change chip, so none reaches here.
+      if (ref.kind === "change") break;
       const from =
         ref.kind === "spec"
           ? listOf(nt.specParent.get(ref.code)!)

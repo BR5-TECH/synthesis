@@ -85,13 +85,13 @@ const CONTEXT_DIR: &str = "dind-uat";
 const TURN_TIMEOUT_MS: u64 = 20 * 60 * 1_000;
 
 /// The repository root, where `tests/dind-uat/` and the mock crate are.
-fn repository_root() -> PathBuf {
+pub(super) fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("the repository root").to_path_buf()
 }
 
 /// The Docker CLI of this machine, found as the application finds it
 /// (GSS-FR-37).
-fn docker_cli() -> String {
+pub(super) fn docker_cli() -> String {
     let path_var = std::env::var("PATH").ok();
     let home = std::env::var_os("HOME").map(PathBuf::from);
     crate::docker::detect_docker_cli(

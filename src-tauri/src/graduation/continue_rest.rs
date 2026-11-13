@@ -27,6 +27,7 @@ pub(super) fn clear_rest<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut
         // check correction of the rest's cause and starts a new gate episode.
         let cause = rest
             .cause
+            .and_then(GraduationRestCause::checks)
             .or_else(|| run.checkpoint.check_gate.as_ref().map(|gate| gate.cause))
             .unwrap_or(GraduationCheckCause::RecordMissing);
         run.checkpoint.check_gate = None;
@@ -113,4 +114,50 @@ pub(super) fn reset_spent_budget<R: tauri::Runtime>(
             "pass_budget" => if run.is_merge() { MERGE_PASS_BUDGET as i64 } else { settings.pass_budget as i64 },
         },
     );
+}
+
+/// GRD-FR-XHSE: refuse to resume a merge run whose pinned tip moved.
+///
+/// Read-only: nothing is written to a branch, a worktree or the run.
+pub(super) fn refuse_moved_tips<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+) -> Result<(), String> {
+    let Some(data) = run.merge.as_ref() else {
+        return Ok(());
+    };
+    // GLG-FR-QNLC: the tip check of a Continue or of an answer is a record,
+    // whether it lets the request through or refuses it.
+    // A merge already applied moved the base branch itself, and the run is
+    // completed by its next dispatch rather than refused.
+    let moved = data.result.is_none() && crate::streams::merge_tips_moved(app, data);
+    log_merge_boundary(
+        app,
+        run,
+        MergeBoundary {
+            level: if moved {
+                crate::logging::LogLevel::Warn
+            } else {
+                crate::logging::LogLevel::Info
+            },
+            domains: &[Domain::Ai, Domain::Backend],
+            message: if moved {
+                "graduation refused to resume a merge run: a pinned tip moved"
+            } else {
+                "graduation checked the pinned tips of a merge run"
+            },
+            boundary: "tip_check",
+            outcome: if moved { crate::streams::ERR_MERGE_BRANCH_MOVED } else { "ok" },
+            pass: Some(run.pass()),
+            paths: None,
+            extra: log_fields! {
+                "checked_at" => "resume",
+                "state" => run.state.as_str().to_string(),
+            },
+        },
+    );
+    if !moved {
+        return Ok(());
+    }
+    Err(crate::streams::ERR_MERGE_BRANCH_MOVED.to_string())
 }

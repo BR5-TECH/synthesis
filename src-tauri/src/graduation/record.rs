@@ -4,8 +4,10 @@ use super::*;
 
 mod ledger;
 mod rest;
+mod review;
 pub use ledger::*;
 pub use rest::*;
+pub use review::*;
 
 // ---------------------------------------------------------------------------
 // The state machine (GRD-FR-QJHM)
@@ -224,63 +226,6 @@ pub struct GraduationResumeRef {
 }
 
 // ---------------------------------------------------------------------------
-// The review verdict (`../ai/GRL-graduation-loop.md` GRL-FR-VIAT)
-// ---------------------------------------------------------------------------
-
-/// GRL-FR-VIAT: how serious a finding is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReviewSeverity {
-    Critical,
-    Major,
-    Minor,
-}
-
-impl ReviewSeverity {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Critical => "critical",
-            Self::Major => "major",
-            Self::Minor => "minor",
-        }
-    }
-}
-
-/// GRL-FR-VIAT: one problem, stated once.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewFinding {
-    pub severity: ReviewSeverity,
-    pub description: String,
-    /// Project-relative; may name a path that does not exist yet.
-    #[serde(default)]
-    pub affected_files: Vec<String>,
-    /// Directly actionable by the next work turn.
-    pub correction: String,
-}
-
-/// GRL-FR-VIAT: what a review turn answers with.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewVerdict {
-    /// `ready` or `revise`, and nothing else.
-    pub verdict: ReviewOutcome,
-    /// Never blank.
-    pub rationale: String,
-    /// Empty for `ready`; at least one for `revise`.
-    #[serde(default)]
-    pub findings: Vec<ReviewFinding>,
-}
-
-/// GRL-FR-VIAT: the two verdicts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReviewOutcome {
-    Ready,
-    Revise,
-}
-
-// ---------------------------------------------------------------------------
 // Stopping (GRD-FR-XVUD, GRD-FR-IKVE)
 // ---------------------------------------------------------------------------
 
@@ -374,6 +319,16 @@ pub struct GraduationBlocker {
     /// zero, which a surface renders as no attempt at all.
     #[serde(default)]
     pub attempt: u32,
+    /// GRD-FR-UJII, OFP-FR-TBHX: the OpenSpec code under an OpenSpec blocker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<String>,
+    /// OFP-FR-EOAD: the CLI state of `openspec_image_cli_unavailable`, or the
+    /// detail of the cause.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// OFP-FR-TBHX, OFP-FR-WRDX: the diagnostics of an OpenSpec blocker.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<crate::openspec::CliDiagnostic>,
 }
 
 // ---------------------------------------------------------------------------
@@ -495,10 +450,19 @@ pub struct GraduationCheckpoint {
     /// names is dispatched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_gate: Option<GraduationCheckGate>,
+    /// OFP-FR-WACS: the OpenSpec CLI version the image probe found.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_image_cli: Option<OpenSpecImageCli>,
     /// GRD-FR-OERK: the cause whose check correction the turn after Continue
     /// from `checks_not_passed` carries. Cleared once that turn has answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continue_check_correction: Option<GraduationCheckCause>,
+    /// OPU-FR-BKZX: the plan update state of an apply run.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::graduation::plan_updates::PlanCheckpoint::is_empty"
+    )]
+    pub plan: crate::graduation::plan_updates::PlanCheckpoint,
 }
 
 /// GRL-FR-QKDC / GRL-FR-HWLD: one refused answer that is asked again.
@@ -658,6 +622,10 @@ pub struct GraduationRun {
     /// PR summary run alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_summary: Option<PrSummaryData>,
+    /// GRD-FR-LKGC, GRD-FR-KZBS: the phase and the change of a propose run
+    /// and of an OpenSpec change run (`OCR-openspec-change-runs.md`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec: Option<RunOpenSpec>,
     /// GRD-FR-UUGP: the run summary of the `ready` review a completed draft run
     /// ended on. Absent on every other run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -814,6 +782,7 @@ impl GraduationRun {
             failure: None,
             merge: None,
             pr_summary: None,
+            openspec: None,
             run_summary: None,
             landings: Vec::new(),
             reverts: Vec::new(),
@@ -940,6 +909,14 @@ pub struct GraduationQueue {
     pub runs: Vec<GraduationRun>,
 }
 
+/// DRS-FR-VHMB: the change a draft's propose run writes, and its stream.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftOpenSpecChange {
+    pub name: String,
+    pub stream_id: String,
+}
+
 /// What the Drafts panel is told about a draft's run (`DRS-FR-18`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -951,4 +928,7 @@ pub struct DraftGraduation {
     /// DRS-FR-KQTW: a run of this draft has committed its work onto a stream
     /// and is not discarded.
     pub graduated: bool,
+    /// DRS-FR-VHMB: present where that run is a propose run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openspec_change: Option<DraftOpenSpecChange>,
 }

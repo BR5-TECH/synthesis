@@ -11,6 +11,7 @@ import type {
 import { passBoundOf } from "../../types/graduation";
 import { blockerSentence } from "./blockers";
 import { failureStatement, isMergeRun } from "./merge";
+import { changeRunOutcome, changeRunStageWord, changeRunStages } from "./openspecRuns";
 import { isPrSummaryRun, PR_SUMMARY_STAGES } from "./prSummary";
 import {
   CHECKS_NOT_PASSED_HEADLINE,
@@ -19,6 +20,7 @@ import {
   totalTimeLimitRestOf,
 } from "./rest";
 import { SLOT_WAIT_HEADLINE } from "./slotWait";
+import { planRestHeadline, planRestOf } from "./planRest";
 import type {
   GraduationObservability,
   GraduationVisualStage,
@@ -101,6 +103,10 @@ export const MERGE_STAGES_NOT_MERGED: ProgressStage[] = MERGE_STAGES.map((stage)
 export function stageDescriptorsFor(run: GraduationRun): ProgressStage[] {
   // GRU-FR-AQKZ: a PR summary run has three stages and no review.
   if (isPrSummaryRun(run)) return PR_SUMMARY_STAGES;
+  // GRU-FR-SOFY / GOB-FR-CAXV: an apply run and a rework run have the words
+  // of their phase.
+  const change = changeRunStages(run);
+  if (change) return change;
   if (!isMergeRun(run)) return GRADUATION_STAGES;
   const ended =
     hasReadableProgress(run.observability) &&
@@ -173,9 +179,10 @@ export function conditionSentence(
       // GRU-FR-AQKZ: a PR summary run has one turn and shows no pass.
       if (isPrSummaryRun(run)) return "Summarizing";
       // GRU-FR-YSTV: a merge run reconciles where a draft run works.
-      return `${isMergeRun(run) ? "Reconciling" : "Working"} · pass ${passOf(run)} of ${passBoundOf(run)}`;
+      // GOB-FR-CAXV: an OpenSpec change run says the word of its phase.
+      return `${changeRunStageWord(run, "working") ?? (isMergeRun(run) ? "Reconciling" : "Working")} · pass ${passOf(run)} of ${passBoundOf(run)}`;
     case "reviewing":
-      return `${isMergeRun(run) ? "Reviewing" : "Review"} · pass ${passOf(run)} of ${passBoundOf(run)}`;
+      return `${changeRunStageWord(run, "review") ?? (isMergeRun(run) ? "Reviewing" : "Review")} · pass ${passOf(run)} of ${passBoundOf(run)}`;
     case "awaiting_author":
       // GRU-FR-FZCN / GRU-FR-WKTL / GRU-FR-WVDV: five shapes rest a run for
       // the author — an escalation it asked, a review that did not settle, a
@@ -194,6 +201,12 @@ export function conditionSentence(
       // GRU-FR-WVDV: a run whose required checks did not pass says so. It
       // spent no pass budget either.
       if (checksNotPassedRestOf(run)) return CHECKS_NOT_PASSED_HEADLINE;
+      {
+        // GRU-FR-TCSM / GRU-FR-TVDF / GRU-FR-PZJY: a plan rest says what it
+        // waits for. It spent no pass budget, so it states none.
+        const plan = planRestOf(run);
+        if (plan) return planRestHeadline(plan);
+      }
       // GRU-FR-FZCN: a review that did not settle before the budget was spent
       // says what it spent, so the author reads a bound rather than a run that
       // stopped for no stated reason. The findings themselves stand in the pass
@@ -367,6 +380,9 @@ export function outcomeStatement(run: GraduationRun): string | null {
         return null;
     }
   }
+  // GRU-FR-IKEQ: a rework run commits nothing; it ends with its proposal.
+  const change = changeRunOutcome(run);
+  if (change !== undefined) return change;
   if (run.merge) {
     switch (run.state) {
       case "completed":

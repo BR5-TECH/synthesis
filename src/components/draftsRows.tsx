@@ -15,6 +15,7 @@ import { Icon } from "./icons";
 import { formatRelative } from "./ProjectPicker";
 import { stateLabel } from "../state/graduation";
 import { AnchoredMenu } from "./DraftsPanelParts";
+import { openOpenSpecChange } from "../state/openspec/changeRoutes";
 import {
   decompositionSuffix,
   originalNameOf,
@@ -572,6 +573,18 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                   setOverlay(null);
                   onOpenRun?.(draft.graduation!.runId);
                 })}
+                {/* DRP-FR-YGOU: a completed propose run's draft opens the
+                    change it wrote, on its stream. */}
+                {draft.graduation.openspecChange &&
+                  draft.graduation.state === "completed" &&
+                  menuEntry("Open change", <Icon.Diff size={12} />, () => {
+                    const change = draft.graduation!.openspecChange!;
+                    setOverlay(null);
+                    openOpenSpecChange(
+                      { kind: "stream", streamId: change.streamId },
+                      change.name,
+                    );
+                  })}
               </>
             )}
           </AnchoredMenu>

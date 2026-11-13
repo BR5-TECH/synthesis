@@ -6,7 +6,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { blockerCode, blockerDetail, blockerStatement } from "./blockers";
+import {
+  blockerCode,
+  blockerDetail,
+  blockerFrame,
+  blockerStatement,
+  openSpecBlockerFailure,
+} from "./blockers";
 import { makeRun } from "../../test/graduationFixtures";
 
 const RAW =
@@ -91,5 +97,53 @@ describe("blockerDetail and blockerCode", () => {
     expect(blockerCode(blocked("blocked", 1))).toBe("review_checkout_failed");
     expect(blockerCode(blocked("awaiting_author", 2))).toBe("review_checkout_failed");
     expect(blockerCode(makeRun("r1", "working"))).toBeNull();
+  });
+});
+
+describe("an OpenSpec blocker (GRU-FR-LBPR, GRD-FR-UJII)", () => {
+  function openspecBlocked(blocker: Record<string, unknown>) {
+    return makeRun("r1", "blocked", {
+      openspec: { phase: "apply", change: "add-logout" },
+      blocker: {
+        message: "openspec_validation_unavailable: cli_rejected",
+        clearsBy: "Continue the run to run the gate again.",
+        attempt: 2,
+        ...blocker,
+      } as never,
+    });
+  }
+
+  it("GRU-FR-LBPR, OFN-FR-RNWG: an OpenSpec blocker is its failure notice, with the cause, the detail, the diagnostics, and the change of the run", () => {
+    const run = openspecBlocked({
+      code: "openspec_validation_unavailable",
+      cause: "cli_rejected",
+      diagnostics: [{ message: "m" }],
+    });
+    expect(openSpecBlockerFailure(run)).toEqual({
+      code: "openspec_validation_unavailable",
+      cause: "cli_rejected",
+      detail: null,
+      change: "add-logout",
+      diagnostics: [{ message: "m" }],
+    });
+    const image = openspecBlocked({ code: "openspec_image_cli_unavailable", detail: "not_found" });
+    expect(openSpecBlockerFailure(image)?.detail).toBe("not_found");
+  });
+
+  it("GRU-FR-LBPR, OFN-FR-PFYW: the run states its OpenSpec blocker once: no statement, no detail line, and a frame with the count, nothing committed, and the act", () => {
+    const run = openspecBlocked({ code: "openspec_validation_unavailable", cause: "cli_rejected" });
+    expect(blockerStatement(run)).toBeNull();
+    expect(blockerDetail(run)).toBeNull();
+    expect(blockerFrame(run)).toBe(
+      "It stopped here 2 times in a row. Nothing was committed. Continue the run to run the gate again.",
+    );
+  });
+
+  it("GRU-FR-LBPR: a blocker whose message is its own sentence states it once", () => {
+    // An older record with no cause gets no notice, and its message is its sentence.
+    const run = openspecBlocked({ code: "openspec_validation_unavailable" });
+    expect(openSpecBlockerFailure(run)).toBeNull();
+    expect(blockerStatement(run)).toContain("openspec_validation_unavailable: cli_rejected");
+    expect(blockerDetail(run)).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ use super::*;
 
 fn hunk_input(hunk_id: &str) -> AttachmentInput {
     AttachmentInput::ProposalHunk {
+        change: None,
         proposal_id: "p1".into(),
         hunk_id: hunk_id.into(),
         draft_id: Some("d1".into()),
@@ -14,6 +15,7 @@ fn hunk_input(hunk_id: &str) -> AttachmentInput {
 
 fn hunk_stored(hunk_id: &str) -> Attachment {
     Attachment::ProposalHunk {
+        change: None,
         proposal_id: "p1".into(),
         hunk_id: hunk_id.into(),
         draft_id: Some("d1".into()),
@@ -165,6 +167,7 @@ fn artifact_hunk(
     artifact_id: Option<&str>,
 ) -> AttachmentInput {
     AttachmentInput::ProposalHunk {
+        change: None,
         proposal_id: "pp1".into(),
         hunk_id: hunk_id.into(),
         draft_id: draft_id.map(Into::into),
@@ -194,6 +197,7 @@ fn an_artifact_hunk_discussion_carries_an_artifact_proposal_hunk() {
     )
     .expect("opened");
     let stored = Attachment::ProposalHunk {
+        change: None,
         proposal_id: "pp1".into(),
         hunk_id: "h1".into(),
         draft_id: None,

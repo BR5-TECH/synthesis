@@ -292,11 +292,15 @@ where
     }
     // (2) Path-convention inference, then the optional content tiebreak. Both
     // report `inferred` (the content read is part of inference, ASC-FR-06).
-    if let Some(t) = infer_from_path(rel) {
-        return (Some(t), Some(TypeSource::Inferred));
-    }
-    if let Some(t) = content(rel).artifact_type {
-        return (Some(t), Some(TypeSource::Inferred));
+    // ASC-FR-YODA: an archived OpenSpec change is typed by an assignment alone,
+    // so neither inference step runs for it.
+    if !inference::is_openspec_archive(rel) {
+        if let Some(t) = infer_from_path(rel) {
+            return (Some(t), Some(TypeSource::Inferred));
+        }
+        if let Some(t) = content(rel).artifact_type {
+            return (Some(t), Some(TypeSource::Inferred));
+        }
     }
     // (3) Nearest-ancestor folder-scope assignment.
     if let Some(t) = nearest_folder_assignment(rel, assignments) {

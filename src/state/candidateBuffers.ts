@@ -31,7 +31,7 @@
  * changed. Sharing the artifact store would have made "saved" mean "written into
  * the draft", which is exactly the confusion DCR-FR-27 exists to prevent.
  */
-import { editDraftChangeHunk, editPromptChangeHunk } from "../api";
+import { editChangeEditHunk, editDraftChangeHunk, editPromptChangeHunk } from "../api";
 import {
   createHistory,
   recordEdit,
@@ -40,7 +40,7 @@ import {
   type EditHistory,
 } from "./editHistory";
 import { logDebug, logError } from "../logging";
-import { PROMPT_PROPOSAL_ERRORS, PROPOSAL_ERRORS } from "../types";
+import { CHANGE_PROPOSAL_ERRORS, PROMPT_PROPOSAL_ERRORS, PROPOSAL_ERRORS } from "../types";
 import { AUTOSAVE_DELAY_MS } from "./writeSchedule";
 
 /**
@@ -508,4 +508,18 @@ export const promptHunkCandidateBuffers = new CandidateBufferStore({
     return editPromptChangeHunk(proposalId, hunkId, content, baseline);
   },
   staleError: PROMPT_PROPOSAL_ERRORS.candidateStale,
+});
+
+/**
+ * OCW-FR-COLR / CEP-FR-UCVO: the candidate store for one hunk at a time of a
+ * change edit proposal, writing through `edit_change_edit_hunk`. Separate from
+ * the two stores above, because a proposal id of one module is not a proposal
+ * id of another (CEP-FR-FQMZ).
+ */
+export const changeHunkCandidateBuffers = new CandidateBufferStore({
+  save: (key, content, baseline) => {
+    const { proposalId, hunkId } = parseHunkKey(key);
+    return editChangeEditHunk(proposalId, hunkId, content, baseline);
+  },
+  staleError: CHANGE_PROPOSAL_ERRORS.candidateStale,
 });

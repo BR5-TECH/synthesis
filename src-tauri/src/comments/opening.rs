@@ -30,8 +30,26 @@ pub(super) fn validate_fragment(
             fragment.path.clone()
         }
         DiscussionTarget::Note { .. } => return Err(ERR_INVALID_FRAGMENT.to_string()),
+        // CMS-FR-84: the change-relative path of one file of the change. It must
+        // stay inside the change folder.
+        DiscussionTarget::Change { .. } => {
+            if !is_change_relative_path(&fragment.path) {
+                return Err(ERR_INVALID_FRAGMENT.to_string());
+            }
+            fragment.path.clone()
+        }
     };
     Ok(FragmentTarget { path, ..fragment.clone() })
+}
+
+/// CMS-FR-84 / CEP-FR-WJKY: a relative path with no empty, `.`, or `..`
+/// segment, so it names a file inside the change folder.
+pub fn is_change_relative_path(path: &str) -> bool {
+    !path.trim().is_empty()
+        && !path.starts_with('/')
+        && !path.contains('\\')
+        && !path.contains(':')
+        && path.split('/').all(|seg| !seg.is_empty() && seg != "." && seg != "..")
 }
 
 /// CMS-FR-26 / CMS-FR-27: the single write path.
@@ -312,6 +330,12 @@ pub(super) fn log_ref_of<'a>(
         (DiscussionTarget::Draft { draft_id }, Some(f)) => ThreadRef::draft_file(draft_id, &f.path),
         (DiscussionTarget::Draft { draft_id }, None) => ThreadRef::discussion(draft_id),
         (DiscussionTarget::Note { note_id }, _) => ThreadRef::note_discussion(note_id),
+        (DiscussionTarget::Change { stream_id, change }, Some(f)) => {
+            ThreadRef::change_file(stream_id, change, &f.path)
+        }
+        (DiscussionTarget::Change { stream_id, change }, None) => {
+            ThreadRef::change_discussion(stream_id, change)
+        }
     }
 }
 

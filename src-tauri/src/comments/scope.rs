@@ -31,6 +31,17 @@ pub enum LogScope<'a> {
     NoteDiscussion {
         note_id: &'a str,
     },
+    /// CMS-FR-GJEY: the per-file fragment logs of one OpenSpec change, in the
+    /// change's own folder of the store.
+    ChangeFile {
+        stream_id: &'a str,
+        change: &'a str,
+    },
+    /// CMS-FR-GJEY: the whole-change discussion log, beside the fragment logs.
+    ChangeDiscussion {
+        stream_id: &'a str,
+        change: &'a str,
+    },
 }
 
 impl LogScope<'_> {
@@ -52,6 +63,16 @@ impl LogScope<'_> {
                 fsa::resolve_under(root, artifact_discussion_log_rel(artifact_id))
                     .map_err(|e| e.to_string())
             }
+            LogScope::ChangeFile { stream_id, change } => fsa::resolve_under(
+                change_comments_dir(root, stream_id, change)?,
+                format!("{}.jsonl", log_id(file_rel)),
+            )
+            .map_err(|e| e.to_string()),
+            LogScope::ChangeDiscussion { stream_id, change } => fsa::resolve_under(
+                change_comments_dir(root, stream_id, change)?,
+                DISCUSSION_LOG_NAME,
+            )
+            .map_err(|e| e.to_string()),
         }
     }
 
@@ -105,6 +126,12 @@ impl LogScope<'_> {
             // the notes beside it, so deleting one note's conversation takes
             // nothing from another's.
             LogScope::NoteDiscussion { note_id } => note_comments_dir(root, note_id)?,
+            // CMS-FR-GJEY: a change's logs, attachments, and question sets sit in
+            // the change's own folder.
+            LogScope::ChangeFile { stream_id, change }
+            | LogScope::ChangeDiscussion { stream_id, change } => {
+                change_comments_dir(root, stream_id, change)?
+            }
         })
     }
 
@@ -146,6 +173,20 @@ pub enum DiscussionTarget {
     /// the note happens to be filed against.
     #[serde(rename_all = "camelCase")]
     Note { note_id: String },
+    /// CMS-FR-UEXD: one OpenSpec change on one work stream, by the stream id and
+    /// the change name.
+    #[serde(rename_all = "camelCase")]
+    Change { stream_id: String, change: String },
+}
+
+impl DiscussionTarget {
+    /// CMS-FR-UEXD: the stream and the change of a change owner.
+    pub fn change_owner(&self) -> Option<(&str, &str)> {
+        match self {
+            DiscussionTarget::Change { stream_id, change } => Some((stream_id, change)),
+            _ => None,
+        }
+    }
 }
 
 /// Which conversation a command is operating on, in the one shape every write
@@ -194,6 +235,17 @@ impl<'a> ThreadRef<'a> {
         Self { scope: LogScope::NoteDiscussion { note_id }, file_rel: "" }
     }
 
+    /// CMS-FR-GJEY: the fragment log of one file of a change, keyed by its
+    /// change-relative path.
+    pub fn change_file(stream_id: &'a str, change: &'a str, file_rel: &'a str) -> Self {
+        Self { scope: LogScope::ChangeFile { stream_id, change }, file_rel }
+    }
+
+    /// CMS-FR-GJEY: the whole-change discussion log. It belongs to no one file.
+    pub fn change_discussion(stream_id: &'a str, change: &'a str) -> Self {
+        Self { scope: LogScope::ChangeDiscussion { stream_id, change }, file_rel: "" }
+    }
+
     /// Every thread the log this names currently holds.
     pub(super) fn list(&self, root: &fsa::RootFs) -> Vec<Discussion> {
         match self.scope {
@@ -206,6 +258,12 @@ impl<'a> ThreadRef<'a> {
                 fold_artifact_discussion(root, artifact_id)
             }
             LogScope::NoteDiscussion { note_id } => fold_note_discussion(root, note_id),
+            LogScope::ChangeFile { stream_id, change } => {
+                list_change_fragment_discussions_in(root, stream_id, change, self.file_rel)
+            }
+            LogScope::ChangeDiscussion { stream_id, change } => {
+                fold_change_discussion(root, stream_id, change)
+            }
         }
     }
 

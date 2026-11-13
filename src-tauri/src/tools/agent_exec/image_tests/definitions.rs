@@ -629,3 +629,34 @@ fn the_claude_code_image_sets_the_bash_timeouts() {
         }
     }
 }
+
+/// AVI-FR-RZFR, AVI-FR-NFNR — both images install the OpenSpec CLI at one exact
+/// version, and both turn its telemetry off.
+#[test]
+fn each_image_carries_the_openspec_cli_with_its_telemetry_off() {
+    let mut pins = Vec::new();
+    for (vendor, dockerfile) in dockerfiles() {
+        let packages = npm_packages(dockerfile);
+        assert!(
+            packages.iter().any(|p| p == "@fission-ai/openspec"),
+            "{vendor} does not install the OpenSpec CLI: {packages:?}"
+        );
+        let pin = dockerfile
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("ARG OPENSPEC_VERSION="))
+            .unwrap_or_else(|| panic!("{vendor} does not pin the OpenSpec CLI"));
+        assert!(
+            pin.split('.').count() == 3 && pin.split('.').all(|n| n.parse::<u64>().is_ok()),
+            "{vendor} pins the OpenSpec CLI to {pin:?}, not an exact version"
+        );
+        pins.push(pin.to_string());
+        let assignments = env_assignments(dockerfile);
+        assert!(
+            assignments.iter().any(|a| a == "OPENSPEC_TELEMETRY=0"),
+            "{vendor} does not set OPENSPEC_TELEMETRY=0: {assignments:?}"
+        );
+    }
+    assert_eq!(pins[0], pins[1], "the two images pin different OpenSpec CLI versions");
+    assert!(README.contains("ARG OPENSPEC_VERSION"), "the README does not name the OpenSpec pin");
+    assert!(README.contains(&pins[0]), "the README does not name the pinned version {}", pins[0]);
+}

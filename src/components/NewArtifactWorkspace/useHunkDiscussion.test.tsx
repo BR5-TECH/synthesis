@@ -269,7 +269,9 @@ describe("PCR-FR-HDMC, DDS-FR-EHDK: Discuss on a change in a file's Editor tab",
       artifactId: ARTIFACT,
       path: ARTIFACT,
     });
-    expect(hook.result.current.opening?.reference.draftId).toBeUndefined();
+    expect(
+      (hook.result.current.opening?.reference as { draftId?: string } | undefined)?.draftId,
+    ).toBeUndefined();
     expect(getDiscussionSession(`artifact:${ARTIFACT}`).body).toBe("@arch ");
   });
 

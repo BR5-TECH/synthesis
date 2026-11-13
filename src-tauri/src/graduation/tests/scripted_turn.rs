@@ -13,6 +13,8 @@ pub(super) enum Answer {
     RawResult(serde_json::Value),
     /// The agent stopped to ask the author something.
     Escalate(Vec<String>),
+    /// OPU-FR-YBLE: an escalation of the kind `plan_update`.
+    PlanUpdate(crate::tools::agent_exec::protocol::AgentEscalation),
     /// The same, under a reason the test names, so an escalation outside the
     /// rules of ESU-FR-19 can be composed.
     EscalateBecause { reason: String, questions: Vec<String> },
@@ -55,8 +57,8 @@ pub(super) struct Turn {
     pub(super) side_effect: Option<Box<dyn Fn() + Send + Sync>>,
     /// Something to do once the verdict of this review is durable.
     pub(super) after_verdict: Option<Box<dyn Fn() + Send + Sync>>,
-    /// Whether the answer carries a resumable vendor session.
-    pub(super) session: bool,
+    /// The id of the resumable vendor session the answer carries, if any.
+    pub(super) session: Option<String>,
     /// Whether the turn answers as scripted even where the run was stopped
     /// while it ran, as an agent that finished at the same moment does.
     pub(super) ignores_cancellation: bool,
@@ -75,7 +77,7 @@ impl Turn {
             answer,
             side_effect: None,
             after_verdict: None,
-            session: false,
+            session: None,
             ignores_cancellation: false,
             duration_ms: 0,
         }
@@ -111,6 +113,7 @@ impl Turn {
             verdict: ReviewOutcome::Revise,
             rationale: "One thing is not delivered.".to_string(),
             findings: vec![ReviewFinding {
+                kind: None,
                 severity,
                 description: description.to_string(),
                 affected_files: vec!["src/panel.ts".to_string()],
@@ -151,8 +154,9 @@ impl Turn {
         self
     }
 
-    pub(super) fn with_session(mut self) -> Self {
-        self.session = true;
+    /// The answer carries the resumable vendor session `id`.
+    pub(super) fn with_session(mut self, id: &str) -> Self {
+        self.session = Some(id.to_string());
         self
     }
 

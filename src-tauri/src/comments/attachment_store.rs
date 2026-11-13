@@ -83,12 +83,24 @@ pub(super) fn stage_attachment(
         // Only the shape is checked: a reference with an empty part names nothing.
         // CMS-FR-TQVB: exactly one of `draft_id` and `artifact_id` names the
         // proposal's target. Neither, or both, names no one target.
-        AttachmentInput::ProposalHunk { proposal_id, hunk_id, draft_id, artifact_id, path } => {
+        AttachmentInput::ProposalHunk {
+            proposal_id,
+            hunk_id,
+            draft_id,
+            artifact_id,
+            change,
+            path,
+        } => {
             if [&proposal_id, &hunk_id, &path].iter().any(|v| v.trim().is_empty()) {
                 return Err(ERR_MALFORMED_ATTACHMENT.to_string());
             }
             let named = |v: &Option<String>| v.as_deref().is_some_and(|v| !v.trim().is_empty());
-            if named(&draft_id) == named(&artifact_id) {
+            // CMS-FR-YQAX: a change reference names a valid change owner.
+            if change.as_ref().is_some_and(|c| !is_change_owner(&c.stream_id, &c.change)) {
+                return Err(ERR_MALFORMED_ATTACHMENT.to_string());
+            }
+            let targets = [named(&draft_id), named(&artifact_id), change.is_some()];
+            if targets.iter().filter(|t| **t).count() != 1 {
                 return Err(ERR_MALFORMED_ATTACHMENT.to_string());
             }
             Ok(StagedAttachment {
@@ -97,8 +109,20 @@ pub(super) fn stage_attachment(
                     hunk_id,
                     draft_id: draft_id.filter(|v| !v.trim().is_empty()),
                     artifact_id: artifact_id.filter(|v| !v.trim().is_empty()),
+                    change,
                     path,
                 },
+                bytes: None,
+            })
+        }
+        // CMS-FR-MTUL: recorded verbatim; every part names something, and the
+        // stream and the change name a valid change owner.
+        AttachmentInput::NewChangeSubject { proposal_id, stream_id, change } => {
+            if proposal_id.trim().is_empty() || !is_change_owner(&stream_id, &change) {
+                return Err(ERR_MALFORMED_ATTACHMENT.to_string());
+            }
+            Ok(StagedAttachment {
+                attachment: Attachment::NewChangeSubject { proposal_id, stream_id, change },
                 bytes: None,
             })
         }

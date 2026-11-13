@@ -20,6 +20,7 @@ The architect shapes the specification map to match how they plan the product: t
 12. **SMO-FR-GQTS** When an index node has no sibling, **Delete** is disabled while the node has children. Its tooltip says that the children must move first. Confirming the delete of such a node without children moves its planned drafts to its parent, or discards their placement when the node is a root node.
 13. **SMO-FR-CZLA** Every confirmed creation, edit, move, and delete applies to the map session at once and then invokes `"save specification map organization"` with that one edit. A failure of the invocation is logged and changes nothing on the map.
 14. **SMO-FR-MHEU** Organization edits live in the map session and are discarded with it (per `SMP-specification-map.md` SMP-FR-MEZK). A new load of the index shows the index without them.
+15. **SMO-FR-RVAV** For the source `openspec` (per `SMP-specification-map.md` SMP-FR-MNZW), the inspector offers no **New**, **Rename**, or **Delete**, no drag starts, and `"save specification map organization"` is not invoked.
 
 ## Wireframes
 ```

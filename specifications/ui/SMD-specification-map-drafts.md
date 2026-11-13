@@ -17,6 +17,7 @@ The architect plans new work where it belongs in the specification map: a draft 
 9. **SMD-FR-LKVU** A planned chip shows the current name of its draft after a rename of that draft. When the draft is archived, graduated, or deleted, its planned chip is removed from the map. An active or a published draft keeps its planned chip.
 10. **SMD-FR-QPAM** A planned chip can be dragged onto any index node, and the drop moves the draft placement to that node (per `SMO-specification-map-organization.md`).
 11. **SMD-FR-BWJY** Draft placements live in the map session and are discarded with it (per `SMP-specification-map.md` SMP-FR-MEZK). Discarding a placement never changes the draft.
+12. **SMD-FR-YQSR** For the source `openspec`, **New draft** and planned chips work as this spec states, on group nodes and capability nodes alike, except that a planned chip cannot be dragged (per `SMO-specification-map-organization.md` SMO-FR-RVAV). The inspector offers no **New draft** for a change chip.
 
 ## Wireframes
 ```

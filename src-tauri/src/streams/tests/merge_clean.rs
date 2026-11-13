@@ -31,9 +31,11 @@ fn a_clean_merge_left_uncommitted_is_unstaged_and_moves_no_branch() {
     let result = merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect("merged");
 
     match result {
-        StreamMergeResult::Merged { merged_paths, commit } => {
+        StreamMergeResult::Merged { merged_paths, commit, archived } => {
             assert_eq!(merged_paths, vec!["added.txt".to_string()]);
             assert_eq!(commit, None, "no commit was made");
+            // OAR-FR-LZLW: a stream with no change to archive archives nothing.
+            assert!(archived.is_empty(), "nothing was archived: {archived:?}");
         }
         other => panic!("expected a merge, got {other:?}"),
     }
@@ -74,7 +76,7 @@ fn a_clean_merge_committed_makes_one_merge_commit_with_both_parents() {
     let repo = fx.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     match result {
-        StreamMergeResult::Merged { merged_paths, commit } => {
+        StreamMergeResult::Merged { merged_paths, commit, .. } => {
             assert_eq!(merged_paths, vec!["added.txt".to_string()]);
             assert_eq!(commit, Some(head.id().to_string()));
         }

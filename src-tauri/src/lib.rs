@@ -19,6 +19,10 @@ pub mod ai_openrouter;
 pub mod ai_shared;
 pub mod artifacts;
 pub mod bm25_index;
+pub mod change_action_requests;
+pub mod change_history;
+pub mod change_proposals;
+pub mod change_statistics;
 pub mod changes;
 pub mod comments;
 pub mod dashboard;
@@ -50,10 +54,13 @@ pub mod library;
 pub mod logging;
 pub mod menu;
 pub mod model_downgrades;
+pub mod new_change_proposals;
 pub mod new_draft_proposals;
 pub mod notes;
 pub mod notifications;
 mod onnx_runtime;
+pub mod openspec;
+pub mod openspec_archive;
 pub mod progress;
 pub mod project;
 pub mod project_settings;
@@ -126,6 +133,9 @@ pub fn run() {
         // binary what it is. The registry is NOT here — it lives in the
         // user-global store above (GSS-FR-14).
         .manage(agentic::AgenticIntegrations::default())
+        // OSM-openspec-mode.md: the one OpenSpec seam, with its kept CLI check
+        // and its slots for CLI processes (OSM-FR-ZNVZ, OSM-FR-QHRV).
+        .manage(openspec::OpenSpec::default())
         // VOP-FR-ZSXI, VOP-FR-KBPZ: the vault namespace of provider keys, and
         // the one capture session. The registry lives in the store above.
         .manage(voice_ai::VoiceAi::default())
@@ -233,6 +243,10 @@ pub fn run() {
             notifications::install(app.handle());
             // VOP-FR-BSNY.
             voice_ai::start_watchdog(app.handle().clone());
+            // AGC-FR-NBZN: the turn builders find a stream's working copy.
+            change_proposals::install_stream_lookup(app.handle().clone());
+            // CAR-FR-IFGR: the turn builders read the state of a requested run.
+            change_action_requests::install_run_state_lookup(app.handle().clone());
             // VOP-FR-MNTN: WebKitGTK denies capture without a handler.
             #[cfg(target_os = "linux")]
             voice_ai::linux_media::install(app.handle());
@@ -436,6 +450,11 @@ pub fn run() {
             streams::get_work_stream_uncommitted_paths,
             graduation::start_graduation,
             graduation::start_direct_graduation,
+            graduation::start_change_apply,
+            graduation::start_change_rework,
+            change_action_requests::list_change_action_requests,
+            change_action_requests::confirm_change_action_request,
+            change_action_requests::decline_change_action_request,
             graduation::start_pull_request_summary,
             graduation::list_branch_completed_runs,
             graduation::preflight_direct_graduation,
@@ -468,6 +487,25 @@ pub fn run() {
             new_draft_proposals::accept_new_draft_proposal,
             new_draft_proposals::reject_new_draft_proposal,
             new_draft_proposals::confirm_draft_decomposition,
+            openspec::change_image::read_change_image,
+            change_history::list_change_versions,
+            change_history::read_change_version,
+            change_statistics::read_change_statistics,
+            change_statistics::record_change_working_interval,
+            new_change_proposals::list_new_change_proposals,
+            new_change_proposals::load_new_change_proposal_files,
+            new_change_proposals::accept_new_change_proposal,
+            new_change_proposals::reject_new_change_proposal,
+            new_change_proposals::complete_new_change_decision,
+            new_change_proposals::confirm_change_split,
+            change_proposals::list_change_edit_proposals,
+            change_proposals::load_change_edit_proposal_hunks,
+            change_proposals::accept_change_edit_hunk,
+            change_proposals::reject_change_edit_hunk,
+            change_proposals::set_change_edit_hunk_discussing,
+            change_proposals::edit_change_edit_hunk,
+            change_proposals::decline_change_edit_proposal,
+            change_proposals::complete_change_edit_decision,
             prompt_proposals::list_prompt_change_proposals,
             prompt_proposals::load_prompt_change_proposal_hunks,
             prompt_proposals::accept_prompt_change_hunk,
@@ -599,6 +637,11 @@ pub fn run() {
             agentic::get_project_agentic_integration,
             agentic::set_project_agentic_integration,
             project_settings::load_project_docker_images,
+            openspec::get_openspec_status,
+            openspec::change::read_openspec_change,
+            openspec::apply::read_apply_progress,
+            // OSI-openspec-spec-index.md OSI-FR-OSWD.
+            openspec::spec_index::load_specification_map,
             project_settings::save_project_vendor_image,
             project_settings::build_project_vendor_image,
             project_settings::cancel_project_vendor_image_build,

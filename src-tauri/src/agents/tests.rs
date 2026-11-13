@@ -535,6 +535,17 @@ fn instructions_are_stored_verbatim_and_an_empty_value_is_ordinary() {
     assert_eq!(read_back.instructions, "# Heading\n\n- one\n- two\n");
 }
 
+// AGR-FR-03 / CMS-FR-MKEV: a generated id that is `synthesis`, the id of the
+// Synthesis participant, is passed over, and the next id is the agent's.
+#[test]
+fn a_generated_agent_id_is_never_the_synthesis_id() {
+    let mut ids = vec![crate::comments::SYNTHESIS_AGENT_ID.to_string(), "a-1".to_string()];
+    ids.reverse();
+    let id = super::agent_id_from(|| ids.pop().expect("an id"));
+    assert_eq!(id, "a-1");
+    assert!(ids.is_empty(), "both ids were drawn");
+}
+
 // -- AGR-FR-03, AGR-FR-10: update -------------------------------------------------
 
 #[test]

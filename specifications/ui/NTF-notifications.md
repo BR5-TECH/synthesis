@@ -19,24 +19,29 @@ The facility through which any surface of the application asks for the author's 
 
 ## Wireframes
 
-The toast stack — three toasts showing, newest on top, anchored at the top-trailing corner of the shell below the top chrome:
+The toast stack — three toasts showing, newest nearest the corner, anchored at the bottom-trailing corner of the shell above the status bar:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────┐
 │  ◈ acme ▾   main ▾  ⟳   [ search…                            ]      ( ✦ 2 )   ☾ ▾    │
 ├──┬───────────────────────────────────────────────────────────────────────────────────┤
-│▤ │  Dashboard  │  RUN-runs.md  ×  │  ┌────────────────────────────────────────────┐   │
-│▤ ├─────────────┴──────────────────┤  │ (i) Info   Graduation · Completed        ✕ │   │
-│▤ │                                │  │ “Add search” is merged into main.          │   │
-│▤ │  # Runs                        │  └────────────────────────────────────────────┘   │
+│▤ │  Dashboard  │  RUN-runs.md  ×  │                                                    │
+│▤ ├─────────────┴──────────────────┤                                                    │
+│▤ │  # Runs                        │  ┌────────────────────────────────────────────┐   │
+│▤ │                                │  │ (x) Error  Graduation · Failed           ✕ │   │
+│▤ │                                │  │ “Rename tags” failed.                      │   │
+│▤ │                                │  └────────────────────────────────────────────┘   │
 │▤ │                                │  ┌────────────────────────────────────────────┐   │
 │▤ │                                │  │ /!\ Warn   Graduation · Waiting           ✕ │   │
 │▤ │                                │  │ “Fix login” is waiting for your answer.    │   │
 │▤ │                                │  └────────────────────────────────────────────┘   │
 │▤ │                                │  ┌────────────────────────────────────────────┐   │
-│▤ │                                │  │ (x) Error  Graduation · Failed           ✕ │   │
-│▤ │                                │  │ “Rename tags” failed.                      │   │
+│▤ │                                │  │ (i) Info   Graduation · Completed        ✕ │   │
+│▤ │                                │  │ “Add search” is merged into main.          │   │
 │▤ │                                │  └────────────────────────────────────────────┘   │
+├──┴────────────────────────────────┴───────────────────────────────────────────────────┤
+│  ⚙                                                                    LF · 2 spaces   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 The model downgrade toast, with its Suppress menu open:
@@ -58,7 +63,7 @@ The model downgrade toast, with its Suppress menu open:
 
 - Layout notes: the Suppress control is a control of its own after the body, apart from the click target of the toast. The menu opens below the control, inside the bounds of the stack, over whatever the toast covers. The trailing dismissal control is **Acknowledge** for this toast; it keeps the place and the shape of the dismissal control of every toast.
 
-- Layout notes: the stack floats at the shell's top-trailing corner immediately below the top chrome, clear of the tab strip's own controls, of the band above an Editor's editing surface (per `EFR-editor-find-replace.md` EFR-FR-AVML), and of the action control every tab carries in its opposite corner (per `ACT-action-control.md` ACT-FR-01). Each toast shows its level as an icon together with a text label, then its title and its body, and carries a dismissal control at its trailing edge. A toast shows no project name. A toast is opaque over whatever it covers and bounded to a measure narrower than the viewport, so its text wraps rather than running the shell's full width. The stack resizes nothing: the tab beneath it neither reflows nor scrolls when a toast appears or goes. Where the vertical panel is on the trailing edge (per `SNV-shell-navigation.md` SNV-FR-06) the stack floats over the panel rather than displacing it.
+- Layout notes: the stack floats at the shell's bottom-trailing corner immediately above the status bar (per `STB-status-bar.md` STB-FR-01), so it covers no tab header, no tab strip control, no band above an Editor's editing surface (per `EFR-editor-find-replace.md` EFR-FR-AVML), no action control of a tab (per `ACT-action-control.md` ACT-FR-01), and no control of the status bar. Each toast shows its level as an icon together with a text label, then its title and its body, and carries a dismissal control at its trailing edge. A toast shows no project name. A toast is opaque over whatever it covers and bounded to a measure narrower than the viewport, so its text wraps rather than running the shell's full width. The stack resizes nothing: the tab beneath it neither reflows nor scrolls when a toast appears or goes. Where the vertical panel is on the trailing edge (per `SNV-shell-navigation.md` SNV-FR-06) the stack floats over the panel rather than displacing it.
 
 The tab strip with two tabs needing attention, `spec.md` being the active tab and `RUN-runs.md` additionally holding unsaved changes:
 
@@ -216,12 +221,12 @@ target :=  dashboard
 51. **NTF-FR-DGLS** A toast shows the level as an icon together with a text label, then the title and the body. It has a dismissal control at its trailing edge. It shows no project name. A toast with an empty body shows no body line. Colour is never the only carrier of the level.
 52. **NTF-FR-YJAE** An Info toast goes away by itself about 5 s after it appears or is replaced. The timer pauses while the pointer is over the toast and while keyboard focus is inside it. It resumes with the time that remained when the pointer and focus have both left.
 53. **NTF-FR-RUBT** A Warn toast and an Error toast never go away by themselves. Each stays until the author dismisses it, clicks it, reaches its target (NTF-FR-14), or until its key is retracted (NTF-FR-38) or the project or worktree changes (NTF-FR-15).
-54. **NTF-FR-HZNF** Toasts stack vertically with the newest on top, and at most 3 show at one time. A raise whose key is the key of a showing toast replaces that toast in place, keeps its position, and restarts its timer.
+54. **NTF-FR-HZNF** Toasts stack vertically with the newest nearest the corner of NTF-FR-LAWP, and at most 3 show at one time. A raise whose key is the key of a showing toast replaces that toast in place, keeps its position, and restarts its timer.
 55. **NTF-FR-SXTI** A raise beyond 3 showing toasts waits in a queue, in order of arrival, and shows when a slot frees. A queued toast whose key is raised again takes the new content in its queue place. A queued toast whose key is reached or retracted is dropped.
 56. **NTF-FR-FNXO** A click on a toast, but not on its dismissal control, does what activating the OS notification of the same address does (NTF-FR-17 through NTF-FR-19), and then the toast goes away. A graduation run toast opens that run. A draft proposal toast opens the draft tab. A prompt artifact proposal toast opens the artifact tab.
 57. **NTF-FR-QEHM** The dismissal control removes only its own toast. It does not route to the address, does not withdraw an OS notification, and does not clear any tab indication.
 58. **NTF-FR-ZSIK** A toast leaves the stack in these cases and no others: its Info timer ends, the author dismisses it, the author clicks it, the author picks an item of its action menu and the action succeeds (NTF-FR-LHVU), the author reaches its target (NTF-FR-14) unless its raise asked for the exemption of NTF-FR-FPBH, its key is retracted (NTF-FR-38), a raise of another channel with its key replaces it, or the project or worktree changes (NTF-FR-15). A toast that has left is not recorded anywhere.
-59. **NTF-FR-LAWP** The stack is anchored at the top-trailing corner of the shell below the top chrome, clear of the tab strip's controls and of the action control (per `ACT-action-control.md` ACT-FR-01). A toast is opaque and bounded in width so its text wraps. The stack floats over the trailing panel and resizes or reflows nothing.
+59. **NTF-FR-LAWP** The stack is anchored at the bottom-trailing corner of the shell immediately above the status bar (per `STB-status-bar.md` STB-FR-01). It covers no tab header and no control of the status bar. A toast is opaque and bounded in width so its text wraps. The stack floats over the trailing panel and resizes or reflows nothing.
 60. **NTF-FR-BVCG** A toast never takes focus when it appears and never interrupts typing. Its click target and its dismissal control are operable with the keyboard and are in the tab order. The stack region intercepts no pointer event outside the toasts.
 61. **NTF-FR-OPCD** An Info toast has the role `status` and is announced politely. A Warn toast and an Error toast have the role `alert` and are announced assertively. Where the platform reports reduced motion, a toast has no entry motion and no exit motion.
 

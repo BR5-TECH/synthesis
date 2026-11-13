@@ -44,6 +44,7 @@ export type GlobalSectionKey = (typeof GLOBAL_SECTION_KEYS)[number];
 export const PROJECT_SECTION_KEYS = [
   "project",
   "template",
+  "openspec",
   "bindings",
   "github-polling",
   "adapters",

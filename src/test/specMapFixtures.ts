@@ -8,6 +8,7 @@ import type {
   Dependency,
   IndexNode,
   LevelName,
+  MapIssue,
   SpecNode,
   SpecificationIndex,
 } from "../state/specMap/types";
@@ -73,5 +74,98 @@ export function smallIndex(dependencies?: Dependency[]): SpecificationIndex {
       { from: "A3", to: "B1", citations: 2 },
       { from: "C2", to: "A1", citations: 1, unresolved: true },
     ],
+  };
+}
+
+export const OPENSPEC_LEVELS: LevelName[] = [
+  { plural: "groups", singular: "group" },
+  { plural: "capabilities", singular: "capability" },
+  { plural: "requirements", singular: "requirement" },
+];
+
+/** OSI-FR-SEYB: requirement `n` of a capability, `gap` where it holds an issue. */
+export function requirement(
+  capability: string,
+  n: number,
+  scenarios = 1,
+  issues?: MapIssue[],
+): SpecNode {
+  return {
+    code: `${capability}#${n}`,
+    badge: `R${n}`,
+    path: `openspec/specs/${capability}/spec.md`,
+    label: `${capability} requirement ${n}`,
+    summary: `The text of ${capability} requirement ${n}.`,
+    requirements: 1,
+    scenarios,
+    state: issues && issues.some((i) => i.level !== "INFO") ? "gap" : "built",
+    ...(issues ? { issues } : {}),
+  };
+}
+
+const STREAM = { kind: "stream", streamId: "s-1", streamName: "editor-work" } as const;
+
+/**
+ * An OpenSpec index in the session's shape (OSI contract), built by hand:
+ * - `group:/` specs → `capability:auth` (R1 built, R2 gap with a WARNING;
+ *   chips add-logout in the active worktree, with an ERROR, and on editor-work),
+ *   and the planned `capability:ui` (chip add-logout on editor-work)
+ * - `group:billing` billing → `capability:billing/pay` (an INFO issue on the
+ *   capability, R1 gap with an ERROR; chip add-refunds on editor-work)
+ */
+export function openspecIndex(over: Partial<SpecificationIndex> = {}): SpecificationIndex {
+  return {
+    levels: OPENSPEC_LEVELS,
+    roots: [
+      node("group:/", [
+        node(
+          "capability:auth",
+          [
+            requirement("auth", 1, 2),
+            requirement("auth", 2, 0, [{ level: "WARNING", message: "needs a scenario" }]),
+          ],
+          {
+            label: "Authentication",
+            changes: [
+              {
+                change: "add-logout",
+                location: { kind: "active_worktree" },
+                issues: [{ level: "ERROR", message: "delta has no scenario" }],
+              },
+              { change: "add-logout", location: STREAM },
+            ],
+          },
+        ),
+        node("capability:ui", [], {
+          label: "ui",
+          summary: "",
+          plannedCapability: true,
+          changes: [{ change: "add-logout", location: STREAM }],
+        }),
+      ], { label: "specs", summary: "" }),
+      node(
+        "group:billing",
+        [
+          node(
+            "capability:billing/pay",
+            [
+              requirement("billing/pay", 1, 0, [{ level: "ERROR", message: "no scenario" }]),
+              requirement("billing/pay", 2, 3),
+            ],
+            {
+              label: "Payments",
+              issues: [{ level: "INFO", message: "purpose is short" }],
+              changes: [{ change: "add-refunds", location: STREAM }],
+            },
+          ),
+        ],
+        { label: "billing", summary: "" },
+      ),
+    ],
+    dependencies: [],
+    source: "openspec",
+    validation: "invalid",
+    unreadLocations: 0,
+    ...over,
   };
 }

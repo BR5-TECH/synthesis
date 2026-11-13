@@ -34,6 +34,7 @@ import {
 import type {
   DirectGraduationPreflight,
   GraduationRun,
+  OpenSpecFailure,
   StandingWork,
   WorkStreamSummary,
 } from "../types";
@@ -52,11 +53,23 @@ import {
 } from "./GraduationStart/destination";
 import { DirectChoice, directBlocker } from "./GraduationStart/direct";
 import { NewStreamFields } from "./GraduationStart/newStream";
+import {
+  CHANGE_NAME_REFUSALS,
+  ChangeNameField,
+  DIRECT_PROPOSE_REASON,
+  GraduateAsChoice,
+  changeNameRefusalText,
+  useOpenspecMode,
+  type GraduateAs,
+} from "./GraduationStart/proposeChange";
+import { deriveChangeName, isValidChangeName } from "../state/openspec/changeName";
 import { useGraduationQueueRuns } from "./GraduationStart/queue";
 import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
 import { reportDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { useInlineWriteGuard } from "./MainBranchWrite";
 import { parseMainBranchRefusal } from "../state/mainBranchWrite";
+import { noticeFailureOf, refusalString } from "../state/openspec/failureNotice";
+import { OpenSpecFailureNotice } from "./OpenSpecFailureNotice";
 
 /** The refusals of a direct start that the preflight must be read again for. */
 const DIRECT_REFUSALS = [
@@ -105,16 +118,28 @@ export function GraduationStart({
   const defaultedFor = useRef<string | null>(null);
   const messageEdited = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // GSD-FR-RFIG: a refusal in words, or an OpenSpec failure for its notice.
+  const [error, setError] = useState<string | OpenSpecFailure | null>(null);
   /** GSD-FR-QGTC: both New stream and Temporary stream make a stream here. */
   const makesStream = destination === "new" || destination === "temporary";
   /** GSD-FR-CXVA: whether the streams listing itself could not be read. */
   const [unreadable, setUnreadable] = useState(false);
   const pickerRef = useRef<HTMLSelectElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  /** GSD-FR-WMTD, GSD-FR-DCLQ: the selected Graduate as segment. */
+  const graduateAsRef = useRef<HTMLButtonElement | null>(null);
   /** GSD-FR-LHQY: the project-wide limit of graduation runs. */
   const capacityRead = useGraduationCapacity(draftId);
-  const errorRef = useRef<HTMLParagraphElement>(null);
+  const errorRef = useRef<HTMLParagraphElement & HTMLDivElement>(null);
+  /** GSD-FR-DCLQ: whether OpenSpec mode is active, read when the dialog opens. */
+  const openspecMode = useOpenspecMode(draftId);
+  const [graduateAs, setGraduateAs] = useState<GraduateAs>("propose");
+  /** GSD-FR-CKSV: the change name, prefilled from the draft. */
+  const [changeName, setChangeName] = useState(() => deriveChangeName(draftName, draftId));
+  /** GSD-FR-DCBH: a refusal of the change name, against the field. */
+  const [changeError, setChangeError] = useState<string | null>(null);
+  /** GSD-FR-DCLQ: a propose run is made only while the mode is active. */
+  const proposing = openspecMode.active && graduateAs === "propose";
 
   // GSD-FR-WMTD / SNV-FR-56: it is the one overlay while it stands, and Escape
   // dismisses it — from the keyboard, wherever focus is, on the terms every
@@ -132,10 +157,15 @@ export function GraduationStart({
   // with nothing to answer — no stream, or a listing that could not be read —
   // puts the keyboard on its own close control instead, because focus left
   // outside an overlay reaches the surface underneath it.
+  //
+  // GSD-FR-DCLQ: while OpenSpec mode is active, **Graduate as** is the first
+  // thing the dialog asks, so its selected segment takes focus. The dialog
+  // waits for the mode read too, so focus does not jump after it arrives.
   useEffect(() => {
-    if (streams === null) return;
-    (pickerRef.current ?? closeRef.current)?.focus();
-  }, [streams]);
+    if (streams === null || !openspecMode.settled) return;
+    const first = openspecMode.active ? graduateAsRef.current : null;
+    (first ?? pickerRef.current ?? closeRef.current)?.focus();
+  }, [streams, openspecMode.settled, openspecMode.active]);
 
   // GSD-FR-JYRP: a refusal renders at the foot of a body that scrolls, so it
   // is brought into view. A refusal the author cannot see reads as a Graduate
@@ -307,10 +337,28 @@ export function GraduationStart({
     setNewName("");
   };
 
+  /** GSD-FR-DCLQ: what the run makes. A refusal of the other choice is cleared. */
+  const selectGraduateAs = (value: GraduateAs) => {
+    setError(null);
+    setChangeError(null);
+    setGraduateAs(value);
+  };
+
+  // GSD-FR-AGPL: a status that arrives after Work directly was chosen moves a
+  // propose run to a stream destination too.
+  useEffect(() => {
+    if (proposing && destination === "direct" && streams !== null) {
+      selectDestination(streams.length > 0 ? "stream" : "new", "arrows");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposing, destination, streams]);
+
   const startRef = useRef<() => Promise<void>>(async () => {});
+  const startInFlight = useRef(false);
   const start = async () => {
-    // GSD-FR-BFOU: one start at a time.
-    if (busy) return;
+    // GSD-FR-BFOU: one start at a time. The ref sees a start that the
+    // render has not shown yet.
+    if (busy || startInFlight.current) return;
     if (destination === "stream" && !streamId) return;
     // GSD-FR-WJHN: a temporary stream takes the draft's name where none is typed.
     if (destination === "new" && !newName.trim()) return;
@@ -320,9 +368,15 @@ export function GraduationStart({
     ) {
       return;
     }
+    // GSD-FR-DCBH / GSD-FR-AGPL: a propose start needs a valid name and a stream.
+    if (proposing && (!isValidChangeName(changeName) || destination === "direct")) return;
+    // GSD-FR-ZAFX: the change name of a propose run, and null for every other run.
+    const openspecChange = proposing ? changeName : null;
+    startInFlight.current = true;
     setBusy(true);
     setError(null);
     setNameError(null);
+    setChangeError(null);
     let createdStream: string | null = null;
     try {
       let run: GraduationRun;
@@ -362,6 +416,7 @@ export function GraduationStart({
           newWaits && standingWorkCommits(standingWork)
             ? message.trim() || null
             : null,
+          openspecChange,
         );
       } else {
         run = await api.startGraduation(
@@ -373,6 +428,7 @@ export function GraduationStart({
           streamWaits && standingWorkCommits(standingWork)
             ? message.trim() || null
             : null,
+          openspecChange,
         );
       }
       onStarted(run);
@@ -387,9 +443,13 @@ export function GraduationStart({
         writeGuard.adoptRefusal(reason, () => void startRef.current());
         return;
       }
-      const text = String(reason);
+      const text = refusalString(reason);
       const [code, detail] = splitTyped(text);
-      setError(graduationErrorMessage(text));
+      // GSD-FR-RFIG: an OpenSpec failure renders its notice.
+      const failure = noticeFailureOf(reason);
+      // GSD-FR-DCBH: a refusal of the change name renders against the field.
+      if (CHANGE_NAME_REFUSALS.includes(code)) setChangeError(changeNameRefusalText(code));
+      else setError(failure ?? graduationErrorMessage(text));
       logError(["frontend"], "graduation could not be started", { draftId, code });
       // GSD-FR-BXKR: a missing Docker socket is also raised as an Error toast,
       // addressed to the place where the path is corrected.
@@ -407,6 +467,7 @@ export function GraduationStart({
         await readPreflight();
       }
     } finally {
+      startInFlight.current = false;
       setBusy(false);
     }
   };
@@ -439,6 +500,9 @@ export function GraduationStart({
   const canStart =
     !busy &&
     !writeGuard.blocked &&
+    // GSD-FR-DCLQ: the dialog knows what it starts once the status read settles.
+    openspecMode.settled &&
+    (!proposing || (isValidChangeName(changeName) && destination !== "direct")) &&
     (destination === "stream"
       ? Boolean(streamId)
       : destination === "new"
@@ -517,11 +581,34 @@ export function GraduationStart({
             </p>
           )}
 
+          {/* GSD-FR-DCLQ / GSD-FR-CKSV: what the run makes, while OpenSpec
+              mode is active, and the name of the change it proposes. */}
+          {openspecMode.active && (
+            <GraduateAsChoice
+              value={graduateAs}
+              disabled={busy}
+              onChange={selectGraduateAs}
+              selectedRef={graduateAsRef}
+            />
+          )}
+          {proposing && (
+            <ChangeNameField
+              value={changeName}
+              onChange={(value) => {
+                setChangeName(value);
+                setChangeError(null);
+              }}
+              refusal={changeError}
+              disabled={busy}
+            />
+          )}
+
           {streams !== null && (
             <DestinationChoice
               value={destination}
               disabled={busy}
               noStream={streams.length === 0}
+              directDisabledReason={proposing ? DIRECT_PROPOSE_REASON : null}
               onChange={selectDestination}
             />
           )}
@@ -646,7 +733,7 @@ export function GraduationStart({
             />
           )}
 
-          {error && (
+          {typeof error === "string" && (
             <p
               className="graduation-start__notice graduation-start__notice--refused"
               role="alert"
@@ -655,6 +742,22 @@ export function GraduationStart({
             >
               {error}
             </p>
+          )}
+          {/* GSD-FR-RFIG: an OpenSpec refusal in its notice, with its
+              actions, and that no run started. */}
+          {error !== null && typeof error !== "string" && (
+            <div
+              className="graduation-start__notice graduation-start__notice--refused"
+              ref={errorRef}
+              data-testid="graduation-start-error"
+            >
+              <OpenSpecFailureNotice
+                failure={error}
+                surface="graduation_start_propose"
+                change={proposing ? changeName : null}
+                frame="No run started."
+              />
+            </div>
           )}
         </div>
 
@@ -672,13 +775,18 @@ export function GraduationStart({
             type="button"
             className="btn btn--primary"
             onClick={start}
-            disabled={!canStart}
+            // While a start is in flight the button is disabled but keeps its
+            // focus stop, so the focus stays in the dialog.
+            disabled={!canStart && !busy}
+            aria-disabled={busy ? "true" : undefined}
             aria-describedby={writeGuard.describedBy}
             data-testid="graduation-start-confirm"
           >
             {busy
               ? "Starting…"
-              : destination === "new"
+              : proposing
+                ? "Propose change"
+                : destination === "new"
                 ? "Create stream and graduate"
                 : destination === "temporary"
                   ? "Create temporary stream and graduate"

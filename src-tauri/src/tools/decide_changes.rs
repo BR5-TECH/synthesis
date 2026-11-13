@@ -243,6 +243,12 @@ pub struct DecisionRow {
     /// DDC contract surface: the draft an accepted new-draft entry created.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_draft_id: Option<String>,
+    /// DCE contract surface: the change-relative path of a change edit hunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// DCE-FR-IZTA: the run a confirmed change action request started.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
 }
 
 impl DecisionRow {
@@ -259,6 +265,8 @@ impl DecisionRow {
             comment_owed: None,
             new_draft_state: None,
             created_draft_id: None,
+            path: None,
+            run_id: None,
         }
     }
 
@@ -283,6 +291,10 @@ pub enum Outcome {
     DiscussionOpened,
     /// DDC-FR-VEKP: a `confirm` entry confirmed the decomposition.
     Confirmed,
+    /// DCE-FR-IZTA: a `confirm` entry started the run of an action request.
+    Started,
+    /// DCE-FR-IZTA: a `reject` entry declined an action request.
+    Declined,
     Refused,
 }
 
@@ -293,6 +305,8 @@ impl Outcome {
             Outcome::Rejected => "rejected",
             Outcome::DiscussionOpened => "discussion_opened",
             Outcome::Confirmed => "confirmed",
+            Outcome::Started => "started",
+            Outcome::Declined => "declined",
             Outcome::Refused => "refused",
         }
     }
@@ -390,6 +404,10 @@ pub const NO_OPEN_DRAFT_PROPOSAL: &str = "No proposal, no proposed draft, and no
 /// DDC-FR-JCSV: the `invalid_action` text of a draft entry.
 pub const INVALID_DRAFT_ACTION: &str = "the action must be `accept`, `reject`, or `discuss` for a change or a proposed draft, and `confirm` for the decomposition.";
 /// DPC-FR-RGGP: no open proposal on the file.
+/// DCE-FR-XVLE: no open proposal on the change.
+pub const NO_OPEN_CHANGE_PROPOSAL: &str = "No proposal is open on this OpenSpec change, so there is no edit to decide. Tell the author that nothing is waiting for a decision.";
+/// DCE-FR-WYJP: the conversation is not about a change.
+pub const NOT_A_CHANGE_CONVERSATION: &str = "This conversation is not about an OpenSpec change, so there is no change edit to decide. Asking again will not succeed.";
 pub const NO_OPEN_FILE_PROPOSAL: &str = "No proposal is open on this file, so there is no change to decide. Tell the author that nothing is waiting for a decision.";
 
 /// A refusal of the whole call. Nothing is decided.
@@ -570,16 +588,25 @@ pub fn hunk_attachment(
     target: &comments::DiscussionTarget,
     path: &str,
 ) -> comments::AttachmentInput {
-    let (draft_id, artifact_id) = match target {
-        comments::DiscussionTarget::Draft { draft_id } => (Some(draft_id.clone()), None),
-        comments::DiscussionTarget::Artifact { artifact_id } => (None, Some(artifact_id.clone())),
-        comments::DiscussionTarget::Note { .. } => (None, None),
+    let (draft_id, artifact_id, change) = match target {
+        comments::DiscussionTarget::Draft { draft_id } => (Some(draft_id.clone()), None, None),
+        comments::DiscussionTarget::Artifact { artifact_id } => {
+            (None, Some(artifact_id.clone()), None)
+        }
+        comments::DiscussionTarget::Note { .. } => (None, None, None),
+        // CMS-FR-YQAX: a hunk of a change edit proposal names its change.
+        comments::DiscussionTarget::Change { stream_id, change } => (
+            None,
+            None,
+            Some(comments::ChangeOwnerRef { stream_id: stream_id.clone(), change: change.clone() }),
+        ),
     };
     comments::AttachmentInput::ProposalHunk {
         proposal_id: proposal_id.to_string(),
         hunk_id: hunk_id.to_string(),
         draft_id,
         artifact_id,
+        change,
         path: path.to_string(),
     }
 }
@@ -674,6 +701,8 @@ fn run_entry<B: ProposalBackend>(
         comment_owed: None,
         new_draft_state: None,
         created_draft_id: None,
+        path: None,
+        run_id: None,
     };
     let refuse = |row: &mut DecisionRow, code: RefusalCode, action: Option<Action>| {
         row.refusal = Some(EntryRefusal {
@@ -778,7 +807,25 @@ pub fn log_call<S: LogSink + Clone + Send + 'static>(
     target: (&'static str, &str),
     outcome: &Result<DecideChangesOutput, CallRefusal>,
 ) {
-    let (target_key, target_value) = target;
+    log_call_with(sink, buffer, tool, &[target], outcome);
+}
+
+/// [`log_call`] with several target fields: DCE-FR-GAHP names the stream id
+/// and the change name.
+pub fn log_call_with<S: LogSink + Clone + Send + 'static>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    tool: &'static str,
+    targets: &[(&'static str, &str)],
+    outcome: &Result<DecideChangesOutput, CallRefusal>,
+) {
+    let put = |fields: &mut crate::logging::Fields| {
+        for (key, value) in targets {
+            if !value.is_empty() {
+                fields.insert(key.to_string(), serde_json::json!(value));
+            }
+        }
+    };
     match outcome {
         Ok(output) => {
             for row in &output.decisions {
@@ -789,7 +836,7 @@ pub fn log_call<S: LogSink + Clone + Send + 'static>(
                         "place" => row.place,
                         "retryable" => refusal.retryable,
                     };
-                    fields.insert(target_key.to_string(), serde_json::json!(target_value));
+                    put(&mut fields);
                     if let Some(error) = &refusal.error {
                         fields.insert("error".to_string(), serde_json::json!(error));
                     }
@@ -809,11 +856,13 @@ pub fn log_call<S: LogSink + Clone + Send + 'static>(
                 Outcome::Rejected,
                 Outcome::DiscussionOpened,
                 Outcome::Confirmed,
+                Outcome::Started,
+                Outcome::Declined,
                 Outcome::Refused,
             ] {
                 fields.insert(outcome.as_str().to_string(), serde_json::json!(count(outcome)));
             }
-            fields.insert(target_key.to_string(), serde_json::json!(target_value));
+            put(&mut fields);
             logging::log_info(sink, buffer, &DOMAINS, "tool call completed", fields);
         }
         Err(refusal) => {
@@ -821,9 +870,7 @@ pub fn log_call<S: LogSink + Clone + Send + 'static>(
                 "tool" => tool,
                 "reason" => refusal.reason(),
             };
-            if !target_value.is_empty() {
-                fields.insert(target_key.to_string(), serde_json::json!(target_value));
-            }
+            put(&mut fields);
             logging::log_warn(sink, buffer, &DOMAINS, "tool call refused", fields);
         }
     }

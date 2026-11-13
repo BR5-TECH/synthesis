@@ -13,6 +13,8 @@
  * nothing will ever resolve.
  */
 import { closeExportDialog, setExportDialogOpening } from "../state/exportDialog";
+import { setModalOpening } from "../state/modalOpening";
+import { configureRunRoute } from "../state/graduation/runRoute";
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import {
@@ -391,6 +393,15 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    */
   const openStartedGraduationRun = (runId: string) =>
     openGraduationRun(runId, graduationSectionActive.current);
+
+  // OCW-FR-LYIX: the change workspace and its request cards open a run
+  // through the same route, from several layers below the shell.
+  const openGraduationRunRef = useRef(openGraduationRun);
+  openGraduationRunRef.current = openGraduationRun;
+  useEffect(() => {
+    configureRunRoute((runId) => openGraduationRunRef.current(runId));
+    return () => configureRunRoute(null);
+  }, []);
   // Mirrored in a ref for the same reason the picker's is: a caller left
   // unsettled is a promise the Changes panel awaits forever.
   const commitRef = useRef<PendingCommit | null>(null);
@@ -610,16 +621,33 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    */
   const openingDiagramEditor = useRef<() => void>(() => {});
   openingDiagramEditor.current = closeAllOverlays;
+  /**
+   * SNV-FR-56: a dialog of the shared `Modal` opens from a tab or a panel, often
+   * from a menu of that surface. It closes the shell's overlays and the chrome
+   * dropdowns, and sends no outside press, so the surface that opened it, and
+   * any menu that holds its state, stays.
+   */
+  const openingModal = useRef<() => void>(() => {});
+  openingModal.current = () => {
+    closeSiblingOverlays();
+    dismissCommitWindow();
+    dismissRollbackWindow();
+    if (streamMergeRef.current) settleStreamMergeWindow(null);
+    closeChromeDropdowns();
+  };
   useEffect(() => {
     setDiagramEditorOpening(() => openingDiagramEditor.current());
     // EXD-FR-XNLZ / SNV-FR-56: the Export dialog closes every other overlay.
     setExportDialogOpening(() => openingDiagramEditor.current());
     // MBW-FR-GYVD / SNV-FR-56: the confirmation closes every other overlay.
     setMainBranchWriteOpening(() => openingDiagramEditor.current());
+    // SNV-FR-56: a dialog of the shared `Modal` closes the shell's overlays.
+    setModalOpening(() => openingModal.current());
     return () => {
       setDiagramEditorOpening(null);
       setExportDialogOpening(null);
       setMainBranchWriteOpening(null);
+      setModalOpening(null);
     };
   }, []);
 

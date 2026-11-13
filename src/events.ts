@@ -22,6 +22,10 @@ import type {
   PublicationMetadataStartupFailed,
   AgentActivityState,
   ChangesUpdatedPayload,
+  ChangeProposalsChangedPayload,
+  ChangeActionRequestsChangedPayload,
+  ChangeStatisticsChangedPayload,
+  NewChangeProposalsChangedPayload,
   Discussion,
   PendingQuestionSet,
   DashboardRefreshFailedPayload,
@@ -98,6 +102,12 @@ export const DRAFTS_CHANGED = "drafts-changed";
 export const DRAFT_CHANGE_PROPOSALS_CHANGED = "draft-change-proposals-changed";
 /** PCP-FR-17: a change was proposed to a prompt artifact, or one was decided. */
 export const PROMPT_CHANGE_PROPOSALS_CHANGED = "prompt-change-proposals-changed";
+
+/**
+ * CEP-FR-SQCG: a change edit proposal was recorded, updated, decided, held, or
+ * committed. It carries the stream id, the change name, and the whole proposal.
+ */
+export const CHANGE_EDIT_PROPOSALS_CHANGED = "change-edit-proposals-changed";
 
 /**
  * DHS-FR-22: a version of a draft's prompt became visible, or a reconciliation
@@ -424,6 +434,49 @@ export const onPromptChangeProposalsChanged = (
   handler: (payload: PromptProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
   listen<PromptProposalsChangedPayload>(PROMPT_CHANGE_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/**
+ * CEP-FR-SQCG / OCW-FR-TAZJ: a change edit proposal of one change moved on.
+ */
+export const onChangeEditProposalsChanged = (
+  handler: (payload: ChangeProposalsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<ChangeProposalsChangedPayload>(CHANGE_EDIT_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** CST-FR-PSUF: events for one change were appended to its statistics log. */
+export const CHANGE_STATISTICS_CHANGED = "change-statistics-changed";
+
+/** CST-FR-PSUF / OCW-FR-ZZCS: subscribe to [`CHANGE_STATISTICS_CHANGED`]. */
+export const onChangeStatisticsChanged = (
+  handler: (payload: ChangeStatisticsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<ChangeStatisticsChangedPayload>(CHANGE_STATISTICS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** NCP-FR-VLOO: a new-change proposal of one change, or its split, moved on. */
+export const NEW_CHANGE_PROPOSALS_CHANGED = "new-change-proposals-changed";
+
+/** NCP-FR-VLOO / OCW-FR-BGDN: subscribe to [`NEW_CHANGE_PROPOSALS_CHANGED`]. */
+export const onNewChangeProposalsChanged = (
+  handler: (payload: NewChangeProposalsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<NewChangeProposalsChangedPayload>(NEW_CHANGE_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** CAR-FR-ZSIQ: a change action request of one change was recorded or decided. */
+export const CHANGE_ACTION_REQUESTS_CHANGED = "change-action-requests-changed";
+
+/** CAR-FR-ZSIQ / OCW-FR-GDZT: subscribe to [`CHANGE_ACTION_REQUESTS_CHANGED`]. */
+export const onChangeActionRequestsChanged = (
+  handler: (payload: ChangeActionRequestsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listen<ChangeActionRequestsChangedPayload>(CHANGE_ACTION_REQUESTS_CHANGED, (event) =>
     handler(event.payload),
   );
 

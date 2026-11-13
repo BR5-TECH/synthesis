@@ -8,6 +8,13 @@
 
 import type { GraduationObservability } from "./graduationObservability";
 import type { GraduationLogStream } from "./graduationLogs";
+import type { CliDiagnostic, DraftOpenspecChange, GraduationOpenspec } from "./openspec";
+import type {
+  PlanRestFields,
+  PlanRestReason,
+  PlanUpdateRefusalCause,
+  ReviewFindingKind,
+} from "./planUpdates";
 
 /** GRD-FR-QJHM: the nine states a run stands in. */
 export type GraduationRunState =
@@ -118,6 +125,8 @@ export interface ReviewFinding {
   /** Project-relative; may name a path that does not exist yet. */
   affectedFiles: string[];
   correction: string;
+  /** OPU-FR-EPXL: `work` or `plan`; `work` where it is absent. */
+  kind?: ReviewFindingKind | null;
 }
 
 /** GRL-FR-VIAT: the two verdicts. */
@@ -161,6 +170,12 @@ export interface GraduationBlocker {
    * which renders as no attempt at all.
    */
   attempt: number;
+  /** OFP-FR-TBHX: the OpenSpec code under an OpenSpec blocker. */
+  cause?: string | null;
+  /** OFP-FR-EOAD: the CLI state of an OpenSpec blocker, where it carries one. */
+  detail?: string | null;
+  /** OFP-FR-TBHX: the CLI diagnostics of an OpenSpec blocker. Never logged. */
+  diagnostics?: CliDiagnostic[] | null;
 }
 
 /**
@@ -168,7 +183,7 @@ export interface GraduationBlocker {
  * an escalation or a blocker. A run with a rest is not a run whose pass budget
  * is spent.
  */
-export type GraduationRestReason = "total_time_limit" | "checks_not_passed";
+export type GraduationRestReason = "total_time_limit" | "checks_not_passed" | PlanRestReason;
 
 /** GRL-FR-CPXI / GRL-FR-TYRV: why the check gate refused a work answer. */
 export type GraduationCheckCause =
@@ -185,8 +200,11 @@ export interface GraduationRestCheck {
   exitStatus: number | null;
 }
 
-/** GRD-FR-SKLO / GRD-FR-PYJN: the record of a rest for the author. */
-export interface GraduationRest {
+/**
+ * GRD-FR-SKLO / GRD-FR-PYJN / OPU-FR-UOYJ: the record of a rest for the
+ * author. The plan fields stand on the plan rests alone.
+ */
+export interface GraduationRest extends PlanRestFields {
   reason: GraduationRestReason;
   /** When the run came to rest. */
   at: string;
@@ -194,10 +212,15 @@ export interface GraduationRest {
   limitMs?: number;
   /** `total_time_limit`: the used total time when the run came to rest, in milliseconds. */
   usedMs?: number;
-  /** `checks_not_passed`: the cause of the last refusal of the check gate. */
-  cause?: GraduationCheckCause;
+  /**
+   * `checks_not_passed`: the cause of the last refusal of the check gate.
+   * `plan_update_invalid`: the cause of the last refusal of a plan update.
+   */
+  cause?: GraduationCheckCause | PlanUpdateRefusalCause;
   /** `checks_not_passed`: each check that did not pass; empty where the answer held no record. */
   checks?: GraduationRestCheck[];
+  /** OPU-FR-UOYJ: origin `review`: every finding of the verdict, in order. */
+  findings?: ReviewFinding[] | null;
 }
 
 /** GRD-FR-SKLO: a rest on the total time limit, with its two times. */
@@ -292,6 +315,11 @@ export interface GraduationCheckpoint {
   blockedCode?: string | null;
   /** GRL-FR-QZFB: how many times in a row that code was raised. */
   blockAttempts: number;
+  /**
+   * GRL-FR-BVTS: the check gate the loop saved before it dispatched its next
+   * step. Present while a check correction is under way.
+   */
+  checkGate?: Record<string, unknown> | null;
 }
 
 /** GRS-FR-WFWD: how far one of a run's two log streams stands. */
@@ -553,6 +581,8 @@ export interface GraduationRun {
   merge?: GraduationMergeData | null;
   /** GRD-FR-KAKU: present on a PR summary run alone. */
   prSummary?: PrSummaryData | null;
+  /** GRD-FR-LKGC: present on a propose run alone. */
+  openspec?: GraduationOpenspec | null;
   /** GRD-FR-UUGP: the run summary of a completed draft run's `ready` review. */
   runSummary?: RunSummary | null;
   /** GRD-FR-PXQN: empty until the run's work is on a branch. */
@@ -611,6 +641,8 @@ export interface DraftGraduation {
   locked: boolean;
   /** DRS-FR-KQTW: a run of this draft committed and is not discarded. */
   graduated: boolean;
+  /** DRS-FR-VHMB: the change a propose run writes, and the stream it lives on. */
+  openspecChange?: DraftOpenspecChange | null;
 }
 
 /** GRD-FR-EFAU: what the queue-changed event carries. */

@@ -46,8 +46,10 @@ pub mod logs;
 pub mod observability;
 pub mod statistics;
 
+mod archive_candidates;
 mod arrangement;
 mod cascade;
+pub mod change_runs;
 mod commands;
 mod commit;
 mod continue_rest;
@@ -57,6 +59,8 @@ mod events;
 mod idle_sandbox;
 mod landings;
 mod merge_run;
+pub mod openspec_start;
+pub mod plan_updates;
 mod pr_summary;
 mod queue;
 mod read_failure;
@@ -71,7 +75,9 @@ mod store;
 mod transitions;
 mod write_check;
 
+pub use archive_candidates::{stream_archive_candidates, ArchiveCandidate};
 pub use arrangement::*;
+pub use change_runs::*;
 pub use commands::*;
 pub use commit::*;
 pub use direct::*;
@@ -92,10 +98,10 @@ pub use observability::{
 };
 pub use pr_summary::*;
 pub use queue::{
-    draft_graduation, draft_graduation_stands, holder_of_queue, latest_run_for,
-    live_run_on_worktree, load_queue, merge_runs_by_stream, next_eligible, position_in_queue,
-    project_queue, queue_of, queued_counts_by_stream, require_no_running_graduation,
-    require_unlocked_draft, slot_holders, streams_with_runs,
+    agent_work_run_on_stream, draft_graduation, draft_graduation_stands, holder_of_queue,
+    latest_run_for, live_run_on_worktree, load_queue, merge_runs_by_stream, next_eligible,
+    position_in_queue, project_queue, queue_of, queued_counts_by_stream,
+    require_no_running_graduation, require_unlocked_draft, slot_holders, streams_with_runs,
 };
 pub use record::*;
 pub use run_progress::{end_with_loop as end_run_progress, PROGRESS_KIND_GRADUATION};
@@ -196,6 +202,8 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
         // GRD-FR-TYVT: the disposable checkout of an ended PR summary run goes
         // on the same terms.
         reclaim_ended_pr_summary_run(app, run);
+        // OCR-FR-FJFI: and what an ended rework run owns.
+        reclaim_ended_rework_run(app, run);
     }
     for summary in &queue.runs {
         // GRD-FR-XVUD: `working` and `reviewing` alone. A `blocked` run also

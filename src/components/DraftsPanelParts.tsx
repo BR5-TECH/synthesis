@@ -10,6 +10,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { announceModalOpening } from "../state/modalOpening";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import { folderName, type MenuAnchor, type TreeItem } from "./draftsTree";
 import { ROOT, ROOT_OPTION } from "./draftsTree";
@@ -102,9 +103,12 @@ export function Modal({
   onClose,
   returnFocus,
   closeOnScrim = true,
+  className,
   children,
 }: {
   label: string;
+  /** A class the dialog adds to its own, for a dialog with a layout of its own. */
+  className?: string;
   onClose: () => void;
   /**
    * Where focus goes when the dialog closes. Supplied rather than read from
@@ -128,6 +132,8 @@ export function Modal({
 
   useEffect(() => {
     const opener = returnFocus ?? (document.activeElement as HTMLElement | null);
+    // SNV-FR-56: the dialog is a floating overlay, so every other one closes.
+    announceModalOpening();
     const focusables = () =>
       Array.from(
         ref.current?.querySelectorAll<HTMLElement>(
@@ -174,7 +180,13 @@ export function Modal({
       className="scrim"
       onClick={(e) => closeOnScrim && e.target === e.currentTarget && onClose()}
     >
-      <div ref={ref} className="modal drafts-overlay" role="dialog" aria-modal="true" aria-label={label}>
+      <div
+        ref={ref}
+        className={className ? `modal drafts-overlay ${className}` : "modal drafts-overlay"}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+      >
         {children}
       </div>
     </div>

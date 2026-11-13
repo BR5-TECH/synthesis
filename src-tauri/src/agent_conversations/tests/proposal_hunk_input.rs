@@ -71,6 +71,7 @@ fn reference_to(
     hunk_id: &str,
 ) -> crate::comments::AttachmentInput {
     crate::comments::AttachmentInput::ProposalHunk {
+        change: None,
         proposal_id: proposal.id.clone(),
         hunk_id: hunk_id.into(),
         draft_id: Some(proposal.draft_id.clone()),
@@ -166,6 +167,7 @@ fn a_proposal_hunk_that_cannot_be_read_keeps_a_bare_line_with_its_id() {
         &draft_id,
         &thread.id,
         crate::comments::AttachmentInput::ProposalHunk {
+            change: None,
             proposal_id: "p-nonesuch".into(),
             hunk_id: "h-nonesuch".into(),
             draft_id: Some(draft_id.clone()),

@@ -8,6 +8,8 @@ interface ToolbarProps {
   level: number;
   total: Rollup | null;
   showDeps: boolean;
+  /** SME-FR-XLUQ: an OpenSpec index has no dependency, so no toggle shows. */
+  depsToggle: boolean;
   gapsOnly: boolean;
   /** SMP-FR-GJEW: the measured width of the Map tab. */
   width: number;
@@ -28,6 +30,7 @@ export function Toolbar({
   level,
   total,
   showDeps,
+  depsToggle,
   gapsOnly,
   width,
   disabled,
@@ -73,19 +76,21 @@ export function Toolbar({
         </span>
       )}
       <span className="smap-toolbar__spacer" />
-      <button
-        type="button"
-        className="smap-filter"
-        data-filter="deps"
-        aria-pressed={showDeps}
-        aria-label="Dependencies"
-        title="Dependencies"
-        disabled={disabled}
-        onClick={onToggleDeps}
-      >
-        <Icon.Branch size={12} />
-        {labelled && <span>dependencies</span>}
-      </button>
+      {depsToggle && (
+        <button
+          type="button"
+          className="smap-filter"
+          data-filter="deps"
+          aria-pressed={showDeps}
+          aria-label="Dependencies"
+          title="Dependencies"
+          disabled={disabled}
+          onClick={onToggleDeps}
+        >
+          <Icon.Branch size={12} />
+          {labelled && <span>dependencies</span>}
+        </button>
+      )}
       <button
         type="button"
         className="smap-filter"

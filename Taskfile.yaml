@@ -2,7 +2,7 @@
 #
 # Specification: specifications/infra/TSK-taskfile.md
 #
-# It defines thirteen tasks and no other task. Every command it holds belongs to
+# It defines fifteen tasks and no other task. Every command it holds belongs to
 # another specification, and this file restates that command byte for byte
 # rather than changing it:
 #
@@ -289,3 +289,30 @@ tasks:
       - cmd: |
           trap 'echo "task uat:dind: a Docker-in-Docker launch shape failed." >&2' ERR
           TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture dind_uat
+
+  uat:openspec:
+    desc: 'Run the OpenSpec acceptance tests against the OpenSpec CLI of this machine. Set OPENSPEC_UAT_BIN to test another CLI. It is not part of tests.'
+    dir: '{{.ROOT_DIR}}/src-tauri'
+    preconditions:
+      - sh: command -v openspec || test -x "$OPENSPEC_UAT_BIN"
+        msg: 'task uat:openspec: the OpenSpec CLI is missing. No "openspec" executable is on PATH and OPENSPEC_UAT_BIN names no executable. Install it with "npm install -g @fission-ai/openspec". No test ran.'
+    cmds:
+      # TSK-FR-NJQE: the ignored acceptance tests of OAT-FR-KWDN, against the
+      # real CLI. OPENSPEC_UAT_BIN reaches the tests through the environment.
+      - cmd: |
+          trap 'echo "task uat:openspec: an OpenSpec acceptance test failed." >&2' ERR
+          TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture openspec_uat_cli
+
+  uat:openspec-image:
+    desc: 'Build the Claude Code agent image and check that it holds a usable OpenSpec CLI. It needs a Docker daemon and is not part of tests.'
+    dir: '{{.ROOT_DIR}}/src-tauri'
+    preconditions:
+      - sh: command -v docker
+        msg: 'task uat:openspec-image: the container runtime is missing. No "docker" executable is on PATH. No test ran.'
+      - sh: docker info
+        msg: 'task uat:openspec-image: the container runtime is not available. The "docker" executable is on PATH, but no daemon answered it. No test ran.'
+    cmds:
+      # TSK-FR-HEXG: the ignored image acceptance tests of OAT-FR-NVHI.
+      - cmd: |
+          trap 'echo "task uat:openspec-image: an OpenSpec image acceptance test failed." >&2' ERR
+          TMPDIR=/tmp cargo test --lib -- --ignored --test-threads=1 --nocapture openspec_uat_image

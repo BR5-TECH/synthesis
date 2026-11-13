@@ -7,6 +7,7 @@
  * log all say the same thing about the same code.
  */
 
+import { shortForm, toOpenSpecFailure } from "../../state/openspec/failureNotice";
 import { STREAM_ERRORS } from "../../types";
 
 export function splitRefusal(text: string): [string, string | null] {
@@ -22,6 +23,8 @@ export function splitRefusal(text: string): [string, string | null] {
  */
 export function refusalText(text: string): string {
   const [code, detail] = splitRefusal(text);
+  const archive = archiveRefusalText(code, detail);
+  if (archive !== null) return archive;
   // GSU-FR-RQDS / WSS-FR-NPXC: the path is the refusal's detail, so the sentence
   // names it rather than appending it.
   if (code === STREAM_ERRORS.dockerSocketUnavailable) {
@@ -91,4 +94,56 @@ export function refusalText(text: string): string {
   // its first colon would leave the author the front half of a sentence.
   if (!sentence) return detail ? `${code}: ${detail}` : code || text;
   return detail ? `${sentence} ${detail}` : sentence;
+}
+
+/** OAR-FR-BEIK: each kind of pending item, in words. */
+const PENDING_KIND: Record<string, string> = {
+  edit_proposal: "an edit proposal that is not decided or not committed",
+  new_change_proposal: "a new-change proposal that is not decided or not committed",
+  action_request: "an action request that is not decided",
+};
+
+/**
+ * WSS-FR-NTGC: the frame sentence of a merge refused by its archive step.
+ * Archive commits of changes before the refused one stay on the stream
+ * (OAR-FR-OQVF).
+ */
+export const ARCHIVE_REFUSAL_FRAME =
+  "The base branch did not move, and the archive commits stay on the stream.";
+
+/** Join the parts of a list as a sentence does. */
+function listed(parts: string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * WSS-FR-NTGC: a merge refused by its archive step. `change_has_pending`
+ * names the change and each kind of pending item; its detail is
+ * `<change>: <kinds>` (OAR-FR-BEIK). `change_not_archivable` and
+ * `archive_failed` render the failure notice of `OFN-openspec-failure-notices.md`
+ * where they arrive as an `OpenSpecFailure`; a typed string of them reads as
+ * the short form of the notice. Null for every other code.
+ */
+function archiveRefusalText(code: string, detail: string | null): string | null {
+  if (code === STREAM_ERRORS.changeNotArchivable || code === STREAM_ERRORS.archiveFailed) {
+    const failure = toOpenSpecFailure(detail ? `${code}: ${detail}` : code);
+    const sentence = shortForm(failure);
+    if (sentence) return `${sentence} ${ARCHIVE_REFUSAL_FRAME}`;
+    // A cause that is not an OpenSpec failure, such as `commit_failed`, is
+    // named as it came (OFN-FR-PVYE).
+    const name = failure.change ? `“${failure.change}”` : "of this stream";
+    const what = code === STREAM_ERRORS.archiveFailed ? "archive" : "check";
+    return `The ${what} of the OpenSpec change ${name} failed with ${failure.cause ?? "an unknown code"}. ${ARCHIVE_REFUSAL_FRAME}`;
+  }
+  if (code !== STREAM_ERRORS.changeHasPending) return null;
+  const [change, rest] = detail ? splitRefusal(detail) : ["", null];
+  const name = change ? `“${change}”` : "of this stream";
+  const kinds = (rest ?? "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k) => k !== "")
+    .map((k) => PENDING_KIND[k] ?? k);
+  const what = kinds.length > 0 ? listed(kinds) : "an item that is not decided";
+  return `The OpenSpec change ${name} holds ${what}. Decide ${kinds.length > 1 ? "them" : "it"} first, then merge again. ${ARCHIVE_REFUSAL_FRAME}`;
 }

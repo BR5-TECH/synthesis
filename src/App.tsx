@@ -9,6 +9,7 @@ import { AboutPanel } from "./components/AboutPanel";
 import { AppShell } from "./AppShell";
 import { GitTransferProvider, useGitTransferState } from "./hooks/useGitTransfer";
 import { useDraftEditingObserver } from "./hooks/useDraftEditingObserver";
+import { useChangeWorkingObserver, useVisibleChanges } from "./hooks/useChangeWorkingObserver";
 import { useMainWindowState } from "./hooks/useMainWindowState";
 import { useAppOverlays } from "./hooks/useAppOverlays";
 import { useAppNotifications } from "./hooks/useAppNotifications";
@@ -88,6 +89,15 @@ function App() {
     activeDraftId: activeDraftTab?.draftId,
     conversationDraftIds,
   });
+
+  /**
+   * OCW-FR-MIEY: the changes a related surface is visible for: the active tab
+   * where it is a change workspace on a stream, which holds the change's
+   * discussion column, and the active conversation tab where its owner is a
+   * change.
+   */
+  // OCW-FR-GVZT: a tab that states an archived change records no interval.
+  useChangeWorkingObserver(useVisibleChanges(s.tabs, s.activeTab));
 
 
   // STB-FR-15: the in-flight operation set the centre region and its overlay

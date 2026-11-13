@@ -3,9 +3,9 @@
  * Pure: built from the tree, the roll-ups and the selection alone.
  */
 import {
-  SPEC_ROOT,
   ancestorIds,
   indexChildren,
+  projectPath,
   specChildren,
   specFolder,
   specsUnder,
@@ -13,7 +13,15 @@ import {
 } from "../../state/specMap/tree";
 import { deleteOutcome } from "../../state/specMap/organize";
 import { EMPTY_ROLLUP, rollupOfSpec, type Rollup } from "../../state/specMap/rollups";
-import type { MapRef } from "../../state/specMap/types";
+import {
+  changeLocationLabel,
+  isOpenSpecIndex,
+  isSpecNode,
+  type ChangeChip,
+  type IndexNode,
+  type MapRef,
+  type MapIssue,
+} from "../../state/specMap/types";
 import { aggregateLinks } from "./edges";
 
 export interface InspectorRow {
@@ -38,21 +46,56 @@ interface Detail {
   totals: string;
   childHeading: string;
   children: InspectorRow[];
-  dependsOn: InspectorRow[];
+  /** SMI-FR-BWIY: null where the index holds no dependency to list. */
+  dependsOn: InspectorRow[] | null;
   attention: string[];
 }
 
 export type InspectorModel =
-  | { kind: "empty"; newRootLabel: string }
+  /** SMO-FR-RVAV: `newRootLabel` is null where the map offers no organization. */
+  | { kind: "empty"; newRootLabel: string | null }
   | ({
       kind: "index";
       id: string;
       openLabel: string;
       newChildLabel: string | null;
       canDelete: boolean;
+      /** SMO-FR-RVAV: whether Rename and Delete are offered. */
+      organize: boolean;
     } & Detail)
   | ({ kind: "spec"; code: string } & Detail)
-  | { kind: "planned"; kindName: string; draftId: string; name: string; holderLabel: string };
+  | { kind: "planned"; kindName: string; draftId: string; name: string; holderLabel: string }
+  | {
+      kind: "change";
+      kindName: string;
+      chip: ChangeChip;
+      locationLabel: string;
+      holderLabel: string;
+      attention: string[];
+    };
+
+/** SMI-FR-BXET: the line of one issue of a spec node or a change chip. */
+const issueLine = (issue: MapIssue) => `${issue.level} — ${issue.message}`;
+
+/**
+ * SMI-FR-BXET: up to four issues of an index node and of the nodes beneath
+ * it, in index order, each named by the label of the node that holds it.
+ */
+function issuesBeneath(node: IndexNode): string[] {
+  const out: string[] = [];
+  const walk = (n: IndexNode) => {
+    for (const issue of n.issues ?? []) out.push(`${n.label} — ${issue.message}`);
+    for (const child of n.children) {
+      if (isSpecNode(child)) {
+        for (const issue of child.issues ?? []) out.push(`${child.label} — ${issue.message}`);
+      } else {
+        walk(child);
+      }
+    }
+  };
+  walk(node);
+  return out.slice(0, 4);
+}
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -62,12 +105,28 @@ export function inspectorModel(
   selection: MapRef | null,
 ): InspectorModel {
   const levels = tree.index.levels;
+  const openspec = isOpenSpecIndex(tree.index);
   const empty: InspectorModel = {
     kind: "empty",
-    newRootLabel: `New ${levels[0]?.singular ?? "node"}`,
+    newRootLabel: openspec ? null : `New ${levels[0]?.singular ?? "node"}`,
   };
   if (!selection) return empty;
   const labelOf = (id: string) => tree.nodes.get(id)?.label ?? "";
+
+  if (selection.kind === "change") {
+    // SMI-FR-ZMZB: the change, its location, and the capability that holds it.
+    const chip = tree.changes.get(selection.key);
+    const holder = tree.changeParent.get(selection.key);
+    if (!chip || !holder) return empty;
+    return {
+      kind: "change",
+      kindName: "change",
+      chip,
+      locationLabel: changeLocationLabel(chip),
+      holderLabel: labelOf(holder),
+      attention: (chip.issues ?? []).map(issueLine),
+    };
+  }
 
   if (selection.kind === "planned") {
     const draft = tree.planned.get(selection.draftId);
@@ -95,7 +154,7 @@ export function inspectorModel(
       ref: selection,
       kindName: levels[tree.leafDepth + 1]?.singular ?? "spec",
       breadcrumb: [...ancestorIds(tree, parent), parent].map(labelOf).join(" → "),
-      badge: { text: spec.code, folder: specFolder(spec) },
+      badge: { text: spec.badge ?? spec.code, folder: specFolder(spec) },
       title: spec.label,
       summary: spec.summary,
       rollup: rollupOfSpec(spec),
@@ -103,10 +162,10 @@ export function inspectorModel(
       // SMI-FR-CEVL: a spec node's one child row is its path.
       childHeading: "Path",
       children: [
-        { key: "path", ref: null, label: SPEC_ROOT + spec.path, badge: null, count: "", rollup: null, danger: false },
+        { key: "path", ref: null, label: projectPath(tree.index, spec), badge: null, count: "", rollup: null, danger: false },
       ],
-      // SMI-FR-YHNT / SMI-FR-PNGA
-      dependsOn: outgoing.map((d) => {
+      // SMI-FR-YHNT / SMI-FR-PNGA / SMI-FR-BWIY
+      dependsOn: openspec ? null : outgoing.map((d) => {
         const target = tree.specs.get(d.to);
         return {
           key: `dep:${d.to}`,
@@ -118,10 +177,12 @@ export function inspectorModel(
           danger: !!d.unresolved,
         };
       }),
-      // SMI-FR-ZLOA
-      attention: outgoing
-        .filter((d) => d.unresolved)
-        .map((d) => `cites ${d.to} — identifier resolves to nothing`),
+      // SMI-FR-ZLOA / SMI-FR-BXET
+      attention: openspec
+        ? (spec.issues ?? []).map(issueLine)
+        : outgoing
+            .filter((d) => d.unresolved)
+            .map((d) => `cites ${d.to} — identifier resolves to nothing`),
     };
   }
 
@@ -134,7 +195,7 @@ export function inspectorModel(
     ? specChildren(node).map((s) => ({
         key: `spec:${s.code}`,
         ref: { kind: "spec", code: s.code },
-        label: `${s.code} · ${s.label}`,
+        label: `${s.badge ?? s.code} · ${s.label}`,
         badge: null,
         count: "1",
         rollup: rollupOfSpec(s),
@@ -165,7 +226,7 @@ export function inspectorModel(
     totals: `${r.requirements} requirements · ${r.scenarios} scenarios`,
     childHeading: capitalize(levels[depth + 1]?.plural ?? ""),
     children,
-    dependsOn: aggregateLinks(tree, depth)
+    dependsOn: openspec ? null : aggregateLinks(tree, depth)
       .filter((l) => l.from === node.id)
       .map((l) => ({
         key: `link:${l.to}`,
@@ -176,12 +237,18 @@ export function inspectorModel(
         rollup: null,
         danger: false,
       })),
-    attention: specsUnder(tree, node.id)
-      .filter((s) => s.state === "gap")
-      .slice(0, 4)
-      .map((s) => `${s.code} — ${s.label}: no coverage yet`),
+    // SMI-FR-ZLOA / SMI-FR-BXET
+    attention: openspec
+      ? issuesBeneath(node)
+      : specsUnder(tree, node.id)
+          .filter((s) => s.state === "gap")
+          .slice(0, 4)
+          .map((s) => `${s.code} — ${s.label}: no coverage yet`),
     openLabel: `Open ${levels[depth]?.singular ?? ""}`,
-    newChildLabel: depth < tree.leafDepth ? `New ${levels[depth + 1]?.singular ?? ""}` : null,
+    // SMO-FR-UAKE / SMO-FR-RVAV
+    newChildLabel:
+      !openspec && depth < tree.leafDepth ? `New ${levels[depth + 1]?.singular ?? ""}` : null,
     canDelete: deleteOutcome(tree, node.id).allowed,
+    organize: !openspec,
   };
 }

@@ -31,6 +31,8 @@ pub enum CompletedRunKind {
     Draft,
     /// A run in the worktree the author stood in (GRD-FR-BSNI).
     Direct,
+    /// OCR-FR-QMCG: an apply run of an OpenSpec change.
+    ChangeApply,
 }
 
 /// GRD-FR-BHFP: one completed run whose work is on a branch.
@@ -108,8 +110,9 @@ pub(crate) fn record_revert<R: tauri::Runtime>(
 }
 
 /// GRD-FR-UXXF / WKS-FR-JXPV: a stream merged into `base_branch` at `commit`.
-/// Each completed draft run of the stream with no landing on that branch
-/// records one.
+/// Each completed draft run and each completed apply run (OCR-FR-QMCG) of the
+/// stream with no landing on that branch records one. A rework run made no
+/// commit, so it records none.
 ///
 /// A run that made no commit records none (GRD-FR-PXQN). The call is
 /// idempotent: a run that already has a landing on the branch keeps it, so a
@@ -283,10 +286,13 @@ pub(crate) fn completed_runs_on(
             Some(BranchCompletedRun {
                 kind: if run.is_direct() {
                     CompletedRunKind::Direct
+                } else if run.is_change_apply() {
+                    CompletedRunKind::ChangeApply
                 } else {
                     CompletedRunKind::Draft
                 },
-                title: run.input.draft_name.clone(),
+                // OCR-FR-FZVF: an apply run is listed under its title.
+                title: run.listing_name(),
                 draft_id: run.input.draft_id.clone(),
                 draft_name: run.input.draft_name.clone(),
                 run_id: run.id,

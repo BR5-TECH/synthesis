@@ -364,7 +364,7 @@ describe("working directly", () => {
     await chooseDirectly();
     await screen.findByTestId("graduation-direct-target");
     await userEvent.click(graduate());
-    expect(graduate()).toBeDisabled();
+    expect(graduate()).toHaveAttribute("aria-disabled", "true");
     expect(radio("New stream")).toBeDisabled();
     await userEvent.click(graduate());
     expect(calls("start_direct_graduation")).toHaveLength(1);
@@ -405,6 +405,7 @@ describe("a stream the dialog creates", () => {
       streamId: "fresh",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
     const order = invoked.mock.calls.map(([name]) => name);
     expect(order.indexOf("create_work_stream")).toBeLessThan(

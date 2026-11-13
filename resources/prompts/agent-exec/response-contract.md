@@ -54,6 +54,8 @@ The `escalation` object carries these fields and no others. A singular
 `question` field, and an `options` field at this level, are refused as the
 undefined fields they are:
 
+- `kind` — leave it out, unless your instructions tell you to give a plan
+  update. Then it is `"plan_update"`, and `questions` may hold no entry.
 - `reason` — why the turn cannot finish, in a sentence or two. Required, never
   empty, and at most 4096 characters.
 - `questions` — everything you are stuck on, as a list of between one and eight

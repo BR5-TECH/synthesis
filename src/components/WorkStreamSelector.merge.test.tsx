@@ -202,6 +202,27 @@ describe("the answer of a call that settled (WSS-FR-KMHD, WSS-FR-PLVE)", () => {
     });
   });
 
+  it("WSS-FR-KMHD, WSS-FR-PLVE: the row that says the answer is scrolled into view when the answer arrives, and not before", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      let settle: (value: unknown) => void = () => {};
+      backend([summary({}, { aheadOfBase: 2 })], () => new Promise((resolve) => (settle = resolve)));
+      renderSelector();
+      const r = await startUncommitted();
+      await within(r).findByTestId("stream-merging-w1");
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      await act(async () => settle(mergedResult()));
+      await within(r).findByTestId("stream-merge-result-w1");
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+      expect(scrollIntoView.mock.contexts[0]).toBe(r);
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it("WSS-FR-KMHD: a committed merge names the commit in short form with the whole id in semantics", async () => {
     const id = "9f2c1ab4d5e6f708192a3b4c5d6e7f8091a2b3c4";
     backend([summary({}, { aheadOfBase: 2 })], () => mergedResult({ commit: id }));
@@ -295,7 +316,7 @@ describe("the answer of a call that settled (WSS-FR-KMHD, WSS-FR-PLVE)", () => {
 
     const line = await within(r).findByTestId("stream-merge-result-w1");
     expect(line.textContent).toMatch(/Git could not settle 12 paths/);
-    expect(line.textContent).toMatch(/Neither branch was written/);
+    expect(line.textContent).toMatch(/The base branch was not written/);
     expect(r.textContent).toMatch(/thing-0\.ts, src\/thing-1\.ts, src\/thing-2\.ts and 9 more/);
     expect(r.textContent).not.toMatch(/thing-11/);
     // WSS-FR-JMWA: the whole path set stands in the row's accessible semantics.
@@ -387,10 +408,11 @@ describe("the stream's merge run (WSS-FR-OFCU, WSS-FR-DTYB, WSS-FR-RJTN, WSS-FR-
     expect(within(r).queryByRole("button", { name: /Continue/ })).toBeNull();
   });
 
-  it("WSS-FR-GBWE: a failed run says neither branch was written, points to Runs, and keeps Merge stream offered", async () => {
+  it("WSS-FR-GBWE: a failed run says the base branch was not written and the stream holds only its archive commits, points to Runs, and keeps Merge stream offered", async () => {
     const { r } = await withRun("failed");
     expect(r.textContent).toMatch(/Merge editor work failed/);
-    expect(r.textContent).toMatch(/Neither branch was written/);
+    expect(r.textContent).toMatch(/The base branch was not written/);
+    expect(r.textContent).toMatch(/stream branch holds no change but its archive commits/);
     expect(r.textContent).toMatch(/cause is in Runs/);
     // The author may start the merge again.
     expect(within(r).getByTestId("stream-merge-w1")).toBeEnabled();

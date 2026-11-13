@@ -37,6 +37,7 @@ fn pr_summary_input_fields() -> Vec<String> {
 /// optional field of a work turn is present.
 fn earlier_findings() -> Vec<ReviewHistoryEntry> {
     let finding = |description: &str| ReviewFinding {
+        kind: None,
         severity: ReviewSeverity::Major,
         description: description.into(),
         affected_files: Vec::new(),
@@ -90,6 +91,9 @@ fn merge_input_fields(part: &str) -> Vec<String> {
     // sets `correction`, so the review part is given it here.
     if part == driver::PART_REVIEW {
         input.checks = Some(driver::checks_folder::REPORT_PATH.into());
+        // GRL-FR-ZDNL: the review sets the specs validation in OpenSpec mode.
+        input.openspec_specs_validation =
+            Some(crate::openspec::ProjectValidation { valid: true, items: Vec::new() });
     }
     input.to_map().keys().cloned().collect()
 }
@@ -135,6 +139,7 @@ fn graduation_input_fields(part: &str) -> Vec<String> {
         failure: None,
         merge: None,
         pr_summary: None,
+        openspec: None,
         run_summary: None,
         landings: Vec::new(),
         reverts: Vec::new(),

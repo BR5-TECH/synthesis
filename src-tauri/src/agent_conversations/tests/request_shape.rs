@@ -265,8 +265,13 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // directories hold — the constant is populated with no file read, and the
     // build would have failed outright rather than reaching a model with no
     // instruction.
-    let templates =
-        [COMMENT_PROMPT_TEMPLATE, DISCUSS_ARTIFACT_PROMPT_TEMPLATE, DISCUSS_DRAFT_PROMPT_TEMPLATE];
+    // CVL-FR-FGGI: the change prompt is compiled in on the same terms.
+    let templates = [
+        COMMENT_PROMPT_TEMPLATE,
+        DISCUSS_ARTIFACT_PROMPT_TEMPLATE,
+        DISCUSS_DRAFT_PROMPT_TEMPLATE,
+        DISCUSS_CHANGE_PROMPT_TEMPLATE,
+    ];
     for template in templates {
         assert!(!template.trim().is_empty());
         // CVL-FR-04: exactly one, because `compile_prompt` substitutes once. A
@@ -295,6 +300,7 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
         "prompts/discuss-artifact.md",
         "prompts/discuss-draft.md",
         "prompts/discuss-note.md",
+        "prompts/discuss-change.md",
     ];
     // …and these are the only prompts the tree holds. A file left behind by a
     // rename would ship in every build and be reachable by nothing, which is the
@@ -568,7 +574,7 @@ fn a_title_fills_its_placeholder_in_every_prompt_and_an_empty_one_is_not_defined
 /// Every `<tag>` a prompt mentions, scanned out of the prompt itself rather than
 /// listed here — a list would drift with the very thing it checks. `spoken` is a
 /// tag of the reply (CVL-FR-HREC) and no section of the input, so it stands apart.
-fn tags_described_by(template: &str) -> std::collections::BTreeSet<String> {
+pub(super) fn tags_described_by(template: &str) -> std::collections::BTreeSet<String> {
     let mut described = std::collections::BTreeSet::new();
     let mut rest = template;
     while let Some(open) = rest.find('<') {
@@ -668,9 +674,18 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
                 .collect::<std::collections::BTreeSet<_>>(),
             "{kind:?} emitted {emitted:?}",
         );
+        // CVL-FR-06 / CVL-FR-XUJX: `comment.md` serves a fragment of a file, a
+        // draft, and a change, so it describes both first sections, each for
+        // the targets that emit it.
+        let mut described = tags_described_by(prompt_template(kind));
+        if prompt_template(kind) == COMMENT_PROMPT_TEMPLATE {
+            assert!(
+                described.remove(TAG_OPENSPEC_CHANGE),
+                "comment.md describes `openspec_change`"
+            );
+        }
         assert_eq!(
-            tags_described_by(prompt_template(kind)),
-            emitted,
+            described, emitted,
             "the prompt and the builders name the same tags for {kind:?}",
         );
     }

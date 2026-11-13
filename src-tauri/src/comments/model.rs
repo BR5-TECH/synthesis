@@ -55,6 +55,18 @@ impl Participant {
             email: None,
         }
     }
+
+    /// CMS-FR-MKEV: the fixed agent participant the application writes as
+    /// where no agent is the author. No record is kept for it, and no agent of
+    /// the registry has its id (AGR-FR-03).
+    pub fn synthesis() -> Self {
+        Participant::Agent {
+            agent_id: SYNTHESIS_AGENT_ID.to_string(),
+            handle: SYNTHESIS_HANDLE.to_string(),
+            model: None,
+            title: Some(String::new()),
+        }
+    }
 }
 
 impl From<GithubIdentity> for Participant {
@@ -189,6 +201,18 @@ pub enum Attachment {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         update: Option<ProposalUpdateCounts>,
     },
+    /// CMS-FR-QLMV: a reference to edits an agent proposed to an OpenSpec
+    /// change (`CEP-change-edit-proposals.md` CEP-FR-QDJH). Identity alone,
+    /// appended through `append_as` alone; no [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    ChangeProposal {
+        proposal_id: String,
+        stream_id: String,
+        change: String,
+        /// CMS-FR-BSQB: present on the comment an update appended.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<ProposalUpdateCounts>,
+    },
     /// CMS-FR-42 / CMS-FR-TQVB: one change of a draft change proposal
     /// (`DCP-draft-change-proposals.md` DCP-FR-FHWN) or of a prompt change
     /// proposal (`PCP-prompt-change-proposals.md`), which the comment is about.
@@ -211,7 +235,11 @@ pub enum Attachment {
         /// CMS-FR-TQVB: the artifact of a prompt change proposal.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         artifact_id: Option<String>,
-        /// Draft-relative path for a draft, project-relative for an artifact.
+        /// CMS-FR-YQAX: the change of a change edit proposal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change: Option<ChangeOwnerRef>,
+        /// Draft-relative path for a draft, project-relative for an artifact,
+        /// change-relative for a change.
         path: String,
     },
     /// CMS-FR-YKGI / CMS-FR-LIBT: a reference to a new draft an agent proposed
@@ -228,6 +256,20 @@ pub enum Attachment {
     /// CMS-FR-KAXQ: the comment is about one new-draft proposal.
     #[serde(rename_all = "camelCase")]
     NewDraftSubject { proposal_id: String, draft_id: String },
+    /// CMS-FR-QYGP: a reference to a new OpenSpec change an agent proposed
+    /// during a split. Identity alone, appended through `append_as` alone.
+    #[serde(rename_all = "camelCase")]
+    NewChangeProposal {
+        proposal_id: String,
+        stream_id: String,
+        change: String,
+        /// The action of the update that appended it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<NewDraftUpdateAction>,
+    },
+    /// CMS-FR-MTUL: the comment is about one new-change proposal.
+    #[serde(rename_all = "camelCase")]
+    NewChangeSubject { proposal_id: String, stream_id: String, change: String },
     /// CMS-FR-OKDW: a reference to an export an agent asked the author for
     /// (`DXP-document-export.md` DXP-FR-XZVZ). Identity alone, appended
     /// through `append_as` alone; no [`AttachmentInput`] produces one.
@@ -240,6 +282,18 @@ pub enum Attachment {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         format: Option<String>,
     },
+    /// CMS-FR-QVZP: a reference to a run an agent asked the author to start
+    /// on an OpenSpec change (`CAR-change-action-requests.md` CAR-FR-KZOZ).
+    /// Identity alone, appended through `append_as` alone; no
+    /// [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    ChangeActionRequest {
+        request_id: String,
+        stream_id: String,
+        change: String,
+        /// `apply` or `rework`.
+        action: String,
+    },
     /// CMS-FR-TUHL: the comment is the Synthesis of an agent group
     /// (`AGC-agent-conversations.md` AGC-FR-CZCU). Holds no content, and appears
     /// through an agent turn's append alone.
@@ -248,6 +302,14 @@ pub enum Attachment {
     /// an agent turn's append alone.
     #[serde(rename_all = "camelCase")]
     Advisors { advisors: Vec<AdvisorEntry> },
+}
+
+/// CMS-FR-YQAX: the change a `proposal_hunk` of a change edit proposal names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeOwnerRef {
+    pub stream_id: String,
+    pub change: String,
 }
 
 /// CMS-FR-KVDV: one advisor of a Meta reply, finished or skipped.
@@ -314,11 +376,17 @@ pub enum AttachmentInput {
         draft_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         artifact_id: Option<String>,
+        /// CMS-FR-YQAX: the change of a change edit proposal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change: Option<ChangeOwnerRef>,
         path: String,
     },
     /// CMS-FR-KAXQ: stored verbatim as an [`Attachment::NewDraftSubject`].
     #[serde(rename_all = "camelCase")]
     NewDraftSubject { proposal_id: String, draft_id: String },
+    /// CMS-FR-MTUL: stored verbatim as an [`Attachment::NewChangeSubject`].
+    #[serde(rename_all = "camelCase")]
+    NewChangeSubject { proposal_id: String, stream_id: String, change: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

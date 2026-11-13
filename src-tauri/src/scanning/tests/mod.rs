@@ -76,6 +76,7 @@ mod assignments;
 mod change_paths;
 mod classification;
 mod ignored;
+mod openspec;
 mod scan_skills;
 mod scope_rules;
 mod skill_names;

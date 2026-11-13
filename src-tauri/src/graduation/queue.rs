@@ -168,6 +168,33 @@ pub fn dispatched_direct_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Op
         .map(|entry| entry.run_id)
 }
 
+/// `CEP-change-edit-proposals.md` CEP-FR-ESQR: the run of the stream that is
+/// `working` or `reviewing`, if one stands. Read from the run order index
+/// alone, so a decision checks it without opening a run record.
+pub fn agent_work_run_on_stream<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    stream_id: &str,
+) -> Option<String> {
+    let key = project_key(app);
+    if key.is_empty() || stream_id.is_empty() {
+        return None;
+    }
+    let fs = store::store_fs(app).ok()?;
+    let base = store::store_base(app).ok()?;
+    agent_work_run_in(&store::read_queue_index(&fs, &base, &key), stream_id)
+}
+
+/// CEP-FR-ESQR: the run of `stream_id` in `index` that is `working` or
+/// `reviewing`. A queued, resting, or terminal run, or a run of another
+/// stream, holds no working copy write.
+pub fn agent_work_run_in(index: &store::QueueIndex, stream_id: &str) -> Option<String> {
+    index
+        .runs
+        .iter()
+        .find(|entry| entry.stream_id == stream_id && entry.state.is_agent_work())
+        .map(|entry| entry.run_id.clone())
+}
+
 /// `GTC-git.md` GTC-FR-TRWC: the live run that stops a pull of the worktree at
 /// `worktree_path`, with whether it is a pull run.
 ///
@@ -232,6 +259,10 @@ pub fn draft_graduation(queue: &GraduationQueue, draft_id: &str) -> Option<Draft
         state: run.state,
         locked: run.locks_draft(),
         graduated: draft_graduation_stands(queue, draft_id),
+        openspec_change: run.openspec.as_ref().map(|data| DraftOpenSpecChange {
+            name: data.change.clone(),
+            stream_id: run.stream_id.clone(),
+        }),
     })
 }
 
@@ -291,4 +322,44 @@ pub fn require_unlocked_draft<R: tauri::Runtime>(
         return Err(ERR_DRAFT_LOCKED.to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod agent_work_tests {
+    use super::*;
+    use crate::graduation::GraduationRunState as S;
+
+    fn entry(run: &str, stream: &str, state: S) -> store::QueueIndexEntry {
+        store::QueueIndexEntry {
+            run_id: run.into(),
+            stream_id: stream.into(),
+            state,
+            ..Default::default()
+        }
+    }
+
+    // CEP-FR-ESQR: only a `working` or `reviewing` run of the stream makes it
+    // busy.
+    #[test]
+    fn only_a_working_or_reviewing_run_of_the_stream_is_busy() {
+        let mut index = store::QueueIndex::default();
+        for (run, state) in [
+            ("q", S::Queued),
+            ("a", S::AwaitingAuthor),
+            ("b", S::Blocked),
+            ("i", S::Interrupted),
+            ("c", S::Completed),
+            ("f", S::Failed),
+        ] {
+            index.runs.push(entry(run, "s1", state));
+        }
+        index.runs.push(entry("other", "s2", S::Working));
+        assert_eq!(agent_work_run_in(&index, "s1"), None);
+        index.runs.push(entry("w", "s1", S::Working));
+        assert_eq!(agent_work_run_in(&index, "s1").as_deref(), Some("w"));
+        index.runs.retain(|e| e.run_id != "w");
+        index.runs.push(entry("r", "s1", S::Reviewing));
+        assert_eq!(agent_work_run_in(&index, "s1").as_deref(), Some("r"));
+        assert_eq!(agent_work_run_in(&index, "s2").as_deref(), Some("other"));
+    }
 }

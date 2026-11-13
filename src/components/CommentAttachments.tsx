@@ -22,7 +22,10 @@ import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
 import { ProposalHunkControl } from "./ProposalHunkControl";
+import { ChangeProposalAttachmentView } from "./ChangeProposalAttachment";
 import { NewDraftReferenceControl } from "./NewDraftReferenceControl";
+import { NewChangeReferenceControl } from "./NewChangeReferenceControl";
+import { ChangeActionReferenceControl } from "./OpenSpecChange/ChangeActionCard";
 import {
   openReview,
   reviewedHunkTotal,
@@ -38,7 +41,6 @@ import {
 import {
   attachmentName,
   isImageAttachment,
-  isProposalAttachment,
   undecidedCount,
   type Attachment,
   type AttachmentInput,
@@ -693,7 +695,7 @@ function PromptProposalAttachmentView({
  * a reading of the proposal answers. The count of changes is the proposal's,
  * so it shows only after one does.
  */
-function ProposalCount({
+export function ProposalCount({
   update,
   changes,
 }: {
@@ -722,7 +724,7 @@ function ProposalCount({
  * for either, and a sentence that drifted between them would be the difference
  * an author reads as a difference in what the control does.
  */
-function proposalControlLabel(
+export function proposalControlLabel(
   state: "pending" | "accepted" | "rejected" | null,
   gone: boolean,
 ): string | null {
@@ -744,7 +746,18 @@ function AttachmentView({
   draftId?: string;
   attachment: Exclude<
     Attachment,
-    { kind: "newDraftProposal" | "newDraftSubject" | "exportRequest" | "synthesis" | "advisors" }
+    {
+      kind:
+        | "newDraftProposal"
+        | "newDraftSubject"
+        | "newChangeProposal"
+        | "newChangeSubject"
+        | "exportRequest"
+        | "changeActionRequest"
+        | "synthesis"
+        | "advisors"
+        | "changeProposal";
+    }
   >;
 }) {
   const name = attachmentName(attachment);
@@ -848,7 +861,9 @@ function AttachmentView({
       <span className="comment-attach__chip-type">
         {failed
           ? "could not be loaded"
-          : isProposalAttachment(attachment) || attachment.kind === "proposalHunk"
+          : attachment.kind === "proposal" ||
+              attachment.kind === "promptProposal" ||
+              attachment.kind === "proposalHunk"
             ? attachment.path
             : attachment.mediaType}
       </span>
@@ -880,17 +895,26 @@ export function CommentAttachmentList({
           <ProposalAttachmentView key={i} attachment={a} />
         ) : a.kind === "promptProposal" ? (
           <PromptProposalAttachmentView key={i} attachment={a} />
+        ) : a.kind === "changeProposal" ? (
+          // CMT-FR-48 / OCW-FR-COLR: the edits proposed to an OpenSpec change.
+          <ChangeProposalAttachmentView key={i} attachment={a} />
         ) : a.kind === "proposalHunk" ? (
           <ProposalHunkControl key={i} attachment={a} />
         ) : a.kind === "newDraftProposal" ? (
           // CMT-FR-MPKL: a reference control that shows the card.
           <NewDraftReferenceControl key={i} attachment={a} />
-        ) : a.kind === "newDraftSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
+        ) : a.kind === "newChangeProposal" ? (
+          // OCW-FR-BGDN: a reference control that opens the original change.
+          <NewChangeReferenceControl key={i} attachment={a} />
+        ) : a.kind === "newDraftSubject" || a.kind === "newChangeSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
           // CVP-FR-HRGH: the collapsed Advisors list of a Meta reply.
           <AdvisorsListView key={i} attachment={a} />
         ) : a.kind === "exportRequest" ? (
           // CMT-FR-HFXL / EXD-FR-UQUD: the export request card.
           <ExportRequestCard key={i} attachment={a} />
+        ) : a.kind === "changeActionRequest" ? (
+          // OCW-FR-QCPB: a reference control that opens the change.
+          <ChangeActionReferenceControl key={i} attachment={a} />
         ) : (
           <AttachmentView
             key={i}

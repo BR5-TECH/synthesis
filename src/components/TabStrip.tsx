@@ -479,10 +479,17 @@ export function TabStrip({
                 ) : t.kind === "draftPreview" ? (
                   // TAB-FR-CIGU: a viewer of a proposed draft, not a draft's tab.
                   <Icon.Doc size={12} data-icon="draft-preview" />
+                ) : t.kind === "openspecChange" ? (
+                  // OCW-FR-DMGL: a reader of one OpenSpec change.
+                  <Icon.Diff size={12} data-icon="openspec-change" />
                 ) : (
                   <Icon.Settings size={12} />
                 )}
                 <span className="tab__label">{t.label}</span>
+                {/* OCW-FR-XUJN: a change on a stream names the stream beside it. */}
+                {t.openspecChange?.streamName && (
+                  <span className="tab__label-detail">· {t.openspecChange.streamName}</span>
+                )}
                 {/* NTF-FR-36: the state itself, for a reader who cannot see the
                     treatment. On the tab rather than on a separate element they
                     would have to go and find. */}

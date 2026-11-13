@@ -3,7 +3,10 @@
     "kind": "draft_discussion",
     "origin": {
       "discussionId": "disc-draft",
-      "target": { "kind": "draft", "draftId": "draft-1" },
+      "target": {
+        "kind": "draft",
+        "draftId": "draft-1"
+      },
       "fragmentTarget": null
     }
   },
@@ -11,9 +14,15 @@
     "kind": "draft_comment",
     "origin": {
       "discussionId": "disc-draft-fragment",
-      "target": { "kind": "draft", "draftId": "draft-1" },
+      "target": {
+        "kind": "draft",
+        "draftId": "draft-1"
+      },
       "fragmentTarget": {
-        "owner": { "kind": "draft", "draftId": "draft-1" },
+        "owner": {
+          "kind": "draft",
+          "draftId": "draft-1"
+        },
         "path": "prompt.md",
         "start": 4,
         "end": 11,
@@ -25,7 +34,10 @@
     "kind": "artifact_discussion",
     "origin": {
       "discussionId": "disc-artifact",
-      "target": { "kind": "artifact", "artifactId": "specifications/ui/a.md" },
+      "target": {
+        "kind": "artifact",
+        "artifactId": "specifications/ui/a.md"
+      },
       "fragmentTarget": null
     }
   },
@@ -33,9 +45,15 @@
     "kind": "artifact_comment",
     "origin": {
       "discussionId": "disc-artifact-fragment",
-      "target": { "kind": "artifact", "artifactId": "specifications/ui/a.md" },
+      "target": {
+        "kind": "artifact",
+        "artifactId": "specifications/ui/a.md"
+      },
       "fragmentTarget": {
-        "owner": { "kind": "artifact", "artifactId": "specifications/ui/a.md" },
+        "owner": {
+          "kind": "artifact",
+          "artifactId": "specifications/ui/a.md"
+        },
         "path": "specifications/ui/a.md",
         "start": 0,
         "end": 7,
@@ -47,8 +65,45 @@
     "kind": "note_discussion",
     "origin": {
       "discussionId": "disc-note",
-      "target": { "kind": "note", "noteId": "note-1" },
+      "target": {
+        "kind": "note",
+        "noteId": "note-1"
+      },
       "fragmentTarget": null
+    }
+  },
+  {
+    "kind": "change_discussion",
+    "origin": {
+      "discussionId": "disc-change",
+      "target": {
+        "kind": "change",
+        "streamId": "stream-1",
+        "change": "add-auth"
+      },
+      "fragmentTarget": null
+    }
+  },
+  {
+    "kind": "change_comment",
+    "origin": {
+      "discussionId": "disc-change-fragment",
+      "target": {
+        "kind": "change",
+        "streamId": "stream-1",
+        "change": "add-auth"
+      },
+      "fragmentTarget": {
+        "owner": {
+          "kind": "change",
+          "streamId": "stream-1",
+          "change": "add-auth"
+        },
+        "path": "specs/auth/spec.md",
+        "start": 0,
+        "end": 7,
+        "quote": "passage"
+      }
     }
   }
 ]

@@ -15,6 +15,7 @@ use super::stops::Stop;
 use super::turns::*;
 use super::*;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
+use crate::graduation::plan_updates::PlanCorrectionStep;
 use crate::graduation::{
     GraduationCheckCause, GraduationCheckGate, GraduationCheckGateStep, GraduationRest,
     GraduationRestCheck,
@@ -34,9 +35,14 @@ enum TurnKind {
     Continued(GraduationCheckCause),
     /// GRL-FR-BVTS: the saved step of an open check gate.
     Gate(GraduationCheckGateStep, GraduationCheckCause),
+    /// OPU-FR-XSRD, OPU-FR-DTYE: a saved correction turn of a plan update.
+    Plan(PlanCorrectionStep),
 }
 
 fn next_kind(run: &GraduationRun) -> TurnKind {
+    if let Some(correction) = run.checkpoint.plan.correction.as_ref() {
+        return TurnKind::Plan(correction.step);
+    }
     if let Some(gate) = run.checkpoint.check_gate.as_ref() {
         return TurnKind::Gate(gate.step, gate.cause);
     }
@@ -68,8 +74,11 @@ pub(super) async fn work_turn<R: tauri::Runtime>(
                 Corrected::Settle(outcome, bound) => (*outcome, bound),
                 Corrected::Stopped => return Step::Stop,
             };
+        // OPU-FR-QKLX: a plan correction turn records no ordinary escalation.
+        let escalations = kind != TurnKind::Plan(PlanCorrectionStep::Plan);
+        let origin = GraduationEscalationOrigin::Work;
         let settled =
-            settle_execution(app, run, worktree, outcome, GraduationEscalationOrigin::Work, bound);
+            settle_execution_with(app, run, worktree, outcome, origin, bound, escalations);
         // GXD-FR-HLQI: the continued correction is spent once the answer of its
         // turn is settled: accepted, gated, or a recorded escalation. A stop
         // before that keeps it.
@@ -82,10 +91,26 @@ pub(super) async fn work_turn<R: tauri::Runtime>(
                 let _ = crate::graduation::save_run(app, run);
             }
         }
+        // OPU-FR-XSRD: a plan update correction turn may answer an escalation,
+        // which spends the correction.
+        if matches!(kind, TurnKind::Plan(_)) && escalated {
+            run.checkpoint.plan.correction = None;
+            let _ = crate::graduation::save_run(app, run);
+        }
         let Some(execution) = settled else {
             return Step::Stop;
         };
+        // OPU-FR-DTYE: a plan correction turn resumes the last work session.
+        if let Some(session) = session_of(&execution).filter(|_| run.is_change_apply()) {
+            run.checkpoint.plan.last_work_session = Some(session);
+        }
         record_turn_end(app, run, worktree);
+        // OPU-FR-MBIY: a plan update is read in place of the check gate.
+        match super::plan_turns::after_answer(app, run, worktree, &execution) {
+            super::plan_turns::PlanNext::Gate => {}
+            super::plan_turns::PlanNext::Stop => return Step::Stop,
+            super::plan_turns::PlanNext::Correct => continue,
+        }
         // GRL-FR-XWNQ: every completed answer passes the gate, on every vendor.
         let reading = check_gate::judge(&execution, run.checkpoint.decisions.len());
         let escalate_step = match kind {
@@ -105,7 +130,11 @@ pub(super) async fn work_turn<R: tauri::Runtime>(
             }
             TurnKind::Gate(GraduationCheckGateStep::Escalate, _) => None,
             // GRL-FR-LAVF: one check correction in each gate episode.
-            TurnKind::Episode | TurnKind::Continued(_) => Some(GraduationCheckGateStep::Correct),
+            // A plan turn's answer never reaches the gate (OPU-FR-FPRX), so it
+            // is read as a turn that starts an episode.
+            TurnKind::Episode | TurnKind::Continued(_) | TurnKind::Plan(_) => {
+                Some(GraduationCheckGateStep::Correct)
+            }
         };
         if !note_gated(app, run, cause, step, &reading) {
             return Step::Stop;
@@ -180,7 +209,12 @@ fn prepare<'a, R: tauri::Runtime>(
                     },
                 );
         }
+        // OPU-FR-XSRD, OPU-FR-DTYE: the correction text, the plan findings,
+        // and the session to resume.
+        TurnKind::Plan(_) => resume = super::plan_turns::correction_input(run, &mut input),
     }
+    // OPU-FR-SKTV: the turn after Continue from a plan rest.
+    super::plan_turns::attach_next_turn(run, &mut input);
     if let Err(reason) = input.validate(run.checkpoint.pass_limit) {
         note_blocked(app, run, "task_invalid");
         let _ = transitions::block(
@@ -222,6 +256,7 @@ fn prepare<'a, R: tauri::Runtime>(
     // GRL-FR-KYYW: a turn that corrects keeps the record of the turn before it.
     let keeps_record = kind != TurnKind::Episode;
     prepare_check_folder(app, run, worktree, keeps_record);
+    super::plan_turns::prepare_scratch(app, run, worktree);
     // GRL-FR-EFTM / GRL-FR-SMQK: the bound is read before each dispatch.
     let bound = settings.turn_bound(run.turn_time_used_ms);
     Some(TurnRequest {
@@ -383,7 +418,7 @@ fn rest_on_checks<R: tauri::Runtime>(
 }
 
 /// GRL-FR-SMQK: the session a refused turn reported.
-fn session_of(execution: &AgentExecution) -> Option<GraduationResumeRef> {
+pub(super) fn session_of(execution: &AgentExecution) -> Option<GraduationResumeRef> {
     let session = execution
         .session
         .as_ref()

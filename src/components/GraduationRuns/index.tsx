@@ -27,6 +27,7 @@ import {
   aheadOf,
   coalesce,
   graduationErrorMessage,
+  continueRefusalMessage,
   readableCapacity,
   waitsForSlot,
   raiseStatement,
@@ -62,8 +63,15 @@ import type {
   GraduationCapacity,
   GraduationQueue,
   GraduationRun,
+  OpenSpecFailure,
 } from "../../types";
 import { GraduationLogWindow } from "../GraduationLogWindow";
+import {
+  logFailureNotice,
+  noticeFailureOf,
+  refusalString,
+  shortForm,
+} from "../../state/openspec/failureNotice";
 import { awaitsLiveSegment, stagesWithLogAccess } from "../../state/graduation/logScopes";
 import { type PressedAction } from "./actionRow";
 import { RunRegion } from "./region";
@@ -134,6 +142,8 @@ export function GraduationRuns({
   const [actionRefusal, setActionRefusal] = useState<{
     runId: string;
     message: string;
+    /** GRU-FR-BPNJ: the OpenSpec failure of the refusal, for its notice. */
+    failure?: OpenSpecFailure | null;
   } | null>(null);
   // GRU-FR-ZMHB: the action row control an act in flight was issued from.
   const pressedRef = useRef<PressedAction | null>(null);
@@ -411,6 +421,8 @@ export function GraduationRuns({
   const [notFound, setNotFound] = useState<string | null>(null);
   /** The request whose one reload is under way, so it asks for no second. */
   const reloadingFor = useRef<object | null>(null);
+  /** GRU-FR-PAHN: the row a request selected, which the rail scrolls to once. */
+  const [routedRow, setRoutedRow] = useState<{ runId: string } | null>(null);
 
   useEffect(() => {
     if (!selectRun) return;
@@ -482,6 +494,7 @@ export function GraduationRuns({
     // the row the author is routed to is one they can see beside the run they
     // are reading.
     reveal(target, { view: viewRef.current, text: filterRef.current });
+    setRoutedRow({ runId: selectRun.runId });
   }, [selectRun, queue, runs, reveal]);
 
   // GRH-FR-MCHQ: the rail's width, as the author last set it. It is read once
@@ -489,6 +502,15 @@ export function GraduationRuns({
   // than one per frame.
   const [railFraction, setRailFraction] = useState(DEFAULT_RAIL_FRACTION);
   const sectionRef = useRef<HTMLDivElement | null>(null);
+
+  // GRU-FR-PAHN: the rail's view shows the selected row: a route scrolls it in
+  // as little as it can. jsdom has no `scrollIntoView`, so it is optional.
+  useEffect(() => {
+    if (!routedRow) return;
+    const rows = sectionRef.current?.querySelectorAll<HTMLElement>("[data-run-id]") ?? [];
+    const row = [...rows].find((el) => el.dataset.runId === routedRow.runId);
+    row?.scrollIntoView?.({ block: "nearest" });
+  }, [routedRow]);
   const draggingRef = useRef(false);
   /** Where the gesture under way has put the boundary. */
   const draggedRef = useRef(DEFAULT_RAIL_FRACTION);
@@ -522,13 +544,15 @@ export function GraduationRuns({
    * focus returns to that row when the act settles (GRU-FR-ZMHB). An act issued
    * from anywhere else is refused against the run region as a whole
    * (GRU-FR-XQVG). `onRefused` hands the refusal to a control that renders it
-   * itself. The answer says whether the act was accepted.
+   * itself. `words` turns the refusal into the words the author reads. The
+   * answer says whether the act was accepted.
    */
   const act = async (
     what: string,
     action: () => Promise<unknown>,
     pressed?: PressedAction,
     onRefused?: (message: string) => void,
+    words: (raw: string) => string = graduationErrorMessage,
   ): Promise<boolean> => {
     if (busy) return false;
     pressedRef.current = pressed ?? null;
@@ -542,15 +566,23 @@ export function GraduationRuns({
       return true;
     } catch (reason) {
       logError(["frontend"], "a graduation act was refused", {});
-      const message = graduationErrorMessage(String(reason));
+      // OFP-FR-QLQJ: an OpenSpec failure is an object with its notice.
+      const failure = noticeFailureOf(reason);
+      const message = failure
+        ? (shortForm(failure) ?? failure.code)
+        : words(refusalString(reason));
       // GRU-FR-KQPE: one refusal alert at most, and a refusal renders only
       // while the run it belongs to is selected.
+      // OFN-FR-LKAT: a control or the region error states the short form of
+      // an OpenSpec failure, so its record is emitted here. The action row
+      // renders the notice itself, and the notice emits its own record.
+      if (failure && (onRefused || !pressed)) logFailureNotice("graduation_runs_act", failure);
       if (onRefused) {
         setActionRefusal(null);
         onRefused(message);
       } else if (pressed) {
         if (selectedRef.current === pressed.runId) {
-          setActionRefusal({ runId: pressed.runId, message });
+          setActionRefusal({ runId: pressed.runId, message, failure });
         }
       } else {
         setActionRefusal(null);
@@ -636,8 +668,13 @@ export function GraduationRuns({
           void act("Paused the run.", () => api.pauseGraduationRun(entry.id))
         }
         onContinue={(entry) =>
-          void act("Continued the run.", () =>
-            api.continueGraduationRun(entry.id),
+          void act(
+            "Continued the run.",
+            () => api.continueGraduationRun(entry.id),
+            undefined,
+            undefined,
+            // GRU-FR-BPNJ: a plan rest states its own refusals.
+            (raw) => continueRefusalMessage(entry, raw),
           )
         }
         onAutoStart={(entry, enabled) =>
@@ -774,6 +811,7 @@ export function GraduationRuns({
               reveal(created, { view: viewRef.current, text: filterRef.current });
             }}
             refusal={actionRefusal?.runId === run.id ? actionRefusal.message : null}
+            refusalFailure={actionRefusal?.runId === run.id ? (actionRefusal.failure ?? null) : null}
             pressedRef={pressedRef}
             openRestart={restartAsk === run.id}
             onRestartOpened={() => setRestartAsk(null)}

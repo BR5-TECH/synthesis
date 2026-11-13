@@ -3,7 +3,7 @@
 **Spec code:** `GRT`
 
 ## Intent
-Starting a new run over the prompt a discarded run carried. A restart answers the prompt the discarded run captured, on a work stream the author chooses at the moment they take it, and leaves the discarded run exactly as it stands. It is offered from the discarded run's row and from its region, it confirms before it invokes anything, and both runs afterwards say what they are to each other. Out of scope: the rail the control stands in, which is `GRH-graduation-history.md`'s; what either run renders once selected, which is `GRU-graduation-runs.md`'s; and the run record a restart creates, which is `../core/GRD-graduation.md`'s.
+Starting a new run over the input a discarded run captured. A restart answers the prompt the discarded run captured, on a work stream the author chooses at the moment they take it, and leaves the discarded run exactly as it stands. It is offered from the discarded run's row and from its region, it confirms before it invokes anything, and both runs afterwards say what they are to each other. Out of scope: the rail the control stands in, which is `GRH-graduation-history.md`'s; what either run renders once selected, which is `GRU-graduation-runs.md`'s; and the run record a restart creates, which is `../core/GRD-graduation.md`'s.
 
 ## Functional requirements
 1. **GRT-FR-CTNO** **Restart** is offered for a run in `discarded` and for no other state, and it stands in exactly two places: the trailing edge of the run region's stage row, where **Discard run** stands for a non-terminal run, and the history rail row's action cluster, where **Archive** stands.
@@ -15,6 +15,7 @@ Starting a new run over the prompt a discarded run carried. A restart answers th
 7. **GRT-FR-FCUF** Restart provenance is rendered on both runs from the records the section already holds. A run carrying `restarted_from_run_id` states which run it was restarted from and offers a route that selects it; a discarded run states each run restarted from it. A run the listing no longer holds, because it was removed (per `../core/GRD-graduation.md` GRD-FR-EPWW), is neither stated nor routed to. A route changes the selection alone and starts nothing.
 8. **GRT-FR-XHLN** An accepted restart selects the new run it created, also where the author selected another run while the restart ran. The rail reveals that run where a filter hides it (per `GRH-graduation-history.md` GRH-FR-XBWU), and keyboard focus goes to its first action-row control (per `GRU-graduation-runs.md` GRU-FR-PVXD). The discarded run stays unchanged and selectable.
 9. **GRT-FR-NPDC** The confirmation of a discarded **direct** run names its pinned worktree and branch and states that the new run works there directly. It asks no stream and no standing-work choice, and it invokes `restart_graduation_run` with resting values for both.
+10. **GRT-FR-GLLN** The confirmation of a discarded **OpenSpec change run** names the run's title and its stream, and states that the new run works on the same change there, with the same instruction for a rework. It asks no stream and no standing-work choice, and it invokes `restart_graduation_run` with the run's stream and resting values for the rest (per `../core/OCR-openspec-change-runs.md` OCR-FR-SAVO).
 
 ## UI contract boundary
 

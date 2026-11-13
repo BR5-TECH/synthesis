@@ -12,7 +12,7 @@
  * - An HTML comment is a chip whose text is a React text node (DTV-FR-HCHX,
  *   EDT-FR-KMAR). A vertical break is an empty spacer.
  */
-import { memo, useMemo } from "react";
+import { createContext, Fragment, memo, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
 import {
   isInlineDataImage,
@@ -23,8 +23,17 @@ import { buildDocument } from "./markdownStructure";
 import { BreakSpacer, CommentChip, CommentChipLine } from "../markdownChips";
 import type { DocNode, ListNode } from "./markdownStructure";
 
+/**
+ * How a surface draws an image in place of the placeholder, where it has a
+ * rule of its own (OCW-FR-FMDZ). Absent, every image is the placeholder above.
+ */
+export type DocumentImageRender = (alt: string, src: string) => ReactNode;
+
+export const DocumentImageContext = createContext<DocumentImageRender | null>(null);
+
 function Inline({ text }: { text: string }) {
   const parts = parseInlineWithImages(text);
+  const renderImage = useContext(DocumentImageContext);
   return (
     <>
       {parts.map((part, index): ReactNode => {
@@ -48,6 +57,9 @@ function Inline({ text }: { text: string }) {
               </span>
             );
           case "image":
+            if (renderImage) {
+              return <Fragment key={index}>{renderImage(part.alt, part.src)}</Fragment>;
+            }
             return isInlineDataImage(part.src) ? (
               <img
                 key={index}

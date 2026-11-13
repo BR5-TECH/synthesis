@@ -202,6 +202,8 @@ fn no_dockerfile_bakes_in_a_credential() {
         //
         // AVI-FR-WWVY: the Claude Code image also sets the CLI's two Bash
         // timeouts, which hold a number of milliseconds rather than a path.
+        // AVI-FR-NFNR: both images turn the OpenSpec CLI's telemetry off, and
+        // the one value that variable may hold is `0`.
         const DEFINED: [&str; 6] =
             ["CARGO_HOME", "HOME", "PATH", "PLAYWRIGHT_BROWSERS_PATH", "PNPM_HOME", "RUSTUP_HOME"];
         const TIMEOUTS: [&str; 2] = ["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"];
@@ -211,7 +213,9 @@ fn no_dockerfile_bakes_in_a_credential() {
                 let (name, value) = assignment
                     .split_once('=')
                     .unwrap_or_else(|| panic!("{vendor} sets an ENV with no value: {assignment}"));
-                if vendor == "claude-code" && TIMEOUTS.contains(&name) {
+                if name == "OPENSPEC_TELEMETRY" {
+                    assert_eq!(value, "0", "{vendor} sets {name} to something other than 0");
+                } else if vendor == "claude-code" && TIMEOUTS.contains(&name) {
                     assert!(
                         !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()),
                         "{vendor} sets {name} to something other than a number: {value}"
@@ -227,6 +231,7 @@ fn no_dockerfile_bakes_in_a_credential() {
             .collect();
         names.sort();
         let mut expected: Vec<&str> = DEFINED.to_vec();
+        expected.push("OPENSPEC_TELEMETRY");
         if vendor == "claude-code" {
             expected.extend(TIMEOUTS);
         }
@@ -469,5 +474,49 @@ fn the_manifest_parses_and_holds_an_entry_per_executable_vendor() {
     // No entry for a vendor the executor cannot run.
     for vendor in ["opencode", "claude_agent_api", "custom_agent_api"] {
         assert!(descriptor::manifest_entry(vendor).is_none());
+    }
+}
+
+/// AVI-FR-BTPR — `verify.sh` runs `openspec --version` in each image under the
+/// launch conditions of EAC-FR-13 and EAC-FR-14, compares the version with the
+/// one the Dockerfile pins, and fails on a status other than zero. Read from
+/// the code lines only, so a check the comments name and the script does not
+/// make cannot pass.
+#[test]
+fn verify_confirms_the_pinned_openspec_cli_of_each_image() {
+    let code: Vec<&str> =
+        VERIFY_SH.lines().map(str::trim).filter(|line| !line.starts_with('#')).collect();
+    let start = code
+        .iter()
+        .position(|line| line.contains("--entrypoint openspec"))
+        .expect("verify.sh does not run openspec in the image");
+    let window = code[start.saturating_sub(6)..start + 1].join("\n");
+    for condition in ["--user \"$foreign_uid\"", "--cap-drop ALL", "no-new-privileges"] {
+        assert!(window.contains(condition), "the openspec check does not run with {condition}");
+    }
+    assert!(code[start].contains("--version"));
+    assert!(code.iter().any(|line| line.contains("build_arg \"$vendor\" OPENSPEC_VERSION")));
+    let failures: Vec<usize> = code
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains("openspec --version") && line.contains("FAIL"))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(failures.len(), 2, "a wrong version and a failed start each fail verify.sh");
+    for at in failures {
+        assert_eq!(code[at + 1], "status=1");
+    }
+}
+
+/// AVI-FR-GSSF — the README states what a project's own image must hold for
+/// OpenSpec runs.
+#[test]
+fn the_readme_states_what_a_project_image_needs_for_openspec() {
+    for needle in [
+        "Node 22.12.0 or later",
+        "OpenSpec CLI 1.0 or later",
+        "`openspec` on the `PATH` of the launching user",
+    ] {
+        assert!(README.contains(needle), "the README does not state {needle:?}");
     }
 }

@@ -189,6 +189,11 @@ pub fn open_discussion<R: tauri::Runtime>(
     let root = project.require_store()?;
     let worktree = project.require_root()?;
     let by = acting_participant(&store, &project)?;
+    // CMS-FR-FACZ: a change owner resolves to a live stream and a change folder
+    // in its working copy before anything is appended.
+    if let Some((stream_id, change)) = target.change_owner() {
+        crate::change_proposals::require_change_owner(&app, stream_id, change)?;
+    }
     let discussion = open_discussion_spoken_in(
         &root,
         &worktree,
@@ -301,6 +306,10 @@ pub(super) fn attachment_scope(discussion: &Discussion) -> LogScope<'_> {
         // CMS-FR-49: a note's blobs live in that note's own folder.
         DiscussionTarget::Note { note_id } => LogScope::NoteDiscussion { note_id },
         DiscussionTarget::Artifact { .. } => LogScope::Artifact,
+        // CMS-FR-GJEY: a change's blobs live in the change's own folder.
+        DiscussionTarget::Change { stream_id, change } => {
+            LogScope::ChangeDiscussion { stream_id, change }
+        }
     }
 }
 

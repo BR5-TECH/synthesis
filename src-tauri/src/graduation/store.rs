@@ -13,6 +13,8 @@ const LOGS_DIR: &str = "logs";
 pub(crate) const REVIEW_DIR: &str = "rv";
 /// GRD-FR-KZPT: a merge run's own worktree.
 const MERGE_DIR: &str = "mw";
+/// OCR-FR-QUSP: a rework run's own worktree.
+const REWORK_DIR: &str = "cw";
 /// GRD-FR-TYVT: the name stem of a PR summary turn's disposable checkout.
 pub(crate) const PR_SUMMARY_DIR: &str = "ps";
 /// GRL-FR-BIQX: the number of hexadecimal digits in a checkout nonce.
@@ -141,6 +143,13 @@ impl StoreBase {
     /// the merge is applied.
     pub fn merge_worktree(&self, run_id: &str) -> PathBuf {
         self.home(run_id).join(MERGE_DIR)
+    }
+
+    /// OCR-FR-QUSP: the worktree a rework run revises its change in. Seeded
+    /// from the stream branch head and the change folder of the stream's
+    /// working copy, and owned by the run.
+    pub fn rework_worktree(&self, run_id: &str) -> PathBuf {
+        self.home(run_id).join(REWORK_DIR)
     }
 
     /// GRD-FR-TYVT / GRD-FR-XKGC: the disposable checkout one PR summary turn

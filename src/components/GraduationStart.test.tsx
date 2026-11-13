@@ -112,6 +112,8 @@ const windowCommands = () =>
     (c) =>
       c !== "get_graduation_capacity" &&
       c !== "list_graduation_queue" &&
+      // GSD-FR-DCLQ: the OpenSpec status read is one of the reads of an open.
+      c !== "get_openspec_status" &&
       c !== "append_log_records",
   );
 
@@ -336,6 +338,7 @@ describe("what the run does with work standing in the stream", () => {
       streamId: "editor-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -354,6 +357,7 @@ describe("what the run does with work standing in the stream", () => {
       streamId: "registry-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -379,6 +383,7 @@ describe("what the run does with work standing in the stream", () => {
       streamId: "registry-work",
       standingWork: "keep",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 
@@ -392,6 +397,7 @@ describe("what the run does with work standing in the stream", () => {
         streamId: "editor-work",
         standingWork: "commit",
         standingWorkMessage: null,
+        openspecChange: null,
       }),
     );
   });
@@ -457,7 +463,10 @@ describe("a start in flight", () => {
 
     // One enqueue is all-or-nothing, so a second activation must not start a
     // second one, and nothing may be dismissed out from under it.
-    await waitFor(() => expect(graduate()).toBeDisabled());
+    // The button is disabled but keeps its focus stop, so the focus stays in
+    // the dialog.
+    await waitFor(() => expect(graduate()).toHaveAttribute("aria-disabled", "true"));
+    expect(document.activeElement).toBe(graduate());
     expect(graduate()).toHaveTextContent("Starting…");
     expect(picker()).toBeDisabled();
     expect(position("keep")).toBeDisabled();
@@ -491,7 +500,7 @@ describe("a start in flight", () => {
     const { onStarted } = draw();
     await waitFor(() => expect(picker()).toBeInTheDocument());
     await userEvent.click(graduate());
-    await waitFor(() => expect(graduate()).toBeDisabled());
+    await waitFor(() => expect(graduate()).toHaveAttribute("aria-disabled", "true"));
     expect(onStarted).not.toHaveBeenCalled();
     accept!({ id: "g-7" });
     await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: "g-7" }));
@@ -608,6 +617,7 @@ describe("a refused start", () => {
         streamId: "registry-work",
         standingWork: "commit_and_push",
         standingWorkMessage: "Notes from the meeting",
+        openspecChange: null,
       }),
     );
   });
@@ -708,6 +718,7 @@ describe("the message a commit takes", () => {
       streamId: "registry-work",
       standingWork: "commit",
       standingWorkMessage: null,
+      openspecChange: null,
     });
   });
 });

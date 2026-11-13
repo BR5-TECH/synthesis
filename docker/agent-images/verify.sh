@@ -9,7 +9,8 @@
 # for the native libraries that floor also states, builds
 # with the toolchains AVI-FR-17 states at the versions their Dockerfile pins,
 # gives the launching user the writable home AVI-FR-18 states, and starts the
-# browser AVI-FR-16 states — the last three under the launch conditions the
+# browser AVI-FR-16 states, and reports the OpenSpec CLI version its
+# Dockerfile pins (AVI-FR-BTPR) — the last four under the launch conditions the
 # executor imposes. A manifest that has drifted
 # from what is in the registry fails here rather than failing a launch.
 #
@@ -232,6 +233,28 @@ for vendor in claude_code codex; do
         fi
     done
 
+    # AVI-FR-BTPR / AVI-FR-RZFR, EAC-FR-13, EAC-FR-14: `openspec --version`
+    # exits with status zero and reports the version the Dockerfile pins,
+    # under the launch conditions of the executor. The image probe of an
+    # OpenSpec run (OFP-FR-BZDP) asks the same question at the first dispatch,
+    # so an image that fails here rests every OpenSpec run.
+    want="$(build_arg "$vendor" OPENSPEC_VERSION)"
+    if openspec_out="$(docker run --rm \
+        --user "$foreign_uid" \
+        --cap-drop ALL \
+        --security-opt no-new-privileges \
+        --network none \
+        --entrypoint openspec "$pinned" --version 2>/dev/null)"; then
+        got="$(printf '%s' "$openspec_out" | tr -d "\r" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1 || true)"
+        if [[ "$got" != "$want" ]]; then
+            echo "FAIL $vendor: the Dockerfile pins OPENSPEC_VERSION=$want, \`openspec --version\` reports '${got:-nothing}'" >&2
+            status=1
+        fi
+    else
+        echo "FAIL $vendor: \`openspec --version\` does not exit with status zero as the executor launches the image; AVI-FR-BTPR" >&2
+        status=1
+    fi
+
     # AVI-FR-16 / AVI-FR-13: the browser starts and draws a page — probed under
     # the conditions a real launch imposes rather than under a convenient
     # subset of them. The executor drops every capability, refuses new
@@ -263,7 +286,7 @@ for vendor in claude_code codex; do
         status=1
     fi
 
-    [[ $status -eq 0 ]] && echo "ok   $vendor: $version at $digest, running as $uid:$gid, home at $home, toolchains build, browser renders"
+    [[ $status -eq 0 ]] && echo "ok   $vendor: $version at $digest, running as $uid:$gid, home at $home, toolchains build, openspec answers, browser renders"
 done
 
 exit "$status"

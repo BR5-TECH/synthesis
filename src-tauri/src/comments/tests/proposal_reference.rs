@@ -37,17 +37,98 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
         .split_once("\n}")
         .expect("its body")
         .0;
-    // CMS-FR-43 / CMS-FR-TQVB / CMS-FR-KAXQ / CMS-FR-LIBT: `proposal_hunk` and
-    // `new_draft_subject` are the reference kinds a caller may supply, and
-    // neither is a proposal reference.
+    // CMS-FR-43 / CMS-FR-TQVB / CMS-FR-KAXQ / CMS-FR-LIBT / CMS-FR-MTUL:
+    // `proposal_hunk`, `new_draft_subject`, and `new_change_subject` are the
+    // reference kinds a caller may supply, and none is a proposal reference.
     let variants = input_variants(input);
-    assert_eq!(variants, vec!["Url", "Inline", "ProposalHunk", "NewDraftSubject"], "{input}");
+    assert_eq!(
+        variants,
+        vec!["Url", "Inline", "ProposalHunk", "NewDraftSubject", "NewChangeSubject"],
+        "{input}"
+    );
+    // CMS-FR-QLMV / CMS-FR-QYGP / CMS-FR-OKDW / CMS-FR-QVZP: nor a change
+    // proposal reference, an export request, or a change action request.
     assert!(
-        !variants
-            .iter()
-            .any(|v| *v == "Proposal" || *v == "PromptProposal" || *v == "NewDraftProposal"),
+        !variants.iter().any(|v| *v == "Proposal"
+            || *v == "PromptProposal"
+            || *v == "NewDraftProposal"
+            || *v == "ChangeProposal"
+            || *v == "NewChangeProposal"
+            || *v == "ExportRequest"
+            || *v == "ChangeActionRequest"),
         "AttachmentInput has no proposal variant (CMS-FR-60): {input}",
     );
+}
+
+// CMS-FR-42 / CMS-FR-QVZP: a stored attachment is one of exactly fourteen
+// kinds, `change_action_request` among them, and each has its wire kind.
+#[test]
+fn a_stored_attachment_is_one_of_fourteen_kinds() {
+    const MODEL: &str = include_str!("../model.rs");
+    let body = MODEL
+        .split_once("pub enum Attachment {")
+        .expect("the stored enum")
+        .1
+        .split_once("\n}")
+        .expect("its body")
+        .0;
+    let variants = input_variants(body);
+    assert_eq!(
+        variants,
+        vec![
+            "Url",
+            "Blob",
+            "Proposal",
+            "PromptProposal",
+            "ChangeProposal",
+            "ProposalHunk",
+            "NewDraftProposal",
+            "NewDraftSubject",
+            "NewChangeProposal",
+            "NewChangeSubject",
+            "ExportRequest",
+            "ChangeActionRequest",
+            "Synthesis",
+            "Advisors",
+        ],
+        "{body}"
+    );
+    let wire = serde_json::to_value(Attachment::ChangeActionRequest {
+        request_id: "r1".into(),
+        stream_id: "s1".into(),
+        change: "add-auth".into(),
+        action: "apply".into(),
+    })
+    .expect("json");
+    assert_eq!(
+        wire,
+        serde_json::json!({
+            "kind": "changeActionRequest",
+            "requestId": "r1",
+            "streamId": "s1",
+            "change": "add-auth",
+            "action": "apply",
+        })
+    );
+}
+
+// CMS-FR-MKEV: the Synthesis participant is one fixed agent participant:
+// `synthesis`, `Synthesis`, an empty title, and no model.
+#[test]
+fn the_synthesis_participant_is_fixed() {
+    assert_eq!(
+        Participant::synthesis(),
+        Participant::Agent {
+            agent_id: "synthesis".into(),
+            handle: "Synthesis".into(),
+            model: None,
+            title: Some(String::new()),
+        }
+    );
+    let wire = serde_json::to_value(Participant::synthesis()).expect("json");
+    assert_eq!(wire["agentId"], "synthesis");
+    assert_eq!(wire["handle"], "Synthesis");
+    assert!(wire.get("model").is_none());
 }
 
 #[test]

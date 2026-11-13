@@ -531,6 +531,19 @@ pub enum ToolRefusal {
     /// RDX-FR-DVQL: the material the model named is not there, with the
     /// tool's fixed message. Retryable: another name can reach it.
     NotFoundWith(&'static str),
+    /// LOS, ROS, LOC: a refusal whose kind, message, code, and retry flag
+    /// are fixed text of the tool's own spec.
+    Fixed { kind: FixedKind, message: &'static str, code: &'static str, retryable: bool },
+}
+
+/// The kinds a [`ToolRefusal::Fixed`] refusal may name (TLC-FR-10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FixedKind {
+    InvalidArgs,
+    NotFound,
+    /// PCE-FR-FEAK, PCE-FR-CUSY: a refusal of the kind `PermissionDenied`.
+    PermissionDenied,
+    Other,
 }
 
 impl ToolRefusal {
@@ -538,6 +551,12 @@ impl ToolRefusal {
     /// without parsing its message.
     pub fn kind(&self) -> ToolErrorKind {
         match self {
+            ToolRefusal::Fixed { kind: FixedKind::InvalidArgs, .. } => ToolErrorKind::InvalidArgs,
+            ToolRefusal::Fixed { kind: FixedKind::NotFound, .. } => ToolErrorKind::NotFound,
+            ToolRefusal::Fixed { kind: FixedKind::Other, .. } => ToolErrorKind::Other,
+            ToolRefusal::Fixed { kind: FixedKind::PermissionDenied, .. } => {
+                ToolErrorKind::PermissionDenied
+            }
             ToolRefusal::NoProjectOpen
             | ToolRefusal::SkillNotFound
             | ToolRefusal::SkillUnreadable
@@ -653,6 +672,7 @@ impl ToolRefusal {
         match self {
             // PND-FR-GPNN / PND-FR-BGJI: the tool decides per refusal.
             ToolRefusal::Denied { retryable, .. } => *retryable,
+            ToolRefusal::Fixed { retryable, .. } => *retryable,
             // PND-FR-SQTD: a write that failed once may succeed next time.
             ToolRefusal::NotRecordedWith(_) => true,
             // RDX-FR-DVQL: a different path or id can reach a document.
@@ -794,6 +814,7 @@ impl ToolRefusal {
             ToolRefusal::NotEscalatableNow => "not_escalatable_now",
             ToolRefusal::AlreadyEscalated => "already_escalated",
             ToolRefusal::Denied { code, .. } => code,
+            ToolRefusal::Fixed { code, .. } => code,
             // RDX-FR-IEQA: an export request is not a proposal.
             ToolRefusal::NotRecordedWith(message)
                 if *message == super::request_document_export::NOT_RECORDED =>
@@ -874,6 +895,7 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::NotEscalatableNow => f.write_str(NOT_ESCALATABLE_NOW),
             ToolRefusal::AlreadyEscalated => f.write_str(ALREADY_ESCALATED),
             ToolRefusal::Denied { message, .. }
+            | ToolRefusal::Fixed { message, .. }
             | ToolRefusal::NotRecordedWith(message)
             | ToolRefusal::NotFoundWith(message) => f.write_str(message),
             // Every word after the fixed opening comes from `Ecosystem`, whose

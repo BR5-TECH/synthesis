@@ -174,6 +174,13 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "get_work_stream_uncommitted_paths",
     "start_graduation",
     "start_direct_graduation",
+    // OCR-openspec-change-runs.md OCR-FR-IDFC.
+    "start_change_apply",
+    "start_change_rework",
+    // CAR-change-action-requests.md.
+    "list_change_action_requests",
+    "confirm_change_action_request",
+    "decline_change_action_request",
     "start_pull_request_summary",
     "list_branch_completed_runs",
     "preflight_direct_graduation",
@@ -206,6 +213,25 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "accept_new_draft_proposal",
     "reject_new_draft_proposal",
     "confirm_draft_decomposition",
+    "read_change_image",
+    "list_change_versions",
+    "read_change_version",
+    "read_change_statistics",
+    "record_change_working_interval",
+    "list_new_change_proposals",
+    "load_new_change_proposal_files",
+    "accept_new_change_proposal",
+    "reject_new_change_proposal",
+    "complete_new_change_decision",
+    "confirm_change_split",
+    "list_change_edit_proposals",
+    "load_change_edit_proposal_hunks",
+    "accept_change_edit_hunk",
+    "reject_change_edit_hunk",
+    "set_change_edit_hunk_discussing",
+    "edit_change_edit_hunk",
+    "decline_change_edit_proposal",
+    "complete_change_edit_decision",
     "list_prompt_change_proposals",
     "load_prompt_change_proposal_hunks",
     "accept_prompt_change_hunk",
@@ -388,6 +414,13 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // it is the read path for an actual Docker operation and must stay
     // unreachable from the frontend (GSS-FR-40).
     "load_project_docker_images",
+    // OpenSpec mode (OSM-openspec-mode.md OSM-FR-YXUC).
+    "get_openspec_status",
+    "read_openspec_change",
+    // OSM-FR-PEAK.
+    "read_apply_progress",
+    // OSI-openspec-spec-index.md OSI-FR-OSWD.
+    "load_specification_map",
     "save_project_vendor_image",
     "build_project_vendor_image",
     "cancel_project_vendor_image_build",

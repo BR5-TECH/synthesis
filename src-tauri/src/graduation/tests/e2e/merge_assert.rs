@@ -32,7 +32,7 @@ impl Outcome {
     /// are the ones it wrote, and a commit id is present where it committed.
     pub(crate) fn expect_merged(self, paths: &[&str], committed: bool) -> Self {
         match self.answer() {
-            Ok(StreamMergeResult::Merged { merged_paths, commit }) => {
+            Ok(StreamMergeResult::Merged { merged_paths, commit, .. }) => {
                 let mut held = merged_paths.clone();
                 held.sort();
                 assert_eq!(held, sorted(paths), "[{}] the paths the merge wrote", self.name);
@@ -63,7 +63,7 @@ impl Outcome {
     /// run the merge was handed to.
     pub(crate) fn expect_conflicted(self, paths: &[&str]) -> Self {
         match self.answer() {
-            Ok(StreamMergeResult::Conflicted { run_id, conflicted_paths }) => {
+            Ok(StreamMergeResult::Conflicted { run_id, conflicted_paths, .. }) => {
                 let mut held = conflicted_paths.clone();
                 held.sort();
                 assert_eq!(held, sorted(paths), "[{}] the conflicted paths", self.name);

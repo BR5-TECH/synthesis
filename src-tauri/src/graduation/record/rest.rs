@@ -13,7 +13,7 @@ pub const REST_CHECKS_NOT_PASSED: &str = "checks_not_passed";
 
 /// GRD-FR-SKLO / GRD-FR-PYJN: a run at rest for the author, without an
 /// escalation and without a blocker.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraduationRest {
     /// `total_time_limit` or `checks_not_passed`.
@@ -27,12 +27,73 @@ pub struct GraduationRest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub used_ms: Option<u64>,
     /// `checks_not_passed`: the cause of the last refusal of the check gate.
+    /// `plan_update_invalid`: the refusal cause of the plan update
+    /// (OPU-FR-CLYW).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cause: Option<GraduationCheckCause>,
+    pub cause: Option<GraduationRestCause>,
     /// `checks_not_passed`: each check of the last record that did not pass.
     /// Empty where the answer held no record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<Vec<GraduationRestCheck>>,
+    /// OPU-FR-UOYJ: `plan_update`: `work` or `review`; `plan_findings`:
+    /// `review`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    /// OPU-FR-UOYJ, OPU-FR-MCSG: the plan thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    /// OPU-FR-UOYJ, OPU-FR-WOKJ: the plan proposal, where edits were recorded
+    /// or admitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_id: Option<String>,
+    /// OPU-FR-UOYJ: the question set, where questions were recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub set_id: Option<String>,
+    /// OPU-FR-UOYJ: the questions as the agent gave them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub questions: Option<Vec<GraduationEscalationQuestion>>,
+    /// OPU-FR-TPYT: the submitted answers, once the set is submitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answers: Option<Vec<crate::comments::QuestionAnswer>>,
+    /// OPU-FR-UOYJ: the agent's reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_reason: Option<String>,
+    /// OPU-FR-UOYJ, OPU-FR-QKLX: every finding of the verdict, for the
+    /// origin `review`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub findings: Option<Vec<ReviewFinding>>,
+}
+
+/// GRD-FR-PYJN, OPU-FR-CLYW: the cause a rest names, a check cause or a
+/// refusal cause of a plan update. Both are snake_case strings on the wire.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GraduationRestCause {
+    Checks(GraduationCheckCause),
+    Plan(crate::graduation::plan_updates::PlanRefusalCause),
+}
+
+impl GraduationRestCause {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Checks(cause) => cause.as_str(),
+            Self::Plan(cause) => cause.as_str(),
+        }
+    }
+
+    /// The check cause, where the rest names one.
+    pub fn checks(self) -> Option<GraduationCheckCause> {
+        match self {
+            Self::Checks(cause) => Some(cause),
+            Self::Plan(_) => None,
+        }
+    }
+}
+
+impl From<GraduationCheckCause> for GraduationRestCause {
+    fn from(cause: GraduationCheckCause) -> Self {
+        Self::Checks(cause)
+    }
 }
 
 impl GraduationRest {
@@ -43,8 +104,7 @@ impl GraduationRest {
             at,
             limit_ms: Some(limit_ms),
             used_ms: Some(used_ms),
-            cause: None,
-            checks: None,
+            ..Self::default()
         }
     }
 
@@ -57,10 +117,9 @@ impl GraduationRest {
         Self {
             reason: REST_CHECKS_NOT_PASSED.to_string(),
             at,
-            limit_ms: None,
-            used_ms: None,
-            cause: Some(cause),
+            cause: Some(cause.into()),
             checks: Some(checks),
+            ..Self::default()
         }
     }
 
@@ -323,4 +382,11 @@ mod tests {
         assert_eq!(rest, GraduationRest::total_time_limit("t0".into(), 1, 2));
         assert!(!rest.is_checks_not_passed());
     }
+}
+
+/// OFP-FR-WACS, GXD-FR-GMDI: what a passing image probe recorded in the
+/// checkpoint. No later dispatch of the run probes again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenSpecImageCli {
+    pub version: String,
 }

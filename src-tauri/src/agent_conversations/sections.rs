@@ -16,6 +16,19 @@ pub(super) use open_proposal::*;
 mod pending_questions;
 pub(super) use pending_questions::*;
 
+/// CEP-FR-XXMW: the reads of a change edit proposal.
+mod change_reads;
+pub(super) use change_reads::*;
+/// AGC-FR-KRMV: the action requests of a change.
+mod action_requests;
+pub(super) use action_requests::*;
+/// AGC-FR-JNOS / AGC-FR-LTLT: the split of a change.
+mod split;
+pub(super) use split::*;
+/// AGC-FR-DKHT: a prompt proposal's hunk in a draft hunk's shape.
+mod prompt_view;
+pub(super) use prompt_view::*;
+
 // ---------------------------------------------------------------------------
 // Input builders (AGC-FR-05)
 // ---------------------------------------------------------------------------
@@ -155,6 +168,16 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         | comments::Attachment::PromptProposal { path, update: Some(update), .. } => {
             update_line(path, update)
         }
+        // CMS-FR-QLMV: a change edit proposal reads from its own store.
+        comments::Attachment::ChangeProposal { change, update: Some(update), .. } => {
+            update_line(&change_label(change), update)
+        }
+        comments::Attachment::ChangeProposal { change, proposal_id, .. } => {
+            match digests.get(proposal_id.as_str()) {
+                Some(digest) => proposal_digest_line(&change_label(change), digest),
+                None => format!("[proposed edits to {}]", change_label(change)),
+            }
+        }
         comments::Attachment::Proposal { path, proposal_id, .. } => {
             match digests.get(proposal_id.as_str()) {
                 Some(digest) => proposal_digest_line(path, digest),
@@ -184,12 +207,17 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         | comments::Attachment::NewDraftSubject { .. } => {
             new_draft_line(attachment, &reads.new_drafts)
         }
+        comments::Attachment::NewChangeProposal { .. }
+        | comments::Attachment::NewChangeSubject { .. } => {
+            new_change_line(attachment, &reads.new_changes)
+        }
         // CMS-FR-OKDW: an export request names the document it asked the author
         // to export. Its outcome comes back as a comment of its own (DXP-FR-VFFP).
         comments::Attachment::ExportRequest { path, format, .. } => match format {
             Some(format) => format!("[asked the author to export {path} to {format}]"),
             None => format!("[asked the author to export {path}]"),
         },
+        comments::Attachment::ChangeActionRequest { .. } => action_request_line(attachment),
         // CMS-FR-TUHL, CMS-FR-KVDV: the group marks name who took part and show
         // none of what the advisors said, which the reply already used.
         comments::Attachment::Synthesis => {
@@ -299,6 +327,8 @@ pub(super) struct AttachmentReads {
     hunks: HunkReads,
     /// AGC-FR-ZZWP: the new-draft proposals of the thread's draft, by id.
     new_drafts: NewDraftReads,
+    /// AGC-FR-LTLT: the new-change proposals of the thread's change, by id.
+    new_changes: NewChangeReads,
 }
 
 /// AGC-FR-RVQP / AGC-FR-DKHT: read every proposal the thread's `proposal`
@@ -325,6 +355,8 @@ fn attachment_reads(
     let mut referenced: Vec<(Option<&str>, &str)> = Vec::new();
     let mut hunk_refs: Vec<(&str, &str, &str)> = Vec::new();
     let mut artifact_hunk_refs: Vec<(&str, &str)> = Vec::new();
+    let mut change_refs: Vec<&str> = Vec::new();
+    let mut change_hunk_refs: Vec<(&str, &str)> = Vec::new();
     for comment in &thread.comments {
         for attachment in &comment.attachments {
             match attachment {
@@ -360,6 +392,19 @@ fn attachment_reads(
                     ..
                 } => {
                     artifact_hunk_refs.push((proposal_id, hunk_id));
+                }
+                comments::Attachment::ChangeProposal { proposal_id, update: None, .. }
+                    if with_proposals && !change_refs.contains(&proposal_id.as_str()) =>
+                {
+                    change_refs.push(proposal_id);
+                }
+                comments::Attachment::ProposalHunk {
+                    change: Some(_),
+                    proposal_id,
+                    hunk_id,
+                    ..
+                } => {
+                    change_hunk_refs.push((proposal_id, hunk_id));
                 }
                 _ => {}
             }
@@ -415,6 +460,13 @@ fn attachment_reads(
         }
     }
 
+    // CEP-FR-XXMW: a hunk of a change edit proposal, read from the store.
+    for (proposal_id, hunk_id) in change_hunk_refs {
+        if let Some(change) = change_hunk(roots.store, proposal_id, hunk_id) {
+            hunks.insert((proposal_id.to_string(), hunk_id.to_string()), change);
+        }
+    }
+
     // The last references the thread made are the ones that render in full.
     let full_from = referenced.len().saturating_sub(PROPOSALS_RENDERED_IN_FULL);
     let mut digests = ProposalDigests::new();
@@ -453,29 +505,13 @@ fn attachment_reads(
             ProposalDigest { counts: proposal.counts, changes: full.then_some(proposal.changes) },
         );
     }
-    AttachmentReads { digests, hunks, new_drafts: new_draft_reads(roots, thread) }
-}
-
-/// AGC-FR-DKHT: a prompt proposal's hunk in the shape a draft's renders from,
-/// so the two read identically in a turn's input.
-fn prompt_change_view(
-    change: crate::prompt_proposals::PromptProposalChange,
-) -> crate::draft_proposals::ProposalChange {
-    use crate::draft_proposals::hunks::HunkState as Draft;
-    use crate::prompt_proposals::HunkState as Prompt;
-    crate::draft_proposals::ProposalChange {
-        id: change.id,
-        kind: change.kind,
-        state: match change.state {
-            Prompt::Pending => Draft::Pending,
-            Prompt::Accepted => Draft::Accepted,
-            Prompt::Rejected => Draft::Rejected,
-            Prompt::Discussing => Draft::Discussing,
-            Prompt::Withdrawn => Draft::Withdrawn,
-        },
-        before: change.before,
-        after: change.after,
+    for proposal_id in change_refs {
+        if let Some((_, digest)) = change_digest(roots.store, proposal_id) {
+            digests.insert(proposal_id.to_string(), digest);
+        }
     }
+    let new_changes = new_change_reads(roots, thread);
+    AttachmentReads { digests, hunks, new_drafts: new_draft_reads(roots, thread), new_changes }
 }
 
 /// AGC-FR-RVQP: one proposal's changes and how each was decided.
@@ -822,8 +858,9 @@ pub(super) fn discussion_history_with_status(
         parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
         parts.push(InputPart::Text("\n".to_string()));
     }
-    // AGC-FR-EPNB / AGC-FR-TCCV / AGC-FR-QSWD: the open proposal, then the
-    // pending question set, end the section. The bound of AGC-FR-11 cuts the
+    // AGC-FR-KRMV / AGC-FR-JNOS / AGC-FR-EPNB / AGC-FR-TCCV / AGC-FR-QSWD: the
+    // action requests, the split, the open proposal, then the pending question
+    // set, end the section. The bound of AGC-FR-11 cuts the
     // comments before them rather than either of them.
     let (questions, unreadable) = match pending_questions_text(roots, &thread.id) {
         Ok(text) => (text, None),
@@ -831,6 +868,8 @@ pub(super) fn discussion_history_with_status(
     };
     let tail: String = [
         decomposition_text(roots, &thread.target),
+        action_requests_text(roots, &thread.target),
+        split_text(roots, &thread.target),
         open_proposal_text(roots, &thread.target),
         questions,
     ]

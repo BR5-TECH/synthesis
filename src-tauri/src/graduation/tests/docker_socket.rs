@@ -33,7 +33,9 @@ impl Fixture {
             stream.id.clone(),
             StandingWork::Keep,
             None,
+            None,
         )
+        .map_err(String::from)
     }
 }
 

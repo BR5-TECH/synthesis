@@ -10,7 +10,7 @@
  * when the proposal closes. The proposed text of a change stays editable, in a
  * plain text field in its block.
  */
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { findNearest } from "../../state/commentAnchors";
 import { HUNK_ATTR, HUNK_CLASS, hunkLabel, type DecoratedHunk } from "../DraftDiscussion";
@@ -87,10 +87,23 @@ function classes(hunk: DecoratedHunk, part: string): string {
 export function SourceReview({
   text,
   review,
+  note = SOURCE_REVIEW_NOTE,
+  segment,
 }: {
   /** The file text as the session holds it. */
   text: string;
   review: EditorReview;
+  /**
+   * The statement above the text, or null for none. The change workspace
+   * (OCW-FR-COLR) never edits its files, so it states nothing here.
+   */
+  note?: string | null;
+  /**
+   * CMT-FR-28: how a part of the file's own text is drawn: the text that no
+   * hunk changes, and the text a hunk strikes through. The change workspace
+   * marks its fragment discussions there. The default is the text itself.
+   */
+  segment?: (from: number, to: number) => ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const placed = useMemo(() => placeOnSource(text, review.hunks), [text, review.hunks]);
@@ -103,10 +116,12 @@ export function SourceReview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placedIds]);
 
+  const plain = (from: number, to: number): ReactNode =>
+    segment ? <Fragment key={`text:${from}`}>{segment(from, to)}</Fragment> : text.slice(from, to);
   const parts: ReactNode[] = [];
   let cursor = 0;
   for (const hunk of placed) {
-    if (hunk.from > cursor) parts.push(text.slice(cursor, hunk.from));
+    if (hunk.from > cursor) parts.push(plain(cursor, hunk.from));
     const isFocused = String(hunk.id === review.focused);
     // DCR-FR-07: the text a change removes, struck through where it stands.
     if (hunk.kind !== "add" && hunk.to > hunk.from) {
@@ -117,7 +132,7 @@ export function SourceReview({
           {...{ [HUNK_ATTR]: hunk.id }}
           data-focused={isFocused}
         >
-          {text.slice(hunk.from, hunk.to)}
+          {plain(hunk.from, hunk.to)}
         </span>,
       );
     }
@@ -150,13 +165,10 @@ export function SourceReview({
           </span>
           <span className="hunk__body">
             {editable ? (
-              <textarea
-                className="hunk__doc hunk__source-edit"
-                aria-label={`Proposed text of ${label}`}
+              <GrowingText
+                label={`Proposed text of ${label}`}
                 value={value}
-                spellCheck={false}
-                rows={Math.max(1, value.split("\n").length)}
-                onChange={(e) => review.onEdit(hunk.id, e.target.value)}
+                onChange={(next) => review.onEdit(hunk.id, next)}
               />
             ) : (
               <span className="hunk__doc hunk__plain">{value}</span>
@@ -167,7 +179,7 @@ export function SourceReview({
     }
     cursor = hunk.to;
   }
-  if (cursor < text.length) parts.push(text.slice(cursor));
+  if (cursor < text.length) parts.push(plain(cursor, text.length));
 
   return (
     <div
@@ -182,9 +194,11 @@ export function SourceReview({
       }}
     >
       {/* PCR-FR-SKRV: the surface says why the text takes no edit. */}
-      <p className="editor__source-review-note t-ui-xs" role="note">
-        {SOURCE_REVIEW_NOTE}
-      </p>
+      {note !== null && (
+        <p className="editor__source-review-note t-ui-xs" role="note">
+          {note}
+        </p>
+      )}
       <div className="editor__source-review-text" aria-label="Source" role="document">
         {parts}
       </div>
@@ -196,5 +210,52 @@ export function SourceReview({
         extent={text.length}
       />
     </div>
+  );
+}
+
+/**
+ * OCW-FR-COLR: the proposed text, as tall as its wrapped lines. A count of
+ * line breaks is not enough: in a narrow pane one line wraps to several, and
+ * the field then clips the text the author decides about.
+ */
+function GrowingText({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const field = ref.current;
+    if (!field) return;
+    const fit = () => {
+      field.style.height = "auto";
+      field.style.height = `${field.scrollHeight}px`;
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    // The width changes when the splitter or the window moves.
+    let width = field.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (field.clientWidth === width) return;
+      width = field.clientWidth;
+      fit();
+    });
+    observer.observe(field);
+    return () => observer.disconnect();
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className="hunk__doc hunk__source-edit"
+      aria-label={label}
+      value={value}
+      spellCheck={false}
+      rows={Math.max(1, value.split("\n").length)}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }

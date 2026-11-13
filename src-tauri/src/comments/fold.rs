@@ -67,6 +67,11 @@ pub enum FoldTarget<'a> {
     /// one discussion that note carries rather than every discussion of a
     /// target that may accumulate several.
     NoteDiscussion { note_id: &'a str },
+    /// CMS-FR-GJEY: one file's fragment log of a change, keyed by the file's
+    /// change-relative path.
+    ChangeFile { stream_id: &'a str, change: &'a str, file_rel: &'a str },
+    /// CMS-FR-GJEY: a change's whole-change discussion log.
+    ChangeDiscussion { stream_id: &'a str, change: &'a str },
 }
 
 impl<'a> FoldTarget<'a> {
@@ -83,6 +88,11 @@ impl<'a> FoldTarget<'a> {
             FoldTarget::NoteDiscussion { note_id } => {
                 DiscussionTarget::Note { note_id: note_id.to_string() }
             }
+            FoldTarget::ChangeFile { stream_id, change, .. }
+            | FoldTarget::ChangeDiscussion { stream_id, change } => DiscussionTarget::Change {
+                stream_id: stream_id.to_string(),
+                change: change.to_string(),
+            },
         }
     }
 
@@ -95,7 +105,9 @@ impl<'a> FoldTarget<'a> {
     pub fn fragment_path(&self) -> Option<&'a str> {
         match *self {
             FoldTarget::Artifact { artifact_id } => Some(artifact_id),
-            FoldTarget::DraftFile { file_rel, .. } => Some(file_rel),
+            FoldTarget::DraftFile { file_rel, .. } | FoldTarget::ChangeFile { file_rel, .. } => {
+                Some(file_rel)
+            }
             _ => None,
         }
     }

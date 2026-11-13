@@ -332,6 +332,13 @@ describe("CIP-FR-10 toolchain resolution", () => {
     }
   });
 
+  it("OAT-FR-KWDN: no workflow runs the ignored OpenSpec acceptance tests", () => {
+    for (const file of WORKFLOW_FILES) {
+      const text = readFileSync(resolve(WORKFLOW_DIR, file), "utf8");
+      expect(text, file).not.toMatch(/openspec_uat|uat:openspec/);
+    }
+  });
+
   it.each(CRATE_DIRS)("a Rust lane verifies %s", (crate) => {
     const lanes = RUST_LANES.filter((lane) => isInside(crate, workingDirOf(lane)));
     expect(lanes, `no Rust lane builds ${crate}`).not.toHaveLength(0);

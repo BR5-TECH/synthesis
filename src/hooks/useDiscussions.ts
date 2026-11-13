@@ -60,6 +60,7 @@ import type { AnchoredThread } from "../state/commentAnchors";
 import {
   locatorOf,
   originArtifactId,
+  originChangeKey,
   originDraftId,
   originFor,
   originKind,
@@ -224,7 +225,13 @@ export function useDiscussions(
         // rendered: one malformed answer costs the surface its conversations,
         // never the tab it is in.
         if (cancelled) return;
-        const list = Array.isArray(loaded) ? loaded.filter((d) => current.kind === "draft" || !isFragmentTargeted(d)) : [];
+        const list = Array.isArray(loaded)
+          ? loaded.filter(
+              // DDS-FR-VHZN / OCW-FR-TRLG: a draft and a change list the fragment
+              // discussions in the same column as the whole-target ones.
+              (d) => current.kind === "draft" || current.kind === "change" || !isFragmentTargeted(d),
+            )
+          : [];
         publishThreads(list);
         setThreads(list);
       })
@@ -260,7 +267,12 @@ export function useDiscussions(
     void onDiscussionChanged((thread) => {
       // Application-wide: another file's discussion, another draft's, and every
       // anchored thread anywhere have nothing to do with this surface.
-      if (isFragmentTargeted(thread) && thread.target.kind !== "draft") return;
+      if (
+        isFragmentTargeted(thread) &&
+        thread.target.kind !== "draft" &&
+        thread.target.kind !== "change"
+      )
+        return;
       if (discussionTargetKey(thread.target) !== targetKey) return;
       mergeThread(thread);
     })
@@ -348,6 +360,9 @@ export function useDiscussions(
         return `draft:${originDraftId(turn.origin)}` === targetKey;
       if (kind === "artifact_discussion")
         return `artifact:${originArtifactId(turn.origin)}` === targetKey;
+      // CMS-FR-UEXD: a change owner holds both kinds in one column.
+      if (kind === "change_discussion" || kind === "change_comment")
+        return originChangeKey(turn.origin) === targetKey;
       return false;
     },
     [targetKey],

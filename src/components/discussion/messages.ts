@@ -92,6 +92,10 @@ export function commentErrorMessage(raw: string): string {
       return "This draft is no longer in the project.";
     case COMMENT_ERRORS.noteNotFound:
       return "This note is no longer in the project, so it cannot be discussed.";
+    case COMMENT_ERRORS.unknownStream:
+      return "This work stream is no longer in the project, so its change cannot be discussed.";
+    case COMMENT_ERRORS.changeNotFound:
+      return "This OpenSpec change is no longer in its work stream, so it cannot be discussed.";
     case COMMENT_ERRORS.emptyBody:
       return "Write an opening message to start this conversation.";
     case COMMENT_ERRORS.notSupported:

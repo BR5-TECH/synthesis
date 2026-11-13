@@ -238,7 +238,10 @@ fn submission_events(
 }
 
 /// CMS-FR-TXRB: `"submit discussion question answers"`.
-#[tauri::command]
+///
+/// Off the main thread: the hand-over of a plan update's answers takes the
+/// graduation write hold, which a Continue holds across its OpenSpec reads.
+#[tauri::command(async)]
 pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
@@ -251,8 +254,26 @@ pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     let root = project.require_store()?;
     let worktree = project.require_root()?;
     let acting = acting_participant(&store, &project)?;
+    // OPU-FR-TPYT: a set of a plan update first hands its answers to the run,
+    // durably. A write that fails refuses the submission, and nothing is
+    // appended.
+    let handed = if acceptable_submission(&root, &worktree, &thread_id, &set_id, &answers) {
+        crate::graduation::plan_updates::hand_over_answers(&app, &set_id, &answers)?
+    } else {
+        None
+    };
     let outcome =
-        commit_question_answers(&root, &worktree, &thread_id, &set_id, &answers, &acting)?;
+        match commit_question_answers(&root, &worktree, &thread_id, &set_id, &answers, &acting) {
+            Ok(outcome) => outcome,
+            Err(code) => {
+                // OPU-FR-TPYT: the set still stands, so the rest must not hold
+                // answers that the discussion never recorded (OPU-FR-THOZ).
+                if let Some(handed) = handed.as_ref() {
+                    crate::graduation::plan_updates::undo_hand_over(&app, handed);
+                }
+                return Err(code);
+            }
+        };
     crate::logging::log_info(
         &app,
         &crate::logging::BUFFER,
@@ -295,6 +316,21 @@ pub fn submit_discussion_question_answers<R: tauri::Runtime>(
         emit_question_set_changed(&app, &thread_id, None);
     }
     Ok(outcome.submitted)
+}
+
+/// OPU-FR-TPYT: whether a submission names the set the discussion holds and
+/// answers it in full, so that [`commit_question_answers`] appends it.
+pub fn acceptable_submission(
+    root: &crate::fs::RootFs,
+    worktree: &crate::fs::RootFs,
+    thread_id: &str,
+    set_id: &str,
+    answers: &[QuestionAnswer],
+) -> bool {
+    let open = read_discussion_by_id(root, worktree, thread_id).is_some_and(|t| !t.resolved);
+    open && read_question_set(root, worktree, thread_id)
+        .filter(|set| set.set_id == set_id)
+        .is_some_and(|set| validate_answers(&set, answers).is_ok())
 }
 
 /// What [`commit_question_answers`] did, so the command can report and announce

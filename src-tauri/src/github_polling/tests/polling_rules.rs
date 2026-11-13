@@ -226,6 +226,7 @@ fn every_shadow_draft_is_a_row() {
                 state: crate::graduation::GraduationRunState::Queued,
                 locked: true,
                 graduated: false,
+                openspec_change: None,
             });
         }
     }

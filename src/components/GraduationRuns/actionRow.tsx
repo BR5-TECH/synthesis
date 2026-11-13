@@ -15,15 +15,21 @@ import * as api from "../../api";
 import {
   actionsFor,
   canRestart,
+  changeRunPhase,
+  continueRefusalMessage,
+  isChangeRun,
   isResume,
   isTerminalRun,
+  planThreadOf,
   removalStatement,
   runsRemovedByDiscard,
   runTitle,
 } from "../../state/graduation";
 import type { RunAction } from "../../state/graduation/runState";
-import type { GraduationQueue, GraduationRun } from "../../types";
+import type { GraduationQueue, GraduationRun, OpenSpecFailure } from "../../types";
+import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { RestartRegionControl } from "./restart";
+import { openOpenSpecChange } from "../../state/openspec/changeRoutes";
 
 /** The action-row control an act was issued from, and the run it acted on. */
 export interface PressedAction {
@@ -32,15 +38,18 @@ export interface PressedAction {
 }
 
 /**
- * One act on a run. `pressed` names the row control that issued it, and
- * `onRefused` hands a refusal to a control that renders it itself. The answer
- * says whether the act was accepted.
+ * One act on a run. `pressed` names the row control that issued it,
+ * `onRefused` hands a refusal to a control that renders it itself, and `words`
+ * turns a refusal into the words the author reads, where the default words of
+ * `graduationErrorMessage` are not the right ones. The answer says whether the
+ * act was accepted.
  */
 export type RunAct = (
   what: string,
   action: () => Promise<unknown>,
   pressed?: PressedAction,
   onRefused?: (message: string) => void,
+  words?: (raw: string) => string,
 ) => Promise<boolean>;
 
 /** GRU-FR-PVXD: the control that takes another's place in the row. */
@@ -60,6 +69,11 @@ export interface RunActionRowProps {
   onRestarted: (created: GraduationRun) => void;
   /** The refusal of this run's last row act, where it was refused. */
   refusal: string | null;
+  /**
+   * GRU-FR-BPNJ: the OpenSpec failure of that refusal, which renders its
+   * failure notice in place of the words.
+   */
+  refusalFailure?: OpenSpecFailure | null;
   /** The row control the act in flight was issued from. */
   pressedRef: MutableRefObject<PressedAction | null>;
   /** GRT-FR-AMHS: the rail's Restart asks this run's confirmation to open. */
@@ -75,12 +89,13 @@ export function RunActionRow({
   onOpenDraft,
   onRestarted,
   refusal,
+  refusalFailure = null,
   pressedRef,
   openRestart,
   onRestartOpened,
 }: RunActionRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const refusalRef = useRef<HTMLParagraphElement>(null);
+  const refusalRef = useRef<HTMLDivElement & HTMLParagraphElement>(null);
   // GRU-FR-CLFA: the act that waits for the author's confirmation, where it
   // would remove runs queued behind this one.
   const [confirming, setConfirming] = useState<"discard" | "revert" | null>(null);
@@ -172,6 +187,9 @@ export function RunActionRow({
                       "Continued the run.",
                       () => api.continueGraduationRun(run.id),
                       from(action),
+                      undefined,
+                      // GRU-FR-BPNJ: a plan rest states its own refusals.
+                      (raw) => continueRefusalMessage(run, raw),
                     )
                   }
                 >
@@ -243,6 +261,38 @@ export function RunActionRow({
               return null;
           }
         })}
+        {/* GRU-FR-LTWN: a completed propose run opens the change it wrote, on
+            its stream, and an apply run or a rework run opens its change in
+            every state. It only navigates, so it stays enabled. GRU-FR-IKEQ:
+            a rework run opens it with its request thread selected, and a run
+            at rest on a plan rest with its plan thread (GRU-FR-TCSM). */}
+        {run.openspec &&
+          (run.state === "completed" || isChangeRun(run)) &&
+          run.streamId && (
+          <button
+            type="button"
+            className="btn btn--sm btn--default"
+            data-action="open-change"
+            onClick={() =>
+              openOpenSpecChange(
+                { kind: "stream", streamId: run.streamId },
+                run.openspec!.change,
+                {
+                  streamName: run.streamName || undefined,
+                  ...(changeRunPhase(run) === "rework"
+                    ? { thread: run.openspec!.threadId ?? null }
+                    : // GRU-FR-TCSM / GRU-FR-TVDF: a plan rest opens it with
+                      // the plan thread selected (OCW-FR-QSZP).
+                      planThreadOf(run)
+                      ? { thread: planThreadOf(run) }
+                      : {}),
+                },
+              )
+            }
+          >
+            Open change
+          </button>
+        )}
       </div>
       {/* GRU-FR-CLFA: the runs the act removes are named before it is invoked,
           and their drafts are said to return to the active drafts. */}
@@ -295,7 +345,25 @@ export function RunActionRow({
       )}
       {/* GRU-FR-KQPE: beside the row that issued it, where the author is
           looking, rather than at the top of a region they scrolled down. */}
-      {refusal && (
+      {/* GRU-FR-BPNJ / OFN-FR-DPIJ: an OpenSpec refusal in its notice. The
+          row's Continue is its retry, so the notice offers none. */}
+      {refusal && refusalFailure && (
+        <div
+          className="graduation__error graduation__warning"
+          data-testid="graduation-action-refusal"
+          ref={refusalRef}
+        >
+          <OpenSpecFailureNotice
+            failure={refusalFailure}
+            surface="graduation_run_continue"
+            change={run.openspec?.change ?? null}
+            location={run.streamId ? { kind: "stream", streamId: run.streamId } : null}
+            streamName={run.streamName || undefined}
+            frame="The run did not continue."
+          />
+        </div>
+      )}
+      {refusal && !refusalFailure && (
         <p
           className="graduation__error graduation__warning"
           role="alert"

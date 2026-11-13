@@ -78,6 +78,11 @@ where
     let Ok(run) = runs::load_run(app, run_id) else {
         return;
     };
+    // GRD-FR-WJLO: a run with no draft writes to its stream branch alone.
+    if run.is_change_run() {
+        change_runs::prime_stream_write(app, &run.stream_id);
+        return;
+    }
     let pinned = run.direct_target.as_ref();
     let pinned = pinned.map(|target| (target.worktree_path.as_str(), target.branch.as_str()));
     prime_start_write(app, &run.project_key, pinned);

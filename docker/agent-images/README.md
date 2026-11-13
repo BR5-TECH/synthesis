@@ -72,9 +72,9 @@ application's, performed on the host where the whole repository is reachable.
   executor generates are the CLI's own and nothing wraps or rewrites them.
 - **Browser** — Chromium at a pinned Playwright version (AVI-FR-16), at
   `/opt/ms-playwright`. See below.
-- **Toolchains** — Rust, pnpm, the TypeScript compiler, the `task` runner, and
-  `cargo-nextest`, each at a pinned version (AVI-FR-17, AVI-FR-NEGK,
-  AVI-FR-PBVT). See below.
+- **Toolchains** — Rust, pnpm, the TypeScript compiler, the `task` runner,
+  `cargo-nextest`, and the OpenSpec CLI, each at a pinned version (AVI-FR-17,
+  AVI-FR-NEGK, AVI-FR-PBVT, AVI-FR-RZFR). See below.
 
 ### The toolchains
 
@@ -89,6 +89,26 @@ describe an edit, which is the same gap the missing browser was.
 | TypeScript — `tsc` | `ARG TYPESCRIPT_VERSION` | npm global |
 | go-task — `task` (AVI-FR-NEGK) | `ARG TASK_VERSION` | `/usr/local/bin/task` |
 | `cargo-nextest` (AVI-FR-PBVT) | `ARG NEXTEST_VERSION` | `/usr/local/bin/cargo-nextest` |
+| OpenSpec CLI — `openspec` (AVI-FR-RZFR) | `ARG OPENSPEC_VERSION`, the npm package `@fission-ai/openspec` | npm global |
+
+An agent in a project that uses OpenSpec follows instructions that call `openspec`, so both images
+carry it at the same exact version, 1.17.0 today. Both images set `OPENSPEC_TELEMETRY=0`
+(AVI-FR-NFNR), so the CLI sends no telemetry from a container.
+
+### A project's own image and OpenSpec
+
+A project can name an image of its own in place of a shipped one, and there is no fallback to a
+shipped image. For OpenSpec runs (propose, apply, and rework), a project's own image must hold:
+
+- Node 22.12.0 or later.
+- The OpenSpec CLI 1.0 or later, as `openspec` on the `PATH` of the launching user. The launching
+  user is the host user's UID and GID, which has no account in the image, so install the CLI
+  globally (for example `npm install --global @fission-ai/openspec@1.17.0`) and not below a home
+  directory.
+
+Before the first turn of each OpenSpec run, the application runs `openspec --version` in a container
+of the image, with no mount and no network. An image that does not hold a usable CLI stops the run
+before any turn, and the run waits until the image is fixed (AVI-FR-GSSF).
 
 The go-task and `cargo-nextest` release archives are checked against the SHA-256 that the release
 publishes, per architecture, on the same terms as `rustup-init`.
@@ -349,6 +369,8 @@ because that is the only shape in which the remaining claims mean anything:
   store.
 - Each toolchain reports the version its Dockerfile pins, which an `ARG`
   overridden at build time would not.
+- `openspec --version` exits with status zero, with no network, and reports the
+  version the Dockerfile pins (AVI-FR-BTPR).
 - The browser starts and renders a page.
 
 Nothing in it writes only to `/tmp`: `/tmp` is writable by every UID whatever

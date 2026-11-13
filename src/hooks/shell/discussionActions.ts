@@ -33,7 +33,11 @@ import {
   type Tab,
 } from "../../types";
 import { conversationTabId, neverEmpty, fragmentSurfaceFor } from "./tabRecords";
-import { fileColumn, setColumnHidden } from "../../state/discussionColumn";
+import { changeColumn, fileColumn, setColumnHidden } from "../../state/discussionColumn";
+import {
+  openOpenSpecChange,
+  requestChangeDiscussion,
+} from "../../state/openspec/changeRoutes";
 
 export interface DiscussionActionDeps {
   tabsRef: MutableRefObject<Tab[]>;
@@ -168,6 +172,19 @@ export function createDiscussionActions(
     }
     if (target.kind === "draft") {
       openDraft({ id: target.draftId, name: reveal.ownerLabel });
+      return;
+    }
+    // CVP-FR-TFRD: a change owner is shown in its change workspace tab on its
+    // stream. The tab is opened or focused, and selects the discussion. A
+    // fragment discussion selects the file it is about.
+    if (target.kind === "change") {
+      if (reveal.discussionId) {
+        requestChangeDiscussion(discussionTargetKey(target), reveal.discussionId);
+      }
+      setColumnHidden(changeColumn(target.streamId, target.change), false);
+      openOpenSpecChange({ kind: "stream", streamId: target.streamId }, target.change, {
+        file: reveal.fragmentTarget?.path ?? null,
+      });
     }
   };
 

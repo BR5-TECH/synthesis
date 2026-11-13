@@ -10,6 +10,9 @@
 //! graduation run, which is the only durable record of that merge. Everything
 //! after the handoff is the run's: its queue, its passes, its review and its
 //! apply.
+//!
+//! In OpenSpec mode the request first archives, on the stream branch, each
+//! OpenSpec change that the stream built (WKS-FR-PXYH, `OAR-openspec-archive.md`).
 
 use tauri::Manager;
 
@@ -21,6 +24,7 @@ use super::*;
 use crate::graduation::MergeRunRequest;
 use crate::log_fields;
 use crate::logging::{self, Domain};
+use crate::openspec::Refusal;
 
 /// Read one stream of the open project, or the typed refusal.
 ///
@@ -46,17 +50,20 @@ fn stream_of<R: tauri::Runtime>(
 ///
 /// Answers when the check has settled. The check is Git work on the author's
 /// repository, so it runs off the thread that serves the window.
+///
+/// OFP-FR-QLQJ: `change_not_archivable` and `archive_failed` reject as an
+/// `OpenSpecFailure` object; every other refusal is its typed code.
 #[tauri::command]
 pub async fn merge_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     publication: StreamMergePublication,
-) -> Result<StreamMergeResult, String> {
+) -> Result<StreamMergeResult, Refusal> {
     tauri::async_runtime::spawn_blocking(move || {
         merge_work_stream_blocking(&app, &stream_id, publication)
     })
     .await
-    .map_err(|error| format!("the merge check did not finish: {error}"))?
+    .map_err(|error| Refusal::Code(format!("the merge check did not finish: {error}")))?
 }
 
 /// The request itself, on the calling thread.
@@ -64,7 +71,7 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream_id: &str,
     publication: StreamMergePublication,
-) -> Result<StreamMergeResult, String> {
+) -> Result<StreamMergeResult, Refusal> {
     let stream = stream_of(app, stream_id)?;
     // WKS-FR-GKPX: refused while a run of the stream has not ended, a merge run
     // included.
@@ -74,7 +81,8 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
             "work stream merge refused",
             stream_id,
             ERR_STREAM_BUSY.to_string(),
-        ));
+        )
+        .into());
     }
 
     // WKS-FR-WUUH: the main branch write check of the base branch, before
@@ -85,7 +93,7 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
         Some(&stream.base_branch),
         "merge_work_stream",
     )
-    .map_err(|reason| refuse(app, "work stream merge refused", stream_id, reason))?;
+    .map_err(|reason| Refusal::from(refuse(app, "work stream merge refused", stream_id, reason)))?;
 
     // A test stands another request between the check above and the guard below.
     #[cfg(test)]
@@ -97,7 +105,9 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
     let hold = match state.as_ref() {
         Some(state) => match state.begin_repository_update(stream_id, Reconciliation::Merge) {
             Ok(hold) => Some(hold),
-            Err(reason) => return Err(refuse(app, "work stream merge refused", stream_id, reason)),
+            Err(reason) => {
+                return Err(refuse(app, "work stream merge refused", stream_id, reason).into())
+            }
         },
         None => None,
     };
@@ -110,7 +120,8 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
             "work stream merge refused",
             stream_id,
             ERR_STREAM_BUSY.to_string(),
-        ));
+        )
+        .into());
     }
     let progress = MergeProgress::begin(app, &stream.name);
     logging::log_info(
@@ -125,17 +136,19 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
     );
 
     let settled = check(app, &stream, &publication);
-    let result = match settled {
-        Ok(result) => result,
-        Err(reason) => return Err(refuse(app, "work stream merge refused", stream_id, reason)),
-    };
 
     // The guard is released before the queue is offered a dispatch: the claim of
     // a run is refused while a merge or an update of its stream holds the guard
     // (WKS-FR-RQVM), and a run offered a slot under it would wait for the next
-    // change to be offered another.
+    // change to be offered another. OFP-FR-ETEN: the merge notice of a refusal
+    // comes after the release too, because the start of its repair run takes
+    // the graduation write guard, which is not reentrant.
     drop(progress);
     drop(hold);
+    let result = match settled {
+        Ok(result) => result,
+        Err(refusal) => return Err(refuse_merge(app, stream_id, refusal)),
+    };
     announce(app, &stream.project_key);
     if matches!(result, StreamMergeResult::Conflicted { .. }) {
         crate::graduation::advance_stream_queue(app, stream_id);
@@ -143,12 +156,35 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
     Ok(result)
 }
 
+/// WKS-FR-YTJY, OFP-FR-ETEN, OFP-FR-MQGG: a refusal of the merge, with the
+/// merge notice of a content refusal of its archive step on it. The caller
+/// holds no guard.
+fn refuse_merge<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    stream_id: &str,
+    refusal: Refusal,
+) -> Refusal {
+    let refusal = match refusal {
+        Refusal::OpenSpec(mut failure) => {
+            if let Some(change) = failure.change.clone() {
+                crate::openspec_archive::give_merge_notice(app, stream_id, &change, &failure)
+                    .apply_to(&mut failure);
+            }
+            Refusal::OpenSpec(failure)
+        }
+        other => other,
+    };
+    // The record holds the line form, which holds no diagnostic.
+    refuse(app, "work stream merge refused", stream_id, refusal.to_string());
+    refusal
+}
+
 /// The Git half of the request, under the guard.
 fn check<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream: &WorkStream,
     publication: &StreamMergePublication,
-) -> Result<StreamMergeResult, String> {
+) -> Result<StreamMergeResult, Refusal> {
     let buffer = &crate::logging::BUFFER;
     let root = project_root(app)?;
     let main = git::primary_repo(&root)?;
@@ -172,6 +208,17 @@ fn check<R: tauri::Runtime>(
         return Ok(StreamMergeResult::NothingToMerge);
     }
 
+    // WKS-FR-PXYH, OAR-FR-SEQU: the archive step, after the clean check and
+    // after the merge found work to merge, and before the merge is prepared.
+    // A refusal of the step is a refusal of the merge (WKS-FR-YTJY), and an
+    // archive commit stays on the stream on every later outcome (OAR-FR-OQVF).
+    let archived = crate::openspec_archive::archive_stream_changes(app, stream)?;
+    if !archived.is_empty() {
+        // The stream branch holds the archive commits now, so the merge is
+        // prepared from its new tip.
+        prepared = merge::prepare(&main, stream)?;
+    }
+
     if prepared.conflicted_paths.is_empty() {
         let commit = merge::apply(&main, base_repo.as_ref(), stream, &mut prepared, publication)?;
         // WKS-FR-JXPV / GRD-FR-UXXF: the stream's completed draft runs land on
@@ -193,6 +240,7 @@ fn check<R: tauri::Runtime>(
         return Ok(StreamMergeResult::Merged {
             merged_paths: prepared.merged_paths.clone(),
             commit,
+            archived,
         });
     }
 
@@ -200,7 +248,7 @@ fn check<R: tauri::Runtime>(
     // holds the base branch. Where none does, the apply could never land, so the
     // request is refused now and no run is made for it.
     if base_repo.is_none() && matches!(publication, StreamMergePublication::Uncommitted) {
-        return Err(ERR_BASE_NOT_CHECKED_OUT.to_string());
+        return Err(ERR_BASE_NOT_CHECKED_OUT.into());
     }
 
     // WKS-FR-UCMR: a conflict no text turn can reconcile is refused before the
@@ -247,6 +295,7 @@ fn check<R: tauri::Runtime>(
             Ok(StreamMergeResult::Conflicted {
                 run_id: run.id,
                 conflicted_paths: snapshot.unresolved_paths,
+                archived,
             })
         }
         Err(reason) => {
@@ -260,7 +309,7 @@ fn check<R: tauri::Runtime>(
                     log_fields! { "stream_id" => stream.id.clone(), "reason" => release },
                 );
             }
-            Err(reason)
+            Err(reason.into())
         }
     }
 }

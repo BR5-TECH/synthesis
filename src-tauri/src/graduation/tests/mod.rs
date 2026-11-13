@@ -24,7 +24,18 @@ use crate::tools::agent_exec::{
 };
 
 mod activity_stream;
+mod archive_support;
 mod blocking;
+mod change_action_requests;
+mod change_apply;
+mod change_plan_continue;
+mod change_plan_decisions;
+mod change_plan_recovery;
+mod change_plan_sessions;
+mod change_plan_updates;
+mod change_rework;
+mod change_rework_finish;
+mod change_runs;
 mod check_folder;
 mod check_gate_continue;
 mod check_gate_contract;
@@ -54,10 +65,21 @@ mod merge_passes;
 mod merge_prompts;
 mod merge_records;
 mod merge_run;
+mod merge_specs_review;
 mod milestone_prompts;
+mod openspec_archive;
+mod openspec_archive_candidates;
+mod openspec_archive_refusals;
+mod openspec_archive_restore;
+mod openspec_failures;
+mod openspec_image_probe;
+mod openspec_merge_notice;
+mod openspec_merge_notice_starts;
+mod openspec_spec_index;
 mod pr_summary;
 mod pr_summary_turn;
 mod prompts;
+mod propose_run;
 mod review_checkout;
 mod run_progress;
 mod run_summary;
@@ -451,6 +473,38 @@ struct ScriptedDispatch {
     seen: Mutex<Vec<Seen>>,
     /// What the turn dispatched last does once its verdict is durable.
     after_verdict: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// OFP-FR-BZDP: the answers of the image probe, in order. An empty list
+    /// answers an image with OpenSpec 1.17.0.
+    probes: Mutex<std::collections::VecDeque<ProbeAnswer>>,
+    /// How many image probes the loop made.
+    probed: Mutex<usize>,
+}
+
+/// What one image probe answers.
+pub(super) type ProbeAnswer = Result<
+    crate::tools::agent_exec::image_probe::ImageProbeOutcome,
+    crate::tools::agent_exec::AgentExecutionError,
+>;
+
+/// An image probe that exited with `status` and printed `stdout`.
+pub(super) fn probe_answer(status: Option<i32>, stdout: &str) -> ProbeAnswer {
+    probe_ended(crate::tools::agent_exec::runtime::RunEnd::Exited, status, stdout)
+}
+
+/// An image probe that ended by `end` with `status` and printed `stdout`.
+pub(super) fn probe_ended(
+    end: crate::tools::agent_exec::runtime::RunEnd,
+    status: Option<i32>,
+    stdout: &str,
+) -> ProbeAnswer {
+    Ok(crate::tools::agent_exec::image_probe::ImageProbeOutcome::Ran(
+        crate::tools::agent_exec::image_probe::ImageProbe {
+            end,
+            exit_status: status,
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        },
+    ))
 }
 
 impl ScriptedDispatch {
@@ -459,7 +513,19 @@ impl ScriptedDispatch {
             turns: Mutex::new(turns.into_iter().collect()),
             seen: Mutex::new(Vec::new()),
             after_verdict: Mutex::new(None),
+            probes: Mutex::new(std::collections::VecDeque::new()),
+            probed: Mutex::new(0),
         })
+    }
+
+    /// OFP-FR-BZDP: the answers of the next image probes.
+    pub(super) fn script_probes(&self, answers: Vec<ProbeAnswer>) {
+        self.probes.lock().unwrap().extend(answers);
+    }
+
+    /// How many image probes the loop made.
+    pub(super) fn probes_taken(&self) -> usize {
+        *self.probed.lock().unwrap()
     }
 
     fn seen(&self) -> Vec<Seen> {
@@ -539,6 +605,22 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
 }
 
 impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch {
+    fn probe_graduation_image<'a>(
+        &'a self,
+        _app: &'a tauri::AppHandle<Runtime>,
+        _project_key: &'a str,
+        _request: crate::tools::agent_exec::image_probe::ImageProbeRequest,
+    ) -> crate::graduation::driver::seams::ProbeFuture<'a> {
+        *self.probed.lock().unwrap() += 1;
+        let answer = self
+            .probes
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| probe_answer(Some(0), "1.17.0\n"));
+        Box::pin(async move { answer })
+    }
+
     fn review_verdict_recorded(&self) {
         // Taken before it runs: an act can reach the store and this seam again.
         let act = self.after_verdict.lock().unwrap().take();
@@ -658,7 +740,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
             // EAC-FR-25: the executor honours the cancellation token, so a turn
             // stopped while it ran reports that rather than an answer.
             if cancellation.is_cancelled() && !turn.ignores_cancellation {
-                return Ok(execution(ProcessOutcome::Cancelled, None, false));
+                return Ok(execution(ProcessOutcome::Cancelled, None, None));
             }
 
             let mut summary = "scripted".to_string();
@@ -686,7 +768,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 Answer::ResumeUnavailable => {
                     return Ok(AgentExecution {
                         resume_unavailable: true,
-                        ..execution(ProcessOutcome::Terminated, None, false)
+                        ..execution(ProcessOutcome::Terminated, None, None)
                     })
                 }
                 Answer::FromAFreshSession => {
@@ -708,7 +790,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                                 session: None,
                                 metadata: None,
                             }),
-                            false,
+                            None,
                         )
                     })
                 }
@@ -747,6 +829,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     AgentOutcome::EscalationRequired,
                     None,
                     Some(AgentEscalation {
+                        kind: None,
                         reason,
                         questions: questions
                             .into_iter()
@@ -757,10 +840,14 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                             .collect(),
                     }),
                 ),
+                Answer::PlanUpdate(escalation) => {
+                    (AgentOutcome::EscalationRequired, None, Some(escalation))
+                }
                 Answer::Escalate(questions) => (
                     AgentOutcome::EscalationRequired,
                     None,
                     Some(AgentEscalation {
+                        kind: None,
                         reason: "Only the author can settle this.".to_string(),
                         questions: questions
                             .into_iter()
@@ -781,13 +868,13 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     result,
                     failure: reported,
                     escalation,
-                    session: turn.session.then(|| SessionRef {
-                        session_id: Some("s1".to_string()),
-                        continuation_token: None,
-                    }),
+                    session: turn
+                        .session
+                        .clone()
+                        .map(|id| SessionRef { session_id: Some(id), continuation_token: None }),
                     metadata: None,
                 }),
-                turn.session,
+                turn.session.clone(),
             );
             completed.duration_ms = turn.duration_ms;
             Ok(completed)
@@ -818,7 +905,7 @@ fn object_of(value: serde_json::Value) -> Option<serde_json::Map<String, serde_j
 fn execution(
     process_outcome: ProcessOutcome,
     response: Option<AgentResponseEnvelope>,
-    session: bool,
+    session: Option<String>,
 ) -> AgentExecution {
     // A process that was stopped has no exit code, and one that exited with an
     // error has a code other than zero, as the real executor reports them.
@@ -836,8 +923,7 @@ fn execution(
         duration_ms: 0,
         resume_unavailable: false,
         refusal: None,
-        session: session
-            .then(|| SessionRef { session_id: Some("s1".to_string()), continuation_token: None }),
+        session: session.map(|id| SessionRef { session_id: Some(id), continuation_token: None }),
         container_removed: true,
     }
 }

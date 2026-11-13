@@ -57,7 +57,7 @@ fn continue_is_refused_while_the_run_waits_on_its_questions() {
     let refusal = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
         .expect_err("a run that waits on its questions does not continue");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
-    assert!(refusal.starts_with(ERR_RUN_STATE_NOT_PERMITTED), "{refusal}");
+    assert!(refusal.to_string().starts_with(ERR_RUN_STATE_NOT_PERMITTED), "{refusal}");
 
     let stored = fx.reload(&run.id);
     assert_eq!(serde_json::to_value(&stored).expect("the record"), before, "the record stands");

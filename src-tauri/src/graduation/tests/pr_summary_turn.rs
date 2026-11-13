@@ -69,7 +69,10 @@ pub(super) fn commit_on_branch(
 
 /// A fixture with a head branch one commit ahead of `main`, and a PR summary
 /// run for it, enqueued through the command.
-fn summary_run(fx: &Fixture, mode: PrSummaryMode) -> (GraduationRun, git2::Oid, git2::Oid) {
+pub(super) fn summary_run(
+    fx: &Fixture,
+    mode: PrSummaryMode,
+) -> (GraduationRun, git2::Oid, git2::Oid) {
     fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
     let repo = fx.repo();
     let base = repo.head().unwrap().peel_to_commit().unwrap().id();
@@ -96,7 +99,7 @@ fn summary_run(fx: &Fixture, mode: PrSummaryMode) -> (GraduationRun, git2::Oid, 
     (run, tip, base)
 }
 
-fn summary_answer(title: &str, description: &str) -> Turn {
+pub(super) fn summary_answer(title: &str, description: &str) -> Turn {
     Turn::answering(Answer::RawResult(serde_json::json!({
         "title": title,
         "description": description,
@@ -294,7 +297,7 @@ fn a_refused_answer_is_corrected_once_in_its_session() {
         Turn::answering(Answer::Refused(
             crate::tools::agent_exec::protocol::EnvelopeInvalid::Malformed,
         ))
-        .with_session(),
+        .with_session("s1"),
         summary_answer("Add the panel", "Adds it."),
     ]);
 
@@ -315,7 +318,7 @@ fn a_refused_answer_is_corrected_once_in_its_session() {
         Turn::answering(Answer::Refused(
             crate::tools::agent_exec::protocol::EnvelopeInvalid::Malformed,
         ))
-        .with_session()
+        .with_session("s1")
     };
     let done = fx.drive(&run, ScriptedDispatch::new(vec![refused(), refused()]));
     assert_eq!(done.state, GraduationRunState::Failed);
@@ -330,7 +333,7 @@ fn a_paused_turn_rests_the_run_and_continue_starts_the_turn_again() {
     let (run, tip, _) = summary_run(&fx, PrSummaryMode::Diff);
     let app = fx.app.clone();
     let id = run.id.clone();
-    let paused = Turn::answering(Answer::Success).with_session().doing(move || {
+    let paused = Turn::answering(Answer::Success).with_session("s1").doing(move || {
         crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
     });
 
@@ -416,7 +419,7 @@ fn an_unreadable_summary_is_asked_for_again_once_in_its_session() {
             "title": "a\nb",
             "description": "d",
         })))
-        .with_session()
+        .with_session("s1")
     };
     let dispatch =
         ScriptedDispatch::new(vec![two_lines(), summary_answer("Add the panel", "Adds it.")]);
@@ -455,7 +458,7 @@ fn continue_drops_a_correction_the_paused_turn_left() {
     let refused_and_paused = Turn::answering(Answer::Refused(
         crate::tools::agent_exec::protocol::EnvelopeInvalid::Malformed,
     ))
-    .with_session()
+    .with_session("s1")
     .ignoring_cancellation()
     .doing(move || {
         crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");

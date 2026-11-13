@@ -3,7 +3,7 @@
 **Spec code:** `GOB`
 
 ## Intent
-What a graduation run tells the author about itself. A run carries a versioned observability record describing the stage it stands at, the condition it stands there in, how it reached that stage, and what each pass was asked to do and judged. The record is a description of the run rather than a part of it: the state machine of `GRD-graduation.md` is unchanged by everything here, and nothing in this record gates, delays or decides a transition. It exists so a surface can say what a run is doing, and so an author looking back at a run that went round twice can read what the review asked for and what the next turn was told. A merge run (a graduation run that carries `merge` data) is described by the same record: it stands at the same four stages in the same conditions, and only the words a surface shows for its stages differ.
+What a graduation run tells the author about itself. A run carries a versioned observability record describing the stage it stands at, the condition it stands there in, how it reached that stage, and what each pass was asked to do and judged. The record is a description of the run rather than a part of it: the state machine of `GRD-graduation.md` is unchanged by everything here, and nothing in this record gates, delays or decides a transition. It exists so a surface can say what a run is doing, and so an author looking back at a run that went round twice can read what the review asked for and what the next turn was told. A merge run (a graduation run that carries `merge` data) is described by the same record: it stands at the same four stages in the same conditions, and only the words a surface shows for its stages differ. An apply run and a rework run (per `OCR-openspec-change-runs.md`) are described on the same terms, each with words of its own.
 
 ## Functional requirements
 1. **GOB-FR-XMDU** Every run carries a `GraduationObservability` record holding `observability_version`, the current stage, the stage condition, the stage history, and the pass records. `observability_version` is `1`, and a reader that does not recognise a version renders none of it rather than guessing at its shape.
@@ -26,6 +26,8 @@ What a graduation run tells the author about itself. A run carries a versioned o
 17. **GOB-FR-DNHS** A merge run enters `working` when a `merge_work` turn is dispatched and `review` when a `merge_review` turn is dispatched, by the rule of GOB-FR-SJVW. The apply step that follows a `ready` merge review belongs to the `review` stage: the run enters `done` with the reason `finished` only when the apply succeeds. A merge run that rests `blocked` at the apply step stands at `review` with condition `blocked`, and its Continue moves it to `queued` with the reason `blocked_retry` by the rule of GOB-FR-BTXN.
 18. **GOB-FR-VCXQ** A merge run has pass records on the terms of GOB-FR-XYCY, GOB-FR-ABRE and GOB-FR-DKCJ. The `task` of its first pass is the merge statement the run carries as its prompt, and the `task` of a later pass is the review's instruction. Every `revise` verdict of a merge review makes its pass record `failed` with its finding count, whatever the severities of the findings, because the advisory-minor rule of ordinary runs does not apply to a merge review. Pass numbers ascend through the whole life of the run: a Continue after the pass budget is spent starts the next number and does not restart at 1.
 19. **GOB-FR-MZFA** A merge run has no source draft, so this record holds no draft name for it and no statistic of it. The result of an applied merge is not a field of this record: a surface reads it from the `merge.result` of the run, which holds how the merge was published (`uncommitted` or `commit`), the merge commit where one was made, and the project-relative paths the merge changed. Until the apply succeeds the run has no `merge.result`, and the surface shows none.
+20. **GOB-FR-CAXV** The stage words of an apply run and of a rework run are **data of this spec**, in the OpenSpec change run stage labels of the contract surface. A surface selects them by the phase `apply` or `rework` of the run's `openspec` data. The record of such a run has no field or name of its own.
+21. **GOB-FR-TEAY** The finish of a rework run (per `OCR-openspec-change-runs.md` OCR-FR-ZNJT) belongs to the `review` stage: the run enters `done` with the reason `finished` only when the finish records its proposal or its comment. A rework run that rests `blocked` at the finish stands at `review` with condition `blocked`, and its Continue moves it by the rule of GOB-FR-BTXN.
 
 ## Contract surface
 
@@ -64,6 +66,18 @@ done     complete           Merged
 done     stopped            Not merged
 ```
 A stage of a merge run with another condition is shown with the label of its stage and the condition word every run is shown.
+
+### OpenSpec change run stage labels
+A surface shows these words for the stages of a run whose `openspec` data carries the phase `apply` or `rework` (GOB-FR-CAXV). The stage and the condition are those of the record.
+```
+stage    condition          apply label     rework label
+queued   waiting            Queued          Queued
+working  active             Tasks           Reworking
+review   active             Verify          Reviewing
+done     complete           Landed          Proposed
+done     stopped            Not landed      Not proposed
+```
+A stage with another condition is shown with the label of its stage and the condition word every run is shown.
 
 ### Record shapes
 ```

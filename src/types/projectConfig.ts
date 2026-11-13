@@ -5,6 +5,7 @@
 // resolves to the same set and no import site moved.
 
 import type { GraduationConcurrencyLimit } from "./graduation";
+import type { OpenSpecModeSetting } from "./openspec";
 
 // ---------------------------------------------------------------------------
 // Project-public config (PSS-project-settings-storage.md PSS-FR-17)
@@ -59,6 +60,11 @@ export interface ProjectConfig {
    * 345,600,000. `null` is the unset state, which takes the default of 5 hours.
    */
   graduationTotalTimeLimitMs?: number | null;
+  /**
+   * PSS-FR-IMDN: `auto` or `off`; a read always names it, and `auto` while the
+   * project stores none.
+   */
+  openspecMode?: OpenSpecModeSetting;
 }
 
 /**
@@ -89,4 +95,6 @@ export interface ProjectConfigPatch {
   graduationPassBudget?: number | null;
   graduationStageTimeLimitMs?: number | null;
   graduationTotalTimeLimitMs?: number | null;
+  /** PSS-FR-HVUZ: omitted leaves it as stored; `auto` removes the key. */
+  openspecMode?: OpenSpecModeSetting;
 }

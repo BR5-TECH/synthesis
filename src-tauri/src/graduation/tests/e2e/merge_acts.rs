@@ -262,7 +262,8 @@ impl Outcome {
             self.ctx = self.ctx.for_run(run_id, &self.stream_id, &self.worktree);
             self.run = self.fx.reload(run_id);
         }
-        self.merge_answer = Some(answer);
+        self.merge_failure = answer.as_ref().err().and_then(|r| r.openspec().cloned());
+        self.merge_answer = Some(answer.map_err(String::from));
         self
     }
 

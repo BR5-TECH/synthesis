@@ -22,7 +22,7 @@ fn resting(rest: GraduationRest, gate: Option<Cause>) -> GraduationRun {
 
 fn checks_rest(cause: Option<Cause>) -> GraduationRest {
     let mut rest = GraduationRest::checks_not_passed("t0".into(), Cause::ChecksRed, Vec::new());
-    rest.cause = cause;
+    rest.cause = cause.map(Into::into);
     rest
 }
 

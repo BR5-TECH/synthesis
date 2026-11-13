@@ -16,6 +16,7 @@ import type {
   GraduationMergePublication,
   GraduationRun,
 } from "../../types/graduation";
+import { changeRunTitle } from "./openspecRuns";
 
 /** GRD-FR-MRNQ: a run is a merge run when its record carries `merge` data. */
 export function isMergeRun(run: GraduationRun): boolean {
@@ -35,7 +36,11 @@ export function isPullRun(run: GraduationRun): boolean {
  * They are never mixed: neither a merge run nor a PR summary run names a draft.
  */
 export function runTitle(run: GraduationRun): string {
-  return run.prSummary?.name ?? run.merge?.name ?? run.input?.draftName ?? "";
+  // GRU-FR-HABG / OCR-FR-FZVF: an OpenSpec change run's title is
+  // `Apply <change>` or `Rework <change>`, where a draft run names its draft.
+  return (
+    run.prSummary?.name ?? run.merge?.name ?? changeRunTitle(run) ?? run.input?.draftName ?? ""
+  );
 }
 
 /**

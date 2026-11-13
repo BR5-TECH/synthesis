@@ -5,12 +5,16 @@
 // resolves to the same set and no import site moved.
 
 import type { NewDraftProposalReference, NewDraftSubjectReference } from "./newDraftProposals";
+import type { NewChangeProposalReference, NewChangeSubjectReference } from "./newChangeProposals";
 import type { ExportRequestReference } from "./documentExport";
 import { GITHUB_TOKEN_ERRORS } from "./github";
 import type { AdvisorsList, SynthesisMark } from "./groupAttachments";
 
 export type { AdvisorEntry, AdvisorsList, SynthesisMark } from "./groupAttachments";
 export { PROMPT_PROPOSAL_ERRORS } from "./promptProposalErrors";
+import type { ChangeProposalReference, ProposalHunkReference, ProposalUpdateCounts } from "./proposalReferences";
+export type { ChangeProposalReference, ProposalHunkReference, ProposalUpdateCounts } from "./proposalReferences";
+import type { ChangeActionRequestReference } from "./changeRuns";
 
 // --- Comments (CMS-comments-storage.md / CMT-comments.md) -----------------
 
@@ -184,6 +188,8 @@ export type Attachment =
       /** CMS-FR-BSQB: present only on the comment an update appended. */
       update?: ProposalUpdateCounts;
     }
+  /** CMS-FR-QLMV: the edits an agent proposed to an OpenSpec change. */
+  | ChangeProposalReference
   /**
    * CMS-FR-TQVB: a reference to **one change** of a draft change proposal. It
    * marks the comment as being about that change alone, and the opening comment
@@ -194,41 +200,17 @@ export type Attachment =
   /** CMS-FR-YKGI / CMS-FR-KAXQ: the two new-draft references. */
   | NewDraftProposalReference
   | NewDraftSubjectReference
+  /** CMS-FR-QYGP / CMS-FR-MTUL: the two new-change references. */
+  | NewChangeProposalReference
+  | NewChangeSubjectReference
   /** CMS-FR-OKDW: an export an agent asked the author for. */
   | ExportRequestReference
+  /** CMS-FR-QVZP: a run an agent asked the author to start on a change. */
+  | ChangeActionRequestReference
   /** CMS-FR-TUHL: the comment is the Synthesis of an agent group. */
   | SynthesisMark
   /** CMS-FR-KVDV: the advisors of a Meta reply. */
   | AdvisorsList;
-
-/**
- * CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
- * withdrawn. The values are as the update appended them.
- */
-export interface ProposalUpdateCounts {
-  changed: number;
-  added: number;
-  withdrawn: number;
-}
-
-/** CMS-FR-42: the `proposal_hunk` attachment, as stored and as supplied. */
-export interface ProposalHunkReference {
-  kind: "proposalHunk";
-  proposalId: string;
-  hunkId: string;
-  /**
-   * CMS-FR-TQVB: the draft whose proposal holds the change. Exactly one of
-   * `draftId` and `artifactId` is present.
-   */
-  draftId?: string;
-  /**
-   * CMS-FR-TQVB / CMS-FR-AHDQ: the prompt or DOC file whose proposal holds the
-   * change (`PCP-prompt-change-proposals.md`).
-   */
-  artifactId?: string;
-  /** Draft-relative path, or project-relative path for an artifact. */
-  path: string;
-}
 
 /**
  * CMS-FR-43: what the rail supplies on an append.
@@ -248,8 +230,9 @@ export type AttachmentInput =
     }
   /** CMS-FR-43: both append paths take a reference to one change. */
   | ProposalHunkReference
-  /** CMS-FR-KAXQ: and a reference to one new-draft proposal. */
-  | NewDraftSubjectReference;
+  /** CMS-FR-KAXQ / CMS-FR-MTUL: and a reference to one new-draft or new-change proposal. */
+  | NewDraftSubjectReference
+  | NewChangeSubjectReference;
 
 /** CMS-FR-48: what `read_comment_attachment` serves back. */
 export interface AttachmentContent {
@@ -268,12 +251,15 @@ export interface AttachmentContent {
 export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
   if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
+  if (a.kind === "newChangeProposal" || a.kind === "newChangeSubject") return "Proposed change";
   if (a.kind === "exportRequest") return a.path;
+  if (a.kind === "changeActionRequest") return a.change;
   if (a.kind === "synthesis") return "Synthesis";
   if (a.kind === "advisors") return "Advisors";
   if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
     return a.path;
   }
+  if (a.kind === "changeProposal") return a.change;
   return a.label ?? a.url;
 }
 
@@ -284,10 +270,14 @@ export function isImageAttachment(a: Attachment): boolean {
   if (
     a.kind === "proposal" ||
     a.kind === "promptProposal" ||
+    a.kind === "changeProposal" ||
     a.kind === "proposalHunk" ||
     a.kind === "newDraftProposal" ||
     a.kind === "newDraftSubject" ||
+    a.kind === "newChangeProposal" ||
+    a.kind === "newChangeSubject" ||
     a.kind === "exportRequest" ||
+    a.kind === "changeActionRequest" ||
     a.kind === "synthesis" ||
     a.kind === "advisors"
   ) {
@@ -299,8 +289,8 @@ export function isImageAttachment(a: Attachment): boolean {
 /** CMT-FR-48: whether this attachment renders as a control rather than a preview. */
 export function isProposalAttachment(
   a: Attachment,
-): a is Extract<Attachment, { kind: "proposal" | "promptProposal" }> {
-  return a.kind === "proposal" || a.kind === "promptProposal";
+): a is Extract<Attachment, { kind: "proposal" | "promptProposal" | "changeProposal" }> {
+  return a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "changeProposal";
 }
 
 /**
@@ -825,7 +815,13 @@ export type DiscussionTarget =
    * association is the log's existence rather than a field on the note record
    * (CMS-FR-62).
    */
-  | { kind: "note"; noteId: string };
+  | { kind: "note"; noteId: string }
+  /**
+   * CMS-FR-UEXD: one OpenSpec change on one work stream, named by the stream id
+   * and the change name. Its discussions live with the change in the
+   * repository machine store, not in a worktree.
+   */
+  | { kind: "change"; streamId: string; change: string };
 
 /**
  * A stable string for one target, for keying session-lived state and for the
@@ -840,6 +836,9 @@ export function discussionTargetKey(target: DiscussionTarget): string {
       return `artifact:${target.artifactId}`;
     case "note":
       return `note:${target.noteId}`;
+    // CVP-FR-FWOB: a change owner is keyed by its stream and its change name.
+    case "change":
+      return `change:${target.streamId}:${target.change}`;
   }
 }
 
@@ -940,6 +939,10 @@ export const COMMENT_ERRORS = {
   notFragmentTargeted: "not_fragment_targeted",
   /** CMS-FR-62: the `noteId` names no note in the open project. */
   noteNotFound: "note_not_found",
+  /** CMS-FR-FACZ: a change owner's stream is not a live stream of the project. */
+  unknownStream: "unknown_stream",
+  /** CMS-FR-FACZ: the change folder is not in the stream's working copy. */
+  changeNotFound: "change_not_found",
   /**
    * CMS-FR-57: an operation that cannot serve the target it was handed —
    * `open_discussion` on a note, which could open a second discussion on

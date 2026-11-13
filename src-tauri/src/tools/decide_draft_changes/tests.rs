@@ -449,6 +449,7 @@ fn discuss_opens_a_new_hunk_discussion_as_the_agent_and_holds_a_pending_hunk() {
     assert_eq!(
         opening.attachments,
         vec![Attachment::ProposalHunk {
+            change: None,
             proposal_id: f.proposal_id.clone(),
             hunk_id: f.hunk(1).to_string(),
             draft_id: Some(f.draft_id.clone()),

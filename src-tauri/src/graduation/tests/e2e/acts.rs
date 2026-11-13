@@ -246,6 +246,7 @@ impl Outcome {
     pub(crate) fn refusing_continue(self, code: &str) -> Self {
         self.refused("continue", code, |app, run| {
             crate::graduation::continue_graduation_run(app.clone(), run.id.clone())
+                .map_err(String::from)
         })
     }
 

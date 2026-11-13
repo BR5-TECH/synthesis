@@ -223,7 +223,7 @@ fn aap_ts35_a_stored_selection_serves_the_graduation_run_and_never_an_agents_tur
 fn aap_ts31_only_openrouter_routes_through_its_own_client() {
     // AAP-FR-23: a client that fails outright for OpenRouter must leave the
     // other three providers verifying normally. The generic prober here
-    // stands in for the `ureq` path and the failing one for the SDK.
+    // stands in for the generic HTTP path and the failing one for the SDK.
     let generic = FakeProber::returning(&[("gpt-5", "GPT-5")]);
     let openrouter = FakeProber::failing(ProbeError::Unreachable("sdk down".into()));
     let keys = FakeKeychain::new();

@@ -217,24 +217,32 @@ pub struct HttpRelayProbe;
 
 impl RelayProbe for HttpRelayProbe {
     fn health(&self, health_url: &str) -> Result<RelayHealth, String> {
-        let agent: ureq::Agent =
-            crate::tls::ureq_config().timeout_global(Some(VERIFY_TIMEOUT)).build().into();
+        self.health_within(health_url, VERIFY_TIMEOUT)
+    }
+}
 
-        let mut response = match agent.get(health_url).header("User-Agent", "synthesis").call() {
+impl HttpRelayProbe {
+    /// [`RelayProbe::health`] that must end within `limit`, body included.
+    pub(crate) fn health_within(
+        &self,
+        health_url: &str,
+        limit: Duration,
+    ) -> Result<RelayHealth, String> {
+        use crate::http::HttpError;
+        let call = crate::http::Request::get(health_url, limit).header("User-Agent", "synthesis");
+        let response = match call.send() {
             Ok(response) => response,
             // A relay that answers with a status is reachable but is not
             // answering the health contract.
-            Err(ureq::Error::StatusCode(_)) => return Err(ERR_NOT_A_RELAY.to_string()),
-            Err(ureq::Error::Timeout(_)) => return Err(ERR_TIMED_OUT.to_string()),
+            Err(HttpError::Status(_)) => return Err(ERR_NOT_A_RELAY.to_string()),
+            Err(HttpError::Timeout) => return Err(ERR_TIMED_OUT.to_string()),
             // AAP-FR-LRTC: a refused certificate is its own typed error.
-            Err(e) => {
-                return Err(crate::tls::ureq_wire(&e, health_url)
-                    .unwrap_or_else(|| ERR_UNREACHABLE.to_string()))
-            }
+            Err(HttpError::Tls(failure)) => return Err(failure.wire()),
+            Err(_) => return Err(ERR_UNREACHABLE.to_string()),
         };
 
-        let body = response.body_mut().read_to_string().map_err(|_| ERR_UNREACHABLE.to_string())?;
-        parse_health(&body)
+        let body = response.text().map_err(|_| ERR_UNREACHABLE.to_string())?;
+        parse_health(body)
     }
 }
 

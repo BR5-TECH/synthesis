@@ -62,59 +62,49 @@ pub struct HttpGithubVerifier;
 
 impl GithubVerifier for HttpGithubVerifier {
     fn verify(&self, host: &str, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
-        let user_api = format!("{}/user", github_api_base(host));
-        let agent: ureq::Agent = crate::tls::ureq_config()
-            .timeout_global(Some(std::time::Duration::from_secs(15)))
-            .build()
-            .into();
-
-        let response = agent
-            .get(&user_api)
-            .header("Authorization", &format!("Bearer {secret}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
-            // GitHub rejects an API request with no User-Agent outright, which
-            // would otherwise read as "the token is bad".
-            .header("User-Agent", "synthesis")
-            .call();
-
-        let mut response = match response {
-            Ok(r) => r,
-            // A 4xx/5xx arrives here as a status error rather than an `Ok`.
-            Err(ureq::Error::StatusCode(code)) => return Err(verify_failure_for_status(code)),
-            Err(e) => {
-                return Err(match crate::tls::ureq_failure(&e, &user_api) {
-                    Some(failure) => VerifyError::TlsUntrusted(failure),
-                    None => VerifyError::Unreachable(e.to_string()),
-                })
-            }
-        };
-
-        // The granted scopes ride on a response header. A fine-grained token
-        // carries no such header at all, which is an empty scope list rather
-        // than a failure.
-        let scopes = response
-            .headers()
-            .get("x-oauth-scopes")
-            .and_then(|v| v.to_str().ok())
-            .map(parse_scopes)
-            .unwrap_or_default();
-
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| VerifyError::Unreachable(e.to_string()))?;
-        let account = account_from_user_payload(&body).ok_or_else(|| {
-            VerifyError::Unreachable("GitHub returned an unrecognised response".into())
-        })?;
-
-        Ok(VerifiedIdentity {
-            login: account.login,
-            display_name: account.display_name,
-            email: account.email,
-            scopes,
-        })
+        verify_at(&format!("{}/user", github_api_base(host)), secret)
     }
+}
+
+/// One `GET user_api` with `secret`. [`HttpGithubVerifier`] gives the address
+/// of the host; a test gives the address of a local server.
+pub(crate) fn verify_at(user_api: &str, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
+    let response = crate::http::Request::get(user_api, std::time::Duration::from_secs(15))
+        .bearer(secret)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION)
+        // GitHub rejects an API request with no User-Agent outright, which
+        // would otherwise read as "the token is bad".
+        .header("User-Agent", "synthesis")
+        .send();
+
+    let response = match response {
+        Ok(r) => r,
+        // AAP-FR-UXUI: a 4xx/5xx arrives here as a status error rather than
+        // an `Ok`.
+        Err(crate::http::HttpError::Status(code)) => return Err(verify_failure_for_status(code)),
+        Err(crate::http::HttpError::Tls(failure)) => {
+            return Err(VerifyError::TlsUntrusted(failure))
+        }
+        Err(e) => return Err(VerifyError::Unreachable(e.to_string())),
+    };
+
+    // The granted scopes ride on a response header. A fine-grained token
+    // carries no such header at all, which is an empty scope list rather
+    // than a failure.
+    let scopes = response.header("x-oauth-scopes").map(parse_scopes).unwrap_or_default();
+
+    let body = response.text().map_err(|e| VerifyError::Unreachable(e.to_string()))?;
+    let account = account_from_user_payload(body).ok_or_else(|| {
+        VerifyError::Unreachable("GitHub returned an unrecognised response".into())
+    })?;
+
+    Ok(VerifiedIdentity {
+        login: account.login,
+        display_name: account.display_name,
+        email: account.email,
+        scopes,
+    })
 }
 
 /// GTS-FR-04: which HTTP statuses mean "GitHub refused this token" and which

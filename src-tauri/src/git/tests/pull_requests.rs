@@ -637,10 +637,10 @@ fn the_production_client_reads_only_api_github_com_and_maps_statuses_to_fixed_fa
         HttpGithubPullRequests.get_json(SECRET, "@evil.example/x").unwrap_err(),
         GithubFailure::Unreachable
     );
-    assert_eq!(classify(&ureq::Error::StatusCode(401)), GithubFailure::Rejected);
-    assert_eq!(classify(&ureq::Error::StatusCode(403)), GithubFailure::Rejected);
-    assert_eq!(classify(&ureq::Error::StatusCode(404)), GithubFailure::NotFound);
-    assert_eq!(classify(&ureq::Error::StatusCode(500)), GithubFailure::Unreachable);
+    assert_eq!(classify(&crate::http::HttpError::Status(401)), GithubFailure::Rejected);
+    assert_eq!(classify(&crate::http::HttpError::Status(403)), GithubFailure::Rejected);
+    assert_eq!(classify(&crate::http::HttpError::Status(404)), GithubFailure::NotFound);
+    assert_eq!(classify(&crate::http::HttpError::Status(500)), GithubFailure::Unreachable);
 }
 
 // GTC-FR-DWVY, GTC-FR-11, GTC-FR-09

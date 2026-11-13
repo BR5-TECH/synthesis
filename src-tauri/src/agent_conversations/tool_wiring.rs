@@ -71,7 +71,7 @@ where
 ///
 /// The message names what a model can act on and carries no Rust type name, no
 /// crate name, and nothing it sent (TLC-FR-09).
-pub(super) fn undecodable_arguments() -> rig::tool::ToolExecutionError {
+pub(crate) fn undecodable_arguments() -> rig::tool::ToolExecutionError {
     rig::tool::ToolExecutionError::new(
         rig::tool::ToolErrorKind::InvalidArgs,
         "The arguments for that tool were not in the shape it expects. Check the tool's parameters and call it again.",

@@ -1,0 +1,128 @@
+/* MSS-FR-XALV through MSS-FR-MMLA: the MCP servers section of Project settings.
+   One card for each server, with the status chip at the end of its head line,
+   and the failure line and the test result directly under their row. */
+.mcp-servers { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 680px; }
+.mcp-servers__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.mcp-servers__add { display: flex; justify-content: flex-end; }
+/* MSS-FR-POYD: the team group and the personal group, each with a heading
+   and one sentence over its cards. */
+.mcp-servers__group { display: flex; flex-direction: column; gap: var(--sp-2); }
+.mcp-servers__group + .mcp-servers__group { margin-top: var(--sp-3); }
+.mcp-servers__group-title { margin: 0; font-size: var(--fs-ui-md); font-weight: 600; color: var(--fg-1); }
+.mcp-servers__group-title + p { margin: 0 0 var(--sp-1); }
+.mcp-servers__load-error { display: flex; align-items: center; gap: var(--sp-3); color: var(--danger); }
+
+.mcp-server {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-panel);
+}
+.mcp-server__head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.mcp-server__name { font-size: var(--fs-ui-md); font-weight: 600; color: var(--fg-1); }
+.mcp-server__id { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+/* The chip goes to the end of the line, where the eye reads a status. */
+.mcp-server__chip { margin-left: auto; }
+/* MSS-FR-SAKG: the scope badge reads quieter than the transport badge. */
+.mcp-server__scope { color: var(--fg-3); }
+.mcp-server__dot { width: 6px; height: 6px; border-radius: var(--r-full); background: currentColor; flex: none; }
+.mcp-server__note { margin: 0; font-size: var(--fs-ui-xs); color: var(--fg-2); }
+.mcp-server__note--danger { color: var(--danger); }
+.mcp-server__actions { display: flex; align-items: center; gap: var(--sp-1-5); flex-wrap: wrap; }
+.mcp-server__switch { display: inline-flex; align-items: center; gap: var(--sp-1-5); margin-right: var(--sp-2); }
+.mcp-server__test {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+}
+.mcp-server__test p { margin: 0; }
+.mcp-server__test--failed { color: var(--danger); }
+/* MSS-FR-VWKQ: the text of a failed test reads in the colour of the failure,
+   as the failure line under the row does. */
+.mcp-server__test--failed .t-ui-xs { color: inherit; }
+/* MSS-FR-DVDX: a fixed ID reads as text, not as a field to type in. */
+.mcp-dialog .input[readonly] {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+}
+/* The row takes focus after an action removed the control that had it. */
+.mcp-server:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* MSS-FR-VWKQ: the standard error lines of a failed test, in a monospace
+   block that scrolls rather than pushes the next row away. */
+.mcp-server__stderr {
+  margin: var(--sp-2) 0 0;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mcp-server__tools { display: flex; flex-direction: column; gap: var(--sp-1); }
+.mcp-server__disclosure {
+  align-self: flex-start;
+  border: 0; background: none; padding: 0;
+  font: inherit; font-size: var(--fs-ui-sm); color: var(--fg-2);
+  cursor: pointer;
+}
+.mcp-server__disclosure:hover { color: var(--fg-1); }
+.mcp-server__tool-list { list-style: none; margin: 0; padding: 0 0 0 var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-1); }
+.mcp-tool { display: flex; align-items: center; gap: var(--sp-3); }
+.mcp-tool__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.mcp-tool__name { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-1); }
+.mcp-tool__description { font-size: var(--fs-ui-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* MSS layout notes: the dialog uses the wide modal layout and scrolls its body
+   when it is taller than the window. `.modal.modal--wide` is the bounded flex
+   column; this narrows it to a form width. */
+.modal.mcp-dialog { max-width: 720px; }
+.mcp-dialog__field { display: grid; grid-template-columns: 130px 1fr; gap: var(--sp-3); align-items: start; margin-bottom: var(--sp-3); }
+.mcp-dialog__label { padding-top: 6px; font-size: var(--fs-ui-sm); color: var(--fg-2); }
+.mcp-dialog__control { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.mcp-dialog__hint { margin: 0; }
+.mcp-dialog__problem { margin: 0; font-size: var(--fs-ui-xs); color: var(--danger); }
+.mcp-dialog__top { margin-bottom: var(--sp-3); }
+.mcp-dialog__args { resize: vertical; }
+.mcp-dialog__port { width: 120px; }
+.mcp-dialog__choice { border: 0; padding: 0; margin: 0 0 var(--sp-3); }
+/* A legend takes no grid cell, so it floats where the labels of the other
+   fields stand, and the choices take the rest of the line. */
+.mcp-dialog__choice > legend { float: left; width: 130px; margin-right: var(--sp-3); padding: 6px 0 0; }
+.mcp-dialog__radios { display: flex; flex-wrap: wrap; gap: var(--sp-4); padding-top: 6px; min-height: 28px; }
+/* MSS-FR-SCDK: three long choices read best one under the other. */
+.mcp-dialog__radios--column { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: var(--sp-1-5); }
+/* The scope of an edit stands on the line of its label. */
+.mcp-dialog__value { padding-top: 6px; }
+/* MSS-FR-ENMX: the check box stands under the values, not under the labels. */
+.mcp-dialog__check {
+  display: flex; align-items: center; gap: var(--sp-1-5);
+  margin: 0 0 var(--sp-3) calc(130px + var(--sp-3));
+}
+.mcp-dialog__radio { display: inline-flex; align-items: center; gap: var(--sp-1-5); font-size: var(--fs-ui-sm); }
+.mcp-dialog__secret { display: flex; flex-direction: column; gap: var(--sp-1); }
+.mcp-dialog__secret-state { color: var(--fg-3); }
+.mcp-dialog__link {
+  border: 0; background: none; padding: 0;
+  font: inherit; color: var(--accent); cursor: pointer;
+  text-decoration: underline;
+}
+.mcp-dialog__list { border: 0; padding: 0; margin: var(--sp-4) 0 var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.mcp-dialog__list-item { display: flex; flex-direction: column; gap: var(--sp-1); }
+.mcp-dialog__list-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto; gap: var(--sp-2); align-items: center; }
+.mcp-dialog__secret-check { display: inline-flex; align-items: center; gap: var(--sp-1); }
+
+/* MSS-FR-VJPZ: the command of the trust dialog, on one line that wraps. */
+.mcp-trust__facts { display: flex; flex-direction: column; gap: var(--sp-1); margin: var(--sp-2) 0 var(--sp-3) var(--sp-4); }
+.mcp-trust__command {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mcp-trust__facts p { margin: 0; }

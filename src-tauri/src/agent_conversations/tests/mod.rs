@@ -702,6 +702,7 @@ mod durable_record;
 mod export_request_turns;
 mod images;
 mod invalid_arguments;
+mod mcp_tools;
 mod model_downgrades;
 mod new_change_turns;
 mod new_draft_turns;

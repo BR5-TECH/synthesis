@@ -25,13 +25,23 @@ import type { ActiveToolCall, AgentTurn } from "../types";
 export const THINKING = "Thinking…";
 
 /**
- * CTA-FR-VSIM / TLC-FR-27: a call whose tool this vocabulary does not name.
+ * CTA-FR-VSIM / TLC-FR-27: a call whose tool this vocabulary does not name,
+ * and that is not an MCP tool (CTA-FR-NIHS).
  *
  * Never empty and never the tool's own name: a tool this surface has not been
  * taught still reads as work in progress, and an author is never shown an
  * identifier out of the model's mouth.
  */
 export const WORKING = "Working…";
+
+/**
+ * CTA-FR-NIHS / MCT-FR-TZMA: a call of a tool that an MCP server of the project
+ * offers. Its tool name starts with {@link MCP_TOOL_PREFIX}.
+ */
+export const USING_MCP_TOOL = "Using an MCP tool…";
+
+/** MCT-FR-TZMA: the prefix of the tool name of every MCP tool. */
+export const MCP_TOOL_PREFIX = "mcp__";
 
 /** CTA-FR-HPXE: a turn bound to a speech that is still open. */
 export const WAITING_FOR_SPEECH = "Waiting for you to finish speaking…";
@@ -72,7 +82,12 @@ export const TOOL_ACTIVITY_STATUS: Readonly<Record<string, string>> = {
  * rendered (CVP-FR-32).
  */
 export function toolActivityStatus(tool: string): string {
-  return TOOL_ACTIVITY_STATUS[tool] ?? WORKING;
+  const named = TOOL_ACTIVITY_STATUS[tool];
+  if (named) return named;
+  // CTA-FR-NIHS: every tool of an MCP server reads one fixed line. The server
+  // and the tool show in the tool list alone, never in the status (CTA-FR-VRJU).
+  if (tool.startsWith(MCP_TOOL_PREFIX)) return USING_MCP_TOOL;
+  return WORKING;
 }
 
 /**

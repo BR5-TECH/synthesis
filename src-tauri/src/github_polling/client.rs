@@ -1,8 +1,8 @@
 //! The GitHub Projects client (GPP-FR-WOIM, GPP-FR-WYRP, GPP-FR-DEZO,
 //! GPP-FR-XSKT, GPP-FR-IFVC, GPP-FR-ILGG).
 //!
-//! Direct HTTPS against GitHub's GraphQL API through `ureq`, the client the
-//! rest of the application already uses. The trait is what makes the polling
+//! Direct HTTPS against GitHub's GraphQL API through `crate::http`, the one
+//! HTTP path of the application (AAP-FR-DTJA). The trait is what makes the polling
 //! and claim flows testable without a network: the production implementation
 //! is the only thing in this module that opens a socket. Every method takes the
 //! secret rather than holding it, so no implementation retains a credential.
@@ -186,37 +186,37 @@ impl HttpGithubProjects {
     pub fn for_graphql_host(host: &str) -> Self {
         Self { url: crate::github_tokens::github_graphql_url(host) }
     }
-}
 
-fn agent() -> ureq::Agent {
-    crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
+    /// The client for the GraphQL address `url`, so a test can answer it from
+    /// a local server.
+    #[cfg(test)]
+    pub(crate) fn at(url: &str) -> Self {
+        Self { url: url.to_string() }
+    }
 }
 
 /// One GraphQL request. GPP-FR-WKZF: a transport error never reaches a caller
-/// verbatim, because `ureq`'s own message can echo the request it made.
+/// verbatim, because the client's own message can echo the request it made.
 fn graphql(url: &str, secret: &str, query: &str, variables: Value) -> Result<Value, String> {
     let payload = json!({ "query": query, "variables": variables });
-    let response = agent()
-        .post(url)
-        .header("Authorization", &format!("Bearer {secret}"))
+    let response = crate::http::Request::post(url, TIMEOUT)
+        .bearer(secret)
         .header("Accept", "application/vnd.github+json")
         .header("Content-Type", "application/json")
         .header("User-Agent", "synthesis")
         // GPP-FR-BOQX: the issue type field sits behind this feature flag on
         // some GitHub deployments; it is harmless where it is not needed.
         .header("GraphQL-Features", "issue_types")
-        .send(payload.to_string());
-    let mut response = match response {
+        .json(&payload)
+        .send();
+    let response = match response {
         Ok(response) => response,
-        Err(ureq::Error::StatusCode(_)) => return Err(ERR_REQUEST_FAILED.to_string()),
+        Err(crate::http::HttpError::Status(_)) => return Err(ERR_REQUEST_FAILED.to_string()),
         // AAP-FR-LRTC: a refused certificate is its own typed error.
-        Err(e) => {
-            return Err(crate::tls::ureq_wire(&e, url)
-                .unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string()))
-        }
+        Err(e) => return Err(e.tls_wire().unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())),
     };
-    let body = response.body_mut().read_to_string().map_err(|_| ERR_GITHUB_UNREACHABLE)?;
-    serde_json::from_str(&body).map_err(|_| ERR_REQUEST_FAILED.to_string())
+    let body = response.text().map_err(|_| ERR_GITHUB_UNREACHABLE)?;
+    serde_json::from_str(body).map_err(|_| ERR_REQUEST_FAILED.to_string())
 }
 
 /// The `type` of every GraphQL error a response carries.

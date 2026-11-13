@@ -751,39 +751,41 @@ pub struct HttpEndpointProber;
 
 impl EndpointProber for HttpEndpointProber {
     fn probe(&self, request: &ProbeRequest<'_>) -> Result<Vec<ModelOption>, ProbeError> {
-        let config = crate::tls::ureq_config().timeout_global(Some(PROBE_TIMEOUT));
-        let agent: ureq::Agent = config.build().into();
+        self.probe_within(request, PROBE_TIMEOUT)
+    }
+}
 
+impl HttpEndpointProber {
+    /// [`EndpointProber::probe`] that must end within `limit`, body included.
+    pub(crate) fn probe_within(
+        &self,
+        request: &ProbeRequest<'_>,
+        limit: Duration,
+    ) -> Result<Vec<ModelOption>, ProbeError> {
+        use crate::http::HttpError;
         let url = format!("{}{}", request.base_url, request.models_path);
-        let mut call = agent.get(&url).header("User-Agent", "synthesis");
+        let mut call = crate::http::Request::get(&url, limit).header("User-Agent", "synthesis");
         if let Some(key) = request.api_key.filter(|k| !k.is_empty()) {
             call = match request.auth {
-                AuthStyle::Bearer => call.header("Authorization", &format!("Bearer {key}")),
+                AuthStyle::Bearer => call.bearer(key),
                 AuthStyle::AnthropicApiKey => {
-                    call.header("x-api-key", key).header("anthropic-version", "2023-06-01")
+                    call.credential("x-api-key", key).header("anthropic-version", "2023-06-01")
                 }
             };
         }
 
-        let mut response = match call.call() {
+        let response = match call.send() {
             Ok(r) => r,
-            Err(ureq::Error::StatusCode(code)) => return Err(probe_failure_for_status(code)),
-            Err(ureq::Error::Timeout(_)) => return Err(ProbeError::TimedOut),
-            Err(e) => {
-                return Err(match crate::tls::ureq_failure(&e, &url) {
-                    Some(failure) => ProbeError::TlsUntrusted(failure),
-                    None => ProbeError::Unreachable(e.to_string()),
-                })
-            }
+            Err(HttpError::Status(code)) => return Err(probe_failure_for_status(code)),
+            Err(HttpError::Timeout) => return Err(ProbeError::TimedOut),
+            Err(HttpError::Tls(failure)) => return Err(ProbeError::TlsUntrusted(failure)),
+            Err(e) => return Err(ProbeError::Unreachable(e.to_string())),
         };
 
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| ProbeError::Unreachable(e.to_string()))?;
+        let body = response.text().map_err(|e| ProbeError::Unreachable(e.to_string()))?;
         match request.models_format {
-            ModelsFormat::Lenient => parse_models_payload(&body),
-            ModelsFormat::Gateway => parse_gateway_models_payload(&body),
+            ModelsFormat::Lenient => parse_models_payload(body),
+            ModelsFormat::Gateway => parse_gateway_models_payload(body),
         }
         .ok_or(ProbeError::NotExpectedKind)
     }

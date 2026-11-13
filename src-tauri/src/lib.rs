@@ -48,10 +48,12 @@ pub mod github_publication;
 pub mod github_tokens;
 pub mod global_settings;
 pub mod graduation;
+pub mod http;
 pub mod isolation;
 pub mod layout;
 pub mod library;
 pub mod logging;
+pub mod mcp;
 pub mod menu;
 pub mod model_downgrades;
 pub mod new_change_proposals;
@@ -227,6 +229,8 @@ pub fn run() {
         .manage(documents::DocumentsWatcher::default())
         // SCC-FR-12: the at-most-one running search.
         .manage(search::SearchRegistry::default())
+        // MCS-FR-RXZG: the live connections of the project's MCP servers.
+        .manage(mcp::McpManager::default())
         // SNV-FR-28 / SNV-FR-30: handles on the Save / Save All items, whose
         // enabled state the frontend drives for the life of the application.
         .manage(menu::SaveMenuItems::<tauri::Wry>::default())
@@ -265,6 +269,8 @@ pub fn run() {
             // every start, off this thread, and the first outbound call waits
             // for the result.
             tls::load_at_start(app.handle());
+            // MCS-FR-NOKX, MCS-FR-KEEF: MCP status changes reach the window and the log.
+            mcp::install(app.handle());
             // EMB-FR-VXIS: read the embeddings settings. The model loads, and
             // downloads, only when the Global switch is on.
             embeddings::on_app_started(app.handle());
@@ -715,6 +721,18 @@ pub fn run() {
             embeddings::start_reindex,
             model_downgrades::load_model_downgrade_suppressions,
             model_downgrades::save_model_downgrade_suppression,
+            mcp::commands::list_mcp_servers,
+            mcp::commands::save_mcp_server,
+            mcp::commands::remove_mcp_server,
+            mcp::commands::set_mcp_server_secret,
+            mcp::commands::clear_mcp_server_secret,
+            mcp::commands::trust_mcp_server,
+            mcp::commands::test_mcp_server,
+            mcp::commands::reconnect_mcp_server,
+            mcp::commands::start_mcp_sign_in,
+            mcp::commands::cancel_mcp_sign_in,
+            mcp::commands::sign_out_mcp_server,
+            mcp::commands::set_mcp_server_enabled,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -741,6 +759,8 @@ pub fn run() {
                 notifications::withdraw_all_on_exit(app);
                 // VOP non-functional: application exit ends a VAD session.
                 let _ = app.state::<voice_ai::VoiceAi>().end_activity();
+                // MCS-FR-QTSW: every MCP session ends, and every stdio server stops.
+                mcp::on_exit(app);
             }
         });
 }

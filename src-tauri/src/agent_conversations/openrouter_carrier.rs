@@ -136,8 +136,8 @@ pub(super) async fn carry_openrouter(
 ) -> Result<ModelReply, CallFailure> {
     // AAP-FR-WMCX: the SDK is given the shared HTTP client, so it keeps no trust
     // setup of its own.
-    let (http_client, tls_record) = crate::tls::openrouter_http_client()
-        .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
+    let (http_client, tls_record) =
+        crate::tls::rig_http_client().map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let client = openrouter_rs::OpenRouterClient::builder()
         .base_url(endpoint.base_url.clone())
         .api_key(endpoint.api_key.clone().unwrap_or_default())
@@ -153,7 +153,8 @@ pub(super) async fn carry_openrouter(
     // one would make two records nobody can tell apart.
     let round = built.messages().len();
     let response = client
-        .send_chat_completion(&built)
+        .chat()
+        .create(&built)
         .await
         .map_err(|e| with_recorded_tls(openrouter_failure(&e), &tls_record))?;
     Ok(reply_from_openrouter(&response, endpoint.model_id.as_deref().unwrap_or_default(), round))

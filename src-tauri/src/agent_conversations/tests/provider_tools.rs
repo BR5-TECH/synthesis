@@ -531,6 +531,7 @@ fn a_structured_provider_refusal_keeps_the_code_the_id_and_the_reason() {
             request_id: Some("req_abc123".to_string()),
             metadata: None,
             kind: ApiErrorKind::Generic,
+            retry_after: None,
         }))
     };
 

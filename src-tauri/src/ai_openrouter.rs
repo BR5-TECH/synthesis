@@ -2,7 +2,7 @@
 //! AAP-FR-23 / FR-24 / FR-25 / FR-26.
 //!
 //! OpenRouter is the one provider reached through an SDK rather than through the
-//! generic `ureq` prober of `ai_shared`. That is not a stylistic choice: it is
+//! generic HTTP prober of `ai_shared`. That is not a stylistic choice: it is
 //! the only provider whose model listing reports, per model, *what reasoning
 //! that model can be asked for*, and the SDK is what keeps this module from
 //! re-deriving that descriptor by hand from a payload whose shape is the
@@ -12,8 +12,9 @@
 //!
 //! - **The blast radius of the dependency stops here** (AAP-FR-23). Only
 //!   `openrouter` routes through it; Anthropic, OpenAI, and Custom keep the
-//!   `ureq` path, so an SDK that breaks cannot cost the application its ability
-//!   to reach the other three.
+//!   generic prober, so an SDK that breaks cannot cost the application its
+//!   ability to reach the other three. The SDK sends through the one shared
+//!   `reqwest` client (AAP-FR-DTJA).
 //! - **The async runtime is confined to one owned thread.** The SDK is async and
 //!   every call path in `ai_api` is synchronous. Rather than colour the whole
 //!   module async, each probe runs a current-thread runtime on a thread this
@@ -135,17 +136,16 @@ impl EndpointProber for OpenRouterProber {
                 // AAP-FR-WMCX: the SDK's own free functions build a client with
                 // the default trust setup, so the client is built here from the
                 // shared roots and handed over.
-                let (http_client, tls_record) =
-                    crate::tls::openrouter_http_client().map_err(|_| {
-                        ProbeError::Unreachable("the HTTP client could not be built".into())
-                    })?;
+                let (http_client, tls_record) = crate::tls::rig_http_client().map_err(|_| {
+                    ProbeError::Unreachable("the HTTP client could not be built".into())
+                })?;
                 let client = openrouter_rs::OpenRouterClient::builder()
                     .base_url(base_url.clone())
                     .api_key(api_key.clone())
                     .http_client(http_client)
                     .build()
                     .map_err(|e| ProbeError::Unreachable(e.to_string()))?;
-                runtime.block_on(async {
+                let result = runtime.block_on(async {
                     // The SDK applies no deadline of its own, so the same bound
                     // every other probe honours is imposed here. Without it an
                     // endpoint that never answers would hold the settings
@@ -164,7 +164,11 @@ impl EndpointProber for OpenRouterProber {
                         }),
                         Ok(Ok(models)) => Ok(models.iter().map(model_option).collect()),
                     }
-                })
+                });
+                // A name lookup that hangs is left behind, so the probe ends at
+                // its timeout.
+                runtime.shutdown_background();
+                result
             });
             match handle.join() {
                 Ok(result) => result,
@@ -339,6 +343,7 @@ mod tests {
                 request_id: None,
                 metadata: None,
                 kind: ApiErrorKind::Generic,
+                retry_after: None,
             }))
         };
 

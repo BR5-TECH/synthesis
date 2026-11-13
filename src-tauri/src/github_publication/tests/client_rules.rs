@@ -130,11 +130,11 @@ fn a_candidate_is_accepted_only_where_its_body_holds_the_marker_exactly() {
 /// made and is the one place a credential could surface.
 #[test]
 fn a_transport_failure_becomes_a_typed_code_and_never_a_message() {
-    assert_eq!(transport_code(&ureq::Error::StatusCode(401)), ERR_ISSUES_CREATE_FORBIDDEN);
-    assert_eq!(transport_code(&ureq::Error::StatusCode(403)), ERR_ISSUES_CREATE_FORBIDDEN);
-    assert_eq!(transport_code(&ureq::Error::StatusCode(404)), ERR_ISSUES_INACCESSIBLE);
-    assert_eq!(transport_code(&ureq::Error::StatusCode(500)), ERR_GITHUB_UNREACHABLE);
-    assert_eq!(transport_code(&ureq::Error::TooManyRedirects), ERR_GITHUB_UNREACHABLE);
+    assert_eq!(transport_code(&crate::http::HttpError::Status(401)), ERR_ISSUES_CREATE_FORBIDDEN);
+    assert_eq!(transport_code(&crate::http::HttpError::Status(403)), ERR_ISSUES_CREATE_FORBIDDEN);
+    assert_eq!(transport_code(&crate::http::HttpError::Status(404)), ERR_ISSUES_INACCESSIBLE);
+    assert_eq!(transport_code(&crate::http::HttpError::Status(500)), ERR_GITHUB_UNREACHABLE);
+    assert_eq!(transport_code(&crate::http::HttpError::Redirect), ERR_GITHUB_UNREACHABLE);
 }
 
 /// The search query is escaped, so a marker and a repository address reach

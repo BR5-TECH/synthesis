@@ -44,6 +44,8 @@ pub use host::{
     github_web_base, is_stacks_path, normalize_host, token_creation_url, DEFAULT_HOST,
     ERR_HOST_MISMATCH, ERR_INVALID_HOST, GITHUB_API_VERSION, GITHUB_STACKS_API_VERSION,
 };
+#[cfg(test)]
+pub(crate) use verifier::verify_at;
 pub use verifier::{
     account_from_user_payload, login_from_user_payload, parse_scopes, verify_failure_for_status,
     GithubIdentity, GithubVerifier, HttpGithubVerifier, VerifiedIdentity, VerifyError,

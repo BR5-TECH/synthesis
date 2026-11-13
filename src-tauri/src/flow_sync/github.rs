@@ -7,7 +7,8 @@
 //! closes, reopens, or deletes an issue or a milestone.
 //!
 //! Every error is a fixed code. A transport error never reaches a caller as
-//! text, because `ureq`'s message can echo the request it made (GHP-FR-DHXK).
+//! text, because the client's message can echo the request it made
+//! (GHP-FR-DHXK).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -82,17 +83,24 @@ impl GithubAdapter {
         self.remember(number, id);
     }
 
-    /// The HTTP agent of one request. `ureq` reads a proxy from
-    /// `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` by default; a direct
-    /// adapter uses no proxy.
-    pub(super) fn agent(&self) -> ureq::Agent {
-        let config = crate::tls::ureq_config().timeout_global(Some(TIMEOUT));
-        let config = if self.direct { config.proxy(None) } else { config };
-        config.build().into()
+    /// One request to `url`, with the credential of the adapter. A request
+    /// uses the proxy that the system names; a direct adapter uses no proxy
+    /// (AAP-FR-JGYD).
+    pub(super) fn request(&self, method: &str, url: &str) -> crate::http::Request {
+        let call = match method {
+            "GET" => crate::http::Request::get(url, TIMEOUT),
+            "DELETE" => crate::http::Request::delete(url, TIMEOUT),
+            "PATCH" => crate::http::Request::patch(url, TIMEOUT),
+            _ => crate::http::Request::post(url, TIMEOUT),
+        };
+        call.bearer(&self.secret)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "synthesis")
+            .direct(self.direct)
     }
 
-    fn fail(&self, error: &ureq::Error, url: &str) -> String {
-        crate::tls::ureq_wire(error, url).unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
+    fn fail(&self, error: &crate::http::HttpError) -> String {
+        error.tls_wire().unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
     }
 
     /// The `repository` of a query whose variables are the bound repository.
@@ -108,19 +116,15 @@ impl GithubAdapter {
     fn graphql_data(&self, query: &str, variables: Value) -> Result<Value, String> {
         let payload = json!({ "query": query, "variables": variables });
         let response = self
-            .agent()
-            .post(&self.graphql)
-            .header("Authorization", &format!("Bearer {}", self.secret))
-            .header("Accept", "application/vnd.github+json")
+            .request("POST", &self.graphql)
             .header("Content-Type", "application/json")
-            .header("User-Agent", "synthesis")
             .header("GraphQL-Features", "issue_types,sub_issues")
-            .send(payload.to_string());
-        let mut response = response.map_err(|e| self.fail(&e, &self.graphql))?;
-        let body =
-            response.body_mut().read_to_string().map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?;
+            .json(&payload)
+            .send()
+            .map_err(|e| self.fail(&e))?;
+        let body = response.text().map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?;
         let value: Value =
-            serde_json::from_str(&body).map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?;
+            serde_json::from_str(body).map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?;
         // A number that names no item answers `null` with a NOT_FOUND error.
         // Every other error means the read could not answer.
         let errors = value.get("errors").and_then(Value::as_array).cloned().unwrap_or_default();
@@ -183,27 +187,27 @@ impl GithubAdapter {
     /// with a body of `null` is refused by GitHub.
     fn rest(&self, method: &str, path: &str, payload: Option<Value>) -> Result<Value, String> {
         let url = format!("{}{path}", self.api);
-        let agent = self.agent();
-        let auth = format!("Bearer {}", self.secret);
-        let version = crate::github_tokens::GITHUB_API_VERSION;
-        let result = match (method, payload) {
-            ("GET", _) => rest_headers(agent.get(&url), &auth, version).call(),
-            ("DELETE", None) => rest_headers(agent.delete(&url), &auth, version).call(),
-            ("DELETE", Some(payload)) => {
-                rest_headers(agent.delete(&url).force_send_body(), &auth, version)
-                    .header("Content-Type", "application/json")
-                    .send(payload.to_string())
-            }
-            (method, payload) => {
-                let builder = if method == "PATCH" { agent.patch(&url) } else { agent.post(&url) };
-                rest_headers(builder, &auth, version)
-                    .header("Content-Type", "application/json")
-                    .send(payload.unwrap_or_else(|| json!({})).to_string())
-            }
+        let call = self
+            .request(method, &url)
+            .header("X-GitHub-Api-Version", crate::github_tokens::GITHUB_API_VERSION);
+        let call = match (method, payload) {
+            ("GET", _) | ("DELETE", None) => call,
+            (_, payload) => call
+                .header("Content-Type", "application/json")
+                .json(&payload.unwrap_or_else(|| json!({}))),
         };
-        let mut response = result.map_err(|e| self.fail(&e, &url))?;
-        let body = response.body_mut().read_to_string().unwrap_or_default();
-        Ok(serde_json::from_str(&body).unwrap_or(Value::Null))
+        let response = match call.send() {
+            Ok(response) => response,
+            // A body that broke off reads as no JSON, as a body that is not
+            // JSON does. A body that is too long is a failure (AAP-FR-TIZO).
+            Err(crate::http::HttpError::Body) => return Ok(Value::Null),
+            Err(e) => return Err(self.fail(&e)),
+        };
+        Ok(response
+            .text()
+            .ok()
+            .and_then(|body| serde_json::from_str(body).ok())
+            .unwrap_or(Value::Null))
     }
 
     fn repo_path(&self) -> String {
@@ -227,19 +231,6 @@ impl GithubAdapter {
             ids.insert(number, id);
         }
     }
-}
-
-/// The headers of every REST request.
-fn rest_headers<B>(
-    builder: ureq::RequestBuilder<B>,
-    auth: &str,
-    version: &str,
-) -> ureq::RequestBuilder<B> {
-    builder
-        .header("Authorization", auth)
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", version)
-        .header("User-Agent", "synthesis")
 }
 
 /// The issue fields every read asks for. `id` is the global id that a read

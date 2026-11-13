@@ -88,18 +88,19 @@ fn a_tls_error_is_found_inside_wrapping_io_errors() {
     assert_eq!(classify_error(&plain), None);
 }
 
-// AAP-FR-HZTB
+// AAP-FR-HZTB, AAP-FR-DTJA
 #[test]
-fn a_ureq_error_that_is_not_tls_has_no_tls_failure() {
-    assert_eq!(ureq_failure(&ureq::Error::StatusCode(500), "https://h.test"), None);
-    assert_eq!(ureq_failure(&ureq::Error::ConnectionFailed, "https://h.test"), None);
-    let tls = ureq::Error::Rustls(rustls::Error::InvalidCertificate(
-        rustls::CertificateError::UnknownIssuer,
-    ));
-    assert_eq!(
-        ureq_failure(&tls, "https://h.test:8443/v1"),
-        Some(TlsFailure::new("h.test", TlsCause::UnknownIssuer))
-    );
+fn a_connection_closed_before_the_handshake_is_not_read_as_a_tls_failure() {
+    // The server accepts the connection and closes it with no byte, so the
+    // handshake never starts. The listener stays open for the whole test.
+    let port = crate::http::tests::closing_server();
+    let error =
+        crate::http::Request::get(&format!("https://127.0.0.1:{port}/"), Duration::from_secs(20))
+            .direct(true)
+            .send()
+            .expect_err("the server closes the connection");
+    assert_eq!(error, crate::http::HttpError::Transport);
+    assert_eq!(error.tls_wire(), None);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,27 +232,32 @@ pub(crate) fn serve(leaf: &Leaf) -> SocketAddr {
     addr
 }
 
-fn ureq_get(roots: &TrustRoots, port: u16) -> Result<String, ureq::Error> {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .tls_config(roots.ureq_tls_config())
-        .proxy(None)
-        .timeout_global(Some(Duration::from_secs(20)))
-        .build()
-        .into();
-    let url = format!("https://localhost:{port}/");
-    agent.get(&url).call()?.body_mut().read_to_string()
+/// Call the server through `crate::http`, the path of every synchronous
+/// caller.
+fn http_get(roots: &TrustRoots, port: u16) -> Result<String, crate::http::HttpError> {
+    let response =
+        crate::http::Request::get(&format!("https://localhost:{port}/"), Duration::from_secs(20))
+            .direct(true)
+            .send_with_roots(roots)?;
+    Ok(response.text()?.to_string())
 }
 
-fn ureq_cause(roots: &TrustRoots, port: u16) -> Option<TlsCause> {
-    let error = ureq_get(roots, port).expect_err("the handshake is refused");
-    classify_ureq(&error)
+fn http_cause(roots: &TrustRoots, port: u16) -> Option<TlsCause> {
+    match http_get(roots, port).expect_err("the handshake is refused") {
+        crate::http::HttpError::Tls(failure) => {
+            assert_eq!(failure.host, "localhost");
+            Some(failure.cause)
+        }
+        _ => None,
+    }
 }
 
 fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread().enable_all().build().expect("runtime")
 }
 
-/// Call the server through the `reqwest` client of `rig`. `name` is a unique
+/// Call the server through the shared `reqwest` client that `rig`, `rmcp`,
+/// and `openrouter-rs` take. `name` is a unique
 /// host name that resolves to the server, so tests running in parallel do not
 /// read each other's record.
 fn rig_get(
@@ -279,32 +285,6 @@ fn rig_get(
     (result, record)
 }
 
-/// The same call through the `reqwest` client of `openrouter-rs`.
-fn openrouter_get(
-    roots: &TrustRoots,
-    name: &str,
-    addr: SocketAddr,
-) -> (Result<String, String>, TlsRecord) {
-    let record = TlsRecord::new();
-    let client = roots
-        .reqwest012_builder(&record)
-        .expect("rustls config")
-        .no_proxy()
-        .resolve(name, addr)
-        .timeout(Duration::from_secs(20))
-        .build()
-        .expect("client");
-    let result = runtime().block_on(async {
-        let response = client
-            .get(format!("https://{name}:{}/", addr.port()))
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        response.text().await.map_err(|e| e.to_string())
-    });
-    (result, record)
-}
-
 fn trusting(ca: &(rcgen::Certificate, KeyPair)) -> TrustRoots {
     TrustRoots::assemble(vec![ca.0.der().to_vec()], 0)
 }
@@ -313,51 +293,36 @@ fn trusting(ca: &(rcgen::Certificate, KeyPair)) -> TrustRoots {
 #[test]
 fn a_certificate_from_a_root_in_the_operating_system_store_is_trusted() {
     let ca = private_ca();
-    let addr =
-        serve(&leaf_signed_by(&ca, &["localhost", "trusted-rig.test", "trusted-or.test"], false));
+    let addr = serve(&leaf_signed_by(&ca, &["localhost", "trusted-rig.test"], false));
     let roots = trusting(&ca);
-    assert_eq!(ureq_get(&roots, addr.port()).expect("ureq connects"), "{}");
+    assert_eq!(http_get(&roots, addr.port()).expect("the http path connects"), "{}");
     assert_eq!(rig_get(&roots, "trusted-rig.test", addr).0.expect("rig connects"), "{}");
-    assert_eq!(
-        openrouter_get(&roots, "trusted-or.test", addr).0.expect("openrouter connects"),
-        "{}"
-    );
 }
 
 // AAP-FR-QLNV, AAP-FR-HZTB
 #[test]
 fn a_certificate_from_an_unknown_root_is_refused_with_unknown_issuer() {
     let ca = private_ca();
-    let addr =
-        serve(&leaf_signed_by(&ca, &["localhost", "unknown-rig.test", "unknown-or.test"], false));
+    let addr = serve(&leaf_signed_by(&ca, &["localhost", "unknown-rig.test"], false));
     let roots = TrustRoots::assemble(Vec::new(), 0);
-    assert_eq!(ureq_cause(&roots, addr.port()), Some(TlsCause::UnknownIssuer));
+    assert_eq!(http_cause(&roots, addr.port()), Some(TlsCause::UnknownIssuer));
 
     let (result, record) = rig_get(&roots, "unknown-rig.test", addr);
     assert!(result.is_err());
     assert_eq!(record.take(), Some(TlsFailure::new("unknown-rig.test", TlsCause::UnknownIssuer)));
-
-    let (result, record) = openrouter_get(&roots, "unknown-or.test", addr);
-    assert!(result.is_err());
-    assert_eq!(record.take(), Some(TlsFailure::new("unknown-or.test", TlsCause::UnknownIssuer)));
 }
 
 // AAP-FR-QLNV, AAP-FR-HZTB
 #[test]
 fn an_expired_certificate_is_refused_with_expired() {
     let ca = private_ca();
-    let addr =
-        serve(&leaf_signed_by(&ca, &["localhost", "expired-rig.test", "expired-or.test"], true));
+    let addr = serve(&leaf_signed_by(&ca, &["localhost", "expired-rig.test"], true));
     let roots = trusting(&ca);
-    assert_eq!(ureq_cause(&roots, addr.port()), Some(TlsCause::Expired));
+    assert_eq!(http_cause(&roots, addr.port()), Some(TlsCause::Expired));
 
     let (result, record) = rig_get(&roots, "expired-rig.test", addr);
     assert!(result.is_err());
     assert_eq!(record.take(), Some(TlsFailure::new("expired-rig.test", TlsCause::Expired)));
-
-    let (result, record) = openrouter_get(&roots, "expired-or.test", addr);
-    assert!(result.is_err());
-    assert_eq!(record.take(), Some(TlsFailure::new("expired-or.test", TlsCause::Expired)));
 }
 
 // AAP-FR-QLNV, AAP-FR-HZTB
@@ -366,7 +331,7 @@ fn a_certificate_for_another_host_is_refused_with_hostname_mismatch() {
     let ca = private_ca();
     let addr = serve(&leaf_signed_by(&ca, &["some-other-host.test"], false));
     let roots = trusting(&ca);
-    assert_eq!(ureq_cause(&roots, addr.port()), Some(TlsCause::HostnameMismatch));
+    assert_eq!(http_cause(&roots, addr.port()), Some(TlsCause::HostnameMismatch));
 
     let (result, record) = rig_get(&roots, "mismatch-rig.test", addr);
     assert!(result.is_err());
@@ -374,50 +339,62 @@ fn a_certificate_for_another_host_is_refused_with_hostname_mismatch() {
         record.take(),
         Some(TlsFailure::new("mismatch-rig.test", TlsCause::HostnameMismatch))
     );
-
-    let (result, record) = openrouter_get(&roots, "mismatch-or.test", addr);
-    assert!(result.is_err());
-    assert_eq!(
-        record.take(),
-        Some(TlsFailure::new("mismatch-or.test", TlsCause::HostnameMismatch))
-    );
 }
 
-// AAP-FR-WMCX
+/// Every source file of the application that sends an HTTP(S) or WSS request.
+pub(crate) const CLIENT_SOURCES: [(&str, &str); 17] = [
+    ("http.rs", include_str!("../http.rs")),
+    ("ai_shared.rs", include_str!("../ai_shared.rs")),
+    ("ai_api/detection.rs", include_str!("../ai_api/detection.rs")),
+    ("github_tokens.rs", include_str!("../github_tokens.rs")),
+    ("github_tokens/verifier.rs", include_str!("../github_tokens/verifier.rs")),
+    ("relay_endpoint.rs", include_str!("../relay_endpoint.rs")),
+    ("github_polling/client.rs", include_str!("../github_polling/client.rs")),
+    ("github_publication/client.rs", include_str!("../github_publication/client.rs")),
+    ("git/pull_requests/client.rs", include_str!("../git/pull_requests/client.rs")),
+    ("flow_sync/github.rs", include_str!("../flow_sync/github.rs")),
+    ("ai_openrouter.rs", include_str!("../ai_openrouter.rs")),
+    ("agent_conversations/rig_bridge.rs", include_str!("../agent_conversations/rig_bridge.rs")),
+    (
+        "agent_conversations/openrouter_carrier.rs",
+        include_str!("../agent_conversations/openrouter_carrier.rs"),
+    ),
+    ("mcp/connect.rs", include_str!("../mcp/connect.rs")),
+    ("mcp/oauth.rs", include_str!("../mcp/oauth.rs")),
+    ("voice_ai/http.rs", include_str!("../voice_ai/http.rs")),
+    ("voice_ai/realtime.rs", include_str!("../voice_ai/realtime.rs")),
+];
+
+/// The code of a source file: no test module and no comment line.
+pub(crate) fn code_of(source: &str) -> String {
+    let code = source.split("#[cfg(test)]").next().unwrap_or(source);
+    code.lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n")
+}
+
+// AAP-FR-WMCX, AAP-FR-DTJA
 #[test]
 fn no_client_of_the_application_builds_its_own_trust_setup() {
-    const SOURCES: [(&str, &str); 9] = [
-        ("ai_shared.rs", include_str!("../ai_shared.rs")),
-        ("github_tokens.rs", include_str!("../github_tokens.rs")),
-        ("relay_endpoint.rs", include_str!("../relay_endpoint.rs")),
-        ("github_polling/client.rs", include_str!("../github_polling/client.rs")),
-        ("github_publication/client.rs", include_str!("../github_publication/client.rs")),
-        ("git/pull_requests/client.rs", include_str!("../git/pull_requests/client.rs")),
-        ("ai_openrouter.rs", include_str!("../ai_openrouter.rs")),
-        ("agent_conversations/rig_bridge.rs", include_str!("../agent_conversations/rig_bridge.rs")),
-        (
-            "agent_conversations/openrouter_carrier.rs",
-            include_str!("../agent_conversations/openrouter_carrier.rs"),
-        ),
-    ];
-    for (name, source) in SOURCES {
-        let code = source.split("#[cfg(test)]").next().unwrap_or(source);
-        let code: String = code
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(
-            !code.contains("ureq::Agent::config_builder"),
-            "{name} builds a ureq agent with the default trust setup"
-        );
+    for (name, source) in CLIENT_SOURCES {
+        let code = code_of(source);
         for forbidden in [
-            "reqwest::Client",
-            "reqwest013::Client",
-            "reqwest012::Client",
-            "ureq::agent(",
-            "ureq::get(",
-            "ureq::post(",
+            // AAP-FR-DTJA: one HTTP client library.
+            "ureq",
+            "reqwest012",
+            // The blocking client panics on a Tokio worker thread.
+            "reqwest013::blocking",
+            "reqwest::blocking",
+            // A client that does not start from `tls` has its own trust.
+            "reqwest013::Client::new",
+            "reqwest013::Client::builder",
+            "reqwest::Client::new",
+            "reqwest::Client::builder",
+            "ClientBuilder::new",
+            "tls_backend_preconfigured",
+            "use_preconfigured_tls",
+            "add_root_certificate",
+            "danger_accept_invalid",
+            "tls_built_in",
+            "RootCertStore",
         ] {
             assert!(!code.contains(forbidden), "{name} builds its own HTTP client: {forbidden}");
         }

@@ -1,13 +1,15 @@
 //! The GitHub transport of the pull request operations (GTC-FR-DWVY).
 //!
-//! Direct HTTPS against GitHub's REST API through `ureq`, as the other GitHub
-//! clients of this application do. The trait is what makes every pull request
+//! Direct HTTPS against GitHub's REST API through `crate::http`, as the other
+//! GitHub clients of this application do (AAP-FR-DTJA). The trait is what makes every pull request
 //! operation testable without a network: the production implementation is the
 //! only code in this module tree that opens a socket.
 
 use std::time::Duration;
 
 use serde_json::Value;
+
+use crate::http::HttpError;
 
 /// The API base of `github.com`. A request to another host goes through a client
 /// that `GithubPullRequests::for_host` returns, which holds that host's base
@@ -111,46 +113,26 @@ pub(crate) struct HostedGithubPullRequests {
     api: String,
 }
 
-/// An agent that returns a non-2xx answer as a response, so the body of a 422
-/// can be read for the reason GitHub gave.
-fn write_agent() -> ureq::Agent {
-    crate::tls::ureq_config()
-        .timeout_global(Some(REQUEST_TIMEOUT))
-        .timeout_connect(Some(CONNECT_TIMEOUT))
-        .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
-        .http_status_as_error(false)
-        // A redirected POST may come back as a GET, whose answer is not the
-        // pull request. A redirect is a failure to create, not a success.
-        .max_redirects(0)
-        .build()
-        .into()
-}
-
-fn agent() -> ureq::Agent {
-    crate::tls::ureq_config()
-        .timeout_global(Some(REQUEST_TIMEOUT))
-        .timeout_connect(Some(CONNECT_TIMEOUT))
-        // A redirect can only carry the token to the host that issued it.
-        .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
-        .build()
-        .into()
+/// The request of one call: the credential goes to no other host on a
+/// redirect (AAP-FR-GMVE), and the connection opens within its own limit.
+fn request(call: crate::http::Request, secret: &str, path: &str) -> crate::http::Request {
+    call.connect_timeout(CONNECT_TIMEOUT)
+        .bearer(secret)
+        .credential_to_same_host()
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", crate::github_tokens::api_version_for_path(path))
+        // GitHub rejects a request with no User-Agent, which would otherwise
+        // read as a bad token.
+        .header("User-Agent", "synthesis")
 }
 
 /// Map a transport error to a fixed failure. Never reads the error's text.
-#[cfg(test)]
-pub(crate) fn classify(error: &ureq::Error) -> GithubFailure {
-    classify_at(error, API)
-}
-
-/// [`classify`] for the API base `api`.
-pub(crate) fn classify_at(error: &ureq::Error, api: &str) -> GithubFailure {
+pub(crate) fn classify(error: &HttpError) -> GithubFailure {
     match error {
-        ureq::Error::StatusCode(401 | 403) => GithubFailure::Rejected,
-        ureq::Error::StatusCode(404 | 410) => GithubFailure::NotFound,
-        other => match crate::tls::ureq_failure(other, api) {
-            Some(failure) => GithubFailure::TlsUntrusted(failure),
-            None => GithubFailure::Unreachable,
-        },
+        HttpError::Status(401 | 403) => GithubFailure::Rejected,
+        HttpError::Status(404 | 410) => GithubFailure::NotFound,
+        HttpError::Tls(failure) => GithubFailure::TlsUntrusted(failure.clone()),
+        _ => GithubFailure::Unreachable,
     }
 }
 
@@ -226,34 +208,36 @@ pub(crate) fn write_at(
         return Err(GithubWriteFailure::Unreachable);
     }
     let url = format!("{api}{path}");
-    let payload = serde_json::to_string(body).map_err(|_| GithubWriteFailure::Unreachable)?;
-    let agent = write_agent();
-    let request = match method {
-        WriteMethod::Post => agent.post(&url),
-        WriteMethod::Patch => agent.patch(&url),
+    let call = match method {
+        WriteMethod::Post => crate::http::Request::post(&url, REQUEST_TIMEOUT),
+        WriteMethod::Patch => crate::http::Request::patch(&url, REQUEST_TIMEOUT),
     };
-    let mut response = request
-        .header("Authorization", &format!("Bearer {secret}"))
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", crate::github_tokens::api_version_for_path(path))
-        .header("User-Agent", "synthesis")
+    let response = request(call, secret, path)
         .header("Content-Type", "application/json")
-        .send(payload)
-        .map_err(|error| match crate::tls::ureq_failure(&error, api) {
-            Some(failure) => GithubWriteFailure::TlsUntrusted(failure),
-            None => GithubWriteFailure::Unreachable,
+        .json(body)
+        // A non-2xx answer is a response, so the body of a 422 can be read for
+        // the reason GitHub gave. Each status is classified below
+        // (AAP-FR-UXUI).
+        .statuses_as_responses()
+        // A redirected POST may come back as a GET, whose answer is not the
+        // pull request. A redirect is a failure to create, not a success.
+        .max_redirects(0)
+        .send()
+        .map_err(|error| match error {
+            HttpError::Tls(failure) => GithubWriteFailure::TlsUntrusted(failure),
+            _ => GithubWriteFailure::Unreachable,
         })?;
-    let status = response.status().as_u16();
-    let text = response.body_mut().read_to_string().map_err(|_| GithubWriteFailure::Unreachable)?;
+    let status = response.status;
+    let text = response.text().map_err(|_| GithubWriteFailure::Unreachable)?;
     match status {
-        200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
+        200..=299 => serde_json::from_str(text).map_err(|_| GithubWriteFailure::Unreachable),
         401 | 403 => Err(GithubWriteFailure::Rejected),
         404 | 410 => Err(GithubWriteFailure::NotFound),
         // GTC-FR-KQVA: a stacks endpoint that answers 400 does not know the
         // stacks API version of the host.
         400 if crate::github_tokens::is_stacks_path(path) => Err(GithubWriteFailure::NotFound),
         409 => Err(GithubWriteFailure::Conflict),
-        422 => Err(GithubWriteFailure::Invalid(invalid_reason(&text))),
+        422 => Err(GithubWriteFailure::Invalid(invalid_reason(text))),
         _ => Err(GithubWriteFailure::Unreachable),
     }
 }
@@ -265,23 +249,16 @@ pub(crate) fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, Githu
         return Err(GithubFailure::Unreachable);
     }
     let url = format!("{api}{path}");
-    let mut response = agent()
-        .get(&url)
-        .header("Authorization", &format!("Bearer {secret}"))
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", crate::github_tokens::api_version_for_path(path))
-        // GitHub rejects a request with no User-Agent, which would
-        // otherwise read as a bad token.
-        .header("User-Agent", "synthesis")
-        .call()
+    let response = request(crate::http::Request::get(&url, REQUEST_TIMEOUT), secret, path)
+        .send()
         .map_err(|error| match error {
-            ureq::Error::StatusCode(400 | 410) if crate::github_tokens::is_stacks_path(path) => {
-                GithubFailure::Unsupported
-            }
-            other => classify_at(&other, api),
-        })?;
-    let body = response.body_mut().read_to_string().map_err(|_| GithubFailure::Unreachable)?;
-    serde_json::from_str(&body).map_err(|_| GithubFailure::Unreachable)
+        HttpError::Status(400 | 410) if crate::github_tokens::is_stacks_path(path) => {
+            GithubFailure::Unsupported
+        }
+        other => classify(&other),
+    })?;
+    let body = response.text().map_err(|_| GithubFailure::Unreachable)?;
+    serde_json::from_str(body).map_err(|_| GithubFailure::Unreachable)
 }
 
 /// The reasons of a 422 answer, joined: the `message` of GitHub's body and each

@@ -53,24 +53,19 @@ git2 = { version = "0.21.0", default-features = false, features = [
 # `synthesis.toml`. The `v1` feature is the platform-native store set
 # (Keychain on macOS, Credential Manager on Windows, Secret Service on *nix).
 keyring = { version = "4", features = ["v1"] }
-# The backend's HTTP client, used only where a credential has to be checked
-# against the service it belongs to: GTS-FR-04 / GTS-FR-07 verify a token
-# against api.github.com, and AAP-FR-05 / AIC-FR-22 verify an AI endpoint by
-# asking it for its model list. Every one of those calls is bounded by a global
-# timeout, because the UI has no way to cancel an in-flight `invoke`.
-ureq = "3.5"
 # AAP-FR-23: the `openrouter` provider is reached through this SDK, which is
 # what its verification, its model probe, and the reasoning parameter of every
-# call it carries go through. It is the only provider that depends on it — the
-# other three keep the `ureq` path above — so a fault here cannot cost the
-# application its ability to reach Anthropic, OpenAI, or a custom endpoint.
-# The crate is async; `ai_openrouter` confines the runtime to one owned thread
-# rather than making this module's call paths async.
-openrouter-rs = "0.13"
-# Only what `ai_openrouter` needs to drive that async SDK from a synchronous
-# call path: a current-thread runtime and the timer behind the probe deadline.
-# No macros and no multi-thread scheduler — this runtime exists for one request
-# at a time, on a thread the prober owns and joins.
+# call it carries go through. It is the only provider that depends on it, so a
+# fault here cannot cost the application its ability to reach Anthropic,
+# OpenAI, or a custom endpoint. It sends through the `reqwest013` client that
+# `tls` builds (AAP-FR-DTJA). The crate is async; `ai_openrouter` confines the
+# runtime to one owned thread rather than making this module's call paths
+# async.
+openrouter-rs = "0.25"
+# What `ai_openrouter` and `http` need to drive an async client from a
+# synchronous call path: a current-thread runtime and the timer behind the
+# request deadline. No multi-thread scheduler — this runtime exists for one
+# request at a time, on a thread the caller owns and joins.
 #
 # EAC-FR-17 / EAC-FR-24 additionally needs `process`: the agent-CLI executor
 # drives a container through the host Docker CLI, and reading its two pipes
@@ -232,19 +227,17 @@ sqlite-vec = "0.1.9"
 
 # AAP-FR-WMCX / AAP-FR-QLNV / AAP-FR-MXJD: one TLS trust setup for every outbound
 # HTTP(S) path. The roots are the operating system store (read live on each
-# start) plus the bundled Mozilla roots. `ureq`, the `rig` clients, and the
-# `openrouter-rs` client are all built from that one list, so each of them is
-# named here only to reach its client builder. `rustls` builds the verifier
-# of the two `reqwest` clients and gives the error types the others are
-# classified by.
+# start) plus the bundled Mozilla roots. `rustls` builds the verifier of the
+# one `reqwest` client and gives the error types that failures are classified
+# by.
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 rustls-native-certs = "0.8"
 webpki-root-certs = "1"
-# The same `reqwest` versions `rig-reqwest` (0.13) and `openrouter-rs` (0.12)
-# use. Each is named so the application can build the client those crates
-# are handed, with the shared roots.
+# AAP-FR-DTJA: the one HTTP client library of the application's own requests.
+# It is the version `rig-reqwest`, `rmcp`, and `openrouter-rs` use, so the
+# client that `tls` builds is the client those crates are handed. Every
+# synchronous call path drives it on a runtime of its own thread (`http`).
 reqwest013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "http2", "multipart"] }
-reqwest012 = { package = "reqwest", version = "0.12", default-features = false, features = ["rustls-tls"] }
 # The Realtime client of Voice AI. The `__rustls-tls` feature gives the
 # connector that takes the shared client configuration (`tls.rs`), so a `wss`
 # connection has no trust list of its own.

@@ -3,9 +3,11 @@
 //! Specification: `specifications/core/AAP-ai-api-integrations.md`
 //! (AAP-FR-WMCX, AAP-FR-QLNV, AAP-FR-MXJD, AAP-FR-HZTB, AAP-FR-PKWE).
 //!
-//! Every HTTP client in the application is built from the root list held here:
-//! the `ureq` agents, the `reqwest` client that `rig` gets, and the `reqwest`
-//! client that `openrouter-rs` gets. No client keeps its own default trust.
+//! Every HTTP client in the application is built from the root list held here.
+//! The application has one HTTP client library, `reqwest` 0.13 (AAP-FR-DTJA):
+//! the synchronous callers of `crate::http`, `rig`, `rmcp`, and `openrouter-rs`
+//! all take a client that this module builds. No client keeps its own default
+//! trust.
 //!
 //! The roots are the operating system store, read live on each start, plus the
 //! bundled Mozilla roots. When the operating system store cannot be read, the
@@ -162,20 +164,6 @@ pub fn classify_error(error: &(dyn StdError + 'static)) -> Option<TlsCause> {
     None
 }
 
-/// AAP-FR-HZTB: the TLS failure of a `ureq` error, or `None`.
-pub fn classify_ureq(error: &ureq::Error) -> Option<TlsCause> {
-    match error {
-        ureq::Error::Rustls(tls) => Some(cause_of_rustls(tls)),
-        ureq::Error::Io(io) => classify_error(io),
-        _ => None,
-    }
-}
-
-/// The TLS failure of a `ureq` error against `url`, ready to report.
-pub fn ureq_failure(error: &ureq::Error, url: &str) -> Option<TlsFailure> {
-    classify_ureq(error).map(|cause| TlsFailure::new(host_of(url), cause))
-}
-
 /// `error` where it is already the typed TLS error, or `fallback`. For a caller
 /// that would otherwise replace the error of a lower layer with its own code.
 pub fn keep_tls(error: String, fallback: &str) -> String {
@@ -185,11 +173,6 @@ pub fn keep_tls(error: String, fallback: &str) -> String {
     }
 }
 
-/// The wire text of the TLS failure in a `ureq` error against `url`, or `None`.
-pub fn ureq_wire(error: &ureq::Error, url: &str) -> Option<String> {
-    ureq_failure(error, url).map(|failure| failure.wire())
-}
-
 // ---------------------------------------------------------------------------
 // The roots
 // ---------------------------------------------------------------------------
@@ -197,6 +180,9 @@ pub fn ureq_wire(error: &ureq::Error, url: &str) -> Option<String> {
 /// AAP-FR-QLNV / AAP-FR-MXJD: the DER roots every client trusts.
 pub struct TrustRoots {
     ders: Vec<Vec<u8>>,
+    /// The roots as the TLS library holds them, built once and shared by every
+    /// client of the run.
+    store: std::sync::OnceLock<Arc<rustls::RootCertStore>>,
     os_roots: usize,
     os_errors: usize,
     bundled_roots: usize,
@@ -240,7 +226,7 @@ impl TrustRoots {
                 bundled_roots += 1;
             }
         }
-        Self { ders, os_roots, os_errors, bundled_roots }
+        Self { ders, store: std::sync::OnceLock::new(), os_roots, os_errors, bundled_roots }
     }
 
     pub fn ders(&self) -> &[Vec<u8>] {
@@ -262,37 +248,31 @@ impl TrustRoots {
         self.os_roots > 0
     }
 
-    /// The `ureq` TLS configuration for these roots.
-    pub fn ureq_tls_config(&self) -> ureq::tls::TlsConfig {
-        let certs: Vec<ureq::tls::Certificate<'static>> =
-            self.ders.iter().map(|der| ureq::tls::Certificate::from_der(der).to_owned()).collect();
-        ureq::tls::TlsConfig::builder()
-            .provider(ureq::tls::TlsProvider::Rustls)
-            .root_certs(ureq::tls::RootCerts::new_with_certs(&certs))
-            .build()
-    }
-
-    /// The `rustls` client configuration for the `reqwest` clients that `rig`
-    /// and `openrouter-rs` use. It validates the chain and the host name against
-    /// these roots. It also records the cause of each refused certificate by
-    /// host, because both libraries flatten the TLS error into text before the
+    /// The `rustls` client configuration of the `reqwest` clients. It
+    /// validates the chain and the host name against these roots. It also
+    /// records the cause of each refused certificate by host, because `rig`,
+    /// `rmcp`, and `openrouter-rs` flatten the TLS error into text before the
     /// application sees it (see [`TlsRecord`]).
     fn rustls_config(
         &self,
         alpn: &[&[u8]],
         record: &TlsRecord,
     ) -> Result<rustls::ClientConfig, rustls::Error> {
-        let mut store = rustls::RootCertStore::empty();
-        for der in &self.ders {
-            let _ = store.add(rustls::pki_types::CertificateDer::from(der.clone()));
-        }
+        let store = self
+            .store
+            .get_or_init(|| {
+                let mut store = rustls::RootCertStore::empty();
+                for der in &self.ders {
+                    let _ = store.add(rustls::pki_types::CertificateDer::from(der.clone()));
+                }
+                Arc::new(store)
+            })
+            .clone();
         let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let inner = rustls::client::WebPkiServerVerifier::builder_with_provider(
-            Arc::new(store),
-            provider.clone(),
-        )
-        .build()
-        .map_err(|e| rustls::Error::General(e.to_string()))?;
+        let inner =
+            rustls::client::WebPkiServerVerifier::builder_with_provider(store, provider.clone())
+                .build()
+                .map_err(|e| rustls::Error::General(e.to_string()))?;
         let mut config = rustls::ClientConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()?
             .dangerous()
@@ -305,23 +285,14 @@ impl TrustRoots {
         Ok(config)
     }
 
-    /// A `reqwest` 0.13 builder (the version `rig` uses) with these roots.
+    /// A `reqwest` 0.13 builder with these roots. It is the start of every
+    /// HTTP client of the application (AAP-FR-DTJA).
     pub fn reqwest013_builder(
         &self,
         record: &TlsRecord,
     ) -> Result<reqwest013::ClientBuilder, rustls::Error> {
         let config = self.rustls_config(&[b"h2", b"http/1.1"], record)?;
         Ok(reqwest013::Client::builder().tls_backend_preconfigured(config))
-    }
-
-    /// A `reqwest` 0.12 builder (the version `openrouter-rs` uses) with these
-    /// roots.
-    pub fn reqwest012_builder(
-        &self,
-        record: &TlsRecord,
-    ) -> Result<reqwest012::ClientBuilder, rustls::Error> {
-        let config = self.rustls_config(&[b"http/1.1"], record)?;
-        Ok(reqwest012::Client::builder().use_preconfigured_tls(config))
     }
 }
 
@@ -460,21 +431,55 @@ where
 // The clients
 // ---------------------------------------------------------------------------
 
-/// AAP-FR-WMCX: the `ureq` agent configuration every `ureq` call starts from.
-pub fn ureq_config() -> ureq::config::ConfigBuilder<ureq::typestate::AgentScope> {
-    ureq::Agent::config_builder().tls_config(roots().ureq_tls_config())
-}
-
-/// AAP-FR-WMCX: the `reqwest` client `rig` is given, with the record of the
-/// refusals its verifier notes.
+/// AAP-FR-WMCX, AAP-FR-DTJA: the shared `reqwest` client that `rig`, `rmcp`,
+/// and `openrouter-rs` are given, with the record of the refusals its verifier
+/// notes.
+///
+/// AAP-FR-GMVE: the client follows a redirect only to the same scheme, host,
+/// and port as the address before it, and at most `crate::http::MAX_REDIRECTS`
+/// of them. `reqwest` removes `Authorization` on a redirect to another host,
+/// but it keeps a header of another name, such as `x-api-key` or the secret
+/// header of an MCP server. So a redirect to another origin is not followed:
+/// its answer is the response.
 pub fn rig_http_client() -> Result<(reqwest013::Client, TlsRecord), String> {
     let record = TlsRecord::new();
     let client = roots()
         .reqwest013_builder(&record)
         .map_err(|e| e.to_string())?
+        .redirect(same_origin_redirects())
         .build()
         .map_err(|e| e.to_string())?;
     Ok((client, record))
+}
+
+/// The redirect error of a chain longer than `crate::http::MAX_REDIRECTS`.
+#[derive(Debug)]
+struct TooManyRedirects;
+
+impl std::fmt::Display for TooManyRedirects {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("too many redirects")
+    }
+}
+
+impl StdError for TooManyRedirects {}
+
+/// AAP-FR-GMVE: follow a redirect to the same origin only.
+fn same_origin_redirects() -> reqwest013::redirect::Policy {
+    reqwest013::redirect::Policy::custom(|attempt| {
+        // `previous` holds the first address and every address followed since.
+        if attempt.previous().len() > crate::http::MAX_REDIRECTS as usize {
+            return attempt.error(TooManyRedirects);
+        }
+        let same = attempt
+            .previous()
+            .last()
+            .is_some_and(|from| crate::http::same_origin(from, attempt.url()));
+        match same {
+            true => attempt.follow(),
+            false => attempt.stop(),
+        }
+    })
 }
 
 /// AAP-FR-WMCX, VOP-FR-YPEY: the `rustls` configuration of a `wss` connection.
@@ -484,18 +489,6 @@ pub fn websocket_client_config() -> Result<Arc<rustls::ClientConfig>, String> {
     let config =
         roots().rustls_config(&[b"http/1.1"], &TlsRecord::new()).map_err(|e| e.to_string())?;
     Ok(Arc::new(config))
-}
-
-/// AAP-FR-WMCX: the `reqwest` client `openrouter-rs` is given, with the record
-/// of the refusals its verifier notes.
-pub fn openrouter_http_client() -> Result<(reqwest012::Client, TlsRecord), String> {
-    let record = TlsRecord::new();
-    let client = roots()
-        .reqwest012_builder(&record)
-        .map_err(|e| e.to_string())?
-        .build()
-        .map_err(|e| e.to_string())?;
-    Ok((client, record))
 }
 
 #[cfg(test)]

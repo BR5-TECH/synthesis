@@ -129,22 +129,15 @@ pub fn parse_show_payload(body: &str) -> Option<Detected> {
 }
 
 /// Production detector: one `POST <base>/api/show` under the bounded timeout of
-/// AAP-FR-05, with the same bearer secret the model list was asked with. One
-/// agent serves every request, so the requests share its connections.
-pub struct HttpModelDetector {
-    agent: ureq::Agent,
-}
+/// AAP-FR-05, with the same bearer secret the model list was asked with. Each
+/// request has a client of its own, so a TLS refusal belongs to that request
+/// alone.
+#[derive(Default)]
+pub struct HttpModelDetector;
 
 impl HttpModelDetector {
     pub fn new() -> Self {
-        let config = crate::tls::ureq_config().timeout_global(Some(PROBE_TIMEOUT));
-        Self { agent: config.build().into() }
-    }
-}
-
-impl Default for HttpModelDetector {
-    fn default() -> Self {
-        Self::new()
+        Self
     }
 }
 
@@ -155,29 +148,26 @@ impl ModelDetector for HttpModelDetector {
         api_key: Option<&str>,
         model_id: &str,
     ) -> Result<Detected, DetectionFailure> {
+        use crate::http::HttpError;
         let url = format!("{}{}", base_url.trim_end_matches('/'), SHOW_PATH);
-        let mut call = self
-            .agent
-            .post(&url)
+        let mut call = crate::http::Request::post(&url, PROBE_TIMEOUT)
             .header("User-Agent", "synthesis")
             .header("Content-Type", "application/json");
         if let Some(key) = api_key.filter(|k| !k.is_empty()) {
-            call = call.header("Authorization", &format!("Bearer {key}"));
+            call = call.bearer(key);
         }
         // AAP-FR-KJSL: every failure is "no detected values". Only the kind of
         // the error is kept, so it cannot carry the request into a log.
-        let mut response = call
-            .send(serde_json::json!({ "model": model_id }).to_string())
-            .map_err(|e| match e {
-                ureq::Error::StatusCode(code) => DetectionFailure::Status(code),
-                ureq::Error::Timeout(_) => DetectionFailure::Timeout,
+        let response =
+            call.json(&serde_json::json!({ "model": model_id })).send().map_err(|e| match e {
+                HttpError::Status(code) => DetectionFailure::Status(code),
+                HttpError::Timeout => DetectionFailure::Timeout,
+                // AAP-FR-TIZO: a body that is too long is not the expected body.
+                HttpError::TooLarge | HttpError::Body => DetectionFailure::BadBody,
                 _ => DetectionFailure::Network,
             })?;
-        let body = response.body_mut().read_to_string().map_err(|e| match e {
-            ureq::Error::Timeout(_) => DetectionFailure::Timeout,
-            _ => DetectionFailure::BadBody,
-        })?;
-        parse_show_payload(&body).ok_or(DetectionFailure::BadBody)
+        let body = response.text().map_err(|_| DetectionFailure::BadBody)?;
+        parse_show_payload(body).ok_or(DetectionFailure::BadBody)
     }
 }
 

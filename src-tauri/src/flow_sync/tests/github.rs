@@ -153,15 +153,6 @@ fn sub_issue_answer(children: Vec<Value>) -> Value {
     json!({ "data": { "repository": { "i0": { "id": "I_2", "subIssues": page(children, None) } } } })
 }
 
-/// FTS-FR-ARMD: the adapter of a test sends its requests directly to the
-/// local server and never through a proxy that the environment names. This
-/// test can fail only on a machine where a proxy variable is set.
-#[test]
-fn the_test_adapter_uses_no_proxy() {
-    let github = adapter("http://127.0.0.1:9");
-    assert!(github.agent().config().proxy().is_none());
-}
-
 /// FTS-FR-ARMD: a removal of a blocked-by relation is a `DELETE` with no
 /// body, which GitHub accepts; a body of `null` it refuses. It sends no
 /// `Transfer-Encoding` header, so no chunked body goes with it either.

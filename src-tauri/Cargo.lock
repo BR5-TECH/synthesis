@@ -2272,18 +2272,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
-name = "dotenvy_macro"
-version = "0.15.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb0235d912a8c749f4e0c9f18ca253b4c28cfefc1d2518096016d6e3230b6424"
-dependencies = [
- "dotenvy",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "dpi"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3843,7 +3831,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.61.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -5217,7 +5205,7 @@ dependencies = [
  "object",
  "rand 0.10.2",
  "rayon",
- "reqwest 0.13.3",
+ "reqwest 0.13.5",
  "scopeguard",
  "sea-orm",
  "semver",
@@ -6336,7 +6324,7 @@ dependencies = [
  "oci-spec",
  "olpc-cjson",
  "regex",
- "reqwest 0.13.3",
+ "reqwest 0.13.5",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -6426,22 +6414,28 @@ dependencies = [
 
 [[package]]
 name = "openrouter-rs"
-version = "0.13.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f2077635e0329f15b20a6a5a482fcc5da097171b53d7ffa56fed802f1c58d7b"
+checksum = "c84782e75d64dcdf8abeb5434e6324d4898db817f80e4b46e8db17fc47c1346c"
 dependencies = [
+ "bytes",
  "derive_builder",
- "dotenvy_macro",
  "futures-util",
  "http",
- "reqwest 0.12.28",
+ "mime",
+ "reqwest 0.13.5",
+ "rustls",
+ "rustls-webpki",
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "thiserror 1.0.69",
  "tokio",
  "tokio-util",
+ "url",
  "urlencoding",
+ "webpki-root-certs",
 ]
 
 [[package]]
@@ -7520,7 +7514,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "rustix",
- "windows 0.61.3",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -7570,7 +7564,6 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
- "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -7596,11 +7589,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.3"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
+checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -7757,7 +7750,7 @@ dependencies = [
  "bytes",
  "futures",
  "http",
- "reqwest 0.13.3",
+ "reqwest 0.13.5",
  "rig-http",
  "thiserror 2.0.21",
  "tokio",
@@ -7812,7 +7805,7 @@ dependencies = [
  "pin-project-lite",
  "process-wrap",
  "rand 0.10.2",
- "reqwest 0.13.3",
+ "reqwest 0.13.5",
  "rmcp-macros",
  "schemars 1.2.1",
  "serde",
@@ -8057,9 +8050,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "e3a0760a887c14823fca5a1c970b01d47c328c696c0c64829d1df50e8f853fd5"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -9309,7 +9302,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
- "quote",
  "unicode-ident",
 ]
 
@@ -9403,8 +9395,7 @@ dependencies = [
  "pulldown-cmark",
  "rcgen",
  "regex",
- "reqwest 0.12.28",
- "reqwest 0.13.3",
+ "reqwest 0.13.5",
  "resvg",
  "rig-core",
  "rig-reqwest",
@@ -9428,7 +9419,6 @@ dependencies = [
  "toml 0.8.2",
  "tower-service",
  "ttf-parser",
- "ureq",
  "url",
  "webkit2gtk",
  "webpki-root-certs",
@@ -9584,7 +9574,7 @@ dependencies = [
  "percent-encoding",
  "plist",
  "raw-window-handle",
- "reqwest 0.13.3",
+ "reqwest 0.13.5",
  "serde",
  "serde_json",
  "serde_repr",
@@ -10078,7 +10068,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio 1.2.0",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
@@ -11123,9 +11112,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.9"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b96554aa2acc8ccdb7e1c9a58a7a68dd5d13bccc69cd124cb09406db612a1c9b"
+checksum = "293198dcebfb821155b5092ab94b5a82ff180eddd7241df3bd6e66a4ffd1a585"
 dependencies = [
  "rustls-pki-types",
 ]

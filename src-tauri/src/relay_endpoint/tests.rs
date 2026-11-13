@@ -322,8 +322,10 @@ fn the_module_holds_no_transport_of_its_own() {
             "relay_endpoint.rs holds `{forbidden}`, which GSS-FR-TXAO and GSS-FR-VMRB forbid"
         );
     }
-    // One outbound call, in the production probe alone.
-    assert_eq!(source.matches(".get(health_url)").count(), 1);
+    // One outbound call, in the production probe alone, through the one HTTP
+    // path of the application (AAP-FR-DTJA).
+    assert_eq!(source.matches("Request::get(health_url,").count(), 1);
+    assert_eq!(source.matches(".send()").count(), 1);
 }
 
 // GSS-FR-ZKQT, GSS-FR-NLDC: the record survives a write and a read of

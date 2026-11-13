@@ -48,6 +48,7 @@ pub mod github_publication;
 pub mod github_tokens;
 pub mod global_settings;
 pub mod graduation;
+pub mod http;
 pub mod isolation;
 pub mod layout;
 pub mod library;

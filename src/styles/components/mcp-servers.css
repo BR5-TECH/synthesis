@@ -42,12 +42,10 @@
 /* MSS-FR-VWKQ: the text of a failed test reads in the colour of the failure,
    as the failure line under the row does. */
 .mcp-server__test--failed .t-ui-xs { color: inherit; }
-/* MSS-FR-DVDX: a fixed ID reads as text, not as a field to type in. */
-.mcp-dialog .input[readonly] {
-  background: transparent;
-  border-color: transparent;
-  padding-left: 0;
-}
+/* MSS-FR-UHXN / MSS-FR-DVDX: the ID reads as text, with `Edit ID` beside it. */
+.mcp-dialog__id-line { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.mcp-dialog__id { font-family: var(--font-mono); font-size: var(--fs-ui-sm); color: var(--fg-1); overflow-wrap: anywhere; }
+.mcp-dialog__id--empty { font-family: inherit; color: var(--fg-3); font-style: italic; }
 /* The row takes focus after an action removed the control that had it. */
 .mcp-server:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* MSS-FR-VWKQ: the standard error lines of a failed test, in a monospace

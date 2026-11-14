@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { resetLogBufferForTest } from "../logging";
+import { flushLogs, resetLogBufferForTest } from "../logging";
 import { otherCommand } from "../test/invokeMocks";
 import { httpTransport, mcpEntry, mcpRecord, stdioTransport } from "../test/mcpFixtures";
-import type { McpServer, McpServerEntry } from "../types";
+import type { LogInput, McpServer, McpServerEntry } from "../types";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -28,6 +28,10 @@ const sequence = () =>
       const args = c[1] as { slot?: string };
       return args?.slot ? `${c[0]} ${args.slot}` : (c[0] as string);
     });
+function logRecords(): LogInput[] {
+  flushLogs();
+  return calls("append_log_records").flatMap((c) => (c[1] as { records: LogInput[] }).records);
+}
 const savedServer = (index = 0) => (calls("save_mcp_server")[index][1] as { server: McpServer }).server;
 
 beforeEach(() => {
@@ -82,6 +86,15 @@ function setup({ entry = null, knownIds = [], focusMissingSecret = false }: Setu
 
 const box = (dialog: HTMLElement, name: string) => within(dialog).getByRole("textbox", { name });
 const saveButton = (dialog: HTMLElement) => within(dialog).getByRole("button", { name: "Save" });
+/** MSS-FR-UHXN: the ID as text, with `Edit ID` on add. */
+const idLine = (dialog: HTMLElement) => within(dialog).getByRole("group", { name: "ID" });
+const editId = (dialog: HTMLElement) => within(dialog).getByRole("button", { name: "Edit ID" });
+const noIdInput = (dialog: HTMLElement) => {
+  expect(within(dialog).queryByRole("textbox", { name: "ID" })).toBeNull();
+};
+const ID_HINT = "Agents see it in the names of the tools. You cannot change it later.";
+const INVALID_ID = "Use 1 to 32 lowercase letters, digits, and hyphens. Start with a letter or a digit.";
+const DUPLICATE_ID = "Another server of this project has this ID.";
 
 const TRACKER = mcpRecord({
   id: "tracker",
@@ -97,11 +110,13 @@ const TRACKER = mcpRecord({
 });
 
 describe("MCP server dialog: fields", () => {
-  it("MSS-FR-MWAV: Add opens empty, with Name, ID, and the two transports", () => {
+  it("MSS-FR-MWAV, MSS-FR-UHXN: Add opens empty, with Name, the ID line, and the two transports", () => {
     const { dialog } = setup();
     expect(dialog).toHaveAccessibleName("Add MCP server");
     expect(box(dialog, "Name")).toHaveValue("");
-    expect(box(dialog, "ID")).toHaveValue("");
+    noIdInput(dialog);
+    expect(idLine(dialog)).toHaveTextContent("Made from the name");
+    expect(editId(dialog)).toBeInTheDocument();
     expect(within(dialog).getByRole("radio", { name: "Local command" })).toBeChecked();
     expect(within(dialog).getByRole("radio", { name: "Remote (HTTP)" })).not.toBeChecked();
     // The Modal puts the focus on the first field.
@@ -120,6 +135,8 @@ describe("MCP server dialog: fields", () => {
   it("MSS-FR-DVDX: on add, ID follows Name as a slug until the author edits ID", async () => {
     const { dialog, user } = setup();
     await user.type(box(dialog, "Name"), "Issue Tracker");
+    expect(idLine(dialog)).toHaveTextContent("issue-tracker");
+    await user.click(editId(dialog));
     expect(box(dialog, "ID")).toHaveValue("issue-tracker");
     await user.clear(box(dialog, "ID"));
     await user.type(box(dialog, "ID"), "issues");
@@ -131,11 +148,13 @@ describe("MCP server dialog: fields", () => {
     expect(box(dialog, "ID")).toHaveValue("");
   });
 
-  it("MSS-FR-DVDX: on edit, ID is read-only", async () => {
+  it("MSS-FR-DVDX: on edit, the ID line shows the ID as text, with no Edit ID and no input", async () => {
     const { dialog, user } = setup({ entry: mcpEntry(TRACKER, { state: "ready", toolCount: 0 }) });
-    expect(box(dialog, "ID")).toHaveAttribute("readonly");
+    noIdInput(dialog);
+    expect(within(dialog).queryByRole("button", { name: "Edit ID" })).toBeNull();
+    expect(idLine(dialog)).toHaveTextContent("tracker");
     await user.type(box(dialog, "Name"), " new");
-    expect(box(dialog, "ID")).toHaveValue("tracker");
+    expect(idLine(dialog)).toHaveTextContent("tracker");
   });
 
   it("MSS-FR-XMNV: Local command has Command, Arguments, Working folder, and the environment list", async () => {
@@ -319,17 +338,20 @@ describe("MCP server dialog: checks and refusals", () => {
     expect(saveButton(dialog)).toBeEnabled();
   });
 
-  it("MSS-FR-BEQD: an ID from the name that is not valid or not unique shows its problem with the name", async () => {
+  it("MSS-FR-WQRL, MSS-FR-BEQD: an ID from the name that is not valid or not unique shows its problem under the closed ID line", async () => {
     const { dialog, user } = setup({ knownIds: ["docs"] });
     await user.type(box(dialog, "Name"), "Docs");
-    expect(within(dialog).getByText("Another server of this project has this ID.")).toBeInTheDocument();
+    expect(within(idLine(dialog)).getByText(DUPLICATE_ID)).toBeInTheDocument();
+    expect(idLine(dialog)).toHaveAccessibleDescription(DUPLICATE_ID);
     await user.clear(box(dialog, "Name"));
     await user.type(box(dialog, "Name"), "日本");
-    expect(
-      within(dialog).getByText(
-        "Use 1 to 32 lowercase letters, digits, and hyphens. Start with a letter or a digit.",
-      ),
-    ).toBeInTheDocument();
+    expect(idLine(dialog)).toHaveTextContent("Made from the name");
+    expect(within(idLine(dialog)).getByText(INVALID_ID)).toBeInTheDocument();
+    expect(saveButton(dialog)).toBeDisabled();
+    // The same problem shows under the open input.
+    await user.click(editId(dialog));
+    expect(box(dialog, "ID")).toHaveAttribute("aria-invalid", "true");
+    expect(within(dialog).getByText(INVALID_ID)).toBeInTheDocument();
     expect(saveButton(dialog)).toBeDisabled();
   });
 
@@ -423,17 +445,21 @@ describe("MCP server dialog: checks and refusals", () => {
     ]);
   });
 
-  it("MSS-FR-STXZ: after a first save of a new server, the ID is fixed", async () => {
+  it("MSS-FR-STXZ, MSS-FR-DVDX: after a first save of a new server, the ID is fixed text", async () => {
     refuse.bearer = "invalid_secret";
     const { dialog, user } = setup();
     await user.type(box(dialog, "Name"), "Tracker");
+    // The open input also turns back into text.
+    await user.click(editId(dialog));
     await user.click(within(dialog).getByRole("radio", { name: "Remote (HTTP)" }));
     await user.type(box(dialog, "URL"), "https://mcp.example.com");
     await user.click(within(dialog).getByRole("radio", { name: "Bearer token" }));
     await user.type(within(dialog).getByLabelText("Token"), "tok");
     await user.click(saveButton(dialog));
     expect(await within(dialog).findByText(/This secret was not stored/)).toBeInTheDocument();
-    expect(box(dialog, "ID")).toHaveAttribute("readonly");
+    noIdInput(dialog);
+    expect(within(dialog).queryByRole("button", { name: "Edit ID" })).toBeNull();
+    expect(idLine(dialog)).toHaveTextContent("tracker");
   });
 
   it("MSS-FR-GMHC: Cancel and Escape close the dialog and save nothing", async () => {
@@ -464,8 +490,9 @@ describe("MCP server dialog: checks and refusals", () => {
     const { dialog } = setup({
       entry: mcpEntry(null, { state: "invalid" }, { id: "broken", invalid: "invalid_url" }),
     });
-    expect(box(dialog, "ID")).toHaveValue("broken");
-    expect(box(dialog, "ID")).toHaveAttribute("readonly");
+    noIdInput(dialog);
+    expect(within(dialog).queryByRole("button", { name: "Edit ID" })).toBeNull();
+    expect(idLine(dialog)).toHaveTextContent("broken");
     expect(box(dialog, "Name")).toHaveValue("");
   });
 
@@ -547,5 +574,146 @@ describe("MCP server dialog: checks and refusals", () => {
     await user.click(saveButton(dialog));
     await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
     expect(savedServer().enabled).toBe(true);
+  });
+});
+
+describe("MCP server dialog: the ID line", () => {
+  it("MSS-FR-UHXN, MSS-FR-WQRL: Edit ID opens a focused input with the ID, and the hint shows only when it is open", async () => {
+    const { dialog, user } = setup();
+    await user.type(box(dialog, "Name"), "Docs");
+    expect(within(dialog).queryByText(ID_HINT)).toBeNull();
+    await user.click(editId(dialog));
+    expect(box(dialog, "ID")).toHaveValue("docs");
+    expect(box(dialog, "ID")).toHaveFocus();
+    expect(within(dialog).queryByRole("button", { name: "Edit ID" })).toBeNull();
+    expect(within(dialog).getByText(ID_HINT)).toBeInTheDocument();
+  });
+
+  it("MSS-FR-DVDX: the open input follows Name until the author types in it", async () => {
+    const { dialog, user } = setup();
+    await user.click(editId(dialog));
+    await user.type(box(dialog, "Name"), "Wiki Pages");
+    expect(box(dialog, "ID")).toHaveValue("wiki-pages");
+    await user.type(box(dialog, "ID"), "x");
+    await user.type(box(dialog, "Name"), " 2");
+    expect(box(dialog, "ID")).toHaveValue("wiki-pagesx");
+  });
+
+  it("MSS-FR-UHXN: the input stays open while the author works on other fields", async () => {
+    const { dialog, user } = setup();
+    await user.click(editId(dialog));
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.clear(box(dialog, "ID"));
+    await user.click(within(dialog).getByRole("radio", { name: "Remote (HTTP)" }));
+    expect(box(dialog, "ID")).toHaveValue("");
+  });
+
+  it("MSS-FR-UHXN: a save after Edit ID sends the ID that the author typed", async () => {
+    const { dialog, user } = setup();
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.click(editId(dialog));
+    await user.clear(box(dialog, "ID"));
+    await user.type(box(dialog, "ID"), "my-docs");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(calls("save_mcp_server")).toHaveLength(1));
+    expect(savedServer().id).toBe("my-docs");
+  });
+
+  it("MSS-FR-WQRL, MSS-FR-BEQD: a duplicate typed in the open input shows its problem until it is unique", async () => {
+    const { dialog, user } = setup({ knownIds: ["docs"] });
+    await user.type(box(dialog, "Name"), "Wiki");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(editId(dialog));
+    await user.clear(box(dialog, "ID"));
+    await user.type(box(dialog, "ID"), "docs");
+    expect(within(dialog).getByText(DUPLICATE_ID)).toBeInTheDocument();
+    expect(box(dialog, "ID")).toHaveAttribute("aria-invalid", "true");
+    expect(saveButton(dialog)).toBeDisabled();
+    await user.type(box(dialog, "ID"), "-2");
+    expect(within(dialog).queryByText(DUPLICATE_ID)).toBeNull();
+    expect(saveButton(dialog)).toBeEnabled();
+  });
+
+  it("MSS-FR-HHEJ: a duplicate_id refusal opens the ID input and moves the focus to it", async () => {
+    refuse.save_mcp_server = "duplicate_id";
+    const { dialog, user, onSaved } = setup();
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(saveButton(dialog));
+    const input = await within(dialog).findByRole("textbox", { name: "ID" });
+    expect(input).toHaveValue("docs");
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(within(dialog).getByText(DUPLICATE_ID)).toBeInTheDocument();
+    expect(box(dialog, "Name")).toHaveValue("Docs");
+    expect(onSaved).not.toHaveBeenCalled();
+    await user.type(input, "-2");
+    expect(within(dialog).queryByText(DUPLICATE_ID)).toBeNull();
+  });
+
+  it("MSS-FR-HHEJ: an invalid_id refusal moves the focus back to an input that is already open", async () => {
+    refuse.save_mcp_server = "invalid_id";
+    const { dialog, user } = setup();
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.click(editId(dialog));
+    await user.type(box(dialog, "Command"), "npx");
+    expect(box(dialog, "Command")).toHaveFocus();
+    await user.click(saveButton(dialog));
+    expect(await within(dialog).findByText(INVALID_ID)).toBeInTheDocument();
+    await waitFor(() => expect(box(dialog, "ID")).toHaveFocus());
+  });
+
+  it("MSS-FR-HHEJ, MSS-FR-DVDX: on edit, a duplicate_id refusal shows under the ID text and opens no input", async () => {
+    refuse.save_mcp_server = "duplicate_id";
+    const { dialog, user } = setup({ entry: mcpEntry(TRACKER, { state: "ready", toolCount: 0 }) });
+    await user.click(saveButton(dialog));
+    expect(await within(idLine(dialog)).findByText(DUPLICATE_ID)).toBeInTheDocument();
+    noIdInput(dialog);
+    expect(within(dialog).queryByRole("button", { name: "Edit ID" })).toBeNull();
+  });
+
+  it("MSS-FR-HHEJ: an invalid_id refusal opens the closed ID input and moves the focus to it", async () => {
+    refuse.save_mcp_server = "invalid_id";
+    const { dialog, user } = setup();
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(saveButton(dialog));
+    const input = await within(dialog).findByRole("textbox", { name: "ID" });
+    expect(within(dialog).getByText(INVALID_ID)).toBeInTheDocument();
+    await waitFor(() => expect(input).toHaveFocus());
+  });
+
+  it("MSS-FR-HHEJ: a refusal of another field does not open the ID input", async () => {
+    refuse.save_mcp_server = "invalid_command";
+    const { dialog, user } = setup();
+    await user.type(box(dialog, "Name"), "Docs");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(saveButton(dialog));
+    expect(await within(dialog).findByText("Enter a command.")).toBeInTheDocument();
+    noIdInput(dialog);
+    expect(idLine(dialog)).toHaveTextContent("docs");
+  });
+
+  it("MSS-FR-UHXN: Edit ID with an empty Name opens an empty input that has the focus", async () => {
+    const { dialog, user } = setup();
+    await user.click(editId(dialog));
+    expect(box(dialog, "ID")).toHaveValue("");
+    expect(box(dialog, "ID")).toHaveFocus();
+  });
+
+  it("MSS-FR-UHXN, MSS-FR-HHEJ: each way of opening the ID input logs it, with no ID or name", async () => {
+    refuse.save_mcp_server = "duplicate_id";
+    const { dialog, user } = setup();
+    await user.type(box(dialog, "Name"), "Secret Name");
+    await user.type(box(dialog, "Command"), "npx");
+    await user.click(saveButton(dialog));
+    await within(dialog).findByRole("textbox", { name: "ID" });
+    cleanup();
+    const second = setup();
+    await second.user.click(editId(second.dialog));
+    const opened = logRecords().filter((r) => r.message === "mcp server id input opened");
+    expect(opened.map((r) => r.fields)).toEqual([{ reason: "refusal" }, { reason: "edit_id" }]);
+    expect(opened.every((r) => r.level === "INFO")).toBe(true);
+    expect(JSON.stringify(opened)).not.toContain("secret");
   });
 });

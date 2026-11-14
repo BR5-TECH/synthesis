@@ -47,6 +47,53 @@ export function Field({
 }
 
 /**
+ * MSS-FR-UHXN / MSS-FR-DVDX: the ID as text. On add it has an `Edit ID` link,
+ * and an empty ID reads `Made from the name`. MSS-FR-WQRL: its problem shows
+ * under it also while the input is not open.
+ */
+export function IdLine({
+  value,
+  canEdit,
+  problem,
+  onEdit,
+}: {
+  value: string;
+  canEdit: boolean;
+  problem: string | null;
+  onEdit: () => void;
+}) {
+  const id = useId();
+  const labelId = `${id}-label`;
+  const problemId = `${id}-problem`;
+  return (
+    <div className="mcp-dialog__field" role="group" aria-labelledby={labelId} aria-describedby={problem ? problemId : undefined}>
+      <span id={labelId} className="mcp-dialog__label">
+        ID
+      </span>
+      <div className="mcp-dialog__control">
+        <span className="mcp-dialog__value mcp-dialog__id-line">
+          {value ? (
+            <span className="mcp-dialog__id" data-testid="mcp-dialog-id">
+              {value}
+            </span>
+          ) : (
+            <span className="mcp-dialog__id mcp-dialog__id--empty" data-testid="mcp-dialog-id">
+              Made from the name
+            </span>
+          )}
+          {canEdit && (
+            <button type="button" className="mcp-dialog__link t-ui-sm" onClick={onEdit}>
+              Edit ID
+            </button>
+          )}
+        </span>
+        <ProblemLine id={problemId} text={problem} />
+      </div>
+    </div>
+  );
+}
+
+/**
  * MSS-FR-IUMU: the state of a secret beside its field. The field itself is
  * always empty: a stored value never comes back to the UI.
  */

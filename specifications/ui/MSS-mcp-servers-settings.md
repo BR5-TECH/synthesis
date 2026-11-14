@@ -67,10 +67,14 @@ The **MCP servers** section of the Project group of the Settings window (per `SE
 17. **MSS-FR-MMLA** A tool switch that is turned off adds the tool name to `disabledTools`, and one that is turned on removes it, through `save_mcp_server`. A refused save puts the switch back.
 
 ### The add and edit dialog
-18. **MSS-FR-MWAV** `Add server` opens the dialog empty, and `Edit` opens it with the record of the row. The dialog has `Name`, `ID`, and a transport choice of `Local command` and `Remote (HTTP)`.
+18. **MSS-FR-MWAV** `Add server` opens the dialog empty, and `Edit` opens it with the record of the row. The dialog has `Name`, an `ID` line, and a transport choice of `Local command` and `Remote (HTTP)`.
 18. **MSS-FR-SCDK** On add, the dialog has a `Who uses it` choice of `The team (saved in the project)`, `Only me, in this project`, and `Only me, in all my projects`, for the scopes `team`, `personal_project`, and `personal_all`. The team is chosen first. On edit, the dialog shows the scope of the record as text, and the scope does not change.
 18. **MSS-FR-ENMX** For a `team` record, the dialog has an `On for the team by default` check box, which is the record's `enabled`, and is on for a new record. For a personal record, the dialog has no such check box: a new record is saved with `enabled = true`, and an edit keeps the `enabled` of the record.
-19. **MSS-FR-DVDX** On add, `ID` follows `Name` as a slug until the author edits `ID`. On edit, `ID` is read-only.
+19. **MSS-FR-DVDX** On add, `ID` follows `Name` as a slug until the author edits `ID`. On edit, the `ID` line shows the ID as text, with no `Edit ID` link and no input.
+19. **MSS-FR-UHXN** On add, the `ID` line shows the ID as text and an `Edit ID` link. An empty ID shows `Made from the name`. `Edit ID` replaces the text with an `ID` input that has the focus. The input stays open until the dialog closes or a save stores the record.
+    - *Why:* The ID is the permanent key of the server, but the slug of the name is almost always correct, and an input in plain view makes it look like a step the author must do.
+19. **MSS-FR-WQRL** The open `ID` input shows the hint `Agents see it in the names of the tools. You cannot change it later.` A problem of `ID` shows under the `ID` line when the input is open and when it is not.
+19. **MSS-FR-HHEJ** A `duplicate_id` or `invalid_id` refusal of `save_mcp_server` opens the `ID` input and moves the focus to it.
 20. **MSS-FR-XMNV** For `Local command`, the dialog has `Command`, `Arguments` (one argument on each line), `Working folder` (relative to the project, optional), and an environment list.
 21. **MSS-FR-HIWH** For `Remote (HTTP)`, the dialog has `URL`, an `Authentication` choice of `None`, `Bearer token`, and `OAuth 2`, and a header list. `Bearer token` shows a `Token` secret field. `OAuth 2` shows `Client ID` (optional), `Client secret` (optional secret field, shown only with a client ID), `Scopes` (separated by spaces, optional), and `Callback port` (optional).
 22. **MSS-FR-BHNZ** Each row of the environment list and of the header list has a name, a value, and a `Secret` check box. A plain row saves its value into the record. A secret row saves its name into `secretEnv` or `secretHeaders` and its value into the vault.
@@ -151,6 +155,20 @@ Saved on this computer only. Nobody else sees them.
 │   [on]  [ Reconnect ] [ Test ] [ Edit ] [ Remove ]                       │
 └──────────────────────────────────────────────────────────────────────────┘
                                                         [ + Add server ]
+```
+
+```
+┌─ Add MCP server ───────────────────────────────────────────┐
+│ Name       [ Issue tracker                         ]       │
+│ ID         issue-tracker  Edit ID                          │
+│ Who uses it                                                │
+│ (•) The team (saved in the project)                        │
+│ ( ) Only me, in this project                               │
+│ ( ) Only me, in all my projects                            │
+│ [x] On for the team by default                             │
+│ Transport  (•) Local command  ( ) Remote (HTTP)            │
+│ …                                                          │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ```

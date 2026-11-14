@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { buildTree } from "../../state/specMap/tree";
-import { applyEdit } from "../../state/specMap/organize";
 import {
   columnsFor,
   holderRect,
@@ -83,15 +82,13 @@ describe("expanded levels (SMZ-FR-RNIT, SMN-FR-TNDA)", () => {
   });
 
   it("SMN-FR-ISBE: a fourth chip starts a new row 28px lower", () => {
+    // g1 holds four spec chips: A1, A2, C1 and C2.
     const index = smallIndex();
-    const layout = layoutOf(
-      3,
-      1200,
-      applyEdit(
-        applyEdit(index, { kind: "move", ref: { kind: "spec", code: "C1" }, parentId: "g1", index: 2 }),
-        { kind: "move", ref: { kind: "spec", code: "C2" }, parentId: "g1", index: 3 },
-      ),
-    );
+    const g1 = (index.roots[0].children[0] as ReturnType<typeof node>).children[0] as ReturnType<typeof node>;
+    const g4 = (index.roots[1].children[0] as ReturnType<typeof node>).children[0] as ReturnType<typeof node>;
+    g1.children = [...(g1.children as ReturnType<typeof spec>[]), ...(g4.children as ReturnType<typeof spec>[])];
+    g4.children = [];
+    const layout = layoutOf(3, 1200, index);
     expect(rel(layout, "C2", "g1")).toEqual({ dx: 10, dy: 90 });
     expect(layout.box.get("g1")!.h).toBe(124);
   });
@@ -105,29 +102,6 @@ describe("expanded levels (SMZ-FR-RNIT, SMN-FR-TNDA)", () => {
     const layout = layoutOf(4, 1200, five);
     expect(["r", "b1", "b2", "g"].map((id) => layout.box.get(id)!.w)).toEqual([380, 360, 340, 320]);
     expect(layout.chip.has("Y1")).toBe(true);
-  });
-});
-
-describe("planned chips (SMD-FR-CGNW, SMD-FR-ULTF)", () => {
-  const planned = () =>
-    applyEdit(
-      applyEdit(smallIndex(), { kind: "attachDraft", nodeId: "g1", draft: { draftId: "p1", name: "One" } }),
-      { kind: "attachDraft", nodeId: "f2", draft: { draftId: "p2", name: "Two" } },
-    );
-
-  it("SMD-FR-CGNW: in a leaf group, planned chips follow the spec chips in the same grid", () => {
-    const layout = layoutOf(3, 1200, planned());
-    expect(layout.chip.get("p1")).toMatchObject({ kind: "planned", w: 96, h: 22 });
-    expect(rel(layout, "p1", "g1")).toEqual({ dx: 214, dy: 62 });
-  });
-
-  it("SMD-FR-ULTF: an expanded branch places planned chips after its children and grows", () => {
-    const layout = layoutOf(2, 1200, planned());
-    // f2 holds one collapsed group (64px): 52 + 64 + 8, then one chip row.
-    expect(rel(layout, "p2", "f2")).toEqual({ dx: 10, dy: 124 });
-    expect(layout.box.get("f2")!.h).toBe(124 + 28 + 8);
-    // Collapsed at level 1, the chip does not render.
-    expect(layoutOf(1, 1200, planned()).chip.has("p2")).toBe(false);
   });
 });
 

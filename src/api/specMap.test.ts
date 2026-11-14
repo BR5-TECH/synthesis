@@ -107,14 +107,13 @@ describe('"load specification map"', () => {
     expect(auth.children[0]).toMatchObject({ code: "auth#1", badge: "R1", path: "openspec/specs/auth/spec.md" });
   });
 
-  it("SMP-FR-MNZW, SMN-FR-VNTJ: a planned capability node is marked as one and holds no planned draft", async () => {
+  it("SMP-FR-MNZW, SMN-FR-VNTJ: a planned capability node is marked as one, under a name of its own", async () => {
     answer({ source: "openspec", index: wire });
     const index = await loadSpecificationMap();
     const ui = index.roots[0].children[1];
     if ("code" in ui) throw new Error("expected an index node");
     expect(ui.plannedCapability).toBe(true);
-    // The session keeps the drafts of SMD-FR-OYLC in `planned`.
-    expect(ui.planned).toBeUndefined();
+    expect(ui).not.toHaveProperty("planned");
     expect(index.roots[0].children[0]).not.toHaveProperty("plannedCapability");
   });
 

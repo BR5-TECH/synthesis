@@ -4,8 +4,9 @@
 //! The validator in the parent module reads raw JSON, so that it can name every
 //! violation. The modules that read a plan after it is valid — the delivery
 //! state (`FDL-flow-delivery.md`), the overlap analysis
-//! (`FOA-flow-overlap-analysis.md`), and the tracker sync
-//! (`FTS-flow-tracker-sync.md`) — read this typed form instead.
+//! (`FOA-flow-overlap-analysis.md`), and the delivery modules that read and
+//! write a plan (`DSR-delivery-source.md`, `GDP-github-delivery-plan.md`) — read
+//! this typed form instead.
 
 use std::collections::{HashMap, HashSet};
 
@@ -44,34 +45,33 @@ impl Kind {
         }
     }
 
-    /// A container kind carries `size` and holds other items; a leaf kind does
-    /// neither (FGV-FR-01).
+    /// A container kind holds other items; a leaf kind does not (FGV-FR-01).
     pub fn is_container(self) -> bool {
         !matches!(self, Self::Task | Self::Defect)
     }
 
-    /// FGV-FR-YHFX: the containers this kind may sit in. `None` is the top level.
-    pub fn permitted_parents(self) -> &'static [Option<Kind>] {
+    /// FGV-FR-YHFX: the rank of the kind. `milestone` is the highest, then
+    /// `epic`, then `feature`, and then `task` and `defect` together.
+    pub fn rank(self) -> u8 {
         match self {
-            Self::Milestone => &[None],
-            Self::Epic => &[Some(Self::Milestone)],
-            Self::Feature => &[Some(Self::Milestone), Some(Self::Epic)],
-            Self::Task => &[Some(Self::Feature)],
-            Self::Defect => &[Some(Self::Feature), Some(Self::Epic), Some(Self::Milestone)],
+            Self::Milestone => 3,
+            Self::Epic => 2,
+            Self::Feature => 1,
+            Self::Task | Self::Defect => 0,
         }
     }
-}
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Position {
-    pub x: f64,
-    pub y: f64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Size {
-    pub width: f64,
-    pub height: f64,
+    /// FGV-FR-YHFX: whether this kind may sit in `container`. `None` is the top
+    /// level. A `milestone` sits at the top level alone. Every other kind sits
+    /// at the top level or in a container of a higher rank.
+    pub fn may_sit_in(self, container: Option<Kind>) -> bool {
+        match (self, container) {
+            (Self::Milestone, None) => true,
+            (Self::Milestone, Some(_)) => false,
+            (_, None) => true,
+            (_, Some(c)) => c.is_container() && c.rank() > self.rank(),
+        }
+    }
 }
 
 /// One plan item. Field order is the order the document writes them in.
@@ -88,16 +88,11 @@ pub struct Item {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local_only: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub footprint: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<String>,
-    pub position: Position,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub size: Option<Size>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -116,76 +111,8 @@ pub struct Edge {
     pub edge_type: EdgeType,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RefKind {
-    Issue,
-    Milestone,
-}
-
-/// A tracker reference (FGV-FR-01's `ref`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TrackerRef {
-    pub kind: RefKind,
-    pub host: String,
-    pub owner: String,
-    pub repo: String,
-    pub number: u64,
-    pub url: String,
-}
-
-/// Read a field that can be absent, `null`, or a value. Serde reads `null` as
-/// an absent field by default, so a base that holds `"type": null` would lose
-/// the field on the next write. With this, an absent field is `None` (through
-/// `default`) and `null` is `Some(None)`.
-fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<T>::deserialize(deserializer).map(Some)
-}
-
-/// The tracker values at the last sync. The issue-only and milestone-only
-/// fields are absent on the other kind of link.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncBase {
-    pub name: String,
-    pub description: String,
-    pub state: String,
-    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    pub r#type: Option<Option<String>>,
-    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    pub parent: Option<Option<TrackerRef>>,
-    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    pub milestone: Option<Option<u64>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blocked_by: Option<Vec<TrackerRef>>,
-    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    pub due: Option<Option<String>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SyncLink {
-    pub item_id: String,
-    #[serde(rename = "ref")]
-    pub reference: TrackerRef,
-    pub base: SyncBase,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Sync {
-    pub tracker: String,
-    pub links: Vec<SyncLink>,
-    /// FTS-FR-YHVD: the tracker items a sync never creates or pulls. Absent
-    /// when empty, as the Flow tab writes it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ignored: Vec<TrackerRef>,
-}
-
-/// A valid Flow document, version 2.
+/// A valid Flow document, version 3. It holds the plan alone: no position, no
+/// size, and no tracker section (FGV-FR-01).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FlowDocument {
     #[serde(default)]
@@ -200,8 +127,6 @@ pub struct FlowDocument {
     pub items: Vec<Item>,
     #[serde(default)]
     pub edges: Vec<Edge>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sync: Option<Sync>,
 }
 
 /// Validate `body` and return its typed form, or the report that refused it.

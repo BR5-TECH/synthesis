@@ -23,7 +23,6 @@ The architect moves over the specification map by panning and by semantic zoom: 
 12. **SMZ-FR-FOXU** Focusing an index node makes the map render only the subtree of that node. The focused node takes the place of the only root node. The level control and the legend then list the levels from the depth of the focused node to the last level.
 13. **SMZ-FR-BRCT** While a node is focused, a breadcrumb sits at the top left of the canvas. It reads `specifications`, then each ancestor of the focused node, then the focused node, separated by `→`. Clicking an ancestor focuses that ancestor. Clicking `specifications` ends the focus and shows the whole index.
 14. **SMZ-FR-LWEQ** Focusing a node or ending a focus shows level 0 of the new view with the framing of SMZ-FR-NUOB, and keeps the selection.
-15. **SMZ-FR-CUTY** The wheel and the zoom controls change nothing while a drag of `SMO-specification-map-organization.md` is in progress.
 
 ## Wireframes
 ```

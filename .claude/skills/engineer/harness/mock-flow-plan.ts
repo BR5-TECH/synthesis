@@ -1,48 +1,19 @@
 /*
- * Delivery plan stand-in (FLO-flow.md, FSR-flow-sync-review.md, FDL, FOA, FTS),
- * for UI auditing only.
+ * Delivery plan stand-in (FLO-flow.md, FDL, FOA, DMS), for UI auditing only.
  *
- * `flows/release.flow.md` is served as a version 2 delivery plan with a
- * hierarchy, blocked items, an overlap, tracker links, a local-only task, and
- * containers that hold enough to show collapsed. The delivery state, the
- * overlaps, and the sync are answered from fixed data, so every marker and the
- * sync review can be seen in a browser.
+ * `flows/release.flow.md` is served as a version 3 delivery plan with a
+ * hierarchy, blocked items, an overlap, and containers that hold enough to
+ * show collapsed. The delivery state and the overlaps are answered from fixed
+ * data, so every marker can be seen in a browser. The layout of each scope is
+ * kept in memory, seeded for the plan, so a drag, a resize, and a collapse
+ * survive a tab switch until the page reloads.
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
 
-const ref = (number: number, kind: "issue" | "milestone" = "issue") => ({
-  kind,
-  host: "github.com",
-  owner: "acme",
-  repo: "payments",
-  number,
-  url:
-    kind === "milestone"
-      ? `https://github.com/acme/payments/milestone/${number}`
-      : `https://github.com/acme/payments/issues/${number}`,
-});
-
-const base = (name: string, extra: Record<string, unknown> = {}) => ({
-  name,
-  description: "",
-  state: "open",
-  type: null,
-  parent: null,
-  milestone: null,
-  blockedBy: [],
-  ...extra,
-});
-
-const link = (itemId: string, number: number, name: string, kind: "issue" | "milestone" = "issue") => ({
-  itemId,
-  ref: ref(number, kind),
-  base: kind === "milestone" ? { name, description: "", state: "open", due: null } : base(name),
-});
-
 /** FLO-FR-03: the plan, in the shape `serializeFlowDocument` writes. */
 export const FLOW_PLAN = {
-  version: 2,
+  version: 3,
   name: "Payments v2",
   description: "Card payments for the EU launch.",
   references: ["flows/payments-hld.md", "specifications/ui/LIB-library.md"],
@@ -53,11 +24,9 @@ export const FLOW_PLAN = {
       name: "Beta",
       description: "Accept **Visa** and **Mastercard**.",
       due: "2027-03-31",
-      position: { x: 16, y: 48 },
-      size: { width: 928, height: 526 },
     },
-    { id: "ep1", kind: "epic", name: "Checkout", parentId: "m1", position: { x: 16, y: 48 }, size: { width: 600, height: 462 } },
-    { id: "f1", kind: "feature", name: "Card capture", parentId: "ep1", position: { x: 16, y: 48 }, size: { width: 568, height: 230 } },
+    { id: "ep1", kind: "epic", name: "Checkout", parentId: "m1" },
+    { id: "f1", kind: "feature", name: "Card capture", parentId: "ep1" },
     {
       id: "t1",
       kind: "task",
@@ -66,7 +35,6 @@ export const FLOW_PLAN = {
       parentId: "f1",
       draftId: "d-tok",
       footprint: ["specifications/core/PST-project-storage.md"],
-      position: { x: 16, y: 48 },
     },
     {
       id: "t2",
@@ -74,10 +42,8 @@ export const FLOW_PLAN = {
       name: "Card form",
       description: "Card **number**, expiry and CVC.",
       parentId: "f1",
-      localOnly: true,
       draftId: "d-card",
       footprint: ["specifications/ui/", "src/payments/card_form.tsx"],
-      position: { x: 204, y: 48 },
     },
     {
       id: "t3",
@@ -85,21 +51,19 @@ export const FLOW_PLAN = {
       name: "3DS challenge",
       parentId: "f1",
       footprint: ["specifications/ui/LIB-library.md"],
-      position: { x: 392, y: 48 },
     },
-    { id: "f2", kind: "feature", name: "Refunds", parentId: "ep1", position: { x: 16, y: 318 }, size: { width: 568, height: 128 } },
-    { id: "t4", kind: "task", name: "Refund API", parentId: "f2", position: { x: 16, y: 44 } },
-    { id: "t5", kind: "task", name: "Partial refunds", parentId: "f2", position: { x: 204, y: 44 } },
-    { id: "t6", kind: "task", name: "Refund emails", parentId: "f2", position: { x: 392, y: 44 } },
+    { id: "f2", kind: "feature", name: "Refunds", parentId: "ep1" },
+    { id: "t4", kind: "task", name: "Refund API", parentId: "f2" },
+    { id: "t5", kind: "task", name: "Partial refunds", parentId: "f2" },
+    { id: "t6", kind: "task", name: "Refund emails", parentId: "f2" },
     {
       id: "x1",
       kind: "defect",
       name: "Decline message is wrong",
       parentId: "m1",
       draftId: "d-decline",
-      position: { x: 650, y: 48 },
     },
-    { id: "f3", kind: "feature", name: "Fraud rules", parentId: "m1", position: { x: 632, y: 236 }, size: { width: 280, height: 274 } },
+    { id: "f3", kind: "feature", name: "Fraud rules", parentId: "m1" },
     {
       id: "t7",
       kind: "task",
@@ -108,11 +72,10 @@ export const FLOW_PLAN = {
       parentId: "f3",
       draftId: "d-velocity",
       footprint: ["specifications/ui/LIB-library.md"],
-      position: { x: 55, y: 48 },
     },
-    { id: "m2", kind: "milestone", name: "GA", due: "2027-06-30", position: { x: 976, y: 48 }, size: { width: 354, height: 300 } },
-    { id: "f4", kind: "feature", name: "Payouts", parentId: "m2", position: { x: 16, y: 48 }, size: { width: 322, height: 236 } },
-    { id: "t8", kind: "task", name: "Payout schedule", parentId: "f4", draftId: "d-payout", position: { x: 16, y: 48 } },
+    { id: "m2", kind: "milestone", name: "GA", due: "2027-06-30" },
+    { id: "f4", kind: "feature", name: "Payouts", parentId: "m2" },
+    { id: "t8", kind: "task", name: "Payout schedule", parentId: "f4", draftId: "d-payout" },
   ],
   edges: [
     { id: "e1", from: "t1", to: "t2", type: "blocks" },
@@ -120,26 +83,48 @@ export const FLOW_PLAN = {
     { id: "e3", from: "m1", to: "m2", type: "blocks" },
     { id: "e4", from: "x1", to: "t3", type: "relates" },
   ],
-  sync: {
-    tracker: "github",
-    links: [
-      link("m1", 3, "Beta", "milestone"),
-      link("ep1", 41, "Checkout"),
-      link("f1", 42, "Card capture"),
-      link("f2", 46, "Refunds"),
-      link("f3", 48, "Fraud rules"),
-      link("t1", 51, "Tokenize card numbers"),
-      link("t3", 53, "3DS challenge"),
-      link("x1", 47, "Decline message is wrong"),
-      link("t7", 55, "Velocity check"),
-      link("t9", 49, "Old spike"),
-    ],
-    // FTS-FR-YHVD: a tracker item an earlier Unlink keeps out of every sync.
-    ignored: [ref(60)],
-  },
 };
 
 export const FLOW_PLAN_BODY = `${JSON.stringify(FLOW_PLAN, null, 2)}\n`;
+
+type Layout = {
+  items: Record<
+    string,
+    { position?: { x: number; y: number }; size?: { width: number; height: number }; collapsed?: boolean }
+  >;
+};
+
+const at = (x: number, y: number, width?: number, height?: number) => ({
+  position: { x, y },
+  ...(width !== undefined && height !== undefined ? { size: { width, height } } : {}),
+});
+
+/** DMS-FR-DMWD: the layout of each scope, seeded for the plan of `FLOW_PLAN`. */
+const layouts = new Map<string, Layout>([
+  [
+    "flow:flows/release.flow.md",
+    {
+      items: {
+        m1: at(16, 48, 928, 526),
+        ep1: at(16, 48, 600, 462),
+        f1: at(16, 48, 568, 230),
+        t1: at(16, 48),
+        t2: at(204, 48),
+        t3: at(392, 48),
+        f2: at(16, 318, 568, 128),
+        t4: at(16, 44),
+        t5: at(204, 44),
+        t6: at(392, 44),
+        x1: at(650, 48),
+        f3: at(632, 236, 280, 274),
+        t7: at(55, 48),
+        m2: at(976, 48, 354, 300),
+        f4: at(16, 48, 322, 236),
+        t8: at(16, 48),
+      },
+    },
+  ],
+]);
 
 type State = "not_started" | "drafting" | "in_progress" | "done" | "dropped";
 
@@ -171,7 +156,7 @@ interface PlanItem {
 }
 
 /** FDL-FR-VGZI / FDL-FR-JYKC / FDL-FR-PXHL, from the fixed leaf states above. */
-function deliveryState(body: string) {
+export function deliveryStateOf(body: string) {
   let doc: { items: PlanItem[]; edges: Array<{ from: string; to: string; type: string }> };
   try {
     doc = JSON.parse(body);
@@ -245,100 +230,22 @@ function deliveryState(body: string) {
   };
 }
 
-/** FTS-FR-LVTU: the result the review shows, as in the FSR wireframe. */
-const SYNC_RESULT = {
-  created: 0,
-  updated: 2,
-  added: 0,
-  changed: 1,
-  conflicts: [
-    {
-      id: "c-name-f1",
-      kind: "field",
-      itemId: "f1",
-      itemName: "Card capture",
-      field: "name",
-      base: "Card capture",
-      flow: "Card capture",
-      tracker: "Card capture and 3DS",
-      choices: ["keep_flow", "take_tracker"],
-      url: "https://github.com/acme/payments/issues/42",
-    },
-    {
-      id: "c-parent-t1",
-      kind: "invalid_on_tracker",
-      itemId: "t1",
-      itemName: "Tokenize card numbers",
-      field: "parent",
-      base: ref(42),
-      flow: ref(42),
-      tracker: ref(41),
-      choices: ["keep_flow", "unlink"],
-      url: "https://github.com/acme/payments/issues/51",
-    },
-    {
-      id: "c-gone-t9",
-      kind: "removed_in_flow",
-      itemId: "t9",
-      itemName: "Old spike",
-      field: null,
-      base: null,
-      flow: null,
-      tracker: null,
-      choices: ["unlink", "restore"],
-      url: "https://github.com/acme/payments/issues/49",
-    },
-  ],
-  skipped: [
-    {
-      number: 58,
-      title: "Load test plan",
-      url: "https://github.com/acme/payments/issues/58",
-      reason: "no_kind_fits",
-    },
-    {
-      number: null,
-      title: "Payout schedule",
-      url: null,
-      itemId: "t8",
-      reason: "issue_type_unavailable",
-    },
-  ],
-  stale: [],
-};
-
 /** The commands of the delivery plan; NOT_HANDLED for every other one. */
 export function flowPlanInvoke(cmd: string, a: Record<string, unknown>): unknown {
   switch (cmd) {
     case "load_flow_delivery_state":
-      return deliveryState(String(a.body ?? ""));
+      return deliveryStateOf(String(a.body ?? ""));
     case "analyze_flow_overlap":
       return {
         overlaps: [{ items: ["t3", "t7"], paths: ["specifications/ui/LIB-library.md"] }],
       };
-    case "sync_flow_with_tracker":
-      return new Promise((res) => setTimeout(() => res(SYNC_RESULT), 600));
-    case "resolve_flow_sync_conflicts": {
-      const ids = new Set(
-        ((a.resolutions as Array<{ conflictId: string }>) ?? []).map((r) => r.conflictId),
-      );
-      return {
-        ...SYNC_RESULT,
-        conflicts: SYNC_RESULT.conflicts.filter((c) => !ids.has(c.id)),
-      };
-    }
-    case "read_tracker_item": {
-      const n = Number(a.number);
-      if (n === 404) {
-        return Promise.reject({
-          code: "tracker_item_not_found",
-          message: `No issue #${n} in acme/payments.`,
-        });
-      }
-      return {
-        ref: ref(n, a.kind === "milestone" ? "milestone" : "issue"),
-        ...base(`Issue ${n} from GitHub`),
-      };
+    case "load_delivery_layout":
+      return layouts.get(String(a.scope)) ?? { items: {} };
+    case "save_delivery_layout": {
+      const layout = a.layout as Layout;
+      if (Object.keys(layout?.items ?? {}).length === 0) layouts.delete(String(a.scope));
+      else layouts.set(String(a.scope), layout);
+      return undefined;
     }
     case "open_tracker_link":
       return undefined;
@@ -349,7 +256,7 @@ export function flowPlanInvoke(cmd: string, a: Record<string, unknown>): unknown
   }
 }
 
-/** FGV-FR-02: a cut-down stand-in for the validator of a version 2 plan. */
+/** FGV-FR-02: a cut-down stand-in for the validator of a version 3 plan. */
 export function validateFlowPlan(body: string): {
   valid: boolean;
   violations: Array<{ code: string; message: string }>;
@@ -361,10 +268,10 @@ export function validateFlowPlan(body: string): {
   } catch (e) {
     return { valid: false, violations: [{ code: "not_json", message: `the file is not valid JSON: ${e}` }] };
   }
-  if (raw?.version !== 2) {
+  if (raw?.version !== 3) {
     return {
       valid: false,
-      violations: [{ code: "unknown_version", message: "expected a Flow document of version 2" }],
+      violations: [{ code: "unknown_version", message: "expected a Flow document of version 3" }],
     };
   }
   return { valid: true, violations: [] };

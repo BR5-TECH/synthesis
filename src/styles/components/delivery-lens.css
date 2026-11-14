@@ -1,0 +1,227 @@
+/* ---------- Delivery lens ----------
+   MDL-map-delivery-lens.md and SDL-specification-delivery-links.md. The lens
+   sits in the Map tab's frame (.smap) and hosts the Flow canvas (flow.css);
+   these rules hold what the lens adds around it. */
+
+/* MDL-FR-GDUP: the 170 × 8px bar of the leaf states. */
+.dlens-bar {
+  flex: none;
+  display: flex;
+  width: 170px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-sunken);
+}
+.dlens-bar__segment { height: 100%; }
+.dlens-bar__segment[data-state="done"] { background: var(--ok); }
+.dlens-bar__segment[data-state="in_progress"] { background: var(--warn); }
+.dlens-bar__segment[data-state="drafting"] { background: var(--accent); }
+.dlens-bar__segment[data-state="not_started"] { background: var(--fg-4); opacity: 0.55; }
+.dlens-bar__segment[data-state="dropped"] { background: var(--border-2); }
+
+/* The canvas column: the notices, then the canvas that takes the rest. */
+.dlens-main { position: relative; }
+.dlens-plan { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dlens-canvas { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dlens-canvas > .flow-surface { flex: 1; min-height: 0; }
+
+/* MDL-FR-XMQU: the empty state. */
+.dlens-empty { gap: 6px; }
+.dlens-empty__title { font-weight: var(--fw-semi); color: var(--fg-1); }
+.dlens-empty__reason { max-width: 32rem; text-align: center; color: var(--fg-3); }
+.dlens-empty .smap-state__actions { margin-top: 8px; }
+
+/* MDL-FR-LSKL / MDL-FR-IEWL / MDL-FR-MWMO: one line each, below the band. */
+.dlens-notice { flex-wrap: wrap; }
+.dlens-notice > span[role="status"] { flex: 1; min-width: 0; }
+.dlens-notice__time { color: var(--fg-3); }
+.dlens-notice__action { flex: none; height: 22px; }
+.dlens-notice__toggle {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dlens-notice__toggle:hover { color: var(--fg-1); }
+.dlens-notice__list {
+  flex: 1 1 100%;
+  margin: 2px 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--fg-2);
+}
+
+/* MDL-FR-KKYH: what the band of a GitHub plan adds. */
+.dlens-band__repo {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+/* MDL-FR-BZHY / MDL-FR-DHHW: the repository and the Flow path are links. */
+.dlens-band__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  background: none;
+  cursor: pointer;
+}
+.dlens-band__link:hover:not(:disabled) { color: var(--accent); }
+.dlens-band__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dlens-band__link:disabled { cursor: default; color: var(--fg-3); }
+.dlens-band__read { flex: none; font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; }
+.dlens-band__refresh { display: inline-flex; align-items: center; gap: 4px; }
+
+/* The band menu: a transient surface of the tab. */
+.dlens-menu { position: relative; flex: none; }
+.dlens-menu__toggle { width: 26px; height: 26px; padding: 0; font-size: var(--fs-ui-md); line-height: 1; }
+.dlens-menu__list.draft-actions__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  bottom: auto;
+  z-index: 40;
+  width: 188px;
+  gap: 0;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+.dlens-menu__list .draft-actions__item {
+  min-width: 0;
+  border-color: transparent;
+  background: var(--bg-elevated);
+  box-shadow: none;
+  padding: 5px 8px;
+}
+.dlens-menu__list .draft-actions__item:hover,
+.dlens-menu__list .draft-actions__item:focus-visible { background: var(--accent-soft); outline: none; }
+
+/* SDL-FR-KNOP / MDL-FR-QEXS / MDL-FR-PUKL: the rows the lens adds to the panel. */
+.dlens-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-1);
+}
+.dlens-panel__loading { margin: 0; font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.dlens-specs { display: flex; flex-direction: column; gap: 2px; }
+.dlens-spec {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.dlens-spec:hover { background: var(--bg-hover); border-color: var(--border-1); }
+.dlens-spec:focus-visible { outline: none; border-color: var(--accent); }
+.dlens-spec .smap-code { padding: 1px 3px; font-size: var(--fs-ui-2xs); }
+.dlens-spec__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlens-add-issue .flow-panel__row { flex-wrap: nowrap; }
+.dlens-add-issue__input { width: 96px; font-family: var(--font-mono); }
+
+/* MDL-FR-PUKL: Add existing issue at the top level, from the add affordance. */
+.dlens-add-top {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+.dlens-add-top .dlens-panel { margin-top: 0; padding-top: 0; border-top: none; }
+.dlens-add-top__close { flex: none; }
+
+/* SDL-FR-VAGU: the Delivered by rows. */
+.dlens-delivered .flow-glyph { flex: none; color: var(--fg-2); }
+.dlens-delivered .flow-chip { margin-left: auto; }
+.dlens-loading-row .smap-row__label,
+.dlens-muted { color: var(--fg-3); }
+
+/* The dialogs of the lens. */
+.modal.dlens-dialog { width: 480px; display: flex; flex-direction: column; max-height: calc(100vh - 64px); }
+.modal.dlens-dialog > .modal__body { overflow-y: auto; min-height: 0; }
+.modal.dlens-dialog > .modal__head,
+.modal.dlens-dialog > .modal__actions { flex: none; }
+.dlens-dialog__line { margin: 0; color: var(--fg-1); line-height: var(--lh-snug); }
+.dlens-dialog__hint { margin: 0; font-size: var(--fs-ui-sm); color: var(--fg-3); line-height: var(--lh-snug); }
+.dlens-dialog__error { margin: 0; font-size: var(--fs-ui-sm); color: var(--danger); }
+.dlens-dialog__failure { display: flex; flex-direction: column; gap: 6px; }
+.dlens-dialog__progress {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+.dlens-dialog__links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dlens-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.dlens-link:hover { text-decoration: underline; }
+.dlens-field { display: flex; flex-direction: column; gap: 4px; }
+.dlens-field__label { font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.dlens-types { display: flex; flex-direction: column; gap: 6px; }
+.dlens-types__row { display: grid; grid-template-columns: 1fr auto 132px; align-items: center; gap: 10px; }
+.dlens-types__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-medium); }
+.dlens-types__count { font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; }
+.dlens-types__select { width: 100%; }
+.dlens-spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: dlens-spin 0.8s linear infinite;
+}
+@keyframes dlens-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .dlens-spinner { animation: none; border-top-color: var(--accent); }
+}

@@ -11,7 +11,6 @@ import {
   specsUnder,
   type TreeIndex,
 } from "../../state/specMap/tree";
-import { deleteOutcome } from "../../state/specMap/organize";
 import { EMPTY_ROLLUP, rollupOfSpec, type Rollup } from "../../state/specMap/rollups";
 import {
   changeLocationLabel,
@@ -52,19 +51,10 @@ interface Detail {
 }
 
 export type InspectorModel =
-  /** SMO-FR-RVAV: `newRootLabel` is null where the map offers no organization. */
-  | { kind: "empty"; newRootLabel: string | null }
-  | ({
-      kind: "index";
-      id: string;
-      openLabel: string;
-      newChildLabel: string | null;
-      canDelete: boolean;
-      /** SMO-FR-RVAV: whether Rename and Delete are offered. */
-      organize: boolean;
-    } & Detail)
+  /** SMI-FR-KDGX: no node is selected. */
+  | { kind: "empty" }
+  | ({ kind: "index"; id: string; openLabel: string } & Detail)
   | ({ kind: "spec"; code: string } & Detail)
-  | { kind: "planned"; kindName: string; draftId: string; name: string; holderLabel: string }
   | {
       kind: "change";
       kindName: string;
@@ -106,10 +96,7 @@ export function inspectorModel(
 ): InspectorModel {
   const levels = tree.index.levels;
   const openspec = isOpenSpecIndex(tree.index);
-  const empty: InspectorModel = {
-    kind: "empty",
-    newRootLabel: openspec ? null : `New ${levels[0]?.singular ?? "node"}`,
-  };
+  const empty: InspectorModel = { kind: "empty" };
   if (!selection) return empty;
   const labelOf = (id: string) => tree.nodes.get(id)?.label ?? "";
 
@@ -125,19 +112,6 @@ export function inspectorModel(
       locationLabel: changeLocationLabel(chip),
       holderLabel: labelOf(holder),
       attention: (chip.issues ?? []).map(issueLine),
-    };
-  }
-
-  if (selection.kind === "planned") {
-    const draft = tree.planned.get(selection.draftId);
-    const holder = tree.plannedParent.get(selection.draftId);
-    if (!draft || !holder) return empty;
-    return {
-      kind: "planned",
-      kindName: "draft",
-      draftId: draft.draftId,
-      name: draft.name,
-      holderLabel: labelOf(holder),
     };
   }
 
@@ -245,10 +219,5 @@ export function inspectorModel(
           .slice(0, 4)
           .map((s) => `${s.code} — ${s.label}: no coverage yet`),
     openLabel: `Open ${levels[depth]?.singular ?? ""}`,
-    // SMO-FR-UAKE / SMO-FR-RVAV
-    newChildLabel:
-      !openspec && depth < tree.leafDepth ? `New ${levels[depth + 1]?.singular ?? ""}` : null,
-    canDelete: deleteOutcome(tree, node.id).allowed,
-    organize: !openspec,
   };
 }

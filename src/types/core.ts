@@ -104,16 +104,14 @@ export interface SaveResult {
 
 /**
  * One thing wrong with a Flow document (`../specifications/core/FGV-flow-graph-validation.md`
- * FGV-FR-04). `elementId` names the node or loop it sits on, `edgeId` names the
- * edge, and a violation about the document as a whole carries neither.
+ * FGV-FR-04). `elementId` names the item it sits on, `edgeId` names the edge,
+ * and a violation about the document as a whole carries neither.
  */
 export interface FlowViolation {
   code: string;
   message: string;
   elementId?: string;
   edgeId?: string;
-  /** The position of the sync link a violation sits on (FGV-FR-LWPD). */
-  linkIndex?: number;
 }
 
 /** What `"validate flow document"` returns (FGV-FR-02). */

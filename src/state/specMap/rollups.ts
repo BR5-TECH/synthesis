@@ -1,6 +1,6 @@
 /**
  * SMN-FR-OJAY: the counts of an index node, computed from the spec nodes
- * beneath it in the current tree. The index supplies no aggregate.
+ * beneath it in the loaded tree. The index supplies no aggregate.
  */
 import { specChildren, indexChildren, type TreeIndex } from "./tree";
 import {

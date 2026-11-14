@@ -24,16 +24,14 @@ export function Legend({ levelName }: { levelName: string }) {
   );
 }
 
-/** SMZ-FR-JWXA / SMZ-FR-CUTY */
+/** SMZ-FR-JWXA */
 export function ZoomControls({
   scale,
-  disabled,
   onZoomIn,
   onZoomOut,
   onReset,
 }: {
   scale: number;
-  disabled: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
@@ -45,7 +43,6 @@ export function ZoomControls({
         className="smap-zoom__btn"
         aria-label="Zoom out"
         title="Zoom out"
-        disabled={disabled}
         onClick={onZoomOut}
       >
         <Icon.Minus size={13} />
@@ -55,7 +52,6 @@ export function ZoomControls({
         className="smap-zoom__btn"
         aria-label="Zoom in"
         title="Zoom in"
-        disabled={disabled}
         onClick={onZoomIn}
       >
         <Icon.Plus size={13} />
@@ -65,7 +61,6 @@ export function ZoomControls({
         className="smap-zoom__btn smap-zoom__label"
         aria-label="Reset view"
         title="Fit"
-        disabled={disabled}
         onClick={onReset}
       >
         {scaleLabel(scale)}

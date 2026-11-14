@@ -49,15 +49,14 @@ const draft = (id: string, name: string): DraftSummary =>
 /** A feature with two tasks; `t1` links `d-1` when `linked`. */
 const twoTasks = (linked = false, extra: Record<string, unknown> = {}) =>
   plan([
-    item("f1", "feature", { size: { width: 600, height: 300 } }),
+    item("f1", "feature", {}),
     item("t1", "task", {
       parentId: "f1",
       name: "Tokenize",
-      position: { x: 20, y: 60 },
       ...(linked ? { draftId: "d-1" } : {}),
       ...extra,
     }),
-    item("t2", "task", { parentId: "f1", name: "Card form", position: { x: 220, y: 60 } }),
+    item("t2", "task", { parentId: "f1", name: "Card form" }),
   ]);
 
 describe("Create draft (FLO-FR-NRBV)", () => {
@@ -147,7 +146,7 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const b = flowBackend(
       plan([
         item("m1", "milestone"),
-        item("x1", "defect", { parentId: "m1", name: "Decline message", position: { x: 20, y: 60 } }),
+        item("x1", "defect", { parentId: "m1", name: "Decline message" }),
       ]),
     );
     b.on.create_draft = (args) => ({
@@ -190,7 +189,7 @@ describe("the draft row (FLO-FR-QZUR)", () => {
     const b = flowBackend(
       plan([
         item("m1", "milestone"),
-        item("x1", "defect", { parentId: "m1", draftId: "d-4", position: { x: 20, y: 60 } }),
+        item("x1", "defect", { parentId: "m1", draftId: "d-4" }),
       ]),
     );
     b.delivery = {

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ChangeChip, MapRef } from "../../state/specMap/types";
 import { Icon } from "../icons";
 import { CompletenessBar } from "./CompletenessBar";
@@ -8,14 +9,22 @@ export interface InspectorActions {
   onSelect: (ref: MapRef) => void;
   onFocus: (id: string) => void;
   onZoomTo: (ref: MapRef) => void;
-  onCreate: (parentId: string | null) => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
-  onNewDraft: (id: string) => void;
   onOpenSpec: (code: string) => void;
-  onOpenDraft: (draftId: string, name: string) => void;
   /** SMI-FR-UKIV: open the change of a change chip in its location. */
   onOpenChange: (chip: ChangeChip) => void;
+}
+
+/**
+ * The insertion points of `SDL-specification-delivery-links.md` in the
+ * inspector. Each one gets the subject, a spec node or an index node, and
+ * returns what to render there, or null for nothing. A change chip subject
+ * gets no slot.
+ */
+export interface InspectorSlots {
+  /** SDL-FR-VAGU: the **Delivered by** list, after the **Depends on** list. */
+  deliveredBy?: (subject: MapRef) => ReactNode;
+  /** SDL-FR-CFHH: **Plan work**, in the action row after the primary and secondary actions. */
+  planWork?: (subject: MapRef) => ReactNode;
 }
 
 /** SMI-FR-ZLOA / SMI-FR-BXET: the card of the lines that need attention. */
@@ -72,10 +81,12 @@ export function Inspector({
   model,
   overlay,
   actions,
+  slots,
 }: {
   model: InspectorModel;
   overlay: boolean;
   actions: InspectorActions;
+  slots?: InspectorSlots;
 }) {
   return (
     <aside className="smap-inspector" data-overlay={overlay || undefined} aria-label="Inspector">
@@ -93,30 +104,28 @@ export function Inspector({
         </button>
       </div>
       <div className="smap-inspector__body">
-        <InspectorBody model={model} actions={actions} />
+        <InspectorBody model={model} actions={actions} slots={slots ?? {}} />
       </div>
     </aside>
   );
 }
 
-function InspectorBody({ model, actions }: { model: InspectorModel; actions: InspectorActions }) {
+function InspectorBody({
+  model,
+  actions,
+  slots,
+}: {
+  model: InspectorModel;
+  actions: InspectorActions;
+  slots: InspectorSlots;
+}) {
   if (model.kind === "empty") {
-    return (
-      <>
-        <p className="smap-inspector__hint">Select a node to inspect it.</p>
-        {model.newRootLabel && (
-          <div className="smap-actions">
-            <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onCreate(null)}>
-              <Icon.Plus size={12} /> {model.newRootLabel}
-            </button>
-          </div>
-        )}
-      </>
-    );
+    // SMI-FR-KDGX: the sentence alone, with no action.
+    return <p className="smap-inspector__hint">Select a node to inspect it.</p>;
   }
 
   if (model.kind === "change") {
-    // SMI-FR-ZMZB / SMI-FR-UKIV / SMD-FR-YQSR: no New draft for a change chip.
+    // SMI-FR-ZMZB / SMI-FR-UKIV
     return (
       <>
         <div className="smap-inspector__crumbs" data-testid="spec-map-change-holder">On {model.holderLabel}</div>
@@ -138,27 +147,6 @@ function InspectorBody({ model, actions }: { model: InspectorModel; actions: Ins
             onClick={() => actions.onOpenChange(model.chip)}
           >
             Open change
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  if (model.kind === "planned") {
-    return (
-      <>
-        <div className="smap-inspector__crumbs">Planned under {model.holderLabel}</div>
-        <div className="smap-inspector__heading">
-          <span className="smap-code smap-code--draft">draft</span>
-          <span className="smap-inspector__name">{model.name}</span>
-        </div>
-        <div className="smap-actions">
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => actions.onOpenDraft(model.draftId, model.name)}
-          >
-            Open draft
           </button>
         </div>
       </>
@@ -207,56 +195,27 @@ function InspectorBody({ model, actions }: { model: InspectorModel; actions: Ins
         </>
       )}
 
+      {/* SDL-FR-VAGU: the Delivered by list follows the Depends on list. */}
+      {slots.deliveredBy?.(model.ref)}
+
       <Attention lines={model.attention} />
 
-      {model.kind === "spec" ? (
-        <div className="smap-actions">
+      <div className="smap-actions">
+        {model.kind === "spec" ? (
           <button type="button" className="btn btn--primary btn--sm" onClick={() => actions.onOpenSpec(model.code)}>
             Open in editor
           </button>
-          <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onZoomTo(model.ref)}>
-            Zoom to
+        ) : (
+          <button type="button" className="btn btn--primary btn--sm" onClick={() => actions.onFocus(model.id)}>
+            {model.openLabel}
           </button>
-        </div>
-      ) : (
-        <>
-          <div className="smap-actions">
-            <button type="button" className="btn btn--primary btn--sm" onClick={() => actions.onFocus(model.id)}>
-              {model.openLabel}
-            </button>
-            <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onZoomTo(model.ref)}>
-              Zoom to
-            </button>
-          </div>
-          {/* SMO-FR-RVAV: an OpenSpec index offers no organization. */}
-          {model.organize && (
-            <div className="smap-actions">
-              {model.newChildLabel && (
-                <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onCreate(model.id)}>
-                  <Icon.Plus size={12} /> {model.newChildLabel}
-                </button>
-              )}
-              <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onEdit(model.id)}>
-                Rename
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger btn--sm"
-                disabled={!model.canDelete}
-                title={model.canDelete ? undefined : "Move the children out first"}
-                onClick={() => actions.onDelete(model.id)}
-              >
-                Delete
-              </button>
-            </div>
-          )}
-          <div className="smap-actions">
-            <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onNewDraft(model.id)}>
-              <Icon.Plus size={12} /> New draft
-            </button>
-          </div>
-        </>
-      )}
+        )}
+        <button type="button" className="btn btn--sm smap-action" onClick={() => actions.onZoomTo(model.ref)}>
+          Zoom to
+        </button>
+        {/* SDL-FR-CFHH: Plan work follows the primary and secondary actions. */}
+        {slots.planWork?.(model.ref)}
+      </div>
     </>
   );
 }

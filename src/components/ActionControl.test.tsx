@@ -11,7 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { Editor } from "./Editor";
-import { FlowCanvas } from "./Flow";
+import { FlowCanvas, fileBinding } from "./Flow";
 import { DiffView } from "./DiffView";
 import { EditSessionStore } from "../state/editSessions";
 import { FlowSessionStore } from "../state/flowSessions";
@@ -58,7 +58,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const BODY = "# Editor\n\nSteps to run before the first session.\n";
 const FLOW_BODY = JSON.stringify({
-  version: 2,
+  version: 3,
   name: "Onboarding review",
   items: [],
   edges: [],
@@ -265,7 +265,7 @@ describe("the action set is decided by the item (ACT-FR-04, ACT-FR-05)", () => {
       flows.openTab("review.flow");
       await flows.get("review.flow")?.pendingLoad;
     });
-    render(<FlowCanvas flowId="review.flow" flows={flows} />);
+    render(<FlowCanvas binding={fileBinding(flows, "review.flow")} />);
     await screen.findByRole("button", { name: "Actions" });
     expect(items(await openActions())).toEqual(["Discuss"]);
   });

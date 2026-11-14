@@ -8,7 +8,7 @@ import { ProjectAgentGroupSettings } from "./ProjectAgentGroupSettings";
 import { DraftTemplateSection } from "./DraftTemplateSection";
 import { OpenSpecImageRequirement, OpenSpecSection } from "./OpenSpecSection";
 import { GithubPollingSection } from "./GithubPollingSection";
-import { FlowSyncSettingsGroup } from "./FlowSyncSettings";
+import { DeliverySettingsSection } from "./DeliverySettingsSection";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
 import { GraduationSettingsSection } from "./GraduationSettingsSection";
 import {
@@ -62,6 +62,14 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
     "github-polling",
     "GitHub Project settings",
     "Which GitHub Project the Git panel reads ready tasks from, how often, and how drafts are published as issues.",
+  ],
+  // SET-FR-03 / SET-FR-WDYJ: the Delivery section, after GitHub Project
+  // settings. Each change persists at once, outside the section dirty state
+  // (SET-FR-XUKD).
+  [
+    "delivery",
+    "Delivery",
+    "Where the project's delivery plan lives, and how GitHub issue Types map to plan kinds.",
   ],
   ["adapters", "Agent adapters", "The agent backends available to this project."],
   // SET-FR-06 / MSS-FR-DZIQ: the MCP servers section. Each action writes at
@@ -468,10 +476,12 @@ export function Settings({
         <>
           <GithubPollingSection />
           <GithubPublicationSettingsGroup />
-          {/* SET-FR-ZJRC: the Flow sync group, below the Publication group. */}
-          <FlowSyncSettingsGroup />
         </>
       )}
+
+      {/* SET-FR-WDYJ through SET-FR-RUPL: the Delivery section persists at
+          once, so it takes no part in the save-before-close sweep. */}
+      {section === "delivery" && <DeliverySettingsSection />}
 
       {/* The placeholder for the sections that are still stubs. Listed as the
           ones it *excludes*, so a section built later has to be named here —
@@ -484,6 +494,7 @@ export function Settings({
         section !== "docker" &&
         section !== "graduation" &&
         section !== "github-polling" &&
+        section !== "delivery" &&
         section !== "agents" &&
         section !== "mcp" &&
         section !== "indexing" && (

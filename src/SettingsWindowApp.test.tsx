@@ -239,6 +239,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "OpenSpec",
       "Target repo bindings",
       "GitHub Project settings",
+      "Delivery",
       "Agent adapters",
       "MCP servers",
       "Plugins",

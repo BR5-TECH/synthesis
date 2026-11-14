@@ -1,6 +1,7 @@
 /**
  * The plan tags of a draft's action row
- * (`../../specifications/ui/NAW-new-artifact.md` NAW-FR-TXKN, NAW-FR-SGVS).
+ * (`../../specifications/ui/NAW-new-artifact.md` NAW-FR-TXKN, NAW-FR-SGVS,
+ * NAW-FR-PHGO).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -26,8 +27,8 @@ import { resetMermaidForTest } from "./markdownMermaidRender";
 import type { FlowItemMatch } from "../types";
 
 const MATCHES: FlowItemMatch[] = [
-  { flowId: "plans/payments.flow", flowName: "Payments v2", itemId: "t1", itemName: "Tokenize", kind: "task" },
-  { flowId: "plans/unnamed.flow", flowName: "", itemId: "x1", itemName: "Decline text", kind: "defect" },
+  { flowId: "plans/payments.flow", flowName: "Payments v2", delivery: false, itemId: "t1", itemName: "Tokenize", kind: "task" },
+  { flowId: "plans/unnamed.flow", flowName: "", delivery: false, itemId: "x1", itemName: "Decline text", kind: "defect" },
 ];
 
 function answer(items: FlowItemMatch[] | Error | Promise<FlowItemMatch[]>) {
@@ -81,6 +82,28 @@ describe("PlanTags", () => {
       name: "payments.flow",
       artifactType: "flow",
     });
+  });
+
+  it("NAW-FR-PHGO: a tag of an item of the delivery shows that item on the Map tab and opens no Flow", async () => {
+    answer([{ ...MATCHES[0], delivery: true }]);
+    const open = vi.fn();
+    const show = vi.fn();
+    render(<PlanTags draftId="d1" onOpenArtifact={open} onShowDeliveryItem={show} />);
+    fireEvent.click(await screen.findByTestId("draft-plan-tag"));
+    expect(show).toHaveBeenCalledWith("t1");
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("NAW-FR-PHGO: a tag of a GitHub plan, which has no Flow file, shows the item on the Map tab and is named by the Project title", async () => {
+    answer([{ flowId: null, flowName: "Payments board", delivery: true, itemId: "i42", itemName: "Card form", kind: "task" }]);
+    const open = vi.fn();
+    const show = vi.fn();
+    render(<PlanTags draftId="d1" onOpenArtifact={open} onShowDeliveryItem={show} />);
+    const tag = await screen.findByTestId("draft-plan-tag");
+    expect(tag).toHaveTextContent("Payments board › Card form");
+    fireEvent.click(tag);
+    expect(show).toHaveBeenCalledWith("i42");
+    expect(open).not.toHaveBeenCalled();
   });
 
   it("NAW-FR-TXKN: the items are read again for each mount, so a tab made active again reads them anew", async () => {
@@ -145,5 +168,21 @@ describe("the plan tags in the New Artifact tab (NAW-FR-TXKN)", () => {
       expect.objectContaining({ id: "plans/payments.flow", artifactType: "flow" }),
     );
     expect(invokeMock).toHaveBeenCalledWith("find_flow_items_for_draft", { draftId: "d1" });
+  });
+
+  it("NAW-FR-PHGO: a tag of an item of the delivery calls the shell's route to that item, and opens no Flow", async () => {
+    stub();
+    const base = invokeMock.getMockImplementation();
+    invokeMock.mockImplementation((cmd: string, args: unknown) =>
+      cmd === "find_flow_items_for_draft" ? Promise.resolve([{ ...MATCHES[0], delivery: true }]) : base?.(cmd, args),
+    );
+    const onOpenArtifact = vi.fn();
+    const onShowDeliveryItem = vi.fn();
+    renderWorkspace(undefined, { onOpenArtifact, onShowDeliveryItem });
+
+    const row = await screen.findByTestId("draft-workspace-chrome");
+    fireEvent.click(await within(row).findByTestId("draft-plan-tag"));
+    expect(onShowDeliveryItem).toHaveBeenCalledWith("t1");
+    expect(onOpenArtifact).not.toHaveBeenCalled();
   });
 });

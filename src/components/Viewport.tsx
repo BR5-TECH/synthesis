@@ -4,8 +4,9 @@ import type { EditSessionStore } from "../state/editSessions";
 import type { DraftSessionStore } from "../state/draftSessions";
 import type { FlowSessionStore } from "../state/flowSessions";
 import type { NamedDraftOutcome } from "../hooks/shell/draftActions";
+import type { GithubPollingController } from "../hooks/useGithubPolling";
 import { Dashboard } from "./Dashboard";
-import { FlowCanvas } from "./Flow";
+import { FlowCanvas, fileBinding } from "./Flow";
 import { Editor } from "./Editor";
 import { DiffView } from "./DiffView";
 import { SearchResults } from "./SearchResults";
@@ -74,6 +75,11 @@ interface ViewportProps {
    */
   onOpenDraft: (draftId: string) => void;
   /**
+   * DSH-FR-DFDW: open the Map tab on its Delivery lens, with one milestone
+   * selected, or with none for null (per MDL-FR-JIKK).
+   */
+  onShowDeliveryItem?: (itemId: string | null) => void;
+  /**
    * FLO-FR-NRBV: create a draft named after a Flow task, with no tab opened.
    */
   onCreateDraftForFlow?: (name: string) => Promise<NamedDraftOutcome>;
@@ -89,10 +95,17 @@ interface ViewportProps {
   onDraftRenamed: (draftId: string, name: string) => void;
   /** SMP-FR-QNUH: the shell-owned map session the Map tab renders from. */
   specMap: SpecMapSessionStore;
-  /** SMD-FR-HVBE: create a draft from a map node and place it there. */
-  onNewDraftForMapNode: (nodeId: string) => void;
   /** SNV-FR-56: a dialog of the Map tab closes every other floating overlay. */
   onOverlayOpening?: () => void;
+  /**
+   * MDL-FR-QEXS / MDL-FR-UKGH / MDL-FR-JRGK: the polling view and the claim
+   * flow the Delivery lens offers on a task.
+   */
+  githubPolling?: GithubPollingController | null;
+  /** MDL-FR-XMQU / MDL-FR-WAOZ: open a section of Project settings. */
+  onOpenProjectSettings?: (section: "delivery" | "github-polling") => void;
+  /** MDL-FR-DHHW / LIB-FR-18: reveal a file in the Project panel. */
+  onRevealInProject?: (artifactId: string) => void;
 }
 
 /**
@@ -124,13 +137,16 @@ export function Viewport({
   onGraduationStarted,
   onOpenRun,
   onOpenDraft,
+  onShowDeliveryItem,
   onCreateDraftForFlow,
   onOpenDraftTab,
   onCloseTab,
   onDraftRenamed,
   specMap,
-  onNewDraftForMapNode,
   onOverlayOpening,
+  githubPolling,
+  onOpenProjectSettings,
+  onRevealInProject,
 }: ViewportProps) {
   // TAB-FR-01: the viewport holds tab content and nothing else. The strip never
   // empties while a project is open (TAB-FR-15), so in practice there is always
@@ -149,6 +165,9 @@ export function Viewport({
         onOpenDraft={onOpenDraft}
         // DSH-FR-07: a run row opens the Runs bottom panel for that run.
         onOpenRun={onOpenRun}
+        // DSH-FR-DFDW: a milestone or the widget header opens the Map tab on
+        // its Delivery lens.
+        onShowDeliveryItem={onShowDeliveryItem}
       />
     );
   // TAB-FR-QXMV / TAB-FR-23: a conversation tab, keyed on the tab's own id so a
@@ -202,6 +221,8 @@ export function Viewport({
         onArchived={() => onCloseTab(activeT.id)}
         onNameChanged={(name) => onDraftRenamed(activeT.draftId!, name)}
         onOpenArtifact={onOpenArtifact}
+        // NAW-FR-PHGO: a plan tag of a delivery item shows it on the Map tab.
+        onShowDeliveryItem={onShowDeliveryItem}
       />
     );
   // SMP-FR-KQTD: the one Map tab renders from the shell's map session, which
@@ -212,10 +233,18 @@ export function Viewport({
         store={specMap}
         // SMI-FR-GAJD: Open in editor takes the shell's ordinary open route.
         onOpenArtifact={onOpenArtifact}
-        onNewDraft={onNewDraftForMapNode}
-        // SMD-FR-XEPS: by id, so a renamed draft is still the one that opens.
-        onOpenDraft={(draft) => onOpenDraft(draft.id)}
         onOverlayOpening={onOverlayOpening}
+        // MDL-FR-VLQJ: the Map tab takes the role of the delivery's Flow tab.
+        delivery={{
+          flows,
+          claims: githubPolling,
+          onOpenProjectSettings,
+          onRevealInProject,
+          // NAW-FR-03 / FLO-FR-NRBV: a plan task's draft opens in a New Artifact tab.
+          onCreateDraft: onCreateDraftForFlow,
+          onOpenDraft: onOpenDraftTab,
+          onOpenDraftById: onOpenDraft,
+        }}
       />
     );
   // TAB-FR-LKCT / TAB-FR-QXRF: the viewer-only tabs of the Documents
@@ -245,8 +274,7 @@ export function Viewport({
     return (
       <FlowCanvas
         key={activeT.artifactId ?? activeTab}
-        flowId={activeT.artifactId}
-        flows={flows}
+        binding={fileBinding(flows, activeT.artifactId)}
         // FLO-FR-12: an item's artifact click-through opens that artifact in
         // its natural surface, through the same shell entry point every other
         // surface routes an open through (LIB-FR-03 / TAB-FR-07).

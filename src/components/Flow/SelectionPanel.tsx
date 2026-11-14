@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import * as api from "../../api";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
@@ -8,7 +8,6 @@ import {
   allowedKinds,
   isContainerKind,
   itemLinkingDraft,
-  syncLinkOf,
   type FlowDocument,
   type FlowItem,
   type FlowItemKind,
@@ -39,86 +38,56 @@ export interface SelectionPanelProps {
   onAddFootprint: (path: string) => void;
   onRemoveFootprint: (path: string) => void;
   onDue: (due: string) => void;
-  onLocalOnly: (on: boolean) => void;
-  onLinkExisting: (number: number) => Promise<string | null>;
   onAddReference: (artifactId: string) => void;
   onRemoveReference: (artifactId: string) => void;
   onOpenReference: (artifact: ArtifactOption) => void;
+  /**
+   * MDL-FR-XJBV: a description is one edit when the field loses focus, not one
+   * per key, because each edit of a GitHub plan is a request.
+   */
+  describeOnBlur?: boolean;
+  /**
+   * The kinds a change of kind cannot reach beyond the plan rules: a GitHub
+   * plan changes no kind to or from a milestone (GDP-FR-EJTS).
+   */
+  kindFilter?: (kind: FlowItemKind) => boolean;
+  /** SDL-FR-KNOP / MDL-FR-QEXS: rows the host adds at the end of the panel. */
+  extras?: ReactNode;
 }
 
 /**
- * FLO-FR-TYEZ: Link to existing. It takes an issue or milestone number, and a
- * refusal shows its typed text and stores nothing.
+ * FLO-FR-13: the Markdown source of a description. In a plan binding it is
+ * one edit when the field loses focus.
  */
-function LinkExisting({
-  milestone,
+function DescriptionField({
+  item,
   inert,
-  onLink,
+  onBlurOnly,
+  onDescribe,
 }: {
-  milestone: boolean;
+  item: FlowItem;
   inert: boolean;
-  onLink: (n: number) => Promise<string | null>;
+  onBlurOnly: boolean;
+  onDescribe: (text: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const what = milestone ? "Milestone number" : "Issue number";
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="flow-btn flow-btn--xs"
-        disabled={inert}
-        onClick={() => setOpen(true)}
-      >
-        Link to existing…
-      </button>
-    );
-  }
-  const n = Number(value);
-  const valid = Number.isInteger(n) && n > 0;
+  const [text, setText] = useState(item.description ?? "");
   return (
-    <form
-      className="flow-panel__link"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!valid || busy || inert) return;
-        setBusy(true);
-        setError(null);
-        void onLink(n).then((refused) => {
-          setBusy(false);
-          if (refused) setError(refused);
-          else {
-            setOpen(false);
-            setValue("");
-          }
-        });
+    <textarea
+      id={`flow-desc-${item.id}`}
+      className="flow-panel__src"
+      aria-label="Description"
+      placeholder="Markdown"
+      rows={3}
+      disabled={inert}
+      value={onBlurOnly ? text : (item.description ?? "")}
+      onChange={(e) => {
+        if (onBlurOnly) setText(e.target.value);
+        else onDescribe(e.target.value);
       }}
-    >
-      <input
-        className="flow-input flow-input--num"
-        type="number"
-        min={1}
-        aria-label={what}
-        placeholder={milestone ? "Milestone" : "Issue #"}
-        value={value}
-        autoFocus
-        disabled={inert}
-        onChange={(e) => setValue(e.target.value)}
-      />
-      <button type="submit" className="flow-btn flow-btn--xs" disabled={!valid || busy || inert}>
-        {busy ? "Linking…" : "Link"}
-      </button>
-      <button type="button" className="flow-btn flow-btn--xs flow-btn--quiet" onClick={() => setOpen(false)}>
-        Cancel
-      </button>
-      {error && (
-        <div className="flow-panel__error" role="alert">
-          {error}
-        </div>
-      )}
-    </form>
+      onBlur={() => {
+        if (onBlurOnly && text !== (item.description ?? "")) onDescribe(text);
+      }}
+    />
   );
 }
 
@@ -130,8 +99,9 @@ function LinkExisting({
 export function SelectionPanel(props: SelectionPanelProps) {
   const { doc, item, state, inert } = props;
   const leaf = !isContainerKind(item.kind);
-  const kinds = allowedKinds(doc, item.id);
-  const link = syncLinkOf(doc, item.id);
+  const kinds = allowedKinds(doc, item.id).filter(
+    (k) => k === item.kind || (props.kindFilter?.(k) ?? true),
+  );
   const [drafts, setDrafts] = useState<DraftSummary[] | null>(null);
   const fieldsRef = useRef<HTMLDivElement>(null);
   const { onMeasure } = props;
@@ -212,15 +182,11 @@ export function SelectionPanel(props: SelectionPanelProps) {
             Description
           </label>
           {/* FLO-FR-13: the Markdown source, in a plain field with no toolbar. */}
-          <textarea
-            id={`flow-desc-${item.id}`}
-            className="flow-panel__src"
-            aria-label="Description"
-            placeholder="Markdown"
-            rows={3}
-            disabled={inert}
-            value={item.description ?? ""}
-            onChange={(e) => props.onDescribe(e.target.value)}
+          <DescriptionField
+            item={item}
+            inert={inert}
+            onBlurOnly={props.describeOnBlur === true}
+            onDescribe={props.onDescribe}
           />
 
           <div className="flow-panel__row">
@@ -335,19 +301,6 @@ export function SelectionPanel(props: SelectionPanelProps) {
             </>
           )}
 
-          <label className="flow-switch">
-            <input
-              type="checkbox"
-              role="switch"
-              aria-label="Local only"
-              disabled={inert}
-              checked={item.localOnly === true}
-              onChange={(e) => props.onLocalOnly(e.target.checked)}
-            />
-            <span className="flow-switch__track" aria-hidden="true" />
-            Local only
-          </label>
-
           <span className="flow-panel__label">References</span>
           <ReferenceRows
             references={props.references}
@@ -363,15 +316,9 @@ export function SelectionPanel(props: SelectionPanelProps) {
               onAdd={props.onAddReference}
               disabled={inert}
             />
-            {doc.sync && !link && (
-              <LinkExisting
-                milestone={item.kind === "milestone"}
-                inert={inert}
-                onLink={props.onLinkExisting}
-              />
-            )}
           </div>
         </fieldset>
+        {props.extras}
       </div>
     </div>
   );

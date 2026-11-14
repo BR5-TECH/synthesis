@@ -1,5 +1,4 @@
-import type { FlowItemState, FlowLeafCounts } from "../../types";
-import type { SyncLink } from "../../state/flowDocument";
+import type { FlowItemState, FlowLeafCounts, TrackerFacts } from "../../types";
 
 /**
  * FLO-FR-KQCE: each state has a shape and a word, so a chip never says its
@@ -23,6 +22,23 @@ export function StatusChip({ state }: { state: FlowItemState | undefined }) {
         {look.shape}
       </span>
       {look.word}
+    </span>
+  );
+}
+
+/**
+ * MDL-FR-ECPZ: the `Status` of an issue of a GitHub plan, after its state
+ * chip. Its fill is neutral, so it does not read as a delivery state.
+ */
+export function TrackerStatusChip({ tracker }: { tracker: TrackerFacts | undefined }) {
+  if (!tracker || tracker.ref.kind !== "issue" || !tracker.status) return null;
+  return (
+    <span
+      className="flow-chip flow-chip--status"
+      data-testid="flow-tracker-status"
+      title={`Status on GitHub: ${tracker.status}`}
+    >
+      {tracker.status}
     </span>
   );
 }
@@ -80,51 +96,49 @@ export function OverlapMarker({
   );
 }
 
-/** The repository a link names, as `owner/repo`. */
-export function repoOf(link: SyncLink): string {
-  return `${link.ref.owner}/${link.ref.repo}`;
-}
-
-/** FLO-FR-ULEM: what a tracker tag reads: the number, or the milestone number. */
-export function tagText(link: SyncLink): string {
-  return link.ref.kind === "milestone"
-    ? `milestone ${link.ref.number}`
-    : `#${link.ref.number}`;
+/** FLO-FR-ULEM: what a tracker tag reads: the issue number, or the milestone number. */
+export function tagText(tracker: TrackerFacts): string {
+  return tracker.ref.kind === "milestone"
+    ? `milestone ${tracker.ref.number}`
+    : `#${tracker.ref.number}`;
 }
 
 /**
- * FLO-FR-ULEM: the tracker tag. It names the repository and the number, and
- * activating it opens the tracker item.
+ * FLO-FR-ULEM: the tracker tag of an item of a GitHub plan. It names the
+ * repository and the number, and activating it opens the tracker item.
  */
 export function TrackerTag({
-  link,
+  repository,
+  tracker,
   onOpen,
 }: {
-  link: SyncLink;
+  repository: string;
+  tracker: TrackerFacts;
   onOpen: (url: string) => void;
 }) {
   const full =
-    link.ref.kind === "milestone"
-      ? `${repoOf(link)} milestone ${link.ref.number}`
-      : `${repoOf(link)}#${link.ref.number}`;
+    tracker.ref.kind === "milestone"
+      ? `${repository} milestone ${tracker.ref.number}`
+      : `${repository}#${tracker.ref.number}`;
   return (
     <button
       type="button"
       className="flow-tag"
+      data-testid="flow-tracker-tag"
       title={`Open ${full} on GitHub`}
       aria-label={`Open ${full} on GitHub`}
-      onClick={() => onOpen(link.ref.url)}
+      onClick={() => onOpen(tracker.ref.url)}
     >
-      {tagText(link)}
+      {tagText(tracker)}
     </button>
   );
 }
 
-/** FLO-FR-TZSU: the mark of an item that a sync never creates on the tracker. */
-export function LocalOnlyMark() {
+/** MDL-FR-PUCM: the mark of an item whose edit is pending. */
+export function PendingMark() {
   return (
-    <span className="flow-local" title="A sync does not create this item on GitHub">
-      local only
+    <span className="flow-pending" data-testid="flow-pending" title="This change is on its way to GitHub">
+      saving…
     </span>
   );
 }

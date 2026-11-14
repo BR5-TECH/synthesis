@@ -1,19 +1,20 @@
 /**
- * The backend operations of the Map tab.
+ * The backend operations of the map session of the Map tab.
  *
  * `"load specification map"` is a command of
- * `../../specifications/core/OSI-openspec-spec-index.md`. The other two are
- * stubs: no core spec and no `#[tauri::command]` exist for them yet
- * (`SMO-specification-map-organization.md`, `SMD-specification-map-drafts.md`,
- * each marking its operation a stub), so their wrappers do not call `invoke`.
- * `./index` does not re-export this module, so the map session takes its
- * operations from here alone and a test replaces them as one set.
+ * `../../specifications/core/OSI-openspec-spec-index.md`, and
+ * `"get delivery source"` of `../../specifications/core/DSR-delivery-source.md`
+ * (SMP-FR-TKUS: the default lens). `./index` does not
+ * re-export this module, so the map session takes its operations from here
+ * alone and a test replaces them as one set.
  */
 import { invoke } from "@tauri-apps/api/core";
 
 import { logDebug } from "../logging";
+import type { DeliverySource } from "../types/delivery";
+import { getDeliverySource } from "./delivery";
 import { DEMO_SPECIFICATION_INDEX } from "../state/specMap/fixture";
-import { cloneIndex } from "../state/specMap/organize";
+import { cloneIndex } from "../state/specMap/tree";
 import { toOpenSpecFailure } from "../state/openspec/failureNotice";
 import type {
   ChangeChip,
@@ -53,24 +54,11 @@ export type SpecificationMapLoad =
   | { source: "demo" }
   | { source: "openspec"; index: OpenSpecMapIndex };
 
-/** SMO UI contract boundary: the one edit `"save specification map organization"` takes. */
-export type OrganizationEdit =
-  | {
-      kind: "create";
-      parentId: string | null;
-      node: { id: string; label: string; summary: string };
-    }
-  | { kind: "edit"; nodeId: string; label: string; summary: string }
-  | { kind: "move"; nodeId: string; parentId: string | null; index: number }
-  | { kind: "delete"; nodeId: string };
-
 export interface SpecMapOps {
   /** `"load specification map"` */
   load: () => Promise<SpecificationIndex>;
-  /** `"save specification map organization"` */
-  saveOrganization: (edit: OrganizationEdit) => Promise<void>;
-  /** `"attach draft to specification map node"` */
-  attachDraft: (args: { draftId: string; nodeId: string }) => Promise<void>;
+  /** `"get delivery source"` (SMP-FR-TKUS) */
+  getDeliverySource: () => Promise<DeliverySource>;
 }
 
 function fromWireNode(node: OpenSpecWireNode): IndexNode {
@@ -81,8 +69,7 @@ function fromWireNode(node: OpenSpecWireNode): IndexNode {
       "code" in child ? { ...child } : fromWireNode(child),
     ) as IndexNode[] | SpecNode[],
   };
-  // The session keeps the drafts of SMD-FR-OYLC in `planned`, so the wire's
-  // planned capability takes a name of its own.
+  // OSI-FR-VOOS: the wire's planned capability.
   if (planned === true) out.plannedCapability = true;
   return out;
 }
@@ -121,25 +108,7 @@ export async function loadSpecificationMap(): Promise<SpecificationIndex> {
   return index;
 }
 
-/** SMO-FR-CZLA: the stub keeps no state. Only the edit kind is logged. */
-export async function saveSpecificationMapOrganization(
-  edit: OrganizationEdit,
-): Promise<void> {
-  logDebug(["frontend"], "specification map organization stub received an edit", {
-    kind: edit.kind,
-  });
-}
-
-/** SMD-FR-OYLC: the stub keeps no state. */
-export async function attachDraftToSpecificationMapNode(_args: {
-  draftId: string;
-  nodeId: string;
-}): Promise<void> {
-  logDebug(["frontend"], "specification map draft placement stub received a placement", {});
-}
-
 export const specMapOps: SpecMapOps = {
   load: loadSpecificationMap,
-  saveOrganization: saveSpecificationMapOrganization,
-  attachDraft: attachDraftToSpecificationMapNode,
+  getDeliverySource,
 };

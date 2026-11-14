@@ -7,11 +7,11 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
-use super::model::{EdgeType, Kind, RefKind};
+use super::field_rules::footprint_entry_ok;
+use super::model::{EdgeType, Kind};
 use super::FlowViolation;
 
-pub const DOC_FIELDS: &[&str] =
-    &["version", "name", "description", "references", "items", "edges", "sync"];
+pub const DOC_FIELDS: &[&str] = &["version", "name", "description", "references", "items", "edges"];
 const ITEM_FIELDS: &[&str] = &[
     "id",
     "kind",
@@ -19,30 +19,18 @@ const ITEM_FIELDS: &[&str] = &[
     "description",
     "artifactIds",
     "parentId",
-    "localOnly",
     "draftId",
     "footprint",
     "due",
-    "position",
-    "size",
 ];
 const EDGE_FIELDS: &[&str] = &["id", "from", "to", "type"];
-const POSITION_FIELDS: &[&str] = &["x", "y"];
-const SIZE_FIELDS: &[&str] = &["width", "height"];
-const SYNC_FIELDS: &[&str] = &["tracker", "links", "ignored"];
-const LINK_FIELDS: &[&str] = &["itemId", "ref", "base"];
-const REF_FIELDS: &[&str] = &["kind", "host", "owner", "repo", "number", "url"];
-const ISSUE_BASE_FIELDS: &[&str] =
-    &["name", "description", "state", "type", "parent", "milestone", "blockedBy"];
-const MILESTONE_BASE_FIELDS: &[&str] = &["name", "description", "state", "due"];
 
-/// Where a violation is attributed: the document, an item, an edge, or a link.
+/// Where a violation is attributed: the document, an item, or an edge.
 #[derive(Clone, Copy)]
 pub enum At<'a> {
     Doc,
     Item(&'a str),
     Edge(&'a str),
-    Link(usize),
 }
 
 impl At<'_> {
@@ -51,7 +39,6 @@ impl At<'_> {
             At::Doc => FlowViolation::doc(code, message),
             At::Item(id) => FlowViolation::element(code, id, message),
             At::Edge(id) => FlowViolation::edge(code, id, message),
-            At::Link(i) => FlowViolation::link(code, i, message),
         }
     }
 }
@@ -116,30 +103,6 @@ pub fn required_id(
     }
 }
 
-fn number_pair(
-    value: Option<&Value>,
-    field: &str,
-    keys: &[&str],
-    place: &str,
-    at: At,
-    out: &mut Vec<FlowViolation>,
-) {
-    let Some(value) = value else {
-        out.push(shape(at, place, &format!("has no `{field}`")));
-        return;
-    };
-    let Some(obj) = value.as_object() else {
-        out.push(shape(at, place, &format!("has a `{field}` that is not an object")));
-        return;
-    };
-    unknown_fields(obj, keys, &format!("{place} `{field}`"), at, out);
-    for key in keys {
-        if !obj.get(*key).is_some_and(Value::is_number) {
-            out.push(shape(at, place, &format!("has no number `{field}.{key}`")));
-        }
-    }
-}
-
 /// FGV-FR-08 / FGV-FR-JDGO: a list of artifact ids. Each entry is a non-empty
 /// string, and no entry repeats.
 pub fn reference_list(
@@ -174,18 +137,6 @@ pub fn reference_list(
     }
 }
 
-/// FGV-FR-RQEM: one footprint entry is a project-relative path.
-fn footprint_entry_ok(path: &str) -> bool {
-    if path.is_empty() || path.starts_with('/') || path.starts_with('\\') {
-        return false;
-    }
-    let bytes = path.as_bytes();
-    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
-        return false;
-    }
-    !path.split(['/', '\\']).any(|segment| segment == "..")
-}
-
 fn footprint(value: &Value, place: &str, at: At, out: &mut Vec<FlowViolation>) {
     let Some(entries) = value.as_array() else {
         out.push(shape(at, place, "has a `footprint` that is not an array"));
@@ -198,13 +149,9 @@ fn footprint(value: &Value, place: &str, at: At, out: &mut Vec<FlowViolation>) {
             continue;
         };
         if !footprint_entry_ok(path) || !seen.insert(path) {
-            out.push(at.violation(
-                "invalid_footprint_path",
-                format!(
-                    "{place} has a footprint entry `{path}` that is empty, absolute, \
-                     climbs out with `..`, or repeats"
-                ),
-            ));
+            if let At::Item(id) = at {
+                out.push(super::field_rules::invalid_footprint(id, place, path));
+            }
         }
     }
 }
@@ -271,12 +218,8 @@ pub fn read_item(value: &Value, index: usize, out: &mut Vec<FlowViolation>) -> O
     }
     optional_string(obj, "description", &place, at, out);
     let parent = optional_string(obj, "parentId", &place, at, out);
-    if obj.get("localOnly").is_some_and(|v| !v.is_boolean()) {
-        out.push(shape(at, &place, "has a `localOnly` that is not a boolean"));
-    }
     let draft_id = optional_string(obj, "draftId", &place, at, out);
     reference_list(obj.get("artifactIds"), "artifactIds", &place, at, out);
-    number_pair(obj.get("position"), "position", POSITION_FIELDS, &place, at, out);
     if let Some(fp) = obj.get("footprint") {
         footprint(fp, &place, at, out);
     }
@@ -303,9 +246,6 @@ pub fn read_item(value: &Value, index: usize, out: &mut Vec<FlowViolation>) -> O
                     not_allowed(field, out);
                 }
             }
-            number_pair(obj.get("size"), "size", SIZE_FIELDS, &place, at, out);
-        } else if obj.contains_key("size") {
-            not_allowed("size", out);
         }
         if k != Kind::Milestone && obj.contains_key("due") {
             not_allowed("due", out);
@@ -343,192 +283,4 @@ pub fn read_edge(value: &Value, index: usize, out: &mut Vec<FlowViolation>) -> O
     let from = required_id(obj, "from", &place, at, out);
     let to = required_id(obj, "to", &place, at, out);
     Some(RawEdge { id, from: from?, to: to?, edge_type })
-}
-
-/// What makes two tracker references the same: host, owner, repository,
-/// kind, and number.
-pub type RefKey = (String, String, String, &'static str, u64);
-
-/// A sync link as the structural rules read it.
-pub struct RawLink {
-    pub index: usize,
-    pub item_id: String,
-    pub ref_kind: RefKind,
-    pub ref_key: RefKey,
-}
-
-fn read_ref(
-    value: Option<&Value>,
-    place: &str,
-    at: At,
-    out: &mut Vec<FlowViolation>,
-) -> Option<(RefKind, RefKey)> {
-    let Some(obj) = value.and_then(Value::as_object) else {
-        out.push(shape(at, place, "has no reference object"));
-        return None;
-    };
-    unknown_fields(obj, REF_FIELDS, place, at, out);
-    let kind = match obj.get("kind").and_then(Value::as_str) {
-        Some("issue") => Some(RefKind::Issue),
-        Some("milestone") => Some(RefKind::Milestone),
-        _ => {
-            out.push(shape(at, place, "has no `kind` of `issue` or `milestone`"));
-            None
-        }
-    };
-    let host = required_id(obj, "host", place, at, out);
-    let owner = required_id(obj, "owner", place, at, out);
-    let repo = required_id(obj, "repo", place, at, out);
-    required_id(obj, "url", place, at, out);
-    let number = match obj.get("number").and_then(Value::as_u64) {
-        Some(n) if n > 0 => Some(n),
-        _ => {
-            out.push(shape(at, place, "has no `number` greater than zero"));
-            None
-        }
-    };
-    let kind = kind?;
-    let tag = match kind {
-        RefKind::Issue => "issue",
-        RefKind::Milestone => "milestone",
-    };
-    Some((kind, (host?, owner?, repo?, tag, number?)))
-}
-
-fn read_base(
-    value: Option<&Value>,
-    kind: RefKind,
-    place: &str,
-    at: At,
-    out: &mut Vec<FlowViolation>,
-) {
-    let Some(obj) = value.and_then(Value::as_object) else {
-        out.push(shape(at, place, "has no `base` object"));
-        return;
-    };
-    let place = format!("{place} `base`");
-    let fields = match kind {
-        RefKind::Issue => ISSUE_BASE_FIELDS,
-        RefKind::Milestone => MILESTONE_BASE_FIELDS,
-    };
-    unknown_fields(obj, fields, &place, at, out);
-    for field in ["name", "description"] {
-        if !obj.get(field).is_some_and(Value::is_string) {
-            out.push(shape(at, &place, &format!("has no `{field}` string")));
-        }
-    }
-    if !matches!(obj.get("state").and_then(Value::as_str), Some("open" | "closed")) {
-        out.push(shape(at, &place, "has no `state` of `open` or `closed`"));
-    }
-    let null_or =
-        |field: &str, ok: fn(&Value) -> bool, what: &str, out: &mut Vec<FlowViolation>| {
-            if let Some(v) = obj.get(field) {
-                if !v.is_null() && !ok(v) {
-                    out.push(shape(at, &place, &format!("has a `{field}` that is not {what}")));
-                }
-            }
-        };
-    match kind {
-        RefKind::Issue => {
-            null_or("type", Value::is_string, "a string or null", out);
-            null_or("milestone", |v| v.as_u64().is_some(), "a number or null", out);
-            if let Some(p) = obj.get("parent") {
-                if !p.is_null() {
-                    read_ref(Some(p), &format!("{place} `parent`"), at, out);
-                }
-            }
-            if let Some(list) = obj.get("blockedBy") {
-                match list.as_array() {
-                    Some(refs) => {
-                        for r in refs {
-                            read_ref(Some(r), &format!("{place} `blockedBy` entry"), at, out);
-                        }
-                    }
-                    None => out.push(shape(at, &place, "has a `blockedBy` that is not an array")),
-                }
-            }
-        }
-        RefKind::Milestone => {
-            null_or("due", |v| v.as_str().is_some_and(is_calendar_date), "a date or null", out);
-        }
-    }
-}
-
-/// One `sync.ignored` entry as the structural rules read it.
-pub struct RawIgnored {
-    pub index: usize,
-    pub ref_key: RefKey,
-}
-
-/// The `sync` section as the structural rules read it.
-#[derive(Default)]
-pub struct RawSync {
-    pub links: Vec<RawLink>,
-    pub ignored: Vec<RawIgnored>,
-}
-
-/// Read the `sync` section (FGV-FR-08, FGV-FR-01). Returns its links and its
-/// ignored references.
-pub fn read_sync(value: &Value, out: &mut Vec<FlowViolation>) -> RawSync {
-    let Some(obj) = value.as_object() else {
-        out.push(FlowViolation::doc("shape", "the document has a `sync` that is not an object"));
-        return RawSync::default();
-    };
-    unknown_fields(obj, SYNC_FIELDS, "the sync section", At::Doc, out);
-    if obj.get("tracker").and_then(Value::as_str) != Some("github") {
-        out.push(FlowViolation::doc("shape", "the sync section has no `tracker` of `github`"));
-    }
-    let links = match obj.get("links").and_then(Value::as_array) {
-        Some(links) => read_links(links, out),
-        None => {
-            out.push(FlowViolation::doc("shape", "the sync section has no `links` array"));
-            Vec::new()
-        }
-    };
-    RawSync { links, ignored: read_ignored(obj.get("ignored"), out) }
-}
-
-fn read_links(links: &[Value], out: &mut Vec<FlowViolation>) -> Vec<RawLink> {
-    let mut raw = Vec::new();
-    for (index, v) in links.iter().enumerate() {
-        let at = At::Link(index);
-        let place = format!("sync link {index}");
-        let Some(link) = v.as_object() else {
-            out.push(shape(at, &place, "is not an object"));
-            continue;
-        };
-        unknown_fields(link, LINK_FIELDS, &place, at, out);
-        let item_id = required_id(link, "itemId", &place, at, out);
-        let reference = read_ref(link.get("ref"), &format!("{place} `ref`"), at, out);
-        if let Some((kind, _)) = &reference {
-            read_base(link.get("base"), *kind, &place, at, out);
-        }
-        if let (Some(item_id), Some((ref_kind, ref_key))) = (item_id, reference) {
-            raw.push(RawLink { index, item_id, ref_kind, ref_key });
-        }
-    }
-    raw
-}
-
-/// FGV-FR-01: `sync.ignored` is an optional list of references. A violation
-/// of an entry is about the sync section as a whole, so it carries no index;
-/// its message names the entry.
-fn read_ignored(value: Option<&Value>, out: &mut Vec<FlowViolation>) -> Vec<RawIgnored> {
-    let Some(value) = value else { return Vec::new() };
-    let Some(entries) = value.as_array() else {
-        out.push(FlowViolation::doc(
-            "shape",
-            "the sync section has an `ignored` that is not an array",
-        ));
-        return Vec::new();
-    };
-    entries
-        .iter()
-        .enumerate()
-        .filter_map(|(index, v)| {
-            let place = format!("sync ignored entry {index}");
-            read_ref(Some(v), &place, At::Doc, out)
-                .map(|(_, ref_key)| RawIgnored { index, ref_key })
-        })
-        .collect()
 }

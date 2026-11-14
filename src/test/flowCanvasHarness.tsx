@@ -1,27 +1,31 @@
 /**
- * The backend and the render of the Flow canvas tests (FLO, FSR).
+ * The backend and the render of the Flow canvas tests (FLO).
  *
  * A test file mocks `@tauri-apps/api/core` and `@tauri-apps/api/event` with
  * `./flowMocks`, and gets one routed backend per test from `flowBackend`. The backend answers by command name, answers the
  * background `append_log_records`, and rejects a command it does not know, so
  * no timer of the code under test throws into the next test.
  */
+import type { ComponentProps } from "react";
 import { act, render, waitFor } from "@testing-library/react";
 import { expect, vi } from "vitest";
 
-import { FlowCanvas, type FlowCanvasProps } from "../components/Flow";
+import { FlowCanvas, fileBinding } from "../components/Flow";
 import { FlowSessionStore } from "../state/flowSessions";
 import {
+  resolveLayout,
   serializeFlowDocument,
   type FlowDocument,
+  type FlowLayout,
+  type StoredLayout,
 } from "../state/flowDocument";
+import { flowLayoutScope } from "../types/delivery";
 import type {
   DraftSummary,
   FlowDeliveryState,
   FlowItemState,
   FlowOverlapReport,
   ItemDeliveryState,
-  SyncResult,
 } from "../types";
 import { ID, TREE } from "./flowFixtures";
 import { invokeMock } from "./flowMocks";
@@ -47,24 +51,15 @@ export function itemState(
   };
 }
 
-export function emptyResult(extra: Partial<SyncResult> = {}): SyncResult {
-  return {
-    created: 0,
-    updated: 0,
-    added: 0,
-    changed: 0,
-    conflicts: [],
-    skipped: [],
-    stale: [],
-    ...extra,
-  };
-}
-
 export interface FlowBackend {
   /** The body the next load serves. */
   body: string;
   /** Every body `save_artifact_contents` was given. */
   writes: string[];
+  /** FLO-FR-PLUZ: the layout `load_delivery_layout` serves. */
+  layout: StoredLayout;
+  /** FLO-FR-21: every layout `save_delivery_layout` was given, with its scope. */
+  layoutWrites: Array<{ scope: string; layout: StoredLayout }>;
   validation: { valid: boolean; violations: Array<Record<string, unknown>> };
   /** The delivery state answer, or a function of the body asked about. */
   delivery: FlowDeliveryState | ((body: string) => FlowDeliveryState | Promise<FlowDeliveryState>);
@@ -76,10 +71,15 @@ export interface FlowBackend {
   on: Record<string, (args: Record<string, unknown>) => unknown>;
 }
 
-export function flowBackend(doc: FlowDocument | string): FlowBackend {
+export function flowBackend(
+  doc: FlowDocument | string,
+  layout: StoredLayout = { items: {} },
+): FlowBackend {
   const b: FlowBackend = {
     body: typeof doc === "string" ? doc : serializeFlowDocument(doc),
     writes: [],
+    layout,
+    layoutWrites: [],
     validation: { valid: true, violations: [] },
     delivery: { items: [] },
     overlaps: { overlaps: [] },
@@ -116,6 +116,12 @@ export function flowBackend(doc: FlowDocument | string): FlowBackend {
         return { folders: [], drafts: b.drafts };
       case "list_discussions":
         return [];
+      case "load_delivery_layout":
+        return b.layout;
+      case "save_delivery_layout":
+        b.layoutWrites.push({ scope: String(args.scope), layout: args.layout as StoredLayout });
+        b.layout = args.layout as StoredLayout;
+        return undefined;
       default:
         throw new Error(`unexpected invoke ${cmd}`);
     }
@@ -157,11 +163,11 @@ export function clearFlowStores() {
 
 /**
  * Load the backend's body as the Flow `ID` and render a canvas over it, with
- * the project tree settled.
+ * the project tree and the layout settled.
  */
 export async function renderFlow(
   b: FlowBackend,
-  props: Partial<FlowCanvasProps> = {},
+  props: Partial<ComponentProps<typeof FlowCanvas>> = {},
 ) {
   void b;
   const flows = new FlowSessionStore();
@@ -172,7 +178,7 @@ export async function renderFlow(
   });
   const onOpenArtifact = vi.fn();
   const view = render(
-    <FlowCanvas flowId={ID} flows={flows} onOpenArtifact={onOpenArtifact} {...props} />,
+    <FlowCanvas binding={fileBinding(flows, ID)} onOpenArtifact={onOpenArtifact} {...props} />,
   );
   await waitFor(() =>
     expect(invokeMock.mock.calls.some((c) => c[0] === "load_project_tree")).toBe(true),
@@ -181,5 +187,16 @@ export async function renderFlow(
   return { flows, view, onOpenArtifact };
 }
 
+/** The layout entry the canvas last stored for an item, if it stored one. */
+export const storedEntry = (b: FlowBackend, id: string) =>
+  b.layoutWrites[b.layoutWrites.length - 1]?.layout.items[id];
+
 /** The plan the store holds now. */
 export const planOf = (flows: FlowSessionStore) => flows.get(ID)!.doc!;
+
+/** FLO-FR-HBBF: the layout scope of the Flow `ID`. */
+export const SCOPE = flowLayoutScope(ID);
+
+/** The layout the canvas draws now: the stored layout of `ID` with the automatic one. */
+export const placedOf = (flows: FlowSessionStore): FlowLayout =>
+  resolveLayout(planOf(flows), flows.layouts.get(SCOPE) ?? { items: {} });

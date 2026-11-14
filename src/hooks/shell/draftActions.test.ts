@@ -21,7 +21,6 @@ import {
   setBranchWriteGuardReadsForTest,
   settleMainBranchWrite,
 } from "../../state/mainBranchWrite";
-import type { SpecMapSessionStore } from "../../state/specMap/session";
 import type { BranchWriteGuard } from "../../types";
 import { createDraftTabActions } from "./draftActions";
 
@@ -34,7 +33,6 @@ function actions() {
     setActiveTab: vi.fn(),
     activateTab: vi.fn(),
     bumpDrafts: vi.fn(),
-    specMap: {} as SpecMapSessionStore,
   };
   return { deps, ...createDraftTabActions(deps) };
 }

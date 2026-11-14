@@ -66,7 +66,6 @@ function renderViewport(
       onActivateSearchHit={vi.fn()}
       searches={new SearchSessionStore()}
       specMap={new SpecMapSessionStore()}
-      onNewDraftForMapNode={vi.fn()}
       focusThread={focusThread}
       onThreadFocused={onThreadFocused}
     />,

@@ -299,7 +299,8 @@ describe("useShellSession teardown flush (EDT-FR-33)", () => {
     // (SNV-FR-43); and `get_active_worktree`, the one-shot label fetch the
     // chrome's worktree selector makes when a project opens (WTS-FR-03); and
     // `open_artifact_by_id`, the type read of a tab opened with no type
-    // (TAB-FR-SZGD).
+    // (TAB-FR-SZGD); and `get_delivery_source`, the read of the delivery
+    // source an open project makes (LIB-FR-JTXR).
     const order = invokeMock.mock.calls
       .map((c) => c[0])
       .filter(
@@ -307,7 +308,8 @@ describe("useShellSession teardown flush (EDT-FR-33)", () => {
           cmd !== "set_save_menu_state" &&
           cmd !== "set_find_menu_state" &&
           cmd !== "get_active_worktree" &&
-          cmd !== "open_artifact_by_id",
+          cmd !== "open_artifact_by_id" &&
+          cmd !== "get_delivery_source",
       );
     expect(order).toEqual([
       "save_artifact_contents",
@@ -503,7 +505,7 @@ describe("File menu Save / Save All (SNV-FR-28..31)", () => {
       await result.current.flows.get(id)?.pendingLoad;
     });
     act(() =>
-      result.current.flows.applyEdit(id, (d) => docOrUnchanged(d, addItem(d, "milestone", { x: 40, y: 40 }))),
+      result.current.flows.applyEdit(id, (d) => docOrUnchanged(d, addItem(d, "milestone"))),
     );
   };
 

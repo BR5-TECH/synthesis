@@ -2,8 +2,8 @@
  * The effective difference between two revisions of a Flow
  * (`DFV-diff-viewer.md` DFV-FR-33, DFV-FR-RGBK, DFV-FR-34, DFV-FR-35).
  *
- * A Flow is JSON, so its source diff is a diff of braces: an item moved by
- * three pixels changes the same lines as an item that is removed. This module
+ * A Flow is JSON, so its source diff is a diff of braces: a renamed item
+ * changes the same lines as an item that is removed. This module
  * compares the two revisions as the plans they describe: the Flow's own
  * fields, each item paired by id, and each edge paired by its two endpoints.
  *
@@ -16,7 +16,6 @@ import {
   type FlowEdge,
   type FlowItem,
   type FlowItemKind,
-  type SyncLink,
 } from "../state/flowDocument";
 
 /** How an entry, or one fact in it, stands between the two revisions. */
@@ -153,24 +152,6 @@ function listFacts(
   return out;
 }
 
-const position = (i: FlowItem) => `${i.position.x}, ${i.position.y}`;
-const size = (i: FlowItem) =>
-  i.size ? `${i.size.width} × ${i.size.height}` : undefined;
-
-/** FLO-FR-ULEM: a tracker link as a reader names it. */
-function trackerLink(link: SyncLink | undefined): string | undefined {
-  if (!link) return undefined;
-  const r = link.ref;
-  const where = `${r.host === "github.com" ? "" : `${r.host}/`}${r.owner}/${r.repo}`;
-  return r.kind === "milestone"
-    ? `${where} milestone ${r.number}`
-    : `${where}#${r.number}`;
-}
-
-function linkOf(doc: FlowDocument, itemId: string): SyncLink | undefined {
-  return doc.sync?.links.find((l) => l.itemId === itemId);
-}
-
 /** The container an item sits in, named by its name where it has one. */
 function containerName(doc: FlowDocument, parentId: string | undefined): string {
   if (parentId === undefined) return "(top level)";
@@ -179,8 +160,9 @@ function containerName(doc: FlowDocument, parentId: string | undefined): string 
 
 /**
  * DFV-FR-RGBK: what an item's entry says. What the item is comes first, then
- * what it links, then where it sits, which says the least. The name and the
- * kind are in the entry's title, so only a difference in them is a fact.
+ * what it links, then its container. The name and the kind are in the entry's
+ * title, so only a difference in them is a fact. A Flow holds no layout, so
+ * there is no position or size to compare.
  */
 function itemFacts(
   before: FlowItem | null,
@@ -201,16 +183,6 @@ function itemFacts(
   facts.push(...listFacts("Footprint", before?.footprint, after?.footprint, paired));
   facts.push(fact("Draft", before?.draftId, after?.draftId, paired));
   facts.push(fact("Due", before?.due, after?.due, paired));
-  const local = (i: FlowItem | null) => (i?.localOnly ? "Yes" : undefined);
-  facts.push(fact("Local only", local(before), local(after), paired));
-  facts.push(
-    fact(
-      "Tracker link",
-      before ? trackerLink(linkOf(oldDoc, before.id)) : undefined,
-      after ? trackerLink(linkOf(newDoc, after.id)) : undefined,
-      paired,
-    ),
-  );
   if (paired) {
     if (before.parentId !== after.parentId) {
       facts.push({
@@ -220,16 +192,6 @@ function itemFacts(
         after: containerName(newDoc, after.parentId),
       });
     }
-    if (position(before) !== position(after)) {
-      facts.push({
-        label: "Position",
-        status: "changed",
-        before: position(before),
-        after: position(after),
-      });
-    }
-    const sizeFact = fact("Size", size(before), size(after), true);
-    if (sizeFact && sizeFact.status !== "unchanged") facts.push(sizeFact);
   } else if (after?.parentId !== undefined) {
     // On an item that is itself new or gone, its container is part of it,
     // stated only when it is not the top level.
@@ -312,8 +274,7 @@ function pairingError(doc: FlowDocument): string | null {
 /**
  * DFV-FR-33: the two revisions as the plans they describe. A missing revision
  * (the comparison added or deleted the file) reads as an empty plan, so an
- * added file reads as every part of it added. Sync bases are not compared
- * (DFV-FR-RGBK): a sync that only refreshed them changed no plan.
+ * added file reads as every part of it added.
  */
 export function flowDiff(
   oldBody: string | null,

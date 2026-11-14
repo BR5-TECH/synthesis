@@ -25,6 +25,7 @@ import type { SpecMapSessionStore } from "../../state/specMap/session";
 import type { Tab, TabCloseScope } from "../../types";
 import { HOME_TAB_TARGET } from "../../types";
 import { SPEC_MAP_TAB, neverEmpty } from "./tabRecords";
+import { deliveryFlowId } from "./useDeliveryShell";
 
 export interface TabStripActionDeps {
   /**
@@ -134,7 +135,23 @@ export function createTabStripActions(
 
     // SMP-FR-BXAP: closing the Map tab resets its view and its focus. The index,
     // its edits, and its draft placements stay with the project.
-    if (id === SPEC_MAP_TAB.id) specMap.resetView();
+    if (id === SPEC_MAP_TAB.id) {
+      // MDL-FR-VLQJ / FLO-FR-28: the Map tab takes the role of the Flow tab of
+      // the delivery's Flow file. It writes the pending changes before it
+      // closes, and a refused write keeps it open.
+      const flowId = deliveryFlowId(specMap.snapshot().deliverySource);
+      if (flowId && flows.get(flowId)) {
+        const res = await flows.flush(flowId);
+        if (!res.ok) {
+          activateTab(id);
+          return false;
+        }
+        const flowTab = tabsRef.current.some((t) => t.kind === "flow" && t.artifactId === flowId);
+        if (!flowTab) flows.closeTab(flowId);
+      }
+      // SMP-FR-BXAP: only a close that goes ahead resets the view.
+      specMap.resetView();
+    }
 
     // TAB-FR-10 / EDT-FR-31: closing an Editor tab writes its pending changes
     // first. TAB-FR-11 / EDT-FR-32: a write that cannot proceed safely refuses,

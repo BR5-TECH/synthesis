@@ -1,7 +1,8 @@
 /**
  * Rendering helpers for the Map tab's component tests
- * (`SMP-specification-map.md`). The store is real; only its three stub
- * operations are replaced, so a test can make a load fail or watch a save.
+ * (`SMP-specification-map.md`). The store is real; only its operations are
+ * replaced, so a test can make a load fail or choose the delivery source. By
+ * default the source is `none`, so the map opens on the Specifications lens.
  */
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { expect, vi } from "vitest";
@@ -10,12 +11,15 @@ import type { SpecMapOps } from "../api/specMap";
 import { SpecMapSessionStore, type MapView } from "../state/specMap/session";
 import type { SpecificationIndex } from "../state/specMap/types";
 import { smallIndex } from "./specMapFixtures";
+import type { DeliverySource } from "../types/delivery";
+
+/** DSR-FR-ZKGG: the answer of a project with no delivery source. */
+export const NO_DELIVERY_SOURCE: DeliverySource = { kind: "none", reason: "no_source" };
 
 export function makeStore(index?: SpecificationIndex, overrides: Partial<SpecMapOps> = {}) {
   const ops = {
     load: vi.fn<SpecMapOps["load"]>(async () => index ?? smallIndex()),
-    saveOrganization: vi.fn<SpecMapOps["saveOrganization"]>(async () => {}),
-    attachDraft: vi.fn<SpecMapOps["attachDraft"]>(async () => {}),
+    getDeliverySource: vi.fn<SpecMapOps["getDeliverySource"]>(async () => NO_DELIVERY_SOURCE),
     ...overrides,
   };
   return { store: new SpecMapSessionStore(ops), ops };
@@ -51,8 +55,6 @@ export async function renderMap(
   const { store, ops } = makeStore(options.index, options.ops);
   const props = {
     onOpenArtifact: vi.fn(),
-    onNewDraft: vi.fn(),
-    onOpenDraft: vi.fn(),
     onOverlayOpening: vi.fn(),
   };
   const view = render(<SpecMap store={store} {...props} />);

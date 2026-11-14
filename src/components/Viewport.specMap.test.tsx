@@ -11,7 +11,13 @@ import { SearchSessionStore } from "../state/searchSessions";
 import { SPEC_MAP_TAB } from "../hooks/shell/tabRecords";
 import { makeStore, setWindowWidth } from "../test/specMapRender";
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+// The Delivery lens of a file source reads the file; this suite answers only
+// the background log flush, and refuses every other command.
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn((cmd: string) =>
+    cmd === "append_log_records" ? Promise.resolve() : Promise.reject(new Error(`unexpected command ${cmd}`)),
+  ),
+}));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("../logging", () => ({
   logDebug: vi.fn(),
@@ -22,12 +28,10 @@ vi.mock("../logging", () => ({
 
 afterEach(cleanup);
 
-async function renderMapTab() {
+async function renderMapTab(ops: Parameters<typeof makeStore>[1] = {}) {
   setWindowWidth(1440);
-  const { store } = makeStore();
+  const { store } = makeStore(undefined, ops);
   const onOpenArtifact = vi.fn();
-  const onOpenDraft = vi.fn();
-  const onNewDraftForMapNode = vi.fn();
   const onOverlayOpening = vi.fn();
   render(
     <Viewport
@@ -45,16 +49,18 @@ async function renderMapTab() {
       draftsRevision={0}
       onGraduationStarted={vi.fn()}
       onOpenRun={vi.fn()}
-      onOpenDraft={onOpenDraft}
+      onOpenDraft={vi.fn()}
       onCloseTab={vi.fn()}
       onDraftRenamed={vi.fn()}
       specMap={store}
-      onNewDraftForMapNode={onNewDraftForMapNode}
       onOverlayOpening={onOverlayOpening}
     />,
   );
-  await waitFor(() => expect(store.snapshot().status).toBe("ready"));
-  return { store, onOpenArtifact, onOpenDraft, onNewDraftForMapNode, onOverlayOpening };
+  await waitFor(() => expect(store.snapshot().lens).not.toBeNull());
+  if (store.snapshot().lens === "specifications") {
+    await waitFor(() => expect(store.snapshot().status).toBe("ready"));
+  }
+  return { store, onOpenArtifact, onOverlayOpening };
 }
 
 const inspector = () => screen.getByRole("complementary", { name: "Inspector" });
@@ -76,27 +82,11 @@ describe("the Map tab in the viewport (SMP-FR-KQTD)", () => {
     );
   });
 
-  it("SMD-FR-HVBE: New draft reaches the shell with the node it ran on", async () => {
-    const { store, onNewDraftForMapNode } = await renderMapTab();
-    act(() => store.select({ kind: "index", id: "f2" }));
-    fireEvent.click(within(inspector()).getByRole("button", { name: "New draft" }));
-    expect(onNewDraftForMapNode).toHaveBeenCalledWith("f2");
-  });
-
-  it("SMD-FR-XEPS: Open draft opens the draft by its id", async () => {
-    const { store, onOpenDraft } = await renderMapTab();
-    act(() => {
-      store.dispatch({ kind: "attachDraft", nodeId: "g2", draft: { draftId: "d-7", name: "Plan" } });
-      store.select({ kind: "planned", draftId: "d-7" });
+  it("SMP-FR-KQTD, SMP-FR-TKUS: with a delivery source the Map tab opens on the Delivery lens", async () => {
+    const { store } = await renderMapTab({
+      getDeliverySource: vi.fn(async () => ({ kind: "file" as const, flowId: "f", path: "plan.flow" })),
     });
-    fireEvent.click(within(inspector()).getByRole("button", { name: "Open draft" }));
-    expect(onOpenDraft).toHaveBeenCalledWith("d-7");
-  });
-
-  it("SNV-FR-56: opening a map dialog closes the shell's other floating overlays", async () => {
-    const { onOverlayOpening } = await renderMapTab();
-    fireEvent.click(within(inspector()).getByRole("button", { name: "New domain" }));
-    expect(onOverlayOpening).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("New domain");
+    expect(screen.getByTestId("delivery-lens")).toBeInTheDocument();
+    expect(store.snapshot().status).toBe("idle");
   });
 });

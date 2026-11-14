@@ -175,6 +175,10 @@ export const WORKTREE_CONTEXT_CHANGED = "worktree-context-changed";
 export const BRANCHES_CHANGED = "branches-changed";
 /** GPP-FR-TYOV: the GitHub polling view changed, with the new issues of a poll. */
 export const GITHUB_POLLING_CHANGED = "github-polling-changed";
+/** DSR-FR-EGFF: the delivery settings changed, or a publish or an export completed. */
+export const DELIVERY_SOURCE_CHANGED = "delivery-source-changed";
+/** GDP-FR-URZY: the read cache of a GitHub delivery plan changed. */
+export const GITHUB_DELIVERY_PLAN_CHANGED = "github-delivery-plan-changed";
 /** GTC-FR-04: one line of a transfer's output, push and pull alike. */
 export const GIT_OUTPUT_LINE = "git-output-line";
 /** GTC-FR-04: the single terminal event a transfer ends with. */

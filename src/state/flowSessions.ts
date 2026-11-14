@@ -2,16 +2,11 @@ import * as api from "../api";
 import { onArtifactChangedExternally } from "../events";
 import { errorLogCode } from "../errorLogCode";
 import { logError, logWarn } from "../logging";
-import type {
-  ArtifactChangedPayload,
-  FlowValidationReport,
-  FlowViolation,
-  SkippedIssue,
-  SyncConflict,
-} from "../types";
+import type { ArtifactChangedPayload, FlowValidationReport, FlowViolation } from "../types";
 import type { FlushResult } from "./editSessions";
 import { WriteSchedule } from "./writeSchedule";
 import { holdEdit, mainBranchSaveRefusal } from "./mainBranchWrite";
+import { FlowLayoutStore } from "./flowLayouts";
 import {
   parseFlowDocument,
   serializeFlowDocument,
@@ -96,46 +91,6 @@ export interface FlowSession {
   writeChain: Promise<void>;
 }
 
-/**
- * FSR-FR-AUWG: one conflict of the sync review. `stale` marks a conflict that a
- * resolve reported as changed since the sync.
- */
-export type ReviewConflict = SyncConflict & { stale?: boolean };
-
-/**
- * FLO-FR-AKMV to FLO-FR-WLHA and FSR: the tracker sync of one Flow, as the tab
- * shows it. Held by the store and not by the canvas, because only the active
- * tab's canvas is mounted: a sync that runs while the author looks at another
- * tab must still keep the Flow inert (FLO-FR-KHBY) and report its result.
- * Memory only (FSR NFR): a closed tab drops it.
- */
-export interface FlowSyncState {
-  /** FLO-FR-KHBY / FSR-FR-IDRR: a sync or a resolve is in flight. */
-  running: "sync" | "resolve" | null;
-  /** FLO-FR-WLHA: the typed text of the last sync error, shown in the band. */
-  error: string | null;
-  /** FSR-FR-RDZI: the conflicts of the last sync or resolve. */
-  conflicts: ReviewConflict[];
-  /** FSR-FR-CSOT: the skipped issues of the last sync or resolve. */
-  skipped: SkippedIssue[];
-  /** FSR-FR-KGOY: whether the review panel is open. */
-  reviewOpen: boolean;
-  /** FSR-FR-BXJJ: the typed text of a refused Apply. */
-  applyError: string | null;
-  /** FSR-FR-UHAM: a result has arrived, so an empty list reads as in sync. */
-  settled: boolean;
-}
-
-export const IDLE_SYNC: FlowSyncState = {
-  running: null,
-  error: null,
-  conflicts: [],
-  skipped: [],
-  reviewOpen: false,
-  applyError: null,
-  settled: false,
-};
-
 function newSession(flowId: string): FlowSession {
   return {
     flowId,
@@ -191,19 +146,12 @@ export class FlowSessionStore {
     return this.sessions.get(flowId);
   }
 
-  // --- the tracker sync of each Flow (FLO-FR-AKMV, FSR) --------------------
-  private syncStates = new Map<string, FlowSyncState>();
-
-  /** The sync state of a Flow; the idle state when it has none. */
-  syncState(flowId: string): FlowSyncState {
-    return this.syncStates.get(flowId) ?? IDLE_SYNC;
-  }
-
-  /** Change the sync state of a Flow, and tell the canvas. */
-  setSyncState(flowId: string, patch: Partial<FlowSyncState>): void {
-    this.syncStates.set(flowId, { ...this.syncState(flowId), ...patch });
-    this.notify();
-  }
+  /**
+   * FLO-FR-21: the per-machine layout of each Flow's scope. A layout is not
+   * part of the plan, so it has a store of its own, and nothing it holds marks
+   * a Flow dirty (FLO-FR-TDHR).
+   */
+  readonly layouts = new FlowLayoutStore();
 
   /** The Flow's record, created on first use. Does NOT start a load. */
   ensure(flowId: string): FlowSession {
@@ -366,8 +314,6 @@ export class FlowSessionStore {
    */
   closeTab(flowId: string): void {
     this.cancelWrite(flowId);
-    // FSR NFR: the review is memory only, and a closed tab loses it.
-    this.syncStates.delete(flowId);
     if (!this.sessions.delete(flowId)) return;
     this.notify();
   }
@@ -378,7 +324,8 @@ export class FlowSessionStore {
     // write left scheduled would land in a project that is no longer open.
     this.writes.cancelAll();
     this.sessions.clear();
-    this.syncStates.clear();
+    // The layouts are of the project that closes.
+    this.layouts.clear();
     this.notify();
   }
 
@@ -418,7 +365,7 @@ export class FlowSessionStore {
    *
    * Returns true when the edit changed the graph, and false when it was
    * dropped or changed nothing. A caller that reports a result after an await
-   * reads it, because a sync can start while the call waits.
+   * reads it, because the edit can be held while the call waits.
    */
   applyEdit(
     flowId: string,
@@ -426,8 +373,6 @@ export class FlowSessionStore {
   ): boolean {
     const s = this.ensure(flowId);
     if (!s.doc) return false;
-    // FLO-FR-KHBY: while a sync runs the tab is inert and schedules no write.
-    if (this.syncState(flowId).running) return false;
     // EDT-FR-UPNU: the canvas saves through "save artifact contents", so its
     // first change on an unconfirmed main branch is held too.
     if (holdEdit()) return false;

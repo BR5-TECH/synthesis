@@ -1,7 +1,7 @@
-/* ---------- Map — specifications ----------
-   SMP-specification-map.md and its feature specs: SMZ (canvas and zoom), SMN
-   (nodes), SME (edges), SMI (inspector), SMO (organization), SMD (drafts). The
-   layout sets each node's position and size inline; everything else is here. */
+/* ---------- Map ----------
+   SMP-specification-map.md and the feature specs of its Specifications lens:
+   SMZ (canvas and zoom), SMN (nodes), SME (edges), SMI (inspector). The layout
+   sets each node's position and size inline; everything else is here. */
 
 .smap {
   height: 100%;
@@ -49,6 +49,8 @@
 }
 .smap-levels__option[data-active] { background: var(--accent-soft); color: var(--accent); }
 .smap-levels__option:disabled { cursor: default; }
+/* SMP-FR-TKUS: the lens switch takes the treatment of the level control. */
+.smap-lens { margin-right: 2px; }
 .smap-toolbar__divider { flex: none; width: 1px; height: 18px; background: var(--border-1); }
 .smap-toolbar__label {
   flex: none;
@@ -76,9 +78,10 @@
   color: var(--fg-3);
   cursor: pointer;
 }
-/* SME-FR-OKUH / SMN-FR-HLDQ: the two toggles when on. */
+/* SME-FR-OKUH / SMN-FR-HLDQ / SDL-FR-HZLB: the toggles when on. */
 .smap-filter[data-filter="deps"][aria-pressed="true"] { background: var(--bg-active); color: var(--accent); }
-.smap-filter[data-filter="gaps"][aria-pressed="true"] { background: var(--danger-soft); color: var(--danger); }
+.smap-filter[data-filter="gaps"][aria-pressed="true"],
+.smap-filter[data-filter="unplanned"][aria-pressed="true"] { background: var(--danger-soft); color: var(--danger); }
 .smap-filter:disabled { opacity: 0.5; cursor: default; }
 
 /* SMN-FR-OJAY / SMN-FR-CMLN: a completeness bar is four segments in state
@@ -215,11 +218,13 @@
     opacity 140ms linear;
 }
 .smap-node:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
-/* SMN-FR-HLDQ / SME-FR-WRPX / SMO-FR-DKTM */
+/* SMN-FR-HLDQ / SME-FR-WRPX */
 .smap-node[data-dim="gaps"] { opacity: 0.3; }
 .smap-chip[data-dim="gaps"] { opacity: 0.25; }
 .smap-node[data-dim="related"] { opacity: 0.5; }
-.smap-node[data-dim="drag"] { opacity: 0.4; }
+/* SDL-FR-KXCY: the unplanned filter. */
+.smap-node[data-dim="unplanned"] { opacity: 0.3; }
+.smap-chip[data-dim="unplanned"] { opacity: 0.25; }
 
 /* SMN-FR-XCOK / SMN-FR-QHVM: root cards. */
 .smap-root {
@@ -229,13 +234,11 @@
   background: var(--bg-canvas);
   box-shadow: var(--shadow-2);
 }
-/* SMN-FR-KTZB / SMN-FR-EYRV / SMO-FR-ARQV */
+/* SMN-FR-KTZB / SMN-FR-EYRV */
 .smap-root[data-context],
 .smap-box[data-context] { border-color: var(--border-3); }
 .smap-root[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .smap-box[data-selected] { border-color: var(--accent); }
-.smap-root[data-drop],
-.smap-box[data-drop] { border-color: var(--accent); }
 .smap-root__head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
 /* A root node's hue arrives inline as its two theme values; these are the
    defaults for a node the index gives no hue. */
@@ -344,7 +347,7 @@
 .smap-box[data-role="leaf"] .smap-box__summary { height: 32px; padding: 4px 10px 0; line-height: var(--lh-snug); }
 .smap-box__bar { padding: 8px 11px 0; }
 
-/* SMN-FR-ISBE / SMD-FR-CGNW: spec chips and planned chips. */
+/* SMN-FR-ISBE: spec chips. */
 .smap-chip {
   height: 22px;
   display: flex;
@@ -356,7 +359,18 @@
   background: var(--bg-canvas);
 }
 .smap-chip[data-selected] { border-color: var(--accent); background: var(--accent-soft); }
-.smap-chip--planned { border-style: dashed; border-color: var(--border-2); }
+/* SDL-FR-SGQM: the planned mark, a 2px accent bar along the bottom edge. */
+.smap-chip[data-plan-linked] { overflow: hidden; }
+.smap-chip[data-plan-linked]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
 /* SMN-FR-ZOUZ: a change chip. */
 .smap-chip--change { border-style: dashed; border-color: var(--accent); }
 .smap-chip__label {
@@ -399,27 +413,10 @@
 [data-theme="dark"] .smap-code[data-folder="dir"]    { background: #0B0D11; color: #847F76; }
 .smap-code[data-folder][data-danger],
 [data-theme="dark"] .smap-code[data-folder][data-danger] { background: var(--danger-soft); color: var(--danger); }
-.smap-code--draft { background: var(--live-soft); color: var(--live); }
 .smap-code--change { background: var(--accent-soft); color: var(--accent); }
 /* SMN-FR-WAGD: a spec below openspec/ takes the openspec pair. */
 .smap-code[data-folder="openspec"] { background: #DDF0F2; color: #0E7783; }
 [data-theme="dark"] .smap-code[data-folder="openspec"] { background: #0F2E31; color: #62CBD4; }
-
-/* SMO-FR-DKTM / SMO-FR-ARQV: the drag ghost and the insertion bar. */
-.smap-drop-bar { position: absolute; border-radius: 1px; background: var(--accent); pointer-events: none; }
-.smap-ghost {
-  position: absolute;
-  transform: translate(8px, 8px);
-  padding: 2px 8px;
-  border: 1px solid var(--accent);
-  border-radius: var(--r-xs);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-3);
-  font-size: var(--fs-ui-xs);
-  color: var(--fg-1);
-  white-space: nowrap;
-  pointer-events: none;
-}
 
 /* SMN-FR-MVWA / SMN-FR-YSKQ: the hover card ignores the pointer. */
 .smap-hover {
@@ -673,6 +670,3 @@ button.smap-row:hover { background: var(--bg-hover); }
 /* SMI layout notes: a secondary action sits on --bg-canvas with a --border-2 line. */
 .smap-action { background: var(--bg-canvas); border: 1px solid var(--border-2); color: var(--fg-1); }
 .smap-action:hover { background: var(--bg-hover); border-color: var(--border-3); }
-
-/* SMO-FR-IMXW */
-.smap-dialog__text { margin: 0; font-size: var(--fs-ui-md); color: var(--fg-2); }

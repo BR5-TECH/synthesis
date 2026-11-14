@@ -1,7 +1,7 @@
 /**
  * The edit operations on items and on the Flow's own fields (FLO-FR-07 to
  * FLO-FR-13, FLO-FR-25, FLO-FR-YDWT, FLO-FR-45, FLO-FR-HGIY, FLO-FR-NRBV,
- * FLO-FR-RMVR, FLO-FR-ZEJU, FLO-FR-XAPK, FLO-FR-TZSU, FLO-FR-OAOZ).
+ * FLO-FR-RMVR, FLO-FR-ZEJU, FLO-FR-XAPK, FLO-FR-OAOZ).
  */
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +11,6 @@ import {
   addItem,
   addItemArtifact,
   allowedKinds,
-  DEFAULT_CONTAINER_SIZES,
   emptyFlow,
   findItem,
   isCalendarDate,
@@ -30,15 +29,12 @@ import {
   setItemDescription,
   setItemDraft,
   setItemKind,
-  setLocalOnly,
   type FlowDocument,
   type FlowEditResult,
 } from "./flowDocument";
 import {
   blocks,
   ids,
-  issueBase,
-  issueRef,
   item,
   plan,
   relates,
@@ -63,101 +59,72 @@ function refusal(r: FlowEditResult) {
 }
 
 describe("addItem (FLO-FR-07, FLO-FR-42, FLO-FR-OAOZ)", () => {
-  it("FLO-FR-07: a new milestone gets its default name and default size", () => {
-    const { doc, itemId } = added(addItem(emptyFlow(), "milestone", { x: 40, y: 50 }));
+  it("FLO-FR-07: a new milestone gets its default name and no layout field", () => {
+    const { doc, itemId } = added(addItem(emptyFlow(), "milestone"));
     expect(itemId).toBe("m1");
-    expect(doc.items).toEqual([
-      {
-        id: "m1",
-        kind: "milestone",
-        name: "New milestone",
-        position: { x: 40, y: 50 },
-        size: { width: 640, height: 380 },
-      },
-    ]);
-    // The size is a copy, so an edit to it cannot change the default.
-    expect(doc.items[0].size).not.toBe(DEFAULT_CONTAINER_SIZES.milestone);
+    expect(doc.items).toEqual([{ id: "m1", kind: "milestone", name: "New milestone" }]);
   });
 
-  it("FLO-FR-07, FLO-FR-42: a task added in a feature stores its position in the feature's coordinates", () => {
-    const { doc, itemId } = added(addItem(samplePlan(), "task", { x: 100, y: 200 }, "f1"));
+  it("FLO-FR-07, FLO-FR-42: a task added in a feature joins it", () => {
+    const { doc, itemId } = added(addItem(samplePlan(), "task", "f1"));
     expect(findItem(doc, itemId)).toEqual({
       id: "t4",
       kind: "task",
       name: "New task",
       parentId: "f1",
-      position: { x: 60, y: 80 },
     });
   });
 
-  it("FLO-FR-07: each kind gets its own default name, and only a container gets a size", () => {
+  it("FLO-FR-07: each kind gets its own default name", () => {
     const base = samplePlan();
     const cases = [
-      ["milestone", undefined, "New milestone", true],
-      ["epic", "m1", "New epic", true],
-      ["feature", "ep1", "New feature", true],
-      ["defect", "ep1", "New defect", false],
+      ["milestone", undefined, "New milestone"],
+      ["epic", "m1", "New epic"],
+      ["feature", "ep1", "New feature"],
+      ["defect", "ep1", "New defect"],
     ] as const;
-    for (const [kind, parent, name, sized] of cases) {
-      const { doc, itemId } = added(addItem(base, kind, { x: 0, y: 0 }, parent));
-      const placed = findItem(doc, itemId)!;
-      expect(placed.name).toBe(name);
-      expect(placed.size !== undefined).toBe(sized);
+    for (const [kind, parent, name] of cases) {
+      const { doc, itemId } = added(addItem(base, kind, parent));
+      expect(findItem(doc, itemId)!.name).toBe(name);
+    }
+  });
+
+  it("FGV-FR-YHFX: every kind but a milestone may be added at the top level", () => {
+    for (const kind of ["epic", "feature", "task", "defect"] as const) {
+      const { doc, itemId } = added(addItem(samplePlan(), kind));
+      expect("parentId" in findItem(doc, itemId)!, kind).toBe(false);
     }
   });
 
   it("FLO-FR-OAOZ: a placement in a container the kind does not permit is refused and names the permitted containers", () => {
-    expect(refusal(addItem(samplePlan(), "task", { x: 0, y: 0 }))).toEqual({
-      code: "invalid_parent_kind",
-      permitted: ["feature"],
-    });
-    expect(refusal(addItem(samplePlan(), "milestone", { x: 0, y: 0 }, "f1"))).toEqual({
+    expect(refusal(addItem(samplePlan(), "milestone", "f1"))).toEqual({
       code: "invalid_parent_kind",
       permitted: [null],
     });
-    expect(refusal(addItem(samplePlan(), "milestone", { x: 0, y: 0 }, "m1")).code).toBe(
-      "invalid_parent_kind",
-    );
-    expect(refusal(addItem(samplePlan(), "epic", { x: 0, y: 0 }))).toEqual({
+    expect(refusal(addItem(samplePlan(), "milestone", "m1")).code).toBe("invalid_parent_kind");
+    expect(refusal(addItem(samplePlan(), "epic", "f1"))).toEqual({
       code: "invalid_parent_kind",
-      permitted: ["milestone"],
+      permitted: [null, "milestone"],
     });
   });
 
   it("FLO-FR-OAOZ: a placement in a leaf or in an item that is not there is refused", () => {
-    expect(refusal(addItem(samplePlan(), "task", { x: 0, y: 0 }, "t1")).code).toBe(
-      "invalid_parent_kind",
-    );
-    expect(refusal(addItem(samplePlan(), "task", { x: 0, y: 0 }, "nope")).code).toBe(
-      "unknown_parent",
-    );
+    expect(refusal(addItem(samplePlan(), "task", "t1")).code).toBe("invalid_parent_kind");
+    expect(refusal(addItem(samplePlan(), "task", "nope")).code).toBe("unknown_parent");
   });
 
   it("FLO-FR-06: a new id never repeats one in use, also after a removal", () => {
     const after = removeItem(samplePlan(), "t2");
-    const { doc, itemId } = added(addItem(after, "task", { x: 0, y: 0 }, "f1"));
+    const { doc, itemId } = added(addItem(after, "task", "f1"));
     // Two tasks are left (t1, t3), so the search starts at t3, which is taken.
     expect(itemId).toBe("t4");
     expect(new Set(ids(doc)).size).toBe(doc.items.length);
   });
 
-  it("FGV-FR-15: a new id never takes the id of a removed item that keeps its sync link", () => {
-    const linked = {
-      ...samplePlan(),
-      sync: {
-        tracker: "github" as const,
-        links: [{ itemId: "t3", ref: issueRef(3), base: issueBase("T3") }],
-      },
-    };
-    // Two tasks are left, so the search starts at t3, which the link keeps.
-    const { itemId } = added(addItem(removeItem(linked, "t3"), "task", { x: 0, y: 0 }, "f1"));
-    expect(itemId).toBe("t4");
-  });
-
-    it("FLO-FR-07: the input document does not change", () => {
+  it("FLO-FR-07: the input document does not change", () => {
     const before = samplePlan();
     const copy = structuredClone(before);
-    addItem(before, "task", { x: 0, y: 0 }, "f1");
+    addItem(before, "task", "f1");
     expect(before).toEqual(copy);
   });
 });
@@ -193,15 +160,6 @@ describe("removeItem (FLO-FR-08, FLO-FR-45)", () => {
     const doc = withItems(samplePlan(), item("f9", "feature", { parentId: "m1" }));
     expect(removalScope(doc, "f9").itemCount).toBe(0);
     expect(ids(removeItem(doc, "f9"))).not.toContain("f9");
-  });
-
-  it("FGV-FR-15: the sync link of a removed item stays as the record of a local removal", () => {
-    const doc = samplePlan();
-    doc.sync = {
-      tracker: "github",
-      links: [{ itemId: "t1", ref: issueRef(1), base: issueBase("T1") }],
-    };
-    expect(removeItem(doc, "f1").sync?.links.map((l) => l.itemId)).toEqual(["t1"]);
   });
 
   it("FLO-FR-08: an unknown id changes nothing", () => {
@@ -275,7 +233,7 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
     expect(findItem(next, "t1")).toMatchObject({ kind: "defect", draftId: "dr1", footprint: ["src/"] });
   });
 
-  it("FLO-FR-HGIY, FGV-FR-MZIA: a leaf that becomes a container loses its draft and footprint and gets a default size", () => {
+  it("FLO-FR-HGIY, FGV-FR-MZIA: a leaf that becomes a container loses its draft and its footprint", () => {
     const doc = samplePlan();
     doc.items[7] = { ...doc.items[7], draftId: "dr1", footprint: ["src/"] };
     expect(kindChangeDrops(doc, "x1", "feature")).toEqual(["draftId", "footprint"]);
@@ -284,7 +242,6 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
     expect(x1.kind).toBe("feature");
     expect(x1.draftId).toBeUndefined();
     expect(x1.footprint).toBeUndefined();
-    expect(x1.size).toEqual(DEFAULT_CONTAINER_SIZES.feature);
   });
 
   it("FLO-FR-HGIY: a change to a kind that keeps every field drops nothing", () => {
@@ -292,27 +249,15 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
     expect(kindChangeDrops(samplePlan(), "nope", "defect")).toEqual([]);
   });
 
-  it("FLO-FR-HGIY, FGV-FR-MZIA: an empty container becomes a leaf and loses its size", () => {
+  it("FLO-FR-HGIY: an empty container becomes a leaf", () => {
     const doc = withItems(samplePlan(), item("f9", "feature", { parentId: "m1" }));
     const next = ok(setItemKind(doc, "f9", "defect"));
-    expect(findItem(next, "f9")).toEqual({
-      id: "f9",
-      kind: "defect",
-      name: "F9",
-      parentId: "m1",
-      position: { x: 0, y: 0 },
-    });
+    expect(findItem(next, "f9")).toEqual({ id: "f9", kind: "defect", name: "F9", parentId: "m1" });
   });
 
-  it("FLO-FR-HGIY: a container that becomes another container keeps its size", () => {
-    const doc = withItems(
-      samplePlan(),
-      item("f9", "feature", { parentId: "m1", size: { width: 333, height: 222 } }),
-    );
-    expect(findItem(ok(setItemKind(doc, "f9", "epic")), "f9")?.size).toEqual({
-      width: 333,
-      height: 222,
-    });
+  it("FLO-FR-HGIY, FGV-FR-YHFX: a feature that holds tasks may become an epic", () => {
+    const next = ok(setItemKind(samplePlan(), "f1", "epic"));
+    expect(findItem(next, "f1")?.kind).toBe("epic");
   });
 
   it("FLO-FR-HGIY: a container that holds items cannot become a leaf", () => {
@@ -323,9 +268,9 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
   });
 
   it("FLO-FR-HGIY: a kind that a member cannot sit in is refused and names the members", () => {
-    expect(refusal(setItemKind(samplePlan(), "f1", "epic"))).toEqual({
+    expect(refusal(setItemKind(samplePlan(), "m1", "epic"))).toEqual({
       code: "member_not_permitted",
-      itemIds: ["t1", "t2"],
+      itemIds: ["ep1"],
     });
     expect(refusal(setItemKind(samplePlan(), "ep1", "feature"))).toEqual({
       code: "member_not_permitted",
@@ -336,9 +281,12 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
   it("FLO-FR-HGIY: a kind that the container does not permit is refused", () => {
     expect(refusal(setItemKind(samplePlan(), "t1", "feature"))).toEqual({
       code: "invalid_parent_kind",
-      permitted: ["milestone", "epic"],
+      permitted: [null, "milestone", "epic"],
     });
-    expect(refusal(setItemKind(samplePlan(), "m1", "epic")).code).toBe("invalid_parent_kind");
+    expect(refusal(setItemKind(samplePlan(), "x1", "milestone"))).toEqual({
+      code: "invalid_parent_kind",
+      permitted: [null],
+    });
   });
 
   it("FLO-FR-HGIY: the same kind changes nothing, and an unknown item is refused", () => {
@@ -349,9 +297,9 @@ describe("setItemKind (FLO-FR-HGIY, FGV-FR-MZIA)", () => {
 
   it("FLO-FR-HGIY: allowedKinds offers only the kinds a change accepts", () => {
     const doc = samplePlan();
-    expect(allowedKinds(doc, "x1")).toEqual(["epic", "feature", "defect"]);
+    expect(allowedKinds(doc, "x1")).toEqual(["epic", "feature", "task", "defect"]);
     expect(allowedKinds(doc, "t1")).toEqual(["task", "defect"]);
-    expect(allowedKinds(doc, "f1")).toEqual(["feature"]);
+    expect(allowedKinds(doc, "f1")).toEqual(["epic", "feature"]);
     expect(allowedKinds(doc, "m1")).toEqual(["milestone"]);
     expect(allowedKinds(doc, "nope")).toEqual([]);
   });
@@ -483,21 +431,5 @@ describe("due dates (FLO-FR-XAPK, FGV-FR-RRND)", () => {
     expect(refusal(setDue(samplePlan(), "f1", "2027-03-31")).code).toBe("not_milestone");
     expect(refusal(setDue(samplePlan(), "t1", "2027-03-31")).code).toBe("not_milestone");
     expect(refusal(setDue(samplePlan(), "nope", "2027-03-31")).code).toBe("unknown_item");
-  });
-});
-
-describe("local only (FLO-FR-TZSU)", () => {
-  it("FLO-FR-TZSU: the flag is set to true, and cleared by removing it", () => {
-    const on = setLocalOnly(samplePlan(), "f1", true);
-    expect(findItem(on, "f1")?.localOnly).toBe(true);
-    expect(setLocalOnly(on, "f1", true)).toBe(on);
-    const off = setLocalOnly(on, "f1", false);
-    expect("localOnly" in findItem(off, "f1")!).toBe(false);
-    expect(setLocalOnly(off, "f1", false)).toBe(off);
-  });
-
-  it("FLO-FR-TZSU: a `false` read from a file is cleared by an off", () => {
-    const doc = plan([item("m1", "milestone", { localOnly: false })]);
-    expect("localOnly" in findItem(setLocalOnly(doc, "m1", false), "m1")!).toBe(false);
   });
 });

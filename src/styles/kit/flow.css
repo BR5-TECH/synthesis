@@ -6,12 +6,12 @@
   flex-direction: column;
   min-height: 0;
 }
-/* FLO-FR-KHBY: while a sync runs, no item takes a press. A press reaches the
-   canvas, which pans, and the view controls still act. */
-.flow-surface[data-syncing="true"] .flow-viewport { pointer-events: none; }
-.flow-surface[data-syncing="true"] .flow-viewport > * { opacity: 0.72; }
+/* MDL-FR-WMGU: while the host keeps the canvas inert, no item takes a press. A
+   press reaches the canvas, which pans, and the view controls still act. */
+.flow-surface[data-inert="true"] .flow-viewport { pointer-events: none; }
+.flow-surface[data-inert="true"] .flow-viewport > * { opacity: 0.72; }
 
-/* ---- the band: name, description, references, Sync (FLO-FR-25, YDWT, AKMV) */
+/* ---- the band: name, description, references (FLO-FR-25, FLO-FR-YDWT) */
 .flow-band {
   flex: none;
   display: flex;
@@ -50,64 +50,6 @@
 .flow-band__required { flex: none; font-size: var(--fs-ui-xs); color: var(--danger); }
 .flow-band__refs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
 .flow-band__spacer { flex: 1; }
-.flow-band__error {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 420px;
-  font-size: var(--fs-ui-xs);
-  color: var(--danger);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* FLO-FR-AKMV / FLO-FR-WLHA: the Sync control and its count. */
-.flow-sync {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px 2px 2px;
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-sm);
-  background: var(--bg-canvas);
-}
-.flow-sync__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  background: transparent;
-  color: var(--fg-1);
-  font: inherit;
-  font-size: var(--fs-ui-sm);
-  padding: 3px 6px;
-  border-radius: var(--r-xs);
-  cursor: pointer;
-}
-.flow-sync__btn:hover:not(:disabled) { background: var(--bg-active); }
-.flow-sync__btn:disabled { color: var(--fg-2); cursor: progress; }
-.flow-sync__icon { display: inline-block; color: var(--fg-3); }
-.flow-sync[data-running="true"] .flow-sync__icon { animation: flow-spin 1s linear infinite; color: var(--accent); }
-.flow-sync__count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-radius: var(--r-full);
-  border: 1px solid var(--warn);
-  background: var(--warn-soft);
-  color: var(--warn);
-  font: inherit;
-  font-size: var(--fs-ui-2xs);
-  font-weight: 600;
-  cursor: pointer;
-}
-.flow-sync__repo { color: var(--fg-3); font-size: var(--fs-ui-xs); white-space: nowrap; }
-@keyframes flow-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-  .flow-sync[data-running="true"] .flow-sync__icon { animation: none; }
-}
 
 /* ---- references (FLO-FR-10, FLO-FR-11, FLO-FR-YDWT) ---- */
 .flow-refs { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
@@ -279,6 +221,20 @@ button.flow-ref:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-ctr__toggle:hover { color: var(--fg-1); background: var(--bg-active); }
 .flow-ctr__name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 24px; flex: 0 1 auto; }
 .flow-ctr__spacer { flex: 1; min-width: 4px; }
+/* FLO-FR-SQUS: the place of a milestone column in the milestone order. */
+.flow-ctr__order { flex: none; min-width: 16px; text-align: center; font-size: var(--fs-ui-2xs); font-weight: 600; color: var(--fg-3); border: 1px solid var(--border-2); border-radius: var(--r-xs); }
+/* FLO-FR-SQUS: the arrows between the milestone columns. */
+.flow-seq { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.flow-seq__line { stroke: var(--fg-3); stroke-width: 1.5; }
+.flow-seq__head { fill: var(--fg-3); }
+/* FLO-FR-IAOQ: the No milestone column. It is not an item: a press on it is a press on the canvas. */
+.flow-col-none {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+}
+.flow-col-none__head { height: 40px; display: flex; align-items: center; padding: 0 10px; font-size: var(--fs-ui-sm); font-weight: 600; color: var(--fg-3); }
 .flow-ctr__counts { padding: 0 10px 6px 34px; font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flow-ctr__about {
   position: relative;
@@ -387,6 +343,14 @@ button.flow-ref:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-chip[data-state="in_progress"] { color: var(--warn); }
 .flow-chip[data-state="done"] { color: var(--ok); }
 .flow-chip[data-state="dropped"] { color: var(--fg-4); text-decoration: line-through; }
+/* MDL-FR-ECPZ: the Status of a GitHub issue, in a neutral fill. */
+.flow-chip--status {
+  padding: 0 6px;
+  color: var(--fg-2);
+  background: var(--bg-sunken);
+  border-color: var(--border-1);
+  font-weight: 500;
+}
 /* FLO-FR-IKMM / FLO-FR-KWFH: the Blocked and Overlap markers. */
 .flow-marker {
   display: inline-flex;
@@ -418,8 +382,8 @@ button.flow-ref:hover { border-color: var(--border-3); color: var(--fg-1); }
   cursor: pointer;
 }
 button.flow-tag:hover { color: var(--accent); border-color: var(--accent); }
-/* FLO-FR-TZSU: the local-only mark, dashed like a thing that stays here. */
-.flow-local {
+/* MDL-FR-PUCM: the mark of an item whose edit is pending in a GitHub plan. */
+.flow-pending {
   flex: none;
   font-size: var(--fs-ui-2xs);
   color: var(--fg-3);
@@ -577,7 +541,7 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
   flex-direction: column;
   gap: 6px;
 }
-/* KHBY: the fieldset only disables its controls; it takes no box. */
+/* MDL-FR-WMGU: the fieldset only disables its controls; it takes no box. */
 .flow-panel__fieldset { display: contents; }
 .flow-panel__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .flow-panel__row--head { margin-bottom: 2px; }
@@ -601,8 +565,6 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-panel__src:focus { outline: none; border-color: var(--accent); }
 .flow-panel__note { font-size: var(--fs-ui-xs); color: var(--warn); }
 .flow-panel__error { width: 100%; font-size: var(--fs-ui-xs); color: var(--danger); }
-.flow-panel__link { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.flow-input--num { width: 84px; }
 .flow-panel .flow-select[aria-label="Add path"],
 .flow-panel .flow-select[aria-label="Link draft"] { max-width: 220px; }
 /* FLO-FR-ZEJU: a footprint entry; one that names nothing on disk is marked. */
@@ -624,23 +586,6 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-fp__missing { flex: none; color: var(--warn); font-family: var(--font-ui-family); }
 .flow-fp__remove { margin-left: auto; flex: none; border: none; background: transparent; color: var(--fg-4); cursor: pointer; padding: 0 2px; font: inherit; }
 .flow-fp__remove:hover { color: var(--danger); }
-/* FLO-FR-TZSU: the Local only switch. */
-.flow-switch { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-ui-xs); cursor: pointer; align-self: flex-start; }
-.flow-switch input { position: absolute; left: 0; top: 50%; width: 24px; height: 14px; margin: -7px 0 0; opacity: 0; cursor: pointer; }
-.flow-switch__track { position: relative; width: 24px; height: 14px; border-radius: 7px; background: var(--border-3); flex: none; }
-.flow-switch__track::after {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 5px;
-  background: var(--bg-elevated);
-}
-.flow-switch input:checked + .flow-switch__track { background: var(--accent); }
-.flow-switch input:checked + .flow-switch__track::after { left: 12px; background: var(--accent-fg); }
-.flow-switch input:focus-visible + .flow-switch__track { box-shadow: var(--shadow-focus); }
 
 /* ---- the canvas's own chrome ---- */
 /* FLO-FR-16: the feedback of a refusal, at the top of the canvas. */

@@ -1,24 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INITIAL_VIEW, SpecMapSessionStore } from "./session";
 import type { SpecMapOps } from "../../api/specMap";
-import type { MapEdit } from "./types";
-import { buildTree, specChildren } from "./tree";
-import { openspecIndex, smallIndex } from "../../test/specMapFixtures";
+import type { DeliverySource } from "../../types/delivery";
+import { smallIndex } from "../../test/specMapFixtures";
 
 const logWarn = vi.fn();
 const logError = vi.fn();
+const logInfo = vi.fn();
 vi.mock("../../logging", () => ({
   logDebug: vi.fn(),
-  logInfo: vi.fn(),
+  logInfo: (...args: unknown[]) => logInfo(...args),
   logWarn: (...args: unknown[]) => logWarn(...args),
   logError: (...args: unknown[]) => logError(...args),
 }));
 
+const NONE: DeliverySource = { kind: "none", reason: "no_source" };
+const FILE: DeliverySource = { kind: "file", flowId: "flow-1", path: "plan.flow" };
+
 function makeOps(overrides: Partial<SpecMapOps> = {}) {
   const ops = {
-    load: vi.fn(async () => smallIndex()),
-    saveOrganization: vi.fn(async () => {}),
-    attachDraft: vi.fn(async () => {}),
+    load: vi.fn<SpecMapOps["load"]>(async () => smallIndex()),
+    getDeliverySource: vi.fn<SpecMapOps["getDeliverySource"]>(async () => NONE),
     ...overrides,
   };
   return ops;
@@ -33,6 +35,7 @@ async function loaded(ops = makeOps()) {
 beforeEach(() => {
   logWarn.mockReset();
   logError.mockReset();
+  logInfo.mockReset();
 });
 
 describe("loading the index", () => {
@@ -78,117 +81,186 @@ describe("loading the index", () => {
 });
 
 describe("the session lifetime", () => {
-  it("SMP-FR-QNUH, SMP-FR-BXAP: resetting the view keeps the index, the edits, the selection and the toggles", async () => {
+  it("SMP-FR-QNUH, SMP-FR-BXAP: resetting the views keeps the lens, the index, the selection, the toggles and the delivery data", async () => {
     const { store } = await loaded();
-    store.dispatch({ kind: "edit", nodeId: "g1", label: "renamed", summary: "" });
+    store.setLens("delivery");
     store.select({ kind: "spec", code: "A1" });
     store.toggleGaps();
     store.toggleDeps();
     store.setFocus("d1");
     store.setView({ level: 2, scale: 1.1, tx: 40, ty: -12, touched: true });
+    store.setDeliveryState({ data: { plan: "p" }, view: { x: 3 } });
+    const index = store.snapshot().index;
 
     store.resetView();
     const state = store.snapshot();
     expect(state.view).toEqual(INITIAL_VIEW);
     expect(state.focusId).toBeNull();
-    expect(buildTree(state.index!).nodes.get("g1")!.label).toBe("renamed");
+    expect(state.delivery).toEqual({ data: { plan: "p" }, view: null });
+    expect(state.lens).toBe("delivery");
+    expect(state.index).toBe(index);
     expect(state.selection).toEqual({ kind: "spec", code: "A1" });
     expect(state.gapsOnly).toBe(true);
     expect(state.showDeps).toBe(false);
   });
 
-  it("SMP-FR-MEZK, SMO-FR-MHEU, SMD-FR-BWJY: clearing discards the session, and the next load has no edits", async () => {
+  it("SMP-FR-MEZK: clearing discards the whole session, and the next open asks for the lens and the index again", async () => {
     const { store, ops } = await loaded();
-    store.dispatch({ kind: "create", parentId: null, node: { id: "n1", label: "later", summary: "" } });
-    store.dispatch({ kind: "attachDraft", nodeId: "g1", draft: { draftId: "x", name: "Untitled" } });
+    await store.decideLens();
+    store.select({ kind: "spec", code: "A1" });
+    store.setDeliveryState({ data: { plan: "p" } });
     store.clear();
-    expect(store.snapshot().status).toBe("idle");
-    expect(store.snapshot().index).toBeNull();
-    expect(store.snapshot().selection).toBeNull();
+    const state = store.snapshot();
+    expect(state.status).toBe("idle");
+    expect(state.index).toBeNull();
+    expect(state.selection).toBeNull();
+    expect(state.lens).toBeNull();
+    expect(state.deliverySource).toBeNull();
+    expect(state.delivery).toEqual({ data: null, view: null });
+    await store.decideLens();
     await store.load();
-    const tree = store.tree()!;
-    expect(tree.nodes.has("n1")).toBe(false);
-    expect(tree.planned.size).toBe(0);
+    expect(ops.getDeliverySource).toHaveBeenCalledTimes(2);
     expect(ops.load).toHaveBeenCalledTimes(2);
   });
 });
 
-describe("edits", () => {
-  it("SMO-FR-CZLA: an edit applies at once and reaches the save operation as that one edit", async () => {
-    const { store, ops } = await loaded();
-    expect(
-      store.dispatch({ kind: "move", ref: { kind: "spec", code: "A1" }, parentId: "g4", index: 0 }),
-    ).toBe(true);
-    expect(specChildren(store.tree()!.nodes.get("g4")!).map((s) => s.code)).toEqual(["A1", "C1", "C2"]);
-    expect(ops.saveOrganization).toHaveBeenCalledWith({ kind: "move", nodeId: "A1", parentId: "g4", index: 0 });
-  });
-
-  it("SMO-FR-CZLA: a failed save is logged and changes nothing on the map", async () => {
-    const { store } = await loaded(makeOps({ saveOrganization: vi.fn().mockRejectedValue(new Error("nope")) }));
-    store.dispatch({ kind: "edit", nodeId: "g1", label: "renamed", summary: "" });
-    await vi.waitFor(() =>
-      expect(logWarn).toHaveBeenCalledWith(["frontend"], "specification map edit could not be saved", {
-        kind: "edit",
-        reason: "nope",
-      }),
-    );
-    expect(store.tree()!.nodes.get("g1")!.label).toBe("renamed");
-  });
-
-  it("SMO-FR-CZLA: the edit is in the session before its save operation is invoked, and a delete saves as one delete", async () => {
-    let seen: string | undefined;
-    let store!: SpecMapSessionStore;
-    const ops = makeOps({
-      saveOrganization: vi.fn(async () => {
-        seen = store.tree()!.nodes.get("g1")?.label;
-      }),
+describe("the lens (SMP-FR-TKUS, SMP-FR-RNLH)", () => {
+  const sources: [string, DeliverySource, "delivery" | "specifications"][] = [
+    ["github", {
+      kind: "github",
+      project: { nodeId: "P1", title: "Plan", ownerLogin: "acme", number: 1, url: "" },
+      repository: { host: "github.com", owner: "acme", name: "app" },
+      configuration: {} as never,
+    }, "delivery"],
+    ["file", FILE, "delivery"],
+    ["none", NONE, "specifications"],
+    ["none with a missing file", { kind: "none", reason: "delivery_file_missing", flowId: "f" }, "specifications"],
+  ];
+  for (const [name, source, lens] of sources) {
+    it(`SMP-FR-TKUS: a ${name} source opens the ${lens} lens`, async () => {
+      const store = new SpecMapSessionStore(makeOps({ getDeliverySource: vi.fn(async () => source) }));
+      expect(store.snapshot().lens).toBeNull();
+      await store.decideLens();
+      expect(store.snapshot().lens).toBe(lens);
+      expect(store.snapshot().deliverySource).toEqual(source);
+      expect(logInfo).toHaveBeenCalledWith(["frontend"], "map tab chose its default lens", {
+        sourceKind: source.kind,
+        lens,
+      });
     });
-    store = new SpecMapSessionStore(ops);
-    await store.load();
-    store.dispatch({ kind: "edit", nodeId: "g1", label: "renamed", summary: "s" });
-    expect(seen).toBe("renamed");
-    store.dispatch({ kind: "delete", nodeId: "g2" });
-    expect(ops.saveOrganization).toHaveBeenLastCalledWith({ kind: "delete", nodeId: "g2" });
+  }
+
+  it("SMP-FR-TKUS: the source is asked for once per session, also by two renders at the same time", async () => {
+    const ops = makeOps();
+    const store = new SpecMapSessionStore(ops);
+    await Promise.all([store.decideLens(), store.decideLens()]);
+    await store.decideLens();
+    expect(ops.getDeliverySource).toHaveBeenCalledTimes(1);
   });
 
-  it("SMO-FR-WGOF: a refused edit changes nothing, reaches no operation, and is logged", async () => {
-    const { store, ops } = await loaded();
-    const before = store.snapshot().index;
-    expect(store.dispatch({ kind: "delete", nodeId: "g3" })).toBe(false);
-    expect(store.snapshot().index).toBe(before);
-    expect(ops.saveOrganization).not.toHaveBeenCalled();
-    expect(logWarn).toHaveBeenCalledWith(["frontend"], "specification map edit refused", { kind: "delete" });
+  it("SMP-FR-TKUS: a source that cannot be read opens the Specifications lens, and is logged", async () => {
+    const store = new SpecMapSessionStore(
+      makeOps({ getDeliverySource: vi.fn(() => Promise.reject(new TypeError("no backend"))) }),
+    );
+    await store.decideLens();
+    expect(store.snapshot().lens).toBe("specifications");
+    expect(store.snapshot().deliverySource).toBeNull();
+    expect(logWarn).toHaveBeenCalledWith(["frontend"], "the delivery source of the map could not be read", {
+      reason: "TypeError",
+    });
   });
 
-  it("SMO-FR-NXDL: a created node is selected and asked to be shown", async () => {
+  it("SMP-FR-TKUS: a lens the author chose while the source was asked for stays", async () => {
+    let answer!: (s: DeliverySource) => void;
+    const store = new SpecMapSessionStore(
+      makeOps({ getDeliverySource: vi.fn(() => new Promise<DeliverySource>((r) => (answer = r))) }),
+    );
+    const pending = store.decideLens();
+    store.setLens("specifications");
+    answer(FILE);
+    await pending;
+    expect(store.snapshot().lens).toBe("specifications");
+    expect(store.snapshot().deliverySource).toEqual(FILE);
+  });
+
+  it("SMP-FR-MEZK: a source answer that arrives after the session cleared lands nowhere", async () => {
+    let answer!: (s: DeliverySource) => void;
+    const store = new SpecMapSessionStore(
+      makeOps({ getDeliverySource: vi.fn(() => new Promise<DeliverySource>((r) => (answer = r))) }),
+    );
+    const pending = store.decideLens();
+    store.clear();
+    answer(FILE);
+    await pending;
+    expect(store.snapshot().lens).toBeNull();
+    expect(store.snapshot().deliverySource).toBeNull();
+  });
+
+  it("SMP-FR-RNLH: a lens switch keeps the selection, the view, the index and the delivery state", async () => {
     const { store } = await loaded();
-    store.dispatch({ kind: "create", parentId: "f1", node: { id: "n1", label: "planning", summary: "" } });
-    expect(store.snapshot().selection).toEqual({ kind: "index", id: "n1" });
-    expect(store.snapshot().zoom?.ref).toEqual({ kind: "index", id: "n1" });
+    store.setLens("specifications");
+    store.select({ kind: "index", id: "f1" });
+    store.setView({ level: 1, scale: 1, tx: 5, ty: 6, touched: true });
+    store.setDeliveryState({ data: { selected: "item-1" }, view: { zoom: 2 } });
+    const before = store.snapshot();
+    store.setLens("delivery");
+    store.setLens("specifications");
+    const after = store.snapshot();
+    expect(after.selection).toBe(before.selection);
+    expect(after.view).toBe(before.view);
+    expect(after.index).toBe(before.index);
+    expect(after.delivery).toEqual({ data: { selected: "item-1" }, view: { zoom: 2 } });
   });
 
-  it("SMO-FR-OBRF: a delete moves the selection to the sibling that took the children", async () => {
+  it("SMP-FR-TKUS: a switch to the lens that is already active changes nothing", async () => {
     const { store } = await loaded();
-    store.select({ kind: "index", id: "g2" });
-    store.dispatch({ kind: "delete", nodeId: "g2" });
-    expect(store.snapshot().selection).toEqual({ kind: "index", id: "g1" });
+    store.setLens("specifications");
+    const version = store.getVersion();
+    store.setLens("specifications");
+    expect(store.getVersion()).toBe(version);
+  });
+});
+
+describe("the dirty indicator of the Delivery lens (SMP-FR-SWUL)", () => {
+  it("SMP-FR-SWUL: the flag notifies its own listeners on a change only, and not the map listeners", () => {
+    const store = new SpecMapSessionStore(makeOps());
+    const dirty = vi.fn();
+    const map = vi.fn();
+    store.subscribeDeliveryDirty(dirty);
+    store.subscribe(map);
+    store.setDeliveryDirty(true);
+    store.setDeliveryDirty(true);
+    expect(store.deliveryDirty()).toBe(true);
+    expect(dirty).toHaveBeenCalledTimes(1);
+    expect(map).not.toHaveBeenCalled();
+    store.setDeliveryDirty(false);
+    expect(dirty).toHaveBeenCalledTimes(2);
   });
 
-  it("SMI-FR-WDAB: a subject removed from the tree leaves no selection", async () => {
-    const { store } = await loaded();
-    store.dispatch({ kind: "attachDraft", nodeId: "g1", draft: { draftId: "x", name: "Untitled" } });
-    store.select({ kind: "planned", draftId: "x" });
-    store.dispatch({ kind: "detachDraft", draftId: "x" });
-    expect(store.snapshot().selection).toBeNull();
+  it("SMP-FR-SWUL: Save writes through the handler of the lens only while it holds unsaved changes", async () => {
+    const store = new SpecMapSessionStore(makeOps());
+    const save = vi.fn(async () => {});
+    store.setDeliverySave(save);
+    await store.saveDelivery();
+    expect(save).not.toHaveBeenCalled();
+    store.setDeliveryDirty(true);
+    await store.saveDelivery();
+    expect(save).toHaveBeenCalledTimes(1);
   });
 
-  it("SMD-FR-OYLC, SMD-FR-QPAM: a placement and a planned chip's move both reach the placement operation", async () => {
-    const { store, ops } = await loaded();
-    store.dispatch({ kind: "attachDraft", nodeId: "g1", draft: { draftId: "x", name: "Untitled" } });
-    expect(ops.attachDraft).toHaveBeenLastCalledWith({ draftId: "x", nodeId: "g1" });
-    store.dispatch({ kind: "move", ref: { kind: "planned", draftId: "x" }, parentId: "d2", index: 0 });
-    expect(ops.attachDraft).toHaveBeenLastCalledWith({ draftId: "x", nodeId: "d2" });
-    expect(ops.saveOrganization).not.toHaveBeenCalled();
+  it("SMP-FR-SWUL, SMP-FR-MEZK: clearing the session clears the flag and drops the handler", async () => {
+    const store = new SpecMapSessionStore(makeOps());
+    const dirty = vi.fn();
+    const save = vi.fn(async () => {});
+    store.subscribeDeliveryDirty(dirty);
+    store.setDeliverySave(save);
+    store.setDeliveryDirty(true);
+    store.clear();
+    expect(store.deliveryDirty()).toBe(false);
+    expect(dirty).toHaveBeenCalledTimes(2);
+    store.setDeliveryDirty(true);
+    await store.saveDelivery();
+    expect(save).not.toHaveBeenCalled();
   });
 });
 
@@ -216,39 +288,5 @@ describe("selection by project path (SMI-FR-PRSL)", () => {
     await store.load();
     expect(store.snapshot().selection).toEqual({ kind: "spec", code: "A2" });
     expect(store.snapshot().pendingPath).toBeNull();
-  });
-});
-
-describe("an OpenSpec index (SMO-FR-RVAV, SMD-FR-YQSR)", () => {
-  const refused: MapEdit[] = [
-    { kind: "create", parentId: "group:/", node: { id: "n-1", label: "New", summary: "" } },
-    { kind: "edit", nodeId: "capability:auth", label: "Renamed", summary: "" },
-    { kind: "delete", nodeId: "capability:auth" },
-    { kind: "move", ref: { kind: "index", id: "capability:auth" }, parentId: "group:billing", index: 0 },
-    { kind: "move", ref: { kind: "spec", code: "auth#1" }, parentId: "capability:billing/pay", index: 0 },
-  ];
-
-  for (const edit of refused) {
-    it(`SMO-FR-RVAV: a ${edit.kind} edit${edit.kind === "move" ? ` of a ${edit.ref.kind}` : ""} is refused, changes nothing, saves nothing, and is logged`, async () => {
-      const { store, ops } = await loaded(makeOps({ load: vi.fn(async () => openspecIndex()) }));
-      const before = store.snapshot();
-      expect(store.dispatch(edit)).toBe(false);
-      expect(store.snapshot()).toBe(before);
-      expect(ops.saveOrganization).not.toHaveBeenCalled();
-      expect(ops.attachDraft).not.toHaveBeenCalled();
-      expect(logWarn).toHaveBeenCalledWith(
-        ["frontend"],
-        "specification map edit refused for an openspec index",
-        { kind: edit.kind },
-      );
-    });
-  }
-
-  it("SMD-FR-YQSR: a draft edit is still applied to an OpenSpec index", async () => {
-    const { store, ops } = await loaded(makeOps({ load: vi.fn(async () => openspecIndex()) }));
-    expect(
-      store.dispatch({ kind: "attachDraft", nodeId: "capability:auth", draft: { draftId: "dr", name: "Plan" } }),
-    ).toBe(true);
-    expect(ops.attachDraft).toHaveBeenCalledWith({ draftId: "dr", nodeId: "capability:auth" });
   });
 });

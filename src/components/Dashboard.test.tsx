@@ -3,9 +3,11 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Dashboard, hasPendingGitContent, pendingGitRows, runTone } from "./Dashboard";
+import { resetLogBufferForTest } from "../logging";
 import type {
   ActiveDraftItem,
   AgentRunItem,
+  DeliveryMilestones,
   OpenableArtifact,
   PendingGitActivity,
   RecentlyEditedArtifact,
@@ -76,6 +78,15 @@ function run(
   };
 }
 
+/** DSH-FR-YAZR: a project with no delivery source, so the Delivery widget is hidden. */
+const NO_DELIVERY: DeliveryMilestones = {
+  source: { kind: "none", reason: "no_source" },
+  planName: null,
+  milestones: [],
+  readAt: null,
+  stale: false,
+};
+
 const NO_GIT: PendingGitActivity = {
   modifiedArtifacts: null,
   modifiedSourceFiles: null,
@@ -112,8 +123,12 @@ function renderDashboard(fixture: Fixture = {}) {
         return fixture.runs ?? [];
       case "list_pending_git_activity":
         return fixture.git ?? NO_GIT;
-      default:
+      case "load_delivery_milestones":
+        return NO_DELIVERY;
+      case "append_log_records":
         return undefined;
+      default:
+        throw new Error(`unexpected command ${cmd}`);
     }
   });
   render(
@@ -141,6 +156,7 @@ function liveIndicator(): Element | null {
 }
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   for (const k in listeners) delete listeners[k];
 });
@@ -222,7 +238,10 @@ describe("Dashboard — Recently edited widget (DSH-FR-09)", () => {
       // this scenario is about the Recently edited widget's own loading state,
       // not about DSH-FR-08.
       if (cmd === "list_recent_agent_runs") return Promise.resolve([run("r1")]);
-      return Promise.resolve([]);
+      if (cmd === "load_delivery_milestones") return Promise.resolve(NO_DELIVERY);
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
     });
     render(
       <Dashboard
@@ -503,7 +522,10 @@ describe("Dashboard — empty and loading (DSH-FR-08 / DSH-FR-17)", () => {
       if (cmd === "list_pending_git_activity") return slowGit;
       if (cmd === "list_recently_edited_artifacts")
         return Promise.resolve([markdown("a.md", "a.md")]);
-      return Promise.resolve([]);
+      if (cmd === "load_delivery_milestones") return Promise.resolve(NO_DELIVERY);
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
     });
     render(
       <Dashboard
@@ -557,7 +579,10 @@ describe("Dashboard — refresh events (DSH-FR-15 / DSH-FR-16)", () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "list_recently_edited_artifacts") return served;
       if (cmd === "list_pending_git_activity") return NO_GIT;
-      return [];
+      if (cmd === "load_delivery_milestones") return NO_DELIVERY;
+      if (cmd === "append_log_records") return undefined;
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return [];
+      throw new Error(`unexpected command ${cmd}`);
     });
     render(
       <Dashboard
@@ -583,7 +608,10 @@ describe("Dashboard — refresh events (DSH-FR-15 / DSH-FR-16)", () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "list_active_drafts") return served;
       if (cmd === "list_pending_git_activity") return NO_GIT;
-      return [];
+      if (cmd === "load_delivery_milestones") return NO_DELIVERY;
+      if (cmd === "append_log_records") return undefined;
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return [];
+      throw new Error(`unexpected command ${cmd}`);
     });
     render(
       <Dashboard
@@ -618,7 +646,10 @@ describe("Dashboard — error and stale states (DSH-FR-18 / DSH-FR-19)", () => {
       if (cmd === "list_pending_git_activity") throw new Error("git is unwell");
       if (cmd === "list_recently_edited_artifacts")
         return [markdown("a.md", "a.md")];
-      return [];
+      if (cmd === "load_delivery_milestones") return NO_DELIVERY;
+      if (cmd === "append_log_records") return undefined;
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return [];
+      throw new Error(`unexpected command ${cmd}`);
     });
     render(
       <Dashboard
@@ -653,7 +684,10 @@ describe("Dashboard — error and stale states (DSH-FR-18 / DSH-FR-19)", () => {
         });
       }
       if (cmd === "list_pending_git_activity") return Promise.resolve(NO_GIT);
-      return Promise.resolve([]);
+      if (cmd === "load_delivery_milestones") return Promise.resolve(NO_DELIVERY);
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
     });
     render(
       <Dashboard
@@ -708,7 +742,10 @@ describe("Dashboard — error and stale states (DSH-FR-18 / DSH-FR-19)", () => {
       if (cmd === "list_recently_edited_artifacts")
         return new Promise<RecentlyEditedArtifact[]>((res) => settle.push(res));
       if (cmd === "list_pending_git_activity") return Promise.resolve(NO_GIT);
-      return Promise.resolve([]);
+      if (cmd === "load_delivery_milestones") return Promise.resolve(NO_DELIVERY);
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
     });
     render(
       <Dashboard
@@ -740,7 +777,10 @@ describe("Dashboard — error and stale states (DSH-FR-18 / DSH-FR-19)", () => {
       if (cmd === "list_recently_edited_artifacts")
         return new Promise<RecentlyEditedArtifact[]>((res) => settle.push(res));
       if (cmd === "list_pending_git_activity") return Promise.resolve(NO_GIT);
-      return Promise.resolve([]);
+      if (cmd === "load_delivery_milestones") return Promise.resolve(NO_DELIVERY);
+      if (cmd === "append_log_records") return Promise.resolve();
+      if (["list_recently_edited_artifacts", "list_active_drafts", "list_recent_agent_runs"].includes(cmd)) return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
     });
     render(
       <Dashboard

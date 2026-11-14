@@ -36,6 +36,7 @@ use crate::project_settings::{
 
 pub mod claims;
 pub mod client;
+pub mod delivery_access;
 pub mod eligibility;
 pub mod records;
 pub mod session;

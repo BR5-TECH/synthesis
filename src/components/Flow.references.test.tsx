@@ -8,7 +8,7 @@ import { resetToasts, visibleToasts } from "../state/toasts";
 import { callsOf, clearFlowStores, flowBackend, planOf, renderFlow } from "../test/flowCanvasHarness";
 import { HLD_ID, itemEl, panel, selectItem, SKILL_ID } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
-import { item, plan, samplePlan } from "../test/flowPlanFixtures";
+import { item, plan, sampleLayout, samplePlan } from "../test/flowPlanFixtures";
 
 vi.mock("@tauri-apps/api/core", async () => ({
   invoke: (await import("../test/flowMocks")).invoke,
@@ -36,7 +36,7 @@ const offered = (select: HTMLElement) =>
 
 describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
   it("FLO-FR-10: the picker offers every artifact that is not a Flow, a skill only by its SKILL.md, and none the item has", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: ["prompts/gather-repo.md"], position: { x: 20, y: 60 } })]));
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: ["prompts/gather-repo.md"] })]));
     await renderFlow(b);
 
     selectItem("t1");
@@ -45,7 +45,7 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
   });
 
   it("FLO-FR-10: a reference is added from the picker and removed on its own", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: ["prompts/gather-repo.md"], position: { x: 20, y: 60 } })]));
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: ["prompts/gather-repo.md"] })]));
     const { flows } = await renderFlow(b);
 
     selectItem("t1");
@@ -56,7 +56,7 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
   });
 
   it("FLO-FR-11: a resolved reference shows the display name and the type chip; one that does not resolve names its id and stays", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"], position: { x: 20, y: 60 } })]));
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"] })]));
     const { flows } = await renderFlow(b);
 
     const card = itemEl("t1");
@@ -70,7 +70,7 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
   it("FLO-FR-11: while the project tree is not read, no reference shows as unresolved", async () => {
     const doc = plan([
       item("f1", "feature"),
-      item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"], position: { x: 20, y: 60 } }),
+      item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"] }),
     ]);
     doc.references = ["gone/hld.md"];
     const b = flowBackend(doc);
@@ -84,7 +84,7 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
   });
 
   it("FLO-FR-12: a resolved reference opens through \"open artifact by id\" in its natural surface; an unresolved one opens nothing", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"], position: { x: 20, y: 60 } })]));
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [SKILL_ID, "gone/old.md"] })]));
     const { onOpenArtifact } = await renderFlow(b);
 
     await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Open Code review" }));
@@ -99,7 +99,7 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
 describe("opening a reference (FLO-FR-12)", () => {
   const OTHER_FLOW = "flows/other.flow";
   const withRef = (id: string) =>
-    plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [id], position: { x: 20, y: 60 } })]);
+    plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", artifactIds: [id] })]);
 
   it("FLO-FR-12: a reference to another Flow opens it in a Flow tab", async () => {
     const b = flowBackend(withRef(OTHER_FLOW));
@@ -130,7 +130,7 @@ describe("opening a reference (FLO-FR-12)", () => {
 
 describe("Flow references (FLO-FR-YDWT)", () => {
   it("FLO-FR-YDWT: a Flow with no reference shows Add HLD in the band, which adds the HLD", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const add = within(screen.getByTestId("flow-band")).getByRole("combobox", { name: "Add HLD" });

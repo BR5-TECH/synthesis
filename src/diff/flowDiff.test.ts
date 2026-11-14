@@ -12,27 +12,21 @@ function flow(doc: {
   references?: string[];
   items?: Obj[];
   edges?: Obj[];
-  sync?: Obj;
 }): string {
   return JSON.stringify({
-    version: 2,
+    version: 3,
     name: doc.name ?? "F",
     ...(doc.description ? { description: doc.description } : {}),
     ...(doc.references ? { references: doc.references } : {}),
     items: doc.items ?? [],
     edges: doc.edges ?? [],
-    ...(doc.sync ? { sync: doc.sync } : {}),
   });
 }
-
-const CONTAINERS = new Set(["milestone", "epic", "feature"]);
 
 const it_ = (id: string, kind: string, name: string, extra: Obj = {}): Obj => ({
   id,
   kind,
   name,
-  position: { x: 0, y: 0 },
-  ...(CONTAINERS.has(kind) ? { size: { width: 400, height: 220 } } : {}),
   ...extra,
 });
 
@@ -44,27 +38,6 @@ const milestone = it_("m1", "milestone", "Beta");
 const frame = [milestone, feature];
 
 const edge = (id: string, from: string, to: string, type = "blocks") => ({ id, from, to, type });
-
-const issueLink = (itemId: string, number: number, baseName = "B") => ({
-  itemId,
-  ref: {
-    kind: "issue",
-    host: "github.com",
-    owner: "acme",
-    repo: "payments",
-    number,
-    url: `https://github.com/acme/payments/issues/${number}`,
-  },
-  base: {
-    name: baseName,
-    description: "",
-    state: "open",
-    type: null,
-    parent: null,
-    milestone: null,
-    blockedBy: [],
-  },
-});
 
 function entries(oldBody: string | null, newBody: string | null) {
   const result = flowDiff(oldBody, newBody);
@@ -177,14 +150,14 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     ]);
   });
 
-  it("DFV-FR-RGBK: the draft link, the due date and the local-only flag are facts", () => {
+  it("DFV-FR-RGBK: the draft link and the due date are facts", () => {
     const list = entries(
       flow({ items: [milestone, feature, task("t1", "A", { draftId: "dr1" })] }),
       flow({
         items: [
           it_("m1", "milestone", "Beta", { due: "2027-03-31" }),
           feature,
-          task("t1", "A", { draftId: "dr2", localOnly: true }),
+          task("t1", "A", { draftId: "dr2" }),
         ],
       }),
     );
@@ -193,79 +166,44 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     ]);
     expect(byKey(list, "item:t1").facts).toEqual([
       { label: "Draft", status: "changed", before: "dr1", after: "dr2" },
-      { label: "Local only", status: "added", after: "Yes" },
     ]);
   });
 
-  it("DFV-FR-RGBK: the tracker link is a fact, and the sync base is not compared", () => {
-    const linked = flow({
-      items: [...frame, task("t1", "A")],
-      sync: { tracker: "github", links: [issueLink("t1", 42, "Old base")] },
-    });
-    const rebased = flow({
-      items: [...frame, task("t1", "A")],
-      sync: { tracker: "github", links: [issueLink("t1", 42, "New base")] },
-    });
-    const relinked = flow({
-      items: [...frame, task("t1", "A")],
-      sync: { tracker: "github", links: [issueLink("t1", 43)] },
-    });
-    const unlinked = flow({ items: [...frame, task("t1", "A")] });
-    expect(changedOnly(entries(linked, rebased))).toEqual([]);
-    expect(byKey(entries(linked, relinked), "item:t1").facts).toEqual([
-      { label: "Tracker link", status: "changed", before: "acme/payments#42", after: "acme/payments#43" },
-    ]);
-    expect(byKey(entries(unlinked, linked), "item:t1").facts).toEqual([
-      { label: "Tracker link", status: "added", after: "acme/payments#42" },
-    ]);
-  });
-
-  it("DFV-FR-RGBK: a milestone link and a link on another host name themselves", () => {
-    const milestoneLink = {
-      itemId: "m1",
-      ref: { kind: "milestone", host: "github.com", owner: "acme", repo: "payments", number: 3, url: "u" },
-      base: { name: "Beta", description: "", state: "open", due: null },
-    };
-    const enterprise = issueLink("t1", 9);
-    enterprise.ref.host = "git.acme.dev";
-    const list = entries(
-      null,
-      flow({
-        items: [...frame, task("t1", "A")],
-        sync: { tracker: "github", links: [milestoneLink, enterprise] },
-      }),
-    );
-    expect(byKey(list, "item:m1").facts).toContainEqual({
-      label: "Tracker link",
-      status: "unchanged",
-      after: "acme/payments milestone 3",
-    });
-    expect(byKey(list, "item:t1").facts).toContainEqual({
-      label: "Tracker link",
-      status: "unchanged",
-      after: "git.acme.dev/acme/payments#9",
-    });
-  });
-
-  it("DFV-FR-RGBK: the container is named by name, ahead of position and size, which come last", () => {
+  it("DFV-FR-RGBK: the container is named by name, after what the item is", () => {
     const list = entries(
       flow({ items: [...frame, it_("f2", "feature", "Refunds", { parentId: "m1" }), task("t1", "A")] }),
       flow({
         items: [
           ...frame,
-          it_("f2", "feature", "Refunds", { parentId: "m1", size: { width: 500, height: 220 } }),
-          task("t1", "A", { parentId: "f2", position: { x: 5, y: 6 }, description: "d" }),
+          it_("f2", "feature", "Refunds", { parentId: "m1" }),
+          task("t1", "A", { parentId: "f2", description: "d" }),
         ],
       }),
     );
     expect(byKey(list, "item:t1").facts).toEqual([
       { label: "Description", status: "added", after: "d" },
       { label: "Container", status: "changed", before: "Capture", after: "Refunds" },
-      { label: "Position", status: "changed", before: "0, 0", after: "5, 6" },
     ]);
-    expect(byKey(list, "item:f2").facts).toEqual([
-      { label: "Size", status: "changed", before: "400 × 220", after: "500 × 220" },
-    ]);
+    expect(byKey(list, "item:f2").status).toBe("unchanged");
+  });
+
+  it("DFV-FR-RGBK: a stray position or size in a revision is not compared", () => {
+    const list = entries(
+      flow({ items: [...frame, task("t1", "A", { position: { x: 0, y: 0 } })] }),
+      flow({ items: [...frame, task("t1", "A", { position: { x: 9, y: 9 }, size: { width: 1, height: 1 } })] }),
+    );
+    expect(changedOnly(list)).toEqual([]);
+  });
+
+  it("DFV-FR-RGBK: no fact names a position, a size, a local-only flag, or a tracker link", () => {
+    const labels = new Set(
+      entries(null, flow({ items: [...frame, task("t1", "A", { description: "d", draftId: "dr1" })] }))
+        .flatMap((e) => e.facts)
+        .map((f) => f.label),
+    );
+    for (const gone of ["Position", "Size", "Local only", "Tracker link"]) {
+      expect(labels.has(gone), gone).toBe(false);
+    }
   });
 
   it("DFV-FR-RGBK: a move to another container names both containers", () => {
@@ -290,7 +228,7 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     ]);
   });
 
-  it("DFV-FR-RGBK: a leaf that becomes a container states its kind, its lost draft, and its new size", () => {
+  it("DFV-FR-RGBK: a leaf that becomes a container states its kind and its lost draft", () => {
     const list = entries(
       flow({ items: [...frame, it_("x1", "defect", "Bug", { parentId: "m1", draftId: "dr1" })] }),
       flow({ items: [...frame, it_("x1", "feature", "Bug", { parentId: "m1" })] }),
@@ -298,11 +236,10 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     expect(byKey(list, "item:x1").facts).toEqual([
       { label: "Kind", status: "changed", before: "defect", after: "feature" },
       { label: "Draft", status: "removed", before: "dr1" },
-      { label: "Size", status: "added", after: "400 × 220" },
     ]);
   });
 
-  it("DFV-FR-RGBK: a due date changed and removed, and a local-only flag removed", () => {
+  it("DFV-FR-RGBK: a due date changed and removed", () => {
     const due = (d?: string) => it_("m1", "milestone", "Beta", d ? { due: d } : {});
     expect(byKey(entries(flow({ items: [due("2027-01-01")] }), flow({ items: [due("2027-02-01")] })), "item:m1").facts).toEqual([
       { label: "Due", status: "changed", before: "2027-01-01", after: "2027-02-01" },
@@ -310,9 +247,6 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     expect(byKey(entries(flow({ items: [due("2027-01-01")] }), flow({ items: [due()] })), "item:m1").facts).toEqual([
       { label: "Due", status: "removed", before: "2027-01-01" },
     ]);
-    expect(
-      byKey(entries(flow({ items: [it_("m1", "milestone", "P", { localOnly: true })] }), flow({ items: [milestone] })), "item:m1").facts,
-    ).toContainEqual({ label: "Local only", status: "removed", before: "Yes" });
   });
 
   it("DFV-FR-33: a revision with two items of one id or two edges on one pair is reported, not paired", () => {
@@ -357,11 +291,13 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     expect(byKey(entries(flow({ items: [milestone] }), flow({})), "item:m1").facts).toEqual([]);
   });
 
-  it("DFV-FR-33: a revision that is not a version 2 Flow is reported, not compared", () => {
+  it("DFV-FR-33: a revision that is not a version 3 Flow is reported, not compared", () => {
     const v1 = JSON.stringify({ version: 1, nodes: [], edges: [] });
     const r = flowDiff(v1, flow({}));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/^old revision: unknown Flow version 1/);
+    const v2 = flowDiff(JSON.stringify({ version: 2, items: [], edges: [] }), flow({}));
+    expect(v2.ok ? "" : v2.error).toMatch(/^old revision: unknown Flow version 2/);
     const n = flowDiff(flow({}), "{ not json");
     if (!n.ok) expect(n.error).toMatch(/^new revision: not valid JSON/);
     expect(n.ok).toBe(false);
@@ -501,13 +437,13 @@ describe("flowDiff: the Flow's own fields (DFV-FR-33, DFV-FR-RGBK)", () => {
 
   it("DFV-FR-33: a change of formatting alone changes nothing", () => {
     const doc = {
-      version: 2,
+      version: 3,
       name: "F",
       items: [...frame, task("t1", "A", { footprint: ["src/"] }), task("t2", "B")],
       edges: [edge("e1", "t1", "t2", "relates")],
     };
     const compact = JSON.stringify(doc);
-    const pretty = JSON.stringify({ edges: doc.edges, items: doc.items, name: "F", version: 2 }, null, 4);
+    const pretty = JSON.stringify({ edges: doc.edges, items: doc.items, name: "F", version: 3 }, null, 4);
     expect(changedOnly(entries(compact, pretty))).toEqual([]);
   });
 });

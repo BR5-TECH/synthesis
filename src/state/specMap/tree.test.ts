@@ -4,12 +4,10 @@ import {
   ancestorIds,
   buildTree,
   isWithin,
-  plannedUnder,
   roleOf,
   specsUnder,
 } from "./tree";
 import { EMPTY_ROLLUP, rollupAll, rollupTotal, segments } from "./rollups";
-import { applyEdit } from "./organize";
 import { LEVELS_4, node, smallIndex, spec } from "../../test/specMapFixtures";
 
 describe("the index tree (SMP-FR-FEJV)", () => {
@@ -77,41 +75,25 @@ describe("roll-ups (SMN-FR-OJAY)", () => {
     expect(segments(EMPTY_ROLLUP)).toEqual({ verified: 0, built: 0, drafted: 0, gap: 0 });
   });
 
-  it("SMN-FR-OJAY: a move changes the counts of both the old and the new holder", () => {
-    const moved = applyEdit(smallIndex(), {
-      kind: "move",
-      ref: { kind: "spec", code: "A2" },
-      parentId: "g4",
-      index: 0,
-    });
+  it("SMN-FR-OJAY: the counts follow the loaded tree, wherever it puts a spec node", () => {
+    // The same specs, with A2 under g4 in place of g1.
+    const moved = {
+      ...smallIndex(),
+      roots: [
+        node("d1", [
+          node("f1", [node("g1", [spec("A1", "verified", 10)]), node("g2", [spec("A3", "built", 6)])]),
+          node("f2", [node("g3", [spec("B1", "drafted", 8, "ai")])]),
+        ]),
+        node("d2", [
+          node("f3", [
+            node("g4", [spec("A2", "gap", 4, "core"), spec("C1", "built", 12), spec("C2", "verified", 2)]),
+          ]),
+        ]),
+      ],
+    };
     const all = rollupAll(buildTree(moved));
     expect(all.get("d1")!.gap).toBe(0);
     expect(all.get("d2")!.gap).toBe(1);
     expect(all.get("d2")!.specs).toBe(3);
-  });
-
-  it("SMD-FR-ULTF: counts planned drafts on a node and beneath it", () => {
-    const planned = applyEdit(smallIndex(), {
-      kind: "attachDraft",
-      nodeId: "g1",
-      draft: { draftId: "x", name: "Untitled" },
-    });
-    const tree = buildTree(planned);
-    expect(plannedUnder(tree, "d1")).toBe(1);
-    expect(plannedUnder(tree, "d2")).toBe(0);
-  });
-
-  it("SMD-FR-NQGE: a planned draft adds nothing to spec counts, totals, bars or dependencies", () => {
-    const before = buildTree(smallIndex());
-    const planned = buildTree(
-      applyEdit(
-        applyEdit(smallIndex(), { kind: "attachDraft", nodeId: "g1", draft: { draftId: "x", name: "One" } }),
-        { kind: "attachDraft", nodeId: "d2", draft: { draftId: "y", name: "Two" } },
-      ),
-    );
-    expect(rollupAll(planned)).toEqual(rollupAll(before));
-    expect(rollupTotal(planned)).toEqual(rollupTotal(before));
-    expect(planned.specs.size).toBe(before.specs.size);
-    expect(planned.index.dependencies).toEqual(before.index.dependencies);
   });
 });

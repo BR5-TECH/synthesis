@@ -329,10 +329,10 @@ describe("a Markdown body takes its host's type treatment (NTS-FR-25 / CMP-FR-12
   });
 });
 
-describe("the panels of a Flow tab draw over every item (FLO-FR-44, FSR-FR-KGOY)", () => {
+describe("the panels of a Flow tab draw over every item (FLO-FR-44)", () => {
   // Items are absolutely placed in the viewport, and a selected card lifts
   // itself above its neighbours. The selected item's panel, the edge panel,
-  // the refusal feedback, and the sync review are drawn over the canvas, so
+  // and the refusal feedback are drawn over the canvas, so
   // each one must outrank every item layer, or a card dropped near the
   // selection paints over the panel and takes the presses meant for it.
   // jsdom applies no stylesheet, so no rendering test can see this.
@@ -346,21 +346,12 @@ describe("the panels of a Flow tab draw over every item (FLO-FR-44, FSR-FR-KGOY)
       ...layersOf(css, /^\.flow-resize\b/),
     ];
     expect(items.length).toBeGreaterThan(0);
-    for (const surface of [".flow-panel", ".flow-edge-panel", ".flow-refusal", ".flow-review"]) {
+    for (const surface of [".flow-panel", ".flow-edge-panel", ".flow-refusal"]) {
       const blocks = blocksFor(css, surface).filter((b) => decl(b, "z-index") !== null);
       expect(blocks, `${surface} declares no z-index`).toHaveLength(1);
       const z = Number(decl(blocks[0], "z-index"));
       for (const layer of items) expect(z, surface).toBeGreaterThan(layer);
     }
-  });
-
-  // FSR-FR-KGOY: the review is above the selected item's panel, which an item
-  // the review selects opens beside it.
-  it("puts the sync review above the selection panel", () => {
-    const css = sheet("kit.css");
-    const z = (sel: string) =>
-      Number(decl(blocksFor(css, sel).find((b) => decl(b, "z-index") !== null)!, "z-index"));
-    expect(z(".flow-review")).toBeGreaterThan(z(".flow-panel"));
   });
 });
 

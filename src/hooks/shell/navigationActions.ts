@@ -21,6 +21,8 @@ export interface NavigationActionDeps {
 
 export interface NavigationActions {
   revealArtifact: (item: OpenableArtifact) => void;
+  /** MDL-FR-DHHW / LIB-FR-18: reveal a file in the Project panel, and open no tab. */
+  revealInProject: (artifactId: string) => void;
   showNotesFor: (artifact: OpenableArtifact) => void;
 }
 
@@ -61,5 +63,10 @@ export function createNavigationActions(
     setPanelSurface("notes");
   };
 
-  return { revealArtifact, showNotesFor };
+  const revealInProject = (artifactId: string) => {
+    setPanelSurface("library");
+    setRevealArtifactId(artifactId);
+  };
+
+  return { revealArtifact, revealInProject, showNotesFor };
 }

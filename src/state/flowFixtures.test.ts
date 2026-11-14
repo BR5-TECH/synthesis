@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import { ITEM_KINDS, parseFlowDocument, serializeFlowDocument } from "./flowDocument";
 
-/** Version 2 Flows that exist to be read by both sides of the schema. */
+/** Version 3 Flows that exist to be read by both sides of the schema. */
 const DIRECTORY = "fixtures/flows";
 
 function bodies(): { path: string; body: string }[] {
@@ -50,21 +50,14 @@ describe("every committed Flow fixture (FGV-FR-01, FLO-FR-03)", () => {
       "description",
       "artifactIds",
       "parentId",
-      "localOnly",
       "draftId",
       "footprint",
       "due",
-      "size",
     ] as const) {
       expect(items.some((i) => i[field] !== undefined), field).toBe(true);
     }
     const edges = docs.flatMap((d) => d.edges);
     expect(new Set(edges.map((e) => e.type))).toEqual(new Set(["blocks", "relates"]));
     expect(docs.some((d) => d.references.length > 0 && d.description)).toBe(true);
-    const links = docs.flatMap((d) => d.sync?.links ?? []);
-    expect(new Set(links.map((l) => l.ref.kind))).toEqual(new Set(["issue", "milestone"]));
-    expect(links.some((l) => l.base.parent)).toBe(true);
-    expect(links.some((l) => (l.base.blockedBy ?? []).length > 0)).toBe(true);
-    expect(docs.some((d) => (d.sync?.ignored ?? []).length > 0), "sync.ignored").toBe(true);
   });
 });

@@ -1,9 +1,8 @@
 import { useState } from "react";
 
 import * as api from "../../api";
-import { errorLogCode } from "../../errorLogCode";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
-import { logError, logInfo, logWarn } from "../../logging";
+import { logInfo, logWarn } from "../../logging";
 import {
   addFlowReference,
   addFootprintEntry,
@@ -27,19 +26,13 @@ import {
   setItemDescription,
   setItemDraft,
   setItemKind,
-  setLocalOnly,
-  setSyncLink,
   type FlowEdgeType,
   type FlowItemKind,
   type KindDroppedField,
-  type SyncBase,
 } from "../../state/flowDocument";
 import { showToast } from "../../state/toasts";
 import { errorText } from "./geometry";
-import { refusalMessage } from "./refusals";
 import type { CreatedDraftOutcome, FlowCanvasProps, FlowCanvasState } from "./useFlowCanvas";
-import { applyFlowResolutions, startFlowSync } from "./useFlowSync";
-import type { ConflictResolution } from "../../types";
 
 /** FLO-FR-45: a removal that waits for the author's answer. */
 export interface PendingRemoval {
@@ -49,16 +42,12 @@ export interface PendingRemoval {
 }
 
 /**
- * FLO-FR-NRBV / FLO-FR-KHBY: the error of a draft that was created while the
- * plan could not take its link, for example because a sync started meanwhile.
+ * FLO-FR-NRBV: the error of a draft that was created while the plan could not
+ * take its link, for example because the write of the plan is held.
  */
 export function unlinkedDraftText(name: string): string {
   return `The draft ${name} was created, but this item does not link it: the plan could not be changed. Use Link draft to link it.`;
 }
-
-/** FLO-FR-TYEZ / FLO-FR-KHBY: the error of a link the plan could not take. */
-export const LINK_DROPPED_TEXT =
-  "The item was not linked: the plan could not be changed. Try again.";
 
 /** FLO-FR-HGIY: a kind change that would remove a draft link or a footprint. */
 export interface PendingKind {
@@ -70,13 +59,13 @@ export interface PendingKind {
 
 /**
  * The edits and the backend calls of the canvas's controls: names, kinds,
- * descriptions, references, drafts, footprints, due dates, the local-only
- * flag, tracker links, edges, removal, and the sync. Every rule is the
- * document module's.
+ * descriptions, references, drafts, footprints, due dates, edges, removal, and
+ * the tracker link. Every rule is the document module's.
  */
 export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
-  const { flowId, flows, onOpenArtifact, onCreateDraft, onOpenDraft, onOpenDraftById } = props;
+  const { onOpenArtifact, onCreateDraft, onOpenDraft, onOpenDraftById } = props;
   const { doc, edit, tryEdit, inert } = c;
+  const flowId = c.source.flowId;
   const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
   const [pendingKind, setPendingKind] = useState<PendingKind | null>(null);
   /** FLO-FR-NRBV: the error of a refused draft creation, by item. */
@@ -93,7 +82,6 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
   const setFlowDescriptionTo = (text: string) => edit((d) => setFlowDescription(d, text));
   const addFlowRef = (artifactId: string) => edit((d) => addFlowReference(d, artifactId));
   const removeFlowRef = (artifactId: string) => edit((d) => removeFlowReference(d, artifactId));
-  const setLocal = (id: string, on: boolean) => edit((d) => setLocalOnly(d, id, on));
   const setDueDate = (id: string, due: string) => tryEdit((d) => setDue(d, id, due), "kind");
   const addFootprint = (id: string, path: string) =>
     tryEdit((d) => addFootprintEntry(d, id, path), "link");
@@ -122,12 +110,17 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
 
   /**
    * FLO-FR-08 / FLO-FR-45: remove an item. A container that holds anything
-   * asks first, naming how many items go with it.
+   * asks first, naming how many items go with it. In a plan binding the host
+   * asks how to remove, and removes (MDL-FR-XQGD).
    */
   const requestRemove = (id: string) => {
     const item = doc ? findItem(doc, id) : undefined;
     if (!doc || !item || inert) return;
     const { itemCount } = removalScope(doc, id);
+    if (c.source.requestRemoval) {
+      c.source.requestRemoval({ itemId: id, name: item.name, kind: item.kind, count: itemCount });
+      return;
+    }
     if (isContainerKind(item.kind) && itemCount > 0) {
       setPendingRemoval({ itemId: id, name: item.name, count: itemCount });
       return;
@@ -180,7 +173,7 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
       });
   };
 
-  /** FLO-FR-ULEM / FSR-FR-KDMM: open a tracker URL in the browser. */
+  /** FLO-FR-ULEM: open an item's tracker page through `"open tracker link (url)"`. */
   const openTracker = (url: string) => {
     void Promise.resolve()
       .then(() => api.openTrackerLink(url))
@@ -231,8 +224,8 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
       return;
     }
     const draft = outcome.draft;
-    // FLO-FR-KHBY: a sync that started while the draft was created drops the
-    // link. The item then shows why, and no draft opens that no item links.
+    // EDT-FR-UPNU: a write held while the draft was created drops the link.
+    // The item then shows why, and no draft opens that no item links.
     if (!edit((d) => docOrUnchanged(d, setItemDraft(d, id, draft.id)))) {
       setDraftErrors((prev) => ({ ...prev, [id]: unlinkedDraftText(draft.name) }));
       logWarn(["frontend"], "flow task draft created but not linked", {
@@ -273,62 +266,6 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
   const linkDraft = (id: string, draftId: string | null) =>
     tryEdit((d) => setItemDraft(d, id, draftId), "link");
 
-  /**
-   * FLO-FR-TYEZ: link an item to an existing issue or milestone. Resolves the
-   * typed text of a refusal, or null on success.
-   */
-  const linkExisting = async (id: string, number: number): Promise<string | null> => {
-    const item = doc ? findItem(doc, id) : undefined;
-    if (!flowId || !item || inert) return null;
-    const kind = item.kind === "milestone" ? "milestone" : "issue";
-    try {
-      const snap = await api.readTrackerItem(flowId, kind, number);
-      const base: SyncBase = {
-        name: snap.name,
-        description: snap.description ?? "",
-        state: snap.state,
-        ...(snap.type !== undefined ? { type: snap.type } : {}),
-        ...(snap.parent !== undefined ? { parent: snap.parent } : {}),
-        ...(snap.milestone !== undefined ? { milestone: snap.milestone } : {}),
-        ...(snap.blockedBy !== undefined ? { blockedBy: snap.blockedBy } : {}),
-        ...(snap.due !== undefined ? { due: snap.due } : {}),
-      };
-      const live = flows.get(flowId)?.doc;
-      if (!live) return null;
-      const result = setSyncLink(live, id, snap.ref, base);
-      if (!result.ok) return refusalMessage(live, "link", result.refusal).text;
-      // FLO-FR-KHBY: a sync that started while the item was read drops the link.
-      if (!edit((d) => docOrUnchanged(d, setSyncLink(d, id, snap.ref, base)))) {
-        logWarn(["frontend", "remote"], "flow item link dropped", { flow: flowId, item: id });
-        return LINK_DROPPED_TEXT;
-      }
-      logInfo(["frontend", "remote"], "flow item linked to tracker", { flow: flowId, item: id });
-      return null;
-    } catch (e) {
-      logWarn(["frontend", "remote"], "tracker item not read", {
-        code: (e as { code?: string })?.code ?? "",
-      });
-      return errorText(e);
-    }
-  };
-
-  /** FLO-FR-AKMV: start a sync. */
-  const sync = () => {
-    if (flowId) {
-      void startFlowSync(flows, flowId).catch((e) =>
-        logError(["frontend"], "flow sync did not run", { code: errorLogCode(e) }),
-      );
-    }
-  };
-
-  /** FSR-FR-IDRR: apply the chosen rows. */
-  const applyResolutions = (resolutions: ConflictResolution[]) =>
-    flowId ? applyFlowResolutions(flows, flowId, resolutions) : Promise.resolve(false);
-
-  const setReviewOpen = (open: boolean) => {
-    if (flowId) flows.setSyncState(flowId, { reviewOpen: open });
-  };
-
   return {
     rename,
     describe,
@@ -338,7 +275,6 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
     setFlowDescriptionTo,
     addFlowRef,
     removeFlowRef,
-    setLocal,
     setDueDate,
     addFootprint,
     removeFootprint,
@@ -360,10 +296,6 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
     draftErrors,
     openDraft,
     linkDraft,
-    linkExisting,
-    sync,
-    applyResolutions,
-    setReviewOpen,
   };
 }
 

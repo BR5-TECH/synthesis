@@ -1,10 +1,15 @@
 //! `FDL-flow-delivery.md`: how far along a delivery plan is.
 //!
 //! The state of every item comes from the work itself — the drafts the tasks are
-//! worked in, their graduation runs, and the tracker state a sync stored — and
-//! never from a status the author keeps by hand. This module only reads: a
-//! blocked item is reported, and nothing here starts, stops, or refuses a run
-//! (FDL intent).
+//! worked in, their graduation runs, and, for a plan held on GitHub, the
+//! tracker facts of each item — and never from a status the author keeps by
+//! hand. This module only reads: a blocked item is reported, and nothing here
+//! starts, stops, or refuses a run (FDL intent).
+//!
+//! A Flow file has no tracker facts, so `load_flow_delivery_state` derives its
+//! state from the drafts and the runs alone. The GitHub delivery plan
+//! (`GDP-github-delivery-plan.md` GDP-FR-XWES) reads the tracker facts and calls
+//! [`compute_delivery_state`] in-process.
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -12,6 +17,7 @@ use std::time::Instant;
 use serde::Serialize;
 use tauri::State;
 
+use crate::delivery::settings::DeliverySourceChoice;
 use crate::drafts::{DraftStatus, DraftSummary};
 use crate::flow_validation::model::{parse_valid, EdgeType, FlowDocument, Hierarchy, Item};
 use crate::flow_validation::ValidationReport;
@@ -117,11 +123,62 @@ fn run_is_open(state: GraduationRunState) -> bool {
     )
 }
 
+/// GDP-FR-QGFO: whether a tracker item is open or closed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TrackerState {
+    #[default]
+    Open,
+    Closed,
+}
+
+/// GDP-FR-QGFO: why a closed tracker item was closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CloseReason {
+    Completed,
+    NotPlanned,
+}
+
+/// FDL-FR-TTZZ: the issue of a leaf of a GitHub plan, by the four values that
+/// identify it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IssueReference {
+    pub host: String,
+    pub owner: String,
+    pub repo: String,
+    pub number: u64,
+}
+
+/// The tracker facts of one item of a GitHub plan that the state rules read
+/// (FDL-FR-TTZZ, FDL-FR-YIAZ, FDL-FR-WPSZ, FDL-FR-UEPM). The GitHub delivery
+/// plan reads them (GDP-FR-QGFO); this module only uses them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ItemTrackerFacts {
+    pub state: TrackerState,
+    /// Present on a closed item alone. An absent reason on a closed item reads
+    /// as `completed` (FDL-FR-YIAZ).
+    pub close_reason: Option<CloseReason>,
+    /// The name of the item's Project `Status` option, if it has one.
+    pub status: Option<String>,
+    /// Whether `status` is the option that the In Progress status resolves to
+    /// (GPP-FR-VXSB). The caller resolves it, so this module reads no setting.
+    pub status_is_in_progress: bool,
+    /// The count of the item's open blockers that are not items of the plan
+    /// (GDP-FR-URZL).
+    pub open_external_blockers: usize,
+    /// The item's issue. `None` for a milestone.
+    pub issue: Option<IssueReference>,
+}
+
+/// The tracker facts of a plan, by item id. An item with no entry has no
+/// tracker facts, as every item of a Flow file.
+pub type TrackerFacts = HashMap<String, ItemTrackerFacts>;
+
 /// FDL-FR-TTZZ: the draft a leaf item is worked in, and whether a `draftId`
-/// names no draft (FDL-FR-BRAQ).
+/// names no draft (FDL-FR-BRAQ). A leaf of a GitHub plan with no `draftId`
+/// takes the GitHub-shadow draft of its issue.
 fn leaf_draft<'d>(
-    doc: &FlowDocument,
     item: &Item,
+    facts: Option<&ItemTrackerFacts>,
     drafts: &'d HashMap<&str, &DraftSummary>,
 ) -> (Option<&'d DraftSummary>, bool) {
     if let Some(id) = item.draft_id.as_deref() {
@@ -130,34 +187,54 @@ fn leaf_draft<'d>(
             None => (None, true),
         };
     }
-    let link = doc.sync.as_ref().and_then(|s| s.links.iter().find(|l| l.item_id == item.id));
-    let Some(link) = link else { return (None, false) };
-    let r = &link.reference;
-    let shadow = drafts.values().find(|d| {
-        d.github_issue.as_ref().is_some_and(|g| {
-            g.repository_host.eq_ignore_ascii_case(&r.host)
-                && g.repository_owner.eq_ignore_ascii_case(&r.owner)
-                && g.repository_name.eq_ignore_ascii_case(&r.repo)
-                && g.issue_number == r.number
+    let Some(r) = facts.and_then(|f| f.issue.as_ref()) else { return (None, false) };
+    // The draft list is a map, so the shadow draft of the issue is looked for
+    // in a fixed order. Two shadow drafts of one issue cannot exist
+    // (DRS-FR-XDWS), but a fixed order keeps the answer stable if they do.
+    let mut shadows: Vec<&&DraftSummary> = drafts
+        .values()
+        .filter(|d| {
+            d.github_issue.as_ref().is_some_and(|g| {
+                g.repository_host.eq_ignore_ascii_case(&r.host)
+                    && g.repository_owner.eq_ignore_ascii_case(&r.owner)
+                    && g.repository_name.eq_ignore_ascii_case(&r.repo)
+                    && g.issue_number == r.number
+            })
         })
-    });
-    (shadow.copied(), false)
+        .collect();
+    shadows.sort_by(|a, b| a.id.cmp(&b.id));
+    (shadows.first().map(|d| **d), false)
 }
 
-/// FDL-FR-VGZI, FDL-FR-JYKC: whether the tracker state stored at the last sync
-/// is `closed`.
-fn closed_on_tracker(doc: &FlowDocument, item_id: &str) -> bool {
-    doc.sync
-        .as_ref()
-        .and_then(|s| s.links.iter().find(|l| l.item_id == item_id))
-        .is_some_and(|l| l.base.state == "closed")
+/// FDL-FR-YIAZ: the state of a closed tracker item, or `None` for an item that
+/// is open or has no tracker facts.
+fn closed_state(facts: Option<&ItemTrackerFacts>) -> Option<ItemState> {
+    let f = facts.filter(|f| f.state == TrackerState::Closed)?;
+    Some(match f.close_reason {
+        Some(CloseReason::NotPlanned) => ItemState::Dropped,
+        _ => ItemState::Done,
+    })
 }
 
-/// FDL-FR-VGZI: a leaf's state from its tracker state, its draft, and its run.
-fn leaf_state(closed: bool, draft: Option<&DraftSummary>) -> ItemState {
-    if closed {
-        return ItemState::Done;
+/// FDL-FR-VGZI, FDL-FR-YIAZ, FDL-FR-WPSZ: a leaf's state from its tracker
+/// facts, its draft, and its run.
+fn leaf_state(facts: Option<&ItemTrackerFacts>, draft: Option<&DraftSummary>) -> ItemState {
+    if let Some(closed) = closed_state(facts) {
+        return closed;
     }
+    let by_work = work_state(draft);
+    // FDL-FR-WPSZ: an open leaf on the In Progress option of the board is in
+    // progress, when its work says no more than that it is drafted.
+    if matches!(by_work, ItemState::NotStarted | ItemState::Drafting)
+        && facts.is_some_and(|f| f.status_is_in_progress)
+    {
+        return ItemState::InProgress;
+    }
+    by_work
+}
+
+/// FDL-FR-VGZI: a leaf's state from its draft and its run alone.
+fn work_state(draft: Option<&DraftSummary>) -> ItemState {
     let Some(d) = draft else { return ItemState::NotStarted };
     match d.status {
         DraftStatus::Archived => ItemState::Dropped,
@@ -167,10 +244,11 @@ fn leaf_state(closed: bool, draft: Option<&DraftSummary>) -> ItemState {
     }
 }
 
-/// FDL-FR-JYKC: a container's state from the leaves under it.
-fn container_state(closed: bool, leaves: &[ItemState]) -> ItemState {
-    if closed {
-        return ItemState::Done;
+/// FDL-FR-JYKC, FDL-FR-YIAZ: a container's state from its tracker facts and
+/// the leaves under it.
+fn container_state(facts: Option<&ItemTrackerFacts>, leaves: &[ItemState]) -> ItemState {
+    if let Some(closed) = closed_state(facts) {
+        return closed;
     }
     if leaves.is_empty() {
         return ItemState::NotStarted;
@@ -195,16 +273,30 @@ fn finished(state: ItemState) -> bool {
 }
 
 /// FDL-FR-AZQM to FDL-FR-PRED: the delivery state of every item of a valid
-/// plan, in document order. Pure over its inputs (FDL-FR-PBSD).
+/// Flow file, in document order. A Flow file has no tracker facts. Pure over
+/// its inputs (FDL-FR-PBSD).
 pub fn delivery_state(doc: &FlowDocument, drafts: &[DraftSummary]) -> FlowDeliveryState {
+    delivery_state_with_tracker(doc, &TrackerFacts::new(), drafts)
+}
+
+/// FDL-FR-AZQM to FDL-FR-UEPM: the delivery state of every item of a valid
+/// plan, in document order, with the tracker facts of a GitHub plan applied.
+/// Pure over its inputs (FDL-FR-PBSD): it reads nothing, writes nothing, and
+/// reaches no network.
+pub fn delivery_state_with_tracker(
+    doc: &FlowDocument,
+    tracker: &TrackerFacts,
+    drafts: &[DraftSummary],
+) -> FlowDeliveryState {
     let by_id: HashMap<&str, &DraftSummary> = drafts.iter().map(|d| (d.id.as_str(), d)).collect();
     let hierarchy = Hierarchy::new(&doc.items);
 
     let mut leaf_states: HashMap<&str, ItemState> = HashMap::new();
     let mut leaf_drafts: HashMap<&str, (Option<&DraftSummary>, bool)> = HashMap::new();
     for item in doc.items.iter().filter(|i| !i.kind.is_container()) {
-        let (draft, missing) = leaf_draft(doc, item, &by_id);
-        leaf_states.insert(&item.id, leaf_state(closed_on_tracker(doc, &item.id), draft));
+        let facts = tracker.get(&item.id);
+        let (draft, missing) = leaf_draft(item, facts, &by_id);
+        leaf_states.insert(&item.id, leaf_state(facts, draft));
         leaf_drafts.insert(&item.id, (draft, missing));
     }
 
@@ -223,7 +315,7 @@ pub fn delivery_state(doc: &FlowDocument, drafts: &[DraftSummary]) -> FlowDelive
         let mut c = LeafCounts::default();
         leaves.iter().for_each(|s| c.add(*s));
         counts.insert(&item.id, c);
-        states.insert(&item.id, container_state(closed_on_tracker(doc, &item.id), &leaves));
+        states.insert(&item.id, container_state(tracker.get(&item.id), &leaves));
     }
 
     let items = doc
@@ -244,6 +336,10 @@ pub fn delivery_state(doc: &FlowDocument, drafts: &[DraftSummary]) -> FlowDelive
                     }
                 }
             }
+            // FDL-FR-UEPM: an open blocker outside the plan blocks an item that
+            // is not finished, and is not listed in `blocked_by`.
+            let external = !finished(state)
+                && tracker.get(&item.id).is_some_and(|f| f.open_external_blockers > 0);
             let (draft, missing) =
                 leaf_drafts.get(item.id.as_str()).copied().unwrap_or((None, false));
             ItemDeliveryState {
@@ -258,7 +354,7 @@ pub fn delivery_state(doc: &FlowDocument, drafts: &[DraftSummary]) -> FlowDelive
                 run: draft
                     .and_then(|d| d.graduation.as_ref())
                     .map(|g| RunRef { run_id: g.run_id.clone(), state: g.state }),
-                blocked: !blocked_by.is_empty(),
+                blocked: external || !blocked_by.is_empty(),
                 blocked_by,
                 leaf_counts: counts.remove(item.id.as_str()),
             }
@@ -276,6 +372,21 @@ fn drafts_with_runs<R: tauri::Runtime>(
     let mut drafts = crate::drafts::list_drafts_impl(root).drafts;
     crate::drafts::attach_graduation(app, &mut drafts);
     drafts
+}
+
+/// FDL contract surface: `compute_delivery_state(document, tracker_facts)` for
+/// a GitHub plan (GDP-FR-XWES). It reads the drafts of the active worktree and
+/// their runs once (FDL-FR-PBSD), and applies FDL-FR-TTZZ, FDL-FR-YIAZ,
+/// FDL-FR-WPSZ, and FDL-FR-UEPM. The caller has the document from the plan it
+/// built, so no validation is made here.
+pub fn compute_delivery_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &crate::fs::RootFs,
+    document: &FlowDocument,
+    tracker_facts: &TrackerFacts,
+) -> FlowDeliveryState {
+    let drafts = drafts_with_runs(app, root);
+    delivery_state_with_tracker(document, tracker_facts, &drafts)
 }
 
 /// FDL-FR-AZQM: `"load flow delivery state"`.
@@ -323,12 +434,15 @@ pub fn load_flow_delivery_state(
     Ok(state)
 }
 
-/// FDL-FR-JLXF: one plan item a draft is worked for.
+/// FDL-FR-JLXF: one plan item a draft is worked for. `flow_id` is `None` for
+/// an item of a GitHub plan. `delivery` is true where the plan is the
+/// project's delivery (DSR-delivery-source.md).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FlowItemMatch {
-    pub flow_id: String,
+    pub flow_id: Option<String>,
     pub flow_name: String,
+    pub delivery: bool,
     pub item_id: String,
     pub item_name: String,
     pub kind: &'static str,
@@ -336,22 +450,26 @@ pub struct FlowItemMatch {
 
 /// FDL-FR-BDOD, FDL-FR-JLXF: the items of `flows` (each an artifact id and its
 /// body, in path order) whose draft is `draft_id`. A Flow that fails
-/// validation is skipped.
+/// validation is skipped. `delivery_flow_id` is the artifact id of the Flow
+/// file that is the project's delivery source, if one is.
 pub fn items_for_draft(
     flows: &[(String, String)],
     drafts: &[DraftSummary],
     draft_id: &str,
+    delivery_flow_id: Option<&str>,
 ) -> Vec<FlowItemMatch> {
     let by_id: HashMap<&str, &DraftSummary> = drafts.iter().map(|d| (d.id.as_str(), d)).collect();
     let mut out = Vec::new();
     for (flow_id, body) in flows {
         let Ok(doc) = parse_valid(body) else { continue };
+        let delivery = delivery_flow_id == Some(flow_id.as_str());
         for item in doc.items.iter().filter(|i| !i.kind.is_container()) {
-            if let (Some(d), _) = leaf_draft(&doc, item, &by_id) {
+            if let (Some(d), _) = leaf_draft(item, None, &by_id) {
                 if d.id == draft_id {
                     out.push(FlowItemMatch {
-                        flow_id: flow_id.clone(),
+                        flow_id: Some(flow_id.clone()),
                         flow_name: doc.name.clone().unwrap_or_default(),
+                        delivery,
                         item_id: item.id.clone(),
                         item_name: item.name.clone(),
                         kind: item.kind.as_str(),
@@ -361,6 +479,31 @@ pub fn items_for_draft(
         }
     }
     out
+}
+
+/// FDL-FR-JLUJ, FDL-FR-JLXF: the leaves of the GitHub delivery plan `doc`
+/// whose draft (FDL-FR-TTZZ, with the tracker facts) is `draft_id`. A result
+/// carries no artifact id, and the Project's title as the Flow name.
+pub fn plan_items_for_draft(
+    doc: &FlowDocument,
+    facts: &TrackerFacts,
+    drafts: &[DraftSummary],
+    draft_id: &str,
+) -> Vec<FlowItemMatch> {
+    let by_id: HashMap<&str, &DraftSummary> = drafts.iter().map(|d| (d.id.as_str(), d)).collect();
+    doc.items
+        .iter()
+        .filter(|i| !i.kind.is_container())
+        .filter(|i| leaf_draft(i, facts.get(&i.id), &by_id).0.is_some_and(|d| d.id == draft_id))
+        .map(|item| FlowItemMatch {
+            flow_id: None,
+            flow_name: doc.name.clone().unwrap_or_default(),
+            delivery: true,
+            item_id: item.id.clone(),
+            item_name: item.name.clone(),
+            kind: item.kind.as_str(),
+        })
+        .collect()
 }
 
 /// FDL-FR-BDOD: `"find flow items for draft"`.
@@ -380,18 +523,68 @@ pub fn find_flow_items_for_draft(
         );
         return Err(FlowReadError::no_project());
     };
-    let flows = crate::artifacts::flow_bodies(&root);
-    let drafts = crate::drafts::list_drafts_impl(&root).drafts;
-    let matches = items_for_draft(&flows, &drafts, &draft_id);
+    Ok(find_items_for_draft_in(&app, &root, &draft_id))
+}
+
+/// FDL-FR-BDOD, FDL-FR-JLUJ: the plan items of every Flow file of `root` that
+/// name the draft, then those of the plan of the GitHub read cache. It makes
+/// no network request.
+pub(crate) fn find_items_for_draft_in<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &crate::fs::RootFs,
+    draft_id: &str,
+) -> Vec<FlowItemMatch> {
+    let flows = crate::artifacts::flow_bodies(root);
+    let drafts = crate::drafts::list_drafts_impl(root).drafts;
+    let delivery = delivery_flow_id(app, root);
+    let mut matches = items_for_draft(&flows, &drafts, draft_id, delivery.as_deref());
+    // FDL-FR-JLUJ: the plan of the GitHub read cache comes after the files,
+    // and no request is made.
+    let github = crate::delivery::github::cached_delivery_plan(app, root);
+    if let Some(plan) = &github {
+        matches.extend(plan_items_for_draft(&plan.document, &plan.facts, &drafts, draft_id));
+    }
     log_info(
-        &app,
+        app,
         &BUFFER,
         &[Domain::Backend],
         "flow items for draft found",
-        crate::log_fields! { "flows" => flows.len(), "matches" => matches.len() },
+        crate::log_fields! {
+            "flows" => flows.len(),
+            "matches" => matches.len(),
+            "delivery_file" => delivery.is_some(),
+            "github_plan" => github.is_some(),
+        },
     );
-    Ok(matches)
+    matches
+}
+
+/// FDL-FR-JLXF: the artifact id of the Flow file that the stored delivery
+/// settings choose as the delivery source (DSR-FR-HOEW), or `None`. A store
+/// that cannot be read chooses no file, and this function logs why.
+fn delivery_flow_id<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &crate::fs::RootFs,
+) -> Option<String> {
+    match crate::project_settings::load_delivery_settings_from(root) {
+        Ok(settings) => match settings.source {
+            DeliverySourceChoice::File { flow_id } => Some(flow_id),
+            DeliverySourceChoice::Automatic | DeliverySourceChoice::Github => None,
+        },
+        Err(reason) => {
+            log_warn(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "flow items for draft: delivery settings unreadable",
+                crate::log_fields! { "reason" => reason },
+            );
+            None
+        }
+    }
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
+#[cfg(test)]
+mod tests_tracker;

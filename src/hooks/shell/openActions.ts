@@ -21,6 +21,7 @@ import * as api from "../../api";
 import { typeChip } from "../../artifactTypes";
 import { logDebug, logWarn } from "../../logging";
 import { SPEC_MAP_TAB } from "./tabRecords";
+import { deliveryFlowId } from "./useDeliveryShell";
 import { changeFileTarget } from "../../state/openspec/changeName";
 import type {
   BottomSurface,
@@ -60,6 +61,11 @@ export interface OpenActions {
   openSearchResults: (query: string, mode: SearchMode) => void;
   activateSearchHit: (hit: SearchHit) => void;
   openSpecMap: () => void;
+  /**
+   * MDL-FR-JIKK / DSH-FR-DFDW / NAW-FR-PHGO: open the Map tab on its Delivery
+   * lens, with an item to select, or with none for null.
+   */
+  showDeliveryItem: (itemId: string | null) => void;
   activateLibraryFile: (item: OpenableArtifact) => void;
 }
 
@@ -83,6 +89,13 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
   const openRuns = () => showBottom("runs");
 
   const openArtifact = (item: OpenableArtifact) => {
+    // LIB-FR-JTXR / MDL-FR-YSMB: the delivery's Flow file opens the Map tab on
+    // its Delivery lens, and no Flow tab, whichever surface asks.
+    if (item.id && item.id === deliveryFlowId(specMap.snapshot().deliverySource)) {
+      logDebug(["frontend"], "delivery flow routed to the map", { rule: "MDL-FR-YSMB" });
+      showDeliveryItem(null);
+      return;
+    }
     // The filesystem Library tree supplies `id` (its stable, path-derived key
     // per ASC-FR-13) and `artifactType`; the Dashboard's canned rows supply
     // `type`. Key the tab by id when present so two files with the same
@@ -265,6 +278,11 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     activateTab(SPEC_MAP_TAB.id);
   };
 
+  function showDeliveryItem(itemId: string | null) {
+    specMap.showDeliveryItem(itemId);
+    openSpecMap();
+  }
+
   /**
    * LIB-FR-SJDC / SMI-FR-PRSL: while the Map tab is active, a Spec file clicked
    * in the Project panel selects its node on the map and opens no tab. Every
@@ -273,6 +291,8 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
   const activateLibraryFile = (item: OpenableArtifact) => {
     if (activeTab === SPEC_MAP_TAB.id && item.artifactType === "spec" && item.id) {
       logDebug(["frontend"], "spec row routed to the specification map", { path: item.id });
+      // LIB-FR-SJDC / SMI-FR-PRSL: the node shows on the Specifications lens.
+      specMap.setLens("specifications");
       specMap.selectByPath(item.id);
       return;
     }
@@ -312,6 +332,7 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     openSearchResults,
     activateSearchHit,
     openSpecMap,
+    showDeliveryItem,
     activateLibraryFile,
   };
 }

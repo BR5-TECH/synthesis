@@ -88,12 +88,12 @@ describe("the Map tab through the shell", () => {
     expect(viewMap.closest(".library__footer")!.children).toHaveLength(1);
     expect(viewMap.querySelector("svg")).not.toBeNull();
     await userEvent.click(viewMap);
-    await waitFor(() => expect(tabLabels()).toContain("Map — specifications"));
+    await waitFor(() => expect(tabLabels()).toContain("Map"));
     expect(await screen.findByRole("toolbar", { name: "Map controls" })).toBeInTheDocument();
     await screen.findByTestId("spec-map-canvas");
 
     await userEvent.click(within(projectPanel()).getByRole("button", { name: "View map" }));
-    expect(tabLabels().filter((label) => label === "Map — specifications")).toHaveLength(1);
+    expect(tabLabels().filter((label) => label === "Map")).toHaveLength(1);
   });
 
   it("LIB-FR-SJDC, LIB-FR-03, SMI-FR-PRSL: a Spec row selects its node while the Map tab is active, and opens its file otherwise", async () => {
@@ -107,7 +107,7 @@ describe("the Map tab through the shell", () => {
       expect(screen.getByRole("button", { name: "CHG changes panel" })).toHaveAttribute("data-selected", "true"),
     );
     expect(tabLabels()).not.toContain("CHG-changes.md");
-    expect(tabLabels()).toContain("Map — specifications");
+    expect(tabLabels()).toContain("Map");
     // The row becomes the panel's current selection.
     expect(within(projectPanel()).getByText("CHG-changes.md").closest("[data-selected]")).toHaveAttribute(
       "data-selected",

@@ -36,7 +36,12 @@ function actions(activeTab = "dashboard") {
     setPanelSurface: vi.fn(),
     setRevealArtifactId: vi.fn(),
     showBottom: vi.fn(),
-    specMap: { selectByPath: vi.fn() } as unknown as SpecMapSessionStore,
+    specMap: {
+      selectByPath: vi.fn(),
+      setLens: vi.fn(),
+      showDeliveryItem: vi.fn(),
+      snapshot: () => ({ deliverySource: null }),
+    } as unknown as SpecMapSessionStore,
     activeTab,
     openDocumentHit: vi.fn(),
     openDraftHit: vi.fn(),

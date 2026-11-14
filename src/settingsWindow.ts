@@ -47,6 +47,7 @@ export const PROJECT_SECTION_KEYS = [
   "openspec",
   "bindings",
   "github-polling",
+  "delivery",
   "adapters",
   "mcp",
   "plugins",

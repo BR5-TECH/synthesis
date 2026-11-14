@@ -68,6 +68,13 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
     // SMP-FR-HWIC / OSI-FR-OSWD: a project not in OpenSpec mode gets the demo index.
     case "load_specification_map":
       return { source: "demo" };
+    // DSR-FR-ZKGG / SMP-FR-TKUS: no delivery source, so the Map tab opens on
+    // the Specifications lens.
+    case "get_delivery_source":
+      return { kind: "none", reason: "no_source" };
+    // DSH-FR-BBRC: the Dashboard's Delivery widget reads no milestones.
+    case "load_delivery_milestones":
+      return { source: { kind: "none", reason: "no_source" }, planName: null, milestones: [], readAt: null, stale: false };
     case "list_recent_projects":
       return [
         {

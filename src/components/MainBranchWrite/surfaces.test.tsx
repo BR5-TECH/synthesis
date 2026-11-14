@@ -53,7 +53,6 @@ function draftTabActions() {
     setActiveTab: vi.fn(),
     activateTab: vi.fn(),
     bumpDrafts: vi.fn(),
-    specMap: { dispatch: vi.fn() } as never,
   });
 }
 

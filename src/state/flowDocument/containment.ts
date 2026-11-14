@@ -1,6 +1,7 @@
 /**
  * The hierarchy and the geometry of a plan (FLO-FR-21, FLO-FR-42, FLO-FR-44,
- * FGV-FR-YHFX).
+ * FGV-FR-YHFX). The geometry reads the layout (`FlowLayout`) beside the
+ * document, because the document holds no position and no size.
  *
  * These functions read a document and change nothing. A document that passed
  * the backend validation has no containment cycle (FGV-FR-13), but every walk
@@ -16,6 +17,7 @@ import {
   type FlowDocument,
   type FlowItem,
   type FlowItemKind,
+  type FlowLayout,
   type FlowPosition,
   type FlowSize,
 } from "./types";
@@ -120,42 +122,57 @@ export function permitsParent(
   return PERMITTED_PARENTS[kind].includes(parentKind);
 }
 
-/** The size an item occupies on the canvas: its own size, or the card size. */
-export function itemExtent(item: FlowItem): FlowSize {
-  return item.size ?? { width: CARD_W, height: CARD_H };
+/**
+ * The size an item occupies on the canvas: its container size in the layout,
+ * or the card size.
+ */
+export function itemExtent(layout: FlowLayout, item: FlowItem): FlowSize {
+  return layout[item.id]?.size ?? { width: CARD_W, height: CARD_H };
+}
+
+/** Where an item sits in the coordinates of whatever holds it. */
+export function relativePosition(layout: FlowLayout, id: string): FlowPosition {
+  return layout[id]?.position ?? { x: 0, y: 0 };
 }
 
 /** FLO-FR-21: where an item sits on the canvas, through all its containers. */
-export function absolutePosition(doc: FlowDocument, id: string): FlowPosition {
-  const item = findItem(doc, id);
-  if (!item) return { x: 0, y: 0 };
-  let { x, y } = item.position;
+export function absolutePosition(
+  doc: FlowDocument,
+  layout: FlowLayout,
+  id: string,
+): FlowPosition {
+  if (!findItem(doc, id)) return { x: 0, y: 0 };
+  let { x, y } = relativePosition(layout, id);
   for (const ancestorId of ancestorsOf(doc, id)) {
-    const ancestor = findItem(doc, ancestorId);
-    if (!ancestor) break;
-    x += ancestor.position.x;
-    y += ancestor.position.y;
+    const at = relativePosition(layout, ancestorId);
+    x += at.x;
+    y += at.y;
   }
   return { x, y };
 }
 
 /** The rectangle any item occupies, in canvas coordinates. */
-export function itemBounds(doc: FlowDocument, id: string): FlowRect | null {
+export function itemBounds(
+  doc: FlowDocument,
+  layout: FlowLayout,
+  id: string,
+): FlowRect | null {
   const item = findItem(doc, id);
   if (!item) return null;
-  const at = absolutePosition(doc, id);
-  const extent = itemExtent(item);
+  const at = absolutePosition(doc, layout, id);
+  const extent = itemExtent(layout, item);
   return { x: at.x, y: at.y, width: extent.width, height: extent.height };
 }
 
 /** A container's rectangle in canvas coordinates; null for a leaf. */
 export function containerBounds(
   doc: FlowDocument,
+  layout: FlowLayout,
   id: string,
 ): FlowRect | null {
   const item = findItem(doc, id);
   if (!item || !isContainerKind(item.kind)) return null;
-  return itemBounds(doc, id);
+  return itemBounds(doc, layout, id);
 }
 
 /**
@@ -170,6 +187,7 @@ export function containerBounds(
  */
 export function innermostContainerAt(
   doc: FlowDocument,
+  layout: FlowLayout,
   point: FlowPosition,
   exclude: ReadonlySet<string> = new Set(),
 ): string | undefined {
@@ -179,7 +197,7 @@ export function innermostContainerAt(
     if (exclude.has(item.id) || !isContainerKind(item.kind)) continue;
     const ancestors = ancestorsOf(doc, item.id);
     if (ancestors.some((a) => exclude.has(a))) continue;
-    const b = containerBounds(doc, item.id);
+    const b = containerBounds(doc, layout, item.id);
     if (!b) continue;
     if (
       point.x < b.x ||

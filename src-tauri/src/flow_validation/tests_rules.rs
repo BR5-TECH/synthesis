@@ -97,16 +97,18 @@ fn dangling_parents_and_containment_cycles() {
     assert_eq!(codes(&body), vec!["containment_cycle", "containment_cycle"]);
 }
 
-/// FGV-FR-YHFX: every kind in every container, against the permitted table.
+/// FGV-FR-YHFX: every kind in every container, against the ranks. A
+/// milestone sits at the top level alone; every other kind sits at the top
+/// level or in a container of a higher rank.
 #[test]
 fn hierarchy_table() {
     let kinds = ["milestone", "epic", "feature", "task", "defect"];
     let permitted: &[(&str, &[&str])] = &[
         ("milestone", &["top"]),
-        ("epic", &["milestone"]),
-        ("feature", &["milestone", "epic"]),
-        ("task", &["feature"]),
-        ("defect", &["feature", "epic", "milestone"]),
+        ("epic", &["top", "milestone"]),
+        ("feature", &["top", "milestone", "epic"]),
+        ("task", &["top", "milestone", "epic", "feature"]),
+        ("defect", &["top", "milestone", "epic", "feature"]),
     ];
     for (kind, allowed) in permitted {
         for container in ["top", "milestone", "epic", "feature"] {
@@ -124,9 +126,35 @@ fn hierarchy_table() {
                 .iter()
                 .any(|v| v.code == "invalid_parent_kind" && v.element_id.as_deref() == Some("x"));
             assert_eq!(refused, !allowed.contains(&container), "{kind} in {container}");
+            if allowed.contains(&container) {
+                assert!(report.valid, "{kind} in {container}: {:?}", report.violations);
+            }
         }
     }
     assert_eq!(kinds.len(), permitted.len());
+}
+
+/// FGV-FR-YHFX: a kind in a container of its own rank is refused, and the
+/// message names both kinds.
+#[test]
+fn same_rank_containers_are_refused() {
+    let body = doc(
+        json!([
+            item("e1", "epic", None),
+            item("e2", "epic", Some("e1")),
+            item("f1", "feature", None),
+            item("f2", "feature", Some("f1"))
+        ]),
+        json!([]),
+    );
+    let report = validate(&body);
+    let got: Vec<_> =
+        report.violations.iter().map(|v| (v.code, v.element_id.clone().unwrap())).collect();
+    assert_eq!(
+        got,
+        vec![("invalid_parent_kind", "e2".to_string()), ("invalid_parent_kind", "f2".to_string())]
+    );
+    assert!(report.violations[0].message.contains("epic"), "{:?}", report.violations[0]);
 }
 
 /// FGV-FR-KBLT: an edge between an item and its ancestor or descendant.
@@ -212,47 +240,6 @@ fn duplicate_draft_links() {
     assert_eq!(got, vec![("duplicate_draft_link", "t2".to_string())]);
 }
 
-fn link(item_id: &str, kind: &str, number: u64) -> Value {
-    let base = if kind == "milestone" {
-        json!({ "name": "x", "description": "", "state": "open" })
-    } else {
-        json!({ "name": "x", "description": "", "state": "open", "blockedBy": [] })
-    };
-    json!({ "itemId": item_id,
-        "ref": { "kind": kind, "host": "github.com", "owner": "o", "repo": "r", "number": number,
-                 "url": format!("https://github.com/o/r/issues/{number}") },
-        "base": base })
-}
-
-/// FGV-FR-LWPD: duplicate links, by item and by reference, and kind mismatches.
-#[test]
-fn sync_link_rules() {
-    let body = |links: Value| {
-        json!({ "version": 2, "items": skeleton(), "edges": [],
-                "sync": { "tracker": "github", "links": links } })
-        .to_string()
-    };
-    let report = validate(&body(json!([
-        link("f1", "issue", 1),
-        link("f1", "issue", 2),
-        link("f2", "issue", 1),
-        link("m1", "issue", 3),
-        link("t1", "milestone", 4),
-        link("m1", "milestone", 5),
-    ])));
-    let got: Vec<_> = report.violations.iter().map(|v| (v.code, v.link_index.unwrap())).collect();
-    assert_eq!(
-        got,
-        vec![
-            ("duplicate_tracker_link", 1),
-            ("duplicate_tracker_link", 2),
-            ("tracker_kind_mismatch", 3),
-            ("tracker_kind_mismatch", 4),
-            ("duplicate_tracker_link", 5),
-        ]
-    );
-}
-
 /// FGV-FR-01: a valid document reads into the typed model.
 #[test]
 fn parse_valid_reads_the_typed_model() {
@@ -262,13 +249,25 @@ fn parse_valid_reads_the_typed_model() {
     assert_eq!(doc.items[0].due.as_deref(), Some("2027-03-31"));
     assert_eq!(doc.items[2].footprint.as_ref().unwrap().len(), 2);
     assert_eq!(doc.edges[0].edge_type, EdgeType::Blocks);
-    let sync = doc.sync.as_ref().unwrap();
-    assert_eq!(sync.links[0].reference.number, 42);
-    assert_eq!(sync.links[0].base.milestone, Some(Some(3)));
-    assert_eq!(sync.ignored.iter().map(|r| r.number).collect::<Vec<_>>(), vec![47]);
+    assert_eq!(doc.items[4].parent_id, None, "a defect at the top level");
 
-    assert!(parse_valid("").unwrap().items.is_empty());
+    // The typed form writes back the plan alone: no canvas field, no tracker
+    // section.
+    let written = serde_json::to_value(&doc).unwrap();
+    assert_eq!(written["version"], json!(3));
+    assert!(written.get("sync").is_none());
+    for item in written["items"].as_array().unwrap() {
+        for field in ["position", "size", "localOnly"] {
+            assert!(item.get(field).is_none(), "{field} in {item}");
+        }
+    }
+    assert!(validate(&written.to_string()).valid);
+
+    let empty = parse_valid("").unwrap();
+    assert!(empty.items.is_empty());
+    assert_eq!(empty.version, 3);
     assert!(parse_valid(r#"{"version":1}"#).is_err());
+    assert!(parse_valid(r#"{"version":2}"#).is_err());
 }
 
 /// FGV-FR-PMTY, FOA-FR-XOAR: the waiting relation the typed model exposes.
@@ -337,93 +336,4 @@ fn a_deliverable_is_outside_the_kind_enumeration() {
     assert_eq!(codes(&body), vec!["shape"]);
     assert_eq!(report.violations[0].element_id.as_deref(), Some("d1"));
     assert!(report.violations[0].message.contains("deliverable"));
-}
-
-fn ignored(number: u64) -> Value {
-    json!({ "kind": "issue", "host": "github.com", "owner": "o", "repo": "r", "number": number,
-            "url": format!("https://github.com/o/r/issues/{number}") })
-}
-
-/// FGV-FR-TLMV / FGV-FR-04: an ignored reference that repeats an earlier
-/// one, or that a sync link names, is `duplicate_tracker_link`; one of
-/// another kind, repository, or owner repeats nothing. It is a
-/// violation of the sync section as a whole: it carries no item, edge, or
-/// link index, its message names the entry, and it comes after the
-/// violations of the links.
-#[test]
-fn ignored_references_repeat_nothing() {
-    let body = |links: Value, ignore: Value| {
-        json!({ "version": 2, "items": skeleton(), "edges": [],
-                "sync": { "tracker": "github", "links": links, "ignored": ignore } })
-        .to_string()
-    };
-    assert!(
-        validate(&body(json!([link("f1", "issue", 1)]), json!([ignored(2), ignored(3)]))).valid
-    );
-    // The same number as a milestone is another reference.
-    let mut milestone = ignored(1);
-    milestone["kind"] = json!("milestone");
-    assert!(validate(&body(json!([link("f1", "issue", 1)]), json!([milestone.clone()]))).valid);
-    // The same number in another repository, or of another owner, is
-    // another reference.
-    let mut other_repo = ignored(1);
-    other_repo["repo"] = json!("other");
-    other_repo["url"] = json!("https://github.com/o/other/issues/1");
-    let mut other_owner = ignored(1);
-    other_owner["owner"] = json!("someone");
-    other_owner["url"] = json!("https://github.com/someone/r/issues/1");
-    assert!(
-        validate(&body(json!([link("f1", "issue", 1)]), json!([other_repo, other_owner]))).valid
-    );
-    // An ignored milestone that a milestone link names repeats it.
-    let report = validate(&body(json!([link("m1", "milestone", 1)]), json!([milestone])));
-    let got: Vec<_> = report
-        .violations
-        .iter()
-        .map(|v| (v.code, v.link_index, v.element_id.clone(), v.edge_id.clone()))
-        .collect();
-    assert_eq!(got, vec![("duplicate_tracker_link", None, None, None)]);
-    assert!(report.violations[0].message.contains("sync link"), "{:?}", report.violations[0]);
-
-    let report = validate(&body(
-        json!([link("f1", "issue", 1), link("f2", "issue", 1)]),
-        json!([ignored(2), ignored(1), ignored(2)]),
-    ));
-    let got: Vec<_> = report
-        .violations
-        .iter()
-        .map(|v| (v.code, v.link_index, v.element_id.clone(), v.edge_id.clone()))
-        .collect();
-    assert_eq!(
-        got,
-        vec![
-            ("duplicate_tracker_link", Some(1), None, None),
-            ("duplicate_tracker_link", None, None, None),
-            ("duplicate_tracker_link", None, None, None),
-        ]
-    );
-    assert!(report.violations[1].message.contains("ignored entry 1"), "{:?}", report.violations[1]);
-    assert!(report.violations[1].message.contains("sync link"));
-    assert!(report.violations[2].message.contains("ignored entry 2"), "{:?}", report.violations[2]);
-    assert!(report.violations[2].message.contains("earlier ignored entry"));
-}
-
-/// FGV-FR-08: `sync.ignored` is a list of references; anything else is
-/// `shape`, and an entry with a field the schema does not define is
-/// `unknown_field`.
-#[test]
-fn ignored_references_have_the_reference_shape() {
-    let body = |ignore: Value| {
-        json!({ "version": 2, "items": skeleton(), "edges": [],
-                "sync": { "tracker": "github", "links": [], "ignored": ignore } })
-        .to_string()
-    };
-    assert_eq!(codes(&body(json!({}))), vec!["shape"]);
-    let mut no_number = ignored(1);
-    no_number.as_object_mut().unwrap().remove("number");
-    assert_eq!(codes(&body(json!([no_number]))), vec!["shape"]);
-    let mut extra = ignored(1);
-    extra["title"] = json!("x");
-    assert_eq!(codes(&body(json!([extra]))), vec!["unknown_field"]);
-    assert_eq!(codes(&body(json!(["issue 1"]))), vec!["shape"]);
 }

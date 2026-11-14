@@ -1,9 +1,11 @@
 //! `FGV-flow-graph-validation.md`: the backend authority on what a Flow document
 //! is.
 //!
-//! A Flow is the project's delivery plan: a hierarchy of milestones, epics,
-//! features, tasks, and defects, the `blocks` and `relates` edges between
-//! them, and the tracker issues it is synced with. This module
+//! A Flow is a delivery plan: a hierarchy of milestones, epics, features,
+//! tasks, and defects, the `blocks` and `relates` edges between them, and the
+//! drafts its tasks are worked in. The document holds the plan alone: where
+//! its items sit on a canvas is per-machine state
+//! (`DMS-delivery-machine-state.md`). This module
 //! owns its schema (FGV-FR-01) and the structural rules it obeys, and answers
 //! one question about a body of text: is this a Flow, and if not, exactly what
 //! is wrong with it.
@@ -13,6 +15,7 @@
 //! a write (`PST-FR-28`) and the Flow tab call it on a body that has never been
 //! on disk (`../ui/FLO-flow.md` FLO-FR-46).
 
+pub mod field_rules;
 pub mod model;
 mod rules;
 mod shape;
@@ -25,11 +28,11 @@ use serde_json::Value;
 use crate::logging::{log_debug, log_warn, Domain, BUFFER};
 
 /// The one document version this build reads (FGV-FR-07).
-pub(crate) const FLOW_VERSION: u64 = 2;
+pub(crate) const FLOW_VERSION: u64 = 3;
 
 /// One thing wrong with a document (FGV-FR-04). `element_id` names the item it
-/// sits on, `edge_id` the edge, `link_index` the sync link, and a violation
-/// about the document as a whole carries none of them.
+/// sits on, `edge_id` the edge, and a violation about the document as a whole
+/// carries none of them.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FlowViolation {
@@ -39,13 +42,11 @@ pub struct FlowViolation {
     pub element_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edge_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub link_index: Option<usize>,
 }
 
 impl FlowViolation {
     fn doc(code: &'static str, message: impl Into<String>) -> Self {
-        Self { code, message: message.into(), element_id: None, edge_id: None, link_index: None }
+        Self { code, message: message.into(), element_id: None, edge_id: None }
     }
 
     fn element(code: &'static str, id: impl Into<String>, message: impl Into<String>) -> Self {
@@ -54,10 +55,6 @@ impl FlowViolation {
 
     fn edge(code: &'static str, id: impl Into<String>, message: impl Into<String>) -> Self {
         Self { edge_id: Some(id.into()), ..Self::doc(code, message) }
-    }
-
-    fn link(code: &'static str, index: usize, message: impl Into<String>) -> Self {
-        Self { link_index: Some(index), ..Self::doc(code, message) }
     }
 }
 
@@ -131,7 +128,7 @@ pub fn validate(body: &str) -> ValidationReport {
         }
     };
 
-    // FGV-FR-07: likewise alone, version 1 included.
+    // FGV-FR-07: likewise alone, versions 1 and 2 included.
     let obj = match raw.as_object() {
         Some(o) if o.get("version").and_then(Value::as_u64) == Some(FLOW_VERSION) => o,
         _ => {
@@ -150,7 +147,6 @@ pub fn validate(body: &str) -> ValidationReport {
     let mut doc_level = Vec::new();
     let mut item_level = Vec::new();
     let mut edge_level = Vec::new();
-    let mut link_level = Vec::new();
 
     shape::unknown_fields(obj, shape::DOC_FIELDS, "the document", shape::At::Doc, &mut doc_level);
     shape::optional_string(obj, "name", "the document", shape::At::Doc, &mut doc_level);
@@ -173,11 +169,9 @@ pub fn validate(body: &str) -> ValidationReport {
         .enumerate()
         .filter_map(|(i, v)| shape::read_edge(v, i, &mut edge_level))
         .collect();
-    let sync = obj.get("sync").map(|s| shape::read_sync(s, &mut link_level)).unwrap_or_default();
 
     rules::item_rules(&items, &mut item_level);
     rules::edge_rules(&items, &edges, &mut edge_level);
-    rules::link_rules(&items, &sync, &mut link_level);
 
     // FGV-FR-04: within each group, the order the subjects appear in.
     let mut item_rank = HashMap::new();
@@ -194,12 +188,10 @@ pub fn validate(body: &str) -> ValidationReport {
     order_by_position(&mut edge_level, |v| {
         v.edge_id.as_ref().and_then(|id| edge_rank.get(id).copied())
     });
-    order_by_position(&mut link_level, |v| v.link_index);
 
     let mut violations = doc_level;
     violations.extend(item_level);
     violations.extend(edge_level);
-    violations.extend(link_level);
     ValidationReport::from(violations)
 }
 

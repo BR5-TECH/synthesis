@@ -1,11 +1,11 @@
 //! The structural rules of `FGV-flow-graph-validation.md`: identity, the
-//! hierarchy, what an edge may join, the dependency cycle, and the sync links.
+//! hierarchy, what an edge may join, and the dependency cycle.
 //! Each rule reads the objects `shape.rs` returned and appends its violations.
 
 use std::collections::{HashMap, HashSet};
 
-use super::model::{EdgeType, Hierarchy, Kind, RefKind, WaitGraph};
-use super::shape::{RawEdge, RawItem, RawSync};
+use super::model::{EdgeType, Hierarchy, Kind, WaitGraph};
+use super::shape::{RawEdge, RawItem};
 use super::FlowViolation;
 
 /// FGV-FR-09, FGV-FR-13, FGV-FR-YHFX, FGV-FR-CTFX: the rules on items alone.
@@ -56,7 +56,7 @@ pub fn item_rules(items: &[RawItem], out: &mut Vec<FlowViolation>) {
             }
         }
         if let Some(k) = item.kind {
-            if !k.permitted_parents().contains(&parent_kind) {
+            if !k.may_sit_in(parent_kind) {
                 let container = match parent_kind {
                     Some(pk) => format!("a {}", pk.as_str()),
                     None => "the top level".to_string(),
@@ -70,21 +70,10 @@ pub fn item_rules(items: &[RawItem], out: &mut Vec<FlowViolation>) {
         }
     }
 
-    let mut drafts = HashSet::new();
-    for item in items {
-        if let Some(d) = item.draft_id.as_deref() {
-            if !drafts.insert(d) {
-                out.push(FlowViolation::element(
-                    "duplicate_draft_link",
-                    &item.id,
-                    format!(
-                        "`{}` links the draft `{d}`, which another item already links",
-                        item.id
-                    ),
-                ));
-            }
-        }
-    }
+    super::field_rules::check_draft_links(
+        items.iter().filter_map(|i| i.draft_id.as_deref().map(|d| (i.id.as_str(), d))),
+        out,
+    );
 }
 
 /// Walk up from `parent`; arriving back at `id` means the chain closes on
@@ -176,64 +165,6 @@ pub fn edge_rules(items: &[RawItem], edges: &[RawEdge], out: &mut Vec<FlowViolat
                 "dependency_cycle",
                 *id,
                 format!("edge `{id}` (`{from}` blocks `{to}`) is part of a dependency cycle"),
-            ));
-        }
-    }
-}
-
-/// FGV-FR-LWPD, FGV-FR-TLMV: the rules on sync links and on the ignored
-/// references.
-pub fn link_rules(items: &[RawItem], sync: &RawSync, out: &mut Vec<FlowViolation>) {
-    let links = &sync.links;
-    let kinds: HashMap<&str, Option<Kind>> =
-        items.iter().map(|i| (i.id.as_str(), i.kind)).collect();
-    let mut seen_items = HashSet::new();
-    let mut seen_refs = HashSet::new();
-    for link in links {
-        let duplicate_item = !seen_items.insert(link.item_id.as_str());
-        let duplicate_ref = !seen_refs.insert(link.ref_key.clone());
-        if duplicate_item || duplicate_ref {
-            out.push(FlowViolation::link(
-                "duplicate_tracker_link",
-                link.index,
-                format!(
-                    "sync link {} names an item or a tracker reference that another link names",
-                    link.index
-                ),
-            ));
-        }
-        if let Some(Some(kind)) = kinds.get(link.item_id.as_str()) {
-            let is_milestone = *kind == Kind::Milestone;
-            if is_milestone != (link.ref_kind == RefKind::Milestone) {
-                out.push(FlowViolation::link(
-                    "tracker_kind_mismatch",
-                    link.index,
-                    format!(
-                        "sync link {} joins the {} `{}` to a tracker {}",
-                        link.index,
-                        kind.as_str(),
-                        link.item_id,
-                        if link.ref_kind == RefKind::Milestone { "milestone" } else { "issue" }
-                    ),
-                ));
-            }
-        }
-    }
-    // FGV-FR-TLMV: an ignored reference is about the sync section as a whole,
-    // so its violation carries no index and its message names the entry. It
-    // follows the violations of the links (FGV-FR-04).
-    let mut seen_ignored = HashSet::new();
-    for entry in &sync.ignored {
-        let repeats = !seen_ignored.insert(entry.ref_key.clone());
-        let linked = seen_refs.contains(&entry.ref_key);
-        if repeats || linked {
-            out.push(FlowViolation::doc(
-                "duplicate_tracker_link",
-                format!(
-                    "sync ignored entry {} names a tracker reference that {}",
-                    entry.index,
-                    if linked { "a sync link names" } else { "an earlier ignored entry names" }
-                ),
             ));
         }
     }

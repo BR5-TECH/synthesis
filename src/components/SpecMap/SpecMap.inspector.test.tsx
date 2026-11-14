@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { SpecMap } from ".";
 import { typeChip } from "../../artifactTypes";
-import { nodeButton, renderMap, setView } from "../../test/specMapRender";
-import { node, smallIndex, spec } from "../../test/specMapFixtures";
+import { refKey, type MapRef } from "../../state/specMap/types";
+import { makeStore, nodeButton, renderMap, setView, setWindowWidth } from "../../test/specMapRender";
+import { node, openspecIndex, smallIndex, spec } from "../../test/specMapFixtures";
 
 vi.mock("../../logging", () => ({
   logDebug: vi.fn(),
@@ -45,11 +47,12 @@ describe("placement (SMI-FR-QWOP, SMI-FR-BNHI)", () => {
 });
 
 describe("content (SMI)", () => {
-  it("SMI-FR-KDGX, SMI-FR-TRUZ: with no selection the body asks for one and the header names no kind", async () => {
+  it("SMI-FR-KDGX, SMI-FR-TRUZ: with no selection the body holds only the sentence, with no action, and the header names no kind", async () => {
     const { container } = await renderMap();
-    expect(inspector()).toHaveTextContent("Select a node to inspect it.");
+    const body = container.querySelector(".smap-inspector__body")!;
+    expect(body).toHaveTextContent(/^Select a node to inspect it\.$/);
+    expect(body.querySelectorAll("button")).toHaveLength(0);
     expect(container.querySelector(".smap-inspector__kind")).toHaveTextContent("");
-    expect(within(inspector()).getByRole("button", { name: "New domain" })).toBeInTheDocument();
   });
 
   it("SMI-FR-TRUZ, SMI-FR-MFSA: a leaf group shows its breadcrumb, badge, summary, counts and totals", async () => {
@@ -188,17 +191,14 @@ describe("actions (SMI)", () => {
     expect(nodeButton("C1 c1 label")).toHaveAttribute("data-selected", "true");
   });
 
-  it("SMI-FR-WDAB: a subject removed from the tree returns the inspector to its empty state", async () => {
+  it("SMI-FR-WDAB: a selection that names no node of the tree shows the empty state of the inspector", async () => {
     const { store } = await renderMap();
-    act(() => {
-      store.dispatch({ kind: "attachDraft", nodeId: "g1", draft: { draftId: "x", name: "Plan" } });
-      store.select({ kind: "planned", draftId: "x" });
-    });
-    expect(inspector()).toHaveTextContent("Planned under g1 label");
-    act(() => {
-      store.dispatch({ kind: "detachDraft", draftId: "x" });
-    });
-    expect(inspector()).toHaveTextContent("Select a node to inspect it.");
+    act(() => store.select({ kind: "spec", code: "A1" }));
+    expect(inspector().querySelector(".smap-inspector__name")).toHaveTextContent("a1 label");
+    act(() => store.select({ kind: "spec", code: "GONE" }));
+    expect(inspector().querySelector(".smap-inspector__body")).toHaveTextContent(/^Select a node to inspect it\.$/);
+    act(() => store.select({ kind: "index", id: "gone" }));
+    expect(inspector().querySelector(".smap-inspector__body")).toHaveTextContent(/^Select a node to inspect it\.$/);
   });
 });
 
@@ -230,5 +230,60 @@ describe("ordering and limits (SMI)", () => {
     expect(note.querySelectorAll(".smap-attention__line")).toHaveLength(4);
     expect(note).toHaveTextContent("G1 — g1 label: no coverage yet");
     expect(note).not.toHaveTextContent("G5");
+  });
+});
+
+describe("the insertion points of the delivery links (SDL-FR-VAGU, SDL-FR-CFHH)", () => {
+  const slots = {
+    deliveredBy: (subject: MapRef) => <div data-testid="delivered-by">{refKey(subject)}</div>,
+    planWork: (subject: MapRef) => (
+      <button type="button" data-testid="plan-work">
+        Plan {refKey(subject)}
+      </button>
+    ),
+  };
+
+  async function renderWithSlots(index = smallIndex()) {
+    setWindowWidth(1440);
+    const { store } = makeStore(index);
+    const view = render(<SpecMap store={store} onOpenArtifact={vi.fn()} inspectorSlots={slots} />);
+    await screen.findByTestId("spec-map-canvas");
+    return { store, ...view };
+  }
+
+  it("SMI-FR-YHNT, SMI-FR-KDGX: the Delivered by slot follows Depends on and Plan work ends the action row, for a spec and an index node, and neither shows without a subject", async () => {
+    const { store, container } = await renderWithSlots();
+    expect(screen.queryByTestId("delivered-by")).toBeNull();
+    expect(screen.queryByTestId("plan-work")).toBeNull();
+
+    act(() => store.select({ kind: "spec", code: "A1" }));
+    const body = container.querySelector(".smap-inspector__body")!;
+    const deliveredBy = screen.getByTestId("delivered-by");
+    expect(deliveredBy).toHaveTextContent("spec:A1");
+    const labels = [...body.querySelectorAll(".smap-section-label")];
+    const dependsOn = labels.find((l) => l.textContent === "Depends on")!;
+    // The slot comes after the Depends on rows and before the Needs attention card.
+    expect(dependsOn.compareDocumentPosition(deliveredBy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(deliveredBy.previousElementSibling).toHaveClass("smap-rows");
+    const actions = body.querySelector(".smap-actions")!;
+    expect([...actions.children].map((b) => b.textContent)).toEqual(["Open in editor", "Zoom to", "Plan spec:A1"]);
+
+    act(() => store.select({ kind: "index", id: "g1" }));
+    expect(screen.getByTestId("delivered-by")).toHaveTextContent("index:g1");
+    expect([...body.querySelector(".smap-actions")!.children].map((b) => b.textContent)).toEqual([
+      "Open group",
+      "Zoom to",
+      "Plan index:g1",
+    ]);
+  });
+
+  it("SMI-FR-ZMZB: a change chip subject gets neither slot", async () => {
+    const { store } = await renderWithSlots(openspecIndex());
+    const tree = store.tree()!;
+    const key = [...tree.changes.keys()][0];
+    act(() => store.select({ kind: "change", key }));
+    expect(within(inspector()).getByRole("button", { name: "Open change" })).toBeInTheDocument();
+    expect(screen.queryByTestId("delivered-by")).toBeNull();
+    expect(screen.queryByTestId("plan-work")).toBeNull();
   });
 });

@@ -126,12 +126,12 @@ mod tests {
     use super::*;
     use crate::flow_overlap::overlaps;
 
-    const PLAN: &str = r#"{"version":2,"name":"P","items":[
-      {"id":"m1","kind":"milestone","name":"Beta","position":{"x":0,"y":0},"size":{"width":1,"height":1}},
-      {"id":"f1","kind":"feature","name":"Capture","parentId":"m1","position":{"x":0,"y":0},"size":{"width":1,"height":1}},
-      {"id":"t1","kind":"task","name":"Tokenize","parentId":"f1","footprint":["src/pay/"],"position":{"x":0,"y":0}},
-      {"id":"t2","kind":"task","name":"Form","parentId":"f1","footprint":["src/pay/form.rs"],"position":{"x":0,"y":0}},
-      {"id":"t3","kind":"task","name":"Docs","parentId":"f1","draftId":"gone","position":{"x":0,"y":0}}
+    const PLAN: &str = r#"{"version":3,"name":"P","items":[
+      {"id":"m1","kind":"milestone","name":"Beta"},
+      {"id":"f1","kind":"feature","name":"Capture","parentId":"m1"},
+      {"id":"t1","kind":"task","name":"Tokenize","parentId":"f1","footprint":["src/pay/"]},
+      {"id":"t2","kind":"task","name":"Form","parentId":"f1","footprint":["src/pay/form.rs"]},
+      {"id":"t3","kind":"task","name":"Docs","parentId":"f1","draftId":"gone"}
     ],"edges":[{"id":"e1","from":"t3","to":"t2","type":"blocks"}]}"#;
 
     fn section(body: &str, ty: &str) -> InputSection {
@@ -159,7 +159,7 @@ mod tests {
         assert!(text.contains("- t3 \"Docs\" (task): not started; its draft is missing"), "{text}");
         assert!(text.contains("- t1 \"Tokenize\" and t2 \"Form\" share src/pay/form.rs"), "{text}");
 
-        let quiet = parse_valid(r#"{"version":2}"#).unwrap();
+        let quiet = parse_valid(r#"{"version":3}"#).unwrap();
         let state = crate::flow_delivery::delivery_state(&quiet, &[]);
         assert!(flow_context_text(&quiet, &state, &[]).contains("Overlaps: none."));
     }

@@ -45,22 +45,13 @@ export type FlowRefusalCode =
   /** FGV-FR-RQEM: the item's footprint already holds the path. */
   | "duplicate_footprint"
   /** FGV-FR-RRND: not a calendar date `YYYY-MM-DD`. */
-  | "invalid_due_date"
-  /** FLO-FR-TYEZ: the Flow has no sync section. */
-  | "not_synced"
-  /** FLO-FR-TYEZ: the item already has a sync link. */
-  | "already_linked"
-  /** FGV-FR-LWPD: another item already links the tracker reference. */
-  | "duplicate_tracker_link"
-  /** FGV-FR-LWPD: a milestone and an issue, or the reverse. */
-  | "tracker_kind_mismatch";
+  | "invalid_due_date";
 
 export interface FlowRefusal {
   code: FlowRefusalCode;
   /**
    * The items the refusal names: the items of a cycle (FLO-FR-GZCH), the
-   * members a kind does not permit, or the item that already links a draft or
-   * a tracker reference.
+   * members a kind does not permit, or the item that already links a draft.
    */
   itemIds?: string[];
   /** The edges the refusal names: an existing edge, or a lineage edge. */

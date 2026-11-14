@@ -13,7 +13,6 @@ import { errorLogCode } from "../../errorLogCode";
 import { logWarn } from "../../logging";
 import { showDraftCreateFailed, showDraftOpenFailed } from "../../state/shellToasts";
 import type { DraftSessionStore } from "../../state/draftSessions";
-import type { SpecMapSessionStore } from "../../state/specMap/session";
 import { clearDiscussionSession } from "../../state/discussionSession";
 import { invalidateDraftDiscussions } from "../../state/draftDiscussionInvalidation";
 import type { NewDraftSeed, Tab } from "../../types";
@@ -27,12 +26,7 @@ export interface DraftTabActionDeps {
   setActiveTab: Dispatch<SetStateAction<string>>;
   activateTab: (id: string) => void;
   bumpDrafts: () => void;
-  /** SMD-FR-OYLC: the map session a draft created from the map is placed in. */
-  specMap: SpecMapSessionStore;
 }
-
-/** SMD-FR-EKWN: what the author reads when the map's New draft fails. */
-export const MAP_DRAFT_FAILED = "The draft could not be created.";
 
 /** FLO-FR-NRBV: what a draft creation for a Flow task answers. */
 export type NamedDraftOutcome =
@@ -47,7 +41,6 @@ export interface DraftTabActions {
     seed?: NewDraftSeed,
     failureMessage?: string,
   ) => Promise<{ id: string; name: string } | null>;
-  createDraftForMapNode: (nodeId: string) => Promise<void>;
   renameDraftTab: (draftId: string, name: string) => void;
   followDraftPrompt: (draftId: string) => Promise<void>;
   openDraftById: (draftId: string) => Promise<void>;
@@ -64,7 +57,6 @@ export function createDraftTabActions(
     setActiveTab,
     activateTab,
     bumpDrafts,
-    specMap,
   } = deps;
 
   /**
@@ -211,21 +203,6 @@ export function createDraftTabActions(
   };
 
   /**
-   * SMD-FR-HVBE / SMD-FR-OYLC / SMD-FR-EKWN: the map's **New draft** runs the
-   * Drafts panel's own creation at the drafts root (NAW-FR-03), and only a
-   * draft that was created is placed on the node.
-   */
-  const createDraftForMapNode = async (nodeId: string): Promise<void> => {
-    const created = await createDraft({}, MAP_DRAFT_FAILED);
-    if (!created) return;
-    specMap.dispatch({
-      kind: "attachDraft",
-      nodeId,
-      draft: { draftId: created.id, name: created.name },
-    });
-  };
-
-  /**
    * NAW-FR-04: the strip's label follows the draft's name.
    *
    * NAW-FR-25: and the draft moved, so the revision moves with it. A rename
@@ -305,7 +282,6 @@ export function createDraftTabActions(
     openDraft,
     createDraft,
     createNamedDraft,
-    createDraftForMapNode,
     renameDraftTab,
     followDraftPrompt,
     openDraftById,

@@ -1,0 +1,130 @@
+/* ---------- Dashboard: Delivery widget ---------- */
+/* DSH-FR-AHRJ: the full-width last row, below the grid of the other widgets. */
+.dash-delivery { grid-column: 1 / -1; }
+
+/* DSH-FR-DFDW: the header opens the Map tab on its Delivery lens. */
+.dash-delivery__head {
+  flex: 1; min-width: 0;
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  border-radius: var(--r-xs);
+}
+.dash-delivery__head:hover .dash-delivery__plan { color: var(--fg-1); }
+.dash-delivery__head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dash-delivery__title { flex: none; }
+.dash-delivery__plan {
+  font-size: var(--fs-ui-sm); color: var(--fg-2); font-weight: 600;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-delivery__count { white-space: nowrap; }
+
+/* The body holds one wide row, so it must not take its min-content width. */
+.dash-delivery__body { min-width: 0; }
+.dash-delivery__content { display: flex; align-items: stretch; min-width: 0; }
+
+/* DSH-FR-EWPI: the axis scrolls horizontally when it is wider than the widget. */
+.dash-delivery__scroller {
+  flex: 1; min-width: 0;
+  overflow-x: auto; overflow-y: hidden;
+  padding-bottom: 4px;
+}
+.dash-delivery__track { position: relative; padding-top: 18px; }
+/* DSH-FR-PLRL: the labels sit above the axis, in one or two rows. */
+.dash-delivery__labels { position: relative; }
+
+/* DSH-FR-NNWM: one milestone. */
+.dash-delivery__milestone {
+  position: absolute;
+  display: flex; flex-direction: column; gap: 3px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  font: inherit; color: var(--fg-1); text-align: left; cursor: pointer;
+}
+.dash-delivery__milestone:hover { background: var(--bg-hover); }
+.dash-delivery__milestone:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* DSH-FR-BBRC: the current milestone takes the accent border. */
+.dash-delivery__milestone[data-current="true"] { border-color: var(--accent); }
+
+.dash-delivery__name-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.dash-delivery__glyph { flex: none; font-size: var(--fs-ui-sm); color: var(--fg-3); }
+.dash-delivery__glyph[data-state="drafting"] { color: var(--accent); }
+.dash-delivery__glyph[data-state="in_progress"] { color: var(--warn); }
+.dash-delivery__glyph[data-state="done"] { color: var(--ok); }
+.dash-delivery__glyph[data-state="dropped"] { color: var(--fg-4); }
+.dash-delivery__name {
+  font-size: var(--fs-ui-md); font-weight: 600;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-delivery__due { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+/* FLO-FR-XAPK: a past due date is marked in words and in colour. */
+.dash-delivery__due[data-past="true"] { color: var(--danger); }
+.dash-delivery__past { font-family: var(--font-ui-family); }
+
+.dash-delivery__leaves { display: flex; align-items: center; gap: 6px; }
+/* DSH-FR-NNWM: the 6px bar of the leaf states (MDL-FR-GDUP order). */
+.dash-delivery__bar {
+  flex: 1; display: flex; height: 6px; min-width: 0;
+  border-radius: var(--r-full); overflow: hidden;
+  background: var(--border-1);
+}
+.dash-delivery__segment { display: block; height: 100%; flex-basis: 0; }
+.dash-delivery__segment[data-state="done"] { background: var(--ok); }
+.dash-delivery__segment[data-state="in_progress"] { background: var(--warn); }
+.dash-delivery__segment[data-state="drafting"] { background: var(--accent); }
+.dash-delivery__segment[data-state="not_started"] { background: var(--border-2); }
+.dash-delivery__segment[data-state="dropped"] { background: var(--fg-4); }
+.dash-delivery__fraction { flex: none; font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+/* DSH-FR-BBRC: the counts line wraps inside the card; it never runs past the
+   border. Its text breaks only after the middle dot. */
+.dash-delivery__current-line {
+  font-size: var(--fs-ui-xs); color: var(--fg-2);
+  white-space: normal; overflow-wrap: anywhere;
+}
+
+/* DSH-FR-PLRL: the axis line, with a tick at each due date. */
+.dash-delivery__axis {
+  position: relative; height: 14px;
+  border-bottom: 1px solid var(--border-2);
+}
+.dash-delivery__tick {
+  position: absolute; bottom: -5px;
+  width: 9px; height: 9px; margin-left: -4.5px;
+  border-radius: var(--r-full);
+  background: var(--bg-canvas);
+  border: 1.5px solid var(--fg-3);
+  box-sizing: border-box;
+}
+.dash-delivery__tick[data-current="true"] { border-color: var(--accent); background: var(--accent); }
+.dash-delivery__months { position: relative; height: 22px; }
+.dash-delivery__month {
+  position: absolute; top: 6px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap;
+}
+
+/* DSH-FR-NZXN: the Today line, labelled `today`, in the accent colour. */
+.dash-delivery__today {
+  position: absolute; top: 0; bottom: 22px;
+  width: 0; border-left: 1px solid var(--accent);
+  pointer-events: none;
+}
+.dash-delivery__today-label {
+  position: absolute; top: 0; left: 4px;
+  font-size: var(--fs-ui-xs); color: var(--accent); font-weight: 600; white-space: nowrap;
+}
+
+/* DSH-FR-HVOQ: the No date group sits after the axis, behind a 1px rule. */
+.dash-delivery__nodate {
+  flex: none;
+  display: flex; flex-direction: column; gap: 6px;
+  margin-left: 12px; padding-left: 12px; padding-top: 18px;
+  border-left: 1px solid var(--border-1);
+}
+.dash-delivery__nodate-title {
+  font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  color: var(--fg-3); font-weight: 600;
+}
+.dash-delivery__nodate .dash-delivery__milestone { position: static; width: 132px; }

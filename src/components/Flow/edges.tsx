@@ -1,6 +1,7 @@
 import { findItem, type FlowDocument, type FlowEdge } from "../../state/flowDocument";
 import type { EdgeRoute, Frames } from "./frames";
 import { edgeMidpoint, edgePath } from "./geometry";
+import type { SequenceArrow } from "./columns";
 
 /** FLO-FR-48: what an edge is called, by its type, in words. */
 export function edgeName(doc: FlowDocument, e: FlowEdge): string {
@@ -203,5 +204,23 @@ export function EdgePanel({
         Remove
       </button>
     </div>
+  );
+}
+
+/**
+ * FLO-FR-SQUS: the sequence arrow that joins each milestone column to the
+ * next. It is not an edge of the plan: nothing selects or removes it.
+ */
+export function SequenceArrows({ arrows }: { arrows: readonly SequenceArrow[] }) {
+  if (arrows.length === 0) return null;
+  return (
+    <svg className="flow-seq" aria-hidden="true" data-testid="flow-sequence">
+      {arrows.map((a) => (
+        <g key={`${a.from}>${a.to}`} data-testid={`flow-sequence-${a.from}-${a.to}`}>
+          <line className="flow-seq__line" x1={a.x1 + 8} y1={a.y} x2={a.x2 - 10} y2={a.y} />
+          <path className="flow-seq__head" d={`M ${a.x2 - 10} ${a.y - 5} L ${a.x2 - 2} ${a.y} L ${a.x2 - 10} ${a.y + 5} Z`} />
+        </g>
+      ))}
+    </svg>
   );
 }

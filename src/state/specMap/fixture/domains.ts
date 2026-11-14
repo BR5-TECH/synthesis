@@ -196,14 +196,14 @@ const workspace = N("workspace", "workspace", "The shell the architect works ins
       S("NTF", "ui/NTF-notifications.md", "notifications", 39, "d", "OS notifications and the surfaces they open."),
       S("LOG", "ui/LOG-logs.md", "logs", 22, "i", "Application log surface in the bottom panel."),
     ]),
-    N("sh-map", "specification map", "This map: its canvas, nodes, edges, inspector and planning tools.", [
+    N("sh-map", "specification map", "This map: its canvas, nodes, edges, inspector and delivery links.", [
       S("SMP", "ui/SMP-specification-map.md", "specification map", 17, "d", "The Map tab, its toolbar and its session."),
       S("SMZ", "ui/SMZ-specification-map-zoom.md", "map zoom", 15, "d", "Semantic zoom, panning and the focused subtree."),
       S("SMN", "ui/SMN-specification-map-nodes.md", "map nodes", 16, "d", "Cards, boxes and chips at every level."),
       S("SME", "ui/SME-specification-map-edges.md", "map edges", 10, "d", "Dependency edges aggregated to the level shown."),
       S("SMI", "ui/SMI-specification-map-inspector.md", "map inspector", 15, "d", "The reading pane for the selected node."),
-      S("SMO", "ui/SMO-specification-map-organization.md", "map organization", 14, "g", "Creating, moving and deleting map nodes."),
-      S("SMD", "ui/SMD-specification-map-drafts.md", "map drafts", 11, "g", "Planning new work as drafts on the map."),
+      S("MDL", "ui/MDL-map-delivery-lens.md", "map delivery lens", 30, "g", "The delivery plan of the project in the Map tab."),
+      S("SDL", "ui/SDL-specification-delivery-links.md", "specification delivery links", 15, "g", "Links between delivery items and spec nodes."),
     ]),
   ]),
   N("git", "git & changes", "A project is a Git repository. Worktrees, changes, commits and GitHub credentials live here.", [

@@ -214,9 +214,8 @@ where
 
 /// The save of `save_artifact_contents`, on the calling thread.
 ///
-/// `pub(crate)` because `crate::flow_sync` writes a synced Flow through it
-/// (FTS-FR-VFNM): the same checks and the same validated write as a save from
-/// the Flow tab.
+/// `pub(crate)` so that a backend module that writes a Flow file can use the
+/// same checks and the same validated write as a save from the Flow tab.
 pub(crate) fn save_artifact_contents_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     id: &str,
@@ -578,9 +577,8 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
-        let body = r#"{"version":2,"name":"ok","items":[
-            {"id":"m1","kind":"milestone","name":"a","position":{"x":0,"y":0},
-             "size":{"width":10,"height":10}}],"edges":[]}"#;
+        let body = r#"{"version":3,"name":"ok","items":[
+            {"id":"m1","kind":"milestone","name":"a"}],"edges":[]}"#;
         assert_eq!(
             resolved_type(root, "flows/a.flow"),
             Some(scanning::ArtifactType::Flow),
@@ -603,10 +601,10 @@ mod tests {
         std::fs::write(root.join("flows/a.flow"), b"ORIGINAL").unwrap();
         let tracker = ContentTracker::default();
         // Three milestones that block each other in a ring (FGV-FR-PMTY).
-        let body = r#"{"version":2,"name":"x","items":[
-            {"id":"m1","kind":"milestone","name":"a","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
-            {"id":"m2","kind":"milestone","name":"b","position":{"x":0,"y":0},"size":{"width":10,"height":10}},
-            {"id":"m3","kind":"milestone","name":"c","position":{"x":0,"y":0},"size":{"width":10,"height":10}}
+        let body = r#"{"version":3,"name":"x","items":[
+            {"id":"m1","kind":"milestone","name":"a"},
+            {"id":"m2","kind":"milestone","name":"b"},
+            {"id":"m3","kind":"milestone","name":"c"}
         ],"edges":[{"id":"e1","from":"m1","to":"m2","type":"blocks"},
                    {"id":"e2","from":"m2","to":"m3","type":"blocks"},
                    {"id":"e3","from":"m3","to":"m1","type":"blocks"}]}"#;

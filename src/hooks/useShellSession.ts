@@ -12,7 +12,6 @@ import { DraftSessionStore } from "../state/draftSessions";
 import { FlowSessionStore } from "../state/flowSessions";
 import { SearchSessionStore } from "../state/searchSessions";
 import { SpecMapSessionStore } from "../state/specMap/session";
-import { useSpecMapDraftSync } from "./shell/useSpecMapDraftSync";
 import {
   followTargetForTab,
   selectionFollowsTabEnabled,
@@ -45,6 +44,7 @@ import { createCreationActions } from "./shell/creationActions";
 import { createDraftTabActions } from "./shell/draftActions";
 import { createLifecycleActions } from "./shell/lifecycleActions";
 import { createSaveActions } from "./shell/saveActions";
+import { useDeliveryShell } from "./shell/useDeliveryShell";
 import { createTabClosures } from "./shell/tabClosures";
 import { createOpenActions } from "./shell/openActions";
 import {
@@ -113,6 +113,9 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   const [searches] = useState(() => new SearchSessionStore());
   // SMP-FR-QNUH: the Map tab's session, outside the viewport for the same reason.
   const [specMap] = useState(() => stores.specMap ?? new SpecMapSessionStore());
+  // SMP-FR-SWUL: the Map tab's dirty indicator follows the unsaved Flow
+  // changes of its Delivery lens. Only that flag re-renders the shell.
+  const mapDirty = useSyncExternalStore(specMap.subscribeDeliveryDirty, specMap.deliveryDirty);
   /**
    * NAW-FR-09 / NAW-FR-11 / NAW-FR-12: the selection and unsaved buffer of every
    * draft touched this session. Owned here rather than by the New Artifact tab
@@ -409,6 +412,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     openSearchResults,
     activateSearchHit,
     openSpecMap,
+    showDeliveryItem,
     activateLibraryFile,
   } = createOpenActions({
     tabs,
@@ -459,6 +463,17 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     specMap,
     massCloseTargets,
   });
+  // LIB-FR-JTXR / MDL-FR-EFQF / SMP-FR-SWUL: the delivery source, the routing
+  // of its Flow file, and the Map tab's dirty indicator.
+  useDeliveryShell({
+    active: screen === "ide",
+    projectKey: projectPath,
+    contentRootEpoch,
+    specMap,
+    flows,
+    tabs,
+    closeTab,
+  });
   /**
    * Focus the tab showing the content whose write was blocked, so the user sees
    * the modal, confirmation, or error that stopped it (EDT-FR-32 / EDT-FR-36).
@@ -502,6 +517,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     sessions,
     flows,
     drafts,
+    specMap,
     focusBlocker,
     focusDraft,
   });
@@ -581,7 +597,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     openDraft,
     createDraft,
     createNamedDraft,
-    createDraftForMapNode,
     renameDraftTab,
     openDraftById,
     dropDraftTab,
@@ -592,10 +607,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     setActiveTab,
     activateTab,
     bumpDrafts,
-    specMap,
   });
-  // SMD-FR-LKVU: planned chips follow their drafts through the drafts revision.
-  useSpecMapDraftSync(specMap, draftsRevision);
 
   // TAB-FR-19 / TAB-FR-22 / TAB-FR-41 / CHG-FR-60 – CHG-FR-63: the closures the
   // shell performs because the content behind a tab moved.
@@ -750,7 +762,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   });
 
   // NTS-FR-11 / CMP-FR-10 / CMP-FR-11 / LCM-FR-05: the panel click-throughs.
-  const { revealArtifact, showNotesFor } = createNavigationActions({
+  const { revealArtifact, revealInProject, showNotesFor } = createNavigationActions({
     openArtifact,
     setPanelSurface,
     setRevealArtifactId,
@@ -773,6 +785,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   // stores rather than off the tab record, so it appears the moment an artifact
   // or a Flow is edited and clears the moment it is written.
   const tabsView: Tab[] = tabs.map((t) => {
+    if (t.kind === "map") return mapDirty === !!t.dirty ? t : { ...t, dirty: mapDirty };
     if (!t.artifactId) return t;
     const dirty = t.kind === "flow"
       ? !!flows.get(t.artifactId)?.dirty
@@ -831,6 +844,8 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     // SMP-FR-HZRA / LIB-FR-SJDC: the Map tab, and the Project panel's file
     // clicks, which reach the map while it is the active tab.
     openSpecMap,
+    // MDL-FR-JIKK / DSH-FR-DFDW / NAW-FR-PHGO: the Map tab on its Delivery lens.
+    showDeliveryItem,
     activateLibraryFile,
     // DPN-FR-CDFO / TAB-FR-KUIN: the viewer tabs of the Documents collection.
     openDocument,
@@ -869,6 +884,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     setNotesEntityOverride,
     showNotesFor,
     revealArtifact,
+    revealInProject,
     revealDiscussion,
     bindConversationTab,
     dropNoteConversationTab,
@@ -894,8 +910,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     createDraft,
     // FLO-FR-NRBV: a Flow task's Create draft.
     createNamedDraft,
-    // SMD-FR-HVBE: the map's New draft.
-    createDraftForMapNode,
     renameDraftTab,
     dropDraftTab,
     draftsRevision,

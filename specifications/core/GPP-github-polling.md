@@ -7,6 +7,7 @@ The backend that finds project work which is ready to start on GitHub and lets t
 
 ## Functional requirements
 1. **GPP-FR-WOIM** Every GitHub request of this module goes to the host of the polling repository through the GraphQL URL that `GTS-github-token-storage.md` GTS-FR-PDWB resolves from that host, authenticated with the secret the open project resolves through `GTS-github-token-storage.md` (GTS-FR-13). No secret is stored, copied, or returned in any polling state, view, event, error, log record, draft record, or project-local record.
+2. **GPP-FR-OVOS** The selected GitHub Project is also the project's delivery where the delivery source resolves to `github` (per `DSR-delivery-source.md` DSR-FR-AECK). A change of the selection changes which plan the Map tab shows.
 2. **GPP-FR-RGNM** The **polling repository** is the remote that `GHP-github-publication.md`'s `resolve_publication_repository()` resolves, with its persisted remote selection (GHP-FR-HVQG). Where it resolves none, a poll fails with that refusal code. This module stores no repository of its own.
 3. **GPP-FR-NLPG** The **polling settings** are one selected GitHub Project, stored as its stable node ID, one polling interval, and the names of the **Ready status** and the **In Progress status**. All four are project-public and are read and written through `PSS-project-settings-storage.md` (PSS-FR-OPQD). The **GitHub Project settings** section of the Settings window presents them beside the publication settings that `GHP-github-publication.md` (GHP-FR-KVRH) owns.
 4. **GPP-FR-HZDD** The interval is unset or one of `1`, `5`, `15`, `30`, and `60` minutes. `set_github_polling_settings` refuses any other value with `invalid_interval` and writes nothing.
@@ -49,7 +50,7 @@ The backend that finds project work which is ready to start on GitHub and lets t
 40. **GPP-FR-WKZF** Every failure of a poll, a claim, a retry, or an acknowledgement emits one log record through `LGC-logging.md` with the operation, the error code, and the issue number where one applies. No record carries a token, an `Authorization` header, an issue body, or a credentialed URL.
 41. **GPP-FR-SUFH** The typed error vocabulary is exactly `no_project_open`, `polling_unconfigured`, `polling_configuration_invalid`, `invalid_interval`, `duplicate_status_option`, `project_unavailable`, `status_field_missing`, `ready_option_missing`, `in_progress_option_missing`, the remote refusals of `GHP-github-publication.md` GHP-FR-ZRFP, `github_host_mismatch`, `github_unreachable`, `github_request_failed`, `task_not_ready`, `claim_pending`, `claim_in_progress`, `no_pending_claim`, `status_update_failed`, `pending_claim_write_failed`, `shadow_draft_create_failed`, and `issue_not_listed`.
 42. **GPP-FR-EWLZ** `poll_github_ready_tasks` with no Project selected refuses with `polling_unconfigured` and changes no row.
-43. **GPP-FR-JOKP** The publication settings of `GHP-github-publication.md` (GHP-FR-KVRH) change no polling setting, configuration state, snapshot row, claim, eligibility rule, or Status value. A poll and a claim read the `Task` Type of GPP-FR-BOQX and never the parent issue Types or the sub-issue Type. Saving either group of settings leaves the other group's stored values unchanged.
+43. **GPP-FR-JOKP** The publication settings of `GHP-github-publication.md` (GHP-FR-KVRH) change no polling setting, configuration state, snapshot row, claim, eligibility rule, or Status value. A poll and a claim read the `Task` Type of GPP-FR-BOQX and never the parent issue Types, the sub-issue Type, or the Type mapping of `DSR-delivery-source.md`. Saving either group of settings leaves the other group's stored values unchanged.
 44. **GPP-FR-HSTD** The Project listing, the Project item reads, the `Status` field and option reads, the Status update of a claim, and the issue re-fetch of a claim use the GraphQL URL of the host of the polling repository. Where the host of the token differs from the host of the polling repository, a poll refuses with `github_host_mismatch` and makes no request.
 45. **GPP-FR-HSTE** The issue URL of a row, a claim, and a shadow draft is the address that GitHub returned for the issue, on the host of the polling repository. A pending claim and a shadow-draft link keep the repository host with the owner and the name, and one stored without a host reads as `github.com`.
 
@@ -125,7 +126,7 @@ GithubClaimResult { draft_id, draft_name }
 - `"list github project statuses (project node id)"` → `list_github_project_statuses(project_node_id)` → `GithubProjectStatusOption[]` (GPP-FR-NNSJ).
 - `"set github polling settings (project node id, interval minutes, ready status, in progress status)"` → `set_github_polling_settings(project_node_id, interval_minutes, ready_status, in_progress_status)` → `GithubPollingView` (GPP-FR-IURX, GPP-FR-DBPI).
 - `"poll github ready tasks"` → `poll_github_ready_tasks()` → `GithubPollingView` (GPP-FR-XSKT, GPP-FR-XZTP).
-- `"claim github task (issue number)"` → `claim_github_task(issue_number)` → `GithubClaimResult` (GPP-FR-IFVC).
+- `"claim github task (issue number)"` → `claim_github_task(issue_number)` → `GithubClaimResult` (GPP-FR-IFVC). The claim, retry, and acknowledge commands are invoked by `../ui/GIT-git.md` (GIT-FR-NQTZ) and `../ui/MDL-map-delivery-lens.md` (MDL-FR-QEXS).
 - `"retry github claim (issue number)"` → `retry_github_claim(issue_number)` → `GithubClaimResult` (GPP-FR-TOED).
 - `"acknowledge github claim (issue number)"` → `acknowledge_github_claim(issue_number)` (GPP-FR-BSLI).
 - `"open github task issue (issue number)"` → `open_github_task_issue(issue_number)` (GPP-FR-WOLE).
@@ -133,7 +134,7 @@ GithubClaimResult { draft_id, draft_name }
 Every command errors with `no_project_open` when no project is open.
 
 ### Events
-- `"github polling changed"` — payload `{ new_issues: [{ issue_number, title }] }` (GPP-FR-TYOV). Consumed by `../ui/GIT-git.md`, `../ui/SET-project-settings.md`, and `../ui/NTF-notifications.md`.
+- `"github polling changed"` — payload `{ new_issues: [{ issue_number, title }] }` (GPP-FR-TYOV). Consumed by `../ui/GIT-git.md`, `../ui/SET-project-settings.md`, `../ui/NTF-notifications.md`, and `../ui/MDL-map-delivery-lens.md`.
 
 ### Consumed from other modules
 - `resolve_github_token_secret(remote_host)` — `GTS-github-token-storage.md` (GTS-FR-13).

@@ -354,7 +354,11 @@ export type DraftGraduationStub = {
 export function renderWorkspace(
   drafts = new DraftSessionStore(),
   /** NAW-FR-TXKN: the shell's open route, for a test that follows a plan tag. */
-  extra: { onOpenArtifact?: (item: OpenableArtifact) => void } = {},
+  extra: {
+    onOpenArtifact?: (item: OpenableArtifact) => void;
+    /** NAW-FR-PHGO: the shell's route to an item of the delivery. */
+    onShowDeliveryItem?: (itemId: string) => void;
+  } = {},
 ) {
   const onDraftChanged = vi.fn();
   const onGraduationStarted = vi.fn();
@@ -373,6 +377,7 @@ export function renderWorkspace(
       onArchived={onArchived}
       onNameChanged={onNameChanged}
       onOpenArtifact={extra.onOpenArtifact}
+      onShowDeliveryItem={extra.onShowDeliveryItem}
     />,
   );
   return {

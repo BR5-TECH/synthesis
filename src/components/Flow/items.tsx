@@ -1,25 +1,23 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
-import type {
-  FlowItem,
-  FlowPosition,
-  FlowSize,
-  SyncLink,
-} from "../../state/flowDocument";
-import type { ItemDeliveryState } from "../../types";
+import type { FlowItem, FlowPosition, FlowSize } from "../../state/flowDocument";
+import type { ItemDeliveryState, TrackerFacts } from "../../types";
 import { CommentMarkdown } from "../CommentMarkdown";
 import {
   BlockedMarker,
   DueDate,
   leafCountText,
-  LocalOnlyMark,
   OverlapMarker,
+  PendingMark,
   StatusChip,
+  TrackerStatusChip,
   TrackerTag,
 } from "./chips";
 import { isInteractive, type Reference, type ResizeSides } from "./geometry";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
+import { measureContainer } from "./measure";
+import type { ContainerMeasure } from "./useFlowLayout";
 import { ReferenceRows } from "./references";
 
 /** What an item shows of the delivery state and the overlaps. */
@@ -29,7 +27,12 @@ export interface ItemFacts {
   blockers: { id: string; name: string }[];
   /** FLO-FR-KWFH: the other items of each overlap and the shared paths. */
   overlap: { ids: string[]; names: string[]; paths: string[] } | null;
-  link?: SyncLink;
+  /** FLO-FR-ULEM: the tracker item of an item of a GitHub plan. */
+  tracker?: { repository: string; facts: TrackerFacts };
+  /** MDL-FR-PUCM: an edit of the item is pending. */
+  pending: boolean;
+  /** MDL-FR-PUCM / MDL-FR-HNLP: the error the host shows on the item. */
+  error?: string;
   references: Reference[];
 }
 
@@ -55,6 +58,47 @@ interface ItemViewBase {
   editingName: boolean;
   inert: boolean;
   handlers: ItemHandlers;
+  /**
+   * MDL-FR-XJBV: a rename is one edit when the field closes, not one per key,
+   * because each edit of a GitHub plan is a request.
+   */
+  renameOnEnd: boolean;
+}
+
+/** The field of a rename in progress. */
+function NameField({
+  item,
+  renameOnEnd,
+  handlers,
+  className,
+}: {
+  item: FlowItem;
+  renameOnEnd: boolean;
+  handlers: ItemHandlers;
+  className: string;
+}) {
+  const [text, setText] = useState(item.name);
+  const end = (keep: boolean) => {
+    if (renameOnEnd && keep && text !== item.name) handlers.onRename(text);
+    handlers.onEndRename();
+  };
+  return (
+    <input
+      className={`${className} ${className}--edit`}
+      aria-label="Item name"
+      autoFocus
+      value={renameOnEnd ? text : item.name}
+      onChange={(e) => {
+        if (renameOnEnd) setText(e.target.value);
+        else handlers.onRename(e.target.value);
+      }}
+      onBlur={() => end(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") end(true);
+        if (e.key === "Escape") end(false);
+      }}
+    />
+  );
 }
 
 /**
@@ -67,25 +111,22 @@ function ItemName({
   inert,
   handlers,
   className,
+  renameOnEnd,
 }: {
   item: FlowItem;
   editing: boolean;
   inert: boolean;
   handlers: ItemHandlers;
   className: string;
+  renameOnEnd: boolean;
 }) {
   if (editing && !inert) {
     return (
-      <input
-        className={`${className} ${className}--edit`}
-        aria-label="Item name"
-        autoFocus
-        value={item.name}
-        onChange={(e) => handlers.onRename(e.target.value)}
-        onBlur={handlers.onEndRename}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === "Escape") handlers.onEndRename();
-        }}
+      <NameField
+        item={item}
+        renameOnEnd={renameOnEnd}
+        handlers={handlers}
+        className={className}
       />
     );
   }
@@ -102,13 +143,23 @@ function ItemName({
   );
 }
 
-/** FLO-FR-IKMM / FLO-FR-KWFH: the markers an item carries. */
+/**
+ * MDL-FR-JPYU: the open blockers of a GitHub issue that are not in the plan,
+ * each named by its number and title.
+ */
+function externalBlockers(facts: ItemFacts): string[] {
+  return (facts.tracker?.facts.externalBlockers ?? []).map((b) => `#${b.number} ${b.title}`);
+}
+
+/** FLO-FR-IKMM / FLO-FR-KWFH / MDL-FR-PUCM: the markers an item carries. */
 function Markers({ facts, handlers }: { facts: ItemFacts; handlers: ItemHandlers }) {
+  const external = externalBlockers(facts);
   return (
     <>
-      {facts.state?.blocked && facts.blockers.length > 0 && (
+      {facts.pending && <PendingMark />}
+      {facts.state?.blocked && facts.blockers.length + external.length > 0 && (
         <BlockedMarker
-          blockers={facts.blockers.map((b) => b.name)}
+          blockers={[...facts.blockers.map((b) => b.name), ...external]}
           onActivate={() => handlers.onSelectItems(facts.blockers.map((b) => b.id))}
         />
       )}
@@ -135,11 +186,11 @@ export interface CardViewProps extends ItemViewBase {
 /**
  * FLO-FR-38: a task or a defect, drawn as a card: its glyph and name, its
  * status chip and markers, its draft row, its references, its description,
- * its tracker tag, and its local-only mark. Selection changes nothing in the
- * card: the editing controls are in the attached panel (FLO-FR-44 layout).
+ * and its tracker tag. Selection changes nothing in the card: the editing
+ * controls are in the attached panel (FLO-FR-44 layout).
  */
 export function CardView(props: CardViewProps) {
-  const { item, at, facts, selected, magnet, editingName, inert, handlers } = props;
+  const { item, at, facts, selected, magnet, editingName, inert, handlers, renameOnEnd } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const { onMeasure } = props;
 
@@ -169,6 +220,7 @@ export function CardView(props: CardViewProps) {
       data-kind={item.kind}
       data-selected={selected}
       data-magnet={magnet}
+      data-pending={facts.pending}
       style={{ left: at.x, top: at.y }}
       onPointerDown={(e) => {
         if (!isInteractive(e.target)) handlers.onDragStart(e);
@@ -185,11 +237,13 @@ export function CardView(props: CardViewProps) {
           inert={inert}
           handlers={handlers}
           className="flow-card__name"
+          renameOnEnd={renameOnEnd}
         />
       </div>
-      {(state || facts.overlap) && (
+      {(state || facts.overlap || facts.pending || facts.tracker?.facts.status) && (
         <div className="flow-card__row">
           <StatusChip state={state?.state} />
+          <TrackerStatusChip tracker={facts.tracker?.facts} />
           <Markers facts={facts} handlers={handlers} />
         </div>
       )}
@@ -238,6 +292,11 @@ export function CardView(props: CardViewProps) {
           {props.draftError}
         </div>
       )}
+      {facts.error && (
+        <div className="flow-card__error" role="alert" data-testid={`flow-item-error-${item.id}`}>
+          {facts.error}
+        </div>
+      )}
       <ReferenceRows references={facts.references} onOpen={handlers.onOpenReference} />
       {item.description && (
         <CommentMarkdown
@@ -246,10 +305,13 @@ export function CardView(props: CardViewProps) {
           testId={`flow-item-description-${item.id}`}
         />
       )}
-      {(facts.link || item.localOnly) && (
+      {facts.tracker && (
         <div className="flow-card__row">
-          {facts.link && <TrackerTag link={facts.link} onOpen={handlers.onOpenTracker} />}
-          {item.localOnly && <LocalOnlyMark />}
+          <TrackerTag
+            repository={facts.tracker.repository}
+            tracker={facts.tracker.facts}
+            onOpen={handlers.onOpenTracker}
+          />
         </div>
       )}
       <button
@@ -283,6 +345,13 @@ export interface ContainerViewProps extends ItemViewBase {
   duePast: boolean;
   onToggleCollapsed: () => void;
   onResizeStart: (sides: ResizeSides, e: React.PointerEvent) => void;
+  /** MDL-FR-ECPZ: report the room the header and the content need. */
+  onMeasure?: (id: string, measure: ContainerMeasure) => void;
+  /**
+   * FLO-FR-SQUS / FLO-FR-OGPF: the place of a milestone column in the
+   * milestone order, from 1. A column is not resized.
+   */
+  column?: number;
 }
 
 /**
@@ -292,10 +361,37 @@ export interface ContainerViewProps extends ItemViewBase {
  * press on its region is a press on the canvas.
  */
 export function ContainerView(props: ContainerViewProps) {
-  const { item, at, size, facts, selected, magnet, editingName, inert, handlers } = props;
+  const { item, at, size, facts, selected, magnet, editingName, inert, handlers, renameOnEnd } =
+    props;
   const label = `${kindLabel(item.kind)} ${item.name}`;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
+  const { onMeasure, collapsed } = props;
+  // MDL-FR-ECPZ: measure again when what the header or the content shows
+  // changes. A collapsed container shows no content, so it keeps its last.
+  const shows = [
+    item.name,
+    item.due ?? "",
+    item.description ?? "",
+    facts.references.length,
+    facts.state?.state ?? "",
+    facts.blockers.length,
+    facts.overlap?.ids.length ?? 0,
+    facts.tracker?.facts?.status ?? "",
+    facts.tracker?.facts?.ref.number ?? "",
+    facts.error ?? "",
+    editingName,
+    size.width,
+  ].join("\u0001");
+  useEffect(() => {
+    const root = rootRef.current;
+    const head = headRef.current;
+    if (!onMeasure || collapsed || !root || !head) return;
+    onMeasure(item.id, measureContainer(root, head));
+  }, [onMeasure, collapsed, item.id, shows]);
   return (
     <div
+      ref={rootRef}
       className="flow-ctr"
       role="group"
       aria-label={label}
@@ -305,10 +401,12 @@ export function ContainerView(props: ContainerViewProps) {
       data-selected={selected}
       data-magnet={magnet}
       data-collapsed={props.collapsed}
+      data-pending={facts.pending}
       style={{ left: at.x, top: at.y, width: size.width, height: size.height }}
       onPointerUp={handlers.onPointerUp}
     >
       <div
+        ref={headRef}
         className="flow-ctr__head"
         data-item-id={item.id}
         onPointerDown={(e) => {
@@ -324,6 +422,11 @@ export function ContainerView(props: ContainerViewProps) {
         >
           {props.collapsed ? "▸" : "▾"}
         </button>
+        {props.column !== undefined && (
+          <span className="flow-ctr__order" data-testid={`flow-column-order-${item.id}`}>
+            {props.column}
+          </span>
+        )}
         <span className="flow-glyph" aria-hidden="true">
           {KIND_GLYPHS[item.kind]}
         </span>
@@ -333,13 +436,20 @@ export function ContainerView(props: ContainerViewProps) {
           inert={inert}
           handlers={handlers}
           className="flow-ctr__name"
+          renameOnEnd={renameOnEnd}
         />
         {item.due && <DueDate due={item.due} past={props.duePast} />}
         <span className="flow-ctr__spacer" />
         <Markers facts={facts} handlers={handlers} />
         <StatusChip state={facts.state?.state} />
-        {facts.link && <TrackerTag link={facts.link} onOpen={handlers.onOpenTracker} />}
-        {item.localOnly && <LocalOnlyMark />}
+        <TrackerStatusChip tracker={facts.tracker?.facts} />
+        {facts.tracker && (
+          <TrackerTag
+            repository={facts.tracker.repository}
+            tracker={facts.tracker.facts}
+            onOpen={handlers.onOpenTracker}
+          />
+        )}
         <button
           type="button"
           className="flow-port flow-port--ctr"
@@ -348,6 +458,11 @@ export function ContainerView(props: ContainerViewProps) {
           onPointerDown={handlers.onConnectStart}
         />
       </div>
+      {facts.error && (
+        <div className="flow-card__error" role="alert" data-testid={`flow-item-error-${item.id}`}>
+          {facts.error}
+        </div>
+      )}
       {props.collapsed ? (
         <div className="flow-ctr__counts" data-testid={`flow-leaf-counts-${item.id}`}>
           {leafCountText(facts.state?.leafCounts, props.leaves)}
@@ -368,6 +483,7 @@ export function ContainerView(props: ContainerViewProps) {
       )}
       {!props.collapsed &&
         !inert &&
+        props.column === undefined &&
         RESIZE_HANDLES.map(([where, sides]) => (
           <span
             key={where}

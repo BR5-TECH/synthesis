@@ -4,6 +4,7 @@ import { isOpenSpecIndex, type MapRef } from "../../state/specMap/types";
 import type { MapView } from "../../state/specMap/session";
 import type { MapLayout } from "./layout";
 import { placeHoverCard } from "./zoom";
+import type { SpecLinks } from "../../state/delivery/specLinks";
 import { CompletenessBar } from "./CompletenessBar";
 
 interface HoverCardProps {
@@ -11,13 +12,15 @@ interface HoverCardProps {
   layout: MapLayout;
   rollups: Map<string, Rollup>;
   target: MapRef;
+  /** SDL-FR-SGQM: the delivery links, or null where none show. */
+  links?: SpecLinks | null;
   view: MapView;
   width: number;
   height: number;
 }
 
 /** SMN-FR-MVWA / SMN-FR-FXRL / SMN-FR-YSKQ: the card for the hovered node. */
-export function HoverCard({ tree, layout, rollups, target, view, width, height }: HoverCardProps) {
+export function HoverCard({ tree, layout, rollups, target, links, view, width, height }: HoverCardProps) {
   let content: {
     x: number;
     y: number;
@@ -34,6 +37,9 @@ export function HoverCard({ tree, layout, rollups, target, view, width, height }
     const chip = layout.chip.get(target.code);
     if (spec && chip) {
       const cites = tree.index.dependencies.filter((d) => d.from === spec.code).length;
+      // SDL-FR-SGQM: the meta line ends with the count of the items that link it.
+      const items = links?.bySpec.get(spec.code)?.length ?? 0;
+      const plannedMeta = items > 0 ? ` · ${items} ${items === 1 ? "plan item" : "plan items"}` : "";
       content = {
         x: chip.x,
         y: chip.y,
@@ -44,9 +50,10 @@ export function HoverCard({ tree, layout, rollups, target, view, width, height }
         summary: spec.summary,
         rollup: rollupOfSpec(spec),
         // SMN-FR-EIDC: an OpenSpec requirement cites nothing.
-        meta: isOpenSpecIndex(tree.index)
-          ? `${spec.scenarios} scenarios`
-          : `${spec.requirements} reqs · ${spec.scenarios} scenarios · cites ${cites}`,
+        meta:
+          (isOpenSpecIndex(tree.index)
+            ? `${spec.scenarios} scenarios`
+            : `${spec.requirements} reqs · ${spec.scenarios} scenarios · cites ${cites}`) + plannedMeta,
       };
     }
   } else if (target.kind === "index") {

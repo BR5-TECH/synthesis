@@ -1,171 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import * as api from "../api";
 import * as events from "../events";
-import { logError } from "../logging";
 import { Icon } from "./icons";
+import { DashWidget, WidgetNotice, useWidget } from "./dashboardWidget";
+import { localDate } from "./deliveryTimeline";
+import {
+  DeliveryWidget,
+  DELIVERY_ERROR_TEXT,
+  deliveryHasContent,
+  useDeliveryRefreshEvents,
+} from "./DashboardDelivery";
 import type {
   ActiveDraftItem,
   AgentRunItem,
   DashboardWidgetName,
+  DeliveryMilestones,
   OpenableArtifact,
   PendingGitActivity,
   RecentlyEditedArtifact,
 } from "../types";
-
-/**
- * DSH-FR-17 / DSH-FR-18 / DSH-FR-19: what one widget knows about its own data.
- *
- * The four states are deliberately not one enum: a widget that has rendered
- * once and is refreshing holds `data` **and** `stale`, because DSH-FR-18 forbids
- * blanking a widget the author is reading. `error` likewise sits beside `data`
- * rather than replacing it, so the widget can leave the error state on its next
- * successful result without having lost what it was showing.
- */
-interface WidgetState<T> {
-  data: T | null;
-  error: string | null;
-  /** No result has arrived yet — the widget has nothing to show but itself. */
-  loading: boolean;
-  /** A refresh is outstanding over data already rendered. */
-  stale: boolean;
-}
-
-const INITIAL: WidgetState<never> = {
-  data: null,
-  error: null,
-  loading: true,
-  stale: false,
-};
-
-/**
- * One widget's loader, its result guard, and its error state.
- *
- * **DSH-FR-19 lives here.** Every invocation takes the next sequence number and
- * only the newest may settle, so two outstanding calls can never let a slow one
- * replace fresher data with older — and `reset` bumps the same counter, which is
- * what discards every outstanding result when the project or the active worktree
- * changes rather than rendering it against the new root.
- *
- * Nothing is awaited by the caller (DSH-FR-17): `refresh` dispatches and
- * returns, so a slow loader leaves its own widget in a loading state while every
- * other widget renders.
- */
-function useWidget<T>(
-  widget: DashboardWidgetName,
-  load: () => Promise<T>,
-): {
-  state: WidgetState<T>;
-  refresh: () => void;
-  /** DSH-FR-18: enter the error state from `"dashboard refresh failed"`. */
-  fail: (reason: string) => void;
-  reset: () => void;
-} {
-  const [state, setState] = useState<WidgetState<T>>(INITIAL);
-  // Not React state: the guard has to be readable by a promise that settles
-  // after a re-render, and a stale closure over a `useState` value would let an
-  // overtaken result through.
-  const seq = useRef(0);
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-
-  const refresh = useCallback(() => {
-    const mine = ++seq.current;
-    setState((previous) =>
-      previous.data === null && previous.error === null
-        ? { ...previous, loading: true }
-        : { ...previous, stale: true },
-    );
-    load().then(
-      (data) => {
-        if (!live.current || mine !== seq.current) return;
-        setState({ data, error: null, loading: false, stale: false });
-      },
-      (reason: unknown) => {
-        if (!live.current || mine !== seq.current) return;
-        const message = String(reason);
-        // A loader that fails is the one thing about this surface a reader will
-        // come to the Logs panel for, and it is otherwise invisible: it is
-        // handled, so only one widget's content area changes. The widget's name
-        // and the failure's summary are structural — neither carries a path's
-        // contents or anything the loaders read.
-        logError(["frontend"], "dashboard widget loader failed", {
-          widget,
-          reason: message,
-        });
-        setState((previous) => ({
-          data: previous.data,
-          error: message,
-          loading: false,
-          stale: false,
-        }));
-      },
-    );
-  }, [load, widget]);
-
-  const fail = useCallback((reason: string) => {
-    setState((previous) => ({
-      data: previous.data,
-      error: reason,
-      loading: false,
-      stale: false,
-    }));
-  }, []);
-
-  const reset = useCallback(() => {
-    // Bumping the sequence is what discards every outstanding result; the state
-    // goes back to loading because what it holds describes the outgoing root.
-    seq.current += 1;
-    setState(INITIAL);
-  }, []);
-
-  return { state, refresh, fail, reset };
-}
-
-interface DashWidgetProps {
-  title: string;
-  count?: number;
-  /** DSH-FR-18: a refresh is outstanding over data already rendered. */
-  stale?: boolean;
-  children: ReactNode;
-}
-
-function DashWidget({ title, count, stale, children }: DashWidgetProps) {
-  return (
-    <div className="dash-widget" data-stale={stale ? "true" : undefined}>
-      <div className="dash-widget__head">
-        <span className="dash-widget__title">{title}</span>
-        {stale && (
-          <span className="dash-widget__stale" title="Refreshing…">
-            Refreshing…
-          </span>
-        )}
-        {count != null && <span className="dash-widget__count">{count}</span>}
-      </div>
-      <div className="dash-widget__body">{children}</div>
-    </div>
-  );
-}
-
-/**
- * DSH-FR-17 / DSH-FR-18: a widget's content area while it has no rows to show —
- * still loading, failed to read, or genuinely empty.
- *
- * All three read as one centred line rather than three layouts, because they are
- * the same thing to the eye: the widget is present and has nothing in it yet.
- */
-function WidgetNotice({ kind, children }: { kind: "empty" | "loading" | "error"; children: ReactNode }) {
-  return (
-    <div className={`dash-row__empty dash-row__empty--${kind}`} role={kind === "error" ? "alert" : undefined}>
-      {children}
-    </div>
-  );
-}
 
 interface DashRowProps {
   name: string;
@@ -275,7 +129,20 @@ interface DashboardProps {
    * `onOpenRuns` where the shell supplies no per-run route.
    */
   onOpenRun?: (runId: string) => void;
+  /**
+   * DSH-FR-DFDW / MDL-FR-JIKK: open the Map tab on its Delivery lens. With an
+   * item id, the lens selects that milestone; with null (the widget header),
+   * it opens on the lens alone.
+   */
+  onShowDeliveryItem?: (itemId: string | null) => void;
+  /**
+   * The clock the Delivery widget reads today from (DSH-FR-NZXN,
+   * DSH-FR-NNWM). Tests give a fixed one, so no result depends on real time.
+   */
+  clock?: () => Date;
 }
+
+const systemClock = () => new Date();
 
 export function Dashboard({
   onOpenArtifact,
@@ -283,6 +150,8 @@ export function Dashboard({
   onOpenGit,
   onOpenDraft,
   onOpenRun,
+  onShowDeliveryItem,
+  clock = systemClock,
 }: DashboardProps) {
   const recent = useWidget<RecentlyEditedArtifact[]>(
     "recently_edited",
@@ -291,6 +160,11 @@ export function Dashboard({
   const drafts = useWidget<ActiveDraftItem[]>("active_drafts", api.listActiveDrafts);
   const runs = useWidget<AgentRunItem[]>("agent_activity", api.listRecentAgentRuns);
   const git = useWidget<PendingGitActivity>("pending_git", api.listPendingGitActivity);
+  // DSH-FR-YAZR: the Delivery widget reads with `refresh` false when the
+  // Dashboard renders.
+  const loadDelivery = useCallback(() => api.loadDeliveryMilestones(false), []);
+  const delivery = useWidget<DeliveryMilestones>("delivery", loadDelivery, DELIVERY_ERROR_TEXT);
+  const today = localDate(clock());
 
   // DSH-FR-17: every loader is invoked asynchronously and none is waited for.
   // Widgets render as their results arrive, in whatever order they arrive.
@@ -298,12 +172,17 @@ export function Dashboard({
   const { refresh: refreshDrafts } = drafts;
   const { refresh: refreshRuns } = runs;
   const { refresh: refreshGit } = git;
+  const { refresh: refreshDelivery } = delivery;
   useEffect(() => {
     refreshRecent();
     refreshDrafts();
     refreshRuns();
     refreshGit();
-  }, [refreshRecent, refreshDrafts, refreshRuns, refreshGit]);
+    refreshDelivery();
+  }, [refreshRecent, refreshDrafts, refreshRuns, refreshGit, refreshDelivery]);
+
+  // DSH-FR-LGJT: the Delivery widget's own refresh events.
+  useDeliveryRefreshEvents(refreshDelivery);
 
   // DSH-FR-15 / DSH-FR-16: each refresh event names one loader to re-invoke.
   // This surface starts no timer of its own and polls nothing — the 5-minute
@@ -359,6 +238,7 @@ export function Dashboard({
   const { reset: resetDrafts } = drafts;
   const { reset: resetRuns } = runs;
   const { reset: resetGit } = git;
+  const { reset: resetDelivery } = delivery;
   useEffect(() => {
     let cancelled = false;
     const pending = events.onWorktreeContextChanged(() => {
@@ -366,10 +246,12 @@ export function Dashboard({
       resetDrafts();
       resetRuns();
       resetGit();
+      resetDelivery();
       refreshRecent();
       refreshDrafts();
       refreshRuns();
       refreshGit();
+      refreshDelivery();
     });
     void pending.then((un) => {
       if (cancelled) un();
@@ -383,10 +265,12 @@ export function Dashboard({
     resetDrafts,
     resetRuns,
     resetGit,
+    resetDelivery,
     refreshRecent,
     refreshDrafts,
     refreshRuns,
     refreshGit,
+    refreshDelivery,
   ]);
 
   // DSH-FR-06: route by artifact kind — a Flow opens the Flow tab, every other
@@ -414,8 +298,9 @@ export function Dashboard({
     git.state.loading || git.state.error !== null || hasPendingGitContent(gitActivity);
   const recentHasOwnContent =
     recent.state.loading || recent.state.error !== null || recentItems.length > 0;
+  const deliveryVisible = deliveryHasContent(delivery.state);
   const dashboardHasContent =
-    recentHasOwnContent || draftsVisible || runsVisible || gitVisible;
+    recentHasOwnContent || draftsVisible || runsVisible || gitVisible || deliveryVisible;
 
   if (!dashboardHasContent) {
     return (
@@ -540,6 +425,16 @@ export function Dashboard({
             ))
           )}
         </DashWidget>
+      )}
+
+      {/* DSH-FR-AHRJ: the Delivery widget is the full-width last row, below the
+          grid of the other widgets, and its place is fixed. */}
+      {deliveryVisible && (
+        <DeliveryWidget
+          state={delivery.state}
+          today={today}
+          onShow={(itemId) => onShowDeliveryItem?.(itemId)}
+        />
       )}
     </div>
   );

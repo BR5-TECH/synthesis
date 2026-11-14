@@ -2,8 +2,7 @@
  * The Map tab over an OpenSpec index (`../../../specifications/ui/SMP-specification-map.md`
  * SMP-FR-MNZW, SMP-FR-KVKD, SMP-FR-KBXW; `SMN-specification-map-nodes.md`,
  * `SMI-specification-map-inspector.md`, `SME-specification-map-edges.md`
- * SME-FR-XLUQ, `SMO-specification-map-organization.md` SMO-FR-RVAV,
- * `SMD-specification-map-drafts.md` SMD-FR-YQSR).
+ * SME-FR-XLUQ).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -395,7 +394,7 @@ describe("the inspector (SMI)", () => {
     });
   });
 
-  it("SMI-FR-ZMZB, SMD-FR-YQSR: a click on a change chip shows the change, its location, its capability and its issues, with no New draft", async () => {
+  it("SMI-FR-ZMZB, SMI-FR-UKIV: a click on a change chip shows the change, its location, its capability and its issues, with Open change as its one action", async () => {
     const { store } = await renderMap({ index: openspecIndex() });
     setView(store, { level: 2 });
     fireEvent.click(nodeButton("change add-logout, active worktree, on Authentication"));
@@ -404,7 +403,8 @@ describe("the inspector (SMI)", () => {
     expect(within(pane).getByTestId("spec-map-change-location")).toHaveTextContent("active worktree");
     expect(within(pane).getByTestId("spec-map-change-holder")).toHaveTextContent("Authentication");
     expect(within(pane).getByRole("note")).toHaveTextContent("ERROR — delta has no scenario");
-    expect(within(pane).queryByRole("button", { name: /New draft/ })).toBeNull();
+    const actions = pane.querySelector(".smap-actions")!;
+    expect([...actions.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Open change"]);
 
     fireEvent.click(nodeButton("change add-logout, editor-work, on Authentication"));
     expect(within(inspector()).getByTestId("spec-map-change-location")).toHaveTextContent("editor-work");
@@ -436,68 +436,5 @@ describe("the inspector (SMI)", () => {
     // A path no capability has changes nothing.
     act(() => store.selectByPath("openspec/specs/none/spec.md"));
     expect(store.snapshot().selection).toEqual({ kind: "index", id: "capability:billing/pay" });
-  });
-});
-
-describe("no organization (SMO-FR-RVAV, SMD-FR-YQSR)", () => {
-  it("SMO-FR-RVAV: the inspector offers no New, Rename, or Delete, with or without a subject", async () => {
-    const { store } = await renderMap({ index: openspecIndex() });
-    expect(within(inspector()).queryByRole("button", { name: /^New / })).toBeNull();
-    act(() => store.select({ kind: "index", id: "group:/" }));
-    const pane = inspector();
-    expect(within(pane).queryByRole("button", { name: "New capability" })).toBeNull();
-    expect(within(pane).queryByRole("button", { name: "Rename" })).toBeNull();
-    expect(within(pane).queryByRole("button", { name: "Delete" })).toBeNull();
-    expect(within(pane).getByRole("button", { name: "Open group" })).toBeInTheDocument();
-  });
-
-  it("SMO-FR-RVAV: no drag starts, and no organization edit is applied or saved", async () => {
-    mockCanvasRect({ width: 1200, height: 800 });
-    const { store, ops, container } = await renderMap({ index: openspecIndex() });
-    setView(store, { level: 2 });
-    const before = store.snapshot().index;
-    fireEvent.pointerDown(nodeButton("auth#1 auth requirement 1"), {
-      button: 0,
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 400, clientY: 300 });
-    expect(container.querySelector(".smap-ghost")).toBeNull();
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 400, clientY: 300 });
-    expect(store.snapshot().index).toBe(before);
-
-    let applied = true;
-    act(() => {
-      applied = store.dispatch({
-        kind: "create",
-        parentId: null,
-        node: { id: "n-1", label: "New", summary: "" },
-      });
-    });
-    expect(applied).toBe(false);
-    expect(ops.saveOrganization).not.toHaveBeenCalled();
-  });
-
-  it("SMD-FR-YQSR: New draft is offered on a group and on a capability, and a planned chip is placed but not dragged", async () => {
-    mockCanvasRect({ width: 1200, height: 800 });
-    const { store, ops, onNewDraft, container } = await renderMap({ index: openspecIndex() });
-    act(() => store.select({ kind: "index", id: "group:billing" }));
-    fireEvent.click(within(inspector()).getByRole("button", { name: /New draft/ }));
-    expect(onNewDraft).toHaveBeenLastCalledWith("group:billing");
-    act(() => store.select({ kind: "index", id: "capability:auth" }));
-    fireEvent.click(within(inspector()).getByRole("button", { name: /New draft/ }));
-    expect(onNewDraft).toHaveBeenLastCalledWith("capability:auth");
-
-    act(() => {
-      store.dispatch({ kind: "attachDraft", nodeId: "capability:auth", draft: { draftId: "dr", name: "Plan" } });
-    });
-    expect(ops.attachDraft).toHaveBeenCalledWith({ draftId: "dr", nodeId: "capability:auth" });
-    setView(store, { level: 2 });
-    fireEvent.pointerDown(nodeButton("draft Plan"), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 400, clientY: 300 });
-    expect(container.querySelector(".smap-ghost")).toBeNull();
-    fireEvent.pointerUp(window, { pointerId: 1 });
-    expect(store.tree()!.plannedParent.get("dr")).toBe("capability:auth");
   });
 });

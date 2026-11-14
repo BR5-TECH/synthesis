@@ -33,7 +33,7 @@ export const DASHBOARD_TAB: Tab = Object.freeze({
  */
 export const SPEC_MAP_TAB: Tab = Object.freeze({
   id: "map:specifications",
-  label: "Map — specifications",
+  label: "Map",
   kind: "map",
 });
 

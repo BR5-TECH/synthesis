@@ -601,16 +601,24 @@ export function AppShell(props: AppShellProps) {
                 // draft renamed since the widget last read it is still the one
                 // that opens.
                 onOpenDraft={(draftId) => void s.openDraftById(draftId)}
+                // DSH-FR-DFDW / NAW-FR-PHGO / MDL-FR-JIKK: the Map tab on its
+                // Delivery lens, with the item selected.
+                onShowDeliveryItem={s.showDeliveryItem}
                 // FLO-FR-NRBV: a Flow task's Create draft names the draft after
                 // the task, and the Flow opens it once it stored the link.
                 onCreateDraftForFlow={s.createNamedDraft}
                 onOpenDraftTab={s.openDraft}
-                // SMP-FR-QNUH / SMD-FR-HVBE: the Map tab renders from the shell's
-                // map session, and its New draft runs the Drafts panel's creation.
+                // SMP-FR-QNUH: the Map tab renders from the shell's map session.
                 specMap={s.specMap}
-                onNewDraftForMapNode={(nodeId) => void s.createDraftForMapNode(nodeId)}
                 // SNV-FR-56: a map dialog closes every other floating overlay.
                 onOverlayOpening={closeOtherOverlays}
+                // MDL-FR-QEXS / MDL-FR-UKGH: the claim flow of the Ready tasks
+                // section, on a task of the Delivery lens.
+                githubPolling={githubPolling}
+                // MDL-FR-XMQU / MDL-FR-WAOZ: the routes to Project settings.
+                onOpenProjectSettings={(section) => s.openProjectSettings(section)}
+                // MDL-FR-DHHW / LIB-FR-18: the band's Flow path reveals the file.
+                onRevealInProject={s.revealInProject}
               />
             </TabScrollScope>
           </div>

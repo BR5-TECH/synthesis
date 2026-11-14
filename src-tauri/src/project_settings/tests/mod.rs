@@ -57,11 +57,11 @@ fn docker_root() -> (tempfile::TempDir, crate::fs::RootFs) {
 }
 
 mod changes_panel;
+mod delivery_settings;
 mod docker_images;
 mod docker_in_docker;
 mod draft_template;
 mod drafts_panel;
-mod flow_tracker_settings;
 mod github_polling;
 mod graduation_concurrency;
 mod graduation_loop_settings;

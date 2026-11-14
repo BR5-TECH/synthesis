@@ -131,6 +131,19 @@ impl Response {
     }
 }
 
+/// The parts of a [`Request`] that a test reads (`Request::test_view`).
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct RequestView {
+    pub method: String,
+    pub url: String,
+    /// Each header by its lower-case name: its value, and whether it is a
+    /// credential.
+    pub headers: std::collections::BTreeMap<String, (String, bool)>,
+    pub body: Option<String>,
+    pub invalid_header: bool,
+}
+
 /// One request and the rules it is sent with.
 #[derive(Debug)]
 pub struct Request {
@@ -264,6 +277,29 @@ impl Request {
     pub fn direct(mut self, direct: bool) -> Self {
         self.direct = direct;
         self
+    }
+
+    /// What the request would send, so that a test of a caller can check how
+    /// it builds a request without a network: the method, the URL, the value
+    /// of each header by its lower-case name, whether that header is a
+    /// credential, and the body as text.
+    #[cfg(test)]
+    pub(crate) fn test_view(&self) -> RequestView {
+        RequestView {
+            method: self.method.as_str().to_string(),
+            url: self.url.clone(),
+            headers: self
+                .headers
+                .iter()
+                .map(|(name, value)| {
+                    let text = value.to_str().unwrap_or_default().to_string();
+                    let credential = self.credentials.contains(name);
+                    (name.as_str().to_string(), (text, credential))
+                })
+                .collect(),
+            body: self.body.as_ref().map(|b| String::from_utf8_lossy(b).into_owned()),
+            invalid_header: self.invalid_header,
+        }
     }
 
     /// Send the request with the shared roots of this run.

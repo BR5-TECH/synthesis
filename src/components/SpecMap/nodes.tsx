@@ -13,7 +13,6 @@ import {
   changesUnder,
   indexChildren,
   isWithin,
-  plannedUnder,
   specFolder,
   type TreeIndex,
 } from "../../state/specMap/tree";
@@ -21,9 +20,9 @@ import { EMPTY_ROLLUP, type Rollup } from "../../state/specMap/rollups";
 import { changeLocationLabel, sameRef, type MapRef } from "../../state/specMap/types";
 import type { LayoutBox, LayoutChip, MapLayout } from "./layout";
 import { CompletenessBar, Counts } from "./CompletenessBar";
+import { holdsUnplanned, isUnplanned, type SpecLinks } from "../../state/delivery/specLinks";
 
 export interface NodeHandlers {
-  pointerDown: (ref: MapRef) => (e: PointerEvent<HTMLElement>) => void;
   select: (ref: MapRef) => void;
   hover: (ref: MapRef | null) => void;
 }
@@ -48,12 +47,17 @@ function hueStyle(hue: string | undefined): CSSProperties | undefined {
   } as CSSProperties;
 }
 
+/** SMZ-FR-KAHU: a press on a node never pans the canvas. */
+function keepFromPan(e: PointerEvent<HTMLElement>) {
+  if (e.button === 0) e.stopPropagation();
+}
+
 function interaction(ref: MapRef, label: string, handlers: NodeHandlers) {
   return {
     role: "button" as const,
     tabIndex: 0,
     "aria-label": label,
-    onPointerDown: handlers.pointerDown(ref),
+    onPointerDown: keepFromPan,
     onClick: () => handlers.select(ref),
     onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -76,9 +80,11 @@ export interface NodeLayerProps {
   selection: MapRef | null;
   active: MapRef | null;
   gapsOnly: boolean;
+  /** SDL-FR-SGQM: the delivery links, or null where none show. */
+  links?: SpecLinks | null;
+  /** SDL-FR-KXCY: the **unplanned** filter is on. */
+  unplanned?: boolean;
   related: Set<string> | null;
-  dragging: MapRef | null;
-  dropId: string | null;
   handlers: NodeHandlers;
 }
 
@@ -102,8 +108,8 @@ function MapBox({
   selection,
   active,
   gapsOnly,
-  dragging,
-  dropId,
+  links,
+  unplanned,
   handlers,
 }: NodeLayerProps & { box: LayoutBox }) {
   const node = tree.nodes.get(box.id)!;
@@ -114,26 +120,24 @@ function MapBox({
   // SMN-FR-KTZB: the root and branch that contain the active node.
   const context =
     !selected && box.role !== "leafGroup" && active !== null && isWithin(tree, active, box.id);
-  // SMO-FR-DKTM / SMN-FR-HLDQ
-  const dim = sameRef(dragging, ref)
-    ? "drag"
-    : gapsOnly && r.gap === 0 && r.drafted === 0
+  // SMN-FR-HLDQ / SDL-FR-KXCY
+  const dim =
+    gapsOnly && r.gap === 0 && r.drafted === 0
       ? "gaps"
-      : undefined;
-  // SMD-FR-ULTF: a node that does not show its planned chips counts them.
-  const planned = box.shape === "expanded" ? 0 : plannedUnder(tree, box.id);
-  // SMN-FR-YEVY: and the changes beneath it, each in its location.
+      : unplanned && links && !holdsUnplanned(links, tree, box.id)
+        ? "unplanned"
+        : undefined;
+  // SMN-FR-YEVY: a node that does not show its change chips counts the changes
+  // beneath it, each in its location.
   const changes = box.shape === "expanded" ? 0 : changesUnder(tree, box.id);
-  const plannedMeta =
-    (planned > 0 ? ` · +${planned} planned` : "") +
-    (changes > 0 ? ` · +${changes} ${changes === 1 ? "change" : "changes"}` : "");
+  const changeMeta =
+    changes > 0 ? ` · +${changes} ${changes === 1 ? "change" : "changes"}` : "";
   const attrs = {
     ...interaction(ref, `${node.label}, ${levels[box.depth]?.singular ?? ""}`, handlers),
     "data-shape": box.shape,
     "data-selected": selected || undefined,
     "data-context": context || undefined,
     "data-dim": dim,
-    "data-drop": dropId === box.id || undefined,
     // SMN-FR-VNTJ: a capability a change names and the live specs do not hold.
     "data-planned": node.plannedCapability || undefined,
     style: { left: box.x, top: box.y, width: box.w, height: box.h },
@@ -149,9 +153,9 @@ function MapBox({
         <div className="smap-root__head">
           <span className="smap-swatch" style={hueStyle(node.hue)} />
           <span className="smap-root__label">{node.label}</span>
-          <span className="smap-root__meta" title={`${meta}${plannedMeta}`}>
+          <span className="smap-root__meta" title={`${meta}${changeMeta}`}>
             {meta}
-            {plannedMeta}
+            {changeMeta}
           </span>
         </div>
         {box.shape === "overview" && (
@@ -172,9 +176,9 @@ function MapBox({
       <div className="smap-node smap-box" data-role="branch" {...attrs}>
         <div className="smap-box__head">
           <span className="smap-box__label">{node.label}</span>
-          <span className="smap-box__meta" title={`${r.specs} specs${plannedMeta}`}>
+          <span className="smap-box__meta" title={`${r.specs} specs${changeMeta}`}>
             {r.specs} specs
-            {plannedMeta}
+            {changeMeta}
           </span>
         </div>
         {box.shape === "collapsed" && <div className="smap-box__summary">{node.summary}</div>}
@@ -191,9 +195,9 @@ function MapBox({
         <span className="smap-box__label">{node.label}</span>
         {node.plannedCapability && <span className="smap-box__planned">planned</span>}
         <CompletenessBar rollup={r} variant="mini" />
-        <span className="smap-box__meta" title={`${r.specs}${plannedMeta}`}>
+        <span className="smap-box__meta" title={`${r.specs}${changeMeta}`}>
           {r.specs}
-          {plannedMeta}
+          {changeMeta}
         </span>
       </div>
       <div className="smap-box__summary">{node.summary}</div>
@@ -206,8 +210,9 @@ function MapChip({
   tree,
   selection,
   gapsOnly,
+  links,
+  unplanned,
   related,
-  dragging,
   handlers,
 }: NodeLayerProps & { chip: LayoutChip }) {
   const style = { left: chip.x, top: chip.y, width: chip.w };
@@ -233,39 +238,27 @@ function MapChip({
       </div>
     );
   }
-  if (chip.kind === "planned") {
-    const draft = tree.planned.get(chip.key)!;
-    const ref: MapRef = { kind: "planned", draftId: chip.key };
-    return (
-      <div
-        className="smap-node smap-chip smap-chip--planned"
-        {...interaction(ref, `draft ${draft.name}`, handlers)}
-        data-selected={sameRef(selection, ref) || undefined}
-        data-dim={sameRef(dragging, ref) ? "drag" : undefined}
-        style={style}
-      >
-        <span className="smap-code smap-code--draft">draft</span>
-        <span className="smap-chip__label">{draft.name}</span>
-      </div>
-    );
-  }
   const spec = tree.specs.get(chip.key)!;
   const ref: MapRef = { kind: "spec", code: spec.code };
   const selected = sameRef(selection, ref);
-  // SMO-FR-DKTM, SME-FR-WRPX, SMN-FR-HLDQ
-  const dim = sameRef(dragging, ref)
-    ? "drag"
-    : related && !selected && !related.has(spec.code)
+  // SME-FR-WRPX, SMN-FR-HLDQ, SDL-FR-KXCY
+  const dim =
+    related && !selected && !related.has(spec.code)
       ? "related"
       : gapsOnly && spec.state !== "gap"
         ? "gaps"
-        : undefined;
+        : unplanned && links && !isUnplanned(links, spec.code, spec.state)
+          ? "unplanned"
+          : undefined;
+  // SDL-FR-SGQM: a spec node that a delivery item links carries the planned mark.
+  const linked = links?.bySpec.has(spec.code) ?? false;
   return (
     <div
       className="smap-node smap-chip"
       {...interaction(ref, `${spec.code} ${spec.label}`, handlers)}
       data-selected={selected || undefined}
       data-dim={dim}
+      data-plan-linked={linked || undefined}
       style={style}
     >
       {/* SMN-FR-PMZM: the badge of the node where it carries one. */}

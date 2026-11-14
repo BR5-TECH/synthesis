@@ -5,6 +5,7 @@
 
 export * from "./core";
 export * from "./flowPlan";
+export * from "./delivery";
 export * from "./changes";
 export * from "./diff";
 export * from "./search";

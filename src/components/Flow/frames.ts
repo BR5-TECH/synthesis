@@ -30,8 +30,8 @@ export interface EdgeRoute {
  * FLO-FR-48, FLO-FR-ZASL).
  *
  * A factory and not free functions, because it reads the live document, the
- * positions an in-flight drag or resize gives, the card heights that the cards
- * report, and the collapse state.
+ * positions and sizes of the layout with an in-flight drag or resize applied,
+ * the card heights that the cards report, and the collapse state.
  */
 export function createFrames(ctx: {
   doc: FlowDocument | null;
@@ -60,7 +60,7 @@ export function createFrames(ctx: {
     if (!item) return null;
     const at = absOf(id);
     if (isContainerKind(item.kind)) {
-      const size = sizeOf(id) ?? item.size ?? { width: CARD_W, height: CARD_H };
+      const size = sizeOf(id) ?? { width: CARD_W, height: CARD_H };
       return {
         x: at.x,
         y: at.y,

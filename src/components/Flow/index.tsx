@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 
 import {
   ancestorsOf,
@@ -7,7 +7,6 @@ import {
   isContainerKind,
   ITEM_KINDS,
   leavesUnder,
-  syncLinkOf,
   type FlowDocument,
   type FlowItem,
 } from "../../state/flowDocument";
@@ -15,16 +14,26 @@ import type { FlowViolation } from "../../types";
 import { ActionControl } from "../ActionControl";
 import { Icon } from "../icons";
 import { Band } from "./Band";
-import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges } from "./edges";
+import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges, SequenceArrows } from "./edges";
 import { edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
 import { CardView, ContainerView, type ItemFacts, type ItemHandlers } from "./items";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { SelectionPanel } from "./SelectionPanel";
-import { SyncReview } from "./SyncReview";
+import { useCanvasHandle, type FlowCanvasHandle } from "./useCanvasHandle";
 import { useFlowCanvas, type FlowCanvasProps } from "./useFlowCanvas";
 import { useItemActions } from "./useItemActions";
 
-export type { CreatedDraftOutcome, FlowCanvasProps } from "./useFlowCanvas";
+export type { CreatedDraftOutcome, FlowCanvasProps, FlowViewState } from "./useFlowCanvas";
+export type { FlowCanvasHandle, FlowTaskRequest } from "./useCanvasHandle";
+export {
+  fileBinding,
+  type FlowBinding,
+  type FlowFileBinding,
+  type FlowPlanAnswer,
+  type FlowPlanBinding,
+  type FlowPlanChange,
+  type FlowRemovalRequest,
+} from "./binding";
 
 /** FLO-FR-05 / FLO-FR-47: the violations a report named, each at its item or edge. */
 function ViolationList({
@@ -52,19 +61,32 @@ function ViolationList({
 }
 
 /**
- * `FLO-flow.md`: the Flow tab, a delivery plan on a canvas.
+ * `FLO-flow.md`: the Flow canvas, a delivery plan on a canvas. It runs with a
+ * binding (`./binding.ts`): a Flow file, in a Flow tab or in the Delivery lens,
+ * or a plan the host holds, a GitHub plan in the Delivery lens
+ * (MDL-FR-XJBV). A host reaches the mounted canvas through `ref`
+ * (`FlowCanvasHandle`).
  *
- * The plan lives in the shell's `FlowSessionStore` (FLO-FR-30), so a tab
- * switch neither reloads it nor loses its edits. Selection, pan, zoom, and
- * collapse are view state of this canvas (FLO-FR-22). Items are laid out flat
- * in canvas coordinates: containers first, outermost first, then the edges,
- * then the cards.
+ * A file binding's plan lives in the shell's `FlowSessionStore` (FLO-FR-30), so
+ * a tab switch neither reloads it nor loses its edits. Selection, pan, and zoom
+ * are view state of this canvas (FLO-FR-22); positions, sizes, and collapse are
+ * the per-machine layout (FLO-FR-21). Items are drawn flat in canvas
+ * coordinates: containers first, outermost first, then the edges, then the
+ * cards.
  */
-export function FlowCanvas(props: FlowCanvasProps) {
-  const { flowId } = props;
+export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle> }) {
   const c = useFlowCanvas(props);
   const a = useItemActions(c, props);
-  const { doc, session, sync, delivery, project, frames, view, inert } = c;
+  useCanvasHandle(c, props.ref);
+  const { doc, session, delivery, project, frames, view, inert, source } = c;
+  // MDL-FR-GDUP: the host reads the leaf states for the roll-up of its toolbar.
+  const statesOut = useRef(props.onDeliveryStates);
+  statesOut.current = props.onDeliveryStates;
+  useEffect(() => {
+    statesOut.current?.(delivery.states);
+  }, [delivery.states]);
+  const flowId = source.flowId;
+  const planMode = source.mode === "plan";
   /** The measured height of the selected item's panel content. */
   const [panelHeight, setPanelHeight] = useState<{ id: string; height: number } | null>(null);
   const selectedId = c.selected?.id ?? null;
@@ -119,7 +141,11 @@ export function FlowCanvas(props: FlowCanvasProps) {
               paths: [...overlap.paths],
             }
           : null,
-      link: doc ? syncLinkOf(doc, item.id) : undefined,
+      ...(source.repository && source.tracker.get(item.id)
+        ? { tracker: { repository: source.repository, facts: source.tracker.get(item.id)! } }
+        : {}),
+      pending: source.pending.has(item.id),
+      ...(source.itemErrors[item.id] ? { error: source.itemErrors[item.id] } : {}),
       references: resolveReferences(item.artifactIds, byId, project.loaded),
     };
   };
@@ -200,21 +226,24 @@ export function FlowCanvas(props: FlowCanvasProps) {
 
   const flowRefs = doc ? resolveReferences(doc.references, byId, project.loaded) : [];
 
+  const ready = source.loaded && doc !== null && c.layoutReady;
+
   return (
-    <div className="flow-surface" data-syncing={inert}>
+    <div className="flow-surface" data-inert={inert}>
       <Band
         doc={doc}
         references={flowRefs}
         artifacts={project.referenceable}
-        sync={sync}
+        inert={inert}
+        readOnlyMeta={planMode}
+        extras={props.bandExtras}
         onName={a.setFlowNameTo}
         onDescription={a.setFlowDescriptionTo}
         onAddReference={a.addFlowRef}
         onRemoveReference={a.removeFlowRef}
         onOpenReference={a.openReferenced}
-        onSync={a.sync}
-        onOpenReview={() => a.setReviewOpen(true)}
       />
+      {props.belowBand}
 
       {/* FLO-FR-47: a refused write lists every violation and keeps the plan. */}
       {session?.error && (
@@ -241,9 +270,9 @@ export function FlowCanvas(props: FlowCanvasProps) {
             <span>{session.parseError}</span>
           )}
         </div>
-      ) : !flowId ? (
+      ) : !planMode && !flowId ? (
         <div className="flow-error">No Flow is open.</div>
-      ) : !session?.loaded || !doc ? (
+      ) : !ready || !doc ? (
         <div className="flow-error">Loading…</div>
       ) : (
         <div
@@ -261,9 +290,27 @@ export function FlowCanvas(props: FlowCanvasProps) {
               transformOrigin: "0 0",
             }}
           >
+            {c.columns.none && (
+              <div
+                className="flow-col-none"
+                role="group"
+                aria-label="No milestone"
+                data-testid="flow-no-milestone"
+                style={{
+                  left: c.columns.none.x,
+                  top: c.columns.none.y,
+                  width: c.columns.none.width,
+                  height: c.columns.none.height,
+                }}
+              >
+                <div className="flow-col-none__head">No milestone</div>
+              </div>
+            )}
+            <SequenceArrows arrows={c.columns.arrows} />
             {containers.map((item) => {
               const r = frames.rectOf(item.id)!;
               const facts = factsOf(item);
+              const order = c.columns.order.indexOf(item.id);
               return (
                 <ContainerView
                   key={item.id}
@@ -276,6 +323,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
                   editingName={c.editingName === item.id}
                   inert={inert}
                   handlers={handlersOf(item)}
+                  renameOnEnd={planMode}
                   collapsed={c.collapsed.has(item.id)}
                   leaves={leavesUnder(doc, item.id).length}
                   duePast={
@@ -283,6 +331,8 @@ export function FlowCanvas(props: FlowCanvasProps) {
                   }
                   onToggleCollapsed={() => c.toggleCollapsed(item.id)}
                   onResizeStart={(sides, e) => c.onResizeStart(item.id, sides, e)}
+                  onMeasure={c.onMeasureContainer}
+                  {...(order >= 0 ? { column: order + 1 } : {})}
                 />
               );
             })}
@@ -306,6 +356,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
                 editingName={c.editingName === item.id}
                 inert={inert}
                 handlers={handlersOf(item)}
+                renameOnEnd={planMode}
                 creating={a.creating === item.id}
                 draftError={a.draftErrors[item.id]}
                 onMeasure={c.onMeasureCard}
@@ -363,11 +414,12 @@ export function FlowCanvas(props: FlowCanvasProps) {
               onAddFootprint={(p) => a.addFootprint(c.selected!.id, p)}
               onRemoveFootprint={(p) => a.removeFootprint(c.selected!.id, p)}
               onDue={(due) => a.setDueDate(c.selected!.id, due)}
-              onLocalOnly={(on) => a.setLocal(c.selected!.id, on)}
-              onLinkExisting={(n) => a.linkExisting(c.selected!.id, n)}
               onAddReference={(id) => a.addReference(c.selected!.id, id)}
               onRemoveReference={(id) => a.removeReference(c.selected!.id, id)}
               onOpenReference={a.openReferenced}
+              describeOnBlur={planMode}
+              kindFilter={planMode ? noMilestoneChange(c.selected) : undefined}
+              extras={props.panelExtras?.(c.selected)}
             />
           )}
 
@@ -383,17 +435,6 @@ export function FlowCanvas(props: FlowCanvasProps) {
             />
           )}
 
-          {sync.reviewOpen && (
-            <SyncReview
-              doc={doc}
-              sync={sync}
-              onClose={() => a.setReviewOpen(false)}
-              onApply={a.applyResolutions}
-              onSyncAgain={a.sync}
-              onSelectItem={c.revealItem}
-              onOpenLink={a.openTracker}
-            />
-          )}
 
           {/* FLO-FR-07: one add affordance, a menu of the five kinds. */}
           <div
@@ -423,22 +464,26 @@ export function FlowCanvas(props: FlowCanvasProps) {
                   c.setAddMenuOpen(false);
                   c.addKind(kind);
                 }}
+                extras={props.addMenuExtras?.(() => c.setAddMenuOpen(false))}
               />
             )}
           </div>
 
-          {/* FLO-FR-34 / FLO-FR-35: the action control, over the Flow file. */}
-          <div className="flow-actionhost">
-            <ActionControl
-              discussions={c.control.discussions}
-              artifactType="flow"
-              itemNoun="flow"
-              ownerLabel={flowId ?? undefined}
-              missing={!flowId}
-              dismissSignal={c.dismissAction}
-              onSurfaceOpened={() => c.setAddMenuOpen(false)}
-            />
-          </div>
+          {/* FLO-FR-34 / FLO-FR-35: the action control, over the Flow file. A
+              plan binding carries none (MDL-FR-NTVL). */}
+          {!planMode && (
+            <div className="flow-actionhost">
+              <ActionControl
+                discussions={c.control.discussions}
+                artifactType="flow"
+                itemNoun="flow"
+                ownerLabel={flowId ?? undefined}
+                missing={!flowId}
+                dismissSignal={c.dismissAction}
+                onSurfaceOpened={() => c.setAddMenuOpen(false)}
+              />
+            </div>
+          )}
 
           {/* FLO-FR-22: the view controls. They change no document state. */}
           <div className="flow-overlay flow-overlay--view">
@@ -506,8 +551,22 @@ export function FlowCanvas(props: FlowCanvasProps) {
   );
 }
 
+/**
+ * GDP-FR-EJTS: a GitHub plan changes no kind to or from a milestone, so its
+ * kind choice does not offer that change.
+ */
+function noMilestoneChange(item: FlowItem) {
+  return (kind: FlowItem["kind"]) => (item.kind === "milestone") === (kind === "milestone");
+}
+
 /** FLO-FR-07: the five kinds, each with its glyph, in the action menu's treatment. */
-function AddMenu({ onPick }: { onPick: (kind: (typeof ITEM_KINDS)[number]) => void }) {
+function AddMenu({
+  onPick,
+  extras,
+}: {
+  onPick: (kind: (typeof ITEM_KINDS)[number]) => void;
+  extras?: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.querySelector("button")?.focus();
@@ -522,6 +581,7 @@ function AddMenu({ onPick }: { onPick: (kind: (typeof ITEM_KINDS)[number]) => vo
           {kindLabel(kind)}
         </button>
       ))}
+      {extras}
     </div>
   );
 }

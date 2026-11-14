@@ -2,8 +2,8 @@
  * Lookups over one specification index (`SMP-specification-map.md`
  * SMP-FR-FEJV): where each node sits, how deep, and what lies beneath it.
  *
- * Built once per index value. The index is immutable — every edit returns a new
- * one — so a tree built from it never goes stale.
+ * Built once per index value. The index is immutable, so a tree built from it
+ * never goes stale.
  */
 import {
   changeChipKey,
@@ -13,7 +13,6 @@ import {
   type ChangeChip,
   type IndexNode,
   type MapRef,
-  type PlannedDraft,
   type SpecNode,
   type SpecificationIndex,
 } from "./types";
@@ -46,8 +45,6 @@ export interface TreeIndex {
   /** OSI-FR-ALQI: the change chips, by `changeChipKey`. */
   changes: Map<string, ChangeChip>;
   changeParent: Map<string, string>;
-  planned: Map<string, PlannedDraft>;
-  plannedParent: Map<string, string>;
   /** SMP-FR-FEJV: the depth of every leaf group; spec nodes sit one deeper. */
   leafDepth: number;
   /** Index node ids in pre-order, which is the order of the index. */
@@ -66,8 +63,6 @@ export function buildTree(index: SpecificationIndex): TreeIndex {
     holderByPath: new Map(),
     changes: new Map(),
     changeParent: new Map(),
-    planned: new Map(),
-    plannedParent: new Map(),
     leafDepth: Math.max(index.levels.length - 2, 0),
     order: [],
   };
@@ -76,10 +71,6 @@ export function buildTree(index: SpecificationIndex): TreeIndex {
     tree.parent.set(node.id, parentId);
     tree.depth.set(node.id, depth);
     tree.order.push(node.id);
-    for (const draft of node.planned ?? []) {
-      tree.planned.set(draft.draftId, draft);
-      tree.plannedParent.set(draft.draftId, node.id);
-    }
     for (const chip of node.changes ?? []) {
       const key = changeChipKey(node.id, chip);
       tree.changes.set(key, chip);
@@ -132,19 +123,6 @@ export function specsUnder(tree: TreeIndex, id: string): SpecNode[] {
   return out;
 }
 
-/** SMD-FR-ULTF: how many planned drafts sit on a node or beneath it. */
-export function plannedUnder(tree: TreeIndex, id: string): number {
-  const node = tree.nodes.get(id);
-  if (!node) return 0;
-  let count = 0;
-  const walk = (n: IndexNode) => {
-    count += n.planned?.length ?? 0;
-    for (const child of indexChildren(n)) walk(child);
-  };
-  walk(node);
-  return count;
-}
-
 /**
  * SMN-FR-YEVY: how many distinct changes, each in its location, sit on a node
  * or beneath it.
@@ -168,8 +146,6 @@ export function nodeOfRef(tree: TreeIndex, ref: MapRef): string | null {
       return tree.nodes.has(ref.id) ? ref.id : null;
     case "spec":
       return tree.specParent.get(ref.code) ?? null;
-    case "planned":
-      return tree.plannedParent.get(ref.draftId) ?? null;
     case "change":
       return tree.changeParent.get(ref.key) ?? null;
   }
@@ -181,8 +157,6 @@ export function refExists(tree: TreeIndex, ref: MapRef): boolean {
       return tree.nodes.has(ref.id);
     case "spec":
       return tree.specs.has(ref.code);
-    case "planned":
-      return tree.planned.has(ref.draftId);
     case "change":
       return tree.changes.has(ref.key);
   }
@@ -227,4 +201,9 @@ export function isWithin(
   const depth = tree.depth.get(ancestorId);
   if (depth === undefined) return false;
   return ancestorAtDepth(tree, ref, depth) === ancestorId;
+}
+
+/** A deep copy of an index, so a served index never shares state with its source. */
+export function cloneIndex(index: SpecificationIndex): SpecificationIndex {
+  return JSON.parse(JSON.stringify(index)) as SpecificationIndex;
 }

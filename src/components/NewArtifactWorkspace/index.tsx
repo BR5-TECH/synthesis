@@ -129,6 +129,7 @@ export function NewArtifactWorkspace({
   onArchived,
   onNameChanged,
   onOpenArtifact,
+  onShowDeliveryItem,
 }: WorkspaceProps) {
   useSyncExternalStore(drafts.subscribe, drafts.getVersion);
   const session = drafts.ensure(draftId);
@@ -698,6 +699,7 @@ export function NewArtifactWorkspace({
         graduation={graduation}
         onOpenRun={onOpenRun}
         onOpenArtifact={onOpenArtifact}
+        onShowDeliveryItem={onShowDeliveryItem}
         publication={publication}
         pendingProposal={pendingProposal}
         view={view}

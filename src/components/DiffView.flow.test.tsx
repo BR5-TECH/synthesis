@@ -108,7 +108,7 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
   }) =>
     `${JSON.stringify(
       {
-        version: 2,
+        version: 3,
         name: doc.name ?? "Payments",
         items: doc.items ?? [],
         edges: doc.edges ?? [],
@@ -122,8 +122,6 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
     id,
     kind: "milestone",
     name,
-    position: { x: 0, y: 0 },
-    size: { width: 640, height: 380 },
     ...extra,
   });
 
@@ -193,15 +191,15 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
 
   // DFV-FR-RGBK, DFV-FR-35: each side names the kind its own revision holds.
   it("DFV-FR-RGBK, DFV-FR-35: a changed kind shows the old kind left and the new kind right", async () => {
-    const epic = { id: "ep1", kind: "epic", name: "Checkout", parentId: "n1", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } };
+    const epic = { id: "ep1", kind: "epic", name: "Checkout", parentId: "n1" };
     await renderFlow(
       {
         isBinary: false,
         old: flow({
-          items: [node("n1", "Payments"), epic, { id: "x1", kind: "defect", name: "Bug", parentId: "ep1", position: { x: 0, y: 0 } }],
+          items: [node("n1", "Payments"), epic, { id: "x1", kind: "defect", name: "Bug", parentId: "ep1" }],
         }),
         new: flow({
-          items: [node("n1", "Payments"), epic, { id: "x1", kind: "feature", name: "Bug", parentId: "ep1", position: { x: 0, y: 0 }, size: { width: 400, height: 220 } }],
+          items: [node("n1", "Payments"), epic, { id: "x1", kind: "feature", name: "Bug", parentId: "ep1" }],
         }),
       },
       "side_by_side",
@@ -462,7 +460,7 @@ describe("a Flow read as its plan (DFV-FR-33 – DFV-FR-36)", () => {
     // Same plan, different bytes: the file changed and the Flow did not.
     await renderFlow({
       isBinary: false,
-      old: '{"version":2,"name":"R","items":[],"edges":[]}',
+      old: '{"version":3,"name":"R","items":[],"edges":[]}',
       new: flow({ name: "R" }),
     });
 

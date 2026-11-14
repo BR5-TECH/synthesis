@@ -6,7 +6,8 @@
  * section, the Drafts panel's GitHub row, and the read-only New Artifact tab
  * are all reachable without a network.
  *
- * `?githubPollingInvalid` starts with a configuration error, and
+ * `?githubPollingInvalid` starts with a configuration error,
+ * `?githubPollingValid` (and `?deliveryGithub`) starts with a valid one, and
  * `?githubPollingUnset` with no Project selected. The Roadmap Project's
  * `Status` field says `In progress`, so the default selection of the status
  * selectors is case-insensitive (GPP-FR-VXSB).
@@ -78,7 +79,9 @@ const state: any = {
           missingStatus: "Queued",
           projectTitle: "Roadmap",
         }
-      : { state: "unchecked", errorCode: null, error: null, missingStatus: null, projectTitle: "Roadmap" },
+      : flag("deliveryGithub") || flag("githubPollingValid")
+        ? { state: "valid", errorCode: null, error: null, missingStatus: null, projectTitle: "Roadmap" }
+        : { state: "unchecked", errorCode: null, error: null, missingStatus: null, projectTitle: "Roadmap" },
   repository: { owner: "acme", name: "platform" },
   polling: false,
   tasks: [] as any[],

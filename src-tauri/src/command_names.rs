@@ -247,13 +247,20 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "load_flow_delivery_state",
     "find_flow_items_for_draft",
     "analyze_flow_overlap",
-    // Flow tracker sync (FTS-flow-tracker-sync.md).
-    "sync_flow_with_tracker",
-    "resolve_flow_sync_conflicts",
-    "read_tracker_item",
+    // Delivery machine state (DMS-delivery-machine-state.md).
+    "load_delivery_layout",
+    "save_delivery_layout",
+    // Delivery source (DSR-delivery-source.md).
+    "get_delivery_settings",
+    "set_delivery_settings",
+    "get_delivery_source",
+    "publish_delivery_to_github",
+    "export_delivery_to_file",
+    "load_delivery_milestones",
+    // GitHub delivery plan (GDP-github-delivery-plan.md).
+    "load_github_delivery_plan",
+    "apply_github_delivery_edit",
     "open_tracker_link",
-    "get_flow_tracker_settings",
-    "set_flow_tracker_settings",
     // Held project close / application quit (SNV-FR-25 / SNV-FR-26 / EDT-FR-33).
     "close_project",
     "finish_exit",

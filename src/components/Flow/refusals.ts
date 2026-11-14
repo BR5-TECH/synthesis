@@ -51,8 +51,8 @@ function joinWords(words: string[], last: string): string {
 }
 
 /**
- * FLO-FR-OAOZ: the containers a kind can join, in words, for example "A task
- * can sit only in a feature."
+ * FLO-FR-OAOZ: the containers a kind can join, in words, for example "An epic
+ * can sit only at the top level or in a milestone."
  */
 export function permittedText(
   kind: FlowItemKind,
@@ -63,8 +63,9 @@ export function permittedText(
   if (permitted.length === 1 && permitted[0] === null) {
     return `${head} can sit only at the top level of the plan.`;
   }
-  const places = permitted.map((p) => (p === null ? "the top level" : KIND_NAMES[p]));
-  return `${head} can sit only in ${joinWords(places, "or")}.`;
+  const places = permitted.filter((p) => p !== null).map((p) => KIND_NAMES[p]);
+  const at = permitted.includes(null) ? "at the top level or " : "";
+  return `${head} can sit only ${at}in ${joinWords(places, "or")}.`;
 }
 
 /**
@@ -120,18 +121,6 @@ export function refusalMessage(
       break;
     case "not_empty":
       text = "A container that holds items cannot become a task or a defect.";
-      break;
-    case "duplicate_tracker_link":
-      text = `${joinWords(ids.map(nameOf), "and")} already links that item.`;
-      break;
-    case "tracker_kind_mismatch":
-      text = "A milestone links only a milestone, and every other kind links only an issue.";
-      break;
-    case "already_linked":
-      text = "This item already has a link.";
-      break;
-    case "not_synced":
-      text = "This Flow is not connected to GitHub.";
       break;
     case "draft_already_linked":
       text = `${joinWords(ids.map(nameOf), "and")} already links that draft.`;

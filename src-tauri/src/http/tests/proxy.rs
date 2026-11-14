@@ -59,19 +59,3 @@ fn a_request_to_this_computer_uses_no_proxy() {
     assert_eq!(target.requests().len(), 1);
     assert!(proxy.requests().is_empty(), "the proxy got a request");
 }
-
-// AAP-FR-JGYD, FTS-FR-ARMD: the flow tracker adapter of a test is direct, so
-// a proxy that the environment names never sees its requests.
-#[test]
-fn the_direct_flow_tracker_adapter_uses_no_proxy() {
-    use crate::flow_sync::adapter::TrackerAdapter;
-    use crate::flow_sync::github::GithubAdapter;
-    use crate::flow_sync::records::ERR_GITHUB_UNREACHABLE;
-    let proxy = Loopback::serve(vec![json_reply(200, "{}")]);
-    use_proxy(&proxy);
-    let base = "http://example.invalid";
-    let github = GithubAdapter::at(base, &format!("{base}/graphql"), "acme", "payments");
-    github.remember_id(4, 9004);
-    assert_eq!(github.remove_blocked_by(3, 4).unwrap_err(), ERR_GITHUB_UNREACHABLE);
-    assert!(proxy.requests().is_empty(), "the proxy got a request");
-}

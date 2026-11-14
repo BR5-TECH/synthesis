@@ -56,12 +56,6 @@ export interface SpecNode {
   issues?: MapIssue[];
 }
 
-/** SMD-FR-OYLC: a draft placed on an index node, named by its id. */
-export interface PlannedDraft {
-  draftId: string;
-  name: string;
-}
-
 export interface IndexNode {
   id: string;
   label: string;
@@ -69,10 +63,9 @@ export interface IndexNode {
   /** The swatch hue of a root node, as its dark-theme value. */
   hue?: string;
   children: IndexNode[] | SpecNode[];
-  planned?: PlannedDraft[];
   /**
    * OSI-FR-VOOS: a capability that a change names and the live specs do not
-   * hold. The wire field is `planned: true`; `planned` here holds the drafts.
+   * hold. The wire field is `planned: true`.
    */
   plannedCapability?: boolean;
   /** OSI-FR-SBVF: the issues of an OpenSpec capability. */
@@ -135,26 +128,11 @@ export function changeChipKey(nodeId: string, chip: ChangeChip): string {
   return `change:${nodeId}|${changeIdentity(chip)}`;
 }
 
-/** What a selection, a hover, or a drag names. */
+/** What a selection or a hover names. */
 export type MapRef =
   | { kind: "index"; id: string }
   | { kind: "spec"; code: string }
-  | { kind: "planned"; draftId: string }
   | { kind: "change"; key: string };
-
-/** Every change the map session applies to its index. */
-export type MapEdit =
-  | {
-      kind: "create";
-      parentId: string | null;
-      node: { id: string; label: string; summary: string };
-    }
-  | { kind: "edit"; nodeId: string; label: string; summary: string }
-  | { kind: "move"; ref: MapRef; parentId: string | null; index: number }
-  | { kind: "delete"; nodeId: string }
-  | { kind: "attachDraft"; nodeId: string; draft: PlannedDraft }
-  | { kind: "renameDraft"; draftId: string; name: string }
-  | { kind: "detachDraft"; draftId: string };
 
 export function isSpecNode(node: IndexNode | SpecNode): node is SpecNode {
   return "code" in node;
@@ -167,8 +145,6 @@ export function refKey(ref: MapRef): string {
       return `index:${ref.id}`;
     case "spec":
       return `spec:${ref.code}`;
-    case "planned":
-      return `planned:${ref.draftId}`;
     case "change":
       return ref.key;
   }

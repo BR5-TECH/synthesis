@@ -26,6 +26,7 @@ pub mod change_statistics;
 pub mod changes;
 pub mod comments;
 pub mod dashboard;
+pub mod delivery;
 pub mod dialog;
 pub mod docker;
 pub mod document_export;
@@ -38,7 +39,6 @@ pub mod drafts;
 pub mod embeddings;
 pub mod flow_delivery;
 pub mod flow_overlap;
-pub mod flow_sync;
 pub mod flow_validation;
 pub mod fonts;
 pub mod fs;
@@ -184,6 +184,11 @@ pub fn run() {
         // claim guards, and the seam the GitHub Projects client sits behind.
         .manage(github_polling::GithubPollingState::default())
         .manage(github_polling::GithubProjectsSeam::default())
+        // GDP-FR-RJFS / GDP-FR-IRDD: the one GitHub read and the edit queue of
+        // the delivery plan, and the seam the tracker adapter sits behind
+        // (GDP-FR-UPXR).
+        .manage(delivery::github::GithubDeliveryState::default())
+        .manage(delivery::github::adapter::TrackerSeam::default())
         .manage(project::ProjectState::default())
         .manage(watcher::ProjectWatcher::default())
         .manage(artifacts::ContentTracker::default())
@@ -526,12 +531,17 @@ pub fn run() {
             flow_delivery::load_flow_delivery_state,
             flow_delivery::find_flow_items_for_draft,
             flow_overlap::analyze_flow_overlap,
-            flow_sync::sync_flow_with_tracker,
-            flow_sync::resolve_flow_sync_conflicts,
-            flow_sync::read_tracker_item,
-            flow_sync::open_tracker_link,
-            flow_sync::get_flow_tracker_settings,
-            flow_sync::set_flow_tracker_settings,
+            delivery::machine_state::commands::load_delivery_layout,
+            delivery::machine_state::commands::save_delivery_layout,
+            delivery::source::get_delivery_settings,
+            delivery::source::set_delivery_settings,
+            delivery::source::get_delivery_source,
+            delivery::source::publish::publish_delivery_to_github,
+            delivery::source::export::export_delivery_to_file,
+            delivery::source::milestones::load_delivery_milestones,
+            delivery::github::load_github_delivery_plan,
+            delivery::github::apply_github_delivery_edit,
+            delivery::github::open_tracker_link,
             project::close_project,
             menu::finish_exit,
             menu::set_save_menu_state,

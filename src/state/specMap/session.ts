@@ -2,20 +2,20 @@
  * The map session of the Map tab (`SMP-specification-map.md` SMP-FR-QNUH).
  *
  * The viewport renders only the active tab, so the Map tab unmounts on every
- * switch. What the author built up — the loaded index with its organization
- * edits and draft placements, the selection, the view, the focus, the toggles —
- * lives here, in a store the shell owns, and outlives every mount.
+ * switch. What the author built up — the active lens, the loaded index, the
+ * selection, the view, the focus, the toggles, and the state of the Delivery
+ * lens — lives here, in a store the shell owns, and outlives every mount.
  *
  * Never written to disk. A project or worktree switch clears it (SMP-FR-MEZK),
- * and closing the tab resets only the view (SMP-FR-BXAP).
+ * and closing the tab resets only the views (SMP-FR-BXAP).
  */
-import { specMapOps, type OrganizationEdit, type SpecMapOps } from "../../api/specMap";
+import { specMapOps, type SpecMapOps } from "../../api/specMap";
 import { logError, logInfo, logWarn } from "../../logging";
 import type { OpenSpecFailure } from "../../types";
+import type { DeliverySource } from "../../types/delivery";
 import { hasNotice, toOpenSpecFailure } from "../openspec/failureNotice";
-import { applyEdit, deleteOutcome } from "./organize";
 import { buildTree, refExists, type TreeIndex } from "./tree";
-import { isOpenSpecIndex, type MapEdit, type MapRef, type SpecificationIndex } from "./types";
+import { isOpenSpecIndex, type MapRef, type SpecificationIndex } from "./types";
 
 export interface MapView {
   level: number;
@@ -42,12 +42,22 @@ export interface ZoomRequest {
   lastLevel?: boolean;
 }
 
-/** SMO-FR-RVAV / SMD-FR-YQSR: the edits an OpenSpec index takes. */
-const OPENSPEC_EDITS: ReadonlySet<MapEdit["kind"]> = new Set([
-  "attachDraft",
-  "renameDraft",
-  "detachDraft",
-]);
+/** SMP-FR-TKUS: the two lenses of the Map tab. */
+export type MapLens = "delivery" | "specifications";
+
+/**
+ * SMP-FR-QNUH / SMP-FR-RNLH: what the Delivery lens (`MDL-map-delivery-lens.md`)
+ * keeps in the session. The lens owns both shapes. `data` holds the last
+ * delivery plan answer and the selection, and stays when the tab closes.
+ * `view` holds the pan and the zoom, and a tab close resets it to null
+ * (SMP-FR-BXAP).
+ */
+export interface DeliveryLensSlot {
+  data: unknown;
+  view: unknown;
+}
+
+const EMPTY_DELIVERY_SLOT: DeliveryLensSlot = Object.freeze({ data: null, view: null });
 
 /**
  * SMP-FR-KBXW: the code a load failed with. The backend rejects with an
@@ -61,6 +71,12 @@ export function loadFailureCode(error: unknown): string {
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
 
 export interface SpecMapState {
+  /** SMP-FR-TKUS: the active lens, or null until the default lens is known. */
+  lens: MapLens | null;
+  /** SMP-FR-TKUS / SDL-FR-CKAA: the last `"get delivery source"` answer, or null. */
+  deliverySource: DeliverySource | null;
+  /** SMP-FR-RNLH: the state of the Delivery lens. */
+  delivery: DeliveryLensSlot;
   status: LoadStatus;
   /** SMP-FR-KBXW: the code of the load that failed, or null. */
   errorCode: string | null;
@@ -77,10 +93,22 @@ export interface SpecMapState {
   /** SMI-FR-PRSL: a spec path that arrived before the index loaded. */
   pendingPath: string | null;
   zoom: ZoomRequest | null;
+  /** SDL-FR-KXCY: the **unplanned** toggle. */
+  unplanned: boolean;
+  /**
+   * MDL-FR-JIKK / SDL-FR-MCGI: a delivery item the Delivery lens selects,
+   * reveals, and centres, consumed by the lens.
+   */
+  deliveryReveal: { itemId: string; nonce: number } | null;
+  /** SDL-FR-CFHH: a task the Delivery lens adds, consumed by the lens. */
+  planWork: { name: string; references: string[]; nonce: number } | null;
 }
 
 function initialState(): SpecMapState {
   return {
+    lens: null,
+    deliverySource: null,
+    delivery: EMPTY_DELIVERY_SLOT,
     status: "idle",
     errorCode: null,
     errorFailure: null,
@@ -94,7 +122,17 @@ function initialState(): SpecMapState {
     inspectorOpen: null,
     pendingPath: null,
     zoom: null,
+    unplanned: false,
+    deliveryReveal: null,
+    planWork: null,
   };
+}
+
+/** Two answers of `"get delivery source"` that resolve the same source. */
+function sameSource(a: DeliverySource | null, b: DeliverySource | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 export class SpecMapSessionStore {
@@ -105,6 +143,19 @@ export class SpecMapSessionStore {
   /** Bumped by `clear`, so a load that outlives its session lands nowhere. */
   private generation = 0;
   private treeCache: TreeIndex | null = null;
+  /** SMP-FR-TKUS: true while the default lens is asked for. */
+  private decidingLens = false;
+  /** MDL-FR-YTAP: a source read in flight, and whether another is due after it. */
+  private resolving: Promise<void> | null = null;
+  private resolveAgain = false;
+  /**
+   * SMP-FR-SWUL: whether the Delivery lens holds unsaved Flow changes. It has
+   * listeners of its own, so the shell re-renders for this flag and not for
+   * each pan or selection of the map.
+   */
+  private deliveryDirtyFlag = false;
+  private dirtyListeners = new Set<() => void>();
+  private deliverySaveHandler: (() => Promise<void>) | null = null;
 
   constructor(private readonly ops: SpecMapOps = specMapOps) {}
 
@@ -133,9 +184,176 @@ export class SpecMapSessionStore {
     for (const listener of [...this.listeners]) listener();
   }
 
-  /** SMP-FR-PMCX: load the index once; a session that holds one loads nothing. */
+  /**
+   * SMP-FR-TKUS: on the first render of a map session, ask for the delivery
+   * source and show Delivery where it is not `none`. A lens the author chose
+   * while the answer was in flight stays. A failed answer shows
+   * Specifications.
+   */
+  decideLens = async (): Promise<void> => {
+    if (this.state.lens !== null || this.decidingLens) return;
+    this.decidingLens = true;
+    const generation = this.generation;
+    try {
+      const source = await this.ops.getDeliverySource();
+      if (generation !== this.generation) return;
+      const lens: MapLens = source.kind === "none" ? "specifications" : "delivery";
+      logInfo(["frontend"], "map tab chose its default lens", {
+        sourceKind: source.kind,
+        lens: this.state.lens ?? lens,
+      });
+      this.set({ deliverySource: source, lens: this.state.lens ?? lens });
+    } catch (e) {
+      if (generation !== this.generation) return;
+      logWarn(["frontend"], "the delivery source of the map could not be read", {
+        reason: e instanceof Error ? e.name : typeof e,
+      });
+      if (this.state.lens === null) this.set({ lens: "specifications" });
+    } finally {
+      if (generation === this.generation) this.decidingLens = false;
+    }
+  };
+
+  /** SMP-FR-TKUS / SMP-FR-RNLH: switch the lens. The other lens keeps its state. */
+  setLens = (lens: MapLens): void => {
+    if (this.state.lens === lens) return;
+    logInfo(["frontend"], "map tab switched its lens", { lens });
+    this.set({ lens });
+  };
+
+  /**
+   * SMP-FR-RNLH: the data of the Delivery lens, made on first use. Making it
+   * is no change a reader sees, so it notifies nobody and is safe in a render.
+   */
+  ensureDeliveryData = <T>(is: (data: unknown) => data is T, make: () => T): T => {
+    const data = this.state.delivery.data;
+    if (is(data)) return data;
+    const made = make();
+    this.state = { ...this.state, delivery: { ...this.state.delivery, data: made } };
+    return made;
+  };
+
+  /**
+   * SMP-FR-RNLH: keep the view of the Delivery lens's canvas for its next
+   * mount. Only that mount reads it, so a pan notifies nobody.
+   */
+  keepDeliveryView = (view: unknown): void => {
+    this.state = { ...this.state, delivery: { ...this.state.delivery, view } };
+  };
+
+  /** SMP-FR-RNLH: replace a part of the state of the Delivery lens. */
+  setDeliveryState = (patch: Partial<DeliveryLensSlot>): void => {
+    this.set({ delivery: { ...this.state.delivery, ...patch } });
+  };
+
+  /** SDL-FR-CKAA: record a later `"get delivery source"` answer. The lens does not change. */
+  setDeliverySource = (source: DeliverySource | null): void => {
+    if (sameSource(this.state.deliverySource, source)) return;
+    this.set({ deliverySource: source });
+  };
+
+  /**
+   * MDL-FR-YTAP / LIB-FR-JTXR: read the delivery source again and record it.
+   * A call while a read is in flight makes one more read after it, so the
+   * newest answer is the one kept. A failed read keeps the last answer.
+   */
+  resolveDeliverySource = (): Promise<void> => {
+    if (this.resolving) {
+      this.resolveAgain = true;
+      return this.resolving;
+    }
+    const generation = this.generation;
+    const run = async (): Promise<void> => {
+      do {
+        this.resolveAgain = false;
+        try {
+          const source = await this.ops.getDeliverySource();
+          if (generation !== this.generation) return;
+          if (source && typeof source === "object" && "kind" in source) this.setDeliverySource(source);
+        } catch (e) {
+          if (generation !== this.generation) return;
+          logWarn(["frontend"], "the delivery source could not be read again", {
+            reason: e instanceof Error ? e.name : typeof e,
+          });
+        }
+      } while (this.resolveAgain && generation === this.generation);
+    };
+    const pending = run().finally(() => {
+      if (this.resolving === pending) this.resolving = null;
+    });
+    this.resolving = pending;
+    return pending;
+  };
+
+  /**
+   * MDL-FR-JIKK / DSH-FR-DFDW / NAW-FR-PHGO / SDL-FR-MCGI: show the Delivery
+   * lens, with an item to select, reveal, and centre, or with none for null.
+   */
+  showDeliveryItem = (itemId: string | null): void => {
+    this.set({
+      lens: "delivery",
+      ...(itemId !== null ? { deliveryReveal: { itemId, nonce: ++this.nonce } } : {}),
+    });
+  };
+
+  consumeDeliveryReveal = (nonce: number): void => {
+    if (this.state.deliveryReveal?.nonce === nonce) this.set({ deliveryReveal: null });
+  };
+
+  /** SDL-FR-CFHH: ask the Delivery lens to add a task, and show that lens. */
+  requestPlanWork = (name: string, references: readonly string[]): void => {
+    this.set({ lens: "delivery", planWork: { name, references: [...references], nonce: ++this.nonce } });
+  };
+
+  consumePlanWork = (nonce: number): void => {
+    if (this.state.planWork?.nonce === nonce) this.set({ planWork: null });
+  };
+
+  /** SDL-FR-VUQH: turning **unplanned** on turns **gaps only** off. */
+  toggleUnplanned = (): void => {
+    const on = !this.state.unplanned;
+    this.set({ unplanned: on, ...(on ? { gapsOnly: false } : {}) });
+  };
+
+  subscribeDeliveryDirty = (listener: () => void): (() => void) => {
+    this.dirtyListeners.add(listener);
+    return () => {
+      this.dirtyListeners.delete(listener);
+    };
+  };
+
+  /** SMP-FR-SWUL: whether the Map tab shows its dirty indicator. */
+  deliveryDirty = (): boolean => this.deliveryDirtyFlag;
+
+  /** SMP-FR-SWUL: the Delivery lens sets this while it holds unsaved Flow changes. */
+  setDeliveryDirty = (dirty: boolean): void => {
+    if (this.deliveryDirtyFlag === dirty) return;
+    this.deliveryDirtyFlag = dirty;
+    for (const listener of [...this.dirtyListeners]) listener();
+  };
+
+  /**
+   * SMP-FR-SWUL: the Delivery lens registers the write of its unsaved Flow
+   * changes (FLO-FR-27), and null when it holds none. File → Save calls
+   * `saveDelivery` while the Map tab is the active tab.
+   */
+  setDeliverySave = (handler: (() => Promise<void>) | null): void => {
+    this.deliverySaveHandler = handler;
+  };
+
+  /** SMP-FR-SWUL: write the unsaved changes of the Delivery lens, if any. */
+  saveDelivery = async (): Promise<void> => {
+    if (!this.deliveryDirtyFlag || !this.deliverySaveHandler) return;
+    await this.deliverySaveHandler();
+  };
+
+  /**
+   * SMP-FR-PMCX: load the index once; a session that holds one loads nothing.
+   * SMP-FR-RNLH / SMP-FR-ONSD: a failed load stays failed, through a lens
+   * switch or a remount, until Retry (`retry`).
+   */
   load = async (): Promise<void> => {
-    if (this.state.status === "loading" || this.state.status === "ready") return;
+    if (this.state.status !== "idle") return;
     const generation = this.generation;
     this.set({ status: "loading" });
     try {
@@ -143,6 +361,9 @@ export class SpecMapSessionStore {
       if (generation !== this.generation) return;
       this.set({ status: "ready", errorCode: null, errorFailure: null, index });
       const tree = this.tree()!;
+      // SMI-FR-WDAB: a selection the new index holds no node of clears.
+      const selected = this.state.selection;
+      if (selected && !refExists(tree, selected)) this.set({ selection: null });
       logInfo(["frontend"], "specification map loaded", {
         source: index.source ?? "demo",
         roots: index.roots.length,
@@ -179,71 +400,6 @@ export class SpecMapSessionStore {
     this.set({ status: "idle" });
     return this.load();
   };
-
-  /**
-   * Apply one edit to the session, then hand it to its stub operation
-   * (SMO-FR-CZLA, SMD-FR-OYLC). Returns false when the tree rules refuse it.
-   */
-  dispatch = (edit: MapEdit): boolean => {
-    const { index } = this.state;
-    const tree = this.tree();
-    if (!index || !tree) return false;
-    if (isOpenSpecIndex(index) && !OPENSPEC_EDITS.has(edit.kind)) {
-      logWarn(["frontend"], "specification map edit refused for an openspec index", {
-        kind: edit.kind,
-      });
-      return false;
-    }
-    const siblingId =
-      edit.kind === "delete" ? deleteOutcome(tree, edit.nodeId).siblingId : null;
-    const next = applyEdit(index, edit);
-    if (next === index) {
-      logWarn(["frontend"], "specification map edit refused", { kind: edit.kind });
-      return false;
-    }
-    let selection = this.state.selection;
-    let zoom = this.state.zoom;
-    let focusId = this.state.focusId;
-    if (edit.kind === "create") {
-      // SMO-FR-NXDL: the new node is selected and shown at its own level.
-      selection = { kind: "index", id: edit.node.id };
-      zoom = { ref: selection, nonce: ++this.nonce };
-    }
-    if (edit.kind === "delete" && siblingId) {
-      // SMO-FR-OBRF: the selection moves to the sibling that took the children.
-      selection = { kind: "index", id: siblingId };
-    }
-    const nextTree = buildTree(next);
-    // SMI-FR-WDAB: a subject that left the tree leaves no selection behind.
-    if (selection && !refExists(nextTree, selection)) selection = null;
-    if (focusId && !nextTree.nodes.has(focusId)) focusId = null;
-    this.set({ index: next, selection, zoom, focusId });
-    this.persist(edit);
-    return true;
-  };
-
-  private persist(edit: MapEdit): void {
-    const report = (e: unknown) =>
-      logWarn(["frontend"], "specification map edit could not be saved", {
-        kind: edit.kind,
-        reason: e instanceof Error ? e.message : String(e),
-      });
-    if (edit.kind === "attachDraft") {
-      void this.ops
-        .attachDraft({ draftId: edit.draft.draftId, nodeId: edit.nodeId })
-        .catch(report);
-      return;
-    }
-    if (edit.kind === "move" && edit.ref.kind === "planned") {
-      // SMD-FR-QPAM: a planned chip's move is a new placement.
-      void this.ops
-        .attachDraft({ draftId: edit.ref.draftId, nodeId: edit.parentId! })
-        .catch(report);
-      return;
-    }
-    const organization = toOrganizationEdit(edit);
-    if (organization) void this.ops.saveOrganization(organization).catch(report);
-  }
 
   select = (ref: MapRef | null): void => {
     this.set({ selection: ref });
@@ -297,47 +453,40 @@ export class SpecMapSessionStore {
     this.set({ showDeps: !this.state.showDeps });
   };
 
+  /** SDL-FR-VUQH: turning **gaps only** on turns **unplanned** off. */
   toggleGaps = (): void => {
-    this.set({ gapsOnly: !this.state.gapsOnly });
+    const on = !this.state.gapsOnly;
+    this.set({ gapsOnly: on, ...(on ? { unplanned: false } : {}) });
   };
 
   setInspectorOpen = (open: boolean): void => {
     this.set({ inspectorOpen: open });
   };
 
-  /** SMP-FR-BXAP: closing the tab resets the view and the focus, and nothing else. */
+  /**
+   * SMP-FR-BXAP: closing the tab resets the view of each lens and the focus,
+   * and nothing else.
+   */
   resetView = (): void => {
-    this.set({ view: INITIAL_VIEW, focusId: null, zoom: null });
+    this.set({
+      view: INITIAL_VIEW,
+      focusId: null,
+      zoom: null,
+      delivery: { ...this.state.delivery, view: null },
+    });
   };
 
   /** SMP-FR-MEZK: a project or worktree switch discards the whole session. */
   clear = (): void => {
     this.generation += 1;
     this.treeCache = null;
+    this.decidingLens = false;
+    this.resolving = null;
+    this.resolveAgain = false;
+    this.deliverySaveHandler = null;
     this.state = initialState();
     this.version += 1;
     for (const listener of [...this.listeners]) listener();
+    this.setDeliveryDirty(false);
   };
-}
-
-/** The wire shape of an edit, for the edits `"save specification map organization"` takes. */
-export function toOrganizationEdit(edit: MapEdit): OrganizationEdit | null {
-  switch (edit.kind) {
-    case "create":
-      return { kind: "create", parentId: edit.parentId, node: edit.node };
-    case "edit":
-      return { kind: "edit", nodeId: edit.nodeId, label: edit.label, summary: edit.summary };
-    case "delete":
-      return { kind: "delete", nodeId: edit.nodeId };
-    case "move":
-      if (edit.ref.kind === "planned" || edit.ref.kind === "change") return null;
-      return {
-        kind: "move",
-        nodeId: edit.ref.kind === "spec" ? edit.ref.code : edit.ref.id,
-        parentId: edit.parentId,
-        index: edit.index,
-      };
-    default:
-      return null;
-  }
 }

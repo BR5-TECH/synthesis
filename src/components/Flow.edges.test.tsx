@@ -18,7 +18,7 @@ import {
 } from "../test/flowCanvasHarness";
 import { canvas, client, connectItems, ID, itemEl } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
-import { blocks, item, plan, relates, samplePlan } from "../test/flowPlanFixtures";
+import { blocks, item, plan, relates, sampleLayout, samplePlan, storedLayout } from "../test/flowPlanFixtures";
 
 vi.mock("@tauri-apps/api/core", async () => ({
   invoke: (await import("../test/flowMocks")).invoke,
@@ -45,7 +45,7 @@ const edgePanel = () => screen.getByRole("group", { name: /^Edge / });
 
 describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", () => {
   it("FLO-FR-15, FLO-FR-CEVI: a completed connection creates a blocks edge from the item the drag started on", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("t1", "t3");
@@ -54,7 +54,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-15, FLO-FR-39: an edge joins items in different containers, and a container takes edges too", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("f1", "f2");
@@ -66,7 +66,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-32: from the start of the drag, a dashed provisional edge runs to the pointer with an arrowhead", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
@@ -79,7 +79,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-32: an abandoned drag leaves the plan untouched", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
@@ -92,7 +92,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-33: the nearest item in reach is highlighted, and a release completes the connection onto it", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
@@ -106,7 +106,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-33: an item the rules would refuse is never highlighted", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]), sampleLayout());
     await renderFlow(b);
 
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
@@ -119,7 +119,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-33, FLO-FR-16: the item the drag started on is never highlighted, and a release on it is refused", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
@@ -134,7 +134,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-33, FLO-FR-GZCH: an item that would close a cycle is never highlighted, and a release on it is refused naming the cycle", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const port = within(itemEl("t3")).getByLabelText("Connect from T3");
@@ -149,33 +149,34 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
   });
 
   it("FLO-FR-33: an item snaps within the snap distance of its border, and not beyond it", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
-    // x1's card covers (40, 460)–(210, 556). m1 holds the point but holds t1 too,
-    // so the rules refuse it and only x1 can snap.
+    // x1's card covers (20, 400)–(190, 496): the milestone column m1 is at the
+    // origin (FLO-FR-SQUS). m1 holds the point but holds t1 too, so the rules
+    // refuse it and only x1 can snap.
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
-    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
-    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS + 10 }) });
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 220, y: 140 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 105, y: 496 + MAGNET_RADIUS + 10 }) });
     expect(itemEl("x1")).toHaveAttribute("data-magnet", "false");
     expect(screen.getByTestId("flow-connection")).toHaveAttribute("data-magnet", "false");
-    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS - 10 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 105, y: 496 + MAGNET_RADIUS - 10 }) });
     expect(itemEl("x1")).toHaveAttribute("data-magnet", "true");
     // Out of reach again: the snap goes, and a release there makes no edge.
-    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS + 10 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 105, y: 496 + MAGNET_RADIUS + 10 }) });
     expect(itemEl("x1")).toHaveAttribute("data-magnet", "false");
     fireEvent.pointerUp(canvas(), { pointerId: 1 });
     expect(planOf(flows).edges).toEqual([]);
 
     // A release in reach, outside the card, completes the connection.
-    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 240, y: 200 }) });
-    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 125, y: 556 + MAGNET_RADIUS - 10 }) });
+    fireEvent.pointerDown(port, { pointerId: 1, buttons: 1, ...client({ x: 220, y: 140 }) });
+    fireEvent.pointerMove(canvas(), { pointerId: 1, buttons: 1, ...client({ x: 105, y: 496 + MAGNET_RADIUS - 10 }) });
     fireEvent.pointerUp(canvas(), { pointerId: 1 });
     expect(planOf(flows).edges).toEqual([blocks("e1", "t1", "x1")]);
   });
 
   it("FLO-FR-33: a release the canvas never sees abandons the drag", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const port = within(itemEl("t1")).getByLabelText("Connect from T1");
@@ -190,7 +191,7 @@ describe("drawing a connection (FLO-FR-15, FLO-FR-CEVI, FLO-FR-32, FLO-FR-33)", 
 
 describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)", () => {
   it("FLO-FR-16: a connection from an item to itself is refused with feedback", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("t1", "t1");
@@ -200,7 +201,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
   });
 
   it("FLO-FR-17: a second edge between two items is refused in either direction, and the first stays", async () => {
-    const b = flowBackend(samplePlan([relates("e1", "t1", "t3")]));
+    const b = flowBackend(samplePlan([relates("e1", "t1", "t3")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("t3", "t1");
@@ -210,7 +211,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
   });
 
   it("FLO-FR-ZEPI: a connection between an item and its ancestor is refused", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("t1", "m1");
@@ -219,7 +220,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
   });
 
   it("FLO-FR-ZEPI: a connection from a container to an item it holds, at any depth, is refused", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     for (const [from, to] of [["F1", "t1"], ["M1", "t3"]] as const) {
@@ -232,7 +233,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
   });
 
   it("FLO-FR-GZCH: a connection that closes a cycle is refused, and the feedback names the cycle in blocking order", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("t2", "t1");
@@ -246,7 +247,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
   });
 
   it("FLO-FR-GZCH: a blocks edge into a container closes a cycle through its members", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "x1")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "x1")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     connectItems("x1", "f1");
@@ -256,7 +257,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
   });
 
   it("FLO-FR-46: a refusal costs no backend call, now or after the rests an edit would start", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
     expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1);
     const before = b.calls.length;
@@ -276,7 +277,7 @@ describe("refused connections (FLO-FR-16, FLO-FR-17, FLO-FR-ZEPI, FLO-FR-GZCH)",
 
 describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
   it("FLO-FR-CEVI: a selected edge offers its type as Blocks or Relates, and Reverse on a blocks edge", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     await userEvent.click(edgeHandle("e1"));
@@ -290,7 +291,7 @@ describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
   });
 
   it("FLO-FR-GZCH, FLO-FR-CEVI: a reversal that closes a cycle is refused and leaves the edge as it was", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3"), blocks("e3", "t1", "t3")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3"), blocks("e3", "t1", "t3")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     await userEvent.click(edgeHandle("e3"));
@@ -301,7 +302,7 @@ describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
   });
 
   it("FLO-FR-GZCH: a change to blocks that closes a cycle is refused; a relates edge never forms one", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3"), relates("e3", "t3", "t1")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "t2", "t3"), relates("e3", "t3", "t1")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     await userEvent.click(edgeHandle("e3"));
@@ -311,7 +312,7 @@ describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
   });
 
   it("FLO-FR-20: removing an edge removes only that edge", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), blocks("e2", "t1", "x1")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), blocks("e2", "t1", "x1")]), sampleLayout());
     const { flows } = await renderFlow(b);
 
     await userEvent.click(edgeHandle("e1"));
@@ -321,7 +322,7 @@ describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
   });
 
   it("FLO-FR-CEVI: a press on an edge's path selects it", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]), sampleLayout());
     await renderFlow(b);
 
     const hit = document.querySelector('.flow-edge-hit[data-edge-id="e1"]') as Element;
@@ -333,7 +334,7 @@ describe("a selected edge (FLO-FR-CEVI, FLO-FR-20, FLO-FR-GZCH)", () => {
 
 describe("how an edge is drawn (FLO-FR-48, FLO-FR-39)", () => {
   it("FLO-FR-48: a blocks edge is solid with an arrowhead at the blocked end; a relates edge is dashed with none", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), relates("e2", "t2", "x1")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3"), relates("e2", "t2", "x1")]), sampleLayout());
     await renderFlow(b);
 
     const solid = screen.getByTestId("flow-edge-path-e1");
@@ -348,21 +349,25 @@ describe("how an edge is drawn (FLO-FR-48, FLO-FR-39)", () => {
   });
 
   it("FLO-FR-48, FLO-FR-39: a blocks edge ends on the border of the blocked item, pointing into it", async () => {
-    // t1 is at (60, 180) and t3 at (520, 240), both 170 × 96.
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    // t1 is at (40, 120) and t3 at (500, 180), both 170 × 96.
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]), sampleLayout());
     await renderFlow(b);
 
     const d = screen.getByTestId("flow-edge-path-e1").getAttribute("d")!;
-    // They share the band y 240..276, so the edge runs straight across at 258.
-    expect(d.startsWith("M 230 258 ")).toBe(true);
-    expect(d.endsWith(", 520 258")).toBe(true);
+    // They share the band y 180..216, so the edge runs straight across at 198.
+    expect(d.startsWith("M 210 198 ")).toBe(true);
+    expect(d.endsWith(", 500 198")).toBe(true);
   });
 
   it("FLO-FR-39: an edge to a container lands on the container's border", async () => {
-    const b = flowBackend(plan([
-      item("m1", "milestone", { size: { width: 300, height: 200 } }),
-      item("m2", "milestone", { position: { x: 500, y: 0 }, size: { width: 300, height: 200 } }),
-    ], [blocks("e1", "m1", "m2")]));
+    const b = flowBackend(
+      // Two top-level epics: a milestone column has no stored place (FLO-FR-OGPF).
+      plan([item("m1", "epic"), item("m2", "epic")], [blocks("e1", "m1", "m2")]),
+      storedLayout({
+        m1: { x: 0, y: 0, width: 300, height: 200 },
+        m2: { x: 500, y: 0, width: 300, height: 200 },
+      }),
+    );
     await renderFlow(b);
 
     expect(screen.getByTestId("flow-edge-path-e1").getAttribute("d")).toBe(
@@ -371,7 +376,7 @@ describe("how an edge is drawn (FLO-FR-48, FLO-FR-39)", () => {
   });
 
   it("FLO-FR-48: a selected edge takes the selection emphasis and its arrowhead with it", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t3")]), sampleLayout());
     await renderFlow(b);
 
     await userEvent.click(edgeHandle("e1"));

@@ -20,11 +20,9 @@ import { ID, itemEl, panel, selectItem } from "../test/flowFixtures";
 import { emitEvent, resetListeners } from "../test/flowMocks";
 import {
   blocks,
-  issueBase,
-  issueRef,
   item,
-  milestoneRef,
   plan,
+  sampleLayout,
   samplePlan,
 } from "../test/flowPlanFixtures";
 import { AUTOSAVE_DELAY_MS } from "../state/writeSchedule";
@@ -55,7 +53,7 @@ const chipOf = (id: string) => within(itemEl(id)).queryByTestId("flow-status-chi
 
 describe("the status chip (FLO-FR-KQCE)", () => {
   it("FLO-FR-KQCE: each item shows the state the delivery state gives it, in shape and in words", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.delivery = {
       items: [
         itemState("t1", "not_started"),
@@ -85,7 +83,7 @@ describe("the status chip (FLO-FR-KQCE)", () => {
   });
 
   it("FLO-FR-KQCE: an item with no answer yet renders no chip, and the canvas is usable before the answer", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.on.load_flow_delivery_state = () => new Promise(() => {});
     const { flows } = await renderFlow(b);
 
@@ -98,7 +96,7 @@ describe("the status chip (FLO-FR-KQCE)", () => {
 
 describe("the Blocked marker (FLO-FR-IKMM)", () => {
   it("FLO-FR-IKMM: a blocked item carries a Blocked marker whose tooltip names its blockers", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "x1", "t2")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "x1", "t2")]), sampleLayout());
     b.delivery = {
       items: [itemState("t2", "drafting", { blocked: true, blockedBy: ["t1", "x1"] })],
     };
@@ -111,7 +109,7 @@ describe("the Blocked marker (FLO-FR-IKMM)", () => {
   });
 
   it("FLO-FR-IKMM: activating the marker selects the blocking items and changes nothing", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "x1", "t2")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), blocks("e2", "x1", "t2")]), sampleLayout());
     b.delivery = {
       items: [itemState("t2", "drafting", { blocked: true, blockedBy: ["t1", "x1"] })],
     };
@@ -126,7 +124,7 @@ describe("the Blocked marker (FLO-FR-IKMM)", () => {
   });
 
   it("FLO-FR-IKMM: a blocked container carries the marker in its header", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "x1", "f2")]));
+    const b = flowBackend(samplePlan([blocks("e1", "x1", "f2")]), sampleLayout());
     b.delivery = { items: [itemState("f2", "not_started", { blocked: true, blockedBy: ["x1"] })] };
     await renderFlow(b);
 
@@ -137,7 +135,7 @@ describe("the Blocked marker (FLO-FR-IKMM)", () => {
 
 describe("the Overlap marker (FLO-FR-KWFH)", () => {
   it("FLO-FR-KWFH: a leaf in an overlap carries the marker, naming the other item and the shared paths", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.overlaps = { overlaps: [{ items: ["t1", "t3"], paths: ["src/pay.rs", "src/ui/"] }] };
     await renderFlow(b);
 
@@ -149,7 +147,7 @@ describe("the Overlap marker (FLO-FR-KWFH)", () => {
   });
 
   it("FLO-FR-KWFH: a container never carries the Overlap marker, also when an overlap names it", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.overlaps = { overlaps: [{ items: ["f1", "t3"], paths: ["src/a"] }, { items: ["t1", "t2"], paths: ["src/b"] }] };
     await renderFlow(b);
 
@@ -161,7 +159,7 @@ describe("the Overlap marker (FLO-FR-KWFH)", () => {
   });
 
   it("FLO-FR-KWFH: activating the marker selects the other items of the overlap", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.overlaps = {
       overlaps: [
         { items: ["t1", "t3"], paths: ["src/a"] },
@@ -188,7 +186,7 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
   });
 
   it("FLO-FR-STUN: the tab asks again a short rest after the last edit, with the edited plan", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
     await waitFor(() => expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1));
     vi.useFakeTimers();
@@ -214,7 +212,7 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
   });
 
   it("FLO-FR-STUN: a \"drafts changed\" or a \"graduation run changed\" event asks again", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
     await waitFor(() => expect(callsOf(b, "load_flow_delivery_state")).toHaveLength(1));
 
@@ -226,7 +224,7 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
   });
 
   it("FLO-FR-STUN: a newer answer replaces an older one, and an older answer that arrives last is discarded", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const pending: Array<(s: FlowDeliveryState) => void> = [];
     b.on.load_flow_delivery_state = () => new Promise((res) => pending.push(res));
     await renderFlow(b);
@@ -241,7 +239,7 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
   });
 
   it("FLO-FR-STUN: an older overlap answer that arrives last is discarded", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const pending: Array<(r: FlowOverlapReport) => void> = [];
     b.on.analyze_flow_overlap = () => new Promise((res) => pending.push(res));
     await renderFlow(b);
@@ -257,7 +255,7 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
   });
 
   it("FLO-FR-STUN: an answer for a body that an edit superseded is discarded", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const pending: Array<(s: FlowDeliveryState) => void> = [];
     b.on.load_flow_delivery_state = () => new Promise((res) => pending.push(res));
     const { flows } = await renderFlow(b);
@@ -282,12 +280,12 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
   });
 });
 
-describe("milestones, local-only items, and tracker tags", () => {
+describe("milestones and tracker tags", () => {
   const milestones = () =>
     plan([
-      item("m1", "milestone", { due: "2000-01-31", position: { x: 20, y: 60 } }),
-      item("m2", "milestone", { due: "2000-01-31", position: { x: 700, y: 60 } }),
-      item("ep1", "epic", { parentId: "m1", position: { x: 20, y: 60 } }),
+      item("m1", "milestone", { due: "2000-01-31" }),
+      item("m2", "milestone", { due: "2000-01-31" }),
+      item("ep1", "epic", { parentId: "m1" }),
     ]);
 
   it("FLO-FR-XAPK: a milestone is past only when its due date is before today and it is not done", async () => {
@@ -296,13 +294,12 @@ describe("milestones, local-only items, and tracker tags", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(new Date(2027, 2, 15, 12, 0, 0));
-      const at = (n: number) => ({ x: n * 700, y: 0 });
       const b = flowBackend(
         plan([
-          item("m1", "milestone", { due: "2027-03-14", position: at(0) }),
-          item("m2", "milestone", { due: "2027-03-14", position: at(1) }),
-          item("m3", "milestone", { due: "2027-03-15", position: at(2) }),
-          item("m4", "milestone", { due: "2027-03-16", position: at(3) }),
+          item("m1", "milestone", { due: "2027-03-14" }),
+          item("m2", "milestone", { due: "2027-03-14" }),
+          item("m3", "milestone", { due: "2027-03-15" }),
+          item("m4", "milestone", { due: "2027-03-16" }),
         ]),
       );
       b.delivery = {
@@ -346,50 +343,11 @@ describe("milestones, local-only items, and tracker tags", () => {
     expect(within(panel()).queryByLabelText("Due")).toBeNull();
   });
 
-  it("FLO-FR-TZSU: a selected item offers Local only, and a local-only item carries the mark", async () => {
-    const b = flowBackend(samplePlan());
-    const { flows } = await renderFlow(b);
-
-    expect(within(itemEl("t1")).queryByText("local only")).toBeNull();
-    selectItem("t1");
-    await userEvent.click(within(panel()).getByRole("switch", { name: "Local only" }));
-    expect(findItem(planOf(flows), "t1")!.localOnly).toBe(true);
-    expect(within(itemEl("t1")).getByText("local only")).toBeInTheDocument();
-    await userEvent.click(within(panel()).getByRole("switch", { name: "Local only" }));
-    expect(findItem(planOf(flows), "t1")!.localOnly).toBeUndefined();
-  });
-
-  it("FLO-FR-TZSU: a local-only container carries the mark in its header", async () => {
-    const b = flowBackend(samplePlan());
-    const { flows } = await renderFlow(b);
-    const head = () => itemEl("f1").querySelector(".flow-ctr__head") as HTMLElement;
-
-    expect(within(head()).queryByText("local only")).toBeNull();
-    selectItem("f1");
-    await userEvent.click(within(panel()).getByRole("switch", { name: "Local only" }));
-    expect(findItem(planOf(flows), "f1")!.localOnly).toBe(true);
-    expect(within(head()).getByText("local only")).toBeInTheDocument();
-  });
-
-  it("FLO-FR-ULEM: a linked item carries a tracker tag naming the repository and the number; activating it opens the link", async () => {
-    const doc = samplePlan();
-    doc.sync = {
-      tracker: "github",
-      links: [
-        { itemId: "t1", ref: issueRef(51), base: issueBase("T1") },
-        { itemId: "m1", ref: milestoneRef(3), base: { name: "M1", description: "", state: "open" } },
-      ],
-    };
-    const b = flowBackend(doc);
-    b.on.open_tracker_link = () => undefined;
+  it("FLO-FR-ULEM: an item of a Flow file carries no tracker tag", async () => {
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
-    const tag = within(itemEl("t1")).getByRole("button", { name: "Open acme/payments#51 on GitHub" });
-    expect(tag).toHaveTextContent("#51");
-    const milestoneTag = within(itemEl("m1")).getByRole("button", { name: "Open acme/payments milestone 3 on GitHub" });
-    expect(milestoneTag).toHaveTextContent("milestone 3");
-    await userEvent.click(tag);
-    expect(callsOf(b, "open_tracker_link")).toEqual([{ url: "https://github.com/acme/payments/issues/51" }]);
-    expect(within(itemEl("t2")).queryByRole("button", { name: /on GitHub$/ })).toBeNull();
+    expect(screen.queryByTestId("flow-tracker-tag")).toBeNull();
+    expect(screen.queryByRole("button", { name: /on GitHub$/ })).toBeNull();
   });
 });

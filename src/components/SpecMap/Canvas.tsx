@@ -6,10 +6,10 @@ import type { MapView } from "../../state/specMap/session";
 import { Icon } from "../icons";
 import type { MapLayout, MapScope } from "./layout";
 import type { MapEdges } from "./edges";
-import type { DragState } from "./useMapDrag";
 import { EdgeLayer } from "./EdgeLayer";
 import { NodeLayer, type NodeHandlers } from "./nodes";
 import { HoverCard } from "./HoverCard";
+import type { SpecLinks } from "../../state/delivery/specLinks";
 import { Breadcrumb, Legend, ZoomControls, keepFromCanvas } from "./CanvasChrome";
 import { BUTTON_STEP, WHEEL_IN, WHEEL_OUT, zoomStep } from "./zoom";
 
@@ -29,8 +29,11 @@ interface CanvasProps {
   hover: MapRef | null;
   active: MapRef | null;
   gapsOnly: boolean;
+  /** SDL-FR-SGQM: the delivery links, or null where none show. */
+  links: SpecLinks | null;
+  /** SDL-FR-KXCY: the **unplanned** filter is on. */
+  unplanned: boolean;
   focusId: string | null;
-  drag: DragState | null;
   handlers: NodeHandlers;
   onView: (view: MapView) => void;
   onResetView: () => void;
@@ -41,22 +44,9 @@ interface CanvasProps {
   onOpenInspector: () => void;
 }
 
-function refLabel(tree: TreeIndex, ref: MapRef): string {
-  switch (ref.kind) {
-    case "index":
-      return tree.nodes.get(ref.id)?.label ?? "";
-    case "spec":
-      return ref.code;
-    case "planned":
-      return tree.planned.get(ref.draftId)?.name ?? "";
-    case "change":
-      return tree.changes.get(ref.key)?.change ?? "";
-  }
-}
-
 /** SMZ-FR-DPWC: the canvas, its one transformed stage, and the controls over it. */
 export function Canvas(props: CanvasProps) {
-  const { tree, layout, view, drag, width, height } = props;
+  const { tree, layout, view, width, height } = props;
   const pan = useRef<{ x: number; y: number; view: MapView } | null>(null);
   const [panning, setPanning] = useState(false);
   const latest = useRef(props);
@@ -69,8 +59,6 @@ export function Canvas(props: CanvasProps) {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const current = latest.current;
-      // SMZ-FR-CUTY
-      if (current.drag) return;
       current.onView(zoomStep(current.view, e.deltaY > 0 ? WHEEL_OUT : WHEEL_IN, current.lastLevel));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -101,7 +89,6 @@ export function Canvas(props: CanvasProps) {
     setPanning(false);
   };
 
-  const bar = drag?.target?.bar;
   return (
     <div
       ref={props.setCanvasEl}
@@ -129,29 +116,19 @@ export function Canvas(props: CanvasProps) {
           selection={props.selection}
           active={props.active}
           gapsOnly={props.gapsOnly}
+          links={props.links}
+          unplanned={props.unplanned}
           related={props.edges.related}
-          dragging={drag?.ref ?? null}
-          dropId={drag?.target?.highlightId ?? null}
           handlers={props.handlers}
         />
-        {bar && (
-          <div
-            className="smap-drop-bar"
-            style={{ left: bar.x, top: bar.y, width: bar.w, height: bar.h }}
-          />
-        )}
-        {drag && (
-          <div className="smap-ghost" style={{ left: drag.world.x, top: drag.world.y }}>
-            {refLabel(tree, drag.ref)}
-          </div>
-        )}
       </div>
-      {props.hover && !panning && !drag && (
+      {props.hover && !panning && (
         <HoverCard
           tree={tree}
           layout={layout}
           rollups={props.rollups}
           target={props.hover}
+          links={props.links}
           view={view}
           width={width}
           height={height}
@@ -171,7 +148,6 @@ export function Canvas(props: CanvasProps) {
       <Legend levelName={props.scope.levels[view.level]?.plural ?? ""} />
       <ZoomControls
         scale={view.scale}
-        disabled={drag !== null}
         onZoomIn={() => props.onView(zoomStep(view, BUTTON_STEP, props.lastLevel))}
         onZoomOut={() => props.onView(zoomStep(view, 1 / BUTTON_STEP, props.lastLevel))}
         onReset={props.onResetView}

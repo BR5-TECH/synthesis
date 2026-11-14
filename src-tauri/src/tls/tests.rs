@@ -342,7 +342,7 @@ fn a_certificate_for_another_host_is_refused_with_hostname_mismatch() {
 }
 
 /// Every source file of the application that sends an HTTP(S) or WSS request.
-pub(crate) const CLIENT_SOURCES: [(&str, &str); 17] = [
+pub(crate) const CLIENT_SOURCES: [(&str, &str); 16] = [
     ("http.rs", include_str!("../http.rs")),
     ("ai_shared.rs", include_str!("../ai_shared.rs")),
     ("ai_api/detection.rs", include_str!("../ai_api/detection.rs")),
@@ -352,7 +352,6 @@ pub(crate) const CLIENT_SOURCES: [(&str, &str); 17] = [
     ("github_polling/client.rs", include_str!("../github_polling/client.rs")),
     ("github_publication/client.rs", include_str!("../github_publication/client.rs")),
     ("git/pull_requests/client.rs", include_str!("../git/pull_requests/client.rs")),
-    ("flow_sync/github.rs", include_str!("../flow_sync/github.rs")),
     ("ai_openrouter.rs", include_str!("../ai_openrouter.rs")),
     ("agent_conversations/rig_bridge.rs", include_str!("../agent_conversations/rig_bridge.rs")),
     (

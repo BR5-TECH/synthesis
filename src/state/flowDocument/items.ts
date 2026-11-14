@@ -1,23 +1,16 @@
 /**
  * The edit operations on items and on the Flow's own fields (FLO-FR-07 to
  * FLO-FR-14, FLO-FR-25, FLO-FR-YDWT, FLO-FR-45, FLO-FR-HGIY, FLO-FR-NRBV,
- * FLO-FR-RMVR, FLO-FR-ZEJU, FLO-FR-XAPK, FLO-FR-TZSU).
+ * FLO-FR-RMVR, FLO-FR-ZEJU, FLO-FR-XAPK).
  *
  * Each operation returns a new document, or the same document when it changes
  * nothing, or a typed refusal (`result.ts`). None changes its input.
  */
 
-import {
-  absolutePosition,
-  childrenOf,
-  findItem,
-  permitsParent,
-  subtreeOf,
-} from "./containment";
+import { childrenOf, findItem, permitsParent, subtreeOf } from "./containment";
 import { accept, refuse, type FlowEditResult } from "./result";
 import { ITEM_ID_PREFIX, mintId, patchItem, without } from "./shared";
 import {
-  DEFAULT_CONTAINER_SIZES,
   DEFAULT_ITEM_NAMES,
   isContainerKind,
   ITEM_KINDS,
@@ -25,7 +18,6 @@ import {
   type FlowDocument,
   type FlowItem,
   type FlowItemKind,
-  type FlowPosition,
 } from "./types";
 
 /** The kind of the container `parentId` names, or `null` for the top level. */
@@ -41,17 +33,14 @@ function parentKindOf(
 // ---------------------------------------------------------------------------
 
 /**
- * FLO-FR-07 / FLO-FR-42 / FLO-FR-OAOZ: place a new item of `kind`, with its
- * default name and, for a container kind, its default size.
- *
- * `position` is in canvas coordinates; it is stored in the coordinates of
- * `parentId` (FLO-FR-21). A container the kind does not permit refuses the
+ * FLO-FR-07 / FLO-FR-42 / FLO-FR-OAOZ: add a new item of `kind` with its
+ * default name, in `parentId` or at the top level. Where it sits on the canvas
+ * is the layout's (FLO-FR-21). A container the kind does not permit refuses the
  * placement and names the containers the kind can join.
  */
 export function addItem(
   doc: FlowDocument,
   kind: FlowItemKind,
-  position: FlowPosition,
   parentId?: string,
 ): FlowEditResult<{ itemId: string }> {
   if (parentId !== undefined && !findItem(doc, parentId)) {
@@ -60,25 +49,14 @@ export function addItem(
   if (!permitsParent(kind, parentKindOf(doc, parentId))) {
     return refuse("invalid_parent_kind", { permitted: PERMITTED_PARENTS[kind] });
   }
-  // The id of a removed item that keeps its sync link is not free: that link
-  // is the record a sync reads as a local removal (FGV-FR-15).
-  const taken = new Set([
-    ...doc.items.map((i) => i.id),
-    ...(doc.sync?.links.map((l) => l.itemId) ?? []),
-  ]);
+  const taken = new Set(doc.items.map((i) => i.id));
   const sameKind = doc.items.filter((i) => i.kind === kind).length;
   const id = mintId(ITEM_ID_PREFIX[kind], taken, sameKind + 1);
-  const origin =
-    parentId === undefined ? { x: 0, y: 0 } : absolutePosition(doc, parentId);
   const item: FlowItem = {
     id,
     kind,
     name: DEFAULT_ITEM_NAMES[kind],
     ...(parentId !== undefined ? { parentId } : {}),
-    position: { x: position.x - origin.x, y: position.y - origin.y },
-    ...(isContainerKind(kind)
-      ? { size: { ...DEFAULT_CONTAINER_SIZES[kind as keyof typeof DEFAULT_CONTAINER_SIZES] } }
-      : {}),
   };
   return { ok: true, doc: { ...doc, items: [...doc.items, item] }, itemId: id };
 }
@@ -101,8 +79,7 @@ export function removalScope(
 
 /**
  * FLO-FR-08 / FLO-FR-45: remove an item with every item under it, and every
- * edge of every item that goes. A sync link of a removed item stays: it is the
- * record a sync reads as a local removal (FGV-FR-15).
+ * edge of every item that goes.
  */
 export function removeItem(doc: FlowDocument, id: string): FlowDocument {
   const gone = subtreeOf(doc, id);
@@ -220,11 +197,9 @@ export function kindChangeDrops(
 
 /**
  * FLO-FR-HGIY: change an item's kind. Refused when the item's container does
- * not permit the kind, when a member cannot sit in it, when a container that
- * holds items would become a leaf, or when a sync link would join a milestone
- * to an issue (FGV-FR-LWPD). The fields the new kind does not carry are
- * removed (FGV-FR-MZIA); a leaf that becomes a container gets the default size
- * of its new kind.
+ * not permit the kind, when a member cannot sit in it, or when a container
+ * that holds items would become a leaf. The fields the new kind does not carry
+ * are removed (FGV-FR-MZIA).
  *
  * A kind change cannot make a dependency cycle: an empty container waits as a
  * leaf does (FGV-FR-PMTY), and only an empty container becomes a leaf.
@@ -248,21 +223,9 @@ export function setItemKind(
   if (refused.length > 0) {
     return refuse("member_not_permitted", { itemIds: refused.map((m) => m.id) });
   }
-  const link = doc.sync?.links.find((l) => l.itemId === id);
-  if (link && (kind === "milestone") !== (link.ref.kind === "milestone")) {
-    return refuse("tracker_kind_mismatch");
-  }
 
   let next: FlowItem = { ...item, kind };
-  if (isContainerKind(kind)) {
-    next = without(next, "draftId", "footprint");
-    if (!next.size) {
-      const size = DEFAULT_CONTAINER_SIZES[kind as keyof typeof DEFAULT_CONTAINER_SIZES];
-      next = { ...next, size: { ...size } };
-    }
-  } else {
-    next = without(next, "size");
-  }
+  if (isContainerKind(kind)) next = without(next, "draftId", "footprint");
   if (kind !== "milestone") next = without(next, "due");
   return accept(patchItem(doc, id, () => next));
 }
@@ -273,7 +236,7 @@ export function allowedKinds(doc: FlowDocument, id: string): FlowItemKind[] {
 }
 
 // ---------------------------------------------------------------------------
-// Draft, footprint, due date, local only
+// Draft, footprint, due date
 // ---------------------------------------------------------------------------
 
 /** FGV-FR-CTFX: the item that links `draftId`, if one does. */
@@ -383,12 +346,4 @@ export function setDue(
   if (!isCalendarDate(due)) return refuse("invalid_due_date");
   if (item.due === due) return accept(doc);
   return accept(patchItem(doc, id, (i) => ({ ...i, due })));
-}
-
-/** FLO-FR-TZSU: mark an item local only, or clear the mark (absent when off). */
-export function setLocalOnly(doc: FlowDocument, id: string, on: boolean): FlowDocument {
-  return patchItem(doc, id, (i) => {
-    if (on) return i.localOnly === true ? i : { ...i, localOnly: true };
-    return i.localOnly === undefined ? i : without(i, "localOnly");
-  });
 }

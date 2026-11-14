@@ -25,17 +25,9 @@ export const pendingProposal: DraftChangeProposal = {
 /** The Flow the Flow-tab tests open, and the one-item plan it holds. */
 export const FLOW_ID = "workflows/h.flow";
 export const FLOW_BODY = JSON.stringify({
-  version: 2,
+  version: 3,
   name: "",
-  items: [
-    {
-      id: "m1",
-      kind: "milestone",
-      name: "A",
-      position: { x: 0, y: 0 },
-      size: { width: 640, height: 380 },
-    },
-  ],
+  items: [{ id: "m1", kind: "milestone", name: "A" }],
   edges: [],
 });
 

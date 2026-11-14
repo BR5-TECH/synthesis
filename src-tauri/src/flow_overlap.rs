@@ -136,13 +136,12 @@ mod tests {
     use serde_json::json;
 
     fn plan(items: serde_json::Value, edges: serde_json::Value) -> FlowDocument {
-        let body = json!({ "version": 2, "items": items, "edges": edges }).to_string();
+        let body = json!({ "version": 3, "items": items, "edges": edges }).to_string();
         parse_valid(&body).unwrap_or_else(|r| panic!("fixture invalid: {:?}", r.violations))
     }
 
     fn container(id: &str, kind: &str, parent: Option<&str>) -> serde_json::Value {
-        let mut v = json!({ "id": id, "kind": kind, "name": id, "position": {"x":0,"y":0},
-                            "size": {"width":10,"height":10} });
+        let mut v = json!({ "id": id, "kind": kind, "name": id });
         if let Some(p) = parent {
             v["parentId"] = json!(p);
         }
@@ -150,8 +149,7 @@ mod tests {
     }
 
     fn leaf(id: &str, parent: &str, footprint: &[&str]) -> serde_json::Value {
-        let mut v = json!({ "id": id, "kind": "task", "name": id, "parentId": parent,
-                            "position": {"x":0,"y":0} });
+        let mut v = json!({ "id": id, "kind": "task", "name": id, "parentId": parent });
         if !footprint.is_empty() {
             v["footprint"] = json!(footprint);
         }
@@ -245,5 +243,22 @@ mod tests {
         assert_eq!(overlaps(&doc), overlaps(&doc));
         assert!(overlaps(&parse_valid("").unwrap()).is_empty());
         assert!(parse_valid(r#"{"version":1}"#).is_err());
+        assert!(parse_valid(r#"{"version":2}"#).is_err());
+    }
+
+    /// FOA-FR-RSBH, FOA-FR-JVDK: a version 3 plan with leaves at the top level
+    /// and in an epic, as a GitHub plan holds them, is analysed in-process on
+    /// the parsed document. A defect overlaps a task; a container is in no
+    /// overlap.
+    #[test]
+    fn a_version_three_plan_is_analysed_in_process() {
+        let mut defect = leaf("x1", "e1", &["src/a.rs"]);
+        defect["kind"] = json!("defect");
+        let top = json!({ "id": "t9", "kind": "task", "name": "t9", "footprint": ["src/"] });
+        let doc = plan(json!([container("e1", "epic", None), defect, top]), json!([]));
+        assert_eq!(
+            overlaps(&doc),
+            vec![Overlap { items: ["x1".into(), "t9".into()], paths: vec!["src/a.rs".into()] }]
+        );
     }
 }

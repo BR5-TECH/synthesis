@@ -135,11 +135,11 @@ describe("nodes (SMN)", () => {
     expect(blocksFor(css, ".smap-box[data-context]")).toEqual(blocks);
   });
 
-  it("SMN-FR-HLDQ, SME-FR-WRPX, SMO-FR-DKTM: each kind of dimming has its own opacity", () => {
+  it("SMN-FR-HLDQ, SME-FR-WRPX: each kind of dimming has its own opacity", () => {
     expect(decl(only('.smap-node[data-dim="gaps"]'), "opacity")).toBe("0.3");
     expect(decl(only('.smap-chip[data-dim="gaps"]'), "opacity")).toBe("0.25");
     expect(decl(only('.smap-node[data-dim="related"]'), "opacity")).toBe("0.5");
-    expect(decl(only('.smap-node[data-dim="drag"]'), "opacity")).toBe("0.4");
+    expect(blocksFor(css, '.smap-node[data-dim="drag"]')).toEqual([]);
   });
 
   it("SMN-FR-MVWA, SMN-FR-YSKQ: the hover card is 280px wide and ignores the pointer", () => {
@@ -202,14 +202,6 @@ describe("the inspector (SMI)", () => {
   });
 });
 
-describe("planned chips (SMD)", () => {
-  it("SMD-FR-CGNW: a planned chip has a dashed border and a live-coloured draft badge", () => {
-    expect(decl(only(".smap-chip--planned"), "border-style")).toBe("dashed");
-    const badge = only(".smap-code--draft");
-    expect([decl(badge, "background"), decl(badge, "color")]).toEqual(["var(--live-soft)", "var(--live)"]);
-  });
-});
-
 describe("state styles of controls", () => {
   it("SMZ-FR-VYOS: the current level uses the soft accent, the others are transparent in --fg-3", () => {
     const option = only(".smap-levels__option");
@@ -231,10 +223,16 @@ describe("state styles of controls", () => {
     expect([decl(gaps, "background"), decl(gaps, "color")]).toEqual(["var(--danger-soft)", "var(--danger)"]);
   });
 
-  it("SMD-FR-CGNW: a planned chip's border is a 1px dashed --border-2 line", () => {
+  it("SMN-FR-ISBE: a spec chip has a 1px --border-1 line, and no planned chip style is left", () => {
     expect(decl(only(".smap-chip"), "border")).toBe("1px solid var(--border-1)");
-    const planned = only(".smap-chip--planned");
-    expect([decl(planned, "border-style"), decl(planned, "border-color")]).toEqual(["dashed", "var(--border-2)"]);
+    expect(blocksFor(css, ".smap-chip--planned")).toEqual([]);
+    expect(blocksFor(css, ".smap-code--draft")).toEqual([]);
+  });
+
+  it("SMP-FR-TKUS, SDL-FR-HZLB: the lens switch takes the level control's treatment, and unplanned uses the on tokens of gaps only", () => {
+    expect(blocksFor(css, ".smap-lens")).toHaveLength(1);
+    const unplanned = only('.smap-filter[data-filter="unplanned"][aria-pressed="true"]');
+    expect([decl(unplanned, "background"), decl(unplanned, "color")]).toEqual(["var(--danger-soft)", "var(--danger)"]);
   });
 
   it("SMI-FR-QWOP: the docked inspector has a 1px --border-1 left border", () => {
@@ -272,5 +270,38 @@ describe("the validation notice line (SMP-FR-KVKD)", () => {
     const rule = only(".smap-notice__details");
     expect(decl(rule, "flex")).toBe("1 1 100%");
     expect(decl(only(".smap-notice"), "flex-wrap")).toBe("wrap");
+  });
+});
+
+describe("the delivery links and the Delivery lens (SDL, MDL)", () => {
+  it("SDL-FR-SGQM: the planned mark is a 2px --accent bar along the bottom edge of the chip", () => {
+    const mark = only(".smap-chip[data-plan-linked]::after");
+    expect(decl(mark, "position")).toBe("absolute");
+    expect(decl(mark, "bottom")).toBe("0");
+    expect([decl(mark, "left"), decl(mark, "right")]).toEqual(["0", "0"]);
+    expect(decl(mark, "height")).toBe("2px");
+    expect(decl(mark, "background")).toBe("var(--accent)");
+  });
+
+  it("SDL-FR-KXCY: the unplanned filter dims a chip to 0.25 and an index node to 0.3", () => {
+    expect(decl(only('.smap-chip[data-dim="unplanned"]'), "opacity")).toBe("0.25");
+    expect(decl(only('.smap-node[data-dim="unplanned"]'), "opacity")).toBe("0.3");
+  });
+
+  it("MDL-FR-GDUP: the roll-up bar of the leaf states is 170 × 8px", () => {
+    const bar = only(".dlens-bar");
+    expect([decl(bar, "width"), decl(bar, "height")]).toEqual(["170px", "8px"]);
+    expect(decl(bar, "flex")).toBe("none");
+  });
+
+  it("MDL-FR-ECPZ: the Status chip has a neutral fill and sets no state colour", () => {
+    const kit = sheet("kit.css");
+    const status = blocksFor(kit, ".flow-chip--status");
+    expect(status).toHaveLength(1);
+    expect(decl(status[0], "background")).toBe("var(--bg-sunken)");
+    expect(decl(status[0], "color")).toBe("var(--fg-2)");
+    expect(decl(status[0], "border-color")).toBe("var(--border-1)");
+    // The chip carries no data-state, so no state colour reaches it.
+    expect(blocksFor(kit, '.flow-chip--status[data-state="done"]')).toEqual([]);
   });
 });

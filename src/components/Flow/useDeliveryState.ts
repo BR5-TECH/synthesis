@@ -24,9 +24,10 @@ export interface DeliveryView {
  * rest after each edit, and on each `"drafts changed"` and `"graduation run
  * changed"` event. A newer answer replaces an older one, and an answer for a
  * body that is no longer the plan is discarded. The canvas does not wait for
- * either answer (FLO NFR).
+ * either answer (FLO NFR). A plan binding gets both from its host
+ * (MDL-FR-XJBV), so `enabled` is false there and nothing is asked.
  */
-export function useDeliveryState(doc: FlowDocument | null): DeliveryView {
+export function useDeliveryState(doc: FlowDocument | null, enabled = true): DeliveryView {
   const [states, setStates] = useState<Map<string, ItemDeliveryState> | null>(null);
   const [overlaps, setOverlaps] = useState<FlowOverlap[] | null>(null);
   /** The body the canvas holds now; an answer for another body is stale. */
@@ -81,6 +82,7 @@ export function useDeliveryState(doc: FlowDocument | null): DeliveryView {
 
   useEffect(() => {
     alive.current = true;
+    if (!enabled) return;
     let cancelled = false;
     const unlisten: Array<() => void> = [];
     const again = () => {
@@ -101,7 +103,7 @@ export function useDeliveryState(doc: FlowDocument | null): DeliveryView {
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
     };
-  }, []);
+  }, [enabled]);
 
   return { states, overlaps };
 }

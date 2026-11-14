@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { FlowCanvas } from "./Flow";
+import { FlowCanvas, fileBinding } from "./Flow";
 import { FlowSessionStore } from "../state/flowSessions";
 import { parseFlowDocument, serializeFlowDocument } from "../state/flowDocument";
 import { resetLogBufferForTest } from "../logging";
@@ -22,7 +22,7 @@ import {
 } from "../test/flowCanvasHarness";
 import { canvas, grip, ID, itemEl, panCanvas, panel, queryItem, selectItem } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
-import { blocks, item, plan, relates, samplePlan } from "../test/flowPlanFixtures";
+import { blocks, item, plan, relates, sampleLayout, samplePlan } from "../test/flowPlanFixtures";
 
 vi.mock("@tauri-apps/api/core", async () => ({
   invoke: (await import("../test/flowMocks")).invoke,
@@ -76,7 +76,7 @@ function pressAndDrag(el: HTMLElement) {
 
 describe("opening a Flow", () => {
   it("FLO-FR-01, FLO-FR-03, FLO-FR-46: renders the items and edges of a body that the validation calls valid", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2")]), sampleLayout());
     await renderFlow(b);
 
     const order = b.calls.map((c) => c.cmd);
@@ -101,7 +101,7 @@ describe("opening a Flow", () => {
   });
 
   it("FLO-FR-05: an invalid body shows its violations with their items, renders no plan, and writes nothing", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.validation = {
       valid: false,
       violations: [
@@ -138,13 +138,13 @@ describe("opening a Flow", () => {
   });
 
   it("FLO-FR-46: nothing of the plan renders, and nothing can be edited, before the validation answers", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     let answer: (r: typeof b.validation) => void = () => {};
     b.on.validate_flow_document = () => new Promise((res) => (answer = res));
     const flows = new FlowSessionStore();
     try {
       act(() => flows.openTab(ID));
-      render(<FlowCanvas flowId={ID} flows={flows} />);
+      render(<FlowCanvas binding={fileBinding(flows, ID)} />);
       await waitFor(() => expect(callsOf(b, "validate_flow_document")).toHaveLength(1));
 
       expect(queryItem("t1")).toBeNull();
@@ -161,7 +161,7 @@ describe("opening a Flow", () => {
   });
 
   it("FLO-FR-06, FLO-FR-14: an item with only a kind and a name renders and takes a connection", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", position: { x: 20, y: 60 } }), item("t2", "task", { parentId: "f1", position: { x: 220, y: 60 } })]));
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1" }), item("t2", "task", { parentId: "f1" })]));
     const { flows } = await renderFlow(b);
 
     expect(itemEl("t1")).toHaveAccessibleName("Task T1");
@@ -173,7 +173,7 @@ describe("opening a Flow", () => {
 
 describe("the band (FLO-FR-25)", () => {
   it("FLO-FR-25: the name and the description are edited in place and are part of the plan", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     const name = screen.getByRole("textbox", { name: "Flow name" });
@@ -212,7 +212,7 @@ describe("the band (FLO-FR-25)", () => {
 
 describe("unsaved changes and writes (FLO-FR-26, FLO-FR-27, FLO-FR-47)", () => {
   it("FLO-FR-26, FLO-FR-27: an edit makes the Flow dirty and writes it a short rest later", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
     vi.useFakeTimers();
 
@@ -233,7 +233,7 @@ describe("unsaved changes and writes (FLO-FR-26, FLO-FR-27, FLO-FR-47)", () => {
   });
 
   it("FLO-FR-26, FLO-FR-22: selecting, collapsing, panning, and zooming are not edits", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
     const body = b.body;
     vi.useFakeTimers();
@@ -259,7 +259,7 @@ describe("unsaved changes and writes (FLO-FR-26, FLO-FR-27, FLO-FR-47)", () => {
   });
 
   it("FLO-FR-47: a write the validation refuses lists every violation, keeps the plan dirty, and writes nothing", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
     b.validation = {
       valid: false,
@@ -282,7 +282,7 @@ describe("unsaved changes and writes (FLO-FR-26, FLO-FR-27, FLO-FR-47)", () => {
 
 describe("the view (FLO-FR-22, FLO-FR-23)", () => {
   it("FLO-FR-22: the view controls zoom and fit, and a press on them neither pans nor clears the selection", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
     selectItem("t1");
@@ -306,7 +306,7 @@ describe("the view (FLO-FR-22, FLO-FR-23)", () => {
   });
 
   it("FLO-FR-22: a press on empty canvas pans the view and clears the selection", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
     selectItem("t1");
@@ -316,23 +316,23 @@ describe("the view (FLO-FR-22, FLO-FR-23)", () => {
     expect(itemEl("t1")).toHaveAttribute("data-selected", "false");
   });
 
-  it("FLO-FR-22: a reopened Flow shows the default view with every container expanded", async () => {
-    const b = flowBackend(samplePlan());
+  it("FLO-FR-22, FLO-FR-ZASL: a reopened Flow shows the default view, and its layout keeps what was collapsed", async () => {
+    const b = flowBackend(samplePlan(), sampleLayout());
     const first = await renderFlow(b);
     await userEvent.click(screen.getByRole("button", { name: "Collapse F1" }));
     await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     first.view.unmount();
 
-    render(<FlowCanvas flowId={ID} flows={first.flows} />);
-    expect(screen.getByRole("button", { name: "Collapse F1" })).toHaveAttribute("aria-expanded", "true");
+    render(<FlowCanvas binding={fileBinding(first.flows, ID)} />);
+    expect(screen.getByRole("button", { name: "Expand F1" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByTestId("flow-zoom")).toHaveTextContent("100%");
   });
 
   it("FLO-FR-23: a plan of several hundred items renders with no cap", async () => {
     const tasks = Array.from({ length: 300 }, (_, i) =>
-      item(`t${i}`, "task", { parentId: "f1", position: { x: 20 + (i % 20) * 180, y: 60 + Math.floor(i / 20) * 120 } }),
+      item(`t${i}`, "task", { parentId: "f1" }),
     );
-    const b = flowBackend(plan([item("f1", "feature", { size: { width: 3700, height: 1900 } }), ...tasks]));
+    const b = flowBackend(plan([item("f1", "feature"), ...tasks]));
     await renderFlow(b);
 
     expect(screen.getByTestId("flow-status")).toHaveTextContent("301 items");
@@ -342,7 +342,7 @@ describe("the view (FLO-FR-22, FLO-FR-23)", () => {
 
 describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
   it("FLO-FR-34, FLO-FR-36: the tab carries the action control, bound to the Flow file", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
     expect(within(canvas()).getByRole("button", { name: "Actions" })).toBeInTheDocument();
@@ -352,7 +352,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
   });
 
   it("FLO-FR-34: a press on the action control neither pans the view nor clears the selection", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
     selectItem("t1");
@@ -385,7 +385,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
     };
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.on.list_discussions = () => [opened];
     b.on.list_project_agents = () => [];
     b.on.list_agent_turns = () => [];
@@ -407,7 +407,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
   });
 
   it("FLO-FR-07, FLO-FR-34: the add menu and the action control share one transient surface", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     await userEvent.click(screen.getByRole("button", { name: "Add to plan" }));
@@ -418,7 +418,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
   });
 
   it("FLO-FR-07: opening the add menu closes no floating overlay of the window, and dismisses the discussion panel as ACT-FR-12 says", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.on.list_discussions = () => [flowDiscussion("Is the order of the refunds right?")];
     b.on.list_project_agents = () => [];
     b.on.list_agent_turns = () => [];
@@ -437,7 +437,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
   });
 
   it("FLO-FR-36: a discussion opened from the action control targets the Flow file, with no fragment", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     b.on.list_project_agents = () => [];
     b.on.list_agent_turns = () => [];
     b.on.resolve_comment_author_identity = () => ({ kind: "human", login: "raver119" });
@@ -459,7 +459,7 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
 
 describe("description and name (FLO-FR-09, FLO-FR-13)", () => {
   it("FLO-FR-13: an unselected item renders its description as rich text, and the panel edits its Markdown source", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", description: "Use **bold** text", position: { x: 20, y: 60 } })]));
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", description: "Use **bold** text" })]));
     const { flows } = await renderFlow(b);
 
     const rendered = screen.getByTestId("flow-item-description-t1");
@@ -474,7 +474,7 @@ describe("description and name (FLO-FR-09, FLO-FR-13)", () => {
   });
 
   it("FLO-FR-09: an item is renamed in place, and two items may share a name", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
 
     fireEvent.doubleClick(screen.getByTestId("flow-item-name-t1"));
@@ -486,8 +486,37 @@ describe("description and name (FLO-FR-09, FLO-FR-13)", () => {
     expect(screen.getAllByText("T2")).toHaveLength(2);
   });
 
+  it("FLO-FR-09, FLO-FR-21: a press captures no pointer, so the double-click reaches the name; a drag captures it once it moves", async () => {
+    const proto = HTMLElement.prototype as { setPointerCapture?: (id: number) => void };
+    const original = proto.setPointerCapture;
+    const capture = vi.fn();
+    proto.setPointerCapture = capture;
+    try {
+      await renderFlow(flowBackend(samplePlan(), sampleLayout()));
+      // A real double-click is two presses and releases, then the dblclick.
+      for (let i = 0; i < 2; i += 1) {
+        fireEvent.pointerDown(grip("t1"), { pointerId: 1, buttons: 1, clientX: 10, clientY: 10 });
+        fireEvent.pointerUp(grip("t1"), { pointerId: 1 });
+      }
+      expect(capture).not.toHaveBeenCalled();
+      fireEvent.doubleClick(screen.getByTestId("flow-item-name-t1"));
+      expect(within(itemEl("t1")).getByRole("textbox", { name: "Item name" })).toBeInTheDocument();
+      fireEvent.keyDown(within(itemEl("t1")).getByRole("textbox", { name: "Item name" }), { key: "Escape" });
+
+      fireEvent.pointerDown(grip("t2"), { pointerId: 2, buttons: 1, clientX: 10, clientY: 10 });
+      expect(capture).not.toHaveBeenCalled();
+      fireEvent.pointerMove(canvas(), { pointerId: 2, buttons: 1, clientX: 40, clientY: 30 });
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(capture).toHaveBeenCalledWith(2);
+      fireEvent.pointerUp(canvas(), { pointerId: 2 });
+    } finally {
+      if (original) proto.setPointerCapture = original;
+      else delete proto.setPointerCapture;
+    }
+  });
+
   it("FLO-FR-09: the panel's Rename turns a container's name into a field", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     await renderFlow(b);
 
     selectItem("f1");
@@ -496,20 +525,21 @@ describe("description and name (FLO-FR-09, FLO-FR-13)", () => {
   });
 
   it("FLO-FR-44: selecting an item opens its panel and changes no item's size", async () => {
-    const b = flowBackend(samplePlan());
+    const b = flowBackend(samplePlan(), sampleLayout());
     const { flows } = await renderFlow(b);
     const before = itemEl("f1").getAttribute("style");
 
     selectItem("f1");
     expect(panel()).toBeInTheDocument();
     expect(itemEl("f1").getAttribute("style")).toBe(before);
-    expect(planOf(flows).items.find((i) => i.id === "f1")!.size).toEqual({ width: 420, height: 300 });
+    expect(itemEl("f1").style.width).toBe("420px");
+    expect(itemEl("f1").style.height).toBe("300px");
   });
 });
 
 describe("a plan with relates edges", () => {
   it("FLO-FR-15: a relates edge and a blocks edge both render with their own type", async () => {
-    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), relates("e2", "t1", "x1")]));
+    const b = flowBackend(samplePlan([blocks("e1", "t1", "t2"), relates("e2", "t1", "x1")]), sampleLayout());
     await renderFlow(b);
 
     expect(screen.getByTestId("flow-edge-path-e1")).toHaveAttribute("data-type", "blocks");

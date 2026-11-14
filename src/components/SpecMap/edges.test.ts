@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { buildTree } from "../../state/specMap/tree";
-import { applyEdit } from "../../state/specMap/organize";
 import type { Dependency, SpecificationIndex } from "../../state/specMap/types";
 import { layoutMap, scopeOf } from "./layout";
 import {
@@ -52,19 +51,6 @@ describe("aggregation (SME-FR-FKIW)", () => {
     const edges = edgesOf(smallIndex(), 0);
     expect(edges.light.length + edges.medium.length + edges.heavy.length).toBe(1);
     expect(edges.unresolved).toHaveLength(1);
-  });
-
-  it("SME-FR-JRCY: aggregation reads the current tree after an organization edit", () => {
-    const moved = applyEdit(smallIndex([{ from: "A1", to: "C1", citations: 5 }]), {
-      kind: "move",
-      ref: { kind: "spec", code: "C1" },
-      parentId: "g3",
-      index: 0,
-    });
-    expect(aggregateLinks(buildTree(moved), 1)).toEqual([
-      { from: "f1", to: "f2", citations: 5 },
-    ]);
-    expect(aggregateLinks(buildTree(moved), 0)).toEqual([]);
   });
 });
 

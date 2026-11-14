@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ActionControl } from "./ActionControl";
 import { DiffView } from "./DiffView";
-import { FlowCanvas } from "./Flow";
+import { FlowCanvas, fileBinding } from "./Flow";
 import type { UseDiscussionsResult } from "../hooks/useDiscussions";
 import { EditSessionStore } from "../state/editSessions";
 import { FlowSessionStore } from "../state/flowSessions";
@@ -48,7 +48,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const human = { kind: "human", login: "raver119" } as const;
 const FLOW_BODY = JSON.stringify({
-  version: 2,
+  version: 3,
   name: "Onboarding review",
   items: [],
   edges: [],
@@ -118,7 +118,7 @@ async function renderFlow(b: Backend) {
     flows.openTab("review.flow");
     await flows.get("review.flow")?.pendingLoad;
   });
-  render(<FlowCanvas flowId="review.flow" flows={flows} />);
+  render(<FlowCanvas binding={fileBinding(flows, "review.flow")} />);
   await screen.findByRole("button", { name: "Actions" });
 }
 

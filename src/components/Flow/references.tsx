@@ -7,7 +7,7 @@ export interface ReferenceRowsProps {
   /** FLO-FR-10: a reference is removed on its own, from its row. */
   onRemove?: (artifactId: string) => void;
   onOpen: (artifact: ArtifactOption) => void;
-  /** FLO-FR-KHBY: while a sync runs, no reference is removed. */
+  /** MDL-FR-WMGU: while the canvas is inert, no reference is removed. */
   disabled?: boolean;
   className?: string;
 }
@@ -90,7 +90,7 @@ export function ArtifactPicker({
   onAdd: (artifactId: string) => void;
   label?: string;
   prompt?: string;
-  /** FLO-FR-KHBY: while a sync runs, the picker adds nothing. */
+  /** MDL-FR-WMGU: while the canvas is inert, the picker adds nothing. */
   disabled?: boolean;
   className?: string;
 }) {

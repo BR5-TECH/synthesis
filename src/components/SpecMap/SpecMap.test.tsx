@@ -16,6 +16,9 @@ import {
   setWindowWidth,
 } from "../../test/specMapRender";
 
+const levelRadios = () =>
+  within(screen.getByRole("radiogroup", { name: "Detail level" })).getAllByRole("radio");
+
 vi.mock("../../logging", () => ({
   logDebug: vi.fn(),
   logInfo: vi.fn(),
@@ -35,9 +38,9 @@ describe("the tab frame (SMP)", () => {
       load: vi.fn(() => new Promise<SpecificationIndex>((r) => (resolve = r))),
     });
     setWindowWidth(1440);
-    const props = { onOpenArtifact: vi.fn(), onNewDraft: vi.fn(), onOpenDraft: vi.fn() };
+    const props = { onOpenArtifact: vi.fn() };
     const first = render(<SpecMap store={store} {...props} />);
-    expect(await screen.findByRole("status")).toHaveTextContent("Loading the specification map");
+    expect(await screen.findByText("Loading the specification map…")).toHaveAttribute("class", "smap-state__line");
     await act(async () => resolve(smallIndex()));
     await screen.findByTestId("spec-map-canvas");
     first.unmount();
@@ -67,7 +70,7 @@ describe("the tab frame (SMP)", () => {
     expect(screen.queryByTestId("spec-map-canvas")).toBeNull();
   });
 
-  it("SMP-FR-CVIB, SMZ-FR-VYOS, SMP-FR-QMRE: the toolbar holds its controls in order, with a pill per level name", async () => {
+  it("SMP-FR-CVIB, SMP-FR-TKUS, SMZ-FR-VYOS, SMP-FR-QMRE: the toolbar holds its controls in order, with the lens switch first and a pill per level name", async () => {
     mockCanvasRect({ width: 1440, height: 800 });
     const { container } = await renderMap();
     const toolbar = screen.getByRole("toolbar", { name: "Map controls" });
@@ -75,6 +78,7 @@ describe("the tab frame (SMP)", () => {
       [el.classList[0], el.getAttribute("data-filter")].filter(Boolean).join(":"),
     );
     expect(order).toEqual([
+      "smap-lens",
       "smap-levels",
       "smap-toolbar__divider",
       "smap-toolbar__label",
@@ -84,10 +88,15 @@ describe("the tab frame (SMP)", () => {
       "smap-filter:deps",
       "smap-filter:gaps",
     ]);
-    const radios = screen.getAllByRole("radio");
+    const lenses = within(screen.getByRole("radiogroup", { name: "Lens" })).getAllByRole("radio");
+    expect(lenses.map((r) => [r.textContent, r.getAttribute("aria-checked")])).toEqual([
+      ["Delivery", "false"],
+      ["Specifications", "true"],
+    ]);
+    const radios = levelRadios();
     expect(radios.map((r) => r.textContent)).toEqual(["domains", "features", "groups", "specs"]);
     expect(radios[0]).toHaveAttribute("aria-checked", "true");
-    expect(container.querySelector(".smap-levels__option[data-active]")).toHaveTextContent("domains");
+    expect(container.querySelector(".smap-levels:not(.smap-lens) .smap-levels__option[data-active]")).toHaveTextContent("domains");
   });
 
   it("SMP-FR-YDKM: the project bar and counts cover every spec node", async () => {
@@ -118,6 +127,37 @@ describe("the tab frame (SMP)", () => {
     expect(deps).toHaveTextContent("");
     expect(deps).toHaveAttribute("title", "Dependencies");
     expect(screen.getByRole("button", { name: "Gaps only" })).toHaveAttribute("title", "Gaps only");
+  });
+
+  it("SMP-FR-CVIB: the unplanned toggle shows after gaps only where the frame gets one, and acts through it", async () => {
+    mockCanvasRect({ width: 1440, height: 800 });
+    const { store } = makeStore();
+    setWindowWidth(1440);
+    const onToggle = vi.fn();
+    const view = render(<SpecMap store={store} onOpenArtifact={vi.fn()} />);
+    await screen.findByTestId("spec-map-canvas");
+    expect(screen.queryByRole("button", { name: "Unplanned" })).toBeNull();
+    view.rerender(<SpecMap store={store} onOpenArtifact={vi.fn()} unplanned={{ on: true, onToggle }} />);
+    const toolbar = screen.getByRole("toolbar", { name: "Map controls" });
+    const filters = [...toolbar.querySelectorAll(".smap-filter")].map((el) => el.getAttribute("data-filter"));
+    expect(filters).toEqual(["deps", "gaps", "unplanned"]);
+    const unplanned = screen.getByRole("button", { name: "Unplanned" });
+    expect(unplanned).toHaveAttribute("aria-pressed", "true");
+    expect(unplanned).toHaveTextContent("unplanned");
+    fireEvent.click(unplanned);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("SMP-FR-GJEW: below a tab width of 1000px the unplanned toggle keeps only its icon and tooltip", async () => {
+    mockCanvasRect({ width: 900, height: 800 });
+    const { store } = makeStore();
+    setWindowWidth(1440);
+    render(<SpecMap store={store} onOpenArtifact={vi.fn()} unplanned={{ on: false, onToggle: vi.fn() }} />);
+    await screen.findByTestId("spec-map-canvas");
+    const unplanned = screen.getByRole("button", { name: "Unplanned" });
+    expect(unplanned).toHaveTextContent("");
+    expect(unplanned).toHaveAttribute("title", "Unplanned");
+    expect(unplanned).toHaveAttribute("aria-pressed", "false");
   });
 });
 
@@ -181,7 +221,7 @@ describe("the canvas (SMZ)", () => {
     fireEvent.pointerUp(canvas(), { pointerId: 1 });
     expect(store.snapshot().view).toMatchObject({ tx: 35, ty: 27, touched: true });
 
-    // Under the drag threshold, so this press is neither a pan nor a drag.
+    // A press that starts on a node does not pan.
     fireEvent.pointerDown(nodeButton("d1 label, domain"), { button: 0, pointerId: 2, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(canvas(), { pointerId: 2, clientX: 12, clientY: 11 });
     fireEvent.pointerUp(window, { pointerId: 2 });
@@ -222,7 +262,7 @@ describe("the canvas (SMZ)", () => {
     expect(container.querySelector(".smap-legend__level")).toHaveTextContent("features");
     expect(nodeButton("f1 label, feature")).toHaveAttribute("data-shape", "overview");
     expect(screen.queryByRole("button", { name: "d2 label, domain" })).toBeNull();
-    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual(["features", "groups", "specs"]);
+    expect(levelRadios().map((r) => r.textContent)).toEqual(["features", "groups", "specs"]);
     const crumbs = screen.getByRole("navigation", { name: "Focused subtree" });
     expect(crumbs).toHaveTextContent("specifications→d1 label→f1 label");
 
@@ -321,18 +361,6 @@ describe("nodes (SMN)", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
     fireEvent.pointerUp(canvas(), { pointerId: 1 });
   });
-
-  it("SMD-FR-ULTF, SMD-FR-CGNW: a planned draft counts on a collapsed node and shows as a chip when expanded", async () => {
-    const { store } = await renderMap();
-    act(() => {
-      store.dispatch({ kind: "attachDraft", nodeId: "g1", draft: { draftId: "dr", name: "Untitled" } });
-    });
-    setView(store, { level: 1 });
-    expect(nodeButton("f1 label, feature")).toHaveTextContent("3 specs · +1 planned");
-    setView(store, { level: 3 });
-    const planned = nodeButton("draft Untitled");
-    expect(planned.querySelector(".smap-code--draft")).toHaveTextContent("draft");
-  });
 });
 
 describe("edges (SME)", () => {
@@ -387,21 +415,14 @@ describe("level names, framing and render rules", () => {
       ],
     };
     const { store, container } = await renderMap({ index: renamed });
-    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual(["areas", "themes", "sets", "documents"]);
+    expect(levelRadios().map((r) => r.textContent)).toEqual(["areas", "themes", "sets", "documents"]);
     expect(container.querySelector(".smap-legend__level")).toHaveTextContent("areas");
     expect(nodeButton("d1 label, area")).toHaveTextContent("4 specs · 2 themes");
     const pane = screen.getByRole("complementary", { name: "Inspector" });
-    expect(within(pane).getByRole("button", { name: "New area" })).toBeInTheDocument();
     act(() => store.select({ kind: "index", id: "f1" }));
     expect(container.querySelector(".smap-inspector__kind")).toHaveTextContent("theme");
     expect(within(pane).getByText("Sets")).toBeInTheDocument();
     expect(within(pane).getByRole("button", { name: "Open theme" })).toBeInTheDocument();
-    expect(within(pane).getByRole("button", { name: "New set" })).toBeInTheDocument();
-    fireEvent.click(within(pane).getByRole("button", { name: "Rename" }));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Rename theme");
-    fireEvent.keyDown(window, { key: "Escape" });
-    fireEvent.click(within(pane).getByRole("button", { name: "Delete" }));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Delete theme");
   });
 
   it("SMZ-FR-NUOB: first paint follows each new measured height, and stops once the author pans", async () => {

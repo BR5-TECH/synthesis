@@ -1,5 +1,7 @@
 /**
- * The Flow document shape, version 2: a delivery plan (FGV-FR-01, FLO-FR-03).
+ * The Flow document shape, version 3: a delivery plan (FGV-FR-01, FLO-FR-03),
+ * and the layout of a plan on the canvas, which is not part of the document
+ * (FLO-FR-21, DMS-FR-DMWD).
  *
  * The backend validator (`src-tauri/src/flow_validation.rs`) is the authority on
  * what a valid document is; these types describe one that has passed it.
@@ -32,28 +34,29 @@ export const ITEM_KINDS: readonly FlowItemKind[] = [
   "defect",
 ];
 
-/** A container kind carries a size and holds other items (FGV-FR-01). */
+/** A container kind holds other items, and its layout has a size (FGV-FR-01). */
 export function isContainerKind(kind: FlowItemKind): boolean {
   return kind !== "task" && kind !== "defect";
 }
 
 /**
  * FGV-FR-YHFX: the containers each kind may sit in. `null` is the top level.
+ * A milestone sits at the top level. Every other kind sits at the top level or
+ * in a container of a higher rank.
  */
 export const PERMITTED_PARENTS: Readonly<
   Record<FlowItemKind, readonly (FlowItemKind | null)[]>
 > = {
   milestone: [null],
-  epic: ["milestone"],
-  feature: ["milestone", "epic"],
-  task: ["feature"],
-  defect: ["feature", "epic", "milestone"],
+  epic: [null, "milestone"],
+  feature: [null, "milestone", "epic"],
+  task: [null, "milestone", "epic", "feature"],
+  defect: [null, "milestone", "epic", "feature"],
 };
 
 /**
- * FLO-FR-06: one plan item. Optional fields are absent rather than empty.
- * `position` is measured from the origin of whatever holds the item
- * (FLO-FR-21).
+ * FLO-FR-06: one plan item. Optional fields are absent rather than empty. The
+ * item has no position and no size: the layout keeps them (FLO-FR-21).
  */
 export interface FlowItem {
   /** Unique among all items in the document, and stable across saves. */
@@ -66,17 +69,12 @@ export interface FlowItem {
   artifactIds?: string[];
   /** The container that holds this item; absent at the top level. */
   parentId?: string;
-  /** FLO-FR-TZSU: never created on the tracker by a sync. */
-  localOnly?: boolean;
   /** FLO-FR-NRBV: the draft a task or a defect is worked in. Leaf kinds only. */
   draftId?: string;
   /** FLO-FR-ZEJU: project-relative paths; a trailing `/` names a folder. Leaf kinds only. */
   footprint?: string[];
   /** FLO-FR-XAPK: a calendar date `YYYY-MM-DD`. Milestones only. */
   due?: string;
-  position: FlowPosition;
-  /** Present on container kinds, absent on leaf kinds (FGV-FR-MZIA). */
-  size?: FlowSize;
 }
 
 /** FLO-FR-15: `blocks` runs from the blocking item to the blocked one. */
@@ -89,46 +87,8 @@ export interface FlowEdge {
   type: FlowEdgeType;
 }
 
-/** A tracker reference (FGV-FR-01's `ref`). */
-export interface TrackerRef {
-  kind: "issue" | "milestone";
-  host: string;
-  owner: string;
-  repo: string;
-  number: number;
-  url: string;
-}
-
-/** The tracker values at the last sync (FTS-FR-PNMA). */
-export interface SyncBase {
-  name: string;
-  description: string;
-  state: "open" | "closed";
-  type?: string | null;
-  parent?: TrackerRef | null;
-  milestone?: number | null;
-  blockedBy?: TrackerRef[];
-  due?: string | null;
-}
-
-export interface SyncLink {
-  itemId: string;
-  ref: TrackerRef;
-  base: SyncBase;
-}
-
-export interface FlowSync {
-  tracker: "github";
-  links: SyncLink[];
-  /**
-   * FTS-FR-YHVD: the tracker items a sync never creates or pulls. Absent from
-   * the file when empty (FGV-FR-01).
-   */
-  ignored?: TrackerRef[];
-}
-
 export interface FlowDocument {
-  version: 2;
+  version: 3;
   /** FLO-FR-25: always written, empty or not. */
   name: string;
   /** FLO-FR-25: absent when empty. */
@@ -137,12 +97,10 @@ export interface FlowDocument {
   references: string[];
   items: FlowItem[];
   edges: FlowEdge[];
-  /** FLO-FR-AKMV: present once the Flow is connected to a tracker. */
-  sync?: FlowSync;
 }
 
 /** The only document version this build reads or writes (FGV-FR-07). */
-export const FLOW_VERSION = 2;
+export const FLOW_VERSION = 3;
 
 /** FLO-FR-07: what a freshly added item of each kind is called. */
 export const DEFAULT_ITEM_NAMES: Readonly<Record<FlowItemKind, string>> = {
@@ -153,7 +111,7 @@ export const DEFAULT_ITEM_NAMES: Readonly<Record<FlowItemKind, string>> = {
   defect: "New defect",
 };
 
-/** FLO-FR-07: the size a new, empty container of each kind arrives at. */
+/** FLO-FR-HBBF: the size an empty container of each kind takes when no size is stored. */
 export const DEFAULT_CONTAINER_SIZES: Readonly<
   Record<"milestone" | "epic" | "feature", FlowSize>
 > = {
@@ -161,6 +119,36 @@ export const DEFAULT_CONTAINER_SIZES: Readonly<
   epic: { width: 520, height: 300 },
   feature: { width: 400, height: 220 },
 };
+
+/**
+ * FLO-FR-21 / FLO-FR-44 / FLO-FR-ZASL: where one item sits on the canvas. The
+ * position is measured from the origin of whatever holds the item. A container
+ * has a size and can be collapsed; a leaf has neither.
+ */
+export interface PlacedItem {
+  position: FlowPosition;
+  size?: FlowSize;
+  collapsed?: boolean;
+}
+
+/**
+ * The layout of a plan on the canvas: an entry for every item, a size for every
+ * container. The canvas builds it from the stored layout and the automatic
+ * layout (FLO-FR-PLUZ, FLO-FR-HBBF), and it is never part of the document.
+ */
+export type FlowLayout = Readonly<Record<string, PlacedItem>>;
+
+/**
+ * DMS-FR-DMWD: the layout as the machine stores it for a scope. Every field of
+ * an entry is optional, and an entry for an item that the plan does not hold is
+ * kept and ignored (DMS-FR-EKKY).
+ */
+export interface StoredLayout {
+  items: Record<
+    string,
+    { position?: FlowPosition; size?: FlowSize; collapsed?: boolean }
+  >;
+}
 
 /** FLO-FR-44: the room a container keeps around what it holds. */
 export const CONTAINER_PADDING = 16;

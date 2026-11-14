@@ -3,13 +3,13 @@
 **Spec code:** `SMI`
 
 ## Intent
-The inspector is the reading pane of the specification map. It shows everything the map knows about the selected node — its place in the hierarchy, its summary, its completeness, its children, its dependencies, and what needs attention — and it holds the actions that start work from that node. This spec owns the inspector of the Map tab (`SMP-specification-map.md`), its placement, its content, and its navigation actions. The organization actions it hosts are specified in `SMO-specification-map-organization.md`, and **New draft** in `SMD-specification-map-drafts.md`.
+The inspector is the reading pane of the specification map. It shows everything the map knows about the selected node — its place in the hierarchy, its summary, its completeness, its children, its dependencies, and what needs attention — and it holds the actions that start work from that node. This spec owns the inspector of the Specifications lens of the Map tab (`SMP-specification-map.md`), its placement, its content, and its navigation actions. The **Delivered by** list and the **Plan work** action it hosts are specified in `SDL-specification-delivery-links.md`.
 
 ## Functional requirements
 1. **SMI-FR-QWOP** At a window width of 1160px or more, the inspector docks at the right of the canvas, 318px wide, on `--bg-panel` with a 1px `--border-1` left border, and it is open by default. Below 1160px it overlays the right edge of the canvas, 300px wide with `--shadow-4`, and it is closed by default.
 2. **SMI-FR-BNHI** The close button in the inspector header hides the inspector. While the inspector is hidden, an `inspector` button at the top right of the canvas opens it.
 3. **SMI-FR-TRUZ** The inspector header is 28px high. It shows the `INSPECTOR` micro-label, the singular level name of the subject in monospace `--fg-4`, and the close button.
-4. **SMI-FR-KDGX** The subject of the inspector is the selected node. While no node is selected, the inspector body shows `Select a node to inspect it.` and the actions of `SMO-specification-map-organization.md` that need no subject.
+4. **SMI-FR-KDGX** The subject of the inspector is the selected node. While no node is selected, the inspector body shows `Select a node to inspect it.`
 5. **SMI-FR-MFSA** For a subject, the body shows in order: a breadcrumb of the ancestor labels joined by `→`, or `specifications` for a root node; a badge and the label at 14px weight 600; a summary card with a `SUMMARY` micro-label; a 6px completeness bar; a two-column grid of the four state counts; and a monospace line `R requirements · S scenarios`.
 6. **SMI-FR-CEVL** For an index node, a children list follows, headed with the plural name of the next level. Each row shows the child label, a 44 × 4px completeness bar, and the child's spec count. A spec node's list is headed `Path`, with one row: `specifications/<path>` in the demo index, `<path>` in `openspec`. Clicking a child row selects that child.
 7. **SMI-FR-YHNT** A **Depends on** list follows. For a spec node it holds the outgoing dependencies, most citations first; each row shows the code badge, the label, and the citation count, in `--danger` when unresolved. For an index node it holds the outgoing links at the depth of that node (per `SME-specification-map-edges.md` SME-FR-FKIW).
@@ -44,12 +44,13 @@ The inspector is the reading pane of the specification map. It shows everything 
 │ panels              ▮▮▯▯       5     │
 │ DEPENDS ON                           │
 │ [25] agents & conversations     13   │
+│ DELIVERED BY                         │
+│ ▣ Card capture        In progress    │
 │ ┌ ● NEEDS ATTENTION ───────────────┐ │
 │ │ DSH — dashboard: no coverage yet │ │
 │ └──────────────────────────────────┘ │
 │ [Open feature] [Zoom to]             │
-│ [New group] [Rename] [Delete]        │
-│ [New draft]                          │
+│ [Plan work]                          │
 └──────────────────────────────────────┘
 ```
 - Layout notes: the body scrolls and has 14px padding. The primary action uses `--accent` and `--accent-fg`. **Zoom to** uses `--bg-canvas` with a 1px `--border-2` border. Micro-labels are 11px, uppercase, letter-spacing 0.08em, weight 600, `--fg-3`.

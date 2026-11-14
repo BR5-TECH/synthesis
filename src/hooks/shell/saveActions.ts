@@ -15,6 +15,7 @@ import { logDebug } from "../../logging";
 import type { EditSessionStore, FlushResult } from "../../state/editSessions";
 import type { FlowSessionStore } from "../../state/flowSessions";
 import type { DraftSessionStore } from "../../state/draftSessions";
+import type { SpecMapSessionStore } from "../../state/specMap/session";
 import { nextFindForm, type FindForm } from "../../state/findState";
 import type { Tab } from "../../types";
 
@@ -24,6 +25,8 @@ export interface SaveActionDeps {
   sessions: EditSessionStore;
   flows: FlowSessionStore;
   drafts: DraftSessionStore;
+  /** SMP-FR-SWUL: the map session, whose Delivery lens can hold a dirty Flow. */
+  specMap?: SpecMapSessionStore;
   focusBlocker: (artifactId: string) => void;
   focusDraft: (draftId: string) => void;
 }
@@ -38,8 +41,13 @@ export interface SaveActions {
 }
 
 export function createSaveActions(deps: SaveActionDeps): SaveActions {
-  const { activeSaveTab, sessions, flows, drafts, focusBlocker, focusDraft } =
+  const { activeSaveTab, sessions, flows, drafts, specMap, focusBlocker, focusDraft } =
     deps;
+  /**
+   * SMP-FR-SWUL / SNV-FR-GNQB: while the Delivery lens shows a Flow file, Save
+   * treats the Map tab as a Flow tab of that file.
+   */
+  const mapSaveTarget = activeSaveTab?.kind === "map" && specMap ? specMap : null;
 
   // The content File → Save acts on: the active tab's, when that tab owns
   // something savable (SNV-FR-28). Every other tab type — Dashboard, Search
@@ -60,7 +68,9 @@ export function createSaveActions(deps: SaveActionDeps): SaveActions {
    * content it owns — a dirty Editor tab (EDT-FR-04) or a dirty Flow tab
    * (FLO-FR-26). Everything else greys it out, including a clean editable tab.
    */
-  const saveEnabled = saveTarget
+  const saveEnabled = mapSaveTarget
+    ? mapSaveTarget.deliveryDirty()
+    : saveTarget
     ? saveTarget.flow
       ? !!flows.get(saveTarget.id)?.dirty
       : !!sessions.get(saveTarget.id)?.dirty
@@ -151,6 +161,10 @@ export function createSaveActions(deps: SaveActionDeps): SaveActions {
    */
   const requestSave = async () => {
     if (!saveEnabled) return;
+    if (mapSaveTarget) {
+      await mapSaveTarget.saveDelivery();
+      return;
+    }
     if (draftSaveTarget) {
       await drafts.flush(draftSaveTarget);
       return;

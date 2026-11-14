@@ -21,6 +21,7 @@ export * from "./documents";
 export * from "./documentExport";
 export * from "./embeddings";
 export * from "./flowPlan";
+export * from "./delivery";
 export * from "./remoteConnectivity";
 export * from "./drafts";
 export * from "./newDraftProposals";

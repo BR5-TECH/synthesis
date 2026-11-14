@@ -40,6 +40,7 @@ export function DraftChrome({
   graduation,
   onOpenRun,
   onOpenArtifact,
+  onShowDeliveryItem,
   publication,
   pendingProposal,
   view,
@@ -62,6 +63,8 @@ export function DraftChrome({
   onOpenRun: (runId: string) => void;
   /** NAW-FR-TXKN. */
   onOpenArtifact?: (item: OpenableArtifact) => void;
+  /** NAW-FR-PHGO. */
+  onShowDeliveryItem?: (itemId: string) => void;
   publication: UseDraftPublicationResult;
   pendingProposal: DraftChangeProposal | undefined;
   view: DiscussionColumnState;
@@ -185,7 +188,11 @@ export function DraftChrome({
         <GithubShadowTag draftId={draftId} issue={shadowIssue} />
       )}
       {/* NAW-FR-TXKN: the delivery plan items this draft is worked for. */}
-      <PlanTags draftId={draftId} onOpenArtifact={onOpenArtifact} />
+      <PlanTags
+        draftId={draftId}
+        onOpenArtifact={onOpenArtifact}
+        onShowDeliveryItem={onShowDeliveryItem}
+      />
       {/* NAW-FR-35 / DCR-FR-03: a draft carrying an undecided proposal says
           so, and the marker takes the author to the first change still to be
           decided. It clears the moment the proposal is resolved.

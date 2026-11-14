@@ -57,4 +57,6 @@ export interface WorkspaceProps {
   onNameChanged: (name: string) => void;
   /** NAW-FR-TXKN: a plan tag opens its Flow through the shell's open route. */
   onOpenArtifact?: (item: OpenableArtifact) => void;
+  /** NAW-FR-PHGO: show an item of the project's delivery on the Map tab. */
+  onShowDeliveryItem?: (itemId: string) => void;
 }

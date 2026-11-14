@@ -7,19 +7,13 @@ import {
   addItem,
   docOrUnchanged,
   emptyFlow,
-  moveItem,
   renameItem,
   serializeFlowDocument,
   type FlowDocument,
-  type FlowPosition,
 } from "./flowDocument";
 
-/** Add a milestone at `at`; the edits these tests make never refuse. */
-const addOne = (d: FlowDocument, at: FlowPosition) =>
-  docOrUnchanged(d, addItem(d, "milestone", at));
-/** Move a top-level item, where canvas and stored coordinates agree. */
-const moveTo = (d: FlowDocument, id: string, at: FlowPosition) =>
-  docOrUnchanged(d, moveItem(d, id, at));
+/** Add a milestone; the edits these tests make never refuse. */
+const addOne = (d: FlowDocument) => docOrUnchanged(d, addItem(d, "milestone"));
 
 const invokeMock = vi.fn();
 const unlistenMock = vi.fn();
@@ -106,11 +100,11 @@ async function until(ready: () => boolean, label: string) {
 
 /** A two-item Flow on disk, as `n1` blocks `n2`. */
 const TWO_NODES = `{
-  "version": 2,
+  "version": 3,
   "name": "",
   "items": [
-    { "id": "n1", "kind": "milestone", "name": "A", "position": { "x": 0, "y": 0 }, "size": { "width": 760, "height": 480 } },
-    { "id": "n2", "kind": "milestone", "name": "B", "position": { "x": 900, "y": 0 }, "size": { "width": 760, "height": 480 } }
+    { "id": "n1", "kind": "milestone", "name": "A" },
+    { "id": "n2", "kind": "milestone", "name": "B" }
   ],
   "edges": [{ "id": "e1", "from": "n1", "to": "n2", "type": "blocks" }]
 }`;
@@ -163,7 +157,7 @@ describe("loading (FLO-FR-03 / FLO-FR-04 / FLO-FR-05)", () => {
     expect(s.parseError).toMatch(/not valid JSON/);
 
     // Neither an edit nor an explicit Save can reach the file in this state.
-    store.applyEdit("bad.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("bad.flow", (d) => addOne(d));
     expect(store.get("bad.flow")?.dirty).toBe(false);
     await store.flush("bad.flow", { force: true });
     expect(writes).toEqual([]);
@@ -218,9 +212,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     expect(notified).not.toHaveBeenCalled();
 
     // …and the same through a real mutator asked for something already true.
-    store.applyEdit("f.flow", (d) =>
-      moveTo(d, "n1", d.items[0].position),
-    );
+    store.applyEdit("f.flow", (d) => renameItem(d, "n1", d.items[0].name));
     expect(store.get("f.flow")?.dirty).toBe(false);
 
     stop();
@@ -263,7 +255,7 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     failWrites.add("f.flow");
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
-    store.applyEdit("f.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("f.flow", (d) => addOne(d));
 
     const res = await store.flush("f.flow");
 
@@ -284,15 +276,15 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     const store = new FlowSessionStore();
     await opened(store, "a.flow");
     await opened(store, "b.flow");
-    store.applyEdit("a.flow", (d) => addOne(d, { x: 0, y: 0 }));
-    store.applyEdit("b.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("a.flow", (d) => addOne(d));
+    store.applyEdit("b.flow", (d) => addOne(d));
 
     expect(await store.flushAll()).toEqual({ ok: true });
     expect(writes.map((w) => w.id)).toEqual(["a.flow", "b.flow"]);
 
     failWrites.add("a.flow");
-    store.applyEdit("a.flow", (d) => addOne(d, { x: 0, y: 0 }));
-    store.applyEdit("b.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("a.flow", (d) => addOne(d));
+    store.applyEdit("b.flow", (d) => addOne(d));
     const res = await store.flushAll();
 
     expect(res.ok).toBe(false);
@@ -308,8 +300,8 @@ describe("editing and saving (FLO-FR-26 / FLO-FR-27)", () => {
     const seen: number[] = [];
     store.subscribe(() => seen.push(store.getVersion()));
 
-    store.applyEdit("f.flow", (d) => addOne(d, { x: 0, y: 0 }));
-    store.applyEdit("f.flow", (d) => addOne(d, { x: 0, y: 0 }));
+    store.applyEdit("f.flow", (d) => addOne(d));
+    store.applyEdit("f.flow", (d) => addOne(d));
 
     expect(seen).toHaveLength(2);
     expect(new Set(seen).size).toBe(2);
@@ -395,7 +387,7 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
 
     disk["f.flow"] = {
-      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"milestone","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
+      body: '{"version":3,"name":"","items":[{"id":"n9","kind":"milestone","name":"external"}],"edges":[]}',
       checksum: "ck2",
     };
     fireExternal("f.flow", "ck2");
@@ -414,7 +406,7 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
     store.applyEdit("f.flow", (d) => renameItem(d, "n1", "mine"));
 
-    disk["f.flow"] = { body: '{"version":2,"name":"","items":[],"edges":[]}', checksum: "ck2" };
+    disk["f.flow"] = { body: '{"version":3,"name":"","items":[],"edges":[]}', checksum: "ck2" };
     fireExternal("f.flow", "ck2");
     await store.get("f.flow")?.pendingLoad;
 
@@ -435,7 +427,7 @@ describe("external changes (FLO-FR-31)", () => {
     await opened(store, "f.flow");
 
     disk["f.flow"] = {
-      body: '{"version":2,"name":"","items":[{"id":"n9","kind":"milestone","name":"external","position":{"x":1,"y":2},"size":{"width":760,"height":480}}],"edges":[]}',
+      body: '{"version":3,"name":"","items":[{"id":"n9","kind":"milestone","name":"external"}],"edges":[]}',
       checksum: "ck2",
     };
     fireExternal("f.flow", "ck2");
@@ -595,7 +587,7 @@ describe("backend validation (FLO-FR-46 / FLO-FR-47)", () => {
   // said Flow, the parser could not build one. It has to surface rather than
   // leave the tab on a blank canvas, and it must still write nothing.
   it("surfaces a body the backend accepted but the parser cannot deserialize", async () => {
-    disk["f.flow"] = { body: '{"version":2,"items":"not an array","edges":[]}', checksum: "ck1" };
+    disk["f.flow"] = { body: '{"version":3,"items":"not an array","edges":[]}', checksum: "ck1" };
     validation = { valid: true, violations: [] };
     const store = new FlowSessionStore();
 
@@ -633,22 +625,22 @@ describe("the rest after the last canvas edit (FLO-FR-27)", () => {
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS + 30);
   };
 
-  it("FLO-FR-27: writes once after a drag rather than once per frame", async () => {
+  it("FLO-FR-27: writes once after a run of edits rather than once per edit", async () => {
     disk["f.flow"] = { body: TWO_NODES, checksum: "ck1" };
     const store = new FlowSessionStore();
     await opened(store, "f.flow");
 
-    // A drag arrives as one edit per animation frame.
-    for (let x = 1; x <= 60; x++) {
-      store.applyEdit("f.flow", (d) => moveTo(d, "n1", { x, y: x }));
+    // A rename arrives as one edit per key.
+    for (let n = 1; n <= 60; n++) {
+      store.applyEdit("f.flow", (d) => renameItem(d, "n1", `Name ${n}`));
     }
     expect(writes).toHaveLength(0);
 
     await rest();
 
     expect(writes).toHaveLength(1);
-    // And it carries the node's final position, not an intermediate one.
-    expect(writes[0].body).toContain('"x": 60');
+    // And it carries the final name, not an intermediate one.
+    expect(writes[0].body).toContain('"name": "Name 60"');
   });
 
   it("FLO-FR-27, FLO-FR-30: lands while the Flow tab sits in the background", async () => {

@@ -32,6 +32,7 @@ import {
   planQuestionSet,
 } from "./mock-openspec-plan";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
+import { deliveryInvoke } from "./mock-delivery";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
   DECOMPOSITION_ORIGINAL,
@@ -8246,8 +8247,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     proposalHold: demoProposalHold,
   });
   if (changeRuns !== NOT_HANDLED) return changeRuns;
-  // FLO-flow.md / FSR-flow-sync-review.md: the delivery plan's state, its
-  // overlaps, and the tracker sync.
+  // DSR-delivery-source.md: the delivery settings, the resolved source, and
+  // the Dashboard's milestones.
+  const delivery = deliveryInvoke(cmd, a, (path, body) => {
+    artifactBodies[path] = { body, checksum: `ck-export-${nextArtifactChecksum++}` };
+  });
+  if (delivery !== NOT_HANDLED) return delivery;
+  // FLO-flow.md / DMS-delivery-machine-state.md: the delivery plan's state,
+  // its overlaps, and the per-machine layout of each scope.
   const flowPlan = flowPlanInvoke(cmd, a);
   if (flowPlan !== NOT_HANDLED) return flowPlan;
   // DCP "New-draft proposals": the decomposition commands.

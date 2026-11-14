@@ -3,7 +3,7 @@
 **Spec code:** `FOA`
 
 ## Intent
-The backend check that finds the tasks of a delivery plan that could run at the same time and are expected to change the same files. Each task or defect of a Flow (`FGV-flow-graph-validation.md`) can carry a **footprint**: the project paths its work is expected to change. Two such items that no `blocks` edge orders, and whose footprints share a path, are an **overlap**. Overlaps are what turn parallel work into merge conflicts, and a plan is cheapest to fix before the work starts. So the architect sees each overlap on the canvas (`../ui/FLO-flow.md` FLO-FR-KWFH), and the agent sees the same report in every Flow discussion (`AGC-agent-conversations.md` AGC-FR-KQNF) and helps to split the work or to order it. Out of scope: writing a footprint, which the author does on the canvas and the agent suggests in conversation; whether a footprint path exists on disk; the state of an item, which is `FDL-flow-delivery.md`'s; and any change to the plan, which this module never makes.
+The backend check that finds the tasks of a delivery plan that could run at the same time and are expected to change the same files. Each task or defect of a Flow (`FGV-flow-graph-validation.md`) can carry a **footprint**: the project paths its work is expected to change. A plan held on GitHub carries the same field, from the per-machine overlay of `DMS-delivery-machine-state.md`. Two such items that no `blocks` edge orders, and whose footprints share a path, are an **overlap**. Overlaps are what turn parallel work into merge conflicts, and a plan is cheapest to fix before the work starts. So the architect sees each overlap on the canvas (`../ui/FLO-flow.md` FLO-FR-KWFH), and the agent sees the same report in every Flow discussion (`AGC-agent-conversations.md` AGC-FR-KQNF) and helps to split the work or to order it. Out of scope: writing a footprint, which the author does on the canvas and the agent suggests in conversation; whether a footprint path exists on disk; the state of an item, which is `FDL-flow-delivery.md`'s; and any change to the plan, which this module never makes.
 
 ## Functional requirements
 1. **FOA-FR-LBTE** `analyze_flow_overlap(body)` first validates the body (per `FGV-flow-graph-validation.md` FGV-FR-02). A body with violations returns `flow_invalid` with the report and no overlaps. An empty body returns no overlaps.
@@ -18,7 +18,7 @@ The backend check that finds the tasks of a delivery plan that could run at the 
 
 ## Contract surface
 ### Tauri commands
-- `"analyze flow overlap"` → `analyze_flow_overlap(body)` → `{ overlaps: Overlap[] }`. Invoked by `../ui/FLO-flow.md` (FLO-FR-STUN) and in-process by `AGC-agent-conversations.md` (AGC-FR-KQNF).
+- `"analyze flow overlap"` → `analyze_flow_overlap(body)` → `{ overlaps: Overlap[] }`. Invoked by `../ui/FLO-flow.md` (FLO-FR-STUN) and in-process by `AGC-agent-conversations.md` (AGC-FR-KQNF) and `GDP-github-delivery-plan.md` (GDP-FR-XWES).
 
 ```
 Overlap {

@@ -62,7 +62,7 @@ export interface LayoutBox {
 }
 
 export interface LayoutChip {
-  kind: "spec" | "planned" | "change";
+  kind: "spec" | "change";
   /** The spec code, the draft id, or the change chip key. */
   key: string;
   parentId: string;
@@ -184,16 +184,11 @@ export function layoutMap(
       return box.h;
     }
 
-    const planned = node.planned ?? [];
     if (role === "leafGroup") {
-      // SMN-FR-ISBE / SMD-FR-CGNW / SMN-FR-ZOUZ: spec chips, then planned
-      // chips, then change chips, in one grid.
+      // SMN-FR-ISBE / SMN-FR-ZOUZ: spec chips, then change chips, in one grid.
       const specs = specChildren(node);
       const changes = node.changes ?? [];
       specs.forEach((s, i) => chipAt("spec", s.code, node.id, x + INSET, y + CHIP_TOP, i));
-      planned.forEach((p, i) =>
-        chipAt("planned", p.draftId, node.id, x + INSET, y + CHIP_TOP, specs.length + i),
-      );
       changes.forEach((c, i) =>
         chipAt(
           "change",
@@ -201,10 +196,10 @@ export function layoutMap(
           node.id,
           x + INSET,
           y + CHIP_TOP,
-          specs.length + planned.length + i,
+          specs.length + i,
         ),
       );
-      const rows = Math.ceil((specs.length + planned.length + changes.length) / CHIPS_PER_ROW);
+      const rows = Math.ceil((specs.length + changes.length) / CHIPS_PER_ROW);
       box.h = LEAF_COLLAPSED_H + rows * CHIP_ROW + 4;
       return box.h;
     }
@@ -218,9 +213,6 @@ export function layoutMap(
     for (const child of indexChildren(node)) {
       cursor += place(child, relDepth + 1, x + INSET, y + cursor, node.id) + gap;
     }
-    // SMD-FR-ULTF: planned chips after the children, and the node grows to hold them.
-    planned.forEach((p, i) => chipAt("planned", p.draftId, node.id, x + INSET, y + cursor, i));
-    cursor += Math.ceil(planned.length / CHIPS_PER_ROW) * CHIP_ROW;
     box.h = cursor + tail;
     return box.h;
   };
@@ -269,8 +261,7 @@ export function holderRect(
   ref: MapRef,
 ): (Rect & { key: string }) | null {
   if (ref.kind !== "index") {
-    const key =
-      ref.kind === "spec" ? ref.code : ref.kind === "planned" ? ref.draftId : ref.key;
+    const key = ref.kind === "spec" ? ref.code : ref.key;
     const chip = layout.chip.get(key);
     if (chip) return { ...chip, key: `chip:${key}` };
   }

@@ -32,6 +32,31 @@ let reading = false;
 let heldWhileReading = false;
 /** The worktree and branch the last read was for (`noteEditContext`). */
 let context: string | null = null;
+/** The callers that wait for the gate to decide (`waitEditGate`). */
+let waiters: Array<(open: boolean) => void> = [];
+
+/** Tell each caller that waits whether the gate lets a change go now. */
+function settleWaiters(): void {
+  if (reading || asking || waiters.length === 0) return;
+  const open = !isEditHeld();
+  const ready = waiters;
+  waiters = [];
+  for (const w of ready) w(open);
+}
+
+/**
+ * MDL-FR-EEDO / EDT-FR-UPNU: for a change that the app makes for the author
+ * and that the gate held: wait until the gate decides. Gives `true` when a
+ * change goes now (the branch is not a main branch, or the author confirmed
+ * the write), and `false` when the author cancelled or the read failed.
+ */
+export function waitEditGate(): Promise<boolean> {
+  if (!isEditHeld()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    waiters.push(resolve);
+    settleWaiters();
+  });
+}
 
 /** EDT-FR-QXEK: read the guard when a file opens. Never awaited by a render. */
 export function primeEditGate(): void {
@@ -41,6 +66,8 @@ export function primeEditGate(): void {
     guard = known;
     readError = null;
     reading = false;
+    // A read this one replaced does not settle its waiters, so this does.
+    settleWaiters();
     return;
   }
   reading = true;
@@ -65,6 +92,7 @@ export function primeEditGate(): void {
       const ask = heldWhileReading;
       heldWhileReading = false;
       if (ask) holdEdit();
+      settleWaiters();
     });
 }
 
@@ -125,6 +153,7 @@ export function holdEdit(): boolean {
       })
       .finally(() => {
         asking = false;
+        settleWaiters();
       });
   }
   return true;
@@ -153,4 +182,7 @@ export function resetEditGateForTest(): void {
   heldWhileReading = false;
   context = null;
   generation++;
+  const left = waiters;
+  waiters = [];
+  for (const w of left) w(false);
 }

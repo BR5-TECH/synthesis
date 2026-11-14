@@ -203,27 +203,6 @@ fn the_issues_client_follows_a_moved_issue_with_the_token_on_its_own_host_only()
     assert_eq!(header_of(&landed[0], "authorization"), None, "{}", landed[0]);
 }
 
-// AAP-FR-UXUI, FTS-FR-ZLFX: a write of the flow tracker adapter answered with
-// a status fails with `github_unreachable`.
-#[test]
-fn the_flow_tracker_adapter_classifies_a_4xx_or_5xx_answer() {
-    use crate::flow_sync::adapter::TrackerAdapter;
-    use crate::flow_sync::github::GithubAdapter;
-    use crate::flow_sync::records::ERR_GITHUB_UNREACHABLE;
-    for status in [404, 422, 500] {
-        let server = Loopback::serve(vec![json_reply(status, "{}")]);
-        let url = server.url("");
-        let github = GithubAdapter::at(&url, &format!("{url}/graphql"), "acme", "payments");
-        github.remember_id(4, 9004);
-        assert_eq!(
-            github.remove_blocked_by(3, 4).unwrap_err(),
-            ERR_GITHUB_UNREACHABLE,
-            "status {status}"
-        );
-        server.requests();
-    }
-}
-
 // AAP-FR-UXUI, GTC-FR-DWVY: the pull request client reads a 5xx answer as
 // unreachable, on a read and on a write.
 #[test]
@@ -268,25 +247,6 @@ fn the_pull_request_client_sends_its_token_to_no_other_host() {
     let landed = other.requests();
     assert_eq!(landed.len(), 1, "the write is not repeated at the other host");
     assert_eq!(header_of(&landed[0], "authorization"), None, "{}", landed[0]);
-}
-
-// FTS-FR-ZLFX, AAP-FR-TIZO: a REST answer of the flow tracker adapter whose
-// body breaks off reads as no JSON, as before. A body that is too long fails
-// the request.
-#[test]
-fn the_flow_tracker_adapter_reads_a_cut_body_as_no_json_and_a_long_body_as_a_failure() {
-    use crate::flow_sync::adapter::TrackerAdapter;
-    use crate::flow_sync::github::GithubAdapter;
-    use crate::flow_sync::records::ERR_GITHUB_UNREACHABLE;
-    let cut = b"HTTP/1.1 200 OK\r\ncontent-length: 100\r\nconnection: close\r\n\r\n0123456789";
-    let long = reply(200, &[], &vec![b' '; MAX_BODY_BYTES + 1]);
-    let server = Loopback::serve(vec![cut.to_vec(), long]);
-    let url = server.url("");
-    let github = GithubAdapter::at(&url, &format!("{url}/graphql"), "acme", "payments");
-    github.remember_id(4, 9004);
-    assert_eq!(github.remove_blocked_by(3, 4), Ok(()));
-    assert_eq!(github.remove_blocked_by(3, 4).unwrap_err(), ERR_GITHUB_UNREACHABLE);
-    assert_eq!(server.requests().len(), 2);
 }
 
 // AAP-FR-05, GSS-FR-HPWE: the time limit covers the body. A server that sends

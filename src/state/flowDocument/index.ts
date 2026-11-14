@@ -1,7 +1,8 @@
 /**
- * `FLO-flow.md`: the Flow document, version 2 — a delivery plan. This module
- * holds its serialization, its deserialization, and every plan rule that the
- * canvas answers locally while the author draws (FLO-FR-46).
+ * `FLO-flow.md`: the Flow document, version 3 — a delivery plan. This module
+ * holds its serialization, its deserialization, every plan rule that the
+ * canvas answers locally while the author draws (FLO-FR-46), and the layout of
+ * a plan on the canvas, which is not part of the document (FLO-FR-21).
  *
  * The document's shape is not owned here: `FGV-flow-graph-validation.md`
  * defines it and the backend validator decides whether a body is a Flow
@@ -29,6 +30,7 @@ export {
   leavesUnder,
   parentOf,
   permitsParent,
+  relativePosition,
   subtreeOf,
   type FlowRect,
 } from "./containment";
@@ -62,10 +64,21 @@ export {
   setItemDescription,
   setItemDraft,
   setItemKind,
-  setLocalOnly,
   type KindDroppedField,
 } from "./items";
-export { MIN_CONTAINER_SIZE, minContainerSize, moveItem, resizeItem } from "./layout";
+export {
+  growAncestors,
+  MIN_CONTAINER_SIZE,
+  minContainerSize,
+  placeItem,
+  reparentItem,
+  resizeContainer,
+  setCollapsed,
+  toStoredLayout,
+} from "./layout";
+export { AUTO_GAP, COLUMN_GAP, columnWidth, MEMBER_ORIGIN, noMilestoneX, resolveLayout, type LayoutMeasures } from "./autoLayout";
+export { planEditsBetween, touchedItems } from "./planEdits";
+export { isColumnMilestone, milestoneOrder, moveMilestone, orderMilestones } from "./milestoneOrder";
 export {
   connect,
   connectRefusal,
@@ -74,5 +87,4 @@ export {
   reverseEdge,
   setEdgeType,
 } from "./edges";
-export { connectSync, sameTrackerRef, setSyncLink, syncLinkOf } from "./sync";
 export { cycleClosedBy, dependencyCycleEdges, waitsFor } from "./waitGraph";

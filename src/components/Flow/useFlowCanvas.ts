@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useDiscussionControl } from "../../hooks/useDiscussionControl";
 import { useProjectArtifacts } from "../../hooks/useProjectArtifacts";
@@ -20,24 +12,33 @@ import {
   connect,
   connectRefusal,
   CONTAINER_HEADER_H,
+  docOrUnchanged,
   CONTAINER_PADDING,
   findItem,
   innermostContainerAt,
+  isColumnMilestone,
   isContainerKind,
   MIN_CONTAINER_SIZE,
-  moveItem,
+  moveMilestone,
   parentOf,
-  resizeItem,
+  placeItem,
+  relativePosition,
+  reparentItem,
+  resizeContainer,
+  setCollapsed,
   subtreeOf,
   type FlowDocument,
   type FlowEditResult,
+  type FlowItem,
   type FlowItemKind,
+  type FlowLayout,
   type FlowPosition,
   type FlowSize,
 } from "../../state/flowDocument";
-import { IDLE_SYNC, type FlowSessionStore } from "../../state/flowSessions";
-import { primeEditGate } from "../../state/mainBranchWrite";
-import type { DiscussionTarget, OpenableArtifact } from "../../types";
+import { isEditHeld, primeEditGate, waitEditGate } from "../../state/mainBranchWrite";
+import type { DiscussionTarget, ItemDeliveryState, OpenableArtifact } from "../../types";
+import type { FlowBinding } from "./binding";
+import { columnDropIndex, columnsOf } from "./columns";
 import { createFrames } from "./frames";
 import {
   DEFAULT_VIEW,
@@ -53,7 +54,11 @@ import {
   type View,
 } from "./geometry";
 import { refusalMessage, type FlowAction, type RefusalMessage } from "./refusals";
-import { useDeliveryState } from "./useDeliveryState";
+import { useFlowLayout, type ContainerMeasure } from "./useFlowLayout";
+import { useFlowSource } from "./useFlowSource";
+
+/** The layout before the stored layout is read: nothing is drawn yet. */
+const EMPTY_PLACEMENT: FlowLayout = {};
 
 /** FLO-FR-NRBV: what the shell answers to a request to create a task's draft. */
 export type CreatedDraftOutcome =
@@ -62,10 +67,27 @@ export type CreatedDraftOutcome =
   | { ok: false; error: string | null };
 
 export interface FlowCanvasProps {
-  /** The open Flow's artifact id (ASC-FR-13). */
-  flowId?: string;
-  /** FLO-FR-30: the shell-owned store the plan and its dirty state live in. */
-  flows: FlowSessionStore;
+  /** The plan the canvas shows, and where its edits go (`./binding.ts`). */
+  binding: FlowBinding;
+  /**
+   * MDL-FR-WMGU: the host keeps every edit affordance inert, for example while
+   * a publish runs.
+   */
+  inert?: boolean;
+  /** MDL-FR-KKYH / MDL-FR-JRGK: what the host adds at the trailing end of the band. */
+  bandExtras?: ReactNode;
+  /**
+   * MDL-FR-LSKL / MDL-FR-IEWL / MDL-FR-MWMO: the host's notice lines, below
+   * the band and above the canvas.
+   */
+  belowBand?: ReactNode;
+  /**
+   * SDL-FR-KNOP / MDL-FR-QEXS: rows the host adds at the end of the selected
+   * item's panel.
+   */
+  panelExtras?: (item: FlowItem) => ReactNode;
+  /** MDL-FR-PUKL: entries the host adds to the add menu; `close` closes it. */
+  addMenuExtras?: (close: () => void) => ReactNode;
   /** FLO-FR-12: open a referenced artifact in its natural surface. */
   onOpenArtifact?: (item: OpenableArtifact) => void;
   /**
@@ -77,24 +99,21 @@ export interface FlowCanvasProps {
   onOpenDraft?: (draft: { id: string; name: string }) => void;
   /** FLO-FR-QZUR: open a linked draft through `"open draft (id)"`. */
   onOpenDraftById?: (draftId: string) => void;
+  /**
+   * SMP-FR-RNLH / SMP-FR-QNUH: the view and the selection the canvas starts
+   * from. Without it, the canvas starts from the default view (FLO-FR-22).
+   */
+  initialView?: FlowViewState;
+  /** SMP-FR-RNLH: each change of the view or of the selection. */
+  onViewChange?: (state: FlowViewState) => void;
+  /** MDL-FR-GDUP: each new answer of the delivery state, or null before one. */
+  onDeliveryStates?: (states: ReadonlyMap<string, ItemDeliveryState> | null) => void;
 }
 
-/**
- * Grow each container around `id` to hold what it holds, so that a drop or a
- * placement near a border never leaves a member outside (FLO-FR-44).
- */
-function growAncestors(doc: FlowDocument, id: string): FlowDocument {
-  let next = doc;
-  for (const a of ancestorsOf(doc, id)) {
-    const item = findItem(next, a);
-    if (item?.size) next = resizeItem(next, a, item.size);
-  }
-  return next;
-}
-
-/** Turn a result op into one that also grows the containers around `id`. */
-function andGrow(id: string, result: FlowEditResult): FlowEditResult {
-  return result.ok ? { ok: true, doc: growAncestors(result.doc, id) } : result;
+/** SMP-FR-RNLH: the view state of a canvas that a host keeps for it. */
+export interface FlowViewState {
+  view: View;
+  selection: string[];
 }
 
 /**
@@ -103,20 +122,46 @@ function andGrow(id: string, result: FlowEditResult): FlowEditResult {
  * plan rules are the document module's; this hook calls them and turns a
  * refusal into feedback.
  */
-export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
-  useSyncExternalStore(flows.subscribe, flows.getVersion);
+export function useFlowCanvas({
+  binding,
+  inert: hostInert = false,
+  initialView,
+  onViewChange,
+}: FlowCanvasProps) {
+  const source = useFlowSource(binding);
+  const { flowId, session, doc, delivery } = source;
   const project = useProjectArtifacts();
   // EDT-FR-UPNU: the guard of the file's branch is read when the Flow opens.
-  useEffect(() => primeEditGate(), [flowId]);
+  // A plan binding writes no file.
+  useEffect(() => {
+    if (source.mode === "file") primeEditGate();
+  }, [flowId, source.mode]);
 
-  const session = flowId ? flows.get(flowId) : undefined;
-  const doc = session?.doc ?? null;
-  const sync = flowId ? flows.syncState(flowId) : IDLE_SYNC;
-  /** FLO-FR-KHBY: while a sync or a resolve runs, no edit affordance acts. */
-  const inert = sync.running !== null;
-  const delivery = useDeliveryState(doc);
+  /** MDL-FR-WMGU: while the host keeps the canvas inert, no edit affordance acts. */
+  const inert = hostInert;
+  const [heights, setHeights] = useState<Record<string, number>>({});
+  const [containerSizes, setContainerSizes] = useState<Record<string, ContainerMeasure>>({});
+  const measuredSizes = useMemo(
+    () => ({ cards: heights, containers: containerSizes }),
+    [heights, containerSizes],
+  );
+  const { layout: resolved, collapsed, commit: commitLayout, reset: resetLayout } = useFlowLayout(
+    doc,
+    source.scope,
+    source.layouts,
+    measuredSizes,
+  );
+  const layout: FlowLayout = resolved ?? EMPTY_PLACEMENT;
+  // The newest layout and its commit, for an answer that lands after a render.
+  const layoutRef = useRef<FlowLayout | null>(resolved);
+  layoutRef.current = resolved;
+  const commitRef = useRef(commitLayout);
+  commitRef.current = commitLayout;
 
-  /** FLO-FR-34 / FLO-FR-36: the action control is bound to the Flow file. */
+  /**
+   * FLO-FR-34 / FLO-FR-36: the action control is bound to the Flow file. A
+   * plan binding carries no action control (MDL-FR-NTVL).
+   */
   const discussionTarget = useMemo<DiscussionTarget | undefined>(
     () => (flowId ? { kind: "artifact", artifactId: flowId } : undefined),
     [flowId],
@@ -124,11 +169,15 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
   const control = useDiscussionControl(discussionTarget);
 
   const canvasId = useId().replace(/:/g, "");
-  const [selection, setSelection] = useState<string[]>([]);
+  const [selection, setSelection] = useState<string[]>(() => initialView?.selection ?? []);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  const [heights, setHeights] = useState<Record<string, number>>({});
-  const [view, setView] = useState<View>(DEFAULT_VIEW);
+  const [view, setView] = useState<View>(() => initialView?.view ?? DEFAULT_VIEW);
+  // SMP-FR-RNLH: the host keeps the view state of a canvas that unmounts.
+  const viewChange = useRef(onViewChange);
+  viewChange.current = onViewChange;
+  useEffect(() => {
+    viewChange.current?.({ view, selection });
+  }, [view, selection]);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [resize, setResize] = useState<Resize | null>(null);
   const [pan, setPan] = useState<Pan | null>(null);
@@ -142,6 +191,12 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
 
   const surfaceRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
+  /**
+   * FLO-FR-09 / FLO-FR-21: the card a press went down on. It captures the
+   * pointer only once the drag moves: a capture at the press retargets the
+   * double-click to the card, so the name would never see it.
+   */
+  const dragCapture = useRef<{ el: Element; pointerId: number } | null>(null);
   const resizeRef = useRef<Resize | null>(null);
   const panRef = useRef<Pan | null>(null);
   const connectingRef = useRef<string | null>(null);
@@ -151,13 +206,21 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
     setHeights((prev) => (prev[id] === height ? prev : { ...prev, [id]: height }));
   }, []);
 
-  /** FLO-FR-26: every change to the plan goes through the store. */
-  /** Returns true when the edit changed the plan (see `applyEdit`). */
-  const edit = useCallback(
-    (fn: (d: FlowDocument) => FlowDocument): boolean =>
-      flowId ? flows.applyEdit(flowId, fn) : false,
-    [flowId, flows],
-  );
+  /** MDL-FR-ECPZ: a container reports the room its header and its content need. */
+  const onMeasureContainer = useCallback((id: string, next: ContainerMeasure) => {
+    setContainerSizes((prev) => {
+      const was = prev[id];
+      return was && was.headWidth === next.headWidth && was.memberTop === next.memberTop
+        ? prev
+        : { ...prev, [id]: next };
+    });
+  }, []);
+
+  /**
+   * FLO-FR-26: every change to the plan goes through the binding. Returns true
+   * when the edit changed the plan.
+   */
+  const edit = source.edit;
 
   /**
    * Apply an edit that can be refused. The rule runs on the live plan first,
@@ -201,7 +264,7 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
   const absOf = (id: string): FlowPosition => {
     if (!doc) return { x: 0, y: 0 };
     if (resize?.itemId === id) return { x: resize.rect.x, y: resize.rect.y };
-    const base = absolutePosition(doc, id);
+    const base = absolutePosition(doc, layout, id);
     if (drag?.subtree.has(id)) {
       return { x: base.x + (drag.x - drag.startAbs.x), y: base.y + (drag.y - drag.startAbs.y) };
     }
@@ -210,10 +273,13 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
 
   const sizeOf = (id: string): FlowSize | undefined => {
     if (resize?.itemId === id) return { width: resize.rect.width, height: resize.rect.height };
-    return doc ? findItem(doc, id)?.size : undefined;
+    return layout[id]?.size;
   };
 
   const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf });
+  /** FLO-FR-SQUS / FLO-FR-IAOQ: the milestone columns and the No milestone column. */
+  const columns = doc ? columnsOf(doc, layout, frames.rectOf) : { order: [], arrows: [], none: null };
+
 
   /**
    * FLO-FR-42: the container a drop at `point` joins: the innermost container
@@ -224,7 +290,7 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
     if (!doc) return undefined;
     const skip = new Set(exclude);
     for (const item of doc.items) if (frames.hiddenBy(item.id)) skip.add(item.id);
-    let id = innermostContainerAt(doc, point, skip);
+    let id = innermostContainerAt(doc, layout, point, skip);
     while (id && collapsed.has(id)) {
       const r = frames.rectOf(id);
       if (r && point.y <= r.y + r.height) break;
@@ -236,7 +302,7 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
   /** Keep a placed item clear of its container's header and border. */
   const clampInto = (parentId: string | undefined, at: FlowPosition): FlowPosition => {
     if (!doc || parentId === undefined) return at;
-    const origin = absolutePosition(doc, parentId);
+    const origin = absolutePosition(doc, layout, parentId);
     return {
       x: Math.max(at.x, origin.x + CONTAINER_PADDING),
       y: Math.max(at.y, origin.y + CONTAINER_HEADER_H),
@@ -262,20 +328,12 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
       x: Math.round(centre.x - extent.width / 2),
       y: Math.round(centre.y - extent.height / 2),
     });
-    let added: string | null = null;
-    tryEdit(
-      (d) => {
-        const r = addItem(d, kind, at, parentId);
-        if (r.ok) added = r.itemId;
-        return r.ok ? andGrow(r.itemId, r) : r;
-      },
-      "add",
-      kind,
-    );
-    if (added) {
-      setSelection([added]);
-      setSelectedEdge(null);
-    }
+    const first = addItem(doc, kind, parentId);
+    if (!tryEdit((d) => addItem(d, kind, parentId), "add", kind) || !first.ok) return;
+    // FLO-FR-21: the new item sits where the author sees it, in the layout.
+    commitLayout(placeItem(first.doc, layout, first.itemId, at));
+    setSelection([first.itemId]);
+    setSelectedEdge(null);
   };
 
   const openAddMenu = () => {
@@ -332,42 +390,69 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
       scale: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((v.scale + delta) * 100) / 100)),
     }));
 
-  /** FSR-FR-PGBX: show an item, its containers expanded, in the middle of the view. */
-  const revealItem = (id: string) => {
-    if (!doc || !findItem(doc, id)) return;
+  /**
+   * MDL-FR-JIKK / SDL-FR-MCGI: select an item, expand each collapsed container
+   * that holds it, and centre it. Returns false when the plan has no such item.
+   */
+  const revealItem = (id: string): boolean => {
+    if (!doc || !resolved || !findItem(doc, id)) return false;
     const chain = ancestorsOf(doc, id);
-    setCollapsed((prev) => {
-      if (!chain.some((a) => prev.has(a))) return prev;
-      const next = new Set(prev);
-      chain.forEach((a) => next.delete(a));
-      return next;
-    });
+    let expanded = layout;
+    for (const a of chain) expanded = setCollapsed(doc, expanded, a, false);
+    commitLayout(expanded);
     setSelection([id]);
     setSelectedEdge(null);
-    const at = absolutePosition(doc, id);
-    const item = findItem(doc, id)!;
-    const size = item.size ?? { width: CARD_W, height: heights[id] || CARD_H };
+    centreOn(id, view);
+    return true;
+  };
+
+  /**
+   * MDL-FR-JIKK: the item a reveal centred, where it was, and the view that
+   * centred it. The layout can still move the item after the reveal, for
+   * example when the headers of a GitHub plan are measured and the columns
+   * grow (FLO-FR-SQUS). Until the author moves the view, the canvas centres
+   * the item again where it lands.
+   */
+  const centred = useRef<{ id: string; x: number; y: number; view: View } | null>(null);
+
+  const centreOn = (id: string, from: View) => {
+    if (!doc) return;
+    const at = absolutePosition(doc, layout, id);
+    const size = layout[id]?.size ?? { width: CARD_W, height: heights[id] || CARD_H };
     const rect = surfaceRef.current?.getBoundingClientRect();
     const w = rect?.width || 800;
     const h = rect?.height || 600;
-    setView((v) => ({
-      ...v,
-      x: w / 2 - (at.x + Math.min(size.width, w / v.scale) / 2) * v.scale,
-      y: h / 2 - (at.y + Math.min(size.height, h / v.scale) / 2) * v.scale,
-    }));
+    const next: View = {
+      ...from,
+      x: w / 2 - (at.x + Math.min(size.width, w / from.scale) / 2) * from.scale,
+      y: h / 2 - (at.y + Math.min(size.height, h / from.scale) / 2) * from.scale,
+    };
+    centred.current = { id, x: at.x, y: at.y, view: next };
+    setView(next);
   };
 
-  /** FLO-FR-ZASL: collapse or expand a container. View state, never an edit. */
-  const toggleCollapsed = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  useEffect(() => {
+    const kept = centred.current;
+    if (!kept || !doc) return;
+    if (view !== kept.view || !findItem(doc, kept.id)) {
+      centred.current = null;
+      return;
+    }
+    const at = absolutePosition(doc, layout, kept.id);
+    if (at.x !== kept.x || at.y !== kept.y) centreOn(kept.id, view);
+  });
+
+  /**
+   * FLO-FR-ZASL / FLO-FR-TDHR: collapse or expand a container. The layout
+   * keeps it; it is never an edit.
+   */
+  const toggleCollapsed = (id: string) => {
+    if (!doc || !resolved) return;
+    commitLayout(setCollapsed(doc, layout, id, !collapsed.has(id)));
+  };
 
   const chrome =
-    ".flow-panel, .flow-edge-panel, .flow-review, .flow-overlay, .flow-refusal, .flow-dialog, .flow-addmenu, .flow-actionhost, [data-flow-chrome]";
+    ".flow-panel, .flow-edge-panel, .flow-overlay, .flow-refusal, .flow-dialog, .flow-addmenu, .flow-actionhost, [data-flow-chrome]";
 
   /**
    * Selection follows what the pointer went down on. A press on empty canvas,
@@ -407,8 +492,8 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
   /** FLO-FR-21: start a drag of an item and everything it holds. */
   const onItemDragStart = (id: string, e: React.PointerEvent) => {
     if (!doc || inert) return;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    const at = absolutePosition(doc, id);
+    dragCapture.current = { el: e.currentTarget, pointerId: e.pointerId };
+    const at = absolutePosition(doc, layout, id);
     const p = toCanvas(e.clientX, e.clientY);
     const started: Drag = {
       itemId: id,
@@ -430,25 +515,26 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
    * members, so a resize never puts a member outside the container.
    */
   const onResizeStart = (id: string, sides: ResizeSides, e: React.PointerEvent) => {
-    const item = doc ? findItem(doc, id) : undefined;
-    if (!doc || !item?.size || inert) return;
+    const size = layout[id]?.size;
+    if (!doc || !size || inert) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    const at = absolutePosition(doc, id);
+    const at = absolutePosition(doc, layout, id);
     const members = childrenOf(doc, id);
     let left = Infinity;
     let top = Infinity;
     let right = -Infinity;
     let bottom = -Infinity;
     for (const m of members) {
-      const ext = m.size ?? { width: CARD_W, height: heights[m.id] || CARD_H };
-      left = Math.min(left, m.position.x);
-      top = Math.min(top, m.position.y);
-      right = Math.max(right, m.position.x + ext.width);
-      bottom = Math.max(bottom, m.position.y + ext.height);
+      const ext = layout[m.id]?.size ?? { width: CARD_W, height: heights[m.id] || CARD_H };
+      const p = relativePosition(layout, m.id);
+      left = Math.min(left, p.x);
+      top = Math.min(top, p.y);
+      right = Math.max(right, p.x + ext.width);
+      bottom = Math.max(bottom, p.y + ext.height);
     }
     const any = members.length > 0;
-    const from = { x: at.x, y: at.y, width: item.size.width, height: item.size.height };
+    const from = { x: at.x, y: at.y, width: size.width, height: size.height };
     const started: Resize = {
       itemId: id,
       sides,
@@ -570,53 +656,72 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
       pointer: p,
       moved: current.moved || x !== current.x || y !== current.y,
     };
+    const capture = dragCapture.current;
+    if (next.moved && capture) {
+      dragCapture.current = null;
+      try {
+        capture.el.setPointerCapture?.(capture.pointerId);
+      } catch {
+        // The pointer is gone already; the window listener ends the drag.
+      }
+    }
     dragRef.current = next;
     setDrag(next);
   };
 
   /**
-   * FLO-FR-42 / FLO-FR-OAOZ / FLO-FR-GZCH: land a drag. The pointer decides the
-   * container the item joins. A refused drop leaves the item where it was and
-   * says why.
+   * FLO-FR-21 / FLO-FR-42 / FLO-FR-OAOZ / FLO-FR-GZCH / FLO-FR-TDHR: land a
+   * drag. The pointer decides the container the item joins. A drop into
+   * another container is an edit; a refused drop leaves the item where it was
+   * and says why. The new place is the layout's, stored once.
    */
   const commitMove = (moved: Drag) => {
-    if (!doc) return;
+    if (!doc || inert) return;
     const item = findItem(doc, moved.itemId);
     if (!item) return;
+    if (isColumnMilestone(item)) {
+      // FLO-FR-OGPF: a milestone column has no stored position. Its drop
+      // changes the milestone order, which is an edit (FLO-FR-26).
+      const index = columnDropIndex(columns, frames.rectOf, item.id, moved.pointer.x);
+      const reorder = () => edit((d) => moveMilestone(d, item.id, index));
+      // EDT-FR-UPNU: the gate can hold the change while the branch is read or
+      // while the author confirms a write to a main branch. The new order goes
+      // in once the gate lets it, and not at all after a cancel.
+      if (!reorder() && isEditHeld()) {
+        void waitEditGate().then((confirmed) => {
+          if (confirmed) reorder();
+        });
+      }
+      return;
+    }
     const target = dropTargetAt(moved.pointer, moved.subtree);
     const at = clampInto(target, { x: moved.x, y: moved.y });
-    tryEdit(
-      (d) => andGrow(moved.itemId, moveItem(d, moved.itemId, at, target)),
-      "move",
-      item.kind,
-    );
+    if (target === item.parentId) {
+      commitLayout(placeItem(doc, layout, moved.itemId, at));
+      return;
+    }
+    const first = reparentItem(doc, moved.itemId, target);
+    if (!first.ok) {
+      setRefusal(refusalMessage(doc, "move", first.refusal, item.kind));
+      return;
+    }
+    setRefusal(null);
+    const before = layout[moved.itemId];
+    const answer = source.editAndWait((d) => docOrUnchanged(d, reparentItem(d, moved.itemId, target)));
+    commitLayout(placeItem(first.doc, layout, moved.itemId, at));
+    // MDL-FR-PUCM: a refused move restores the plan of the last answer, so the
+    // item goes back to its old place in its old container.
+    void answer?.then((a) => {
+      if (a.ok || !before) return;
+      const latest = layoutRef.current;
+      if (latest) commitRef.current({ ...latest, [moved.itemId]: before });
+    });
   };
 
-  /** FLO-FR-44: land a resize, the members staying where they are. */
+  /** FLO-FR-44 / FLO-FR-TDHR: land a resize, the members staying where they are. */
   const commitResize = (r: Resize) => {
-    const { itemId, rect } = r;
-    tryEdit((d) => {
-      const item = findItem(d, itemId);
-      if (!item) return { ok: true, doc: d };
-      let next = d;
-      const at = absolutePosition(d, itemId);
-      if (rect.x !== at.x || rect.y !== at.y) {
-        const members = childrenOf(d, itemId).map((m) => ({
-          id: m.id,
-          at: absolutePosition(d, m.id),
-        }));
-        const moved = moveItem(next, itemId, { x: rect.x, y: rect.y }, item.parentId);
-        if (!moved.ok) return moved;
-        next = moved.doc;
-        for (const m of members) {
-          const back = moveItem(next, m.id, m.at, itemId);
-          if (!back.ok) return back;
-          next = back.doc;
-        }
-      }
-      next = resizeItem(next, itemId, { width: rect.width, height: rect.height });
-      return { ok: true, doc: growAncestors(next, itemId) };
-    }, "move");
+    if (!doc || inert) return;
+    commitLayout(resizeContainer(doc, layout, r.itemId, r.rect));
   };
 
   /** FLO-FR-16 / FLO-FR-17 / FLO-FR-ZEPI / FLO-FR-GZCH / FLO-FR-CEVI. */
@@ -636,6 +741,7 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
     const from = connectingRef.current;
     const target = magnetRef.current;
     dragRef.current = null;
+    dragCapture.current = null;
     resizeRef.current = null;
     panRef.current = null;
     connectingRef.current = null;
@@ -697,10 +803,14 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
   })();
 
   return {
+    binding,
+    source,
     project,
     session,
     doc,
-    sync,
+    layout,
+    layoutReady: resolved !== null,
+    resetLayout,
     inert,
     delivery,
     control,
@@ -714,10 +824,13 @@ export function useFlowCanvas({ flowId, flows }: FlowCanvasProps) {
     toggleCollapsed,
     heights,
     onMeasureCard,
+    onMeasureContainer,
+    columns,
     view,
     zoomBy,
     onFit,
     revealItem,
+    commitLayout,
     frames,
     absOf,
     sizeOf,

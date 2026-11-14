@@ -727,7 +727,7 @@ fn operations_log_without_content() {
         (LogLevel::Warn, Some(json!(ERR_PATH_EXISTS)))
     );
     let text = serde_json::to_string(&list).unwrap();
-    for secret in [
+    for (index, marker) in [
         SECRET,
         "Chore Type",
         "Odd Type",
@@ -735,8 +735,11 @@ fn operations_log_without_content() {
         "Hidden text",
         "specs/a.md",
         "https://",
-    ] {
-        assert!(!text.contains(secret), "a record holds {secret:?}");
+    ]
+    .iter()
+    .enumerate()
+    {
+        assert!(!text.contains(marker), "a record holds sentinel {index}");
     }
 }
 

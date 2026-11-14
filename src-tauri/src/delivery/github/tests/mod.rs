@@ -569,7 +569,7 @@ fn reads_and_edits_log_without_content() {
     assert_eq!(field(no_project, "code"), Some(json!("no_project_open")));
 
     let text = serde_json::to_string(&list).unwrap();
-    for secret in [
+    for (index, marker) in [
         SECRET,
         "Secret plan title",
         "Private body text",
@@ -577,7 +577,10 @@ fn reads_and_edits_log_without_content() {
         "Renamed title",
         "Second title",
         "token=leak",
-    ] {
-        assert!(!text.contains(secret), "a record holds {secret:?}");
+    ]
+    .iter()
+    .enumerate()
+    {
+        assert!(!text.contains(marker), "a record holds sentinel {index}");
     }
 }

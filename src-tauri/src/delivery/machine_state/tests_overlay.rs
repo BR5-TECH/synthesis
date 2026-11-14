@@ -47,8 +47,10 @@ fn an_overlay_round_trips_by_project_node_id() {
     // DMS-FR-ROMF: the write logs counts, and no path or id.
     let text = buffer_text(buffer);
     assert!(text.contains("delivery overlay written"), "{text}");
-    for secret in ["src-tauri/src/payments/", "dr_7f3a", "PAY-payments", "payments-hld"] {
-        assert!(!text.contains(secret), "{secret} in {text}");
+    for (index, marker) in
+        ["src-tauri/src/payments/", "dr_7f3a", "PAY-payments", "payments-hld"].iter().enumerate()
+    {
+        assert!(!text.contains(marker), "the log holds sentinel {index}");
     }
 }
 

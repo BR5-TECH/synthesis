@@ -29,7 +29,7 @@ import {
 } from "../state/mcpValidation";
 import type { McpAuthMode, McpScope, McpSecretPresence, McpServerEntry } from "../types";
 import { Modal } from "./DraftsPanelParts";
-import { Field, KeyValueList, ProblemLine, SecretField } from "./McpDialogFields";
+import { Field, IdLine, KeyValueList, ProblemLine, SecretField } from "./McpDialogFields";
 
 export interface McpServerDialogProps {
   /** The row of `Edit` or `Set secrets`. Null for `Add server`. */
@@ -80,6 +80,11 @@ export function McpServerDialog({
   const [saving, setSaving] = useState(false);
   const body = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
+  /** MSS-FR-UHXN: the ID input is open. Once open, it stays open. */
+  const [idOpen, setIdOpen] = useState(false);
+  /** A count that goes up for each request to focus the ID input. */
+  const [idFocusRequest, setIdFocusRequest] = useState(0);
+  const idInput = useRef<HTMLInputElement>(null);
 
   const isNew = savedId === null;
   const otherIds = useMemo(
@@ -112,6 +117,16 @@ export function McpServerDialog({
     // Mount-only: the request is for the moment the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // MSS-FR-UHXN / MSS-FR-HHEJ: the focus goes to the ID input after it renders.
+  useEffect(() => {
+    if (idFocusRequest > 0) idInput.current?.focus();
+  }, [idFocusRequest]);
+
+  const openIdInput = () => {
+    setIdOpen(true);
+    setIdFocusRequest((n) => n + 1);
+  };
 
   const touch = (field: string) =>
     setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
@@ -176,6 +191,11 @@ export function McpServerDialog({
       if (!alive.current) return;
       // MSS-FR-STXZ: every field stays as the author typed it.
       const field = refusalField(code, form);
+      // MSS-FR-HHEJ: a refusal of the ID opens its input, so the author can fix it.
+      if (field === "id" && isNew) {
+        logInfo(["frontend"], "mcp server id input opened", { reason: "refusal" });
+        openIdInput();
+      }
       if (field) setRefusals({ [field]: refusalText(code) });
       else setTopError(refusalText(code));
       setSaving(false);
@@ -255,25 +275,39 @@ export function McpServerDialog({
           )}
         </Field>
 
-        <Field
-          label="ID"
-          hint={isNew ? "Agents see it in the names of the tools. You cannot change it later." : undefined}
-          problem={shown("id")}
-        >
-          {({ id, describedBy, invalid }) => (
-            <input
-              id={id}
-              className="input input--mono"
-              value={form.id}
-              readOnly={!isNew}
-              aria-readonly={!isNew}
-              aria-invalid={invalid}
-              aria-describedby={describedBy}
-              onChange={(event) => change({ id: event.target.value, idEdited: true }, ["id"])}
-              onBlur={() => touch("id")}
-            />
-          )}
-        </Field>
+        {isNew && idOpen ? (
+          // MSS-FR-WQRL: the open input, with its hint and its problem.
+          <Field
+            label="ID"
+            hint="Agents see it in the names of the tools. You cannot change it later."
+            problem={shown("id")}
+          >
+            {({ id, describedBy, invalid }) => (
+              <input
+                id={id}
+                ref={idInput}
+                className="input input--mono"
+                value={form.id}
+                aria-invalid={invalid}
+                aria-describedby={describedBy}
+                onChange={(event) => change({ id: event.target.value, idEdited: true }, ["id"])}
+                onBlur={() => touch("id")}
+              />
+            )}
+          </Field>
+        ) : (
+          // MSS-FR-UHXN / MSS-FR-DVDX: the ID as text. On add, `Edit ID`
+          // opens the input; on edit, the ID is fixed.
+          <IdLine
+            value={form.id}
+            canEdit={isNew}
+            problem={shown("id")}
+            onEdit={() => {
+              logInfo(["frontend"], "mcp server id input opened", { reason: "edit_id" });
+              openIdInput();
+            }}
+          />
+        )}
 
         {isNew ? (
           <fieldset className="mcp-dialog__choice">

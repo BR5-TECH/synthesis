@@ -663,7 +663,9 @@ describe("MCP servers section: dialogs, state, and logs", () => {
     const tracker = await findRow("Issue tracker");
     await userEvent.click(within(tracker).getByRole("button", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit MCP server" });
-    expect(within(dialog).getByRole("textbox", { name: "ID" })).toHaveValue("tracker");
+    // MSS-FR-DVDX: on edit, the ID is text.
+    expect(within(dialog).getByRole("group", { name: "ID" })).toHaveTextContent("tracker");
+    expect(within(dialog).queryByRole("button", { name: "Edit ID" })).toBeNull();
     expect(within(dialog).getByRole("radio", { name: "Remote (HTTP)" })).toBeChecked();
     expect(within(dialog).getByRole("radio", { name: "OAuth 2" })).toBeChecked();
   });

@@ -101,9 +101,8 @@ fn install_monitor(blocked: Vec<isize>, mtm: MainThreadMarker) -> bool {
     DROPPED.with(|count| count.set(0));
     let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
         let event = unsafe { event.as_ref() };
-        let for_blocked = event
-            .window(mtm)
-            .is_some_and(|window| blocked.contains(&window.windowNumber()));
+        let for_blocked =
+            event.window(mtm).is_some_and(|window| blocked.contains(&window.windowNumber()));
         if for_blocked {
             // Dropped: nothing else sees it, so it reaches neither the
             // blocked window's webview nor a menu key equivalent behind it.

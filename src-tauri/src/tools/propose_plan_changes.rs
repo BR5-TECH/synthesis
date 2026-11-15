@@ -38,7 +38,7 @@ pub const NAME: &str = "propose_plan_changes";
 pub const MAX_ROWS: usize = 20;
 
 /// PPT-FR-FFML: the fixed description of the contract surface.
-pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`) or an earlier new issue of the same call (`parent_row`). Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Do not propose all work at once. Keep the discussion on one topic, propose one step, and propose again after the author decided every row. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.";
+pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`). A new issue can also have an earlier new issue of the same call as parent (`parent_row`). Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Do not propose all work at once. Keep the discussion on one topic, propose one step, and propose again after the author decided every row. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.";
 
 const RATIONALE_DESCRIPTION: &str = "What you propose and why, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 const ROWS_DESCRIPTION: &str =
@@ -52,7 +52,7 @@ const TYPE_DESCRIPTION: &str =
     "The Type of the issue. It must be a Type that the repository offers.";
 const MILESTONE_DESCRIPTION: &str = "The exact title of a milestone of the plan. `null` removes the milestone of an existing issue.";
 const PARENT_ISSUE_DESCRIPTION: &str = "The number of a plan issue to set as the parent. `null` removes the parent of an existing issue. Do not give it with `parent_row`.";
-const PARENT_ROW_DESCRIPTION: &str = "The `key` of an earlier `create_issue` row of this call to set as the parent. Do not give it with `parent_issue`.";
+const PARENT_ROW_DESCRIPTION: &str = "The `key` of an earlier `create_issue` row of this call to set as the parent of a new issue. Do not give it with `parent_issue`. A `modify_issue` row does not take it.";
 const LABELS_DESCRIPTION: &str =
     "Labels of the new issue. Each must already exist in the repository. `create_issue` only.";
 const NUMBER_DESCRIPTION: &str = "The number of the plan issue to change. `modify_issue` only.";
@@ -306,7 +306,14 @@ where
             return Err(resolved());
         }
         // PPT-FR-AYQT.
-        if map_plan::open_row_exists(&self.app, discussion_id) {
+        // The store reads are synchronous and an accept can hold the lock for a
+        // while: they run off the async runtime.
+        let (app, id) = (self.app.clone(), discussion_id.to_string());
+        let open =
+            tauri::async_runtime::spawn_blocking(move || map_plan::open_row_exists(&app, &id))
+                .await
+                .map_err(|_| not_recorded())?;
+        if open {
             return Err(card_open());
         }
         // PPT-FR-NXPZ.
@@ -338,8 +345,13 @@ where
             author: self.author.clone(),
             spoken_original: None,
         };
-        map_plan::record_map_plan_proposal(&self.app, discussion_id, built, comment)
-            .map_err(|e| record_refusal(&e))?;
+        let (app, id) = (self.app.clone(), discussion_id.to_string());
+        tauri::async_runtime::spawn_blocking(move || {
+            map_plan::record_map_plan_proposal(&app, &id, built, comment)
+        })
+        .await
+        .map_err(|_| not_recorded())?
+        .map_err(|e| record_refusal(&e))?;
         // CVL-FR-15: set only after the record and its comment both landed.
         self.proposed.store(true, Ordering::SeqCst);
         Ok((ProposePlanChangesOutput { proposed: true, rows: count }, kinds))

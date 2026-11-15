@@ -68,6 +68,15 @@ fn bad_parent_row(at: usize) -> PlanRefusal {
     )
 }
 
+fn parent_row_on_modify(at: usize) -> PlanRefusal {
+    invalid(
+        "bad_parent_row",
+        format!(
+            "`parent_row` of row {at} is for a `create_issue` row only. A `modify_issue` row sets `parent_issue`."
+        ),
+    )
+}
+
 /// What the plan must be asked, from the rows (PPT-NFR: at most the labels, the
 /// Types, and the Status options).
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -159,6 +168,9 @@ fn check_issue_row(
         return Err(bad_rows());
     }
     if let Some(parent) = &row.parent_row {
+        if op != OP_CREATE {
+            return Err(parent_row_on_modify(at));
+        }
         if !creates.contains(parent.trim()) {
             return Err(bad_parent_row(at));
         }

@@ -392,7 +392,6 @@ fn a_parent_is_a_plan_issue_or_an_earlier_new_issue() {
         json!([child(json!({ "parent_row": "b" }))]),
         json!([child(json!({ "parent_row": "a" })), create("a", "Parent")]),
         json!([draft("a"), child(json!({ "parent_row": "a" }))]),
-        json!([modify("a", 2, json!({ "parent_row": "a" }))]),
     ] {
         let refusal = refused(f.rows(rows.clone()));
         assert_eq!(refusal.kind, ToolErrorKind::InvalidArgs, "{rows}");
@@ -400,6 +399,16 @@ fn a_parent_is_a_plan_issue_or_an_earlier_new_issue() {
         assert!(refusal.message.contains("`parent_row` of row"), "{rows}: {}", refusal.message);
         assert!(refusal.message.contains("must name the `key` of an earlier `create_issue` row."));
     }
+    // PPT-FR-DPQP: `parent_row` is for `create_issue` rows only.
+    let on_modify = refused(
+        f.rows(json!([create("a", "Parent"), modify("b", 2, json!({ "parent_row": "a" }))])),
+    );
+    assert_eq!(on_modify.kind, ToolErrorKind::InvalidArgs);
+    assert!(on_modify.retryable);
+    assert_eq!(
+        on_modify.message,
+        "`parent_row` of row 2 is for a `create_issue` row only. A `modify_issue` row sets `parent_issue`."
+    );
     let both = child(json!({ "parent_row": "a", "parent_issue": 1 }));
     assert_eq!(refused(f.rows(json!([create("a", "Parent"), both]))).message, rows::BAD_ROWS);
     let outside = refused(f.rows(json!([child(json!({ "parent_issue": 77 }))])));

@@ -202,7 +202,7 @@ pub fn read_discussion_by_id(
     if let Some(discussion) = locate_note_discussion(root, discussion_id) {
         return Some(discussion);
     }
-    // CMS-FR-GWBK: a Map thread is read by its id, though no list returns it.
+    // CMS-FR-GWBK: a Map thread is found by its id in the log of the Map owner.
     if let Some(discussion) = fold_map_discussions(root).into_iter().find(|d| d.id == discussion_id)
     {
         return Some(discussion);

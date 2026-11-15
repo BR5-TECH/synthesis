@@ -7,8 +7,9 @@
 //! draft event it mirrors, so every rule of DSS-FR-GAWO through DSS-FR-DZQF
 //! applies unchanged (CST-FR-NCLF).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
 
 use crate::fs as fsa;
 use crate::log_fields;
@@ -187,10 +188,7 @@ pub fn record_change_statistics_events<R: tauri::Runtime>(
     if pending.is_empty() {
         return;
     }
-    let Some(store) = app
-        .try_state::<crate::project::ProjectState>()
-        .and_then(|state| state.require_store().ok())
-    else {
+    let Some(store) = app.open_project_state().and_then(|state| state.require_store().ok()) else {
         return;
     };
     let sink = app.clone();
@@ -211,7 +209,7 @@ pub fn record_change_statistics_events<R: tauri::Runtime>(
                         "types" => &types,
                     },
                 );
-                let _ = sink.emit(
+                let _ = sink.emit_project(
                     CHANGE_STATISTICS_CHANGED,
                     ChangeStatisticsChanged {
                         stream_id: stream_id.clone(),
@@ -249,14 +247,13 @@ pub fn record_change_statistics_event<R: tauri::Runtime>(
 }
 
 fn require_store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<fsa::RootFs, String> {
-    let project = app
-        .try_state::<crate::project::ProjectState>()
-        .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    let project = app.open_project_state().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     project.require_store()
 }
 
 /// CST-FR-WPHC / CST-FR-BLIF: `"read change statistics"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn read_change_statistics<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -283,6 +280,7 @@ where
 }
 
 /// CST-FR-TSOU: `"record change working interval"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn record_change_working_interval<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,

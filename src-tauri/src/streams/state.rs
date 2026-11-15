@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::tools::agent_exec::runtime::CancellationToken;
 
@@ -156,7 +156,22 @@ impl StreamState {
             kind,
             cancellation: cancellation.clone(),
         });
-        Ok(RepositoryUpdateHold { state: self, cancellation })
+        Ok(RepositoryUpdateHold { state: HeldState::Borrowed(self), cancellation })
+    }
+
+    /// [`StreamState::begin_repository_update`] for a state that the hold keeps
+    /// alive itself: the state of a project scope has no owner to borrow from.
+    pub fn begin_repository_update_shared(
+        self: &Arc<Self>,
+        stream_id: &str,
+        kind: Reconciliation,
+    ) -> Result<RepositoryUpdateHold<'static>, String> {
+        let hold = self.begin_repository_update(stream_id, kind)?;
+        let cancellation = hold.cancellation.clone();
+        // The guard moves into the shared hold, so it must not release the
+        // update here.
+        std::mem::forget(hold);
+        Ok(RepositoryUpdateHold { state: HeldState::Shared(self.clone()), cancellation })
     }
 
     /// GRB-FR-TXVL / WKS-FR-WEJK: stop the update of one stream.
@@ -292,10 +307,15 @@ struct Reconciling {
 /// WKS-FR-HLGN: what holds the repository update guard, for as long as one
 /// merge or one update runs.
 pub struct RepositoryUpdateHold<'a> {
-    state: &'a StreamState,
+    state: HeldState<'a>,
     /// GRB-FR-MWTC / GRB-FR-TXVL: what the cancellation request trips, and what
     /// the reconciliation passes to every turn it dispatches.
     cancellation: CancellationToken,
+}
+
+enum HeldState<'a> {
+    Borrowed(&'a StreamState),
+    Shared(Arc<StreamState>),
 }
 
 impl RepositoryUpdateHold<'_> {
@@ -307,6 +327,9 @@ impl RepositoryUpdateHold<'_> {
 
 impl Drop for RepositoryUpdateHold<'_> {
     fn drop(&mut self) {
-        self.state.end_reconciliation();
+        match &self.state {
+            HeldState::Borrowed(state) => state.end_reconciliation(),
+            HeldState::Shared(state) => state.end_reconciliation(),
+        }
     }
 }

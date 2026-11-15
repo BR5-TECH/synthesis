@@ -19,16 +19,18 @@
 //! body, labels, or comments (GPP-FR-CRWY). The only write to GitHub is the
 //! status update of a claim to the In Progress status (GPP-FR-ILGG).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::fs::RootFs;
 use crate::github_tokens::{self, GithubTokens, ProjectToken};
 use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
 use crate::logging::{self, Domain, Fields, LogBuffer};
-use crate::project::ProjectState;
 use crate::project_settings::{
     load_github_pending_claims_from, load_github_polling_settings_from,
     save_github_polling_settings_to, GITHUB_POLLING_INTERVALS,
@@ -75,13 +77,13 @@ impl GithubPollingState {
 
 /// GPP-FR-DATH: the project closed, so the polling session ends.
 pub fn end_session<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(state) = app.try_state::<GithubPollingState>() {
+    if let Some(state) = app.try_project_store::<GithubPollingState>() {
         state.slot().end();
     }
 }
 
-fn state<R: Runtime>(app: &AppHandle<R>) -> tauri::State<'_, GithubPollingState> {
-    app.state::<GithubPollingState>()
+fn state<R: Runtime>(app: &AppHandle<R>) -> crate::project_scope::Scoped<'_, GithubPollingState> {
+    app.project_store::<GithubPollingState>()
 }
 
 /// The open project's root, its session key, and its slot key.
@@ -92,7 +94,7 @@ struct Context {
 }
 
 fn context<R: Runtime>(app: &AppHandle<R>) -> Result<Context, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT.to_string())?;
     let project_key = project.slot_key();
     let key = SessionKey { project: project_key.clone(), worktree: root.path().to_path_buf() };
@@ -172,7 +174,7 @@ fn session_repository<R: Runtime>(
 
 /// GPP-FR-TYOV: announce a change of the view.
 fn announce<R: Runtime>(app: &AppHandle<R>, new_issues: Vec<NewIssue>) {
-    let _ = app.emit(GITHUB_POLLING_CHANGED, GithubPollingChanged { new_issues });
+    let _ = app.emit_project(GITHUB_POLLING_CHANGED, GithubPollingChanged { new_issues });
 }
 
 fn log_to<R: Runtime>(app: &AppHandle<R>, level: logging::LogLevel, message: &str, fields: Fields) {
@@ -252,7 +254,7 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(work)
+    crate::project_scope::context::spawn_blocking(work)
         .await
         .map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?
 }
@@ -262,6 +264,7 @@ where
 // ---------------------------------------------------------------------------
 
 /// GPP-FR-WYRP: the Projects the token can read.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_github_projects(
     app: tauri::AppHandle,
@@ -306,6 +309,7 @@ pub(crate) fn list_projects_impl<R: Runtime>(
 }
 
 /// GPP-FR-NNSJ: the options of one Project's `Status` field. Read-only.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_github_project_statuses(
     project_node_id: String,
@@ -341,6 +345,7 @@ pub(crate) fn list_statuses_impl<R: Runtime>(
 }
 
 /// "get github polling state": contacts no network.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_github_polling_state(app: tauri::AppHandle) -> Result<GithubPollingView, String> {
     current_view(&app)
@@ -348,6 +353,7 @@ pub fn get_github_polling_state(app: tauri::AppHandle) -> Result<GithubPollingVi
 
 /// GPP-FR-IURX / GPP-FR-HZDD / GPP-FR-DBPI: persist the settings, then
 /// validate a selected Project at once.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn set_github_polling_settings(
     project_node_id: Option<String>,
@@ -487,7 +493,7 @@ struct InFlight<R: Runtime> {
 
 impl<R: Runtime> Drop for InFlight<R> {
     fn drop(&mut self) {
-        if let Some(state) = self.app.try_state::<GithubPollingState>() {
+        if let Some(state) = self.app.try_project_store::<GithubPollingState>() {
             state.slot().abandon(&self.key, self.token);
         }
     }
@@ -503,6 +509,7 @@ pub(crate) struct Begun<R: Runtime> {
 }
 
 /// GPP-FR-XSKT / GPP-FR-XZTP: run one poll, or report the one in flight.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn poll_github_ready_tasks(app: tauri::AppHandle) -> Result<GithubPollingView, String> {
     off_thread(move || poll_impl(&app)).await
@@ -638,6 +645,7 @@ fn hold_unsaved<R: Runtime>(app: &AppHandle<R>, key: &SessionKey, claim: GithubP
 }
 
 /// GPP-FR-IFVC through GPP-FR-DGWL: claim one ready task.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn claim_github_task(
     issue_number: u64,
@@ -718,6 +726,7 @@ pub(crate) fn claim_impl<R: Runtime>(
 }
 
 /// GPP-FR-TOED / GPP-FR-KSMZ: complete the local steps of a pending claim.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn retry_github_claim(
     issue_number: u64,
@@ -780,6 +789,7 @@ pub(crate) fn retry_impl<R: Runtime>(
 }
 
 /// GPP-FR-BSLI: remove the pending claim of one issue.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn acknowledge_github_claim(
     issue_number: u64,
@@ -805,6 +815,7 @@ pub(crate) fn acknowledge_impl<R: Runtime>(app: &AppHandle<R>, number: u64) -> R
 }
 
 /// GPP-FR-WOLE: open one listed issue in the OS default browser.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn open_github_task_issue(
     issue_number: u64,

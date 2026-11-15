@@ -1,6 +1,9 @@
 //! The commands a work stream is managed through (WKS contract surface).
 
-use tauri::{Emitter, Manager};
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
+use tauri::Manager;
 
 use super::*;
 use crate::log_fields;
@@ -14,8 +17,10 @@ struct StreamsChangedPayload {
 }
 
 pub(super) fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, project_key: &str) {
-    let _ = app
-        .emit(WORK_STREAMS_CHANGED, StreamsChangedPayload { project_key: project_key.to_string() });
+    let _ = app.emit_project(
+        WORK_STREAMS_CHANGED,
+        StreamsChangedPayload { project_key: project_key.to_string() },
+    );
 }
 
 /// The store every operation here reads and writes.
@@ -23,7 +28,7 @@ pub(super) fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, project_key
 /// `short_data_dir()` in the application, and whatever root the managed state
 /// names where one is set.
 pub(super) fn store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<StreamStore, String> {
-    if let Some(root) = app.try_state::<StreamState>().and_then(|state| state.root()) {
+    if let Some(root) = app.try_project_store::<StreamState>().and_then(|state| state.root()) {
         return Ok(StreamStore::new(root));
     }
     let root = fsa::short_data_dir().map_err(|e| e.to_string())?;
@@ -43,16 +48,12 @@ pub(super) fn store_fs<R: tauri::Runtime>(
 pub(super) fn project_root<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<std::path::PathBuf, String> {
-    let state = app
-        .try_state::<crate::project::ProjectState>()
-        .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    let state = app.open_project_state().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     state.root().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())
 }
 
 pub(super) fn project_key<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
-    app.try_state::<crate::project::ProjectState>()
-        .map(|state| state.slot_key())
-        .unwrap_or_default()
+    app.open_project_state().map(|state| state.slot_key()).unwrap_or_default()
 }
 
 /// WKS-FR-GKPX / WKS-FR-NRQT: whether a merge or an update of this stream is
@@ -73,6 +74,7 @@ pub(super) fn stream_has_live_run<R: tauri::Runtime>(
 }
 
 /// WKS-FR-KDXF / WKS-FR-VTEY: create a stream, or create nothing.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn create_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -89,7 +91,7 @@ pub fn create_work_stream<R: tauri::Runtime>(
     // The exclusive hold every write of this module takes, held across the
     // read, the check and the write together: without it two callers each
     // pass their own precondition before either mutates.
-    let held = app.try_state::<StreamState>();
+    let held = app.try_project_store::<StreamState>();
     let _write = held.as_ref().map(|state| state.write_guard());
 
     // WKS-FR-HRUZ: a name no other live stream of the project holds.
@@ -244,12 +246,13 @@ fn listing_repo<R: tauri::Runtime>(
     root: &std::path::Path,
 ) -> Result<git2::Repository, String> {
     git::primary_repo(root).or_else(|refusal| {
-        let anchor = app.try_state::<crate::project::ProjectState>().and_then(|p| p.anchor());
+        let anchor = app.open_project_state().and_then(|p| p.anchor());
         anchor.map_or(Err(refusal), |anchor| git::primary_repo(std::path::Path::new(&anchor)))
     })
 }
 
 /// WKS-FR-SGCM: every live stream, with what each holds.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_work_streams<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -311,6 +314,7 @@ pub fn list_work_streams<R: tauri::Runtime>(
 }
 
 /// WKS-FR-SGCM: one stream, or the typed refusal.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -357,6 +361,7 @@ pub(super) fn refuse<R: tauri::Runtime>(
 /// unmerged (without `force`), dirty (without `discard_uncommitted`). `force`
 /// answers the unmerged check alone and `discard_uncommitted` the dirty check
 /// alone; neither reaches the three before them.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn delete_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -374,7 +379,7 @@ pub fn delete_work_stream<R: tauri::Runtime>(
     // The exclusive hold every write of this module takes, held across the
     // read, the check and the write together: without it two callers each
     // pass their own precondition before either mutates.
-    let held = app.try_state::<StreamState>();
+    let held = app.try_project_store::<StreamState>();
     let _write = held.as_ref().map(|state| state.write_guard());
 
     let stream = store::read_stream(&fs, &store, &stream_id)
@@ -510,6 +515,7 @@ pub fn delete_work_stream<R: tauri::Runtime>(
 ///
 /// Empty where the working copy is missing. Writes nothing, and is the read a
 /// deletion confirmation names the discarded paths from.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_work_stream_uncommitted_paths<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,

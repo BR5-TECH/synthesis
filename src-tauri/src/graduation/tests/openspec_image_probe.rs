@@ -79,7 +79,8 @@ fn an_image_with_no_cli_rests_the_run_and_continue_probes_again() {
     assert_eq!(failed[0].fields["run_id"], run.id.as_str());
     assert_eq!(failed[0].fields["code"], "openspec_image_cli_unavailable");
     assert_eq!(failed[0].fields["state"], "not_found");
-    let capacity = crate::graduation::get_graduation_capacity(fx.app.clone()).unwrap();
+    let capacity =
+        crate::graduation::get_graduation_capacity(fx.app.clone(), Default::default()).unwrap();
     assert_eq!(capacity.in_use, 1, "the blocked run keeps its project slot");
 
     let resumed = fx.continue_run(&blocked);

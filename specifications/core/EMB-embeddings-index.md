@@ -82,6 +82,7 @@ The optional vector index that improves the ranking of specifications and docume
 62. **EMB-FR-EYGO** No record carries a chunk text, a query, a vector, or a document path. A record names a document by its id.
 63. **EMB-FR-RMZH** Closing a project stops every job of that project, keeps its store on disk, and closes the store file.
 64. **EMB-FR-VVBY** This module reads the working copy through `FSA-filesystem-access.md` and the documents through `DCL-documents-collection.md` (DCL-FR-GLUS). It writes only the store, the model cache, and its settings through `GSS-global-settings-storage.md`. It changes no file of a worktree, no Git object, no ref, and no index of Git.
+65. **EMB-FR-NFGZ** The embeddings store, its layers, and its build are held per open project. Every command takes `project_id`. A build for a project tab that is not in front continues. A search in one project reads the vectors of that project only (`PWN-project-windows.md` PWN-FR-NXQW).
 
 ## Contract surface
 The module owns the vector store, the model cache, the embedding jobs, and the commands and event below. The UI consumers are `../ui/GLS-global-settings.md` (the Global Indexing section) and `../ui/SET-project-settings.md` (the Project Indexing section).

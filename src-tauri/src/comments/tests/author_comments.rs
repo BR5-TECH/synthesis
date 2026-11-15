@@ -53,7 +53,7 @@ impl Opened {
             Vec::new(),
             None,
             self.app.state(),
-            self.app.state(),
+            self.app.state::<crate::project::ProjectState>().into(),
         )
         .expect("opened")
     }
@@ -67,7 +67,7 @@ impl Opened {
             Vec::new(),
             None,
             self.app.state(),
-            self.app.state(),
+            self.app.state::<crate::project::ProjectState>().into(),
         )
         .expect("added")
     }
@@ -140,7 +140,7 @@ fn the_opening_comment_of_a_note_discussion_is_an_author_comment() {
         Vec::new(),
         None,
         o.app.state(),
-        o.app.state(),
+        o.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("opened");
     assert!(is_author(&o.handle(), &opened.comments[0].id));
@@ -162,7 +162,7 @@ fn each_answer_comment_of_a_submission_is_an_author_comment() {
         "s1".into(),
         vec![answer_for(1, 1, "one", None), answer_for(2, 2, "two", None)],
         o.app.state(),
-        o.app.state(),
+        o.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("submitted");
     let comments = &submitted.discussion.comments;
@@ -240,7 +240,7 @@ fn a_retried_submission_notes_the_answers_it_committed() {
         "s2".into(),
         answers,
         o.app.state(),
-        o.app.state(),
+        o.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("the retry reports the committed submission");
     assert_eq!(retried.final_answer_comment_id, answer);

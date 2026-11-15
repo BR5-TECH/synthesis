@@ -191,7 +191,7 @@ fn a_hold_of_a_withdrawn_hunk_is_refused_and_the_causes_are_named() {
             p.id.clone(),
             hunk.to_string(),
             true,
-            f.app.state::<crate::project::ProjectState>(),
+            f.app.state::<crate::project::ProjectState>().into(),
         )
     };
     let before = f.reread(&p.id);

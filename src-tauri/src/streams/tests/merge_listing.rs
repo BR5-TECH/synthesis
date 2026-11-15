@@ -177,14 +177,15 @@ fn a_stream_with_a_live_merge_run_cannot_be_deleted() {
     // WKS-FR-OVLQ: neither `force` nor `discard_uncommitted` reaches the refusal.
     for force in [false, true] {
         let before = observe(&fx, &stream);
-        let refusal = delete_work_stream(fx.app.clone(), stream.id.clone(), force, force)
-            .expect_err("refused");
+        let refusal =
+            delete_work_stream(fx.app.clone(), stream.id.clone(), force, force, Default::default())
+                .expect_err("refused");
         assert_eq!(refusal, ERR_STREAM_HAS_RUNS);
         assert_eq!(observe(&fx, &stream), before);
     }
 
     resave(&fx, &mut run, |run| run.state = State::Discarded);
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false)
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
         .expect("deleted once it ended");
 }
 

@@ -8,6 +8,7 @@
 //! stay in sequence as they did on the main thread, and a slow check holds no
 //! other write.
 
+use crate::project::OpenProject as _;
 use std::sync::{Mutex, MutexGuard};
 
 /// The lock that keeps the writes of these commands in sequence.
@@ -30,7 +31,7 @@ where
     T: Send + 'static,
     F: FnOnce(tauri::AppHandle<R>) -> Result<T, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || work(app))
+    crate::project_scope::context::spawn_blocking(move || work(app))
         .await
         .map_err(|error| format!("{operation} failed: {error}"))?
 }
@@ -39,18 +40,12 @@ where
 pub(crate) fn project_root<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<crate::fs::RootFs, String> {
-    use tauri::Manager;
-    app.try_state::<crate::project::ProjectState>()
-        .ok_or_else(|| "no project open".to_string())?
-        .require_root()
+    app.open_project_state().ok_or_else(|| "no project open".to_string())?.require_root()
 }
 
 /// The machine store of the project of `app`, or the typed error.
 pub(crate) fn project_store<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<crate::fs::RootFs, String> {
-    use tauri::Manager;
-    app.try_state::<crate::project::ProjectState>()
-        .ok_or_else(|| "no project open".to_string())?
-        .require_store()
+    app.open_project_state().ok_or_else(|| "no project open".to_string())?.require_store()
 }

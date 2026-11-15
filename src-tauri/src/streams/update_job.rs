@@ -4,9 +4,8 @@
 //! what it settled back to that same record. Every surface then learns what an
 //! update did the one way — by reading the record.
 
+use crate::project_scope::ProjectStores;
 use std::sync::Arc;
-
-use tauri::Manager;
 
 use super::update_record::{StreamUpdateCommit, StreamUpdateStrategy};
 use super::*;
@@ -65,7 +64,7 @@ pub(super) fn start_with<R: tauri::Runtime>(
 ) -> Result<(StreamUpdateRecord, std::thread::JoinHandle<()>), String> {
     let fs = commands::store_fs(app)?;
     let store = commands::store(app)?;
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
 
     // WKS-FR-QFTH: the job is marked live before its record is written and stays
     // marked until its outcome is written, so a sweep running beside it never
@@ -120,7 +119,7 @@ pub(super) fn start_with<R: tauri::Runtime>(
     let stream_id = stream.id.clone();
     let project_key = stream.project_key.clone();
     let started = record.clone();
-    let handle = std::thread::spawn(move || {
+    let handle = crate::project_scope::context::thread_spawn(move || {
         let _job = UpdateJobRelease { app: app.clone(), stream_id: stream_id.clone() };
         update_blocking(
             &app,
@@ -226,7 +225,7 @@ struct UpdateJobRelease<R: tauri::Runtime> {
 
 impl<R: tauri::Runtime> Drop for UpdateJobRelease<R> {
     fn drop(&mut self) {
-        if let Some(state) = self.app.try_state::<StreamState>() {
+        if let Some(state) = self.app.try_project_store::<StreamState>() {
             state.release_update_job(&self.stream_id);
         }
         // WKS-FR-RQVM: a run whose claim this update refused waits in the

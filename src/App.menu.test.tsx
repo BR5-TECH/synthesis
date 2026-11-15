@@ -117,6 +117,7 @@ function defaultInvoke(cmd: string) {
         { name: "acme", path: "~/dev/acme", lastOpenedAt: "2026-05-15T10:00:00Z" },
       ];
     case "open_project_at_path":
+    case "resolve_project_at_path":
       return { name: "acme", path: "~/dev/acme" };
     case "load_layout_preferences":
       return null;
@@ -285,6 +286,8 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
       expect(listeners["menu:save"]).toBeTypeOf("function");
       expect(listeners["menu:save-all"]).toBeTypeOf("function");
       expect(listeners["menu:close-project"]).toBeTypeOf("function");
+      // PJT-FR-PILG: New Tab opens the Project picker over this window.
+      expect(listeners["menu:new-tab"]).toBeTypeOf("function");
       expect(listeners["menu:exit-requested"]).toBeTypeOf("function");
       expect(listeners["menu:find"]).toBeTypeOf("function");
       expect(listeners["menu:find-replace"]).toBeTypeOf("function");
@@ -298,6 +301,8 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
       .map((c) => c[0] as string)
       .filter((e) => e.startsWith("menu:"));
     expect(menuEvents).toEqual([
+      // PJT-FR-PILG: the project tab layer listens for New Tab before the shell.
+      "menu:new-tab",
       "menu:new-file",
       "menu:new-folder",
       "menu:new-artifact",
@@ -317,7 +322,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     await waitFor(() => {
       expect(
         Object.keys(listeners).filter((e) => e.startsWith("menu:")),
-      ).toHaveLength(10);
+      ).toHaveLength(11);
     });
     unmount();
     // The effect cleanup calls each captured unlisten fn, which the mock uses to

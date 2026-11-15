@@ -784,6 +784,7 @@ pub fn resolve_github_identity(
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_github_tokens(
     store: State<'_, GlobalSettingsStore>,
@@ -792,6 +793,7 @@ pub fn list_github_tokens(
     list_tokens_impl(&store, &tokens)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn add_github_token(
     label: String,
@@ -814,6 +816,7 @@ pub fn add_github_token(
     Ok(record)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn validate_github_token(
     id: String,
@@ -827,6 +830,7 @@ pub fn validate_github_token(
     Ok(record)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn rename_github_token(
     id: String,
@@ -840,6 +844,7 @@ pub fn rename_github_token(
     Ok(record)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn remove_github_token(
     id: String,
@@ -855,6 +860,7 @@ pub fn remove_github_token(
 /// GTS-FR-12: hand the OS the token-creation URL of the host and return.
 /// Transmits nothing, receives nothing — the token comes back only by the author
 /// pasting it.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_github_token_creation_page(
     host: Option<String>,
@@ -881,20 +887,22 @@ fn log_refusal(app: &tauri::AppHandle, message: &str, code: &str) {
     );
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_project_github_token_binding(
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectTokenBinding, String> {
     get_binding_impl(&store, &project.slot_key())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_project_github_token_binding(
     token_id: String,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectTokenBinding, String> {
     let binding = set_binding_impl(&store, &project.slot_key(), &token_id)?;
     emit_tokens_changed(&app);

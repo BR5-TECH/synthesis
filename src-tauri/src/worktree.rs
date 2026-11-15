@@ -26,12 +26,14 @@
 //! wrappers thread the managed state, persist the choice (WTC-FR-17), and emit
 //! `"worktree context changed"` (WTC-FR-16).
 
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use git2::{BranchType, Repository};
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
+use tauri::{Manager, State};
 
 use crate::changes::{canonicalize_lenient, open_repo, ERR_NOT_A_REPO, ERR_UNKNOWN_BRANCH};
 use crate::global_settings::GlobalSettingsStore;
@@ -175,7 +177,7 @@ pub(crate) fn announce_branches_changed<R: tauri::Runtime>(
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
     let payload = BranchesChangedPayload { repository_root };
-    if let Err(e) = app.emit(BRANCHES_CHANGED, payload) {
+    if let Err(e) = app.emit_project(BRANCHES_CHANGED, payload) {
         crate::logging::log_warn(
             app,
             &crate::logging::BUFFER,
@@ -707,7 +709,7 @@ fn reroot_with<R: tauri::Runtime>(
             branch: None,
             is_detached: false,
         });
-    if let Err(e) = app.emit(WORKTREE_CONTEXT_CHANGED, payload) {
+    if let Err(e) = app.emit_project(WORKTREE_CONTEXT_CHANGED, payload) {
         // The switch itself has already happened; an undelivered announcement
         // must not undo it. Logged rather than swallowed, because a silent
         // failure here leaves every surface bound to the content root stale.
@@ -726,10 +728,11 @@ fn reroot_with<R: tauri::Runtime>(
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_worktrees_and_branches(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<WorktreeContext, String> {
     let mut context = context_for(&project.require_root()?)?;
     // WTC-FR-QKZD: which of these worktrees are work streams, and which of
@@ -738,25 +741,30 @@ pub fn list_worktrees_and_branches(
     Ok(context)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn get_active_worktree(project: State<'_, ProjectState>) -> Result<WorktreeEntry, String> {
+pub fn get_active_worktree(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<WorktreeEntry, String> {
     active_entry_for(&project.require_root()?)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn propose_worktree_path(
     branch: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<String, String> {
     propose_path_for(&project.require_root()?, &branch)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn activate_worktree(
     path: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<WorktreeContext, String> {
     activate_worktree_at(&app, &project, &watcher, &store, &path)
@@ -788,12 +796,13 @@ pub(crate) fn activate_worktree_at<R: tauri::Runtime>(
     reroot(app, project, watcher, store, &content_root_in(&target, &offset))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn check_out_branch_in_active_worktree(
     branch: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<WorktreeContext, String> {
     check_out_branch_at(&app, &crate::logging::BUFFER, &project, &watcher, &store, &branch)
@@ -864,7 +873,7 @@ pub(crate) fn refresh_and_announce<R: tauri::Runtime>(
     // refused above returns early and emits nothing.
     let payload =
         BranchesChangedPayload { repository_root: outcome.context.repository_root.clone() };
-    if let Err(e) = app.emit(BRANCHES_CHANGED, payload) {
+    if let Err(e) = app.emit_project(BRANCHES_CHANGED, payload) {
         // The refresh itself has already happened; an undelivered announcement
         // must not undo it. Logged rather than swallowed, because a silent
         // failure here leaves the Git panel's branch listing stale.
@@ -883,10 +892,11 @@ pub(crate) fn refresh_and_announce<R: tauri::Runtime>(
 /// thread the fetch is holding. So the blocking half runs on the blocking pool,
 /// which is what lets WTS-FR-31's busy state and the progress region actually
 /// paint while a slow fetch runs.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn refresh_worktrees_and_branches(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<RefreshOutcome, String> {
     let root = project.require_root()?;
     // The user-global slot the token binding is filed under (GSS-FR-18), which
@@ -897,10 +907,10 @@ pub async fn refresh_worktrees_and_branches(
     // The managed state is resolved inside the closure rather than taken as
     // parameters: a `State<'_, T>` borrows the invoke context and cannot cross
     // onto another thread, while the `AppHandle` can and reaches the same values.
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<crate::github_tokens::GithubTokens>();
-        let registry = app.state::<crate::progress::ProgressRegistry>();
+        let registry = app.project_store::<crate::progress::ProgressRegistry>();
         refresh_and_announce(&app, &root, || {
             // WTC-FR-22: GTC's single fetch primitive, composed rather than
             // reimplemented, exactly as WTC-FR-10 composes its checkout primitive.
@@ -922,14 +932,15 @@ pub async fn refresh_worktrees_and_branches(
     .map_err(|e| format!("refresh failed: {e}"))?
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn create_worktree(
     branch: String,
     path: String,
     start: Option<String>,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<WorktreeContext, String> {
     create_worktree_in(&app, &project, &watcher, &store, &branch, &path, start.as_deref())

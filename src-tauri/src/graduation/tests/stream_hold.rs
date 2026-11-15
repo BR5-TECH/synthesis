@@ -65,8 +65,12 @@ fn continuing_a_blocked_run_keeps_its_queue() {
     // The dispatch the command starts is not this test's subject, so the loop
     // is turned off for the one call that would start it.
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), blocked.id.clone())
-        .expect("the run is continued");
+    let continued = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        blocked.id.clone(),
+        Default::default(),
+    )
+    .expect("the run is continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
 
     assert_eq!(continued.state, GraduationRunState::Queued);
@@ -263,7 +267,8 @@ fn a_resumed_run_continues_its_pass() {
 
     // The author continues it, and this time the work is done and reviewed.
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).expect("continued");
+    crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
 
     let run = fx.reload(&run.id);
@@ -315,6 +320,7 @@ fn an_answered_escalation_continues_its_pass() {
             summary: "The first one".to_string(),
             note: None,
         }],
+        Default::default(),
     )
     .expect("the answers");
     fx.app.state::<GraduationState>().set_loop_enabled(true);

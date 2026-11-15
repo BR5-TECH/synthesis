@@ -84,14 +84,22 @@ impl TurnContext {
 
     /// GRD-FR-MDQZ: the author's own pause.
     pub(crate) fn pause(&self) {
-        crate::graduation::pause_graduation_run(self.app.clone(), self.run_id.clone())
-            .unwrap_or_else(|reason| panic!("the pause was refused: {reason}"));
+        crate::graduation::pause_graduation_run(
+            self.app.clone(),
+            self.run_id.clone(),
+            Default::default(),
+        )
+        .unwrap_or_else(|reason| panic!("the pause was refused: {reason}"));
     }
 
     /// GRD-FR-EWTN: the author discards the run.
     pub(crate) fn discard(&self) {
         without_loop(&self.app, || {
-            crate::graduation::discard_graduation_run(self.app.clone(), self.run_id.clone())
+            crate::graduation::discard_graduation_run(
+                self.app.clone(),
+                self.run_id.clone(),
+                Default::default(),
+            )
         })
         .unwrap_or_else(|reason| panic!("the discard was refused: {reason}"));
     }
@@ -139,8 +147,12 @@ impl TurnContext {
 
     /// GRB-FR-TXVL: the author stops the update of the stream.
     pub(crate) fn cancel_update(&self) {
-        crate::streams::cancel_work_stream_update(self.app.clone(), self.stream_id.clone())
-            .unwrap_or_else(|reason| panic!("the update cancellation was refused: {reason}"));
+        crate::streams::cancel_work_stream_update(
+            self.app.clone(),
+            self.stream_id.clone(),
+            Default::default(),
+        )
+        .unwrap_or_else(|reason| panic!("the update cancellation was refused: {reason}"));
     }
 
     /// GTC-FR-19: Git's own lock on the stream's index, as a concurrent `git`
@@ -163,7 +175,7 @@ impl TurnContext {
     /// so the claim goes first.
     pub(crate) fn relaunch(&self) {
         self.app.state::<GraduationState>().release(&self.stream_id);
-        crate::graduation::list_graduation_queue(self.app.clone())
+        crate::graduation::list_graduation_queue(self.app.clone(), Default::default())
             .unwrap_or_else(|reason| panic!("the queue was not readable: {reason}"));
     }
 

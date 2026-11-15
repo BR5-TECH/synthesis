@@ -1,6 +1,7 @@
 //! The commands of the main branch write guard, and the one-line check that
 //! each write command calls (`GTC-git.md` GTC-FR-JWOL, GTC-FR-EMLM).
 
+use crate::project::OpenProject as _;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -15,7 +16,6 @@ use crate::git::GithubAccess;
 use crate::github_tokens::GithubTokens;
 use crate::global_settings::GlobalSettingsStore;
 use crate::logging::{self, LogSink};
-use crate::project::ProjectState;
 
 /// The error of a check that cannot reach the guard. Production manages the
 /// guard at start, so this shows only in a build that forgot to.
@@ -88,7 +88,7 @@ where
     let store = app.try_state::<GlobalSettingsStore>()?;
     let tokens = app.try_state::<GithubTokens>()?;
     let project_key =
-        app.try_state::<ProjectState>().map(|project| project.slot_key()).unwrap_or_default();
+        app.open_project_state().map(|project| project.slot_key()).unwrap_or_default();
     let access = PullRequestAccess {
         project: GithubAccess { root, store: &store, tokens: &tokens, project_key: &project_key },
         client: state.client.as_ref(),
@@ -189,11 +189,12 @@ where
 
 /// The project root of `app`, or the typed "no project open" error.
 fn project_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<crate::fs::RootFs, String> {
-    app.try_state::<ProjectState>().ok_or_else(|| "no project open".to_string())?.require_root()
+    app.open_project_state().ok_or_else(|| "no project open".to_string())?.require_root()
 }
 
 /// GTC `get_branch_write_guard(branch, refresh)` (GTC-FR-TTSV). With no
 /// `branch`, the guard is of the branch the active worktree holds.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_branch_write_guard<R: tauri::Runtime>(
     branch: Option<String>,
@@ -204,7 +205,7 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let root = project_root(&app)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let branch = branch.filter(|name| !name.is_empty()).or_else(|| branch_at(&root));
         with_access(&app, &root, |session, access| {
             guard_for(
@@ -223,6 +224,7 @@ where
 }
 
 /// GTC `confirm_main_branch_write(branch)` (GTC-FR-YWRZ).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn confirm_main_branch_write<R: tauri::Runtime>(
     branch: String,
@@ -232,7 +234,7 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let root = project_root(&app)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         with_access(&app, &root, |session, access| {
             confirm_write(&app, &logging::BUFFER, session, access, &branch)
         })

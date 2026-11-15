@@ -8,6 +8,7 @@
 //! of a merge run, run no check (GRD-FR-MOWZ): the author decided at the start.
 
 use super::*;
+use crate::project::OpenProject as _;
 
 /// GRD-FR-WJLO: check the branches a start of a run of `project_key` writes
 /// to. The active worktree is checked only when it is a worktree of that
@@ -22,7 +23,7 @@ where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
 {
     let root = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|state| state.require_root().ok())
         .filter(|_| queue::project_key(app) == project_key);
     if let Some(root) = root.as_ref() {
@@ -57,7 +58,7 @@ pub(super) fn prime_start_write<R: tauri::Runtime>(
 {
     use crate::git::write_guard::{branch_at, commands::prime_branch_guard};
     let root = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|state| state.require_root().ok())
         .filter(|_| queue::project_key(app) == project_key);
     if let Some(root) = root.as_ref() {

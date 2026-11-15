@@ -8,6 +8,7 @@
 //! at the resume phase `record`, and Continue takes the first step that is not
 //! done. Only when every step has succeeded does the run rest for the author.
 
+use crate::project::OpenProject as _;
 use std::path::Path;
 
 use super::drive::Step;
@@ -252,9 +253,8 @@ fn reserve_set<R: tauri::Runtime>(
     thread_id: &str,
     recording: &PlanRecording,
 ) -> Result<String, String> {
-    let project = app
-        .try_state::<crate::project::ProjectState>()
-        .ok_or_else(|| change_runs::ERR_WRITE_FAILED.to_string())?;
+    let project =
+        app.open_project_state().ok_or_else(|| change_runs::ERR_WRITE_FAILED.to_string())?;
     let worktree = project.require_root().map_err(|_| change_runs::ERR_WRITE_FAILED.to_string())?;
     let set = comments::PendingQuestionSet {
         set_id: crate::notes::new_note_id(),

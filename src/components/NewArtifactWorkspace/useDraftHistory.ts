@@ -7,7 +7,7 @@
  * the live prompt. It renders nothing.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listenProject } from "../../projectEvents";
 
 import * as api from "../../api";
 import type {
@@ -141,7 +141,7 @@ export function useDraftHistory(draftId: string, record: DraftRecord | null) {
    * than holding a second copy that could disagree.
    */
   useEffect(() => {
-    const unlisten = listen<DraftHistoryChanged>(DRAFT_HISTORY_CHANGED, (event) => {
+    const unlisten = listenProject<DraftHistoryChanged>(DRAFT_HISTORY_CHANGED, (event) => {
       if (event.payload?.draftId !== draftId) return;
       // NAW-FR-42: a version an acceptance produced puts the tab back on the
       // live prompt if one was being read, so the author sees what landed

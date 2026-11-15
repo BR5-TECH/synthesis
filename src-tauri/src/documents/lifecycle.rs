@@ -8,10 +8,13 @@
 //! announces a new snapshot, the watch, the background thread, and the hand-over
 //! to the `documents` index of `BMI-bm25-indexing.md`.
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 use crate::bm25_index::{self, PassScope};
 use crate::fs::FsAccessState;
@@ -38,9 +41,10 @@ pub const DOCUMENTS_CHANGED: &str = "documents-changed";
 /// changes no source and only asks for one refresh (DCL-FR-XHSJ). The refresh
 /// runs in the background, so the mount never waits for it.
 pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>, project_key: &str) {
-    let (Some(collection), Some(_)) =
-        (app.try_state::<DocumentsCollection>(), app.try_state::<DocumentsWatcher>())
-    else {
+    let (Some(collection), Some(_)) = (
+        app.try_project_store::<DocumentsCollection>(),
+        app.try_project_store::<DocumentsWatcher>(),
+    ) else {
         return;
     };
     if project_key.is_empty() {
@@ -75,13 +79,13 @@ pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     // The collection closes first and the watch stops after it, so a refresh that
     // is still running and arms a watch late finds the collection closed, and
     // stops that watch itself (see `rearm_watch`).
-    if let Some(collection) = app.try_state::<DocumentsCollection>() {
+    if let Some(collection) = app.try_project_store::<DocumentsCollection>() {
         if collection.is_open() {
             collection.close();
             app.log(LogLevel::Info, "documents collection closed", crate::log_fields! {});
         }
     }
-    if let Some(watcher) = app.try_state::<DocumentsWatcher>() {
+    if let Some(watcher) = app.try_project_store::<DocumentsWatcher>() {
         watcher.stop();
     }
     if let Some(fs) = app.try_state::<FsAccessState>() {
@@ -93,7 +97,7 @@ pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// requests costs one refresh after the one that is running, so the watch and
 /// the commands never queue one refresh per request.
 pub fn request_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let Some(watcher) = app.try_state::<DocumentsWatcher>() else {
+    let Some(watcher) = app.try_project_store::<DocumentsWatcher>() else {
         return;
     };
     watcher.pending.store(true, Ordering::SeqCst);
@@ -101,8 +105,8 @@ pub fn request_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         return;
     }
     let app = app.clone();
-    std::thread::spawn(move || {
-        let Some(watcher) = app.try_state::<DocumentsWatcher>() else {
+    crate::project_scope::context::thread_spawn(move || {
+        let Some(watcher) = app.try_project_store::<DocumentsWatcher>() else {
             return;
         };
         loop {
@@ -132,7 +136,7 @@ pub fn request_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// and bring the watch in line with the sources.
 pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutcome {
     let (Some(collection), Some(fs)) =
-        (app.try_state::<DocumentsCollection>(), app.try_state::<FsAccessState>())
+        (app.try_project_store::<DocumentsCollection>(), app.try_state::<FsAccessState>())
     else {
         return RefreshOutcome { changed: None, stale: true };
     };
@@ -143,7 +147,7 @@ pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutco
     // refresh, so a worktree change (DCL-FR-OWQA) and a changed assignment
     // (DCL-FR-RMVT) both show in the next snapshot.
     let read_typed = || {
-        app.try_state::<crate::project::ProjectState>()
+        app.open_project_state()
             .and_then(|p| p.require_root().ok())
             .map(|root| worktree_type_sources(&root))
             .unwrap_or_else(TypeSources::none)
@@ -151,7 +155,7 @@ pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutco
     let outcome = collection.refresh_with(&fs, app, &read_typed, &|snapshot| {
         // DCL-FR-PTRP: emitted inside the refresh gate, so the events reach the
         // frontend in the order the snapshots arose.
-        if let Err(error) = app.emit(DOCUMENTS_CHANGED, snapshot) {
+        if let Err(error) = app.emit_project(DOCUMENTS_CHANGED, snapshot) {
             app.log(
                 LogLevel::Warn,
                 "documents changed event could not be sent",
@@ -172,7 +176,7 @@ pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutco
 /// when the set of targets changed, so a refresh that a watched change caused
 /// does not tear down the watch that reported it.
 fn rearm_watch<R: tauri::Runtime>(app: &tauri::AppHandle<R>, collection: &DocumentsCollection) {
-    let Some(watcher) = app.try_state::<DocumentsWatcher>() else {
+    let Some(watcher) = app.try_project_store::<DocumentsWatcher>() else {
         return;
     };
     let Ok(snapshot) = collection.snapshot() else {
@@ -200,7 +204,8 @@ pub fn add_sources<R: tauri::Runtime>(
     requested: &[StoredSource],
 ) -> Result<DocumentsSnapshot, DocumentsError> {
     let started = std::time::Instant::now();
-    let collection = app.try_state::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
+    let collection =
+        app.try_project_store::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
     let persist = persister(app);
     let added = collection
         .add_sources(requested, &*persist)
@@ -227,7 +232,8 @@ pub fn remove_source<R: tauri::Runtime>(
     path: &str,
 ) -> Result<DocumentsSnapshot, DocumentsError> {
     let started = std::time::Instant::now();
-    let collection = app.try_state::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
+    let collection =
+        app.try_project_store::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
     let persist = persister(app);
     let removed = collection
         .remove_source(path, &*persist)
@@ -257,9 +263,7 @@ pub fn remove_source<R: tauri::Runtime>(
 /// the attribution file, so the tree, the indexes, and this collection follow it
 /// as they follow any other change of that file (DCL-FR-RMVT).
 fn clear_type_source<R: tauri::Runtime>(app: &tauri::AppHandle<R>, path: &str) -> bool {
-    let Some(root) =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok())
-    else {
+    let Some(root) = app.open_project_state().and_then(|p| p.require_root().ok()) else {
         return false;
     };
     match super::typed::clear_type_assignment(&root, path) {
@@ -283,7 +287,8 @@ pub fn add_picked_sources<R: tauri::Runtime>(
     mode: PickMode,
     picked: Option<Vec<PathBuf>>,
 ) -> Result<PickDocumentSourcesResult, DocumentsError> {
-    let collection = app.try_state::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
+    let collection =
+        app.try_project_store::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
     let Some(paths) = picked else {
         app.log(
             LogLevel::Info,
@@ -358,7 +363,7 @@ fn persister<'a, R: tauri::Runtime>(app: &'a tauri::AppHandle<R>) -> Box<Persist
 /// first step of every refresh, and a command that met `store_unavailable` calls
 /// it before it answers.
 pub fn retry_store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
-    let Some(collection) = app.try_state::<DocumentsCollection>() else {
+    let Some(collection) = app.try_project_store::<DocumentsCollection>() else {
         return false;
     };
     let Some(store) = app.try_state::<GlobalSettingsStore>() else {

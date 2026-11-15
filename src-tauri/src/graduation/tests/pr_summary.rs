@@ -28,6 +28,7 @@ fn start(
         head.to_string(),
         base.to_string(),
         mode,
+        Default::default(),
     )
 }
 
@@ -102,7 +103,8 @@ fn a_second_start_for_the_same_head_is_refused_while_the_first_stands() {
     assert_eq!(other.queue_key(), "pr:feature/other");
 
     // A discarded run is terminal, so the head may start again.
-    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone()).expect("gone");
+    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone(), Default::default())
+        .expect("gone");
     start(&fx, "feature/panel", "main", PrSummaryMode::Diff).expect("started again");
 }
 
@@ -153,20 +155,39 @@ fn a_pr_summary_run_takes_the_common_controls_and_refuses_restart_and_revert() {
     let fx = with_branches();
     let run = start(&fx, "feature/panel", "main", PrSummaryMode::Diff).expect("started");
 
-    let off = crate::graduation::set_graduation_auto_start(fx.app.clone(), run.id.clone(), false)
-        .expect("auto-start");
+    let off = crate::graduation::set_graduation_auto_start(
+        fx.app.clone(),
+        run.id.clone(),
+        false,
+        Default::default(),
+    )
+    .expect("auto-start");
     assert!(!off.auto_start);
-    let archived =
-        crate::graduation::archive_graduation_run(fx.app.clone(), run.id.clone()).unwrap();
+    let archived = crate::graduation::archive_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .unwrap();
     assert!(archived.archived);
-    crate::graduation::unarchive_graduation_run(fx.app.clone(), run.id.clone()).unwrap();
+    crate::graduation::unarchive_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .unwrap();
 
     assert_eq!(
-        crate::graduation::revert_graduation_run(fx.app.clone(), run.id.clone()).unwrap_err(),
+        crate::graduation::revert_graduation_run(
+            fx.app.clone(),
+            run.id.clone(),
+            Default::default()
+        )
+        .unwrap_err(),
         ERR_RUN_NOT_REVERTABLE,
     );
-    let discarded =
-        crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).unwrap();
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .unwrap();
     assert_eq!(discarded.state, GraduationRunState::Discarded);
     let restart = crate::graduation::restart_graduation_run(
         fx.app.clone(),
@@ -174,6 +195,7 @@ fn a_pr_summary_run_takes_the_common_controls_and_refuses_restart_and_revert() {
         String::new(),
         StandingWork::Keep,
         None,
+        Default::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -197,7 +219,13 @@ fn a_pr_summary_run_is_reordered_within_its_own_queue() {
     let before = order(&project_queue(&fx.app).unwrap());
 
     let reorder = |id: &str, expected: usize, new: usize| {
-        crate::graduation::reorder_graduation_run(fx.app.clone(), id.to_string(), expected, new)
+        crate::graduation::reorder_graduation_run(
+            fx.app.clone(),
+            id.to_string(),
+            expected,
+            new,
+            Default::default(),
+        )
     };
     let same = reorder(&run.id, 0, 0).expect("a move to its own place");
     assert_eq!(order(&same), before);

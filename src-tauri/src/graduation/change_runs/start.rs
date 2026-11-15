@@ -8,6 +8,8 @@
 use super::*;
 use crate::comments::Participant;
 use crate::openspec::{OpenSpecFailure, Refusal};
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 
 /// OCR contract surface `ChangeReworkStart`.
 #[derive(Clone, Debug, Serialize)]
@@ -38,6 +40,7 @@ impl Phase<'_> {
 
 /// OCR-FR-IDFC: `"start change apply"`. Off the main thread, because the
 /// guard read can reach GitHub (GRD-FR-WJLO).
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn start_change_apply<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -55,7 +58,7 @@ pub fn start_change_apply_in_process<R: tauri::Runtime>(
     change: &str,
 ) -> Result<GraduationRun, Refusal> {
     prime_stream_write(app, stream_id);
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let outcome =
         checked(app, stream_id, change, &Phase::Apply, "start_change_apply").and_then(|stream| {
@@ -69,6 +72,7 @@ pub fn start_change_apply_in_process<R: tauri::Runtime>(
 
 /// OCR-FR-IDFC, OCR-FR-UAWO: `"start change rework"`. The start opens its
 /// own request thread once every check has passed.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn start_change_rework<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -77,7 +81,7 @@ pub fn start_change_rework<R: tauri::Runtime>(
     instruction: String,
 ) -> Result<ChangeReworkStart, Refusal> {
     prime_stream_write(&app, &stream_id);
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let phase = Phase::Rework { instruction: &instruction, thread_id: None };
     let stream = checked(&app, &stream_id, &change, &phase, "start_change_rework").inspect_err(
@@ -114,7 +118,7 @@ pub fn start_change_rework_in_thread<R: tauri::Runtime>(
     requester: &Participant,
 ) -> Result<GraduationRun, Refusal> {
     prime_stream_write(app, stream_id);
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let phase = Phase::Rework { instruction, thread_id: Some(thread_id) };
     let outcome =
@@ -289,7 +293,7 @@ fn check_rework<R: tauri::Runtime>(
 pub(crate) fn machine_store<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<crate::fs::RootFs, String> {
-    app.try_state::<ProjectState>()
+    app.open_project_state()
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?
         .require_store()
         .map_err(|_| ERR_NO_PROJECT_OPEN.to_string())
@@ -303,7 +307,7 @@ fn open_request_thread<R: tauri::Runtime>(
     change: &str,
     instruction: &str,
 ) -> Result<String, String> {
-    let project = app.try_state::<ProjectState>().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    let project = app.open_project_state().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let settings = app
         .try_state::<crate::global_settings::GlobalSettingsStore>()
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;

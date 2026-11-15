@@ -9,6 +9,7 @@
 //! this module holds the data they carry and the places they differ.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 mod start;
 
@@ -180,7 +181,7 @@ pub fn reclaim_ended_rework_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>, ru
     if !run.is_change_rework() || !run.state.is_terminal() {
         return;
     }
-    if app.try_state::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
+    if app.try_project_store::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
         return;
     }
     if !driver::rework_workspace::stands(app, run) {

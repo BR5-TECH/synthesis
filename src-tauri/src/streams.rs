@@ -7,6 +7,8 @@
 //! made. This module creates streams, enumerates them, merges one back into the
 //! branch it came from, and removes it.
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -393,8 +395,8 @@ pub fn claim_stream<R: tauri::Runtime>(
     // WKS-FR-RQVM: a merge or an update of this stream writes its branch and
     // its working copy from its request until its outcome is written, so no
     // run takes the stream in that time.
-    use tauri::Manager;
-    if let Some(state) = app.try_state::<StreamState>() {
+
+    if let Some(state) = app.try_project_store::<StreamState>() {
         if state.has_update_job(stream_id)
             || state.is_merging(stream_id)
             || state.is_updating(stream_id)
@@ -503,8 +505,7 @@ pub(crate) fn registers_worktree(main: &git2::Repository, name: &str) -> bool {
 }
 
 fn store_for<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<StreamStore> {
-    use tauri::Manager;
-    if let Some(root) = app.try_state::<StreamState>().and_then(|state| state.root()) {
+    if let Some(root) = app.try_project_store::<StreamState>().and_then(|state| state.root()) {
         return Some(StreamStore::new(root));
     }
     fsa::short_data_dir().ok().map(StreamStore::new)
@@ -518,10 +519,7 @@ fn access_for<R: tauri::Runtime>(
 }
 
 fn project_key_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
-    use tauri::Manager;
-    app.try_state::<crate::project::ProjectState>()
-        .map(|state| state.slot_key())
-        .unwrap_or_default()
+    app.open_project_state().map(|state| state.slot_key()).unwrap_or_default()
 }
 
 // The module's own tests. Declared last so the production half of this file

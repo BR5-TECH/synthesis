@@ -20,6 +20,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# PWN-FR-CTXT: the `project_scoped` attribute of the commands.
+project_scope_macros = { path = "project_scope_macros" }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
@@ -401,3 +403,10 @@ microsandbox-image = "=0.7.8"
 # file. Already in the tree as a dependency of many crates.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# PWN-FR-CTXT: the macro crate is a member, and a default member, so that the
+# plain `cargo fmt --check` and `cargo clippy` commands of the backend lane
+# reach it.
+[workspace]
+members = [".", "project_scope_macros"]
+default-members = [".", "project_scope_macros"]

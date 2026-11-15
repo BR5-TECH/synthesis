@@ -7,6 +7,7 @@
 //! further message sends it to a new turn (AGC-FR-CEKN).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// CVL-FR-QPEL: the fixed line that opens a steering message.
 pub(super) const STEERING_PREFACE: &str = "The author posted this comment while you were \
@@ -326,8 +327,7 @@ pub(super) fn redispatch_unread_steering<R: tauri::Runtime>(
     state: AgentTurnState,
     unread: Vec<SteeringItem>,
 ) {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     // AGC-FR-JPPB: only the comments count. A chunk registers no new turn.
     let unread: Vec<&str> = unread.iter().filter_map(SteeringItem::comment_id).collect();
     let Some(newest) = unread.last().copied() else { return };

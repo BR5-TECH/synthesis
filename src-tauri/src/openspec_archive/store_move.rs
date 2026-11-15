@@ -59,7 +59,6 @@ pub fn move_change_records<R: tauri::Runtime>(
     change: &str,
     archived_as: &str,
 ) -> Option<PathBuf> {
-    use tauri::Manager;
     let started = Instant::now();
     let warn = |reason: &str| {
         logging::log_warn(
@@ -81,7 +80,7 @@ pub fn move_change_records<R: tauri::Runtime>(
         return None;
     }
     let store = match app
-        .try_state::<crate::project::ProjectState>()
+        .open_project_state()
         .ok_or_else(|| "no_project_open".to_string())
         .and_then(|project| project.require_store())
     {

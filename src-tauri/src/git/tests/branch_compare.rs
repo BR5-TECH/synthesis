@@ -346,6 +346,7 @@ fn a_stream_branch_is_compared_with_its_base_and_the_reads_are_logged() {
         "Compare".into(),
         Some(base.clone()),
         None,
+        Default::default(),
     )
     .unwrap();
     let worktree = git2::Repository::open(&stream.worktree_path).unwrap();

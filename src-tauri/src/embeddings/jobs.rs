@@ -2,10 +2,10 @@
 //! EMB-FR-JIJH, EMB-FR-NHQG, EMB-FR-VQSK, EMB-FR-TGCL, EMB-FR-HRYV,
 //! EMB-FR-SWRV, EMB-FR-HDPR, EMB-FR-OLDK).
 
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-
-use tauri::{Emitter, Manager};
 
 use super::engine::{self, Evaluation, ReindexScope};
 use super::layers::{self, GitFacts};
@@ -44,10 +44,12 @@ impl EmbeddingsService {
         }
         *started = true;
         let app = app.clone();
-        let spawned = std::thread::Builder::new().name("embeddings".to_string()).spawn(move || {
-            let service = app.state::<EmbeddingsService>();
-            service.worker_loop(&app);
-        });
+        let spawned = std::thread::Builder::new().name("embeddings".to_string()).spawn(
+            crate::project_scope::context::wrap_fn(move || {
+                let service = app.project_store::<EmbeddingsService>();
+                service.worker_loop(&app);
+            }),
+        );
         if spawned.is_err() {
             *started = false;
         }
@@ -176,7 +178,7 @@ impl EmbeddingsService {
         }
         self.emit(app);
         if !cached {
-            let registry = app.state::<ProgressRegistry>();
+            let registry = app.project_store::<ProgressRegistry>();
             let operation = progress::register_and_publish(
                 app,
                 &registry,
@@ -308,7 +310,7 @@ impl EmbeddingsService {
         serial: u64,
         kind: JobKind,
     ) {
-        let Some(indexer) = app.try_state::<Bm25Indexer>() else {
+        let Some(indexer) = app.try_project_store::<Bm25Indexer>() else {
             log_warn(
                 app,
                 &BUFFER,
@@ -341,7 +343,7 @@ impl EmbeddingsService {
         );
         // The file list of the old checkout must not serve the pass, as for
         // every other caller that asks for a pass of the artifact indexes.
-        if let Some(candidates) = app.try_state::<crate::scanning::CandidateStore>() {
+        if let Some(candidates) = app.try_project_store::<crate::scanning::CandidateStore>() {
             candidates.invalidate();
         }
         let scope = crate::bm25_index::PassScope::ARTIFACTS;
@@ -395,7 +397,7 @@ impl EmbeddingsService {
                 None => return,
             }
         };
-        let Some(indexer) = app.try_state::<Bm25Indexer>() else {
+        let Some(indexer) = app.try_project_store::<Bm25Indexer>() else {
             return;
         };
         if indexer.generation() != generation {
@@ -492,7 +494,7 @@ impl EmbeddingsService {
         #[cfg(test)]
         self.jobs_run.lock().unwrap().push(kind);
         self.emit(app);
-        let registry = app.state::<ProgressRegistry>();
+        let registry = app.project_store::<ProgressRegistry>();
         let operation = progress::register_and_publish(
             app,
             &registry,
@@ -662,7 +664,7 @@ impl EmbeddingsService {
             st.last_progress_emit = Some(Instant::now());
             super::service::status_of(&st)
         };
-        let _ = app.emit(EMBEDDINGS_STATUS_CHANGED, status);
+        let _ = app.emit_project(EMBEDDINGS_STATUS_CHANGED, status);
     }
 
     /// EMB-FR-ZFGT: publish a progress-only change, at most a few times a

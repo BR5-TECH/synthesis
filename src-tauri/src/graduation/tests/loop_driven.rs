@@ -439,8 +439,12 @@ fn two_unreadable_verdicts_block_the_run_and_continue_resets_the_count() {
     assert_eq!(run.work_turns, 1);
 
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("continued");
+    let continued = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert_eq!(continued.checkpoint.verdict_refusals, 0);
 }
@@ -570,8 +574,12 @@ fn discarding_a_run_mid_turn_leaves_it_discarded() {
         .writing("src/panel.ts", "half\n")
         .doing(move || {
             app.state::<GraduationState>().set_loop_enabled(false);
-            crate::graduation::discard_graduation_run(app.clone(), run_id.clone())
-                .expect("the author discards it");
+            crate::graduation::discard_graduation_run(
+                app.clone(),
+                run_id.clone(),
+                Default::default(),
+            )
+            .expect("the author discards it");
             app.state::<GraduationState>().set_loop_enabled(true);
         })]);
     let run = fx.drive(&run, dispatch);
@@ -617,7 +625,12 @@ fn reverting_a_run_makes_new_commits_and_rewrites_no_history() {
 
     // A run that made no commit is not revertable.
     assert!(
-        crate::graduation::revert_graduation_run(fx.app.clone(), run.id.clone()).is_err(),
+        crate::graduation::revert_graduation_run(
+            fx.app.clone(),
+            run.id.clone(),
+            Default::default()
+        )
+        .is_err(),
         "a run with no commit has nothing to revert"
     );
 
@@ -632,7 +645,8 @@ fn reverting_a_run_makes_new_commits_and_rewrites_no_history() {
         walk.filter_map(|oid| oid.ok().map(|oid| oid.to_string())).collect()
     };
 
-    crate::graduation::revert_graduation_run(fx.app.clone(), run.id.clone()).expect("reverted");
+    crate::graduation::revert_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("reverted");
 
     let after: Vec<String> = {
         let mut walk = repo.revwalk().unwrap();
@@ -757,7 +771,8 @@ fn a_run_whose_stream_working_copy_is_gone_rests_for_the_author() {
     // The working copy goes, and the run is handed back.
     std::fs::remove_dir_all(stream.worktree()).expect("the working copy goes");
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).expect("continued");
+    crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
 
     let run = fx.reload(&run.id);

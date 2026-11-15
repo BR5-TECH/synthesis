@@ -8,6 +8,8 @@
 //! review has let it through.
 
 use super::*;
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use crate::streams::{StreamMergeConflict, StreamMergePublication};
 
 /// GRL-FR-CZBT: how many passes one budget window of a merge run grants.
@@ -133,7 +135,7 @@ pub fn enqueue_merge_run<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     request: MergeRunRequest,
 ) -> Result<GraduationRun, String> {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     if request.project_key.is_empty() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -196,9 +198,7 @@ pub fn enqueue_merge_run<R: tauri::Runtime>(
         pull: request.pull.map(|(subject, _)| subject),
         // OFP-FR-AQDH: the mode at the creation of the run, read once.
         openspec_gate: crate::openspec::OpenSpec::mode_active(
-            app.try_state::<crate::project::ProjectState>()
-                .and_then(|state| state.require_root().ok())
-                .as_ref(),
+            app.open_project_state().and_then(|state| state.require_root().ok()).as_ref(),
         ),
     });
     // GRS-FR-KDOY: both log streams are created in the write that creates the
@@ -290,7 +290,7 @@ pub fn reclaim_ended_merge_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run
     if run.merge.is_none() || !run.state.is_terminal() {
         return;
     }
-    if app.try_state::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
+    if app.try_project_store::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
         return;
     }
     // GLG-FR-QNLC: one record for one cleanup. A run that has nothing left

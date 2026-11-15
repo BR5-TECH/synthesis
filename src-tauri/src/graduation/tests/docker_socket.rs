@@ -34,6 +34,7 @@ impl Fixture {
             StandingWork::Keep,
             None,
             None,
+            Default::default(),
         )
         .map_err(String::from)
     }
@@ -55,7 +56,8 @@ fn a_missing_socket_refuses_the_start_and_creates_nothing() {
     let refused = fx.start_on(&draft, &stream).unwrap_err();
 
     assert_eq!(refused, format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {path}"));
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert!(queue.runs.is_empty(), "no run exists");
     assert!(crate::graduation::require_unlocked_draft(&fx.app, &draft).is_ok(), "no draft lock");
 }
@@ -91,7 +93,8 @@ fn a_disabled_setting_reads_no_path_and_a_real_socket_passes() {
 
     fx.docker_in_docker(false, "/does/not/exist.sock");
     let run = fx.start_on(&draft, &stream).expect("a disabled setting refuses nothing");
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("discarded");
 
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("docker.sock");
@@ -115,11 +118,13 @@ fn a_direct_start_is_refused_for_a_missing_socket() {
         draft.clone(),
         fx.root().to_string_lossy().into_owned(),
         fx.branch(),
+        Default::default(),
     )
     .unwrap_err();
 
     assert_eq!(refused, format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {path}"));
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert!(queue.runs.is_empty());
     assert!(crate::graduation::require_unlocked_draft(&fx.app, &draft).is_ok());
 }
@@ -136,8 +141,12 @@ fn a_restart_takes_the_socket_check_afresh() {
     fx.hold_stream(&stream.id);
     let draft = fx.draft("task");
     let first = fx.start_on(&draft, &stream).expect("a run");
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone())
-        .expect("a discarded run");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        first.id.clone(),
+        Default::default(),
+    )
+    .expect("a discarded run");
 
     let path = fx.root().join("gone.sock").to_string_lossy().into_owned();
     fx.docker_in_docker(true, &path);
@@ -147,11 +156,13 @@ fn a_restart_takes_the_socket_check_afresh() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     )
     .unwrap_err();
 
     assert_eq!(refused, format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {path}"));
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert!(queue.runs.iter().all(|run| run.restarted_from_run_id.is_none()));
 
     // A comma cannot be mounted, so a path that holds one is refused too.

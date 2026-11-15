@@ -67,11 +67,12 @@ pub fn active_catalog_impl(
     Ok(ActiveAiApiCatalog { resolution: resolved.resolution, catalog })
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_active_ai_api_catalog(
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ActiveAiApiCatalog, String> {
     let result = active_catalog_impl(&store, &project.slot_key());
     match &result {

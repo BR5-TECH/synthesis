@@ -11,6 +11,7 @@
 //! (GRD-FR-RVXK), because its work is not on the branch.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// GRD-FR-PXQN: the work of a completed run is on a branch.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,7 +125,7 @@ pub fn record_stream_landings<R: tauri::Runtime>(
     base_branch: &str,
     commit: &str,
 ) -> usize {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let (Ok(fs), Ok(base)) = (store::store_fs(app), store::store_base(app)) else {
         logging::log_warn(
@@ -195,14 +196,17 @@ pub fn record_stream_landings<R: tauri::Runtime>(
 /// It reads local objects alone and writes nothing. A branch that does not
 /// exist returns `"unknown branch"`. The walk of the history runs off the
 /// thread that serves the window.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_branch_completed_runs<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     branch: String,
 ) -> Result<Vec<BranchCompletedRun>, String> {
-    tauri::async_runtime::spawn_blocking(move || branch_completed_runs_blocking(&app, &branch))
-        .await
-        .map_err(|error| format!("the completed runs read did not finish: {error}"))?
+    crate::project_scope::context::spawn_blocking(move || {
+        branch_completed_runs_blocking(&app, &branch)
+    })
+    .await
+    .map_err(|error| format!("the completed runs read did not finish: {error}"))?
 }
 
 /// The read of [`list_branch_completed_runs`], on the calling thread.

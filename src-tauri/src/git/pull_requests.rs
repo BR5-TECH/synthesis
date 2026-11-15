@@ -29,7 +29,7 @@ mod timeline;
 
 use std::time::Instant;
 
-use tauri::{Manager, State};
+use tauri::Manager;
 
 use crate::changes::{self};
 use crate::github_publication::remotes::parse_remote_repository;
@@ -336,17 +336,18 @@ fn join_error(error: tauri::Error) -> String {
 }
 
 /// GTC-FR-GXUB: the pull requests of the primary GitHub remote, in one state.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_pull_requests(
     state: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<PullRequestSummary>, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
     // The managed state is resolved inside the closure: a `State` borrows the
     // invoke context and cannot cross onto another thread.
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let access = PullRequestAccess {
@@ -365,15 +366,16 @@ pub async fn list_pull_requests(
 }
 
 /// GTC-FR-ZIHE: one pull request's header fields and description.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_pull_request_detail(
     id: u64,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<PullRequestDetail, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let access = PullRequestAccess {
@@ -392,15 +394,16 @@ pub async fn get_pull_request_detail(
 }
 
 /// GTC-FR-CKTM: one pull request's full conversation and activity.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_pull_request_timeline(
     id: u64,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<PullRequestTimeline, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let access = PullRequestAccess {
@@ -419,6 +422,7 @@ pub async fn list_pull_request_timeline(
 }
 
 /// GTC-FR-MMFM: open a pull request on the primary GitHub remote.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn create_pull_request(
     title: String,
@@ -427,11 +431,11 @@ pub async fn create_pull_request(
     head: String,
     draft: bool,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<CreatedPullRequest, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let access = PullRequestAccess {
@@ -453,16 +457,17 @@ pub async fn create_pull_request(
 
 /// GTC-FR-ZHVO: link a pull request to the issues it resolves by closing
 /// keywords in its description.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn link_pull_request_issues(
     number: u64,
     issues: Vec<PullRequestIssueRef>,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<PullRequestLinkOutcome, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let access = PullRequestAccess {
@@ -481,15 +486,16 @@ pub async fn link_pull_request_issues(
 }
 
 /// GTC-FR-NEIW: what stands between a local branch and a pull request for it.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_pull_request_head_state(
     head: String,
     base: Option<String>,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<create::PullRequestHeadState, String> {
     let root = project.require_root()?;
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         create::head_state_reported(&app, &logging::BUFFER, &root, &head, base.as_deref())
     })
     .await
@@ -513,17 +519,18 @@ fn with_access<T>(
 }
 
 /// GTC-FR-TBQW: the stack of a branch.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_branch_stack(
     branch: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<BranchStack, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
     // GTC-FR-RNXK: a store that cannot be resolved is an empty record.
     let machine = project.require_store().ok();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         with_access(&app, &root, &project_key, |access| {
             stack::get_branch_stack_reported(
                 &app,
@@ -539,17 +546,18 @@ pub async fn get_branch_stack(
 }
 
 /// GTC-FR-LCYE / GTC-FR-OIMF: record a branch on top of a stack.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn add_branch_to_stack(
     branch: String,
     parent: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<BranchStack, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
     let machine = project.require_store().ok();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         with_access(&app, &root, &project_key, |access| {
             stack::add_branch_to_stack_reported(
                 &app,
@@ -566,6 +574,7 @@ pub async fn add_branch_to_stack(
 }
 
 /// GTC-FR-UYGD: create a pull request, then add it to the stack of its base.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn submit_pull_request_to_stack(
     title: String,
@@ -574,12 +583,12 @@ pub async fn submit_pull_request_to_stack(
     head: String,
     draft: bool,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<StackedPullRequest, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
     let machine = project.require_store().ok();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         with_access(&app, &root, &project_key, |access| {
             let request = create::NewPullRequest {
                 title: &title,

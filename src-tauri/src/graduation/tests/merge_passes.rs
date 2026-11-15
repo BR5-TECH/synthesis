@@ -130,7 +130,7 @@ fn a_spent_budget_rests_the_run_and_continue_adds_two_passes() {
     assert_eq!(rest["fields"]["pass_budget"], 2);
     assert_eq!(rest["fields"]["passes_made"], 2);
     assert_eq!(
-        crate::streams::get_work_stream(fx.app.clone(), stream.id.clone())
+        crate::streams::get_work_stream(fx.app.clone(), stream.id.clone(), Default::default())
             .unwrap()
             .busy_run_id
             .as_deref(),
@@ -183,8 +183,12 @@ fn continue_is_refused_when_a_pinned_tip_moved_and_changes_nothing() {
     let live_before = live(&fx, &stream);
     let worktree_before = tree_under(&merge_worktree_of(&fx, &run.id));
 
-    let refusal = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
-        .expect_err("refused");
+    let refusal = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .expect_err("refused");
 
     assert_eq!(refusal, crate::streams::ERR_MERGE_BRANCH_MOVED);
     assert_eq!(live(&fx, &stream), live_before);
@@ -226,6 +230,7 @@ fn an_escalating_merge_turn_pauses_the_run_and_an_answer_over_a_moved_tip_is_ref
         fx.app.clone(),
         run.id.clone(),
         answers.clone(),
+        Default::default(),
     )
     .expect_err("refused");
     assert_eq!(refusal, crate::streams::ERR_MERGE_BRANCH_MOVED);
@@ -260,6 +265,7 @@ fn an_answer_goes_into_the_merge_work_turn_that_asked_and_the_pass_does_not_adva
             summary: "The first one".to_string(),
             note: None,
         }],
+        Default::default(),
     )
     .expect("the answers");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
@@ -308,6 +314,7 @@ fn a_note_is_stored_trimmed_and_reaches_the_turn_with_its_answer() {
                 note: Some("   ".to_string()),
             },
         ],
+        Default::default(),
     )
     .expect("the answers");
     let stored = fx.reload(&run.id).checkpoint.pending_escalation_answers;

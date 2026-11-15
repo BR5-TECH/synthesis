@@ -312,6 +312,7 @@ impl Scenario {
                     fx.app.clone(),
                     queued.id.clone(),
                     false,
+                    Default::default(),
                 )
             })
             .unwrap_or_else(|reason| panic!("[{name}] auto-start is settable: {reason}"));

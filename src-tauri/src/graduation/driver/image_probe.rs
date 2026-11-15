@@ -9,6 +9,7 @@
 //! not a turn: it spends no pass, no turn time, and no stage time, starts no
 //! agent CLI, mounts no credential, and emits no agent activity.
 
+use crate::project::OpenProject as _;
 use std::time::Instant;
 
 use super::*;
@@ -108,8 +109,7 @@ pub(super) async fn probe_before_dispatch<R: tauri::Runtime>(
         run.checkpoint.resume_part.clone().unwrap_or_else(|| phases::PART_WORK.to_string());
     // OFP-FR-NQPY: a mode that went off rests the run; the probe is not
     // skipped.
-    let active =
-        app.try_state::<crate::project::ProjectState>().and_then(|s| s.require_root().ok());
+    let active = app.open_project_state().and_then(|s| s.require_root().ok());
     if !OpenSpec::mode_active(active.as_ref()) {
         rest(app, run, &resume_part, None, Some(CODE_MODE_INACTIVE));
         return false;
@@ -192,9 +192,11 @@ async fn probe_once<R: tauri::Runtime>(
 /// thread. The record names `first_code`, the code of the first outcome.
 async fn pause<R: tauri::Runtime>(app: &tauri::AppHandle<R>, first_code: &'static str) {
     let owned = app.clone();
-    let _ = tauri::async_runtime::spawn_blocking(move || match owned.try_state::<OpenSpec>() {
-        Some(seam) => seam.pause_before_retry(&owned, &BUFFER, "image_probe", first_code),
-        None => std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)),
+    let _ = crate::project_scope::context::spawn_blocking(move || {
+        match owned.try_state::<OpenSpec>() {
+            Some(seam) => seam.pause_before_retry(&owned, &BUFFER, "image_probe", first_code),
+            None => std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)),
+        }
     })
     .await;
 }

@@ -10,7 +10,6 @@ use std::time::Instant;
 
 use git2::{BranchType, Commit, Delta, DiffOptions, Oid, Repository, Sort, Tree};
 use serde::Serialize;
-use tauri::State;
 
 use crate::changes;
 use crate::log_fields;
@@ -487,31 +486,34 @@ pub fn commit_file_diff_reported<S: LogSink + Clone + Send + 'static>(
 
 /// GTC-FR-BQNM: at most the 100 latest commits reachable from the active
 /// worktree's `HEAD`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_commit_history(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<CommitHistory, String> {
     commit_history_reported(&app, &logging::BUFFER, &project.require_root()?)
 }
 
 /// GTC-FR-YCEV: the paths one commit changed.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_commit_files(
     commit_id: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<CommitFile>, String> {
     commit_files_reported(&app, &logging::BUFFER, &project.require_root()?, &commit_id)
 }
 
 /// GTC-FR-PDSK: one commit's change to one path.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_commit_file_diff(
     commit_id: String,
     path: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DiffPayload, String> {
     commit_file_diff_reported(&app, &logging::BUFFER, &project.require_root()?, &commit_id, &path)
 }

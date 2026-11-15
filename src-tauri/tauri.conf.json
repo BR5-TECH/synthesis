@@ -15,7 +15,8 @@
         "title": "synthesis",
         "width": 800,
         "height": 600,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "tabbingIdentifier": "tech.br5.synthesis.project"
       }
     ],
     "security": {

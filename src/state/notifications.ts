@@ -13,6 +13,7 @@
  * window, a backend, or a notification centre.
  */
 import * as api from "../api";
+import { getWindowProjectId } from "../api/invoke";
 import { logDebug, logInfo, logWarn } from "../logging";
 import {
   mintAddress,
@@ -412,6 +413,15 @@ export function resetNotifications(): void {
   permissionWrites += 1;
 }
 
+/** PJT-FR-YVWM: show the needs-attention dot on the tab of this window's project. */
+function markProjectAttention(): void {
+  const ownProject = getWindowProjectId();
+  if (!ownProject) return;
+  void api.setProjectWindowAttention(ownProject, true).catch((e) => {
+    logWarn(["frontend"], "project tab attention not set", { error: String(e) });
+  });
+}
+
 /**
  * NTF-FR-01 / NTF-FR-02: ask for the author's attention.
  *
@@ -462,6 +472,18 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
     return false;
   }
 
+  // NTF-FR-ZTGX / PJT-FR-YVWM: a raise that is not suppressed, made while this
+  // project window does not hold OS focus, marks the project tab, whether or
+  // not an OS notification is posted. The enable switch and the OS permission
+  // withhold the posting alone.
+  if (
+    decision.channel === "os" ||
+    (decision.channel === "none" &&
+      (decision.reason === "disabled" || decision.reason === "permission"))
+  ) {
+    markProjectAttention();
+  }
+
   if (decision.channel === "none") {
     // NTF-FR-10: suppression is silent to the author. It is not silent to the
     // Logs panel, which is where someone asking "why didn't it notify me?" will
@@ -476,10 +498,14 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
   if (decision.channel === "toast") {
     // NTF-FR-WMBD: the main window holds focus, so the toast is the whole
     // delivery and nothing is posted to the operating system.
+    // NTF-FR-NGCD: the toast names its project, as the OS notification does.
+    const toastAddress = parseAddress(raise.address);
+    const projectName = toastAddress ? projectSubtitle(toastAddress) : "";
     showToast({
       key: raise.key,
       level: raise.level,
       title: raise.title,
+      ...(projectName ? { projectName } : {}),
       body: raise.body,
       address: raise.address,
       menu: raise.menu ?? null,
@@ -509,6 +535,8 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
       subtitle,
       body: raise.body,
       payload: raise.address,
+      // PWN-FR-NTFY: a click on the notification activates this project's tab.
+      ...(getWindowProjectId() ? { projectId: getWindowProjectId() as string } : {}),
     });
     postedByAddress.set(raise.address, posted.id);
     postedByKey.set(raise.key, posted.id);

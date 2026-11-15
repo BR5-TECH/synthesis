@@ -33,7 +33,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
 
 use crate::fs;
 use crate::log_fields;
@@ -64,6 +63,7 @@ pub use sweeper::*;
 
 /// DAS-FR-02 / DAS-FR-03 / DAS-FR-05: store a pasted or dropped image and answer
 /// with the destination the surface inserts.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn store_draft_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -71,8 +71,8 @@ pub fn store_draft_image<R: tauri::Runtime>(
     media_type: String,
     filename: Option<String>,
     data: String,
-    project: State<'_, ProjectState>,
-    sweeper: State<'_, DraftAssetSweeper>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    sweeper: crate::project_scope::Scoped<'_, DraftAssetSweeper>,
 ) -> Result<DraftAsset, String> {
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     // DAS-FR-25: the graduation lock reaches this module exactly as it reaches
@@ -140,12 +140,13 @@ pub fn store_draft_image<R: tauri::Runtime>(
 
 /// DAS-FR-08: the stored bytes of an image the prompt references, for a surface
 /// to draw.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_draft_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
     path: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftImageContent, String> {
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     let result = read_image_impl(&root, &draft_id, &path);
@@ -165,13 +166,14 @@ pub fn read_draft_image<R: tauri::Runtime>(
 }
 
 /// DAS-FR-09: take back a store whose reference never reached the saved prompt.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn discard_draft_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
     path: String,
-    project: State<'_, ProjectState>,
-    sweeper: State<'_, DraftAssetSweeper>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    sweeper: crate::project_scope::Scoped<'_, DraftAssetSweeper>,
 ) -> Result<DraftAssetDiscarded, String> {
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     // DRS-FR-QPSC: a GitHub-shadow draft refuses with its own reason first.
@@ -209,12 +211,13 @@ pub fn discard_draft_image<R: tauri::Runtime>(
 /// therefore learns that housekeeping was asked for and never what it found: no
 /// command return value, no event, and no payload anywhere carries a
 /// [`DraftAssetSweep`], which reaches the internal caller and the log alone.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn sweep_draft_assets<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
-    project: State<'_, ProjectState>,
-    sweeper: State<'_, DraftAssetSweeper>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    sweeper: crate::project_scope::Scoped<'_, DraftAssetSweeper>,
 ) -> Result<DraftAssetSweepScheduled, String> {
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     // DAS-FR-25: a sweep against a locked draft, or one whose `graduated` status

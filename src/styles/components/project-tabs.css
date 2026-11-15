@@ -1,0 +1,91 @@
+/* PJT-FR-VRRI: the strip scrolls inside its own region and never pushes the
+   trailing cluster of the top chrome out. */
+.project-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.project-tabs__item {
+  display: flex;
+  align-items: center;
+  flex: none;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  color: var(--fg-2);
+}
+.project-tabs__item[data-own="true"] {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--fg-1);
+}
+.project-tabs__tab,
+.project-tabs__close {
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.project-tabs__tab:focus-visible,
+.project-tabs__close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.project-tabs__name {
+  white-space: nowrap;
+}
+.project-tabs__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+.modal.open-project-dialog { width: 420px; }
+
+/* The strip sits at the leading edge of the trailing cluster, so the grid of the
+   top chrome keeps its three tracks. It is capped, and scrolls inside the cap. */
+.top-chrome__right .project-tabs {
+  max-width: min(360px, 32vw);
+}
+
+/* PPK-FR-GMYH: the Project picker as a modal over a project window. */
+.project-picker-modal {
+  position: relative;
+  width: min(820px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+}
+.project-picker-modal__close {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 1;
+}
+.project-picker-modal__error {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--danger, #f85149);
+}
+
+.project-picker-modal__scrim {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-project-confirm {
+  max-width: 420px;
+}

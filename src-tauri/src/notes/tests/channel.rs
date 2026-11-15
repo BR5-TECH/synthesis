@@ -29,7 +29,7 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         None,
         None,
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect("the note is created");
     assert_eq!(
@@ -43,7 +43,7 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         note.id.clone(),
         NoteFields { body: Some("the second body".to_string()), ..Default::default() },
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect("the rewrite lands");
     assert_eq!(indexer().take_note_changes(), vec![NoteChange::to(&note.id)]);
@@ -61,8 +61,13 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         // rewrite at all (NTC-FR-06).
         NoteFields { body: Some("the second body".to_string()), ..Default::default() },
     ] {
-        update_note(note.id.clone(), fields, app.handle().clone(), app.state::<ProjectState>())
-            .expect("the update lands");
+        update_note(
+            note.id.clone(),
+            fields,
+            app.handle().clone(),
+            app.state::<ProjectState>().into(),
+        )
+        .expect("the update lands");
         assert_eq!(
             indexer().take_note_changes(),
             Vec::new(),
@@ -96,7 +101,7 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         note.id.clone(),
         NoteFields { body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)), ..Default::default() },
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect_err("over the bound");
     assert_eq!(indexer().take_note_changes(), Vec::new(), "a refused update surfaces nothing",);
@@ -106,7 +111,7 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         None,
         None,
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect_err("over the bound");
     assert_eq!(indexer().take_note_changes(), Vec::new(), "a refused creation surfaces nothing",);
@@ -115,13 +120,14 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         "no-such-note".to_string(),
         NoteFields { body: Some("anything".to_string()), ..Default::default() },
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect_err("no such note");
     assert_eq!(indexer().take_note_changes(), Vec::new());
 
     // A deletion surfaces.
-    delete_note(note.id.clone(), app.handle().clone()).expect("the deletion lands");
+    delete_note(note.id.clone(), app.handle().clone(), Default::default())
+        .expect("the deletion lands");
     assert_eq!(indexer().take_note_changes(), vec![NoteChange::to(&note.id)]);
 }
 
@@ -148,14 +154,14 @@ fn a_note_write_and_a_note_refusal_are_both_reported_without_the_body() {
         None,
         None,
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect("the note is created");
     update_note(
         note.id.clone(),
         NoteFields { body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)), ..Default::default() },
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect_err("over the bound");
 
@@ -245,7 +251,7 @@ fn a_note_command_answers_the_same_with_nothing_consuming_the_channel() {
         None,
         None,
         app.handle().clone(),
-        app.state::<ProjectState>(),
+        app.state::<ProjectState>().into(),
     )
     .expect("the note is created regardless");
     assert_eq!(note.body, "unheard");
@@ -254,7 +260,7 @@ fn a_note_command_answers_the_same_with_nothing_consuming_the_channel() {
             note.id.clone(),
             NoteFields { body: Some("still unheard".to_string()), ..Default::default() },
             app.handle().clone(),
-            app.state::<ProjectState>(),
+            app.state::<ProjectState>().into(),
         )
         .expect("the update lands regardless")
         .body,

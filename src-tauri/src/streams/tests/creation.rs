@@ -43,7 +43,8 @@ fn the_working_copy_stands_directly_under_the_store_root() {
 fn the_record_is_read_back_from_disk_unchanged() {
     let fx = Fixture::new();
     let created = fx.create("round trip", None).expect("created");
-    let read = get_work_stream(fx.app.clone(), created.id.clone()).expect("read");
+    let read =
+        get_work_stream(fx.app.clone(), created.id.clone(), Default::default()).expect("read");
     assert_eq!(read.id, created.id);
     assert_eq!(read.branch, created.branch);
     assert_eq!(read.base_branch, created.base_branch);
@@ -60,7 +61,7 @@ fn the_base_revision_is_the_one_captured_at_creation() {
     std::fs::write(fx.root().join("later.txt"), "later\n").unwrap();
     commit_all(&fx.repo(), "later");
 
-    let read = get_work_stream(fx.app.clone(), stream.id).expect("read");
+    let read = get_work_stream(fx.app.clone(), stream.id, Default::default()).expect("read");
     assert_eq!(read.base_revision, before);
 }
 
@@ -209,7 +210,8 @@ fn a_name_that_reduces_to_an_empty_slug_is_refused() {
 fn a_deleted_stream_frees_its_name() {
     let fx = Fixture::new();
     let stream = fx.create("reusable", None).expect("created");
-    delete_work_stream(fx.app.clone(), stream.id, false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id, false, false, Default::default())
+        .expect("deleted");
     fx.create("reusable", None).expect("created again");
 }
 
@@ -243,16 +245,21 @@ fn every_operation_refuses_a_project_that_is_not_a_repository() {
     // outside Git is told that, whichever operation it asked for and whatever
     // stream id it named.
     assert_eq!(
-        create_work_stream(handle.clone(), "x".into(), None, None).expect_err("refused"),
-        ERR_NOT_A_GIT_REPOSITORY
-    );
-    assert_eq!(list_work_streams(handle.clone()).expect_err("refused"), ERR_NOT_A_GIT_REPOSITORY);
-    assert_eq!(
-        get_work_stream(handle.clone(), "w1".into()).expect_err("refused"),
+        create_work_stream(handle.clone(), "x".into(), None, None, Default::default())
+            .expect_err("refused"),
         ERR_NOT_A_GIT_REPOSITORY
     );
     assert_eq!(
-        delete_work_stream(handle.clone(), "w1".into(), false, false).expect_err("refused"),
+        list_work_streams(handle.clone(), Default::default()).expect_err("refused"),
+        ERR_NOT_A_GIT_REPOSITORY
+    );
+    assert_eq!(
+        get_work_stream(handle.clone(), "w1".into(), Default::default()).expect_err("refused"),
+        ERR_NOT_A_GIT_REPOSITORY
+    );
+    assert_eq!(
+        delete_work_stream(handle.clone(), "w1".into(), false, false, Default::default())
+            .expect_err("refused"),
         ERR_NOT_A_GIT_REPOSITORY
     );
     let refused = merge_work_stream_blocking(&handle, "w1", StreamMergePublication::Uncommitted)
@@ -308,7 +315,8 @@ fn a_failed_creation_leaves_an_earlier_stream_alone() {
     std::fs::write(&marker, "x").unwrap();
     let _ = fx.create("first", None).expect_err("duplicate refused");
 
-    let read = get_work_stream(fx.app.clone(), first.id.clone()).expect("still there");
+    let read =
+        get_work_stream(fx.app.clone(), first.id.clone(), Default::default()).expect("still there");
     assert_eq!(read.branch, first.branch);
     assert!(Path::new(&read.worktree_path).is_dir());
 }
@@ -361,7 +369,7 @@ fn a_stream_created_without_the_flag_is_not_temporary() {
     let fx = Fixture::new();
     let stream = fx.create("plain", None).expect("created");
     assert!(!stream.temporary);
-    let read = get_work_stream(fx.app.clone(), stream.id).expect("read");
+    let read = get_work_stream(fx.app.clone(), stream.id, Default::default()).expect("read");
     assert!(!read.temporary);
 }
 
@@ -370,12 +378,19 @@ fn a_stream_created_without_the_flag_is_not_temporary() {
 #[test]
 fn a_temporary_stream_records_the_flag_and_the_listing_reports_it() {
     let fx = Fixture::new();
-    let stream = create_work_stream(fx.app.clone(), "scratch".to_string(), None, Some(true))
-        .expect("created");
+    let stream = create_work_stream(
+        fx.app.clone(),
+        "scratch".to_string(),
+        None,
+        Some(true),
+        Default::default(),
+    )
+    .expect("created");
     assert!(stream.temporary);
-    let read = get_work_stream(fx.app.clone(), stream.id.clone()).expect("read");
+    let read =
+        get_work_stream(fx.app.clone(), stream.id.clone(), Default::default()).expect("read");
     assert!(read.temporary);
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    let listed = list_work_streams(fx.app.clone(), Default::default()).expect("listed");
     assert!(listed
         .iter()
         .any(|summary| summary.stream.id == stream.id && summary.stream.temporary));

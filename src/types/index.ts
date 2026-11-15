@@ -29,6 +29,7 @@ export * from "./openspec";
 export * from "./changeRuns";
 export * from "./changeProposals";
 export * from "./logging";
+export * from "./projectWindows";
 export * from "./worktree";
 export * from "./gitHistory";
 export * from "./github";

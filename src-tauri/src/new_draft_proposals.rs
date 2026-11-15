@@ -21,10 +21,10 @@
 //! deleted with the draft (DCP-FR-02). It is a folder of its own, so a listing
 //! of draft change proposals never reads a new-draft record.
 
+use crate::project_scope::events::EmitToProject;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::Emitter;
 
 use crate::drafts;
 use crate::fs;
@@ -228,7 +228,7 @@ pub(crate) fn announce<R: tauri::Runtime>(
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let _ = app.emit(
+    let _ = app.emit_project(
         NEW_DRAFT_PROPOSALS_CHANGED,
         NewDraftProposalsChanged {
             draft_id: draft_id.to_string(),

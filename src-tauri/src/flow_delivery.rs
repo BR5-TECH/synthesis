@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use serde::Serialize;
-use tauri::State;
 
 use crate::delivery::settings::DeliverySourceChoice;
 use crate::drafts::{DraftStatus, DraftSummary};
@@ -390,10 +389,11 @@ pub fn compute_delivery_state<R: tauri::Runtime>(
 }
 
 /// FDL-FR-AZQM: `"load flow delivery state"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_flow_delivery_state(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     body: String,
 ) -> Result<FlowDeliveryState, FlowReadError> {
     let started = Instant::now();
@@ -507,10 +507,11 @@ pub fn plan_items_for_draft(
 }
 
 /// FDL-FR-BDOD: `"find flow items for draft"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn find_flow_items_for_draft(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     draft_id: String,
 ) -> Result<Vec<FlowItemMatch>, FlowReadError> {
     let Ok(root) = project.require_root() else {

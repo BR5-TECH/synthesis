@@ -5,9 +5,8 @@
 //! `drafts` BM25 index, and each group keeps the best chunk of each file,
 //! document, or draft.
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashSet;
-
-use tauri::Manager;
 
 use super::{
     EditContext, EndReason, MatchKind, SearchEndedPayload, SearchGroup, SearchHit,
@@ -42,7 +41,7 @@ pub(super) fn run<R: tauri::Runtime>(
         reason
     };
     // SCC-FR-17: no project open — an id, no hits, and an immediate end.
-    let (Some(root), Some(indexer)) = (root, app.try_state::<Bm25Indexer>()) else {
+    let (Some(root), Some(indexer)) = (root, app.try_project_store::<Bm25Indexer>()) else {
         return end(EndReason::Completed);
     };
     let per_group = match scope {
@@ -53,7 +52,7 @@ pub(super) fn run<R: tauri::Runtime>(
 
     let mut hits = Vec::new();
     let specs = crate::embeddings::search_open_project(app, &indexer, IndexId::Spec, query, wanted);
-    let candidates = app.try_state::<CandidateStore>().map(|store| store.candidates(&root));
+    let candidates = app.try_project_store::<CandidateStore>().map(|store| store.candidates(&root));
     hits.extend(spec_hits(specs, candidates.as_deref().map(Vec::as_slice), per_group));
     if let Some(reason) = stop.reason() {
         return end(reason);
@@ -61,7 +60,7 @@ pub(super) fn run<R: tauri::Runtime>(
 
     let documents =
         crate::embeddings::search_open_project(app, &indexer, IndexId::Documents, query, wanted);
-    let collection = app.try_state::<crate::documents::DocumentsCollection>();
+    let collection = app.try_project_store::<crate::documents::DocumentsCollection>();
     hits.extend(document_hits(documents, collection.as_deref(), per_group));
 
     let drafts = bm25_index::search(&indexer, &[IndexId::Drafts], query, wanted);

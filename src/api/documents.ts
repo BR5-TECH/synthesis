@@ -8,7 +8,7 @@
  * The frontend names no selected path in a read: a document is read by its id
  * alone, and the picker is opened by the backend (DPN-FR-FDVO, PDV-FR-GPLH).
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type {
   DocumentPdf,
   DocumentsSnapshot,

@@ -1,9 +1,9 @@
 //! The file an export reads: a DOC artifact of the active worktree
 //! (DXP-FR-LNCQ), named by its path or by its Documents id (DXP-FR-PKDB).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use std::path::Path;
-
-use tauri::Manager;
 
 use super::ERR_OUTSIDE_PROJECT;
 use super::{ERR_NOT_DOC_ARTIFACT, ERR_NOT_FOUND, ERR_NOT_MARKDOWN, ERR_NO_PROJECT_OPEN};
@@ -86,12 +86,10 @@ pub fn resolve_export_document<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     identifier: &str,
 ) -> Result<String, &'static str> {
-    let root = app
-        .try_state::<crate::project::ProjectState>()
-        .and_then(|p| p.require_root().ok())
-        .ok_or(ERR_NO_PROJECT_OPEN)?;
+    let root =
+        app.open_project_state().and_then(|p| p.require_root().ok()).ok_or(ERR_NO_PROJECT_OPEN)?;
     let snapshot = app
-        .try_state::<DocumentsCollection>()
+        .try_project_store::<DocumentsCollection>()
         .filter(|c| c.is_open())
         .and_then(|c| c.snapshot().ok());
     resolve_identifier(&root, identifier, snapshot.as_ref())

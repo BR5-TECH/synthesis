@@ -19,6 +19,7 @@
 //! I/O (GDT non-functional). For a PDF the text is the extracted text from the
 //! session cache, and the PDF bytes are never returned (GDT-FR-HREW).
 
+use crate::project_scope::ProjectStores;
 use serde::Deserialize;
 use tauri::Manager;
 
@@ -281,7 +282,7 @@ impl<R: tauri::Runtime> GetDocumentTool<R> {
         let outcome = require_open_project(&self.app).and_then(|_| {
             let collection = self
                 .app
-                .try_state::<DocumentsCollection>()
+                .try_project_store::<DocumentsCollection>()
                 .filter(|collection| collection.is_open())
                 .ok_or(ToolRefusal::NoProjectOpen)?;
             let fs = self.app.try_state::<FsAccessState>().ok_or(ToolRefusal::NoProjectOpen)?;

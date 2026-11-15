@@ -2,6 +2,8 @@
 //! (GRD-FR-VLFO, GRD-FR-EGWS, GRD-FR-ZVNO).
 
 use super::*;
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 
 /// GRD-FR-LGDV: every run the project has made, in the project's run order.
 pub fn load_queue(fs: &fsa::FsAccess, base: &StoreBase, project_key: &str) -> GraduationQueue {
@@ -220,7 +222,8 @@ pub fn live_run_on_worktree<R: tauri::Runtime>(
     if let Some(entry) = found {
         return Some((entry.run_id.clone(), entry.merge));
     }
-    let claimed = app.try_state::<GraduationState>().and_then(|state| state.direct_claim())?;
+    let claimed =
+        app.try_project_store::<GraduationState>().and_then(|state| state.direct_claim())?;
     let run = runs::load_run(app, &claimed).ok()?;
     let on_this = run.direct_target.as_ref().is_some_and(|t| t.worktree_path == worktree_path);
     on_this.then(|| (run.id.clone(), run.is_merge()))
@@ -285,7 +288,7 @@ pub fn project_queue<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<Gra
 
 /// The open project's key, or an empty string where no project is open.
 pub(super) fn project_key<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
-    app.try_state::<ProjectState>().map(|state| state.slot_key()).unwrap_or_default()
+    app.open_project_state().map(|state| state.slot_key()).unwrap_or_default()
 }
 
 /// GHP-FR-SRDL: refuse a publication against a draft a **non-terminal** run

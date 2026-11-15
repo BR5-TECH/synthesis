@@ -434,7 +434,7 @@ fn a_finish_blocked_by_a_pending_proposal_is_continued_alone() {
         earlier[0].id.clone(),
         None,
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("declined");
     assert_continued_alone(&fx, &blocked, &dispatch);

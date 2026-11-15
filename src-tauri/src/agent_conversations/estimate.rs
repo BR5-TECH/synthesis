@@ -6,6 +6,7 @@
 //! turn, no event, and no record.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// AGC-FR-OBUA: the agent `agent_id` names in the open project's roster, where
 /// it is one the roster does not shadow.
@@ -98,7 +99,7 @@ pub fn estimate_impl<R: tauri::Runtime>(
     );
     document_language::log_document_language(
         app,
-        app.state::<TurnRegistry>().buffer(),
+        app.project_store::<TurnRegistry>().buffer(),
         "estimate",
         &origin.target,
         language,
@@ -145,13 +146,14 @@ pub fn estimate_impl<R: tauri::Runtime>(
 }
 
 /// AGC contract: `"estimate discussion context"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn estimate_discussion_context<R: tauri::Runtime>(
     target: DiscussionTarget,
     discussion_id: Option<String>,
     agent_id: Option<String>,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DiscussionContext, String> {
     // AGC-FR-QCVC: the one refusal.
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;

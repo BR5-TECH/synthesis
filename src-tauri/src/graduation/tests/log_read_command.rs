@@ -30,6 +30,7 @@ fn command(
         Some(1000),
         None,
         None,
+        Default::default(),
     )
 }
 
@@ -124,7 +125,8 @@ fn a_corrupt_read_is_recorded_on_the_run_and_cleared_by_a_later_one() {
     assert_eq!(page.status, STATUS_UNAVAILABLE);
 
     let recorded =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("the run");
     let failure = recorded.logs.last_read_failure.clone().expect("the damage is on the run record");
     assert_eq!(failure.code, logs::index::CODE_STREAM_CORRUPT);
     // GRS-FR-MRKO: it interrupts no run and moves no run state.
@@ -134,7 +136,8 @@ fn a_corrupt_read_is_recorded_on_the_run_and_cleared_by_a_later_one() {
     // Met again, the record is left exactly as it stands.
     let _ = command(&fx, &run.id, "working", pass.clone(), "structured").expect("a page");
     let again =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("the run");
     assert_eq!(again.logs.last_read_failure, Some(failure));
 
     // GRS-FR-EYNU: it stays readable until a later read of that stream succeeds.
@@ -142,7 +145,8 @@ fn a_corrupt_read_is_recorded_on_the_run_and_cleared_by_a_later_one() {
     let repaired = command(&fx, &run.id, "working", pass, "structured").expect("a page");
     assert_eq!(repaired.status, STATUS_AVAILABLE);
     let cleared =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("the run");
     assert!(cleared.logs.last_read_failure.is_none());
 }
 
@@ -218,6 +222,7 @@ fn command_of_kinds(
         Some(1000),
         None,
         kinds,
+        Default::default(),
     )
 }
 

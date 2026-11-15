@@ -129,6 +129,7 @@ fn shown(tokens: Option<u64>) -> String {
     tokens.map(|t| t.to_string()).unwrap_or_else(|| "default".to_string())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_ai_api_max_output_tokens(
     provider: String,
@@ -148,6 +149,7 @@ pub fn set_ai_api_max_output_tokens(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_ai_api_max_context_size(
     provider: String,

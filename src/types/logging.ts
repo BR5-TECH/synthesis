@@ -327,6 +327,12 @@ export interface NotificationRequest {
   subtitle: string;
   body: string;
   /**
+   * PWN-FR-NTFY: the project the notification is about. A click on the
+   * notification activates the tab of this project. Absent while the window
+   * holds no project.
+   */
+  projectId?: string;
+  /**
    * The `synthesis://` address, carried opaquely: the backend never parses it
    * (NTD-FR-08), and the grammar lives in `src/state/notificationAddress.ts`.
    */

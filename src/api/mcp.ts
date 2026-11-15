@@ -6,7 +6,7 @@
  * `./index.ts` carries the whole rule these files are written under. Every
  * command refuses with `no_project_open` and `malformed_project_config`.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type { McpScope, McpServer, McpServerEntry, McpTestResult } from "../types";
 
 /** MCS-FR-FIEE: the team records, then the personal ones, each with its status. */

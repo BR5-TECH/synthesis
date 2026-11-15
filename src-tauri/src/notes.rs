@@ -27,7 +27,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
 
 use crate::fs as fsa;
 use crate::project::{basename, ProjectState};

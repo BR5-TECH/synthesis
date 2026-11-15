@@ -350,5 +350,29 @@ fn an_unknown_work_area_sizes_the_window_but_gives_no_position() {
 fn the_settings_window_commands_are_in_scope() {
     let _ = open_settings_window::<tauri::test::MockRuntime>;
     let _ = finish_settings_close::<tauri::test::MockRuntime>;
-    let _ = get_settings_window_context::<tauri::test::MockRuntime>;
+    let _ = get_settings_window_context;
+}
+
+// PJT-FR-BQTD: the settings window blocks every project window and no other
+// window, whatever the first window's state is.
+#[test]
+fn blocked_labels_are_the_project_windows_only() {
+    let labels = ["project-2", "settings", "main", "project-3", "about"];
+    assert_eq!(blocked_labels(labels), ["project-2", "main", "project-3"]);
+}
+
+// PJT-FR-BQTD: the first window is closed and two project windows stay open;
+// both of them are blocked, on every platform.
+#[test]
+fn both_project_windows_are_blocked_when_the_first_window_is_closed() {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let app = tauri::test::mock_app();
+    for label in ["project-1", "project-2", "settings"] {
+        WebviewWindowBuilder::new(&app, label, WebviewUrl::default()).build().unwrap();
+    }
+    assert!(app.get_webview_window("main").is_none());
+    let mut labels: Vec<String> =
+        blocked_windows(app.handle()).iter().map(|w| w.label().to_string()).collect();
+    labels.sort();
+    assert_eq!(labels, ["project-1", "project-2"]);
 }

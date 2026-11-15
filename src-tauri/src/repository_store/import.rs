@@ -16,6 +16,7 @@
 //! files stay exactly as they are and the author removes them in a commit of
 //! their own.
 
+use crate::project::OpenProject as _;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -280,8 +281,7 @@ pub fn schedule_import<R: tauri::Runtime>(app: &tauri::AppHandle<R>)
 where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
 {
-    use tauri::Manager as _;
-    let Some(project) = app.try_state::<crate::project::ProjectState>() else {
+    let Some(project) = app.open_project_state() else {
         return;
     };
     let (Ok(worktree), Ok(store)) = (project.require_root(), project.require_store()) else {
@@ -290,7 +290,7 @@ where
         return;
     };
     let sink = app.clone();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         let outcome = import_legacy_storage(&store, &worktree);
         if outcome.is_empty() {
             return;

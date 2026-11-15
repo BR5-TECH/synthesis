@@ -24,12 +24,12 @@
 //! what it is given, exactly as `LGC-logging.md` does, and a caller that wrote
 //! an unmasked value into it would be the fault.
 
+use crate::project_scope::events::EmitToProject;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
 
 use crate::fs::FsAccess;
 use crate::tools::agent_exec::{AgentActivityEvent, AgentActivitySink};
@@ -475,7 +475,7 @@ impl<R: tauri::Runtime> AgentActivitySink for RunActivitySink<R> {
         self.write_to_file(&record);
         // AGV-FR-11: state, never content. A consumer re-reads under whatever
         // cursor it holds, so nothing here has to know what anybody is showing.
-        let _ = self.app.emit(AGENT_ACTIVITY_APPENDED, &state);
+        let _ = self.app.emit_project(AGENT_ACTIVITY_APPENDED, &state);
     }
 }
 
@@ -540,6 +540,7 @@ fn activity_file(run_id: &str, dir: &std::path::Path, fs: Option<&FsAccess>) -> 
 // ---------------------------------------------------------------------------
 
 /// `"read agent activity (run id, after, limit)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_agent_activity(
     run_id: String,

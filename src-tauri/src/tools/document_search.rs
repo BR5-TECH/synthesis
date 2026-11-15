@@ -21,10 +21,10 @@
 //! multiple of it and the walk keeps the best chunk of each document
 //! (SDT-FR-EMCC). The call is never repeated or widened (SDT-FR-BTOJ).
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
 
 use super::{
     bounded_argument, log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal,
@@ -296,10 +296,10 @@ impl<R: tauri::Runtime> SearchDocumentsTool<R> {
         let outcome = require_open_project(&self.app).and_then(|indexer| {
             let collection = self
                 .app
-                .try_state::<DocumentsCollection>()
+                .try_project_store::<DocumentsCollection>()
                 .filter(|collection| collection.is_open())
                 .ok_or(ToolRefusal::NoProjectOpen)?;
-            let service = self.app.try_state::<crate::embeddings::EmbeddingsService>();
+            let service = self.app.try_project_store::<crate::embeddings::EmbeddingsService>();
             let ranker = crate::embeddings::ranker(&self.app, service.as_deref());
             search_ranked(
                 &indexer,

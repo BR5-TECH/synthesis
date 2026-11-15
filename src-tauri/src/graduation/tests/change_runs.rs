@@ -117,7 +117,12 @@ pub(super) fn start_apply(
     fx: &Fixture,
     stream: &crate::streams::WorkStream,
 ) -> Result<GraduationRun, crate::openspec::Refusal> {
-    crate::graduation::start_change_apply(fx.app.clone(), stream.id.clone(), CHANGE.into())
+    crate::graduation::start_change_apply(
+        fx.app.clone(),
+        stream.id.clone(),
+        CHANGE.into(),
+        Default::default(),
+    )
 }
 
 /// The rework start. The refusal keeps the form the command rejects with
@@ -132,6 +137,7 @@ pub(super) fn start_rework(
         stream.id.clone(),
         CHANGE.into(),
         instruction.into(),
+        Default::default(),
     )
 }
 
@@ -231,13 +237,22 @@ fn an_apply_start_is_refused_in_the_order_of_the_checks() {
         fx.app.clone(),
         "no-such-stream".into(),
         "Bad Name".into(),
+        Default::default(),
     );
     assert_eq!(refused.unwrap_err(), "unknown_stream");
-    let refused =
-        crate::graduation::start_change_apply(fx.app.clone(), stream.id.clone(), "Bad".into());
+    let refused = crate::graduation::start_change_apply(
+        fx.app.clone(),
+        stream.id.clone(),
+        "Bad".into(),
+        Default::default(),
+    );
     assert_eq!(refused.unwrap_err(), "invalid_change_name");
-    let refused =
-        crate::graduation::start_change_apply(fx.app.clone(), stream.id.clone(), "absent".into());
+    let refused = crate::graduation::start_change_apply(
+        fx.app.clone(),
+        stream.id.clone(),
+        "absent".into(),
+        Default::default(),
+    );
     assert_eq!(refused.unwrap_err(), "change_not_found");
 
     // A CLI that is not usable refuses before the name is read.
@@ -254,6 +269,7 @@ fn an_apply_start_is_refused_in_the_order_of_the_checks() {
         fresh.app.clone(),
         fresh_stream.id.clone(),
         "Bad".into(),
+        Default::default(),
     );
     // OFP-FR-GPCO, OFP-FR-QLQJ: the one code, with the CLI state.
     let refusal = refused.unwrap_err();
@@ -265,6 +281,7 @@ fn an_apply_start_is_refused_in_the_order_of_the_checks() {
         fresh.app.clone(),
         fresh_stream.id.clone(),
         "Bad".into(),
+        Default::default(),
     );
     // OFP-FR-QLQJ: an object, and not the typed code of the same text.
     assert_object(&refused.unwrap_err(), "openspec_mode_inactive");
@@ -325,7 +342,8 @@ fn an_apply_start_reads_the_progress_of_the_change() {
 
     runner.set("instructions", Ok(ok(ALL_DONE)));
     let first = start_apply(&fx, &stream).expect("all_done admits the start");
-    crate::graduation::discard_graduation_run(fx.app.clone(), first.id).unwrap();
+    crate::graduation::discard_graduation_run(fx.app.clone(), first.id, Default::default())
+        .unwrap();
     runner.set("instructions", Ok(ok(READY)));
     start_apply(&fx, &stream).expect("ready admits the start");
 }
@@ -355,6 +373,7 @@ fn an_active_openspec_run_of_the_change_refuses_every_start() {
         StandingWork::Keep,
         None,
         Some(CHANGE.into()),
+        Default::default(),
     );
     assert_eq!(propose.unwrap_err(), "openspec_change_exists");
     let other = change_stream(&fx, "other");
@@ -381,8 +400,12 @@ fn a_start_with_no_project_open_is_refused_first() {
     let stream = change_stream(&fx, "editor");
     let store_root = fx.app.state::<GraduationState>().root().expect("the store root");
     fx.app.state::<crate::project::ProjectState>().clear_root();
-    let apply =
-        crate::graduation::start_change_apply(fx.app.clone(), "no-such".into(), "Bad".into());
+    let apply = crate::graduation::start_change_apply(
+        fx.app.clone(),
+        "no-such".into(),
+        "Bad".into(),
+        Default::default(),
+    );
     assert_eq!(apply.unwrap_err(), "no_project_open");
     assert_eq!(start_apply(&fx, &stream).unwrap_err(), "no_project_open");
     assert_eq!(start_rework(&fx, &stream, "Drop it.").unwrap_err(), "no_project_open");
@@ -459,7 +482,12 @@ fn an_apply_start_is_refused_by_a_propose_run_or_a_rework_run_of_the_change() {
         start_apply(&fx, &stream).unwrap_err(),
         format!("openspec_run_active: {}", propose.id)
     );
-    crate::graduation::discard_graduation_run(fx.app.clone(), propose.id.clone()).unwrap();
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        propose.id.clone(),
+        Default::default(),
+    )
+    .unwrap();
 
     let rework = start_rework(&fx, &stream, "Drop the second task.").expect("a rework start");
     assert_eq!(
@@ -647,7 +675,12 @@ fn a_discarded_change_run_restarts_on_its_own_stream() {
     let stream = change_stream(&fx, "editor");
     let other = fx.stream("other");
     let started = start_rework(&fx, &stream, "Drop the second task.").unwrap();
-    crate::graduation::discard_graduation_run(fx.app.clone(), started.run.id.clone()).unwrap();
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        started.run.id.clone(),
+        Default::default(),
+    )
+    .unwrap();
 
     let restarted = crate::graduation::restart_graduation_run(
         fx.app.clone(),
@@ -655,6 +688,7 @@ fn a_discarded_change_run_restarts_on_its_own_stream() {
         other.id.clone(),
         StandingWork::CommitAndPush,
         Some("ignored".into()),
+        Default::default(),
     )
     .expect("a restart");
     assert_eq!(restarted.stream_id, stream.id);
@@ -677,7 +711,12 @@ fn a_discarded_change_run_restarts_on_its_own_stream() {
     );
 
     // OCR-FR-NGGJ: the thread is read afresh.
-    crate::graduation::discard_graduation_run(fx.app.clone(), restarted.id.clone()).unwrap();
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        restarted.id.clone(),
+        Default::default(),
+    )
+    .unwrap();
     set_resolved(&fx, &stream.id, &started.thread_id, true);
     let refused = crate::graduation::restart_graduation_run(
         fx.app.clone(),
@@ -685,6 +724,7 @@ fn a_discarded_change_run_restarts_on_its_own_stream() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     );
     assert_eq!(refused.unwrap_err(), "discussion_resolved");
 }
@@ -697,7 +737,8 @@ fn a_restart_takes_the_checks_again() {
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let stream = change_stream(&fx, "editor");
     let first = start_apply(&fx, &stream).unwrap();
-    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone()).unwrap();
+    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone(), Default::default())
+        .unwrap();
     runner.set("instructions", Ok(ok(BLOCKED)));
     let refused = crate::graduation::restart_graduation_run(
         fx.app.clone(),
@@ -705,6 +746,7 @@ fn a_restart_takes_the_checks_again() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     );
     assert_eq!(refused.unwrap_err(), "change_not_ready: design,tasks");
     runner.set("instructions", Ok(ok(READY)));
@@ -714,6 +756,7 @@ fn a_restart_takes_the_checks_again() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     )
     .expect("a restart");
     assert!(restarted.is_change_apply());
@@ -783,6 +826,7 @@ fn the_apply_progress_command_reads_a_stream_change() {
             fx.app.clone(),
             stream_id.to_string(),
             CHANGE.to_string(),
+            Default::default(),
         ))
     };
     assert_eq!(read("no-such-stream").unwrap_err().code, "unknown_stream");

@@ -107,11 +107,19 @@ describe("what a toast shows (NTF-FR-DGLS)", () => {
     expect(labels).toEqual(["Error", "Warn", "Info"]);
   });
 
-  it("NTF-FR-DGLS: shows no project name and no body line for an empty body", () => {
+  it("NTF-FR-DGLS: shows no body line for an empty body", () => {
     renderStack();
     show(input("a", { body: "" }));
     const target = screen.getByTestId("notification-toast-target");
     expect(target.textContent).toBe("InfoTitle a");
+  });
+
+  it("NTF-FR-NGCD, NTF-FR-DGLS: shows the project name after the level label", () => {
+    renderStack();
+    show(input("a", { body: "", projectName: "Atlas" }));
+    expect(screen.getByTestId("notification-toast-project").textContent).toBe("Atlas");
+    const target = screen.getByTestId("notification-toast-target");
+    expect(target.textContent).toBe("InfoAtlasTitle a");
   });
 });
 

@@ -30,7 +30,9 @@
 //! draft holding local asset references rather than uploading them —
 //! GHP-FR-AKUM), and hosts other than `github.com`.
 
-use tauri::{Emitter, Manager, State};
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use tauri::Manager;
 
 use crate::github_tokens::{self, GithubTokens, ProjectToken};
 use crate::global_settings::GlobalSettingsStore;
@@ -66,7 +68,7 @@ const MSG_PUBLISH: &str = "draft publication";
 pub(crate) struct TestSecret(pub String);
 
 fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, draft_id: &str) {
-    let _ = app.emit(DRAFT_PUBLICATION_CHANGED, serde_json::json!({ "draftId": draft_id }));
+    let _ = app.emit_project(DRAFT_PUBLICATION_CHANGED, serde_json::json!({ "draftId": draft_id }));
 }
 
 /// The project's configured Git remotes, by name and URL (GHP-FR-WKDE).
@@ -148,7 +150,7 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(work)
+    crate::project_scope::context::spawn_blocking(work)
         .await
         .map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?
 }
@@ -240,6 +242,7 @@ fn require_no_local_assets<R: tauri::Runtime>(
 // ---------------------------------------------------------------------------
 
 /// GHP-FR-CWTG: everything a surface renders about one draft's publication.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_draft_publication(
     draft_id: String,
@@ -252,7 +255,7 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     draft_id: String,
 ) -> Result<DraftPublicationView, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     let mut record = crate::drafts::draft_record(&root, &draft_id)
@@ -308,6 +311,7 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
 
 /// GHP-FR-WKDE: every configured remote, classified, and which one the next
 /// attempt would use.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_publication_remotes(
     draft_id: String,
@@ -320,7 +324,7 @@ fn list_publication_remotes_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     draft_id: String,
 ) -> Result<PublicationRemoteResolution, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
@@ -365,6 +369,7 @@ fn list_publication_remotes_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-CVYK: start a **new** attempt against the named remote.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn publish_draft_to_github(
     draft_id: String,
@@ -392,7 +397,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     persist_remote: bool,
     publication_choice: PublicationChoiceInput,
 ) -> Result<PublicationOutcome, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     let status = require_publishable_draft(app, &root, &draft_id)?;
@@ -474,6 +479,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-MDLD: everything the publication chooser renders, read-only.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn load_publication_metadata(
     draft_id: String,
@@ -488,7 +494,7 @@ fn load_publication_metadata_impl<R: tauri::Runtime>(
     draft_id: String,
     remote_name: String,
 ) -> Result<PublicationMetadata, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
@@ -536,6 +542,7 @@ fn load_publication_metadata_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-KVRH: the stored publication settings, defaults applied.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_github_publication_settings(
     app: tauri::AppHandle,
@@ -546,7 +553,7 @@ pub fn get_github_publication_settings(
 fn get_github_publication_settings_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<GithubPublicationSettings, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     crate::project_settings::load_github_publication_settings_from(&root).inspect_err(|_error| {
         logging::log_warn(
@@ -560,6 +567,7 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-NQWX: persist the five settings, or refuse and write nothing.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_github_publication_settings(
     parent_issue_types: Vec<String>,
@@ -587,7 +595,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
     root_issue_type: Option<String>,
     note_issue_type: Option<String>,
 ) -> Result<GithubPublicationSettings, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let previous = crate::project_settings::load_github_publication_settings_from(&root).ok();
     let settings = flow::validated_settings(
@@ -632,6 +640,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-PTYL: the issue Types of the publication repository's owner.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_github_issue_types(
     app: tauri::AppHandle,
@@ -642,7 +651,7 @@ pub async fn list_github_issue_types(
 fn list_github_issue_types_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<MetadataList<PublicationIssueType>, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let token = project_token(app, &project.slot_key());
     let repository = resolve_publication_repository_with(app, token.as_ref())
         .map_err(|code| fail(app, "", code))?;
@@ -665,6 +674,7 @@ fn list_github_issue_types_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-OWLB: continue the standing attempt, reusing its marker.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn retry_draft_publication(
     draft_id: String,
@@ -677,7 +687,7 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     draft_id: String,
 ) -> Result<PublicationOutcome, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
@@ -705,6 +715,7 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-YPGL: the author's answer to a recovery choice.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn resolve_draft_publication_conflict(
     draft_id: String,
@@ -719,7 +730,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
     draft_id: String,
     choice: RecoveryChoice,
 ) -> Result<PublicationOutcome, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
@@ -782,6 +793,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-EBSA: cancelling the choice leaves the attempt recoverable.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_draft_publication_conflict(
     draft_id: String,
@@ -795,7 +807,7 @@ fn cancel_draft_publication_conflict_impl<R: tauri::Runtime>(
     draft_id: String,
 ) -> Result<(), String> {
     let app = app.clone();
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(&app, &project)?;
     flow::require_not_shadow(&root, &draft_id).map_err(|code| fail(&app, &draft_id, code))?;
     let machine = require_machine_store(&app, &project, &draft_id)?;
@@ -806,6 +818,7 @@ fn cancel_draft_publication_conflict_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-NAXT: abandon the standing attempt, appending nothing.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_draft_publication_attempt(
     draft_id: String,
@@ -819,7 +832,7 @@ fn cancel_draft_publication_attempt_impl<R: tauri::Runtime>(
     draft_id: String,
 ) -> Result<(), String> {
     let app = app.clone();
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = require_root(&app, &project)?;
     flow::require_not_shadow(&root, &draft_id).map_err(|code| fail(&app, &draft_id, code))?;
     let machine = require_machine_store(&app, &project, &draft_id)?;
@@ -842,7 +855,7 @@ fn cancel_draft_publication_attempt_impl<R: tauri::Runtime>(
 pub fn resolve_publication_repository<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<PublicationRepository, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let token = project_token(app, &project.slot_key());
     resolve_publication_repository_with(app, token.as_ref())
 }
@@ -853,7 +866,7 @@ pub fn resolve_publication_repository_with<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     token: Option<&ProjectToken>,
 ) -> Result<PublicationRepository, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT.to_string())?;
     flow::resolve_repository_hosted(
         &root,
@@ -868,12 +881,13 @@ pub fn resolve_publication_repository_with<R: tauri::Runtime>(
 ///
 /// A URL no record of **this draft** holds is refused, so the command cannot be
 /// used to open an arbitrary address from the frontend.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_publication_issue(
     draft_id: String,
     url: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = require_root(&app, &project)?;
     let machine = require_machine_store(&app, &project, &draft_id)?;

@@ -8,7 +8,7 @@
  * renders that state and holds the refresh events of DSH-FR-LGJT.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listenProject } from "../projectEvents";
 import * as api from "../api";
 import * as events from "../events";
 import { logDebug } from "../logging";
@@ -85,8 +85,8 @@ export function useDeliveryRefreshEvents(refresh: (other?: () => Promise<Deliver
   useEffect(() => {
     const again = () => refresh();
     const pending = [
-      listen(events.DELIVERY_SOURCE_CHANGED, again),
-      listen(events.GITHUB_DELIVERY_PLAN_CHANGED, again),
+      listenProject(events.DELIVERY_SOURCE_CHANGED, again),
+      listenProject(events.GITHUB_DELIVERY_PLAN_CHANGED, again),
       events.onDraftsChanged(again),
       events.onGraduationRunChanged(again),
       events.onDashboardRecentlyEditedChanged(again),

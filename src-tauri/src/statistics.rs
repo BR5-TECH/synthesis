@@ -28,12 +28,13 @@
 //! action and no agent run is ever delayed, refused, or reported differently
 //! because a statistic could not be written.
 
+use crate::project::OpenProject as _;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Condvar, Mutex, OnceLock};
 
+use crate::project_scope::events::EmitToProject;
 use serde::Serialize;
-use tauri::{Emitter, Manager, State};
 
 use crate::fs as fsa;
 use crate::log_fields;
@@ -332,6 +333,10 @@ fn ensure_thread() {
 /// dropped so far, so the caller can name them in a `WARN`.
 pub(crate) fn enqueue(task: Task) -> u64 {
     ensure_thread();
+    // The writer thread has no project of its own. The batch carries the
+    // project of the caller, so the event that it emits reaches that project
+    // only (PWN-FR-CTXT).
+    let task: Task = Box::new(crate::project_scope::context::wrap_fn(task));
     let writer = writer();
     let mut queue = writer.queue.lock().unwrap_or_else(|e| e.into_inner());
     while queue.tasks.len() >= QUEUE_BOUND {
@@ -376,7 +381,7 @@ pub fn record_statistics_events<R: tauri::Runtime>(
     }
     // DSS-FR-KQVN: the log is in the repository machine store; the draft whose
     // existence the writer checks is in the active worktree.
-    let roots = app.try_state::<ProjectState>().and_then(|state| {
+    let roots = app.open_project_state().and_then(|state| {
         state
             .require_store()
             .inspect_err(|reason| {
@@ -446,7 +451,7 @@ pub fn record_statistics_events<R: tauri::Runtime>(
                 );
                 // DSS-FR-TWNA: emitted after the append has landed and never
                 // before, carrying the draft's id and no totals.
-                let _ = sink.emit(
+                let _ = sink.emit_project(
                     DRAFT_STATISTICS_CHANGED,
                     DraftStatisticsChanged { draft_id: draft_id.clone() },
                 );
@@ -534,7 +539,9 @@ pub fn usage_events(
 // ---------------------------------------------------------------------------
 
 /// DSS-FR-QLXV: the open project's root, or the typed refusal.
-fn require_root(project: &State<'_, ProjectState>) -> Result<fsa::RootFs, String> {
+fn require_root(
+    project: &crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<fsa::RootFs, String> {
     project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())
 }
 
@@ -551,10 +558,11 @@ fn require_draft(root: &fsa::RootFs, draft_id: &str) -> Result<(), String> {
 }
 
 /// DSS-FR-YOVS: the draft's captured lifetime aggregate totals.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_draft_statistics(
     draft_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftStatistics, String> {
     let root = require_root(&project)?;
     require_draft(&root, &draft_id)?;
@@ -569,13 +577,14 @@ pub fn read_draft_statistics(
 /// The one recording command the frontend reaches, and it composes the event
 /// itself — no frontend call can forge an event, attribute one to another draft,
 /// or write a line of a log directly (DSS-FR-EKZI).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn record_draft_editing_interval(
     draft_id: String,
     started_at: String,
     ended_at: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = require_root(&project)?;
     require_draft(&root, &draft_id)?;

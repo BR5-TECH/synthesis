@@ -1,6 +1,7 @@
 //! The exit gate: how long a quit is held for the frontend to write its pending changes, and what releases it (SNV-FR-26 / EDT-FR-33).
 
 use super::*;
+use crate::project_scope::events::EmitToProject;
 
 /// How long an unanswered quit stays held before a further quit request is let
 /// through. Long enough for the frontend to write every dirty artifact, short
@@ -19,6 +20,33 @@ pub(super) const EXIT_FLUSH_GRACE: Duration = Duration::from_secs(10);
 #[derive(Default)]
 pub struct ExitGate {
     held_since: Mutex<Option<Instant>>,
+    /// PWN-FR-WVUO: the windows that have not answered the held quit yet.
+    awaiting: Mutex<Awaiting>,
+}
+
+/// The windows that the held quit waits for.
+#[derive(Default)]
+enum Awaiting {
+    /// No list: the first answer decides the quit.
+    #[default]
+    Nobody,
+    /// These windows have not answered yet.
+    Windows(std::collections::HashSet<String>),
+    /// A window cancelled the held quit. A later answer to the same quit is
+    /// ignored, so the application never quits after a cancel. A new quit
+    /// replaces this state (`expect_windows`).
+    Cancelled,
+}
+
+/// What a window's answer to a held quit decides.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum ExitAnswer {
+    /// Every window wrote its changes: the application quits.
+    Quit,
+    /// A window could not write: the quit is cancelled.
+    Cancel,
+    /// Other windows still write their changes.
+    Wait,
 }
 
 impl ExitGate {
@@ -34,6 +62,37 @@ impl ExitGate {
             None => {
                 *slot = Some(now);
                 true
+            }
+        }
+    }
+
+    /// PWN-FR-WVUO: the windows whose answer the held quit waits for. A new
+    /// quit starts here, so it forgets a cancel of the quit before.
+    pub(super) fn expect_windows(&self, labels: impl IntoIterator<Item = String>) {
+        *self.awaiting.lock().unwrap_or_else(|e| e.into_inner()) =
+            Awaiting::Windows(labels.into_iter().collect());
+    }
+
+    /// Take the answer of one window to the held quit. After a cancel, an
+    /// answer of any other window changes nothing.
+    pub(super) fn answer(&self, label: &str, proceed: bool) -> ExitAnswer {
+        let mut awaiting = self.awaiting.lock().unwrap_or_else(|e| e.into_inner());
+        match &mut *awaiting {
+            Awaiting::Cancelled => ExitAnswer::Wait,
+            Awaiting::Nobody if proceed => ExitAnswer::Quit,
+            Awaiting::Nobody => ExitAnswer::Cancel,
+            Awaiting::Windows(_) if !proceed => {
+                *awaiting = Awaiting::Cancelled;
+                ExitAnswer::Cancel
+            }
+            Awaiting::Windows(set) => {
+                set.remove(label);
+                if set.is_empty() {
+                    *awaiting = Awaiting::Nobody;
+                    ExitAnswer::Quit
+                } else {
+                    ExitAnswer::Wait
+                }
             }
         }
     }
@@ -90,7 +149,8 @@ pub(super) fn begin_exit_at<R: tauri::Runtime>(
     // If the event cannot be delivered there is nobody to flush or to answer, so
     // do not hold a quit that would never be released — and give the claim back,
     // since no answer is coming to release it.
-    if app.emit(MENU_EXIT_REQUESTED, ()).is_ok() {
+    gate.expect_windows(quit_windows(app));
+    if app.emit_project(MENU_EXIT_REQUESTED, ()).is_ok() {
         true
     } else {
         gate.release();
@@ -105,9 +165,18 @@ pub(super) fn begin_exit_at<R: tauri::Runtime>(
 /// deliver the request the settings sweep stood in front of. A delivery that
 /// fails gives the claim back rather than leaving a hold nothing will release.
 pub fn resume_held_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if app.emit(MENU_EXIT_REQUESTED, ()).is_err() {
+    app.state::<ExitGate>().expect_windows(quit_windows(app));
+    if app.emit_project(MENU_EXIT_REQUESTED, ()).is_err() {
         app.state::<ExitGate>().release();
     }
+}
+
+/// PWN-FR-WVUO: the windows that write their changes before a quit.
+fn quit_windows<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<String> {
+    app.webview_windows()
+        .into_keys()
+        .filter(|label| crate::project_windows::is_project_window_label(label))
+        .collect()
 }
 
 /// SNV-FR-26 / EDT-FR-33: the frontend's answer to a held quit. `proceed` is
@@ -115,32 +184,64 @@ pub fn resume_held_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// blocked and the quit is cancelled (EDT-FR-32). Either way the hold is
 /// released, so a later quit is held and flushed again rather than slipping
 /// through unflushed.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn finish_exit<R: tauri::Runtime>(
     proceed: bool,
+    window: tauri::Window<R>,
     app: tauri::AppHandle<R>,
     gate: tauri::State<'_, ExitGate>,
 ) {
-    if exit_decision(proceed, &gate) {
-        // `../core/GRD-graduation.md` GRD-FR-TWMA: a graduation the loop is
-        // holding rests as `interrupted` before the process goes, so the run is
-        // something to continue on the next launch rather than something to
-        // notice missing. Written while the store is still reachable.
+    // PWN-FR-WVUO: every project window answers. A window that could not write
+    // cancels the quit and comes to the front.
+    if !finish_exit_for(window.label(), proceed, &app, &gate) {
+        let _ = window.set_focus();
+    }
+}
+
+/// The quit steps that act on the state of a project. They go through every open
+/// project, each in the context of its project (PWN-FR-CTXT): the window that
+/// answered last must not decide which project the steps reach.
+pub(super) fn shut_down_projects<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    // `../core/GRD-graduation.md` GRD-FR-TWMA: a graduation the loop is
+    // holding rests as `interrupted` before the process goes, so the run is
+    // something to continue on the next launch rather than something to
+    // notice missing. Written while the store is still reachable.
+    crate::project_scope::for_each_project(app, || {
         crate::graduation::interrupt_running(
-            &app,
+            app,
             crate::graduation::GraduationInterruptionReason::ApplicationShutdown,
         );
-        // `../core/DAS-draft-assets.md` DAS-FR-20: a housekeeping pass still
-        // running is given the chance to finish and is then abandoned where it
-        // stands. Nothing reports a completed sweep for it: the pass leaves
-        // every asset it had not yet decided untouched and records itself
-        // incomplete, and the next trigger simply runs it again.
-        crate::draft_assets::begin_shutdown(&app);
+    });
+    // `../core/DAS-draft-assets.md` DAS-FR-20: a housekeeping pass still
+    // running is given the chance to finish and is then abandoned where it
+    // stands. Nothing reports a completed sweep for it: the pass leaves
+    // every asset it had not yet decided untouched and records itself
+    // incomplete, and the next trigger simply runs it again.
+    crate::project_scope::for_each_project(app, || crate::draft_assets::begin_shutdown(app));
+}
+
+/// The part of `finish_exit` that does not need a window. Returns `false` when
+/// the quit is cancelled, so the caller can bring the window to the front.
+pub(super) fn finish_exit_for<R: tauri::Runtime>(
+    label: &str,
+    proceed: bool,
+    app: &tauri::AppHandle<R>,
+    gate: &ExitGate,
+) -> bool {
+    let answer = gate.answer(label, proceed);
+    if answer == ExitAnswer::Wait {
+        return true;
+    }
+    if exit_decision(answer == ExitAnswer::Quit, gate) {
+        shut_down_projects(app);
         // EAC-FR-ABHG: the runs are stopped, so every sandbox VM stops before
         // the process goes.
-        crate::tools::agent_exec::sandbox::stop_all_before_exit(&app);
+        crate::tools::agent_exec::sandbox::stop_all_before_exit(app);
         app.exit(0);
+        return true;
     }
+    answer == ExitAnswer::Quit
 }
 
 /// Whether a quit request should be held, given the exit code it carries and

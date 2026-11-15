@@ -12,6 +12,7 @@ use super::stops::{self, Stop};
 use super::*;
 use crate::graduation::commit;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 
 /// GXD-FR-LBYG / GXD-FR-XPUR: what a completed work turn leaves on the run.
@@ -463,7 +464,7 @@ pub(super) fn cancellation_reason_of<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
 ) -> Option<GraduationInterruptionReason> {
-    app.try_state::<GraduationState>()
+    app.try_project_store::<GraduationState>()
         .and_then(|state| state.cancellation_reason(run_id))
         .or_else(|| stored_stop_reason(app, run_id))
 }

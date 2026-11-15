@@ -2,6 +2,7 @@
 //! a long turn runs (AGC-FR-YMFC, AGC-FR-PGSJ, AGC-FR-TUNO).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 use tauri::Manager;
 
 /// AGC-FR-YMFC: the fixed prompt of the call.
@@ -111,7 +112,7 @@ pub fn progress_update_impl<R: tauri::Runtime>(
 ) -> Result<ProgressUpdate, String> {
     let store = app.state::<GlobalSettingsStore>();
     let ai = app.state::<AiApiIntegrations>();
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let entries = activity.len().min(ACTIVITY_LIMIT);
     let endpoint = ai_api::resolve_ai_api_call(&store, &ai, project_key).map_err(|_| {
         log_failure(app, &turns, ("", ""), entries, ai_api::ERR_PROVIDER_UNCONFIGURED);
@@ -153,15 +154,16 @@ pub fn progress_update_impl<R: tauri::Runtime>(
 }
 
 /// AGC-FR-YMFC.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn write_voice_progress_update<R: tauri::Runtime>(
     activity: Vec<ActivityEntry>,
     spoken_language: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProgressUpdate, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         progress_update_impl(&app, &key, &activity, &spoken_language)
     })
     .await

@@ -3,7 +3,8 @@
  * file small. `events.ts` re-exports it.
  */
 
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { listenProject } from "./projectEvents";
 
 import type { NewDraftProposalsChangedPayload } from "./types";
 
@@ -17,6 +18,6 @@ export const NEW_DRAFT_PROPOSALS_CHANGED = "new-draft-proposals-changed";
 export const onNewDraftProposalsChanged = (
   handler: (payload: NewDraftProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<NewDraftProposalsChangedPayload>(NEW_DRAFT_PROPOSALS_CHANGED, (event) =>
+  listenProject<NewDraftProposalsChangedPayload>(NEW_DRAFT_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );

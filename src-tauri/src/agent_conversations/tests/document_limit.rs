@@ -613,7 +613,7 @@ fn the_estimate_command_needs_an_open_project() {
         None,
         None,
         h.app.handle().clone(),
-        h.app.state::<ProjectState>(),
+        h.app.state::<ProjectState>().into(),
     );
     assert_eq!(result, Err(ERR_NO_PROJECT_OPEN.to_string()));
 }

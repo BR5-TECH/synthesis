@@ -8,6 +8,7 @@
 //! critical finding that names the cause, as the propose gate does
 //! (GRL-FR-HSZD).
 
+use crate::project::OpenProject as _;
 use std::path::Path;
 
 use super::*;
@@ -35,13 +36,11 @@ pub async fn apply_progress<R: tauri::Runtime>(
     let owned = app.clone();
     let root = checkout.to_path_buf();
     let name = change.clone();
-    let outcome = tauri::async_runtime::spawn_blocking(move || {
+    let outcome = crate::project_scope::context::spawn_blocking(move || {
         let seam = owned
             .try_state::<OpenSpec>()
             .ok_or(crate::openspec::OpenSpecReadError::OpenSpecModeInactive)?;
-        let active = owned
-            .try_state::<crate::project::ProjectState>()
-            .and_then(|state| state.require_root().ok());
+        let active = owned.open_project_state().and_then(|state| state.require_root().ok());
         let location = crate::openspec::ChangeLocation::ReviewCheckout { root };
         let at = crate::openspec::change::working_copy(&owned, &location)?;
         seam.apply_instructions(&owned, &crate::logging::BUFFER, active.as_ref(), &at, &name)

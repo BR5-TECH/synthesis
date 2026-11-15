@@ -327,7 +327,9 @@ fn create_file_exclusive_lets_exactly_one_of_many_racing_callers_win() {
         .map(|_| {
             let access = Arc::clone(&access);
             let target = target.clone();
-            std::thread::spawn(move || access.create_file(&target, CreateMode::Exclusive))
+            crate::project_scope::context::thread_spawn(move || {
+                access.create_file(&target, CreateMode::Exclusive)
+            })
         })
         .collect();
     let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();

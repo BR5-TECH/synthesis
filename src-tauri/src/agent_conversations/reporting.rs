@@ -4,6 +4,7 @@
 //! tool call opens and closes around itself.
 
 use super::*;
+use crate::project_scope::events::EmitToProject;
 
 // ---------------------------------------------------------------------------
 // Dispatch
@@ -13,7 +14,7 @@ use super::*;
 /// reason every other channel discards it — an event must never take down the
 /// work it reports on.
 pub(super) fn publish<R: tauri::Runtime>(app: &tauri::AppHandle<R>, turn: &AgentTurn) {
-    let _ = app.emit(AGENT_TURN_STATE_CHANGED, turn);
+    let _ = app.emit_project(AGENT_TURN_STATE_CHANGED, turn);
 }
 
 /// CVL-FR-33 / AGC-FR-34: report that a tool call has **begun** in this turn,

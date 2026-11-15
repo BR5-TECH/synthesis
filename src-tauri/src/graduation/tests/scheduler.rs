@@ -121,8 +121,13 @@ fn an_ineligible_run_blocks_no_run_of_another_queue() {
     let (a, b) = (fx.stream("a"), fx.stream("b"));
     let a1 = fx.enqueue_for(&a, "a1", "d1");
     let b1 = fx.enqueue_for(&b, "b1", "d2");
-    crate::graduation::set_graduation_auto_start(fx.app.clone(), a1.id.clone(), false)
-        .expect("paused");
+    crate::graduation::set_graduation_auto_start(
+        fx.app.clone(),
+        a1.id.clone(),
+        false,
+        Default::default(),
+    )
+    .expect("paused");
 
     assert_eq!(pass(&fx), vec![b1.id.clone()]);
 }
@@ -231,8 +236,13 @@ fn the_capacity_lists_the_runs_that_wait_for_a_slot_alone() {
     let _b2 = fx.enqueue_for(&b, "b2", "d4");
     let paused = fx.enqueue_for(&c, "paused", "d5");
     let d1 = fx.enqueue_for(&d, "d1", "d6");
-    crate::graduation::set_graduation_auto_start(fx.app.clone(), paused.id.clone(), false)
-        .expect("paused");
+    crate::graduation::set_graduation_auto_start(
+        fx.app.clone(),
+        paused.id.clone(),
+        false,
+        Default::default(),
+    )
+    .expect("paused");
     work(&fx, &working);
 
     let capacity = crate::graduation::graduation_capacity_of(&fx.app);
@@ -301,7 +311,7 @@ fn raising_the_saved_limit_offers_the_queues_a_dispatch() {
     let save = |limit: GraduationConcurrency| {
         crate::project_settings::save_project_config(
             ProjectConfig { graduation_concurrency_limit: Some(limit), ..Default::default() },
-            fx.app.state::<crate::project::ProjectState>(),
+            fx.app.state::<crate::project::ProjectState>().into(),
             fx.app.clone(),
         )
         .expect("saved");
@@ -359,8 +369,12 @@ fn discarding_a_blocked_run_offers_its_slot_to_another_queue() {
     let tripwire = || fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
     tripwire();
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), blocked.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        blocked.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     let attempts = tripwire();
     assert_eq!(attempts.len(), 1, "{attempts:?}");
     assert_eq!(attempts[0].0, waiting.id);
@@ -384,7 +398,7 @@ fn lowering_the_saved_limit_dispatches_nothing() {
             graduation_concurrency_limit: Some(GraduationConcurrency::limited(1)),
             ..Default::default()
         },
-        fx.app.state::<crate::project::ProjectState>(),
+        fx.app.state::<crate::project::ProjectState>().into(),
         fx.app.clone(),
     )
     .expect("saved");

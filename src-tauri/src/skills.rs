@@ -32,7 +32,6 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde::Serialize;
-use tauri::State;
 
 use crate::bm25_index::{self, Bm25Indexer, IndexId, MAX_FILE_BYTES};
 
@@ -622,10 +621,11 @@ pub fn list_project_skills_impl(indexer: &Bm25Indexer) -> Result<Vec<ProjectSkil
 
 /// DSL-FR-PEHR: the synthesis skills and project skills the persona editor
 /// offers (`../ui/AGT-agents.md` AGT-FR-KVDA).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_project_skills<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    indexer: State<'_, Bm25Indexer>,
+    indexer: crate::project_scope::Scoped<'_, Bm25Indexer>,
 ) -> Result<Vec<ProjectSkill>, String> {
     list_project_skills_logged(&app, &crate::logging::BUFFER, &indexer)
 }

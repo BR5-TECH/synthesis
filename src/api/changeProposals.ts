@@ -1,6 +1,6 @@
 // Change edit proposals (CEP-change-edit-proposals.md, contract surface).
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 import type {
   ChangeDecisionOutcome,

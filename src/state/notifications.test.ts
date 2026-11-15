@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   configureNotifications,
@@ -21,6 +21,8 @@ import {
 } from "./notifications";
 import { mintAddress, parseAddress } from "./notificationAddress";
 import { resetLogBufferForTest } from "../logging";
+import { setWindowProjectId } from "../api/invoke";
+import { visibleToasts } from "./toasts";
 import {
   hasRunIndication,
   indicatedAddresses,
@@ -903,5 +905,74 @@ describe("reading the permission (NTF-FR-13, NTF-FR-WUUY)", () => {
     answers[0].resolve("granted");
     await read;
     expect(notificationGate().permissionGranted).toBe(false);
+  });
+});
+
+describe("the project tab of a background raise (NTF-FR-NGCD, NTF-FR-ZTGX)", () => {
+  const attention = () =>
+    invokeMock.mock.calls
+      .filter((c) => c[0] === "set_project_window_attention")
+      .map((c) => c[1] as { projectId: string; needsAttention: boolean });
+
+  afterEach(() => setWindowProjectId(null));
+
+  beforeEach(() => {
+    resetNotifications();
+    resetTabIndications();
+    setWindowProjectId("acme-id");
+    configureNotifications({
+      snapshot: () => backgrounded,
+      resolveTab: () => null,
+    });
+  });
+
+  it("NTF-FR-ZTGX: marks the tab when the notifications switch is off", async () => {
+    setNotificationPermissionGranted(true);
+    setNotificationsEnabled(false);
+    expect(await raiseNotification(raiseFor(dashboard))).toBe(false);
+    expect(posts()).toHaveLength(0);
+    expect(attention()).toEqual([{ projectId: "acme-id", needsAttention: true }]);
+  });
+
+  it("NTF-FR-ZTGX: marks the tab when the OS permission is refused", async () => {
+    setNotificationPermissionGranted(false);
+    expect(await raiseNotification(raiseFor(dashboard))).toBe(false);
+    expect(posts()).toHaveLength(0);
+    expect(attention()).toEqual([{ projectId: "acme-id", needsAttention: true }]);
+  });
+
+  it("NTF-FR-ZTGX: marks the tab when the OS post fails", async () => {
+    setNotificationPermissionGranted(true);
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "post_notification") throw new Error("refused");
+      return undefined;
+    });
+    expect(await raiseNotification(raiseFor(dashboard))).toBe(false);
+    expect(attention()).toEqual([{ projectId: "acme-id", needsAttention: true }]);
+  });
+
+  it("NTF-FR-ZTGX: marks nothing for a raise the author is already looking at", async () => {
+    setNotificationPermissionGranted(true);
+    configureNotifications({
+      snapshot: () => ({
+        ...backgrounded,
+        focused: true,
+        mainFocused: true,
+        activeTarget: { kind: "dashboard" },
+      }),
+      resolveTab: () => null,
+    });
+    await raiseNotification(raiseFor(dashboard));
+    expect(attention()).toEqual([]);
+  });
+
+  it("NTF-FR-NGCD: a toast names the project and marks no tab", async () => {
+    configureNotifications({
+      snapshot: () => ({ ...backgrounded, focused: true, mainFocused: true }),
+      resolveTab: () => null,
+    });
+    await raiseNotification(raiseFor(dashboard));
+    expect(visibleToasts().map((t) => t.projectName)).toEqual(["acme"]);
+    expect(attention()).toEqual([]);
   });
 });

@@ -4,7 +4,8 @@
 //! strategy the author chose and a merge carries none: a surface that renders
 //! one from the other's event would name the wrong direction of work.
 
-use tauri::{Emitter, Manager};
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 
 use super::artifact::MergeConflict;
 use super::update_record::StreamUpdateStrategy;
@@ -36,7 +37,7 @@ pub(super) fn report<R: tauri::Runtime>(
     turn: u32,
     reconciling: &[MergeConflict],
 ) {
-    let _ = app.emit(
+    let _ = app.emit_project(
         WORK_STREAM_UPDATE_PROGRESS,
         UpdateProgressPayload {
             project_key: project_key.to_string(),
@@ -72,7 +73,7 @@ impl<'a, R: tauri::Runtime> UpdateProgress<'a, R> {
         stream_name: &str,
         strategy: StreamUpdateStrategy,
     ) -> Self {
-        let id = app.try_state::<crate::progress::ProgressRegistry>().map(|registry| {
+        let id = app.try_project_store::<crate::progress::ProgressRegistry>().map(|registry| {
             crate::progress::register_and_publish(
                 app,
                 &registry,
@@ -108,7 +109,7 @@ impl<'a, R: tauri::Runtime> UpdateProgress<'a, R> {
 
     fn advance(&self, turn: u32) {
         let (Some(id), Some(registry)) =
-            (self.id, self.app.try_state::<crate::progress::ProgressRegistry>())
+            (self.id, self.app.try_project_store::<crate::progress::ProgressRegistry>())
         else {
             return;
         };
@@ -127,7 +128,7 @@ impl<R: tauri::Runtime> Drop for UpdateProgress<'_, R> {
         // WKS-FR-FQLS: the update has settled, whichever way it settled.
         report(self.app, &self.project_key, &self.stream_id, "", self.strategy, 0, &[]);
         let (Some(id), Some(registry)) =
-            (self.id, self.app.try_state::<crate::progress::ProgressRegistry>())
+            (self.id, self.app.try_project_store::<crate::progress::ProgressRegistry>())
         else {
             return;
         };

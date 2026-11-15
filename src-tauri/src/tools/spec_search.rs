@@ -23,8 +23,8 @@
 //! escalates — `TLC-tool-conventions.md` puts a retry loop out of bounds for
 //! every tool in this group.
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashSet;
-use tauri::Manager;
 
 use serde::{Deserialize, Serialize};
 
@@ -284,7 +284,7 @@ impl<R: tauri::Runtime> SpecSearchTool<R> {
     /// The whole call, with its logging (TLC-FR-14, SPS-FR-19).
     fn run(&self, args: SpecificationSearchArgs) -> Result<SpecificationSearchOutput, ToolRefusal> {
         let outcome = require_open_project(&self.app).and_then(|indexer| {
-            let service = self.app.try_state::<crate::embeddings::EmbeddingsService>();
+            let service = self.app.try_project_store::<crate::embeddings::EmbeddingsService>();
             let ranker = crate::embeddings::ranker(&self.app, service.as_deref());
             search_ranked(
                 &indexer,

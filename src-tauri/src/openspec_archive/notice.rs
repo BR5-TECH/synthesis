@@ -10,6 +10,7 @@
 //! that thread. The digest guard keeps it to one notice for one state of the
 //! change files, so a repair that does not fix the change cannot start a loop.
 
+use crate::project::OpenProject as _;
 use serde::Serialize;
 
 use super::notice_record::{read_notice_record, write_notice_record, NoticeRecord};
@@ -97,13 +98,11 @@ pub fn give_merge_notice<R: tauri::Runtime>(
     change: &str,
     failure: &OpenSpecFailure,
 ) -> MergeNotice {
-    use tauri::Manager;
     if !notice_applies(failure) {
         return MergeNotice::default();
     }
     let cause = failure.classifying_code().to_string();
-    let store =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_store().ok());
+    let store = app.open_project_state().and_then(|p| p.require_store().ok());
     let location = ChangeLocation::Stream { stream_id: stream_id.to_string() };
     let digest = crate::openspec::change::working_copy(app, &location)
         .ok()

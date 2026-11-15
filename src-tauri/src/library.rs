@@ -14,9 +14,8 @@
 //! snake/camel auto-conversion); the pure `*_impl` halves are unit-tested
 //! without a Tauri runtime.
 
+use crate::project_scope::ProjectStores;
 use std::path::Path;
-
-use tauri::{Manager, State};
 
 use crate::fs;
 use crate::progress::{self, ProgressRegistry};
@@ -30,11 +29,12 @@ use crate::scanning;
 /// so on a large one it is exactly the "am I wedged or working?" case the status
 /// bar exists for. It is scoped to the content root, so a worktree change
 /// terminates a scan still running against the outgoing one (PRG-FR-13).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_project_tree(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    progress: State<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     progress::attribute(
@@ -49,11 +49,12 @@ pub fn load_project_tree(
 
 /// ASC-FR-11: force a fresh scan and return the current tree. Never throws on a
 /// transient filesystem race (the scan skips errored entries).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn rescan_project_tree(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    progress: State<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     progress::attribute(
@@ -68,14 +69,15 @@ pub fn rescan_project_tree(
 
 /// ASC-FR-05: persist a user type assignment, then return the freshly-scanned
 /// tree so the UI can re-tag without a separate reload.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn assign_artifact_type(
     path: String,
     artifact_type: scanning::ArtifactType,
     scope: scanning::Scope,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    candidates: State<'_, scanning::CandidateStore>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     scanning::assign(&root, &path, artifact_type, scope).map_err(|e| e.to_string())?;
@@ -85,12 +87,13 @@ pub fn assign_artifact_type(
 
 /// ASC-FR-07: remove a stored assignment (no-op if absent), then return the
 /// freshly-scanned tree.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn clear_artifact_type(
     path: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    candidates: State<'_, scanning::CandidateStore>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     scanning::clear(&root, &path).map_err(|e| e.to_string())?;
@@ -126,7 +129,7 @@ pub(crate) fn republish_classification<R: tauri::Runtime>(
     root: &fs::RootFs,
     candidates: &scanning::CandidateStore,
 ) {
-    if let Some(baseline) = app.try_state::<scanning::AttributionBaseline>() {
+    if let Some(baseline) = app.try_project_store::<scanning::AttributionBaseline>() {
         baseline.record_from_disk(root);
     }
     candidates.invalidate();
@@ -594,12 +597,13 @@ fn create_folder_impl(
 /// `recursive = false` is the narrow delete *and* the emptiness probe: a folder
 /// holding anything comes back as `ERR_NOT_EMPTY` with nothing removed, which is
 /// how the Library learns it must ask before taking a subtree (LCM-FR-11).
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn delete_path(
     app: tauri::AppHandle,
     path: String,
     recursive: bool,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     ensure_inside_root(&app, &root, "delete_path", &path)?;
@@ -609,12 +613,13 @@ pub fn delete_path(
 }
 
 /// PST-FR-19: rename a project file or folder within its parent (`"rename path"`).
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn rename_path(
     app: tauri::AppHandle,
     path: String,
     new_name: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     ensure_inside_root(&app, &root, "rename_path", &path)?;
@@ -630,12 +635,13 @@ pub fn rename_path(
 
 /// PST-FR-20: copy a project file or folder into a destination folder
 /// (`"copy path into folder"`). Copy, not move — the source is left in place.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn copy_path_into_folder(
     app: tauri::AppHandle,
     source_path: String,
     dest_folder: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     // PST-FR-26 names both sides: a copy composes two paths, and either can be
@@ -651,12 +657,13 @@ pub fn copy_path_into_folder(
 /// name)"`) and return the created node so the UI can open and reveal it. The
 /// structural change also reaches the Library through the ASC watcher's
 /// `"project tree changed"` event.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn create_file(
     app: tauri::AppHandle,
     location: Option<String>,
     name: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     // PST-FR-26: the location is the caller-composed part of the destination, so
@@ -674,13 +681,14 @@ pub fn create_file(
 /// (`"create folder (location, name, artifact type)"`) and return the created
 /// node so the UI can reveal it. The structural change also reaches the Library
 /// through the ASC watcher's `"project tree changed"` event.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn create_folder(
     app: tauri::AppHandle,
     location: Option<String>,
     name: String,
     artifact_type: Option<scanning::ArtifactType>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     // PST-FR-26, as in `create_file`: the location is the caller-composed part.
@@ -702,7 +710,7 @@ pub fn create_folder(
     // always managed (`lib.rs`), and a missing one is a wiring bug worth a
     // panic rather than a silently skipped republish. The `try_state` one
     // function up guards a different caller — the watcher's notify thread.
-    republish_classification(&app, &root, &app.state::<scanning::CandidateStore>());
+    republish_classification(&app, &root, &app.project_store::<scanning::CandidateStore>());
     Ok(node)
 }
 
@@ -712,13 +720,14 @@ pub fn create_folder(
 /// (`../ui/NTA-new-typed-artifact.md` NTA-FR-13). The structural change also
 /// reaches the Project panel through the ASC watcher's `"project tree changed"`
 /// event (ASC-FR-10).
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn create_typed_file(
     app: tauri::AppHandle,
     location: Option<String>,
     name: String,
     artifact_type: Option<scanning::ArtifactType>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     // PST-FR-26, as in `create_file`: the location is the caller-composed part
@@ -766,7 +775,7 @@ pub fn create_typed_file(
     // the panel renders from. Published here for the same reason
     // `assign_artifact_type` and `create_folder` publish — and so the baseline
     // adopts what we wrote, keeping the watcher from reloading a second time.
-    republish_classification(&app, &root, &app.state::<scanning::CandidateStore>());
+    republish_classification(&app, &root, &app.project_store::<scanning::CandidateStore>());
     Ok(node)
 }
 

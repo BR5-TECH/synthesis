@@ -18,12 +18,15 @@ pub mod edits;
 pub mod http;
 pub mod plan;
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::delivery::machine_state::read_delivery_overlay;
 use crate::delivery::settings::DeliverySettings;
@@ -170,7 +173,7 @@ impl GithubDeliveryState {
 /// The log buffer of the delivery modules: the session buffer, or a test's
 /// own.
 pub(crate) fn buffer_of<R: Runtime>(app: &AppHandle<R>) -> &'static LogBuffer {
-    app.try_state::<GithubDeliveryState>().map(|s| s.buffer).unwrap_or(&logging::BUFFER)
+    app.try_project_store::<GithubDeliveryState>().map(|s| s.buffer).unwrap_or(&logging::BUFFER)
 }
 
 /// GDP-FR-QHQR: one record of this module.
@@ -256,14 +259,13 @@ pub(crate) fn connect<R: Runtime>(
 pub(crate) fn machine_store<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<crate::fs::RootFs, DeliveryError> {
-    let project =
-        app.try_state::<crate::project::ProjectState>().ok_or_else(DeliveryError::no_project)?;
+    let project = app.open_project_state().ok_or_else(DeliveryError::no_project)?;
     crate::delivery::machine_store(&project)
 }
 
 /// GDP-FR-URZY: announce a change of the read cache.
 pub(crate) fn announce<R: Runtime>(app: &AppHandle<R>, project_node_id: &str) {
-    let _ = app.emit(
+    let _ = app.emit_project(
         GITHUB_DELIVERY_PLAN_CHANGED,
         PlanChanged { project_node_id: project_node_id.to_string() },
     );
@@ -279,7 +281,7 @@ pub(crate) fn store_edit<R: Runtime>(
 ) -> Result<(), DeliveryError> {
     let store = machine_store(app)?;
     {
-        let state = app.state::<GithubDeliveryState>();
+        let state = app.project_store::<GithubDeliveryState>();
         let mut generation = state.lock_cache();
         cache::write_cache(&store, &target.project_node_id, read)?;
         *generation += 1;
@@ -300,7 +302,7 @@ fn store_github_read<R: Runtime>(
     began: u64,
 ) -> Result<TrackerRead, DeliveryError> {
     let store = machine_store(app)?;
-    let state = app.state::<GithubDeliveryState>();
+    let state = app.project_store::<GithubDeliveryState>();
     let generation = state.lock_cache();
     if *generation != began {
         let newer = cache::read_cache(app, buffer_of(app), &store, &target.project_node_id)?;
@@ -381,10 +383,10 @@ pub(crate) fn shared_read<R: Runtime>(
     app: &AppHandle<R>,
     target: &GithubTarget,
 ) -> Result<TrackerRead, DeliveryError> {
-    let state = app.state::<GithubDeliveryState>();
+    let state = app.project_store::<GithubDeliveryState>();
     let key = format!(
         "{}\u{0}{}",
-        app.state::<crate::project::ProjectState>().slot_key(),
+        app.open_project_state_or_default().slot_key(),
         target.project_node_id
     );
     let seen = state.reads.lock().unwrap_or_else(|e| e.into_inner()).completed;
@@ -616,6 +618,7 @@ pub fn checked_tracker_url<R: Runtime>(
 }
 
 /// GDP contract surface: `"load github delivery plan (refresh)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn load_github_delivery_plan(
     app: AppHandle,
@@ -625,6 +628,7 @@ pub async fn load_github_delivery_plan(
 }
 
 /// GDP contract surface: `"apply github delivery edit (edit)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn apply_github_delivery_edit(
     app: AppHandle,
@@ -635,6 +639,7 @@ pub async fn apply_github_delivery_edit(
 
 /// GDP contract surface: `"open tracker link (url)"`. The OS default browser
 /// opens the URL; no page opens inside the application.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn open_tracker_link(app: AppHandle, url: String) -> Result<(), DeliveryError> {
     source::off_thread(move || {

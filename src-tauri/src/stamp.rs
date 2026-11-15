@@ -37,7 +37,11 @@ mod tests {
     #[test]
     fn stamps_taken_at_the_same_time_are_all_different() {
         let threads: Vec<_> = (0..8)
-            .map(|_| std::thread::spawn(|| (0..1000).map(|_| unique_nanos()).collect::<Vec<_>>()))
+            .map(|_| {
+                crate::project_scope::context::thread_spawn(|| {
+                    (0..1000).map(|_| unique_nanos()).collect::<Vec<_>>()
+                })
+            })
             .collect();
         let mut all: Vec<u64> = threads.into_iter().flat_map(|t| t.join().unwrap()).collect();
         let count = all.len();

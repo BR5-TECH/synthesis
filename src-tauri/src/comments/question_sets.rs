@@ -36,8 +36,8 @@
 //! act is not one filesystem operation and cannot be made into one, so both
 //! sides take this lock and the pair is serialized.
 
+use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
-use tauri::State;
 
 use super::*;
 
@@ -261,11 +261,12 @@ pub fn read_question_set_checked(
 }
 
 /// CMS-FR-JWVH: `"read discussion question set"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_discussion_question_set<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Option<PendingQuestionSet>, String> {
     let thread_id = discussion_id;
     let root = project.require_store()?;
@@ -465,8 +466,7 @@ pub fn emit_question_set_changed<R: tauri::Runtime>(
     thread_id: &str,
     set: Option<&PendingQuestionSet>,
 ) {
-    use tauri::Emitter as _;
-    let _ = app.emit(
+    let _ = app.emit_project(
         DISCUSSION_QUESTION_SET_CHANGED,
         serde_json::json!({ "discussionId": thread_id, "set": set }),
     );

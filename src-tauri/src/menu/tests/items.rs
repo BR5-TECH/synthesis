@@ -43,7 +43,8 @@ fn file_menu_items_are_the_three_creation_items_then_save_save_all_settings_clos
             (MENU_SAVE, "Save", Some("CmdOrCtrl+S")),
             (MENU_SAVE_ALL, "Save All", Some("CmdOrCtrl+Shift+S")),
             (MENU_SETTINGS, "Settings", None),
-            (MENU_CLOSE_PROJECT, "Close Project", None),
+            (MENU_NEW_TAB, "New Tab", Some("CmdOrCtrl+T")),
+            (MENU_CLOSE_PROJECT, "Close Project", Some("CmdOrCtrl+W")),
         ]
     );
 }
@@ -61,6 +62,7 @@ fn on_macos_the_settings_entry_is_in_the_app_name_menu_and_not_the_file_menu() {
             MENU_NEW_FOLDER,
             MENU_SAVE,
             MENU_SAVE_ALL,
+            MENU_NEW_TAB,
             MENU_CLOSE_PROJECT,
         ]
     );
@@ -326,8 +328,8 @@ fn setting_the_find_menu_state_before_the_menu_is_installed_is_inert() {
     let app = mock_app_with_window(dir.path());
     app.manage(FindMenuItems::<tauri::test::MockRuntime>::default());
 
-    set_find_menu_state(true, app.handle().clone(), app.state());
-    set_find_menu_state(false, app.handle().clone(), app.state());
+    set_find_menu_state(true, app.handle().clone(), app.state(), Default::default());
+    set_find_menu_state(false, app.handle().clone(), app.state(), Default::default());
 }
 
 #[test]

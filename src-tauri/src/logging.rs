@@ -714,7 +714,7 @@ pub fn append_and_publish<S: LogSink + Clone + Send + 'static>(
         return;
     }
     let sink = sink.clone();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         // A loop rather than a single sleep, because the debt this thread was
         // woken for is not necessarily the debt it finds. An append landing
         // just outside the window resets `last_emit` and is delivered on the
@@ -804,6 +804,7 @@ impl Inner {
 /// the order given. Never returns an error — a failure to record a diagnostic is
 /// not worth failing the caller over (`../ui/LOG-logs.md` LOG-FR-19) — and
 /// answers normally with no project open.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn append_log_records(app: tauri::AppHandle, records: Vec<LogInput>) {
     append_and_publish(&app, &BUFFER, records);
@@ -811,6 +812,7 @@ pub fn append_log_records(app: tauri::AppHandle, records: Vec<LogInput>) {
 
 /// LGC-FR-09 – LGC-FR-12 / LGC-FR-22: the records matching `filter`, positioned
 /// by `cursor` and bounded by `limit`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn query_logs(
     filter: LogFilter,
@@ -832,6 +834,7 @@ pub fn query_logs(
 /// any other operation in the application gaining that reach. A pre-existing
 /// file there is replaced, since choosing an occupied path in a save dialog is
 /// how a user asks for that.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn export_logs(
     app: tauri::AppHandle,

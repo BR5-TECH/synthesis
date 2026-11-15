@@ -1,6 +1,7 @@
 //! The id-to-action mapping and the two event handlers the runtime calls (SNV-FR-24, SNV-FR-25, SNV-FR-26).
 
 use super::*;
+use tauri::Emitter;
 
 /// The intent a File-menu item carries once its native menu event fires. Pure
 /// data so the id -> action mapping (`menu_event_action`) is unit-testable
@@ -19,6 +20,13 @@ pub(super) enum MenuAction {
     SaveAll,
     /// Close the open project and return to the Project picker (SNV-FR-25).
     CloseProject,
+    /// Open the Project picker as a modal over the focused project window
+    /// (PJT-FR-PILG).
+    NewTab,
+    /// Activate the next tab (PJT-FR-EKKA).
+    NextTab,
+    /// Activate the previous tab (PJT-FR-EKKA).
+    PreviousTab,
     /// Quit the whole application (SNV-FR-26).
     Exit,
     /// Open, switch to, or toggle the Editor's Find panel (SNV-FR-43).
@@ -56,6 +64,9 @@ pub(super) fn menu_event_action(id: &str) -> Option<MenuAction> {
         MENU_SAVE => Some(MenuAction::Save),
         MENU_SAVE_ALL => Some(MenuAction::SaveAll),
         MENU_CLOSE_PROJECT => Some(MenuAction::CloseProject),
+        MENU_NEW_TAB => Some(MenuAction::NewTab),
+        MENU_NEXT_TAB => Some(MenuAction::NextTab),
+        MENU_PREVIOUS_TAB => Some(MenuAction::PreviousTab),
         MENU_FIND => Some(MenuAction::Find),
         MENU_FIND_REPLACE => Some(MenuAction::FindReplace),
         MENU_SETTINGS => Some(MenuAction::Settings),
@@ -103,6 +114,15 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
         MenuAction::Save => MENU_SAVE,
         MenuAction::SaveAll => MENU_SAVE_ALL,
         MenuAction::CloseProject => MENU_CLOSE_PROJECT,
+        MenuAction::NewTab => MENU_NEW_TAB,
+        MenuAction::NextTab => {
+            crate::project_windows::activate_neighbour(app, 1);
+            return;
+        }
+        MenuAction::PreviousTab => {
+            crate::project_windows::activate_neighbour(app, -1);
+            return;
+        }
         // ABT-FR-KMVD: the panel is drawn inside the window, so this side only
         // relays the intent. It is swallowed above while a settings window is
         // open (ABT-FR-NVQT).
@@ -117,7 +137,16 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
             return;
         }
     };
-    let _ = app.emit(event, ());
+    // PWN-FR-AINZ: a menu item acts on the project window that has focus.
+    let focused = crate::project_windows::focused_project_window_label(app);
+    let several = app
+        .try_state::<crate::project_windows::ProjectWindows>()
+        .is_some_and(|windows| windows.entries().len() > 1);
+    if several && app.get_webview_window(&focused).is_some() {
+        let _ = app.emit_to(focused.as_str(), event, ());
+    } else {
+        let _ = app.emit(event, ());
+    }
 }
 
 /// Ask the frontend to write its pending changes and then quit (SNV-FR-26 /
@@ -128,6 +157,21 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
 pub(super) fn request_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if !begin_exit(app, &app.state::<ExitGate>(), None) {
         app.exit(0);
+    }
+}
+
+/// EMB-FR-VQSK: ask for a root-tip check of the project of the window that
+/// gained focus. A window with no project asks for no check of another one.
+fn note_root_tip_check_of<R: tauri::Runtime>(window: &tauri::Window<R>) {
+    let app = window.app_handle();
+    let project = app
+        .try_state::<crate::project_windows::ProjectWindows>()
+        .and_then(|windows| windows.project_of(window.label()));
+    match project {
+        Some(id) => crate::project_scope::context::run_in(&id, || {
+            crate::embeddings::note_root_tip_check(app)
+        }),
+        None => crate::embeddings::note_root_tip_check(app),
     }
 }
 
@@ -155,13 +199,30 @@ pub fn handle_window_event<R: tauri::Runtime>(
     // EMB-FR-VQSK: the main window gained focus, so the root branch tip may
     // have moved while the author was elsewhere.
     if matches!(event, tauri::WindowEvent::Focused(true)) {
-        crate::embeddings::note_root_tip_check(window.app_handle());
+        // PWN-FR-CFSW: the tab of a window that gains focus is the active one.
+        crate::project_windows::note_window_focused(window.app_handle(), window.label());
+        note_root_tip_check_of(window);
         return;
     }
     let tauri::WindowEvent::CloseRequested { api, .. } = event else {
         return;
     };
     let app = window.app_handle();
+    // PJT-FR-PCCL: the close control of a project window runs the close flow of
+    // its project tab, while other project tabs stay open.
+    if let Some(windows) = app.try_state::<crate::project_windows::ProjectWindows>() {
+        if windows.entries().len() > 1 {
+            if let Some(project_id) = windows.project_of(window.label()) {
+                api.prevent_close();
+                let _ = app.emit_to(
+                    window.label(),
+                    crate::project_windows::EVENT_CLOSE_REQUESTED,
+                    serde_json::json!({ "projectId": project_id }),
+                );
+                return;
+            }
+        }
+    }
     // The closing window is still counted here; more than one means the
     // application survives this close.
     if app.webview_windows().len() > 1 {

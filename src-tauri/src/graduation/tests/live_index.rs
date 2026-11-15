@@ -75,6 +75,7 @@ fn read(fx: &Fixture, run_id: &str, scope: serde_json::Value, stream: &str) -> G
         Some(1000),
         None,
         None,
+        Default::default(),
     )
     .expect("a page")
 }
@@ -111,7 +112,8 @@ fn the_run_record_and_the_listing_name_the_output_of_a_turn_that_is_still_runnin
     );
 
     let got =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("the run");
     assert_eq!(got.logs.activity.record_count, 2);
     assert_eq!(got.logs.activity.latest_sequence, 2);
     assert!(names(&got.logs, GraduationLogStream::Activity, "working", Some(run.pass())));
@@ -200,9 +202,11 @@ fn a_read_of_a_run_nobody_writes_answers_with_the_saved_copy_and_holds_nothing()
     std::fs::write(&path, held).expect("written");
 
     let got =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("the run");
     assert_eq!(got.logs.structured.record_count, 1, "the saved copy, as saved");
-    let listed = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    let listed = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert_eq!(
         listed.runs.iter().find(|entry| entry.id == run.id).map(|e| e.logs.structured.record_count),
         Some(1)
@@ -341,10 +345,14 @@ fn a_driven_work_turn_is_readable_before_it_ends() {
             let on_disk = crate::graduation::store::read_run_record(&fs, &base, &run_id)
                 .expect("the saved record")
                 .logs;
-            let got = crate::graduation::get_graduation_run(app.clone(), run_id.clone())
-                .expect("the run")
-                .logs;
-            let listed = crate::graduation::list_graduation_queue(app.clone())
+            let got = crate::graduation::get_graduation_run(
+                app.clone(),
+                run_id.clone(),
+                Default::default(),
+            )
+            .expect("the run")
+            .logs;
+            let listed = crate::graduation::list_graduation_queue(app.clone(), Default::default())
                 .expect("the queue")
                 .runs
                 .into_iter()
@@ -398,7 +406,8 @@ fn a_read_of_a_run_inside_a_turn_keeps_the_damaged_read_the_saved_copy_records()
     work_output(&fx, &run, &["first"]);
 
     let got =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("the run");
     assert_eq!(got.logs.activity.record_count, 1, "the live stream index");
     assert_eq!(got.logs.last_read_failure, Some(damaged), "the saved damaged read");
 }

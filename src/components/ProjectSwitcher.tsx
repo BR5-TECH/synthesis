@@ -27,6 +27,9 @@ interface ProjectSwitcherProps {
   // other floating overlay of the main window rather than coexisting with it.
   // Optional so the switcher stays usable in isolation.
   onOpen?: () => void;
+  // PJT-FR-GASB: resolve the picked project without mounting it. The host asks
+  // for This tab or New tab, writes pending changes, and mounts it.
+  resolveOnly?: boolean;
 }
 
 // SNV-FR-21: at most five rows are visible before the recent-entries region
@@ -50,6 +53,7 @@ export function ProjectSwitcher({
   onBeforeSwitch,
   onOpenAnother,
   onOpen,
+  resolveOnly = false,
 }: ProjectSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<RecentProject[] | null>(null);
@@ -106,13 +110,15 @@ export function ProjectSwitcher({
       // OVW-FR-11 / EDT-FR-33: the outgoing project's pending edits are written
       // before the switch reaches the backend — once "open project at path"
       // runs, the old project is no longer saveable.
-      if (!(await onBeforeSwitch())) {
+      if (!resolveOnly && !(await onBeforeSwitch())) {
         setOpen(false);
         return;
       }
       // SNV-FR-19: switch via "open project at path"; the returned handle
       // drives the in-window teardown + reopen owned by OVW-FR-11.
-      const handle = await api.openProjectAtPath(r.path);
+      const handle = resolveOnly
+        ? await api.resolveProjectAtPath(r.path)
+        : await api.openProjectAtPath(r.path);
       setOpen(false);
       onSwitch(handle);
     } catch (e) {

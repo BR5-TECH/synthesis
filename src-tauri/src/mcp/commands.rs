@@ -47,24 +47,26 @@ fn refused<T>(
 }
 
 /// MCS-FR-FIEE.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_mcp_servers(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
 ) -> Result<Vec<McpServerEntry>, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.list());
     refused(&app, "list", "", result)
 }
 
 /// MCS-FR-XCOS.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn save_mcp_server(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     server: McpServer,
     scope: McpScope,
 ) -> Result<McpServerEntry, String> {
@@ -74,12 +76,13 @@ pub async fn save_mcp_server(
 }
 
 /// MCS-FR-UOIO.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn remove_mcp_server(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
     scope: McpScope,
 ) -> Result<(), String> {
@@ -88,12 +91,13 @@ pub async fn remove_mcp_server(
 }
 
 /// MCS-FR-MKDH.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn set_mcp_server_enabled(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
     enabled: bool,
 ) -> Result<McpServerEntry, String> {
@@ -102,12 +106,13 @@ pub async fn set_mcp_server_enabled(
 }
 
 /// MCS-FR-IXHD.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn set_mcp_server_secret(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
     slot: String,
     value: String,
@@ -117,12 +122,13 @@ pub async fn set_mcp_server_secret(
 }
 
 /// MCS-FR-WBDV.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn clear_mcp_server_secret(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
     slot: String,
 ) -> Result<McpServerEntry, String> {
@@ -131,12 +137,13 @@ pub async fn clear_mcp_server_secret(
 }
 
 /// MCS-FR-EVRS.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn trust_mcp_server(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
     shown: McpServer,
 ) -> Result<McpServerEntry, String> {
@@ -145,12 +152,13 @@ pub async fn trust_mcp_server(
 }
 
 /// MCS-FR-ETIS.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn test_mcp_server(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
 ) -> Result<McpTestResult, String> {
     let plan = refused(
@@ -163,12 +171,13 @@ pub async fn test_mcp_server(
 }
 
 /// MCS-FR-KCIH.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn reconnect_mcp_server(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
 ) -> Result<(), String> {
     let result = context(&project, &store, &manager).and_then(|c| c.reconnect(&id));
@@ -177,12 +186,13 @@ pub async fn reconnect_mcp_server(
 
 /// MCS-FR-YWVC: start a sign-in and return. Its result arrives as a status
 /// change (MCS-FR-NOKX).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn start_mcp_sign_in(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
 ) -> Result<(), String> {
     let prepared = context(&project, &store, &manager)
@@ -210,7 +220,7 @@ pub async fn start_mcp_sign_in(
         secrets: manager.secrets(),
         still_current,
     };
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         let opener = app.clone();
         let open = move |url: &str| {
             use tauri_plugin_opener::OpenerExt;
@@ -232,19 +242,24 @@ pub async fn start_mcp_sign_in(
 }
 
 /// MCS-FR-CMWV.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub async fn cancel_mcp_sign_in(manager: State<'_, McpManager>, id: String) -> Result<(), String> {
+pub async fn cancel_mcp_sign_in(
+    manager: crate::project_scope::Scoped<'_, McpManager>,
+    id: String,
+) -> Result<(), String> {
     manager.cancel_sign_in(&id);
     Ok(())
 }
 
 /// MCS-FR-QRIB.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn sign_out_mcp_server(
     app: AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, GlobalSettingsStore>,
-    manager: State<'_, McpManager>,
+    manager: crate::project_scope::Scoped<'_, McpManager>,
     id: String,
 ) -> Result<McpServerEntry, String> {
     let result = context(&project, &store, &manager).and_then(|c| c.sign_out(&id));

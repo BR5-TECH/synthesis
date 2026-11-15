@@ -5,6 +5,7 @@
 
 use super::{resolve_github_identity, GithubIdentity, ERR_TOKEN_MISSING};
 use crate::global_settings::GlobalSettingsStore;
+use crate::project_scope::events::EmitToProject;
 
 /// GTS-FR-AEQO: the event emitted after the token registry or a project's token
 /// binding changed. It carries no payload.
@@ -34,6 +35,5 @@ pub fn resolve_github_identity_if_stored(
 /// The emit result is discarded on purpose: an event must never fail the
 /// operation it reports on, and a dropped event costs one stale label.
 pub(super) fn emit_tokens_changed(app: &tauri::AppHandle) {
-    use tauri::Emitter as _;
-    let _ = app.emit(GITHUB_TOKENS_CHANGED, ());
+    let _ = app.emit_project(GITHUB_TOKENS_CHANGED, ());
 }

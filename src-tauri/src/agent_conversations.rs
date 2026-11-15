@@ -43,13 +43,14 @@
 //! (LGC-FR-16), and an exported record travels as far as the bug report it is
 //! attached to.
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
+use tauri::State;
 
 use crate::agents::{self, Agent};
 use crate::ai_api::{self, reasoning_label, AiApiCall, AiApiIntegrations};
@@ -734,13 +735,14 @@ struct ContributionFlags<'a> {
 // Tauri commands (AGC contract surface)
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn dispatch_agent_turn<R: tauri::Runtime>(
     nickname: String,
     origin: ConversationOrigin,
     trigger_comment_id: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
@@ -758,13 +760,14 @@ pub fn dispatch_agent_turn<R: tauri::Runtime>(
     )
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_agent_turn<R: tauri::Runtime>(
     turn_id: String,
     app: tauri::AppHandle<R>,
-    turns: State<'_, TurnRegistry>,
-    progress_registry: State<'_, ProgressRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    progress_registry: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -772,11 +775,12 @@ pub fn cancel_agent_turn<R: tauri::Runtime>(
     cancel_impl(&app, &turns, &progress_registry, &turn_id)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_agent_turns(
     origin: Option<ConversationOrigin>,
-    turns: State<'_, TurnRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -791,11 +795,12 @@ pub fn list_agent_turns(
 /// to retry it would otherwise have lost with the event it was not listening
 /// for. A turn returned here is not outstanding, so `list_agent_turns` returns
 /// it under neither form.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_recoverable_agent_turn_failures(
     origin: Option<ConversationOrigin>,
-    turns: State<'_, TurnRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -813,11 +818,12 @@ pub fn list_recoverable_agent_turn_failures(
 /// of it: an entry is replaced by a later turn that also omitted images and
 /// retired by a later turn that carried its images successfully or carried none
 /// at all.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_agent_turn_image_notices(
     origin: Option<ConversationOrigin>,
-    turns: State<'_, TurnRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -835,11 +841,12 @@ pub fn list_agent_turn_image_notices(
 /// assembles its input afresh (AGC-FR-13), begins its own session, and resolves
 /// its own endpoint and key, so the failed turn is neither mutated nor
 /// resurrected and keeps its own id and terminal state.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn retry_agent_turn<R: tauri::Runtime>(
     turn_id: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
@@ -857,8 +864,7 @@ pub fn retry_impl<R: tauri::Runtime>(
     project_key: &str,
     turn_id: &str,
 ) -> Result<AgentTurn, String> {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
 
     // The entry is taken under one lock, so two retries issued together leave
     // exactly one new turn: the loser finds nothing to take and is refused,
@@ -914,7 +920,7 @@ pub fn retry_impl<R: tauri::Runtime>(
         // restores its failed contribution and the offer is there to take again.
         // Without this a resolved thread would silently swallow the only route
         // back to a turn that never happened.
-        let turns = app.state::<TurnRegistry>();
+        let turns = app.project_store::<TurnRegistry>();
         turns.remember_recoverable(failed.clone(), entry_project_key.clone());
         logging::log_warn(
             app,
@@ -940,8 +946,7 @@ pub fn retire_recoverable_for_human_comment<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     thread_id: &str,
 ) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else {
+    let Some(turns) = app.try_project_store::<TurnRegistry>() else {
         return;
     };
     let Some(turn) = turns.retire_recoverable(thread_id) else {
@@ -972,8 +977,7 @@ pub fn retire_recoverable_for_human_comment<R: tauri::Runtime>(
 ///
 /// Called from the submission alone, on its success path.
 pub fn retire_awaiting_for_thread<R: tauri::Runtime>(app: &tauri::AppHandle<R>, thread_id: &str) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else {
+    let Some(turns) = app.try_project_store::<TurnRegistry>() else {
         return;
     };
     let retired = turns.retire_awaiting_on_thread(thread_id);

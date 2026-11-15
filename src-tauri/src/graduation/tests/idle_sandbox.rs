@@ -148,7 +148,8 @@ fn the_discard_of_a_driven_run_asks_for_one_stop() {
         crate::project_settings::GraduationConcurrency::limited(1),
         crate::tools::agent_exec::runtime::CancellationToken::new(),
     ));
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("discarded");
     assert_eq!(stops(&fx), vec![stream.id.clone()]);
     crate::graduation::transition(&fx.app, &mut stale, S::Completed).expect("refused quietly");
     assert_eq!(stops(&fx), vec![stream.id.clone()]);
@@ -166,7 +167,8 @@ fn a_run_at_rest_asks_for_no_stop_and_its_discard_does() {
         move_to(&fx, &run, state);
         assert!(stops(&fx).is_empty(), "{} asks for no stop", state.as_str());
     }
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("discarded");
     assert_eq!(stops(&fx), vec![stream.id.clone()]);
 }
 
@@ -180,7 +182,8 @@ fn a_discard_that_removes_the_runs_behind_asks_for_a_stop() {
     let behind = fx.enqueue_for(&stream, "behind", "d2");
     put(&fx, &held, S::Interrupted);
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone(), Default::default())
+        .expect("discarded");
     assert!(crate::graduation::load_run(&fx.app, &behind.id).is_err(), "the run behind is gone");
     assert_eq!(stops(&fx), vec![stream.id.clone()]);
 }
@@ -198,8 +201,12 @@ fn a_queued_member_keeps_the_vm_until_it_leaves() {
     move_to(&fx, &first, S::Completed);
     assert!(stops(&fx).is_empty(), "the second run waits in the queue");
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), second.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        second.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert_eq!(stops(&fx), vec![stream.id.clone()]);
 }
 
@@ -230,8 +237,12 @@ fn each_queue_is_asked_for_on_its_own() {
     move_to(&fx, &done, S::Completed);
     assert_eq!(stops(&fx), vec![editor.id.clone()]);
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), resting.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        resting.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert_eq!(stops(&fx), vec![editor.id.clone(), header.id.clone()]);
 }
 
@@ -255,7 +266,8 @@ fn a_refused_move_asks_for_no_second_stop() {
     let stream = fx.stream("editor");
     let run = fx.enqueue_for(&stream, "work", "d1");
     let mut stale = put(&fx, &run, S::Working);
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("discarded");
     crate::graduation::transition(&fx.app, &mut stale, S::Completed).expect("refused quietly");
     assert_eq!(stops(&fx), vec![stream.id.clone()]);
 }

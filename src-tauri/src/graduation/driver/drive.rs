@@ -7,6 +7,7 @@ use super::turns::*;
 use super::*;
 use crate::graduation::is_streamless_queue_key;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
+use crate::project_scope::ProjectStores;
 use std::path::PathBuf;
 
 /// What the loop does after a turn.
@@ -42,18 +43,19 @@ fn intercepted<R: tauri::Runtime>(
     let Some(tripwire) = app.try_state::<SpawnTripwire>() else {
         return false;
     };
-    if app.try_state::<GraduationState>().is_some_and(|state| state.loop_enabled()) {
+    if app.try_project_store::<GraduationState>().is_some_and(|state| state.loop_enabled()) {
         let unclaimed = app
-            .try_state::<GraduationState>()
+            .try_project_store::<GraduationState>()
             .is_some_and(|state| state.holder_of(stream_id).is_none());
         let unmarked = is_streamless_queue_key(stream_id)
             || crate::streams::stream_of(app, stream_id)
                 .is_some_and(|stream| stream.busy_run_id.is_none());
-        let unreconciled = app.try_state::<crate::streams::StreamState>().is_none_or(|state| {
-            !(state.has_update_job(stream_id)
-                || state.is_merging(stream_id)
-                || state.is_updating(stream_id))
-        });
+        let unreconciled =
+            app.try_project_store::<crate::streams::StreamState>().is_none_or(|state| {
+                !(state.has_update_job(stream_id)
+                    || state.is_merging(stream_id)
+                    || state.is_updating(stream_id))
+            });
         tripwire.record(run_id, unclaimed && unmarked && unreconciled);
     }
     true
@@ -107,7 +109,7 @@ pub fn spawn_with<R: tauri::Runtime>(
     let app = app.clone();
     let run_id = run_id.to_string();
     let stream_id = stream_id.to_string();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         drive_blocking(&app, &run_id, &stream_id, cancellation, dispatch.as_ref());
     });
     true
@@ -122,7 +124,7 @@ fn claim<R: tauri::Runtime>(
     run_id: &str,
     stream_id: &str,
 ) -> Option<CancellationToken> {
-    let state = app.try_state::<GraduationState>()?;
+    let state = app.try_project_store::<GraduationState>()?;
     if !state.loop_enabled() {
         return None;
     }
@@ -218,7 +220,7 @@ fn drive_blocking<R: tauri::Runtime>(
     // GRD-FR-KZPT: what an ended merge run owns goes once nothing stands in it.
     // The loop is marked finished first, because a run this process still drives
     // is not reclaimed (GRD-FR-PFMD).
-    if let Some(state) = app.try_state::<GraduationState>() {
+    if let Some(state) = app.try_project_store::<GraduationState>() {
         state.end_loop(run_id);
     }
     // GRD-FR-ZHNV: no operation of a run outlives its loop.
@@ -253,7 +255,7 @@ fn release_and_advance<R: tauri::Runtime>(
 ) {
     let holds =
         crate::graduation::load_run(app, run_id).map(|run| run.holds_queue()).unwrap_or(false);
-    if let Some(state) = app.try_state::<GraduationState>() {
+    if let Some(state) = app.try_project_store::<GraduationState>() {
         state.release_run(stream_id, run_id);
     }
     if holds {

@@ -3,10 +3,9 @@
 //! `save_delivery_layout(scope, layout)` (DMS-FR-XAZV). The overlay and the
 //! publish journal have no command (DMS-FR-VEHN).
 
-use tauri::Manager;
+use crate::project::OpenProject as _;
 
 use crate::logging::{log_debug, log_info, log_warn, Domain, LogBuffer, BUFFER};
-use crate::project::ProjectState;
 
 use super::super::{machine_store, DeliveryError};
 use super::layout::{load_layout, parse_scope, save_layout, DeliveryLayout};
@@ -44,7 +43,7 @@ pub fn load_delivery_layout_with<R: tauri::Runtime>(
     buffer: &'static LogBuffer,
     scope: &str,
 ) -> Result<DeliveryLayout, DeliveryError> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let store = machine_store(&project).inspect_err(|e| {
         log_refusal(app, buffer, "load_delivery_layout", scope, e);
     })?;
@@ -69,7 +68,7 @@ pub fn save_delivery_layout_with<R: tauri::Runtime>(
     scope: &str,
     layout: &DeliveryLayout,
 ) -> Result<(), DeliveryError> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let store = machine_store(&project).inspect_err(|e| {
         log_refusal(app, buffer, "save_delivery_layout", scope, e);
     })?;
@@ -91,6 +90,7 @@ pub fn save_delivery_layout_with<R: tauri::Runtime>(
 }
 
 /// DMS contract surface: `"load delivery layout (scope)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_delivery_layout(
     app: tauri::AppHandle,
@@ -100,6 +100,7 @@ pub fn load_delivery_layout(
 }
 
 /// DMS contract surface: `"save delivery layout (scope, layout)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_delivery_layout(
     app: tauri::AppHandle,

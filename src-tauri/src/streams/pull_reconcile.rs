@@ -9,9 +9,9 @@
 //! stream. Nothing here writes a branch or a worktree before the landing of
 //! `crate::git::land_on_branch`.
 
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::path::Path;
-
-use tauri::{Emitter, Manager};
 
 use super::commands::{project_key, project_root};
 use super::update_git::{self, Resolutions};
@@ -41,10 +41,13 @@ pub fn begin_pull<'a, R: tauri::Runtime>(
     if let Some((stream_id, run_id)) = busy_stream_on_branch(app, branch) {
         return Err(format!("{}: {stream_id}, {run_id}", crate::worktree::ERR_WORK_STREAM_BUSY));
     }
-    match app.try_state::<StreamState>() {
-        Some(state) => state
+    match app.try_project_store::<StreamState>() {
+        Some(crate::project_scope::Scoped::Managed(state)) => state
             .inner()
             .begin_repository_update(&format!("pull:{worktree}"), Reconciliation::Pull)
+            .map(Some),
+        Some(crate::project_scope::Scoped::Owned(state, _)) => state
+            .begin_repository_update_shared(&format!("pull:{worktree}"), Reconciliation::Pull)
             .map(Some),
         None => Ok(None),
     }
@@ -141,7 +144,7 @@ pub fn reconcile_pull_blocking<R: tauri::Runtime>(
     remote_tip: &str,
 ) -> PullReconcileOutcome {
     let emit = |name: &str, payload: serde_json::Value| {
-        let _ = app.emit(name, payload);
+        let _ = app.emit_project(name, payload);
     };
     let output = PullOutput::new(&emit);
     let root = match project_root(app) {
@@ -150,7 +153,7 @@ pub fn reconcile_pull_blocking<R: tauri::Runtime>(
     };
     let label = gtc::pull_label(&root);
     let work = || reconcile_in(app, &output, &root, strategy, local_tip, remote_tip);
-    let outcome = match app.try_state::<crate::progress::ProgressRegistry>() {
+    let outcome = match app.try_project_store::<crate::progress::ProgressRegistry>() {
         Some(registry) => crate::progress::attribute(
             app,
             registry.inner(),

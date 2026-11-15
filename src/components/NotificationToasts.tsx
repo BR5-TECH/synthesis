@@ -144,6 +144,14 @@ function ToastItem({
           >
             <LevelIcon size={12} className="icon" />
             <span data-testid="notification-toast-level">{toast.level}</span>
+            {toast.projectName ? (
+              <span
+                data-testid="notification-toast-project"
+                style={{ fontWeight: 400, overflowWrap: "anywhere" }}
+              >
+                {toast.projectName}
+              </span>
+            ) : null}
           </span>
           <span
             style={{

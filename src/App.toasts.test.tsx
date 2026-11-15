@@ -186,7 +186,7 @@ describe("the worktree fallback toast", () => {
   async function openOnFallback(worktreePath: string | null) {
     invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       const answer = await defaultInvoke(cmd, args);
-      if (cmd === "open_project_at_path") {
+      if (cmd === "open_project_at_path" || cmd === "resolve_project_at_path") {
         return { ...(answer as object), rememberedWorktreeUnavailable: true };
       }
       if (cmd === "get_active_worktree" && worktreePath !== null) {

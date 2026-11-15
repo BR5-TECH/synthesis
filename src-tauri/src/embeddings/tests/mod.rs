@@ -21,6 +21,7 @@ mod documents;
 mod failures;
 mod git_moves;
 mod jobs;
+mod projects;
 mod search;
 mod switches;
 

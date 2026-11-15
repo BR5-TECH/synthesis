@@ -9,6 +9,8 @@
 //! the terms of every run.
 
 use super::*;
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 
 /// GRD-FR-HMDW: the prefix of the queue key of a head branch's PR summary
 /// queue.
@@ -164,6 +166,7 @@ pub(crate) fn completed_run_summaries<R: tauri::Runtime>(
 
 /// GRD-FR-HMDW: enqueue a PR summary run for the pull request from `head` into
 /// `base`, and offer the project a dispatch.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn start_pull_request_summary<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -172,7 +175,7 @@ pub fn start_pull_request_summary<R: tauri::Runtime>(
     mode: PrSummaryMode,
 ) -> Result<GraduationRun, String> {
     let run = {
-        let state = app.try_state::<GraduationState>();
+        let state = app.try_project_store::<GraduationState>();
         let _write = state.as_ref().map(|state| state.write_guard());
         enqueue_pull_request_summary(&app, &head, &base, mode, completed_run_summaries)?
     };
@@ -286,7 +289,7 @@ pub(crate) fn project_repo<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<git2::Repository, String> {
     let root = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|state| state.root())
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     crate::streams::primary_repo_of(&root)
@@ -304,7 +307,7 @@ pub fn reclaim_ended_pr_summary_run<R: tauri::Runtime>(
     if !run.is_pr_summary() || !run.state.is_terminal() {
         return;
     }
-    if app.try_state::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
+    if app.try_project_store::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
         return;
     }
     if !driver::pr_summary_checkout::stands(app, run) {

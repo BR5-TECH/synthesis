@@ -6,6 +6,8 @@
 
 use super::*;
 use crate::change_proposals::ApplyRunGate;
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 
 /// The records of the project's runs that are not terminal, read from the
 /// run order's index.
@@ -63,7 +65,7 @@ pub fn admit_plan_proposal<R: tauri::Runtime>(
     run_id: &str,
     proposal_id: &str,
 ) {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let written = runs::load_run(app, run_id).and_then(|mut run| {
         match run.rest.as_mut() {
@@ -107,7 +109,7 @@ pub fn plan_questions_stand<R: tauri::Runtime>(
     else {
         return false;
     };
-    let Some(project) = app.try_state::<ProjectState>() else {
+    let Some(project) = app.open_project_state() else {
         return false;
     };
     let (Ok(root), Ok(worktree)) = (project.require_store(), project.require_root()) else {
@@ -145,7 +147,7 @@ pub fn hand_over_answers<R: tauri::Runtime>(
     set_id: &str,
     answers: &[crate::comments::QuestionAnswer],
 ) -> Result<Option<AnswerHandOver>, String> {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let Some(mut run) = run_of_set(app, set_id) else {
         return Ok(None);
@@ -185,7 +187,7 @@ pub fn hand_over_answers<R: tauri::Runtime>(
 /// before, and Continue stays refused while the set stands. A rest that no
 /// longer names the set is left as it is. A write that fails is logged.
 pub fn undo_hand_over<R: tauri::Runtime>(app: &tauri::AppHandle<R>, hand_over: &AnswerHandOver) {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     let written = runs::load_run(app, &hand_over.run_id).and_then(|mut run| {
         match run.rest.as_mut() {
@@ -245,7 +247,7 @@ pub fn delete_plan_question_set<R: tauri::Runtime>(app: &tauri::AppHandle<R>, ru
     let Some((set_id, thread_id)) = plan_question_set(run) else {
         return;
     };
-    let Some(project) = app.try_state::<ProjectState>() else {
+    let Some(project) = app.open_project_state() else {
         return;
     };
     let deleted = project.require_store().and_then(|root| {

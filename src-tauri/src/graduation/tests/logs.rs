@@ -255,14 +255,23 @@ fn a_stream_that_cannot_be_written_rests_the_run_until_continue_repairs_it() {
     // while they still cannot be written.
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     assert!(
-        crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).is_err(),
+        crate::graduation::continue_graduation_run(
+            fx.app.clone(),
+            run.id.clone(),
+            Default::default()
+        )
+        .is_err(),
         "Continue does not move a run whose logs still cannot be written"
     );
 
     // The obstruction goes, and Continue then replays what was pending.
     std::fs::remove_dir_all(&path).expect("clear the obstruction");
-    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("Continue succeeds once the stream can be written");
+    let continued = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .expect("Continue succeeds once the stream can be written");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
 
     assert_eq!(continued.state, GraduationRunState::Queued);
@@ -523,14 +532,23 @@ fn a_pending_queue_of_both_streams_replays_each_into_its_own() {
     std::fs::remove_dir_all(paths.stream(GraduationLogStream::Structured)).unwrap();
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     assert!(
-        crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).is_err()
+        crate::graduation::continue_graduation_run(
+            fx.app.clone(),
+            run.id.clone(),
+            Default::default()
+        )
+        .is_err()
             || crate::graduation::load_run(&fx.app, &run.id).unwrap().logs.persistence.is_healthy(),
         "Continue either repairs both streams or refuses"
     );
 
     std::fs::remove_dir_all(paths.stream(GraduationLogStream::Activity)).ok();
-    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("continued");
+    let continued = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert!(continued.logs.persistence.is_healthy());
     assert!(!paths.pending().exists(), "the queue is cleared once it is empty");
@@ -633,8 +651,12 @@ fn a_run_that_rested_on_a_log_failure_resumes_the_pass_it_was_in() {
     std::fs::write(&path, held).unwrap();
 
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("continued");
+    let continued = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
 
     assert!(continued.logs.persistence.is_healthy());

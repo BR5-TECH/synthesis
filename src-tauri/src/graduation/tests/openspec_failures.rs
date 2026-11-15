@@ -26,7 +26,12 @@ fn start_apply_raw(
     fx: &Fixture,
     stream: &crate::streams::WorkStream,
 ) -> Result<GraduationRun, crate::openspec::Refusal> {
-    crate::graduation::start_change_apply(fx.app.clone(), stream.id.clone(), CHANGE.into())
+    crate::graduation::start_change_apply(
+        fx.app.clone(),
+        stream.id.clone(),
+        CHANGE.into(),
+        Default::default(),
+    )
 }
 
 fn comment_files(fx: &Fixture) -> Vec<String> {
@@ -100,6 +105,7 @@ fn a_propose_start_rejects_cli_unavailable_as_an_object() {
         StandingWork::Keep,
         None,
         Some(CHANGE.into()),
+        Default::default(),
     )
     .unwrap_err();
     assert_eq!(
@@ -114,6 +120,7 @@ fn a_propose_start_rejects_cli_unavailable_as_an_object() {
         StandingWork::Keep,
         None,
         None,
+        Default::default(),
     )
     .unwrap_err();
     assert_eq!(serde_json::to_value(&other).unwrap(), serde_json::json!("unknown_stream"));
@@ -130,6 +137,7 @@ fn the_progress_command_rejects_with_the_object() {
         fx.app.clone(),
         stream.id.clone(),
         CHANGE.to_string(),
+        Default::default(),
     ))
     .unwrap_err();
     assert_eq!(failure.code, "cli_rejected");
@@ -278,8 +286,12 @@ fn a_mode_that_turns_off_refuses_continue_from_a_plan_rest() {
     std::fs::remove_file(fx.root().join("openspec/config.yaml")).unwrap();
     let before = fx.reload(&rested.id);
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let refused =
-        crate::graduation::continue_graduation_run(fx.app.clone(), rested.id.clone()).unwrap_err();
+    let refused = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        rested.id.clone(),
+        Default::default(),
+    )
+    .unwrap_err();
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert_object(&refused, "openspec_validation_unavailable");
     let failure = refused.openspec().unwrap();

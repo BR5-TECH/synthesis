@@ -22,7 +22,7 @@ fn make_fifo(path: &Path) {
 /// read that blocks is a failed test rather than a stuck one.
 fn within_five_seconds<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
     let (send, receive) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         let _ = send.send(work());
     });
     receive.recv_timeout(Duration::from_secs(5)).expect("the operation ended")

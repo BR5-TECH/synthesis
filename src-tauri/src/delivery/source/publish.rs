@@ -8,11 +8,12 @@
 //! relation goes into the publish journal before the next request, so a
 //! failed publish is resumed and never makes a second copy of the plan.
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashMap;
 use std::time::Instant;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::delivery::github::edits::{apply_for_target, GithubDeliveryEdit};
 use crate::delivery::github::plan::{parse_item_id, PlanRef};
@@ -381,7 +382,7 @@ pub fn publish_impl<R: Runtime>(app: &AppHandle<R>) -> Result<PublishResult, Del
         )));
     }
     let store = github::machine_store(app).map_err(fail)?;
-    let state = app.state::<GithubDeliveryState>();
+    let state = app.project_store::<GithubDeliveryState>();
     let _turn = state.edits.enter();
     // A read first: it checks the configuration (GPP-FR-DEZO) before anything
     // is written, and it gives the edits a read cache.
@@ -446,6 +447,7 @@ pub fn publish_impl<R: Runtime>(app: &AppHandle<R>) -> Result<PublishResult, Del
 }
 
 /// DSR contract surface: `"publish delivery to github"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn publish_delivery_to_github(app: AppHandle) -> Result<PublishResult, DeliveryError> {
     super::off_thread(move || publish_impl(&app)).await

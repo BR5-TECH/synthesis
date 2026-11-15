@@ -13,6 +13,7 @@
  */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as api from "../../api";
+import { getWindowProjectId, setWindowProjectId } from "../../api/invoke";
 import { endVoiceForTeardown } from "../../voice/voiceController";
 import { flushDraftTemplate } from "../../state/draftTemplate";
 import { resetPanelReveals } from "../../state/panelReveal";
@@ -390,6 +391,18 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
     } catch {
       // Best-effort: a teardown failure must not strand the user in a project
       // they asked to leave — the frontend state is reset either way.
+    }
+    // PJT-FR-JSAW / PWN-FR-YRXF: the window of a project tab closes with its
+    // project while other tabs stay open. The last tab stays and shows the picker.
+    const projectId = getWindowProjectId();
+    if (projectId) {
+      try {
+        const closed = await api.closeProjectWindow(projectId);
+        if (!closed.lastClosed) return;
+      } catch (e) {
+        logWarn(["frontend"], "project window close failed", { error: String(e) });
+      }
+      setWindowProjectId(null);
     }
     resetShellState();
     setScreen("picker");

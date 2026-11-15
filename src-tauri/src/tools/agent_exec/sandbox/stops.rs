@@ -23,8 +23,7 @@ where
     );
 }
 
-/// EAC-FR-ABHG: stop every VM. Called when the project closes and when the
-/// application exits.
+/// EAC-FR-ABHG: stop every VM. Called when the application exits.
 pub async fn stop_all<S>(sink: &S)
 where
     S: LogSink + Clone + Send + Sync + 'static,
@@ -45,7 +44,7 @@ pub fn stop_scope_in_background<R: tauri::Runtime>(
     queue_key: String,
 ) {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         stop_scope(&app, &project_key, &queue_key).await;
     });
 }
@@ -59,7 +58,7 @@ where
     F: FnOnce() -> bool + Send + 'static,
 {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         if production_pool().stop_when(&vm, still_idle).await {
             logging::log_info(
                 &app,
@@ -80,12 +79,24 @@ where
     });
 }
 
-/// EAC-FR-ABHG: stop every VM when the project closes, without holding the
-/// close.
-pub fn stop_all_in_background<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+/// EAC-FR-ABHG: stop the VMs of one project and no other. Called when that
+/// project closes: the other open projects keep their VMs.
+pub async fn stop_project<S>(sink: &S, project_key: &str)
+where
+    S: LogSink + Clone + Send + Sync + 'static,
+{
+    production_pool().stop_project(project_key).await;
+    logging::log_info(sink, &BUFFER, &DOMAINS, "sandbox VMs of a project stopped", log_fields! {});
+}
+
+/// EAC-FR-ABHG: stop the VMs of the closing project, without holding the close.
+pub fn stop_project_in_background<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    project_key: String,
+) {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        stop_all(&app).await;
+    crate::project_scope::context::spawn(async move {
+        stop_project(&app, &project_key).await;
     });
 }
 
@@ -94,7 +105,7 @@ pub fn stop_all_in_background<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// it never blocks inside an asynchronous runtime.
 pub fn stop_all_before_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let app = app.clone();
-    let stopped = std::thread::spawn(move || {
+    let stopped = crate::project_scope::context::thread_spawn(move || {
         tauri::async_runtime::block_on(async move {
             let _ = tokio::time::timeout(EXIT_STOP_BOUND, stop_all(&app)).await;
         });

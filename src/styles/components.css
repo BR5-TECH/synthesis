@@ -2,6 +2,7 @@
 @import "./components/notification-toasts.css";
 @import "./components/create-pull-request.css";
 @import "./components/about-panel.css";
+@import "./components/project-tabs.css";
 @import "./components/main-branch-write.css";
 @import "./components/header.css";
 @import "./components/changes-panel.css";

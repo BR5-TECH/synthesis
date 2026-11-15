@@ -118,6 +118,7 @@ A project can connect to **MCP servers** (Model Context Protocol), so that the a
 ### Logging
 61. **MCS-FR-KEEF** The module logs under the `backend` domain through `LGC-logging.md`: an `INFO` record for each connection opened and closed, each sign-in that starts and ends, and each status change; a `WARN` record for each failure, with its failure class.
 62. **MCS-FR-MABN** A log record of this module names the server id, the scope, the transport, the auth mode, the status, the failure class, and a duration. It names no URL, command, argument, environment value, header, secret, token, authorization code, tool argument, or tool result.
+63. **MCS-FR-LIWQ** Server records, trust, sign-in, and live connections are held per open project, keyed by project id. Every command takes `project_id`. The connections of a project tab that is not in front stay open. Closing one project closes only its connections (`PWN-project-windows.md` PWN-FR-NXQW).
 
 ## Contract surface
 

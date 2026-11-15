@@ -1,6 +1,8 @@
 //! Scheduling a housekeeping pass off the path that triggered it.
 
 use super::*;
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 
 // ---------------------------------------------------------------------------
 // Scheduling (DAS-FR-15, DAS-FR-19)
@@ -38,7 +40,7 @@ pub fn schedule_draft_sweep<R: tauri::Runtime>(
     // The worker reaches the shared state through the app handle rather than
     // borrowing it from here, so the thread outlives this call and the caller
     // returns without waiting on anything.
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         run_sweep_worker(app, root, draft, locked);
     });
     answer
@@ -52,8 +54,7 @@ pub(super) fn run_sweep_worker<R: tauri::Runtime>(
     draft_id: String,
     locked: bool,
 ) {
-    use tauri::Manager as _;
-    let Some(sweeper) = app.try_state::<DraftAssetSweeper>() else {
+    let Some(sweeper) = app.try_project_store::<DraftAssetSweeper>() else {
         return;
     };
     let cancelled = sweeper.shutdown.clone();
@@ -116,8 +117,7 @@ pub(super) fn report_sweep<R: tauri::Runtime>(
 /// it records carries `complete` false — nothing reports a completed sweep for
 /// work it did not complete.
 pub fn begin_shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    use tauri::Manager as _;
-    if let Some(sweeper) = app.try_state::<DraftAssetSweeper>() {
+    if let Some(sweeper) = app.try_project_store::<DraftAssetSweeper>() {
         sweeper.begin_shutdown();
     }
 }
@@ -130,8 +130,7 @@ pub fn begin_shutdown<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// reopening the last project at launch — the second request is coalesced into
 /// the first (DAS-FR-15) rather than running a duplicate pass.
 pub fn sweep_at_application_start<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    use tauri::Manager as _;
-    let Some(sweeper) = app.try_state::<DraftAssetSweeper>() else {
+    let Some(sweeper) = app.try_project_store::<DraftAssetSweeper>() else {
         return;
     };
     if sweeper.started.swap(true, Ordering::SeqCst) {
@@ -154,14 +153,13 @@ pub fn sweep_at_application_start<R: tauri::Runtime>(app: &tauri::AppHandle<R>) 
 /// `PST-project-storage.md` PST-FR-30). Each draft gets its own pass and its own
 /// tally, so one draft whose prompt cannot be read costs the others nothing.
 pub fn sweep_project_draft_assets<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    use tauri::Manager as _;
-    let Some(project) = app.try_state::<ProjectState>() else {
+    let Some(project) = app.open_project_state() else {
         return;
     };
     let Ok(root) = project.require_root() else {
         return;
     };
-    let Some(sweeper) = app.try_state::<DraftAssetSweeper>() else {
+    let Some(sweeper) = app.try_project_store::<DraftAssetSweeper>() else {
         return;
     };
     let hierarchy = crate::drafts::list_drafts_impl(&root);

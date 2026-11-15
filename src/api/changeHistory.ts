@@ -3,7 +3,7 @@
 // NCP-new-change-proposals.md, contract surfaces). This module is the only
 // place their command names live.
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 import type {
   ChangeSplit,

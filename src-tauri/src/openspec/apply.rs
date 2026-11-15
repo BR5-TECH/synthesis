@@ -6,6 +6,7 @@
 //! applied. The seam runs it with the artifact `apply` alone (OSM-FR-VALR). It
 //! reads nothing of the change itself: the CLI parses `tasks.md`.
 
+use crate::project::OpenProject as _;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -227,8 +228,7 @@ pub fn read_apply_progress_now<R: tauri::Runtime>(
 ) -> Result<ApplyInstructions, OpenSpecReadError> {
     use tauri::Manager;
     let seam = app.try_state::<OpenSpec>().ok_or(OpenSpecReadError::OpenSpecModeInactive)?;
-    let active =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let active = app.open_project_state().and_then(|p| p.require_root().ok());
     let location = change::ChangeLocation::Stream { stream_id: stream_id.to_string() };
     let at = change::working_copy(app, &location)?;
     seam.apply_instructions(app, &logging::BUFFER, active.as_ref(), &at, name)
@@ -236,13 +236,14 @@ pub fn read_apply_progress_now<R: tauri::Runtime>(
 
 /// OSM-FR-PEAK, OFP-FR-QLQJ: `"read apply progress"`, on a blocking thread.
 /// Every failure rejects as an `OpenSpecFailure`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn read_apply_progress<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     change: String,
 ) -> Result<ApplyProgress, Box<super::OpenSpecFailure>> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         read_apply_progress_now(&app, &stream_id, &change)
             .map(|read| read.progress())
             .map_err(|e| Box::new(e.to_failure()))

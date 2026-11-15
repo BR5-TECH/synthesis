@@ -8,6 +8,7 @@
 //! specifications of the review checkout, the review reads the result, and a
 //! `ready` over specifications that are not valid is never applied.
 
+use crate::project::OpenProject as _;
 use std::path::Path;
 
 use super::*;
@@ -30,11 +31,10 @@ pub async fn specs_validation<R: tauri::Runtime>(
     if !run.merge.as_ref().is_some_and(|merge| merge.openspec_gate) {
         return Ok(None);
     }
-    let active =
-        app.try_state::<crate::project::ProjectState>().and_then(|state| state.require_root().ok());
+    let active = app.open_project_state().and_then(|state| state.require_root().ok());
     let owned = app.clone();
     let root = checkout.to_path_buf();
-    let outcome = tauri::async_runtime::spawn_blocking(move || {
+    let outcome = crate::project_scope::context::spawn_blocking(move || {
         let seam = owned.try_state::<OpenSpec>().ok_or(OpenSpecReadError::CliUnavailable(
             crate::openspec::OpenSpecCliState::NotFound,
         ))?;

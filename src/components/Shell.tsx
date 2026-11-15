@@ -62,6 +62,12 @@ interface TopChromeProps {
   // pending Editor changes; false cancels it. Required — see ProjectSwitcher.
   onBeforeSwitchProject: () => Promise<boolean>;
   onOpenAnother: () => void;
+  // PJT-FR-GASB: the switcher resolves a pick and leaves the choice of tab to the
+  // host. Absent, it opens the pick in this window as before.
+  resolveProjects?: boolean;
+  // PJT-FR-VRRI: the project tab strip, between the search bar and the trailing
+  // cluster. Absent on macOS and while one project is open.
+  projectTabs?: React.ReactNode;
   // SNV-FR-32 / WTS-FR-02: the worktree rooting the project, or null when the
   // project's content root is not inside a Git repository — in which case no
   // selector is rendered and the project switcher is followed directly by the
@@ -132,6 +138,8 @@ export function TopChrome({
   onSwitchProject,
   onBeforeSwitchProject,
   onOpenAnother,
+  resolveProjects,
+  projectTabs,
   activeWorktree,
   onSwitchWorktree,
   onRequestMergeCommit,
@@ -226,6 +234,7 @@ export function TopChrome({
           onBeforeSwitch={onBeforeSwitchProject}
           onOpenAnother={onOpenAnother}
           onOpen={onOverlayOpening}
+          resolveOnly={resolveProjects}
         />
         {/* SNV-FR-32: second and third in the leading cluster — the project
             switcher names which repository is open, the selector names which of
@@ -380,6 +389,7 @@ export function TopChrome({
       </div>
 
       <div className="top-chrome__right" ref={clusters.rightRef}>
+        {projectTabs}
         {/* SNV-FR-59: the trailing cluster holds the agents control and then the
             theme selector, in that fixed order — the two things that belong to
             the author rather than to the repository. The control is present

@@ -7,10 +7,11 @@
 //! item again and updates the read cache (GDP-FR-VNNU). An overlay edit writes
 //! the per-machine overlay alone and makes no GitHub request (GDP-FR-YBHD).
 
+use crate::project_scope::ProjectStores;
 use std::time::Instant;
 
 use serde::Deserialize;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::delivery::machine_state::{
     read_delivery_overlay, write_delivery_overlay, DeliveryOverlay, RelatesEdge,
@@ -729,7 +730,7 @@ pub fn apply_edit_impl<R: Runtime>(
         crate::log_fields! { "edit" => name },
     );
     let result = delivery_target(app).and_then(|target| {
-        let state = app.state::<GithubDeliveryState>();
+        let state = app.project_store::<GithubDeliveryState>();
         let _turn = state.edits.enter();
         apply_for_target(app, &target, &edit)
     });

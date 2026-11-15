@@ -7,7 +7,7 @@
 //! [`super::transition`], which calls [`sync`], so the operation starts and ends
 //! at the same place the state changes.
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use crate::log_fields;
 use crate::logging::{self, Domain, BUFFER};
@@ -54,7 +54,7 @@ fn end_state_of(state: GraduationRunState) -> OperationState {
 /// keeps the one operation.
 pub(super) fn sync<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
     let (Some(state), Some(registry)) =
-        (app.try_state::<GraduationState>(), app.try_state::<ProgressRegistry>())
+        (app.try_project_store::<GraduationState>(), app.try_project_store::<ProgressRegistry>())
     else {
         return;
     };
@@ -103,7 +103,7 @@ pub(super) fn sync<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &Graduatio
 /// outlives it.
 pub fn end_with_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str) {
     let (Some(state), Some(registry)) =
-        (app.try_state::<GraduationState>(), app.try_state::<ProgressRegistry>())
+        (app.try_project_store::<GraduationState>(), app.try_project_store::<ProgressRegistry>())
     else {
         return;
     };

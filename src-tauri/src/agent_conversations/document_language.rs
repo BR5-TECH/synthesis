@@ -177,6 +177,8 @@ pub(crate) fn target_text(
         DiscussionTarget::Change { stream_id, change } => {
             super::change_language_text(stream_id, change, fragment)
         }
+        // CMS-FR-RHXL: the Map holds no text of its own to read a language from.
+        DiscussionTarget::Map => None,
     }
 }
 
@@ -203,6 +205,7 @@ pub(crate) fn log_document_language<R: tauri::Runtime>(
         DiscussionTarget::Draft { .. } => "draft",
         DiscussionTarget::Note { .. } => "note",
         DiscussionTarget::Change { .. } => "change",
+        DiscussionTarget::Map => "map",
     };
     logging::log_debug(
         app,

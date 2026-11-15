@@ -45,6 +45,7 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
         resolved: true,
         created_at: "2026-01-01T00:00:00Z".into(),
         updated_at: "2026-01-02T00:00:00Z".into(),
+        map_node: None,
         resolution: ResolutionMarks::default(),
     };
     let json = serde_json::to_value(&thread).unwrap();

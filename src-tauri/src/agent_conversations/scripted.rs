@@ -401,6 +401,7 @@ impl CompletionSeam for ScriptedCompletion {
             DISCUSS_DRAFT_PROMPT_TEMPLATE,
             DISCUSS_NOTE_PROMPT_TEMPLATE,
             DISCUSS_CHANGE_PROMPT_TEMPLATE,
+            DISCUSS_MAP_PROMPT_TEMPLATE,
         ]
         .iter()
         .any(|template| carries_template(&request.instructions, template));
@@ -492,7 +493,14 @@ impl CompletionSeam for ScriptedCompletion {
                 // CVL-FR-XHKB: and asks the author for a run.
                 with_change.push(crate::tools::request_change_action::NAME);
                 with_change.push(crate::tools::decide_change_edits::NAME);
-                [base, with_draft, with_prompt, with_change]
+                // CVL-FR-LCSN: a Map turn has the plan tools, in the order of
+                // `plan_tools_for_turn`, while the delivery source allows them.
+                let mut with_plan = base.clone();
+                with_plan.push(crate::tools::plan_issue_read::LIST_NAME);
+                with_plan.push(crate::tools::plan_issue_read::SEARCH_NAME);
+                with_plan.push(crate::tools::plan_issue_read::READ_NAME);
+                with_plan.push(crate::tools::propose_plan_changes::NAME);
+                [base, with_draft, with_prompt, with_change, with_plan]
             })
             .collect();
         assert!(

@@ -117,7 +117,14 @@
 .smap-count[data-state="gap"] { color: var(--danger); }
 .smap-dot { flex: none; width: 5px; height: 5px; border-radius: 50%; }
 
-.smap-body { flex: 1; min-height: 0; display: flex; position: relative; }
+.smap-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  /* SMP-FR-SWCL: the width the Discussion column takes at the right edge, which an overlay inspector stays clear of. */
+  --smap-column: 0px;
+}
 /* The column of the canvas. The notice line of SMP-FR-KVKD stands above the
    body, outside the containing block of the overlay inspector. */
 .smap-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -563,7 +570,8 @@
 .smap-inspector[data-overlay] {
   position: absolute;
   top: 0;
-  right: 0;
+  /* SMP-FR-SWCL: the overlay stands left of the Discussion column. */
+  right: var(--smap-column, 0px);
   bottom: 0;
   z-index: 60;
   width: 300px;

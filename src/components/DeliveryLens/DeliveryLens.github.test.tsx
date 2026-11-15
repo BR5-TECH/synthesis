@@ -385,7 +385,7 @@ describe("the items of a GitHub plan (MDL-FR-JPYU, MDL-FR-ECPZ, MDL-FR-NTVL, MDL
     await openPlan();
     expect(document.querySelector(".flow-actionhost")).toBeNull();
     expect(screen.queryByRole("button", { name: "Actions" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Discuss/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Discuss$/ })).toBeNull();
     expect(callsOf(b, "list_discussions")).toHaveLength(0);
   });
 

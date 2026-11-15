@@ -22,6 +22,7 @@ import {
 } from "../../state/openspec/changeRoutes";
 import { discussionTargetKey, type Tab, type WorktreeEntry } from "../../types";
 import type { EditSessionStore } from "../../state/editSessions";
+import { SpecMapSessionStore } from "../../state/specMap/session";
 import { createDiscussionActions } from "./discussionActions";
 import { worktreeChangeLocation } from "./openspecChangeActions";
 
@@ -80,6 +81,8 @@ describe("a reveal of a change discussion", () => {
       activateTab: vi.fn(),
       openArtifact: vi.fn(),
       openDraft: vi.fn(),
+      openMap: vi.fn(),
+      specMap: new SpecMapSessionStore(),
       sessions: { update: vi.fn() } as unknown as EditSessionStore,
       setFocusThread: vi.fn(),
     });

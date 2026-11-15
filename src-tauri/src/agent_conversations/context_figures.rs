@@ -168,7 +168,7 @@ pub(super) fn split_of_sections(instructions: u64, sections: &[InputSection]) ->
     for section in sections {
         let tokens = section_tokens(section);
         match section.tag.as_str() {
-            TAG_ARTIFACT | TAG_NOTE_CONTEXT => split.document += tokens,
+            TAG_ARTIFACT | TAG_NOTE_CONTEXT | TAG_MAP_CONTEXT => split.document += tokens,
             TAG_DISCUSSION_HISTORY => split.history += tokens,
             TAG_CURRENT_COMMENT => split.current_comment += tokens,
             _ => split.history += tokens,

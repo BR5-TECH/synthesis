@@ -35,6 +35,7 @@ export * from "./github";
 export * from "./agentic";
 export * from "./aiApi";
 export * from "./comments";
+export * from "./mapPlan";
 export * from "./agents";
 export * from "./agentConversations";
 export * from "./docker";

@@ -294,6 +294,17 @@ pub enum Attachment {
         /// `apply` or `rework`.
         action: String,
     },
+    /// CMS-FR-OIUO: a node reference of the Map. As the attachment of a human
+    /// comment it is the **focus** of the turn the comment triggers
+    /// (`MPR-map-plan-proposals.md` MPR-FR-PMLX). Stored as appended; this module
+    /// checks nothing about the node it names.
+    #[serde(rename_all = "camelCase")]
+    MapNode { node: MapNodeRef },
+    /// CMS-FR-OIUO: a reference to one plan proposal of a Map discussion
+    /// (`MPR-map-plan-proposals.md`). Identity alone, appended through
+    /// `append_as` alone; no [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    MapPlanProposal { proposal_id: String },
     /// CMS-FR-TUHL: the comment is the Synthesis of an agent group
     /// (`AGC-agent-conversations.md` AGC-FR-CZCU). Holds no content, and appears
     /// through an agent turn's append alone.
@@ -387,6 +398,70 @@ pub enum AttachmentInput {
     /// CMS-FR-MTUL: stored verbatim as an [`Attachment::NewChangeSubject`].
     #[serde(rename_all = "camelCase")]
     NewChangeSubject { proposal_id: String, stream_id: String, change: String },
+    /// CMS-FR-OIUO / MPR-FR-PMLX: the focus node of a Map comment, stored
+    /// verbatim as an [`Attachment::MapNode`].
+    #[serde(rename_all = "camelCase")]
+    MapNode { node: MapNodeRef },
+}
+
+/// MPR-FR-CEKS: the lens of the Map that a node belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MapLens {
+    Delivery,
+    Specifications,
+}
+
+impl MapLens {
+    /// The lens as the wire spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MapLens::Delivery => "delivery",
+            MapLens::Specifications => "specifications",
+        }
+    }
+}
+
+/// MPR-FR-CEKS: what kind of node a node reference names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MapNodeKind {
+    Item,
+    Milestone,
+    Index,
+    Spec,
+}
+
+impl MapNodeKind {
+    /// The kind as the wire spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MapNodeKind::Item => "item",
+            MapNodeKind::Milestone => "milestone",
+            MapNodeKind::Index => "index",
+            MapNodeKind::Spec => "spec",
+        }
+    }
+}
+
+/// CMS-FR-SJTY / MPR-FR-CEKS: a reference to one node of the Map.
+///
+/// Two references name the same node when `lens`, `kind`, and `id` are equal.
+/// `label` is the name shown to the author and takes no part in the match.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MapNodeRef {
+    pub lens: MapLens,
+    pub kind: MapNodeKind,
+    pub id: String,
+    pub label: String,
+}
+
+impl MapNodeRef {
+    /// MPR-FR-MYLA: whether two references name the same node.
+    pub fn names_same_node(&self, other: &MapNodeRef) -> bool {
+        self.lens == other.lens && self.kind == other.kind && self.id == other.id
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -502,6 +577,10 @@ pub struct Discussion {
     pub resolved: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// CMS-FR-SJTY: the node reference of a Map thread. Fixed by the opening
+    /// event. Absent for the Map thread itself and for every other owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map_node: Option<MapNodeRef>,
     /// CMS-FR-WKZR: the two flags `resolved` is folded from. Internal to the
     /// backend and never serialized, so the wire shape has one flag only.
     #[serde(skip)]
@@ -574,6 +653,11 @@ impl Discussion {
         }
     }
 
+    /// CMS-FR-RHXL: whether the discussion belongs to the Map owner.
+    pub fn is_map(&self) -> bool {
+        matches!(self.target, DiscussionTarget::Map)
+    }
+
     /// The file the discussion is about: the fragment's path, else the artifact of
     /// an artifact-owned discussion, else `""`.
     pub fn file_rel(&self) -> &str {
@@ -636,6 +720,10 @@ pub enum EventBody {
         draft_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fragment_target: Option<FragmentTarget>,
+        /// CMS-FR-SJTY: the node reference of a Map thread. Written only where
+        /// present, and never changed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        map_node: Option<MapNodeRef>,
     },
     #[serde(rename_all = "camelCase")]
     CommentAdded {

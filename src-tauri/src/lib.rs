@@ -53,6 +53,7 @@ pub mod isolation;
 pub mod layout;
 pub mod library;
 pub mod logging;
+pub mod map_plan;
 pub mod mcp;
 pub mod menu;
 pub mod model_downgrades;
@@ -580,6 +581,12 @@ pub fn run() {
             comments::read_discussion,
             comments::open_discussion,
             comments::get_or_create_note_discussion,
+            comments::find_map_discussion,
+            comments::get_or_create_map_discussion,
+            comments::list_map_discussions,
+            map_plan::list_map_plan_proposals,
+            map_plan::accept_map_plan_row,
+            map_plan::reject_map_plan_row,
             comments::add_comment,
             comments::set_discussion_resolution,
             comments::reanchor_discussion_fragment,

@@ -104,6 +104,9 @@ fn create_item_makes_a_milestone() {
             container_id: None,
             description: Some("Second".into()),
             due: Some("2027-01-01".into()),
+            parent_id: None,
+            milestone_id: None,
+            labels: Vec::new(),
         },
     )
     .unwrap();
@@ -121,6 +124,9 @@ fn create_item_makes_a_milestone() {
             container_id: Some("issue-1".into()),
             description: None,
             due: None,
+            parent_id: None,
+            milestone_id: None,
+            labels: Vec::new(),
         },
     )
     .unwrap_err();
@@ -142,6 +148,9 @@ fn create_item_makes_an_issue_in_its_containers() {
             container_id: Some("issue-2".into()),
             description: None,
             due: None,
+            parent_id: None,
+            milestone_id: None,
+            labels: Vec::new(),
         },
     )
     .unwrap();
@@ -166,6 +175,9 @@ fn create_item_makes_an_issue_in_its_containers() {
             container_id: Some("milestone-1".into()),
             description: None,
             due: None,
+            parent_id: None,
+            milestone_id: None,
+            labels: Vec::new(),
         },
     )
     .unwrap();
@@ -189,6 +201,9 @@ fn create_item_needs_an_available_type() {
         container_id: None,
         description: None,
         due: None,
+        parent_id: None,
+        milestone_id: None,
+        labels: Vec::new(),
     };
     assert_eq!(create(&h, feature()).unwrap_err().code, ERR_ISSUE_TYPE_UNAVAILABLE);
     h.fake.lock().types = Vec::new();
@@ -210,6 +225,9 @@ fn create_item_needs_an_available_type() {
         container_id: None,
         description: None,
         due: None,
+        parent_id: None,
+        milestone_id: None,
+        labels: Vec::new(),
     };
     assert_eq!(create(&h, task).unwrap_err().code, ERR_ISSUE_TYPE_UNAVAILABLE);
 }

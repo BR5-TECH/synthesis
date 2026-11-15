@@ -135,6 +135,7 @@ mod failures;
 mod flow_context;
 mod groups;
 mod key_input;
+pub(crate) mod map_context;
 mod material;
 mod native_calls;
 mod openrouter_carrier;
@@ -144,6 +145,7 @@ mod provider_memory;
 mod registry;
 mod reporting;
 mod responses_repair;
+mod retiring;
 mod retries;
 mod rig_bridge;
 mod rig_messages;
@@ -184,6 +186,7 @@ use material::*;
 use provider_memory::*;
 pub use registry::*;
 use reporting::*;
+pub use retiring::*;
 use retries::*;
 pub use rig_bridge::*;
 pub use rig_messages::*;
@@ -264,6 +267,11 @@ pub const DISCUSS_NOTE_PROMPT_TEMPLATE: &str =
 pub const DISCUSS_CHANGE_PROMPT_TEMPLATE: &str =
     include_str!("../../resources/prompts/discuss-change.md");
 
+/// CVL-FR-LCSN: a Map thread, in which the author plans delivery from the HLD
+/// down to milestones, features, and tasks.
+pub const DISCUSS_MAP_PROMPT_TEMPLATE: &str =
+    include_str!("../../resources/prompts/discuss-map.md");
+
 /// CVL-FR-03: a turn's prompt is selected by its origin kind and by nothing else.
 ///
 /// The selection is the extension point beside the builder of AGC-FR-05: a
@@ -289,6 +297,8 @@ pub fn prompt_template(kind: OriginKind) -> &'static str {
         OriginKind::NoteDiscussion => DISCUSS_NOTE_PROMPT_TEMPLATE,
         // CVL-FR-FGGI: the whole change.
         OriginKind::ChangeDiscussion => DISCUSS_CHANGE_PROMPT_TEMPLATE,
+        // CVL-FR-LCSN: the Map.
+        OriginKind::MapDiscussion => DISCUSS_MAP_PROMPT_TEMPLATE,
     }
 }
 
@@ -715,6 +725,9 @@ fn conversation_tools<R: tauri::Runtime>(
             session,
         )));
     }
+    // CVL-FR-LCSN: the plan tools of a Map turn, while the delivery source allows
+    // them. Decided at the start of this turn, and never for another turn.
+    tools.extend(plan_tools_for_turn(app, roots, origin, author, proposed));
     // CVL-FR-TJZI: the tools of the ready MCP servers of the project, last.
     tools.extend(crate::mcp::conversation_tools(app));
     tools
@@ -928,65 +941,6 @@ pub fn retry_impl<R: tauri::Runtime>(
             },
         );
     })
-}
-
-/// AGC-FR-31: a later **human** comment in this conversation retires its offer
-/// to retry.
-///
-/// Called from the human write path alone (CMS-FR-11's acting participant), so
-/// an agent's own answer retires nothing: an agent answering elsewhere in the
-/// thread does not mean the author has stopped wanting the answer that failed.
-pub fn retire_recoverable_for_human_comment<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    thread_id: &str,
-) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else {
-        return;
-    };
-    let Some(turn) = turns.retire_recoverable(thread_id) else {
-        return;
-    };
-    logging::log_info(
-        app,
-        turns.buffer(),
-        &[Domain::Ai, Domain::Backend],
-        "an offer to retry was retired by a later comment",
-        log_fields! {
-            "turnId" => &turn.id,
-            "agent" => &turn.nickname,
-            "discussionId" => thread_id,
-        },
-    );
-}
-
-/// AGC-FR-TQLC: retire the turns a discussion has outstanding, because its
-/// question set has been answered.
-///
-/// A submission retires or discards the asking turn **whether or not that agent
-/// is among the agents the submission dispatches to**. The ordinary retirement
-/// is per agent at dispatch (`dispatch.rs`), which would leave an agent that
-/// asked and was not dispatched to awaiting a reply for good — the answers reach
-/// the agents as fresh later turns and never by resuming the turn that asked
-/// (ADQ-FR-ZXAF).
-///
-/// Called from the submission alone, on its success path.
-pub fn retire_awaiting_for_thread<R: tauri::Runtime>(app: &tauri::AppHandle<R>, thread_id: &str) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else {
-        return;
-    };
-    let retired = turns.retire_awaiting_on_thread(thread_id);
-    if retired == 0 {
-        return;
-    }
-    logging::log_info(
-        app,
-        turns.buffer(),
-        &[Domain::Ai, Domain::Backend],
-        "turns awaiting a question set were retired by its answers",
-        log_fields! { "discussionId" => thread_id, "turns" => retired as u64 },
-    );
 }
 
 #[cfg(test)]

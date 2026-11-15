@@ -22,8 +22,12 @@ import {
 import { logInfo, logWarn } from "../../logging";
 import { deliveryLensData } from "../../state/delivery/lensData";
 import { deriveSpecLinks } from "../../state/delivery/specLinks";
+import { deliveryNodeOf } from "../../state/specMap/nodeRefs";
+import { DiscussionToggle } from "../MapDiscussion";
+import { useWindowWidth } from "../SpecMap/useElementSize";
 import { FlowSessionStore } from "../../state/flowSessions";
 import type { SpecMapSessionStore } from "../../state/specMap/session";
+import type { FlowItem } from "../../state/flowDocument";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import { describeSource } from "../DeliverySettingsSection";
 import type { FlowCanvasHandle, FlowViewState } from "../Flow";
@@ -71,6 +75,8 @@ export interface DeliveryLensProps {
   onOverlayOpening?: () => void;
   /** The Flow sessions, the claim flow, and the routes of the shell. */
   host?: DeliveryHost;
+  /** SMP-FR-WNLR: the Discussion column and its splitter, at the right edge of the body. */
+  discussion?: ReactNode;
 }
 
 export function DeliveryLens(props: DeliveryLensProps) {
@@ -104,6 +110,7 @@ function ActiveLens({
   onOverlayOpening,
   host,
   plan,
+  discussion,
 }: DeliveryLensProps & { host: DeliveryHost; plan: ReturnType<typeof useDeliveryPlan> }) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const state = store.snapshot();
@@ -156,13 +163,25 @@ function ActiveLens({
     keptView || data.selection.length > 0
       ? { view: keptView ?? DEFAULT_VIEW, selection: data.selection }
       : undefined;
+  // SMP-FR-DUUU: the node the author selected, for **Use selected node**.
+  const docRef = useRef(plan.doc);
+  docRef.current = plan.doc;
   const onViewChange = useCallback(
     (next: FlowViewState) => {
       store.keepDeliveryView(next.view);
       data.selection = next.selection;
+      const only = next.selection.length === 1 ? next.selection[0] : null;
+      const item = only === null ? undefined : docRef.current?.items.find((i) => i.id === only);
+      store.setDeliveryNode(item ? deliveryNodeOf(item) : null);
     },
     [store, data],
   );
+  // MDL-FR-QELI: **Discuss** hands the node of an item or a milestone to the column.
+  const onDiscuss = useCallback(
+    (item: FlowItem) => store.discuss(deliveryNodeOf(item)),
+    [store],
+  );
+  const windowWidth = useWindowWidth();
 
   const panelSpecs = (itemId: string) => (
     <SpecsList
@@ -251,6 +270,7 @@ function ActiveLens({
         onOpenArtifact={onOpenArtifact}
         onOverlayOpening={onOverlayOpening}
         onSourceChanged={onSourceChanged}
+        onDiscuss={onDiscuss}
       />
     );
   } else if (source.kind === "file") {
@@ -268,6 +288,7 @@ function ActiveLens({
         onStates={setFileStates}
         onOverlayOpening={onOverlayOpening}
         onSourceChanged={onSourceChanged}
+        onDiscuss={onDiscuss}
       />
     );
   }
@@ -277,9 +298,16 @@ function ActiveLens({
       <div className="smap-toolbar" role="toolbar" aria-label="Map controls">
         {lensSwitch}
         <Rollup rollup={leafRollup(plan.doc, states)} />
+        {discussion !== undefined && (
+          <>
+            <span className="smap-toolbar__spacer" />
+            <DiscussionToggle store={store} labelled={windowWidth >= 1000} />
+          </>
+        )}
       </div>
       <div className="smap-body">
         <div className="smap-main dlens-main">{body}</div>
+        {discussion}
       </div>
     </div>
   );

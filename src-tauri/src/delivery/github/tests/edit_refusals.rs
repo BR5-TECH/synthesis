@@ -225,6 +225,9 @@ fn a_partial_edit_names_its_cause() {
         container_id: Some("issue-2".into()),
         description: None,
         due: None,
+        parent_id: None,
+        milestone_id: None,
+        labels: Vec::new(),
     };
     let refused = apply_for_target(&app, &target, &create).unwrap_err();
     assert_eq!(refused.code, ERR_PARTIAL_EDIT);

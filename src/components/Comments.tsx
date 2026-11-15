@@ -84,6 +84,8 @@ function wholeNoun(discussion: Discussion): string {
       return "note";
     case "change":
       return "change";
+    case "map":
+      return "map";
   }
 }
 
@@ -259,7 +261,8 @@ export function Comments({ panel, onReveal }: CommentsProps) {
     const attachments = attachmentCount(item);
     // CMP-FR-06: the owner's name — an artifact's path, a draft's name, or a
     // note's label.
-    const path = ownerLabelOf(item.discussion.target);
+    // CMP-FR-27: a Map thread is labelled Map, and a node thread by its node.
+    const path = item.discussion.mapNode?.label ?? ownerLabelOf(item.discussion.target);
     // CMP-FR-27: a whole-target discussion carries no fragment quote, there
     // being no passage it is pinned to.
     const whole = !isFragmentTargeted(item.discussion);
@@ -399,6 +402,10 @@ export function Comments({ panel, onReveal }: CommentsProps) {
             fragmentTarget: item.discussion.fragmentTarget,
             resolved: item.discussion.resolved,
             ownerLabel: path,
+            // SMP-FR-QHBV: the node thread the Map tab selects.
+            ...(item.discussion.target.kind === "map"
+              ? { mapNode: item.discussion.mapNode ?? null }
+              : {}),
             subject: discussionSubject(item.discussion),
             ownerUnavailable: item.ownerUnavailable,
           })

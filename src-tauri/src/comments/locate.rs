@@ -202,6 +202,11 @@ pub fn read_discussion_by_id(
     if let Some(discussion) = locate_note_discussion(root, discussion_id) {
         return Some(discussion);
     }
+    // CMS-FR-GWBK: a Map thread is read by its id, though no list returns it.
+    if let Some(discussion) = fold_map_discussions(root).into_iter().find(|d| d.id == discussion_id)
+    {
+        return Some(discussion);
+    }
     for draft in crate::drafts::list_drafts_impl(worktree).drafts {
         let target = DiscussionTarget::Draft { draft_id: draft.id };
         if let Some(discussion) = locate_discussion_of(root, &target, discussion_id) {

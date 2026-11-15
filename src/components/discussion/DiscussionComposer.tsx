@@ -23,7 +23,7 @@
  * `../DraftDiscussion/OpenDiscussion.tsx`, which post, attach, and clear on the
  * same terms.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Icon } from "../icons";
 import {
@@ -128,6 +128,22 @@ interface ComposerCommon {
    * with the most time left. A reply composer draws the timeout bar from it.
    */
   turnDeadline?: TurnDeadline | null;
+  /**
+   * Attachments the comment carries beside the strip, for a post in either
+   * mode — the `map_node` focus of a Map message (SMP-FR-DUUU). Not shown in
+   * the strip and not removable there.
+   */
+  extraAttachments?: readonly AttachmentInput[];
+  /**
+   * What the owner draws above the field, inside the composer — the Focus chip
+   * of the Map column (SMP-FR-DUUU).
+   */
+  accessory?: ReactNode;
+  /**
+   * The key the unsent text is kept under, where the owner needs a key finer
+   * than the target of an opening composer.
+   */
+  sessionKey?: string;
 }
 
 export type DiscussionComposerProps = ComposerCommon &
@@ -149,12 +165,6 @@ export type DiscussionComposerProps = ComposerCommon &
         onOpen: (request: OpenDiscussionRequest) => Promise<Discussion>;
         /** Called with the discussion the backend returned, after the field is cleared. */
         onOpened?: (discussion: Discussion) => void;
-        /**
-         * DCR-FR-MTFD: attachments the opening comment carries beside the strip
-         * — the `proposal_hunk` of a hunk discussion. Not shown in the strip and
-         * not removable there; discarding the composer discards them.
-         */
-        extraAttachments?: readonly AttachmentInput[];
       }
   );
 
@@ -166,7 +176,8 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   const participantLabel = useParticipantLabel();
   const { agents } = props;
   const sessionKey =
-    props.mode === "reply" ? props.discussion.id : discussionTargetKey(props.target);
+    props.sessionKey ??
+    (props.mode === "reply" ? props.discussion.id : discussionTargetKey(props.target));
   const session = useDiscussionSession(sessionKey);
   const latestProps = useRef(props);
   latestProps.current = props;
@@ -242,14 +253,19 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
         key,
       });
       if (current.mode === "reply") {
-        await current.onReply(current.discussion.id, text, [...sent.quotes], inputs);
+        await current.onReply(
+          current.discussion.id,
+          text,
+          [...sent.quotes],
+          [...(current.extraAttachments ?? []), ...inputs],
+        );
       } else if (bound) {
         replied = await postReply(
           locatorOf(current.target),
           bound.id,
           text,
           [...sent.quotes],
-          inputs,
+          [...(current.extraAttachments ?? []), ...inputs],
           current.agents,
         );
       } else {
@@ -459,6 +475,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
           </button>
         </div>
       ))}
+      {props.accessory}
       <div
         className="comment-composer"
         // CMT-FR-45: a file dropped on the composer attaches without the Attach

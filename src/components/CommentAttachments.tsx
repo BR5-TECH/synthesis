@@ -18,6 +18,7 @@
  */
 import { AdvisorsListView } from "./discussion/GroupMarks";
 import { ExportRequestCard } from "./ExportDialog/ExportRequestCard";
+import { MapNodeChip, MapPlanProposalCard } from "./MapPlanProposal";
 import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
@@ -756,7 +757,9 @@ function AttachmentView({
         | "changeActionRequest"
         | "synthesis"
         | "advisors"
-        | "changeProposal";
+        | "changeProposal"
+        | "mapNode"
+        | "mapPlanProposal";
     }
   >;
 }) {
@@ -915,6 +918,12 @@ export function CommentAttachmentList({
         ) : a.kind === "changeActionRequest" ? (
           // OCW-FR-QCPB: a reference control that opens the change.
           <ChangeActionReferenceControl key={i} attachment={a} />
+        ) : a.kind === "mapPlanProposal" ? (
+          // SMP-FR-PPJB / MPV-FR-IBSF: the review card of a plan proposal.
+          <MapPlanProposalCard key={i} discussionId={threadId} proposalId={a.proposalId} />
+        ) : a.kind === "mapNode" ? (
+          // MPR-FR-PMLX: the focus a message was sent with.
+          <MapNodeChip key={i} node={a.node} />
         ) : (
           <AttachmentView
             key={i}

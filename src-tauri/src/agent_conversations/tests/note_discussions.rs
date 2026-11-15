@@ -245,6 +245,8 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
         OriginKind::DraftComment,
         OriginKind::DraftDiscussion,
         OriginKind::NoteDiscussion,
+        // CVL-FR-LCSN: the Map prompt names the tags of the Map builder.
+        OriginKind::MapDiscussion,
     ] {
         let prompt = prompt_template(kind);
         let expected = input_tags(kind);
@@ -256,13 +258,18 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
         let mut named: Vec<&str> = Vec::new();
         let mut cursor = 0usize;
         while cursor < prompt.len() {
-            let next =
-                [TAG_ARTIFACT, TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
-                    .into_iter()
-                    .filter_map(|tag| {
-                        prompt[cursor..].find(&format!("<{tag}>")).map(|at| (cursor + at, tag))
-                    })
-                    .min();
+            let next = [
+                TAG_ARTIFACT,
+                TAG_NOTE_CONTEXT,
+                TAG_MAP_CONTEXT,
+                TAG_DISCUSSION_HISTORY,
+                TAG_CURRENT_COMMENT,
+            ]
+            .into_iter()
+            .filter_map(|tag| {
+                prompt[cursor..].find(&format!("<{tag}>")).map(|at| (cursor + at, tag))
+            })
+            .min();
             match next {
                 Some((at, tag)) => {
                     if !named.contains(&tag) {

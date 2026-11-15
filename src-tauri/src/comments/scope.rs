@@ -31,6 +31,10 @@ pub enum LogScope<'a> {
     NoteDiscussion {
         note_id: &'a str,
     },
+    /// CMS-FR-ACLX: the one log of the Map owner, `comments/map/discussion.jsonl`.
+    /// It holds the Map thread and every node thread. Its attachments sit in
+    /// the same folder.
+    MapDiscussion,
     /// CMS-FR-GJEY: the per-file fragment logs of one OpenSpec change, in the
     /// change's own folder of the store.
     ChangeFile {
@@ -53,6 +57,7 @@ impl LogScope<'_> {
         match self {
             LogScope::Artifact => log_path(root, file_rel),
             LogScope::NoteDiscussion { note_id } => note_discussion_log_path(root, note_id),
+            LogScope::MapDiscussion => map_discussion_log_path(root),
             LogScope::Draft { draft_id } => fsa::resolve_under(
                 draft_comments_dir(root, draft_id)?,
                 format!("{}.jsonl", log_id(file_rel)),
@@ -126,6 +131,8 @@ impl LogScope<'_> {
             // the notes beside it, so deleting one note's conversation takes
             // nothing from another's.
             LogScope::NoteDiscussion { note_id } => note_comments_dir(root, note_id)?,
+            // CMS-FR-ACLX: the Map owner's own folder.
+            LogScope::MapDiscussion => map_comments_dir(root)?,
             // CMS-FR-GJEY: a change's logs, attachments, and question sets sit in
             // the change's own folder.
             LogScope::ChangeFile { stream_id, change }
@@ -177,6 +184,9 @@ pub enum DiscussionTarget {
     /// the change name.
     #[serde(rename_all = "camelCase")]
     Change { stream_id: String, change: String },
+    /// CMS-FR-RHXL: the Map of the project. It carries no field, because a
+    /// project has one Map owner.
+    Map,
 }
 
 impl DiscussionTarget {
@@ -235,6 +245,11 @@ impl<'a> ThreadRef<'a> {
         Self { scope: LogScope::NoteDiscussion { note_id }, file_rel: "" }
     }
 
+    /// CMS-FR-ACLX: the log of the Map owner. It belongs to no one file.
+    pub fn map_discussion() -> ThreadRef<'static> {
+        ThreadRef { scope: LogScope::MapDiscussion, file_rel: "" }
+    }
+
     /// CMS-FR-GJEY: the fragment log of one file of a change, keyed by its
     /// change-relative path.
     pub fn change_file(stream_id: &'a str, change: &'a str, file_rel: &'a str) -> Self {
@@ -258,6 +273,7 @@ impl<'a> ThreadRef<'a> {
                 fold_artifact_discussion(root, artifact_id)
             }
             LogScope::NoteDiscussion { note_id } => fold_note_discussion(root, note_id),
+            LogScope::MapDiscussion => fold_map_discussions(root),
             LogScope::ChangeFile { stream_id, change } => {
                 list_change_fragment_discussions_in(root, stream_id, change, self.file_rel)
             }

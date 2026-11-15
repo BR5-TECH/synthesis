@@ -126,6 +126,10 @@ pub(super) fn stage_attachment(
                 bytes: None,
             })
         }
+        // CMS-FR-OIUO: recorded verbatim. The node is neither looked up nor checked.
+        AttachmentInput::MapNode { node } => {
+            Ok(StagedAttachment { attachment: Attachment::MapNode { node }, bytes: None })
+        }
         // CMS-FR-KAXQ: recorded verbatim; both ids must name something.
         AttachmentInput::NewDraftSubject { proposal_id, draft_id } => {
             if proposal_id.trim().is_empty() || draft_id.trim().is_empty() {

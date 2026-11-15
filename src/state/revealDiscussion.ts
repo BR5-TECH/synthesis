@@ -27,6 +27,7 @@ import {
   discussionTargetKey,
   type DiscussionTarget,
   type FragmentTarget,
+  type MapNodeRef,
 } from "../types";
 
 /** What a route knows about the discussion it reveals. */
@@ -42,6 +43,8 @@ export interface DiscussionReveal {
   subject: string;
   /** The caller already knows that the owner no longer resolves. */
   ownerUnavailable?: boolean;
+  /** SMP-FR-QHBV: the node of a Map thread. Null is the Map thread itself. */
+  mapNode?: MapNodeRef | null;
 }
 
 /** Where the route landed. */

@@ -356,6 +356,30 @@ pub fn note_discussion_of(root: &crate::fs::RootFs, note_id: &str) -> Option<Dis
     fold_note_discussion(root, note_id).into_iter().next()
 }
 
+/// CMS-FR-ACLX: the folder of the Map owner, `comments/map/`, behind the FSA-FR-10
+/// escape gate. It holds the log and the attachments of every Map thread.
+pub(super) fn map_comments_dir(root: &crate::fs::RootFs) -> Result<PathBuf, String> {
+    fsa::resolve_under(root, format!("{COMMENTS_REL}/{MAP_SUBDIR}")).map_err(|e| e.to_string())
+}
+
+/// CMS-FR-ACLX: the absolute path of the one log of the Map owner.
+pub(super) fn map_discussion_log_path(root: &crate::fs::RootFs) -> Result<PathBuf, String> {
+    fsa::resolve_under(map_comments_dir(root)?, DISCUSSION_LOG_NAME).map_err(|e| e.to_string())
+}
+
+/// CMS-FR-ACLX: every Map thread the log of the Map owner holds, the Map thread
+/// and the node threads alike, in the order they were begun.
+pub fn fold_map_discussions(root: &crate::fs::RootFs) -> Vec<Discussion> {
+    let Ok(path) = map_discussion_log_path(root) else {
+        return Vec::new();
+    };
+    let Ok(text) = root.read_text(&path) else {
+        // No log yet is simply no Map thread; the first append creates it.
+        return Vec::new();
+    };
+    fold_events_for(FoldTarget::MapDiscussion, parse_events(&text))
+}
+
 /// CMS-FR-55: the absolute path of a draft's one reserved discussion log,
 /// inside that draft's own comments folder wherever it is filed (CMS-FR-37).
 pub(super) fn discussion_log_path(
@@ -601,6 +625,7 @@ pub fn list_discussions_in(root: &crate::fs::RootFs, target: &DiscussionTarget) 
             v
         }
         DiscussionTarget::Note { note_id } => fold_note_discussion(root, note_id),
+        DiscussionTarget::Map => fold_map_discussions(root),
         DiscussionTarget::Change { stream_id, change } => {
             let mut v = list_all_change_fragment_discussions_in(root, stream_id, change);
             v.extend(fold_change_discussion(root, stream_id, change));
@@ -626,7 +651,7 @@ fn stored_draft_ids(root: &crate::fs::RootFs) -> Vec<String> {
 }
 
 /// CMS-FR-32: every discussion of every scope the store holds — artifact
-/// (fragment and whole-target), draft and note — each with its owner target.
+/// (fragment and whole-target), draft, note, change and Map thread — each with its owner target.
 ///
 /// Ordered most-recently-active first, id breaking a tie. `owner_unavailable` is
 /// true where the owner no longer resolves: an artifact path with no file, a draft
@@ -666,6 +691,11 @@ pub fn list_all_discussions_in(
         for discussion in list_discussions_in(root, &target) {
             out.push(DiscussionListItem { discussion, owner_unavailable: false });
         }
+    }
+    // CMS-FR-GWBK: the Map threads are listed with the others. The Map is the
+    // project itself, so its owner always resolves.
+    for discussion in fold_map_discussions(root) {
+        out.push(DiscussionListItem { discussion, owner_unavailable: false });
     }
     sort_items(&mut out);
     out

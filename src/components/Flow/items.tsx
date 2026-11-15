@@ -19,6 +19,7 @@ import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { measureContainer } from "./measure";
 import type { ContainerMeasure } from "./useFlowLayout";
 import { ReferenceRows } from "./references";
+import type { MenuBindings } from "../MapDiscussion/NodeMenu";
 
 /** What an item shows of the delivery state and the overlaps. */
 export interface ItemFacts {
@@ -47,6 +48,11 @@ export interface ItemHandlers {
   onSelectItems: (ids: string[]) => void;
   onOpenTracker: (url: string) => void;
   onOpenReference: (artifact: ArtifactOption) => void;
+  /**
+   * MDL-FR-HULA: the handlers that open the context menu of the item. Present
+   * where the host offers **Discuss**, and then the item takes the focus.
+   */
+  menu?: MenuBindings;
 }
 
 interface ItemViewBase {
@@ -222,6 +228,8 @@ export function CardView(props: CardViewProps) {
       data-magnet={magnet}
       data-pending={facts.pending}
       style={{ left: at.x, top: at.y }}
+      tabIndex={handlers.menu ? 0 : undefined}
+      {...handlers.menu}
       onPointerDown={(e) => {
         if (!isInteractive(e.target)) handlers.onDragStart(e);
       }}
@@ -403,6 +411,8 @@ export function ContainerView(props: ContainerViewProps) {
       data-collapsed={props.collapsed}
       data-pending={facts.pending}
       style={{ left: at.x, top: at.y, width: size.width, height: size.height }}
+      tabIndex={handlers.menu ? 0 : undefined}
+      {...handlers.menu}
       onPointerUp={handlers.onPointerUp}
     >
       <div

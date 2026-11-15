@@ -17,6 +17,7 @@ pub mod cache;
 pub mod edits;
 pub mod http;
 pub mod plan;
+pub mod plan_reads;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -53,6 +54,12 @@ pub const ERR_ISSUE_TYPE_UNAVAILABLE: &str = "issue_type_unavailable";
 pub const ERR_KIND_CHANGE_UNSUPPORTED: &str = "kind_change_unsupported";
 /// GDP-FR-YGXA.
 pub const ERR_MILESTONE_EDGE_UNSUPPORTED: &str = "milestone_edge_unsupported";
+/// GDP-FR-ICDW.
+pub const ERR_LABEL_UNKNOWN: &str = "label_unknown";
+/// GDP-FR-KOWL.
+pub const ERR_STATUS_UNKNOWN: &str = "status_unknown";
+/// GDP-FR-MVAA.
+pub const ERR_NO_CHANGE: &str = "no_change";
 /// GDP-FR-HULQ.
 pub const ERR_TRACKER_ITEM_NOT_FOUND: &str = "tracker_item_not_found";
 pub const ERR_ALREADY_IN_PLAN: &str = "already_in_plan";

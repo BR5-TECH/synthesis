@@ -28,6 +28,73 @@ pub(super) const MAX_MODEL_CALLS: usize = 8;
 /// anything that happened.
 pub(super) const MAX_COUNTED_NATIVE_REPORTS: u32 = 30;
 
+/// MPR-FR-ZCAM: whether a delivery source allows the plan tools. It is true
+/// only for a GitHub Project whose configuration is `valid`
+/// (`GPP-github-polling.md` GPP-FR-NLPG). Pure.
+pub(crate) fn plan_tools_allowed(source: &crate::delivery::source::DeliverySource) -> bool {
+    matches!(
+        source,
+        crate::delivery::source::DeliverySource::Github { configuration, .. }
+            if configuration.state == crate::github_polling::ConfigurationState::Valid
+    )
+}
+
+/// MPR-FR-ZCAM: whether the delivery source of the open project allows the plan
+/// tools. Checked at the start of a turn. It reads memory and the settings of
+/// the project and makes no request. A source that cannot be resolved allows
+/// nothing.
+pub(crate) fn map_plan_tools_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    crate::delivery::source::resolve_source(app).is_ok_and(|source| plan_tools_allowed(&source))
+}
+
+/// CVL-FR-LCSN, MPR-FR-ZCAM: whether a turn is attached the plan tools. Only a
+/// Map turn is, and only where the delivery source allows them (`enabled`).
+/// No other turn ever is. Pure.
+pub(crate) fn plan_tools_wanted(origin: &ConversationOrigin, enabled: bool) -> bool {
+    origin.is_map() && enabled
+}
+
+/// CVL-FR-LCSN: the plan tools of one turn: `list_plan_issues`,
+/// `search_plan_issues`, `read_plan_issue`, and `propose_plan_changes`.
+///
+/// The gate decides first: a turn that is not a Map turn, and a Map turn whose
+/// delivery source does not allow the tools, get nothing. After the gate, the
+/// four tools are bound to `origin`, and `propose_plan_changes` to `author`,
+/// `roots`, and `proposed`. It ends the turn on the call that succeeded
+/// (CVL-FR-15). The three read tools end nothing.
+pub(super) fn plan_tools_for_turn<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    roots: Roots<'_>,
+    origin: &ConversationOrigin,
+    author: &Participant,
+    proposed: &Arc<AtomicBool>,
+) -> Vec<rig::tool::DynamicTool> {
+    if !plan_tools_wanted(origin, origin.is_map() && map_plan_tools_enabled(app)) {
+        return Vec::new();
+    }
+    vec![
+        erase_tool(crate::tools::plan_issue_read::ListPlanIssuesTool::new(
+            app.clone(),
+            origin.clone(),
+        )),
+        erase_tool(crate::tools::plan_issue_read::SearchPlanIssuesTool::new(
+            app.clone(),
+            origin.clone(),
+        )),
+        erase_tool(crate::tools::plan_issue_read::ReadPlanIssueTool::new(
+            app.clone(),
+            origin.clone(),
+        )),
+        erase_tool(crate::tools::propose_plan_changes::ProposePlanChangesTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(proposed),
+        )),
+    ]
+}
+
 /// Erase a `PortableTool` into the form the loop can dispatch by name.
 ///
 /// The typed `PortableTool` knows its own argument type; the loop has a name and

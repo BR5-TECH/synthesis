@@ -28,12 +28,14 @@ const CLASSIFIER_INSTRUCTIONS_CHARS: usize = 2_000;
 
 /// CVL-FR-HNGB: the tools an advisor turn does not carry — the tools that end a
 /// turn on a contribution, and the tools that decide a proposal.
-pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 12] = [
+pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 13] = [
     crate::tools::ask_user_comment::NAME,
     crate::tools::request_document_export::NAME,
     crate::tools::ask_discussion_questions::NAME,
     crate::tools::propose_draft_changes::NAME,
     crate::tools::propose_new_draft::NAME,
+    // CVL-FR-HNGB, CVL-FR-FCWM: a plan proposal ends a turn on a contribution.
+    crate::tools::propose_plan_changes::NAME,
     crate::tools::propose_prompt_changes::NAME,
     crate::tools::decide_draft_changes::NAME,
     crate::tools::decide_prompt_changes::NAME,

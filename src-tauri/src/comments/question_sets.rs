@@ -180,6 +180,9 @@ pub enum DiscussionRef {
         stream_id: String,
         change: String,
     },
+    /// CMS-FR-ACLX: the log of the Map owner. All Map threads share it, and the
+    /// thread id picks the thread.
+    Map,
 }
 
 impl DiscussionRef {
@@ -189,6 +192,7 @@ impl DiscussionRef {
             DiscussionRef::Draft { draft_id } => ThreadRef::discussion(draft_id),
             DiscussionRef::Artifact { artifact_id } => ThreadRef::artifact_discussion(artifact_id),
             DiscussionRef::Note { note_id } => ThreadRef::note_discussion(note_id),
+            DiscussionRef::Map => ThreadRef::map_discussion(),
             DiscussionRef::Change { stream_id, change } => {
                 ThreadRef::change_discussion(stream_id, change)
             }
@@ -216,6 +220,7 @@ pub fn discussion_ref_of(discussion: &Discussion) -> Option<DiscussionRef> {
         DiscussionTarget::Change { stream_id, change } => {
             DiscussionRef::Change { stream_id: stream_id.clone(), change: change.clone() }
         }
+        DiscussionTarget::Map => DiscussionRef::Map,
     })
 }
 

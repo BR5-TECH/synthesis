@@ -153,11 +153,30 @@ export interface SharedConversationContext {
   allTurns: readonly AgentTurn[];
 }
 
+/**
+ * An owner whose threads are not read with `"list discussions for target"` and
+ * not opened with `"open discussion"` supplies its own read and its own opening.
+ * The Map does so (`MPR-map-plan-proposals.md` MPR-FR-MAXH, CMS-FR-QUMW).
+ */
+export interface DiscussionsOverrides {
+  /** The read of every thread of the owner. */
+  list?: () => Promise<Discussion[]>;
+  /** The opening of a thread with its first comment. */
+  open?: (args: {
+    body: string;
+    attachments: AttachmentInput[];
+    spokenOriginal?: string;
+  }) => Promise<Discussion>;
+}
+
 export function useDiscussions(
   target: DiscussionTarget | undefined,
   enabled: boolean,
   shared?: SharedConversationContext,
+  overrides?: DiscussionsOverrides,
 ): UseDiscussionsResult {
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
   const [threads, setThreads] = useState<Discussion[]>([]);
   const [identity, setIdentity] = useState<Participant | null>(null);
   const [identityError, setIdentityError] = useState<string | null>(null);
@@ -219,7 +238,7 @@ export function useDiscussions(
       return;
     }
     let cancelled = false;
-    void listDiscussions(current)
+    void (overridesRef.current?.list ?? (() => listDiscussions(current)))()
       .then((loaded) => {
         // A payload that is not a list is treated as no discussions rather than
         // rendered: one malformed answer costs the surface its conversations,
@@ -363,6 +382,8 @@ export function useDiscussions(
       // CMS-FR-UEXD: a change owner holds both kinds in one column.
       if (kind === "change_discussion" || kind === "change_comment")
         return originChangeKey(turn.origin) === targetKey;
+      // CMS-FR-RHXL: every thread of the Map is one column.
+      if (kind === "map_discussion") return targetKey === "map";
       return false;
     },
     [targetKey],
@@ -574,14 +595,16 @@ export function useDiscussions(
       const current = targetRef.current;
       if (!current) throw new Error("no discussion target");
       try {
-        const created = await openDiscussion({
-          target: current,
-          fragmentTarget,
-          body,
-          attachments,
-          // VOM-FR-QWMK: the transcript of a translated speech comment.
-          ...spokenOriginalArgs(body),
-        });
+        const created = overridesRef.current?.open
+          ? await overridesRef.current.open({ body, attachments, ...spokenOriginalArgs(body) })
+          : await openDiscussion({
+              target: current,
+              fragmentTarget,
+              body,
+              attachments,
+              // VOM-FR-QWMK: the transcript of a translated speech comment.
+              ...spokenOriginalArgs(body),
+            });
         clearError(COMPOSER_KEY);
         mergeThread(created);
         dispatchFor(created, body);
@@ -624,7 +647,7 @@ export function useDiscussions(
         // A refusal because the discussion was resolved since the surface last read
         // it must also re-render the card as resolved, or the composer invites a
         // second attempt at something that cannot succeed.
-        void listDiscussions(current)
+        void (overridesRef.current?.list ?? (() => listDiscussions(current)))()
           .then((loaded) => setThreads(Array.isArray(loaded) ? loaded : []))
           .catch(() => {});
         throw e;

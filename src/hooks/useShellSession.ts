@@ -778,6 +778,8 @@ export function useShellSession(stores: ShellSessionStores = {}) {
       activateTab,
       openArtifact,
       openDraft,
+      openMap: openSpecMap,
+      specMap,
       sessions,
       setFocusThread,
     });

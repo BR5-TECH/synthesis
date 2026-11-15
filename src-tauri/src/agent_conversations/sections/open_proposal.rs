@@ -44,7 +44,7 @@ fn open_hunks(roots: Roots<'_>, target: &DiscussionTarget) -> Option<(String, Ve
                 proposal.changes.into_iter().map(|c| open_hunk(prompt_change_view(c))).collect();
             Some((proposal.path, hunks))
         }
-        DiscussionTarget::Note { .. } => None,
+        DiscussionTarget::Note { .. } | DiscussionTarget::Map => None,
         // CEP-FR-XXMW: the change's pending proposal, each hunk with its path.
         DiscussionTarget::Change { stream_id, change } => {
             let open =

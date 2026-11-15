@@ -25,6 +25,19 @@ use super::cache::TrackerRead;
 use super::plan::{build_plan, issue_id, milestone_id, parse_item_id, BuiltPlan, PlanRef};
 use super::*;
 
+mod extra;
+mod rows;
+
+pub(crate) use rows::{apply_row, IssueChangeRow, NewIssueRow, RowWrite};
+
+/// GDP-FR-MVAA: the reason `close_item` closes an issue with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseReason {
+    Completed,
+    NotPlanned,
+}
+
 /// GDP-FR-WAKG: how `remove_item` removes an item.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,6 +59,17 @@ pub enum GithubDeliveryEdit {
         description: Option<String>,
         #[serde(default)]
         due: Option<String>,
+        /// GDP-FR-RMNF: the parent issue item. Where given, it replaces the
+        /// container rule for the parent.
+        #[serde(default)]
+        parent_id: Option<String>,
+        /// GDP-FR-RMNF: the milestone item. Where given, it replaces the
+        /// container rule for the milestone.
+        #[serde(default)]
+        milestone_id: Option<String>,
+        /// GDP-FR-RMNF: names of existing repository labels.
+        #[serde(default)]
+        labels: Vec<String>,
     },
     Rename {
         item_id: String,
@@ -95,6 +119,41 @@ pub enum GithubDeliveryEdit {
         number: u64,
         container_id: Option<String>,
     },
+    /// GDP-FR-ICDW.
+    SetLabels {
+        item_id: String,
+        #[serde(default)]
+        add: Vec<String>,
+        #[serde(default)]
+        remove: Vec<String>,
+        updated_at: String,
+    },
+    /// GDP-FR-MVAA.
+    CloseItem {
+        item_id: String,
+        reason: CloseReason,
+        updated_at: String,
+    },
+    /// GDP-FR-KOWL.
+    SetStatus {
+        item_id: String,
+        status: String,
+        updated_at: String,
+    },
+    /// GDP-FR-RMNF: `parent_id` is an issue item id, or `None` to remove the
+    /// parent.
+    SetParent {
+        item_id: String,
+        parent_id: Option<String>,
+        updated_at: String,
+    },
+    /// GDP-FR-RMNF: `milestone_id` is a milestone item id, or `None` to remove
+    /// the milestone.
+    SetMilestone {
+        item_id: String,
+        milestone_id: Option<String>,
+        updated_at: String,
+    },
     SetReferences {
         item_id: String,
         artifact_ids: Vec<String>,
@@ -133,6 +192,11 @@ impl GithubDeliveryEdit {
             Self::RemoveEdge { .. } => "remove_edge",
             Self::RemoveItem { .. } => "remove_item",
             Self::AddExistingIssue { .. } => "add_existing_issue",
+            Self::SetLabels { .. } => "set_labels",
+            Self::CloseItem { .. } => "close_item",
+            Self::SetStatus { .. } => "set_status",
+            Self::SetParent { .. } => "set_parent",
+            Self::SetMilestone { .. } => "set_milestone",
             Self::SetReferences { .. } => "set_references",
             Self::SetFootprint { .. } => "set_footprint",
             Self::LinkDraft { .. } => "link_draft",
@@ -284,6 +348,18 @@ fn issue_kind(kind: Kind) -> Option<IssueKind> {
     }
 }
 
+/// The values of a `create_item` edit.
+struct CreateArgs<'a> {
+    kind: Kind,
+    name: &'a str,
+    container_id: Option<&'a str>,
+    description: &'a Option<String>,
+    due: &'a Option<String>,
+    parent_id: Option<&'a str>,
+    milestone_id: Option<&'a str>,
+    labels: &'a [String],
+}
+
 impl TrackerEdit<'_> {
     /// The plan item `id` names, or `tracker_item_not_found`.
     fn item(&self, id: &str) -> Result<PlanRef, DeliveryError> {
@@ -358,8 +434,41 @@ impl TrackerEdit<'_> {
     /// a new item.
     pub fn apply(&mut self, edit: &GithubDeliveryEdit) -> Result<Option<String>, DeliveryError> {
         match edit {
-            GithubDeliveryEdit::CreateItem { item_kind, name, container_id, description, due } => {
-                self.create(*item_kind, name, container_id.as_deref(), description, due).map(Some)
+            GithubDeliveryEdit::CreateItem {
+                item_kind,
+                name,
+                container_id,
+                description,
+                due,
+                parent_id,
+                milestone_id,
+                labels,
+            } => self
+                .create(CreateArgs {
+                    kind: *item_kind,
+                    name,
+                    container_id: container_id.as_deref(),
+                    description,
+                    due,
+                    parent_id: parent_id.as_deref(),
+                    milestone_id: milestone_id.as_deref(),
+                    labels,
+                })
+                .map(Some),
+            GithubDeliveryEdit::SetLabels { item_id, add, remove, updated_at } => {
+                self.set_labels(item_id, add, remove, updated_at).map(|_| None)
+            }
+            GithubDeliveryEdit::CloseItem { item_id, reason, updated_at } => {
+                self.close_item(item_id, *reason, updated_at).map(|_| None)
+            }
+            GithubDeliveryEdit::SetStatus { item_id, status, updated_at } => {
+                self.set_status(item_id, status, updated_at).map(|_| None)
+            }
+            GithubDeliveryEdit::SetParent { item_id, parent_id, updated_at } => {
+                self.set_parent_of(item_id, parent_id.as_deref(), updated_at).map(|_| None)
+            }
+            GithubDeliveryEdit::SetMilestone { item_id, milestone_id, updated_at } => {
+                self.set_milestone_of(item_id, milestone_id.as_deref(), updated_at).map(|_| None)
             }
             GithubDeliveryEdit::Rename { item_id, name, updated_at } => {
                 let item = self.item(item_id)?;
@@ -495,17 +604,24 @@ impl TrackerEdit<'_> {
         Ok(())
     }
 
-    /// GDP-FR-UDOL, GDP-FR-CNVO: create an item and return its id.
-    fn create(
-        &mut self,
-        kind: Kind,
-        name: &str,
-        container_id: Option<&str>,
-        description: &Option<String>,
-        due: &Option<String>,
-    ) -> Result<String, DeliveryError> {
+    /// GDP-FR-UDOL, GDP-FR-CNVO, GDP-FR-RMNF: create an item and return its id.
+    fn create(&mut self, args: CreateArgs<'_>) -> Result<String, DeliveryError> {
+        let CreateArgs {
+            kind,
+            name,
+            container_id,
+            description,
+            due,
+            parent_id,
+            milestone_id: milestone_item,
+            labels,
+        } = args;
         let Some(issue_kind) = issue_kind(kind) else {
-            if container_id.is_some() {
+            if container_id.is_some()
+                || parent_id.is_some()
+                || milestone_item.is_some()
+                || !labels.is_empty()
+            {
                 return Err(kind_unsupported());
             }
             let created = self
@@ -540,14 +656,30 @@ impl TrackerEdit<'_> {
                 "The repository does not offer the create Type of this kind.",
             ));
         };
-        let (parent, milestone) = containers(self.plan, container_id)?;
+        let (parent, milestone) = self.places(container_id, parent_id, milestone_item)?;
+        let labels = self.canonical_labels(labels)?;
+        self.write_new_issue(
+            NewIssue {
+                title: name.to_string(),
+                body: description.clone().unwrap_or_default(),
+                issue_type,
+                milestone,
+                labels,
+            },
+            parent,
+        )
+        .map(|(number, _)| issue_id(number))
+    }
+
+    /// GDP-FR-UDOL, GDP-FR-MSVS: create the issue, add it to the Project, and set
+    /// its parent. It returns the number and the URL of the issue.
+    fn write_new_issue(
+        &mut self,
+        new: NewIssue,
+        parent: Option<u64>,
+    ) -> Result<(u64, String), DeliveryError> {
         let mut writes = Writes::default();
-        let created = writes.run(self.adapter.create_issue(&NewIssue {
-            title: name.to_string(),
-            body: description.clone().unwrap_or_default(),
-            issue_type,
-            milestone,
-        }))?;
+        let created = writes.run(self.adapter.create_issue(&new))?;
         let number = created.number;
         let node_id = created.node_id.clone();
         let url = created.url.clone();
@@ -564,7 +696,7 @@ impl TrackerEdit<'_> {
         self.refresh(&changed);
         // GDP-FR-MSVS, DSR-FR-ULON: a partial create names the issue it made,
         // so a publish journals it and a retry does not make it twice.
-        result.map(|_| issue_id(number)).map_err(|mut e: DeliveryError| {
+        result.map(|_| (number, url.clone())).map_err(|mut e: DeliveryError| {
             e.created_urls = Some(vec![url]);
             e
         })

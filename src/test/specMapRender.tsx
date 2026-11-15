@@ -22,7 +22,11 @@ export function makeStore(index?: SpecificationIndex, overrides: Partial<SpecMap
     getDeliverySource: vi.fn<SpecMapOps["getDeliverySource"]>(async () => NO_DELIVERY_SOURCE),
     ...overrides,
   };
-  return { store: new SpecMapSessionStore(ops), ops };
+  const store = new SpecMapSessionStore(ops);
+  // SMP-FR-WNLR shows the Discussion column on the first open. A test of
+  // another requirement hides it, so its queries meet the canvas alone.
+  store.setDiscussionVisible(false);
+  return { store, ops };
 }
 
 export function setWindowWidth(width: number): void {

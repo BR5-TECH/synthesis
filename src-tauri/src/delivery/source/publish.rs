@@ -130,6 +130,9 @@ impl<R: Runtime> Run<'_, R> {
                 container_id,
                 description: item.description.clone(),
                 due: item.due.clone(),
+                parent_id: None,
+                milestone_id: None,
+                labels: Vec::new(),
             });
             let new_id = match created {
                 Ok(id) => id,

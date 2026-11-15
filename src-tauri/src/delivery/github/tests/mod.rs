@@ -330,6 +330,9 @@ fn an_edit_that_finishes_while_a_read_is_paused_keeps_its_cache_write() {
         container_id: Some("issue-2".into()),
         description: None,
         due: None,
+        parent_id: None,
+        milestone_id: None,
+        labels: Vec::new(),
     };
     let created = edits::apply_edit_impl(&h.handle(), create).unwrap();
     assert!(has(&created, "issue-101"));

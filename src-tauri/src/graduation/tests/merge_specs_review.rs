@@ -149,7 +149,8 @@ fn a_specs_validation_that_cannot_run_blocks_the_merge_run() {
     assert_eq!(run.state, GraduationRunState::Blocked, "{run:?}");
     assert_eq!(run.blocker.as_ref().unwrap().code, "openspec_validation_unavailable");
     assert!(dispatch.of_part("merge_review").is_empty(), "no review turn is dispatched");
-    let capacity = crate::graduation::get_graduation_capacity(fx.app.clone()).unwrap();
+    let capacity =
+        crate::graduation::get_graduation_capacity(fx.app.clone(), Default::default()).unwrap();
     assert_eq!(capacity.in_use, 1, "the blocked run keeps its project slot");
 
     runner.inner.set("validate", Ok(ok(VALID_SPECS)));

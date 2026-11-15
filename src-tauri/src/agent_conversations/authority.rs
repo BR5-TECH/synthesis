@@ -15,6 +15,7 @@
 //! All three ledgers are memory for the run alone (AGC-FR-23). After a
 //! relaunch no turn runs, so no turn can need an entry of an earlier run.
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashSet;
 
 use super::*;
@@ -132,8 +133,7 @@ impl TurnRegistry {
 /// other path calls it, so a decision comment, a confirmation comment, and an
 /// agent comment are never author comments.
 pub fn note_author_comment<R: tauri::Runtime>(app: &tauri::AppHandle<R>, comment_id: &str) {
-    use tauri::Manager;
-    if let Some(turns) = app.try_state::<TurnRegistry>() {
+    if let Some(turns) = app.try_project_store::<TurnRegistry>() {
         turns.note_author(comment_id);
     }
 }
@@ -164,11 +164,10 @@ impl<R: tauri::Runtime> AuthorityGrant<R> {
 
 impl<R: tauri::Runtime> Drop for AuthorityGrant<R> {
     fn drop(&mut self) {
-        use tauri::Manager;
         if self.spent {
             return;
         }
-        if let Some(turns) = self.app.try_state::<TurnRegistry>() {
+        if let Some(turns) = self.app.try_project_store::<TurnRegistry>() {
             turns.release_authority(&self.comment_id);
         }
     }
@@ -188,8 +187,7 @@ pub fn authorize_decision<R: tauri::Runtime>(
     turn_id: &str,
     instruction: &str,
 ) -> Result<AuthorityGrant<R>, AuthorityRefusal> {
-    use tauri::Manager;
-    let turns = app.try_state::<TurnRegistry>().ok_or(AuthorityRefusal::NotAuthorized)?;
+    let turns = app.try_project_store::<TurnRegistry>().ok_or(AuthorityRefusal::NotAuthorized)?;
     let (newest, speech_open) =
         turns.received_by(turn_id).ok_or(AuthorityRefusal::NotAuthorized)?;
     if speech_open {
@@ -220,11 +218,13 @@ pub(crate) mod authority_for_test {
     use super::*;
     use tauri::Manager;
 
-    fn registry<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::State<'_, TurnRegistry> {
-        if app.try_state::<TurnRegistry>().is_none() {
+    fn registry<R: tauri::Runtime>(
+        app: &tauri::AppHandle<R>,
+    ) -> crate::project_scope::Scoped<'_, TurnRegistry> {
+        if app.try_project_store::<TurnRegistry>().is_none() {
             app.manage(TurnRegistry::default());
         }
-        app.state::<TurnRegistry>()
+        app.project_store::<TurnRegistry>()
     }
 
     /// A live turn in `origin`, triggered by `trigger` and bound to `speech`.

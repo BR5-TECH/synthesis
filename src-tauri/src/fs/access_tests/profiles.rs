@@ -216,7 +216,7 @@ fn ts33_a_session_built_while_the_worktree_changes_is_never_installed() {
         .map(|n| {
             let state = std::sync::Arc::clone(&state);
             let stop = std::sync::Arc::clone(&stop);
-            std::thread::spawn(move || {
+            crate::project_scope::context::thread_spawn(move || {
                 let mut opened = 0usize;
                 while !stop.load(std::sync::atomic::Ordering::Relaxed) {
                     if state.open_agent_session(&format!("s{n}")).is_ok() {

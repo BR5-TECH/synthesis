@@ -16,11 +16,13 @@ pub mod export;
 pub mod milestones;
 pub mod publish;
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
 use std::collections::HashSet;
 use std::time::Instant;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::delivery::settings::{DeliverySettings, DeliverySourceChoice, IssueKind, ReadEntry};
 use crate::delivery::DeliveryError;
@@ -28,7 +30,6 @@ use crate::fs::RootFs;
 use crate::github_polling::delivery_access;
 use crate::github_polling::GithubPollingConfiguration;
 use crate::logging::{self, Domain, Fields, LogLevel};
-use crate::project::ProjectState;
 
 /// DSR-FR-NFFP: a `file` choice whose artifact is not a Flow of the project.
 pub const ERR_NOT_A_FLOW: &str = "not_a_flow";
@@ -242,7 +243,7 @@ pub(crate) fn refuse<R: Runtime>(
 
 /// DSR-FR-CFQA: the root of the open project, or `no_project_open`.
 pub(crate) fn project_root<R: Runtime>(app: &AppHandle<R>) -> Result<RootFs, DeliveryError> {
-    app.try_state::<ProjectState>()
+    app.open_project_state()
         .and_then(|p| p.require_root().ok())
         .ok_or_else(DeliveryError::no_project)
 }
@@ -256,7 +257,7 @@ fn github_source<R: Runtime>(app: &AppHandle<R>, project_node_id: &str) -> Deliv
     let configuration = delivery_access::configuration(app)
         .unwrap_or_else(|_| GithubPollingConfiguration::unchecked());
     let cache = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|p| crate::delivery::machine_store(&p).ok())
         .and_then(|store| {
             crate::delivery::github::cache::read_cache(
@@ -313,7 +314,7 @@ pub fn resolve_source<R: Runtime>(app: &AppHandle<R>) -> Result<DeliverySource, 
 pub(crate) fn announce<R: Runtime>(app: &AppHandle<R>) {
     match resolve_source(app) {
         Ok(source) => {
-            let _ = app.emit(DELIVERY_SOURCE_CHANGED, source);
+            let _ = app.emit_project(DELIVERY_SOURCE_CHANGED, source);
         }
         Err(e) => log(
             app,
@@ -415,7 +416,7 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, DeliveryError> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(work).await.map_err(|_| {
+    crate::project_scope::context::spawn_blocking(work).await.map_err(|_| {
         DeliveryError::new(
             crate::github_polling::records::ERR_GITHUB_UNREACHABLE,
             "The operation stopped unexpectedly.",
@@ -424,12 +425,14 @@ where
 }
 
 /// DSR contract surface: `"get delivery settings"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_delivery_settings(app: AppHandle) -> Result<DeliverySettings, DeliveryError> {
     get_settings_impl(&app)
 }
 
 /// DSR contract surface: `"set delivery settings (settings)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn set_delivery_settings(
     app: AppHandle,
@@ -439,6 +442,7 @@ pub async fn set_delivery_settings(
 }
 
 /// DSR contract surface: `"get delivery source"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_delivery_source(app: AppHandle) -> Result<DeliverySource, DeliveryError> {
     off_thread(move || get_source_impl(&app)).await

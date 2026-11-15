@@ -4,7 +4,8 @@ use super::*;
 use crate::change_proposals::AppSites;
 use crate::global_settings::GlobalSettingsStore;
 use crate::project::ProjectState;
-use tauri::{Emitter, State};
+use crate::project_scope::events::EmitToProject;
+use tauri::State;
 
 /// NCP-FR-VLOO: `"new change proposals changed"`.
 pub const NEW_CHANGE_PROPOSALS_CHANGED: &str = "new-change-proposals-changed";
@@ -38,7 +39,7 @@ pub(super) fn announce<R: tauri::Runtime>(
     proposal: Option<&NewChangeProposal>,
     cause: NewChangeCause,
 ) {
-    let _ = app.emit(
+    let _ = app.emit_project(
         NEW_CHANGE_PROPOSALS_CHANGED,
         NewChangeProposalsChanged {
             stream_id: stream_id.to_string(),
@@ -108,11 +109,12 @@ fn require_store(project: &ProjectState) -> Result<fs::RootFs, String> {
 
 /// NCP contract surface: every proposal of the change, newest first, and
 /// its confirmed split.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn list_new_change_proposals(
     stream_id: String,
     change: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewChangeProposals, String> {
     let store = require_store(&project)?;
     Ok(NewChangeProposals {
@@ -128,10 +130,11 @@ pub struct NewChangeFiles {
 }
 
 /// NCP contract surface: `"load new change proposal files"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn load_new_change_proposal_files(
     proposal_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewChangeFiles, String> {
     let store = require_store(&project)?;
     let (_, dir) = read_proposal(&store, &proposal_id)?;
@@ -159,13 +162,14 @@ where
 }
 
 /// NCP-FR-UWOR: `"accept new change proposal"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn accept_new_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     feedback: Option<String>,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -174,13 +178,14 @@ where
 }
 
 /// NCP-FR-TWDN: `"reject new change proposal"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn reject_new_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     feedback: Option<String>,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -189,11 +194,12 @@ where
 }
 
 /// NCP-FR-KRSA: `"complete new change decision"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn complete_new_change_decision<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -203,13 +209,14 @@ where
 }
 
 /// NCP-FR-MQCS: `"confirm change split"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn confirm_change_split<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     change: String,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeSplit, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,

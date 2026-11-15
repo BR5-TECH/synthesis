@@ -22,6 +22,8 @@
 //! where it was (SWN-FR-11). The one thing this side does write is the size the
 //! author gave the window, once the window has closed (SWN-FR-MRBK).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -45,6 +47,39 @@ const DOMAINS: [Domain; 1] = [Domain::Backend];
 /// in two states (`window.rs`), which is precisely what SWN-FR-02 describes when
 /// it names the main window and the picker as the two possible parents.
 pub const PARENT_WINDOW_LABEL: &str = "main";
+
+/// PWN-FR-VIYR: the label of the project window that opened the settings window.
+static PARENT_LABEL: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The parent of the settings window: the project window that opened it, or the
+/// first window when none did.
+fn parent_label() -> String {
+    PARENT_LABEL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_else(|| PARENT_WINDOW_LABEL.to_string())
+}
+
+/// The labels that the settings window blocks while it is open (PJT-FR-BQTD):
+/// every project window, whatever its label, and no other window. The first
+/// window is only one of them, and it can be closed while others stay open.
+fn blocked_labels<'a>(labels: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    labels
+        .into_iter()
+        .filter(|label| crate::project_windows::is_project_window_label(label))
+        .collect()
+}
+
+/// Every window that the settings window blocks while it is open (PJT-FR-BQTD).
+/// The macOS and the other platforms' blocks both take their windows from here.
+fn blocked_windows<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<tauri::WebviewWindow<R>> {
+    let windows = app.webview_windows();
+    blocked_labels(windows.keys().map(String::as_str))
+        .into_iter()
+        .filter_map(|label| windows.get(label).cloned())
+        .collect()
+}
 
 /// Label of the Settings child window.
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
@@ -159,17 +194,16 @@ fn is_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
 /// platform gives instead, and why Tauri's own `set_enabled` cannot be used.
 #[cfg(not(target_os = "macos"))]
 fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: bool) {
-    let Some(parent) = app.get_webview_window(PARENT_WINDOW_LABEL) else {
-        return;
-    };
-    if let Err(e) = parent.set_enabled(enabled) {
-        logging::log_warn(
-            app,
-            &BUFFER,
-            &DOMAINS,
-            "settings window could not change parent interactivity",
-            log_fields! { "enabled" => enabled, "reason" => e.to_string() },
-        );
+    for parent in blocked_windows(app) {
+        if let Err(e) = parent.set_enabled(enabled) {
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &DOMAINS,
+                "settings window could not change parent interactivity",
+                log_fields! { "enabled" => enabled, "reason" => e.to_string() },
+            );
+        }
     }
 }
 
@@ -177,9 +211,8 @@ fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: boo
 /// window. See `macos_modality` for what the platform gives and what it costs.
 #[cfg(target_os = "macos")]
 fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: bool) {
-    let Some(parent) = app.get_webview_window(PARENT_WINDOW_LABEL) else {
-        return;
-    };
+    let parents = blocked_windows(app);
+    // PJT-FR-BQTD: every project window is blocked, not only the first one.
     // AppKit is main-thread-only and a command runs on a worker thread, so the
     // block is posted rather than performed here. The post also fixes the order
     // it happens in: `create` blocks on building the settings window, which is
@@ -187,11 +220,11 @@ fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: boo
     // that window exists rather than some frames after it.
     let handle = app.clone();
     let post = app.run_on_main_thread(move || {
-        // The window went between the request and the main thread.
-        let Ok(ns_window) = parent.ns_window() else {
-            return;
-        };
-        let report = unsafe { macos_modality::set_window_blocked(ns_window, !enabled) };
+        // A window that went between the request and the main thread is left
+        // out.
+        let ns_windows: Vec<*mut std::ffi::c_void> =
+            parents.iter().filter_map(|parent| parent.ns_window().ok()).collect();
+        let report = unsafe { macos_modality::set_windows_blocked(&ns_windows, !enabled) };
         // SWN-FR-02 is invisible when it works and indistinguishable from a bug
         // when it does not, so each end of it is on the record with what it
         // actually installed and what it caught.
@@ -206,7 +239,7 @@ fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: boo
             },
             log_fields! {
                 "monitor" => report.monitor,
-                "overlay" => report.overlay,
+                "overlays" => report.overlays,
                 "dropped" => report.dropped
             },
         );
@@ -259,7 +292,7 @@ mod macos_modality;
 
 /// Announce whether the window is open to every webview.
 fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, open: bool) {
-    let _ = app.emit(EVENT_CHANGED, serde_json::json!({ "open": open }));
+    let _ = app.emit_project(EVENT_CHANGED, serde_json::json!({ "open": open }));
 }
 
 /// Percent-encode a query-string value.
@@ -349,7 +382,7 @@ struct OpeningDisplay {
 }
 
 fn opening_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<OpeningDisplay> {
-    let parent = app.get_webview_window(PARENT_WINDOW_LABEL)?;
+    let parent = app.get_webview_window(&parent_label())?;
     let (pos, size) = (parent.outer_position().ok()?, parent.outer_size().ok()?);
     let (work, scale) = crate::window::work_area_for_rect(
         app,
@@ -461,30 +494,44 @@ fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWi
 /// the centre of the parent's display, so it is never seen at another size or
 /// another position first.
 fn create<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>) {
-    let url = match &section {
-        Some(s) => format!("index.html?settings=1&section={}", encode_query_value(s)),
-        None => "index.html?settings=1".to_string(),
-    };
+    // PWN-FR-VIYR: the parent is the project window that has focus now, and the
+    // Project group edits the project of that window.
+    let parent = crate::project_windows::focused_project_window_label(app);
+    *PARENT_LABEL.lock().unwrap_or_else(|e| e.into_inner()) = Some(parent.clone());
+    let project = app
+        .try_state::<crate::project_windows::ProjectWindows>()
+        .and_then(|windows| windows.project_of(&parent));
+    let mut url = "index.html?settings=1".to_string();
+    if let Some(s) = &section {
+        url.push_str(&format!("&section={}", encode_query_value(s)));
+    }
+    if let Some(project) = &project {
+        url.push_str(&format!("&project={}", encode_query_value(project)));
+    }
     // Built through a factory rather than a `mut` binding: `parent` consumes
     // the builder and gives it back only on success, so a platform that refuses
     // the relationship would otherwise leave nothing to build from.
     let base = || {
-        tauri::WebviewWindowBuilder::new(
+        let builder = tauri::WebviewWindowBuilder::new(
             app,
             SETTINGS_WINDOW_LABEL,
             tauri::WebviewUrl::App(url.clone().into()),
-        )
-        .title(SETTINGS_WINDOW_TITLE)
-        .inner_size(DEFAULT_WINDOW_SIZE.0 as f64, DEFAULT_WINDOW_SIZE.1 as f64)
-        // SWN-FR-03: the author can drag-resize the window, but it offers no
-        // maximize. Disabling the maximize control also disables the macOS zoom
-        // button, which is what keeps the window out of OS full-screen. The
-        // minimum size is set in `place`, once the chrome can be measured.
-        .resizable(true)
-        .maximizable(false)
-        .visible(false)
+        );
+        // PWN-FR-ILXF: the settings window never joins the project tab group.
+        #[cfg(target_os = "macos")]
+        let builder = builder.tabbing_identifier("tech.br5.synthesis.settings");
+        builder
+            .title(SETTINGS_WINDOW_TITLE)
+            .inner_size(DEFAULT_WINDOW_SIZE.0 as f64, DEFAULT_WINDOW_SIZE.1 as f64)
+            // SWN-FR-03: the author can drag-resize the window, but it offers no
+            // maximize. Disabling the maximize control also disables the macOS zoom
+            // button, which is what keeps the window out of OS full-screen. The
+            // minimum size is set in `place`, once the chrome can be measured.
+            .resizable(true)
+            .maximizable(false)
+            .visible(false)
     };
-    let builder = match app.get_webview_window(PARENT_WINDOW_LABEL) {
+    let builder = match app.get_webview_window(&parent_label()) {
         Some(parent) => match base().parent(&parent) {
             Ok(b) => b,
             Err(e) => {
@@ -636,7 +683,7 @@ fn perform<R: tauri::Runtime>(app: &tauri::AppHandle<R>, next: Transition) {
     announce(app, false);
     match next {
         Transition::Close => {
-            if let Some(parent) = app.get_webview_window(PARENT_WINDOW_LABEL) {
+            if let Some(parent) = app.get_webview_window(&parent_label()) {
                 let _ = parent.set_focus();
             }
         }
@@ -655,8 +702,7 @@ fn dispatch<R: tauri::Runtime>(app: &tauri::AppHandle<R>, request: Request) {
     // Project section. The Project group is absent from the window, but an
     // address a notification carries or a stale frontend call could still name
     // one, so the rule is enforced where every route meets.
-    let project_open =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.root()).is_some();
+    let project_open = app.open_project_state().and_then(|p| p.root()).is_some();
     if !route_allowed(&request, project_open) {
         logging::log_warn(
             app,
@@ -695,6 +741,7 @@ pub fn request_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Optio
 /// (`AGT-agents.md` AGT-FR-06), the GitHub section a failed Git operation
 /// offers, the section a notification's address carries. `None` opens the
 /// window on Appearance (SWN-FR-MRNB).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_settings_window<R: tauri::Runtime>(section: Option<String>, app: tauri::AppHandle<R>) {
     dispatch(&app, Request::Open { section });
@@ -727,11 +774,11 @@ pub struct SettingsWindowContext {
 /// Answers with empty strings rather than an error while no project is open:
 /// the window is reachable in exactly that state (SWN-FR-15), and the window
 /// then shows its Global group alone.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn get_settings_window_context<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
+pub fn get_settings_window_context(
+    project: crate::project_scope::Scoped<'_, crate::project::ProjectState>,
 ) -> SettingsWindowContext {
-    let project = app.state::<crate::project::ProjectState>();
     let project_key = project.anchor().unwrap_or_default();
     SettingsWindowContext {
         project_name: if project_key.is_empty() {
@@ -752,6 +799,7 @@ pub fn get_settings_window_context<R: tauri::Runtime>(
 /// failure cancels the close outright: the window stays open and a held quit is
 /// released (SWN-FR-11, SWN-FR-19). `section` names the section address that
 /// failed, so the window can present it.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn finish_settings_close<R: tauri::Runtime>(
     ok: bool,
@@ -868,7 +916,7 @@ pub fn handle_window_event<R: tauri::Runtime>(
         // NTF-FR-08: "no window of the application holds OS focus" is what
         // decides whether a raise is posted, and this window is one of ours.
         tauri::WindowEvent::Focused(focused) => {
-            let _ = app.emit(EVENT_FOCUS, serde_json::json!({ "focused": *focused }));
+            let _ = app.emit_project(EVENT_FOCUS, serde_json::json!({ "focused": *focused }));
         }
         _ => {}
     }

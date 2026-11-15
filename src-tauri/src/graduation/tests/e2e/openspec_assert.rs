@@ -150,6 +150,7 @@ impl Outcome {
         let read = crate::graduation::get_draft_graduation(
             self.fx.app.clone(),
             self.run.input.draft_id.clone(),
+            Default::default(),
         )
         .expect("the link is readable")
         .unwrap_or_else(|| panic!("[{}] the draft names a run", self.name));

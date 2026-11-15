@@ -84,6 +84,7 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
         },
       ];
     case "open_project_at_path":
+    case "resolve_project_at_path":
       return {
         name: "acme",
         path: "~/dev/acme",

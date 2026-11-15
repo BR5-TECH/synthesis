@@ -12,6 +12,7 @@ use crate::global_settings::{
     AppPreferences, GlobalSettingsStore, InstalledAdapter, InstalledPlugin, RecentProjectEntry,
 };
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_app_preferences(
     store: State<'_, GlobalSettingsStore>,
@@ -19,6 +20,7 @@ pub fn load_app_preferences(
     store.load_app_preferences()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_app_preferences(
     preferences: AppPreferences,
@@ -27,6 +29,7 @@ pub fn save_app_preferences(
     store.save_app_preferences(preferences)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_recent_projects(
     store: State<'_, GlobalSettingsStore>,
@@ -34,6 +37,7 @@ pub fn list_recent_projects(
     store.list_recent_projects()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn remove_recent_project(
     path: String,
@@ -42,11 +46,13 @@ pub fn remove_recent_project(
     store.remove_recent_project(&path)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn clear_recent_projects(store: State<'_, GlobalSettingsStore>) -> Result<(), String> {
     store.clear_recent_projects()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn pin_recent_project(
     path: String,
@@ -55,6 +61,7 @@ pub fn pin_recent_project(
     store.pin_recent_project(&path)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn unpin_recent_project(
     path: String,
@@ -63,6 +70,7 @@ pub fn unpin_recent_project(
     store.unpin_recent_project(&path)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_installed_plugins(
     store: State<'_, GlobalSettingsStore>,
@@ -70,6 +78,7 @@ pub fn list_installed_plugins(
     store.list_installed_plugins()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn install_plugin(
     source: String,
@@ -78,11 +87,13 @@ pub fn install_plugin(
     store.install_plugin(&source)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn uninstall_plugin(id: String, store: State<'_, GlobalSettingsStore>) -> Result<(), String> {
     store.uninstall_plugin(&id)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_agent_adapters(
     store: State<'_, GlobalSettingsStore>,
@@ -90,6 +101,7 @@ pub fn list_agent_adapters(
     store.list_agent_adapters()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn install_adapter(
     source: String,

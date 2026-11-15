@@ -8,12 +8,14 @@
 //! reported and not written, because the author chooses how the two histories
 //! join (`reconcile_pull`).
 
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::path::Path;
 use std::time::Instant;
 
 use git2::{BranchType, Oid, Repository};
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
+use tauri::Manager;
 
 use crate::changes::{self};
 use crate::github_tokens::GithubTokens;
@@ -431,7 +433,7 @@ fn pull_inner<H>(
 /// run's apply announces through it too (GRD-FR-PAPX).
 pub(crate) fn announce_changes<R: tauri::Runtime>(app: &tauri::AppHandle<R>, change_count: usize) {
     if let Err(e) =
-        app.emit(changes::CHANGES_UPDATED, changes::ChangesUpdatedPayload { change_count })
+        app.emit_project(changes::CHANGES_UPDATED, changes::ChangesUpdatedPayload { change_count })
     {
         logging::log_warn(
             app,
@@ -444,14 +446,15 @@ pub(crate) fn announce_changes<R: tauri::Runtime>(app: &tauri::AppHandle<R>, cha
 }
 
 /// GTC-FR-QHMT: pull the active worktree's branch, streaming its output.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn pull_current_branch(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<PullOutcome, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         pull_current_branch_blocking(&app, &root, &project_key)
     })
     .await
@@ -467,11 +470,11 @@ pub(crate) fn pull_current_branch_blocking<R: tauri::Runtime>(
 ) -> Result<PullOutcome, String> {
     let store = app.state::<GlobalSettingsStore>();
     let tokens = app.state::<GithubTokens>();
-    let registry = app.state::<ProgressRegistry>();
+    let registry = app.project_store::<ProgressRegistry>();
     let emit = |name: &str, payload: serde_json::Value| {
         // An event that cannot be delivered is dropped: reporting must never
         // take down the transfer.
-        let _ = app.emit(name, payload);
+        let _ = app.emit_project(name, payload);
     };
     let refresh = || {
         crate::worktree::refresh_and_announce(app, root, || {
@@ -496,6 +499,7 @@ pub(crate) fn pull_current_branch_blocking<R: tauri::Runtime>(
 
 /// GTC-FR-NJUY: integrate a diverged branch with its upstream on the author's
 /// choice, at the tips the author was shown.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn reconcile_pull(
     app: tauri::AppHandle,
@@ -503,7 +507,7 @@ pub async fn reconcile_pull(
     local_tip: String,
     remote_tip: String,
 ) -> Result<PullReconcileOutcome, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         // GTC-FR-EMLM: a pull of any kind runs no main branch write check.
         let outcome =
             crate::streams::reconcile_pull_blocking(&app, strategy, &local_tip, &remote_tip);

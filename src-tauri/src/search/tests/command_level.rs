@@ -63,8 +63,8 @@ fn scc_ts20_a_search_attributes_progress_and_always_leaves_the_in_flight_set() {
         "needle".into(),
         SearchMode::LiteralInsensitive,
         SearchScope::Full,
-        app.state::<crate::project::ProjectState>(),
-        app.state::<SearchRegistry>(),
+        app.state::<crate::project::ProjectState>().into(),
+        app.state::<SearchRegistry>().into(),
     )
     .expect("a valid query starts");
     // SCC-FR-02, SCC-FR-19: the id comes back immediately, before the sweep is done.
@@ -101,8 +101,8 @@ fn scc_ts19_with_no_project_open_a_search_ends_completed_and_terminates_its_oper
         "anything".into(),
         SearchMode::LiteralInsensitive,
         SearchScope::Capped,
-        app.state::<crate::project::ProjectState>(),
-        app.state::<SearchRegistry>(),
+        app.state::<crate::project::ProjectState>().into(),
+        app.state::<SearchRegistry>().into(),
     )
     .expect("no project open is not an error");
     assert!(id.starts_with("search-"));
@@ -135,8 +135,8 @@ fn ts7_an_invalid_query_starts_nothing_at_the_command_level() {
         "foo(".into(),
         SearchMode::Regex,
         SearchScope::Capped,
-        app.state::<crate::project::ProjectState>(),
-        app.state::<SearchRegistry>(),
+        app.state::<crate::project::ProjectState>().into(),
+        app.state::<SearchRegistry>().into(),
     )
     .unwrap_err();
 
@@ -154,7 +154,7 @@ fn cancelling_an_unknown_search_id_is_a_noop() {
     // is still in flight.
     use tauri::Manager;
     let app = mock_search_app(None);
-    cancel_search("search-never-existed".into(), app.state::<SearchRegistry>());
+    cancel_search("search-never-existed".into(), app.state::<SearchRegistry>().into());
 }
 
 #[test]

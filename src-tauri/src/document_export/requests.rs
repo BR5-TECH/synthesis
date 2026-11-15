@@ -11,11 +11,12 @@
 //! export-requests/<request-id>.toml
 //! ```
 
+use crate::project_scope::events::EmitToProject;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
+use tauri::State;
 
 use super::*;
 use crate::agent_conversations::ConversationOrigin;
@@ -215,7 +216,7 @@ pub fn outcome_body(path: &str, outcome: &ExportOutcome) -> String {
 }
 
 fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, request: &ExportRequest) {
-    let _ = app.emit(EXPORT_REQUEST_CHANGED, request);
+    let _ = app.emit_project(EXPORT_REQUEST_CHANGED, request);
 }
 
 /// DXP-FR-IMSX: the request id, the format, and the outcome; never the path,
@@ -510,16 +511,18 @@ fn resolve_locked(
 }
 
 /// DXP contract surface: `"get export request (id)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_export_request(
     request_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ExportRequest, String> {
     let store = project.require_store().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     get_export_request_impl(&store, &request_id)
 }
 
 /// DXP contract surface: `"resolve export request (id, outcome, destination, error)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn resolve_export_request<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -528,7 +531,7 @@ pub fn resolve_export_request<R: tauri::Runtime>(
     destination: Option<String>,
     error: Option<String>,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ExportResolution, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,

@@ -14,6 +14,8 @@
 //! the completion once, and the row says where the comment is still owed
 //! (DPC-FR-WNHU). The review then offers its own retry (PCR-FR-KCVC).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use tauri::Manager;
 
 use super::decide_changes::{
@@ -101,7 +103,7 @@ where
             return Ok(decider.clone());
         }
         let store = self.app.try_state::<crate::global_settings::GlobalSettingsStore>();
-        let project = self.app.try_state::<crate::project::ProjectState>();
+        let project = self.app.open_project_state();
         match (store, project) {
             (Some(store), Some(project)) => comments::acting_participant(&store, &project),
             _ => Err(prompt_proposals::ERR_NO_PROJECT_OPEN.to_string()),
@@ -170,10 +172,10 @@ impl<R: tauri::Runtime> PromptBackend<'_, R> {
         DiscussionTarget::Artifact { artifact_id: self.artifact_id.to_string() }
     }
 
-    fn tracker(&self) -> Result<tauri::State<'_, ContentTracker>, String> {
+    fn tracker(&self) -> Result<crate::project_scope::Scoped<'_, ContentTracker>, String> {
         self.tool
             .app
-            .try_state::<ContentTracker>()
+            .try_project_store::<ContentTracker>()
             .ok_or_else(|| prompt_proposals::ERR_NO_PROJECT_OPEN.to_string())
     }
 }

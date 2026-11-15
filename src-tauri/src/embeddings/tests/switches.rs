@@ -117,15 +117,19 @@ fn the_project_commands_need_an_open_project() {
     let h = Harness::new();
     assert_eq!(
         commands::load_project_embeddings_mode(
-            h.app.state::<crate::project::ProjectState>(),
+            h.app.state::<crate::project::ProjectState>().into(),
             h.app.state::<crate::global_settings::GlobalSettingsStore>(),
         )
         .unwrap_err(),
         ERR_NO_PROJECT_OPEN
     );
     assert_eq!(
-        commands::save_project_embeddings_mode(h.handle().clone(), ProjectEmbeddingsMode::Off)
-            .unwrap_err(),
+        commands::save_project_embeddings_mode(
+            h.handle().clone(),
+            ProjectEmbeddingsMode::Off,
+            Default::default()
+        )
+        .unwrap_err(),
         ERR_NO_PROJECT_OPEN
     );
     assert_eq!(

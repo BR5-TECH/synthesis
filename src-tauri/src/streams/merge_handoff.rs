@@ -14,7 +14,7 @@
 //! In OpenSpec mode the request first archives, on the stream branch, each
 //! OpenSpec change that the stream built (WKS-FR-PXYH, `OAR-openspec-archive.md`).
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use super::commands::{
     announce, project_key, project_root, refuse, store, store_fs, stream_has_live_run,
@@ -53,13 +53,14 @@ fn stream_of<R: tauri::Runtime>(
 ///
 /// OFP-FR-QLQJ: `change_not_archivable` and `archive_failed` reject as an
 /// `OpenSpecFailure` object; every other refusal is its typed code.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn merge_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     publication: StreamMergePublication,
 ) -> Result<StreamMergeResult, Refusal> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         merge_work_stream_blocking(&app, &stream_id, publication)
     })
     .await
@@ -101,7 +102,7 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
 
     // WKS-FR-HLGN / WKS-FR-TSOA: the repository update guard. One merge check or
     // one update runs in a repository at a time.
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
     let hold = match state.as_ref() {
         Some(state) => match state.begin_repository_update(stream_id, Reconciliation::Merge) {
             Ok(hold) => Some(hold),

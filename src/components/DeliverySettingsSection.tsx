@@ -10,7 +10,7 @@
  * control that made the change.
  */
 import { useCallback, useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listenProject } from "../projectEvents";
 
 import * as api from "../api";
 import { DELIVERY_SOURCE_CHANGED } from "../events";
@@ -177,7 +177,7 @@ export function DeliverySettingsSection() {
   // DSR-FR-EGFF: a change made elsewhere (a publish, an export, the Map tab)
   // moves the statement of the resolved source and the stored values.
   useEffect(() => {
-    const pending = listen(DELIVERY_SOURCE_CHANGED, () => {
+    const pending = listenProject(DELIVERY_SOURCE_CHANGED, () => {
       void loadSettings();
       void loadSource();
     });

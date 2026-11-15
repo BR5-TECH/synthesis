@@ -35,10 +35,10 @@
 //! or until the draft goes, which is what makes one left for a month cost exactly
 //! what one decided immediately costs.
 
+use crate::project_scope::events::EmitToProject;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::Emitter;
 
 use crate::comments::{self, Attachment, Participant, ThreadRef};
 use crate::drafts;
@@ -889,7 +889,7 @@ pub(crate) fn announce<R: tauri::Runtime>(
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let _ = app.emit(
+    let _ = app.emit_project(
         PROPOSALS_CHANGED,
         ProposalsChanged { draft_id: proposal.draft_id.clone(), proposal: proposal.clone(), cause },
     );

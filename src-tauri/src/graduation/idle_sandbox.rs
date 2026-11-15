@@ -2,6 +2,7 @@
 //! `../tools/EAC-execute-agent-cli.md` EAC-FR-LQRI).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// GRD-FR-UESX: whether a queue is idle. No run holds it (GRD-FR-BNTC), no
 /// member stands in `queued`, and no loop of this process has claimed it.
@@ -21,8 +22,9 @@ pub(super) fn idle_now<R: tauri::Runtime>(
     project_key: &str,
     key: &str,
 ) -> bool {
-    let claimed =
-        app.try_state::<GraduationState>().is_some_and(|state| state.holder_of(key).is_some());
+    let claimed = app
+        .try_project_store::<GraduationState>()
+        .is_some_and(|state| state.holder_of(key).is_some());
     let (Ok(fs), Ok(base)) = (store::store_fs(app), store::store_base(app)) else {
         return false;
     };
@@ -80,7 +82,7 @@ pub(super) fn stop_sandbox_if_idle<R: tauri::Runtime>(
         move || idle_now(&handle, &project_key, &key)
     };
     #[cfg(test)]
-    if let Some(state) = app.try_state::<GraduationState>() {
+    if let Some(state) = app.try_project_store::<GraduationState>() {
         state.record_idle_stop(&run.queue_key(), &vm, Box::new(still_idle.clone()));
     }
     crate::tools::agent_exec::sandbox::stop_idle_scope_in_background(app, vm, still_idle);

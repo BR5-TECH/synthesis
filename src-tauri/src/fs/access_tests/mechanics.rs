@@ -88,7 +88,7 @@ fn ts17_two_appenders_both_land_and_neither_payload_is_split() {
         .map(|w| {
             let access = Arc::clone(&access);
             let log = log.clone();
-            std::thread::spawn(move || {
+            crate::project_scope::context::thread_spawn(move || {
                 for i in 0..50 {
                     access
                         .append_lines(&log, &[format!("w{w}-{i}-aaa"), format!("w{w}-{i}-bbb")])

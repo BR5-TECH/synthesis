@@ -12,7 +12,7 @@
  *   lens unmounts on a tab switch and a write can land after that.
  */
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listenProject } from "../../projectEvents";
 
 import * as events from "../../events";
 import { logInfo, logWarn } from "../../logging";
@@ -50,7 +50,7 @@ export function useDeliveryShell(deps: DeliveryShellDeps): void {
     let cancelled = false;
     const off: Array<() => void> = [];
     const again = () => void specMap.resolveDeliverySource();
-    for (const pending of [listen(events.DELIVERY_SOURCE_CHANGED, again), events.onProjectTreeChanged(again)]) {
+    for (const pending of [listenProject(events.DELIVERY_SOURCE_CHANGED, again), events.onProjectTreeChanged(again)]) {
       void Promise.resolve(pending)
         .then((fn) => {
           if (typeof fn !== "function") return;

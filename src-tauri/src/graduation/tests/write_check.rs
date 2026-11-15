@@ -20,7 +20,10 @@ impl Fixture {
     }
 
     fn queued_runs(&self) -> usize {
-        crate::graduation::list_graduation_queue(self.app.clone()).expect("the queue").runs.len()
+        crate::graduation::list_graduation_queue(self.app.clone(), Default::default())
+            .expect("the queue")
+            .runs
+            .len()
     }
 }
 
@@ -43,6 +46,7 @@ fn a_start_on_an_unconfirmed_main_branch_enqueues_nothing() {
             StandingWork::Keep,
             None,
             None,
+            Default::default(),
         )
     };
     let refused = start().unwrap_err();
@@ -77,6 +81,7 @@ fn a_direct_start_on_an_unconfirmed_main_branch_is_refused() {
             draft.clone(),
             fx.root().to_string_lossy().into_owned(),
             fx.branch(),
+            Default::default(),
         )
     };
     let refused = start().unwrap_err();
@@ -172,7 +177,12 @@ fn a_restart_of_a_direct_run_pinned_to_an_unconfirmed_main_branch_is_refused() {
     let draft = fx.committed_draft("direct");
     fx.other_branch("elsewhere");
     let original = fx.direct("Add the empty state.", &draft);
-    crate::graduation::discard_graduation_run(fx.app.clone(), original.id.clone()).unwrap();
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        original.id.clone(),
+        Default::default(),
+    )
+    .unwrap();
     fx.check_out("elsewhere");
     fx.arm_write_guard();
     let before = fx.queued_runs();
@@ -183,6 +193,7 @@ fn a_restart_of_a_direct_run_pinned_to_an_unconfirmed_main_branch_is_refused() {
             String::new(),
             StandingWork::Keep,
             None,
+            Default::default(),
         )
     };
 
@@ -224,8 +235,12 @@ fn a_revert_after_a_relaunch_runs_no_check() {
     );
     assert!(guard.is_err(), "the branch is an unconfirmed main branch");
 
-    let reverted = crate::graduation::revert_graduation_run(fx.app.clone(), done.id.clone())
-        .expect("the revert runs no check");
+    let reverted = crate::graduation::revert_graduation_run(
+        fx.app.clone(),
+        done.id.clone(),
+        Default::default(),
+    )
+    .expect("the revert runs no check");
 
     assert_eq!(reverted.reverts.len(), 1);
     assert_eq!(reverted.reverts[0].branch, main);

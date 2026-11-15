@@ -110,7 +110,7 @@ fn build_with_cli(
         .flatten()
     {
         let tx = lines_tx.clone();
-        readers.push(std::thread::spawn(move || stream.pump(tx)));
+        readers.push(crate::project_scope::context::thread_spawn(move || stream.pump(tx)));
     }
     drop(lines_tx);
 

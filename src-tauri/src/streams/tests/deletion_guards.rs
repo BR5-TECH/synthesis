@@ -23,7 +23,7 @@ fn commit_in(stream: &WorkStream, rel: &str) {
 fn assert_intact(fx: &Fixture, stream: &WorkStream) {
     assert!(branch_names(&fx.repo()).contains(&stream.branch));
     assert!(Path::new(&stream.worktree_path).is_dir());
-    assert!(get_work_stream(fx.app.clone(), stream.id.clone()).is_ok());
+    assert!(get_work_stream(fx.app.clone(), stream.id.clone(), Default::default()).is_ok());
 }
 
 // ---------------------------------------------------------------------------
@@ -43,8 +43,14 @@ fn deleting_the_stream_whose_working_copy_is_active_is_refused_whatever_the_flag
 
     for (force, discard) in [(false, false), (true, false), (false, true), (true, true)] {
         assert_eq!(
-            delete_work_stream(fx.app.clone(), stream.id.clone(), force, discard)
-                .expect_err("refused"),
+            delete_work_stream(
+                fx.app.clone(),
+                stream.id.clone(),
+                force,
+                discard,
+                Default::default()
+            )
+            .expect_err("refused"),
             ERR_STREAM_ACTIVE,
             "force {force}, discard {discard}",
         );
@@ -58,7 +64,8 @@ fn a_stream_the_project_is_not_standing_in_is_not_active() {
     let fx = Fixture::new();
     let stream = fx.create("elsewhere", None).expect("created");
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+        .expect("deleted");
 }
 
 // WKS-FR-OVLQ, WKS-FR-DBXN
@@ -74,8 +81,14 @@ fn discarding_uncommitted_paths_does_not_answer_the_busy_refusal() {
 
     for (force, discard) in [(true, true), (false, true)] {
         assert_eq!(
-            delete_work_stream(fx.app.clone(), stream.id.clone(), force, discard)
-                .expect_err("refused"),
+            delete_work_stream(
+                fx.app.clone(),
+                stream.id.clone(),
+                force,
+                discard,
+                Default::default()
+            )
+            .expect_err("refused"),
             ERR_STREAM_BUSY
         );
     }
@@ -96,7 +109,8 @@ fn a_stream_with_uncommitted_paths_is_refused_with_every_path_and_nothing_is_rem
     dirty(&stream, "nested/deep.txt");
 
     let refusal =
-        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect_err("refused");
+        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+            .expect_err("refused");
 
     assert_eq!(refusal, format!("{ERR_STREAM_DIRTY}: README.md, nested/deep.txt, scratch.txt"));
     assert_intact(&fx, &stream);
@@ -110,7 +124,8 @@ fn force_does_not_answer_the_dirty_refusal() {
     dirty(&stream, "scratch.txt");
 
     let refusal =
-        delete_work_stream(fx.app.clone(), stream.id.clone(), true, false).expect_err("refused");
+        delete_work_stream(fx.app.clone(), stream.id.clone(), true, false, Default::default())
+            .expect_err("refused");
 
     assert!(refusal.starts_with(ERR_STREAM_DIRTY), "{refusal}");
     assert_intact(&fx, &stream);
@@ -124,12 +139,16 @@ fn discarding_uncommitted_paths_deletes_the_stream_with_them() {
     std::fs::write(Path::new(&stream.worktree_path).join("README.md"), "edited\n").unwrap();
     dirty(&stream, "scratch.txt");
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, true).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, true, Default::default())
+        .expect("deleted");
 
     assert!(!branch_names(&fx.repo()).contains(&stream.branch));
     assert!(worktree_names(&fx.repo()).is_empty());
     assert!(!Path::new(&stream.worktree_path).exists());
-    assert_eq!(get_work_stream(fx.app.clone(), stream.id).expect_err("gone"), ERR_UNKNOWN_STREAM);
+    assert_eq!(
+        get_work_stream(fx.app.clone(), stream.id, Default::default()).expect_err("gone"),
+        ERR_UNKNOWN_STREAM
+    );
 }
 
 // WKS-FR-EIBC, WKS-FR-DBXN
@@ -141,15 +160,18 @@ fn the_unmerged_refusal_comes_before_the_dirty_one_and_each_flag_answers_its_own
     dirty(&stream, "scratch.txt");
 
     let unmerged =
-        delete_work_stream(fx.app.clone(), stream.id.clone(), false, true).expect_err("refused");
+        delete_work_stream(fx.app.clone(), stream.id.clone(), false, true, Default::default())
+            .expect_err("refused");
     assert!(unmerged.starts_with(ERR_STREAM_UNMERGED), "{unmerged}");
 
     let dirty_refusal =
-        delete_work_stream(fx.app.clone(), stream.id.clone(), true, false).expect_err("refused");
+        delete_work_stream(fx.app.clone(), stream.id.clone(), true, false, Default::default())
+            .expect_err("refused");
     assert!(dirty_refusal.starts_with(ERR_STREAM_DIRTY), "{dirty_refusal}");
     assert_intact(&fx, &stream);
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), true, true).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), true, true, Default::default())
+        .expect("deleted");
     assert!(!branch_names(&fx.repo()).contains(&stream.branch));
 }
 
@@ -161,10 +183,12 @@ fn an_untracked_path_of_application_storage_is_not_uncommitted_work() {
     dirty(&stream, ".synthesis/drafts/note.md");
 
     assert_eq!(
-        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone()).expect("read"),
+        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone(), Default::default())
+            .expect("read"),
         Vec::<String>::new()
     );
-    delete_work_stream(fx.app.clone(), stream.id, false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id, false, false, Default::default())
+        .expect("deleted");
 }
 
 // WKS-FR-DBXN, WKS-FR-GQSU
@@ -175,10 +199,12 @@ fn a_stream_whose_working_copy_is_missing_reports_no_path_and_is_deleted() {
     std::fs::remove_dir_all(&stream.worktree_path).unwrap();
 
     assert_eq!(
-        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone()).expect("read"),
+        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone(), Default::default())
+            .expect("read"),
         Vec::<String>::new()
     );
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+        .expect("deleted");
 
     assert!(!branch_names(&fx.repo()).contains(&stream.branch));
     assert!(worktree_names(&fx.repo()).is_empty());
@@ -194,7 +220,8 @@ fn the_uncommitted_paths_of_a_stream_are_the_complete_sorted_set_and_nothing_is_
     let fx = Fixture::new();
     let stream = fx.create("reading", None).expect("created");
     assert_eq!(
-        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone()).expect("read"),
+        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone(), Default::default())
+            .expect("read"),
         Vec::<String>::new(),
         "a clean working copy"
     );
@@ -203,7 +230,9 @@ fn the_uncommitted_paths_of_a_stream_are_the_complete_sorted_set_and_nothing_is_
     dirty(&stream, "dir/a.txt");
     let before = files_under(Path::new(&stream.worktree_path));
 
-    let paths = get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone()).expect("read");
+    let paths =
+        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone(), Default::default())
+            .expect("read");
 
     assert_eq!(paths, vec!["README.md", "b.txt", "dir/a.txt"]);
     assert_eq!(before, files_under(Path::new(&stream.worktree_path)));
@@ -216,7 +245,8 @@ fn the_uncommitted_paths_of_an_unknown_stream_are_the_typed_error() {
     let fx = Fixture::new();
 
     assert_eq!(
-        get_work_stream_uncommitted_paths(fx.app.clone(), "w-nothing".into()).expect_err("refused"),
+        get_work_stream_uncommitted_paths(fx.app.clone(), "w-nothing".into(), Default::default())
+            .expect_err("refused"),
         ERR_UNKNOWN_STREAM
     );
 }

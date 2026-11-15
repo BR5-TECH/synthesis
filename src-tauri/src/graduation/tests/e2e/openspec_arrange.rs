@@ -62,6 +62,7 @@ impl ChangeStart {
                         stream.id.clone(),
                         change.clone(),
                         instruction.clone(),
+                        Default::default(),
                     )
                 })
                 .unwrap_or_else(|reason| panic!("[{name}] the rework start was refused: {reason}"))
@@ -78,6 +79,7 @@ fn start_apply(name: &'static str, fx: &Fixture, stream_id: &str, change: &str) 
             fx.app.clone(),
             stream_id.to_string(),
             change.to_string(),
+            Default::default(),
         )
     })
     .unwrap_or_else(|reason| panic!("[{name}] the apply start was refused: {reason}"))
@@ -233,7 +235,7 @@ impl Outcome {
             rest.set_id.clone().expect("the question set"),
             vec![first],
             self.fx.app.state(),
-            self.fx.app.state(),
+            self.fx.app.state::<crate::project::ProjectState>().into(),
         );
         match refused {
             Ok(_) => panic!("[{}] a partial answer set was accepted", self.name),
@@ -256,7 +258,11 @@ impl Outcome {
         };
         let before = record(&self);
         let refused = without_loop(&self.fx.app, || {
-            crate::graduation::continue_graduation_run(self.fx.app.clone(), self.run.id.clone())
+            crate::graduation::continue_graduation_run(
+                self.fx.app.clone(),
+                self.run.id.clone(),
+                Default::default(),
+            )
         });
         match refused {
             Ok(_) => panic!("[{}] the Continue was accepted, but {code} was expected", self.name),
@@ -294,7 +300,11 @@ impl Outcome {
             .collect();
         assert_eq!(repair.len(), 1, "[{}] one repair run stands", self.name);
         without_loop(&self.fx.app, || {
-            crate::graduation::discard_graduation_run(self.fx.app.clone(), repair[0].clone())
+            crate::graduation::discard_graduation_run(
+                self.fx.app.clone(),
+                repair[0].clone(),
+                Default::default(),
+            )
         })
         .unwrap_or_else(|reason| panic!("[{}] the discard was refused: {reason}", self.name));
         self

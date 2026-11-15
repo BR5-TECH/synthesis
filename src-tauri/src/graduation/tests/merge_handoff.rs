@@ -167,7 +167,7 @@ fn a_conflict_hands_off_and_leaves_both_branches_and_working_copies_as_they_were
 
 impl Fixture {
     fn state_of_stream_is_busy(&self, stream: &crate::streams::WorkStream) -> bool {
-        crate::streams::get_work_stream(self.app.clone(), stream.id.clone())
+        crate::streams::get_work_stream(self.app.clone(), stream.id.clone(), Default::default())
             .expect("the stream")
             .busy_run_id
             .is_some()
@@ -488,8 +488,12 @@ fn discarding_a_merge_run_reclaims_everything_the_run_owned() {
     let worktree = merge_worktree_of(&fx, &run_id);
     let before = live(&fx, &stream);
 
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), run_id.clone())
-        .expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        run_id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
 
     assert_eq!(discarded.state, GraduationRunState::Discarded);
     assert!(!worktree.exists(), "the worktree directory is gone");
@@ -535,7 +539,7 @@ fn the_first_queue_read_reclaims_ended_runs_and_keeps_resting_ones() {
         kept.push((id, worktree));
     }
 
-    crate::graduation::list_graduation_queue(fx.app.clone()).expect("a queue");
+    crate::graduation::list_graduation_queue(fx.app.clone(), Default::default()).expect("a queue");
 
     assert!(!ended_worktree.exists(), "the ended run's worktree is reclaimed");
     assert!(!registered(&fx, &format!("{ended_id}-mw")));
@@ -561,7 +565,8 @@ fn a_merge_run_found_working_with_no_loop_is_interrupted_and_keeps_its_worktree(
     run.state = GraduationRunState::Working;
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
 
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("a queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("a queue");
 
     let found = queue.runs.iter().find(|r| r.id == run_id).expect("the run");
     assert_eq!(found.state, GraduationRunState::Interrupted);

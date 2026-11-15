@@ -39,6 +39,7 @@ fn command(
         Some(1000),
         None,
         None,
+        Default::default(),
     )
     .expect("a page")
 }
@@ -291,6 +292,7 @@ fn the_read_refuses_the_source_stream() {
         None,
         None,
         None,
+        Default::default(),
     )
     .expect_err("no such stream");
     assert_eq!(refused, crate::graduation::ERR_UNKNOWN_STREAM);

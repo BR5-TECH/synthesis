@@ -11,6 +11,7 @@
 //! passes wrote, so Continue resumes the saved work. It is removed when the run
 //! ends.
 
+use crate::project::OpenProject as _;
 use std::path::PathBuf;
 
 use super::*;
@@ -29,7 +30,7 @@ fn registration(run_id: &str) -> String {
 /// The project's repository, opened at its primary worktree.
 fn primary<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<git2::Repository, String> {
     let root = app
-        .try_state::<crate::project::ProjectState>()
+        .open_project_state()
         .and_then(|state| state.root())
         .ok_or_else(|| crate::graduation::ERR_NO_PROJECT_OPEN.to_string())?;
     crate::streams::primary_repo_of(&root)

@@ -88,12 +88,21 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
     // `set_menu` is a full replacement, so we re-provide the standard Window
     // submenu (Minimize/Zoom/Close) the OS default menu would otherwise carry —
     // otherwise installing our Edit menu would silently drop it on macOS.
-    let window_menu = SubmenuBuilder::new(manager, "Window")
+    //
+    // PJT-FR-JGHF: the predefined Close item is left out. It holds Cmd+W, which
+    // Close Project holds now. On macOS the system adds its tab commands (Show
+    // Tab Bar, Move Tab to New Window, Merge All Windows) to the menu that is
+    // set as the windows menu (PJT-FR-WZLQ).
+    let mut window_builder = SubmenuBuilder::new(manager, "Window")
         .item(&PredefinedMenuItem::minimize(manager, Some("Minimize"))?)
         .item(&PredefinedMenuItem::maximize(manager, Some("Zoom"))?)
-        .item(&PredefinedMenuItem::separator(manager)?)
-        .item(&PredefinedMenuItem::close_window(manager, Some("Close"))?)
-        .build()?;
+        .item(&PredefinedMenuItem::separator(manager)?);
+    for spec in WINDOW_MENU_ITEMS {
+        window_builder = window_builder.item(&item(*spec)?);
+    }
+    let window_menu = window_builder.build()?;
+    #[cfg(target_os = "macos")]
+    window_menu.set_as_windows_menu_for_nsapp()?;
 
     let menu = MenuBuilder::new(manager)
         .item(&app_menu)

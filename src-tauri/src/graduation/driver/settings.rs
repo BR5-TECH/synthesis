@@ -12,6 +12,7 @@
 //! (PSS-FR-HDBN): no phase of this loop reaches a model.
 
 use super::*;
+use crate::project::OpenProject as _;
 
 /// GRL-FR-REPL: what one turn is bounded by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,7 +128,7 @@ pub struct TurnBound {
 /// The open project's root, read through the filesystem instance the
 /// application already holds (`FSA-filesystem-access.md`).
 fn project_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<crate::fs::RootFs> {
-    let state = app.try_state::<crate::project::ProjectState>()?;
+    let state = app.open_project_state()?;
     let root = state.require_root().ok()?;
     Some(root)
 }

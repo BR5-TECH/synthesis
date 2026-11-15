@@ -172,9 +172,13 @@ impl Outcome {
     }
 
     fn update_record(&self) -> StreamUpdateRecord {
-        crate::streams::get_work_stream_update(self.fx.app.clone(), self.stream_id.clone())
-            .expect("a known stream")
-            .unwrap_or_else(|| panic!("[{}] the stream holds an update record", self.name))
+        crate::streams::get_work_stream_update(
+            self.fx.app.clone(),
+            self.stream_id.clone(),
+            Default::default(),
+        )
+        .expect("a known stream")
+        .unwrap_or_else(|| panic!("[{}] the stream holds an update record", self.name))
     }
 
     pub(crate) fn expect_update_state(self, state: StreamUpdateState) -> Self {
@@ -227,9 +231,12 @@ impl Outcome {
     }
 
     pub(crate) fn expect_no_update_record(self) -> Self {
-        let held =
-            crate::streams::get_work_stream_update(self.fx.app.clone(), self.stream_id.clone())
-                .expect("a known stream");
+        let held = crate::streams::get_work_stream_update(
+            self.fx.app.clone(),
+            self.stream_id.clone(),
+            Default::default(),
+        )
+        .expect("a known stream");
         assert!(held.is_none(), "[{}] no update was recorded", self.name);
         self
     }

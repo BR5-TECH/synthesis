@@ -305,6 +305,10 @@ pub struct SandboxPool {
     /// earlier epoch was stopped, also where a launch held its slot then, so
     /// it is never reused.
     epoch: std::sync::atomic::AtomicU64,
+    /// EAC-FR-ABHG: the stops of the VMs of one project, by VM name prefix. A
+    /// VM sees the sum of this and `epoch`, so a stop of one project makes the
+    /// VMs of that project stale and leaves every other project as it is.
+    project_epochs: Mutex<HashMap<String, u64>>,
     /// EAC-FR-MNEH: the bound on one boot.
     boot_bound: Duration,
 }
@@ -340,6 +344,7 @@ impl SandboxPool {
             runtime,
             slots: Mutex::new(HashMap::new()),
             epoch: std::sync::atomic::AtomicU64::new(0),
+            project_epochs: Mutex::new(HashMap::new()),
             boot_bound: BOOT_BOUND,
         }
     }
@@ -394,7 +399,7 @@ impl SandboxPool {
             }
             booted = slot.lock() => booted,
         };
-        let epoch = self.epoch.load(std::sync::atomic::Ordering::SeqCst);
+        let epoch = self.epoch_of(launch.vm);
         let identities = source_identities(launch.spec);
         let mut decision = reuse(booted.as_ref(), &launch, &identities, epoch);
         if matches!(decision, Reuse::Yes) {
@@ -811,9 +816,37 @@ impl SandboxPool {
     /// shutdown must not wait on a turn.
     pub async fn stop_all(&self) {
         self.epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.stop_slots(|_| true).await;
+    }
+
+    /// EAC-FR-ABHG: stop the VMs of one project and no other. A project that
+    /// closes stops its own VMs; the runs of the other open projects go on.
+    pub async fn stop_project(&self, project_key: &str) {
+        let prefix = vm_prefix(project_key);
+        {
+            let mut epochs =
+                self.project_epochs.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            *epochs.entry(prefix.clone()).or_insert(0) += 1;
+        }
+        self.stop_slots(|vm| vm.starts_with(&prefix)).await;
+    }
+
+    /// The stop epoch a VM is in: the stops of every VM and the stops of its
+    /// own project.
+    fn epoch_of(&self, vm: &str) -> u64 {
+        let all = self.epoch.load(std::sync::atomic::Ordering::SeqCst);
+        let epochs = self.project_epochs.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        all + epochs.get(project_part(vm)).copied().unwrap_or(0)
+    }
+
+    async fn stop_slots(&self, wanted: impl Fn(&str) -> bool) {
         let slots: Vec<(String, Slot)> = {
             let slots = self.slots.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            slots.iter().map(|(vm, slot)| (vm.clone(), slot.clone())).collect()
+            slots
+                .iter()
+                .filter(|(vm, _)| wanted(vm))
+                .map(|(vm, slot)| (vm.clone(), slot.clone()))
+                .collect()
         };
         for (vm, slot) in slots {
             let booted = match slot.try_lock() {
@@ -919,8 +952,20 @@ pub(super) fn cancelled_outcome() -> RuntimeOutcome {
 /// EAC-FR-DWBS: the VM name of one scope of one project. A name identifies one
 /// queue of one project, and holds nothing that names a path.
 pub fn vm_name(project_key: &str, scope: &SandboxScope) -> String {
-    let digest = crate::fs::sha256_bytes(format!("{project_key}\0{}", scope.queue_key).as_bytes());
-    format!("synthesis-{}", &digest[..20])
+    let digest = crate::fs::sha256_bytes(scope.queue_key.as_bytes());
+    format!("{}{}", vm_prefix(project_key), &digest[..10])
+}
+
+/// EAC-FR-ABHG: what the name of every VM of one project starts with, so a
+/// project can stop its own VMs and no other.
+pub fn vm_prefix(project_key: &str) -> String {
+    let digest = crate::fs::sha256_bytes(project_key.as_bytes());
+    format!("synthesis-{}-", &digest[..9])
+}
+
+/// The part of a VM name that names its project, with the closing dash.
+fn project_part(vm: &str) -> &str {
+    vm.rfind('-').map_or(vm, |dash| &vm[..=dash])
 }
 
 mod production;

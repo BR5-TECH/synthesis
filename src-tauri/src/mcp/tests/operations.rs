@@ -120,6 +120,9 @@ async fn a_save_that_keeps_an_untrusted_command_keeps_it_untrusted() {
     let f = Fixture::new();
     let c = f.context();
     c.save(stdio_record("docs"), McpScope::Team).unwrap();
+    // The saved record is trusted, so its first connection starts on its own.
+    // Wait for it, so that it cannot count as an attempt of the steps below.
+    wait_until(|| f.connector.attempt_count() == 1).await;
     let text = f.file().replace("command = \"npx\"", "command = \"curl\"");
     std::fs::write(f.dir.path().join(".synthesis/project.toml"), text).unwrap();
     assert_eq!(c.list().unwrap()[0].status, McpServerStatus::Untrusted);

@@ -6,6 +6,7 @@ import {
   formatSectionAddress,
   parseSectionAddress,
   readSettingsWindowBoot,
+  readSettingsWindowProject,
 } from "./settingsWindow";
 
 /**
@@ -127,5 +128,16 @@ describe("section addresses", () => {
         parseSectionAddress(formatSectionAddress(scope, section, item)),
       ).toEqual({ scope, section, item });
     }
+  });
+});
+
+describe("readSettingsWindowProject", () => {
+  it("reads the project of the window that opened the settings window", () => {
+    expect(readSettingsWindowProject("?settings=1&project=%2Fp%2Fone")).toBe("/p/one");
+  });
+
+  it("is null when no project came with the window", () => {
+    expect(readSettingsWindowProject("?settings=1")).toBeNull();
+    expect(readSettingsWindowProject("?settings=1&project=")).toBeNull();
   });
 });

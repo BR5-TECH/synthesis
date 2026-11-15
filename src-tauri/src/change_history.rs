@@ -285,9 +285,8 @@ fn resolve<R: tauri::Runtime>(
     stream_id: &str,
     change: &str,
 ) -> Result<std::path::PathBuf, String> {
-    use tauri::Manager;
-    if app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok()).is_none()
-    {
+    use crate::project::OpenProject as _;
+    if app.open_project_state().and_then(|p| p.require_root().ok()).is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
     }
     if !crate::openspec::change::valid_change_name(change) {
@@ -340,6 +339,7 @@ fn report<R: tauri::Runtime, T>(
 }
 
 /// CVH-FR-VZGR / CVH-FR-GHMO: `"list change versions"`, on a blocking thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_change_versions<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -349,7 +349,7 @@ pub async fn list_change_versions<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let started = std::time::Instant::now();
         let outcome =
             resolve(&app, &stream_id, &change).and_then(|root| list_versions_in(&root, &change));
@@ -361,6 +361,7 @@ where
 }
 
 /// CVH-FR-VDZZ / CVH-FR-GHMO: `"read change version"`, on a blocking thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn read_change_version<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -371,7 +372,7 @@ pub async fn read_change_version<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let started = std::time::Instant::now();
         let outcome = resolve(&app, &stream_id, &change)
             .and_then(|root| read_version_in(&root, &change, &commit_id));

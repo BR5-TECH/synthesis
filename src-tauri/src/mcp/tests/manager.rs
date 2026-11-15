@@ -34,6 +34,11 @@ async fn an_allowed_server_connects_and_becomes_ready() {
     manager.reconcile(project(), vec![input(http_record("docs", McpAuth::None))], None);
     ready(&manager, "docs").await;
     assert_eq!(status_of(&manager, "docs"), Some(McpServerStatus::Ready { tool_count: 5 }));
+    wait_until(|| {
+        observer.statuses.lock().unwrap().len() == 2
+            && observer.log_text().contains("mcp connection opened")
+    })
+    .await;
     let statuses: Vec<_> =
         observer.statuses.lock().unwrap().iter().map(|(_, s)| s.code()).collect();
     assert_eq!(statuses, ["connecting", "ready"]);

@@ -126,14 +126,14 @@ impl CliRunner for RealCliRunner {
 
         let mut out_pipe = child.stdout.take();
         let mut err_pipe = child.stderr.take();
-        let out_handle = std::thread::spawn(move || {
+        let out_handle = crate::project_scope::context::thread_spawn(move || {
             let mut buf = String::new();
             if let Some(pipe) = out_pipe.as_mut() {
                 let _ = pipe.read_to_string(&mut buf);
             }
             buf
         });
-        let err_handle = std::thread::spawn(move || {
+        let err_handle = crate::project_scope::context::thread_spawn(move || {
             let mut buf = String::new();
             if let Some(pipe) = err_pipe.as_mut() {
                 let _ = pipe.read_to_string(&mut buf);

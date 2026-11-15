@@ -103,7 +103,7 @@ impl DocumentsWatcher {
         };
         self.pending.store(false, Ordering::SeqCst);
         if let Some(old) = old {
-            std::thread::spawn(move || drop(old));
+            crate::project_scope::context::thread_spawn(move || drop(old));
         }
     }
 
@@ -148,11 +148,14 @@ impl DocumentsWatcher {
         if targets.is_empty() {
             return;
         }
-        let mut debouncer = match new_debouncer(DEBOUNCE, move |result: DebounceEventResult| {
-            if result.is_ok() {
-                on_change();
-            }
-        }) {
+        let mut debouncer = match new_debouncer(
+            DEBOUNCE,
+            crate::project_scope::context::wrap_handler(move |result: DebounceEventResult| {
+                if result.is_ok() {
+                    on_change();
+                }
+            }),
+        ) {
             Ok(debouncer) => debouncer,
             Err(_) => {
                 log.log(
@@ -182,7 +185,7 @@ impl DocumentsWatcher {
         if inner.epoch != epoch {
             // A stop came while the paths were registered.
             drop(inner);
-            std::thread::spawn(move || drop(debouncer));
+            crate::project_scope::context::thread_spawn(move || drop(debouncer));
             return;
         }
         inner.debouncer = Some(debouncer);

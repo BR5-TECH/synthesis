@@ -1,6 +1,7 @@
 //! The one funnel a run's state changes through (GRD-FR-QJHM).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// Move a run to `next`, durably, and tell every reader.
 ///
@@ -49,7 +50,7 @@ pub fn transition<R: tauri::Runtime>(
         // The loop that drove the run is ending. Its claim is not the hold, which
         // the stored run carries (GRD-FR-BSWV), so a Continue that follows finds
         // no stale claim in its way.
-        if let Some(state) = app.try_state::<GraduationState>() {
+        if let Some(state) = app.try_project_store::<GraduationState>() {
             state.release_run(&run.queue_key(), &run.id);
         }
     }
@@ -125,7 +126,7 @@ pub fn enter_stage<R: tauri::Runtime>(
 /// GRD-FR-BNTC / WKS-FR-JQJA: release the stream this run was holding, in
 /// memory and on the stream's own record.
 pub(super) fn release_stream<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
-    if let Some(state) = app.try_state::<GraduationState>() {
+    if let Some(state) = app.try_project_store::<GraduationState>() {
         state.release_run(&run.queue_key(), &run.id);
     }
     // An ordinary worktree has no stream record to clear (GRD-FR-ZVNO).

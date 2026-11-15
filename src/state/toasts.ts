@@ -29,6 +29,11 @@ export interface ToastEntry {
   key: string;
   level: NotificationLevel;
   title: string;
+  /**
+   * NTF-FR-NGCD: the name of the project that raised the toast, shown on the
+   * header line after the level. Absent for a result toast of a surface.
+   */
+  projectName?: string;
   /** May be empty. A toast with an empty body shows no body line. */
   body: string;
   /** Where a click lands the author. Null for a toast that only dismisses. */

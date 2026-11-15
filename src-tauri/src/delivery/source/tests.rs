@@ -4,6 +4,7 @@
 //! network.
 
 use serde_json::json;
+use tauri::Manager as _;
 
 use super::export::export_impl;
 use super::milestones::{milestone_order, milestones_impl, milestones_of};

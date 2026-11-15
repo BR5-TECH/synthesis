@@ -63,10 +63,10 @@
 //! artifact and Git history (`HIS-history.md`), with which this shares neither
 //! storage nor surface.
 
+use crate::project_scope::events::EmitToProject;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
 
 use crate::comments::{self, Participant};
 use crate::draft_proposals::{self, DraftChangeProposal, ProposalState};
@@ -504,7 +504,7 @@ pub fn announce_entry<R: tauri::Runtime>(
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let _ = app.emit(
+    let _ = app.emit_project(
         HISTORY_CHANGED,
         HistoryChanged { draft_id: draft_id.to_string(), entry: entry.cloned() },
     );
@@ -587,11 +587,12 @@ fn log_recovery<R: tauri::Runtime>(
     );
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_draft_history<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftHistoryList, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -604,11 +605,12 @@ where
     list_impl(&root, &draft_id)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_draft_history_entry<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     entry_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftHistoryContent, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,

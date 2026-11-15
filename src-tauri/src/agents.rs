@@ -23,8 +23,9 @@
 //! (AGR-FR-15). This module describes *who may be spoken to* and never speaks
 //! to them. Holding the conversation is `crate::agent_conversations`'.
 
+use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
+use tauri::State;
 
 use crate::ai_api::{self, ReasoningChoice};
 use crate::fs::RootFs;
@@ -786,19 +787,21 @@ fn open_worktree(project: &ProjectState) -> Option<RootFs> {
     project.require_root().ok()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_personal_agents(
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ProjectAgent>, String> {
     list_personal_agents_impl(&store, &project.slot_key(), open_worktree(&project).as_ref())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_project_agents<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ProjectAgent>, String> {
     let key = require_project(&project)?;
     let worktree = open_worktree(&project).ok_or(ERR_NO_PROJECT_OPEN)?;
@@ -817,13 +820,14 @@ pub fn list_project_agents<R: tauri::Runtime>(
     Ok(roster)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn create_agent<R: tauri::Runtime>(
     scope: AgentScope,
     draft: AgentDraft,
     app: tauri::AppHandle<R>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Agent, String> {
     let result = create_agent_impl(
         &store,
@@ -835,10 +839,11 @@ pub fn create_agent<R: tauri::Runtime>(
     let id = result.as_ref().map(|a| a.id.as_str()).unwrap_or("");
     log_write(&app, "create", scope, id, &result.as_ref().map(|_| ()).map_err(String::as_str));
     let agent = result?;
-    let _ = app.emit(AGENTS_CHANGED, ());
+    let _ = app.emit_project(AGENTS_CHANGED, ());
     Ok(agent)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn update_agent<R: tauri::Runtime>(
     scope: AgentScope,
@@ -846,7 +851,7 @@ pub fn update_agent<R: tauri::Runtime>(
     draft: AgentDraft,
     app: tauri::AppHandle<R>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Agent, String> {
     let result = update_agent_impl(
         &store,
@@ -858,7 +863,7 @@ pub fn update_agent<R: tauri::Runtime>(
     );
     log_write(&app, "update", scope, &id, &result.as_ref().map(|_| ()).map_err(String::as_str));
     let agent = result?;
-    let _ = app.emit(AGENTS_CHANGED, ());
+    let _ = app.emit_project(AGENTS_CHANGED, ());
     Ok(agent)
 }
 
@@ -866,15 +871,16 @@ pub fn update_agent<R: tauri::Runtime>(
 /// (AGC-FR-20) — an agent that no longer exists should not go on answering. A
 /// Project agent's turns are cancelled in the open project; a Personal agent's
 /// in every project.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn delete_agent<R: tauri::Runtime>(
     scope: AgentScope,
     id: String,
     app: tauri::AppHandle<R>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
-    turns: State<'_, crate::agent_conversations::TurnRegistry>,
-    progress: State<'_, crate::progress::ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, crate::agent_conversations::TurnRegistry>,
+    progress: crate::project_scope::Scoped<'_, crate::progress::ProgressRegistry>,
 ) -> Result<Vec<ProjectAgent>, String> {
     let key = project.slot_key();
     let result = delete_agent_impl(&store, &key, open_worktree(&project).as_ref(), scope, &id);
@@ -885,7 +891,7 @@ pub fn delete_agent<R: tauri::Runtime>(
         AgentScope::Personal => None,
     };
     crate::agent_conversations::cancel_turns_for_agent(&app, &turns, &progress, &id, cancel_in);
-    let _ = app.emit(AGENTS_CHANGED, ());
+    let _ = app.emit_project(AGENTS_CHANGED, ());
     Ok(agents)
 }
 

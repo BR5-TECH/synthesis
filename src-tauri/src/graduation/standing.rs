@@ -6,6 +6,7 @@
 //! behind several others — so nothing here reads a path set the author was
 //! shown: it acts on what stands in the stream at this moment.
 
+use crate::project_scope::ProjectStores;
 use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
@@ -127,7 +128,7 @@ fn push_stream_branch<R: tauri::Runtime>(
     // switch projects while this run works, and the credential a push presents
     // belongs to the project the stream is part of.
     let key = project_key.to_string();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         let _ = report.send(push_now(&handle, &root, &key));
     });
 
@@ -171,7 +172,7 @@ fn push_now<R: tauri::Runtime>(
     let (Some(store), Some(tokens), Some(registry)) = (
         app.try_state::<crate::global_settings::GlobalSettingsStore>(),
         app.try_state::<crate::github_tokens::GithubTokens>(),
-        app.try_state::<crate::progress::ProgressRegistry>(),
+        app.try_project_store::<crate::progress::ProgressRegistry>(),
     ) else {
         return Err(ERR_PUSH_UNAVAILABLE.to_string());
     };

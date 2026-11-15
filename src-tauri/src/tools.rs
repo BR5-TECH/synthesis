@@ -375,12 +375,14 @@ pub fn log_tool_refusal_with<S: LogSink + Clone + Send + 'static>(
 /// conclude the project offers none and stop looking (SST-FR-07, SLT-FR-11).
 pub fn require_open_project<'a, R: tauri::Runtime>(
     app: &'a tauri::AppHandle<R>,
-) -> Result<tauri::State<'a, crate::bm25_index::Bm25Indexer>, ToolRefusal> {
+) -> Result<crate::project_scope::Scoped<'a, crate::bm25_index::Bm25Indexer>, ToolRefusal> {
     // `try_state` rather than `state`: a mock app in another module's test
     // manages only the stores that test needs, and a panic here would be a far
     // worse answer than the refusal this returns anyway.
-    let indexer =
-        app.try_state::<crate::bm25_index::Bm25Indexer>().ok_or(ToolRefusal::NoProjectOpen)?;
+    let indexer = crate::project_scope::ProjectStores::try_project_store::<
+        crate::bm25_index::Bm25Indexer,
+    >(app)
+    .ok_or(ToolRefusal::NoProjectOpen)?;
     if indexer.root().is_none() {
         return Err(ToolRefusal::NoProjectOpen);
     }

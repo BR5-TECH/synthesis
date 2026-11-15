@@ -12,13 +12,17 @@ fn deleting_a_merged_stream_removes_its_branch_and_its_working_copy() {
     let stream = fx.create("spent", None).expect("created");
     let path = stream.worktree_path.clone();
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+        .expect("deleted");
 
     let repo = fx.repo();
     assert!(!branch_names(&repo).contains(&stream.branch));
     assert!(worktree_names(&repo).is_empty());
     assert!(!Path::new(&path).exists());
-    assert_eq!(get_work_stream(fx.app.clone(), stream.id).expect_err("gone"), ERR_UNKNOWN_STREAM);
+    assert_eq!(
+        get_work_stream(fx.app.clone(), stream.id, Default::default()).expect_err("gone"),
+        ERR_UNKNOWN_STREAM
+    );
 }
 
 // WKS-FR-EIBC: a stream carrying commits its base does not hold is refused
@@ -32,7 +36,8 @@ fn deleting_an_unmerged_stream_is_refused_and_names_the_count() {
     commit_all(&worktree, "stream work");
 
     let refusal =
-        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect_err("refused");
+        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+            .expect_err("refused");
     assert!(refusal.starts_with(ERR_STREAM_UNMERGED), "{refusal}");
     assert!(refusal.contains('1'), "the count is named: {refusal}");
 
@@ -51,7 +56,8 @@ fn force_deletes_an_unmerged_stream() {
     std::fs::write(Path::new(&stream.worktree_path).join("new.txt"), "work\n").unwrap();
     commit_all(&worktree, "stream work");
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), true, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), true, false, Default::default())
+        .expect("deleted");
     let repo = fx.repo();
     assert!(!branch_names(&repo).contains(&stream.branch));
 }
@@ -68,7 +74,8 @@ fn deleting_a_busy_stream_is_refused() {
     store::write_stream(&fs, &store, &stream).expect("written");
 
     assert_eq!(
-        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect_err("refused"),
+        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+            .expect_err("refused"),
         ERR_STREAM_BUSY
     );
     let repo = fx.repo();
@@ -89,7 +96,8 @@ fn deleting_a_stream_whose_working_copy_is_locked_removes_it() {
         repo.find_worktree(&name).unwrap().lock(Some("claude agent agent-x (pid 1)")).unwrap();
     }
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+        .expect("deleted");
 
     let repo = fx.repo();
     assert!(!branch_names(&repo).contains(&stream.branch));

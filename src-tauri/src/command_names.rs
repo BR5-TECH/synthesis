@@ -264,6 +264,18 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Held project close / application quit (SNV-FR-25 / SNV-FR-26 / EDT-FR-33).
     "close_project",
     "finish_exit",
+    "resolve_project_at_path",
+    "resolve_project_from_git_url",
+    "resolve_new_project",
+    "list_project_windows",
+    "current_project_window",
+    "attach_project_to_window",
+    "detach_project_from_window",
+    "open_project_window",
+    "activate_project_window",
+    "request_project_window_close",
+    "close_project_window",
+    "set_project_window_attention",
     // File -> Save / Save All enablement (SNV-FR-28 / SNV-FR-30).
     "set_save_menu_state",
     // Edit -> Find / Find & Replace enablement (SNV-FR-43).

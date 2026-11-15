@@ -2,6 +2,7 @@
 //! OSM-FR-UJPT): the bytes of one image file of a change in its stream's
 //! working copy, for the Rich view of the change workspace.
 
+use crate::project::OpenProject as _;
 use serde::Serialize;
 
 use crate::fs as fsa;
@@ -63,6 +64,7 @@ pub fn read_change_image_in(
 }
 
 /// OSM-FR-BLEY / OSM-FR-UJPT: `"read change image"`, on a blocking thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn read_change_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -73,10 +75,9 @@ pub async fn read_change_image<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || {
-        use tauri::Manager;
+    crate::project_scope::context::spawn_blocking(move || {
         let outcome = (|| {
-            app.try_state::<crate::project::ProjectState>()
+            app.open_project_state()
                 .and_then(|p| p.require_root().ok())
                 .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
             let (_, copy) = crate::change_proposals::stream_working_copy(&stream_id)

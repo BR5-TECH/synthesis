@@ -50,6 +50,7 @@ fn a_shadow_draft_is_admitted_to_graduation() {
         StandingWork::Keep,
         None,
         None,
+        Default::default(),
     );
     assert!(refused.is_err());
     assert_eq!(fx.resolved_status(&draft), crate::drafts::DraftStatus::GithubShadow);
@@ -66,7 +67,8 @@ fn a_shadow_draft_is_admitted_to_graduation() {
             .collect::<Vec<_>>()
     };
     assert!(graduation_events().is_empty(), "a refused start commits nothing");
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert!(queue.runs.is_empty(), "a refused start made no run");
 
     fx.hold_stream(&stream.id);
@@ -77,6 +79,7 @@ fn a_shadow_draft_is_admitted_to_graduation() {
         StandingWork::Keep,
         None,
         None,
+        Default::default(),
     )
     .expect("a shadow draft starts like any other");
     assert_eq!(run.input.draft_id, draft);

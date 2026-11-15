@@ -1,5 +1,6 @@
 //! The agent group settings: the switch and the join timeout (PSS-FR-CQML).
 
+use crate::project::OpenProject as _;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
@@ -39,9 +40,10 @@ impl AgentGroupSettings {
 }
 
 /// `"load agent group settings"` (PSS-FR-CQML).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_agent_group_settings(
-    project: tauri::State<'_, crate::project::ProjectState>,
+    project: crate::project_scope::Scoped<'_, crate::project::ProjectState>,
     store: tauri::State<'_, GlobalSettingsStore>,
 ) -> Result<AgentGroupSettings, String> {
     let key = project.anchor().ok_or_else(|| crate::agents::ERR_NO_PROJECT_OPEN.to_string())?;
@@ -49,13 +51,14 @@ pub fn load_agent_group_settings(
 }
 
 /// `"save agent group settings"` (PSS-FR-CQML).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_agent_group_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: AgentGroupSettings,
 ) -> Result<AgentGroupSettings, String> {
     settings.validate()?;
-    let project = app.state::<crate::project::ProjectState>();
+    let project = app.open_project_state_or_default();
     let key = project.anchor().ok_or_else(|| crate::agents::ERR_NO_PROJECT_OPEN.to_string())?;
     app.state::<GlobalSettingsStore>().save_agent_group_settings(&key, &settings)?;
     log_info(

@@ -21,11 +21,12 @@ use super::*;
 /// DCP-FR-09 / DCP-FR-28: every proposal the draft holds, after the draft's
 /// acceptance journal has been reconciled — so no proposal is ever reported in a
 /// state the journal has not yet settled.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_draft_change_proposals<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<DraftChangeProposal>, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -38,16 +39,18 @@ where
 
 /// DCP-FR-10: the proposal's hunks and their placements, for a review about to
 /// render them.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_draft_change_proposal_hunks(
     proposal_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProposalHunks, String> {
     let root = project.require_root()?;
     load_hunks_impl(&root, &proposal_id)
 }
 
 /// a turn (DCR-FR-15).
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn accept_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -55,7 +58,7 @@ pub fn accept_draft_change_hunk<R: tauri::Runtime>(
     hunk_id: String,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -69,6 +72,7 @@ where
 }
 
 /// DCP-FR-14: reject one change, writing nothing into the draft.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn reject_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -76,7 +80,7 @@ pub fn reject_draft_change_hunk<R: tauri::Runtime>(
     hunk_id: String,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -95,7 +99,7 @@ fn decide_hunk<R: tauri::Runtime>(
     decision: Decision,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -117,13 +121,14 @@ where
 ///
 /// A held change is **undecided**, so it still occupies the draft's one slot —
 /// a change the author is talking about is one they have not decided.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_draft_change_hunk_discussing<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     hunk_id: String,
     discussing: bool,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftChangeProposal, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -204,6 +209,7 @@ pub fn edit_hunk_impl(
     Ok(CandidateSaved { checksum })
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn edit_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -211,7 +217,7 @@ pub fn edit_draft_change_hunk<R: tauri::Runtime>(
     hunk_id: String,
     after: String,
     baseline_checksum: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<CandidateSaved, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -221,13 +227,14 @@ where
         .inspect_err(|e| log_refusal(&app, "edit_hunk", e))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn decline_draft_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,

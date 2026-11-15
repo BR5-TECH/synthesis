@@ -345,7 +345,7 @@ where
     F: std::future::Future<Output = Result<T, CallFailure>> + Send + 'static,
     T: Send + 'static,
 {
-    let handle = std::thread::spawn(move || {
+    let handle = crate::project_scope::context::thread_spawn(move || {
         let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
             Ok(runtime) => runtime,
             Err(_) => return Err(CallFailure::unreachable(class::TRANSPORT_OTHER)),

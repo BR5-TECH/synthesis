@@ -6,7 +6,7 @@
  * `./index.ts` carries the whole rule these files are written under. Every
  * refusal is a bare typed code (GPP-FR-SUFH).
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type {
   GithubClaimResult,
   GithubPollingInterval,

@@ -12,8 +12,8 @@
 //! No log line here carries the title, the body, or any text of the note
 //! (GHP-FR-MAMT).
 
+use crate::project::OpenProject as _;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
 
 use super::client::{GithubIssues, IssueFields};
 use super::records::*;
@@ -21,7 +21,6 @@ use super::{flow, issues_client, off_thread, project_token, resolve_publication_
 use crate::github_tokens::ProjectToken;
 use crate::log_fields;
 use crate::logging::{self, Domain};
-use crate::project::ProjectState;
 
 /// GHP-FR-HKMC: the most characters a title holds.
 pub const MAX_TITLE_CHARS: usize = 256;
@@ -250,7 +249,7 @@ pub fn is_repository_issue_url(url: &str, host: &str, owner: &str, repo: &str) -
 fn run_condition<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(crate::fs::RootFs, PublicationRepository, ProjectToken), String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT.to_string())?;
     let polling = crate::project_settings::load_github_polling_settings_from(&root)
         .map_err(|_| ERR_INVALID_PUBLICATION_SETTINGS.to_string())?;
@@ -279,6 +278,7 @@ fn warn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, note_id: &str, code: &str)
 // ---------------------------------------------------------------------------
 
 /// GHP-FR-CNPX: whether **Publish to GitHub** is available on a note row.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_note_publication_availability(
     app: tauri::AppHandle,
@@ -308,6 +308,7 @@ pub(super) fn get_note_publication_availability_impl<R: tauri::Runtime>(
 }
 
 /// GHP-FR-JGNI: publish a note as an issue, then delete the note.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn publish_note_to_github(
     note_id: String,
@@ -405,6 +406,7 @@ pub(super) fn publish_note_to_github_impl<R: tauri::Runtime>(
 
 /// GHP-FR-MAMB: open an issue of the publication repository in the system
 /// browser. No draft is needed.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn open_publication_repository_issue(
     url: String,
@@ -432,7 +434,7 @@ pub(super) fn require_repository_issue_url<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     url: &str,
 ) -> Result<(), String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     project.require_root().map_err(|_| ERR_NO_PROJECT.to_string())?;
     let token = project_token(app, &project.slot_key());
     let repository = resolve_publication_repository_with(app, token.as_ref())?;

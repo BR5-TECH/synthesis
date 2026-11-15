@@ -87,7 +87,7 @@ where
     F: std::future::Future<Output = Result<String, String>> + Send + 'static,
 {
     let ledger = ledger.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         let result = transcription.await;
         if let Ok(mut ledger) = ledger.lock() {
             ledger.resolve(index, result);

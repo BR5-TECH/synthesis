@@ -5,7 +5,7 @@
 //! reads the same from the window that started it, from another window, and
 //! from a launch after the one that ran it.
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use super::commands::{
     announce, project_key, project_root, refuse, store, store_fs, stream_has_live_run,
@@ -70,6 +70,7 @@ fn missing_at<R: tauri::Runtime>(
 ///
 /// Returns the update's record in `running`. The update runs to rest on a thread
 /// of its own, and what it settled is read back through `get_work_stream_update`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn update_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -177,6 +178,7 @@ pub(crate) fn update_work_stream_with<R: tauri::Runtime>(
 }
 
 /// WKS-FR-GYHF: what one stream's last update did, or nothing.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -186,6 +188,7 @@ pub fn get_work_stream_update<R: tauri::Runtime>(
 }
 
 /// WKS-FR-CBXW: the author's answers to an update that asked.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn answer_work_stream_update_escalation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -291,6 +294,7 @@ pub(crate) fn answer_work_stream_update_escalation_with<R: tauri::Runtime>(
 }
 
 /// WKS-FR-DPNM: run the update again, with three fresh semantic turns.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn retry_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -359,6 +363,7 @@ pub(crate) fn retry_work_stream_update_with<R: tauri::Runtime>(
 }
 
 /// WKS-FR-LRAV: forget what an update settled.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn clear_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -367,7 +372,7 @@ pub fn clear_work_stream_update<R: tauri::Runtime>(
     let stream = stream_of(&app, &stream_id)?;
     let fs = store_fs(&app)?;
     let store = store(&app)?;
-    let held = app.try_state::<StreamState>();
+    let held = app.try_project_store::<StreamState>();
     let _write = held.as_ref().map(|state| state.write_guard());
 
     let running = update_record::read_update(&fs, &store, &stream_id)
@@ -399,13 +404,14 @@ pub fn clear_work_stream_update<R: tauri::Runtime>(
 /// A stream with no update running is answered without an error: an update that
 /// settled between the author reading the row and pressing the control is not a
 /// failure of the request.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
 ) -> Result<(), String> {
     let stopped = app
-        .try_state::<StreamState>()
+        .try_project_store::<StreamState>()
         .map(|state| state.cancel_update(&stream_id))
         .unwrap_or(false);
     logging::log_info(

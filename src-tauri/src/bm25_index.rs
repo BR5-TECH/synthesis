@@ -44,6 +44,7 @@
 //! each with that shard's own stemming. A monolingual project — very nearly all
 //! of them — has exactly one shard per index and pays nothing for this.
 
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -52,7 +53,6 @@ use std::time::Duration;
 
 use bm25::{Language, SearchEngine};
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
 
 use crate::logging::{log_error, log_info, log_warn, Domain, BUFFER};
 use crate::progress::{self, OperationState, ProgressRegistry};
@@ -758,7 +758,7 @@ impl Bm25Indexer {
         generation: u64,
     ) -> Option<PassStats> {
         let pass = self.passes_started.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-        let registry = app.state::<ProgressRegistry>();
+        let registry = app.project_store::<ProgressRegistry>();
 
         // BMI-FR-22: one operation per pass, terminated whatever the outcome.
         let operation = progress::register_and_publish(
@@ -788,7 +788,7 @@ impl Bm25Indexer {
             // later one.
             let documents_fed = scope.documents
                 && app
-                    .try_state::<crate::documents::DocumentsCollection>()
+                    .try_project_store::<crate::documents::DocumentsCollection>()
                     .is_some_and(|collection| collection.has_refreshed());
             let (sources, skills, exclusions) = collect_sources(app, root, scope);
             progress::update_and_publish(

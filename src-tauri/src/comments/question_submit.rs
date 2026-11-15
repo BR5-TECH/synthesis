@@ -241,6 +241,7 @@ fn submission_events(
 ///
 /// Off the main thread: the hand-over of a plan update's answers takes the
 /// graduation write hold, which a Continue holds across its OpenSpec reads.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -248,7 +249,7 @@ pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     set_id: String,
     answers: Vec<QuestionAnswer>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<QuestionAnswersSubmitted, String> {
     let thread_id = discussion_id;
     let root = project.require_store()?;

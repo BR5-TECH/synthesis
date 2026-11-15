@@ -125,10 +125,12 @@ fn a_merge_run_is_listed_and_read_with_its_merge_data() {
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
 
     let read =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("a run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("a run");
     assert_eq!(read.merge.as_ref().map(|m| m.name.as_str()), Some("Merge feature"));
     assert!(read.merge.as_ref().unwrap().result.is_none());
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("a queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("a queue");
     let listed = queue.runs.iter().find(|r| r.id == run.id).expect("listed");
     assert_eq!(listed.merge, run.merge);
     assert_eq!(listed.state, GraduationRunState::Queued);
@@ -137,7 +139,8 @@ fn a_merge_run_is_listed_and_read_with_its_merge_data() {
     done.id = run.id.clone();
     crate::graduation::save_run(&fx.app, &mut done).expect("saved");
     let read =
-        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("a run");
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+            .expect("a run");
     assert_eq!(read.state, GraduationRunState::Completed);
     assert_eq!(
         read.merge.unwrap().result.unwrap().merged_paths,

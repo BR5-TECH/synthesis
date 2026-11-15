@@ -288,6 +288,7 @@ const DOMAINS: [Domain; 2] = [Domain::Backend, Domain::Remote];
 
 /// GSS-FR-ZKQT: the stored record. Reads the store and reaches no network, so
 /// the Remote connectivity section renders offline and instantly.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_relay_endpoint(store: State<'_, GlobalSettingsStore>) -> Result<RelayEndpoint, String> {
     Ok(store.load_relay_endpoint()?.outbound())
@@ -295,6 +296,7 @@ pub fn load_relay_endpoint(store: State<'_, GlobalSettingsStore>) -> Result<Rela
 
 /// GSS-FR-NLDC: persist the URL, and return the record with the validation
 /// state that URL carries.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_relay_endpoint(
     url: String,
@@ -329,6 +331,7 @@ pub fn save_relay_endpoint_with<S: LogSink + Clone + Send + 'static>(
 
 /// GSS-FR-HPWE: read the relay's unauthenticated health answer, and commit the
 /// success only where the relay answered and advertised what is needed.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn verify_relay_endpoint(
     url: String,

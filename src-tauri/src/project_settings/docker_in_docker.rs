@@ -7,7 +7,6 @@
 //! save carries every other section through unchanged.
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
 
 use super::{load_local, local_store_lock, write_local};
 use crate::project::ProjectState;
@@ -176,9 +175,10 @@ pub fn save_docker_in_docker_settings_to(
     write_local(root, &config)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_docker_in_docker_settings(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DockerInDockerState, String> {
     // No project open: the defaults, as a worktree with nothing stored.
     match project.require_root() {
@@ -187,10 +187,11 @@ pub fn load_docker_in_docker_settings(
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_docker_in_docker_settings(
     settings: DockerInDockerSettings,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     save_docker_in_docker_settings_to(&root, settings)

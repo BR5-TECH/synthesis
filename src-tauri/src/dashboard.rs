@@ -24,11 +24,13 @@
 //! [`active_drafts_from`], and [`agent_runs_from`] — are unit-tested here
 //! without a Tauri runtime.
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
-use tauri::{Emitter, Manager, State};
 
 use crate::artifacts::ArtifactKind;
 use crate::drafts::{DraftStatus, DraftSummary};
@@ -350,10 +352,11 @@ fn stat_artifacts(
 ///
 /// Answers with an empty list rather than an error when no project is open
 /// (PST-FR-12), which is what hides the widget on an empty Dashboard.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_recently_edited_artifacts(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<RecentlyEditedItem>, String> {
     let Ok(root) = project.require_root() else {
         return Ok(Vec::new());
@@ -402,10 +405,11 @@ fn active_drafts_from(drafts: Vec<DraftSummary>) -> Vec<ActiveDraftItem> {
 }
 
 /// `"list active drafts"` (PST-FR-32).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_active_drafts(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ActiveDraftItem>, String> {
     let Ok(root) = project.require_root() else {
         return Ok(Vec::new());
@@ -507,10 +511,11 @@ fn agent_runs_impl<R: tauri::Runtime>(
 }
 
 /// `"list recent agent runs"` (PST-FR-33).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_recent_agent_runs(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentRunItem>, String> {
     agent_runs_impl(&app, &project)
 }
@@ -551,9 +556,10 @@ fn pending_git_impl(root: &crate::fs::RootFs) -> Result<PendingGitActivity, Stri
 }
 
 /// `"list pending git activity"` (PST-FR-34).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_pending_git_activity(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<PendingGitActivity, String> {
     let Ok(root) = project.require_root() else {
         return Ok(PendingGitActivity::default());
@@ -567,8 +573,11 @@ pub fn list_pending_git_activity(
 
 /// `"list due/upcoming reminders"` (PST-FR-12), backed by the notes carrying a
 /// reminder (NTC-FR-17). Soonest first, which is the order that module returns.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn list_due_reminders(project: State<'_, ProjectState>) -> Result<Vec<ReminderItem>, String> {
+pub fn list_due_reminders(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<Vec<ReminderItem>, String> {
     let Ok(root) = project.require_root() else {
         return Ok(Vec::new());
     };
@@ -587,9 +596,10 @@ pub fn list_due_reminders(project: State<'_, ProjectState>) -> Result<Vec<Remind
 
 /// `"list project health signals"` (PST-FR-12). Empty in the walking skeleton,
 /// which hides the widget (DSH-FR-04).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_project_health_signals(
-    _project: State<'_, ProjectState>,
+    _project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ProjectHealthSignal>, String> {
     Ok(Vec::new())
 }
@@ -605,7 +615,7 @@ pub fn list_project_health_signals(
 /// application performed moves the file's modification time and must therefore
 /// move the widget, which is the whole point of ordering by that time.
 pub fn note_recently_edited_changed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let _ = app.emit(DASHBOARD_RECENTLY_EDITED_CHANGED, ());
+    let _ = app.emit_project(DASHBOARD_RECENTLY_EDITED_CHANGED, ());
 }
 
 /// PST-FR-35: which drafts qualify, how they are named, or how they order may
@@ -616,7 +626,7 @@ pub fn note_recently_edited_changed<R: tauri::Runtime>(app: &tauri::AppHandle<R>
 /// qualify and what their names and statuses are. A refresh caused by the second
 /// re-reads the same prompt-file times and therefore reorders nothing.
 pub fn note_active_drafts_changed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let _ = app.emit(DASHBOARD_ACTIVE_DRAFTS_CHANGED, ());
+    let _ = app.emit_project(DASHBOARD_ACTIVE_DRAFTS_CHANGED, ());
 }
 
 // ---------------------------------------------------------------------------
@@ -721,7 +731,7 @@ struct RootIdentity {
 /// `try_state`, not `state`: this runs on a background thread, where a panic
 /// surfaces as a silently dead timer rather than as a failure anyone sees.
 fn current_identity<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RootIdentity {
-    app.try_state::<ProjectState>().map(|project| identity_of(&project)).unwrap_or_default()
+    app.open_project_state().map(|project| identity_of(&project)).unwrap_or_default()
 }
 
 impl RootIdentity {
@@ -746,11 +756,15 @@ fn identity_of(project: &ProjectState) -> RootIdentity {
 /// keeps the cadence: the next tick is due 5 minutes later whatever this one
 /// found.
 fn tick<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if !current_identity(app).is_open() {
-        return;
-    }
-    dispatch_refresh(app, DashboardWidget::AgentActivity);
-    dispatch_refresh(app, DashboardWidget::PendingGit);
+    // PWN-FR-CTXT: the timer serves the whole application, so one tick goes
+    // through every open project, each in its own context.
+    crate::project_scope::for_each_project(app, || {
+        if !current_identity(app).is_open() {
+            return;
+        }
+        dispatch_refresh(app, DashboardWidget::AgentActivity);
+        dispatch_refresh(app, DashboardWidget::PendingGit);
+    });
 }
 
 /// Dispatch one widget's refresh, or record it as the pending one behind a
@@ -774,7 +788,7 @@ pub fn dispatch_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>, widget: Da
         );
         return;
     }
-    let Some(state) = app.try_state::<DashboardRefreshState>() else {
+    let Some(state) = app.try_project_store::<DashboardRefreshState>() else {
         // Unmanaged state would leave the slot claimed for good, so the absence
         // is reported rather than swallowed.
         crate::logging::log_error(
@@ -813,7 +827,7 @@ fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>, widget: DashboardWi
     // every loader below is a blocking filesystem or libgit2 read, and blocking
     // a runtime worker is what would eventually starve the commands that share
     // it (PST-FR-37, "nothing here occupies a UI thread").
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         // The slot is claimed until this thread settles it, so a panic inside a
         // loader would leave the widget "refreshing" for the life of the
         // process — never refreshed again, with nothing said about it. Catching
@@ -832,12 +846,12 @@ fn read_for<R: tauri::Runtime>(
     widget: DashboardWidget,
 ) -> Result<(), String> {
     match widget {
-        DashboardWidget::AgentActivity => match app.try_state::<ProjectState>() {
+        DashboardWidget::AgentActivity => match app.open_project_state() {
             Some(project) => agent_runs_impl(app, &project).map(|_| ()),
             None => Ok(()),
         },
         DashboardWidget::PendingGit => {
-            match app.try_state::<ProjectState>().and_then(|p| p.require_root().ok()) {
+            match app.open_project_state().and_then(|p| p.require_root().ok()) {
                 Some(root) => pending_git_impl(&root).map(|_| ()),
                 // The project closed while the refresh was queued. Not a
                 // failure: the result is discarded below on identity.
@@ -863,7 +877,7 @@ fn settle_refresh<R: tauri::Runtime>(
     outcome: Result<(), String>,
 ) {
     let (fresh, next) = {
-        let Some(state) = app.try_state::<DashboardRefreshState>() else {
+        let Some(state) = app.try_project_store::<DashboardRefreshState>() else {
             return;
         };
         let Ok(mut slots) = state.slots.lock() else {
@@ -873,7 +887,7 @@ fn settle_refresh<R: tauri::Runtime>(
     };
     match settlement(fresh, &current_identity(app), dispatched_for, outcome) {
         Settlement::Changed => {
-            let _ = app.emit(widget.changed_event(), ());
+            let _ = app.emit_project(widget.changed_event(), ());
         }
         Settlement::Failed(error) => {
             // PST-FR-37: a failed refresh reaches the user, not only the log.
@@ -890,7 +904,8 @@ fn settle_refresh<R: tauri::Runtime>(
                     "reason" => error.clone(),
                 },
             );
-            let _ = app.emit(DASHBOARD_REFRESH_FAILED, DashboardRefreshFailed { widget, error });
+            let _ = app
+                .emit_project(DASHBOARD_REFRESH_FAILED, DashboardRefreshFailed { widget, error });
         }
         // A discarded stale result is not a failure and emits neither event
         // (PST-FR-37); it is not logged as one either, an overtaken read being
@@ -948,7 +963,7 @@ fn settlement(
 /// it running; it stops only when the application quits.
 pub fn start_refresh_timer<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         let mut ticker = tokio::time::interval(REFRESH_INTERVAL);
         // PST-FR-36: no tick is skipped, dropped, or silently coalesced away.
         // `Burst` is what says that — ticks the process slept through (a closed

@@ -325,7 +325,7 @@ fn a_hanging_agent_is_ended_by_caller_cancellation() {
 
     let token = CancellationToken::new();
     let trigger = token.clone();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         std::thread::sleep(Duration::from_millis(300));
         trigger.cancel();
     });

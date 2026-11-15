@@ -13,7 +13,11 @@ use crate::graduation::plan_updates::{self as plan};
 
 pub(super) fn continue_of(fx: &Fixture, run: &GraduationRun) -> Result<GraduationRun, String> {
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone());
+    let continued = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    );
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     continued.map_err(String::from)
 }
@@ -44,7 +48,7 @@ pub(super) fn submit(fx: &Fixture, rest: &GraduationRest) -> Result<(), String> 
         rest.set_id.clone().unwrap(),
         answers(),
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .map(|_| ())
 }
@@ -65,7 +69,7 @@ pub(super) fn accept(
         hunk.to_string(),
         feedback.map(str::to_string),
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .map(|_| ())
 }
@@ -82,7 +86,7 @@ pub(super) fn reject(
         hunk.to_string(),
         feedback.map(str::to_string),
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .map(|_| ())
 }
@@ -123,6 +127,7 @@ fn an_escalation_answer_is_refused_at_a_plan_rest() {
             summary: "x".into(),
             note: None,
         }],
+        Default::default(),
     );
     assert!(refused.unwrap_err().starts_with("run_state_not_permitted"));
     assert_eq!(fx.reload(&rested.id).rest, rested.rest);
@@ -192,8 +197,12 @@ fn continue_from_a_plan_update_takes_the_decisions_on_the_plan_base() {
     runner.set("validate", Err(crate::openspec::ProcessError::TimedOut { stderr: stalled }));
     let before = record(&fx);
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let refused =
-        crate::graduation::continue_graduation_run(fx.app.clone(), rested.id.clone()).unwrap_err();
+    let refused = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        rested.id.clone(),
+        Default::default(),
+    )
+    .unwrap_err();
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert!(refused.to_string().starts_with("openspec_validation_unavailable:"), "{refused}");
     let failure = refused.openspec().expect("an OpenSpec failure");
@@ -441,7 +450,7 @@ fn a_recording_on_the_change_is_refused_while_the_apply_run_stands() {
         admitted.id.clone(),
         None,
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("declined");
     // CEP-FR-DQAJ: a proposal that closes with no accepted hunk records no
@@ -455,8 +464,12 @@ fn a_recording_on_the_change_is_refused_while_the_apply_run_stands() {
     );
 
     // Once the run has ended, the change takes proposals again.
-    crate::graduation::discard_graduation_run(fx.app.clone(), rested.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        rested.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert!(record_into(&fx, &stream.id, &other).is_ok());
 }
 
@@ -556,8 +569,12 @@ fn a_discard_deletes_the_question_set_and_keeps_the_thread_and_the_proposal() {
     let rested = rested_on_update(&fx, &stream);
     let rest = rested.rest.clone().unwrap();
     let thread_id = rest.thread_id.clone().unwrap();
-    crate::graduation::discard_graduation_run(fx.app.clone(), rested.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        rested.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert!(
         crate::comments::read_question_set(&store(&fx), &project_root(&fx), &thread_id).is_none()
     );

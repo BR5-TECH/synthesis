@@ -65,7 +65,9 @@ pub mod openspec;
 pub mod openspec_archive;
 pub mod progress;
 pub mod project;
+pub mod project_scope;
 pub mod project_settings;
+pub mod project_windows;
 pub mod prompt_proposals;
 pub mod prompts;
 pub mod relay_endpoint;
@@ -155,87 +157,35 @@ pub fn run() {
         .manage(project_settings::images::ImageBuildRegistry::default())
         .manage(project_settings::ImageBuilderSeam::default())
         .manage(ai_api::AiApiIntegrations::default())
-        // AGC-FR-23: the turns in flight. Held in memory only, so nothing about
-        // an interrupted conversation survives a relaunch — the reply delivered
-        // into the conversation is the whole of the record. Also holds the
-        // single completion seam (CVL-FR-11) and the concurrency bound of
-        // AGC-FR-25.
-        .manage(agent_conversations::TurnRegistry::default())
-        // GRD-FR-BNTC / GRD-FR-TWMA: the lock that serialises writes to the
-        // graduation store, and the cancellation of the one loop that may be
-        // running. The queue itself is NOT here — it is on disk under
-        // `short_data_dir()` (GSU-FR-RJRF), which is what makes an interrupted
-        // run something to continue rather than something to notice missing.
-        .manage(graduation::GraduationState::default())
-        .manage(graduation::logs::LogRegistry::default())
-        .manage(streams::StreamState::default())
         // AGV-FR-01: one store for every run's activity, alive for the process
         // rather than for a project — a run's narration outlives the project
         // switch that happens while it works.
         .manage(std::sync::Arc::new(agent_activity::ActivityStore::new()))
-        // DAS-FR-14 / DAS-FR-15: the hold registry and the sweep scheduler are
-        // memory of the running session — written to no file, surviving no
-        // relaunch, and protecting nothing afterwards (DAS-FR-13).
-        .manage(draft_assets::DraftAssetSweeper::default())
         .manage(github_publication::GithubIssuesSeam::default())
-        // GHP-FR-IQTK: the metadata cache that every window shares.
-        .manage(github_publication::metadata_refresh::PublicationMetadataCache::default())
-        // GPP-FR-DATH / GPP-FR-RAQP: the polling session and the per-issue
-        // claim guards, and the seam the GitHub Projects client sits behind.
-        .manage(github_polling::GithubPollingState::default())
+        // GPP-FR-RAQP: the seam the GitHub Projects client sits behind.
         .manage(github_polling::GithubProjectsSeam::default())
-        // GDP-FR-RJFS / GDP-FR-IRDD: the one GitHub read and the edit queue of
-        // the delivery plan, and the seam the tracker adapter sits behind
-        // (GDP-FR-UPXR).
-        .manage(delivery::github::GithubDeliveryState::default())
+        // GDP-FR-UPXR: the seam the tracker adapter sits behind.
         .manage(delivery::github::adapter::TrackerSeam::default())
-        .manage(project::ProjectState::default())
-        .manage(watcher::ProjectWatcher::default())
-        .manage(artifacts::ContentTracker::default())
-        // ASC-FR-20: the checksum of `.synthesis/library.toml` as this
-        // application last wrote it, so the watcher can tell a teammate's pulled
-        // curation from the echo of our own assignment.
-        .manage(scanning::AttributionBaseline::default())
-        // DRS-FR-42: the drafts-root watch, mounted with the content root and
-        // torn down with it. `.synthesis/drafts/` is outside what the project
-        // watcher above surfaces, so nothing else can observe a prompt write.
-        .manage(draft_watcher::DraftsWatcher::default())
-        // PST-FR-37: the per-widget refresh bookkeeping behind the timer —
-        // one refresh in flight per widget, the ticks behind it coalesced, and
-        // an overtaken result discarded rather than applied.
-        .manage(dashboard::DashboardRefreshState::default())
+        // PWN-FR-SCPE: every store that serves one project lives in the scope of
+        // that project, and is made on first use. The scopes hold the turn
+        // registry (AGC-FR-23), the graduation state (GRD-FR-BNTC), the
+        // sweeper (DAS-FR-14), the publication cache (GHP-FR-IQTK), the
+        // polling and delivery state (GPP-FR-DATH, GDP-FR-RJFS), the scan
+        // baseline and candidates (ASC-FR-20, ASC-FR-17), the drafts watcher
+        // (DRS-FR-42), the dashboard state (PST-FR-37), the progress registry
+        // (PRG-FR-02), the indexer (BMI-FR-02), the documents (DCL-FR-QGLH),
+        // the embeddings (EMB-FR-RFNF), the search (SCC-FR-12) and the MCP
+        // manager (MCS-FR-RXZG).
+        .manage(project_scope::ProjectScopes::default())
+        // PWN-FR-EKKX: the list of open project windows, in memory only.
+        .manage(project_windows::ProjectWindows::default())
+        // SNV-FR-26: the answers of the windows to a held quit.
         .manage(menu::ExitGate::default())
-        // PRG-FR-02: the in-flight operation set. Held in memory only and
-        // bounded by what is genuinely running (PRG-FR-10).
-        .manage(progress::ProgressRegistry::default())
         // NTD-notification-delivery.md: what is showing in the OS notification
         // centre, and the platform it is shown through. Two slots rather than
         // one so a test can hold a different sink behind the same registry.
         .manage(notifications::NotificationRegistry::default())
         .manage(notifications::Notifier::default())
-        // ASC-FR-17: the scan's file-node set as an enumerable candidate list,
-        // mounted with the content root and torn down with it. Search consumes
-        // it rather than walking the tree itself (SCC-FR-03 / SCC-FR-04).
-        .manage(scanning::CandidateStore::default())
-        // BMI-FR-02 / BMI-FR-14: the nine BM25 indexes and the pass scheduler
-        // that keeps them in agreement with disk. Held in memory only —
-        // nothing here is written to the project, to `.synthesis/cache/`, or to
-        // `app_data_dir()`, and nothing is read back at startup (BMI-FR-13).
-        .manage(bm25_index::Bm25Indexer::default())
-        // DCL-FR-QGLH / DCL-FR-ZYQC: the Documents collection and the watch over
-        // its selected paths. Held in memory only — the store keeps references
-        // and nothing else (DCL-FR-VEVZ), and the PDF text cache lasts for the
-        // application session (DCL-FR-QVYZ).
-        .manage(documents::DocumentsCollection::default())
-        // EMB-FR-RFNF / EMB-FR-SWRV: the embeddings index — its switches, the
-        // loaded model, and the one worker that runs its jobs. The vectors live
-        // in the repository store, not here.
-        .manage(embeddings::EmbeddingsService::default())
-        .manage(documents::DocumentsWatcher::default())
-        // SCC-FR-12: the at-most-one running search.
-        .manage(search::SearchRegistry::default())
-        // MCS-FR-RXZG: the live connections of the project's MCP servers.
-        .manage(mcp::McpManager::default())
         // SNV-FR-28 / SNV-FR-30: handles on the Save / Save All items, whose
         // enabled state the frontend drives for the life of the application.
         .manage(menu::SaveMenuItems::<tauri::Wry>::default())
@@ -544,6 +494,18 @@ pub fn run() {
             delivery::github::open_tracker_link,
             project::close_project,
             menu::finish_exit,
+            project::resolve_project_at_path,
+            project::resolve_project_from_git_url,
+            project::resolve_new_project,
+            project_windows::list_project_windows,
+            project_windows::current_project_window,
+            project_windows::attach_project_to_window,
+            project_windows::detach_project_from_window,
+            project_windows::open_project_window,
+            project_windows::activate_project_window,
+            project_windows::request_project_window_close,
+            project_windows::close_project_window,
+            project_windows::set_project_window_attention,
             menu::set_save_menu_state,
             menu::set_find_menu_state,
             dashboard::list_recently_edited_artifacts,

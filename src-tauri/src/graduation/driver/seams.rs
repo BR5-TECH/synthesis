@@ -5,6 +5,7 @@
 //! root re-exports every name, so no caller's path moved.
 
 use super::*;
+use crate::project::OpenProject as _;
 use crate::tools::agent_exec::image_probe::{ImageProbeOutcome, ImageProbeRequest};
 
 // ---------------------------------------------------------------------------
@@ -148,7 +149,7 @@ impl<'a> LaunchParts<'a> {
         // the project and travels with it, where the execution directory is
         // a copy this run made.
         let project_root = app
-            .try_state::<crate::project::ProjectState>()
+            .open_project_state()
             .and_then(|state| state.require_root().ok())
             .ok_or_else(|| {
                 AgentExecutionError::VendorImageUnresolved(

@@ -3,7 +3,7 @@
  * proposals"). This module is the only place their command names live.
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 import type { DraftRecord, NewDraftDecisionOutcome, NewDraftProposal } from "../types";
 

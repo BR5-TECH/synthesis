@@ -7,6 +7,7 @@ use super::*;
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_agentic_integrations(
     store: State<'_, GlobalSettingsStore>,
@@ -15,6 +16,7 @@ pub fn list_agentic_integrations(
     list_integrations_impl(&store, &ai)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn detect_agentic_cli_binary(
     vendor: String,
@@ -23,6 +25,7 @@ pub fn detect_agentic_cli_binary(
     detect_binary_impl(&ai, &vendor)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn verify_agentic_integration(
     vendor: String,
@@ -47,6 +50,7 @@ pub fn verify_agentic_integration(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_agentic_integration_model(
     vendor: String,
@@ -70,6 +74,7 @@ pub fn set_agentic_integration_model(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_agentic_integration_effort(
     vendor: String,
@@ -93,6 +98,7 @@ pub fn set_agentic_integration_effort(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_active_agentic_integration(
     vendor: String,
@@ -102,6 +108,7 @@ pub fn set_active_agentic_integration(
     set_active_impl(&store, &ai, &vendor)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn clear_agentic_integration(
     vendor: String,
@@ -135,21 +142,23 @@ pub fn resolve_project_vendor<R: tauri::Runtime>(
     get_project_impl(&store, &ai, project_key).ok().and_then(|resolved| resolved.vendor)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_project_agentic_integration(
     store: State<'_, GlobalSettingsStore>,
     ai: State<'_, AgenticIntegrations>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectAgenticIntegration, String> {
     get_project_impl(&store, &ai, &project.slot_key())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_project_agentic_integration(
     vendor: Option<String>,
     store: State<'_, GlobalSettingsStore>,
     ai: State<'_, AgenticIntegrations>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectAgenticIntegration, String> {
     set_project_impl(&store, &ai, &project.slot_key(), vendor.as_deref())
 }

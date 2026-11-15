@@ -63,7 +63,13 @@ impl Fixture {
     }
 
     fn create(&self, name: &str, base: Option<&str>) -> Result<WorkStream, String> {
-        create_work_stream(self.app.clone(), name.to_string(), base.map(str::to_string), None)
+        create_work_stream(
+            self.app.clone(),
+            name.to_string(),
+            base.map(str::to_string),
+            None,
+            Default::default(),
+        )
     }
 }
 
@@ -347,7 +353,8 @@ fn update_job_scripted(
 
 /// The update record as it stands on disk right now.
 fn update_of(fx: &Fixture, stream_id: &str) -> Option<StreamUpdateRecord> {
-    get_work_stream_update(fx.app.clone(), stream_id.to_string()).expect("a known stream")
+    get_work_stream_update(fx.app.clone(), stream_id.to_string(), Default::default())
+        .expect("a known stream")
 }
 
 /// The revision a branch names right now.
@@ -362,7 +369,7 @@ fn tip_of(repo: &git2::Repository, branch: &str) -> git2::Oid {
 
 /// One summary out of the project's listing.
 fn summary_of(fx: &Fixture, stream_id: &str) -> WorkStreamSummary {
-    list_work_streams(fx.app.clone())
+    list_work_streams(fx.app.clone(), Default::default())
         .expect("a listing")
         .into_iter()
         .find(|summary| summary.stream.id == stream_id)

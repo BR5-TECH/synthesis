@@ -320,7 +320,7 @@ impl OpenSpecRunner for RealRunner {
         }
         let mut child = command.spawn().map_err(|_| ProcessError::NotExecutable)?;
         let mut stdout = child.stdout.take();
-        let reader = std::thread::spawn(move || {
+        let reader = crate::project_scope::context::thread_spawn(move || {
             let mut bytes = Vec::new();
             if let Some(out) = stdout.as_mut() {
                 let _ = out.read_to_end(&mut bytes);
@@ -330,7 +330,9 @@ impl OpenSpecRunner for RealRunner {
         // OFP-FR-WNVO: standard error is read on its own thread too, and only
         // its last 4 KiB is kept.
         let stderr = child.stderr.take();
-        let errors = std::thread::spawn(move || read_tail(stderr, super::failure::STDERR_KEEP));
+        let errors = crate::project_scope::context::thread_spawn(move || {
+            read_tail(stderr, super::failure::STDERR_KEEP)
+        });
         let started = std::time::Instant::now();
         let status = loop {
             match child.try_wait() {

@@ -5,6 +5,11 @@ import "./styles/kit.css";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProjectPicker } from "./components/ProjectPicker";
+import { ProjectPickerModal } from "./components/ProjectPickerModal";
+import { OpenProjectDialog } from "./components/OpenProjectDialog";
+import { CloseProjectConfirm } from "./components/CloseProjectConfirm";
+import { ProjectTabStrip } from "./components/ProjectTabStrip";
+import { countRunsInFlight, useProjectTabs } from "./hooks/useProjectTabs";
 import { AboutPanel } from "./components/AboutPanel";
 import { AppShell } from "./AppShell";
 import { GitTransferProvider, useGitTransferState } from "./hooks/useGitTransfer";
@@ -104,6 +109,22 @@ function App() {
   // render from. Mounted here rather than inside the status bar so it survives
   // the shell subtree's remount on a project or worktree switch.
   const operations = useInFlightOperations();
+
+  // PJT-project-tabs.md: this window is one project tab. The hook mounts its
+  // project, asks where a chosen project opens, and runs the close flow.
+  const tabs = useProjectTabs({
+    screen: s.screen,
+    loadProject: s.loadProject,
+    flushBeforeTeardown: s.flushBeforeTeardown,
+    requestCloseProject: s.requestCloseProject,
+    runningOperations: countRunsInFlight(operations),
+  });
+  // PJT-FR-PCCL: the Close Project menu item and the close controls of the shell
+  // run the close flow of the project tab, which asks first when a run is active.
+  const shell = useMemo(
+    () => ({ ...s, requestCloseProject: tabs.requestClose }),
+    [s, tabs.requestClose],
+  );
 
   // STB-FR-25 / STB-FR-30: the uncommitted diff summary, reloaded against the
   // new content root whenever the active worktree changes.
@@ -378,7 +399,7 @@ function App() {
   // NTF-notifications.md: the facility this window drives, and the attention
   // the tab strip shows for what it raised.
   const { notifications, tabAttention, runsAttention } = useAppNotifications({
-    s,
+    s: shell,
     overlays,
     vpanel,
     projectFolders,
@@ -408,7 +429,14 @@ function App() {
   if (s.screen === "picker") {
     return (
       <div className="app">
-        <ProjectPicker onOpen={s.loadProject} />
+        {/* PJT-FR-JSAW: the last project tab closed, or no project is open yet.
+            A choice mounts the project in this window (PPK-FR-06). */}
+        <ProjectPicker onOpen={tabs.chooseProject} resolveOnly />
+        {tabs.error && (
+          <p className="project-picker-modal__error" role="alert">
+            {tabs.error}
+          </p>
+        )}
         {/* PPK-FR-EWQH / ABT-FR-ZEJM: the About panel overlays and blocks the
             picker, which stays mounted beneath it and so is unchanged when the
             panel closes. */}
@@ -427,7 +455,7 @@ function App() {
           takes no focus and is outside the single-overlay rule (SNV-FR-56). */}
       <NotificationToasts onActivate={notifications.activate} />
       <AppShell
-        s={s}
+        s={shell}
         overlays={overlays}
         vpanel={vpanel}
         bpanel={bpanel}
@@ -446,7 +474,43 @@ function App() {
         tabAttention={tabAttention}
         runsAttention={runsAttention}
         githubPolling={githubPolling}
+        projectTabs={{
+          strip: (
+            <ProjectTabStrip
+              windows={tabs.stripWindows}
+              ownProjectId={tabs.ownProjectId}
+              onActivate={tabs.activateTab}
+              onClose={tabs.closeTab}
+            />
+          ),
+          openPicker: tabs.openPicker,
+          choose: (handle) => void tabs.chooseProject(handle),
+        }}
       />
+      {/* PPK-FR-GMYH: the Project picker over this project window. */}
+      {tabs.pickerOpen && (
+        <ProjectPickerModal
+          onChoose={(handle) => void tabs.chooseProject(handle)}
+          onDismiss={tabs.closePicker}
+          error={tabs.error}
+        />
+      )}
+      {/* PJT-FR-GASB: where the chosen project opens. */}
+      {tabs.pending && (
+        <OpenProjectDialog
+          projectName={tabs.pending.name}
+          onChoose={(choice) => void tabs.answerDialog(choice)}
+          onCancel={tabs.cancelDialog}
+        />
+      )}
+      {/* PJT-FR-OJZG: a run is still working in this project. */}
+      {tabs.confirmingClose && (
+        <CloseProjectConfirm
+          projectName={s.projectName}
+          onConfirm={() => void tabs.confirmClose()}
+          onCancel={tabs.cancelClose}
+        />
+      )}
     </GitTransferProvider>
   );
 }

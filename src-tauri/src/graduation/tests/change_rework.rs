@@ -306,7 +306,8 @@ fn a_discarded_rework_run_is_reclaimed_and_writes_nothing() {
     let tasks = || std::fs::read_to_string(stream.worktree().join(tasks_path())).unwrap();
     let tasks_before = tasks();
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).unwrap();
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .unwrap();
     assert!(!base.rework_worktree(&run.id).exists());
     assert_eq!(thread(&fx, &stream.id, &thread_id).comments.len(), comments_before);
     assert!(proposals(&fx, &stream.id).is_empty());
@@ -333,7 +334,8 @@ fn the_queue_read_reclaims_what_an_ended_rework_run_left() {
     crate::graduation::save_run(&fx.app, &mut run).unwrap();
     assert!(base.rework_worktree(&run.id).exists());
 
-    crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert!(!base.rework_worktree(&run.id).exists());
 }
 
@@ -344,7 +346,11 @@ fn a_rework_run_is_not_revertable() {
     let stream = change_stream(&fx, "editor");
     let (run, _) = rework_run(&fx, &stream);
     let done = fx.drive(&run, ScriptedDispatch::new(vec![revising(), Turn::ready()]));
-    let refused = crate::graduation::revert_graduation_run(fx.app.clone(), done.id.clone());
+    let refused = crate::graduation::revert_graduation_run(
+        fx.app.clone(),
+        done.id.clone(),
+        Default::default(),
+    );
     assert_eq!(refused.unwrap_err(), "run_not_revertable");
 }
 

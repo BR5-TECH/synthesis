@@ -79,6 +79,7 @@ impl Outcome {
                 self.fx.app.clone(),
                 self.run.id.clone(),
                 payload,
+                Default::default(),
             )
         })
         .unwrap_or_else(|reason| panic!("[{}] the answers were refused: {reason}", self.name));
@@ -99,6 +100,7 @@ impl Outcome {
                 self.stream_id.clone(),
                 choice,
                 None,
+                Default::default(),
             )
         })
         .unwrap_or_else(|reason| panic!("[{}] the restart was refused: {reason}", self.name));
@@ -169,7 +171,11 @@ impl Outcome {
     pub(crate) fn discarded(mut self) -> Self {
         self.dispatch = ScriptedDispatch::new(Vec::new());
         without_loop(&self.fx.app, || {
-            crate::graduation::discard_graduation_run(self.fx.app.clone(), self.run.id.clone())
+            crate::graduation::discard_graduation_run(
+                self.fx.app.clone(),
+                self.run.id.clone(),
+                Default::default(),
+            )
         })
         .unwrap_or_else(|reason| panic!("[{}] the discard was refused: {reason}", self.name));
         self.run = self.fx.reload(&self.run.id);
@@ -181,7 +187,11 @@ impl Outcome {
     pub(crate) fn discarding(self, label: &'static str) -> Self {
         let other = self.ctx.others.get(label);
         without_loop(&self.fx.app, || {
-            crate::graduation::discard_graduation_run(self.fx.app.clone(), other.run_id.clone())
+            crate::graduation::discard_graduation_run(
+                self.fx.app.clone(),
+                other.run_id.clone(),
+                Default::default(),
+            )
         })
         .unwrap_or_else(|reason| {
             panic!("[{}] the discard of the run labelled {label} was refused: {reason}", self.name)
@@ -193,8 +203,12 @@ impl Outcome {
     pub(crate) fn reverted(mut self) -> Self {
         self.dispatch = ScriptedDispatch::new(Vec::new());
         self.history_before = self.history_since(None);
-        crate::graduation::revert_graduation_run(self.fx.app.clone(), self.run.id.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the revert was refused: {reason}", self.name));
+        crate::graduation::revert_graduation_run(
+            self.fx.app.clone(),
+            self.run.id.clone(),
+            Default::default(),
+        )
+        .unwrap_or_else(|reason| panic!("[{}] the revert was refused: {reason}", self.name));
         self.run = self.fx.reload(&self.run.id);
         self
     }
@@ -245,26 +259,38 @@ impl Outcome {
 
     pub(crate) fn refusing_continue(self, code: &str) -> Self {
         self.refused("continue", code, |app, run| {
-            crate::graduation::continue_graduation_run(app.clone(), run.id.clone())
-                .map_err(String::from)
+            crate::graduation::continue_graduation_run(
+                app.clone(),
+                run.id.clone(),
+                Default::default(),
+            )
+            .map_err(String::from)
         })
     }
 
     pub(crate) fn refusing_pause(self, code: &str) -> Self {
         self.refused("pause", code, |app, run| {
-            crate::graduation::pause_graduation_run(app.clone(), run.id.clone())
+            crate::graduation::pause_graduation_run(app.clone(), run.id.clone(), Default::default())
         })
     }
 
     pub(crate) fn refusing_discard(self, code: &str) -> Self {
         self.refused("discard", code, |app, run| {
-            crate::graduation::discard_graduation_run(app.clone(), run.id.clone())
+            crate::graduation::discard_graduation_run(
+                app.clone(),
+                run.id.clone(),
+                Default::default(),
+            )
         })
     }
 
     pub(crate) fn refusing_revert(self, code: &str) -> Self {
         self.refused("revert", code, |app, run| {
-            crate::graduation::revert_graduation_run(app.clone(), run.id.clone())
+            crate::graduation::revert_graduation_run(
+                app.clone(),
+                run.id.clone(),
+                Default::default(),
+            )
         })
     }
 
@@ -277,6 +303,7 @@ impl Outcome {
                 stream_id,
                 StandingWork::Keep,
                 None,
+                Default::default(),
             )
         })
     }
@@ -284,7 +311,12 @@ impl Outcome {
     pub(crate) fn refusing_answers(self, answers: &[&str], code: &str) -> Self {
         let payload = self.answers_for(answers);
         self.refused("answers", code, move |app, run| {
-            crate::graduation::answer_graduation_escalation(app.clone(), run.id.clone(), payload)
+            crate::graduation::answer_graduation_escalation(
+                app.clone(),
+                run.id.clone(),
+                payload,
+                Default::default(),
+            )
         })
     }
 

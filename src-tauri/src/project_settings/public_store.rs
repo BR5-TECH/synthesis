@@ -11,8 +11,6 @@
 //! Split out of the module root, which had reached a thousand lines. What the
 //! store holds and what a read returns are unchanged.
 
-use tauri::State;
-
 use super::{
     graduation_loop, loop_settings, openspec_mode, project_toml_path, GraduationConcurrency,
     LineEndings, ProjectConfig, ProjectState, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG,
@@ -161,16 +159,20 @@ pub fn line_endings_for(root: &crate::fs::RootFs) -> LineEndings {
     load_project_config_from(root).map(|c| c.line_endings).unwrap_or_default()
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn load_project_config(project: State<'_, ProjectState>) -> Result<ProjectConfig, String> {
+pub fn load_project_config(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<ProjectConfig, String> {
     let root = project.require_root()?;
     load_project_config_from(&root)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_project_config<R: tauri::Runtime>(
     config: ProjectConfig,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     let root = project.require_root()?;

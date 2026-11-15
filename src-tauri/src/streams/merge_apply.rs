@@ -6,7 +6,7 @@
 //! the repository update guard, after both pinned tips are verified again. Every
 //! refusal writes nothing to either branch and nothing to either working copy.
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use super::commands::{project_root, store, store_fs};
 use super::*;
@@ -109,7 +109,7 @@ pub fn apply_merge_run<R: tauri::Runtime>(
 
     // WKS-FR-HLGN: the guard is held across the tip check and the write that
     // follows it, so the base branch cannot advance between them.
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
     let _hold = match state.as_ref() {
         Some(state) => match state.begin_repository_update(stream_id, Reconciliation::Merge) {
             Ok(hold) => Some(hold),

@@ -86,6 +86,7 @@ fn a_built_change_is_archived_on_the_stream_and_merged() {
         fx.app.clone(),
         crate::openspec::ChangeLocation::Stream { stream_id: stream.id.clone() },
         "add-logout".into(),
+        Default::default(),
     ));
     let failure = read.unwrap_err();
     assert_eq!(failure.code, "change_archived");
@@ -376,7 +377,8 @@ fn a_merge_after_a_discarded_merge_run_does_not_archive_again() {
     };
     assert_eq!(first, vec![archived("add-logout")]);
     let archive_tip = tip(&fx, &stream.branch);
-    crate::graduation::discard_graduation_run(fx.app.clone(), run_id).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run_id, Default::default())
+        .expect("discarded");
 
     let again = merge(&fx, &stream, commit_publication()).expect("handed off again");
 

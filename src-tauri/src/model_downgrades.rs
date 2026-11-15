@@ -6,6 +6,7 @@
 //! module holds their shape, the expiry arithmetic, and the two commands. The
 //! decision to raise is the main window's (NTF-FR-CYTU).
 
+use crate::project::OpenProject as _;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
@@ -107,11 +108,12 @@ fn now_unix() -> i64 {
 }
 
 /// `"load model downgrade suppressions"` (GSS-FR-PCPW).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_model_downgrade_suppressions<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<ModelDowngradeSuppression>, String> {
-    let project = app.state::<crate::project::ProjectState>();
+    let project = app.open_project_state_or_default();
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let now = crate::notes::format_rfc3339_utc(now_unix());
     let loaded = app
@@ -149,6 +151,7 @@ pub fn load_model_downgrade_suppressions<R: tauri::Runtime>(
 }
 
 /// `"save model downgrade suppression"` (GSS-FR-UUET).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_model_downgrade_suppression<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -156,7 +159,7 @@ pub fn save_model_downgrade_suppression<R: tauri::Runtime>(
     served_model: String,
     duration: SuppressionDuration,
 ) -> Result<ModelDowngradeSuppression, String> {
-    let project = app.state::<crate::project::ProjectState>();
+    let project = app.open_project_state_or_default();
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let rule = rule_for(&requested_model, &served_model, duration, now_unix())?;
     let saved = app.state::<GlobalSettingsStore>().save_model_downgrade_suppression(&key, &rule);

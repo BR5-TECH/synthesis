@@ -2,6 +2,7 @@
 //! GSU-FR-MTDA, GSU-FR-CZEP, GSU-FR-UIDE, GSU-FR-QSNE) and the `openspec`
 //! data a propose run carries (`GRD-graduation.md` GRD-FR-LKGC).
 
+use crate::project::OpenProject as _;
 use tauri::Manager;
 
 use super::*;
@@ -64,7 +65,7 @@ fn check<R: tauri::Runtime>(
 pub(super) fn require_mode_and_cli<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(), Refusal> {
-    let active = app.try_state::<ProjectState>().and_then(|state| state.require_root().ok());
+    let active = app.open_project_state().and_then(|state| state.require_root().ok());
     let seam = app.try_state::<crate::openspec::OpenSpec>();
     let inactive = || Refusal::from(OpenSpecFailure::new(ERR_OPENSPEC_MODE_INACTIVE));
     let (Some(active), Some(seam)) = (active, seam) else {

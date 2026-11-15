@@ -44,6 +44,7 @@ mod collaborators;
 mod commit_retitle;
 mod decision_ledger;
 mod direct;
+mod direct_lifecycle;
 mod direct_message;
 mod docker_socket;
 mod e2e;
@@ -252,8 +253,14 @@ impl Fixture {
 
     /// A work stream on the production path.
     fn stream(&self, name: &str) -> crate::streams::WorkStream {
-        crate::streams::create_work_stream(self.app.clone(), name.to_string(), None, None)
-            .expect("a stream")
+        crate::streams::create_work_stream(
+            self.app.clone(),
+            name.to_string(),
+            None,
+            None,
+            Default::default(),
+        )
+        .expect("a stream")
     }
 
     /// A real draft in the project, so what a run is attributed to exists.
@@ -361,9 +368,12 @@ impl Fixture {
     fn continue_run(&self, run: &GraduationRun) -> GraduationRun {
         use tauri::Manager;
         self.app.state::<GraduationState>().set_loop_enabled(false);
-        let continued =
-            crate::graduation::continue_graduation_run(self.app.clone(), run.id.clone())
-                .expect("continued");
+        let continued = crate::graduation::continue_graduation_run(
+            self.app.clone(),
+            run.id.clone(),
+            Default::default(),
+        )
+        .expect("continued");
         self.app.state::<GraduationState>().set_loop_enabled(true);
         continued
     }

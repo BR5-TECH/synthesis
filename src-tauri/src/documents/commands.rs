@@ -9,7 +9,6 @@
 
 use std::path::PathBuf;
 
-use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::fs::FsAccessState;
@@ -22,10 +21,11 @@ use super::model::{
 };
 
 /// DCL-FR-SQEP: the in-memory snapshot. It does not wait for a refresh.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_documents(
     app: tauri::AppHandle,
-    collection: State<'_, DocumentsCollection>,
+    collection: crate::project_scope::Scoped<'_, DocumentsCollection>,
 ) -> Result<DocumentsSnapshot, String> {
     match collection.snapshot() {
         Ok(snapshot) => Ok(snapshot),
@@ -44,6 +44,7 @@ pub fn list_documents(
 /// The picker blocks, so it runs on the blocking pool and the command future
 /// stays non-blocking for the frontend. A cancel adds nothing and is not an
 /// error.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn pick_document_sources(
     app: tauri::AppHandle,
@@ -51,14 +52,16 @@ pub async fn pick_document_sources(
 ) -> Result<PickDocumentSourcesResult, String> {
     // The refusal of DCL-FR-MSHW comes before the picker opens, so a user is
     // never asked to choose files that cannot be stored.
-    if let Some(collection) = tauri::Manager::try_state::<DocumentsCollection>(&app) {
+    if let Some(collection) =
+        crate::project_scope::ProjectStores::try_project_store::<DocumentsCollection>(&app)
+    {
         if let Err(error) = collection.snapshot() {
             lifecycle::log_refused(&app, "pick document sources", error);
             return Err(String::from(error));
         }
     }
     let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let picked = pick(&handle, mode);
         lifecycle::add_picked_sources(&handle, mode, picked).map_err(String::from)
     })
@@ -86,12 +89,13 @@ fn pick(app: &tauri::AppHandle, mode: PickMode) -> Option<Vec<PathBuf>> {
 }
 
 /// DCL-FR-ATNL: remove one reference. The file or folder itself is untouched.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn remove_document_source(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<DocumentsSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         lifecycle::remove_source(&app, &path).map_err(String::from)
     })
     .await
@@ -99,11 +103,13 @@ pub async fn remove_document_source(
 }
 
 /// DCL-FR-NCBQ: the current text of a Markdown or text document.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn read_document(app: tauri::AppHandle, id: String) -> Result<DocumentText, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let collection = tauri::Manager::try_state::<DocumentsCollection>(&app)
-            .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
+    crate::project_scope::context::spawn_blocking(move || {
+        let collection =
+            crate::project_scope::ProjectStores::try_project_store::<DocumentsCollection>(&app)
+                .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
         let fs = tauri::Manager::try_state::<FsAccessState>(&app)
             .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
         collection.read_document(&fs, &id).map_err(|error| {
@@ -117,11 +123,13 @@ pub async fn read_document(app: tauri::AppHandle, id: String) -> Result<Document
 
 /// DCL-FR-TEUK: the whole content of a PDF document, base64 encoded. No other
 /// operation returns PDF bytes.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn read_document_pdf(app: tauri::AppHandle, id: String) -> Result<DocumentPdf, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let collection = tauri::Manager::try_state::<DocumentsCollection>(&app)
-            .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
+    crate::project_scope::context::spawn_blocking(move || {
+        let collection =
+            crate::project_scope::ProjectStores::try_project_store::<DocumentsCollection>(&app)
+                .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
         let fs = tauri::Manager::try_state::<FsAccessState>(&app)
             .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
         collection.read_document_pdf(&fs, &id).map_err(|error| {

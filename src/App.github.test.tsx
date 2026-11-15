@@ -97,6 +97,7 @@ function defaultInvoke(cmd: string) {
         { name: "acme", path: "~/dev/acme", lastOpenedAt: "2026-05-15T10:00:00Z" },
       ];
     case "open_project_at_path":
+    case "resolve_project_at_path":
       return { name: "acme", path: "~/dev/acme", activeWorktreePath: "~/dev/acme" };
     case "get_active_worktree":
       return {

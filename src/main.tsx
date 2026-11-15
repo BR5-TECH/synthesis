@@ -2,7 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { SettingsWindowApp } from "./SettingsWindowApp";
-import { readSettingsWindowBoot } from "./settingsWindow";
+import { readSettingsWindowBoot, readSettingsWindowProject } from "./settingsWindow";
+import { setWindowProjectId } from "./api/invoke";
 import { installDropGuard } from "./dropGuard";
 
 /**
@@ -19,6 +20,10 @@ const boot = readSettingsWindowBoot(window.location.search);
 // SNV-FR-UKER: the main window hands every drag to its web content
 // (SNV-FR-RQLF), so a drop no surface takes must not load the dropped file.
 if (!boot) installDropGuard(window);
+
+// PWN-FR-VIYR: the Settings window serves the project of the window that opened
+// it, so its calls carry that project's id.
+if (boot) setWindowProjectId(readSettingsWindowProject(window.location.search));
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

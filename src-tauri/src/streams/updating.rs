@@ -7,10 +7,9 @@
 //! tree that carries no conflict marker, and nothing of the base branch moves
 //! at all.
 
+use crate::project_scope::ProjectStores;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-use tauri::Manager;
 
 use super::artifact::{MergeArtifact, MergeConflict};
 use super::attempts::{cleanup, AttemptMark};
@@ -100,7 +99,7 @@ async fn drive<R: tauri::Runtime>(
     // pinned-revision check and every write the strategy makes, so the base
     // branch cannot advance between the check and the execution and a merge of
     // any stream of this repository cannot run beside this update.
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
     let hold = match state.as_ref() {
         Some(state) => match state.begin_repository_update(stream_id, Reconciliation::Update) {
             Ok(hold) => Some(hold),

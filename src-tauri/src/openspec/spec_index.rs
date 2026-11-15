@@ -9,6 +9,7 @@
 //! the UI shows its demo index. The load reads through the seam of this
 //! module, writes nothing, and keeps no result between two loads.
 
+use crate::project::OpenProject as _;
 use std::time::Instant;
 
 use serde::Serialize;
@@ -245,8 +246,7 @@ pub fn load_specification_map_now<R: tauri::Runtime>(
 ) -> Result<SpecificationMapLoad, Box<super::OpenSpecFailure>> {
     use tauri::Manager;
     let started = Instant::now();
-    let active =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let active = app.open_project_state().and_then(|p| p.require_root().ok());
     let outcome = match active {
         None => Err(Box::new(super::OpenSpecFailure::new(ERR_NO_PROJECT_OPEN))),
         Some(active) if !OpenSpec::mode_active(Some(&active)) => Ok(SpecificationMapLoad::Demo),
@@ -303,11 +303,12 @@ pub fn load_specification_map_now<R: tauri::Runtime>(
 }
 
 /// OSI-FR-VTAD: `"load specification map"`, on a blocking thread. Read-only.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn load_specification_map<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<SpecificationMapLoad, Box<super::OpenSpecFailure>> {
-    tauri::async_runtime::spawn_blocking(move || load_specification_map_now(&app))
+    crate::project_scope::context::spawn_blocking(move || load_specification_map_now(&app))
         .await
         .map_err(|_| Box::new(super::OpenSpecFailure::new(super::failure::CODE_FAILED)))?
 }

@@ -66,7 +66,7 @@ fn run_of(stream: &WorkStream, state: GraduationRunState) -> QueueIndexEntry {
 }
 
 fn notices(fx: &Fixture) -> Vec<RemovedStreamNotice> {
-    list_removed_work_streams(fx.app.clone()).expect("notices")
+    list_removed_work_streams(fx.app.clone(), Default::default()).expect("notices")
 }
 
 // WKS-FR-APUE, WKS-FR-AXRD, WKS-FR-VYIW, WKS-FR-STSZ, WKS-FR-YLBX: a listing
@@ -78,7 +78,7 @@ fn a_listing_removes_a_stream_whose_working_copy_is_gone_and_keeps_its_branch() 
     let gone = fx.create("gone", None).expect("created");
     remove_working_copy(&gone);
 
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    let listed = list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].stream.id, kept.id);
@@ -108,7 +108,7 @@ fn a_notice_says_when_the_branch_went_with_the_working_copy() {
     remove_working_copy(&stream);
     delete_branch_ref(&fx, &stream);
 
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 
     assert!(!notices(&fx)[0].branch_survives);
 }
@@ -123,7 +123,7 @@ fn the_update_record_leaves_with_the_stream() {
     std::fs::write(&path, "state = \"failed\"\n").unwrap();
     remove_working_copy(&stream);
 
-    list_work_streams(fx.app.clone()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert!(!path.exists(), "the update record left");
 }
@@ -138,14 +138,14 @@ fn a_held_stream_stays_until_the_hold_ends() {
     store::write_stream(&fs_of(&fx), &store_of(&fx), &stream).expect("written");
     remove_working_copy(&stream);
 
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    let listed = list_work_streams(fx.app.clone(), Default::default()).expect("listed");
     assert_eq!(listed.len(), 1);
     assert!(listed[0].stream.is_missing);
     assert!(notices(&fx).is_empty());
 
     stream.busy_run_id = None;
     store::write_stream(&fs_of(&fx), &store_of(&fx), &stream).expect("written");
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 }
 
 // WKS-FR-RVSU: every state that is not terminal keeps the stream.
@@ -164,7 +164,11 @@ fn each_non_terminal_run_state_keeps_the_stream() {
         write_index(&fx, vec![run_of(&stream, state)]);
         remove_working_copy(&stream);
 
-        assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1, "{state:?}");
+        assert_eq!(
+            list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(),
+            1,
+            "{state:?}"
+        );
     }
 }
 
@@ -176,12 +180,14 @@ fn a_discard_of_the_blocking_run_releases_the_stream_and_keeps_the_run() {
     let stream = fx.create("blocked", None).expect("created");
     let run = save_plain_run(&fx, &stream, GraduationRunState::Blocked);
     remove_working_copy(&stream);
-    assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1);
+    assert_eq!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(), 1);
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("discarded");
 
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
-    let kept = crate::graduation::get_graduation_run(fx.app.clone(), run.id).expect("kept");
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
+    let kept = crate::graduation::get_graduation_run(fx.app.clone(), run.id, Default::default())
+        .expect("kept");
     assert_eq!(kept.state, GraduationRunState::Discarded);
 }
 
@@ -195,10 +201,10 @@ fn a_running_merge_or_update_keeps_the_stream() {
         let hold = state.begin_repository_update(&stream.id, kind).expect("held");
         remove_working_copy(&stream);
 
-        assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1);
+        assert_eq!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(), 1);
 
         drop(hold);
-        assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+        assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
     }
 }
 
@@ -211,10 +217,10 @@ fn an_update_job_keeps_the_stream() {
     assert!(state.claim_update_job(&stream.id));
     remove_working_copy(&stream);
 
-    assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1);
+    assert_eq!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(), 1);
 
     state.release_update_job(&stream.id);
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 }
 
 // WKS-FR-RVSU, WKS-FR-AXRD: the stream that roots the project stays listed as
@@ -227,14 +233,15 @@ fn a_gone_stream_that_roots_the_project_stays_listed_until_the_project_moves() {
     project.set_root(canonical(&stream.worktree()));
     remove_working_copy(&stream);
 
-    let listed = list_work_streams(fx.app.clone()).expect("the listing still answers");
+    let listed =
+        list_work_streams(fx.app.clone(), Default::default()).expect("the listing still answers");
 
     assert_eq!(listed.len(), 1);
     assert!(listed[0].stream.is_missing);
     assert!(notices(&fx).is_empty());
 
     project.set_root(fx.root());
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
     assert_eq!(notices(&fx).len(), 1);
 }
 
@@ -262,7 +269,7 @@ fn an_unreadable_run_order_index_keeps_every_stream() {
     std::fs::write(&path, "this is = = not toml").unwrap();
     remove_working_copy(&stream);
 
-    assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1);
+    assert_eq!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(), 1);
     assert!(notices(&fx).is_empty());
 }
 
@@ -276,7 +283,7 @@ fn a_working_copy_the_application_cannot_read_keeps_the_stream() {
     stream.worktree_path = "/outside/every/allowed/root".into();
     store::write_stream(&fs_of(&fx), &store_of(&fx), &stream).expect("written");
 
-    assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1);
+    assert_eq!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(), 1);
     assert!(store_of(&fx).record(&stream.id).exists());
 }
 
@@ -291,7 +298,7 @@ fn a_moved_working_copy_keeps_its_directory_and_its_registration() {
     let gitdir = fx.repo().path().join("worktrees").join(&stream.id).join("gitdir");
     std::fs::write(&gitdir, format!("{}\n", moved.join(".git").display())).unwrap();
 
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 
     assert!(moved.join("README.md").exists(), "the moved copy is untouched");
     let registered = fx.repo().worktrees().expect("worktrees");
@@ -307,7 +314,7 @@ fn a_stream_whose_home_stands_stays_whatever_its_record_names() {
     stream.worktree_path = canonical(fx.store.path()).join("no-such").display().to_string();
     store::write_stream(&fs_of(&fx), &store_of(&fx), &stream).expect("written");
 
-    assert_eq!(list_work_streams(fx.app.clone()).expect("listed").len(), 1);
+    assert_eq!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").len(), 1);
     assert!(notices(&fx).is_empty());
 }
 
@@ -334,7 +341,7 @@ fn a_locked_registration_stays_when_its_stream_leaves() {
     std::fs::write(admin.join("locked"), "on the portable drive\n").unwrap();
     remove_working_copy(&stream);
 
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 
     assert!(admin.join("locked").exists());
     assert_eq!(notices(&fx).len(), 1);
@@ -349,7 +356,7 @@ fn a_gone_stream_of_another_project_is_left_alone() {
     store::write_stream(&fs_of(&fx), &store_of(&fx), &stream).expect("written");
     remove_working_copy(&stream);
 
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 
     assert!(store_of(&fx).record(&stream.id).exists());
     assert!(notices(&fx).is_empty());
@@ -368,7 +375,7 @@ fn a_branch_read_that_fails_promises_nothing_and_flags_nothing() {
     live.branch = "bad..name".into();
     store::write_stream(&fs_of(&fx), &store_of(&fx), &live).expect("written");
 
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    let listed = list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert!(!notices(&fx)[0].branch_survives);
     assert_eq!(listed.len(), 1);
@@ -385,7 +392,8 @@ fn a_gone_branch_does_not_let_a_delete_past_uncommitted_work() {
     std::fs::write(&file, "the author's work\n").unwrap();
     delete_branch_ref(&fx, &stream);
 
-    let refusal = delete_work_stream(fx.app.clone(), stream.id, false, false).expect_err("refused");
+    let refusal = delete_work_stream(fx.app.clone(), stream.id, false, false, Default::default())
+        .expect_err("refused");
 
     assert!(refusal.starts_with(ERR_STREAM_DIRTY), "{refusal}");
     assert!(file.exists());
@@ -397,7 +405,9 @@ fn a_healthy_stream_reports_its_branch_present() {
     let fx = Fixture::new();
     fx.create("healthy", None).expect("created");
 
-    assert!(!list_work_streams(fx.app.clone()).expect("listed")[0].branch_missing);
+    assert!(
+        !list_work_streams(fx.app.clone(), Default::default()).expect("listed")[0].branch_missing
+    );
 }
 
 // WKS-FR-AIWE: the branch gone and the directory present keeps the stream, with
@@ -410,7 +420,7 @@ fn a_gone_branch_keeps_the_stream_and_delete_ends_it() {
     std::fs::write(&file, "the author's work\n").unwrap();
     delete_branch_ref(&fx, &stream);
 
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    let listed = list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert_eq!(listed.len(), 1);
     assert!(listed[0].branch_missing);
@@ -418,8 +428,9 @@ fn a_gone_branch_keeps_the_stream_and_delete_ends_it() {
     assert!(file.exists(), "the sweep touched no file");
     assert!(notices(&fx).is_empty());
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, true).expect("deleted");
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, true, Default::default())
+        .expect("deleted");
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 }
 
 // WKS-FR-AIWE: a stream with no directory is flagged missing rather than as
@@ -433,7 +444,7 @@ fn a_held_stream_with_no_directory_does_not_report_its_branch_missing() {
     remove_working_copy(&stream);
     delete_branch_ref(&fx, &stream);
 
-    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    let listed = list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert!(listed[0].stream.is_missing);
     assert!(!listed[0].branch_missing);
@@ -448,7 +459,7 @@ fn a_listing_that_removes_a_stream_emits_each_event_once() {
     let streams = count_events(&fx, WORK_STREAMS_CHANGED);
     let branches = count_events(&fx, crate::worktree::BRANCHES_CHANGED);
 
-    list_work_streams(fx.app.clone()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     wait_for_count(&streams, 1);
     wait_for_count(&branches, 1);
@@ -465,7 +476,7 @@ fn two_removals_in_one_listing_emit_once_and_keep_their_order() {
     remove_working_copy(&second);
     let streams = count_events(&fx, WORK_STREAMS_CHANGED);
 
-    list_work_streams(fx.app.clone()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     wait_for_count(&streams, 1);
     let mut expected = [first.id, second.id];
@@ -487,8 +498,8 @@ fn a_listing_that_removes_nothing_emits_nothing() {
     let streams = count_events(&fx, WORK_STREAMS_CHANGED);
     let branches = count_events(&fx, crate::worktree::BRANCHES_CHANGED);
 
-    list_work_streams(fx.app.clone()).expect("listed");
-    list_work_streams(fx.app.clone()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert_eq!(streams.load(Ordering::SeqCst), 0);
     assert_eq!(branches.load(Ordering::SeqCst), 0);
@@ -501,14 +512,15 @@ fn a_notice_stays_until_it_is_dismissed() {
     let fx = Fixture::new();
     let stream = fx.create("noticed", None).expect("created");
     remove_working_copy(&stream);
-    list_work_streams(fx.app.clone()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     assert_eq!(notices(&fx).len(), 1);
     assert_eq!(notices(&fx).len(), 1, "a read consumed nothing");
 
-    dismiss_removed_work_stream(fx.app.clone(), stream.id).expect("dismissed");
+    dismiss_removed_work_stream(fx.app.clone(), stream.id, Default::default()).expect("dismissed");
     assert!(notices(&fx).is_empty());
-    dismiss_removed_work_stream(fx.app.clone(), "wnothing".into()).expect("no error");
+    dismiss_removed_work_stream(fx.app.clone(), "wnothing".into(), Default::default())
+        .expect("no error");
 }
 
 // WKS-FR-YLBX: notices are in removal order, and one project reads its own.
@@ -530,7 +542,8 @@ fn notices_are_in_order_and_belong_to_one_project() {
     let ids: Vec<String> = notices(&fx).into_iter().map(|n| n.stream_id).collect();
     assert_eq!(ids, ["first", "second"]);
 
-    dismiss_removed_work_stream(fx.app.clone(), "theirs".into()).expect("no error");
+    dismiss_removed_work_stream(fx.app.clone(), "theirs".into(), Default::default())
+        .expect("no error");
     assert_eq!(state.removed_notices("another project").len(), 1, "not this project's notice");
 }
 
@@ -545,13 +558,13 @@ fn a_surviving_branch_refuses_its_name_and_names_the_branch() {
     };
     let before = tip(&fx);
     remove_working_copy(&stream);
-    list_work_streams(fx.app.clone()).expect("listed");
+    list_work_streams(fx.app.clone(), Default::default()).expect("listed");
 
     let refusal = fx.create("again", None).expect_err("refused");
 
     assert_eq!(refusal, format!("{ERR_STREAM_BRANCH_EXISTS}: {}", stream.branch));
     assert_eq!(tip(&fx), before);
-    assert!(list_work_streams(fx.app.clone()).expect("listed").is_empty());
+    assert!(list_work_streams(fx.app.clone(), Default::default()).expect("listed").is_empty());
 }
 
 // WKS-FR-HRUZ: any branch of that name refuses, not only one a stream left.

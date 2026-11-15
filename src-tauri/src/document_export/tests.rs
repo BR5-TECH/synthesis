@@ -282,6 +282,7 @@ fn an_unknown_format_is_invalid_format() {
         destination.clone(),
         "e-1".into(),
         None,
+        Default::default(),
     ));
     assert_eq!(outcome.unwrap_err(), ERR_INVALID_FORMAT);
     assert!(!std::path::Path::new(&destination).exists());

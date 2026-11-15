@@ -70,6 +70,7 @@ The semantic mode calls `hybrid_search` of `EMB-embeddings-index.md` and `search
 26. **SCC-FR-LXCP** In a semantic search, `ordinal` is the rank of the hit within its group, from 0, in the order that the ranking call returned. The same query against the same index state gives the same ordinals.
 27. **SCC-FR-WEAK** `scope` bounds each group of a semantic search: `capped` and `full` each have a fixed limit of hits per group, and the `full` limit is larger. A semantic search ends with `reason = "completed"` unless it is cancelled or superseded.
 28. **SCC-FR-DBBK** A `semantic` query is never an `"invalid query"`. When embeddings are not ready (`EMB-embeddings-index.md` EMB-FR-BLHF), the specification and document groups carry the BM25 ranking, and the search raises no error.
+29. **SCC-FR-TQHW** A search belongs to one project. Every command takes `project_id`, and the `"search results"` event carries it and goes to the window of that project only. A hit of project A never shows in the overlay of project B (`PWN-project-windows.md` PWN-FR-AINZ).
 
 ## Non-functional requirements
 - The consumer pool is a fixed size chosen from the machine's available parallelism and bounded so a search never starves the rest of the application; it does not grow with the size of the tree.

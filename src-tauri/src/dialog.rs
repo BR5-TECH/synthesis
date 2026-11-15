@@ -20,9 +20,10 @@ use tauri_plugin_dialog::DialogExt;
 /// The mapping from `Option<FilePath>` → `BrowseResult` lives in the `fs`
 /// module (`fs::map_dialog_result`) so the cancel/select semantics can be
 /// unit-tested without a real dialog. See `src/fs/mod.rs` tests `fr1_*`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn browse_for_folder(app: tauri::AppHandle) -> Result<fs::BrowseResult, String> {
-    let picked = tauri::async_runtime::spawn_blocking(move || {
+    let picked = crate::project_scope::context::spawn_blocking(move || {
         let dialog = app.dialog().file();
         // The dialog plugin returns `Option<FilePath>`. We coerce to
         // `Option<PathBuf>` here to keep `fs::map_dialog_result` free of
@@ -43,9 +44,10 @@ pub async fn browse_for_folder(app: tauri::AppHandle) -> Result<fs::BrowseResult
 /// CLI the application could not detect. No filter is applied — an executable
 /// has no extension on Unix, and a filter that hid extensionless files would
 /// hide exactly what this picker exists to select.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn browse_for_file(app: tauri::AppHandle) -> Result<fs::BrowseResult, String> {
-    let picked = tauri::async_runtime::spawn_blocking(move || {
+    let picked = crate::project_scope::context::spawn_blocking(move || {
         app.dialog().file().blocking_pick_file().and_then(|fp| fp.into_path().ok())
     })
     .await
@@ -61,12 +63,13 @@ pub async fn browse_for_file(app: tauri::AppHandle) -> Result<fs::BrowseResult, 
 /// follows up leaves the filesystem untouched. Its one caller today is the Logs
 /// panel's export control (`../ui/LOG-logs.md` LOG-FR-17), which hands the path
 /// to `logging::export_logs`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn browse_for_save_path(
     app: tauri::AppHandle,
     default_name: String,
 ) -> Result<fs::BrowseResult, String> {
-    let picked = tauri::async_runtime::spawn_blocking(move || {
+    let picked = crate::project_scope::context::spawn_blocking(move || {
         app.dialog()
             .file()
             .set_file_name(default_name)

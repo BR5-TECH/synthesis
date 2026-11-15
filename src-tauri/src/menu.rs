@@ -59,7 +59,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 #[cfg(test)]
 use crate::artifacts::ContentTracker;

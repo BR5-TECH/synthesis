@@ -182,7 +182,8 @@ fn the_same_change_files_give_no_second_notice() {
     runner.set_archive(CHANGE, conflicting());
     let first = merge_raw(&fx, &stream);
     let repair = failure_of(&first).repair_run_id.clone().unwrap();
-    crate::graduation::discard_graduation_run(fx.app.clone(), repair.clone()).expect("a discard");
+    crate::graduation::discard_graduation_run(fx.app.clone(), repair.clone(), Default::default())
+        .expect("a discard");
 
     let second = merge_raw(&fx, &stream);
     assert_eq!(failure_of(&second).thread_id, failure_of(&first).thread_id);

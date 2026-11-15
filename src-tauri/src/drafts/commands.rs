@@ -3,11 +3,14 @@
 
 use super::*;
 use crate::git::write_guard::off_main::{in_sequence, project_root, project_store, run_write};
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_drafts(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftHierarchy, String> {
     let root = project.require_root()?;
     let (mut hierarchy, repaired) = list_drafts_reporting(&root);
@@ -59,6 +62,7 @@ pub fn list_drafts(
     Ok(hierarchy)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn create_draft<R: tauri::Runtime>(
     name: Option<String>,
@@ -104,9 +108,10 @@ where
 /// (DRS-FR-32) — a draft carries its whole directory with it, and every path
 /// inside it is draft-relative and therefore unmoved.
 pub(super) fn announce_organisation<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let _ = app.emit(DRAFTS_CHANGED, ());
+    let _ = app.emit_project(DRAFTS_CHANGED, ());
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn create_drafts_folder<R: tauri::Runtime>(
     parent: String,
@@ -135,6 +140,7 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn rename_drafts_folder<R: tauri::Runtime>(
     path: String,
@@ -163,6 +169,7 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn delete_drafts_folder<R: tauri::Runtime>(
     path: String,
@@ -209,6 +216,7 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn move_draft_to_folder<R: tauri::Runtime>(
     draft_id: String,
@@ -244,6 +252,7 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn move_drafts_folder<R: tauri::Runtime>(
     path: String,
@@ -274,20 +283,22 @@ where
 
 /// DRS-FR-17: the panel's text filter, which is the one operation it makes that
 /// reads a draft's files.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn search_drafts(
     text: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<DraftMatch>, String> {
     let root = project.require_root()?;
     Ok(search_drafts_impl(&root, &text))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_draft(
     id: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftRecord, String> {
     let root = project.require_root()?;
     let mut record = open_draft_impl(&root, &id)?;
@@ -515,6 +526,7 @@ pub fn read_draft_prompt(root: &fs::RootFs, id: &str) -> Result<DraftPrompt, Str
     Ok(DraftPrompt { draft: record, prompt_path, content })
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn rename_draft<R: tauri::Runtime>(
     id: String,
@@ -545,6 +557,7 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn set_draft_status<R: tauri::Runtime>(
     id: String,
@@ -575,6 +588,7 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn delete_draft<R: tauri::Runtime>(
     id: String,
@@ -611,16 +625,18 @@ where
     .await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_draft_file_contents(
     id: String,
     path: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftContents, String> {
     let root = project.require_root()?;
     load_draft_file_impl(&root, &id, &path)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn save_draft_file_contents<R: tauri::Runtime>(
     id: String,
@@ -650,7 +666,7 @@ where
         // is what settles it — from here on the saved prompt is what protects an
         // asset from housekeeping (DAS-FR-13). Released after the write has landed,
         // so a pass running in the instant before it still finds the hold.
-        if let Some(sweeper) = app.try_state::<crate::draft_assets::DraftAssetSweeper>() {
+        if let Some(sweeper) = app.try_project_store::<crate::draft_assets::DraftAssetSweeper>() {
             sweeper.release_draft(&id);
         }
         // DRS-FR-22: a write refreshes the draft's last-activity instant, so the

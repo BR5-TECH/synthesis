@@ -334,7 +334,8 @@ fn a_paused_turn_rests_the_run_and_continue_starts_the_turn_again() {
     let app = fx.app.clone();
     let id = run.id.clone();
     let paused = Turn::answering(Answer::Success).with_session("s1").doing(move || {
-        crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
+        crate::graduation::pause_graduation_run(app.clone(), id.clone(), Default::default())
+            .expect("paused");
     });
 
     let first = ScriptedDispatch::new(vec![paused]);
@@ -376,7 +377,8 @@ fn the_head_tip_is_pinned_at_the_first_dispatch() {
     let app = fx.app.clone();
     let id = run.id.clone();
     let paused = Turn::answering(Answer::Success).doing(move || {
-        crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
+        crate::graduation::pause_graduation_run(app.clone(), id.clone(), Default::default())
+            .expect("paused");
     });
     let rested = fx.drive(&run, ScriptedDispatch::new(vec![paused]));
     commit_on_branch(&fx.repo(), "feature/panel", "later.ts", "later\n");
@@ -461,7 +463,8 @@ fn continue_drops_a_correction_the_paused_turn_left() {
     .with_session("s1")
     .ignoring_cancellation()
     .doing(move || {
-        crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
+        crate::graduation::pause_graduation_run(app.clone(), id.clone(), Default::default())
+            .expect("paused");
     });
     let rested = fx.drive(&run, ScriptedDispatch::new(vec![refused_and_paused]));
     assert_eq!(rested.state, GraduationRunState::Interrupted);
@@ -506,7 +509,8 @@ fn the_checkout_goes_when_the_run_is_terminal() {
     let app = fx.app.clone();
     let id = run.id.clone();
     let paused = Turn::answering(Answer::Success).writing("scratch.txt", "x\n").doing(move || {
-        crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
+        crate::graduation::pause_graduation_run(app.clone(), id.clone(), Default::default())
+            .expect("paused");
     });
     let rested = fx.drive(&run, ScriptedDispatch::new(vec![paused]));
     assert!(!fx.root().join("scratch.txt").exists(), "the author's worktree is untouched");
@@ -517,7 +521,8 @@ fn the_checkout_goes_when_the_run_is_terminal() {
     assert!(head.head_detached().unwrap(), "detached at the pinned tip");
     drop(head);
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone()).expect("gone");
+    crate::graduation::discard_graduation_run(fx.app.clone(), run.id.clone(), Default::default())
+        .expect("gone");
 
     assert!(!checkout.exists(), "the checkout is removed");
     let repo = fx.repo();
@@ -610,6 +615,7 @@ fn a_pr_summary_run_into_an_unconfirmed_main_branch_is_not_refused() {
         "feature/panel".to_string(),
         "main".to_string(),
         PrSummaryMode::Diff,
+        Default::default(),
     )
     .expect("the start runs no check");
     let done = fx.drive(&run, ScriptedDispatch::new(vec![summary_answer("Panel", "Adds it.")]));

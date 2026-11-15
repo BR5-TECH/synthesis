@@ -8,6 +8,7 @@
  * subscribe-once / cancel-flag pattern they used with raw `listen`.
  */
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listenProject } from "./projectEvents";
 import type {
   ModelDowngrade,
   VoiceActivityChange,
@@ -53,6 +54,7 @@ import type {
   SearchResultsPayload,
   TreeChangedPayload,
   WorktreeContextChangedPayload,
+  ProjectWindowsSnapshot,
 } from "./types";
 
 // Native File-menu activations (SNV-FR-24 / SNV-FR-25). The id doubles as the
@@ -65,6 +67,8 @@ export const MENU_SAVE = "menu:save";
 /** SNV-FR-30 / SNV-FR-31: write everything holding unsaved changes. */
 export const MENU_SAVE_ALL = "menu:save-all";
 export const MENU_CLOSE_PROJECT = "menu:close-project";
+/** PJT-FR-PILG: open the Project picker as a modal over this window. */
+export const MENU_NEW_TAB = "menu:new-tab";
 /**
  * SNV-FR-26: the application is quitting. The backend holds the exit while the
  * frontend writes pending Editor changes (EDT-FR-33) and then either releases it
@@ -130,7 +134,7 @@ export const DRAFT_STATISTICS_CHANGED = "draft-statistics-changed";
 export const onDraftStatisticsChanged = (
   handler: (payload: DraftStatisticsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<DraftStatisticsChangedPayload>(DRAFT_STATISTICS_CHANGED, (event) =>
+  listenProject<DraftStatisticsChangedPayload>(DRAFT_STATISTICS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -141,7 +145,7 @@ export const DRAFT_PUBLICATION_CHANGED = "draft-publication-changed";
 export const onDraftPublicationChanged = (
   handler: (payload: { draftId: string }) => void,
 ): Promise<UnlistenFn> =>
-  listen<{ draftId: string }>(DRAFT_PUBLICATION_CHANGED, (event) =>
+  listenProject<{ draftId: string }>(DRAFT_PUBLICATION_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -152,7 +156,7 @@ export const PUBLICATION_METADATA_CHANGED = "publication-metadata-changed";
 export const onPublicationMetadataChanged = (
   handler: (payload: PublicationMetadataCacheChanged) => void,
 ): Promise<UnlistenFn> =>
-  listen<PublicationMetadataCacheChanged>(PUBLICATION_METADATA_CHANGED, (event) =>
+  listenProject<PublicationMetadataCacheChanged>(PUBLICATION_METADATA_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -163,7 +167,7 @@ export const PUBLICATION_METADATA_STARTUP_FAILED = "publication-metadata-startup
 export const onPublicationMetadataStartupFailed = (
   handler: (payload: PublicationMetadataStartupFailed) => void,
 ): Promise<UnlistenFn> =>
-  listen<PublicationMetadataStartupFailed>(PUBLICATION_METADATA_STARTUP_FAILED, (event) =>
+  listenProject<PublicationMetadataStartupFailed>(PUBLICATION_METADATA_STARTUP_FAILED, (event) =>
     handler(event.payload),
   );
 
@@ -237,7 +241,7 @@ export const EXPORT_REQUEST_CHANGED = "export-request-changed";
 export const onDocumentsChanged = (
   handler: (snapshot: DocumentsSnapshot) => void,
 ): Promise<UnlistenFn> =>
-  listen<DocumentsSnapshot>(DOCUMENTS_CHANGED, (event) =>
+  listenProject<DocumentsSnapshot>(DOCUMENTS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -251,7 +255,7 @@ export const EMBEDDINGS_STATUS_CHANGED = "embeddings-status-changed";
 export const onEmbeddingsStatusChanged = (
   handler: (status: EmbeddingsStatus) => void,
 ): Promise<UnlistenFn> =>
-  listen<EmbeddingsStatus>(EMBEDDINGS_STATUS_CHANGED, (event) =>
+  listenProject<EmbeddingsStatus>(EMBEDDINGS_STATUS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -265,7 +269,7 @@ export const MCP_SERVER_STATUS_CHANGED = "mcp-server-status-changed";
 export const onMcpServerStatusChanged = (
   handler: (change: McpServerStatusChanged) => void,
 ): Promise<UnlistenFn> =>
-  listen<McpServerStatusChanged>(MCP_SERVER_STATUS_CHANGED, (event) =>
+  listenProject<McpServerStatusChanged>(MCP_SERVER_STATUS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -310,7 +314,7 @@ export const PROJECT_IMAGE_BUILD_FINISHED = "project-image-build-finished";
 export const onProjectImageBuildProgress = (
   handler: (payload: ImageBuildProgress) => void,
 ): Promise<UnlistenFn> =>
-  listen<ImageBuildProgress>(PROJECT_IMAGE_BUILD_PROGRESS, (event) =>
+  listenProject<ImageBuildProgress>(PROJECT_IMAGE_BUILD_PROGRESS, (event) =>
     handler(event.payload),
   );
 
@@ -318,7 +322,7 @@ export const onProjectImageBuildProgress = (
 export const onProjectImageBuildFinished = (
   handler: (payload: ImageBuildFinished) => void,
 ): Promise<UnlistenFn> =>
-  listen<ImageBuildFinished>(PROJECT_IMAGE_BUILD_FINISHED, (event) =>
+  listenProject<ImageBuildFinished>(PROJECT_IMAGE_BUILD_FINISHED, (event) =>
     handler(event.payload),
   );
 
@@ -330,6 +334,7 @@ export type MenuEvent =
   | typeof MENU_SAVE
   | typeof MENU_SAVE_ALL
   | typeof MENU_CLOSE_PROJECT
+  | typeof MENU_NEW_TAB
   | typeof MENU_EXIT_REQUESTED
   | typeof MENU_FIND
   | typeof MENU_FIND_REPLACE
@@ -345,7 +350,7 @@ export const onMenuEvent = (
 export const onArtifactChangedExternally = (
   handler: (payload: ArtifactChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<ArtifactChangedPayload>(ARTIFACT_CHANGED_EXTERNALLY, (ev) =>
+  listenProject<ArtifactChangedPayload>(ARTIFACT_CHANGED_EXTERNALLY, (ev) =>
     handler(ev.payload),
   );
 
@@ -353,7 +358,7 @@ export const onArtifactChangedExternally = (
 export const onProjectTreeChanged = (
   handler: (payload: TreeChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<TreeChangedPayload>(PROJECT_TREE_CHANGED, (ev) => handler(ev.payload));
+  listenProject<TreeChangedPayload>(PROJECT_TREE_CHANGED, (ev) => handler(ev.payload));
 
 /**
  * DRP-FR-05 / DRS-FR-22: a draft was created, renamed, restatused, written to,
@@ -361,7 +366,7 @@ export const onProjectTreeChanged = (
  * on it, so the list is current without the author refreshing anything.
  */
 export const onDraftsChanged = (handler: () => void): Promise<UnlistenFn> =>
-  listen(DRAFTS_CHANGED, () => handler());
+  listenProject(DRAFTS_CHANGED, () => handler());
 
 /**
  * DRS-FR-42: the **content** of one draft's prompt file changed on disk,
@@ -373,7 +378,7 @@ export const onDraftsChanged = (handler: () => void): Promise<UnlistenFn> =>
 export const onDraftPromptChanged = (
   handler: (payload: DraftPromptChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<DraftPromptChangedPayload>(DRAFT_PROMPT_CHANGED, (ev) =>
+  listenProject<DraftPromptChangedPayload>(DRAFT_PROMPT_CHANGED, (ev) =>
     handler(ev.payload),
   );
 
@@ -386,7 +391,7 @@ export const onDraftPromptChanged = (
 export const onDashboardRecentlyEditedChanged = (
   handler: () => void,
 ): Promise<UnlistenFn> =>
-  listen(DASHBOARD_RECENTLY_EDITED_CHANGED, () => handler());
+  listenProject(DASHBOARD_RECENTLY_EDITED_CHANGED, () => handler());
 
 /**
  * DSH-FR-16 / PST-FR-35: which drafts qualify for the Active workstreams
@@ -395,7 +400,7 @@ export const onDashboardRecentlyEditedChanged = (
 export const onDashboardActiveDraftsChanged = (
   handler: () => void,
 ): Promise<UnlistenFn> =>
-  listen(DASHBOARD_ACTIVE_DRAFTS_CHANGED, () => handler());
+  listenProject(DASHBOARD_ACTIVE_DRAFTS_CHANGED, () => handler());
 
 /**
  * DSH-FR-15 / PST-FR-36: the backend's 5-minute timer refreshed the agent
@@ -404,13 +409,13 @@ export const onDashboardActiveDraftsChanged = (
 export const onDashboardAgentActivityChanged = (
   handler: () => void,
 ): Promise<UnlistenFn> =>
-  listen(DASHBOARD_AGENT_ACTIVITY_CHANGED, () => handler());
+  listenProject(DASHBOARD_AGENT_ACTIVITY_CHANGED, () => handler());
 
 /** DSH-FR-15 / PST-FR-36: the same tick's Pending Git reading. */
 export const onDashboardPendingGitChanged = (
   handler: () => void,
 ): Promise<UnlistenFn> =>
-  listen(DASHBOARD_PENDING_GIT_CHANGED, () => handler());
+  listenProject(DASHBOARD_PENDING_GIT_CHANGED, () => handler());
 
 /**
  * DSH-FR-18 / PST-FR-37: a background refresh the author never asked for
@@ -420,7 +425,7 @@ export const onDashboardPendingGitChanged = (
 export const onDashboardRefreshFailed = (
   handler: (payload: DashboardRefreshFailedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<DashboardRefreshFailedPayload>(DASHBOARD_REFRESH_FAILED, (ev) =>
+  listenProject<DashboardRefreshFailedPayload>(DASHBOARD_REFRESH_FAILED, (ev) =>
     handler(ev.payload),
   );
 
@@ -436,7 +441,7 @@ export const onDashboardRefreshFailed = (
 export const onDraftChangeProposalsChanged = (
   handler: (payload: ProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<ProposalsChangedPayload>(DRAFT_CHANGE_PROPOSALS_CHANGED, (event) =>
+  listenProject<ProposalsChangedPayload>(DRAFT_CHANGE_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -452,7 +457,7 @@ export const onDraftChangeProposalsChanged = (
 export const onPromptChangeProposalsChanged = (
   handler: (payload: PromptProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<PromptProposalsChangedPayload>(PROMPT_CHANGE_PROPOSALS_CHANGED, (event) =>
+  listenProject<PromptProposalsChangedPayload>(PROMPT_CHANGE_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -462,7 +467,7 @@ export const onPromptChangeProposalsChanged = (
 export const onChangeEditProposalsChanged = (
   handler: (payload: ChangeProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<ChangeProposalsChangedPayload>(CHANGE_EDIT_PROPOSALS_CHANGED, (event) =>
+  listenProject<ChangeProposalsChangedPayload>(CHANGE_EDIT_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -473,7 +478,7 @@ export const CHANGE_STATISTICS_CHANGED = "change-statistics-changed";
 export const onChangeStatisticsChanged = (
   handler: (payload: ChangeStatisticsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<ChangeStatisticsChangedPayload>(CHANGE_STATISTICS_CHANGED, (event) =>
+  listenProject<ChangeStatisticsChangedPayload>(CHANGE_STATISTICS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -484,7 +489,7 @@ export const NEW_CHANGE_PROPOSALS_CHANGED = "new-change-proposals-changed";
 export const onNewChangeProposalsChanged = (
   handler: (payload: NewChangeProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<NewChangeProposalsChangedPayload>(NEW_CHANGE_PROPOSALS_CHANGED, (event) =>
+  listenProject<NewChangeProposalsChangedPayload>(NEW_CHANGE_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -495,7 +500,7 @@ export const CHANGE_ACTION_REQUESTS_CHANGED = "change-action-requests-changed";
 export const onChangeActionRequestsChanged = (
   handler: (payload: ChangeActionRequestsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<ChangeActionRequestsChangedPayload>(CHANGE_ACTION_REQUESTS_CHANGED, (event) =>
+  listenProject<ChangeActionRequestsChangedPayload>(CHANGE_ACTION_REQUESTS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -507,7 +512,7 @@ export const onChangeActionRequestsChanged = (
 export const onChangesUpdated = (
   handler: (payload: ChangesUpdatedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<ChangesUpdatedPayload>(CHANGES_UPDATED, (ev) => handler(ev.payload));
+  listenProject<ChangesUpdatedPayload>(CHANGES_UPDATED, (ev) => handler(ev.payload));
 
 /**
  * PRG-FR-04 / STB-FR-15: an operation's registration, an advance in its
@@ -518,7 +523,7 @@ export const onChangesUpdated = (
 export const onOperationProgress = (
   handler: (operation: Operation) => void,
 ): Promise<UnlistenFn> =>
-  listen<Operation>(OPERATION_PROGRESS, (ev) => handler(ev.payload));
+  listenProject<Operation>(OPERATION_PROGRESS, (ev) => handler(ev.payload));
 
 /**
  * WTC-FR-16 / WTS-FR-25: the active worktree — or the branch checked out in it
@@ -529,7 +534,7 @@ export const onOperationProgress = (
 export const onWorktreeContextChanged = (
   handler: (payload: WorktreeContextChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<WorktreeContextChangedPayload>(WORKTREE_CONTEXT_CHANGED, (ev) =>
+  listenProject<WorktreeContextChangedPayload>(WORKTREE_CONTEXT_CHANGED, (ev) =>
     handler(ev.payload),
   );
 
@@ -545,7 +550,7 @@ export const onWorktreeContextChanged = (
 export const onBranchesChanged = (
   handler: (payload: BranchesChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<BranchesChangedPayload>(BRANCHES_CHANGED, (ev) => handler(ev.payload));
+  listenProject<BranchesChangedPayload>(BRANCHES_CHANGED, (ev) => handler(ev.payload));
 
 /**
  * GPP-FR-TYOV: the GitHub polling view changed. Followed by the main window's
@@ -556,7 +561,7 @@ export const onBranchesChanged = (
 export const onGithubPollingChanged = (
   handler: (payload: GithubPollingChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<GithubPollingChangedPayload>(GITHUB_POLLING_CHANGED, (ev) =>
+  listenProject<GithubPollingChangedPayload>(GITHUB_POLLING_CHANGED, (ev) =>
     handler(ev.payload ?? { newIssues: [] }),
   );
 
@@ -573,7 +578,7 @@ export const onGithubPollingChanged = (
 export const onGitOutputLine = (
   handler: (payload: GitOutputLinePayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<GitOutputLinePayload>(GIT_OUTPUT_LINE, (ev) => handler(ev.payload));
+  listenProject<GitOutputLinePayload>(GIT_OUTPUT_LINE, (ev) => handler(ev.payload));
 
 /**
  * GTC-FR-04 / CHG-FR-43: a transfer reached a terminal state. Emitted exactly
@@ -583,7 +588,7 @@ export const onGitOutputLine = (
 export const onGitOperationFinished = (
   handler: (payload: GitOperationFinishedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<GitOperationFinishedPayload>(GIT_OPERATION_FINISHED, (ev) =>
+  listenProject<GitOperationFinishedPayload>(GIT_OPERATION_FINISHED, (ev) =>
     handler(ev.payload),
   );
 
@@ -596,7 +601,7 @@ export const onGitOperationFinished = (
 export const onSearchResults = (
   handler: (payload: SearchResultsPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<SearchResultsPayload>(SEARCH_RESULTS, (ev) => handler(ev.payload));
+  listenProject<SearchResultsPayload>(SEARCH_RESULTS, (ev) => handler(ev.payload));
 
 /**
  * SCC-FR-13: a search reached a terminal state. Emitted exactly once per search
@@ -606,7 +611,7 @@ export const onSearchResults = (
 export const onSearchEnded = (
   handler: (payload: SearchEndedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<SearchEndedPayload>(SEARCH_ENDED, (ev) => handler(ev.payload));
+  listenProject<SearchEndedPayload>(SEARCH_ENDED, (ev) => handler(ev.payload));
 
 /**
  * AGC-FR-21, AGC-FR-34: a turn changed. An event comes at the registration, at
@@ -618,7 +623,7 @@ export const onSearchEnded = (
 export const onAgentTurnStateChanged = (
   handler: (turn: AgentTurn) => void,
 ): Promise<UnlistenFn> =>
-  listen<AgentTurn>(AGENT_TURN_STATE_CHANGED, (ev) => handler(ev.payload));
+  listenProject<AgentTurn>(AGENT_TURN_STATE_CHANGED, (ev) => handler(ev.payload));
 
 /**
  * AGC-FR-UVKF: a turn found a model downgrade. Emitted once for each
@@ -652,7 +657,7 @@ export const onAgentsChanged = (handler: () => void): Promise<UnlistenFn> =>
 export const onDiscussionChanged = (
   handler: (discussion: Discussion) => void,
 ): Promise<UnlistenFn> =>
-  listen<Discussion>(DISCUSSION_CHANGED, (ev) => handler(ev.payload));
+  listenProject<Discussion>(DISCUSSION_CHANGED, (ev) => handler(ev.payload));
 
 /** VOP-FR-NWHQ: subscribe to [`VOICE_AI_CHANGED`]. */
 export const onVoiceAiChanged = (
@@ -693,7 +698,7 @@ export const onGithubTokensChanged = (handler: () => void): Promise<UnlistenFn> 
 export const onDiscussionQuestionSetChanged = (
   handler: (payload: { discussionId: string; set: PendingQuestionSet | null }) => void,
 ): Promise<UnlistenFn> =>
-  listen<{ discussionId: string; set: PendingQuestionSet | null }>(
+  listenProject<{ discussionId: string; set: PendingQuestionSet | null }>(
     DISCUSSION_QUESTION_SET_CHANGED,
     (ev) => handler(ev.payload),
   );
@@ -746,7 +751,7 @@ export const onNotificationActivated = (
 export const onAgentActivityAppended = (
   handler: (state: AgentActivityState) => void,
 ): Promise<UnlistenFn> =>
-  listen<AgentActivityState>(AGENT_ACTIVITY_APPENDED, (event) =>
+  listenProject<AgentActivityState>(AGENT_ACTIVITY_APPENDED, (event) =>
     handler(event.payload),
   );
 
@@ -761,7 +766,7 @@ export const onAgentActivityAppended = (
 export const onGraduationQueueChanged = (
   handler: (payload: GraduationQueueChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<GraduationQueueChangedPayload>(GRADUATION_QUEUE_CHANGED, (event) =>
+  listenProject<GraduationQueueChangedPayload>(GRADUATION_QUEUE_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -773,7 +778,7 @@ export const onGraduationQueueChanged = (
 export const onWorkStreamsChanged = (
   handler: (payload: WorkStreamsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<WorkStreamsChangedPayload>(WORK_STREAMS_CHANGED, (event) =>
+  listenProject<WorkStreamsChangedPayload>(WORK_STREAMS_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -786,7 +791,7 @@ export const onWorkStreamsChanged = (
 export const onWorkStreamUpdateProgress = (
   handler: (payload: WorkStreamUpdateProgress) => void,
 ): Promise<UnlistenFn> =>
-  listen<WorkStreamUpdateProgress>(WORK_STREAM_UPDATE_PROGRESS, (event) =>
+  listenProject<WorkStreamUpdateProgress>(WORK_STREAM_UPDATE_PROGRESS, (event) =>
     handler(event.payload),
   );
 
@@ -798,7 +803,7 @@ export const onWorkStreamUpdateProgress = (
 export const onGraduationRunChanged = (
   handler: (payload: GraduationRunChangedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<GraduationRunChangedPayload>(GRADUATION_RUN_CHANGED, (event) =>
+  listenProject<GraduationRunChangedPayload>(GRADUATION_RUN_CHANGED, (event) =>
     handler(event.payload),
   );
 
@@ -811,7 +816,7 @@ export const onGraduationRunChanged = (
 export const onGraduationLogRecordsAppended = (
   handler: (payload: GraduationLogAppendedPayload) => void,
 ): Promise<UnlistenFn> =>
-  listen<GraduationLogAppendedPayload>(
+  listenProject<GraduationLogAppendedPayload>(
     GRADUATION_LOG_RECORDS_APPENDED,
     (event) => handler(event.payload),
   );
@@ -958,10 +963,27 @@ export * from "./newDraftEvents";
 export const onDocumentExportProgress = (
   handler: (progress: ExportProgress) => void,
 ): Promise<UnlistenFn> =>
-  listen<ExportProgress>(DOCUMENT_EXPORT_PROGRESS, (ev) => handler(ev.payload));
+  listenProject<ExportProgress>(DOCUMENT_EXPORT_PROGRESS, (ev) => handler(ev.payload));
 
 /** DXP-FR-FVTK: subscribe to [`EXPORT_REQUEST_CHANGED`]. */
 export const onExportRequestChanged = (
   handler: (request: ExportRequest) => void,
 ): Promise<UnlistenFn> =>
-  listen<ExportRequest>(EXPORT_REQUEST_CHANGED, (ev) => handler(ev.payload));
+  listenProject<ExportRequest>(EXPORT_REQUEST_CHANGED, (ev) => handler(ev.payload));
+
+/** PWN-FR-NEYF: the list of project windows changed. */
+export const PROJECT_WINDOWS_CHANGED = "project-windows-changed";
+/** PWN-FR-BYCL: this window must run the close flow of its project. */
+export const PROJECT_WINDOW_CLOSE_REQUESTED = "project-window-close-requested";
+
+export const onProjectWindowsChanged = (
+  handler: (snapshot: ProjectWindowsSnapshot) => void,
+): Promise<UnlistenFn> =>
+  listen<ProjectWindowsSnapshot>(PROJECT_WINDOWS_CHANGED, (ev) => handler(ev.payload));
+
+export const onProjectWindowCloseRequested = (
+  handler: (projectId: string) => void,
+): Promise<UnlistenFn> =>
+  listen<{ projectId: string }>(PROJECT_WINDOW_CLOSE_REQUESTED, (ev) =>
+    handler(ev.payload.projectId),
+  );

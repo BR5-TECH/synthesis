@@ -115,6 +115,7 @@ fn a_scenario_that_lets_the_queue_dispatch_fails() {
             summary: "The editor's.".to_string(),
             note: None,
         }],
+        Default::default(),
     )
     .expect("the answers are recorded");
     drop(outcome);

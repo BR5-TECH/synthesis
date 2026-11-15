@@ -301,7 +301,8 @@ impl Outcome {
     /// GTE-FR-YCQW: the claims the scenario held on other streams are let go, so
     /// the project slots they took are free again.
     pub(crate) fn releasing_the_held_slots(self) -> Self {
-        let streams = crate::streams::list_work_streams(self.fx.app.clone()).expect("the streams");
+        let streams = crate::streams::list_work_streams(self.fx.app.clone(), Default::default())
+            .expect("the streams");
         let state = self.fx.app.state::<GraduationState>();
         for row in streams {
             if row.stream.id != self.stream_id {
@@ -320,6 +321,7 @@ impl Outcome {
                 self.fx.app.clone(),
                 self.run.id.clone(),
                 false,
+                Default::default(),
             )
         })
         .unwrap_or_else(|reason| panic!("[{}] auto-start is settable: {reason}", self.name));
@@ -337,8 +339,12 @@ impl Outcome {
 
     /// GRD-FR-JOFE: the author files the merge run away.
     pub(crate) fn archiving(self) -> Self {
-        crate::graduation::archive_graduation_run(self.fx.app.clone(), self.run.id.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the archive was refused: {reason}", self.name));
+        crate::graduation::archive_graduation_run(
+            self.fx.app.clone(),
+            self.run.id.clone(),
+            Default::default(),
+        )
+        .unwrap_or_else(|reason| panic!("[{}] the archive was refused: {reason}", self.name));
         self
     }
 
@@ -350,6 +356,7 @@ impl Outcome {
                 self.run.id.clone(),
                 from,
                 to,
+                Default::default(),
             )
         })
         .unwrap_or_else(|reason| panic!("[{}] the reorder was refused: {reason}", self.name));
@@ -493,13 +500,14 @@ impl Outcome {
         let state = self.fx.app.state::<GraduationState>();
         state.release(&self.stream_id);
         without_loop(&self.fx.app, || {
-            crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(|reason| {
-                panic!("[{}] the queue was not readable: {reason}", self.name)
-            })
+            crate::graduation::list_graduation_queue(self.fx.app.clone(), Default::default())
+                .unwrap_or_else(|reason| {
+                    panic!("[{}] the queue was not readable: {reason}", self.name)
+                })
         });
-        crate::streams::list_work_streams(self.fx.app.clone()).unwrap_or_else(|reason| {
-            panic!("[{}] the streams were not readable: {reason}", self.name)
-        });
+        crate::streams::list_work_streams(self.fx.app.clone(), Default::default()).unwrap_or_else(
+            |reason| panic!("[{}] the streams were not readable: {reason}", self.name),
+        );
         self.dispatch = super::super::ScriptedDispatch::new(Vec::new());
         if self.run.id != "no-run" {
             self.run = self.fx.reload(&self.run.id);

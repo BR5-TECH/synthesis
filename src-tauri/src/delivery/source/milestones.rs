@@ -178,6 +178,7 @@ pub fn milestones_impl<R: Runtime>(
 }
 
 /// DSR contract surface: `"load delivery milestones (refresh)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn load_delivery_milestones(
     app: AppHandle,

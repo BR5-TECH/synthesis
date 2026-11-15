@@ -101,6 +101,7 @@ pub fn system_font_families() -> Vec<FontFamily> {
 /// FNT-FR-10: the answer is a property of the machine, so it is identical
 /// whether or not a project is open and whichever worktree is active — nothing
 /// here takes a project, a path, or any managed state.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_system_fonts() -> Vec<FontFamily> {
     system_font_families()
@@ -124,7 +125,7 @@ mod tests {
         // this without error, so the shape is what matters — the content is
         // whatever the machine running the test happens to carry, including
         // nothing at all.
-        let families = list_system_fonts();
+        let families = list_system_fonts(Default::default());
         for entry in &families {
             assert!(
                 !entry.family.trim().is_empty(),
@@ -212,8 +213,8 @@ mod tests {
         // whichever worktree is active — the command takes no project, no path,
         // and no managed state, so two calls made under any circumstances
         // agree.
-        let first = list_system_fonts();
-        let second = list_system_fonts();
+        let first = list_system_fonts(Default::default());
+        let second = list_system_fonts(Default::default());
         assert_eq!(
             first, second,
             "the fonts a machine has installed are a property of the machine"

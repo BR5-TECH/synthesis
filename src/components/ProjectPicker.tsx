@@ -19,6 +19,16 @@ import type {
 
 interface ProjectPickerProps {
   onOpen: (handle: ProjectHandle) => void;
+  /**
+   * PJT-FR-IOEV: resolve the chosen project without mounting it. The host asks
+   * where it opens (This tab or New tab) and mounts it itself.
+   */
+  resolveOnly?: boolean;
+  /**
+   * PPK-FR-GMYH: `modal` is the picker over a project window. It keeps the
+   * window as it is: no fixed size, no centring.
+   */
+  presentation?: "window" | "modal";
 }
 
 // Fixed outer size of the picker window (spec PPK-FR-09 / PPK-FR-10 / PPK-FR-11).
@@ -183,7 +193,11 @@ function isContextMenuKey(e: React.KeyboardEvent): boolean {
   return e.key === "ContextMenu" || (e.shiftKey && e.key === "F10");
 }
 
-export function ProjectPicker({ onOpen }: ProjectPickerProps) {
+export function ProjectPicker({
+  onOpen,
+  resolveOnly = false,
+  presentation = "window",
+}: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[] | null>(null);
   const [recentsError, setRecentsError] = useState("");
 
@@ -217,9 +231,11 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   const recentsBodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // PPK-FR-GMYH: the modal leaves the window of its project as it is.
+    if (presentation === "modal") return;
     // PPK-FR-09 / PPK-FR-10 / PPK-FR-11: picker uses a fixed, non-resizable window.
     void applyPickerWindowChrome();
-  }, []);
+  }, [presentation]);
 
   useEffect(() => {
     api.listRecentProjects()
@@ -351,7 +367,7 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   };
 
   const onRecentClick = (r: RecentProject) =>
-    runOpen(() => api.openProjectAtPath(r.path), (message) =>
+    runOpen(() => (resolveOnly ? api.resolveProjectAtPath(r.path) : api.openProjectAtPath(r.path)), (message) =>
       setRecentError(message ? { path: r.path, message } : null),
     );
 
@@ -360,7 +376,10 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     try {
       const picked = await openDialog({ directory: true, multiple: false });
       if (typeof picked !== "string") return;
-      await runOpen(() => api.openProjectAtPath(picked), setBrowseError);
+      await runOpen(
+        () => (resolveOnly ? api.resolveProjectAtPath(picked) : api.openProjectAtPath(picked)),
+        setBrowseError,
+      );
     } catch (e) {
       setBrowseError(errorMessage(e));
     }
@@ -371,7 +390,13 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
       setGitError("URL is not parsable");
       return;
     }
-    runOpen(() => api.openProjectFromGitUrl(git.trim()), setGitError);
+    runOpen(
+      () =>
+        resolveOnly
+          ? api.resolveProjectFromGitUrl(git.trim())
+          : api.openProjectFromGitUrl(git.trim()),
+      setGitError,
+    );
   };
 
   const onCreateBrowse = async () => {
@@ -394,7 +419,10 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
       return;
     }
     runOpen(
-      () => api.createProject(name.trim(), mode, createTarget),
+      () =>
+        resolveOnly
+          ? api.resolveNewProject(name.trim(), mode, createTarget)
+          : api.createProject(name.trim(), mode, createTarget),
       setCreateError,
     );
   };

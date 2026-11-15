@@ -63,6 +63,7 @@ fn log_failure(app: &tauri::AppHandle, message: &str, code: &str) {
     );
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_voice_ai_integrations(
     store: State<'_, GlobalSettingsStore>,
@@ -70,6 +71,7 @@ pub fn list_voice_ai_integrations(
     list_integrations(&store)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // The operation of VOP takes these five values.
 pub async fn verify_voice_ai_integration(
@@ -127,6 +129,7 @@ pub async fn verify_voice_ai_integration(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_voice_ai_routes(
     provider: String,
@@ -143,6 +146,7 @@ pub fn set_voice_ai_routes(
     Ok(record)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_voice_ai_default_voice(
     provider: String,
@@ -159,6 +163,7 @@ pub fn set_voice_ai_default_voice(
 }
 
 /// VOP-FR-HQTQ.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_voice_ai_speech_options(
     provider: String,
@@ -175,6 +180,7 @@ pub fn set_voice_ai_speech_options(
     Ok(record)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_active_voice_ai_integration(
     provider: String,
@@ -189,6 +195,7 @@ pub fn set_active_voice_ai_integration(
     Ok(integrations)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn clear_voice_ai_integration(
     provider: String,
@@ -203,6 +210,7 @@ pub fn clear_voice_ai_integration(
     Ok(integrations)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_voice_ai_models(
     provider: String,
@@ -217,6 +225,7 @@ pub async fn list_voice_ai_models(
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_voice_ai_voices(
     provider: Option<String>,
@@ -226,6 +235,7 @@ pub async fn list_voice_ai_voices(
     list_voices(&store, &voice, provider.as_deref()).await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn start_voice_capture(
     capture_rate: u32,
@@ -291,6 +301,7 @@ pub(crate) fn body_samples(body: &InvokeBody) -> Vec<i16> {
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn append_voice_capture(
     request: Request<'_>,
@@ -305,6 +316,7 @@ pub async fn append_voice_capture(
     voice.append_and_detect(&session_id, body_samples(request.body())).await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn finish_voice_capture(
     session_id: String,
@@ -325,6 +337,7 @@ pub async fn finish_voice_capture(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn retry_voice_capture(
     session_id: String,
@@ -346,6 +359,7 @@ pub async fn retry_voice_capture(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_voice_capture(session_id: String, voice: State<'_, VoiceAi>) -> Result<(), String> {
     voice.cancel_capture(&session_id)
@@ -361,6 +375,7 @@ pub(crate) fn end_segment(result: &Result<(), String>, emit: &mut impl FnMut(Vec
 
 // Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
 #[allow(clippy::too_many_arguments)]
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn speak_voice_segment(
     speech_id: String,
@@ -422,6 +437,7 @@ pub async fn speak_voice_segment(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_voice_speech(speech_id: String, voice: State<'_, VoiceAi>) -> Result<(), String> {
     voice.cancel_speech(&speech_id);
@@ -432,7 +448,7 @@ pub fn cancel_voice_speech(speech_id: String, voice: State<'_, VoiceAi>) -> Resu
 /// application.
 pub fn start_watchdog(app: tauri::AppHandle) {
     use tauri::Manager;
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         loop {
             tokio::time::sleep(WATCHDOG_TICK).await;
             let voice = app.state::<VoiceAi>();

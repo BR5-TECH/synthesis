@@ -416,6 +416,7 @@ const DOMAINS: [Domain; 1] = [Domain::Backend];
 
 /// GSS-FR-DPWS: the stored record with the facts of this machine. Boots no VM,
 /// runs no executable, and reaches no network.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_isolation_settings(
     store: State<'_, GlobalSettingsStore>,
@@ -424,6 +425,7 @@ pub fn load_isolation_settings(
 }
 
 /// GSS-FR-OAKR: validate and persist the record, and return the new state.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_isolation_settings(
     settings: IsolationSettings,

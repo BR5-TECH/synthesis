@@ -4,6 +4,7 @@
 //! CVL-FR-16, up to the round bound of CVL-FR-13.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 pub(super) enum TurnEnd {
     Cancelled,
@@ -803,8 +804,7 @@ fn report_turn_running<R: tauri::Runtime>(
     turns: &TurnRegistry,
     plan: &TurnPlan,
 ) {
-    use tauri::Manager;
-    let progress_registry = app.state::<ProgressRegistry>();
+    let progress_registry = app.project_store::<ProgressRegistry>();
     let operation = progress::register_and_publish_with_activation(
         app,
         &progress_registry,

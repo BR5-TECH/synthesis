@@ -4,7 +4,7 @@
  * One part of the typed wrappers over the backend's `#[tauri::command]` set;
  * `./index.ts` carries the whole rule these files are written under.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type {
   AgenticCliVendor,
   DockerBackend,

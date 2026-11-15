@@ -3,9 +3,8 @@
 //! WKS-FR-APUE, WKS-FR-RVSU, WKS-FR-AUSI, WKS-FR-VYIW, WKS-FR-YLBX,
 //! WKS-FR-DBWC).
 
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeSet;
-
-use tauri::Manager;
 
 use super::*;
 use crate::log_fields;
@@ -184,7 +183,7 @@ pub(super) fn sweep_gone_streams<R: tauri::Runtime>(
         return;
     }
 
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
     let active_root = crate::changes::canonicalize_lenient(root);
     let mut removed = false;
     {
@@ -233,22 +232,27 @@ pub(super) fn sweep_gone_streams<R: tauri::Runtime>(
 
 /// WKS-FR-YLBX: the notices of the open project. Reading consumes none of them:
 /// a listing runs on any surface, and a remount of the selector reads again.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_removed_work_streams<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<RemovedStreamNotice>, String> {
     let key = commands::project_key(&app);
-    Ok(app.try_state::<StreamState>().map(|state| state.removed_notices(&key)).unwrap_or_default())
+    Ok(app
+        .try_project_store::<StreamState>()
+        .map(|state| state.removed_notices(&key))
+        .unwrap_or_default())
 }
 
 /// WKS-FR-YLBX: drop one notice. An id with no notice is no error.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn dismiss_removed_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
 ) -> Result<(), String> {
     let key = commands::project_key(&app);
-    if let Some(state) = app.try_state::<StreamState>() {
+    if let Some(state) = app.try_project_store::<StreamState>() {
         state.dismiss_removed(&key, &stream_id);
     }
     Ok(())

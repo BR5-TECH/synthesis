@@ -7133,6 +7133,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "project_scope_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "pulldown-cmark"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9392,6 +9401,7 @@ dependencies = [
  "ort",
  "pdf-extract",
  "process-wrap",
+ "project_scope_macros",
  "pulldown-cmark",
  "rcgen",
  "regex",

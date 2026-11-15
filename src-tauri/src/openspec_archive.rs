@@ -15,6 +15,7 @@
 //! OAR-FR-EZNX: every file read and write goes through `crate::fs`, every Git
 //! read and write through `crate::git`, and nothing reaches the network.
 
+use crate::project::OpenProject as _;
 use std::time::Instant;
 
 use serde::Serialize;
@@ -181,8 +182,7 @@ pub fn archive_stream_changes<R: tauri::Runtime>(
     if changes.is_empty() {
         return Ok(Vec::new());
     }
-    let active =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let active = app.open_project_state().and_then(|p| p.require_root().ok());
     let cx = ArchiveContext { app, stream_id: &stream.id, active, at };
     let seam = app.try_state::<OpenSpec>();
 

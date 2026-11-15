@@ -37,5 +37,6 @@ export * from "./changeProposals";
 export * from "./changeHistory";
 export * from "./panels";
 export * from "./project";
+export * from "./projectWindows";
 export * from "./streams";
 export * from "./voice";

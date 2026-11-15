@@ -111,6 +111,7 @@ pub struct VoiceActivityClosed {
     capture_id: Option<String>,
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn open_voice_activity_session(
     capture_rate: u32,
@@ -152,6 +153,7 @@ pub async fn open_voice_activity_session(
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn feed_voice_activity(
     request: Request<'_>,
@@ -166,6 +168,7 @@ pub async fn feed_voice_activity(
     voice.feed_activity(&activity_id, body_samples(request.body())).await
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_voice_activity_gate(
     activity_id: String,
@@ -179,6 +182,7 @@ pub fn set_voice_activity_gate(
     voice.set_activity_gate(&activity_id, Gate { seq, blocked, playing, chunked, keyterms })
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn close_voice_activity_session(
     activity_id: String,

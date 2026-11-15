@@ -398,7 +398,7 @@ where
     S: logging::LogSink + Clone + Send + 'static,
 {
     let sink = sink.clone();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         let roots = roots();
         let readable = roots.os_store_readable();
         let fields = log_fields! {

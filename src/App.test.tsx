@@ -518,7 +518,7 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
         { name: "beta", path: "~/dev/beta", lastOpenedAt: "2026-06-19T10:00:00Z" },
       ];
     }
-    if (cmd === "open_project_at_path") {
+    if (cmd === "open_project_at_path" || cmd === "resolve_project_at_path") {
       const path = args?.path ?? "~/dev/acme";
       return { name: path.includes("beta") ? "beta" : "acme", path };
     }
@@ -556,6 +556,9 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
     await userEvent.click(screen.getByTestId("project-switcher"));
     const menu = await screen.findByTestId("project-switcher-menu");
     await userEvent.click(await within(menu).findByText("beta"));
+    // PJT-FR-GASB: a pick other than the current project asks where it opens.
+    const dialog = await screen.findByRole("dialog", { name: "Open beta" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "This tab" }));
 
     // The window reopened for B: the switcher trigger shows the new project.
     await waitFor(() =>
@@ -585,7 +588,7 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
     );
   });
 
-  it("OVW-FR-02, OVW-FR-11: 'Open Another Project…' returns to the Project picker", async () => {
+  it("PJT-FR-IOEV: 'Open Another Project…' shows the Project picker over the window and keeps the project", async () => {
     invokeMock.mockImplementation(async (cmd: string, args?: { path?: string }) =>
       twoRecentInvoke(cmd, args),
     );
@@ -598,11 +601,49 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
       await screen.findByTestId("project-switcher-open-another"),
     );
 
-    // Back on the picker; the main shell is gone.
-    expect(await screen.findByTestId("picker-left")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Settings" }),
-    ).not.toBeInTheDocument();
+    // The picker is a modal over the project window; the shell stays mounted.
+    const modal = await screen.findByRole("dialog", { name: "Project picker" });
+    expect(within(modal).getByTestId("picker-left")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    // PPK-FR-IHWN: Escape dismisses it and changes nothing.
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Project picker" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("project-switcher")).toHaveTextContent("acme");
+  });
+
+  it("PJT-FR-GASB: New tab opens a project window and leaves this project as it is", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: { path?: string }) =>
+      twoRecentInvoke(cmd, args),
+    );
+    render(<App />);
+    await enterIde();
+    await userEvent.click(screen.getByTestId("project-switcher"));
+    const menu = await screen.findByTestId("project-switcher-menu");
+    await userEvent.click(await within(menu).findByText("beta"));
+    const dialog = await screen.findByRole("dialog", { name: "Open beta" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "New tab" }));
+    await waitFor(() =>
+      expect(invokeMock.mock.calls.some((c) => c[0] === "open_project_window")).toBe(true),
+    );
+    expect(screen.getByTestId("project-switcher")).toHaveTextContent("acme");
+  });
+
+  it("PJT-FR-GASB: Cancel in the dialog changes nothing", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: { path?: string }) =>
+      twoRecentInvoke(cmd, args),
+    );
+    render(<App />);
+    await enterIde();
+    await userEvent.click(screen.getByTestId("project-switcher"));
+    const menu = await screen.findByTestId("project-switcher-menu");
+    await userEvent.click(await within(menu).findByText("beta"));
+    const dialog = await screen.findByRole("dialog", { name: "Open beta" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Open beta" })).not.toBeInTheDocument();
+    expect(invokeMock.mock.calls.some((c) => c[0] === "open_project_window")).toBe(false);
+    expect(screen.getByTestId("project-switcher")).toHaveTextContent("acme");
   });
 });
 

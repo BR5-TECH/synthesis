@@ -334,7 +334,7 @@ fn a_draft_whose_history_cannot_be_reconciled_answers_nothing_about_its_proposal
         list_draft_change_proposals(
             f.handle(),
             f.draft_id.clone(),
-            f.app.state::<crate::project::ProjectState>(),
+            f.app.state::<crate::project::ProjectState>().into(),
         )
         .err(),
         f.accept(&proposal.id).err(),

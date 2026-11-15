@@ -6,6 +6,7 @@
 //! of a file's. Each entry runs the function behind the chip's command
 //! (CEP-FR-KLWZ), so a decision by tool is the author's decision.
 
+use crate::project::OpenProject as _;
 use tauri::Manager;
 
 use super::decide_changes::{
@@ -118,7 +119,7 @@ where
             return Ok(decider.clone());
         }
         let store = self.app.try_state::<crate::global_settings::GlobalSettingsStore>();
-        let project = self.app.try_state::<crate::project::ProjectState>();
+        let project = self.app.open_project_state();
         match (store, project) {
             (Some(store), Some(project)) => comments::acting_participant(&store, &project),
             _ => Err(cep::ERR_NO_PROJECT_OPEN.to_string()),
@@ -413,7 +414,7 @@ where
         // reach the network, so the decisions run on a blocking thread.
         let this = self.clone();
         async move {
-            match tauri::async_runtime::spawn_blocking(move || this.run(arguments)).await {
+            match crate::project_scope::context::spawn_blocking(move || this.run(arguments)).await {
                 Ok(result) => result,
                 // A panic in the decisions stays a panic of the turn, as it
                 // was when the decisions ran on the turn's own thread.

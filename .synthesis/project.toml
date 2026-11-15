@@ -16,7 +16,21 @@ graduationConcurrencyLimit = 2
 graduationPassBudget = 4
 lineEndings = "lf"
 
+[delivery.createTypes]
+defect = "Bug"
+epic = "Epic"
+feature = "Feature"
+task = "Task"
+
+[delivery.source]
+kind = "github"
+
 [dockerImages.claude_code]
 dockerfile = "docker/agent-images/claude-code/Dockerfile"
 imageName = "claude-code"
 tag = "latest"
+
+[githubPolling]
+inProgressStatus = "In progress"
+projectNodeId = "PVT_kwDOBGMvbM4Blx47"
+readyStatus = "Ready"

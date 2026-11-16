@@ -332,7 +332,7 @@ That last sentence holds only once a digest has been recorded. While an entry
 in `manifest.toml` carries the all-zero sentinel, there is no digest to pin to,
 so the executor addresses that image by its `image_ref` — repository **and
 tag** — and the tag it names is the CLI version with a build revision after it
-(`2.1.233-6`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
+(`2.1.325-1`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
 the application launches.
 
 So on a machine running an unpublished image, the tag the executor asks for is

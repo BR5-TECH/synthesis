@@ -268,7 +268,7 @@ ENV OPENSPEC_TELEMETRY=0
 # AVI-FR-06: an exact version, never a floating tag. This is the `cli_version`
 # `manifest.toml` records, and `make verify` is what catches the two drifting
 # apart.
-ARG CLAUDE_CODE_VERSION=2.1.314
+ARG CLAUDE_CODE_VERSION=2.1.325
 RUN npm install --global --no-fund --no-audit \
         "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force

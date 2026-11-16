@@ -2,34 +2,33 @@
  * The Discussion column of the Map tab (`SMP-specification-map.md` SMP-FR-WNLR
  * .. SMP-FR-BOBB, `CMT-comments.md` CMT-FR-LVNQ).
  *
- * The column shows one thread at a time with the shared `DiscussionSurface`,
- * and begins a thread with the shared `DiscussionComposer`, as every owner
- * does. What it owns is the header with its thread chooser, the Focus chip,
- * and the empty states. A thread is read with `"list map discussions"` and
- * followed by the `"discussion changed"` event (the shared hook), and the
- * thread of the chosen node is also asked for with
- * `"find map discussion (map node)"`, which creates nothing (SMP-FR-IHFM). The
- * first message of an empty thread creates it with
- * `"get or create map discussion (map node, body, attachments)"`, and later
- * messages are added with `"add comment to discussion"` (SMP-FR-KHKC).
+ * The column is the discussion column of the draft and the file
+ * (`DDS-draft-discussion.md`): one tab for each open thread, the control that
+ * begins another, the resolved disclosure, the header menu that resolves and
+ * reopens, and the shared surface and composer. What the Map adds is the name
+ * of each tab, the node of a thread in the header, the Focus chip, and its own
+ * words for the opening composer.
+ *
+ * The threads are read with `"list map discussions"` and followed by the
+ * `"discussion changed"` event (the shared hook). **Discuss** on a node asks
+ * for the latest open thread of the node with `"find map discussion (map node)"`,
+ * which creates nothing (SMP-FR-IHFM). Each opening composer creates a new thread
+ * with `"open map discussion (map node, body, attachments)"` (SMP-FR-KHKC), and
+ * later messages are added with `"add comment to discussion"`.
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { findMapDiscussion, getOrCreateMapDiscussion, listMapDiscussions } from "../../api";
+import { findMapDiscussion, listMapDiscussions, openMapDiscussion } from "../../api";
 import { identityBlockFor } from "../../hooks/useComments";
-import { useDiscussions, COMPOSER_KEY } from "../../hooks/useDiscussions";
-import { logDebug } from "../../logging";
+import { useDiscussions } from "../../hooks/useDiscussions";
+import { logDebug, logWarn } from "../../logging";
 import { requestPendingFocus } from "../../state/discussionFocus";
+import { MAP_COLUMN } from "../../state/discussionColumn";
 import { mapThreadKey, sameMapNode } from "../../state/specMap/discussion";
 import type { SpecMapSessionStore } from "../../state/specMap/session";
-import type {
-  AttachmentInput,
-  CommentQuote,
-  Discussion,
-  DiscussionTarget,
-  MapNodeRef,
-} from "../../types";
-import { DiscussionComposer, DiscussionSurface } from "../discussion";
+import type { AttachmentInput, Discussion, DiscussionTarget, MapNodeRef } from "../../types";
+import { DiscussionColumn } from "../DraftDiscussion/DiscussionColumn";
+import type { OpeningCopy, OpenState } from "../DraftDiscussion/OpenDiscussion";
 import { Icon } from "../icons";
 import { MapPlanHostContext, type MapPlanHost } from "../MapPlanProposal";
 import { FocusChip } from "./FocusChip";
@@ -46,32 +45,64 @@ export interface MapColumnProps {
 
 const MAP_TARGET: DiscussionTarget = { kind: "map" };
 
-/** SMP-FR-XGBI: what the empty Map thread tells the author about the plan tools. */
-function MapThreadHint({ planTool }: { planTool: boolean }) {
-  return (
-    <div className="mdc-empty" data-testid="map-discussion-empty">
-      <p>Plan the delivery here with an agent. Each message is about the whole map unless it has a focus.</p>
-      <p data-testid="map-plan-tool-note">
-        The agent reads the plan and proposes changes only while a GitHub Project is the delivery
-        source.
-        {!planTool && " The delivery source is not a GitHub Project now, so the agent has no plan tool."}
-      </p>
-    </div>
-  );
+/** SMP-FR-EIUP: what the tab of a thread reads. */
+export function mapTabLabel(thread: Discussion): string {
+  return thread.mapNode?.label ?? "Map";
+}
+
+/** SMP-FR-XGBI: what the opening composer of a whole-map thread says of the plan tools. */
+function planToolNote(planTool: boolean): string {
+  return planTool
+    ? "The agent reads the plan and proposes changes only while a GitHub Project is the delivery source."
+    : "The agent reads the plan and proposes changes only while a GitHub Project is the delivery source. " +
+        "The delivery source is not a GitHub Project now, so the agent has no plan tool.";
+}
+
+/** SMP-FR-XGBI / SMP-FR-IHFM: the words of the opening composer. */
+function openingCopy(node: MapNodeRef | null, planTool: boolean): OpeningCopy {
+  return {
+    statement: (state: OpenState, resolved: number) => {
+      if (node) {
+        return {
+          lead: `This begins a discussion about ${node.label}.`,
+          hint: "Each message is about this node unless it has another focus. The other threads stay where they are.",
+        };
+      }
+      if (state === "resolved") {
+        return {
+          lead:
+            resolved === 1
+              ? "The discussion about the map is resolved."
+              : "Every discussion about the map is resolved.",
+          hint: `Open ${resolved === 1 ? "it" : "them"} above to read what was said, or write below to begin another. ${planToolNote(planTool)}`,
+        };
+      }
+      return {
+        lead:
+          state === "another"
+            ? "This begins another discussion about the map."
+            : "Plan the delivery here with an agent. Each message is about the whole map unless it has a focus.",
+        hint: planToolNote(planTool),
+      };
+    },
+    ariaLabel: node ? "Discuss this node" : "Discuss the map",
+    placeholder: node ? "Ask an agent about this node…" : "Ask an agent about the plan…",
+    sessionKey: mapThreadKey(node),
+  };
 }
 
 export function MapDiscussionColumn({ store, selected, planTool, planHost }: MapColumnProps) {
   useSyncExternalStore(store.subscribe, store.getVersion);
-  const { node, focusSignal } = store.snapshot().discussion;
-  const nodeKey = mapThreadKey(node);
+  const state = store.snapshot().discussion;
+  const { node, composing, threadId, focusSignal, discussSignal } = state;
   const nodeRef = useRef(node);
   nodeRef.current = node;
 
   const overrides = useMemo(
     () => ({
       list: listMapDiscussions,
-      // SMP-FR-KHKC: the first message of a thread creates it, or joins the one
-      // that another window created.
+      // SMP-FR-KHKC: each opening composer begins a new thread, about the node
+      // it was opened for or about the whole map.
       open: ({
         body,
         attachments,
@@ -80,39 +111,60 @@ export function MapDiscussionColumn({ store, selected, planTool, planHost }: Map
         body: string;
         attachments: AttachmentInput[];
         spokenOriginal?: string;
-      }) =>
-        getOrCreateMapDiscussion({ mapNode: nodeRef.current, body, attachments, spokenOriginal }),
+      }) => openMapDiscussion({ mapNode: nodeRef.current, body, attachments, spokenOriginal }),
     }),
     [],
   );
   const discussions = useDiscussions(MAP_TARGET, true, undefined, overrides);
   const threads = useMemo(() => discussions.discussions.map((d) => d.thread), [discussions.discussions]);
 
-  // SMP-FR-IHFM: the thread of the node, asked for and never created by this call.
-  const [found, setFound] = useState<{ key: string; thread: Discussion | null } | null>(null);
+  // SMP-FR-IHFM: Discuss on a node asks for its latest open thread. Until the
+  // answer, the column holds the opening composer of the node, and it keeps it
+  // where the node has no open thread. A later Discuss supersedes the answer.
+  const latestDiscuss = useRef(discussSignal);
+  latestDiscuss.current = discussSignal;
   useEffect(() => {
-    let cancelled = false;
+    if (discussSignal === 0 || !node) return;
+    if (store.snapshot().discussion.lookedSignal >= discussSignal) return;
+    const asked = discussSignal;
     void findMapDiscussion(node)
-      .then((thread) => {
-        if (!cancelled) setFound({ key: nodeKey, thread: thread ?? null });
+      .then((found) => {
+        store.noteDiscussLooked(asked);
+        if (latestDiscuss.current !== asked) return;
+        logDebug(["frontend"], "map discussion of a node looked up", { found: !!found });
+        // The author can choose a tab, or begin another discussion, before the
+        // answer comes. That choice stands.
+        const held = store.snapshot().discussion;
+        if (!held.composing || !sameMapNode(held.node, node)) return;
+        if (!found) return;
+        // The reply composer of the thread takes the caret that the opening
+        // composer held, so the author writes on (SMP-FR-IHFM).
+        requestPendingFocus(found.id, "composer");
+        store.selectDiscussionThread(found.id);
       })
-      .catch(() => {
-        if (!cancelled) setFound({ key: nodeKey, thread: null });
+      .catch((error: unknown) => {
+        store.noteDiscussLooked(asked);
+        logWarn(["frontend"], "map discussion look-up of a node failed", { error: String(error) });
       });
-    return () => {
-      cancelled = true;
-    };
+    // The node is the one the Discuss named; the signal is what starts a look-up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeKey]);
-  const listed = threads.find((t) => sameMapNode(t.mapNode ?? null, node)) ?? null;
-  const thread = listed ?? (found?.key === nodeKey ? found.thread : null);
+  }, [discussSignal]);
 
-  // SMP-FR-DUUU: the focus of the next message. In a node thread it starts as
-  // the node of the thread, and it returns there after each post.
-  const [focus, setFocus] = useState<MapNodeRef | null>(node);
+  // The thread the column shows, as the shared column picks it.
+  const open = threads.filter((t) => !t.resolved);
+  const offered = state.showResolved ? [...open, ...threads.filter((t) => t.resolved)] : open;
+  const shown = composing ? undefined : (offered.find((t) => t.id === threadId) ?? offered[0]);
+  const subject = composing ? node : (shown?.mapNode ?? null);
+
+  // SMP-FR-DUUU: the focus of the next message. It starts as the node of the
+  // thread or of the opening composer, and it returns there after each post.
+  const subjectKey = composing ? `new:${mapThreadKey(node)}` : `thread:${shown?.id ?? ""}`;
+  const subjectRef = useRef(subject);
+  subjectRef.current = subject;
+  const [focus, setFocus] = useState<MapNodeRef | null>(subject);
   useEffect(() => {
-    setFocus(nodeRef.current);
-  }, [nodeKey]);
+    setFocus(subjectRef.current);
+  }, [subjectKey]);
   const focusAttachments = useMemo<AttachmentInput[] | undefined>(
     () => (focus ? [{ kind: "mapNode", node: focus }] : undefined),
     [focus],
@@ -121,134 +173,73 @@ export function MapDiscussionColumn({ store, selected, planTool, planHost }: Map
     <FocusChip focus={focus} selected={selected} onUse={setFocus} onClear={() => setFocus(null)} />
   );
 
-  // SMP-FR-EIUP: the Map thread first, then every node thread, and the node the
-  // column reads where it has no thread yet.
-  const options = useMemo(() => {
-    const list: { key: string; node: MapNodeRef | null; label: string }[] = [
-      { key: mapThreadKey(null), node: null, label: "Map" },
-    ];
-    for (const t of threads) {
-      if (t.mapNode) list.push({ key: mapThreadKey(t.mapNode), node: t.mapNode, label: t.mapNode.label });
-    }
-    if (node && !list.some((o) => o.key === nodeKey)) {
-      list.push({ key: nodeKey, node, label: node.label });
-    }
-    return list;
-  }, [threads, node, nodeKey]);
-
   const identityBlock = identityBlockFor(discussions.identityError);
   const block = identityBlock
     ? { message: identityBlock.message, route: identityBlock.route }
     : null;
 
-  const reply = async (
-    threadId: string,
-    body: string,
-    quotes: CommentQuote[],
-    attachments: AttachmentInput[],
-  ) => {
-    await discussions.reply(threadId, body, quotes, attachments);
-    setFocus(nodeRef.current);
-  };
+  // SMP-FR-EIUP: the header names the node of the thread, and selecting the
+  // name selects the node on the canvas of its lens.
+  const header = subject ? (
+    <button
+      type="button"
+      className="mdc__node"
+      title="Select this node on the canvas"
+      data-testid="map-discussion-node"
+      onClick={() => store.showMapNode(subject)}
+    >
+      <Icon.Node size={11} />
+      <span className="mdc__node-name">{subject.label}</span>
+    </button>
+  ) : null;
 
   return (
     <MapPlanHostContext.Provider value={planHost}>
-      <section
-        className="dds-discussion mdc"
-        aria-label="Discussion"
-        data-testid="map-discussion-column"
-      >
-        <header className="dds-discussion__head mdc__head">
-          <Icon.Comment size={12} />
-          <label className="mdc__chooser">
-            <span className="mdc__chooser-label t-eyebrow">Thread</span>
-            <select
-              aria-label="Thread"
-              className="mdc__select"
-              value={nodeKey}
-              onChange={(e) => {
-                const chosen = options.find((o) => o.key === e.target.value);
-                if (!chosen) return;
-                logDebug(["frontend"], "map discussion thread chosen", { threads: options.length });
-                store.setDiscussionNode(chosen.node);
-              }}
-            >
-              {options.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {node && (
-            <button
-              type="button"
-              className="mdc__node"
-              title="Select this node on the canvas"
-              onClick={() => store.showMapNode(node)}
-            >
-              <Icon.Node size={11} />
-              <span className="mdc__node-name">{node.label}</span>
-            </button>
-          )}
-        </header>
-        <div className="dds-discussion__body">
-          {!thread && block && (
-            <div className="comment-rail__blocked" role="alert">
-              {block.message}
-              {block.route && <div className="comment-rail__route">{block.route}</div>}
-            </div>
-          )}
-          {thread ? (
-            <DiscussionSurface
-              key={thread.id}
-              discussion={thread}
-              owner="column"
-              variant="stream"
-              agents={discussions.agents}
-              identity={discussions.identity}
-              identityBlock={block}
-              disabled={block !== null}
-              focused
-              ownerLabel={node?.label ?? "Map"}
-              error={discussions.errors[thread.id]}
-              onReply={reply}
-              onSetResolved={discussions.setResolved}
-              composerFocusSignal={focusSignal}
-              composerAccessory={chip}
-              composerAttachments={focusAttachments}
-            />
-          ) : (
-            <div className="mdc__opening">
-              {node ? (
-                <div className="mdc-empty" data-testid="map-discussion-empty">
-                  <p>No one has discussed this node yet. Your first message begins its thread.</p>
-                </div>
-              ) : (
-                <MapThreadHint planTool={planTool} />
-              )}
-              <DiscussionComposer
-                mode="opening"
-                target={MAP_TARGET}
-                sessionKey={nodeKey}
-                agents={discussions.agents}
-                disabled={block !== null}
-                error={discussions.errors[COMPOSER_KEY]}
-                ariaLabel={node ? "Discuss this node" : "Discuss the map"}
-                placeholder={node ? "Ask an agent about this node…" : "Ask an agent about the plan…"}
-                focusSignal={focusSignal}
-                accessory={chip}
-                extraAttachments={focusAttachments}
-                onOpen={(request) => discussions.open(request.body, request.attachments, null)}
-                onOpened={(created) => {
-                  setFocus(nodeRef.current);
-                  requestPendingFocus(created.id, "composer");
-                }}
-              />
-            </div>
-          )}
-        </div>
-      </section>
+      <DiscussionColumn
+        column={MAP_COLUMN}
+        target={MAP_TARGET}
+        noun="map"
+        material="map"
+        testId="map-discussion-column"
+        discussions={threads}
+        selectedThreadId={threadId}
+        onSelectThread={(id) => {
+          logDebug(["frontend"], "map discussion thread chosen", { threads: threads.length });
+          store.selectDiscussionThread(id);
+        }}
+        identity={discussions.identity}
+        identityBlock={block}
+        agents={discussions.agents}
+        onReply={async (id, body, quotes, attachments) => {
+          await discussions.reply(id, body, quotes, attachments);
+          setFocus(subjectRef.current);
+        }}
+        onSetResolved={discussions.setResolved}
+        errors={discussions.errors}
+        blocked={false}
+        anchor={null}
+        onOpenDiscussion={(request) => discussions.open(request.body, request.attachments, null)}
+        onOpened={(created) => {
+          store.selectDiscussionThread(created.id);
+          requestPendingFocus(created.id, "composer");
+        }}
+        ownerLabel={subject?.label ?? "Map"}
+        focusSignal={focusSignal}
+        showResolved={state.showResolved}
+        onShowResolved={store.setDiscussionShowResolved}
+        tabLabel={mapTabLabel}
+        composing={composing}
+        onComposingChange={(next) => {
+          // SMP-FR-KHKC: the control that begins another discussion begins one
+          // about the whole map.
+          if (next) store.composeDiscussion(null);
+          else store.cancelDiscussionComposer();
+        }}
+        headerAccessory={header}
+        composerAccessory={chip}
+        composerAttachments={focusAttachments}
+        opening={openingCopy(node, planTool)}
+      />
     </MapPlanHostContext.Provider>
   );
 }

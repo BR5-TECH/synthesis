@@ -18,8 +18,11 @@
  * standing, and stating it twice would put two copies of one sentence on the
  * surface at once.
  */
+import type { ReactNode } from "react";
+
 import { DiscussionComposer, type OpenDiscussionRequest } from "../discussion";
 import type {
+  AttachmentInput,
   Discussion,
   DiscussionTarget,
   FragmentTarget,
@@ -37,6 +40,20 @@ export interface HunkOpening {
   /** The change's place in its proposal, for `change N of M`. */
   position: number;
   total: number;
+}
+
+/**
+ * What a host of its own words puts in place of the column's statement and of
+ * the composer's names. The Map tab says what its planning conversation is
+ * (SMP-FR-XGBI), and keeps one unsent text for each node (SMP-FR-AUFA).
+ */
+export interface OpeningCopy {
+  /** The statement for a state, or null for the column's own. */
+  statement?: (state: OpenState, resolved: number) => { lead: string; hint: string } | null;
+  ariaLabel?: string;
+  placeholder?: string;
+  /** The session key of the composer's unsent text. */
+  sessionKey?: string;
 }
 
 /** DDS layout: the states a column showing no transcript can be in. */
@@ -133,6 +150,9 @@ export function OpenDiscussion({
   material,
   fragment,
   hunk = null,
+  copy,
+  accessory,
+  attachments,
   onOpen,
   onOpened,
   onCancel,
@@ -163,12 +183,20 @@ export function OpenDiscussion({
   fragment: FragmentTarget | null;
   /** DDS-FR-RHKW: the change the discussion will be about, if it is one. */
   hunk?: HunkOpening | null;
+  /** The host's own words, where it has them. */
+  copy?: OpeningCopy;
+  /** SMP-FR-DUUU: a control the composer carries. */
+  accessory?: ReactNode;
+  /** SMP-FR-DUUU: the attachments the opening post carries. */
+  attachments?: AttachmentInput[];
   onOpen: (request: OpenDiscussionRequest) => Promise<Discussion>;
   onOpened: (discussion: Discussion) => void;
   /** The author discarded the composer. */
   onCancel: () => void;
 }) {
-  const statement = statementFor(state, resolved, hunk, noun, material);
+  const statement =
+    copy?.statement?.(state, resolved) ?? statementFor(state, resolved, hunk, noun, material);
+  const extra = [...(hunk !== null ? [hunk.reference] : []), ...(attachments ?? [])];
 
   return (
     <div className="dds-open" data-testid="draft-open-discussion">
@@ -198,10 +226,12 @@ export function OpenDiscussion({
         agents={agents}
         disabled={disabled}
         error={error}
-        ariaLabel={`Discuss this ${noun}`}
-        placeholder={`Ask an agent about this ${noun}…`}
+        ariaLabel={copy?.ariaLabel ?? `Discuss this ${noun}`}
+        placeholder={copy?.placeholder ?? `Ask an agent about this ${noun}…`}
+        sessionKey={copy?.sessionKey}
+        accessory={accessory}
         alwaysShowCancel={fragment !== null || hunk !== null}
-        extraAttachments={hunk !== null ? [hunk.reference] : undefined}
+        extraAttachments={extra.length > 0 ? extra : undefined}
         onOpen={onOpen}
         onOpened={onOpened}
         onCancel={onCancel}

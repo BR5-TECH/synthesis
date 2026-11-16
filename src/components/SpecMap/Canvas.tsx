@@ -11,7 +11,8 @@ import { NodeLayer, type NodeHandlers } from "./nodes";
 import { HoverCard } from "./HoverCard";
 import type { SpecLinks } from "../../state/delivery/specLinks";
 import { Breadcrumb, Legend, ZoomControls, keepFromCanvas } from "./CanvasChrome";
-import { BUTTON_STEP, WHEEL_IN, WHEEL_OUT, zoomStep } from "./zoom";
+import { bindCanvasGestures } from "../canvasGestures";
+import { BUTTON_STEP, WHEEL_IN, WHEEL_OUT, pinchZoom, zoomStep } from "./zoom";
 
 interface CanvasProps {
   canvasEl: HTMLDivElement | null;
@@ -52,17 +53,31 @@ export function Canvas(props: CanvasProps) {
   const latest = useRef(props);
   latest.current = props;
 
-  // SMZ-FR-ZQLP: a wheel over the canvas zooms it and scrolls nothing else.
+  // SMZ-FR-ZQLP: a wheel over the canvas zooms it by one step and scrolls
+  // nothing else. SMZ-FR-DLES: a pinch, or a wheel with Ctrl or ⌘, zooms in
+  // proportion to the gesture, about the point under the pointer.
   useEffect(() => {
     const el = props.canvasEl;
     if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const current = latest.current;
-      current.onView(zoomStep(current.view, e.deltaY > 0 ? WHEEL_OUT : WHEEL_IN, current.lastLevel));
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    return bindCanvasGestures(el, {
+      onPinch: (factor, clientX, clientY) => {
+        const current = latest.current;
+        const rect = el.getBoundingClientRect();
+        const anchor = {
+          x: clientX - rect.left - rect.width / 2,
+          y: clientY - rect.top - rect.height / 2,
+        };
+        current.onView(pinchZoom(current.view, factor, anchor, current.lastLevel));
+      },
+      onScroll: (e) => {
+        e.preventDefault();
+        if (e.deltaY === 0) return;
+        const current = latest.current;
+        current.onView(
+          zoomStep(current.view, e.deltaY > 0 ? WHEEL_OUT : WHEEL_IN, current.lastLevel),
+        );
+      },
+    });
   }, [props.canvasEl]);
 
   // SMZ-FR-KAHU: a drag that starts on empty canvas pans the stage.

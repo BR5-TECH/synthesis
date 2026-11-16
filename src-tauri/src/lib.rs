@@ -544,7 +544,7 @@ pub fn run() {
             comments::open_discussion,
             comments::get_or_create_note_discussion,
             comments::find_map_discussion,
-            comments::get_or_create_map_discussion,
+            comments::open_map_discussion,
             comments::list_map_discussions,
             map_plan::list_map_plan_proposals,
             map_plan::accept_map_plan_row,

@@ -23,9 +23,11 @@ import { SelectionPanel } from "./SelectionPanel";
 import { useCanvasHandle, type FlowCanvasHandle } from "./useCanvasHandle";
 import { useFlowCanvas, type FlowCanvasProps } from "./useFlowCanvas";
 import { useItemActions } from "./useItemActions";
+import { useCanvasWheel } from "./useCanvasWheel";
 
 export type { CreatedDraftOutcome, FlowCanvasProps, FlowViewState } from "./useFlowCanvas";
 export type { FlowCanvasHandle, FlowTaskRequest } from "./useCanvasHandle";
+export { FlowExcerptsContext } from "./excerptContext";
 export {
   fileBinding,
   type FlowBinding,
@@ -236,6 +238,10 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
   const flowRefs = doc ? resolveReferences(doc.references, byId, project.loaded) : [];
 
   const ready = source.loaded && doc !== null && c.layoutReady;
+  // FLO-FR-MGJH / FLO-FR-MFPM: the canvas element exists only while the plan
+  // shows, so the listeners bind when it does.
+  const surfaceShown = ready && !session?.parseError && (planMode || !!flowId);
+  useCanvasWheel(c.surfaceRef, surfaceShown, c);
 
   return (
     <div className="flow-surface" data-inert={inert}>

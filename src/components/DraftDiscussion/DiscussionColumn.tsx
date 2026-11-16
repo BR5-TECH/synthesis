@@ -16,7 +16,7 @@
  * said about how far the author has scrolled. The scroll position, the unread
  * state and the follow rule are the surface's, kept in the session store.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Icon } from "../icons";
 import {
@@ -24,7 +24,7 @@ import {
   type OpenDiscussionRequest,
   type OwnerAvailability,
 } from "../discussion";
-import { OpenDiscussion, type HunkOpening } from "./OpenDiscussion";
+import { OpenDiscussion, type HunkOpening, type OpeningCopy } from "./OpenDiscussion";
 import { HunkSubject } from "./HunkSubject";
 import { ContextIndicator } from "./ContextIndicator";
 import { useDiscussionContext } from "../../hooks/useDiscussionContext";
@@ -182,6 +182,26 @@ export interface DiscussionColumnProps {
    * The moment it clears is a save, which refreshes the context indicator.
    */
   documentDirty?: boolean;
+  /**
+   * SMP-FR-EIUP: what a tab reads, for a host whose discussions have names.
+   * Absent, a tab reads its place in the list.
+   */
+  tabLabel?: (discussion: Discussion) => string;
+  /**
+   * SMP-FR-KHKC / SMP-FR-IHFM: whether the column holds the opening composer of
+   * a new discussion, for a host that keeps it. Absent, the column keeps it for
+   * this sitting.
+   */
+  composing?: boolean;
+  onComposingChange?: (composing: boolean) => void;
+  /** SMP-FR-EIUP: what the header shows after its title. */
+  headerAccessory?: ReactNode;
+  /** SMP-FR-DUUU: a control that each composer of the column carries. */
+  composerAccessory?: ReactNode;
+  /** SMP-FR-DUUU: the attachments that each post of the column carries. */
+  composerAttachments?: AttachmentInput[];
+  /** What the opening composer says and is called, for a host of its own words. */
+  opening?: OpeningCopy;
 }
 
 export function DiscussionColumn(props: DiscussionColumnProps) {
@@ -196,7 +216,13 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
    * about the draft: a column returned to shows the conversation, which is what
    * the author came back to read.
    */
-  const [composingOther, setComposingNew] = useState(false);
+  const [heldComposing, setHeldComposing] = useState(false);
+  const composingOther = props.composing ?? heldComposing;
+  const onComposingChange = props.onComposingChange;
+  const setComposingNew = (composing: boolean) => {
+    setHeldComposing(composing);
+    onComposingChange?.(composing);
+  };
   /** CMT-FR-17: whether the resolved discussions are being shown with the rest. */
   const [heldResolved, setHeldResolved] = useState(false);
   const showResolved = props.showResolved ?? heldResolved;
@@ -217,9 +243,15 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   // the prompt, or a new discussion just opened — is the one the column reads,
   // and a resolved one is reached through its disclosure.
   const { selectedThreadId } = props;
+  // On the first render the column shows what its host holds: a host that
+  // keeps the opening composer open (SMP-FR-IHFM) keeps it. Only a later change
+  // of the focused discussion leaves the composer.
+  const focusedBefore = useRef(selectedThreadId);
   useEffect(() => {
+    const changed = focusedBefore.current !== selectedThreadId;
+    focusedBefore.current = selectedThreadId;
     if (selectedThreadId === null) return;
-    setComposingNew(false);
+    if (changed) setComposingNew(false);
     if (discussions.some((d) => d.id === selectedThreadId && d.resolved)) {
       setShowResolved(true);
     }
@@ -324,6 +356,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
           only while there is a transcript for it to be about. */}
       <header className="dds-discussion__head">
         <span className="dds-discussion__title t-eyebrow">Discussion</span>
+        {props.headerAccessory}
         {transcript && (
           <span
             className={
@@ -418,11 +451,13 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
                 data-active={!composingNew && d.id === thread?.id}
                 data-target={quoted ? "fragment" : "whole"}
                 title={
-                  quoted
-                    ? `Discussion ${at + 1}: ${quoted.quote}`
-                    : change
-                      ? `Discussion ${at + 1}: a change to ${change.path}`
-                      : `Discussion ${at + 1}`
+                  props.tabLabel
+                    ? props.tabLabel(d)
+                    : quoted
+                      ? `Discussion ${at + 1}: ${quoted.quote}`
+                      : change
+                        ? `Discussion ${at + 1}: a change to ${change.path}`
+                        : `Discussion ${at + 1}`
                 }
                 onClick={() => {
                   // DDS-FR-YLRM: a tab leaves whichever opening composer
@@ -435,7 +470,12 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
                   props.onSelectThread(d.id);
                 }}
               >
-                <Icon.Comment size={11} /> {at + 1}
+                <Icon.Comment size={11} />{" "}
+                {props.tabLabel ? (
+                  <span className="dds-discussion__thread-label">{props.tabLabel(d)}</span>
+                ) : (
+                  at + 1
+                )}
               </button>
             );
           })}
@@ -539,6 +579,8 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             onReply={props.onReply}
             onSetResolved={props.onSetResolved}
             actionsHost={actionsHost}
+            composerAccessory={props.composerAccessory}
+            composerAttachments={props.composerAttachments}
             {...props.turnsFor?.(thread.id)}
           />
         ) : (
@@ -563,6 +605,9 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             target={props.target}
             noun={noun}
             material={props.material}
+            copy={props.opening}
+            accessory={props.composerAccessory}
+            attachments={props.composerAttachments}
             agents={props.agents}
             disabled={props.blocked || props.identityBlock !== null}
             error={props.errors[COMPOSER_KEY]}

@@ -19,7 +19,7 @@ vi.mock("../../logging", () => ({
 import { consumePendingFocus, registerSurface, resetDiscussionFocus } from "../../state/discussionFocus";
 import type { EditSessionStore } from "../../state/editSessions";
 import { SpecMapSessionStore } from "../../state/specMap/session";
-import { ITEM_NODE } from "../../test/mapPlanFixtures";
+import { ITEM_NODE, SPEC_NODE } from "../../test/mapPlanFixtures";
 import type { Tab } from "../../types";
 import { createDiscussionActions } from "./discussionActions";
 
@@ -53,8 +53,9 @@ beforeEach(() => {
 });
 
 describe("a reveal of a Map thread (SMP-FR-QHBV, CVP-FR-06, CVP-FR-54, CMP-FR-10)", () => {
-  it("SMP-FR-QHBV: opens or focuses the Map tab, shows the Discussion column, and selects the thread of the node", () => {
+  it("SMP-FR-QHBV: opens or focuses the Map tab, shows the Discussion column, and selects the thread", () => {
     specMap.setDiscussionVisible(false);
+    specMap.discuss(SPEC_NODE);
     const actions = shell();
     const outcome = actions.revealDiscussion({
       discussionId: "t2",
@@ -66,23 +67,37 @@ describe("a reveal of a Map thread (SMP-FR-QHBV, CVP-FR-06, CVP-FR-54, CMP-FR-10
     });
     expect(outcome).toBe("owner");
     expect(openMap).toHaveBeenCalledTimes(1);
-    expect(specMap.snapshot().discussion).toMatchObject({ visible: true, node: ITEM_NODE });
+    expect(specMap.snapshot().discussion).toMatchObject({
+      visible: true,
+      threadId: "t2",
+      composing: false,
+      showResolved: false,
+    });
     // CVP-FR-54: a Map thread opens no conversation tab.
     expect(setTabs).not.toHaveBeenCalled();
   });
 
-  it("SMP-FR-QHBV: the Map thread itself selects the thread with no node", () => {
-    specMap.setDiscussionNode(ITEM_NODE);
+  it("SMP-FR-QHBV: a resolved Map thread is selected with the resolved disclosure expanded", () => {
     const actions = shell();
     actions.revealDiscussion({
       discussionId: "t1",
       target: MAP,
       fragmentTarget: null,
+      resolved: true,
       ownerLabel: "Map",
       subject: "Discussion",
     });
     expect(openMap).toHaveBeenCalledTimes(1);
-    expect(specMap.snapshot().discussion.node).toBeNull();
+    expect(specMap.snapshot().discussion).toMatchObject({ threadId: "t1", showResolved: true });
+  });
+
+  it("SMP-FR-QHBV: a reveal with no discussion id only shows the column", () => {
+    specMap.setDiscussionVisible(false);
+    specMap.selectDiscussionThread("t9");
+    const actions = shell();
+    actions.revealDiscussion({ target: MAP, fragmentTarget: null, ownerLabel: "Map", subject: "Discussion" });
+    expect(openMap).toHaveBeenCalledTimes(1);
+    expect(specMap.snapshot().discussion).toMatchObject({ visible: true, threadId: "t9" });
   });
 
   it("CVP-FR-06: holds the focus request for the surface that mounts with the Map tab", () => {

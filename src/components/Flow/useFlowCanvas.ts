@@ -396,6 +396,28 @@ export function useFlowCanvas({
     }));
 
   /**
+   * FLO-FR-MGJH: zoom by `factor` about a point of the screen, which stays in
+   * place, within the range of the zoom controls.
+   */
+  const zoomAt = useCallback((factor: number, clientX: number, clientY: number) => {
+    const rect = surfaceRef.current?.getBoundingClientRect();
+    const px = clientX - (rect?.left ?? 0);
+    const py = clientY - (rect?.top ?? 0);
+    setView((v) => {
+      const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.scale * factor));
+      if (scale === v.scale) return v;
+      const ratio = scale / v.scale;
+      return { x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio, scale };
+    });
+  }, []);
+
+  /** FLO-FR-MFPM: move the view by a scroll distance, in pixels. */
+  const panBy = useCallback((dx: number, dy: number) => {
+    if (dx === 0 && dy === 0) return;
+    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+  }, []);
+
+  /**
    * MDL-FR-JIKK / SDL-FR-MCGI: select an item, expand each collapsed container
    * that holds it, and centre it. Returns false when the plan has no such item.
    */
@@ -835,6 +857,8 @@ export function useFlowCanvas({
     columns,
     view,
     zoomBy,
+    zoomAt,
+    panBy,
     onFit,
     revealItem,
     commitLayout,

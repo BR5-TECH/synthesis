@@ -6,6 +6,7 @@ import { buildTree } from "../../state/specMap/tree";
 import type { SpecificationIndex } from "../../state/specMap/types";
 import { layoutMap, scopeOf } from "./layout";
 import { smallIndex } from "../../test/specMapFixtures";
+import { wheelFactor } from "../DiagramEditor/viewerGeometry";
 import {
   canvas,
   makeStore,
@@ -212,6 +213,39 @@ describe("the canvas (SMZ)", () => {
     expect(store.snapshot().view).toMatchObject({ level: 1, scale: 0.66 });
     fireEvent.wheel(canvas(), { deltaY: 120 });
     expect(store.snapshot().view).toMatchObject({ level: 0, scale: 1.3 });
+  });
+
+  it("SMZ-FR-DLES: a pinch over the canvas zooms in proportion to the gesture, about the pointer", async () => {
+    const { store } = await renderMap();
+    setView(store, { level: 1, scale: 1, tx: 0, ty: 0 });
+    // jsdom lays the canvas out at 0 × 0, so the pointer is measured from the origin.
+    fireEvent.wheel(canvas(), { deltaY: -5, ctrlKey: true, clientX: 100, clientY: 50 });
+    const factor = wheelFactor(-5, 0, true);
+    const after = store.snapshot().view;
+    expect(after.level).toBe(1);
+    expect(after.scale).toBeCloseTo(factor);
+    expect(after.tx).toBeCloseTo(100 - 100 * factor);
+    expect(after.ty).toBeCloseTo(50 - 50 * factor);
+  });
+
+  it("SMZ-FR-DLES: the pinch point is measured from the centre of the canvas, where the stage has its origin", async () => {
+    mockCanvasRect({ width: 400, height: 300 });
+    const { store } = await renderMap();
+    setView(store, { level: 1, scale: 1, tx: 10, ty: -20 });
+    fireEvent.wheel(canvas(), { deltaY: -5, ctrlKey: true, clientX: 100, clientY: 50 });
+    const factor = wheelFactor(-5, 0, true);
+    const ax = 100 - 200;
+    const ay = 50 - 150;
+    const after = store.snapshot().view;
+    expect(after.tx).toBeCloseTo(ax - (ax - 10) * factor);
+    expect(after.ty).toBeCloseTo(ay - (ay + 20) * factor);
+  });
+
+  it("SMZ-FR-ZQLP: a wheel with no vertical distance zooms nothing, and scrolls no other surface", async () => {
+    const { store } = await renderMap();
+    setView(store, { level: 1, scale: 1, tx: 0 });
+    expect(fireEvent.wheel(canvas(), { deltaX: 30 })).toBe(false);
+    expect(store.snapshot().view.scale).toBe(1);
   });
 
   it("SMZ-FR-KAHU: a drag on empty canvas pans, and a drag that starts on a node does not", async () => {

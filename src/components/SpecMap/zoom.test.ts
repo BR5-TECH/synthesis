@@ -8,6 +8,7 @@ import {
   centerScale,
   centeredOn,
   firstPaintView,
+  pinchZoom,
   placeHoverCard,
   scaleLabel,
   screenToWorld,
@@ -103,5 +104,33 @@ describe("the hover card (SMN-FR-MVWA)", () => {
     expect(placeHoverCard(-100, -100, v, 1000, 800)).toEqual({ x: 418, y: 314 });
     expect(placeHoverCard(480, 380, v, 1000, 800)).toEqual({ x: 712, y: 622 });
     expect(placeHoverCard(-600, -500, v, 1000, 800)).toEqual({ x: 8, y: 8 });
+  });
+});
+
+describe("a pinch (SMZ-FR-DLES, SMZ-FR-HCTF)", () => {
+  it("SMZ-FR-DLES: within one level the point under the pointer stays in place", () => {
+    const before = view({ scale: 1, tx: 100, ty: -50 });
+    const anchor = { x: 40, y: 30 };
+    const next = pinchZoom(before, 1.1, anchor, 3);
+    expect(next).toMatchObject({ level: 1, touched: true });
+    expect(next.scale).toBeCloseTo(1.1);
+    // The stage point under the anchor before and after is the same.
+    const stageX = (anchor.x - before.tx) / before.scale;
+    const stageY = (anchor.y - before.ty) / before.scale;
+    expect((anchor.x - next.tx) / next.scale).toBeCloseTo(stageX);
+    expect((anchor.y - next.ty) / next.scale).toBeCloseTo(stageY);
+  });
+
+  it("SMZ-FR-DLES, SMZ-FR-HCTF: a pinch past the scale window steps the level and scales the translation by the ratio", () => {
+    const before = view({ level: 1, scale: 1.25, tx: 100, ty: -50 });
+    const next = pinchZoom(before, 1.1, { x: 40, y: 30 }, 3);
+    expect(next).toMatchObject({ level: 2, scale: SCALE_MIN });
+    expect(next.tx).toBeCloseTo(100 * (SCALE_MIN / 1.25));
+    expect(next.ty).toBeCloseTo(-50 * (SCALE_MIN / 1.25));
+  });
+
+  it("SMZ-FR-DLES: at the last level and at level 0 a pinch clamps the scale", () => {
+    expect(pinchZoom(view({ level: 3, scale: 1.25 }), 1.2, { x: 0, y: 0 }, 3).scale).toBe(SCALE_MAX);
+    expect(pinchZoom(view({ level: 0, scale: 0.7 }), 0.8, { x: 0, y: 0 }, 3).scale).toBe(SCALE_MIN);
   });
 });

@@ -1,4 +1,4 @@
-//! The Map owner: the Map thread and the node threads (`CMS-comments-storage.md`
+//! The Map owner: the whole-map threads and the node threads (`CMS-comments-storage.md`
 //! CMS-FR-RHXL, CMS-FR-SJTY, CMS-FR-ACLX, CMS-FR-GWBK, CMS-FR-QUMW, CMS-FR-OIUO;
 //! `MPR-map-plan-proposals.md` MPR-FR-CEKS, MPR-FR-NRNZ, MPR-FR-MYLA,
 //! MPR-FR-MAXH, MPR-FR-RVTT, MPR-FR-KZRN).
@@ -27,13 +27,42 @@ fn write(
     body: &str,
     second: u32,
 ) -> MapWrite {
-    get_or_create_map_discussion_in(
+    open_map_discussion_in(
         root,
         map_node,
         opening(body),
         Stamp { by: &human("raver119"), at: &at(second) },
     )
     .unwrap()
+}
+
+/// Reply in a Map thread as a human at second `second`.
+fn reply(root: &crate::fs::RootFs, thread_id: &str, body: &str, second: u32) -> Discussion {
+    add_comment_reporting_id(
+        root,
+        ThreadRef::map_discussion(),
+        thread_id,
+        body.into(),
+        Vec::new(),
+        Vec::new(),
+        None,
+        Stamp { by: &human("raver119"), at: &at(second) },
+    )
+    .unwrap()
+    .0
+}
+
+/// Resolve a Map thread as a human at second `second`.
+fn resolve(root: &crate::fs::RootFs, thread_id: &str, second: u32) {
+    set_resolution_to(
+        root,
+        ThreadRef::map_discussion(),
+        thread_id,
+        true,
+        &human("raver119"),
+        &at(second),
+    )
+    .unwrap();
 }
 
 /// An app with a project open, the settings store, and a turn registry, so the
@@ -66,12 +95,8 @@ impl Opened {
         self.app.handle().clone()
     }
 
-    fn get_or_create(
-        &self,
-        map_node: Option<MapNodeRef>,
-        body: &str,
-    ) -> Result<Discussion, String> {
-        get_or_create_map_discussion(
+    fn open(&self, map_node: Option<MapNodeRef>, body: &str) -> Result<Discussion, String> {
+        open_map_discussion(
             self.handle(),
             map_node,
             body.into(),
@@ -137,54 +162,68 @@ fn a_node_reference_matches_on_lens_kind_and_id() {
     assert!(!a.names_same_node(&other_lens));
 }
 
-// MPR-FR-NRNZ, CMS-FR-SJTY: a project has at most one Map thread and at most one
-// thread for each node reference. A second call for the same reference
-// comments on its thread.
+// MPR-FR-NRNZ, CMS-FR-SJTY, MPR-FR-MAXH: the Map holds any number of
+// whole-map threads and any number of threads for one node reference. Each
+// opening creates a new thread, and the reference of a thread never changes.
 #[test]
-fn a_project_has_one_map_thread_and_one_thread_for_each_node() {
+fn each_opening_creates_a_new_thread() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let first = write(&root, None, "Plan the map", 1);
-    let again = write(&root, None, "More on the map", 2);
-    assert!(first.created && !again.created);
-    assert_eq!(first.discussion.id, again.discussion.id);
-    assert_eq!(again.discussion.comments.len(), 2);
+    let second = write(&root, None, "More on the map", 2);
+    assert_ne!(first.discussion.id, second.discussion.id);
+    assert_eq!(second.discussion.comments.len(), 1);
+    assert_eq!(second.discussion.map_node, None);
 
     let relay = node(MapNodeKind::Item, "issue-12", "Relay");
     let relabelled = node(MapNodeKind::Item, "issue-12", "Relay, renamed");
     let one = write(&root, Some(relay.clone()), "About the relay", 3);
-    let same = write(&root, Some(relabelled), "Still the relay", 4);
-    assert!(one.created && !same.created);
-    assert_eq!(one.discussion.id, same.discussion.id);
-    assert_eq!(same.discussion.comments.len(), 2);
-    assert_eq!(same.discussion.map_node.as_ref(), Some(&relay), "the reference never changes");
-    assert_ne!(one.discussion.id, first.discussion.id);
+    let two = write(&root, Some(relabelled.clone()), "Still the relay", 4);
+    assert_ne!(one.discussion.id, two.discussion.id);
+    assert_eq!(one.discussion.map_node.as_ref(), Some(&relay));
+    assert_eq!(two.discussion.map_node.as_ref(), Some(&relabelled));
 
-    let milestone =
-        write(&root, Some(node(MapNodeKind::Milestone, "issue-12", "Relay")), "A milestone", 5);
-    assert!(milestone.created);
-    assert_eq!(fold_map_discussions(&root).len(), 3);
+    let threads = fold_map_discussions(&root);
+    assert_eq!(threads.len(), 4);
+    assert!(threads.iter().all(|t| t.comments.len() == 1), "no opening joined another thread");
 }
 
-// MPR-FR-NRNZ: the Map thread comes first, then the node threads by
-// `updated_at`, newest first.
+// MPR-FR-NRNZ, CMS-FR-SJTY: a resolved thread limits no other. A new thread of
+// the same node opens beside it, and the resolved one stays as it was.
 #[test]
-fn the_map_threads_list_with_the_map_thread_first() {
+fn a_resolved_thread_blocks_no_new_thread() {
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let relay = node(MapNodeKind::Item, "issue-12", "Relay");
+    let old = write(&root, Some(relay.clone()), "Old", 1).discussion;
+    resolve(&root, &old.id, 2);
+    let new = write(&root, Some(relay), "New", 3).discussion;
+    assert_ne!(new.id, old.id);
+    assert!(!new.resolved);
+    let old_now = ThreadRef::map_discussion().find(&root, &old.id).unwrap();
+    assert!(old_now.resolved);
+    assert_eq!(old_now.comments.len(), 1);
+}
+
+// MPR-FR-NRNZ: every Map thread lists in the order it was opened, resolved
+// ones included. A later reply does not move a thread.
+#[test]
+fn the_map_threads_list_in_opening_order() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let a = write(&root, Some(node(MapNodeKind::Item, "a", "A")), "A", 1).discussion.id;
     let b = write(&root, Some(node(MapNodeKind::Item, "b", "B")), "B", 2).discussion.id;
     let map = write(&root, None, "Map", 3).discussion.id;
     let c = write(&root, Some(node(MapNodeKind::Spec, "c", "C")), "C", 4).discussion.id;
-    // The oldest node thread is written to last, so it is the newest.
-    write(&root, Some(node(MapNodeKind::Item, "a", "A")), "A again", 5);
+    reply(&root, &a, "A again", 5);
+    resolve(&root, &b, 6);
     let order: Vec<String> = list_map_discussions_in(&root).into_iter().map(|d| d.id).collect();
-    assert_eq!(order, vec![map, a, c, b]);
+    assert_eq!(order, vec![a, b, map, c]);
 }
 
-// MPR-FR-MYLA, CMS-FR-QUMW: `find_map_discussion` returns the thread of the
-// reference, or the Map thread where the reference is absent, or nothing. It
-// creates nothing.
+// MPR-FR-MYLA, CMS-FR-QUMW: `find_map_discussion` returns the open thread of
+// the reference, or the open whole-map thread where the reference is absent, or
+// nothing. It creates nothing.
 #[test]
 fn find_returns_the_thread_and_creates_nothing() {
     let dir = temp_root();
@@ -205,15 +244,99 @@ fn find_returns_the_thread_and_creates_nothing() {
     assert_eq!(log_lines(&root), lines, "a find writes nothing");
 }
 
-// MPR-FR-MAXH: where the thread exists, the call appends the comment to it. Where
-// it does not, the call creates the thread and its first comment as one step,
-// and an empty opening creates nothing.
+// MPR-FR-MYLA: of several open threads of one node, the find returns the one
+// with the latest `updated_at`, and it never returns a resolved thread.
 #[test]
-fn get_or_create_appends_or_creates_in_one_step() {
+fn find_returns_the_latest_open_thread() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let relay = node(MapNodeKind::Item, "issue-12", "Relay");
-    let blank = get_or_create_map_discussion_in(
+    let older = write(&root, Some(relay.clone()), "Older", 1).discussion;
+    let newer = write(&root, Some(relay.clone()), "Newer", 2).discussion;
+    assert_eq!(find_map_discussion_in(&root, Some(&relay)).unwrap().id, newer.id);
+
+    // A reply makes the older thread the latest one.
+    reply(&root, &older.id, "Back to this one", 3);
+    assert_eq!(find_map_discussion_in(&root, Some(&relay)).unwrap().id, older.id);
+
+    // A resolved thread is passed over, however late its last write.
+    resolve(&root, &older.id, 4);
+    assert_eq!(find_map_discussion_in(&root, Some(&relay)).unwrap().id, newer.id);
+    resolve(&root, &newer.id, 5);
+    assert!(find_map_discussion_in(&root, Some(&relay)).is_none());
+
+    // The same holds for the whole-map threads.
+    let map = write(&root, None, "Map", 6).discussion;
+    resolve(&root, &map.id, 7);
+    assert!(find_map_discussion_in(&root, None).is_none());
+}
+
+// MPR-FR-MYLA: a whole-map find never returns a node thread, a node find never
+// returns a whole-map thread, and two open threads with one `updated_at` give
+// the larger id, whatever the order of the log.
+#[test]
+fn find_keeps_whole_map_and_node_threads_apart_and_breaks_a_tie_by_id() {
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let relay = node(MapNodeKind::Item, "issue-12", "Relay");
+    write(&root, Some(relay.clone()), "Relay", 1);
+    assert!(find_map_discussion_in(&root, None).is_none());
+
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    write(&root, None, "Map", 1);
+    assert!(find_map_discussion_in(&root, Some(&relay)).is_none());
+
+    let a = write(&root, Some(relay.clone()), "A", 2).discussion.id;
+    let b = write(&root, Some(relay.clone()), "B", 2).discussion.id;
+    let larger = if a > b { a } else { b };
+    assert_eq!(find_map_discussion_in(&root, Some(&relay)).unwrap().id, larger);
+}
+
+// MPR-FR-NRNZ: two threads opened in the same second list by id.
+#[test]
+fn threads_opened_together_list_by_id() {
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let a = write(&root, None, "A", 1).discussion.id;
+    let b = write(&root, None, "B", 1).discussion.id;
+    let mut expected = vec![a, b];
+    expected.sort();
+    let order: Vec<String> = list_map_discussions_in(&root).into_iter().map(|d| d.id).collect();
+    assert_eq!(order, expected);
+}
+
+// MPR-FR-MAXH, CMS-FR-UYVK: the opening comment keeps its focus attachment and
+// the spoken original the author said.
+#[test]
+fn an_opening_keeps_its_focus_and_its_spoken_original() {
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let relay = node(MapNodeKind::Item, "issue-12", "Relay");
+    let created = open_map_discussion_in(
+        &root,
+        Some(relay.clone()),
+        Opening {
+            body: "Plan the relay".into(),
+            attachments: vec![AttachmentInput::MapNode { node: relay.clone() }],
+            spoken_original: Some("plan the relay".into()),
+        },
+        Stamp { by: &human("raver119"), at: &at(1) },
+    )
+    .unwrap();
+    let comment = &created.discussion.comments[0];
+    assert_eq!(comment.attachments, vec![Attachment::MapNode { node: relay }]);
+    assert_eq!(comment.spoken_original.as_deref(), Some("plan the relay"));
+}
+
+// MPR-FR-MAXH: an opening creates the thread and its first comment as one step,
+// and an empty opening creates nothing.
+#[test]
+fn an_opening_creates_the_thread_and_its_comment_in_one_step() {
+    let dir = temp_root();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let relay = node(MapNodeKind::Item, "issue-12", "Relay");
+    let blank = open_map_discussion_in(
         &root,
         Some(relay.clone()),
         opening("  "),
@@ -222,23 +345,16 @@ fn get_or_create_appends_or_creates_in_one_step() {
     assert_eq!(blank.err().as_deref(), Some(ERR_EMPTY_BODY));
     assert_eq!(log_lines(&root), 0, "nothing was written");
 
-    let created = write(&root, Some(relay.clone()), "First", 2);
-    assert!(created.created);
+    let created = write(&root, Some(relay), "First", 2);
     assert_eq!(log_lines(&root), 2, "the opening and the comment are written together");
     assert_eq!(created.discussion.comments.len(), 1);
     assert_eq!(created.discussion.comments[0].id, created.comment_id);
-
-    let appended = write(&root, Some(relay), "Second", 3);
-    assert!(!appended.created);
-    assert_eq!(appended.discussion.comments.len(), 2);
-    assert_eq!(appended.discussion.comments[1].body, "Second");
-    assert_eq!(log_lines(&root), 3);
+    assert_eq!(created.discussion.comments[0].body, "First");
 }
 
-// MPR-FR-MAXH: two callers that race for one reference resolve to one thread
-// with one opening comment.
+// MPR-FR-MAXH: callers that open together each get a whole thread of their own.
 #[test]
-fn racing_callers_resolve_to_one_thread() {
+fn racing_openings_each_create_one_thread() {
     let dir = temp_root();
     let path = dir.path().to_path_buf();
     let ids: Vec<String> = std::thread::scope(|scope| {
@@ -254,32 +370,35 @@ fn racing_callers_resolve_to_one_thread() {
             .collect();
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
-    assert!(ids.iter().all(|id| *id == ids[0]), "{ids:?}");
+    let unique: std::collections::BTreeSet<&String> = ids.iter().collect();
+    assert_eq!(unique.len(), 6, "{ids:?}");
     let root = crate::fs::RootFs::for_root(&path);
     let threads = fold_map_discussions(&root);
-    assert_eq!(threads.len(), 1);
-    assert_eq!(threads[0].comments.len(), 6, "every call comments once, and one thread opened");
+    assert_eq!(threads.len(), 6);
+    assert!(threads.iter().all(|t| t.comments.len() == 1));
 }
 
-// MPR-FR-MAXH, CMS-FR-VRZA, AGC-FR-TFEN: `get_or_create_map_discussion` is a
-// human write command: the comment it writes is an author comment, on a new
-// thread and on an existing one.
+// MPR-FR-MAXH, CMS-FR-VRZA, AGC-FR-TFEN: `open_map_discussion` is a human write
+// command: the comment it writes is an author comment, and each call opens a
+// new thread.
 #[test]
 fn the_command_notes_the_author_comment() {
     let o = Opened::new();
     let relay = node(MapNodeKind::Item, "issue-12", "Relay");
-    let created = o.get_or_create(Some(relay.clone()), "First").unwrap();
+    let created = o.open(Some(relay.clone()), "First").unwrap();
     assert!(is_author(&o.handle(), &created.comments[0].id));
-    let appended = o.get_or_create(Some(relay), "Second").unwrap();
-    assert_eq!(appended.id, created.id);
-    assert!(is_author(&o.handle(), &appended.comments[1].id));
+    let another = o.open(Some(relay), "Second").unwrap();
+    assert_ne!(another.id, created.id);
+    assert!(is_author(&o.handle(), &another.comments[0].id));
     assert_eq!(o.find(None).unwrap(), None);
-    assert_eq!(o.find(created.map_node.clone()).unwrap().unwrap().id, created.id);
+    // The two threads were opened on the real clock and can tie, so only the
+    // node of the answer is checked here. The choice between them is MPR-FR-MYLA's.
+    assert_eq!(o.find(created.map_node.clone()).unwrap().unwrap().map_node, created.map_node);
     assert_eq!(
         list_map_discussions(o.handle(), o.app.state::<crate::project::ProjectState>().into())
             .unwrap()
             .len(),
-        1
+        2
     );
 }
 
@@ -300,7 +419,7 @@ fn each_operation_refuses_with_no_project_open_and_logs_it() {
             app.state::<crate::project::ProjectState>().into(),
         )
         .unwrap_err(),
-        get_or_create_map_discussion(
+        open_map_discussion(
             handle.clone(),
             Some(relay),
             "BODY-SECRET".into(),
@@ -356,9 +475,9 @@ fn the_map_threads_are_listed_with_the_discussions_of_other_owners() {
         Stamp { by: &human("raver119"), at: &at(1) },
     )
     .unwrap();
-    let map = o.get_or_create(None, "About the map").unwrap();
+    let map = o.open(None, "About the map").unwrap();
     let node_thread =
-        o.get_or_create(Some(node(MapNodeKind::Spec, "CMS", "Comments")), "About CMS").unwrap();
+        o.open(Some(node(MapNodeKind::Spec, "CMS", "Comments")), "About CMS").unwrap();
 
     let all = list_all_discussions(o.app.state::<crate::project::ProjectState>().into()).unwrap();
     let ids: Vec<&str> = all.iter().map(|item| item.discussion.id.as_str()).collect();
@@ -443,7 +562,7 @@ fn a_map_node_attachment_is_stored_as_appended() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let ghost = node(MapNodeKind::Item, "issue-9999", "A node that does not exist");
-    let created = get_or_create_map_discussion_in(
+    let created = open_map_discussion_in(
         &root,
         None,
         Opening {

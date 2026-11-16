@@ -103,7 +103,10 @@ describe("the Discuss entry of a GitHub plan (MDL-FR-HULA, MDL-FR-QELI)", () => 
     const { discussion } = store.snapshot();
     expect(discussion.visible).toBe(true);
     expect(discussion.node).toEqual({ lens: "delivery", kind: "item", id: "t1", label: "T1" });
-    expect(b.calls.filter((c) => c.cmd.startsWith("get_or_create_map")).length).toBe(0);
+    expect(discussion.composing).toBe(true);
+    expect(
+      b.calls.filter((c) => c.cmd === "open_map_discussion" || c.cmd === "open_discussion"),
+    ).toHaveLength(0);
   });
 
   it("MDL-FR-QELI: Discuss on a milestone hands a node of the kind milestone", async () => {

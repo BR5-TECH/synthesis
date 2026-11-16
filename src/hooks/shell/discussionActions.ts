@@ -184,7 +184,11 @@ export function createDiscussionActions(
     // SMP-FR-QHBV / CVP-FR-54: a Map thread opens or focuses the Map tab, shows
     // its Discussion column, and selects the thread.
     if (target.kind === "map") {
-      specMap.revealThread(reveal.mapNode ?? null);
+      if (reveal.discussionId) {
+        specMap.revealThread(reveal.discussionId, reveal.resolved ?? false);
+      } else {
+        specMap.setDiscussionVisible(true);
+      }
       openMap();
       return;
     }

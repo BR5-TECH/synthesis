@@ -42,6 +42,28 @@ export function zoomStep(view: MapView, factor: number, lastLevel: number): MapV
 }
 
 /**
+ * SMZ-FR-DLES: a pinch of `factor` at `anchor`, a point of the canvas measured
+ * from its centre, where the stage has its origin. Within one level the point
+ * under the pointer stays in place. A pinch that steps the level follows
+ * SMZ-FR-HCTF, because the stage then holds another layout.
+ */
+export function pinchZoom(
+  view: MapView,
+  factor: number,
+  anchor: { x: number; y: number },
+  lastLevel: number,
+): MapView {
+  const next = zoomStep(view, factor, lastLevel);
+  if (next.level !== view.level) return next;
+  const ratio = next.scale / view.scale;
+  return {
+    ...next,
+    tx: anchor.x - (anchor.x - view.tx) * ratio,
+    ty: anchor.y - (anchor.y - view.ty) * ratio,
+  };
+}
+
+/**
  * SMZ-FR-NUOB: level 0 at scale 0.8, top-aligned from the measured canvas
  * height rather than centred.
  */

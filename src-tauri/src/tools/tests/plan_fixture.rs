@@ -42,7 +42,7 @@ impl PlanFixture {
         // found it so. The load stores the read cache of the plan too.
         crate::delivery::github::load_plan_impl(&h.handle(), true).expect("a plan");
         let store = h.handle().state::<crate::project::ProjectState>().require_store().unwrap();
-        let write = crate::comments::get_or_create_map_discussion_in(
+        let write = crate::comments::open_map_discussion_in(
             &store,
             None,
             Opening {

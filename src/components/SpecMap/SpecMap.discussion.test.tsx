@@ -110,6 +110,21 @@ describe("the column in the tab (SMP-FR-WNLR, SMP-FR-SWCL)", () => {
     expect(await screen.findByTestId("map-discussion-column")).toBeInTheDocument();
   });
 
+  it("SMP-FR-VDND: the Specifications toolbar shows the presets and the hint from 1180px, the presets alone from 1000px, and neither below", async () => {
+    await renderShown({ width: 1180 });
+    expect(screen.getByTestId("map-discussion-split").querySelector("kbd")).not.toBeNull();
+    cleanup();
+    await renderShown({ width: 1179 });
+    expect(screen.getByTestId("map-discussion-split").querySelector("kbd")).toBeNull();
+    cleanup();
+    await renderShown({ width: 1000 });
+    expect(screen.getByTestId("map-discussion-split")).toBeInTheDocument();
+    cleanup();
+    await renderShown({ width: 999 });
+    expect(screen.queryByTestId("map-discussion-split")).toBeNull();
+    expect(screen.getByRole("button", { name: "Discussion" })).toBeInTheDocument();
+  });
+
   it("SMP-FR-SWCL: the inspector stays with the column from 900px of tab width", async () => {
     const store = await renderShown({ width: 900 });
     act(() => store.select({ kind: "index", id: "g1" }));
@@ -127,10 +142,11 @@ describe("the column in the tab (SMP-FR-WNLR, SMP-FR-SWCL)", () => {
     expect(screen.getByRole("complementary", { name: "Inspector" })).toBeInTheDocument();
   });
 
-  it("SMP-FR-SWCL: the canvas takes the width that the session holds for the column", async () => {
+  it("SMP-FR-SWCL: the column takes the share of the split that the session holds, and the canvas the rest", async () => {
     const store = await renderShown();
-    act(() => store.setDiscussionWidth(500));
-    expect(screen.getByTestId("map-discussion")).toHaveStyle({ width: "500px" });
+    expect(screen.getByTestId("map-discussion")).toHaveStyle({ width: "30%" });
+    act(() => store.setDiscussionRatio("chat70"));
+    expect(screen.getByTestId("map-discussion")).toHaveStyle({ width: "70%" });
   });
 
   it("SMP-FR-DUUU: the node selected on the Specifications canvas is the node that Use selected node takes", async () => {

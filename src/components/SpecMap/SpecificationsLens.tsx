@@ -46,7 +46,11 @@ import { useElementSize, useWindowWidth } from "./useElementSize";
 import { Icon } from "../icons";
 import { DiscussionToggle, useDiscussMenu } from "../MapDiscussion";
 import { specNodeOf } from "../../state/specMap/nodeRefs";
-import { DISCUSSION_REPLACES_INSPECTOR_BELOW } from "../../state/specMap/discussion";
+import {
+  DISCUSSION_REPLACES_INSPECTOR_BELOW,
+  columnFraction,
+} from "../../state/specMap/discussion";
+import { columnWidth } from "../MapDiscussion/Pane";
 import type { MapNodeRef } from "../../types";
 import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { noticeSentence } from "../../state/openspec/failureNotice";
@@ -380,9 +384,17 @@ export function SpecificationsLens({
         onLevel={chooseLevel}
         onToggleDeps={store.toggleDeps}
         onToggleGaps={store.toggleGaps}
+        discussionVisible={state.discussion.visible}
         discussionToggle={
           discussion !== undefined
-            ? (labelled) => <DiscussionToggle store={store} labelled={labelled} />
+            ? (form, split) => (
+                <DiscussionToggle
+                  store={store}
+                  labelled={form !== "icons"}
+                  presets={split.presets}
+                  hint={split.hint}
+                />
+              )
             : undefined
         }
       />
@@ -405,7 +417,9 @@ export function SpecificationsLens({
         className="smap-body"
         style={
           columnShown && !columnReplacesInspector
-            ? ({ "--smap-column": `${state.discussion.width}px` } as CSSProperties)
+            ? ({
+                "--smap-column": columnWidth(columnFraction(state.discussion.ratio)),
+              } as CSSProperties)
             : undefined
         }
       >

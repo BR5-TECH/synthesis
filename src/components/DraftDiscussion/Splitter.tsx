@@ -25,6 +25,10 @@ export function Splitter({
   onChange,
   boundsRef,
   hidden,
+  className,
+  testId,
+  label = "Resize the document and discussion columns",
+  side = "Document",
 }: {
   ratio: SplitRatio;
   onChange: (fraction: number) => void;
@@ -37,6 +41,13 @@ export function Splitter({
    * reports a ratio between one column and nothing.
    */
   hidden?: boolean;
+  /** A class the host lays the splitter out with, beside the shared one. */
+  className?: string;
+  testId?: string;
+  /** What the separator is called, where the document column has another name. */
+  label?: string;
+  /** What the value names: the column on the left of the splitter. */
+  side?: string;
 }) {
   const [dragging, setDragging] = useState(false);
   const fraction = documentFraction(ratio);
@@ -78,16 +89,17 @@ export function Splitter({
 
   return (
     <div
-      className="dds-splitter"
+      className={className ? `dds-splitter ${className}` : "dds-splitter"}
       role="separator"
       hidden={hidden}
       tabIndex={hidden ? -1 : 0}
-      aria-label="Resize the document and discussion columns"
+      aria-label={label}
+      data-testid={testId}
       aria-orientation="vertical"
       aria-valuemin={Math.round(MIN_FRACTION * 100)}
       aria-valuemax={Math.round(MAX_FRACTION * 100)}
       aria-valuenow={Math.round(fraction * 100)}
-      aria-valuetext={`Document ${Math.round(fraction * 100)} percent`}
+      aria-valuetext={`${side} ${Math.round(fraction * 100)} percent`}
       data-dragging={dragging}
       onPointerDown={(event) => {
         event.preventDefault();

@@ -15,14 +15,36 @@ export interface UnplannedToggle {
  * hides the counts and shows the toggles as icons, `short` hides the label,
  * narrows the bar and shortens the counts, `full` shows everything.
  */
-type ToolbarForm = "icons" | "short" | "full";
-const FORMS: ToolbarForm[] = ["icons", "short", "full"];
+export type ToolbarForm = "icons" | "short" | "full";
 
-/** SMP-FR-GJEW: the form that the width of the Map tab gives. */
-function formForWidth(width: number): ToolbarForm {
-  if (width >= 1180) return "full";
-  if (width >= 1000) return "short";
-  return "icons";
+/**
+ * SMP-FR-VDND: which split controls lead the **Discussion** toggle. `hint`
+ * implies `presets`.
+ */
+export interface SplitControlsForm {
+  presets: boolean;
+  hint: boolean;
+}
+
+/**
+ * The steps the toolbar takes, narrowest first. A toolbar that does not fit
+ * drops the accelerator hint, then the split presets, and only then its own
+ * labels (SMP-FR-GJEW, SMP-FR-VDND).
+ */
+const STEPS: { form: ToolbarForm; split: SplitControlsForm }[] = [
+  { form: "icons", split: { presets: false, hint: false } },
+  { form: "short", split: { presets: false, hint: false } },
+  { form: "short", split: { presets: true, hint: false } },
+  { form: "full", split: { presets: false, hint: false } },
+  { form: "full", split: { presets: true, hint: false } },
+  { form: "full", split: { presets: true, hint: true } },
+];
+
+/** SMP-FR-GJEW / SMP-FR-VDND: the widest step that the width of the Map tab gives. */
+function stepForWidth(width: number): number {
+  if (width >= 1180) return STEPS.length - 1;
+  if (width >= 1000) return 2;
+  return 0;
 }
 
 interface ToolbarProps {
@@ -45,7 +67,13 @@ interface ToolbarProps {
   onToggleDeps: () => void;
   onToggleGaps: () => void;
   /** SMP-FR-WNLR: the **Discussion** toggle, drawn last; `labelled` is false where only icons show. */
-  discussionToggle?: (labelled: boolean) => ReactNode;
+  /**
+   * SMP-FR-WNLR / SMP-FR-VDND: the **Discussion** toggle and the split presets,
+   * drawn last, in the form the toolbar takes.
+   */
+  discussionToggle?: (form: ToolbarForm, split: SplitControlsForm) => ReactNode;
+  /** SMP-FR-VDND: the column shows, so the split controls take room. */
+  discussionVisible?: boolean;
 }
 
 /**
@@ -68,6 +96,7 @@ export function Toolbar({
   onToggleDeps,
   onToggleGaps,
   discussionToggle,
+  discussionVisible = false,
 }: ToolbarProps) {
   // SMP-FR-GJEW: the two thresholds, against the tab's own width, give the
   // widest form. The lens switch and the unplanned toggle can make that form
@@ -81,11 +110,15 @@ export function Toolbar({
     depsToggle,
     Boolean(unplanned),
     Boolean(discussionToggle),
+    discussionVisible,
   ].join("|");
-  const [fit, setFit] = useState<{ key: string; index: number }>({ key: "", index: 2 });
-  const widest = FORMS.indexOf(formForWidth(width));
+  const [fit, setFit] = useState<{ key: string; index: number }>({
+    key: "",
+    index: STEPS.length - 1,
+  });
+  const widest = stepForWidth(width);
   const index = fit.key === fitKey ? Math.min(fit.index, widest) : widest;
-  const form = FORMS[index];
+  const { form, split } = STEPS[index];
   useLayoutEffect(() => {
     const el = ref.current;
     // Measure before paint: a form that does not fit is never shown.
@@ -173,7 +206,7 @@ export function Toolbar({
           {labelled && <span>unplanned</span>}
         </button>
       )}
-      {discussionToggle?.(labelled)}
+      {discussionToggle?.(form, split)}
     </div>
   );
 }

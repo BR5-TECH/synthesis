@@ -3,10 +3,10 @@
 //! MPR-FR-MAXH).
 //!
 //! All Map threads share the one log `comments/map/discussion.jsonl`. A thread
-//! with no node reference is the Map thread, and there is at most one. A thread
-//! with a node reference is a node thread, and there is at most one for each
-//! node. The association is the log itself, as for a note (CMS-FR-62), so the
-//! find-or-create step runs under a lock.
+//! with no node reference is a whole-map thread, and a thread with a node
+//! reference is a node thread. The Map holds any number of each, and several
+//! threads can carry the same node (CMS-FR-SJTY). The opening step runs under a
+//! lock, so two openings that arrive together append in turn.
 
 use super::*;
 
@@ -16,28 +16,31 @@ const MAP_PROPOSALS_SUBDIR: &str = "proposals";
 /// MPR-FR-RVTT: no project is open.
 const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 
-/// CMS-FR-SJTY: serializes the find-and-create step, so two calls that arrive
-/// together for one node resolve to one thread with one opening comment.
+/// MPR-FR-MAXH: serializes the opening step, so two openings that arrive
+/// together each append one whole thread.
 static MAP_DISCUSSION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// What [`get_or_create_map_discussion_in`] did.
+/// What [`open_map_discussion_in`] did.
 pub struct MapWrite {
-    /// The thread, as it stands after the write.
+    /// The new thread, as it stands after the write.
     pub discussion: Discussion,
-    /// The id of the comment that the call wrote.
+    /// The id of the opening comment.
     pub comment_id: String,
-    /// True where the call created the thread.
-    pub created: bool,
 }
 
-/// MPR-FR-MYLA: the thread of a node reference, or the Map thread where the
-/// reference is absent. A node reference matches on `lens`, `kind`, and `id`.
-/// Creates nothing.
+/// MPR-FR-MYLA: the open thread of a node reference with the latest
+/// `updated_at`, or the open whole-map thread with the latest `updated_at`
+/// where the reference is absent. A resolved thread is never returned. A node
+/// reference matches on `lens`, `kind`, and `id`. Creates nothing.
 pub fn find_map_discussion_in(
     root: &crate::fs::RootFs,
     map_node: Option<&MapNodeRef>,
 ) -> Option<Discussion> {
-    fold_map_discussions(root).into_iter().find(|d| same_thread(d.map_node.as_ref(), map_node))
+    fold_map_discussions(root)
+        .into_iter()
+        .filter(|d| !d.resolved && same_thread(d.map_node.as_ref(), map_node))
+        // The id breaks a tie, so the answer does not depend on the fold order.
+        .max_by(|a, b| a.updated_at.cmp(&b.updated_at).then_with(|| a.id.cmp(&b.id)))
 }
 
 fn same_thread(thread: Option<&MapNodeRef>, wanted: Option<&MapNodeRef>) -> bool {
@@ -48,17 +51,11 @@ fn same_thread(thread: Option<&MapNodeRef>, wanted: Option<&MapNodeRef>) -> bool
     }
 }
 
-/// MPR-FR-NRNZ: every Map thread, the Map thread first and then the node
-/// threads by `updated_at` descending. The id breaks a tie.
+/// MPR-FR-NRNZ: every Map thread, resolved ones included, in the order they
+/// were opened. The id breaks a tie.
 pub fn list_map_discussions_in(root: &crate::fs::RootFs) -> Vec<Discussion> {
     let mut threads = fold_map_discussions(root);
-    threads.sort_by(|a, b| {
-        a.map_node
-            .is_some()
-            .cmp(&b.map_node.is_some())
-            .then_with(|| b.updated_at.cmp(&a.updated_at))
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    threads.sort_by(|a, b| a.created_at.cmp(&b.created_at).then_with(|| a.id.cmp(&b.id)));
     threads
 }
 
@@ -69,14 +66,13 @@ fn lock_map_discussions() -> std::sync::MutexGuard<'static, ()> {
     MAP_DISCUSSION_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// MPR-FR-MAXH: the thread of a node reference. Where it exists, the comment
-/// is appended to it. Where it does not, the thread and its first comment are
-/// created in one append (CMS-FR-14).
+/// MPR-FR-MAXH: a new thread with the node reference, or with none, and its
+/// first comment, in one append (CMS-FR-14). It never appends to an existing
+/// thread, so a resolved thread of the same node blocks nothing.
 ///
 /// An opening with an empty body is refused with `empty_body` before anything is
-/// written. An existing thread that is resolved refuses the comment with
-/// `discussion_resolved`, as every discussion does (CMS-FR-17).
-pub fn get_or_create_map_discussion_in(
+/// written.
+pub fn open_map_discussion_in(
     root: &crate::fs::RootFs,
     map_node: Option<MapNodeRef>,
     opening: Opening,
@@ -85,20 +81,6 @@ pub fn get_or_create_map_discussion_in(
     let Stamp { by, at } = stamp;
     let Opening { body, attachments, spoken_original } = opening;
     let _guard = lock_map_discussions();
-
-    if let Some(existing) = find_map_discussion_in(root, map_node.as_ref()) {
-        let (discussion, comment_id) = add_comment_reporting_id(
-            root,
-            ThreadRef::map_discussion(),
-            &existing.id,
-            body,
-            Vec::new(),
-            attachments,
-            spoken_original,
-            Stamp { by, at },
-        )?;
-        return Ok(MapWrite { discussion, comment_id, created: false });
-    }
 
     // CMS-FR-14: a discussion is never created empty.
     if body.trim().is_empty() {
@@ -139,7 +121,7 @@ pub fn get_or_create_map_discussion_in(
         ],
     )?;
     let discussion = thread_ref.find(root, &thread_id)?;
-    Ok(MapWrite { discussion, comment_id, created: true })
+    Ok(MapWrite { discussion, comment_id })
 }
 
 /// MPR-FR-RVRN: the folder of the plan proposals, `comments/map/proposals/`,
@@ -203,9 +185,9 @@ fn open_store(project: &ProjectState) -> Result<crate::fs::RootFs, String> {
     project.require_store()
 }
 
-/// MPR-FR-MYLA, `"find map discussion (map node)"`: the thread of the node
-/// reference, or the Map thread where the reference is absent, or nothing. It
-/// creates nothing and emits nothing.
+/// MPR-FR-MYLA, `"find map discussion (map node)"`: the latest open thread of
+/// the node reference, or the latest open whole-map thread where the reference
+/// is absent, or nothing. It creates nothing and emits nothing.
 #[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn find_map_discussion<R: tauri::Runtime>(
@@ -225,7 +207,7 @@ pub fn find_map_discussion<R: tauri::Runtime>(
     Ok(found)
 }
 
-/// MPR-FR-MAXH, `"get or create map discussion (map node, body, attachments)"`.
+/// MPR-FR-MAXH, `"open map discussion (map node, body, attachments)"`.
 ///
 /// A human write command (CMS-FR-VRZA): the participant is resolved on this
 /// machine, and the comment is given to the author-comment bookkeeping of the
@@ -233,7 +215,7 @@ pub fn find_map_discussion<R: tauri::Runtime>(
 /// each write.
 #[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn get_or_create_map_discussion<R: tauri::Runtime>(
+pub fn open_map_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     map_node: Option<MapNodeRef>,
     body: String,
@@ -243,9 +225,10 @@ pub fn get_or_create_map_discussion<R: tauri::Runtime>(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = open_store(&project).inspect_err(|err| log_map_refusal(&app, "write", err))?;
-    let by = acting_participant(&store, &project)?;
+    let by = acting_participant(&store, &project)
+        .inspect_err(|err| log_map_refusal(&app, "write", err))?;
     let has_node = map_node.is_some();
-    let write = get_or_create_map_discussion_in(
+    let write = open_map_discussion_in(
         &root,
         map_node,
         Opening { body, attachments, spoken_original },
@@ -254,18 +237,11 @@ pub fn get_or_create_map_discussion<R: tauri::Runtime>(
     .inspect_err(|err| log_map_refusal(&app, "write", err))?;
     // CMS-FR-VRZA: the written comment is an author comment (AGC-FR-TFEN).
     crate::agent_conversations::note_author_comment(&app, &write.comment_id);
-    if !write.created {
-        // AGC-FR-31: a later human comment retires the offer to retry a failed turn.
-        crate::agent_conversations::retire_recoverable_for_human_comment(
-            &app,
-            &write.discussion.id,
-        );
-    }
     crate::logging::log_info(
         &app,
         &crate::logging::BUFFER,
         &[crate::logging::Domain::Backend],
-        if write.created { "map discussion opened" } else { "map discussion commented" },
+        "map discussion opened",
         crate::log_fields! {
             "discussionId" => write.discussion.id.clone(),
             "node" => has_node,
@@ -275,8 +251,8 @@ pub fn get_or_create_map_discussion<R: tauri::Runtime>(
     Ok(write.discussion)
 }
 
-/// MPR-FR-NRNZ, `"list map discussions"`: the Map thread first, then the node
-/// threads by `updated_at` descending.
+/// MPR-FR-NRNZ, `"list map discussions"`: every Map thread in the order they
+/// were opened.
 #[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_map_discussions<R: tauri::Runtime>(

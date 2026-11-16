@@ -41,7 +41,7 @@ fn at(second: u32) -> String {
 
 /// Open the Map thread of `map_node` as `ada`, with the opening comment `body`.
 fn open_map(root: &crate::fs::RootFs, map_node: Option<MapNodeRef>, body: &str) -> Discussion {
-    crate::comments::get_or_create_map_discussion_in(
+    crate::comments::open_map_discussion_in(
         root,
         map_node,
         Opening { body: body.into(), attachments: Vec::new(), spoken_original: None },

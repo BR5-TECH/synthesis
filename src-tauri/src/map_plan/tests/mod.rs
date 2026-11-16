@@ -49,7 +49,7 @@ impl Plan {
 pub(super) fn setup() -> Plan {
     let h = Harness::github_plan();
     let store = h.handle().state::<crate::project::ProjectState>().require_store().unwrap();
-    let write = crate::comments::get_or_create_map_discussion_in(
+    let write = crate::comments::open_map_discussion_in(
         &store,
         None,
         Opening {

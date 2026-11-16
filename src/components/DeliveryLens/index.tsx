@@ -24,13 +24,13 @@ import { deliveryLensData } from "../../state/delivery/lensData";
 import { deriveSpecLinks } from "../../state/delivery/specLinks";
 import { deliveryNodeOf } from "../../state/specMap/nodeRefs";
 import { DiscussionToggle } from "../MapDiscussion";
-import { useWindowWidth } from "../SpecMap/useElementSize";
+import { useElementSize, useWindowWidth } from "../SpecMap/useElementSize";
 import { FlowSessionStore } from "../../state/flowSessions";
 import type { SpecMapSessionStore } from "../../state/specMap/session";
 import type { FlowItem } from "../../state/flowDocument";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import { describeSource } from "../DeliverySettingsSection";
-import type { FlowCanvasHandle, FlowViewState } from "../Flow";
+import { FlowExcerptsContext, type FlowCanvasHandle, type FlowViewState } from "../Flow";
 import { DEFAULT_VIEW, type View } from "../Flow/geometry";
 import { FileLens } from "./FileLens";
 import { GithubLens } from "./GithubLens";
@@ -182,6 +182,9 @@ function ActiveLens({
     [store],
   );
   const windowWidth = useWindowWidth();
+  // SMP-FR-VDND: the width of the Map tab decides which split controls show.
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const tabWidth = useElementSize(rootEl).width;
 
   const panelSpecs = (itemId: string) => (
     <SpecsList
@@ -203,6 +206,10 @@ function ActiveLens({
           ? `file:${source.flowId}`
           : source.kind;
   const lensRoot = useRef<HTMLDivElement>(null);
+  const bindRoot = useCallback((el: HTMLDivElement | null) => {
+    lensRoot.current = el;
+    setRootEl(el);
+  }, []);
   const onSourceChanged = useSourceChangeFocus(store, lensRoot, sourceKey);
   const githubPlan = plan.github?.snapshot();
   const states: ReadonlyMap<string, ItemDeliveryState> | null = github
@@ -294,19 +301,31 @@ function ActiveLens({
   }
 
   return (
-    <div ref={lensRoot} className="smap" data-testid="delivery-lens">
+    <div
+      ref={bindRoot}
+      className="smap"
+      data-testid="delivery-lens"
+    >
       <div className="smap-toolbar" role="toolbar" aria-label="Map controls">
         {lensSwitch}
         <Rollup rollup={leafRollup(plan.doc, states)} />
         {discussion !== undefined && (
           <>
             <span className="smap-toolbar__spacer" />
-            <DiscussionToggle store={store} labelled={windowWidth >= 1000} />
+            <DiscussionToggle
+              store={store}
+              labelled={windowWidth >= 1000}
+              presets={tabWidth >= 1000}
+              hint={tabWidth >= 1180}
+            />
           </>
         )}
       </div>
       <div className="smap-body">
-        <div className="smap-main dlens-main">{body}</div>
+        <div className="smap-main dlens-main">
+          {/* MDL-FR-RILW: an item of the plan reads as its name, with no excerpt. */}
+          <FlowExcerptsContext.Provider value={false}>{body}</FlowExcerptsContext.Provider>
+        </div>
         {discussion}
       </div>
     </div>

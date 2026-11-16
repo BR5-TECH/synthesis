@@ -15,12 +15,8 @@ import type { OpenSpecFailure } from "../../types";
 import type { DeliverySource } from "../../types/delivery";
 import type { MapNodeRef } from "../../types";
 import { hasNotice, toOpenSpecFailure } from "../openspec/failureNotice";
-import {
-  clampDiscussionWidth,
-  initialDiscussionState,
-  sameMapNode,
-  type MapDiscussionState,
-} from "./discussion";
+import { cycleRatio, type SplitRatio } from "../../components/DraftDiscussion/ratio";
+import { initialDiscussionState, sameMapNode, type MapDiscussionState } from "./discussion";
 import { buildTree, refExists, type TreeIndex } from "./tree";
 import { isOpenSpecIndex, type MapRef, type SpecificationIndex } from "./types";
 
@@ -109,7 +105,7 @@ export interface SpecMapState {
   deliveryReveal: { itemId: string; nonce: number } | null;
   /** SDL-FR-CFHH: a task the Delivery lens adds, consumed by the lens. */
   planWork: { name: string; references: string[]; nonce: number } | null;
-  /** SMP-FR-AUFA: the visibility, the width, and the thread of the Discussion column. */
+  /** SMP-FR-AUFA: the visibility, the split, and the thread of the Discussion column. */
   discussion: MapDiscussionState;
   /**
    * SMP-FR-DUUU: the item or milestone selected on the canvas of the Delivery
@@ -490,30 +486,69 @@ export class SpecMapSessionStore {
     this.setDiscussion({ visible });
   };
 
-  /** SMP-FR-SWCL: the width of the column, held between 280px and 560px. */
-  setDiscussionWidth = (width: number): void => {
-    const next = clampDiscussionWidth(width);
-    if (this.state.discussion.width === next) return;
-    this.setDiscussion({ width: next });
+  /** SMP-FR-SWCL: set the split between the canvas side and the column. */
+  setDiscussionRatio = (ratio: SplitRatio): void => {
+    if (this.state.discussion.ratio === ratio) return;
+    logInfo(["frontend"], "map discussion split changed", {
+      ratio: typeof ratio === "number" ? "dragged" : ratio,
+    });
+    this.setDiscussion({ ratio });
   };
 
-  /** SMP-FR-EIUP: read another thread. A node of null is the Map thread. */
-  setDiscussionNode = (node: MapNodeRef | null): void => {
-    if (sameMapNode(this.state.discussion.node, node)) return;
-    this.setDiscussion({ node });
+  /** SMP-FR-SWCL: the accelerator moves to the next preset. */
+  cycleDiscussionRatio = (): void => {
+    this.setDiscussionRatio(cycleRatio(this.state.discussion.ratio));
+  };
+
+  /** SMP-FR-EIUP: read one thread of the column. */
+  selectDiscussionThread = (threadId: string): void => {
+    const held = this.state.discussion;
+    if (held.threadId === threadId && !held.composing && held.node === null) return;
+    this.setDiscussion({ threadId, composing: false, node: null });
   };
 
   /**
-   * SMP-FR-IHFM: the **Discuss** entry of a node. The column shows, reads the
-   * thread of the node, and puts the caret in its composer.
+   * SMP-FR-KHKC: show the opening composer of a new thread, about `node` or,
+   * for null, about the whole map.
+   */
+  composeDiscussion = (node: MapNodeRef | null): void => {
+    this.setDiscussion({ composing: true, node });
+  };
+
+  /** The author discarded the opening composer of a new thread. */
+  cancelDiscussionComposer = (): void => {
+    const held = this.state.discussion;
+    if (!held.composing && held.node === null) return;
+    this.setDiscussion({ composing: false, node: null });
+  };
+
+  /** SMP-FR-HSZM / CMT-FR-17: expand or collapse the resolved disclosure. */
+  setDiscussionShowResolved = (showResolved: boolean): void => {
+    if (this.state.discussion.showResolved === showResolved) return;
+    this.setDiscussion({ showResolved });
+  };
+
+  /**
+   * SMP-FR-IHFM: the **Discuss** entry of a node. The column shows, and asks for
+   * the latest open thread of the node (`discussSignal`). Until that answer
+   * comes, the column holds the opening composer of the node.
    */
   discuss = (node: MapNodeRef): void => {
     logInfo(["frontend"], "map tab opens a node discussion", { lens: node.lens, kind: node.kind });
+    const held = this.state.discussion;
     this.setDiscussion({
       visible: true,
+      composing: true,
       node,
-      focusSignal: this.state.discussion.focusSignal + 1,
+      focusSignal: held.focusSignal + 1,
+      discussSignal: held.discussSignal + 1,
     });
+  };
+
+  /** SMP-FR-IHFM: the look-up of the Discuss `signal` answered. */
+  noteDiscussLooked = (signal: number): void => {
+    if (this.state.discussion.lookedSignal >= signal) return;
+    this.setDiscussion({ lookedSignal: signal });
   };
 
   /** SMP-FR-DUUU: record the node selected on the canvas of the Delivery lens. */
@@ -525,10 +560,16 @@ export class SpecMapSessionStore {
 
   /**
    * SMP-FR-QHBV: `revealDiscussion` of a Map thread. The column shows and reads
-   * the thread of the node, or the Map thread for null.
+   * the thread. A resolved thread is read with the resolved disclosure expanded.
    */
-  revealThread = (node: MapNodeRef | null): void => {
-    this.setDiscussion({ visible: true, node });
+  revealThread = (threadId: string, resolved: boolean): void => {
+    this.setDiscussion({
+      visible: true,
+      threadId,
+      composing: false,
+      node: null,
+      ...(resolved ? { showResolved: true } : {}),
+    });
   };
 
   /**

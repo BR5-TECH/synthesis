@@ -47,7 +47,11 @@ export interface DiscussionColumnState {
  * Which column a state belongs to. A draft and a file are two kinds of key, so
  * the kind is part of the key and a draft id never names a file's column.
  */
-export type ColumnKey = `draft:${string}` | `file:${string}` | `change:${string}`;
+export type ColumnKey =
+  | `draft:${string}`
+  | `file:${string}`
+  | `change:${string}`
+  | `map:${string}`;
 
 export function draftColumn(draftId: string): ColumnKey {
   return `draft:${draftId}`;
@@ -61,6 +65,13 @@ export function draftColumn(draftId: string): ColumnKey {
 export function changeColumn(streamId: string, change: string): ColumnKey {
   return `change:${streamId}:${change}`;
 }
+
+/**
+ * SMP-FR-WNLR: the Discussion column of the Map tab. The Map session holds its
+ * split (SMP-FR-AUFA), so this store keeps only what the shared column reads
+ * of its own, and the layout record keeps nothing of it.
+ */
+export const MAP_COLUMN: ColumnKey = "map:discussion";
 
 /** CMT-FR-30: a file's column is keyed by its project-relative path. */
 export function fileColumn(path: string): ColumnKey {
@@ -171,7 +182,7 @@ function storedAs(key: ColumnKey): {
  * the field they share is one.
  */
 function persist(key: ColumnKey, entry: { ratio?: string; hidden?: boolean }): void {
-  if (projectKey === null || key.startsWith("change:")) return;
+  if (projectKey === null || key.startsWith("change:") || key.startsWith("map:")) return;
   const project = projectKey;
   const at = storedAs(key);
   void patchLayoutPreferences(project, (base) => {

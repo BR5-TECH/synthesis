@@ -12,8 +12,10 @@ The architect moves over the specification map by panning and by semantic zoom: 
 4. **SMZ-FR-VYOS** The level control is a segmented control with one button per level, labelled with the plural level names of the index (per `SMP-specification-map.md` SMP-FR-QMRE). The button of the current level has an `--accent-soft` background and `--accent` text. The other buttons are transparent with `--fg-3` text.
 5. **SMZ-FR-GMEB** At every level the scale stays between 0.66 and 1.30, including both ends.
    - *Why:* The scale window keeps every level legible; a smaller scale is reached by a shallower level, not by smaller type.
-6. **SMZ-FR-ZQLP** A wheel step multiplies the scale by 1.06 toward the user and by 0.94 away. A result above 1.30 steps one level deeper with scale 0.66, and a result below 0.66 steps one level shallower with scale 1.30. At the last level and at level 0 the scale clamps instead.
-7. **SMZ-FR-HCTF** Every scale change multiplies the translation by the ratio of the new scale to the old scale.
+6. **SMZ-FR-ZQLP** A wheel step with no modifier multiplies the scale by 1.06 toward the user and by 0.94 away. A result above 1.30 steps one level deeper with scale 0.66, and a result below 0.66 steps one level shallower with scale 1.30. At the last level and at level 0 the scale clamps instead.
+6. **SMZ-FR-DLES** A pinch on a touchpad over the canvas, and a wheel turned with Ctrl or ⌘ held, multiply the scale in proportion to the gesture, and step the level at the ends of the scale window as SMZ-FR-ZQLP does. Within one level, the point under the pointer stays in place.
+    - *Why:* A pinch is continuous, so fixed steps make it jump, and a zoom about the centre moves away the node under the fingers.
+7. **SMZ-FR-HCTF** Every scale change, except a pinch within one level (SMZ-FR-DLES), multiplies the translation by the ratio of the new scale to the old scale.
 8. **SMZ-FR-JWXA** The zoom controls sit at the bottom right of the canvas. They hold a minus button that zooms by a factor of 1/1.18, a plus button that zooms by 1.18, and a percentage button that shows the scale rounded to a whole percent. Both zoom buttons follow SMZ-FR-ZQLP. The percentage button applies SMZ-FR-NUOB.
 9. **SMZ-FR-NUOB** Until the author pans or zooms, the map shows level 0 at scale 0.8 with horizontal translation 0 and vertical translation `max(0, contentHeight / 2 × scale − canvasHeight / 2 + 26)`. The canvas height is measured, and the framing is computed again each time the measured height changes.
    - *Why:* The canvas has no height in its first frame; framing from that height paints the map centred with the first card above the fold.
@@ -47,4 +49,4 @@ The architect moves over the specification map by panning and by semantic zoom: 
 
 ## Non-functional requirements
 - A level change animates node position and height over 200ms and opacity over 140ms with the `--ease-out` curve. A hover or border change uses `--dur-fast`. No motion bounces.
-- The wheel listener is not passive, so a wheel step over the canvas never scrolls any other surface.
+- The wheel listener is not passive, so a wheel step or a pinch over the canvas never scrolls any other surface and never zooms the page.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
 import type { FlowItem, FlowPosition, FlowSize } from "../../state/flowDocument";
@@ -14,6 +14,7 @@ import {
   TrackerTag,
 } from "./chips";
 import { descriptionExcerpt } from "./excerpt";
+import { FlowExcerptsContext } from "./excerptContext";
 import { isInteractive, type Reference, type ResizeSides } from "./geometry";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { measureContainer } from "./measure";
@@ -182,10 +183,16 @@ function Markers({ facts, handlers }: { facts: ItemFacts; handlers: ItemHandlers
 
 /**
  * FLO-FR-XCRP: the excerpt of a description in at most two lines. The full
- * text is in the panel of the selected item (FLO-FR-13).
+ * text is in the panel of the selected item (FLO-FR-13). MDL-FR-RILW: a canvas
+ * that shows no excerpts gets nothing.
  */
+function useExcerpt(item: FlowItem): string | null {
+  const shown = useContext(FlowExcerptsContext);
+  return shown ? descriptionExcerpt(item.description) : null;
+}
+
 function Excerpt({ item }: { item: FlowItem }) {
-  const text = descriptionExcerpt(item.description);
+  const text = useExcerpt(item);
   if (!text) return null;
   return (
     <p className="flow-excerpt" title={text} data-testid={`flow-item-excerpt-${item.id}`}>
@@ -369,6 +376,7 @@ export function ContainerView(props: ContainerViewProps) {
   const label = `${kindLabel(item.kind)} ${item.name}`;
   const rootRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
+  const excerpt = useExcerpt(item);
   const { onMeasure, collapsed } = props;
   // MDL-FR-ECPZ: measure again when what the header or the content shows
   // changes. A collapsed container shows no content, so it keeps its last.
@@ -473,7 +481,7 @@ export function ContainerView(props: ContainerViewProps) {
           {leafCountText(facts.state?.leafCounts, props.leaves)}
         </div>
       ) : (
-        (facts.references.length > 0 || descriptionExcerpt(item.description) !== null) && (
+        (facts.references.length > 0 || excerpt !== null) && (
           <div className="flow-ctr__about">
             <ReferenceRows references={facts.references} onOpen={handlers.onOpenReference} />
             <Excerpt item={item} />

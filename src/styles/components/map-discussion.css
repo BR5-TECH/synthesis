@@ -5,31 +5,37 @@
    (draft-discussion.css); these rules hold what the Map adds. All colours,
    radii, and motion come from the design-system tokens. */
 
-/* SMP-FR-SWCL: the column keeps the width the session holds, and the canvas
-   takes the rest. */
+/* SMP-FR-SWCL: the column takes the share of the body that the split of the
+   session gives it, and the canvas side takes the rest. */
 .map-discussion {
   flex: none;
   display: flex;
   min-width: 0;
   min-height: 0;
 }
-.map-discussion > .mdc { flex: 1; min-width: 0; }
+.map-discussion > .dds-discussion { flex: 1; min-width: 0; }
 .map-discussion-splitter { flex: none; width: 5px; }
 
-.mdc__head { gap: var(--sp-2); min-width: 0; }
-.mdc__chooser { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.mdc__chooser-label { flex: none; color: var(--fg-4); }
-.mdc__select {
+/* SMP-FR-VDND: the presets and the accelerator hint, leading the toggle. */
+.mdc-split { display: inline-flex; align-items: center; gap: var(--sp-2); flex: none; }
+
+/* SMP-FR-EIUP: a tab reads the node label, cut past 160px. The row of tabs
+   scrolls where the tabs do not fit, and never wraps. */
+.map-discussion .dds-discussion__threads { overflow-x: auto; }
+.map-discussion .dds-discussion__thread { flex: none; }
+.dds-discussion__thread-label {
   max-width: 160px;
-  height: var(--ctl-h-xs);
-  font-family: inherit;
-  font-size: var(--fs-ui-xs);
-  color: var(--fg-1);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-1);
-  border-radius: var(--r-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* SMP-FR-EIUP: a long node name gives way first. The title of the column and
+   its state words keep their width. */
+.map-discussion .dds-discussion__title,
+.map-discussion .dds-discussion__state { flex: none; }
 .mdc__node {
+  flex: 0 1 auto;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
@@ -46,17 +52,6 @@
 }
 .mdc__node:hover { border-color: var(--border-3); }
 .mdc__node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.mdc__opening { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.mdc-empty {
-  flex: 1;
-  padding: var(--sp-4);
-  font-size: var(--fs-ui-sm);
-  line-height: var(--lh-normal);
-  color: var(--fg-3);
-  overflow: auto;
-}
-.mdc-empty p { margin: 0 0 var(--sp-2); }
 
 /* SMP-FR-DUUU: the Focus chip, above the field of the composer. */
 .mdc-focus {

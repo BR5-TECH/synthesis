@@ -33,6 +33,7 @@ import {
 } from "./mock-openspec-plan";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import { deliveryInvoke } from "./mock-delivery";
+import { mapDiscussionsInvoke } from "./mock-map-discussions";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
   DECOMPOSITION_ORIGINAL,
@@ -8175,6 +8176,9 @@ export async function invoke(cmd: string, args?: Record<string, any>): Promise<a
   // demo change on its stream (see mock-openspec.ts).
   const change = openspecDiscussionInvoke(cmd, args ?? {});
   if (change !== NOT_HANDLED) return change;
+  // MPR: the threads of the Map tab (see mock-map-discussions.ts).
+  const mapThread = mapDiscussionsInvoke(cmd, args ?? {});
+  if (mapThread !== NOT_HANDLED) return mapThread;
   return unifiedInvoke(cmd, args, legacyInvoke);
 }
 

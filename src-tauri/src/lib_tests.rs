@@ -404,7 +404,7 @@ fn command_names_list_contains_layout_preferences_commands() {
         "open_discussion",
         "get_or_create_note_discussion",
         "find_map_discussion",
-        "get_or_create_map_discussion",
+        "open_map_discussion",
         "list_map_discussions",
         "list_map_plan_proposals",
         "accept_map_plan_row",

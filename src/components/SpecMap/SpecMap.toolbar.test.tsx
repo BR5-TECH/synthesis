@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { SpecMap } from ".";
+import { Toolbar } from "./Toolbar";
 import { makeStore, mockCanvasRect, setWindowWidth } from "../../test/specMapRender";
 
 vi.mock("../../logging", () => ({
@@ -17,6 +18,8 @@ vi.mock("../../logging", () => ({
  */
 type Needs = { full: number; short: number; icons: number };
 let needs: Needs;
+const SPLIT_PX = 200;
+const HINT_PX = 30;
 let tabWidth: number;
 
 function toolbar() {
@@ -29,7 +32,10 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
     if (!this.classList.contains("smap-toolbar")) return 0;
     const form = this.getAttribute("data-form") as keyof Needs | null;
-    return form ? Math.max(needs[form], tabWidth) : tabWidth;
+    // SMP-FR-VDND: the split presets and the accelerator hint take room too.
+    const split = this.querySelector(".mdc-split") ? SPLIT_PX : 0;
+    const hint = this.querySelector(".mdc-split kbd") ? HINT_PX : 0;
+    return form ? Math.max(needs[form] + split + hint, tabWidth) : tabWidth;
   });
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
     return this.classList.contains("smap-toolbar") ? tabWidth : 0;
@@ -113,5 +119,88 @@ describe("the toolbar fits the Map tab (SMP-FR-GJEW, SMP-FR-CVIB)", () => {
     await renderAt(1214, false);
     expect(toolbar()).toHaveAttribute("data-form", "full");
     expect(screen.queryByRole("button", { name: "Unplanned" })).toBeNull();
+  });
+});
+
+/**
+ * The toolbar alone, with a Discussion toggle that draws the split controls
+ * the toolbar asks for, so the width they take is what the mock measures.
+ */
+function toolbarElement(width: number, discussionVisible: boolean) {
+  return (
+    <Toolbar
+      lensSwitch={<span>lenses</span>}
+      levels={[{ plural: "domains", singular: "domain" }]}
+      level={0}
+      total={null}
+      showDeps={false}
+      depsToggle={false}
+      gapsOnly={false}
+      width={width}
+      disabled={false}
+      onLevel={vi.fn()}
+      onToggleDeps={vi.fn()}
+      onToggleGaps={vi.fn()}
+      discussionVisible={discussionVisible}
+      discussionToggle={(_form, split) => (
+        <>
+          {discussionVisible && split.presets && (
+            <span className="mdc-split" data-testid="split">
+              presets{split.hint && <kbd>⌘\\</kbd>}
+            </span>
+          )}
+          <button type="button">Discussion</button>
+        </>
+      )}
+    />
+  );
+}
+
+function renderToolbar(width: number, discussionVisible = true) {
+  tabWidth = width;
+  return render(toolbarElement(width, discussionVisible));
+}
+
+describe("the split controls in the toolbar (SMP-FR-VDND)", () => {
+  it("SMP-FR-VDND: a wide tab shows the split presets and the accelerator hint before the Discussion toggle", () => {
+    needs = { full: 1100, short: 1000, icons: 800 };
+    renderToolbar(1400);
+    expect(toolbar()).toHaveAttribute("data-form", "full");
+    expect(screen.getByTestId("split").querySelector("kbd")).not.toBeNull();
+  });
+
+  it("SMP-FR-VDND: a toolbar that does not fit drops the hint, then the presets, and only then its labels", () => {
+    // With the presets and the hint 1330px; with the presets alone 1300px;
+    // with neither 1100px. A tab of 1320px keeps the presets and drops the hint.
+    needs = { full: 1100, short: 1000, icons: 800 };
+    const first = renderToolbar(1320);
+    expect(toolbar()).toHaveAttribute("data-form", "full");
+    expect(screen.getByTestId("split").querySelector("kbd")).toBeNull();
+    first.unmount();
+    // A tab of 1200px keeps the full form and drops the presets.
+    renderToolbar(1200);
+    expect(toolbar()).toHaveAttribute("data-form", "full");
+    expect(screen.queryByTestId("split")).toBeNull();
+    expect(screen.getByRole("button", { name: "Discussion" })).toBeInTheDocument();
+  });
+
+  it("SMP-FR-VDND: below 1180px the hint is hidden, and below 1000px the presets too", () => {
+    needs = { full: 0, short: 0, icons: 0 };
+    const first = renderToolbar(1100);
+    expect(screen.getByTestId("split").querySelector("kbd")).toBeNull();
+    first.unmount();
+    renderToolbar(900);
+    expect(screen.queryByTestId("split")).toBeNull();
+  });
+
+  it("SMP-FR-VDND: a toolbar that fits with the column hidden fits again when the column shows", () => {
+    needs = { full: 1100, short: 1000, icons: 800 };
+    const view = renderToolbar(1320, false);
+    expect(screen.queryByTestId("split")).toBeNull();
+    view.rerender(toolbarElement(1320, true));
+    // With the presets and the hint the toolbar needs 1330px, so the hint goes.
+    expect(screen.getByTestId("split")).toBeInTheDocument();
+    expect(screen.getByTestId("split").querySelector("kbd")).toBeNull();
+    expect(toolbar()).toHaveAttribute("data-form", "full");
   });
 });

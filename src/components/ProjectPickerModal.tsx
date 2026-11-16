@@ -16,9 +16,16 @@ interface ProjectPickerModalProps {
   onDismiss: () => void;
   /** The last failure of an open, shown inline (PPK-FR-KRPD). */
   error?: string;
+  /** PJT-FR-PNDG: the name of the project that opens in a new tab now. */
+  opening?: string;
 }
 
-export function ProjectPickerModal({ onChoose, onDismiss, error }: ProjectPickerModalProps) {
+export function ProjectPickerModal({
+  onChoose,
+  onDismiss,
+  error,
+  opening = "",
+}: ProjectPickerModalProps) {
   // PPK-FR-IHWN: Escape dismisses the modal and changes nothing.
   useEffect(() => {
     const opener = document.activeElement;
@@ -26,6 +33,8 @@ export function ProjectPickerModal({ onChoose, onDismiss, error }: ProjectPicker
       if (e.key !== "Escape") return;
       // The open project dialog above the modal takes Escape first.
       if (document.querySelector(".open-project-dialog")) return;
+      // PJT-FR-PNDG: an open in progress finishes first.
+      if (document.querySelector(".project-picker-modal__opening")) return;
       e.preventDefault();
       onDismiss();
     };
@@ -43,16 +52,25 @@ export function ProjectPickerModal({ onChoose, onDismiss, error }: ProjectPicker
         role="dialog"
         aria-modal="true"
         aria-label="Project picker"
+        aria-busy={opening ? true : undefined}
       >
         <button
           type="button"
           className="project-picker-modal__close btn btn--ghost btn--sm"
           aria-label="Close project picker"
           onClick={onDismiss}
+          disabled={!!opening}
         >
           <Icon.X size={12} />
         </button>
-        <ProjectPicker onOpen={onChoose} resolveOnly presentation="modal" />
+        <div inert={opening ? true : undefined}>
+          <ProjectPicker onOpen={onChoose} resolveOnly presentation="modal" />
+        </div>
+        {opening && (
+          <div className="project-picker-modal__opening" role="status">
+            Opening {opening} in a new tab…
+          </div>
+        )}
         {error && (
           <p className="project-picker-modal__error" role="alert">
             {error}

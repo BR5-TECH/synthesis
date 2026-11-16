@@ -78,3 +78,24 @@ describe("the Project picker modal (PPK-FR-GMYH)", () => {
     await screen.findByText("design");
   });
 });
+
+describe("the modal while a project opens in a new tab (PJT-FR-PNDG)", () => {
+  it("PJT-FR-PNDG: names the project, blocks the picker, and ignores Escape and the close control", async () => {
+    const onDismiss = vi.fn();
+    const onChoose = vi.fn();
+    render(<ProjectPickerModal onChoose={onChoose} onDismiss={onDismiss} opening="design" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Opening design in a new tab…");
+    expect(screen.getByRole("dialog", { name: "Project picker" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Close project picker" })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onDismiss).not.toHaveBeenCalled();
+    const entry = await screen.findByText("design", { selector: "*:not([role=status])" });
+    expect(entry.closest("[inert]")).not.toBeNull();
+  });
+
+  it("PJT-FR-PNDG: shows no progress when nothing opens", async () => {
+    render(<ProjectPickerModal onChoose={vi.fn()} onDismiss={vi.fn()} />);
+    await screen.findByText("design");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});

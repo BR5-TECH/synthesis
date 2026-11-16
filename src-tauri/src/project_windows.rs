@@ -11,6 +11,8 @@
 //! starts at the Project picker with an empty list.
 
 mod host;
+#[cfg(target_os = "macos")]
+mod macos_tabs;
 pub use host::*;
 
 use serde::Serialize;

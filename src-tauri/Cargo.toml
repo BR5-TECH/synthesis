@@ -325,6 +325,10 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
 # added to the build.
 objc2 = { version = "0.6", features = ["exception"] }
 block2 = "0.6"
+# PWN-FR-XGTO: a new project window joins the tab group from a block on the
+# main dispatch queue, outside the event loop's callback. Already in the tree
+# as a dependency of `tao`.
+dispatch2 = "0.3"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
   "block2",
   "NSApplication",

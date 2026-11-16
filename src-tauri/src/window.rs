@@ -308,10 +308,13 @@ fn recenter_on_resize<R: tauri::Runtime>(
 /// `apply_centering` as launch, so the prior position is neither read nor
 /// restored (PPK-FR-12). Best-effort: a missing window or probe failure is
 /// logged and never surfaced to the caller.
+///
+/// PPK-FR-WCMN: it centres the window that shows the picker, which is the window
+/// that makes the call, and no other window.
 #[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn center_picker(app: tauri::AppHandle) {
-    let Some(window) = app.get_webview_window(PICKER_WINDOW_LABEL) else {
+pub fn center_picker(app: tauri::AppHandle, window: tauri::Window) {
+    let Some(window) = app.get_webview_window(window.label()) else {
         return;
     };
     match window.outer_size() {

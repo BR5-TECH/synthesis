@@ -296,7 +296,17 @@ export interface AppPreferences {
    * missing field means "never chosen" and the behaviour is opt-out (GSS-FR-33).
    */
   selectionFollowsTab?: boolean;
+  /**
+   * GSS-FR-OPBH / PJT-FR-RMBR: where a project opened from the project switcher
+   * opens. `ask` shows the open project dialog. Optional so a record from a
+   * backend that predates the field still types; a reader treats `undefined` as
+   * `ask`.
+   */
+  openProjectBehaviour?: OpenProjectBehaviour;
 }
+
+/** GSS-FR-OPBH: the stored answer of the open project dialog. */
+export type OpenProjectBehaviour = "ask" | "this_tab" | "new_tab";
 
 /**
  * The platform's disposition toward this application

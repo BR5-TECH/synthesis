@@ -1,30 +1,40 @@
 /**
  * The open project dialog
- * (`../specifications/ui/PJT-project-tabs.md` PJT-FR-GASB, PJT-FR-YCNT).
+ * (`../specifications/ui/PJT-project-tabs.md` PJT-FR-GASB, PJT-FR-DLGT,
+ * PJT-FR-RMCB, PJT-FR-YCNT).
  *
  * It asks where a project opens: in this project tab, in a new one, or
- * nowhere. It owns the choice and nothing that follows from it; the caller
- * writes pending changes and calls the backend.
+ * nowhere. Each choice is a card that says what it does to the project of this
+ * window. It owns the choice and the Remember my choice flag, and nothing that
+ * follows from them; the caller stores the flag, writes pending changes, and
+ * calls the backend.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 export type OpenProjectChoice = "this-tab" | "new-tab";
 
 interface OpenProjectDialogProps {
+  /** The project that opens. */
   projectName: string;
-  onChoose: (choice: OpenProjectChoice) => void;
+  /** The project of this window, which This tab closes. */
+  currentName: string;
+  onChoose: (choice: OpenProjectChoice, remember: boolean) => void;
   onCancel: () => void;
 }
 
-const FOCUSABLE = "button:not([disabled])";
+const FOCUSABLE = "button:not([disabled]), input:not([disabled])";
 
 export function OpenProjectDialog({
   projectName,
+  currentName,
   onChoose,
   onCancel,
 }: OpenProjectDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const newTabRef = useRef<HTMLButtonElement>(null);
+  // PJT-FR-RMCB: off at each show.
+  const [remember, setRemember] = useState(false);
+  const id = useId();
 
   // PJT-FR-GASB: the first focus is on New tab. PJT-FR-YCNT: focus returns to
   // the control that opened the dialog when it closes.
@@ -76,26 +86,67 @@ export function OpenProjectDialog({
         role="dialog"
         aria-modal="true"
         aria-label={`Open ${projectName}`}
+        aria-describedby={`${id}-lead`}
       >
         <div className="modal__head">
           <div className="modal__title">Open {projectName}</div>
         </div>
+        <div className="modal__body">
+          <p id={`${id}-lead`} className="open-project-dialog__lead">
+            {currentName} is open in this window. Where do you want to open {projectName}?
+          </p>
+          <div className="open-project-dialog__choices">
+            <button
+              type="button"
+              className="open-project-dialog__choice"
+              aria-labelledby={`${id}-this`}
+              aria-describedby={`${id}-this-desc`}
+              onClick={() => onChoose("this-tab", remember)}
+            >
+              <span id={`${id}-this`} className="open-project-dialog__label">
+                This tab
+              </span>
+              <span id={`${id}-this-desc`} className="open-project-dialog__desc">
+                {currentName} closes in this window. Its changes are saved first.
+              </span>
+            </button>
+            <button
+              ref={newTabRef}
+              type="button"
+              className="open-project-dialog__choice"
+              aria-labelledby={`${id}-new`}
+              aria-describedby={`${id}-new-desc`}
+              onClick={() => onChoose("new-tab", remember)}
+            >
+              <span id={`${id}-new`} className="open-project-dialog__label">
+                New tab
+              </span>
+              <span id={`${id}-new-desc`} className="open-project-dialog__desc">
+                {projectName} opens in a new tab. {currentName} stays open with its files and
+                runs.
+              </span>
+            </button>
+          </div>
+          <label className="open-project-dialog__remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              aria-labelledby={`${id}-remember`}
+              aria-describedby={`${id}-remember-hint`}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>
+              <span id={`${id}-remember`} className="open-project-dialog__remember-label">
+                Remember my choice
+              </span>
+              <span id={`${id}-remember-hint`} className="open-project-dialog__desc">
+                From now on, projects open this way with no question. You can change this in
+                Settings → Navigation.
+              </span>
+            </span>
+          </label>
+        </div>
         <div className="modal__actions">
-          <button
-            type="button"
-            className="btn btn--sm"
-            onClick={() => onChoose("this-tab")}
-          >
-            This tab
-          </button>
-          <button
-            ref={newTabRef}
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => onChoose("new-tab")}
-          >
-            New tab
-          </button>
           <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel}>
             Cancel
           </button>

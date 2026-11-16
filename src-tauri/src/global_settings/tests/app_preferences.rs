@@ -194,6 +194,8 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
             notifications_enabled: false,
             // Non-default for the same reason (GSS-FR-33).
             selection_follows_tab: false,
+            // Non-default for the same reason (GSS-FR-OPBH).
+            open_project_behaviour: OpenProjectBehaviour::NewTab,
             // Non-default for the same reason (GSS-FR-34): a write that
             // dropped it would read back at 0.20 and pass a weaker
             // assertion than the one below.
@@ -302,6 +304,12 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert!(
         !after_diff.selection_follows_tab,
         "no other editor's write may re-enable selection-follows-tab"
+    );
+    // GSS-FR-20 / GSS-FR-OPBH: nor the open project behaviour.
+    assert_eq!(
+        after_diff.open_project_behaviour,
+        OpenProjectBehaviour::NewTab,
+        "no other editor's write may reset the open project behaviour"
     );
     // GSS-FR-20 / GSS-FR-34: nor the graduation rail's width, which the
     // Runs panel's graduation section owns. Written `0.28` above, so a

@@ -240,3 +240,11 @@ fn a_notification_of_no_open_project_activates_nothing() {
     assert_eq!(activate_project_for_notification(app.handle(), ""), None);
     assert_eq!(window_label_of_project(app.handle(), "a"), None);
 }
+
+// PWN-FR-KQZB: the page of a created window marks it as a project window and
+// names the project, escaped so a name cannot add a parameter.
+#[test]
+fn a_created_window_boots_as_a_project_window_that_names_its_project() {
+    assert_eq!(project_window_url("acme"), "index.html?projectWindow=1&name=acme");
+    assert_eq!(project_window_url("a&b c#d"), "index.html?projectWindow=1&name=a%26b%20c%23d");
+}

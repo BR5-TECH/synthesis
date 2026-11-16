@@ -8,16 +8,22 @@ import {
   MENU_NEW_TAB,
 } from "../events";
 import { logError, logInfo, logWarn } from "../logging";
+import { loadAppPreferences, patchAppPreferences } from "../state/appPreferences";
 import type {
+  OpenProjectBehaviour,
   Operation,
   ProjectHandle,
   ProjectWindow,
   ProjectWindowsSnapshot,
 } from "../types";
 import type { OpenProjectChoice } from "../components/OpenProjectDialog";
+import type { ProjectWindowBoot } from "../projectWindowBoot";
 
-/** PJT-FR-PBQT: on macOS the system draws the tab bar, so the app draws none. */
-function isMacPlatform(): boolean {
+/**
+ * PJT-FR-PBQT: on macOS the system draws the tab bar, so the app draws none.
+ * PWN-FR-XGTO: a macOS window shares the frame of its tab group.
+ */
+export function isMacPlatform(): boolean {
   return typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
 }
 
@@ -44,20 +50,44 @@ export interface ProjectTabsDeps {
   requestCloseProject: () => Promise<void>;
   /** The runs in flight in this window's project: see {@link countRunsInFlight} (PJT-FR-OJZG). */
   runningOperations: number;
+  /** PWN-FR-KQZB: set when "open project window" created this window. */
+  boot?: ProjectWindowBoot | null;
+}
+
+/**
+ * PJT-FR-IOEV / PJT-FR-NWTD: what opened the Project picker modal. New Tab has
+ * made the choice already; Open Another Project… has not.
+ */
+export type PickerIntent = "ask" | "new-tab";
+
+/** PWN-FR-KQZB: the loading state of a window that mounts its project. */
+export interface BootState {
+  name: string;
+  /** Empty while the mount runs; the failure once it failed. */
+  error: string;
+}
+
+/** The stored answer of the open project dialog for one choice (PJT-FR-RMBR). */
+function behaviourOf(choice: OpenProjectChoice): OpenProjectBehaviour {
+  return choice === "new-tab" ? "new_tab" : "this_tab";
 }
 
 export interface ProjectTabs {
-  /** The tabs the in-app strip draws; empty on macOS. */
+  /** The tabs the in-app strip draws; empty on macOS (PJT-FR-PBQT). */
   stripWindows: ProjectWindow[];
   ownProjectId: string;
   /** PJT-FR-IOEV: the Project picker modal shows. */
   pickerOpen: boolean;
+  /** PJT-FR-NWTD: what opened the modal. */
+  pickerIntent: PickerIntent;
   openPicker: () => void;
   closePicker: () => void;
+  /** PJT-FR-PNDG: the name of the project that opens in a new tab now; empty when none. */
+  opening: string;
   /** PJT-FR-GASB: the project the open project dialog asks about. */
   pending: ProjectHandle | null;
   chooseProject: (handle: ProjectHandle) => Promise<void>;
-  answerDialog: (choice: OpenProjectChoice) => Promise<void>;
+  answerDialog: (choice: OpenProjectChoice, remember?: boolean) => Promise<void>;
   cancelDialog: () => void;
   /** PJT-FR-OJZG: the close confirmation shows. */
   confirmingClose: boolean;
@@ -69,6 +99,10 @@ export interface ProjectTabs {
   closeTab: (projectId: string) => void;
   /** The last failure of an open, as text; empty when none. */
   error: string;
+  /** PWN-FR-KQZB: the loading state of this window; `null` once it holds its project. */
+  boot: BootState | null;
+  /** PWN-FR-KQZB: close this window after its mount failed. */
+  closeBootWindow: () => Promise<void>;
 }
 
 /**
@@ -86,6 +120,16 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
     activeProjectId: null,
   });
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerIntent, setPickerIntent] = useState<PickerIntent>("ask");
+  const pickerRef = useRef({ open: false, intent: "ask" as PickerIntent });
+  pickerRef.current = { open: pickerOpen, intent: pickerIntent };
+  const [opening, setOpening] = useState("");
+  const openingRef = useRef(opening);
+  openingRef.current = opening;
+  const [boot, setBoot] = useState<BootState | null>(() =>
+    deps.boot ? { name: deps.boot.name, error: "" } : null,
+  );
+  const bootProjectRef = useRef<string | null>(null);
   const [pending, setPending] = useState<ProjectHandle | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [error, setError] = useState("");
@@ -142,10 +186,21 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
   // the list: it mounts that project at startup (PJT-FR-JLHP).
   useEffect(() => {
     let cancelled = false;
+    const booting = !!depsRef.current.boot;
     void api
       .currentProjectWindow()
       .then(async (entry) => {
-        if (cancelled || !entry || depsRef.current.screen !== "picker") return;
+        if (cancelled || depsRef.current.screen !== "picker") return;
+        if (!entry) {
+          // PWN-FR-KQZB: the list holds no project for this window any more. It
+          // shows the Project picker, as a window with no project does.
+          if (booting) {
+            logWarn(["frontend"], "created project window holds no project");
+            setBoot(null);
+          }
+          return;
+        }
+        bootProjectRef.current = entry.projectId;
         logInfo(["frontend"], "project window mounts its project");
         await mountHere({
           name: entry.name,
@@ -153,28 +208,40 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
           activeWorktreePath: entry.projectId,
           rememberedWorktreeUnavailable: false,
         });
+        if (!cancelled) setBoot(null);
       })
       .catch((e) => {
-        if (!cancelled) {
-          logError(["frontend"], "project window could not mount its project", {
-            error: String(e),
-          });
-        }
+        if (cancelled) return;
+        logError(["frontend"], "project window could not mount its project", {
+          error: String(e),
+        });
+        // PWN-FR-KQZB: the window shows the failure; the user closes it.
+        if (booting) setBoot((b) => (b ? { ...b, error: String(e) } : b));
       });
     return () => {
       cancelled = true;
     };
   }, [mountHere]);
 
-  const openPicker = useCallback(() => setPickerOpen(true), []);
-  const closePicker = useCallback(() => setPickerOpen(false), []);
+  // PJT-FR-IOEV: Open Another Project… asks where the project opens.
+  const openPicker = useCallback(() => {
+    setPickerIntent("ask");
+    setPickerOpen(true);
+  }, []);
+  const closePicker = useCallback(() => {
+    setPickerOpen(false);
+    setPickerIntent("ask");
+  }, []);
 
-  // PJT-FR-PILG: New Tab opens the Project picker over this window.
+  // PJT-FR-PILG / PJT-FR-NWTD: New Tab opens the Project picker over this window,
+  // and the project chosen in it opens in a new tab.
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     void onMenuEvent(MENU_NEW_TAB, () => {
-      if (depsRef.current.screen === "ide") setPickerOpen(true);
+      if (depsRef.current.screen !== "ide") return;
+      setPickerIntent("new-tab");
+      setPickerOpen(true);
     })
       .then((fn) => {
         if (cancelled) fn();
@@ -187,17 +254,60 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
     };
   }, []);
 
+  /** PJT-FR-PNDG / PJT-FR-JLHP: open a project in a new tab, with the modal busy. */
+  const openInNewTab = useCallback(async (handle: ProjectHandle) => {
+    openingRef.current = handle.name;
+    setOpening(handle.name);
+    logInfo(["frontend"], "project opens in a new tab");
+    try {
+      await api.openProjectWindow(handle.path);
+      setPickerOpen(false);
+      setPickerIntent("ask");
+    } catch (e) {
+      setError(String(e));
+      logError(["frontend"], "project could not be opened in a new tab", { error: String(e) });
+    } finally {
+      setOpening("");
+    }
+  }, []);
+
+  /** PJT-FR-ERZZ: replace the project of this window. */
+  const replaceHere = useCallback(
+    async (handle: ProjectHandle) => {
+      try {
+        // OVW-FR-11: pending changes are written first. A write that cannot
+        // proceed cancels the replacement.
+        if (!(await depsRef.current.flushBeforeTeardown())) return;
+        await api.closeProject().catch((e) => {
+          logWarn(["frontend"], "project teardown failed", { error: String(e) });
+        });
+        await mountHere(handle);
+        setPickerOpen(false);
+        setPickerIntent("ask");
+      } catch (e) {
+        setError(String(e));
+        logError(["frontend"], "project could not be opened", { error: String(e) });
+      }
+    },
+    [mountHere],
+  );
+
+  /** PJT-FR-ZRZD: a project that a tab holds already is activated, not opened again. */
+  const activateIfOpen = useCallback((handle: ProjectHandle): boolean => {
+    if (!snapshotRef.current.windows.some((w) => w.projectId === handle.path)) return false;
+    setPickerOpen(false);
+    setPickerIntent("ask");
+    setPending(null);
+    void api.activateProjectWindow(handle.path).catch(() => {});
+    return true;
+  }, []);
+
   const chooseProject = useCallback(
     async (handle: ProjectHandle) => {
+      // PJT-FR-PNDG: one open at a time.
+      if (openingRef.current) return;
       setError("");
-      // PJT-FR-ZRZD: a project that a tab holds already is activated, not opened
-      // a second time.
-      if (snapshotRef.current.windows.some((w) => w.projectId === handle.path)) {
-        setPickerOpen(false);
-        setPending(null);
-        await api.activateProjectWindow(handle.path).catch(() => {});
-        return;
-      }
+      if (activateIfOpen(handle)) return;
       if (depsRef.current.screen === "picker") {
         try {
           await mountHere(handle);
@@ -207,41 +317,43 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
         }
         return;
       }
-      setPending(handle);
+      // PJT-FR-NWTD: New Tab has made the choice already.
+      const picker = pickerRef.current;
+      if (picker.open && picker.intent === "new-tab") {
+        await openInNewTab(handle);
+        return;
+      }
+      // PJT-FR-RMBR: a remembered choice runs with no dialog.
+      const behaviour = (await loadAppPreferences()).openProjectBehaviour ?? "ask";
+      if (behaviour === "new_tab") {
+        await openInNewTab(handle);
+      } else if (behaviour === "this_tab") {
+        await replaceHere(handle);
+      } else {
+        setPending(handle);
+      }
     },
-    [mountHere],
+    [mountHere, activateIfOpen, openInNewTab, replaceHere],
   );
 
   const answerDialog = useCallback(
-    async (choice: OpenProjectChoice) => {
+    async (choice: OpenProjectChoice, remember = false) => {
       const handle = pending;
       if (!handle) return;
       setPending(null);
       setError("");
-      if (snapshotRef.current.windows.some((w) => w.projectId === handle.path)) {
-        setPickerOpen(false);
-        await api.activateProjectWindow(handle.path).catch(() => {});
-        return;
+      // PJT-FR-RMBR: the choice is stored before the project opens. A failed
+      // write does not stop the open.
+      if (remember) {
+        await patchAppPreferences({ openProjectBehaviour: behaviourOf(choice) }).catch((e) => {
+          logWarn(["frontend"], "open project choice not remembered", { error: String(e) });
+        });
       }
-      try {
-        if (choice === "new-tab") {
-          await api.openProjectWindow(handle.path);
-        } else {
-          // PJT-FR-ERZZ / OVW-FR-11: pending changes are written first. A write
-          // that cannot proceed cancels the replacement.
-          if (!(await depsRef.current.flushBeforeTeardown())) return;
-          await api.closeProject().catch((e) => {
-            logWarn(["frontend"], "project teardown failed", { error: String(e) });
-          });
-          await mountHere(handle);
-        }
-        setPickerOpen(false);
-      } catch (e) {
-        setError(String(e));
-        logError(["frontend"], "project could not be opened", { error: String(e) });
-      }
+      if (activateIfOpen(handle)) return;
+      if (choice === "new-tab") await openInNewTab(handle);
+      else await replaceHere(handle);
     },
-    [pending, mountHere],
+    [pending, activateIfOpen, openInNewTab, replaceHere],
   );
 
   const cancelDialog = useCallback(() => setPending(null), []);
@@ -282,6 +394,23 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
 
   const ownProjectId = getWindowProjectId() ?? "";
 
+  // PWN-FR-KQZB: a window whose mount failed closes itself and its entry.
+  const closeBootWindow = useCallback(async () => {
+    const projectId = bootProjectRef.current;
+    if (!projectId) {
+      setBoot(null);
+      return;
+    }
+    try {
+      const result = await api.closeProjectWindow(projectId);
+      // The last window stays and shows the Project picker (PWN-FR-QEGI).
+      if (result?.lastClosed) setBoot(null);
+    } catch (e) {
+      logError(["frontend"], "project window could not be closed", { error: String(e) });
+      setBoot(null);
+    }
+  }, []);
+
   const activateTab = useCallback((projectId: string) => {
     void api.activateProjectWindow(projectId).catch(() => {});
   }, []);
@@ -306,8 +435,10 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
     stripWindows: isMacPlatform() ? [] : snapshot.windows,
     ownProjectId,
     pickerOpen,
+    pickerIntent,
     openPicker,
     closePicker,
+    opening,
     pending,
     chooseProject,
     answerDialog,
@@ -319,5 +450,7 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
     activateTab,
     closeTab,
     error,
+    boot,
+    closeBootWindow,
   };
 }

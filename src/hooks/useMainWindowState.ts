@@ -93,6 +93,12 @@ export function useMainWindowState(
    * SNV-FR-35, SNV-FR-40, OVW-FR-11 requires B to open at B's own size, not A's.
    */
   projectKey: string = "",
+  /**
+   * PWN-FR-XGTO: false for a window that joined a macOS tab group. The tabs of a
+   * group share one frame, so a restore here would resize, or take into
+   * full-screen, every other tab of the group as well.
+   */
+  restoreGeometry: boolean = true,
 ): void {
   const readyRef = useRef(false);
   // Last full-screen state we persisted, so the resize listener only writes on
@@ -140,78 +146,80 @@ export function useMainWindowState(
         console.warn("setMaximizable(true) failed", err);
       }
 
-      let prefs: LayoutPreferences = {};
-      try {
-        prefs = await loadLayoutPreferences(projectKey);
-      } catch {
-        prefs = {};
-      }
-      if (cancelled) return;
+      if (restoreGeometry) {
+        let prefs: LayoutPreferences = {};
+        try {
+          prefs = await loadLayoutPreferences(projectKey);
+        } catch {
+          prefs = {};
+        }
+        if (cancelled) return;
 
-      // Positive, finite dimensions only. A record whose geometry fields are
-      // absent deserialises on the backend to `0.0` rather than staying absent,
-      // so `typeof === "number"` would accept a zero here and the restore below
-      // would call `setSize(0, 0)` — a window the user cannot see, let alone
-      // recover. The same guard rejects the 0×0 an iconify can report.
-      const hasPersistedGeometry =
-        typeof prefs.mainWindowOuterWidth === "number" &&
-        typeof prefs.mainWindowOuterHeight === "number" &&
-        prefs.mainWindowOuterWidth > 0 &&
-        prefs.mainWindowOuterHeight > 0;
+        // Positive, finite dimensions only. A record whose geometry fields are
+        // absent deserialises on the backend to `0.0` rather than staying absent,
+        // so `typeof === "number"` would accept a zero here and the restore below
+        // would call `setSize(0, 0)` — a window the user cannot see, let alone
+        // recover. The same guard rejects the 0×0 an iconify can report.
+        const hasPersistedGeometry =
+          typeof prefs.mainWindowOuterWidth === "number" &&
+          typeof prefs.mainWindowOuterHeight === "number" &&
+          prefs.mainWindowOuterWidth > 0 &&
+          prefs.mainWindowOuterHeight > 0;
 
-      try {
-        if (!hasPersistedGeometry) {
-          // SNV-FR-11: no persisted state → maximize on the available work area.
-          await w.maximize();
-        } else {
-          const width = prefs.mainWindowOuterWidth as number;
-          const height = prefs.mainWindowOuterHeight as number;
-          const fits = await fitsAnyMonitor(width, height);
-          if (!fits) {
-            // SNV-FR-13: persisted geometry does not fit any display → maximize.
-            await w.maximize();
-          } else if (prefs.mainWindowMaximized) {
+        try {
+          if (!hasPersistedGeometry) {
+            // SNV-FR-11: no persisted state → maximize on the available work area.
             await w.maximize();
           } else {
-            // SNV-FR-12: restore persisted (logical) outer dimensions; ensure
-            // unmaximized.
-            try {
-              if (await w.isMaximized()) await w.unmaximize();
-            } catch {
-              // ignore
+            const width = prefs.mainWindowOuterWidth as number;
+            const height = prefs.mainWindowOuterHeight as number;
+            const fits = await fitsAnyMonitor(width, height);
+            if (!fits) {
+              // SNV-FR-13: persisted geometry does not fit any display → maximize.
+              await w.maximize();
+            } else if (prefs.mainWindowMaximized) {
+              await w.maximize();
+            } else {
+              // SNV-FR-12: restore persisted (logical) outer dimensions; ensure
+              // unmaximized.
+              try {
+                if (await w.isMaximized()) await w.unmaximize();
+              } catch {
+                // ignore
+              }
+              await w.setSize(new LogicalSize(width, height));
             }
-            await w.setSize(new LogicalSize(width, height));
+          }
+        } catch {
+          // Outside the Tauri runtime, window calls reject silently.
+        }
+
+        // SNV-FR-39: apply the user-global full-screen preference last, so it
+        // goes on top of the per-project geometry restored above rather than
+        // being undone by it. Leaving full-screen then reveals the window at that
+        // geometry, which is exactly what SNV-FR-39 asks for.
+        let wantFullscreen = false;
+        try {
+          wantFullscreen = !!(await loadAppPreferences()).mainWindowFullscreen;
+        } catch {
+          wantFullscreen = false;
+        }
+        if (cancelled) return;
+        if (wantFullscreen) {
+          try {
+            await w.setFullscreen(true);
+          } catch (err) {
+            // A platform that refuses full-screen leaves the window at its
+            // restored geometry — degraded, but usable.
+            console.warn("setFullscreen(true) failed", err);
           }
         }
-      } catch {
-        // Outside the Tauri runtime, window calls reject silently.
+        // Seed from what the window ACTUALLY is, not from what we asked for. The
+        // two can differ: a platform that refused the request, or (on macOS) a
+        // window the OS restored into a full-screen space of its own while the
+        // stored preference says otherwise. Seeding from the request would make
+        // the first resize look like a transition and write the wrong answer.
       }
-
-      // SNV-FR-39: apply the user-global full-screen preference last, so it
-      // goes on top of the per-project geometry restored above rather than
-      // being undone by it. Leaving full-screen then reveals the window at that
-      // geometry, which is exactly what SNV-FR-39 asks for.
-      let wantFullscreen = false;
-      try {
-        wantFullscreen = !!(await loadAppPreferences()).mainWindowFullscreen;
-      } catch {
-        wantFullscreen = false;
-      }
-      if (cancelled) return;
-      if (wantFullscreen) {
-        try {
-          await w.setFullscreen(true);
-        } catch (err) {
-          // A platform that refuses full-screen leaves the window at its
-          // restored geometry — degraded, but usable.
-          console.warn("setFullscreen(true) failed", err);
-        }
-      }
-      // Seed from what the window ACTUALLY is, not from what we asked for. The
-      // two can differ: a platform that refused the request, or (on macOS) a
-      // window the OS restored into a full-screen space of its own while the
-      // stored preference says otherwise. Seeding from the request would make
-      // the first resize look like a transition and write the wrong answer.
       fullscreenRef.current = await isFullscreenSafe(w);
       if (cancelled) return;
 
@@ -314,5 +322,5 @@ export function useMainWindowState(
         }
       }
     };
-  }, [enabled, projectKey]);
+  }, [enabled, projectKey, restoreGeometry]);
 }

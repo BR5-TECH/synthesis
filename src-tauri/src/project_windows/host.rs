@@ -127,10 +127,66 @@ fn bring_to_front<R: Runtime>(app: &tauri::AppHandle<R>, label: &str) {
         return;
     }
     if let Some(window) = app.get_webview_window(label) {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        show_and_focus(app, window);
     }
+}
+
+/// Bring one window to the front with OS focus.
+///
+/// On macOS a tab that comes to the front is drawn at once. A draw inside the
+/// callback of the event loop stops the main thread (`macos_tabs`), and a menu
+/// item or a focus change runs in that callback. So the window comes to the
+/// front from the main dispatch queue.
+#[cfg(target_os = "macos")]
+fn show_and_focus<R: Runtime>(app: &tauri::AppHandle<R>, window: tauri::WebviewWindow<R>) {
+    let handle = app.clone();
+    let posted = app.run_on_main_thread(move || {
+        let scheduled = window
+            .ns_window()
+            // SAFETY: `ns_window` gives the live `NSWindow` of a window that
+            // exists, and this closure runs on the main thread.
+            .map(|ns_window| unsafe { super::macos_tabs::bring_to_front_later(ns_window) })
+            .unwrap_or(false);
+        if !scheduled {
+            logging::log_warn(
+                &handle,
+                &BUFFER,
+                &DOMAINS,
+                "project window could not come to the front",
+                log_fields! { "window" => window.label() },
+            );
+        }
+    });
+    if let Err(e) = posted {
+        logging::log_warn(
+            app,
+            &BUFFER,
+            &DOMAINS,
+            "project window could not come to the front",
+            log_fields! { "reason" => e.to_string() },
+        );
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_and_focus<R: Runtime>(_app: &tauri::AppHandle<R>, window: tauri::WebviewWindow<R>) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
+/// The query that marks a window as a project window from its start
+/// (PWN-FR-KQZB). The frontend reads it before it renders anything.
+pub const PROJECT_WINDOW_QUERY: &str = "projectWindow";
+
+/// PWN-FR-KQZB: the page of a window that `open_project_window` creates. It
+/// names the project, so the window can say which project it opens while it
+/// mounts it.
+pub fn project_window_url(name: &str) -> String {
+    format!(
+        "index.html?{PROJECT_WINDOW_QUERY}=1&name={}",
+        crate::settings_window::encode_query_value(name)
+    )
 }
 
 fn entry_for(project_id: &str, window_label: &str) -> ProjectWindowEntry {
@@ -252,6 +308,7 @@ pub async fn open_project_window<R: Runtime>(
         return Ok(OpenProjectWindowResult { project_id, window_label, created: false });
     }
     let name = crate::project::basename(&project_id);
+    log_event(&app, "project window creation started", &name, &label);
     let created = create_project_window(&app, &window, &label, &name);
     if let Err(reason) = created {
         let snapshot = {
@@ -281,10 +338,38 @@ fn create_project_window<R: Runtime>(
     label: &str,
     title: &str,
 ) -> Result<(), String> {
-    let mut builder =
-        tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::App("index.html".into()))
-            .title(title)
-            .disable_drag_drop_handler();
+    let builder = tauri::WebviewWindowBuilder::new(
+        app,
+        label,
+        tauri::WebviewUrl::App(project_window_url(title).into()),
+    )
+    .title(title)
+    .disable_drag_drop_handler();
+    let builder = size_like(builder, from);
+    let window = builder.build().map_err(|e| e.to_string())?;
+    join_tab_group(app, from, window);
+    Ok(())
+}
+
+/// On macOS the window is built hidden: a window that shows while it is built
+/// shows inside the callback of the event loop, and as a tab it is drawn there at
+/// once, which stops the main thread (`macos_tabs`). The tab group gives it its
+/// frame, so it copies no size (PWN-FR-XGTO).
+#[cfg(target_os = "macos")]
+fn size_like<'a, R: Runtime, M: Manager<R>>(
+    builder: tauri::WebviewWindowBuilder<'a, R, M>,
+    _from: &tauri::Window<R>,
+) -> tauri::WebviewWindowBuilder<'a, R, M> {
+    builder.tabbing_identifier(TABBING_IDENTIFIER).visible(false)
+}
+
+/// On Windows and Linux the new window takes the size of the window it opens
+/// from, and shows at once.
+#[cfg(not(target_os = "macos"))]
+fn size_like<'a, R: Runtime, M: Manager<R>>(
+    mut builder: tauri::WebviewWindowBuilder<'a, R, M>,
+    from: &tauri::Window<R>,
+) -> tauri::WebviewWindowBuilder<'a, R, M> {
     if let Ok(size) = from.inner_size() {
         let scale = from.scale_factor().unwrap_or(1.0);
         builder = builder.inner_size(size.width as f64 / scale, size.height as f64 / scale);
@@ -292,11 +377,65 @@ fn create_project_window<R: Runtime>(
     if from.is_maximized().unwrap_or(false) {
         builder = builder.maximized(true);
     }
-    #[cfg(target_os = "macos")]
-    {
-        builder = builder.tabbing_identifier(TABBING_IDENTIFIER);
+    builder
+}
+
+/// PWN-FR-XGTO: add the new window to the tab group of the window it opens from,
+/// as the tab after it, and bring it to the front. The task on the main thread
+/// runs after the event loop has made the window, because both go through the
+/// same queue in order.
+#[cfg(target_os = "macos")]
+fn join_tab_group<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    from: &tauri::Window<R>,
+    window: tauri::WebviewWindow<R>,
+) {
+    let handle = app.clone();
+    let parent = from.clone();
+    let posted = app.run_on_main_thread(move || {
+        let scheduled = match (parent.ns_window(), window.ns_window()) {
+            // SAFETY: both pointers are the live `NSWindow`s of windows that
+            // exist, and this closure runs on the main thread.
+            (Ok(parent), Ok(child)) => unsafe { super::macos_tabs::add_tab_later(parent, child) },
+            _ => false,
+        };
+        if scheduled {
+            logging::log_info(
+                &handle,
+                &BUFFER,
+                &DOMAINS,
+                "project window joins the tab group",
+                log_fields! { "window" => window.label(), "parent" => parent.label() },
+            );
+        } else {
+            // The window must not stay hidden: it shows as a window of its own.
+            logging::log_warn(
+                &handle,
+                &BUFFER,
+                &DOMAINS,
+                "project window could not join the tab group",
+                log_fields! { "window" => window.label(), "parent" => parent.label() },
+            );
+            show_and_focus(&handle, window);
+        }
+    });
+    if let Err(e) = posted {
+        logging::log_error(
+            app,
+            &BUFFER,
+            &DOMAINS,
+            "project window could not be shown",
+            log_fields! { "reason" => e.to_string() },
+        );
     }
-    builder.build().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn join_tab_group<R: Runtime>(
+    _app: &tauri::AppHandle<R>,
+    _from: &tauri::Window<R>,
+    _window: tauri::WebviewWindow<R>,
+) {
 }
 
 /// PWN-FR-XUJP.

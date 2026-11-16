@@ -5,6 +5,51 @@
 
 use super::*;
 
+// ---- Open project behaviour (GSS-FR-OPBH) ----------------------------
+
+// GSS-FR-OPBH: a fresh machine and a record written before the field existed
+// both ask where a project opens.
+#[test]
+fn open_project_behaviour_defaults_to_ask_including_for_a_record_without_the_field() {
+    assert_eq!(AppPreferences::default().open_project_behaviour, OpenProjectBehaviour::Ask);
+    let legacy = r#"
+        theme = "dark"
+        selectionFollowsTab = false
+    "#;
+    let decoded: AppPreferences = toml::from_str(legacy).unwrap();
+    assert_eq!(decoded.open_project_behaviour, OpenProjectBehaviour::Ask);
+    assert!(!decoded.selection_follows_tab, "and the rest still decodes");
+}
+
+// GSS-FR-OPBH: a value that is not one of the three reads as ask, and the rest
+// of the record still decodes.
+#[test]
+fn an_unknown_open_project_behaviour_reads_as_ask() {
+    for stored in [r#"openProjectBehaviour = "sideways""#, "openProjectBehaviour = 3"] {
+        let record = format!("theme = \"dark\"\n{stored}\n");
+        let decoded: AppPreferences = toml::from_str(&record).unwrap();
+        assert_eq!(decoded.open_project_behaviour, OpenProjectBehaviour::Ask, "{stored}");
+        assert_eq!(decoded.theme, Theme::Dark, "{stored}");
+    }
+}
+
+// GSS-FR-OPBH, GSS-FR-20: each value round-trips through the store, and the
+// wire form is snake_case.
+#[test]
+fn open_project_behaviour_round_trips_through_the_store() {
+    let store = GlobalSettingsStore::in_memory();
+    for value in
+        [OpenProjectBehaviour::ThisTab, OpenProjectBehaviour::NewTab, OpenProjectBehaviour::Ask]
+    {
+        let mut prefs = store.load_app_preferences().unwrap();
+        prefs.open_project_behaviour = value;
+        store.save_app_preferences(prefs).unwrap();
+        assert_eq!(store.load_app_preferences().unwrap().open_project_behaviour, value);
+    }
+    let json = serde_json::to_value(OpenProjectBehaviour::NewTab).unwrap();
+    assert_eq!(json, serde_json::json!("new_tab"));
+}
+
 // ---- Selection follows tab (GSS-FR-33) -------------------------------
 
 #[test]

@@ -4,6 +4,7 @@ import App from "./App";
 import { SettingsWindowApp } from "./SettingsWindowApp";
 import { readSettingsWindowBoot, readSettingsWindowProject } from "./settingsWindow";
 import { setWindowProjectId } from "./api/invoke";
+import { readProjectWindowBoot } from "./projectWindowBoot";
 import { installDropGuard } from "./dropGuard";
 
 /**
@@ -30,7 +31,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     {boot ? (
       <SettingsWindowApp initialSection={boot.section} />
     ) : (
-      <App />
+      <App projectWindowBoot={readProjectWindowBoot(window.location.search)} />
     )}
   </React.StrictMode>,
 );

@@ -9,7 +9,9 @@ import { ProjectPickerModal } from "./components/ProjectPickerModal";
 import { OpenProjectDialog } from "./components/OpenProjectDialog";
 import { CloseProjectConfirm } from "./components/CloseProjectConfirm";
 import { ProjectTabStrip } from "./components/ProjectTabStrip";
-import { countRunsInFlight, useProjectTabs } from "./hooks/useProjectTabs";
+import { countRunsInFlight, isMacPlatform, useProjectTabs } from "./hooks/useProjectTabs";
+import { ProjectWindowLoading } from "./components/ProjectWindowLoading";
+import type { ProjectWindowBoot } from "./projectWindowBoot";
 import { AboutPanel } from "./components/AboutPanel";
 import { AppShell } from "./AppShell";
 import { GitTransferProvider, useGitTransferState } from "./hooks/useGitTransfer";
@@ -57,7 +59,12 @@ import {
  * is on (SNV-FR-49).
  */
 
-function App() {
+interface AppProps {
+  /** PWN-FR-KQZB: set when "open project window" created this window. */
+  projectWindowBoot?: ProjectWindowBoot | null;
+}
+
+function App({ projectWindowBoot = null }: AppProps = {}) {
   const { themePref, selectTheme } = useThemePreference();
   // OVW-FR-14: the three typographic roles, applied to the application root
   // before any surface renders and re-applied the moment the Appearance section
@@ -118,6 +125,7 @@ function App() {
     flushBeforeTeardown: s.flushBeforeTeardown,
     requestCloseProject: s.requestCloseProject,
     runningOperations: countRunsInFlight(operations),
+    boot: projectWindowBoot,
   });
   // PJT-FR-PCCL: the Close Project menu item and the close controls of the shell
   // run the close flow of the project tab, which asks first when a run is active.
@@ -175,7 +183,13 @@ function App() {
   // and write the *per-project* layout slot: a switch (OVW-FR-11) must re-read
   // the new project's own layout rather than leave the previous project's
   // applied — and, worse, written into the new project's slot (SNV-FR-35, SNV-FR-40, OVW-FR-11).
-  useMainWindowState(s.screen === "ide", s.projectPath);
+  // PWN-FR-XGTO: a window that joined a macOS tab group takes the frame of the
+  // group, so it restores no geometry of its own over the other tabs.
+  useMainWindowState(
+    s.screen === "ide",
+    s.projectPath,
+    !(projectWindowBoot && isMacPlatform()),
+  );
 
   /**
    * SNV-FR-56 / CMW-FR-01 / GHA-FR-21: the modal action surfaces of this window
@@ -426,6 +440,19 @@ function App() {
     resetKey: `${s.projectPath}::${s.contentRootEpoch}`,
   });
 
+  // PWN-FR-KQZB: a created project window never shows the Project picker while
+  // it mounts its project.
+  if (s.screen === "picker" && tabs.boot) {
+    return (
+      <div className="app">
+        <ProjectWindowLoading
+          name={tabs.boot.name}
+          error={tabs.boot.error}
+          onClose={() => void tabs.closeBootWindow()}
+        />
+      </div>
+    );
+  }
   if (s.screen === "picker") {
     return (
       <div className="app">
@@ -493,13 +520,15 @@ function App() {
           onChoose={(handle) => void tabs.chooseProject(handle)}
           onDismiss={tabs.closePicker}
           error={tabs.error}
+          opening={tabs.opening}
         />
       )}
       {/* PJT-FR-GASB: where the chosen project opens. */}
       {tabs.pending && (
         <OpenProjectDialog
           projectName={tabs.pending.name}
-          onChoose={(choice) => void tabs.answerDialog(choice)}
+          currentName={s.projectName}
+          onChoose={(choice, remember) => void tabs.answerDialog(choice, remember)}
           onCancel={tabs.cancelDialog}
         />
       )}

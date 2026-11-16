@@ -1,19 +1,39 @@
 /**
  * `DBR-delivery-board.md`: the card of the board and the parts that a card
- * and a group header share: the address, the state glyph, the status, and the
- * marker glyphs. A card has three lines and one height (DBR-FR-LNZI).
+ * and a group face share: the kind chip, the address, the status dot and
+ * word, the markers, and the error strip. A card is as high as its lines
+ * (DBR-FR-LNZI), so it reports its height to the board layout.
  */
+import { useContext, useEffect, useRef, type RefObject } from "react";
+
 import type { FlowItem, FlowPosition, FlowSize } from "../../state/flowDocument";
 import type { TrackerFacts } from "../../types";
-import { PendingMark, STATE_LOOK } from "./chips";
+import { boardDot, boardStatusWord, BoardStatusNamesContext, KIND_CHIPS } from "./boardStatus";
+import { Icon } from "../icons";
 import { isInteractive } from "./geometry";
 import { externalBlockers, ItemName, type ItemFacts, type ItemHandlers } from "./items";
-import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
+import { kindLabel } from "./kindGlyphs";
+
+/** DBR-FR-DZSU: the kind chip: three letters in the colours of the kind. */
+export function KindChip({ kind }: { kind: FlowItem["kind"] }) {
+  return (
+    <span className="dm-kind" data-kind={kind} role="img" aria-label={kindLabel(kind)} data-testid="flow-kind-chip">
+      {KIND_CHIPS[kind]}
+    </span>
+  );
+}
+
+/** DBR-FR-XOOU: the full address of a tracker item: `owner/name#number`. */
+export function fullAddress(repository: string, tracker: TrackerFacts): string {
+  return tracker.ref.kind === "milestone"
+    ? `${repository} milestone ${tracker.ref.number}`
+    : `${repository}#${tracker.ref.number}`;
+}
 
 /**
- * DBR-FR-XOOU: the address of an item of a GitHub plan: `owner/name#number`
- * for an issue. It truncates at its start, so the number always shows, and
- * activating it opens the tracker item (FLO-FR-ULEM).
+ * DBR-FR-XOOU: the address of an item of a GitHub plan: `#number`, with the
+ * full address in its tooltip and accessible name. Activating it opens the
+ * tracker item (FLO-FR-ULEM).
  */
 export function BoardAddress({
   repository,
@@ -24,61 +44,43 @@ export function BoardAddress({
   tracker: TrackerFacts;
   onOpen: (url: string) => void;
 }) {
-  const text =
-    tracker.ref.kind === "milestone"
-      ? `${repository} milestone ${tracker.ref.number}`
-      : `${repository}#${tracker.ref.number}`;
+  const text = fullAddress(repository, tracker);
   return (
     <button
       type="button"
-      className="flow-baddr"
+      className="dm-card__ref"
       data-testid="flow-tracker-tag"
       title={`Open ${text} on GitHub`}
       aria-label={`Open ${text} on GitHub`}
       onClick={() => onOpen(tracker.ref.url)}
     >
-      <bdi className="flow-baddr__text">{text}</bdi>
+      #{tracker.ref.number}
     </button>
   );
 }
 
 /**
- * DBR-FR-QZPA: the state glyph: a shape and a colour for each delivery state,
- * named in its tooltip. No glyph until the delivery state answers.
+ * DBR-FR-HWHO / DBR-FR-QZPA: the status dot and the status word in lowercase.
+ * Nothing where the item shows no status.
  */
-export function StateGlyph({ facts }: { facts: ItemFacts }) {
-  const state = facts.state?.state;
-  if (!state) return null;
-  const look = STATE_LOOK[state];
+export function BoardStatus({ facts }: { facts: ItemFacts }) {
+  const names = useContext(BoardStatusNamesContext);
+  const source = { tracker: facts.tracker?.facts, state: facts.state?.state };
+  const word = boardStatusWord(source);
+  const dot = boardDot(source, names);
+  if (word === null) return null;
   return (
-    <span
-      className="flow-sglyph"
-      data-state={state}
-      role="img"
-      aria-label={look.word}
-      title={look.word}
-      data-testid="flow-state-glyph"
-    >
-      {look.shape}
+    <span className="dm-card__status" data-testid="flow-card-status" data-dot={dot ?? undefined}>
+      {dot && <i className="dm-dot" data-s={dot} aria-hidden="true" data-testid="flow-status-dot" />}
+      {word}
     </span>
   );
 }
 
 /**
- * DBR-FR-HWHO: the status an item shows: the `Status` of its issue in a
- * GitHub plan, or the name of its delivery state in a Flow file.
- */
-export function boardStatusText(facts: ItemFacts): string | null {
-  const tracker = facts.tracker?.facts;
-  if (tracker) return tracker.ref.kind === "issue" ? tracker.status || "No status" : null;
-  const state = facts.state?.state;
-  return state ? STATE_LOOK[state].word : null;
-}
-
-/**
- * DBR-FR-GFGG / DBR-FR-CJSG / MDL-FR-PUCM: the marker glyphs: pending, error,
- * Blocked, Overlap, and the draft. Each keeps its tooltip, and Blocked and
- * Overlap keep their activation.
+ * DBR-FR-GFGG / DBR-FR-ZBVZ / MDL-FR-PUCM: the markers: pending, Blocked,
+ * Overlap, and the draft, each a badge with a lowercase word. Each keeps its
+ * tooltip, and Blocked and Overlap keep their activation.
  */
 export function BoardMarks({
   item,
@@ -92,68 +94,103 @@ export function BoardMarks({
   const external = externalBlockers(facts);
   const blockers = [...facts.blockers.map((b) => b.name), ...external];
   const draftName = facts.state?.draft?.name ?? item.draftId;
+  const blocked = facts.state?.blocked === true && blockers.length > 0;
+  if (!facts.pending && !blocked && !facts.overlap && item.draftId === undefined) return null;
   return (
-    <span className="flow-bmarks">
-      {facts.pending && <PendingMark />}
-      {facts.error && (
+    <span className="dm-card__markers">
+      {facts.pending && (
         <span
-          className="flow-bmark flow-bmark--error"
-          role="img"
-          aria-label={facts.error}
-          title={facts.error}
-          data-testid={`flow-item-error-${item.id}`}
+          className="badge badge--live"
+          title="This change is on its way to GitHub"
+          data-testid="flow-pending"
         >
-          !
+          pending
         </span>
       )}
-      {facts.state?.blocked && blockers.length > 0 && (
+      {blocked && (
         <button
           type="button"
-          className="flow-bmark flow-bmark--blocked"
+          className="badge badge--danger dm-mark"
           title={`Blocked by ${blockers.join(", ")}`}
           aria-label={`Blocked by ${blockers.join(", ")}. Select the blocking items.`}
           data-testid="flow-marker-blocked"
           onClick={() => handlers.onSelectItems(facts.blockers.map((b) => b.id))}
         >
-          ⊘
+          blocked
         </button>
       )}
       {facts.overlap && (
         <button
           type="button"
-          className="flow-bmark flow-bmark--overlap"
+          className="badge badge--warn dm-mark"
           title={`Overlaps with ${facts.overlap.names.join(", ")} on ${facts.overlap.paths.join(", ")}`}
           aria-label={`Overlaps with ${facts.overlap.names.join(", ")}. Select the overlapping items.`}
           data-testid="flow-marker-overlap"
           onClick={() => handlers.onSelectItems(facts.overlap!.ids)}
         >
-          ⧉
+          overlap
         </button>
       )}
       {item.draftId !== undefined &&
         (facts.state?.draftMissing ? (
           <span
-            className="flow-bmark flow-bmark--warn"
+            className="badge badge--warn"
             role="img"
             aria-label={`Draft ${item.draftId} is missing`}
             title={`Draft ${item.draftId} is missing`}
             data-testid="flow-draft-missing"
           >
-            ⚠
+            draft missing
           </span>
         ) : (
           <span
-            className="flow-bmark flow-bmark--draft"
+            className="badge"
             role="img"
             aria-label={`Draft ${draftName}`}
             title={`Draft ${draftName}`}
             data-testid="flow-draft-glyph"
           >
-            ✎
+            draft
           </span>
         ))}
     </span>
   );
+}
+
+/** DBR-FR-CJSG: the error strip: the error text on one line, in full in its tooltip. */
+export function ErrorStrip({ item, error }: { item: FlowItem; error: string | undefined }) {
+  if (error === undefined) return null;
+  return (
+    <div className="dm-card__error" title={error} data-testid={`flow-item-error-${item.id}`}>
+      <Icon.Info size={12} aria-hidden="true" />
+      <span className="dm-card__error-text">{error}</span>
+    </div>
+  );
+}
+
+/**
+ * DBR-FR-LNZI / DBR-FR-SBTR / DBR-FR-BYQX: report the height of `ref` to the
+ * board layout, plus `extra` for the borders around it. jsdom lays nothing
+ * out, so there the height is 0 and the layout keeps its default.
+ */
+export function useBoardHeight(
+  ref: RefObject<HTMLElement | null>,
+  id: string,
+  extra: number,
+  onMeasure: ((id: string, height: number) => void) | undefined,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !onMeasure) return;
+    const report = () => {
+      if (el.offsetHeight > 0) onMeasure(id, el.offsetHeight + extra);
+    };
+    report();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, id, extra, onMeasure]);
 }
 
 export interface BoardCardProps {
@@ -168,20 +205,23 @@ export interface BoardCardProps {
   inert: boolean;
   handlers: ItemHandlers;
   renameOnEnd: boolean;
+  /** DBR-FR-LNZI: report the height the lines of the card take. */
+  onMeasure?: (id: string, height: number) => void;
 }
 
 /**
- * DBR-FR-LNZI .. DBR-FR-ZRBD: a task or a defect on the board: its kind and
- * its address on the top line, its name on the middle line, and its status
- * with the state glyph and the marker glyphs on the bottom line. It shows no
- * chip, reference, excerpt, or draft row; the panel shows them.
+ * DBR-FR-LNZI .. DBR-FR-CJSG: a task or a defect on the board: its kind chip
+ * and its address on the top line, its name on at most two lines, and its
+ * status dot, its status, and its markers on the bottom line. It shows no
+ * reference, excerpt, or draft row; the panel shows them.
  */
 export function BoardCard(props: BoardCardProps) {
   const { item, at, size, facts, selected, magnet, lifted, editingName, inert, handlers } = props;
-  const status = boardStatusText(facts);
+  const faceRef = useRef<HTMLDivElement>(null);
+  useBoardHeight(faceRef, item.id, 2, props.onMeasure);
   return (
     <div
-      className="flow-card flow-bcard"
+      className="dm-card"
       role="group"
       aria-label={`${kindLabel(item.kind)} ${item.name}`}
       title={item.name}
@@ -202,37 +242,30 @@ export function BoardCard(props: BoardCardProps) {
       }}
       onPointerUp={handlers.onPointerUp}
     >
-      <div className="flow-bcard__line flow-bcard__top">
-        <span className="flow-glyph" aria-hidden="true">
-          {KIND_GLYPHS[item.kind]}
-        </span>
-        <span className="flow-bcard__kind">{kindLabel(item.kind)}</span>
-        {facts.tracker && (
-          <BoardAddress
-            repository={facts.tracker.repository}
-            tracker={facts.tracker.facts}
-            onOpen={handlers.onOpenTracker}
-          />
-        )}
-      </div>
-      <div className="flow-bcard__line flow-bcard__title">
+      <div className="dm-card__face" ref={faceRef}>
+        <div className="dm-card__id">
+          <KindChip kind={item.kind} />
+          {facts.tracker && (
+            <BoardAddress
+              repository={facts.tracker.repository}
+              tracker={facts.tracker.facts}
+              onOpen={handlers.onOpenTracker}
+            />
+          )}
+        </div>
         <ItemName
           item={item}
           editing={editingName}
           inert={inert}
           handlers={handlers}
-          className="flow-card__name flow-bcard__name"
+          className="dm-card__title"
           renameOnEnd={props.renameOnEnd}
         />
-      </div>
-      <div className="flow-bcard__line flow-bcard__status">
-        <StateGlyph facts={facts} />
-        {status !== null && (
-          <span className="flow-bcard__statusname" data-testid="flow-card-status">
-            {status}
-          </span>
-        )}
-        <BoardMarks item={item} facts={facts} handlers={handlers} />
+        <div className="dm-card__meta">
+          <BoardStatus facts={facts} />
+          <BoardMarks item={item} facts={facts} handlers={handlers} />
+        </div>
+        <ErrorStrip item={item} error={facts.error} />
       </div>
       <button
         type="button"

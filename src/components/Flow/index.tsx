@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 
 import {
   ancestorsOf,
+  boardHolderOf,
   CONTAINER_HEADER_H,
   findItem,
   isContainerKind,
+  isColumnMilestone,
   ITEM_KINDS,
   leavesUnder,
   type FlowDocument,
@@ -16,9 +18,11 @@ import { Icon } from "../icons";
 import { useDiscussMenu } from "../MapDiscussion/NodeMenu";
 import { Band } from "./Band";
 import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges, SequenceArrows } from "./edges";
-import { edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
+import { boardPanelPlacement, edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
 import { CardView, ContainerView, type ItemFacts, type ItemHandlers } from "./items";
-import { BoardCard } from "./boardItems";
+import { BoardAddress, BoardCard, BoardStatus } from "./boardItems";
+import { BoardContainer } from "./BoardContainer";
+import { boardDot, BoardStatusNamesContext, boardStatusWord, NO_STATUS_NAMES } from "./boardStatus";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { SelectionPanel } from "./SelectionPanel";
 import { useCanvasHandle, type FlowCanvasHandle } from "./useCanvasHandle";
@@ -177,6 +181,37 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
     ...(props.onDiscuss ? { menu: discussMenu.bindings(item) } : {}),
   });
 
+  const statusNames = props.statusNames ?? NO_STATUS_NAMES;
+  /** MDL-FR-XKCH / MDL-FR-XCJN: the header, the status, and the footer of the popover of the board. */
+  const boardPanelProps = (item: FlowItem) => {
+    const facts = factsOf(item);
+    return {
+      board: true,
+      address: facts.tracker ? (
+        <BoardAddress
+          repository={facts.tracker.repository}
+          tracker={facts.tracker.facts}
+          onOpen={a.openTracker}
+        />
+      ) : undefined,
+      // MDL-FR-XKCH: a milestone shows its state on its column, not in a section.
+      status:
+        item.kind !== "milestone" &&
+        boardStatusWord({ tracker: facts.tracker?.facts, state: facts.state?.state }) !== null ? (
+          <BoardStatus facts={facts} />
+        ) : undefined,
+      onDiscuss: props.onDiscuss ? () => props.onDiscuss?.(item) : undefined,
+      footer: props.panelFooter?.(item),
+    };
+  };
+  /** DBR-FR-VNSJ: the leaves under an item whose status dot is done. */
+  const doneUnder = (leaves: string[]) =>
+    leaves.filter((id) => {
+      const leaf = doc ? findItem(doc, id) : undefined;
+      if (!leaf) return false;
+      const facts = factsOf(leaf);
+      return boardDot({ tracker: facts.tracker?.facts, state: facts.state?.state }, statusNames) === "done";
+    }).length;
   const today = todayIso();
   const shown = doc ? doc.items.filter((i) => !frames.hiddenBy(i.id)) : [];
   const containers = doc
@@ -201,6 +236,17 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
     if (!item || frames.hiddenBy(item.id)) return null;
     const r = frames.rectOf(item.id);
     if (!r) return null;
+    if (c.board) {
+      // MDL-FR-XKCH: the popover of the board opens beside the item.
+      const head = toScreen(r.x, r.y);
+      const end = toScreen(r.x + r.width, r.y);
+      const el = c.surfaceRef.current;
+      return boardPanelPlacement(
+        { left: head.left, top: head.top, right: end.left },
+        { width: el?.clientWidth ?? 0, height: el?.clientHeight ?? 0 },
+        panelHeight?.id === item.id ? panelHeight.height : undefined,
+      );
+    }
     const below = isContainerKind(item.kind) ? r.y + CONTAINER_HEADER_H : r.y + r.height;
     const head = toScreen(r.x, r.y);
     const foot = toScreen(r.x, below);
@@ -245,382 +291,432 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
   useCanvasWheel(c.surfaceRef, surfaceShown, c);
 
   return (
-    <div className="flow-surface" data-inert={inert}>
-      <Band
-        doc={doc}
-        references={flowRefs}
-        artifacts={project.referenceable}
-        inert={inert}
-        readOnlyMeta={planMode}
-        extras={props.bandExtras}
-        onName={a.setFlowNameTo}
-        onDescription={a.setFlowDescriptionTo}
-        onAddReference={a.addFlowRef}
-        onRemoveReference={a.removeFlowRef}
-        onOpenReference={a.openReferenced}
-      />
-      {props.belowBand}
+    <BoardStatusNamesContext.Provider value={statusNames}>
+      <div className="flow-surface" data-inert={inert} data-board={c.board}>
+        <Band
+          doc={doc}
+          references={flowRefs}
+          artifacts={project.referenceable}
+          inert={inert}
+          readOnlyMeta={planMode}
+          extras={props.bandExtras}
+          onName={a.setFlowNameTo}
+          onDescription={a.setFlowDescriptionTo}
+          onAddReference={a.addFlowRef}
+          onRemoveReference={a.removeFlowRef}
+          onOpenReference={a.openReferenced}
+        />
+        {props.belowBand}
 
-      {/* FLO-FR-47: a refused write lists every violation and keeps the plan. */}
-      {session?.error && (
-        <div className="flow-banner flow-banner--error" role="alert">
-          {session.violations.length > 0 ? (
-            <>
-              <strong>This Flow was not written.</strong>
-              <ViolationList violations={session.violations} doc={doc} />
-            </>
-          ) : (
-            session.error
-          )}
-        </div>
-      )}
+        {/* FLO-FR-47: a refused write lists every violation and keeps the plan. */}
+        {session?.error && (
+          <div className="flow-banner flow-banner--error" role="alert">
+            {session.violations.length > 0 ? (
+              <>
+                <strong>This Flow was not written.</strong>
+                <ViolationList violations={session.violations} doc={doc} />
+              </>
+            ) : (
+              session.error
+            )}
+          </div>
+        )}
 
-      {/* FLO-FR-05 / FLO-FR-46: a body the validation refused shows no plan,
-          offers no editing, and is never written. */}
-      {session?.parseError ? (
-        <div className="flow-error" role="alert">
-          <strong>This file could not be read as a Flow.</strong>
-          {session.violations.length > 0 ? (
-            <ViolationList violations={session.violations} doc={null} />
-          ) : (
-            <span>{session.parseError}</span>
-          )}
-        </div>
-      ) : !planMode && !flowId ? (
-        <div className="flow-error">No Flow is open.</div>
-      ) : !ready || !doc ? (
-        <div className="flow-error">Loading…</div>
-      ) : (
-        <div
-          className="flow"
-          data-board={c.board}
-          data-dragging={c.lifted !== null}
-          data-refuse={c.dragRefused}
-          ref={c.surfaceRef}
-          onPointerDown={c.onSurfacePointerDown}
-          onPointerMove={c.onSurfacePointerMove}
-          onPointerUp={() => c.endGesture()}
-          onPointerCancel={() => c.endGesture({ abandon: true })}
-        >
+        {/* FLO-FR-05 / FLO-FR-46: a body the validation refused shows no plan,
+            offers no editing, and is never written. */}
+        {session?.parseError ? (
+          <div className="flow-error" role="alert">
+            <strong>This file could not be read as a Flow.</strong>
+            {session.violations.length > 0 ? (
+              <ViolationList violations={session.violations} doc={null} />
+            ) : (
+              <span>{session.parseError}</span>
+            )}
+          </div>
+        ) : !planMode && !flowId ? (
+          <div className="flow-error">No Flow is open.</div>
+        ) : !ready || !doc ? (
+          <div className="flow-error">Loading…</div>
+        ) : (
           <div
-            className="flow-viewport"
-            style={{
-              transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-              transformOrigin: "0 0",
-            }}
+            className="flow"
+            data-board={c.board}
+            data-dragging={c.lifted !== null}
+            data-refuse={c.dragRefused}
+            ref={c.surfaceRef}
+            onPointerDown={c.onSurfacePointerDown}
+            onPointerMove={c.onSurfacePointerMove}
+            onPointerUp={() => c.endGesture()}
+            onPointerCancel={() => c.endGesture({ abandon: true })}
           >
-            {c.columns.none && (
-              <div
-                className="flow-col-none"
-                role="group"
-                aria-label="No milestone"
-                data-testid="flow-no-milestone"
-                data-drop-target={c.dropHolder === null}
-                style={{
-                  left: c.columns.none.x,
-                  top: c.columns.none.y,
-                  width: c.columns.none.width,
-                  height: c.columns.none.height,
-                }}
-              >
-                <div className="flow-col-none__head">No milestone</div>
-              </div>
-            )}
-            <SequenceArrows arrows={c.columns.arrows} />
-            {containers.map((item) => {
-              const r = frames.rectOf(item.id)!;
-              const facts = factsOf(item);
-              const order = c.columns.order.indexOf(item.id);
-              return (
-                <ContainerView
-                  key={item.id}
-                  item={item}
-                  at={{ x: r.x, y: r.y }}
-                  size={{ width: r.width, height: r.height }}
-                  facts={facts}
-                  selected={selectionSet.has(item.id)}
-                  magnet={c.magnet === item.id}
-                  editingName={c.editingName === item.id}
-                  inert={inert}
-                  handlers={handlersOf(item)}
-                  renameOnEnd={planMode}
-                  collapsed={c.collapsed.has(item.id)}
-                  leaves={leavesUnder(doc, item.id).length}
-                  duePast={
-                    item.due !== undefined && item.due < today && facts.state?.state !== "done"
-                  }
-                  onToggleCollapsed={() => c.toggleCollapsed(item.id)}
-                  onResizeStart={(sides, e) => c.onResizeStart(item.id, sides, e)}
-                  {...(c.board ? {} : { onMeasure: c.onMeasureContainer })}
-                  {...(order >= 0 ? { column: order + 1 } : {})}
-                  board={c.board}
-                  dropTarget={c.dropHolder === item.id}
-                  lifted={c.lifted?.has(item.id) ?? false}
-                />
-              );
-            })}
+            <div
+              className="flow-viewport"
+              style={{
+                transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+                transformOrigin: "0 0",
+              }}
+            >
+              {c.columns.none && (
+                <div
+                  className={c.board ? "dm-lane dm-lane--none flow-col-none" : "flow-col-none"}
+                  role="group"
+                  aria-label="No milestone"
+                  data-testid="flow-no-milestone"
+                  data-drop-target={c.dropHolder === null}
+                  style={{
+                    left: c.columns.none.x,
+                    top: c.columns.none.y,
+                    width: c.columns.none.width,
+                    height: c.columns.none.height,
+                  }}
+                >
+                  {c.board ? (
+                    <>
+                      <div className="dm-lane__head">
+                        <div className="dm-lane__row">
+                          <span className="dm-lane__name">No milestone</span>
+                        </div>
+                      </div>
+                      {!doc.items.some((i) => !isColumnMilestone(i) && boardHolderOf(doc, i) === null) && (
+                        <div className="dm-lane__empty">No items. Drag one here to take it out of its milestone.</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flow-col-none__head">No milestone</div>
+                  )}
+                </div>
+              )}
+              <SequenceArrows arrows={c.columns.arrows} />
+              {containers.map((item) => {
+                const r = frames.rectOf(item.id)!;
+                const facts = factsOf(item);
+                const order = c.columns.order.indexOf(item.id);
+                if (c.board) {
+                  const leaves = leavesUnder(doc, item.id);
+                  return (
+                    <BoardContainer
+                      key={item.id}
+                      item={item}
+                      at={{ x: r.x, y: r.y }}
+                      size={{ width: r.width, height: r.height }}
+                      facts={facts}
+                      selected={selectionSet.has(item.id)}
+                      magnet={c.magnet === item.id}
+                      editingName={c.editingName === item.id}
+                      inert={inert}
+                      handlers={handlersOf(item)}
+                      renameOnEnd={planMode}
+                      collapsed={c.collapsed.has(item.id)}
+                      holdsItems={doc.items.some((i) => i.parentId === item.id)}
+                      leaves={leaves.length}
+                      done={doneUnder(leaves)}
+                      duePast={
+                        item.due !== undefined && item.due < today && facts.state?.state !== "done"
+                      }
+                      column={order >= 0}
+                      dropTarget={c.dropHolder === item.id}
+                      lifted={c.lifted?.has(item.id) ?? false}
+                      onToggleCollapsed={() => c.toggleCollapsed(item.id)}
+                      onMeasure={c.onMeasureCard}
+                    />
+                  );
+                }
+                return (
+                  <ContainerView
+                    key={item.id}
+                    item={item}
+                    at={{ x: r.x, y: r.y }}
+                    size={{ width: r.width, height: r.height }}
+                    facts={facts}
+                    selected={selectionSet.has(item.id)}
+                    magnet={c.magnet === item.id}
+                    editingName={c.editingName === item.id}
+                    inert={inert}
+                    handlers={handlersOf(item)}
+                    renameOnEnd={planMode}
+                    collapsed={c.collapsed.has(item.id)}
+                    leaves={leavesUnder(doc, item.id).length}
+                    duePast={
+                      item.due !== undefined && item.due < today && facts.state?.state !== "done"
+                    }
+                    onToggleCollapsed={() => c.toggleCollapsed(item.id)}
+                    onResizeStart={(sides, e) => c.onResizeStart(item.id, sides, e)}
+                    onMeasure={c.onMeasureContainer}
+                    {...(order >= 0 ? { column: order + 1 } : {})}
+                  />
+                );
+              })}
 
-            <EdgeLayer
-              routes={routes}
-              selectedEdge={c.selectedEdge}
-              canvasId={c.canvasId}
-              preview={c.connectionPreview}
-              refused={refusedRoute}
-            />
-
-            {/* DBR-FR-CZEU: the placeholder where the dragged item would land. */}
-            {c.boardGap && (
-              <div
-                className="flow-bslot"
-                data-testid="flow-board-placeholder"
-                aria-hidden="true"
-                style={{
-                  left: c.boardGap.x,
-                  top: c.boardGap.y,
-                  width: c.boardGap.width,
-                  height: c.boardGap.height,
-                }}
+              <EdgeLayer
+                routes={routes}
+                selectedEdge={c.selectedEdge}
+                canvasId={c.canvasId}
+                preview={c.connectionPreview}
+                refused={refusedRoute}
               />
-            )}
 
-            {c.board &&
-              cards.map((item) => (
-                <BoardCard
+              {/* DBR-FR-CZEU: the placeholder where the dragged item would land. */}
+              {c.boardGap && (
+                <div
+                  className="flow-bslot"
+                  data-testid="flow-board-placeholder"
+                  aria-hidden="true"
+                  style={{
+                    left: c.boardGap.x,
+                    top: c.boardGap.y,
+                    width: c.boardGap.width,
+                    height: c.boardGap.height,
+                  }}
+                />
+              )}
+
+              {c.board &&
+                cards.map((item) => (
+                  <BoardCard
+                    key={item.id}
+                    item={item}
+                    at={c.absOf(item.id)}
+                    size={c.sizeOf(item.id) ?? { width: 0, height: 0 }}
+                    facts={factsOf(item)}
+                    selected={selectionSet.has(item.id)}
+                    magnet={c.magnet === item.id}
+                    lifted={c.lifted?.has(item.id) ?? false}
+                    editingName={c.editingName === item.id}
+                    inert={inert}
+                    handlers={handlersOf(item)}
+                    renameOnEnd={planMode}
+                    onMeasure={c.onMeasureCard}
+                  />
+                ))}
+
+              {!c.board && cards.map((item) => (
+                <CardView
                   key={item.id}
                   item={item}
                   at={c.absOf(item.id)}
-                  size={c.sizeOf(item.id) ?? { width: 0, height: 0 }}
                   facts={factsOf(item)}
                   selected={selectionSet.has(item.id)}
                   magnet={c.magnet === item.id}
-                  lifted={c.lifted?.has(item.id) ?? false}
                   editingName={c.editingName === item.id}
                   inert={inert}
                   handlers={handlersOf(item)}
                   renameOnEnd={planMode}
+                  draftError={a.draftErrors[item.id]}
+                  onMeasure={c.onMeasureCard}
+                  onOpenDraft={a.openDraft}
+                  onUnlinkDraft={() => a.linkDraft(item.id, null)}
                 />
               ))}
 
-            {!c.board && cards.map((item) => (
-              <CardView
-                key={item.id}
-                item={item}
-                at={c.absOf(item.id)}
-                facts={factsOf(item)}
-                selected={selectionSet.has(item.id)}
-                magnet={c.magnet === item.id}
-                editingName={c.editingName === item.id}
-                inert={inert}
-                handlers={handlersOf(item)}
-                renameOnEnd={planMode}
-                draftError={a.draftErrors[item.id]}
-                onMeasure={c.onMeasureCard}
-                onOpenDraft={a.openDraft}
-                onUnlinkDraft={() => a.linkDraft(item.id, null)}
-              />
-            ))}
-
-            <EdgeHandles
-              doc={doc}
-              routes={routes}
-              selectedEdge={c.selectedEdge}
-              onSelect={(id) => {
-                c.setSelectedEdge(id);
-                c.setSelection([]);
-              }}
-            />
-          </div>
-
-          {/* DBR-FR-EEKD: the containers the dragged kind can join, near the pointer. */}
-          {c.dragHint && c.drag && (
-            <div
-              className="flow-bhint"
-              role="status"
-              data-testid="flow-board-hint"
-              style={toScreen(c.drag.pointer.x + 12, c.drag.pointer.y + 12)}
-            >
-              {c.dragHint}
-            </div>
-          )}
-
-          {/* FLO-FR-16 / FLO-FR-OAOZ / FLO-FR-GZCH: the feedback of a refusal. */}
-          {c.refusal && (
-            <div className="flow-refusal" role="status" data-testid="flow-refusal">
-              <strong className="flow-refusal__title">{c.refusal.title}</strong>
-              <span>{c.refusal.text}</span>
-              <button
-                type="button"
-                className="flow-refusal__close"
-                aria-label="Dismiss"
-                onClick={() => c.setRefusal(null)}
-              >
-                ×
-              </button>
-            </div>
-          )}
-
-          {/* DBR-FR-QCAJ: the panel gives way while an item of the board is dragged. */}
-          {c.selected && panelAt && c.lifted === null && (
-            <SelectionPanel
-              key={c.selected.id}
-              doc={doc}
-              item={c.selected}
-              state={delivery.states?.get(c.selected.id)}
-              references={resolveReferences(c.selected.artifactIds, byId, project.loaded)}
-              artifacts={project.referenceable}
-              paths={project.paths}
-              treeLoaded={project.loaded}
-              inert={inert}
-              at={panelAt}
-              onMeasure={onPanelMeasure}
-              onRename={() => c.setEditingName(c.selected!.id)}
-              onRemove={() => a.requestRemove(c.selected!.id)}
-              onDescribe={(text) => a.describe(c.selected!.id, text)}
-              onKind={(kind) => a.requestKind(c.selected!.id, kind)}
-              onLinkDraft={(id) => a.linkDraft(c.selected!.id, id)}
-              creating={a.creating === c.selected.id}
-              onCreateDraft={() => void a.createDraftFor(c.selected!.id)}
-              onAddFootprint={(p) => a.addFootprint(c.selected!.id, p)}
-              onRemoveFootprint={(p) => a.removeFootprint(c.selected!.id, p)}
-              onDue={(due) => a.setDueDate(c.selected!.id, due)}
-              onAddReference={(id) => a.addReference(c.selected!.id, id)}
-              onRemoveReference={(id) => a.removeReference(c.selected!.id, id)}
-              onOpenReference={a.openReferenced}
-              {...(c.board ? { onOpenDraft: a.openDraft } : {})}
-              error={factsOf(c.selected).error}
-              describeOnBlur={planMode}
-              kindFilter={planMode ? noMilestoneChange(c.selected) : undefined}
-              extras={props.panelExtras?.(c.selected)}
-            />
-          )}
-
-          {edgeSelected && edgePanelAt && (
-            <EdgePanel
-              doc={doc}
-              edge={edgeSelected}
-              at={edgePanelAt}
-              inert={inert}
-              onType={(type) => a.retypeEdge(edgeSelected.id, type)}
-              onReverse={() => a.reverse(edgeSelected.id)}
-              onRemove={() => a.dropEdge(edgeSelected.id)}
-            />
-          )}
-
-
-          {/* FLO-FR-07: one add affordance, a menu of the five kinds. */}
-          <div
-            className="flow-addmenu"
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && c.addMenuOpen) {
-                e.stopPropagation();
-                c.setAddMenuOpen(false);
-              }
-            }}
-          >
-            <button
-              type="button"
-              className="flow-overlay flow-overlay--add"
-              aria-label="Add to plan"
-              title="Add to plan"
-              aria-haspopup="menu"
-              aria-expanded={c.addMenuOpen}
-              disabled={inert}
-              onClick={() => (c.addMenuOpen ? c.setAddMenuOpen(false) : c.openAddMenu())}
-            >
-              <Icon.Plus size={14} />
-            </button>
-            {c.addMenuOpen && (
-              <AddMenu
-                onPick={(kind) => {
-                  c.setAddMenuOpen(false);
-                  c.addKind(kind);
+              <EdgeHandles
+                doc={doc}
+                routes={routes}
+                selectedEdge={c.selectedEdge}
+                onSelect={(id) => {
+                  c.setSelectedEdge(id);
+                  c.setSelection([]);
                 }}
-                extras={props.addMenuExtras?.(() => c.setAddMenuOpen(false))}
+              />
+            </div>
+
+            {/* DBR-FR-EEKD: the containers the dragged kind can join, near the pointer. */}
+            {c.dragHint && c.drag && (
+              <div
+                className="flow-bhint"
+                role="status"
+                data-testid="flow-board-hint"
+                style={toScreen(c.drag.pointer.x + 12, c.drag.pointer.y + 12)}
+              >
+                {c.dragHint}
+              </div>
+            )}
+
+            {/* FLO-FR-16 / FLO-FR-OAOZ / FLO-FR-GZCH: the feedback of a refusal. */}
+            {c.refusal && (
+              <div className="flow-refusal" role="status" data-testid="flow-refusal">
+                <strong className="flow-refusal__title">{c.refusal.title}</strong>
+                <span>{c.refusal.text}</span>
+                <button
+                  type="button"
+                  className="flow-refusal__close"
+                  aria-label="Dismiss"
+                  onClick={() => c.setRefusal(null)}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* DBR-FR-QCAJ: the panel gives way while an item of the board is dragged. */}
+            {c.selected && panelAt && c.lifted === null && (
+              <SelectionPanel
+                key={c.selected.id}
+                doc={doc}
+                item={c.selected}
+                state={delivery.states?.get(c.selected.id)}
+                references={resolveReferences(c.selected.artifactIds, byId, project.loaded)}
+                artifacts={project.referenceable}
+                paths={project.paths}
+                treeLoaded={project.loaded}
+                inert={inert}
+                at={panelAt}
+                onMeasure={onPanelMeasure}
+                onRename={() => c.setEditingName(c.selected!.id)}
+                onRemove={() => a.requestRemove(c.selected!.id)}
+                onDescribe={(text) => a.describe(c.selected!.id, text)}
+                onKind={(kind) => a.requestKind(c.selected!.id, kind)}
+                onLinkDraft={(id) => a.linkDraft(c.selected!.id, id)}
+                creating={a.creating === c.selected.id}
+                onCreateDraft={() => void a.createDraftFor(c.selected!.id)}
+                onAddFootprint={(p) => a.addFootprint(c.selected!.id, p)}
+                onRemoveFootprint={(p) => a.removeFootprint(c.selected!.id, p)}
+                onDue={(due) => a.setDueDate(c.selected!.id, due)}
+                onAddReference={(id) => a.addReference(c.selected!.id, id)}
+                onRemoveReference={(id) => a.removeReference(c.selected!.id, id)}
+                onOpenReference={a.openReferenced}
+                {...(c.board ? { onOpenDraft: a.openDraft } : {})}
+                error={factsOf(c.selected).error}
+                describeOnBlur={planMode}
+                kindFilter={planMode ? noMilestoneChange(c.selected) : undefined}
+                extras={props.panelExtras?.(c.selected)}
+                {...(c.board ? boardPanelProps(c.selected) : {})}
               />
             )}
-          </div>
 
-          {/* FLO-FR-34 / FLO-FR-35: the action control, over the Flow file. A
-              plan binding carries none (MDL-FR-NTVL). */}
-          {!planMode && (
-            <div className="flow-actionhost">
-              <ActionControl
-                discussions={c.control.discussions}
-                artifactType="flow"
-                itemNoun="flow"
-                ownerLabel={flowId ?? undefined}
-                missing={!flowId}
-                dismissSignal={c.dismissAction}
-                onSurfaceOpened={() => c.setAddMenuOpen(false)}
+            {edgeSelected && edgePanelAt && (
+              <EdgePanel
+                doc={doc}
+                edge={edgeSelected}
+                at={edgePanelAt}
+                inert={inert}
+                onType={(type) => a.retypeEdge(edgeSelected.id, type)}
+                onReverse={() => a.reverse(edgeSelected.id)}
+                onRemove={() => a.dropEdge(edgeSelected.id)}
               />
+            )}
+
+
+            {/* FLO-FR-07: one add affordance, a menu of the five kinds. */}
+            <div
+              className="flow-addmenu"
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && c.addMenuOpen) {
+                  e.stopPropagation();
+                  c.setAddMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="flow-overlay flow-overlay--add"
+                aria-label="Add to plan"
+                title="Add to plan"
+                aria-haspopup="menu"
+                aria-expanded={c.addMenuOpen}
+                disabled={inert}
+                onClick={() => (c.addMenuOpen ? c.setAddMenuOpen(false) : c.openAddMenu())}
+              >
+                <Icon.Plus size={14} />
+              </button>
+              {c.addMenuOpen && (
+                <AddMenu
+                  onPick={(kind) => {
+                    c.setAddMenuOpen(false);
+                    c.addKind(kind);
+                  }}
+                  extras={props.addMenuExtras?.(() => c.setAddMenuOpen(false))}
+                />
+              )}
             </div>
-          )}
 
-          {/* FLO-FR-22: the view controls. They change no document state. */}
-          <div className="flow-overlay flow-overlay--view">
-            <button type="button" className="flow-overlay__btn" aria-label="Zoom out" title="Zoom out" onClick={() => c.zoomBy(-ZOOM_STEP)}>
-              <Icon.Minus size={14} />
-            </button>
-            <span className="flow-overlay__zoom" data-testid="flow-zoom">
-              {Math.round(view.scale * 100)}%
-            </span>
-            <button type="button" className="flow-overlay__btn" aria-label="Zoom in" title="Zoom in" onClick={() => c.zoomBy(ZOOM_STEP)}>
-              <Icon.Plus size={14} />
-            </button>
-            <button type="button" className="flow-overlay__btn" aria-label="Fit" title="Fit" onClick={c.onFit}>
-              <Icon.Fit size={14} />
-            </button>
-          </div>
+            {/* MDL layout notes: on the board, the readout and the view controls
+                sit on a strip below the canvas. A press on it moves nothing. */}
+            {c.board && (
+              <div className="dm-foot" aria-hidden="true" onPointerDown={(e) => e.stopPropagation()} />
+            )}
 
-          {/* FLO-FR-23: a readout, not a budget. */}
-          <div className="flow-status" data-testid="flow-status">
-            {readout}
-          </div>
-
-          {discussMenu.menu}
-
-          {/* FLO-FR-45: removing a container that holds anything asks first. */}
-          {a.pendingRemoval && (
-            <div className="flow-dialog" role="alertdialog" aria-label="Remove item" data-testid="flow-remove-confirm">
-              <p>
-                Remove <strong>{a.pendingRemoval.name}</strong> and the {a.pendingRemoval.count}{" "}
-                {a.pendingRemoval.count === 1 ? "item" : "items"} under it?
-              </p>
-              <div className="flow-dialog__actions">
-                <button type="button" className="flow-btn" onClick={() => a.setPendingRemoval(null)}>
-                  Cancel
-                </button>
-                <button type="button" className="flow-btn flow-btn--danger-solid" onClick={a.confirmRemove}>
-                  Remove
-                </button>
+            {/* FLO-FR-34 / FLO-FR-35: the action control, over the Flow file. A
+                plan binding carries none (MDL-FR-NTVL). */}
+            {!planMode && (
+              <div className="flow-actionhost">
+                <ActionControl
+                  discussions={c.control.discussions}
+                  artifactType="flow"
+                  itemNoun="flow"
+                  ownerLabel={flowId ?? undefined}
+                  missing={!flowId}
+                  dismissSignal={c.dismissAction}
+                  onSurfaceOpened={() => c.setAddMenuOpen(false)}
+                />
               </div>
-            </div>
-          )}
+            )}
 
-          {/* FLO-FR-HGIY: a kind change that removes a draft link or a footprint asks first. */}
-          {a.pendingKind && (
-            <div className="flow-dialog" role="alertdialog" aria-label="Change kind" data-testid="flow-kind-confirm">
-              <p>
-                Change <strong>{a.pendingKind.name}</strong> to{" "}
-                {kindLabel(a.pendingKind.kind).toLowerCase()}? This removes its{" "}
-                {a.pendingKind.drops
-                  .map((d) => (d === "draftId" ? "draft link" : "footprint"))
-                  .join(" and its ")}
-                .
-              </p>
-              <div className="flow-dialog__actions">
-                <button type="button" className="flow-btn" onClick={() => a.setPendingKind(null)}>
-                  Cancel
-                </button>
-                <button type="button" className="flow-btn flow-btn--primary" onClick={a.confirmKind}>
-                  Change kind
-                </button>
-              </div>
+            {/* FLO-FR-22: the view controls. They change no document state. */}
+            <div className="flow-overlay flow-overlay--view">
+              <button type="button" className="flow-overlay__btn" aria-label="Zoom out" title="Zoom out" onClick={() => c.zoomBy(-ZOOM_STEP)}>
+                <Icon.Minus size={14} />
+              </button>
+              <span className="flow-overlay__zoom" data-testid="flow-zoom">
+                {Math.round(view.scale * 100)}%
+              </span>
+              <button type="button" className="flow-overlay__btn" aria-label="Zoom in" title="Zoom in" onClick={() => c.zoomBy(ZOOM_STEP)}>
+                <Icon.Plus size={14} />
+              </button>
+              <button type="button" className="flow-overlay__btn" aria-label="Fit" title="Fit" onClick={c.onFit}>
+                <Icon.Fit size={14} />
+              </button>
             </div>
-          )}
-        </div>
-      )}
-    </div>
+
+            {/* FLO-FR-23: a readout, not a budget. */}
+            <div className="flow-status" data-testid="flow-status">
+              {readout}
+            </div>
+
+            {discussMenu.menu}
+
+            {/* FLO-FR-45: removing a container that holds anything asks first. */}
+            {a.pendingRemoval && (
+              <div className="flow-dialog" role="alertdialog" aria-label="Remove item" data-testid="flow-remove-confirm">
+                <p>
+                  Remove <strong>{a.pendingRemoval.name}</strong> and the {a.pendingRemoval.count}{" "}
+                  {a.pendingRemoval.count === 1 ? "item" : "items"} under it?
+                </p>
+                <div className="flow-dialog__actions">
+                  <button type="button" className="flow-btn" onClick={() => a.setPendingRemoval(null)}>
+                    Cancel
+                  </button>
+                  <button type="button" className="flow-btn flow-btn--danger-solid" onClick={a.confirmRemove}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* FLO-FR-HGIY: a kind change that removes a draft link or a footprint asks first. */}
+            {a.pendingKind && (
+              <div className="flow-dialog" role="alertdialog" aria-label="Change kind" data-testid="flow-kind-confirm">
+                <p>
+                  Change <strong>{a.pendingKind.name}</strong> to{" "}
+                  {kindLabel(a.pendingKind.kind).toLowerCase()}? This removes its{" "}
+                  {a.pendingKind.drops
+                    .map((d) => (d === "draftId" ? "draft link" : "footprint"))
+                    .join(" and its ")}
+                  .
+                </p>
+                <div className="flow-dialog__actions">
+                  <button type="button" className="flow-btn" onClick={() => a.setPendingKind(null)}>
+                    Cancel
+                  </button>
+                  <button type="button" className="flow-btn flow-btn--primary" onClick={a.confirmKind}>
+                    Change kind
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </BoardStatusNamesContext.Provider>
   );
 }
 

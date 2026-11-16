@@ -303,6 +303,19 @@
   --border-1:      #E5E0D6;   /* default UI dividers              */
   --border-2:      #D7D1C3;   /* stronger separators, inputs      */
   --border-3:      #BAB3A2;   /* hovered/emphasis borders         */
+
+  /* DBR-FR-DZSU: the kind chips of the Delivery board. */
+  --chip-scenario-bg: #EDE5FB;
+  --chip-scenario-fg: #6F47C2;
+  --chip-skill-bg:    #ECEEFF;
+  --chip-skill-fg:    #3B4BEF;
+  --chip-harness-bg:  #E5E0D6;
+  --chip-harness-fg:  #44403B;
+  --chip-spec-bg:     #FCE6E6;
+  --chip-spec-fg:     #C82A2F;
+
+  /* Native controls (select, date) follow the theme. */
+  color-scheme: light;
   --ring:          rgba(75,91,255,0.35);
 
   /* Syntax-ish (diff, code, log) */
@@ -406,6 +419,19 @@
   --border-1:      #262A33;
   --border-2:      #333845;
   --border-3:      #4A4F5E;
+
+  /* DBR-FR-DZSU: the kind chips of the Delivery board. */
+  --chip-scenario-bg: #2A1F40;
+  --chip-scenario-fg: #C19EFF;
+  --chip-skill-bg:    #232745;
+  --chip-skill-fg:    #9AA7FF;
+  --chip-harness-bg:  #2A2E37;
+  --chip-harness-fg:  #B8B4AC;
+  --chip-spec-bg:     #401819;
+  --chip-spec-fg:     #F39DA0;
+
+  /* Native controls (select, date) follow the theme. */
+  color-scheme: dark;
   --ring:          rgba(122,139,255,0.45);
 
   --diff-add-bg:   #14322A;

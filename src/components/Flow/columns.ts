@@ -41,6 +41,8 @@ export function columnsOf(
   doc: FlowDocument,
   layout: FlowLayout,
   rectOf: (id: string) => FlowRect | null,
+  /** DBR layout notes: the height of the middle of a column's first header row. */
+  headMid: number = CONTAINER_HEADER_H / 2,
 ): ColumnsView {
   const order = milestoneOrder(doc)
     .map((m) => m.id)
@@ -55,7 +57,7 @@ export function columnsOf(
       to: order[k],
       x1: a.x + a.width,
       x2: b.x,
-      y: Math.min(a.y, b.y) + CONTAINER_HEADER_H / 2,
+      y: Math.min(a.y, b.y) + headMid,
     });
   }
   if (doc.items.length === 0) return { order, arrows, none: null };

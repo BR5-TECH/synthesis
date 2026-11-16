@@ -80,7 +80,7 @@ export { AUTO_GAP, COLUMN_GAP, columnWidth, MEMBER_ORIGIN, noMilestoneX, resolve
 export {
   BOARD_CARD_H,
   BOARD_CARD_W,
-  BOARD_COLLAPSED_H,
+  BOARD_FACE_H,
   BOARD_EMPTY_H,
   BOARD_GAP,
   BOARD_HEAD_H,
@@ -91,6 +91,7 @@ export {
   resolveBoardLayout,
   toBoardStoredLayout,
   type BoardGap,
+  type BoardHeights,
   type BoardHolder,
   type BoardLayout,
   type BoardOptions,

@@ -67,8 +67,10 @@ export function useFlowLayout(
   const stored = scope ? layouts.get(scope) : null;
   const { cards, containers } = sizes;
   const boardLayout = useMemo(
-    () => (board && doc && stored ? resolveBoardLayout(doc, stored) : null),
-    [board, doc, stored],
+    // DBR-FR-LNZI: on the board, `cards` holds the measured height of each
+    // card, group face, and column header.
+    () => (board && doc && stored ? resolveBoardLayout(doc, stored, { heights: cards }) : null),
+    [board, doc, stored, cards],
   );
   const layout = useMemo(() => {
     if (!doc || !stored) return null;

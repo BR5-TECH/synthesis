@@ -39,6 +39,7 @@ import { isEditHeld, primeEditGate, waitEditGate } from "../../state/mainBranchW
 import type { DiscussionTarget, ItemDeliveryState, OpenableArtifact } from "../../types";
 import type { FlowBinding } from "./binding";
 import { boardTargetAt, pointOutside } from "./boardDrop";
+import type { BoardStatusNames } from "./boardStatus";
 import { commitBoardDrop } from "./boardCommit";
 import { columnDropIndex, columnsOf } from "./columns";
 import { createFrames } from "./frames";
@@ -62,6 +63,8 @@ import { useBoardDrag } from "./useBoardDrag";
 import { resizedRect, resizeFrom } from "./resize";
 
 /** DBR-FR-MYVI: how far a press moves, in screen pixels, before a drag of the board starts. */
+/** DBR layout notes: the middle of the first header row of a column: border, padding, and half the row. */
+const BOARD_ROW_MID = 25;
 export const BOARD_DRAG_THRESHOLD = 4;
 
 /** The layout before the stored layout is read: nothing is drawn yet. */
@@ -93,6 +96,13 @@ export interface FlowCanvasProps {
    * item's panel.
    */
   panelExtras?: (item: FlowItem) => ReactNode;
+  /**
+   * MDL-FR-XKCH / MDL-FR-QEXS: the actions the host adds to the footer of the
+   * popover of a selected item on the board, after **Discuss**.
+   */
+  panelFooter?: (item: FlowItem) => ReactNode;
+  /** DBR-FR-TCPE: the Ready and In Progress status names of a GitHub plan. */
+  statusNames?: BoardStatusNames;
   /** MDL-FR-PUKL: entries the host adds to the add menu; `close` closes it. */
   addMenuExtras?: (close: () => void) => ReactNode;
   /** FLO-FR-12: open a referenced artifact in its natural surface. */
@@ -293,6 +303,7 @@ export function useFlowCanvas({
   const preview =
     lifting && doc && stored
       ? resolveBoardLayout(doc, stored, {
+          heights,
           lifted: lifting.subtree,
           gap:
             lifting.drop && !lifting.drop.collapsed
@@ -325,7 +336,9 @@ export function useFlowCanvas({
 
   const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf });
   /** FLO-FR-SQUS / FLO-FR-IAOQ: the milestone columns and the No milestone column. */
-  const columnsBase = doc ? columnsOf(doc, layout, frames.rectOf) : { order: [], arrows: [], none: null };
+  const columnsBase = doc
+    ? columnsOf(doc, layout, frames.rectOf, boardMode ? BOARD_ROW_MID : undefined)
+    : { order: [], arrows: [], none: null };
   // FLO-FR-IAOQ / DBR-FR-ZGNB: on the board, the No milestone column is a column of the board.
   const columns = boardMode ? { ...columnsBase, none: preview?.none ?? boardNone } : columnsBase;
 

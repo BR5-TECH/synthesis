@@ -365,21 +365,28 @@ describe("the items of a GitHub plan (MDL-FR-JPYU, MDL-FR-ECPZ, MDL-FR-NTVL, MDL
     expect(within(itemEl("x1")).getByRole("button", { name: /Blocked by/ })).toHaveAttribute("title", "Blocked by T1");
   });
 
-  it("MDL-FR-ECPZ, DBR-FR-HWHO, DBR-FR-SBTR, DBR-FR-XOOU: each issue card shows its Status on its bottom line, a group header shows it after the state glyph, and every item carries its address", async () => {
+  it("MDL-FR-ECPZ, DBR-FR-HWHO, DBR-FR-SBTR, DBR-FR-XOOU, DBR-FR-TCPE: each issue card and group face shows its Status in lowercase on its bottom line, and every item carries its address", async () => {
     await openPlan();
     const status = within(itemEl("t2")).getByTestId("flow-card-status");
-    expect(status).toHaveTextContent("Ready");
-    expect(status.parentElement).toHaveClass("flow-bcard__status");
-    expect(within(itemEl("t2")).getByTestId("flow-state-glyph")).toHaveAttribute("title", "Not started");
-    expect(within(itemEl("f1")).getByTestId("flow-group-status")).toHaveTextContent("In Progress");
-    // A milestone shows no Status; an issue with no Status says so.
-    expect(within(itemEl("m1")).queryByTestId("flow-tracker-status")).toBeNull();
-    expect(within(itemEl("x1")).getByTestId("flow-card-status")).toHaveTextContent("No status");
-    for (const id of ["m1", "f1", "t1", "t2", "x1"]) {
+    expect(status).toHaveTextContent("ready");
+    expect(status.parentElement).toHaveClass("dm-card__meta");
+    // DBR-FR-TCPE: the dot comes from the Status, not from the delivery state of the item.
+    expect(within(status).getByTestId("flow-status-dot")).toHaveAttribute("data-s", "ready");
+    expect(within(itemEl("f1")).getByTestId("flow-card-status")).toHaveTextContent("in progress");
+    // A milestone shows no issue Status; an issue with no Status says so.
+    expect(within(itemEl("m1")).queryByTestId("flow-card-status")).toBeNull();
+    expect(within(itemEl("x1")).getByTestId("flow-card-status")).toHaveTextContent("no status");
+    expect(within(itemEl("x1")).getByTestId("flow-status-dot")).toHaveAttribute("data-s", "backlog");
+    for (const id of ["f1", "t1", "t2", "x1"]) {
       expect(within(itemEl(id)).getAllByTestId("flow-tracker-tag").length).toBeGreaterThan(0);
     }
-    expect(within(itemEl("m1")).getAllByTestId("flow-tracker-tag")[0]).toHaveTextContent("milestone 3");
-    expect(within(itemEl("t2")).getByTestId("flow-tracker-tag")).toHaveTextContent(/^acme\/payments#\d+$/);
+    // DBR-FR-VNSJ: the tracker tag of a milestone is in its panel, not on its column.
+    expect(within(itemEl("m1")).queryByTestId("flow-tracker-tag")).toBeNull();
+    selectItem("m1");
+    const panel = await screen.findByTestId("flow-selection-panel");
+    expect(within(panel).getByTestId("flow-tracker-tag")).toHaveAccessibleName(/milestone 3/);
+    expect(within(itemEl("t2")).getByTestId("flow-tracker-tag")).toHaveTextContent(/^#\d+$/);
+    expect(within(itemEl("t2")).getByTestId("flow-tracker-tag")).toHaveAccessibleName(/^Open acme\/payments#\d+ on GitHub$/);
   });
 
   it("MDL-FR-NTVL, ACT-FR-UNJB: a GitHub plan carries no action control and no discussions control", async () => {
@@ -390,20 +397,17 @@ describe("the items of a GitHub plan (MDL-FR-JPYU, MDL-FR-ECPZ, MDL-FR-NTVL, MDL
     expect(callsOf(b, "list_discussions")).toHaveLength(0);
   });
 
-  it("MDL-FR-GDUP: the toolbar holds, after the lens switch, the bar of the leaf states and the counts line", async () => {
+  it("MDL-FR-GDUP: the toolbar holds, after the lens switch, the progress track of done, in progress, and blocked items, and its legend", async () => {
     await openPlan();
     const toolbar = screen.getByRole("toolbar", { name: "Map controls" });
     expect(toolbar.firstElementChild).toHaveAttribute("aria-label", "Lens");
     const bar = within(toolbar).getByTestId("delivery-rollup-bar");
-    expect([...bar.children].map((c) => c.getAttribute("data-state"))).toEqual([
-      "done",
-      "in_progress",
-      "drafting",
-      "not_started",
-      "dropped",
-    ]);
-    expect(within(toolbar).getByTestId("delivery-rollup-counts")).toHaveTextContent("1 done · 0 in progress · 2 blocked");
+    expect([...bar.children].map((c) => c.getAttribute("data-k"))).toEqual(["done", "active", "blocked"]);
+    expect(bar).toHaveAccessibleName("1 done, 0 in progress, 2 blocked");
+    const legend = within(toolbar).getByTestId("delivery-rollup-counts");
+    expect([...legend.children].map((c) => c.textContent)).toEqual(["1 done", "0 in progress", "2 blocked"]);
     expect((bar.children[0] as HTMLElement).style.width).toBe(`${(1 / 3) * 100}%`);
+    expect((bar.children[2] as HTMLElement).style.width).toBe(`${(2 / 3) * 100}%`);
   });
 });
 
@@ -417,7 +421,11 @@ describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () =>
     fireEvent.change(field, { target: { value: "Decline text" } });
     fireEvent.keyDown(field, { key: "Enter" });
     expect(screen.getByTestId("flow-item-name-x1")).toHaveTextContent("Decline text");
-    expect(within(itemEl("x1")).getByTestId("flow-pending")).toBeInTheDocument();
+    const pending = within(itemEl("x1")).getByTestId("flow-pending");
+    // DBR-FR-GFGG: the pending mark is the first marker, a live badge.
+    expect(pending.parentElement!.firstElementChild).toBe(pending);
+    expect(pending).toHaveClass("badge", "badge--live");
+    expect(pending).toHaveTextContent("pending");
     await waitFor(() => expect(callsOf(b, "apply_github_delivery_edit")).toHaveLength(1));
     expect(callsOf(b, "apply_github_delivery_edit")[0].edit).toMatchObject({
       kind: "rename",
@@ -438,7 +446,7 @@ describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () =>
     const field = screen.getByLabelText("Item name");
     fireEvent.change(field, { target: { value: "Other" } });
     fireEvent.keyDown(field, { key: "Enter" });
-    // DBR-FR-CJSG: the error glyph of the item carries the error text.
+    // DBR-FR-CJSG: the error strip of the item carries the error text.
     expect(await screen.findByTestId("flow-item-error-x1")).toHaveAttribute("title", CHANGED_ON_GITHUB);
     expect(screen.getByTestId("flow-item-name-x1")).toHaveTextContent("X1");
     await waitFor(() => expect(callsOf(b, "load_github_delivery_plan").length).toBe(before + 1));

@@ -14,6 +14,8 @@ import {
 } from "../../state/flowDocument";
 import type { DraftSummary, ItemDeliveryState } from "../../types";
 import type { PanelPlacement, Reference } from "./geometry";
+import { Icon } from "../icons";
+import { KindChip } from "./boardItems";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { ArtifactPicker, ReferenceRows } from "./references";
 import { CommentMarkdown } from "../CommentMarkdown";
@@ -74,6 +76,19 @@ export interface SelectionPanelProps {
   kindFilter?: (kind: FlowItemKind) => boolean;
   /** SDL-FR-KNOP / MDL-FR-QEXS: rows the host adds at the end of the panel. */
   extras?: ReactNode;
+  /**
+   * MDL-FR-XKCH: the panel is the popover of the board: a header with the
+   * kind chip, the address, and the name; labelled sections; and a footer.
+   */
+  board?: boolean;
+  /** MDL-FR-XKCH: the address of the item in the header of the popover. */
+  address?: ReactNode;
+  /** MDL-FR-XKCH: the status dot and word of the item, in its own section. */
+  status?: ReactNode;
+  /** MDL-FR-XCJN: **Discuss** in the footer of the popover. */
+  onDiscuss?: () => void;
+  /** MDL-FR-XKCH / MDL-FR-QEXS: the host's actions in the footer, after **Discuss**. */
+  footer?: ReactNode;
 }
 
 /**
@@ -141,13 +156,16 @@ export function SelectionPanel(props: SelectionPanelProps) {
   // FLO-FR-13: the panel opens on the rich text; Edit shows the source.
   const [editing, setEditing] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
-  const { onMeasure } = props;
+  const headRef = useRef<HTMLDivElement>(null);
+  const footRef = useRef<HTMLDivElement>(null);
+  const { onMeasure, board = false } = props;
 
   // FLO layout notes: the content's full height, also while the panel is
   // bound and scrolls, so the canvas can open the panel where it fits.
   useLayoutEffect(() => {
     const el = fieldsRef.current;
-    if (el && el.scrollHeight > 0) onMeasure?.(el.scrollHeight + 2);
+    const frame = (headRef.current?.offsetHeight ?? 0) + (footRef.current?.offsetHeight ?? 0);
+    if (el && el.scrollHeight > 0) onMeasure?.(el.scrollHeight + frame + 2);
   });
 
   // FLO-FR-RMVR: the worktree's drafts, read when a task or a defect is selected.
@@ -176,13 +194,31 @@ export function SelectionPanel(props: SelectionPanelProps) {
   const pathSet = new Set(props.paths);
   const referenced = new Set(item.artifactIds ?? []);
 
+  /** MDL-FR-XKCH: the buttons of the popover are the buttons of the design system. */
+  const ghost = board ? "btn btn--ghost btn--sm" : "flow-btn flow-btn--xs flow-btn--quiet";
+  const danger = board ? "btn btn--danger btn--sm" : "flow-btn flow-btn--xs flow-btn--danger";
+  const plain = board ? "btn btn--default btn--sm" : "flow-btn flow-btn--xs";
+  const control = (base: string) => (board ? `${base} input` : base);
+
+  const renameRemove = (
+    <>
+      <button type="button" className={ghost} disabled={inert} onClick={props.onRename}>
+        Rename
+      </button>
+      <button type="button" className={danger} disabled={inert} onClick={props.onRemove}>
+        Remove
+      </button>
+    </>
+  );
+
   return (
     <div
-      className="flow-panel"
+      className={board ? "flow-panel dm-pop" : "flow-panel"}
       role="region"
       aria-label={`Edit ${kindLabel(item.kind).toLowerCase()} ${item.name}`}
       data-testid="flow-selection-panel"
       data-placement={props.at.placement}
+      data-board={board}
       style={{
         left: props.at.left,
         top: props.at.top,
@@ -190,85 +226,95 @@ export function SelectionPanel(props: SelectionPanelProps) {
         maxHeight: props.at.maxHeight,
       }}
     >
-      <div className="flow-panel__fields" ref={fieldsRef}>
-        <fieldset className="flow-panel__fieldset" disabled={inert}>
-          <div className="flow-panel__row flow-panel__row--head">
-            <span className="flow-panel__title">
-              <span aria-hidden="true">{KIND_GLYPHS[item.kind]}</span> {kindLabel(item.kind)}
-            </span>
-            <span className="flow-panel__spacer" />
-            <button
-              type="button"
-              className="flow-btn flow-btn--xs flow-btn--quiet"
-              disabled={inert}
-              onClick={props.onRename}
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              className="flow-btn flow-btn--xs flow-btn--danger"
-              disabled={inert}
-              onClick={props.onRemove}
-            >
-              Remove
-            </button>
+      {board && (
+        <div className="dm-pop__head" ref={headRef}>
+          <div className="dm-pop__top">
+            {item.kind === "milestone" ? (
+              <Icon.Flag size={14} className="icon dm-lane__flag" aria-label="Milestone" />
+            ) : (
+              <KindChip kind={item.kind} />
+            )}
+            <span className="dm-pop__ref">{props.address}</span>
+            {renameRemove}
           </div>
+          <div className="dm-pop__title">{item.name || "Unnamed"}</div>
+        </div>
+      )}
+      <div className={board ? "flow-panel__fields dm-pop__body" : "flow-panel__fields"} ref={fieldsRef}>
+        <fieldset className="flow-panel__fieldset" disabled={inert}>
+          {!board && (
+            <div className="flow-panel__row flow-panel__row--head">
+              <span className="flow-panel__title">
+                <span aria-hidden="true">{KIND_GLYPHS[item.kind]}</span> {kindLabel(item.kind)}
+              </span>
+              <span className="flow-panel__spacer" />
+              {renameRemove}
+            </div>
+          )}
           {props.error && (
             <div className="flow-panel__error" role="alert" data-testid="flow-panel-error">
               {props.error}
             </div>
           )}
 
-          <div className="flow-panel__row flow-panel__row--label">
-            <label
-              className={
-                !editing && opensWithDescriptionHeading(item.description)
-                  ? "flow-panel__label sr-only"
-                  : "flow-panel__label"
-              }
-              htmlFor={`flow-desc-${item.id}`}
-            >
-              Description
-            </label>
-            <span className="flow-panel__spacer" />
-            <button
-              type="button"
-              className="flow-btn flow-btn--xs flow-btn--quiet"
-              aria-label={editing ? "Done editing the description" : "Edit the description"}
-              aria-pressed={editing}
-              disabled={inert}
-              onClick={() => setEditing((e) => !e)}
-            >
-              {editing ? "Done" : "Edit"}
-            </button>
-          </div>
-          {/* FLO-FR-13: the full description as rich text, and its Markdown
-              source in a plain field with no toolbar behind Edit. */}
-          {editing && !inert ? (
-            <DescriptionField
-              item={item}
-              inert={inert}
-              onBlurOnly={props.describeOnBlur === true}
-              onDescribe={props.onDescribe}
-            />
-          ) : item.description ? (
-            <CommentMarkdown
-              body={item.description}
-              className="flow-desc flow-panel__desc"
-              testId={`flow-item-description-${item.id}`}
-            />
-          ) : (
-            <div className="flow-panel__empty">No description.</div>
+          {board && props.status && (
+            <div className="flow-panel__section" data-testid="flow-panel-status">
+              <span className="flow-panel__label">Status</span>
+              {props.status}
+            </div>
           )}
 
-          <div className="flow-panel__row">
+          <div className="flow-panel__section">
+            <div className="flow-panel__row flow-panel__row--label">
+              <label
+                className={
+                  !editing && opensWithDescriptionHeading(item.description)
+                    ? "flow-panel__label sr-only"
+                    : "flow-panel__label"
+                }
+                htmlFor={`flow-desc-${item.id}`}
+              >
+                Description
+              </label>
+              <span className="flow-panel__spacer" />
+              <button
+                type="button"
+                className={ghost}
+                aria-label={editing ? "Done editing the description" : "Edit the description"}
+                aria-pressed={editing}
+                disabled={inert}
+                onClick={() => setEditing((e) => !e)}
+              >
+                {editing ? "Done" : "Edit"}
+              </button>
+            </div>
+            {/* FLO-FR-13: the full description as rich text, and its Markdown
+                source in a plain field with no toolbar behind Edit. */}
+            {editing && !inert ? (
+              <DescriptionField
+                item={item}
+                inert={inert}
+                onBlurOnly={props.describeOnBlur === true}
+                onDescribe={props.onDescribe}
+              />
+            ) : item.description ? (
+              <CommentMarkdown
+                body={item.description}
+                className="flow-desc flow-panel__desc"
+                testId={`flow-item-description-${item.id}`}
+              />
+            ) : (
+              <div className="flow-panel__empty">No description.</div>
+            )}
+          </div>
+
+          <div className="flow-panel__row flow-panel__row--kind">
             <label className="flow-panel__label" htmlFor={`flow-kind-${item.id}`}>
               Kind
             </label>
             <select
               id={`flow-kind-${item.id}`}
-              className="flow-select"
+              className={control("flow-select")}
               aria-label="Kind"
               disabled={inert}
               value={item.kind}
@@ -276,7 +322,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
             >
               {kinds.map((k) => (
                 <option key={k} value={k}>
-                  {KIND_GLYPHS[k]} {kindLabel(k)}
+                  {board ? kindLabel(k) : `${KIND_GLYPHS[k]} ${kindLabel(k)}`}
                 </option>
               ))}
             </select>
@@ -287,7 +333,7 @@ export function SelectionPanel(props: SelectionPanelProps) {
                 </label>
                 <input
                   id={`flow-due-${item.id}`}
-                  className="flow-input"
+                  className={control("flow-input")}
                   type="date"
                   aria-label="Due"
                   disabled={inert}
@@ -300,128 +346,144 @@ export function SelectionPanel(props: SelectionPanelProps) {
 
           {leaf && (
             <>
-              <span className="flow-panel__label">Draft</span>
-              {item.draftId === undefined && props.onCreateDraft && (
+              <div className="flow-panel__section">
+                <span className="flow-panel__label">Draft</span>
+                {item.draftId === undefined && props.onCreateDraft && (
+                  <div className="flow-panel__row">
+                    <button
+                      type="button"
+                      className={plain}
+                      disabled={inert || props.creating}
+                      onClick={props.onCreateDraft}
+                    >
+                      {props.creating ? "Creating draft…" : "Create draft"}
+                    </button>
+                  </div>
+                )}
+                {item.draftId !== undefined && !state?.draftMissing && props.onOpenDraft && (
+                  <div className="flow-panel__row">
+                    <button
+                      type="button"
+                      className="flow-draft"
+                      aria-label={`Open draft ${state?.draft?.name ?? item.draftId}`}
+                      data-testid="flow-panel-draft"
+                      onClick={() => props.onOpenDraft!(item.draftId!)}
+                    >
+                      {!board && <span aria-hidden="true">✎</span>}
+                      <span className="flow-draft__name">{state?.draft?.name ?? item.draftId}</span>
+                      {state?.run && (
+                        <span className="flow-draft__run">{state.run.state.replace(/_/g, " ")}</span>
+                      )}
+                    </button>
+                  </div>
+                )}
                 <div className="flow-panel__row">
-                  <button
-                    type="button"
-                    className="flow-btn flow-btn--xs"
-                    disabled={inert || props.creating}
-                    onClick={props.onCreateDraft}
+                  <select
+                    className={control("flow-select")}
+                    aria-label="Link draft"
+                    disabled={inert}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) props.onLinkDraft(e.target.value);
+                    }}
                   >
-                    {props.creating ? "Creating draft…" : "Create draft"}
-                  </button>
+                    <option value="">{drafts === null ? "Loading drafts…" : "Link draft…"}</option>
+                    {linkable.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  {item.draftId !== undefined && (
+                    <button
+                      type="button"
+                      className={plain}
+                      aria-label="Unlink draft"
+                      disabled={inert}
+                      onClick={() => props.onLinkDraft(null)}
+                    >
+                      Unlink
+                    </button>
+                  )}
                 </div>
-              )}
-              {item.draftId !== undefined && !state?.draftMissing && props.onOpenDraft && (
-                <div className="flow-panel__row">
-                  <button
-                    type="button"
-                    className="flow-draft"
-                    aria-label={`Open draft ${state?.draft?.name ?? item.draftId}`}
-                    data-testid="flow-panel-draft"
-                    onClick={() => props.onOpenDraft!(item.draftId!)}
-                  >
-                    <span aria-hidden="true">✎</span>
-                    <span className="flow-draft__name">{state?.draft?.name ?? item.draftId}</span>
-                    {state?.run && (
-                      <span className="flow-draft__run">{state.run.state.replace(/_/g, " ")}</span>
-                    )}
-                  </button>
-                </div>
-              )}
-              <div className="flow-panel__row">
+                {state?.draftMissing && (
+                  <div className="flow-panel__note">The linked draft {item.draftId} is missing.</div>
+                )}
+              </div>
+
+              <div className="flow-panel__section">
+                <span className="flow-panel__label">Footprint</span>
+                {footprint.map((p) => {
+                  const missing = props.treeLoaded && !pathSet.has(p);
+                  return (
+                    <div className="flow-fp" key={p} data-missing={missing}>
+                      <span className="flow-fp__path">{p}</span>
+                      {missing && <span className="flow-fp__missing">missing</span>}
+                      <button
+                        type="button"
+                        className="flow-fp__remove"
+                        aria-label={`Remove path ${p}`}
+                        disabled={inert}
+                        onClick={() => props.onRemoveFootprint(p)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
                 <select
-                  className="flow-select"
-                  aria-label="Link draft"
+                  className={control("flow-select")}
+                  aria-label="Add path"
                   disabled={inert}
                   value=""
                   onChange={(e) => {
-                    if (e.target.value) props.onLinkDraft(e.target.value);
+                    if (e.target.value) props.onAddFootprint(e.target.value);
                   }}
                 >
-                  <option value="">{drafts === null ? "Loading drafts…" : "Link draft…"}</option>
-                  {linkable.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
+                  <option value="">+ Add path</option>
+                  {props.paths
+                    .filter((p) => !footprint.includes(p))
+                    .map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
                 </select>
-                {item.draftId !== undefined && (
-                  <button
-                    type="button"
-                    className="flow-btn flow-btn--xs"
-                    aria-label="Unlink draft"
-                    disabled={inert}
-                    onClick={() => props.onLinkDraft(null)}
-                  >
-                    Unlink
-                  </button>
-                )}
               </div>
-              {state?.draftMissing && (
-                <div className="flow-panel__note">The linked draft {item.draftId} is missing.</div>
-              )}
-
-              <span className="flow-panel__label">Footprint</span>
-              {footprint.map((p) => {
-                const missing = props.treeLoaded && !pathSet.has(p);
-                return (
-                  <div className="flow-fp" key={p} data-missing={missing}>
-                    <span className="flow-fp__path">{p}</span>
-                    {missing && <span className="flow-fp__missing">missing</span>}
-                    <button
-                      type="button"
-                      className="flow-fp__remove"
-                      aria-label={`Remove path ${p}`}
-                      disabled={inert}
-                      onClick={() => props.onRemoveFootprint(p)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
-              <select
-                className="flow-select"
-                aria-label="Add path"
-                disabled={inert}
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) props.onAddFootprint(e.target.value);
-                }}
-              >
-                <option value="">+ Add path</option>
-                {props.paths
-                  .filter((p) => !footprint.includes(p))
-                  .map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-              </select>
             </>
           )}
 
-          <span className="flow-panel__label">References</span>
-          <ReferenceRows
-            references={props.references}
-            onOpen={props.onOpenReference}
-            onRemove={props.onRemoveReference}
-            disabled={inert}
-            className="flow-refs flow-refs--panel"
-          />
-          <div className="flow-panel__row">
-            <ArtifactPicker
-              artifacts={props.artifacts}
-              referenced={referenced}
-              onAdd={props.onAddReference}
+          <div className="flow-panel__section">
+            <span className="flow-panel__label">References</span>
+            <ReferenceRows
+              references={props.references}
+              onOpen={props.onOpenReference}
+              onRemove={props.onRemoveReference}
               disabled={inert}
+              className="flow-refs flow-refs--panel"
             />
+            <div className="flow-panel__row">
+              <ArtifactPicker
+                artifacts={props.artifacts}
+                referenced={referenced}
+                onAdd={props.onAddReference}
+                disabled={inert}
+              />
+            </div>
           </div>
         </fieldset>
         {props.extras}
       </div>
+      {board && (props.onDiscuss || props.footer) && (
+        <div className="dm-pop__foot" ref={footRef} data-testid="flow-panel-foot">
+          {props.onDiscuss && (
+            <button type="button" className="btn btn--default btn--sm" onClick={props.onDiscuss}>
+              Discuss
+            </button>
+          )}
+          {props.footer}
+        </div>
+      )}
     </div>
   );
 }

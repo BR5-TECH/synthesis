@@ -79,7 +79,7 @@ describe("the tab frame (SMP)", () => {
       [el.classList[0], el.getAttribute("data-filter")].filter(Boolean).join(":"),
     );
     expect(order).toEqual([
-      "smap-lens",
+      "dm-seg",
       "smap-levels",
       "smap-toolbar__divider",
       "smap-toolbar__label",

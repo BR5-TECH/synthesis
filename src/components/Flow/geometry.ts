@@ -242,7 +242,7 @@ export interface PanelPlacement {
   top?: number;
   bottom?: number;
   maxHeight?: number;
-  placement: "below" | "above";
+  placement: "below" | "above" | "beside";
 }
 
 /**
@@ -283,4 +283,33 @@ export function panelPlacement(
     };
   }
   return { left, top, maxHeight: Math.max(PANEL_MIN_H, roomBelow), placement: "below" };
+}
+
+/** MDL-FR-XKCH: the width of the popover of a selected item of the board. */
+export const BOARD_PANEL_W = 340;
+
+/**
+ * MDL-FR-XKCH: the popover of the board opens beside the item: at its
+ * trailing edge where it fits, else at its leading edge, with its top at the
+ * top of the item. It stays inside the canvas, and its height is bound to the
+ * room below its top. A surface of zero size gives the plain place.
+ */
+export function boardPanelPlacement(
+  item: { left: number; top: number; right: number },
+  surface: { width: number; height: number },
+  wanted: number = PANEL_ROOM_WANTED,
+): PanelPlacement {
+  const { width, height } = surface;
+  const after = item.right + PANEL_GAP;
+  if (width <= 0 || height <= 0) return { left: after, top: item.top, placement: "beside" };
+  const fitsAfter = after + BOARD_PANEL_W + PANEL_MARGIN <= width;
+  const before = item.left - PANEL_GAP - BOARD_PANEL_W;
+  const left = Math.max(
+    PANEL_MARGIN,
+    Math.min(fitsAfter || before < PANEL_MARGIN ? after : before, width - BOARD_PANEL_W - PANEL_MARGIN),
+  );
+  const floor = height - PANEL_FOOT;
+  const room = Math.max(PANEL_MIN_H, Math.min(wanted, floor - PANEL_MARGIN));
+  const top = Math.max(PANEL_MARGIN, Math.min(item.top, floor - room));
+  return { left, top, maxHeight: Math.max(PANEL_MIN_H, floor - top), placement: "beside" };
 }

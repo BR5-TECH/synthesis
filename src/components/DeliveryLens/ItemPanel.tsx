@@ -122,17 +122,15 @@ export function ClaimActions({
   }
   if (!action) return null;
   return (
-    <div className="dlens-panel" data-testid="delivery-claim">
-      <div className="flow-panel__row">
-        <button
-          type="button"
-          className="flow-btn flow-btn--primary flow-btn--xs"
-          disabled={inert || busy !== undefined}
-          onClick={action.run}
-        >
-          {action.label}
-        </button>
-      </div>
+    <div className="dm-claim" data-testid="delivery-claim">
+      <button
+        type="button"
+        className="btn btn--primary btn--sm"
+        disabled={inert || busy !== undefined}
+        onClick={action.run}
+      >
+        {action.label}
+      </button>
       {error && (
         <div className="flow-panel__error" role="alert">
           {error}
@@ -181,7 +179,7 @@ export function AddExistingIssue({
       <span className="flow-panel__label">Add existing issue</span>
       <div className="flow-panel__row">
         <input
-          className="flow-panel__src dlens-add-issue__input"
+          className="input input--mono dlens-add-issue__input"
           aria-label={`Issue number to add into ${where}`}
           placeholder="#123"
           inputMode="numeric"
@@ -199,7 +197,7 @@ export function AddExistingIssue({
         />
         <button
           type="button"
-          className="flow-btn flow-btn--xs"
+          className="btn btn--default btn--sm"
           disabled={inert || busy || number === null || number <= 0}
           onClick={() => void submit()}
         >

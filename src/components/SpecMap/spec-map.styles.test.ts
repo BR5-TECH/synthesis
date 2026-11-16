@@ -229,8 +229,13 @@ describe("state styles of controls", () => {
     expect(blocksFor(css, ".smap-code--draft")).toEqual([]);
   });
 
-  it("SMP-FR-TKUS, SDL-FR-HZLB: the lens switch takes the level control's treatment, and unplanned uses the on tokens of gaps only", () => {
+  it("SMP-FR-TKUS, SDL-FR-HZLB: the lens switch is the segmented control of the design system, and unplanned uses the on tokens of gaps only", () => {
     expect(blocksFor(css, ".smap-lens")).toHaveLength(1);
+    const kit = sheet("kit.css");
+    expect(decl(blocksFor(kit, ".dm-seg")[0], "background")).toBe("var(--bg-sunken)");
+    const on = blocksFor(kit, '.dm-seg__btn[aria-checked="true"]')[0];
+    expect([decl(on, "background"), decl(on, "color")]).toEqual(["var(--bg-canvas)", "var(--fg-1)"]);
+    expect(decl(blocksFor(kit, ".dm-seg__btn:focus-visible")[0], "box-shadow")).toBe("var(--shadow-focus)");
     const unplanned = only('.smap-filter[data-filter="unplanned"][aria-pressed="true"]');
     expect([decl(unplanned, "background"), decl(unplanned, "color")]).toEqual(["var(--danger-soft)", "var(--danger)"]);
   });
@@ -288,10 +293,16 @@ describe("the delivery links and the Delivery lens (SDL, MDL)", () => {
     expect(decl(only('.smap-node[data-dim="unplanned"]'), "opacity")).toBe("0.3");
   });
 
-  it("MDL-FR-GDUP: the roll-up bar of the leaf states is 170 × 8px", () => {
-    const bar = only(".dlens-bar");
-    expect([decl(bar, "width"), decl(bar, "height")]).toEqual(["170px", "8px"]);
-    expect(decl(bar, "flex")).toBe("none");
+  it("MDL-FR-GDUP: the progress track is 160 × 4px, with a done, an in progress, and a blocked segment", () => {
+    const kit = sheet("kit.css");
+    const track = blocksFor(kit, ".dm-progress__track")[0];
+    expect([decl(track, "width"), decl(track, "height")]).toEqual(["160px", "4px"]);
+    expect(decl(track, "background")).toBe("var(--bg-sunken)");
+    expect(decl(blocksFor(kit, '.dm-progress__seg[data-k="done"]')[0], "background")).toBe("var(--ok)");
+    expect(decl(blocksFor(kit, '.dm-progress__seg[data-k="active"]')[0], "background")).toBe("var(--live)");
+    expect(decl(blocksFor(kit, '.dm-progress__seg[data-k="blocked"]')[0], "background")).toBe("var(--danger)");
+    expect(decl(blocksFor(kit, ".dm-progress__legend")[0], "font")).toMatch(/var\(--font-mono\)/);
+    expect(blocksFor(css, ".dlens-bar")).toEqual([]);
   });
 
   it("MDL-FR-ECPZ: the Status chip has a neutral fill and sets no state colour", () => {

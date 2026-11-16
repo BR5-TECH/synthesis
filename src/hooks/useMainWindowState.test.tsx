@@ -894,3 +894,39 @@ describe("useMainWindowState — chrome unlock on entry (SNV-FR-12 / SNV-FR-13)"
     expect(maximizableIdx).toBeLessThan(firstGeometryIdx);
   });
 });
+
+describe("useMainWindowState — a window in a macOS tab group (PWN-FR-XGTO)", () => {
+  function GroupProbe() {
+    useMainWindowState(true, "", false);
+    return null;
+  }
+
+  it("PWN-FR-XGTO, PJT-FR-JLHP: restores no geometry and no full-screen, and still persists a resize", async () => {
+    let onResize: (() => Promise<void>) | null = null;
+    onResizedMock.mockImplementation(async (h: unknown) => {
+      onResize = h as () => Promise<void>;
+      return () => {};
+    });
+    outerSizeMock.mockResolvedValue({ width: 1400, height: 900 });
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "load_layout_preferences")
+        return { mainWindowOuterWidth: 1600, mainWindowOuterHeight: 1000, mainWindowMaximized: false };
+      if (cmd === "load_app_preferences") return { theme: "system", mainWindowFullscreen: true };
+      if (cmd === "save_layout_preferences") return undefined;
+      if (cmd === "append_log_records") return undefined;
+      throw new Error(`unexpected ${cmd}`);
+    });
+    render(<GroupProbe />);
+    await waitFor(() => expect(onResizedMock).toHaveBeenCalledTimes(1));
+    expect(maximizeMock).not.toHaveBeenCalled();
+    expect(unmaximizeMock).not.toHaveBeenCalled();
+    expect(setSizeMock).not.toHaveBeenCalled();
+    expect(setFullscreenMock).not.toHaveBeenCalled();
+    // The resize affordances of the shell stay on.
+    expect(setResizableMock).toHaveBeenCalledWith(true);
+    await onResize!();
+    await waitFor(() =>
+      expect(invokeMock.mock.calls.some((c) => c[0] === "save_layout_preferences")).toBe(true),
+    );
+  });
+});

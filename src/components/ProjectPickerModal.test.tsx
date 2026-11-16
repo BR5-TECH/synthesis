@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   resolveProjectAtPath: vi.fn(),
   openProjectAtPath: vi.fn(),
   centerPicker: vi.fn(),
+  appendLogRecords: vi.fn(),
 }));
 vi.mock("../api", () => api);
 
@@ -17,6 +18,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 import { ProjectPickerModal } from "./ProjectPickerModal";
+import { resetLogBufferForTest } from "../logging";
 
 const handle = {
   name: "design",
@@ -32,11 +34,16 @@ beforeEach(() => {
   ]);
   api.resolveProjectAtPath.mockResolvedValue(handle);
   api.centerPicker.mockResolvedValue(undefined);
+  api.appendLogRecords.mockResolvedValue(undefined);
+  resetLogBufferForTest();
   window_.setSize.mockReset();
   window_.setResizable.mockReset();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetLogBufferForTest();
+});
 
 describe("the Project picker modal (PPK-FR-GMYH)", () => {
   it("is a dialog named Project picker over the window", async () => {

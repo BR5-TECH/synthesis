@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import App from "./App";
 import { resetLogBufferForTest } from "./logging";
@@ -71,6 +71,8 @@ function backend(cmd: string): Promise<unknown> {
       return Promise.resolve({ windows: [entry], activeProjectId: entry.projectId });
     case "open_project_at_path":
       return mountResult();
+    case "close_project_window":
+      return Promise.resolve({ lastClosed: false });
     case "load_app_preferences":
       return Promise.resolve({ theme: "dark" });
     default:
@@ -95,10 +97,11 @@ afterEach(() => {
   cleanup();
   cancelAllScheduledWrites();
   setWindowProjectId(null);
+  resetLogBufferForTest();
 });
 
 describe("a created project window at its start (PWN-FR-KQZB)", () => {
-  it("PWN-FR-KQZB, PPK-FR-WCMN: names its project, shows no Project picker, and sizes no window", async () => {
+  it("PWN-FR-KQZB, PPK-FR-WCMN: names its project, shows no Project picker, and applies no picker chrome", async () => {
     render(<App projectWindowBoot={{ name: "design" }} />);
     expect(await screen.findByText("Opening design…")).toBeInTheDocument();
     await vi.waitFor(() => expect(calls("open_project_at_path")).toHaveLength(1));
@@ -112,8 +115,10 @@ describe("a created project window at its start (PWN-FR-KQZB)", () => {
     render(<App projectWindowBoot={{ name: "design" }} />);
     expect(await screen.findByText("Could not open design")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("not a Synthesis project");
-    expect(screen.getByRole("button", { name: "Close this tab" })).toBeInTheDocument();
     expect(calls("list_recent_projects")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Close this tab" }));
+    await vi.waitFor(() => expect(calls("close_project_window")).toHaveLength(1));
+    expect(calls("close_project_window")[0][1]).toMatchObject({ projectId: "/work/design" });
   });
 
   it("PWN-FR-QEGI: the first window, which the backend did not create, shows the Project picker", async () => {

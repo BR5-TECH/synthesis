@@ -9,6 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { NavigationSettings } from "./NavigationSettings";
 import { resetAppPreferencesCache } from "../state/appPreferences";
+import { resetLogBufferForTest } from "../logging";
 import {
   resetSelectionFollowsTab,
   selectionFollowsTabEnabled,
@@ -32,8 +33,12 @@ beforeEach(() => {
   // The preferences record is a module-level cache shared across the process.
   resetAppPreferencesCache();
   resetSelectionFollowsTab();
+  resetLogBufferForTest();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetLogBufferForTest();
+});
 
 describe("Navigation section (GLS-FR-28)", () => {
   it("GLS-FR-03, GLS-FR-28, GLS-FR-10, GLS-FR-13, GLS-FR-14, GSS-FR-33, GSS-FR-20: reads on, on a machine that has never saved a preference", async () => {

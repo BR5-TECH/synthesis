@@ -57,11 +57,18 @@ fn open_project_behaviour_lenient<'de, D>(deserializer: D) -> Result<OpenProject
 where
     D: serde::Deserializer<'de>,
 {
-    let raw = String::deserialize(deserializer).unwrap_or_default();
-    Ok(match raw.as_str() {
-        "this_tab" => OpenProjectBehaviour::ThisTab,
-        "new_tab" => OpenProjectBehaviour::NewTab,
-        _ => OpenProjectBehaviour::Ask,
+    // Any value is read whole, so a value of another type leaves the rest of
+    // the record readable.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Text(String),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Text(text) if text == "this_tab" => OpenProjectBehaviour::ThisTab,
+        Stored::Text(text) if text == "new_tab" => OpenProjectBehaviour::NewTab,
+        Stored::Text(_) | Stored::Other(_) => OpenProjectBehaviour::Ask,
     })
 }
 

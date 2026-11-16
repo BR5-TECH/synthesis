@@ -126,6 +126,9 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
   const [opening, setOpening] = useState("");
   const openingRef = useRef(opening);
   openingRef.current = opening;
+  // PJT-FR-PNDG: set while a choice is decided, before its open starts, so a
+  // second choice in that time is ignored too.
+  const choosingRef = useRef(false);
   const [boot, setBoot] = useState<BootState | null>(() =>
     deps.boot ? { name: deps.boot.name, error: "" } : null,
   );
@@ -305,7 +308,7 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
   const chooseProject = useCallback(
     async (handle: ProjectHandle) => {
       // PJT-FR-PNDG: one open at a time.
-      if (openingRef.current) return;
+      if (openingRef.current || choosingRef.current) return;
       setError("");
       if (activateIfOpen(handle)) return;
       if (depsRef.current.screen === "picker") {
@@ -317,20 +320,25 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
         }
         return;
       }
-      // PJT-FR-NWTD: New Tab has made the choice already.
-      const picker = pickerRef.current;
-      if (picker.open && picker.intent === "new-tab") {
-        await openInNewTab(handle);
-        return;
-      }
-      // PJT-FR-RMBR: a remembered choice runs with no dialog.
-      const behaviour = (await loadAppPreferences()).openProjectBehaviour ?? "ask";
-      if (behaviour === "new_tab") {
-        await openInNewTab(handle);
-      } else if (behaviour === "this_tab") {
-        await replaceHere(handle);
-      } else {
-        setPending(handle);
+      choosingRef.current = true;
+      try {
+        // PJT-FR-NWTD: New Tab has made the choice already.
+        const picker = pickerRef.current;
+        if (picker.open && picker.intent === "new-tab") {
+          await openInNewTab(handle);
+          return;
+        }
+        // PJT-FR-RMBR: a remembered choice runs with no dialog.
+        const behaviour = (await loadAppPreferences()).openProjectBehaviour ?? "ask";
+        if (behaviour === "new_tab") {
+          await openInNewTab(handle);
+        } else if (behaviour === "this_tab") {
+          await replaceHere(handle);
+        } else {
+          setPending(handle);
+        }
+      } finally {
+        choosingRef.current = false;
       }
     },
     [mountHere, activateIfOpen, openInNewTab, replaceHere],

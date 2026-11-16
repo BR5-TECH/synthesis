@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   requestProjectWindowClose: vi.fn(),
   closeProject: vi.fn(),
   closeProjectWindow: vi.fn(),
+  appendLogRecords: vi.fn(),
 }));
 vi.mock("../api", () => api);
 
@@ -45,6 +46,7 @@ vi.mock("../events", () => ({
 }));
 
 import { setWindowProjectId } from "../api/invoke";
+import { resetLogBufferForTest } from "../logging";
 import { countRunsInFlight, useProjectTabs, type ProjectTabsDeps } from "./useProjectTabs";
 
 function handle(name: string): ProjectHandle {
@@ -98,6 +100,8 @@ beforeEach(() => {
   api.requestProjectWindowClose.mockResolvedValue(undefined);
   api.closeProject.mockResolvedValue(undefined);
   api.closeProjectWindow.mockResolvedValue({ lastClosed: false });
+  api.appendLogRecords.mockResolvedValue(undefined);
+  resetLogBufferForTest();
   listeners.changed = null;
   listeners.closeRequested = null;
   listeners.menu.clear();
@@ -108,6 +112,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   setWindowProjectId(null);
+  resetLogBufferForTest();
 });
 
 describe("the list of project tabs", () => {
@@ -441,6 +446,25 @@ describe("an open in progress (PJT-FR-PNDG)", () => {
     expect(result.current.pickerOpen).toBe(false);
   });
 
+  it("PJT-FR-PNDG, PJT-FR-RMBR: ignores a second choice while a remembered choice is read", async () => {
+    const releases: ((v: unknown) => void)[] = [];
+    prefs.loadAppPreferences.mockImplementation(
+      () => new Promise((resolve) => releases.push(resolve)),
+    );
+    const { result } = mount(deps());
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.chooseProject(handle("b"));
+    });
+    await act(() => result.current.chooseProject(handle("c")));
+    await act(async () => {
+      for (const release of releases) release({ theme: "system", openProjectBehaviour: "new_tab" });
+      await first;
+    });
+    expect(api.openProjectWindow).toHaveBeenCalledTimes(1);
+    expect(api.openProjectWindow).toHaveBeenCalledWith("/work/b");
+  });
+
   it("PJT-FR-PNDG: a failure shows the error and keeps the modal open", async () => {
     api.openProjectWindow.mockRejectedValue(new Error("not a project"));
     const { result } = mount(deps());
@@ -563,5 +587,20 @@ describe("a window that open project window created (PWN-FR-KQZB)", () => {
   it("PWN-FR-KQZB: a window that the backend did not create has no loading state", () => {
     const { result } = mount(deps({ screen: "picker" }));
     expect(result.current.boot).toBeNull();
+  });
+});
+
+describe("Cancel in the open project dialog (PJT-FR-GASB, PPK-FR-KRPD)", () => {
+  it("PJT-FR-GASB, PPK-FR-KRPD: returns to the modal of Open Another Project…, and stores nothing", async () => {
+    const { result } = mount(deps());
+    act(() => result.current.openPicker());
+    await act(() => result.current.chooseProject(handle("b")));
+    expect(result.current.pending?.name).toBe("b");
+    act(() => result.current.cancelDialog());
+    expect(result.current.pending).toBeNull();
+    expect(result.current.pickerOpen).toBe(true);
+    expect(result.current.pickerIntent).toBe("ask");
+    expect(prefs.patchAppPreferences).not.toHaveBeenCalled();
+    expect(api.openProjectWindow).not.toHaveBeenCalled();
   });
 });

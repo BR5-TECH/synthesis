@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { OpenProjectDialog } from "./OpenProjectDialog";
 
@@ -28,6 +29,7 @@ describe("OpenProjectDialog (PJT-FR-GASB, PJT-FR-DLGT)", () => {
 
   it("PJT-FR-DLGT: says which project is open here and asks where the new one opens", () => {
     renderDialog();
+    expect(screen.getByText("Open design-skills")).toHaveClass("modal__title");
     expect(
       screen.getByText("acme is open in this window. Where do you want to open design-skills?"),
     ).toBeInTheDocument();
@@ -118,12 +120,26 @@ describe("OpenProjectDialog focus (PJT-FR-YCNT)", () => {
     expect(cancel).toHaveFocus();
   });
 
-  it("PJT-FR-YCNT: Space toggles the checkbox", () => {
-    renderDialog();
+  it("PJT-FR-YCNT: Tab moves New tab → checkbox → Cancel → This tab, Space toggles, Enter chooses", async () => {
+    const user = userEvent.setup();
+    const { onChoose } = renderDialog();
     const box = screen.getByRole("checkbox", { name: "Remember my choice" });
-    box.focus();
-    fireEvent.click(box);
+    expect(screen.getByRole("button", { name: "New tab" })).toHaveFocus();
+    await user.tab();
+    expect(box).toHaveFocus();
+    await user.keyboard(" ");
     expect(box).toBeChecked();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "This tab" })).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.tab({ shift: true });
+    await user.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "New tab" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onChoose).toHaveBeenCalledWith("new-tab", true);
   });
 
   it("PJT-FR-YCNT: returns focus to the opener when it closes", () => {

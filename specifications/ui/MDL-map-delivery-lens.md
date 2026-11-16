@@ -8,9 +8,9 @@ The Delivery lens is the first lens of the Map tab (`SMP-specification-map.md`).
 ## Functional requirements
 1. **MDL-FR-YTAP** The lens resolves the delivery source through `"get delivery source"` when it first renders, and again on `"delivery source changed"`, on `"github polling changed"`, and on `"project tree changed"`.
 2. **MDL-FR-XMQU** With the source `none`, the lens renders an empty state that says the project has no delivery, states the reason in words, and offers **Configure delivery**. That action opens the Delivery section of Project settings (per `SET-project-settings.md` SET-FR-WDYJ).
-3. **MDL-FR-WAOZ** With a `github` source whose configuration is not `valid`, the lens renders the configuration error text of `../core/GPP-github-polling.md` (GPP-FR-EHRC) with a route to the GitHub Project settings section, and renders no plan.
-4. **MDL-FR-VLQJ** With a `file` source, the lens hosts the canvas of `FLO-flow.md` bound to that Flow file. Every requirement of `FLO-flow.md` applies to it as it applies to a Flow tab, and the Map tab takes the role of the Flow tab in FLO-FR-26, FLO-FR-28, and FLO-FR-30.
-5. **MDL-FR-XJBV** With a `github` source, the lens hosts the canvas of `FLO-flow.md` over the plan that `"load github delivery plan (refresh)"` returns. Each edit of FLO-FR-26 goes through `"apply github delivery edit (edit)"` in place of a write. The states and overlaps come with each answer, and FLO-FR-27 to FLO-FR-31, FLO-FR-46, FLO-FR-47, and FLO-FR-STUN do not apply.
+3. **MDL-FR-WAOZ** With a `github` source whose configuration is `invalid`, the lens renders the configuration error text of `../core/GPP-github-polling.md` (GPP-FR-EHRC) with a route to the GitHub Project settings section, and renders no plan. A configuration that is `unchecked` does not stop the lens: the lens loads the plan (MDL-FR-LZIE), and the load checks the configuration (per `../core/GDP-github-delivery-plan.md` GDP-FR-QSHX). The author never opens the settings to show a plan whose configuration was valid before.
+4. **MDL-FR-VLQJ** With a `file` source, the lens hosts the canvas of `FLO-flow.md` bound to that Flow file, laid out as the board of `DBR-delivery-board.md`. Every requirement of `FLO-flow.md` applies to it as it applies to a Flow tab, and the Map tab takes the role of the Flow tab in FLO-FR-26, FLO-FR-28, and FLO-FR-30.
+5. **MDL-FR-XJBV** With a `github` source, the lens hosts the canvas of `FLO-flow.md` over the plan that `"load github delivery plan (refresh)"` returns, laid out as the board of `DBR-delivery-board.md`. Each edit of FLO-FR-26 goes through `"apply github delivery edit (edit)"` in place of a write. The states and overlaps come with each answer, and FLO-FR-27 to FLO-FR-31, FLO-FR-46, FLO-FR-47, and FLO-FR-STUN do not apply.
 6. **MDL-FR-LZIE** With a `github` source, the lens loads with `refresh` false when it first renders, and then with `refresh` true. It loads with `refresh` true on `"github polling changed"` and on **Refresh**, and with `refresh` false on `"drafts changed"` and `"graduation run changed"`. A newer answer replaces an older one.
 7. **MDL-FR-NRJM** The lens renders a loading state until the first answer. A load that refuses with no plan to show renders the error text with a **Retry** action.
 8. **MDL-FR-LSKL** An answer marked `stale` renders its plan with one notice line above the canvas. The line names the time of the read and the error text, and offers **Retry**.
@@ -25,7 +25,7 @@ The Delivery lens is the first lens of the Map tab (`SMP-specification-map.md`).
 15. **MDL-FR-XUJY** **Map Types** opens a dialog with one row for each unmapped Type and a selector of **Epic**, **Feature**, **Task**, **Defect**, and **Leave out**. Confirm writes the choices through `"set delivery settings (settings)"` and the lens loads with `refresh` false. Confirm is disabled until a row holds a choice.
 16. **MDL-FR-MWMO** Where the answer reports misplaced items or omitted relations, one notice line states their counts. Activating it lists each one with its issue numbers and the reason in words.
 17. **MDL-FR-JPYU** An item with an open external blocker carries the **Blocked** marker of FLO-FR-IKMM. Its tooltip names each external blocker by number and title.
-18. **MDL-FR-ECPZ** In a GitHub plan, each issue item shows its `Status` name as a chip after its state chip, and every item carries the tracker tag of FLO-FR-ULEM.
+18. **MDL-FR-ECPZ** In a GitHub plan, each issue card shows its `Status` name on its bottom line (per `DBR-delivery-board.md` DBR-FR-HWHO), each group header shows it after the state glyph (DBR-FR-SBTR), and every item carries the tracker tag of FLO-FR-ULEM as its address (DBR-FR-XOOU).
 18. **MDL-FR-RILW** In the lens, a card and a container show no excerpt of the item's description (FLO-FR-XCRP), for a `github` source and for a `file` source. Every other part of FLO-FR-CMPK applies. The panel of a selected item still shows the full description (per FLO-FR-13).
     - *Why:* On the plan canvas a long issue body hides the structure, and the title is enough to find the item.
 19. **MDL-FR-QEXS** A selected task that is eligible for a claim, and that no GitHub-shadow draft or pending claim names, offers **Claim and graduate** on the terms of `GIT-git.md` GIT-FR-NQTZ. A pending claim offers **Retry** on the terms of GIT-FR-FTHT.
@@ -62,12 +62,16 @@ The Delivery lens is the first lens of the Map tab (`SMP-specification-map.md`).
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ ┌─ 1 ⚑ Beta ─ 2027-03-31 ─┐    ┌─ 2 ⚑ GA ─ 2027-06-30 ───┐    ┌─ No milestone ──────────┐ │
 │ │ In progress  #3          │ ─▶ │ Not started  #4          │    │ ┌─────────────────────┐ │ │
-│ │ ┌─ ▣ Card capture ─────┐ │    │ ┌─ ▣ Payouts ── ⊘ ─────┐ │    │ │ ✱ Decline message   │ │ │
-│ │ │ ☐ Tokenize  #51      │ │    │ │ ☐ Payout schedule    │ │    │ │ Drafting  #47       │ │ │
-│ │ │       │              │ │    │ │ Drafting  Ready      │ │    │ └─────────────────────┘ │ │
-│ │ │       ▼              │ │    │ └──────────────────────┘ │    │                         │ │
-│ │ │ ☐ Card form  #53     │ │    │                          │    │                         │ │
-│ │ │ Not started  Ready   │ │    │                          │    │                         │ │
+│ │ ▾ ▣ Card capture  ◐ #41  │    │ ▾ ▣ Payouts  ⊘ ○  #45    │    │ │┃✱ Defect  acme/p…#47 │ │ │
+│ │ ┌──────────────────────┐ │    │ ┌──────────────────────┐ │    │ │┃Decline message      │ │ │
+│ │ │┃☐ Task  acme/pla…#51 │ │    │ │┃☐ Task  acme/pla…#53 │ │    │ │┃◔ Todo            ✎  │ │ │
+│ │ │┃Tokenize card numbers│ │    │ │┃Payout schedule      │ │    │ └─────────────────────┘ │ │
+│ │ │┃◐ In Progress     ✎  │ │    │ │┃◔ Ready        ⊘ ✎   │ │    │                         │ │
+│ │ └──────────────────────┘ │    │ └──────────────────────┘ │    │                         │ │
+│ │ ┌──────────────────────┐ │    │                          │    │                         │ │
+│ │ │┃☐ Task  acme/pla…#52 │ │    │                          │    │                         │ │
+│ │ │┃Card form            │ │    │                          │    │                         │ │
+│ │ │┃○ Ready           ⊘  │ │    │                          │    │                         │ │
 │ │ └──────────────────────┘ │    │                          │    │                         │ │
 │ └──────────────────────────┘    └──────────────────────────┘    └─────────────────────────┘ │
 │ 16 items · 4 edges · 8 blocked · 1 overlap                          [−] 100% [+] [⤢]    │
@@ -80,7 +84,7 @@ selected ready task                         remove in a GitHub plan
 │ [Claim and graduate]             │       │                               [Cancel]     │
 └──────────────────────────────────┘       └────────────────────────────────────────────┘
 ```
-- Layout notes: the toolbar is the Map tab's toolbar (per `SMP-specification-map.md` SMP-FR-CVIB) and keeps its 38px height. The band sits between the toolbar and the canvas. The notice lines sit below the band, one line each, and never cover the canvas. The canvas, its add affordance, its readout, and its view controls are those of `FLO-flow.md`. The **Status** chip uses the chip treatment of FLO-FR-KQCE with a neutral fill, so it does not read as a delivery state.
+- Layout notes: the toolbar is the Map tab's toolbar (per `SMP-specification-map.md` SMP-FR-CVIB) and keeps its 38px height. The band sits between the toolbar and the canvas. The notice lines sit below the band, one line each, and never cover the canvas. The canvas, its add affordance, its readout, and its view controls are those of `FLO-flow.md`. The board inside the canvas, its cards, and its groups are those of `DBR-delivery-board.md`.
 
 ## UI contract boundary
 - **Owned by the UI**: the resolution of which binding hosts the canvas, the loading, empty, error, and stale states, the band and its menu, the notice lines and the Map Types dialog, the pending marks and the restore after a refusal, the remove dialog, the claim, retry, and graduate actions on an item, the Add existing issue input, the publish and export dialogs and their progress, the roll-up of the toolbar, and the routing of the delivery's Flow file to the Map tab.
@@ -91,7 +95,7 @@ selected ready task                         remove in a GitHub plan
   - `"claim github task (issue number)"`, `"retry github claim (issue number)"`, and `"acknowledge github claim (issue number)"`, with the event `"github polling changed"` — owned by `../core/GPP-github-polling.md`.
   - The events `"project tree changed"` (owned by `../core/ASC-artifact-scanning.md`), `"drafts changed"` (owned by `../core/DRS-draft-storage.md`), and `"graduation run changed"` (owned by `../core/GRD-graduation.md`).
 
-  The canvas and its own operations are owned by `FLO-flow.md`. The start dialog is owned by `GSD-graduation-start-dialog.md`.
+  The canvas and its own operations are owned by `FLO-flow.md`. The board layout and its drag and drop are owned by `DBR-delivery-board.md`. The start dialog is owned by `GSD-graduation-start-dialog.md`.
 
 ## Non-functional requirements
 - The lens shows a cached GitHub plan before the network answers, and a slow or failed GitHub read never blocks reading the plan the cache holds.

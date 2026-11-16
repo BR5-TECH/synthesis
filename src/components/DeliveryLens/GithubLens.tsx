@@ -232,6 +232,8 @@ export function GithubLens(props: GithubLensProps) {
       <FlowCanvas
         ref={props.canvasRef}
         binding={binding}
+        // MDL-FR-VLQJ / MDL-FR-XJBV / DBR-FR-ERHW: the lens lays the plan out as a board.
+        board
         initialView={props.initialView}
         onViewChange={props.onViewChange}
         onDiscuss={props.onDiscuss}

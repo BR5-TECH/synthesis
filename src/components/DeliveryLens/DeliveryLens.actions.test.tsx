@@ -138,7 +138,8 @@ describe("removing an item of a GitHub plan (MDL-FR-XQGD)", () => {
     await userEvent.click(within(panel()).getByRole("button", { name: /Remove/ }));
     await userEvent.click(within(screen.getByTestId("delivery-remove-dialog")).getByRole("button", { name: "Remove from board" }));
     await waitFor(() => expect(callsOf(b, "apply_github_delivery_edit")).toHaveLength(1));
-    expect(await screen.findByTestId("flow-item-error-f1")).toHaveTextContent("GitHub refused the request.");
+    // DBR-FR-CJSG: the error glyph of the item carries the error text.
+    expect(await screen.findByTestId("flow-item-error-f1")).toHaveAttribute("title", "GitHub refused the request.");
     for (const id of ["f1", "t1", "t2"]) expect(itemEl(id)).toBeInTheDocument();
   });
 
@@ -416,7 +417,8 @@ describe("requests of the map (MDL-FR-EEDO, MDL-FR-JIKK)", () => {
     const r = await openPlan();
     act(() => r.store.requestPlanWork("Card form", ["specifications/ui/A1-a1.md"]));
     await waitFor(() => expect(callsOf(b, "apply_github_delivery_edit")).toHaveLength(2));
-    expect(await screen.findByTestId("flow-item-error-new-1")).toHaveTextContent("The references were not set.");
+    // DBR-FR-CJSG: the error glyph of the item carries the error text.
+    expect(await screen.findByTestId("flow-item-error-new-1")).toHaveAttribute("title", "The references were not set.");
     expect(itemEl("new-1")).toHaveAttribute("data-selected", "true");
   });
 

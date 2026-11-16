@@ -147,10 +147,12 @@ export function PendingMark() {
  * FLO-FR-XAPK: a milestone's due date. A date before today on a milestone that
  * is not done is marked as past, in words as well as in colour.
  */
-export function DueDate({ due, past }: { due: string; past: boolean }) {
+export function DueDate({ due, past, compact = false }: { due: string; past: boolean; compact?: boolean }) {
+  // DBR-FR-BYQX: a column of the board shows the date alone; the tooltip names it.
   return (
-    <span className="flow-due" data-past={past} data-testid="flow-due">
-      due {due}
+    <span className="flow-due" data-past={past} data-testid="flow-due" title={`Due ${due}`}>
+      {compact ? "" : "due "}
+      {due}
       {past && <span className="flow-due__past"> · past</span>}
     </span>
   );

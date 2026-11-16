@@ -48,6 +48,10 @@ export interface SelectionPanelProps {
   onDescribe: (text: string) => void;
   onKind: (kind: FlowItemKind) => void;
   onLinkDraft: (draftId: string | null) => void;
+  /** DBR-FR-GFGG / FLO-FR-QZUR: open the linked draft from the panel. */
+  onOpenDraft?: (draftId: string) => void;
+  /** DBR-FR-CJSG: the error the host shows on the item, at the top of the panel. */
+  error?: string;
   /** FLO-FR-NRBV: a draft creation for the item is in flight. */
   creating?: boolean;
   /** FLO-FR-NRBV: create a draft for a task or a defect with no draft link. */
@@ -210,6 +214,11 @@ export function SelectionPanel(props: SelectionPanelProps) {
               Remove
             </button>
           </div>
+          {props.error && (
+            <div className="flow-panel__error" role="alert" data-testid="flow-panel-error">
+              {props.error}
+            </div>
+          )}
 
           <div className="flow-panel__row flow-panel__row--label">
             <label
@@ -301,6 +310,23 @@ export function SelectionPanel(props: SelectionPanelProps) {
                     onClick={props.onCreateDraft}
                   >
                     {props.creating ? "Creating draft…" : "Create draft"}
+                  </button>
+                </div>
+              )}
+              {item.draftId !== undefined && !state?.draftMissing && props.onOpenDraft && (
+                <div className="flow-panel__row">
+                  <button
+                    type="button"
+                    className="flow-draft"
+                    aria-label={`Open draft ${state?.draft?.name ?? item.draftId}`}
+                    data-testid="flow-panel-draft"
+                    onClick={() => props.onOpenDraft!(item.draftId!)}
+                  >
+                    <span aria-hidden="true">✎</span>
+                    <span className="flow-draft__name">{state?.draft?.name ?? item.draftId}</span>
+                    {state?.run && (
+                      <span className="flow-draft__run">{state.run.state.replace(/_/g, " ")}</span>
+                    )}
                   </button>
                 </div>
               )}

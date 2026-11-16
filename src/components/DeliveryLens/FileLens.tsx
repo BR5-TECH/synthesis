@@ -125,6 +125,8 @@ export function FileLens(props: FileLensProps) {
         <FlowCanvas
           ref={props.canvasRef}
           binding={fileBinding(host.flows, source.flowId)}
+          // MDL-FR-VLQJ / MDL-FR-XJBV / DBR-FR-ERHW: the lens lays the plan out as a board.
+          board
           // MDL-FR-WMGU: while a publish runs, no edit affordance acts.
           inert={publish?.phase === "running"}
           initialView={props.initialView}

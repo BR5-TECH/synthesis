@@ -18,6 +18,7 @@ import { Band } from "./Band";
 import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges, SequenceArrows } from "./edges";
 import { edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
 import { CardView, ContainerView, type ItemFacts, type ItemHandlers } from "./items";
+import { BoardCard } from "./boardItems";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { SelectionPanel } from "./SelectionPanel";
 import { useCanvasHandle, type FlowCanvasHandle } from "./useCanvasHandle";
@@ -292,6 +293,9 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
       ) : (
         <div
           className="flow"
+          data-board={c.board}
+          data-dragging={c.lifted !== null}
+          data-refuse={c.dragRefused}
           ref={c.surfaceRef}
           onPointerDown={c.onSurfacePointerDown}
           onPointerMove={c.onSurfacePointerMove}
@@ -311,6 +315,7 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                 role="group"
                 aria-label="No milestone"
                 data-testid="flow-no-milestone"
+                data-drop-target={c.dropHolder === null}
                 style={{
                   left: c.columns.none.x,
                   top: c.columns.none.y,
@@ -346,8 +351,11 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                   }
                   onToggleCollapsed={() => c.toggleCollapsed(item.id)}
                   onResizeStart={(sides, e) => c.onResizeStart(item.id, sides, e)}
-                  onMeasure={c.onMeasureContainer}
+                  {...(c.board ? {} : { onMeasure: c.onMeasureContainer })}
                   {...(order >= 0 ? { column: order + 1 } : {})}
+                  board={c.board}
+                  dropTarget={c.dropHolder === item.id}
+                  lifted={c.lifted?.has(item.id) ?? false}
                 />
               );
             })}
@@ -360,7 +368,40 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
               refused={refusedRoute}
             />
 
-            {cards.map((item) => (
+            {/* DBR-FR-CZEU: the placeholder where the dragged item would land. */}
+            {c.boardGap && (
+              <div
+                className="flow-bslot"
+                data-testid="flow-board-placeholder"
+                aria-hidden="true"
+                style={{
+                  left: c.boardGap.x,
+                  top: c.boardGap.y,
+                  width: c.boardGap.width,
+                  height: c.boardGap.height,
+                }}
+              />
+            )}
+
+            {c.board &&
+              cards.map((item) => (
+                <BoardCard
+                  key={item.id}
+                  item={item}
+                  at={c.absOf(item.id)}
+                  size={c.sizeOf(item.id) ?? { width: 0, height: 0 }}
+                  facts={factsOf(item)}
+                  selected={selectionSet.has(item.id)}
+                  magnet={c.magnet === item.id}
+                  lifted={c.lifted?.has(item.id) ?? false}
+                  editingName={c.editingName === item.id}
+                  inert={inert}
+                  handlers={handlersOf(item)}
+                  renameOnEnd={planMode}
+                />
+              ))}
+
+            {!c.board && cards.map((item) => (
               <CardView
                 key={item.id}
                 item={item}
@@ -390,6 +431,18 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
             />
           </div>
 
+          {/* DBR-FR-EEKD: the containers the dragged kind can join, near the pointer. */}
+          {c.dragHint && c.drag && (
+            <div
+              className="flow-bhint"
+              role="status"
+              data-testid="flow-board-hint"
+              style={toScreen(c.drag.pointer.x + 12, c.drag.pointer.y + 12)}
+            >
+              {c.dragHint}
+            </div>
+          )}
+
           {/* FLO-FR-16 / FLO-FR-OAOZ / FLO-FR-GZCH: the feedback of a refusal. */}
           {c.refusal && (
             <div className="flow-refusal" role="status" data-testid="flow-refusal">
@@ -406,7 +459,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
             </div>
           )}
 
-          {c.selected && panelAt && (
+          {/* DBR-FR-QCAJ: the panel gives way while an item of the board is dragged. */}
+          {c.selected && panelAt && c.lifted === null && (
             <SelectionPanel
               key={c.selected.id}
               doc={doc}
@@ -432,6 +486,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
               onAddReference={(id) => a.addReference(c.selected!.id, id)}
               onRemoveReference={(id) => a.removeReference(c.selected!.id, id)}
               onOpenReference={a.openReferenced}
+              {...(c.board ? { onOpenDraft: a.openDraft } : {})}
+              error={factsOf(c.selected).error}
               describeOnBlur={planMode}
               kindFilter={planMode ? noMilestoneChange(c.selected) : undefined}
               extras={props.panelExtras?.(c.selected)}

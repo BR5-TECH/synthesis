@@ -119,7 +119,26 @@ describe("the source (MDL-FR-YTAP, MDL-FR-XMQU, MDL-FR-WAOZ)", () => {
     expect(await screen.findByTestId("delivery-empty")).toHaveTextContent("the chosen Flow file is missing");
   });
 
-  it("MDL-FR-WAOZ: a GitHub source whose configuration is not valid shows the configuration error with a route to its settings, and no plan", async () => {
+  it("MDL-FR-WAOZ, GDP-FR-QSHX: an unchecked configuration (as after a restart) loads the plan and needs no visit to the settings", async () => {
+    b.plan = async () => githubAnswer(DOC);
+    const r = await renderLens({ source: githubSource("unchecked") });
+    await waitFor(() => expect(callsOf(b, "load_github_delivery_plan").length).toBeGreaterThan(0));
+    expect(await screen.findByTestId("flow-band")).toBeInTheDocument();
+    expect(screen.queryByTestId("delivery-config-error")).toBeNull();
+    expect(r.host.onOpenProjectSettings).not.toHaveBeenCalled();
+  });
+
+  it("MDL-FR-WAOZ, GDP-FR-QSHX, GPP-FR-TYOV: when the load finds an unchecked configuration invalid, the lens shows the configuration error", async () => {
+    let state: "unchecked" | "invalid" = "unchecked";
+    b.plan = () => Promise.reject({ code: "status_field_missing", message: "No Status field." });
+    await renderLens({ source: async () => githubSource(state, state === "invalid" ? "No Status field." : null) });
+    await waitFor(() => expect(callsOf(b, "load_github_delivery_plan").length).toBeGreaterThan(0));
+    state = "invalid";
+    act(() => emitEvent("github-polling-changed", { newIssues: [] }));
+    expect(await screen.findByTestId("delivery-config-error")).toHaveTextContent("No Status field.");
+  });
+
+  it("MDL-FR-WAOZ: a GitHub source whose configuration is invalid shows the configuration error with a route to its settings, and no plan", async () => {
     const r = await renderLens({ source: githubSource("invalid", "Choose a Status field in GitHub Project settings.") });
     const error = await screen.findByTestId("delivery-config-error");
     expect(error).toHaveTextContent("Choose a Status field in GitHub Project settings.");
@@ -131,8 +150,11 @@ describe("the source (MDL-FR-YTAP, MDL-FR-XMQU, MDL-FR-WAOZ)", () => {
 });
 
 describe("a Flow file source (MDL-FR-VLQJ, MDL-FR-NTVL, MDL-FR-GDUP)", () => {
-  it("MDL-FR-VLQJ: the lens hosts the canvas bound to the file, which reads, edits, and asks for its own delivery state", async () => {
+  it("MDL-FR-VLQJ, DBR-FR-ERHW: the lens hosts the canvas bound to the file as a board, which reads, edits, and asks for its own delivery state", async () => {
     const r = await openFile();
+    // DBR-FR-ERHW: the lens lays the file out as the board.
+    expect(document.querySelector(".flow")).toHaveAttribute("data-board", "true");
+    expect(screen.getByTestId("flow-item-t1")).toHaveClass("flow-bcard");
     expect(callsOf(b, "load_artifact_contents_by_id")[0]).toMatchObject({ id: FLOW });
     await waitFor(() => expect(callsOf(b, "load_flow_delivery_state").length).toBeGreaterThan(0));
     act(() => {

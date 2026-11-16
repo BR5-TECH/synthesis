@@ -32,7 +32,7 @@ The backend that finds project work which is ready to start on GitHub and lets t
 21. **GPP-FR-DATH** The **polling session** starts when a project opens or its active worktree changes and ends when either changes again or the project closes. The session holds the issue keys of the previous successful poll and the keys already reported, in memory only.
 22. **GPP-FR-YROY** A successful poll reports as **new** each eligible issue that is absent from the previous successful poll of the session and not yet reported in the session. The first successful poll of a session compares against an empty result.
 23. **GPP-FR-RRPB** A failed, discarded, or refused poll reports no new issue. An issue reported once is never reported again in the same session, even when it leaves the result and comes back.
-24. **GPP-FR-TYOV** `"github polling changed"` is emitted after every change of the view: a poll that settles, a settings change, a claim, a retry, and an acknowledgement. Its payload carries the new issues of the poll that caused it, each with its number and title, and an empty list for every other cause.
+24. **GPP-FR-TYOV** `"github polling changed"` is emitted after every change of the view: a poll that settles, a settings change, a configuration check of a delivery plan load (per `GDP-github-delivery-plan.md` GDP-FR-QSHX), a claim, a retry, and an acknowledgement. Its payload carries the new issues of the poll that caused it, each with its number and title, and an empty list for every other cause.
 25. **GPP-FR-IFVC** `claim_github_task(issue_number)` re-fetches the issue from GitHub immediately before it changes anything. Where the re-fetched issue is no longer eligible (GPP-FR-BOQX), it refuses with `task_not_ready` and changes nothing.
 26. **GPP-FR-ILGG** After the re-fetch, the claim changes the issue's `Status` in the selected Project to the option that the In Progress status resolves to, before it writes anything locally. It reads the two statuses from the polling settings and never from fixed names. Where that update fails, it refuses with `status_update_failed`, writes no pending claim, creates no draft, and opens nothing.
 27. **GPP-FR-DHQM** After the status update succeeds, the claim writes one **pending claim** to the project-local store (per `PSS-project-settings-storage.md` PSS-FR-TXBB) before it creates a draft. The record names the repository host, owner, and name, the issue number, the issue URL, the selected Project node ID, and the shadow draft ID once one exists.
@@ -120,7 +120,7 @@ GithubPollingView {
 GithubClaimResult { draft_id, draft_name }
 ```
 
-`unchecked` is the state of a selected Project that no poll and no settings write has validated yet in this session. It permits polling.
+`unchecked` is the state of a selected Project that no poll, no settings write, and no delivery plan load (per `GDP-github-delivery-plan.md` GDP-FR-QSHX) has validated yet in this session. It permits polling, and it permits a delivery plan load.
 
 ### Tauri commands
 - `"list github projects"` → `list_github_projects()` → `GithubProjectOption[]` (GPP-FR-WYRP).

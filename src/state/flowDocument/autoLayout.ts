@@ -65,7 +65,7 @@ function storedSize(stored: StoredLayout, id: string): FlowSize | undefined {
  * an edge from an item at or under A to an item at or under B makes B wait for
  * A, when A and B share a container (or both sit at the top level).
  */
-function siblingWaits(doc: FlowDocument): Map<string, Set<string>> {
+export function siblingWaits(doc: FlowDocument): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   const pathOf = (id: string) => [...ancestorsOf(doc, id)].reverse().concat(id);
   for (const e of doc.edges) {
@@ -88,7 +88,7 @@ function siblingWaits(doc: FlowDocument): Map<string, Set<string>> {
  * order for the rest. A cycle (which a valid plan does not have) is broken in
  * document order.
  */
-function memberOrder(
+export function memberOrder(
   members: readonly FlowItem[],
   waits: Map<string, Set<string>>,
   index: Map<string, number>,

@@ -54,7 +54,14 @@ const githubSource = () => ({
   kind: "github",
   project: GITHUB_PROJECT,
   repository: { host: "github.com", owner: "acme", name: "platform" },
-  configuration: { state: "valid", errorCode: null, error: null, missingStatus: null, projectTitle: GITHUB_PROJECT.title },
+  // MDL-FR-WAOZ: `?deliveryGithubUnchecked` gives the state after a restart, which the lens loads too.
+  configuration: {
+    state: flag("deliveryGithubUnchecked") ? "unchecked" : "valid",
+    errorCode: null,
+    error: null,
+    missingStatus: null,
+    projectTitle: GITHUB_PROJECT.title,
+  },
 });
 
 /** DSR-FR-AECK: Automatic resolves to the selected GitHub Project, or to none. */

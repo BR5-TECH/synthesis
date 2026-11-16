@@ -20,6 +20,7 @@ import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { measureContainer } from "./measure";
 import type { ContainerMeasure } from "./useFlowLayout";
 import { ReferenceRows } from "./references";
+import { BoardAddress, BoardMarks, boardStatusText, StateGlyph } from "./boardItems";
 import type { MenuBindings } from "../MapDiscussion/NodeMenu";
 
 /** What an item shows of the delivery state and the overlaps. */
@@ -112,7 +113,7 @@ function NameField({
  * FLO-FR-09: the name, renamed in place. It reads as text, and a double click
  * or the panel's Rename turns it into a field. A name is free text.
  */
-function ItemName({
+export function ItemName({
   item,
   editing,
   inert,
@@ -154,7 +155,7 @@ function ItemName({
  * MDL-FR-JPYU: the open blockers of a GitHub issue that are not in the plan,
  * each named by its number and title.
  */
-function externalBlockers(facts: ItemFacts): string[] {
+export function externalBlockers(facts: ItemFacts): string[] {
   return (facts.tracker?.facts.externalBlockers ?? []).map((b) => `#${b.number} ${b.title}`);
 }
 
@@ -362,6 +363,15 @@ export interface ContainerViewProps extends ItemViewBase {
    * milestone order, from 1. A column is not resized.
    */
   column?: number;
+  /**
+   * DBR-FR-IQBN / DBR-FR-SBTR: a column or a group of the board: one header
+   * line, no references, no excerpt, and no resize.
+   */
+  board?: boolean;
+  /** DBR-FR-CZEU: the container holds the target stack of a drag. */
+  dropTarget?: boolean;
+  /** DBR-FR-QCAJ: the container is dragged. */
+  lifted?: boolean;
 }
 
 /**
@@ -413,6 +423,11 @@ export function ContainerView(props: ContainerViewProps) {
       data-magnet={magnet}
       data-collapsed={props.collapsed}
       data-pending={facts.pending}
+      data-board={props.board === true}
+      data-drop-target={props.dropTarget === true}
+      data-lifted={props.lifted === true}
+      data-error={props.board === true && facts.error !== undefined}
+      data-state={facts.state?.state}
       style={{ left: at.x, top: at.y, width: size.width, height: size.height }}
       tabIndex={handlers.menu ? 0 : undefined}
       {...handlers.menu}
@@ -451,17 +466,43 @@ export function ContainerView(props: ContainerViewProps) {
           className="flow-ctr__name"
           renameOnEnd={renameOnEnd}
         />
-        {item.due && <DueDate due={item.due} past={props.duePast} />}
+        {item.due && <DueDate due={item.due} past={props.duePast} compact={props.board === true} />}
         <span className="flow-ctr__spacer" />
-        <Markers facts={facts} handlers={handlers} />
-        <StatusChip state={facts.state?.state} />
-        <TrackerStatusChip tracker={facts.tracker?.facts} />
-        {facts.tracker && (
-          <TrackerTag
-            repository={facts.tracker.repository}
-            tracker={facts.tracker.facts}
-            onOpen={handlers.onOpenTracker}
-          />
+        {props.board && props.column === undefined ? (
+          <>
+            {/* DBR-FR-SBTR: the state glyph, the marker glyphs, the Status, and the address. */}
+            <StateGlyph facts={facts} />
+            <BoardMarks item={item} facts={facts} handlers={handlers} />
+            {facts.tracker && boardStatusText(facts) !== null && (
+              <span className="flow-ctr__status" data-testid="flow-group-status">
+                {boardStatusText(facts)}
+              </span>
+            )}
+            {facts.tracker && (
+              <BoardAddress
+                repository={facts.tracker.repository}
+                tracker={facts.tracker.facts}
+                onOpen={handlers.onOpenTracker}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {props.board ? (
+              <BoardMarks item={item} facts={facts} handlers={handlers} />
+            ) : (
+              <Markers facts={facts} handlers={handlers} />
+            )}
+            <StatusChip state={facts.state?.state} />
+            <TrackerStatusChip tracker={facts.tracker?.facts} />
+            {facts.tracker && (
+              <TrackerTag
+                repository={facts.tracker.repository}
+                tracker={facts.tracker.facts}
+                onOpen={handlers.onOpenTracker}
+              />
+            )}
+          </>
         )}
         <button
           type="button"
@@ -471,7 +512,7 @@ export function ContainerView(props: ContainerViewProps) {
           onPointerDown={handlers.onConnectStart}
         />
       </div>
-      {facts.error && (
+      {facts.error && !props.board && (
         <div className="flow-card__error" role="alert" data-testid={`flow-item-error-${item.id}`}>
           {facts.error}
         </div>
@@ -481,6 +522,7 @@ export function ContainerView(props: ContainerViewProps) {
           {leafCountText(facts.state?.leafCounts, props.leaves)}
         </div>
       ) : (
+        !props.board &&
         (facts.references.length > 0 || excerpt !== null) && (
           <div className="flow-ctr__about">
             <ReferenceRows references={facts.references} onOpen={handlers.onOpenReference} />
@@ -490,6 +532,7 @@ export function ContainerView(props: ContainerViewProps) {
       )}
       {!props.collapsed &&
         !inert &&
+        !props.board &&
         props.column === undefined &&
         RESIZE_HANDLES.map(([where, sides]) => (
           <span

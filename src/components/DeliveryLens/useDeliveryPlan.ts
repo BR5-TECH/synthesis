@@ -31,9 +31,16 @@ export interface DeliveryPlanView {
   flowId: string | null;
 }
 
-/** The GitHub source of a valid configuration, or null. */
+/**
+ * MDL-FR-WAOZ: the GitHub source whose plan the lens loads, or null. A
+ * configuration that is `unchecked` (as after each restart) loads too: the
+ * load checks it (GDP-FR-QSHX), so the author never opens the settings to
+ * show a plan whose configuration was valid before.
+ */
 export function githubSourceOf(source: DeliverySource | null) {
-  return source?.kind === "github" && source.configuration.state === "valid" ? source : null;
+  if (source?.kind !== "github") return null;
+  const state = source.configuration.state;
+  return state === "valid" || state === "unchecked" ? source : null;
 }
 
 /**

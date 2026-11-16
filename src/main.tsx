@@ -5,6 +5,7 @@ import { SettingsWindowApp } from "./SettingsWindowApp";
 import { readSettingsWindowBoot, readSettingsWindowProject } from "./settingsWindow";
 import { setWindowProjectId } from "./api/invoke";
 import { readProjectWindowBoot } from "./projectWindowBoot";
+import { markPlatform } from "./platform";
 import { installDropGuard } from "./dropGuard";
 
 /**
@@ -17,6 +18,9 @@ import { installDropGuard } from "./dropGuard";
  * location rather than anything the application has to be asked.
  */
 const boot = readSettingsWindowBoot(window.location.search);
+
+// PJT-FR-PBQT: the top chrome meets the system-drawn bar of macOS.
+markPlatform(document.documentElement, navigator.platform);
 
 // SNV-FR-UKER: the main window hands every drag to its web content
 // (SNV-FR-RQLF), so a drop no surface takes must not load the dropped file.

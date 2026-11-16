@@ -397,6 +397,10 @@
   gap: 16px;
 }
 .top-chrome > :nth-child(2) { max-width: 520px; justify-self: center; width: 100%; }
+/* PJT-FR-PBQT: on macOS the system draws the titlebar and the project tab bar
+   above the top chrome, in white in the light theme. The top chrome takes the
+   same colour, so the system bar and the top chrome read as one surface. */
+:root[data-platform="macos"][data-theme="light"] .top-chrome { background: var(--bg-canvas); }
 /* SNV-FR-HMCZ: each cluster fits its content at its own edge, so its measured
    width does not follow the width of its track. */
 .top-chrome__left { display: flex; align-items: center; gap: 10px; justify-self: start; }

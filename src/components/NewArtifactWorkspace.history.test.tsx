@@ -432,11 +432,16 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
           screen.queryByTestId("draft-version-reading"),
         ).not.toBeInTheDocument(),
       );
-      // NAW-FR-12: the buffer was never replaced and nothing was written.
+      // NAW-FR-12: the buffer was never replaced, and the reading wrote
+      // nothing. The autosave of the author's own edit can land at any point
+      // of this test (its delay is real time, and a slow runner passes it), so
+      // the check is on what each write carried, not on the dirty mark.
       expect(drafts.docs.get(drafts.key("d1", PROMPT))?.buffer).toBe(
         "an unsaved edit",
       );
-      expect(drafts.isDirty("d1")).toBe(true);
+      for (const [, args] of callsNamed("save_draft_file_contents")) {
+        expect((args as { body: string }).body).toBe("an unsaved edit");
+      }
       // NAW-FR-12: the editing mode came back too — the surface is still the
       // raw-Markdown one the author left it in.
       await screen.findByLabelText("Markdown source");
@@ -546,6 +551,10 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
           if ((args as { entryId: string }).entryId === "e2")
             throw "snapshot_corrupt";
           return { content: "an older version", sha256: "s" };
+        // The autosave of the author's edit can land on a slow runner; it
+        // lands as a real write does, so no save error enters the test.
+        case "save_draft_file_contents":
+          return { checksum: "c1" };
         default:
           return undefined;
       }
@@ -562,9 +571,14 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     expect(
       screen.getByText("Its stored snapshot did not match its checksum."),
     ).toBeInTheDocument();
-    // NAW-FR-41: the live prompt's buffer and dirty state are untouched.
+    // NAW-FR-41: the live prompt's buffer is untouched, and the failed read
+    // wrote nothing. The autosave of the author's own edit can land at any
+    // point (its delay is real time), so the check is on what each write
+    // carried, not on the dirty mark.
     expect(drafts.docs.get(drafts.key("d1", PROMPT))?.buffer).toBe("an unsaved edit");
-    expect(drafts.isDirty("d1")).toBe(true);
+    for (const [, args] of callsNamed("save_draft_file_contents")) {
+      expect((args as { body: string }).body).toBe("an unsaved edit");
+    }
     // …and the rail's other rows are still listed and still selectable.
     expect(versionRows()).toHaveLength(3);
     await userEvent.click(versionRows()[2]);

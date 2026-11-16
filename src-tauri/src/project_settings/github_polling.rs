@@ -20,6 +20,7 @@ const PROJECT_NODE_ID_KEY: &str = "projectNodeId";
 const INTERVAL_MINUTES_KEY: &str = "intervalMinutes";
 const READY_STATUS_KEY: &str = "readyStatus";
 const IN_PROGRESS_STATUS_KEY: &str = "inProgressStatus";
+const BLOCKED_STATUS_KEY: &str = "blockedStatus";
 /// PSS-FR-TXBB: the project-local list of pending claims.
 const PENDING_CLAIMS_KEY: &str = "github_pending_claims";
 
@@ -39,6 +40,10 @@ pub struct GithubPollingSettings {
     /// The name of the In Progress status option (GPP-FR-VXSB).
     #[serde(default)]
     pub in_progress_status: Option<String>,
+    /// The name of the Blocked status option (GPP-FR-BLVX). Optional: it
+    /// takes no part in the validation of the configuration.
+    #[serde(default)]
+    pub blocked_status: Option<String>,
 }
 
 /// PSS-FR-TXBB: one pending claim, in the shape `GPP-github-polling.md`
@@ -114,6 +119,7 @@ pub fn load_github_polling_settings_from(
         interval_minutes,
         ready_status: text(READY_STATUS_KEY),
         in_progress_status: text(IN_PROGRESS_STATUS_KEY),
+        blocked_status: text(BLOCKED_STATUS_KEY),
     })
 }
 
@@ -134,6 +140,7 @@ pub fn save_github_polling_settings_to(
     let statuses = [
         (READY_STATUS_KEY, &settings.ready_status),
         (IN_PROGRESS_STATUS_KEY, &settings.in_progress_status),
+        (BLOCKED_STATUS_KEY, &settings.blocked_status),
     ];
     for (key, value) in statuses {
         if let Some(name) = value.as_deref().filter(|name| !name.trim().is_empty()) {

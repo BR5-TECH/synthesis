@@ -25,7 +25,11 @@ fn shape_of(names: &[&str]) -> ProjectShape {
 }
 
 fn names(ready: Option<&str>, in_progress: Option<&str>) -> StatusNames {
-    StatusNames { ready: ready.map(str::to_string), in_progress: in_progress.map(str::to_string) }
+    StatusNames {
+        ready: ready.map(str::to_string),
+        in_progress: in_progress.map(str::to_string),
+        blocked: None,
+    }
 }
 
 fn chosen(project: &str, ready: Option<&str>, in_progress: Option<&str>) -> GithubPollingSettings {
@@ -34,6 +38,7 @@ fn chosen(project: &str, ready: Option<&str>, in_progress: Option<&str>) -> Gith
         interval_minutes: Some(5),
         ready_status: ready.map(str::to_string),
         in_progress_status: in_progress.map(str::to_string),
+        blocked_status: None,
     }
 }
 
@@ -203,11 +208,13 @@ fn a_settings_write_persists_and_validates_the_status_names() {
         interval_minutes: Some(5),
         ready_status: Some("Queued".into()),
         in_progress_status: Some("Doing".into()),
+        blocked_status: Some("Stuck".into()),
     };
     let view = set_settings_impl(&h.handle(), cleared).unwrap();
     assert_eq!(view.configuration.state, ConfigurationState::Unset);
     assert_eq!(view.settings.ready_status, None);
     assert_eq!(view.settings.in_progress_status, None);
+    assert_eq!(view.settings.blocked_status, None, "GPP-FR-IURX: the three names");
 }
 
 /// GPP-FR-DBPI / GPP-FR-SUFH: two equal status names are refused with
@@ -221,6 +228,31 @@ fn equal_status_names_are_refused_and_nothing_is_written() {
     let refused = set_settings_impl(&h.handle(), chosen(PROJECT, Some("Ready"), Some("Ready")));
     assert_eq!(refused.unwrap_err(), ERR_DUPLICATE_STATUS_OPTION);
     assert_eq!(std::fs::read(&path).unwrap(), before, "project.toml is byte-identical");
+
+    // GPP-FR-DBPI: the Blocked status may not repeat either of the others.
+    for (ready, in_progress) in [("Stuck", "Doing"), ("Queued", "Stuck")] {
+        let mut settings = chosen(PROJECT, Some(ready), Some(in_progress));
+        settings.blocked_status = Some("Stuck".into());
+        let refused = set_settings_impl(&h.handle(), settings);
+        assert_eq!(refused.unwrap_err(), ERR_DUPLICATE_STATUS_OPTION);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
+}
+
+/// GPP-FR-NLPG, GPP-FR-IURX, GPP-FR-BLVX: the Blocked status is stored with
+/// the other settings, and a Blocked name that matches no option causes no
+/// configuration error.
+#[test]
+fn the_blocked_status_is_stored_and_never_invalidates_the_configuration() {
+    let h = Harness::new();
+    *h.fake.shape.lock().unwrap() = Ok(shape_of(&["Queued", "Doing"]));
+    let mut settings = chosen(PROJECT, Some("Queued"), Some("Doing"));
+    settings.blocked_status = Some("Stuck".into());
+    let view = set_settings_impl(&h.handle(), settings.clone()).unwrap();
+    assert_eq!(view.configuration.state, ConfigurationState::Valid);
+    assert_eq!(view.settings.blocked_status.as_deref(), Some("Stuck"));
+    let stored = crate::project_settings::load_github_polling_settings_from(&h.root()).unwrap();
+    assert_eq!(stored, settings);
 }
 
 /// GPP-FR-NNSJ: the status options of a Project, in the order of the field;

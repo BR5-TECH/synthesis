@@ -20,7 +20,7 @@ import {
   planOf,
   renderFlow,
 } from "../test/flowCanvasHarness";
-import { canvas, grip, ID, itemEl, panCanvas, panel, queryItem, selectItem } from "../test/flowFixtures";
+import { canvas, grip, ID, itemEl, panCanvas, descriptionSource, panel, queryItem, selectItem } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
 import { blocks, item, plan, relates, sampleLayout, samplePlan } from "../test/flowPlanFixtures";
 
@@ -458,19 +458,34 @@ describe("the action control (FLO-FR-34, FLO-FR-35, FLO-FR-36)", () => {
 });
 
 describe("description and name (FLO-FR-09, FLO-FR-13)", () => {
-  it("FLO-FR-13: an unselected item renders its description as rich text, and the panel edits its Markdown source", async () => {
-    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", description: "Use **bold** text" })]));
+  it("FLO-FR-13, FLO-FR-CMPK: a card shows the excerpt alone; the panel renders the description as rich text, and Edit shows its Markdown source", async () => {
+    const description = "## Intent\n\nUse **bold** text\n\n## Inputs\n\n- one";
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", description })]));
     const { flows } = await renderFlow(b);
 
-    const rendered = screen.getByTestId("flow-item-description-t1");
-    expect(within(rendered).getByText("bold").tagName).toBe("STRONG");
+    expect(screen.queryByTestId("flow-item-description-t1")).toBeNull();
+    expect(screen.getByTestId("flow-item-excerpt-t1")).toHaveTextContent(/^Use bold text$/);
     selectItem("t1");
-    const source = within(panel()).getByRole("textbox", { name: "Description" });
-    expect(source).toHaveValue("Use **bold** text");
+    const rendered = within(panel()).getByTestId("flow-item-description-t1");
+    expect(within(rendered).getByText("bold").tagName).toBe("STRONG");
+    expect(within(rendered).getByText("Inputs")).toBeInTheDocument();
+    expect(within(panel()).queryByRole("textbox", { name: "Description" })).toBeNull();
+    const source = descriptionSource();
+    expect(source).toHaveValue(description);
     expect(within(panel()).queryByRole("toolbar")).toBeNull();
     await userEvent.clear(source);
     await userEvent.type(source, "Plain");
     expect(planOf(flows).items[1].description).toBe("Plain");
+  });
+
+  it("FLO-FR-13: a container's panel renders its description as rich text; an item with none says so", async () => {
+    const b = flowBackend(plan([item("f1", "feature", { description: "A **wide** feature" }), item("t1", "task", { parentId: "f1" })]));
+    await renderFlow(b);
+
+    selectItem("f1");
+    expect(within(within(panel()).getByTestId("flow-item-description-f1")).getByText("wide").tagName).toBe("STRONG");
+    selectItem("t1");
+    expect(within(panel()).getByText("No description.")).toBeInTheDocument();
   });
 
   it("FLO-FR-09: an item is renamed in place, and two items may share a name", async () => {

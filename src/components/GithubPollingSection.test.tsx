@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { GithubPollingSection } from "./GithubPollingSection";
 import { Settings } from "../test/settingsHarness";
 import { pollingView } from "../test/githubPollingFixtures";
+import { resetLogBufferForTest } from "../logging";
 import { resetSettingsSections, settingsSectionsPending } from "../state/settingsSweep";
 import type {
   GithubPollingView,
@@ -51,6 +52,7 @@ interface SetArgs {
   intervalMinutes: number | null;
   readyStatus: string | null;
   inProgressStatus: string | null;
+  blockedStatus?: string | null;
 }
 
 let state: GithubPollingView;
@@ -61,6 +63,7 @@ let setImpl: (args: SetArgs) => Promise<GithubPollingView>;
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   handlers = [];
   state = pollingView();
   listImpl = async () => PROJECTS;
@@ -72,6 +75,7 @@ beforeEach(() => {
         intervalMinutes: args.intervalMinutes as GithubPollingView["settings"]["intervalMinutes"],
         readyStatus: args.readyStatus,
         inProgressStatus: args.inProgressStatus,
+        blockedStatus: args.blockedStatus ?? null,
       },
       configuration:
         args.projectNodeId === null
@@ -113,6 +117,7 @@ const intervalSelect = () =>
 const readySelect = () => screen.getByLabelText("Ready status") as HTMLSelectElement;
 const inProgressSelect = () =>
   screen.getByLabelText("In Progress status") as HTMLSelectElement;
+const blockedSelect = () => screen.getByLabelText("Blocked status") as HTMLSelectElement;
 /**
  * Every select is disabled while a status read or a write is outstanding, and
  * `selectOptions` on a disabled select does nothing. So each choice waits for
@@ -192,6 +197,7 @@ describe("the GitHub polling section", () => {
       intervalMinutes: 5,
       readyStatus: "ready",
       inProgressStatus: "In progress",
+      blockedStatus: null,
     });
     await waitFor(() => expect(intervalSelect()).not.toBeDisabled());
     await choose(intervalSelect, "");
@@ -201,6 +207,7 @@ describe("the GitHub polling section", () => {
       intervalMinutes: null,
       readyStatus: "ready",
       inProgressStatus: "In progress",
+      blockedStatus: null,
     });
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
     await choose(projectSelect, "");
@@ -210,11 +217,71 @@ describe("the GitHub polling section", () => {
         intervalMinutes: null,
         readyStatus: null,
         inProgressStatus: null,
+        blockedStatus: null,
       }),
     );
     // SET-FR-UGSP: the selectors are absent while no Project is selected.
     await waitFor(() => expect(screen.queryByLabelText("Ready status")).toBeNull());
     expect(screen.queryByLabelText("In Progress status")).toBeNull();
+  });
+
+  it("SET-FR-UGSP, SET-FR-CJZH, SET-FR-VLQJ: a Blocked status selector takes its default and its change persists at once", async () => {
+    statusesImpl = async (id) =>
+      id === "P2" ? [...OPTIONS.P2, { id: "o7", name: "BLOCKED" }, { id: "o8", name: "On hold" }] : (OPTIONS[id] ?? []);
+    render(<GithubPollingSection />);
+    await waitFor(() => expect(projectSelect().value).toBe("P1"));
+    await choose(projectSelect, "P2");
+    await waitFor(() => expect(calls("set_github_polling_settings")).toHaveLength(1));
+    expect(calls("set_github_polling_settings")[0][1]).toMatchObject({
+      readyStatus: "ready",
+      inProgressStatus: "In progress",
+      blockedStatus: "BLOCKED",
+    });
+    await waitFor(() => expect(blockedSelect().value).toBe("BLOCKED"));
+    await choose(blockedSelect, "On hold");
+    await waitFor(() => expect(calls("set_github_polling_settings")).toHaveLength(2));
+    expect(calls("set_github_polling_settings")[1][1]).toEqual({
+      projectNodeId: "P2",
+      intervalMinutes: 5,
+      readyStatus: "ready",
+      inProgressStatus: "In progress",
+      blockedStatus: "On hold",
+    });
+  });
+
+  it("SET-FR-QZYV: each status selector disables the options the other two hold", async () => {
+    statusesImpl = async (id) =>
+      id === "P2" ? [...OPTIONS.P2, { id: "o7", name: "Blocked" }] : (OPTIONS[id] ?? []);
+    render(<GithubPollingSection />);
+    await waitFor(() => expect(projectSelect().value).toBe("P1"));
+    await choose(projectSelect, "P2");
+    await waitFor(() => expect(blockedSelect().value).toBe("Blocked"));
+    const disabled = (select: HTMLSelectElement) =>
+      Array.from(select.options).filter((o) => o.disabled && o.value !== "").map((o) => o.value);
+    expect(disabled(blockedSelect())).toEqual(["ready", "In progress"]);
+    expect(disabled(readySelect())).toEqual(["In progress", "Blocked"]);
+    expect(disabled(inProgressSelect())).toEqual(["ready", "Blocked"]);
+  });
+
+  it("GPP-FR-BLVX: an unset Blocked status is not marked as an error", async () => {
+    render(<GithubPollingSection />);
+    await waitFor(() => expect(projectSelect().value).toBe("P1"));
+    await waitFor(() => expect(blockedSelect()).toBeEnabled());
+    expect(blockedSelect().value).toBe("");
+    expect(blockedSelect()).not.toHaveAttribute("aria-invalid");
+    expect(calls("set_github_polling_settings")).toHaveLength(0);
+  });
+
+  it("SET-FR-SDKP: a stored Project with an unset Blocked status takes its default once the options are read", async () => {
+    statusesImpl = async (id) => (id === "P1" ? [...OPTIONS.P1, { id: "o9", name: "blocked" }] : (OPTIONS[id] ?? []));
+    render(<GithubPollingSection />);
+    await waitFor(() => expect(calls("set_github_polling_settings")).toHaveLength(1));
+    expect(calls("set_github_polling_settings")[0][1]).toMatchObject({
+      projectNodeId: "P1",
+      readyStatus: "Ready",
+      blockedStatus: "blocked",
+    });
+    await waitFor(() => expect(blockedSelect().value).toBe("blocked"));
   });
 
   it("SET-FR-VLQJ: a refused write keeps the previous values and renders the error inline", async () => {
@@ -231,7 +298,7 @@ describe("the GitHub polling section", () => {
 
   it("SET-FR-GKTA: states no Project, a valid Project with its title, or the error with polling disabled", async () => {
     state = pollingView({
-      settings: { projectNodeId: null, intervalMinutes: null, readyStatus: null, inProgressStatus: null },
+      settings: { projectNodeId: null, intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null },
       configuration: { state: "unset", errorCode: null, error: null, missingStatus: null, projectTitle: null },
     });
     const view = render(<GithubPollingSection />);
@@ -377,6 +444,8 @@ describe("the Ready status and In Progress status selectors", () => {
     expect(await screen.findByTestId("github-polling-ready-status-loading")).toBeInTheDocument();
     expect(readySelect()).toBeDisabled();
     expect(readySelect().value).toBe("Ready");
+    expect(screen.getByTestId("github-polling-blocked-status-loading")).toBeInTheDocument();
+    expect(blockedSelect()).toBeDisabled();
     await act(async () => release());
     expect(await screen.findByTestId("github-statuses-error")).toHaveTextContent(
       "GitHub could not be reached",
@@ -410,6 +479,7 @@ describe("the Ready status and In Progress status selectors", () => {
         intervalMinutes: 5,
         readyStatus: null,
         inProgressStatus: "IN PROGRESS",
+        blockedStatus: null,
       });
       await waitFor(() => expect(readySelect().value).toBe(""));
       expect(readySelect().selectedOptions[0].textContent).toBe("Choose an option");
@@ -432,6 +502,7 @@ describe("the Ready status and In Progress status selectors", () => {
       intervalMinutes: 5,
       readyStatus: null,
       inProgressStatus: null,
+      blockedStatus: null,
     });
     expect(await screen.findByTestId("github-statuses-error")).toBeInTheDocument();
   });
@@ -443,6 +514,7 @@ describe("the Ready status and In Progress status selectors", () => {
         intervalMinutes: 15,
         readyStatus: null,
         inProgressStatus: "Todo",
+        blockedStatus: null,
       },
     });
     render(<GithubPollingSection />);
@@ -452,6 +524,7 @@ describe("the Ready status and In Progress status selectors", () => {
       intervalMinutes: 15,
       readyStatus: "Ready",
       inProgressStatus: "Todo",
+      blockedStatus: null,
     });
     await waitFor(() => expect(readySelect().value).toBe("Ready"));
     expect(inProgressSelect().value).toBe("Todo");
@@ -464,6 +537,7 @@ describe("the Ready status and In Progress status selectors", () => {
         intervalMinutes: 5,
         readyStatus: "Queued",
         inProgressStatus: "In Progress",
+        blockedStatus: null,
       },
     });
     render(<GithubPollingSection />);
@@ -481,6 +555,7 @@ describe("the Ready status and In Progress status selectors", () => {
       intervalMinutes: 5,
       readyStatus: "Todo",
       inProgressStatus: "In Progress",
+      blockedStatus: null,
     });
   });
 

@@ -11,7 +11,9 @@
  * milestones answer (and the GitHub plan) stale, `?deliveryFails` refuses the
  * milestones read, `?deliveryGithub` starts with the GitHub Project "Roadmap"
  * as the source (see `mock-github-plan.ts`), and `?deliveryPublishFails` makes
- * the first Publish to GitHub stop after one created issue.
+ * the first Publish to GitHub stop after one created issue. `?deliveryUndated`
+ * removes the due date of every milestone, and `?deliveryPastDue` moves the
+ * due date of Beta before today.
  *
  * Publish to GitHub makes GitHub the source; Export to file writes the GitHub
  * plan to the chosen path and makes that file the source.
@@ -207,7 +209,13 @@ export function deliveryInvoke(
       return {
         source,
         planName: "Payments v2",
-        milestones: MILESTONES,
+        // `?deliveryUndated`: no milestone has a due date (DSH-FR-NZXN).
+        // `?deliveryPastDue`: Beta is past due, so its card holds every line.
+        milestones: flag("deliveryUndated")
+          ? MILESTONES.map((m) => ({ ...m, due: null }))
+          : flag("deliveryPastDue")
+            ? MILESTONES.map((m) => (m.itemId === "m1" ? { ...m, due: "2026-09-30" } : m))
+            : MILESTONES,
         readAt: flag("deliveryStale") ? new Date(Date.now() - 20 * 60_000).toISOString() : null,
         stale: flag("deliveryStale"),
       };

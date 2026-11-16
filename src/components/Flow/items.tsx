@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
 import type { FlowItem, FlowPosition, FlowSize } from "../../state/flowDocument";
 import type { ItemDeliveryState, TrackerFacts } from "../../types";
-import { CommentMarkdown } from "../CommentMarkdown";
 import {
   BlockedMarker,
   DueDate,
@@ -14,6 +13,7 @@ import {
   TrackerStatusChip,
   TrackerTag,
 } from "./chips";
+import { descriptionExcerpt } from "./excerpt";
 import { isInteractive, type Reference, type ResizeSides } from "./geometry";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { measureContainer } from "./measure";
@@ -180,20 +180,33 @@ function Markers({ facts, handlers }: { facts: ItemFacts; handlers: ItemHandlers
   );
 }
 
+/**
+ * FLO-FR-XCRP: the excerpt of a description in at most two lines. The full
+ * text is in the panel of the selected item (FLO-FR-13).
+ */
+function Excerpt({ item }: { item: FlowItem }) {
+  const text = descriptionExcerpt(item.description);
+  if (!text) return null;
+  return (
+    <p className="flow-excerpt" title={text} data-testid={`flow-item-excerpt-${item.id}`}>
+      {text}
+    </p>
+  );
+}
+
 export interface CardViewProps extends ItemViewBase {
-  creating: boolean;
   draftError?: string;
   onMeasure: (id: string, height: number) => void;
-  onCreateDraft: () => void;
   onOpenDraft: (draftId: string) => void;
   onUnlinkDraft: () => void;
 }
 
 /**
- * FLO-FR-38: a task or a defect, drawn as a card: its glyph and name, its
- * status chip and markers, its draft row, its references, its description,
- * and its tracker tag. Selection changes nothing in the card: the editing
- * controls are in the attached panel (FLO-FR-44 layout).
+ * FLO-FR-38 / FLO-FR-CMPK: a task or a defect, drawn as a compact card: its
+ * glyph and name, its status chip and markers, its draft row, its references,
+ * its excerpt, and its tracker tag. Selection changes nothing in the card:
+ * the full description and the draft actions are in the attached panel
+ * (FLO-FR-13, FLO-FR-NRBV).
  */
 export function CardView(props: CardViewProps) {
   const { item, at, facts, selected, magnet, editingName, inert, handlers, renameOnEnd } = props;
@@ -283,18 +296,6 @@ export function CardView(props: CardViewProps) {
             )}
           </button>
         ))}
-      {item.draftId === undefined && (
-        <div className="flow-card__row">
-          <button
-            type="button"
-            className="flow-btn flow-btn--xs"
-            disabled={inert || props.creating}
-            onClick={props.onCreateDraft}
-          >
-            {props.creating ? "Creating draft…" : "Create draft"}
-          </button>
-        </div>
-      )}
       {props.draftError && (
         <div className="flow-card__error" role="alert">
           {props.draftError}
@@ -306,13 +307,7 @@ export function CardView(props: CardViewProps) {
         </div>
       )}
       <ReferenceRows references={facts.references} onOpen={handlers.onOpenReference} />
-      {item.description && (
-        <CommentMarkdown
-          body={item.description}
-          className="flow-desc"
-          testId={`flow-item-description-${item.id}`}
-        />
-      )}
+      <Excerpt item={item} />
       {facts.tracker && (
         <div className="flow-card__row">
           <TrackerTag
@@ -478,16 +473,10 @@ export function ContainerView(props: ContainerViewProps) {
           {leafCountText(facts.state?.leafCounts, props.leaves)}
         </div>
       ) : (
-        (facts.references.length > 0 || item.description) && (
+        (facts.references.length > 0 || descriptionExcerpt(item.description) !== null) && (
           <div className="flow-ctr__about">
             <ReferenceRows references={facts.references} onOpen={handlers.onOpenReference} />
-            {item.description && (
-              <CommentMarkdown
-                body={item.description}
-                className="flow-desc-ctr"
-                testId={`flow-item-description-${item.id}`}
-              />
-            )}
+            <Excerpt item={item} />
           </div>
         )
       )}

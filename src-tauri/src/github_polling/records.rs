@@ -34,6 +34,8 @@ pub const STATUS_FIELD: &str = "Status";
 /// falls back to them.
 pub const READY: &str = "Ready";
 pub const IN_PROGRESS: &str = "In Progress";
+/// GPP-FR-BLVX: the default name of the Blocked status.
+pub const BLOCKED: &str = "Blocked";
 /// GPP-FR-BOQX: the GitHub issue type an eligible issue carries.
 pub const TASK_TYPE: &str = "Task";
 

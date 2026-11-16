@@ -26,7 +26,7 @@ The backend that decides where the project's one delivery plan lives, and that m
 18. **DSR-FR-RZUH** An export creates one Flow document of version `3` (per `FGV-flow-graph-validation.md` FGV-FR-07) at the path through `PST-project-storage.md`, with the Project's title as its name and each item, edge, and reference of the plan, its milestone items in milestone order. It writes no tracker reference, and it copies the plan's layout into the layout scope of the new file.
 19. **DSR-FR-JWYO** An export that completes sets the source choice to `file` with the new artifact id, and returns that id and the path. It changes nothing on GitHub, and it keeps the overlay of the GitHub plan.
 19. **DSR-FR-OJLB** `load_delivery_milestones(refresh)` resolves the source (DSR-FR-AECK). For `none` it answers the source with its reason and no milestone. For `github` it reads the plan through `load_github_delivery_plan(refresh)` (per `GDP-github-delivery-plan.md` GDP-FR-QSHX). For `file` it reads the Flow and its states through `FDL-flow-delivery.md` (FDL-FR-AZQM).
-19. **DSR-FR-FQZD** The answer holds the plan's name and each milestone item in milestone order (per `../ui/FLO-flow.md` FLO-FR-MCFR), with its id, name, due date, state, leaf counts (per `FDL-flow-delivery.md` FDL-FR-IJXW), and count of blocked leaves under it. The first milestone whose state is neither `done` nor `dropped` is marked `current`.
+19. **DSR-FR-FQZD** The answer holds the plan's name and each milestone item in milestone order (per `../ui/FLO-flow.md` FLO-FR-MCFR), with its id, name, due date, state, leaf counts (per `FDL-flow-delivery.md` FDL-FR-IJXW), and count of blocked work items under it (per `FDL-flow-delivery.md` FDL-FR-KWMT). The first milestone whose state is neither `done` nor `dropped` is marked `current`.
 19. **DSR-FR-BIYW** The milestone order starts from the document order of a Flow file, and from the order of `GDP-github-delivery-plan.md` GDP-FR-HNEW for a GitHub plan. The answer carries the `read_at` and `stale` of a GitHub plan, and neither for a Flow file.
 19. **DSR-FR-SKPX** `load_delivery_milestones` refuses with the error of the read it makes: a configuration or request error of a GitHub plan with no cache, and `flow_invalid` with the report for a Flow file that fails validation. It writes nothing.
 20. **DSR-FR-LYMF** Each operation of this module logs its start, its outcome, its counts, and every error, handled ones included, through `LGC-logging.md`. No record carries a token, a Type name, an item name, a description, or a URL query.
@@ -69,7 +69,7 @@ DeliveryMilestones {
     due,             // "YYYY-MM-DD" | null
     state,           // ItemDeliveryState.state (FDL-flow-delivery.md)
     leaf_counts,     // { not_started, drafting, in_progress, done, dropped }
-    blocked_leaves,  // count of blocked leaves under the milestone
+    blocked_leaves,  // count of blocked work items under the milestone (DSR-FR-FQZD)
     current          // true on one milestone at most (DSR-FR-FQZD)
   }[],
   read_at,           // GitHub plan alone, else null

@@ -4,6 +4,7 @@ import {
   autoSelectedStatuses,
   configurationErrorBody,
   configurationErrorTransition,
+  defaultStatuses,
   defaultStatusOption,
   githubPollingErrorMessage,
   intervalMs,
@@ -22,12 +23,12 @@ describe("polling rules", () => {
     expect(timedPollingEnabled(pollingView())).toBe(true);
     expect(
       timedPollingEnabled(
-        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } }),
+        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
       ),
     ).toBe(false);
     expect(
       timedPollingEnabled(
-        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
+        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
       ),
     ).toBe(false);
     expect(
@@ -63,12 +64,12 @@ describe("polling rules", () => {
     expect(refreshAvailable(null)).toBe(false);
     expect(
       refreshAvailable(
-        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } }),
+        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
       ),
     ).toBe(true);
     expect(
       refreshAvailable(
-        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
+        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
       ),
     ).toBe(false);
     expect(
@@ -97,7 +98,7 @@ describe("GIT-FR-HNGQ / GIT-FR-RUAH: the one state the section renders", () => {
     expect(readyTasksState(null, false)).toBe("unread");
     expect(
       readyTasksState(
-        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
+        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
         false,
       ),
     ).toBe("not-configured");
@@ -204,15 +205,16 @@ describe("status names", () => {
   });
 
   it("SET-FR-SDKP: only an unset name takes its default; a stored name stays; no change writes nothing", () => {
-    expect(autoSelectedStatuses({ readyStatus: null, inProgressStatus: "Todo" }, options)).toEqual({
+    expect(autoSelectedStatuses({ readyStatus: null, inProgressStatus: "Todo", blockedStatus: null }, options)).toEqual({
       readyStatus: "ready",
       inProgressStatus: "Todo",
+      blockedStatus: null,
     });
     expect(
-      autoSelectedStatuses({ readyStatus: "Gone", inProgressStatus: "Todo" }, options),
+      autoSelectedStatuses({ readyStatus: "Gone", inProgressStatus: "Todo", blockedStatus: null }, options),
     ).toBeNull();
     expect(
-      autoSelectedStatuses({ readyStatus: null, inProgressStatus: null }, [{ id: "x", name: "Queued" }]),
+      autoSelectedStatuses({ readyStatus: null, inProgressStatus: null, blockedStatus: null }, [{ id: "x", name: "Queued" }]),
     ).toBeNull();
   });
 
@@ -222,12 +224,48 @@ describe("status names", () => {
       { id: "p", name: "In Progress" },
     ];
     expect(
-      autoSelectedStatuses({ readyStatus: null, inProgressStatus: "Ready" }, both),
+      autoSelectedStatuses({ readyStatus: null, inProgressStatus: "Ready", blockedStatus: null }, both),
     ).toBeNull();
     expect(
-      autoSelectedStatuses({ readyStatus: "In Progress", inProgressStatus: null }, both),
+      autoSelectedStatuses({ readyStatus: "In Progress", inProgressStatus: null, blockedStatus: null }, both),
     ).toBeNull();
     expect(defaultStatusOption(both, "Ready", "Ready")).toBeNull();
+  });
+});
+
+describe("the Blocked status defaults (SET-FR-CJZH, SET-FR-SDKP, SET-FR-QZYV)", () => {
+  const three = [
+    { id: "r", name: "Ready" },
+    { id: "p", name: "In Progress" },
+    { id: "b", name: "blocked" },
+  ];
+
+  it("SET-FR-CJZH: a newly selected Project takes the default of each of the three selectors", () => {
+    expect(defaultStatuses(three)).toEqual({
+      readyStatus: "Ready",
+      inProgressStatus: "In Progress",
+      blockedStatus: "blocked",
+    });
+    expect(defaultStatuses([{ id: "q", name: "Queued" }])).toEqual({
+      readyStatus: null,
+      inProgressStatus: null,
+      blockedStatus: null,
+    });
+  });
+
+  it("SET-FR-SDKP: an unset Blocked status takes its default; a stored one stays", () => {
+    expect(
+      autoSelectedStatuses({ readyStatus: "Ready", inProgressStatus: "In Progress", blockedStatus: null }, three),
+    ).toEqual({ readyStatus: "Ready", inProgressStatus: "In Progress", blockedStatus: "blocked" });
+    expect(
+      autoSelectedStatuses({ readyStatus: "Ready", inProgressStatus: "In Progress", blockedStatus: "Gone" }, three),
+    ).toBeNull();
+  });
+
+  it("SET-FR-QZYV: the Blocked default never takes an option another status holds", () => {
+    expect(
+      autoSelectedStatuses({ readyStatus: "blocked", inProgressStatus: "In Progress", blockedStatus: null }, three),
+    ).toBeNull();
   });
 });
 

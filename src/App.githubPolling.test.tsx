@@ -105,6 +105,7 @@ const invalidView = () =>
       intervalMinutes: 5,
       readyStatus: "Queued",
       inProgressStatus: "In Progress",
+      blockedStatus: null,
     },
     configuration: {
       state: "invalid",

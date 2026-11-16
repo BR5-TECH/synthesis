@@ -15,11 +15,10 @@ import { onGithubPollingChanged } from "../events";
 import { logInfo, logWarn } from "../logging";
 import {
   autoSelectedStatuses,
-  defaultStatusOption,
+  defaultStatuses,
   githubPollingErrorMessage,
-  IN_PROGRESS_STATUS_DEFAULT,
-  READY_STATUS_DEFAULT,
   refusalCode,
+  type StatusNames,
 } from "../state/githubPolling";
 import {
   GITHUB_POLLING_INTERVALS,
@@ -149,8 +148,7 @@ export function GithubPollingSection() {
     async (
       projectNodeId: string | null,
       intervalMinutes: GithubPollingInterval | null,
-      readyStatus: string | null,
-      inProgressStatus: string | null,
+      names: StatusNames,
     ) => {
       setSaving(true);
       setSaveError(null);
@@ -159,8 +157,9 @@ export function GithubPollingSection() {
           await api.setGithubPollingSettings(
             projectNodeId,
             intervalMinutes,
-            readyStatus,
-            inProgressStatus,
+            names.readyStatus,
+            names.inProgressStatus,
+            names.blockedStatus,
           ),
         );
       } catch (e) {
@@ -210,13 +209,21 @@ export function GithubPollingSection() {
       const options = await readStatuses(projectNodeId);
       const current = viewRef.current?.settings;
       if (!options || !current || current.projectNodeId !== projectNodeId) return;
-      const next = autoSelectedStatuses(current, options);
+      const next = autoSelectedStatuses(
+        {
+          readyStatus: current.readyStatus,
+          inProgressStatus: current.inProgressStatus,
+          blockedStatus: current.blockedStatus ?? null,
+        },
+        options,
+      );
       if (!next) return;
       logInfo(["frontend"], "github polling statuses selected by default", {
         ready: next.readyStatus !== null,
         inProgress: next.inProgressStatus !== null,
+        blocked: next.blockedStatus !== null,
       });
-      await save(projectNodeId, current.intervalMinutes, next.readyStatus, next.inProgressStatus);
+      await save(projectNodeId, current.intervalMinutes, next);
     },
     [readStatuses, save],
   );
@@ -225,6 +232,8 @@ export function GithubPollingSection() {
   const interval = view?.settings.intervalMinutes ?? null;
   const readyStatus = view?.settings.readyStatus ?? null;
   const inProgressStatus = view?.settings.inProgressStatus ?? null;
+  const blockedStatus = view?.settings.blockedStatus ?? null;
+  const names: StatusNames = { readyStatus, inProgressStatus, blockedStatus };
 
   // SET-FR-UGSP: the selected Project's options are read once it is known,
   // and again whenever another Project is selected.
@@ -243,18 +252,17 @@ export function GithubPollingSection() {
     if (projectNodeId === null) {
       statusReadSeq.current += 1;
       setStatuses(null);
-      await save(null, interval, null, null);
+      await save(null, interval, { readyStatus: null, inProgressStatus: null, blockedStatus: null });
       return;
     }
     setSaving(true);
     setChangingTo(projectNodeId);
     try {
       const options = await readStatuses(projectNodeId);
-      const ready = options ? defaultStatusOption(options, READY_STATUS_DEFAULT) : null;
-      const inProgress = options
-        ? defaultStatusOption(options, IN_PROGRESS_STATUS_DEFAULT)
-        : null;
-      await save(projectNodeId, interval, ready, inProgress);
+      const chosen = options
+        ? defaultStatuses(options)
+        : { readyStatus: null, inProgressStatus: null, blockedStatus: null };
+      await save(projectNodeId, interval, chosen);
     } finally {
       setChangingTo(null);
     }
@@ -286,7 +294,8 @@ export function GithubPollingSection() {
       <div className="t-ui-sm t-muted" style={{ marginBottom: 12 }}>
         The Git panel lists the open Tasks of this repository whose Status in
         the selected GitHub Project is the Ready status chosen below. A claim
-        moves the Task to the In Progress status.
+        moves the Task to the In Progress status. An open issue on the Blocked
+        status counts as blocked in the delivery plan.
       </div>
 
       {view === null && !readError && <div className="t-muted t-ui-sm">Loading…</div>}
@@ -336,12 +345,14 @@ export function GithubPollingSection() {
               <StatusSelector
                 id="github-polling-ready-status"
                 value={readyStatus}
-                other={inProgressStatus}
-                otherLabel="In Progress status"
+                others={[
+                  { name: inProgressStatus, label: "In Progress status" },
+                  { name: blockedStatus, label: "Blocked status" },
+                ]}
                 options={statusOptions}
                 loading={statusOptions === null && statusError === null}
                 disabled={busy}
-                onChange={(name) => void save(selected, interval, name, inProgressStatus)}
+                onChange={(name) => void save(selected, interval, { ...names, readyStatus: name })}
               />
               <label className="t-ui-sm" htmlFor="github-polling-in-progress-status">
                 In Progress status
@@ -349,12 +360,32 @@ export function GithubPollingSection() {
               <StatusSelector
                 id="github-polling-in-progress-status"
                 value={inProgressStatus}
-                other={readyStatus}
-                otherLabel="Ready status"
+                others={[
+                  { name: readyStatus, label: "Ready status" },
+                  { name: blockedStatus, label: "Blocked status" },
+                ]}
                 options={statusOptions}
                 loading={statusOptions === null && statusError === null}
                 disabled={busy}
-                onChange={(name) => void save(selected, interval, readyStatus, name)}
+                onChange={(name) =>
+                  void save(selected, interval, { ...names, inProgressStatus: name })
+                }
+              />
+              <label className="t-ui-sm" htmlFor="github-polling-blocked-status">
+                Blocked status
+              </label>
+              <StatusSelector
+                id="github-polling-blocked-status"
+                value={blockedStatus}
+                others={[
+                  { name: readyStatus, label: "Ready status" },
+                  { name: inProgressStatus, label: "In Progress status" },
+                ]}
+                optional
+                options={statusOptions}
+                loading={statusOptions === null && statusError === null}
+                disabled={busy}
+                onChange={(name) => void save(selected, interval, { ...names, blockedStatus: name })}
               />
               {statusError && (
                 <div
@@ -394,8 +425,7 @@ export function GithubPollingSection() {
                 e.target.value === NONE
                   ? null
                   : (Number(e.target.value) as GithubPollingInterval),
-                readyStatus,
-                inProgressStatus,
+                names,
               )
             }
           >

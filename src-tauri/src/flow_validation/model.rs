@@ -244,6 +244,38 @@ impl<'a> Hierarchy<'a> {
         out
     }
 
+    /// FDL-FR-KWMT: a leaf, or a container that holds no item.
+    pub fn is_work_item(&self, id: &str) -> bool {
+        match self.kind(id) {
+            Some(k) if !k.is_container() => true,
+            Some(_) => self.children(id).is_empty(),
+            None => false,
+        }
+    }
+
+    /// FDL-FR-KWMT: every work item under `id` at any depth, not `id`
+    /// itself, in document order. Bounded by the seen set, so a containment
+    /// cycle cannot make it run for ever.
+    pub fn work_items_under(&self, id: &str) -> Vec<&'a str> {
+        let mut out = Vec::new();
+        let mut seen: HashSet<&str> = HashSet::from([id]);
+        let mut stack: Vec<&'a str> = self.children(id).to_vec();
+        while let Some(at) = stack.pop() {
+            if !seen.insert(at) {
+                continue;
+            }
+            if self.is_work_item(at) {
+                out.push(at);
+            } else {
+                stack.extend(self.children(at).iter().copied());
+            }
+        }
+        let rank: HashMap<&str, usize> =
+            self.order.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+        out.sort_by_key(|id| rank.get(id).copied().unwrap_or(usize::MAX));
+        out
+    }
+
     /// Item ids in document order.
     pub fn order(&self) -> &[&'a str] {
         &self.order

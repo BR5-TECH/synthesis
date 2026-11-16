@@ -262,7 +262,7 @@ fn only_the_five_intervals_are_accepted() {
 }
 
 /// GPP-FR-NLPG: the settings are the Project node id, the interval, and the
-/// two status names, stored project-public through PSS.
+/// three status names, stored project-public through PSS.
 #[test]
 fn the_settings_are_project_public() {
     let dir = project();
@@ -281,6 +281,7 @@ fn the_settings_are_project_public() {
             "intervalMinutes": 5,
             "readyStatus": null,
             "inProgressStatus": null,
+            "blockedStatus": null,
         })
     );
 }

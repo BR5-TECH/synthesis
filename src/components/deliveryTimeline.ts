@@ -74,13 +74,18 @@ export function leafTotal(counts: FlowLeafCounts): number {
   return counts.done + counts.inProgress + counts.drafting + counts.notStarted + counts.dropped;
 }
 
-/** DSH-FR-OUPX: the count line of the header. */
+/**
+ * DSH-FR-OUPX: the count line of the header. It ends in `· N blocked` where a
+ * milestone holds a blocked work item.
+ */
 export function milestoneCountLine(milestones: DeliveryMilestone[]): string {
+  const blocked = milestones.reduce((sum, m) => sum + m.blockedLeaves, 0);
+  const tail = blocked > 0 ? ` · ${blocked} blocked` : "";
   if (milestones.every((m) => m.state === "done" || m.state === "dropped")) {
-    return "All milestones done";
+    return `All milestones done${tail}`;
   }
   const done = milestones.filter((m) => m.state === "done").length;
-  return `${done} of ${milestones.length} milestones done`;
+  return `${done} of ${milestones.length} milestones done${tail}`;
 }
 
 /** A dated milestone on the axis. */

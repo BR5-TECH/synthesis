@@ -28,7 +28,7 @@ const ERROR_TEXT: Record<string, string> = {
     "The GitHub polling configuration has an error. Fix it in Project settings → GitHub Project settings.",
   invalid_interval: "That polling interval is not available.",
   duplicate_status_option:
-    "The Ready status and the In Progress status must be different options.",
+    "The Ready, In Progress, and Blocked statuses must be different options.",
   project_unavailable:
     "The selected GitHub Project is missing or the GitHub token cannot read it. Select another Project in Project settings.",
   status_field_missing:
@@ -170,6 +170,7 @@ export function newIssuesTitle(issues: GithubNewIssue[]): string {
 /** GPP-FR-VXSB: the default name of each status. */
 export const READY_STATUS_DEFAULT = "Ready";
 export const IN_PROGRESS_STATUS_DEFAULT = "In Progress";
+export const BLOCKED_STATUS_DEFAULT = "Blocked";
 
 /**
  * SET-FR-CJZH: the option a selector selects by default — the first, in the
@@ -180,12 +181,20 @@ export const IN_PROGRESS_STATUS_DEFAULT = "In Progress";
 export function defaultStatusOption(
   options: readonly GithubProjectStatusOption[],
   defaultName: string,
-  other: string | null = null,
+  ...others: (string | null)[]
 ): string | null {
   const wanted = defaultName.toLowerCase();
   return (
-    options.find((o) => o.name.toLowerCase() === wanted && o.name !== other)?.name ?? null
+    options.find((o) => o.name.toLowerCase() === wanted && !others.includes(o.name))?.name ??
+    null
   );
+}
+
+/** SET-FR-CJZH: the three status names of the polling settings. */
+export interface StatusNames {
+  readyStatus: string | null;
+  inProgressStatus: string | null;
+  blockedStatus: string | null;
 }
 
 /**
@@ -194,23 +203,45 @@ export function defaultStatusOption(
  * where nothing changes, so the read writes nothing.
  */
 export function autoSelectedStatuses(
-  stored: { readyStatus: string | null; inProgressStatus: string | null },
+  stored: StatusNames,
   options: readonly GithubProjectStatusOption[],
-): { readyStatus: string | null; inProgressStatus: string | null } | null {
-  // SET-FR-QZYV: a default never takes the option the other selector holds.
+): StatusNames | null {
+  // SET-FR-QZYV: a default never takes an option another selector holds.
   const readyStatus =
     stored.readyStatus ??
-    defaultStatusOption(options, READY_STATUS_DEFAULT, stored.inProgressStatus);
+    defaultStatusOption(
+      options,
+      READY_STATUS_DEFAULT,
+      stored.inProgressStatus,
+      stored.blockedStatus,
+    );
   const inProgressStatus =
     stored.inProgressStatus ??
-    defaultStatusOption(options, IN_PROGRESS_STATUS_DEFAULT, readyStatus);
+    defaultStatusOption(options, IN_PROGRESS_STATUS_DEFAULT, readyStatus, stored.blockedStatus);
+  const blockedStatus =
+    stored.blockedStatus ??
+    defaultStatusOption(options, BLOCKED_STATUS_DEFAULT, readyStatus, inProgressStatus);
   if (
     readyStatus === stored.readyStatus &&
-    inProgressStatus === stored.inProgressStatus
+    inProgressStatus === stored.inProgressStatus &&
+    blockedStatus === stored.blockedStatus
   ) {
     return null;
   }
-  return { readyStatus, inProgressStatus };
+  return { readyStatus, inProgressStatus, blockedStatus };
+}
+
+/** SET-FR-CJZH: the default of each selector for a newly selected Project. */
+export function defaultStatuses(options: readonly GithubProjectStatusOption[]): StatusNames {
+  const readyStatus = defaultStatusOption(options, READY_STATUS_DEFAULT);
+  const inProgressStatus = defaultStatusOption(options, IN_PROGRESS_STATUS_DEFAULT, readyStatus);
+  const blockedStatus = defaultStatusOption(
+    options,
+    BLOCKED_STATUS_DEFAULT,
+    readyStatus,
+    inProgressStatus,
+  );
+  return { readyStatus, inProgressStatus, blockedStatus };
 }
 
 /** NTF-FR-UZGZ: the key of the configuration-error raise. */

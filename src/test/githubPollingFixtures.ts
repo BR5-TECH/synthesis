@@ -65,6 +65,7 @@ export function pollingView(
       intervalMinutes: 5,
       readyStatus: "Ready",
       inProgressStatus: "In Progress",
+      blockedStatus: null,
     },
     configuration: {
       state: "valid",

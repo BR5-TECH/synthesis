@@ -189,12 +189,12 @@ describe("Dashboard — Delivery widget: place and visibility", () => {
 });
 
 describe("Dashboard — Delivery widget: content", () => {
-  it("DSH-FR-OUPX: the header shows DELIVERY, the plan name, and the count line", async () => {
+  it("DSH-FR-OUPX: the header shows DELIVERY, the plan name, and the count line with the blocked work items", async () => {
     renderDashboard();
     const el = await widget();
     expect(await within(el).findByText("Delivery")).toBeInTheDocument();
     expect(within(el).getByText("· Payments v2")).toBeInTheDocument();
-    expect(within(el).getByText("2 of 5 milestones done")).toBeInTheDocument();
+    expect(within(el).getByText("2 of 5 milestones done · 4 blocked")).toBeInTheDocument();
   });
 
   it("DSH-FR-OUPX: every milestone done or dropped reads All milestones done", async () => {
@@ -275,7 +275,7 @@ describe("Dashboard — Delivery widget: content", () => {
     expect(within(scroller).getByTestId("delivery-today")).toHaveTextContent("today");
   });
 
-  it("DSH-FR-HVOQ: milestones with no due date sit after the axis in a No date group", async () => {
+  it("DSH-FR-HVOQ: milestones with no due date sit under the axis in a labelled No date track", async () => {
     renderDashboard();
     const group = await screen.findByTestId("delivery-no-date");
     expect(within(group).getByText("No date")).toBeInTheDocument();

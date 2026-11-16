@@ -19,7 +19,6 @@ import {
   CARD_W,
   CONTAINER_HEADER_H,
   CONTAINER_PADDING,
-  DEFAULT_CONTAINER_SIZES,
   isContainerKind,
   type FlowDocument,
   type FlowItem,
@@ -252,10 +251,9 @@ export function resolveLayout(
     visiting.add(c.id);
     placeMembers(c.id);
     const list = members.get(c.id) ?? [];
-    let need: FlowSize =
-      list.length === 0
-        ? { ...DEFAULT_CONTAINER_SIZES[c.kind as keyof typeof DEFAULT_CONTAINER_SIZES] }
-        : { ...MIN_CONTAINER_SIZE };
+    // FLO-FR-HBBF: an empty container takes the room its header and its
+    // excerpt need, measured below, and no more.
+    let need: FlowSize = { ...MIN_CONTAINER_SIZE };
     // MDL-FR-ECPZ: the header shows its chips, and the content above the
     // members shows in full.
     const head = measured(measures.headWidth?.(c.id));

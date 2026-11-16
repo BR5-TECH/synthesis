@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
 import { resetToasts } from "../state/toasts";
-import { absolutePosition, findItem } from "../state/flowDocument";
+import { absolutePosition, findItem, MIN_CONTAINER_SIZE } from "../state/flowDocument";
 import { KIND_GLYPHS } from "./Flow/kindGlyphs";
 import {
   callsOf,
@@ -265,9 +265,29 @@ describe("containers (FLO-FR-38, FLO-FR-44, FLO-FR-45, FLO-FR-ZASL)", () => {
     expect(head).toHaveTextContent("M1");
     expect(within(head).getByTestId("flow-due")).toHaveTextContent("due 2099-01-31");
     expect(await within(head).findByTestId("flow-status-chip")).toHaveTextContent("In progress");
-    // An empty container keeps its size.
-    expect(itemEl("m1").style.width).toBe("640px");
-    expect(itemEl("m1").style.height).toBe("380px");
+    // FLO-FR-HBBF: an empty container takes the room its header needs, and
+    // jsdom measures no header.
+    expect(itemEl("m1").style.width).toBe(`${MIN_CONTAINER_SIZE.width}px`);
+    expect(itemEl("m1").style.height).toBe(`${MIN_CONTAINER_SIZE.height}px`);
+  });
+
+  it("FLO-FR-CMPK, FLO-FR-XCRP: a container shows the excerpt of its description below its header, with no heading in it", async () => {
+    const description = "## Description\nFull Implementation of the Executor\n\n## Criteria\n- one";
+    const b = flowBackend(plan([item("f1", "feature", { description })]));
+    await renderFlow(b);
+
+    const excerpt = within(itemEl("f1")).getByTestId("flow-item-excerpt-f1");
+    expect(excerpt).toHaveTextContent(/^Full Implementation of the Executor$/);
+    expect(itemEl("f1")).not.toHaveTextContent("Criteria");
+    expect(within(itemEl("f1")).queryByTestId("flow-item-description-f1")).toBeNull();
+  });
+
+  it("FLO-FR-XCRP, FLO-FR-HBBF: a container whose description holds only headings shows no excerpt and no content row", async () => {
+    const b = flowBackend(plan([item("f1", "feature", { description: "## Description\n## Criteria" })]));
+    await renderFlow(b);
+
+    expect(within(itemEl("f1")).queryByTestId("flow-item-excerpt-f1")).toBeNull();
+    expect(itemEl("f1").querySelector(".flow-ctr__about")).toBeNull();
   });
 
   it("FLO-FR-38: a task or a defect renders as a card", async () => {

@@ -316,7 +316,7 @@ fn each_item_carries_its_tracker_facts() {
     assert_eq!((reference.owner.as_str(), reference.number), ("acme", 1));
 
     // A stored In Progress name resolves exactly.
-    let statuses = StatusNames { ready: None, in_progress: Some("Todo".into()) };
+    let statuses = StatusNames { ready: None, in_progress: Some("Todo".into()), blocked: None };
     let r2 = read(vec![on_board(issue(5, Some("Task")), Some("Todo"))], Vec::new());
     let plan =
         build_plan(&r2, &DeliverySettings::default(), &DeliveryOverlay::default(), &statuses);
@@ -424,4 +424,53 @@ fn milestones_follow_the_overlay_order_then_the_due_date() {
         ids(&ordered),
         ["milestone-4", "milestone-1", "milestone-5", "milestone-3", "milestone-2"]
     );
+}
+
+/// GPP-FR-BLVX, GPP-FR-VXSB, GPP-FR-DBPI, FDL-FR-SBLQ: the Blocked status
+/// resolves through the Status field: an unset name takes the option named
+/// `Blocked` without case, also where the Ready status resolves to none, and a
+/// stored name takes its option exactly. Without such an option no item is
+/// blocked by Status, and the Blocked status never shares the option of
+/// another status.
+#[test]
+fn the_blocked_status_resolves_through_the_status_field() {
+    let with_options = |names: &[&str], items: Vec<ProjectItemRead>| {
+        let mut r = read(items, Vec::new());
+        let field = r.project.status_field.as_mut().unwrap();
+        field.options = names
+            .iter()
+            .map(|n| StatusChoice { id: format!("OPT_{n}"), name: (*n).into() })
+            .collect();
+        r
+    };
+    let blocked_of = |r: &TrackerRead, statuses: &StatusNames, id: &str| {
+        let plan =
+            build_plan(r, &DeliverySettings::default(), &DeliveryOverlay::default(), statuses);
+        plan.facts[id].status_is_blocked
+    };
+    let items = || {
+        vec![
+            on_board(issue(1, Some("Task")), Some("blocked")),
+            on_board(issue(2, Some("Task")), Some("On hold")),
+            on_board(issue(3, Some("Task")), Some("Todo")),
+        ]
+    };
+    let unset = StatusNames::default();
+    // No Ready option: the configuration is not valid, the Blocked status still resolves.
+    let r = with_options(&["Todo", "blocked", "On hold"], items());
+    assert!(blocked_of(&r, &unset, "issue-1"), "the default name, without case");
+    assert!(!blocked_of(&r, &unset, "issue-2"));
+    assert!(!blocked_of(&r, &unset, "issue-3"));
+
+    let stored = StatusNames { blocked: Some("On hold".into()), ..StatusNames::default() };
+    assert!(blocked_of(&r, &stored, "issue-2"), "a stored name, exactly");
+    assert!(!blocked_of(&r, &stored, "issue-1"), "the default does not apply");
+    let cased = StatusNames { blocked: Some("Blocked".into()), ..StatusNames::default() };
+    assert!(!blocked_of(&r, &cased, "issue-1"), "a stored name never matches another case");
+
+    let none = with_options(&["Todo", "Ready", "In Progress"], items());
+    assert!(!blocked_of(&none, &unset, "issue-1"), "no Blocked option");
+
+    let taken = StatusNames { ready: Some("blocked".into()), ..StatusNames::default() };
+    assert!(!blocked_of(&r, &taken, "issue-1"), "the Ready status holds that option");
 }

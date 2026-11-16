@@ -7,8 +7,8 @@ import {
   CARD_H,
   CARD_W,
   CONTAINER_PADDING,
-  DEFAULT_CONTAINER_SIZES,
   MEMBER_ORIGIN,
+  MIN_CONTAINER_SIZE,
   resolveLayout,
   type FlowLayout,
 } from "./flowDocument";
@@ -191,9 +191,16 @@ describe("resolveLayout (FLO-FR-HBBF)", () => {
     expect(layout.m1.size!.width).toBe(xOf(layout, "f1") + layout.f1.size!.width + CONTAINER_PADDING);
   });
 
-  it("FLO-FR-HBBF: an empty container without a stored size takes the size of its kind", () => {
-    const layout = layoutFor(plan([item("ep1", "epic")]));
-    expect(layout.ep1.size).toEqual(DEFAULT_CONTAINER_SIZES.epic);
+  it("FLO-FR-HBBF: an empty container without a stored size takes the room its header and excerpt need", () => {
+    const doc = plan([item("ep1", "epic"), item("f1", "feature")]);
+    const unmeasured = resolveLayout(doc, { items: {} });
+    expect(unmeasured.ep1.size).toEqual(MIN_CONTAINER_SIZE);
+    const measured = resolveLayout(doc, { items: {} }, {
+      headWidth: (id) => (id === "f1" ? 312 : undefined),
+      memberTop: (id) => (id === "f1" ? 74 : undefined),
+    });
+    expect(measured.f1.size).toEqual({ width: 312, height: 74 + CONTAINER_PADDING });
+    expect(measured.ep1.size).toEqual(MIN_CONTAINER_SIZE);
   });
 
   it("FLO-FR-HBBF: a stored size is kept where it holds the members", () => {

@@ -16,7 +16,7 @@ import {
   planOf,
   renderFlow,
 } from "../test/flowCanvasHarness";
-import { ID, itemEl, panel, selectItem } from "../test/flowFixtures";
+import { ID, itemEl, descriptionSource, panel, selectItem } from "../test/flowFixtures";
 import { emitEvent, resetListeners } from "../test/flowMocks";
 import {
   blocks,
@@ -89,7 +89,7 @@ describe("the status chip (FLO-FR-KQCE)", () => {
 
     expect(chipOf("t1")).toBeNull();
     selectItem("t1");
-    await userEvent.type(within(panel()).getByRole("textbox", { name: "Description" }), "x");
+    await userEvent.type(descriptionSource(), "x");
     expect(findItem(planOf(flows), "t1")!.description).toBe("x");
   });
 });
@@ -192,7 +192,7 @@ describe("when the canvas asks for the state (FLO-FR-STUN)", () => {
     vi.useFakeTimers();
 
     selectItem("t1");
-    const field = within(panel()).getByRole("textbox", { name: "Description" });
+    const field = descriptionSource();
     fireEvent.change(field, { target: { value: "a" } });
     await advance(DELIVERY_REST_MS - 50);
     fireEvent.change(field, { target: { value: "ab" } });

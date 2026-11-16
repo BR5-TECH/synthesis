@@ -44,6 +44,8 @@ interface ToolbarProps {
   onLevel: (level: number) => void;
   onToggleDeps: () => void;
   onToggleGaps: () => void;
+  /** SMP-FR-WNLR: the **Discussion** toggle, drawn last; `labelled` is false where only icons show. */
+  discussionToggle?: (labelled: boolean) => ReactNode;
 }
 
 /**
@@ -65,6 +67,7 @@ export function Toolbar({
   onLevel,
   onToggleDeps,
   onToggleGaps,
+  discussionToggle,
 }: ToolbarProps) {
   // SMP-FR-GJEW: the two thresholds, against the tab's own width, give the
   // widest form. The lens switch and the unplanned toggle can make that form
@@ -77,6 +80,7 @@ export function Toolbar({
     total ? [total.verified, total.built, total.drafted, total.gap, total.specs].join(",") : "",
     depsToggle,
     Boolean(unplanned),
+    Boolean(discussionToggle),
   ].join("|");
   const [fit, setFit] = useState<{ key: string; index: number }>({ key: "", index: 2 });
   const widest = FORMS.indexOf(formForWidth(width));
@@ -169,6 +173,7 @@ export function Toolbar({
           {labelled && <span>unplanned</span>}
         </button>
       )}
+      {discussionToggle?.(labelled)}
     </div>
   );
 }

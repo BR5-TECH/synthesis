@@ -29,6 +29,7 @@ export * from "./git";
 export * from "./githubPolling";
 export * from "./integrations";
 export * from "./library";
+export * from "./mapPlan";
 export * from "./mcp";
 export * from "./modelDowngrades";
 export * from "./openspec";

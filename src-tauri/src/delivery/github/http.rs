@@ -34,6 +34,8 @@ use crate::github_polling::records::{
 
 use super::adapter::*;
 
+mod detail;
+
 /// The whole request budget of one call.
 const TIMEOUT: Duration = Duration::from_secs(20);
 /// The items of one Project page. Each item carries its relations, so a page
@@ -401,18 +403,7 @@ pub fn project_of(response: &Value) -> Result<ProjectPage, String> {
             types.iter().all(|t| t == "NOT_FOUND" || t == "FORBIDDEN" || t.is_empty());
         return Err(if unavailable { ERR_PROJECT_UNAVAILABLE } else { ERR_REQUEST_FAILED }.into());
     };
-    let status_field = node.get("field").filter(|f| !f.is_null()).and_then(|field| {
-        let field_id = field.get("id").and_then(Value::as_str)?.to_string();
-        let options = field
-            .get("options")
-            .and_then(Value::as_array)?
-            .iter()
-            .filter_map(|o| {
-                Some(StatusChoice { id: str_of(o, "id"), name: o.get("name")?.as_str()?.into() })
-            })
-            .collect();
-        Some(StatusFieldRead { field_id, options })
-    });
+    let status_field = detail::status_field_of(node);
     let (items, next) = items_of(node.get("items"))?;
     Ok(ProjectPage {
         project: ProjectRead {
@@ -581,6 +572,9 @@ impl TrackerAdapter for GithubTracker {
         if let Some(m) = issue.milestone {
             payload["milestone"] = Value::from(m);
         }
+        if !issue.labels.is_empty() {
+            payload["labels"] = json!(issue.labels);
+        }
         let value = self.rest("POST", &format!("{}/issues", self.repo_path()), Some(payload))?;
         let number = value.get("number").and_then(Value::as_u64).ok_or(ERR_REQUEST_FAILED)?;
         if let (Some(id), Ok(mut ids)) = (value.get("id").and_then(Value::as_u64), self.ids.lock())
@@ -734,11 +728,46 @@ impl TrackerAdapter for GithubTracker {
 
     fn close_issue(&self, number: u64, reason: CloseWith) -> Result<(), String> {
         let reason = match reason {
+            CloseWith::Completed => "completed",
             CloseWith::NotPlanned => "not_planned",
         };
         let payload = json!({ "state": "closed", "state_reason": reason });
         self.rest("PATCH", &format!("{}/issues/{number}", self.repo_path()), Some(payload))
             .map(|_| ())
+    }
+
+    fn list_labels(&self) -> Result<Vec<String>, String> {
+        self.labels()
+    }
+
+    fn read_status_field(&self, project_id: &str) -> Result<Option<StatusFieldRead>, String> {
+        self.status_field(project_id)
+    }
+
+    fn read_issue_detail(
+        &self,
+        number: u64,
+        project_id: &str,
+    ) -> Result<Option<IssueDetail>, String> {
+        self.issue_detail(number, project_id)
+    }
+
+    fn add_labels(&self, number: u64, labels: &[String]) -> Result<(), String> {
+        self.labels_added(number, labels)
+    }
+
+    fn remove_label(&self, number: u64, label: &str) -> Result<(), String> {
+        self.label_removed(number, label)
+    }
+
+    fn set_project_status(
+        &self,
+        project_id: &str,
+        item_id: &str,
+        field_id: &str,
+        option_id: &str,
+    ) -> Result<(), String> {
+        self.status_set(project_id, item_id, field_id, option_id)
     }
 }
 

@@ -34,6 +34,10 @@ pub struct FakeState {
     pub board: Vec<(String, Option<String>, Board)>,
     pub status_field: Option<StatusFieldRead>,
     pub types: Vec<String>,
+    /// The label names of the repository.
+    pub labels: Vec<String>,
+    /// The labels of each issue, by number.
+    pub issue_labels: std::collections::HashMap<u64, Vec<String>>,
     pub title: String,
     /// Every call, in order, by name and its main argument.
     pub calls: Vec<String>,
@@ -140,6 +144,8 @@ impl FakeTracker {
                 board: Vec::new(),
                 status_field: Some(status_field()),
                 types: vec!["Epic".into(), "Feature".into(), "Task".into(), "Bug".into()],
+                labels: vec!["bug".into(), "docs".into(), "Needs Review".into()],
+                issue_labels: std::collections::HashMap::new(),
                 title: "Roadmap".into(),
                 calls: Vec::new(),
                 writes_before_failure: None,
@@ -336,6 +342,9 @@ impl TrackerAdapter for FakeTracker {
         created.milestone = new.milestone;
         created.updated_at = s.stamp();
         s.issues.push(created.clone());
+        if !new.labels.is_empty() {
+            s.issue_labels.insert(number, new.labels.clone());
+        }
         Ok(created)
     }
 
@@ -438,8 +447,102 @@ impl TrackerAdapter for FakeTracker {
         let issue = s.issue_mut(number)?;
         issue.state = "closed".into();
         issue.state_reason = Some(match reason {
+            CloseWith::Completed => StateReason::Completed,
             CloseWith::NotPlanned => StateReason::NotPlanned,
         });
+        Ok(())
+    }
+
+    fn list_labels(&self) -> Result<Vec<String>, String> {
+        Ok(self.read("list_labels".into())?.labels.clone())
+    }
+
+    fn read_status_field(&self, project_id: &str) -> Result<Option<StatusFieldRead>, String> {
+        Ok(self.read(format!("read_status_field {project_id}"))?.status_field.clone())
+    }
+
+    fn read_issue_detail(
+        &self,
+        number: u64,
+        project_id: &str,
+    ) -> Result<Option<IssueDetail>, String> {
+        let s = self.read(format!("read_issue_detail {number} {project_id}"))?;
+        if s.pull_requests.contains(&number) {
+            return Ok(None);
+        }
+        let Some(issue) = s.issues.iter().find(|i| i.number == number) else { return Ok(None) };
+        let status = s
+            .board
+            .iter()
+            .find(|(_, _, b)| matches!(b, Board::Issue(n) if *n == number))
+            .and_then(|(_, status, _)| status.clone());
+        Ok(Some(IssueDetail {
+            number,
+            url: issue.url.clone(),
+            owner: issue.owner.clone(),
+            repo: issue.repo.clone(),
+            title: issue.title.clone(),
+            body: issue.body.clone(),
+            state: issue.state.clone(),
+            state_reason: issue.state_reason,
+            issue_type: issue.issue_type.clone(),
+            labels: s.issue_labels.get(&number).cloned().unwrap_or_default(),
+            milestone: issue.milestone,
+            milestone_title: issue
+                .milestone
+                .and_then(|m| s.milestones.iter().find(|x| x.number == m))
+                .map(|m| m.title.clone()),
+            parent: issue.parent.clone(),
+            sub_issues: s
+                .issues
+                .iter()
+                .filter(|i| i.parent.as_ref().is_some_and(|p| p.number == number))
+                .map(|i| link(i.number, &i.state))
+                .collect(),
+            blocked_by: issue.blocked_by.clone(),
+            status,
+            updated_at: issue.updated_at.clone(),
+        }))
+    }
+
+    fn add_labels(&self, number: u64, labels: &[String]) -> Result<(), String> {
+        let mut s = self.write(format!("add_labels {number} {}", labels.join(",")))?;
+        s.issue_mut(number)?;
+        let held = s.issue_labels.entry(number).or_default();
+        for label in labels {
+            if !held.contains(label) {
+                held.push(label.clone());
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_label(&self, number: u64, label: &str) -> Result<(), String> {
+        let mut s = self.write(format!("remove_label {number} {label}"))?;
+        s.issue_mut(number)?;
+        s.issue_labels.entry(number).or_default().retain(|l| l != label);
+        Ok(())
+    }
+
+    fn set_project_status(
+        &self,
+        project_id: &str,
+        item_id: &str,
+        field_id: &str,
+        option_id: &str,
+    ) -> Result<(), String> {
+        let mut s = self
+            .write(format!("set_project_status {project_id} {item_id} {field_id} {option_id}"))?;
+        let name = s
+            .status_field
+            .as_ref()
+            .filter(|f| f.field_id == field_id)
+            .and_then(|f| f.options.iter().find(|o| o.id == option_id))
+            .map(|o| o.name.clone())
+            .ok_or("github_request_failed")?;
+        let entry =
+            s.board.iter_mut().find(|(id, _, _)| id == item_id).ok_or("github_request_failed")?;
+        entry.1 = Some(name);
         Ok(())
     }
 }

@@ -257,7 +257,7 @@ fn a_discussion_carries_the_other_prompt() {
     }
 }
 
-// CVL-FR-02, CVL-FR-ZLSM
+// CVL-FR-02, CVL-FR-ZLSM, CVL-FR-LCSN
 #[test]
 fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // CVL-FR-02. `include_str!` is resolved at build time, so a
@@ -271,6 +271,7 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
         DISCUSS_ARTIFACT_PROMPT_TEMPLATE,
         DISCUSS_DRAFT_PROMPT_TEMPLATE,
         DISCUSS_CHANGE_PROMPT_TEMPLATE,
+        DISCUSS_MAP_PROMPT_TEMPLATE,
     ];
     for template in templates {
         assert!(!template.trim().is_empty());
@@ -301,6 +302,8 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
         "prompts/discuss-draft.md",
         "prompts/discuss-note.md",
         "prompts/discuss-change.md",
+        // CVL-FR-LCSN: the prompt of a Map discussion.
+        "prompts/discuss-map.md",
     ];
     // …and these are the only prompts the tree holds. A file left behind by a
     // rename would ship in every build and be reachable by nothing, which is the

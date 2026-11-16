@@ -12,6 +12,7 @@ import { deliveryErrorMessage } from "../../state/deliveryErrors";
 import { showToast } from "../../state/toasts";
 import type { DeliverySource } from "../../types/delivery";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
+import type { FlowItem } from "../../state/flowDocument";
 import { FlowCanvas, fileBinding, type FlowCanvasHandle, type FlowViewState } from "../Flow";
 import { BandMenu, FlowPathLink, type BandMenuEntry } from "./BandMenu";
 import { PublishDialog, type PublishState } from "./dialogs";
@@ -41,6 +42,8 @@ export interface FileLensProps {
   onStates: (states: ReadonlyMap<string, ItemDeliveryState> | null) => void;
   /** SNV-FR-56: close every other floating overlay before a dialog opens. */
   onOverlayOpening?: () => void;
+  /** MDL-FR-HULA: the **Discuss** entry of the menu of an item or a milestone. */
+  onDiscuss?: (item: FlowItem) => void;
   /** MDL-FR-JRGK: a publish made GitHub the source; read it again. */
   onSourceChanged: () => void;
 }
@@ -126,6 +129,7 @@ export function FileLens(props: FileLensProps) {
           inert={publish?.phase === "running"}
           initialView={props.initialView}
           onViewChange={props.onViewChange}
+          onDiscuss={props.onDiscuss}
           onDeliveryStates={props.onStates}
           onOpenArtifact={props.onOpenArtifact}
           onCreateDraft={host.onCreateDraft}

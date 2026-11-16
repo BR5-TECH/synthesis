@@ -30,6 +30,8 @@ pub(super) fn validate_fragment(
             fragment.path.clone()
         }
         DiscussionTarget::Note { .. } => return Err(ERR_INVALID_FRAGMENT.to_string()),
+        // CMS-FR-RHXL: the Map has no text to point into.
+        DiscussionTarget::Map => return Err(ERR_INVALID_FRAGMENT.to_string()),
         // CMS-FR-84: the change-relative path of one file of the change. It must
         // stay inside the change folder.
         DiscussionTarget::Change { .. } => {
@@ -218,7 +220,9 @@ pub fn open_discussion_spoken_in(
     let Opening { body, attachments, spoken_original } = opening;
     let spoken_original = spoken_original.filter(|t| !t.trim().is_empty());
     let Stamp { by, at } = stamp;
-    if matches!(target, DiscussionTarget::Note { .. }) {
+    // CMS-FR-QUMW: a note and the Map are opened by their own find-or-create
+    // commands alone.
+    if matches!(target, DiscussionTarget::Note { .. } | DiscussionTarget::Map) {
         return Err(ERR_NOT_SUPPORTED.to_string());
     }
     let fragment = fragment_target.as_ref().map(|f| validate_fragment(target, f)).transpose()?;
@@ -298,6 +302,7 @@ fn open_discussion_unchecked_spoken(
                     target: Some(target.clone()),
                     draft_id: None,
                     fragment_target: fragment_target.clone(),
+                    map_node: None,
                 },
             ),
             (
@@ -330,6 +335,7 @@ pub(super) fn log_ref_of<'a>(
         (DiscussionTarget::Draft { draft_id }, Some(f)) => ThreadRef::draft_file(draft_id, &f.path),
         (DiscussionTarget::Draft { draft_id }, None) => ThreadRef::discussion(draft_id),
         (DiscussionTarget::Note { note_id }, _) => ThreadRef::note_discussion(note_id),
+        (DiscussionTarget::Map, _) => ThreadRef::map_discussion(),
         (DiscussionTarget::Change { stream_id, change }, Some(f)) => {
             ThreadRef::change_file(stream_id, change, &f.path)
         }
@@ -425,6 +431,7 @@ pub fn get_or_create_note_discussion_spoken_in(
                     target: Some(DiscussionTarget::Note { note_id: note_id.to_string() }),
                     draft_id: None,
                     fragment_target: None,
+                    map_node: None,
                 },
             ),
             (

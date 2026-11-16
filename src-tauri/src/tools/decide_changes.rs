@@ -593,7 +593,9 @@ pub fn hunk_attachment(
         comments::DiscussionTarget::Artifact { artifact_id } => {
             (None, Some(artifact_id.clone()), None)
         }
-        comments::DiscussionTarget::Note { .. } => (None, None, None),
+        comments::DiscussionTarget::Note { .. } | comments::DiscussionTarget::Map => {
+            (None, None, None)
+        }
         // CMS-FR-YQAX: a hunk of a change edit proposal names its change.
         comments::DiscussionTarget::Change { stream_id, change } => (
             None,

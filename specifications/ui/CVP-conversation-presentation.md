@@ -122,6 +122,7 @@ The **unavailable-owner** state in the conversation tab header:
     | Closed | Available artifact | Open | The Editor tab of the artifact, its discussion column shown; on a surface that renders highlights where the discussion has a fragment, with the fragment shown | The discussion in the discussion column |
     | Closed | Available draft | Open | The New Artifact tab of the draft; its discussion column | The discussion in that surface |
     | Closed, from a Flow, Diff, or History origin | Available artifact | Open | The panel of that origin in the artifact's tab | The discussion in that panel |
+    | Closed or shown | Map thread | Open or focus | The Map tab, its Discussion column shown (per `SMP-specification-map.md` SMP-FR-QHBV) | The thread in the Discussion column |
     | Closed or shown | Note | Conversation tab | One conversation tab for the note's discussion | The discussion, or the opening composer where the note has none |
     | Closed or shown | Unavailable owner | Fallback conversation tab | One conversation tab whose header names the unavailable owner | The discussion in the tab |
     | None, by **Discuss** on a note with no discussion | Note | Conversation tab, opening state | One conversation tab holding the opening composer | The opening composer |

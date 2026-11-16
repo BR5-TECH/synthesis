@@ -281,6 +281,7 @@ mod change_owner;
 mod errors_and_lifecycle;
 mod local_participant;
 mod log_and_fold;
+mod map_threads;
 mod note_discussions;
 mod option_descriptions;
 mod project_wide_read;

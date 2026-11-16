@@ -49,6 +49,7 @@ import type {
   WorkStreamsChangedPayload,
   GraduationRunChangedPayload,
   ProposalsChangedPayload,
+  MapPlanProposalsChangedPayload,
   PromptProposalsChangedPayload,
   SearchEndedPayload,
   SearchResultsPayload,
@@ -490,6 +491,17 @@ export const onNewChangeProposalsChanged = (
   handler: (payload: NewChangeProposalsChangedPayload) => void,
 ): Promise<UnlistenFn> =>
   listenProject<NewChangeProposalsChangedPayload>(NEW_CHANGE_PROPOSALS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** MPR-FR-SGYA: a plan proposal of a Map discussion was recorded or a row of it was decided. */
+export const MAP_PLAN_PROPOSALS_CHANGED = "map-plan-proposals-changed";
+
+/** MPV-FR-CZDO: subscribe to [`MAP_PLAN_PROPOSALS_CHANGED`]. */
+export const onMapPlanProposalsChanged = (
+  handler: (payload: MapPlanProposalsChangedPayload) => void,
+): Promise<UnlistenFn> =>
+  listenProject<MapPlanProposalsChangedPayload>(MAP_PLAN_PROPOSALS_CHANGED, (event) =>
     handler(event.payload),
   );
 

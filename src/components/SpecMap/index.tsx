@@ -7,7 +7,7 @@
  * (SMP-FR-TKUS). The active lens and the state of each lens live in the
  * shell-owned `SpecMapSessionStore` (SMP-FR-QNUH, SMP-FR-RNLH).
  */
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { SpecMapSessionStore } from "../../state/specMap/session";
 import type { OpenableArtifact } from "../../types";
 import { DeliveryLens, type DeliveryHost, type SpecificationsRequest } from "../DeliveryLens";
@@ -17,6 +17,10 @@ import type { InspectorSlots } from "./Inspector";
 import { LensSwitch } from "./LensSwitch";
 import { SpecificationsLens } from "./SpecificationsLens";
 import type { UnplannedToggle } from "./Toolbar";
+import { githubSourceOf, useDeliveryPlan } from "../DeliveryLens/useDeliveryPlan";
+import { DiscussionPane } from "../MapDiscussion";
+import type { MapPlanHost } from "../MapPlanProposal";
+import { issueItemId, specNodeOf } from "../../state/specMap/nodeRefs";
 
 export { DOCKED_INSPECTOR_WIDTH, openSpecNotice } from "./SpecificationsLens";
 
@@ -48,6 +52,28 @@ export function SpecMap({
   const host: DeliveryHost = delivery ?? { flows: ownFlows };
   // SDL-FR-VAGU .. SDL-FR-CKAA: what the Specifications lens shows of the delivery.
   const links = useSpecLinkView(store, host, lens === "specifications");
+
+  // SMP-FR-WNLR: the Discussion column, shared by both lenses.
+  const plan = useDeliveryPlan(store, host.flows, false);
+  const planDoc = plan.doc;
+  const planTool = githubSourceOf(plan.source) !== null;
+  const state = store.snapshot();
+  // SMP-FR-DUUU: the node selected on the canvas of the active lens.
+  const tree = store.tree();
+  const selected =
+    lens === "delivery" ? state.deliveryNode : tree ? specNodeOf(tree, state.selection) : null;
+  const openDraftById = host.onOpenDraftById;
+  const planHost = useMemo<MapPlanHost>(
+    () => ({
+      itemOnCanvas: (number) => planDoc?.items.some((i) => i.id === issueItemId(number)) ?? false,
+      selectItem: (number) => store.showDeliveryItem(issueItemId(number)),
+      ...(openDraftById ? { openDraft: openDraftById } : {}),
+    }),
+    [planDoc, store, openDraftById],
+  );
+  const discussion = (
+    <DiscussionPane store={store} selected={selected} planTool={planTool} planHost={planHost} />
+  );
 
   // SMP-FR-TKUS: the first render of a map session asks for the default lens.
   useEffect(() => {
@@ -89,6 +115,7 @@ export function SpecMap({
         onOpenArtifact={onOpenArtifact}
         onOverlayOpening={onOverlayOpening}
         host={host}
+        discussion={discussion}
       />
       {lens === "specifications" && (
         <SpecificationsLens
@@ -98,6 +125,8 @@ export function SpecMap({
           inspectorSlots={inspectorSlots ?? links.slots}
           unplanned={unplanned ?? links.unplanned}
           links={links.links}
+          discussion={discussion}
+          onOverlayOpening={onOverlayOpening}
         />
       )}
     </>

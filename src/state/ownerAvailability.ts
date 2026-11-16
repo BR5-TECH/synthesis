@@ -92,6 +92,8 @@ export function ownerLabelOf(target: DiscussionTarget): string {
     // CVP-FR-57: a change is called by its change name.
     case "change":
       return target.change;
+    case "map":
+      return "Map";
   }
 }
 

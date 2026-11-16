@@ -43,9 +43,11 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
     let variants = input_variants(input);
     assert_eq!(
         variants,
-        vec!["Url", "Inline", "ProposalHunk", "NewDraftSubject", "NewChangeSubject"],
+        vec!["Url", "Inline", "ProposalHunk", "NewDraftSubject", "NewChangeSubject", "MapNode"],
         "{input}"
     );
+    // CMS-FR-OIUO: `map_node` is the one more reference kind a caller may
+    // supply. It names a node of the Map, and no proposal.
     // CMS-FR-QLMV / CMS-FR-QYGP / CMS-FR-OKDW / CMS-FR-QVZP: nor a change
     // proposal reference, an export request, or a change action request.
     assert!(
@@ -60,10 +62,11 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
     );
 }
 
-// CMS-FR-42 / CMS-FR-QVZP: a stored attachment is one of exactly fourteen
-// kinds, `change_action_request` among them, and each has its wire kind.
+// CMS-FR-42 / CMS-FR-QVZP / CMS-FR-OIUO: a stored attachment is one of exactly
+// sixteen kinds, `change_action_request` and the two Map kinds among them, and
+// each has its wire kind.
 #[test]
-fn a_stored_attachment_is_one_of_fourteen_kinds() {
+fn a_stored_attachment_is_one_of_sixteen_kinds() {
     const MODEL: &str = include_str!("../model.rs");
     let body = MODEL
         .split_once("pub enum Attachment {")
@@ -88,6 +91,8 @@ fn a_stored_attachment_is_one_of_fourteen_kinds() {
             "NewChangeSubject",
             "ExportRequest",
             "ChangeActionRequest",
+            "MapNode",
+            "MapPlanProposal",
             "Synthesis",
             "Advisors",
         ],

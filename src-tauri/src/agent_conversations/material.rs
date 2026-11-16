@@ -225,7 +225,7 @@ pub(super) fn material_of(
             }
             None => draft_material(roots, draft_id, budget),
         },
-        DiscussionTarget::Note { .. } => Material::default(),
+        DiscussionTarget::Note { .. } | DiscussionTarget::Map => Material::default(),
         // AGC-FR-NBZN: the whole change, every file of it.
         DiscussionTarget::Change { stream_id, change } => {
             change_material(stream_id, change, budget).unwrap_or_default()

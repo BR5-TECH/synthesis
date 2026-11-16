@@ -156,6 +156,10 @@ export interface DiscussionSurfaceProps {
   beforeComment?: (commentId: string, index: number) => React.ReactNode;
   /** ACT-FR-QWNP: raised to put the caret in the composer. */
   composerFocusSignal?: number;
+  /** SMP-FR-DUUU: what the owner draws above the field of the composer. */
+  composerAccessory?: React.ReactNode;
+  /** SMP-FR-DUUU: attachments each comment of the composer carries beside its strip. */
+  composerAttachments?: readonly AttachmentInput[];
 }
 
 export function DiscussionSurface(props: DiscussionSurfaceProps) {
@@ -567,6 +571,8 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
           attachDismissSignal={menuOpenings}
           dismissSignal={menu.open ? 1 : 0}
           focusSignal={props.composerFocusSignal}
+          accessory={props.composerAccessory}
+          extraAttachments={props.composerAttachments}
           turnDeadline={turnDeadline}
         />
       )}

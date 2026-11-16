@@ -20,6 +20,7 @@ import {
   getDiscussionSession,
 } from "../../state/discussionSession";
 import type { EditSessionStore } from "../../state/editSessions";
+import type { SpecMapSessionStore } from "../../state/specMap/session";
 import {
   revealDiscussion as route,
   revealKey,
@@ -46,6 +47,10 @@ export interface DiscussionActionDeps {
   activateTab: (id: string) => void;
   openArtifact: (item: OpenableArtifact) => void;
   openDraft: (draft: { id: string; name: string }) => void;
+  /** SMP-FR-QHBV: open or focus the Map tab. */
+  openMap: () => void;
+  /** SMP-FR-QHBV: the map session, whose column shows the thread. */
+  specMap: SpecMapSessionStore;
   sessions: EditSessionStore;
   setFocusThread: (
     thread: { artifactId: string; threadId: string } | null,
@@ -99,6 +104,8 @@ export function createDiscussionActions(
     activateTab,
     openArtifact,
     openDraft,
+    openMap,
+    specMap,
     sessions,
     setFocusThread,
   } = deps;
@@ -172,6 +179,13 @@ export function createDiscussionActions(
     }
     if (target.kind === "draft") {
       openDraft({ id: target.draftId, name: reveal.ownerLabel });
+      return;
+    }
+    // SMP-FR-QHBV / CVP-FR-54: a Map thread opens or focuses the Map tab, shows
+    // its Discussion column, and selects the thread.
+    if (target.kind === "map") {
+      specMap.revealThread(reveal.mapNode ?? null);
+      openMap();
       return;
     }
     // CVP-FR-TFRD: a change owner is shown in its change workspace tab on its

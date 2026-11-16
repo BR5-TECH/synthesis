@@ -69,6 +69,14 @@ pub fn estimate_impl<R: tauri::Runtime>(
             sections.extend(note_section(roots, note_id));
             None
         }
+        // AGC-FR-UOPJ: the dry run holds no trigger, so every comment counts.
+        DiscussionTarget::Map => {
+            if let Some(discussion) = &discussion {
+                sections.push(map_context::map_context_section(roots, discussion, ""));
+                map_context::extend_map_material(app, roots, &budget, &mut sections);
+            }
+            None
+        }
         target => {
             let material = material_of(roots, target, origin.fragment_target.as_ref(), &budget);
             sections.extend(material.section);

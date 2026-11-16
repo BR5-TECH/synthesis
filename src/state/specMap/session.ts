@@ -13,7 +13,14 @@ import { specMapOps, type SpecMapOps } from "../../api/specMap";
 import { logError, logInfo, logWarn } from "../../logging";
 import type { OpenSpecFailure } from "../../types";
 import type { DeliverySource } from "../../types/delivery";
+import type { MapNodeRef } from "../../types";
 import { hasNotice, toOpenSpecFailure } from "../openspec/failureNotice";
+import {
+  clampDiscussionWidth,
+  initialDiscussionState,
+  sameMapNode,
+  type MapDiscussionState,
+} from "./discussion";
 import { buildTree, refExists, type TreeIndex } from "./tree";
 import { isOpenSpecIndex, type MapRef, type SpecificationIndex } from "./types";
 
@@ -102,6 +109,14 @@ export interface SpecMapState {
   deliveryReveal: { itemId: string; nonce: number } | null;
   /** SDL-FR-CFHH: a task the Delivery lens adds, consumed by the lens. */
   planWork: { name: string; references: string[]; nonce: number } | null;
+  /** SMP-FR-AUFA: the visibility, the width, and the thread of the Discussion column. */
+  discussion: MapDiscussionState;
+  /**
+   * SMP-FR-DUUU: the item or milestone selected on the canvas of the Delivery
+   * lens, as a node reference. The lens sets it, and the **Use selected node**
+   * control of the Discussion column reads it.
+   */
+  deliveryNode: MapNodeRef | null;
 }
 
 function initialState(): SpecMapState {
@@ -125,6 +140,8 @@ function initialState(): SpecMapState {
     unplanned: false,
     deliveryReveal: null,
     planWork: null,
+    discussion: initialDiscussionState(),
+    deliveryNode: null,
   };
 }
 
@@ -461,6 +478,73 @@ export class SpecMapSessionStore {
 
   setInspectorOpen = (open: boolean): void => {
     this.set({ inspectorOpen: open });
+  };
+
+  private setDiscussion(patch: Partial<MapDiscussionState>): void {
+    this.set({ discussion: { ...this.state.discussion, ...patch } });
+  }
+
+  /** SMP-FR-WNLR: show or hide the Discussion column. */
+  setDiscussionVisible = (visible: boolean): void => {
+    if (this.state.discussion.visible === visible) return;
+    this.setDiscussion({ visible });
+  };
+
+  /** SMP-FR-SWCL: the width of the column, held between 280px and 560px. */
+  setDiscussionWidth = (width: number): void => {
+    const next = clampDiscussionWidth(width);
+    if (this.state.discussion.width === next) return;
+    this.setDiscussion({ width: next });
+  };
+
+  /** SMP-FR-EIUP: read another thread. A node of null is the Map thread. */
+  setDiscussionNode = (node: MapNodeRef | null): void => {
+    if (sameMapNode(this.state.discussion.node, node)) return;
+    this.setDiscussion({ node });
+  };
+
+  /**
+   * SMP-FR-IHFM: the **Discuss** entry of a node. The column shows, reads the
+   * thread of the node, and puts the caret in its composer.
+   */
+  discuss = (node: MapNodeRef): void => {
+    logInfo(["frontend"], "map tab opens a node discussion", { lens: node.lens, kind: node.kind });
+    this.setDiscussion({
+      visible: true,
+      node,
+      focusSignal: this.state.discussion.focusSignal + 1,
+    });
+  };
+
+  /** SMP-FR-DUUU: record the node selected on the canvas of the Delivery lens. */
+  setDeliveryNode = (node: MapNodeRef | null): void => {
+    const held = this.state.deliveryNode;
+    if (sameMapNode(held, node) && held?.label === node?.label) return;
+    this.set({ deliveryNode: node });
+  };
+
+  /**
+   * SMP-FR-QHBV: `revealDiscussion` of a Map thread. The column shows and reads
+   * the thread of the node, or the Map thread for null.
+   */
+  revealThread = (node: MapNodeRef | null): void => {
+    this.setDiscussion({ visible: true, node });
+  };
+
+  /**
+   * SMP-FR-EIUP: select the node of a thread on the canvas of its lens. A node
+   * that the index no longer holds changes nothing.
+   */
+  showMapNode = (node: MapNodeRef): void => {
+    if (node.lens === "delivery") {
+      this.showDeliveryItem(node.id);
+      return;
+    }
+    const tree = this.tree();
+    const ref: MapRef =
+      node.kind === "spec" ? { kind: "spec", code: node.id } : { kind: "index", id: node.id };
+    if (!tree || !refExists(tree, ref)) return;
+    this.set({ lens: "specifications", selection: ref, zoom: { ref, nonce: ++this.nonce } });
   };
 
   /**

@@ -314,6 +314,8 @@ pub(super) fn attachment_scope(discussion: &Discussion) -> LogScope<'_> {
         // CMS-FR-49: a note's blobs live in that note's own folder.
         DiscussionTarget::Note { note_id } => LogScope::NoteDiscussion { note_id },
         DiscussionTarget::Artifact { .. } => LogScope::Artifact,
+        // CMS-FR-ACLX: the blobs of a Map thread live under `comments/map/attachments/`.
+        DiscussionTarget::Map => LogScope::MapDiscussion,
         // CMS-FR-GJEY: a change's blobs live in the change's own folder.
         DiscussionTarget::Change { stream_id, change } => {
             LogScope::ChangeDiscussion { stream_id, change }

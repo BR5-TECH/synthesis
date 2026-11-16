@@ -10,7 +10,7 @@ import * as api from "../../api";
 import { errorLogCode } from "../../errorLogCode";
 import { logInfo, logWarn } from "../../logging";
 import { deliveryErrorMessage } from "../../state/deliveryErrors";
-import { isContainerKind, type FlowDocument } from "../../state/flowDocument";
+import { isContainerKind, type FlowDocument, type FlowItem } from "../../state/flowDocument";
 import type { GithubPlanSession } from "../../state/delivery/githubPlan";
 import type { DeliveryLensData } from "../../state/delivery/lensData";
 import { showToast } from "../../state/toasts";
@@ -70,6 +70,8 @@ export interface GithubLensProps {
   onOpenArtifact: (item: OpenableArtifact) => void;
   /** SNV-FR-56: close every other floating overlay before a dialog opens. */
   onOverlayOpening?: () => void;
+  /** MDL-FR-HULA: the **Discuss** entry of the menu of an item or a milestone. */
+  onDiscuss?: (item: FlowItem) => void;
   /** MDL-FR-QIXG / MDL-FR-XUJY: the source changed; read it again. */
   onSourceChanged: () => void;
 }
@@ -232,6 +234,7 @@ export function GithubLens(props: GithubLensProps) {
         binding={binding}
         initialView={props.initialView}
         onViewChange={props.onViewChange}
+        onDiscuss={props.onDiscuss}
         onOpenArtifact={props.onOpenArtifact}
         onCreateDraft={host.onCreateDraft}
         onOpenDraft={host.onOpenDraft}

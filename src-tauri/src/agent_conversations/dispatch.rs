@@ -115,7 +115,7 @@ pub(super) fn progress_label_of(
                 .unwrap_or_else(|_| draft_id.clone()),
         ),
         DiscussionTarget::Artifact { artifact_id } => Some(artifact_id.clone()),
-        DiscussionTarget::Note { .. } => None,
+        DiscussionTarget::Note { .. } | DiscussionTarget::Map => None,
         DiscussionTarget::Change { change, .. } => Some(change.clone()),
     };
     match subject {
@@ -398,6 +398,11 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     // AGC-FR-KQNF: a Flow's material also carries its delivery state and its
     // overlaps, which need the run queue only the application holds.
     flow_context::extend_flow_material(app, roots, &document_budget, &mut input);
+    // AGC-FR-UOPJ: a Map thread's material also carries the short summary of the
+    // delivery plan, read from the cache of the GitHub plan with no request.
+    if origin.is_map() {
+        map_context::extend_map_material(app, roots, &document_budget, &mut input);
+    }
     // AGC-FR-QSWD: a record that cannot be read adds no question set. The kind
     // is the whole of the record: no path and no content.
     if let Some(kind) = question_set_unreadable {

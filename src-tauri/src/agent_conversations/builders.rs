@@ -62,6 +62,11 @@ pub fn build_input_within(
             sections.extend(note_section(roots, note_id));
             None
         }
+        // AGC-FR-UOPJ: the focus, and the rows of the plan proposals.
+        DiscussionTarget::Map => {
+            sections.push(map_context::map_context_section(roots, &discussion, trigger_comment_id));
+            None
+        }
         target => {
             let material = material_of(roots, target, discussion.fragment_target.as_ref(), budget);
             sections.extend(material.section);

@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import * as api from "../../api";
@@ -43,6 +44,10 @@ import { holderRect, lastLevelOf, layoutMap, levelFor, scopeOf } from "./layout"
 import { centerScale, centeredOn, firstPaintView, topAlignedView } from "./zoom";
 import { useElementSize, useWindowWidth } from "./useElementSize";
 import { Icon } from "../icons";
+import { DiscussionToggle, useDiscussMenu } from "../MapDiscussion";
+import { specNodeOf } from "../../state/specMap/nodeRefs";
+import { DISCUSSION_REPLACES_INSPECTOR_BELOW } from "../../state/specMap/discussion";
+import type { MapNodeRef } from "../../types";
 import { OpenSpecFailureNotice } from "../OpenSpecFailureNotice";
 import { noticeSentence } from "../../state/openspec/failureNotice";
 import { useShortFormLog } from "../../state/openspec/useShortFormLog";
@@ -59,6 +64,10 @@ export interface SpecificationsLensProps {
   unplanned?: UnplannedToggle;
   /** SDL-FR-SGQM / SDL-FR-KXCY: the delivery links, or null where none show. */
   links?: SpecLinks | null;
+  /** SMP-FR-WNLR: the Discussion column and its splitter, at the right edge of the body. */
+  discussion?: ReactNode;
+  /** SNV-FR-56: a menu of the map closes every other floating overlay. */
+  onOverlayOpening?: () => void;
 }
 
 /** SMI-FR-QWOP: the inspector docks from this window width up. */
@@ -126,6 +135,8 @@ export function SpecificationsLens({
   inspectorSlots,
   unplanned,
   links = null,
+  discussion,
+  onOverlayOpening,
 }: SpecificationsLensProps) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const state = store.snapshot();
@@ -137,6 +148,10 @@ export function SpecificationsLens({
   const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
   const size = useElementSize(canvasEl);
   const [hoverRef, setHover] = useState<MapRef | null>(null);
+  // SMN-FR-JHQR / SMN-FR-BSZV: the **Discuss** menu of a node.
+  const discussMenu = useDiscussMenu<MapNodeRef>((node) => store.discuss(node), {
+    onOpening: onOverlayOpening,
+  });
 
   // SMP-FR-PMCX: when this lens renders, a session without an index loads it
   // once.
@@ -257,7 +272,11 @@ export function SpecificationsLens({
   );
   const empty = ready && tree.index.roots.length === 0;
   const docked = windowWidth >= DOCKED_INSPECTOR_WIDTH;
-  const inspectorOpen = state.inspectorOpen ?? docked;
+  // SMP-FR-SWCL: below 900px of tab width the column replaces the inspector.
+  const columnShown = state.discussion.visible && discussion !== undefined;
+  const columnReplacesInspector =
+    columnShown && tabSize.measured && tabSize.width < DISCUSSION_REPLACES_INSPECTOR_BELOW;
+  const inspectorOpen = (state.inspectorOpen ?? docked) && !columnReplacesInspector;
 
   let content;
   if (state.status === "error") {
@@ -328,11 +347,15 @@ export function SpecificationsLens({
         links={links}
         unplanned={!!unplanned?.on && links !== null}
         focusId={state.focusId}
-        handlers={{ select: store.select, hover: setHover }}
+        handlers={{
+          select: store.select,
+          hover: setHover,
+          menu: (ref) => discussMenu.bindings(tree ? specNodeOf(tree, ref) : null),
+        }}
         onView={store.setView}
         onResetView={() => store.setView(INITIAL_VIEW)}
         onFocus={store.setFocus}
-        showInspectorButton={!inspectorOpen}
+        showInspectorButton={!inspectorOpen && !columnReplacesInspector}
         inspectorOverlay={inspectorOpen && !docked}
         onOpenInspector={() => store.setInspectorOpen(true)}
       />
@@ -357,6 +380,11 @@ export function SpecificationsLens({
         onLevel={chooseLevel}
         onToggleDeps={store.toggleDeps}
         onToggleGaps={store.toggleGaps}
+        discussionToggle={
+          discussion !== undefined
+            ? (labelled) => <DiscussionToggle store={store} labelled={labelled} />
+            : undefined
+        }
       />
       {/* SMP-FR-KVKD: one line above the canvas, so it hides no node. It
           stands outside the body, so the inspector that overlays the body
@@ -373,7 +401,14 @@ export function SpecificationsLens({
           )}
         </div>
       )}
-      <div className="smap-body">
+      <div
+        className="smap-body"
+        style={
+          columnShown && !columnReplacesInspector
+            ? ({ "--smap-column": `${state.discussion.width}px` } as CSSProperties)
+            : undefined
+        }
+      >
         <div className="smap-main">
           {content}
         </div>
@@ -392,7 +427,9 @@ export function SpecificationsLens({
             }}
           />
         )}
+        {discussion}
       </div>
+      {discussMenu.menu}
     </div>
   );
 }

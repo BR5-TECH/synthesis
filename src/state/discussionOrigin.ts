@@ -48,7 +48,8 @@ export type OriginKind =
   | "draft_discussion"
   | "note_discussion"
   | "change_discussion"
-  | "change_comment";
+  | "change_comment"
+  | "map_discussion";
 
 /** AGC-FR-05: the kind of conversation the origin names. */
 export function originKind(o: ConversationOrigin): OriginKind {
@@ -63,6 +64,9 @@ export function originKind(o: ConversationOrigin): OriginKind {
     // CMS-FR-UEXD: a change owner has whole-change and fragment discussions.
     case "change":
       return fragment ? "change_comment" : "change_discussion";
+    // CMS-FR-RHXL: a Map thread is a whole-target discussion only.
+    case "map":
+      return "map_discussion";
   }
 }
 
@@ -81,6 +85,7 @@ export function locatorOf(target: DiscussionTarget): {
       return { noteId: target.noteId };
     // The backend finds a change discussion by its id. No hint narrows it.
     case "change":
+    case "map":
       return {};
   }
 }

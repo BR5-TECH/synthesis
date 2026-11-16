@@ -11,6 +11,7 @@ use tauri::Manager;
 use tempfile::TempDir;
 
 pub(crate) mod document_fixture;
+pub(crate) mod plan_fixture;
 
 use super::*;
 use crate::logging::{LogBuffer, LogFilter, LogLevel};

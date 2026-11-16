@@ -3,7 +3,7 @@
 **Spec code:** `GDP`
 
 ## Intent
-The backend that reads and writes the project's delivery plan when its source is a GitHub Project (per `DSR-delivery-source.md`). The plan is the issues on the selected Project board, with their sub-issue hierarchy, their milestones, their blocked-by relations, and the Project's `Status` field. GitHub is the plan's one source of truth: each edit the architect makes on the canvas goes to GitHub at once, and no local copy of the plan is ever written back. The module keeps a per-machine read cache so that the plan opens fast and offline. All tracker access goes through one tracker adapter, so another tracker can take GitHub's place later. Out of scope: which source is active, which belongs to `DSR-delivery-source.md`; the rules of an item's state, which belong to `FDL-flow-delivery.md`; the overlaps, which belong to `FOA-flow-overlap-analysis.md`; the per-machine layout and overlay, which belong to `DMS-delivery-machine-state.md`; the claim of a ready task, which belongs to `GPP-github-polling.md`; and Project fields other than `Status`, assignees, labels, and comments.
+The backend that reads and writes the project's delivery plan when its source is a GitHub Project (per `DSR-delivery-source.md`). The plan is the issues on the selected Project board, with their sub-issue hierarchy, their milestones, their blocked-by relations, and the Project's `Status` field. GitHub is the plan's one source of truth: each edit the architect makes on the canvas goes to GitHub at once, and no local copy of the plan is ever written back. The module keeps a per-machine read cache so that the plan opens fast and offline. All tracker access goes through one tracker adapter, so another tracker can take GitHub's place later. Out of scope: which source is active, which belongs to `DSR-delivery-source.md`; the rules of an item's state, which belong to `FDL-flow-delivery.md`; the overlaps, which belong to `FOA-flow-overlap-analysis.md`; the per-machine layout and overlay, which belong to `DMS-delivery-machine-state.md`; the claim of a ready task, which belongs to `GPP-github-polling.md`; and Project fields other than `Status`, assignees, and comments.
 
 ## Functional requirements
 1. **GDP-FR-QSHX** `load_github_delivery_plan(refresh)` refuses with `not_github_source` where `DSR-delivery-source.md` resolves another source (DSR-FR-AECK). It refuses with the configuration error of `GPP-github-polling.md` where the configuration is not `valid` (GPP-FR-DEZO).
@@ -43,6 +43,11 @@ The backend that reads and writes the project's delivery plan when its source is
 33. **GDP-FR-UPXR** All tracker access goes through one **tracker adapter** interface: read the Project's items with their fields, read the milestones, create and update an issue, set its parent and its milestone, add and remove a blocked-by relation, add and remove a Project item, create, update, and close a milestone, and close an issue with a reason. `github` is the one adapter.
 34. **GDP-FR-QHQR** Each read and each edit logs its operation, its outcome, its counts, and its duration, and every error, handled ones included, through `LGC-logging.md`. No record carries a token, a title, a body, a Type name, or a URL query.
 35. **GDP-FR-ZFQH** Each operation refuses with `no_project_open` when no project is open, and logs the refusal.
+36. **GDP-FR-ICDW** `set_labels` adds the labels of its `add` list to an issue and removes the labels of its `remove` list. Only labels that exist in the repository are used. A name that does not exist refuses the edit with `label_unknown` and the name, and writes nothing. The edit creates no label.
+37. **GDP-FR-MVAA** `close_item` closes an issue with the reason `completed` or `not_planned`, and leaves it on the Project. It refuses an issue that is closed already with `no_change`. It writes no other field.
+38. **GDP-FR-KOWL** `set_status` sets the `Status` of an issue on the selected Project to the option of the given name. A name that is not an option of the Status field refuses the edit with `status_unknown`, and writes nothing.
+39. **GDP-FR-RMNF** `set_parent` sets or removes the parent issue of an issue, and `set_milestone` sets or removes its milestone. Each is independent of the other and of the container of the item. `create_item` also takes optional `parent_id`, `milestone_id`, and `labels`. Where given, they replace the container rule of GDP-FR-NJJZ for the new issue.
+40. **GDP-FR-QFQF** The adapter reads the names of the labels of the polling repository, the Types it offers, the options of the Status field, and the full detail of one issue: title, body, labels, Type, milestone, parent, sub-issues, state, close reason, `Status`, blocked-by relations, and `updated_at`. These reads change nothing and update no read cache.
 
 ## Contract surface
 ### Tauri commands
@@ -82,7 +87,7 @@ TrackerFacts {
 }
 
 GithubDeliveryEdit =
-  | { kind: "create_item", item_kind, name, container_id, description?, due? }
+  | { kind: "create_item", item_kind, name, container_id, description?, due?, parent_id?, milestone_id?, labels? }
   | { kind: "rename", item_id, name, updated_at }
   | { kind: "set_description", item_id, description, updated_at }
   | { kind: "set_due", item_id, due, updated_at }
@@ -92,6 +97,11 @@ GithubDeliveryEdit =
   | { kind: "remove_edge", from, to, type, updated_at }
   | { kind: "remove_item", item_id, mode: "remove_from_board" | "close_not_planned", updated_at }
   | { kind: "add_existing_issue", number, container_id }
+  | { kind: "set_labels", item_id, add, remove, updated_at }
+  | { kind: "close_item", item_id, reason: "completed" | "not_planned", updated_at }
+  | { kind: "set_status", item_id, status, updated_at }
+  | { kind: "set_parent", item_id, parent_id, updated_at }       // parent_id: item id or null
+  | { kind: "set_milestone", item_id, milestone_id, updated_at } // milestone_id: item id or null
   | { kind: "set_references", item_id, artifact_ids }
   | { kind: "set_footprint", item_id, footprint }
   | { kind: "link_draft", item_id, draft_id }
@@ -102,7 +112,7 @@ GithubDeliveryEdit =
 
 `container_id` is an item id or `null` for the top level. `updated_at` is the value of the tracker facts that the edit was made against; an edge edit names the blocked item's value.
 
-Errors are typed: `no_project_open`, `not_github_source`, the configuration and request errors of `GPP-github-polling.md` GPP-FR-SUFH, `changed_on_tracker`, `issue_type_unavailable`, `kind_change_unsupported`, `milestone_edge_unsupported`, `tracker_item_not_found`, `already_in_plan`, `type_unmapped`, `partial_edit` with the error that stopped it, `tracker_url_refused`, `invalid_overlay` from `DMS-delivery-machine-state.md`, and `store_unavailable` from `RMS-repository-machine-storage.md`.
+Errors are typed: `no_project_open`, `not_github_source`, the configuration and request errors of `GPP-github-polling.md` GPP-FR-SUFH, `changed_on_tracker`, `issue_type_unavailable`, `kind_change_unsupported`, `milestone_edge_unsupported`, `label_unknown`, `status_unknown`, `no_change`, `tracker_item_not_found`, `already_in_plan`, `type_unmapped`, `partial_edit` with the error that stopped it, `tracker_url_refused`, `invalid_overlay` from `DMS-delivery-machine-state.md`, and `store_unavailable` from `RMS-repository-machine-storage.md`.
 
 The read cache is `delivery/github/<project-node-id>.json` in the repository store. This module reads the delivery settings through `DSR-delivery-source.md`, drafts through `DRS-draft-storage.md`, run states through `GRD-graduation.md`, and the overlay through `DMS-delivery-machine-state.md`.
 

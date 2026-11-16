@@ -120,6 +120,19 @@ impl TrackerRead {
         });
     }
 
+    /// GDP-FR-KOWL: take the `Status` a write set on the Project item that
+    /// holds issue `number`.
+    pub fn set_status(&mut self, number: u64, status: Option<String>) {
+        let repository = self.repository.clone();
+        for item in &mut self.project.items {
+            if let ItemContent::Issue(i) = &item.content {
+                if i.number == number && repository.is(&i.owner, &i.repo) {
+                    item.status = status.clone();
+                }
+            }
+        }
+    }
+
     /// Remove the Project item that holds issue `number`.
     pub fn remove_issue(&mut self, number: u64) {
         let repository = self.repository.clone();

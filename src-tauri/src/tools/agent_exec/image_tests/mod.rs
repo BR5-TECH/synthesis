@@ -7,7 +7,7 @@
 //! the suite never builds, pulls, or runs an image, so what is left to check is
 //! that the definitions say what the spec requires them to say.
 //!
-//! **Three scenarios are not automated here and cannot be**, because each needs
+//! **These scenarios are not automated here and cannot be**, because each needs
 //! a built image and a container runtime:
 //!
 //! - **AVI-FR-16, AVI-FR-02** — the installed package set, and the absence of the other
@@ -26,6 +26,9 @@
 //! - **AVI-FR-17, EAC-FR-14, AVI-FR-18** — `$HOME` in a running container is the directory the image
 //!   names, and the running user may write it. Its Dockerfile half — the
 //!   variables and the directory's mode — *is* asserted below.
+//! - **AVI-FR-NFFO, AVI-FR-MYOU** — Cargo links a program through `mold`. Its
+//!   Dockerfile half — the package, the wrapper, and the Cargo configuration —
+//!   *is* asserted below, and so is the check of `verify.sh`.
 //! - **AVI-FR-10** — no credential in any layer, environment variable, or file.
 //!
 //! They are covered by `docker/agent-images/verify.sh` and a manual run against

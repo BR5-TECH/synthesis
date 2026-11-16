@@ -89,7 +89,23 @@ describe an edit, which is the same gap the missing browser was.
 | TypeScript — `tsc` | `ARG TYPESCRIPT_VERSION` | npm global |
 | go-task — `task` (AVI-FR-NEGK) | `ARG TASK_VERSION` | `/usr/local/bin/task` |
 | `cargo-nextest` (AVI-FR-PBVT) | `ARG NEXTEST_VERSION` | `/usr/local/bin/cargo-nextest` |
+| `mold` linker (AVI-FR-NFFO) | the package archive of the pinned base | `/usr/bin/mold`, with the wrapper `/usr/local/bin/cc-mold` |
 | OpenSpec CLI — `openspec` (AVI-FR-RZFR) | `ARG OPENSPEC_VERSION`, the npm package `@fission-ai/openspec` | npm global |
+
+Cargo links every Linux target through `mold` (AVI-FR-NFFO). A check compiles one changed
+crate and then links the whole test binary again, and GNU `ld` writes that binary through the
+mount of the working tree. For a large crate that link is most of each check: more than seven
+minutes with GNU `ld`, less than forty seconds with `mold`.
+
+The image sets it in `$CARGO_HOME/config.toml` as the `linker` of `x86_64-unknown-linux-gnu`
+and `aarch64-unknown-linux-gnu`. The wrapper `/usr/local/bin/cc-mold` calls `cc` with every
+argument of `rustc` and puts `-fuse-ld=mold` last, because the C compiler obeys the last
+`-fuse-ld` and `rustc` can pass `-fuse-ld=lld` on x86_64. That file has the lowest precedence
+of all Cargo configuration, so a repository that names its own `linker` in a
+`[target.<triple>]` table keeps it. A `linker` in a `[target.'cfg(…)']` table of a repository
+does not apply in the image, because Cargo uses the `<triple>` table first. The file sets no
+`rustflags`, so the flags of a repository's `.cargo/config.toml` and of `RUSTFLAGS` stay as
+they are.
 
 An agent in a project that uses OpenSpec follows instructions that call `openspec`, so both images
 carry it at the same exact version, 1.17.0 today. Both images set `OPENSPEC_TELEMETRY=0`
@@ -316,7 +332,7 @@ That last sentence holds only once a digest has been recorded. While an entry
 in `manifest.toml` carries the all-zero sentinel, there is no digest to pin to,
 so the executor addresses that image by its `image_ref` — repository **and
 tag** — and the tag it names is the CLI version with a build revision after it
-(`2.1.233-5`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
+(`2.1.233-6`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
 the application launches.
 
 So on a machine running an unpublished image, the tag the executor asks for is
@@ -362,6 +378,9 @@ because that is the only shape in which the remaining claims mean anything:
 - `$HOME` is `/home/agent` and the running user can write it.
 - `CARGO_HOME` and `RUSTUP_HOME` can be written too, and a crate compiles,
   links, runs, lints, and formats.
+- That crate was linked by `mold`: its `.comment` section names the linker
+  (AVI-FR-MYOU). This checks the linker entry of the architecture the image
+  was built for.
 - `pkg-config` answers for `glib-2.0`, `gtk+-3.0`, `webkit2gtk-4.1`, and
   `openssl` — the native floor a `-sys` build script asks it for, without which
   a build stops inside a transitive dependency.

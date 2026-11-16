@@ -749,4 +749,7 @@ pub fn run() {
 mod tests;
 
 #[cfg(test)]
+mod dev_profile_tests;
+
+#[cfg(test)]
 mod native_linkage_tests;

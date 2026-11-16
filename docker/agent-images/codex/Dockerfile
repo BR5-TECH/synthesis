@@ -13,7 +13,8 @@ FROM node:22-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e8513645
 
 # AVI-FR-02: the same package floor as the Claude Code image and nothing more —
 # CA certificates, curl, Python with pip and venv, the C compiler and linker the
-# Rust toolchain of AVI-FR-17 builds through, and the shared libraries and font
+# Rust toolchain of AVI-FR-17 builds through, the `mold` linker of AVI-FR-NFFO,
+# and the shared libraries and font
 # the browser of AVI-FR-16 needs, for the reasons that image states. Git is
 # present here for the reason it is present there: a turn that revises or judges
 # a change set reads what changed rather than every file whole. What the client
@@ -69,6 +70,7 @@ RUN apt-get update \
         libxfixes3 \
         libxkbcommon0 \
         libxrandr2 \
+        mold \
         pkg-config \
         python3 \
         python3-pip \
@@ -134,6 +136,33 @@ RUN set -eux; \
     find "${RUSTUP_HOME}" "${CARGO_HOME}" -type d -exec chmod a+w {} +; \
     /usr/local/cargo/bin/rustc --version; \
     /usr/local/cargo/bin/cargo --version
+
+# AVI-FR-NFFO: Cargo links through `mold`, not through GNU `ld`. A check in a
+# turn compiles one changed crate and then links the whole test binary again,
+# and GNU `ld` writes that binary through the mount of the working tree. For a
+# large crate that link is most of each check: more than seven minutes with
+# GNU `ld` against less than forty seconds with `mold`, measured in a
+# graduation sandbox on 2026-11-15.
+#
+# The linker is set in Cargo's own configuration in `CARGO_HOME`, which has the
+# lowest precedence of all Cargo configuration. A repository that names its own
+# `linker` keeps it. The file sets no `rustflags`, because a `rustflags` key for
+# a target makes Cargo ignore the `build.rustflags` of a repository; the
+# wrapper passes every argument of `rustc` through and adds `-fuse-ld=mold`
+# last. The C compiler obeys the last `-fuse-ld`, and on x86_64 `rustc` can
+# itself pass `-fuse-ld=lld`, its default linker since Rust 1.90.
+RUN set -eux; \
+    printf '#!/bin/sh\nexec cc "$@" -fuse-ld=mold\n' > /usr/local/bin/cc-mold; \
+    chmod 0755 /usr/local/bin/cc-mold; \
+    printf '%s\n' \
+        '# AVI-FR-NFFO: link every Linux target through mold.' \
+        '[target.x86_64-unknown-linux-gnu]' \
+        'linker = "/usr/local/bin/cc-mold"' \
+        '' \
+        '[target.aarch64-unknown-linux-gnu]' \
+        'linker = "/usr/local/bin/cc-mold"' \
+        > "${CARGO_HOME}/config.toml"; \
+    mold --version
 
 # AVI-FR-NEGK: the `task` runner (go-task), because a repository can name its
 # checks as tasks, and a turn that cannot run them cannot run the checks as the

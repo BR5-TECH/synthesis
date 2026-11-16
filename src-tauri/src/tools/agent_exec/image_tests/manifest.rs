@@ -390,6 +390,10 @@ fn the_readme_documents_everything_avi_requires() {
         ("the TypeScript pin", "ARG TYPESCRIPT_VERSION"),
         ("the task runner pin", "ARG TASK_VERSION"),
         ("the cargo-nextest pin", "ARG NEXTEST_VERSION"),
+        ("where the image sets the linker", "`$CARGO_HOME/config.toml`"),
+        ("the mold wrapper", "/usr/local/bin/cc-mold"),
+        ("why a repository linker wins", "lowest precedence"),
+        ("the mold check of verify", "`.comment` section names the linker"),
         ("the Bash timeouts", "BASH_MAX_TIMEOUT_MS"),
         ("the rule for upgrading a toolchain", "both Dockerfiles"),
         ("the home directory the image names", "HOME=/home/agent"),
@@ -519,4 +523,40 @@ fn the_readme_states_what_a_project_image_needs_for_openspec() {
     ] {
         assert!(README.contains(needle), "the README does not state {needle:?}");
     }
+}
+
+/// AVI-FR-MYOU — verify.sh confirms that the program it builds with Cargo, as
+/// the executor launches the image, was linked by `mold`. The proof is the
+/// `.comment` section of that program, not the configuration file.
+#[test]
+fn verify_confirms_cargo_links_through_mold() {
+    let code: Vec<&str> =
+        VERIFY_SH.lines().map(str::trim).filter(|line| !line.starts_with('#')).collect();
+    let probe = code
+        .iter()
+        .position(|line| line.starts_with("probe=\"$(docker run --rm"))
+        .expect("verify.sh has no toolchain probe");
+    let window = code[probe..probe + 5].join("\n");
+    for condition in ["--user \"$foreign_uid\"", "--cap-drop ALL", "no-new-privileges"] {
+        assert!(window.contains(condition), "the toolchain probe does not run with {condition}");
+    }
+    let build = code
+        .iter()
+        .position(|line| *line == "cargo build --offline --quiet")
+        .expect("the probe builds no program");
+    let check = code
+        .iter()
+        .position(|line| {
+            line.starts_with("readelf --string-dump=.comment ./target/debug/verify-crate")
+                && line.contains("grep -q mold")
+        })
+        .expect("verify.sh does not read the linker from the built program");
+    let end = code[probe..]
+        .iter()
+        .position(|line| line.starts_with("' 2>&1)\""))
+        .map(|at| probe + at)
+        .expect("the toolchain probe has no end");
+    assert!(probe < build && build < check && check < end, "the mold check is not in the probe");
+    assert!(code[check].ends_with("|| {"), "a missing mold does not fail the probe");
+    assert_eq!(code[check + 2], "exit 1");
 }

@@ -410,3 +410,18 @@ libc = "0.2"
 [workspace]
 members = [".", "project_scope_macros"]
 default-members = [".", "project_scope_macros"]
+
+# RDP-FR-RFMT, RDP-FR-RQEL: line tables for the workspace crates and no debug
+# information for the dependencies. A panic and a backtrace still show the file
+# and the line of each workspace frame. The `test` profile takes these values,
+# so the test binary is approximately one third of its size with full debug
+# information, and each check links it much faster.
+#
+# RDP-FR-EKRY: for full debug information in one build, for example a debugger
+# session, set `CARGO_PROFILE_DEV_DEBUG=full` for the workspace crates, and add
+# `--config 'profile.dev.package."*".debug="full"'` for the dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

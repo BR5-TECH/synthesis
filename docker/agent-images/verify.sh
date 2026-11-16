@@ -192,6 +192,13 @@ for vendor in claude_code codex; do
         cd verify-crate
         cargo build --offline --quiet
         ./target/debug/verify-crate >/dev/null
+        # AVI-FR-MYOU / AVI-FR-NFFO: Cargo linked the program through mold.
+        # The linker writes its own name into the .comment section, so the
+        # program itself is the proof, not the configuration file.
+        readelf --string-dump=.comment ./target/debug/verify-crate | grep -q mold || {
+            echo "AVI-FR-NFFO: the program was not linked by mold" >&2
+            exit 1
+        }
         cargo clippy --offline --quiet
         cargo fmt --check
         # AVI-FR-02: the native floor the Rust toolchain builds through. A
@@ -286,7 +293,7 @@ for vendor in claude_code codex; do
         status=1
     fi
 
-    [[ $status -eq 0 ]] && echo "ok   $vendor: $version at $digest, running as $uid:$gid, home at $home, toolchains build, openspec answers, browser renders"
+    [[ $status -eq 0 ]] && echo "ok   $vendor: $version at $digest, running as $uid:$gid, home at $home, toolchains build, mold links, openspec answers, browser renders"
 done
 
 exit "$status"

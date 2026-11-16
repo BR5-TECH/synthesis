@@ -306,6 +306,9 @@ export function expectCentred(id: string) {
   const card = screen.getByTestId(`flow-item-${id}`);
   const left = parseFloat(card.style.left);
   const top = parseFloat(card.style.top);
-  expect(x + (left + CARD_W / 2) * scale).toBeCloseTo(400, 0);
-  expect(y + (top + CARD_H / 2) * scale).toBeCloseTo(300, 0);
+  // DBR-FR-LNZI: a card of the board has the size of its slot.
+  const width = parseFloat(card.style.width) || CARD_W;
+  const height = parseFloat(card.style.height) || CARD_H;
+  expect(x + (left + width / 2) * scale).toBeCloseTo(400, 0);
+  expect(y + (top + height / 2) * scale).toBeCloseTo(300, 0);
 }

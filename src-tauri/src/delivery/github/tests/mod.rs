@@ -121,6 +121,25 @@ fn a_valid_read_records_the_configuration() {
     assert_eq!(configuration.project_title.as_deref(), Some("Roadmap"));
 }
 
+/// GDP-FR-QSHX, GPP-FR-TYOV: a configuration that is `unchecked`, as after a
+/// restart, does not refuse the load. The load that reads GitHub checks it,
+/// records it as valid, and announces the change of the polling view.
+#[test]
+fn an_unchecked_configuration_is_checked_by_the_load() {
+    let h = Harness::github_plan();
+    let before = crate::github_polling::delivery_access::configuration(&h.handle()).unwrap();
+    assert_eq!(before.state, ConfigurationState::Unchecked);
+    let seen = listen(&h.handle(), crate::github_polling::GITHUB_POLLING_CHANGED);
+    load(&h, true).expect("an unchecked configuration loads the plan");
+    let after = crate::github_polling::delivery_access::configuration(&h.handle()).unwrap();
+    assert_eq!(after.state, ConfigurationState::Valid);
+    let payloads = seen.lock().unwrap().clone();
+    assert!(!payloads.is_empty(), "the check announces the polling view");
+    // GPP-FR-TYOV: a cause other than a poll reports no new issue.
+    let payload: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
+    assert_eq!(payload["newIssues"], json!([]), "{payload}");
+}
+
 /// GDP-FR-ZFQH, GDP-FR-QHQR: no open project is `no_project_open`, and the
 /// refusal is logged.
 #[test]

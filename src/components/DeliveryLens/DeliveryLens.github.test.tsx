@@ -365,20 +365,21 @@ describe("the items of a GitHub plan (MDL-FR-JPYU, MDL-FR-ECPZ, MDL-FR-NTVL, MDL
     expect(within(itemEl("x1")).getByRole("button", { name: /Blocked by/ })).toHaveAttribute("title", "Blocked by T1");
   });
 
-  it("MDL-FR-ECPZ: each issue shows its Status after its state chip, and every item carries its tracker tag", async () => {
+  it("MDL-FR-ECPZ, DBR-FR-HWHO, DBR-FR-SBTR, DBR-FR-XOOU: each issue card shows its Status on its bottom line, a group header shows it after the state glyph, and every item carries its address", async () => {
     await openPlan();
-    const card = itemEl("t2");
-    const row = within(card).getByTestId("flow-status-chip").parentElement!;
-    const chips = [...row.querySelectorAll(".flow-chip")].map((c) => c.textContent);
-    expect(chips).toEqual([expect.stringContaining("Not started"), "Ready"]);
-    expect(within(itemEl("f1")).getByTestId("flow-tracker-status")).toHaveTextContent("In Progress");
-    // A milestone and an issue with no Status show no Status chip.
+    const status = within(itemEl("t2")).getByTestId("flow-card-status");
+    expect(status).toHaveTextContent("Ready");
+    expect(status.parentElement).toHaveClass("flow-bcard__status");
+    expect(within(itemEl("t2")).getByTestId("flow-state-glyph")).toHaveAttribute("title", "Not started");
+    expect(within(itemEl("f1")).getByTestId("flow-group-status")).toHaveTextContent("In Progress");
+    // A milestone shows no Status; an issue with no Status says so.
     expect(within(itemEl("m1")).queryByTestId("flow-tracker-status")).toBeNull();
-    expect(within(itemEl("x1")).queryByTestId("flow-tracker-status")).toBeNull();
+    expect(within(itemEl("x1")).getByTestId("flow-card-status")).toHaveTextContent("No status");
     for (const id of ["m1", "f1", "t1", "t2", "x1"]) {
       expect(within(itemEl(id)).getAllByTestId("flow-tracker-tag").length).toBeGreaterThan(0);
     }
     expect(within(itemEl("m1")).getAllByTestId("flow-tracker-tag")[0]).toHaveTextContent("milestone 3");
+    expect(within(itemEl("t2")).getByTestId("flow-tracker-tag")).toHaveTextContent(/^acme\/payments#\d+$/);
   });
 
   it("MDL-FR-NTVL, ACT-FR-UNJB: a GitHub plan carries no action control and no discussions control", async () => {
@@ -437,7 +438,8 @@ describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () =>
     const field = screen.getByLabelText("Item name");
     fireEvent.change(field, { target: { value: "Other" } });
     fireEvent.keyDown(field, { key: "Enter" });
-    expect(await screen.findByTestId("flow-item-error-x1")).toHaveTextContent(CHANGED_ON_GITHUB);
+    // DBR-FR-CJSG: the error glyph of the item carries the error text.
+    expect(await screen.findByTestId("flow-item-error-x1")).toHaveAttribute("title", CHANGED_ON_GITHUB);
     expect(screen.getByTestId("flow-item-name-x1")).toHaveTextContent("X1");
     await waitFor(() => expect(callsOf(b, "load_github_delivery_plan").length).toBe(before + 1));
     expect(last(callsOf(b, "load_github_delivery_plan"))).toEqual({ refresh: true });

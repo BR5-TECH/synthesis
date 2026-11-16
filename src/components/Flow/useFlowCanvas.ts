@@ -5,10 +5,11 @@ import { useProjectArtifacts } from "../../hooks/useProjectArtifacts";
 import {
   absolutePosition,
   addItem,
+  boardOrders,
+  resolveBoardLayout,
   ancestorsOf,
   CARD_H,
   CARD_W,
-  childrenOf,
   connect,
   connectRefusal,
   CONTAINER_HEADER_H,
@@ -18,11 +19,9 @@ import {
   innermostContainerAt,
   isColumnMilestone,
   isContainerKind,
-  MIN_CONTAINER_SIZE,
   moveMilestone,
   parentOf,
   placeItem,
-  relativePosition,
   reparentItem,
   resizeContainer,
   setCollapsed,
@@ -34,10 +33,13 @@ import {
   type FlowLayout,
   type FlowPosition,
   type FlowSize,
+  type StoredLayout,
 } from "../../state/flowDocument";
 import { isEditHeld, primeEditGate, waitEditGate } from "../../state/mainBranchWrite";
 import type { DiscussionTarget, ItemDeliveryState, OpenableArtifact } from "../../types";
 import type { FlowBinding } from "./binding";
+import { boardTargetAt, pointOutside } from "./boardDrop";
+import { commitBoardDrop } from "./boardCommit";
 import { columnDropIndex, columnsOf } from "./columns";
 import { createFrames } from "./frames";
 import {
@@ -56,6 +58,11 @@ import {
 import { refusalMessage, type FlowAction, type RefusalMessage } from "./refusals";
 import { useFlowLayout, type ContainerMeasure } from "./useFlowLayout";
 import { useFlowSource } from "./useFlowSource";
+import { useBoardDrag } from "./useBoardDrag";
+import { resizedRect, resizeFrom } from "./resize";
+
+/** DBR-FR-MYVI: how far a press moves, in screen pixels, before a drag of the board starts. */
+export const BOARD_DRAG_THRESHOLD = 4;
 
 /** The layout before the stored layout is read: nothing is drawn yet. */
 const EMPTY_PLACEMENT: FlowLayout = {};
@@ -113,6 +120,8 @@ export interface FlowCanvasProps {
    * item or a milestone. Without it, an item has no context menu.
    */
   onDiscuss?: (item: FlowItem) => void;
+  /** DBR-FR-ERHW: lay the plan out as the board of the Delivery lens. */
+  board?: boolean;
 }
 
 /** SMP-FR-RNLH: the view state of a canvas that a host keeps for it. */
@@ -132,6 +141,7 @@ export function useFlowCanvas({
   inert: hostInert = false,
   initialView,
   onViewChange,
+  board = false,
 }: FlowCanvasProps) {
   const source = useFlowSource(binding);
   const { flowId, session, doc, delivery } = source;
@@ -150,12 +160,19 @@ export function useFlowCanvas({
     () => ({ cards: heights, containers: containerSizes }),
     [heights, containerSizes],
   );
-  const { layout: resolved, collapsed, commit: commitLayout, reset: resetLayout } = useFlowLayout(
-    doc,
-    source.scope,
-    source.layouts,
-    measuredSizes,
-  );
+  const {
+    layout: resolved,
+    collapsed,
+    commit: commitLayout,
+    reset: resetLayout,
+    stored,
+    commitStored,
+    boardNone,
+  } = useFlowLayout(doc, source.scope, source.layouts, measuredSizes, board);
+  /** DBR-FR-ERHW: the board shows once the stored layout is read. */
+  const boardMode = board && doc !== null && stored !== null;
+  const storedRef = useRef<StoredLayout | null>(stored);
+  storedRef.current = stored;
   const layout: FlowLayout = resolved ?? EMPTY_PLACEMENT;
   // The newest layout and its commit, for an answer that lands after a render.
   const layoutRef = useRef<FlowLayout | null>(resolved);
@@ -265,25 +282,52 @@ export function useFlowCanvas({
     };
   };
 
+  /**
+   * DBR-FR-QCAJ / DBR-FR-CZEU: while an item of the board is dragged, the
+   * board shows without it, and with the placeholder where it would land. A
+   * milestone column moves as a column (FLO-FR-OGPF).
+   */
+  const draggedItem = doc && drag ? findItem(doc, drag.itemId) : undefined;
+  const lifting =
+    boardMode && drag?.moved && draggedItem && !isColumnMilestone(draggedItem) ? drag : null;
+  const preview =
+    lifting && doc && stored
+      ? resolveBoardLayout(doc, stored, {
+          lifted: lifting.subtree,
+          gap:
+            lifting.drop && !lifting.drop.collapsed
+              ? {
+                  holder: lifting.drop.holder,
+                  index: lifting.drop.index,
+                  height: layout[lifting.itemId]?.size?.height ?? CARD_H,
+                }
+              : null,
+        })
+      : null;
+  const shown: FlowLayout = preview?.layout ?? layout;
+
   /** Where an item sits now, with an in-flight drag or resize applied. */
   const absOf = (id: string): FlowPosition => {
     if (!doc) return { x: 0, y: 0 };
     if (resize?.itemId === id) return { x: resize.rect.x, y: resize.rect.y };
-    const base = absolutePosition(doc, layout, id);
-    if (drag?.subtree.has(id)) {
+    if (drag?.subtree.has(id) && (!boardMode || drag.moved)) {
+      const base = absolutePosition(doc, layout, id);
       return { x: base.x + (drag.x - drag.startAbs.x), y: base.y + (drag.y - drag.startAbs.y) };
     }
-    return base;
+    return absolutePosition(doc, shown, id);
   };
 
   const sizeOf = (id: string): FlowSize | undefined => {
     if (resize?.itemId === id) return { width: resize.rect.width, height: resize.rect.height };
-    return layout[id]?.size;
+    if (lifting?.subtree.has(id)) return layout[id]?.size;
+    return shown[id]?.size;
   };
 
   const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf });
   /** FLO-FR-SQUS / FLO-FR-IAOQ: the milestone columns and the No milestone column. */
-  const columns = doc ? columnsOf(doc, layout, frames.rectOf) : { order: [], arrows: [], none: null };
+  const columnsBase = doc ? columnsOf(doc, layout, frames.rectOf) : { order: [], arrows: [], none: null };
+  // FLO-FR-IAOQ / DBR-FR-ZGNB: on the board, the No milestone column is a column of the board.
+  const columns = boardMode ? { ...columnsBase, none: preview?.none ?? boardNone } : columnsBase;
 
 
   /**
@@ -534,6 +578,8 @@ export function useFlowCanvas({
       y: at.y,
       pointer: p,
       moved: false,
+      startClient: { x: e.clientX, y: e.clientY },
+      client: { x: e.clientX, y: e.clientY },
     };
     dragRef.current = started;
     setDrag(started);
@@ -544,62 +590,13 @@ export function useFlowCanvas({
    * members, so a resize never puts a member outside the container.
    */
   const onResizeStart = (id: string, sides: ResizeSides, e: React.PointerEvent) => {
-    const size = layout[id]?.size;
-    if (!doc || !size || inert) return;
+    if (!doc || inert) return;
+    const started = resizeFrom(doc, layout, heights, id, sides, e.clientX, e.clientY);
+    if (!started) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    const at = absolutePosition(doc, layout, id);
-    const members = childrenOf(doc, id);
-    let left = Infinity;
-    let top = Infinity;
-    let right = -Infinity;
-    let bottom = -Infinity;
-    for (const m of members) {
-      const ext = layout[m.id]?.size ?? { width: CARD_W, height: heights[m.id] || CARD_H };
-      const p = relativePosition(layout, m.id);
-      left = Math.min(left, p.x);
-      top = Math.min(top, p.y);
-      right = Math.max(right, p.x + ext.width);
-      bottom = Math.max(bottom, p.y + ext.height);
-    }
-    const any = members.length > 0;
-    const from = { x: at.x, y: at.y, width: size.width, height: size.height };
-    const started: Resize = {
-      itemId: id,
-      sides,
-      startX: e.clientX,
-      startY: e.clientY,
-      from,
-      maxLeft: any ? at.x + left - CONTAINER_PADDING : Infinity,
-      maxTop: any ? at.y + top - CONTAINER_HEADER_H : Infinity,
-      minRight: any ? at.x + right + CONTAINER_PADDING : -Infinity,
-      minBottom: any ? at.y + bottom + CONTAINER_PADDING : -Infinity,
-      minWidth: MIN_CONTAINER_SIZE.width,
-      minHeight: MIN_CONTAINER_SIZE.height,
-      rect: from,
-    };
     resizeRef.current = started;
     setResize(started);
-  };
-
-  /** FLO-FR-44: the rectangle a resize gives for a pointer at (clientX, clientY). */
-  const resizedRect = (r: Resize, clientX: number, clientY: number) => {
-    const dx = (clientX - r.startX) / view.scale;
-    const dy = (clientY - r.startY) / view.scale;
-    let left = r.from.x;
-    let top = r.from.y;
-    let right = r.from.x + r.from.width;
-    let bottom = r.from.y + r.from.height;
-    if (r.sides.left) left = Math.min(r.from.x + dx, r.maxLeft, right - r.minWidth);
-    if (r.sides.right) right = Math.max(right + dx, r.minRight, left + r.minWidth);
-    if (r.sides.top) top = Math.min(r.from.y + dy, r.maxTop, bottom - r.minHeight);
-    if (r.sides.bottom) bottom = Math.max(bottom + dy, r.minBottom, top + r.minHeight);
-    return {
-      x: Math.round(left),
-      y: Math.round(top),
-      width: Math.round(right - left),
-      height: Math.round(bottom - top),
-    };
   };
 
   /**
@@ -664,7 +661,7 @@ export function useFlowCanvas({
       return;
     }
     if (resizeRef.current) {
-      const next = { ...resizeRef.current, rect: resizedRect(resizeRef.current, e.clientX, e.clientY) };
+      const next = { ...resizeRef.current, rect: resizedRect(resizeRef.current, e.clientX, e.clientY, view.scale) };
       resizeRef.current = next;
       setResize(next);
       return;
@@ -678,13 +675,21 @@ export function useFlowCanvas({
     const p = toCanvas(e.clientX, e.clientY);
     const x = Math.round(p.x - current.offsetX);
     const y = Math.round(p.y - current.offsetY);
-    const next: Drag = {
+    // DBR-FR-MYVI: on the board, a press that moves less than the threshold is a click.
+    const start = current.startClient;
+    const moved = boardMode
+      ? current.moved ||
+        (start !== undefined &&
+          Math.hypot(e.clientX - start.x, e.clientY - start.y) > BOARD_DRAG_THRESHOLD)
+      : current.moved || x !== current.x || y !== current.y;
+    const next: Drag = retarget({
       ...current,
       x,
       y,
       pointer: p,
-      moved: current.moved || x !== current.x || y !== current.y,
-    };
+      moved,
+      client: { x: e.clientX, y: e.clientY },
+    });
     const capture = dragCapture.current;
     if (next.moved && capture) {
       dragCapture.current = null;
@@ -696,6 +701,27 @@ export function useFlowCanvas({
     }
     dragRef.current = next;
     setDrag(next);
+  };
+
+  /** DBR-FR-CZEU / DBR-FR-EEKD: the slot of the board under the pointer of `next`. */
+  const retarget = (next: Drag): Drag => {
+    if (!boardMode || !doc || !stored || !next.moved) return next;
+    const item = findItem(doc, next.itemId);
+    if (!item || isColumnMilestone(item)) return next;
+    // DBR-FR-BBDZ: a pointer outside the canvas has no target, so a release there puts the item back.
+    if (pointOutside(surfaceRef.current?.getBoundingClientRect(), next.client)) return { ...next, drop: null, hint: null };
+    const target = boardTargetAt({
+      doc,
+      item,
+      lifted: next.subtree,
+      point: next.pointer,
+      orders: boardOrders(doc, stored),
+      collapsed,
+      none: columns.none,
+      rectOf: frames.rectOf,
+      hidden: (id) => frames.hiddenBy(id) !== undefined,
+    });
+    return { ...next, drop: target.drop, hint: target.hint };
   };
 
   /**
@@ -721,6 +747,22 @@ export function useFlowCanvas({
           if (confirmed) reorder();
         });
       }
+      return;
+    }
+    if (boardMode) {
+      if (!stored || !moved.drop) return;
+      commitBoardDrop({
+        doc,
+        stored,
+        item,
+        drop: moved.drop,
+        mode: source.mode === "file" ? "file" : "plan",
+        edit,
+        editAndWait: source.editAndWait,
+        commitStored,
+        latestStored: () => storedRef.current,
+        refuse: (r) => setRefusal(r ? refusalMessage(doc, "move", r, item.kind) : null),
+      });
       return;
     }
     const target = dropTargetAt(moved.pointer, moved.subtree);
@@ -831,6 +873,33 @@ export function useFlowCanvas({
     };
   })();
 
+  // DBR-FR-BBDZ / DBR-FR-IQOM: Escape puts the item back; an edge pans the view.
+  useBoardDrag({
+    active: lifting !== null,
+    extent: () => {
+      let width = columns.none ? columns.none.x + columns.none.width : 0;
+      let height = columns.none?.height ?? 0;
+      for (const i of doc?.items ?? []) {
+        const r = i.parentId === undefined ? frames.rectOf(i.id) : null;
+        if (r) {
+          width = Math.max(width, r.x + r.width);
+          height = Math.max(height, r.y + r.height);
+        }
+      }
+      return { width, height };
+    },
+    dragRef,
+    surfaceRef,
+    view,
+    panBy,
+    onPanned: (next) => {
+      const again = retarget(next);
+      dragRef.current = again;
+      setDrag(again);
+    },
+    onCancel: () => endGesture({ abandon: true }),
+  });
+
   return {
     binding,
     source,
@@ -888,6 +957,16 @@ export function useFlowCanvas({
     onItemPointerUp,
     endGesture,
     connectionPreview,
+    board: boardMode,
+    /** DBR-FR-CZEU: the placeholder of the drag, in canvas units, or null. */
+    boardGap: preview?.gapRect ?? null,
+    /** DBR-FR-CZEU: the holder of the target stack (null is No milestone), or undefined. */
+    dropHolder: lifting?.drop ? lifting.drop.holder : undefined,
+    /** DBR-FR-EEKD: the hint of a stack under the pointer that cannot hold the dragged kind. */
+    dragHint: lifting?.hint ?? null,
+    /** DBR-FR-EEKD: no stack under the pointer takes the drop. */
+    dragRefused: lifting !== null && !lifting.drop,
+    lifted: lifting?.subtree ?? null,
   };
 }
 

@@ -22,8 +22,8 @@ The per-machine home for how the author arranges a delivery canvas, and for the 
 
 ## Contract surface
 ### Tauri commands
-- `"load delivery layout (scope)"` → `load_delivery_layout(scope)` → `DeliveryLayout`. Invoked by `../ui/FLO-flow.md` (FLO-FR-PLUZ).
-- `"save delivery layout (scope, layout)"` → `save_delivery_layout(scope, layout)` → nothing. Invoked by `../ui/FLO-flow.md` (FLO-FR-21) and `../ui/MDL-map-delivery-lens.md` (MDL-FR-QAJN).
+- `"load delivery layout (scope)"` → `load_delivery_layout(scope)` → `DeliveryLayout`. Invoked by `../ui/FLO-flow.md` (FLO-FR-PLUZ) and `../ui/DBR-delivery-board.md` (DBR-FR-HTCE).
+- `"save delivery layout (scope, layout)"` → `save_delivery_layout(scope, layout)` → nothing. Invoked by `../ui/FLO-flow.md` (FLO-FR-21), `../ui/MDL-map-delivery-lens.md` (MDL-FR-QAJN), and `../ui/DBR-delivery-board.md` (DBR-FR-KTJS).
 
 ### In-process
 - `read_delivery_overlay(project_node_id)` → `DeliveryOverlay` (no UI consumer).

@@ -248,7 +248,7 @@ function ActiveLens({
       <div className="smap-state" role="alert" data-testid="delivery-config-error">
         <p className="smap-state__line">
           {source.configuration.error ??
-            "The GitHub Project settings are not checked yet. Open them to check the Project."}
+            "The GitHub Project configuration is not valid. Open the GitHub Project settings to fix it."}
         </p>
         <div className="smap-state__actions">
           <button

@@ -77,6 +77,24 @@ export {
   toStoredLayout,
 } from "./layout";
 export { AUTO_GAP, COLUMN_GAP, columnWidth, MEMBER_ORIGIN, noMilestoneX, resolveLayout, type LayoutMeasures } from "./autoLayout";
+export {
+  BOARD_CARD_H,
+  BOARD_CARD_W,
+  BOARD_COLLAPSED_H,
+  BOARD_EMPTY_H,
+  BOARD_GAP,
+  BOARD_HEAD_H,
+  BOARD_INSET,
+  boardHolderOf,
+  boardHolds,
+  boardOrders,
+  resolveBoardLayout,
+  toBoardStoredLayout,
+  type BoardGap,
+  type BoardHolder,
+  type BoardLayout,
+  type BoardOptions,
+} from "./boardLayout";
 export { planEditsBetween, touchedItems } from "./planEdits";
 export { isColumnMilestone, milestoneOrder, moveMilestone, orderMilestones } from "./milestoneOrder";
 export {

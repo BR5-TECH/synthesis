@@ -8739,8 +8739,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         ...(artifactType ? { artifactType } : {}),
       };
     }
-    case "save_artifact_contents":
-      return { checksum: "sha-2" };
+    case "save_artifact_contents": {
+      // The written body is what the next read gives, so a Flow that the
+      // canvas changed keeps the change when its tab or the Map opens again.
+      const checksum = `sha-save-${nextArtifactChecksum++}`;
+      artifactBodies[String(a.id)] = { body: String(a.body ?? ""), checksum };
+      return { checksum };
+    }
     /**
      * NAW-FR-13 / NAW-FR-36: the author's own typing settles into the live
      * prompt and puts NO row in the History rail. It does move the live digest,

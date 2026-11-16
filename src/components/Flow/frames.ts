@@ -68,6 +68,9 @@ export function createFrames(ctx: {
         height: collapsed.has(id) ? COLLAPSED_H : size.height,
       };
     }
+    // DBR-FR-LNZI: a card of the board has the size of its slot.
+    const slot = sizeOf(id);
+    if (slot) return { x: at.x, y: at.y, width: slot.width, height: slot.height };
     return { x: at.x, y: at.y, width: CARD_W, height: heights[id] || CARD_H };
   };
 

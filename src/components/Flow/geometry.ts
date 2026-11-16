@@ -1,4 +1,5 @@
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
+import type { BoardDrop } from "./boardDrop";
 import {
   CONTAINER_HEADER_H,
   type FlowPosition,
@@ -111,6 +112,14 @@ export interface Drag {
   /** Where the pointer is, in canvas units: the drop point (FLO-FR-42). */
   pointer: FlowPosition;
   moved: boolean;
+  /** DBR-FR-MYVI: where the press went down, in screen units. */
+  startClient?: FlowPosition;
+  /** DBR-FR-IQOM: where the pointer is now, in screen units. */
+  client?: FlowPosition;
+  /** DBR-FR-CZEU: the slot of the board the drag would land in. */
+  drop?: BoardDrop | null;
+  /** DBR-FR-EEKD: the hint of a stack that cannot hold the kind. */
+  hint?: string | null;
 }
 
 /** Which edges of a container a resize moves (FLO-FR-44). */

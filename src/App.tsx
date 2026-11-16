@@ -9,9 +9,15 @@ import { ProjectPickerModal } from "./components/ProjectPickerModal";
 import { OpenProjectDialog } from "./components/OpenProjectDialog";
 import { CloseProjectConfirm } from "./components/CloseProjectConfirm";
 import { ProjectTabStrip } from "./components/ProjectTabStrip";
-import { countRunsInFlight, isMacPlatform, useProjectTabs } from "./hooks/useProjectTabs";
+import {
+  countRunsInFlight,
+  isMacPlatform,
+  restoresGeometry,
+  useProjectTabs,
+} from "./hooks/useProjectTabs";
 import { ProjectWindowLoading } from "./components/ProjectWindowLoading";
 import type { ProjectWindowBoot } from "./projectWindowBoot";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AboutPanel } from "./components/AboutPanel";
 import { AppShell } from "./AppShell";
 import { GitTransferProvider, useGitTransferState } from "./hooks/useGitTransfer";
@@ -126,6 +132,7 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
     requestCloseProject: s.requestCloseProject,
     runningOperations: countRunsInFlight(operations),
     boot: projectWindowBoot,
+    closeWindow: () => getCurrentWindow().destroy(),
   });
   // PJT-FR-PCCL: the Close Project menu item and the close controls of the shell
   // run the close flow of the project tab, which asks first when a run is active.
@@ -185,10 +192,17 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
   // applied — and, worse, written into the new project's slot (SNV-FR-35, SNV-FR-40, OVW-FR-11).
   // PWN-FR-XGTO: a window that joined a macOS tab group takes the frame of the
   // group, so it restores no geometry of its own over the other tabs.
+  // PJT-FR-QFRM: the same holds for any window in a tab group with other
+  // project windows, also when This tab replaces its project.
   useMainWindowState(
     s.screen === "ide",
     s.projectPath,
-    !(projectWindowBoot && isMacPlatform()),
+    () =>
+      restoresGeometry({
+        created: projectWindowBoot !== null,
+        mac: isMacPlatform(),
+        inTabGroup: tabs.inTabGroup(),
+      }),
   );
 
   /**

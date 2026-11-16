@@ -94,12 +94,15 @@ export function useMainWindowState(
    */
   projectKey: string = "",
   /**
-   * PWN-FR-XGTO: false for a window that joined a macOS tab group. The tabs of a
-   * group share one frame, so a restore here would resize, or take into
-   * full-screen, every other tab of the group as well.
+   * PWN-FR-XGTO / PJT-FR-QFRM: false for a window in a macOS tab group with
+   * other project windows. The tabs of a group share one frame, so a restore
+   * here would resize, or take into full-screen, every other tab as well. A
+   * function is read each time the restore would run, for example at This tab.
    */
-  restoreGeometry: boolean = true,
+  restoreGeometry: boolean | (() => boolean) = true,
 ): void {
+  const restoreRef = useRef(restoreGeometry);
+  restoreRef.current = restoreGeometry;
   const readyRef = useRef(false);
   // Last full-screen state we persisted, so the resize listener only writes on
   // an actual transition rather than on every resize event.
@@ -146,7 +149,8 @@ export function useMainWindowState(
         console.warn("setMaximizable(true) failed", err);
       }
 
-      if (restoreGeometry) {
+      const restore = restoreRef.current;
+      if (typeof restore === "function" ? restore() : restore) {
         let prefs: LayoutPreferences = {};
         try {
           prefs = await loadLayoutPreferences(projectKey);
@@ -322,5 +326,5 @@ export function useMainWindowState(
         }
       }
     };
-  }, [enabled, projectKey, restoreGeometry]);
+  }, [enabled, projectKey]);
 }

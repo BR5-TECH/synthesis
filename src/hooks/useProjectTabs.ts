@@ -7,7 +7,7 @@ import {
   onProjectWindowsChanged,
   MENU_NEW_TAB,
 } from "../events";
-import { logError, logInfo, logWarn } from "../logging";
+import { logDebug, logError, logInfo, logWarn } from "../logging";
 import { loadAppPreferences, patchAppPreferences } from "../state/appPreferences";
 import type {
   OpenProjectBehaviour,
@@ -52,6 +52,8 @@ export interface ProjectTabsDeps {
   runningOperations: number;
   /** PWN-FR-KQZB: set when "open project window" created this window. */
   boot?: ProjectWindowBoot | null;
+  /** PWN-FR-KQZB: close this OS window. */
+  closeWindow?: () => Promise<void>;
 }
 
 /**
@@ -65,6 +67,19 @@ export interface BootState {
   name: string;
   /** Empty while the mount runs; the failure once it failed. */
   error: string;
+}
+
+/**
+ * PWN-FR-XGTO / PJT-FR-QFRM: whether a window restores its stored size and
+ * full-screen state. A window in a macOS tab group shares the frame of the
+ * group, so it restores nothing.
+ */
+export function restoresGeometry(window: {
+  created: boolean;
+  mac: boolean;
+  inTabGroup: boolean;
+}): boolean {
+  return !((window.created && window.mac) || window.inTabGroup);
 }
 
 /** The stored answer of the open project dialog for one choice (PJT-FR-RMBR). */
@@ -103,6 +118,8 @@ export interface ProjectTabs {
   boot: BootState | null;
   /** PWN-FR-KQZB: close this window after its mount failed. */
   closeBootWindow: () => Promise<void>;
+  /** PJT-FR-QFRM: this window shares a macOS tab group with other project windows. */
+  inTabGroup: () => boolean;
 }
 
 /**
@@ -134,6 +151,8 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
   );
   const bootProjectRef = useRef<string | null>(null);
   const [pending, setPending] = useState<ProjectHandle | null>(null);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [error, setError] = useState("");
   const snapshotRef = useRef(snapshot);
@@ -195,12 +214,26 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
       .then(async (entry) => {
         if (cancelled || depsRef.current.screen !== "picker") return;
         if (!entry) {
+          if (!booting) return;
           // PWN-FR-KQZB: the list holds no project for this window any more. It
-          // shows the Project picker, as a window with no project does.
-          if (booting) {
-            logWarn(["frontend"], "created project window holds no project");
-            setBoot(null);
+          // closes, so it never shows the Project picker inside a tab group.
+          // The only window of the application shows the picker instead.
+          logWarn(["frontend"], "created project window holds no project");
+          const others = await api.listProjectWindows().catch(() => null);
+          const close = depsRef.current.closeWindow;
+          if (others && others.windows.length > 0 && close) {
+            // A close that throws at once fails the same way as a rejected one.
+            await Promise.resolve()
+              .then(close)
+              .catch((e) => {
+                logError(["frontend"], "created project window could not close", {
+                  error: String(e),
+                });
+                setBoot(null);
+              });
+            return;
           }
+          if (!cancelled) setBoot(null);
           return;
         }
         bootProjectRef.current = entry.projectId;
@@ -243,6 +276,17 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
     let unlisten: (() => void) | undefined;
     void onMenuEvent(MENU_NEW_TAB, () => {
       if (depsRef.current.screen !== "ide") return;
+      // PJT-FR-PILG: the modal, the open project dialog, or an open in progress
+      // holds the window; New Tab changes nothing then.
+      const busy =
+        pickerRef.current.open ||
+        pendingRef.current !== null ||
+        openingRef.current !== "" ||
+        choosingRef.current;
+      if (busy) {
+        logDebug(["frontend"], "new tab ignored while a project choice is open");
+        return;
+      }
       setPickerIntent("new-tab");
       setPickerOpen(true);
     })
@@ -358,8 +402,14 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
         });
       }
       if (activateIfOpen(handle)) return;
-      if (choice === "new-tab") await openInNewTab(handle);
-      else await replaceHere(handle);
+      // PJT-FR-PILG / PJT-FR-PNDG: a This tab replace is an open in progress too.
+      choosingRef.current = true;
+      try {
+        if (choice === "new-tab") await openInNewTab(handle);
+        else await replaceHere(handle);
+      } finally {
+        choosingRef.current = false;
+      }
     },
     [pending, activateIfOpen, openInNewTab, replaceHere],
   );
@@ -401,6 +451,12 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
   }, [requestClose]);
 
   const ownProjectId = getWindowProjectId() ?? "";
+
+  // PJT-FR-QFRM: read when a restore would run, so it sees the list of now.
+  const inTabGroup = useCallback(
+    () => isMacPlatform() && snapshotRef.current.windows.length > 1,
+    [],
+  );
 
   // PWN-FR-KQZB: a window whose mount failed closes itself and its entry.
   const closeBootWindow = useCallback(async () => {
@@ -460,5 +516,6 @@ export function useProjectTabs(deps: ProjectTabsDeps): ProjectTabs {
     error,
     boot,
     closeBootWindow,
+    inTabGroup,
   };
 }

@@ -48,6 +48,7 @@ vi.mock("@tauri-apps/api/window", () => {
     outerSize: async () => ({ width: 1440, height: 900 }),
     onResized: async () => () => {},
     scaleFactor: async () => 1,
+    destroy: record("destroy"),
   };
   return { LogicalSize, getCurrentWindow: () => win, availableMonitors: async () => [] };
 });
@@ -128,5 +129,20 @@ describe("a created project window at its start (PWN-FR-KQZB)", () => {
     render(<App />);
     await vi.waitFor(() => expect(calls("list_recent_projects").length).toBeGreaterThan(0));
     expect(screen.queryByText(/^Opening /)).not.toBeInTheDocument();
+  });
+
+  it("PWN-FR-KQZB: a created window with no entry closes while another project window is open", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "current_project_window") return Promise.resolve(null);
+      if (cmd === "list_project_windows")
+        return Promise.resolve({
+          windows: [{ ...entry, projectId: "/work/other", windowLabel: "main" }],
+          activeProjectId: "/work/other",
+        });
+      return backend(cmd);
+    });
+    render(<App projectWindowBoot={{ name: "design" }} />);
+    await vi.waitFor(() => expect(windowCalls).toContain("destroy()"));
+    expect(calls("list_recent_projects")).toHaveLength(0);
   });
 });

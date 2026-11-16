@@ -47,7 +47,12 @@ vi.mock("../events", () => ({
 
 import { setWindowProjectId } from "../api/invoke";
 import { resetLogBufferForTest } from "../logging";
-import { countRunsInFlight, useProjectTabs, type ProjectTabsDeps } from "./useProjectTabs";
+import {
+  countRunsInFlight,
+  restoresGeometry,
+  useProjectTabs,
+  type ProjectTabsDeps,
+} from "./useProjectTabs";
 
 function handle(name: string): ProjectHandle {
   return {
@@ -577,11 +582,52 @@ describe("a window that open project window created (PWN-FR-KQZB)", () => {
     expect(result.current.boot).toBeNull();
   });
 
-  it("PWN-FR-KQZB: a window with no entry in the list shows the Project picker", async () => {
+  it("PWN-FR-KQZB: a created window with no entry closes while other project windows are open", async () => {
     api.currentProjectWindow.mockResolvedValue(null);
-    const { result } = mount(deps({ screen: "picker", boot: { name: "b" } }));
-    await waitFor(() => expect(result.current.boot).toBeNull());
+    api.listProjectWindows.mockResolvedValue({ windows: [win("a")], activeProjectId: "/work/a" });
+    const closeWindow = vi.fn().mockResolvedValue(undefined);
+    const { result } = mount(deps({ screen: "picker", boot: { name: "b" }, closeWindow }));
+    await waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(1));
+    expect(result.current.boot).not.toBeNull();
     expect(api.openProjectAtPath).not.toHaveBeenCalled();
+  });
+
+  it("PWN-FR-KQZB, PWN-FR-QEGI: the only window with no entry shows the Project picker and stays open", async () => {
+    api.currentProjectWindow.mockResolvedValue(null);
+    const closeWindow = vi.fn().mockResolvedValue(undefined);
+    const { result } = mount(deps({ screen: "picker", boot: { name: "b" }, closeWindow }));
+    await waitFor(() => expect(result.current.boot).toBeNull());
+    expect(closeWindow).not.toHaveBeenCalled();
+    expect(api.openProjectAtPath).not.toHaveBeenCalled();
+  });
+
+  it("PWN-FR-KQZB: a window that cannot close shows the Project picker", async () => {
+    api.currentProjectWindow.mockResolvedValue(null);
+    api.listProjectWindows.mockResolvedValue({ windows: [win("a")], activeProjectId: "/work/a" });
+    const closeWindow = vi.fn().mockRejectedValue(new Error("not allowed"));
+    const { result } = mount(deps({ screen: "picker", boot: { name: "b" }, closeWindow }));
+    await waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.boot).toBeNull());
+  });
+
+  it("PWN-FR-KQZB: a close that throws at once shows the Project picker, not a failure", async () => {
+    api.currentProjectWindow.mockResolvedValue(null);
+    api.listProjectWindows.mockResolvedValue({ windows: [win("a")], activeProjectId: "/work/a" });
+    const closeWindow = vi.fn(() => {
+      throw new Error("destroy is missing");
+    });
+    const { result } = mount(deps({ screen: "picker", boot: { name: "b" }, closeWindow }));
+    await waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.boot).toBeNull());
+  });
+
+  it("PWN-FR-KQZB: a list that cannot be read shows the Project picker and closes nothing", async () => {
+    api.currentProjectWindow.mockResolvedValue(null);
+    api.listProjectWindows.mockRejectedValue(new Error("no list"));
+    const closeWindow = vi.fn().mockResolvedValue(undefined);
+    const { result } = mount(deps({ screen: "picker", boot: { name: "b" }, closeWindow }));
+    await waitFor(() => expect(result.current.boot).toBeNull());
+    expect(closeWindow).not.toHaveBeenCalled();
   });
 
   it("PWN-FR-KQZB: a window that the backend did not create has no loading state", () => {
@@ -602,5 +648,157 @@ describe("Cancel in the open project dialog (PJT-FR-GASB, PPK-FR-KRPD)", () => {
     expect(result.current.pickerIntent).toBe("ask");
     expect(prefs.patchAppPreferences).not.toHaveBeenCalled();
     expect(api.openProjectWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe("New Tab while a project choice is open (PJT-FR-PILG)", () => {
+  async function ready() {
+    const r = mount(deps());
+    await waitFor(() => expect(listeners.menu.has("menu:new-tab")).toBe(true));
+    return r;
+  }
+
+  it("PJT-FR-PILG: does nothing while the modal of Open Another Project… shows", async () => {
+    const { result } = await ready();
+    act(() => result.current.openPicker());
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerIntent).toBe("ask");
+    await act(() => result.current.chooseProject(handle("b")));
+    expect(result.current.pending?.name).toBe("b");
+    expect(api.openProjectWindow).not.toHaveBeenCalled();
+  });
+
+  it("PJT-FR-PILG: does nothing while the open project dialog shows", async () => {
+    const { result } = await ready();
+    await act(() => result.current.chooseProject(handle("b")));
+    expect(result.current.pending?.name).toBe("b");
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerOpen).toBe(false);
+    expect(result.current.pickerIntent).toBe("ask");
+  });
+
+  it("PJT-FR-PILG, PJT-FR-PNDG: does nothing while an open is in progress", async () => {
+    const releases: ((v: unknown) => void)[] = [];
+    api.openProjectWindow.mockImplementation(() => new Promise((resolve) => releases.push(resolve)));
+    prefs.loadAppPreferences.mockResolvedValue({ theme: "system", openProjectBehaviour: "new_tab" });
+    const { result } = await ready();
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.chooseProject(handle("b"));
+    });
+    await waitFor(() => expect(result.current.opening).toBe("b"));
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerOpen).toBe(false);
+    await act(async () => {
+      for (const release of releases) release({ projectId: "/work/b", windowLabel: "project-1", created: true });
+      await first;
+    });
+  });
+
+  it("PJT-FR-PILG: opens the modal again once the choice is over", async () => {
+    const { result } = await ready();
+    await act(() => result.current.chooseProject(handle("b")));
+    act(() => result.current.cancelDialog());
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerOpen).toBe(true);
+    expect(result.current.pickerIntent).toBe("new-tab");
+  });
+});
+
+describe("a window in a macOS tab group (PJT-FR-QFRM)", () => {
+  it("PJT-FR-QFRM: is in a tab group on macOS while another project window is open", async () => {
+    setPlatform("MacIntel");
+    const { result } = mount(deps());
+    await waitFor(() => expect(listeners.changed).not.toBeNull());
+    act(() => listeners.changed?.({ windows: [win("a")], activeProjectId: "/work/a" }));
+    expect(result.current.inTabGroup()).toBe(false);
+    act(() => listeners.changed?.({ windows: [win("a"), win("b")], activeProjectId: "/work/a" }));
+    expect(result.current.inTabGroup()).toBe(true);
+  });
+
+  it("PJT-FR-QFRM: is never in a tab group on Windows and Linux", async () => {
+    setPlatform("Linux x86_64");
+    const { result } = mount(deps());
+    await waitFor(() => expect(listeners.changed).not.toBeNull());
+    act(() => listeners.changed?.({ windows: [win("a"), win("b")], activeProjectId: "/work/a" }));
+    expect(result.current.inTabGroup()).toBe(false);
+  });
+});
+
+describe("each condition of the New Tab guard (PJT-FR-PILG)", () => {
+  async function ready() {
+    const r = mount(deps());
+    await waitFor(() => expect(listeners.menu.has("menu:new-tab")).toBe(true));
+    return r;
+  }
+
+  it("PJT-FR-PILG, PJT-FR-PNDG: an open in a new tab from the dialog holds New Tab", async () => {
+    const releases: ((v: unknown) => void)[] = [];
+    api.openProjectWindow.mockImplementation(() => new Promise((resolve) => releases.push(resolve)));
+    const { result } = await ready();
+    await act(() => result.current.chooseProject(handle("b")));
+    let answer!: Promise<void>;
+    act(() => {
+      answer = result.current.answerDialog("new-tab");
+    });
+    await waitFor(() => expect(result.current.opening).toBe("b"));
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerOpen).toBe(false);
+    await act(async () => {
+      for (const release of releases) release({ projectId: "/work/b", windowLabel: "project-1", created: true });
+      await answer;
+    });
+  });
+
+  it("PJT-FR-PILG: reading the remembered choice holds New Tab", async () => {
+    const releases: ((v: unknown) => void)[] = [];
+    prefs.loadAppPreferences.mockImplementation(() => new Promise((resolve) => releases.push(resolve)));
+    const { result } = await ready();
+    let choice!: Promise<void>;
+    act(() => {
+      choice = result.current.chooseProject(handle("b"));
+    });
+    await waitFor(() => expect(releases.length).toBe(1));
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerOpen).toBe(false);
+    await act(async () => {
+      for (const release of releases) release({ theme: "system" });
+      await choice;
+    });
+  });
+
+  it("PJT-FR-PILG, PJT-FR-PNDG: a This tab replace holds New Tab and a second choice", async () => {
+    const releases: ((v: boolean) => void)[] = [];
+    const d = deps({
+      flushBeforeTeardown: vi.fn(() => new Promise<boolean>((resolve) => releases.push(resolve))),
+    });
+    const { result } = mount(d);
+    await waitFor(() => expect(listeners.menu.has("menu:new-tab")).toBe(true));
+    await act(() => result.current.chooseProject(handle("b")));
+    let answer!: Promise<void>;
+    act(() => {
+      answer = result.current.answerDialog("this-tab");
+    });
+    await waitFor(() => expect(releases.length).toBe(1));
+    act(() => listeners.menu.get("menu:new-tab")?.());
+    expect(result.current.pickerOpen).toBe(false);
+    await act(() => result.current.chooseProject(handle("c")));
+    expect(result.current.pending).toBeNull();
+    await act(async () => {
+      for (const release of releases) release(true);
+      await answer;
+    });
+    expect(api.attachProjectToWindow).toHaveBeenCalledWith("/work/b");
+    expect(api.attachProjectToWindow).not.toHaveBeenCalledWith("/work/c");
+  });
+});
+
+describe("restoresGeometry (PJT-FR-QFRM, PWN-FR-XGTO)", () => {
+  it("PJT-FR-QFRM, PWN-FR-XGTO: restores only outside a macOS tab group", () => {
+    expect(restoresGeometry({ created: false, mac: true, inTabGroup: false })).toBe(true);
+    expect(restoresGeometry({ created: false, mac: true, inTabGroup: true })).toBe(false);
+    expect(restoresGeometry({ created: true, mac: true, inTabGroup: false })).toBe(false);
+    expect(restoresGeometry({ created: true, mac: false, inTabGroup: false })).toBe(true);
+    expect(restoresGeometry({ created: false, mac: false, inTabGroup: false })).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 
 import { useMainWindowState } from "./useMainWindowState";
 import { resetAppPreferencesCache } from "../state/appPreferences";
@@ -928,5 +928,56 @@ describe("useMainWindowState — a window in a macOS tab group (PWN-FR-XGTO)", (
     await waitFor(() =>
       expect(invokeMock.mock.calls.some((c) => c[0] === "save_layout_preferences")).toBe(true),
     );
+  });
+});
+
+describe("useMainWindowState — the restore is decided when it runs (PJT-FR-QFRM)", () => {
+  it("PJT-FR-QFRM: reads the decision at each project change, as at This tab", async () => {
+    let inGroup = false;
+    function Switching({ project }: { project: string }) {
+      useMainWindowState(true, project, () => !inGroup);
+      return null;
+    }
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "load_layout_preferences") return null;
+      if (cmd === "load_app_preferences") return { theme: "system", mainWindowFullscreen: true };
+      if (cmd === "append_log_records") return undefined;
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const { rerender } = render(<Switching project="a" />);
+    // The first run is over once it listens for resizes.
+    await waitFor(() => expect(onResizedMock).toHaveBeenCalledTimes(1));
+    expect(maximizeMock).toHaveBeenCalledTimes(1);
+    expect(setFullscreenMock).toHaveBeenCalledWith(true);
+    inGroup = true;
+    maximizeMock.mockClear();
+    setFullscreenMock.mockClear();
+    onResizedMock.mockClear();
+    rerender(<Switching project="b" />);
+    await waitFor(() => expect(onResizedMock).toHaveBeenCalledTimes(1));
+    expect(maximizeMock).not.toHaveBeenCalled();
+    expect(setFullscreenMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useMainWindowState — a new decision function is no new restore (PJT-FR-QFRM)", () => {
+  it("PJT-FR-QFRM: a render with a new function and the same project restores nothing again", async () => {
+    function Rendered({ tick }: { tick: number }) {
+      useMainWindowState(true, "a", () => tick >= 0);
+      return null;
+    }
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "load_layout_preferences") return null;
+      if (cmd === "load_app_preferences") return { theme: "system" };
+      if (cmd === "append_log_records") return undefined;
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const { rerender } = render(<Rendered tick={0} />);
+    await waitFor(() => expect(onResizedMock).toHaveBeenCalledTimes(1));
+    rerender(<Rendered tick={1} />);
+    await act(async () => {});
+    expect(setResizableMock).toHaveBeenCalledTimes(1);
+    expect(maximizeMock).toHaveBeenCalledTimes(1);
+    expect(onResizedMock).toHaveBeenCalledTimes(1);
   });
 });

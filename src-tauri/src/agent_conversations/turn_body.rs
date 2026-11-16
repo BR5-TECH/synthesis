@@ -4,6 +4,7 @@
 //! CVL-FR-16, up to the round bound of CVL-FR-13.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 pub(super) enum TurnEnd {
     Cancelled,
@@ -71,6 +72,7 @@ pub(super) fn ends_turn(name: &str) -> bool {
         crate::tools::ask_discussion_questions::NAME,
         crate::tools::propose_draft_changes::NAME,
         crate::tools::propose_new_draft::NAME,
+        crate::tools::propose_plan_changes::NAME,
         crate::tools::propose_prompt_changes::NAME,
         crate::tools::propose_change_edits::NAME,
         crate::tools::propose_new_change::NAME,
@@ -518,6 +520,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::propose_draft_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_new_draft::NAME {
                 Some(crate::tools::propose_new_draft::ONE_AT_A_TIME)
+            } else if call.function.name == crate::tools::propose_plan_changes::NAME {
+                // CVL-FR-15, PPT-FR-PRPX: one plan proposal per turn.
+                Some(crate::tools::propose_plan_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_prompt_changes::NAME
                 || call.function.name == crate::tools::propose_change_edits::NAME
                 || call.function.name == crate::tools::propose_new_change::NAME
@@ -803,8 +808,7 @@ fn report_turn_running<R: tauri::Runtime>(
     turns: &TurnRegistry,
     plan: &TurnPlan,
 ) {
-    use tauri::Manager;
-    let progress_registry = app.state::<ProgressRegistry>();
+    let progress_registry = app.project_store::<ProgressRegistry>();
     let operation = progress::register_and_publish_with_activation(
         app,
         &progress_registry,

@@ -439,7 +439,7 @@ impl McpManager {
         let manager = self.clone();
         let (project, record, stderr) = (project.clone(), record.clone(), stderr.clone());
         let owner = owner.clone();
-        let task = tauri::async_runtime::spawn(async move {
+        let task = crate::project_scope::context::spawn(async move {
             manager.supervise(generation, project, record, owner, stderr, stop_rx).await;
         });
         let tauri::async_runtime::JoinHandle::Tokio(task) = task;

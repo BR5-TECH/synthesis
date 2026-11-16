@@ -9,6 +9,7 @@ use super::*;
 use crate::agent_groups::{
     ready_nicknames, render_advisors_section, GroupMode, GroupState, JoinOutcome, MemberStatus,
 };
+use crate::project_scope::ProjectStores;
 
 /// AGC-FR-HVQD: the name of the advisors tool.
 pub const ADVISORS_TOOL_NAME: &str = "ask_advisors";
@@ -179,7 +180,7 @@ fn run_call<R: tauri::Runtime>(
     arguments: &serde_json::Value,
 ) -> Result<String, rig::tool::ToolExecutionError> {
     use tauri::Manager;
-    let turns = context.app.state::<TurnRegistry>();
+    let turns = context.app.project_store::<TurnRegistry>();
     let question = question_of(arguments)?;
     logging::log_info(
         &context.app,

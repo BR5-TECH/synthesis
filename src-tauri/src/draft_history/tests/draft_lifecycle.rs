@@ -202,7 +202,7 @@ fn the_commands_reconcile_before_they_answer_and_refuse_a_closed_project() {
     let listed = list_draft_history(
         f.handle(),
         f.draft_id.clone(),
-        f.app.state::<crate::project::ProjectState>(),
+        f.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("listed");
 
@@ -226,7 +226,7 @@ fn the_commands_reconcile_before_they_answer_and_refuse_a_closed_project() {
     let loaded = load_draft_history_entry(
         f.handle(),
         original.clone(),
-        f.app.state::<crate::project::ProjectState>(),
+        f.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("loaded");
     assert_eq!(loaded.sha256, listed.entries[0].sha256);
@@ -237,13 +237,13 @@ fn the_commands_reconcile_before_they_answer_and_refuse_a_closed_project() {
         list_draft_history(
             f.handle(),
             f.draft_id.clone(),
-            f.app.state::<crate::project::ProjectState>(),
+            f.app.state::<crate::project::ProjectState>().into(),
         )
         .err(),
         load_draft_history_entry(
             f.handle(),
             original,
-            f.app.state::<crate::project::ProjectState>(),
+            f.app.state::<crate::project::ProjectState>().into(),
         )
         .err(),
     ] {

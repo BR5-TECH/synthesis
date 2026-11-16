@@ -27,6 +27,8 @@ Every node of the specification map shows what it is, what it is for, and how co
 18. **SMN-FR-VNTJ** A planned capability node renders as a leaf group with a 1px dashed `--border-2` border and the word `planned` after its label. It holds no spec chip, and its spec count is 0.
 19. **SMN-FR-YEVY** Change chips add nothing to spec counts, requirement totals, scenario totals, or completeness bars. A collapsed index node that holds change chips beneath it adds `+N changes` to its meta line, `N` counting the distinct changes and locations.
 20. **SMN-FR-EIDC** For the source `openspec`, the meta line of a spec node's hover card reads `S scenarios` and names no citation.
+21. **SMN-FR-JHQR** A right-click on a node of the Specifications lens, and the context-menu key or `Shift+F10` on a focused node, opens a context menu that holds a **Discuss** entry. It is available on a root card, a branch box, a leaf-group box, and a spec chip. Its leading icon follows `LCM-library-context-menu.md` LCM-FR-07.
+22. **SMN-FR-BSZV** **Discuss** hands the node reference of the node (`lens` `specifications`, `kind` `index` or `spec`, and the node id or the spec code) to the Discussion column of `SMP-specification-map.md` (SMP-FR-IHFM). The menu closes, and the focus moves to the composer of the column. A change chip has no menu.
 
 ## Wireframes
 ```

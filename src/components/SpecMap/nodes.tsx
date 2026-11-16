@@ -21,10 +21,16 @@ import { changeLocationLabel, sameRef, type MapRef } from "../../state/specMap/t
 import type { LayoutBox, LayoutChip, MapLayout } from "./layout";
 import { CompletenessBar, Counts } from "./CompletenessBar";
 import { holdsUnplanned, isUnplanned, type SpecLinks } from "../../state/delivery/specLinks";
+import type { MenuBindings } from "../MapDiscussion/NodeMenu";
 
 export interface NodeHandlers {
   select: (ref: MapRef) => void;
   hover: (ref: MapRef | null) => void;
+  /**
+   * SMN-FR-JHQR: the handlers that open the **Discuss** menu of a node, or
+   * undefined for a node that has none, such as a change chip.
+   */
+  menu?: (ref: MapRef) => MenuBindings | undefined;
 }
 
 /** The light-theme values of the design system's swatch hues. */
@@ -53,6 +59,7 @@ function keepFromPan(e: PointerEvent<HTMLElement>) {
 }
 
 function interaction(ref: MapRef, label: string, handlers: NodeHandlers) {
+  const menu = handlers.menu?.(ref);
   return {
     role: "button" as const,
     tabIndex: 0,
@@ -64,7 +71,9 @@ function interaction(ref: MapRef, label: string, handlers: NodeHandlers) {
         e.preventDefault();
         handlers.select(ref);
       }
+      menu?.onKeyDown(e);
     },
+    onContextMenu: menu?.onContextMenu,
     // SMN-FR-KTZB: the innermost node under the pointer is the hovered one.
     onMouseOver: (e: MouseEvent<HTMLElement>) => {
       e.stopPropagation();

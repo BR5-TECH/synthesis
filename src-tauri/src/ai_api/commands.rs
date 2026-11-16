@@ -213,6 +213,7 @@ pub(super) fn log_config_outcome<S: LogSink + Clone + Send + 'static, T>(
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_ai_api_integrations(
     app: tauri::AppHandle,
@@ -224,6 +225,7 @@ pub fn list_ai_api_integrations(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_ai_api_catalogs(
     store: State<'_, GlobalSettingsStore>,
@@ -231,6 +233,7 @@ pub fn list_ai_api_catalogs(
     list_catalogs_impl(&store)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn verify_ai_api_integration(
     provider: String,
@@ -265,6 +268,7 @@ pub fn verify_ai_api_integration(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_ai_api_model(
     provider: String,
@@ -293,6 +297,7 @@ pub fn set_ai_api_model(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_ai_api_reasoning(
     provider: String,
@@ -313,6 +318,7 @@ pub fn set_ai_api_reasoning(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_active_ai_api_integration(
     provider: String,
@@ -331,6 +337,7 @@ pub fn set_active_ai_api_integration(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn clear_ai_api_integration(
     provider: String,
@@ -352,12 +359,13 @@ pub fn clear_ai_api_integration(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_project_ai_api_integration(
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     ai: State<'_, AiApiIntegrations>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectAiApiIntegration, String> {
     let result = get_project_impl(&store, &ai, &project.slot_key());
     if let Ok(resolved) = &result {
@@ -366,13 +374,14 @@ pub fn get_project_ai_api_integration(
     result
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_project_ai_api_integration(
     provider: Option<String>,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     ai: State<'_, AiApiIntegrations>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectAiApiIntegration, String> {
     let result = set_project_impl(&store, &ai, &project.slot_key(), provider.as_deref());
     log_config_outcome(

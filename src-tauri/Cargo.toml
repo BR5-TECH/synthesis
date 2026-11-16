@@ -20,6 +20,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# PWN-FR-CTXT: the `project_scoped` attribute of the commands.
+project_scope_macros = { path = "project_scope_macros" }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
@@ -323,6 +325,10 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
 # added to the build.
 objc2 = { version = "0.6", features = ["exception"] }
 block2 = "0.6"
+# PWN-FR-XGTO: a new project window joins the tab group from a block on the
+# main dispatch queue, outside the event loop's callback. Already in the tree
+# as a dependency of `tao`.
+dispatch2 = "0.3"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
   "block2",
   "NSApplication",
@@ -401,3 +407,25 @@ microsandbox-image = "=0.7.8"
 # file. Already in the tree as a dependency of many crates.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# PWN-FR-CTXT: the macro crate is a member, and a default member, so that the
+# plain `cargo fmt --check` and `cargo clippy` commands of the backend lane
+# reach it.
+[workspace]
+members = [".", "project_scope_macros"]
+default-members = [".", "project_scope_macros"]
+
+# RDP-FR-RFMT, RDP-FR-RQEL: line tables for the workspace crates and no debug
+# information for the dependencies. A panic and a backtrace still show the file
+# and the line of each workspace frame. The `test` profile takes these values,
+# so the test binary is approximately one third of its size with full debug
+# information, and each check links it much faster.
+#
+# RDP-FR-EKRY: for full debug information in one build, for example a debugger
+# session, set `CARGO_PROFILE_DEV_DEBUG=full` for the workspace crates, and add
+# `--config 'profile.dev.package."*".debug="full"'` for the dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

@@ -2,6 +2,7 @@
 //! document language of its target (AGC-FR-QEOF, AGC-FR-WSKP, AGC-FR-SBGB).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 use crate::voice_ai::languages::{spoken_language, SpokenLanguage};
 use tauri::Manager;
 
@@ -107,7 +108,7 @@ pub fn translate_impl<R: tauri::Runtime>(
 ) -> Result<Translation, String> {
     let store = app.state::<GlobalSettingsStore>();
     let ai = app.state::<AiApiIntegrations>();
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let found = document_language::document_language(roots, target, None);
     document_language::log_document_language(app, turns.buffer(), "translation", target, found);
     let document = found.name;
@@ -213,18 +214,19 @@ fn log_translation_failure<R: tauri::Runtime>(
 }
 
 /// AGC-FR-QEOF.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn translate_voice_transcript<R: tauri::Runtime>(
     text: String,
     nicknames: Vec<String>,
     target: DiscussionTarget,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Translation, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     let store = project.require_store()?;
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let roots = Roots { worktree: &root, store: &store };
         translate_impl(&app, roots, &key, &text, &nicknames, &target)
     })

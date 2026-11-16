@@ -69,6 +69,7 @@ fn start(
         StandingWork::Keep,
         None,
         change.map(str::to_string),
+        Default::default(),
     )
 }
 
@@ -380,7 +381,8 @@ fn a_validation_without_the_mode_or_the_cli_blocks_and_keeps_the_slot() {
 
         let queue = crate::graduation::queue::project_queue(&fx.app).unwrap();
         assert!(queue.runs.iter().any(|r| r.id == run.id && !r.state.is_terminal()));
-        let capacity = crate::graduation::get_graduation_capacity(fx.app.clone()).unwrap();
+        let capacity =
+            crate::graduation::get_graduation_capacity(fx.app.clone(), Default::default()).unwrap();
         assert_eq!(capacity.in_use, 1, "{take_away}: the blocked run keeps its project slot");
     }
 }
@@ -394,7 +396,8 @@ fn a_restart_of_a_propose_run_keeps_its_change() {
     fx.app.state::<GraduationState>().set_loop_enabled(false);
     let stream = fx.stream("editor");
     let first = start(&fx, &fx.draft("logout"), &stream, Some(CHANGE)).expect("a propose start");
-    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone()).expect("a discard");
+    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone(), Default::default())
+        .expect("a discard");
     std::fs::create_dir_all(stream.worktree().join("openspec/changes").join(CHANGE)).unwrap();
 
     let restarted = crate::graduation::restart_graduation_run(
@@ -403,13 +406,18 @@ fn a_restart_of_a_propose_run_keeps_its_change() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     )
     .expect("the folder of the run's own work refuses no restart");
     assert_eq!(restarted.openspec, first.openspec);
     assert_eq!(restarted.restarted_from_run_id.as_deref(), Some(first.id.as_str()));
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), restarted.id.clone())
-        .expect("a discard");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        restarted.id.clone(),
+        Default::default(),
+    )
+    .expect("a discard");
     std::fs::remove_file(fx.root().join("openspec/config.yaml")).unwrap();
     let refused = crate::graduation::restart_graduation_run(
         fx.app.clone(),
@@ -417,6 +425,7 @@ fn a_restart_of_a_propose_run_keeps_its_change() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     );
     assert_eq!(refused.unwrap_err(), "openspec_mode_inactive");
 }
@@ -450,6 +459,7 @@ fn an_unknown_stream_is_refused_before_the_mode() {
         StandingWork::Keep,
         None,
         Some(CHANGE.into()),
+        Default::default(),
     );
     assert_eq!(refused.unwrap_err(), crate::graduation::ERR_UNKNOWN_STREAM);
 }
@@ -472,7 +482,9 @@ fn the_draft_link_is_read_from_the_run_and_never_stored_in_the_draft() {
     assert_eq!(run.state, GraduationRunState::Completed);
 
     let read =
-        crate::graduation::get_draft_graduation(fx.app.clone(), draft.clone()).unwrap().unwrap();
+        crate::graduation::get_draft_graduation(fx.app.clone(), draft.clone(), Default::default())
+            .unwrap()
+            .unwrap();
     assert_eq!(read.openspec, run.openspec);
     let mut checked = 0;
     let mut stack = vec![fx.root()];
@@ -506,6 +518,7 @@ fn a_change_is_read_on_a_live_stream_and_an_unknown_stream_is_refused() {
         fx.app.clone(),
         location,
         CHANGE.into(),
+        Default::default(),
     ));
     assert_eq!(refused.unwrap_err().code, "unknown_stream");
     assert!(runner.calls().iter().all(|c| c.args[0] == "--version"), "no read process for it");
@@ -523,6 +536,7 @@ fn a_change_is_read_on_a_live_stream_and_an_unknown_stream_is_refused() {
         fx.app.clone(),
         location.clone(),
         CHANGE.into(),
+        Default::default(),
     ))
     .expect("a change on a live stream");
     assert_eq!(detail.location, location);

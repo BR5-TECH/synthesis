@@ -141,6 +141,7 @@ fn creating_a_draft_settles_no_version_and_announces_none() {
         Some("spec".into()),
         None,
         app.handle().clone(),
+        Default::default(),
     ))
     .expect("created");
 
@@ -611,6 +612,7 @@ fn creating_a_draft_on_an_unconfirmed_main_branch_writes_nothing() {
             Some("spec".into()),
             None,
             app.handle().clone(),
+            Default::default(),
         ))
     };
 

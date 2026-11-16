@@ -178,6 +178,11 @@ pub const DISCUSSION_LOG_MARKER: &str = ".discussion";
 /// reaches no project-wide list (CMS-FR-40) without a scope check of its own.
 pub(super) const NOTES_SUBDIR: &str = "notes";
 
+/// CMS-FR-ACLX: the subdirectory of the store's comments folder that holds the
+/// log and the attachments of the Map owner. A directory, so it reaches no
+/// project-wide list (CMS-FR-GWBK) for the reason [`NOTES_SUBDIR`] does not.
+pub(super) const MAP_SUBDIR: &str = "map";
+
 /// CMS-FR-64: the name a note's conversation folder is moved aside to before it
 /// is deleted.
 ///

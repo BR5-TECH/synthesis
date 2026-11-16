@@ -15,6 +15,8 @@
 //! channels and under the same rules (EMB-FR-HWRQ, EMB-FR-IBXK): this module
 //! mounts no watcher and reads no file of the working copy.
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use std::time::Instant;
 
 use tauri::Manager;
@@ -138,7 +140,7 @@ fn model_cache_environment(
 /// on. Called once from the application's setup.
 pub fn on_app_started<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let (Some(service), Some(store)) = (
-        app.try_state::<EmbeddingsService>(),
+        app.try_project_store::<EmbeddingsService>(),
         app.try_state::<crate::global_settings::GlobalSettingsStore>(),
     ) else {
         return;
@@ -155,15 +157,24 @@ pub fn on_app_started<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// at every change of the active worktree or its branch (WTC-FR-08). Called
 /// after the BM25 indexer mounted, so its generation is the new one.
 pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let Some(service) = app.try_state::<EmbeddingsService>() else {
+    let Some(service) = app.try_project_store::<EmbeddingsService>() else {
         return;
     };
-    let Some(project) = app.try_state::<crate::project::ProjectState>() else {
+    let Some(project) = app.open_project_state() else {
         return;
     };
-    let (Some(root), Some(indexer)) =
-        (project.root(), app.try_state::<crate::bm25_index::Bm25Indexer>())
-    else {
+    // The service of a project scope starts with the switch off, and the start
+    // of the application reaches the default scope only. The Global record is
+    // applied here, before the mount, so every project scope follows it.
+    if let Some(store) = app.try_state::<crate::global_settings::GlobalSettingsStore>() {
+        service.apply_settings(store.load_embeddings_config().unwrap_or_default());
+    }
+    let (Some(root), Some(indexer)) = (
+        project.root(),
+        crate::project_scope::ProjectStores::try_project_store::<crate::bm25_index::Bm25Indexer>(
+            app,
+        ),
+    ) else {
         return;
     };
     let key = project.slot_key();
@@ -186,7 +197,7 @@ pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 
 /// EMB-FR-RMZH: the project closed.
 pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(service) = app.try_state::<EmbeddingsService>() {
+    if let Some(service) = app.try_project_store::<EmbeddingsService>() {
         service.unmount();
         service.emit(app);
     }
@@ -200,7 +211,7 @@ pub fn note_index_published<R: tauri::Runtime>(
     generation: u64,
     pass: u64,
 ) {
-    if let Some(service) = app.try_state::<EmbeddingsService>() {
+    if let Some(service) = app.try_project_store::<EmbeddingsService>() {
         service.index_published(
             Published {
                 touched: scope.artifacts || scope.documents,
@@ -214,7 +225,7 @@ pub fn note_index_published<R: tauri::Runtime>(
 
 /// EMB-FR-VQSK: Git metadata changed, or the main window gained focus.
 pub fn note_root_tip_check<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(service) = app.try_state::<EmbeddingsService>() {
+    if let Some(service) = app.try_project_store::<EmbeddingsService>() {
         service.request_root_check();
     }
 }
@@ -267,7 +278,7 @@ pub fn search_open_project<R: tauri::Runtime>(
     query: &str,
     limit: usize,
 ) -> Vec<crate::bm25_index::ChunkHit> {
-    let service = app.try_state::<EmbeddingsService>();
+    let service = app.try_project_store::<EmbeddingsService>();
     let ranker = ranker(app, service.as_deref());
     hybrid_search(indexer, ranker.as_ref().map(|r| r as &dyn VectorRanker), index, query, limit)
 }

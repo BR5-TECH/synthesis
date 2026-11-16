@@ -8,13 +8,14 @@
 //! (-> `"project tree changed"`). The pure halves are unit-tested without a
 //! Tauri runtime.
 
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult, Debouncer};
-use tauri::{Emitter, Manager};
 
 use crate::artifacts::{ArtifactChangedPayload, ContentTracker};
 use crate::changes::{self, ChangesUpdatedPayload};
@@ -237,8 +238,9 @@ pub fn start_watching<R: tauri::Runtime>(
     let (git_dir_owned, extra_git_watch) = git_watch_targets(root);
     let common_dir_owned = common_dir_target(root);
     let common_dir_batch = common_dir_owned.clone();
-    let debouncer =
-        new_debouncer(Duration::from_millis(300), move |result: DebounceEventResult| {
+    let debouncer = new_debouncer(
+        Duration::from_millis(300),
+        crate::project_scope::context::wrap_handler(move |result: DebounceEventResult| {
             // The debounced batch carries no event kinds (notify-mini collapses
             // create/modify/delete into `Any`), so we discriminate structural
             // from content changes via the per-artifact checksum tracker:
@@ -283,7 +285,7 @@ pub fn start_watching<R: tauri::Runtime>(
                 crate::embeddings::note_root_tip_check(&app_handle);
             }
             if changes_count > 0 {
-                let _ = app_handle.emit(
+                let _ = app_handle.emit_project(
                     crate::changes::CHANGES_UPDATED,
                     ChangesUpdatedPayload { change_count: changes_count },
                 );
@@ -306,7 +308,7 @@ pub fn start_watching<R: tauri::Runtime>(
                 // a panic surfaces as a silently dead watcher rather than as a
                 // failure anyone sees. An unmanaged baseline degrades to
                 // "always external" — one redundant pass, never staleness.
-                let state = app_handle.try_state::<scanning::AttributionBaseline>();
+                let state = app_handle.try_project_store::<scanning::AttributionBaseline>();
                 let baseline = state.as_ref().and_then(|s| s.current());
                 let current = root_owned.sha256_file(scanning::LIBRARY_TOML_REL).ok();
                 let is_self = attribution_is_self_write(baseline.as_deref(), current.as_deref());
@@ -338,7 +340,7 @@ pub fn start_watching<R: tauri::Runtime>(
             // edit can change a file's classification through the frontmatter
             // tiebreak (ASC-FR-04), and a stale list would go on grouping that
             // file under the type it used to have (SCC-FR-08).
-            app_handle.state::<scanning::CandidateStore>().invalidate();
+            app_handle.project_store::<scanning::CandidateStore>().invalidate();
             // BMI-FR-15 / BMI-FR-16 / BMI-FR-17 / BMI-FR-18: every change the
             // watcher sees — a creation, a deletion, a content edit, a pull
             // that rewrote half the tree — reaches the BM25 indexes here and
@@ -353,7 +355,7 @@ pub fn start_watching<R: tauri::Runtime>(
             // — invisible to the tree, and so to every other consumer here —
             // still reach the skills index.
             crate::bm25_index::request_pass(&app_handle, crate::bm25_index::PassScope::ARTIFACTS);
-            let tracker = app_handle.state::<ContentTracker>();
+            let tracker = app_handle.project_store::<ContentTracker>();
             // PST-FR-35: whether what the Recently edited widget enumerates, or
             // how it orders, may have moved. Set from BOTH channels below — a
             // content modification to a path that resolves to an artifact, and
@@ -393,7 +395,7 @@ pub fn start_watching<R: tauri::Runtime>(
                         // same change does not re-fire; a further external edit
                         // (new checksum) still will (EXC-FR-UWYK).
                         tracker.record(rel, &new_ck);
-                        let _ = app_handle.emit(
+                        let _ = app_handle.emit_project(
                             ARTIFACT_CHANGED_EXTERNALLY,
                             ArtifactChangedPayload { artifact_id: rel.clone(), checksum: new_ck },
                         );
@@ -488,7 +490,7 @@ pub fn start_watching<R: tauri::Runtime>(
                 }
                 // Best-effort emit; a dropped event is not fatal (the user can
                 // still trigger a manual rescan).
-                let _ = app_handle.emit(
+                let _ = app_handle.emit_project(
                     PROJECT_TREE_CHANGED,
                     scanning::TreeChangedPayload {
                         // The attribution change counts as one: it is a change
@@ -503,7 +505,8 @@ pub fn start_watching<R: tauri::Runtime>(
                     },
                 );
             }
-        });
+        }),
+    );
     let mut debouncer = match debouncer {
         Ok(d) => d,
         Err(e) => {

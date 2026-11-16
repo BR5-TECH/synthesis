@@ -10,7 +10,7 @@
 //! The update reads the issue before it writes. A closed issue is not edited
 //! until the caller asks again with `update_closed` (GHP-FR-AXRU).
 
-use tauri::Manager;
+use crate::project::OpenProject as _;
 
 use super::client::{GithubIssues, IssueEdit, IssueFields, IssueRef};
 use super::records::*;
@@ -18,9 +18,9 @@ use super::{flow, store};
 use crate::fs;
 use crate::log_fields;
 use crate::logging::{self, Domain};
-use crate::project::ProjectState;
 
 /// GHP-FR-MZMW: edit the issue of the draft's current record.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn update_draft_on_github(
     draft_id: String,
@@ -35,7 +35,7 @@ pub(super) fn update_draft_on_github_impl<R: tauri::Runtime>(
     draft_id: String,
     update_closed: bool,
 ) -> Result<IssueUpdateOutcome, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = super::require_root(app, &project)?;
     let project_key = project.slot_key();
     // GHP-FR-LVVD: the refusals of a publication, before the first request.

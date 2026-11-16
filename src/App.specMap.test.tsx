@@ -128,6 +128,9 @@ describe("the Map tab through the shell", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "CHG changes panel" })).toHaveAttribute("data-selected", "true"),
     );
+    // SMP-FR-SWCL: jsdom measures a tab of 0px, so the shown Discussion column
+    // replaces the inspector. Hiding the column brings the inspector back.
+    await userEvent.click(screen.getByRole("button", { name: "Discussion" }));
     const openInspector = screen.queryByRole("button", { name: "inspector" });
     if (openInspector) await userEvent.click(openInspector);
     await userEvent.click(

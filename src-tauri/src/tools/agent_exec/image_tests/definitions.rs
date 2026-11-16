@@ -160,7 +160,7 @@ fn installed_packages(dockerfile: &str) -> Vec<String> {
 /// AVI-FR-16 — each image installs exactly the packages AVI-FR-02 names —
 /// including Python with `pip` and `venv`, which repository work asks for
 /// directly, `build-essential` for the linker the Rust toolchain of AVI-FR-17
-/// calls, `pkg-config` with the GTK, WebKit, and OpenSSL headers that
+/// calls, `mold` for the faster linker of AVI-FR-NFFO, `pkg-config` with the GTK, WebKit, and OpenSSL headers that
 /// toolchain's `-sys` build scripts ask it for, and the shared libraries and
 /// font the browser of AVI-FR-16 links against — and Git is not among them.
 ///
@@ -212,6 +212,7 @@ fn each_image_installs_exactly_the_packages_avi_names() {
                 "libxfixes3",
                 "libxkbcommon0",
                 "libxrandr2",
+                "mold",
                 "pkg-config",
                 "python3",
                 "python3-pip",
@@ -659,4 +660,93 @@ fn each_image_carries_the_openspec_cli_with_its_telemetry_off() {
     assert_eq!(pins[0], pins[1], "the two images pin different OpenSpec CLI versions");
     assert!(README.contains("ARG OPENSPEC_VERSION"), "the README does not name the OpenSpec pin");
     assert!(README.contains(&pins[0]), "the README does not name the pinned version {}", pins[0]);
+}
+
+/// The Cargo configuration that the `printf '%s\n'` of the mold `RUN` writes,
+/// rebuilt from its arguments, one line for each argument.
+fn written_cargo_config(dockerfile: &str) -> String {
+    let lines: Vec<&str> = dockerfile.lines().map(str::trim).collect();
+    let start = lines
+        .iter()
+        .position(|line| line.starts_with(r"printf '%s\n' \"))
+        .expect("no printf writes the Cargo configuration");
+    let end = lines[start..]
+        .iter()
+        .position(|line| line.starts_with(r#"> "${CARGO_HOME}/config.toml""#))
+        .map(|at| start + at)
+        .expect("the printf does not write ${CARGO_HOME}/config.toml");
+    lines[start + 1..end]
+        .iter()
+        .map(|line| {
+            let argument = line.trim_end_matches('\\').trim();
+            argument
+                .strip_prefix('\'')
+                .and_then(|a| a.strip_suffix('\''))
+                .unwrap_or_else(|| panic!("{argument:?} is not one quoted printf argument"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// AVI-FR-NFFO — Cargo links each Linux target through `mold`. The image sets
+/// the `linker` of both Linux targets in `$CARGO_HOME/config.toml` to a wrapper
+/// that calls `cc` with every argument and `-fuse-ld=mold` last, so that a
+/// `-fuse-ld=lld` from `rustc` cannot replace it, after the Rust toolchain has
+/// made `CARGO_HOME`. The file holds nothing but those two `linker` keys: a
+/// target's `rustflags` makes Cargo ignore a repository's `build.rustflags`.
+///
+/// That the built program was linked by `mold` is `verify.sh`'s to show
+/// (AVI-FR-MYOU); this reads what the definitions say.
+#[test]
+fn each_image_links_rust_through_mold() {
+    for (vendor, dockerfile) in dockerfiles() {
+        let block = run_block(dockerfile, "/usr/local/bin/cc-mold");
+        for needle in [
+            r#"printf '#!/bin/sh\nexec cc "$@" -fuse-ld=mold\n' > /usr/local/bin/cc-mold;"#,
+            "chmod 0755 /usr/local/bin/cc-mold",
+            "mold --version",
+        ] {
+            assert!(
+                block.contains(needle),
+                "{vendor} does not set up mold with {needle:?}: {block}"
+            );
+        }
+
+        // The configuration file, parsed: two targets, one key each.
+        let config: toml::Value = toml::from_str(&written_cargo_config(dockerfile))
+            .unwrap_or_else(|e| panic!("{vendor} writes a malformed Cargo config: {e}"));
+        let top: Vec<&String> = config.as_table().unwrap().keys().collect();
+        assert_eq!(top, ["target"], "{vendor} writes more than target tables: {config}");
+        let targets = config["target"].as_table().unwrap();
+        let mut triples: Vec<&String> = targets.keys().collect();
+        triples.sort();
+        assert_eq!(triples, ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]);
+        for (triple, table) in targets {
+            let keys: Vec<&String> = table.as_table().unwrap().keys().collect();
+            assert_eq!(keys, ["linker"], "{vendor} sets more than the linker of {triple}");
+            assert_eq!(table["linker"].as_str(), Some("/usr/local/bin/cc-mold"));
+        }
+
+        // Both are written after the toolchain RUN has made CARGO_HOME, and
+        // CARGO_HOME is set once, so the file stays where Cargo reads it.
+        let toolchain = dockerfile.find("--default-toolchain").expect("no Rust toolchain");
+        let wrapper = dockerfile.find("printf '#!/bin/sh").unwrap();
+        assert!(toolchain < wrapper, "{vendor} writes the Cargo config before the toolchain");
+        let assignments = env_assignments(dockerfile);
+        let homes = assignments.iter().filter(|a| a.starts_with("CARGO_HOME=")).count();
+        assert_eq!(homes, 1, "{vendor} sets CARGO_HOME {homes} times");
+
+        // No environment variable takes the linker choice or the flags away
+        // from the configuration files.
+        for assignment in assignments {
+            let name = assignment.split('=').next().unwrap_or_default();
+            assert!(
+                !name.starts_with("CARGO_TARGET_")
+                    && !name.starts_with("CARGO_BUILD_")
+                    && name != "RUSTFLAGS"
+                    && name != "CARGO_ENCODED_RUSTFLAGS",
+                "{vendor} sets {name}, which overrides a repository's own linker or flags"
+            );
+        }
+    }
 }

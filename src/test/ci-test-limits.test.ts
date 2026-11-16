@@ -24,7 +24,12 @@ import {
 } from "./ciWorkflowModel";
 
 /** The Rust crates whose lanes run `cargo nextest run` (CIP-FR-VITB). */
-const NEXTEST_CRATES = ["src-tauri", "tools/agentic-cli-mock", "server"];
+const NEXTEST_CRATES = [
+  "src-tauri",
+  "src-tauri/project_scope_macros",
+  "tools/agentic-cli-mock",
+  "server",
+];
 
 const read = (path: string): string => readFileSync(resolve(ROOT, path), "utf8");
 

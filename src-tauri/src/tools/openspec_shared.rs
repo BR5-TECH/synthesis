@@ -99,5 +99,5 @@ where
     T: Send + 'static,
     F: FnOnce() -> T + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(work).await.unwrap_or(lost)
+    crate::project_scope::context::spawn_blocking(work).await.unwrap_or(lost)
 }

@@ -8,6 +8,7 @@
 //! decided on the active worktree for each of them (OSM-FR-DDHL); the CLI runs
 //! in the working copy of the location (OSM-FR-HHUD).
 
+use crate::project::OpenProject as _;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -536,7 +537,7 @@ pub fn working_copy<R: tauri::Runtime>(
 ) -> Result<RootFs, OpenSpecReadError> {
     use tauri::Manager;
     let active = || {
-        app.try_state::<crate::project::ProjectState>()
+        app.open_project_state()
             .and_then(|p| p.require_root().ok())
             .ok_or(OpenSpecReadError::NoOpenProject)
     };
@@ -558,15 +559,18 @@ pub fn working_copy<R: tauri::Runtime>(
 
 /// OSM-FR-MBTI, OSM-FR-GMKV, OFP-FR-QLQJ: `"read openspec change"`, on a
 /// blocking thread. Every failure rejects as an `OpenSpecFailure`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn read_openspec_change<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     location: ChangeLocation,
     name: String,
 ) -> Result<ChangeDetail, Box<OpenSpecFailure>> {
-    tauri::async_runtime::spawn_blocking(move || read_openspec_change_now(&app, location, &name))
-        .await
-        .map_err(|_| Box::new(OpenSpecFailure::new(super::failure::CODE_FAILED)))?
+    crate::project_scope::context::spawn_blocking(move || {
+        read_openspec_change_now(&app, location, &name)
+    })
+    .await
+    .map_err(|_| Box::new(OpenSpecFailure::new(super::failure::CODE_FAILED)))?
 }
 
 /// The read of `"read openspec change"`, on the calling thread.
@@ -579,8 +583,7 @@ pub(crate) fn read_openspec_change_now<R: tauri::Runtime>(
     let seam = app
         .try_state::<OpenSpec>()
         .ok_or_else(|| Box::new(OpenSpecFailure::new(super::failure::CODE_MODE_INACTIVE)))?;
-    let active =
-        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let active = app.open_project_state().and_then(|p| p.require_root().ok());
     let at = working_copy(app, &location).map_err(|e| Box::new(e.to_failure()))?;
     // OSM-FR-GMKV: `change_archived` carries its archive folder as `detail`.
     seam.read_change(app, &logging::BUFFER, active.as_ref(), &at, location, name)

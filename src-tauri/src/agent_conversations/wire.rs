@@ -52,6 +52,9 @@ pub enum OriginKind {
     DraftComment,
     DraftDiscussion,
     NoteDiscussion,
+    /// AGC-FR-UOPJ: a Map thread, the Map thread and a node thread alike. The
+    /// Map has no fragment, so there is no comment kind of it.
+    MapDiscussion,
     /// AGC-FR-05: a fragment discussion of an OpenSpec change.
     ChangeComment,
     /// AGC-FR-05: a whole-change discussion.
@@ -79,6 +82,7 @@ impl ConversationOrigin {
             (DiscussionTarget::Draft { .. }, true) => OriginKind::DraftComment,
             (DiscussionTarget::Draft { .. }, false) => OriginKind::DraftDiscussion,
             (DiscussionTarget::Note { .. }, _) => OriginKind::NoteDiscussion,
+            (DiscussionTarget::Map, _) => OriginKind::MapDiscussion,
             (DiscussionTarget::Change { .. }, true) => OriginKind::ChangeComment,
             (DiscussionTarget::Change { .. }, false) => OriginKind::ChangeDiscussion,
         }
@@ -108,6 +112,12 @@ impl ConversationOrigin {
     /// which decides the change proposal and decision tools.
     pub fn is_change(&self) -> bool {
         matches!(self.target, DiscussionTarget::Change { .. })
+    }
+
+    /// CVL-FR-LCSN: whether this conversation is a Map thread, which decides the
+    /// prompt, the builder, and the plan tools.
+    pub fn is_map(&self) -> bool {
+        matches!(self.target, DiscussionTarget::Map)
     }
 
     /// CVL-FR-08: whether this conversation is about a whole target, which is what
@@ -170,6 +180,15 @@ impl ConversationOrigin {
         }
     }
 
+    /// A Map thread (CMS-FR-RHXL), with no node reference.
+    pub(crate) fn stub_map(discussion_id: impl Into<String>) -> Self {
+        Self {
+            discussion_id: discussion_id.into(),
+            fragment_target: None,
+            target: DiscussionTarget::Map,
+        }
+    }
+
     pub(crate) fn stub_note(discussion_id: impl Into<String>, note_id: impl Into<String>) -> Self {
         Self {
             discussion_id: discussion_id.into(),
@@ -190,6 +209,7 @@ impl OriginKind {
             OriginKind::DraftComment => "draft_comment",
             OriginKind::DraftDiscussion => "draft_discussion",
             OriginKind::NoteDiscussion => "note_discussion",
+            OriginKind::MapDiscussion => "map_discussion",
             OriginKind::ChangeComment => "change_comment",
             OriginKind::ChangeDiscussion => "change_discussion",
         }
@@ -446,12 +466,22 @@ pub const TAG_CURRENT_COMMENT: &str = "current_comment";
 /// to be filed against as the thing being discussed.
 pub const TAG_NOTE_CONTEXT: &str = "note_context";
 
+/// AGC-FR-UOPJ: the material tag of a **map** turn. It stands where
+/// [`TAG_ARTIFACT`] stands on a file or a draft, and holds the focus of the turn,
+/// the short summary of the delivery plan, and the plan proposals of the
+/// discussion with the state of each row (MPR-FR-NXDX).
+pub const TAG_MAP_CONTEXT: &str = "map_context";
+
 /// The tag vocabulary of a file-or-draft turn, in presentation order.
 pub const INPUT_TAGS: [&str; 3] = [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// The tag vocabulary of a note turn, in presentation order (AGC-FR-06).
 pub const NOTE_INPUT_TAGS: [&str; 3] =
     [TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
+
+/// AGC-FR-UOPJ / CVL-FR-06: the tag vocabulary of a map turn.
+pub const MAP_INPUT_TAGS: [&str; 3] =
+    [TAG_MAP_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// AGC-FR-NBZN / CVL-FR-06: the tag vocabulary of a change turn.
 pub const CHANGE_INPUT_TAGS: [&str; 3] =
@@ -465,6 +495,7 @@ pub const CHANGE_INPUT_TAGS: [&str; 3] =
 pub fn input_tags(kind: OriginKind) -> [&'static str; 3] {
     match kind {
         OriginKind::NoteDiscussion => NOTE_INPUT_TAGS,
+        OriginKind::MapDiscussion => MAP_INPUT_TAGS,
         OriginKind::ChangeComment | OriginKind::ChangeDiscussion => CHANGE_INPUT_TAGS,
         _ => INPUT_TAGS,
     }

@@ -184,6 +184,8 @@ pub struct NewIssue {
     pub body: String,
     pub issue_type: Option<String>,
     pub milestone: Option<u64>,
+    /// GDP-FR-RMNF: names of existing repository labels, already checked.
+    pub labels: Vec<String>,
 }
 
 /// The fields an issue update writes. A `None` field is not written.
@@ -213,7 +215,34 @@ pub struct MilestoneChange {
 /// The reason an issue is closed with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CloseWith {
+    Completed,
     NotPlanned,
+}
+
+/// GDP-FR-QFQF: one issue in full, as one read of the tracker found it. The
+/// read cache never holds it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IssueDetail {
+    pub number: u64,
+    pub url: String,
+    /// The repository the issue is in.
+    pub owner: String,
+    pub repo: String,
+    pub title: String,
+    pub body: String,
+    /// `open` or `closed`.
+    pub state: String,
+    pub state_reason: Option<StateReason>,
+    pub issue_type: Option<String>,
+    pub labels: Vec<String>,
+    pub milestone: Option<u64>,
+    pub milestone_title: Option<String>,
+    pub parent: Option<IssueLink>,
+    pub sub_issues: Vec<IssueLink>,
+    pub blocked_by: Vec<IssueLink>,
+    /// The `Status` of the issue on the selected Project, or `None`.
+    pub status: Option<String>,
+    pub updated_at: String,
 }
 
 /// GDP-FR-UPXR: every tracker operation of the plan. `github` is the one
@@ -270,6 +299,38 @@ pub trait TrackerAdapter: Send + Sync {
     fn close_milestone(&self, number: u64) -> Result<(), String>;
 
     fn close_issue(&self, number: u64, reason: CloseWith) -> Result<(), String>;
+
+    /// GDP-FR-QFQF: the names of every label of the repository.
+    fn list_labels(&self) -> Result<Vec<String>, String>;
+
+    /// GDP-FR-QFQF: the `Status` field of the Project with its options, or
+    /// `None` where the Project has none.
+    fn read_status_field(&self, project_id: &str) -> Result<Option<StatusFieldRead>, String>;
+
+    /// GDP-FR-QFQF: one issue in full, with its `Status` on the Project
+    /// `project_id`. `None` where no issue has the number, or the number is a
+    /// pull request.
+    fn read_issue_detail(
+        &self,
+        number: u64,
+        project_id: &str,
+    ) -> Result<Option<IssueDetail>, String>;
+
+    /// GDP-FR-ICDW: add labels that exist to an issue.
+    fn add_labels(&self, number: u64, labels: &[String]) -> Result<(), String>;
+
+    /// GDP-FR-ICDW: remove one label from an issue.
+    fn remove_label(&self, number: u64, label: &str) -> Result<(), String>;
+
+    /// GDP-FR-KOWL: set the `Status` of a Project item to the option
+    /// `option_id` of the field `field_id`.
+    fn set_project_status(
+        &self,
+        project_id: &str,
+        item_id: &str,
+        field_id: &str,
+        option_id: &str,
+    ) -> Result<(), String>;
 }
 
 /// Makes the adapter of one repository with one secret.

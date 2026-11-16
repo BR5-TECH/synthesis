@@ -3,7 +3,7 @@
  * (`MDL-map-delivery-lens.md` MDL-FR-YTAP, MDL-FR-LZIE).
  */
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listenProject } from "../../projectEvents";
 
 import * as events from "../../events";
 import type { GithubPlanSession } from "../../state/delivery/githubPlan";
@@ -39,7 +39,7 @@ export function useLensEvents(store: SpecMapSessionStore, github: GithubPlanSess
       const plan = githubRef.current;
       if (plan?.hasStarted()) void plan.load(refresh);
     };
-    keep(listen(events.DELIVERY_SOURCE_CHANGED, resolve), off, isCancelled);
+    keep(listenProject(events.DELIVERY_SOURCE_CHANGED, resolve), off, isCancelled);
     keep(events.onProjectTreeChanged(resolve), off, isCancelled);
     keep(
       events.onGithubPollingChanged(() => {

@@ -454,6 +454,7 @@ fn the_start_records_the_answers_and_touches_no_working_copy() {
         StandingWork::CommitAndPush,
         Some("Notes from the review meeting".to_string()),
         None,
+        Default::default(),
     )
     .expect("work standing in the stream refuses no start");
 
@@ -487,6 +488,7 @@ fn the_start_captures_the_prompt_and_enqueues_one_run() {
         StandingWork::Keep,
         None,
         None,
+        Default::default(),
     )
     .expect("a run");
 
@@ -499,7 +501,8 @@ fn the_start_captures_the_prompt_and_enqueues_one_run() {
     assert_eq!(run.standing_work, StandingWork::Keep);
     assert_eq!(run.standing_work_message, None);
     // GSU-FR-ELZO: one run, and it is the one the queue holds.
-    let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
+    let queue = crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("the queue");
     assert_eq!(queue.runs.len(), 1);
     assert_eq!(queue.runs[0].id, run.id);
 }
@@ -522,10 +525,15 @@ fn a_restart_records_its_own_answers() {
         StandingWork::Keep,
         Some("the first run's message".to_string()),
         None,
+        Default::default(),
     )
     .expect("a run");
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone())
-        .expect("a discarded run");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        first.id.clone(),
+        Default::default(),
+    )
+    .expect("a discarded run");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
 
     let restarted = crate::graduation::restart_graduation_run(
@@ -534,6 +542,7 @@ fn a_restart_records_its_own_answers() {
         stream.id.clone(),
         StandingWork::CommitAndPush,
         Some("the restart's own message".to_string()),
+        Default::default(),
     )
     .expect("a new run");
 
@@ -565,10 +574,15 @@ fn a_restart_asks_for_a_commit_under_the_drafts_current_name() {
         StandingWork::Keep,
         None,
         None,
+        Default::default(),
     )
     .expect("a run");
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone())
-        .expect("a discarded run");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        first.id.clone(),
+        Default::default(),
+    )
+    .expect("a discarded run");
     let access = fx.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
     let root = crate::fs::RootFs::new(fx.root(), access);
     crate::drafts::rename_draft_impl(&root, &draft, "editor scrolling").expect("a rename");
@@ -579,6 +593,7 @@ fn a_restart_asks_for_a_commit_under_the_drafts_current_name() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     )
     .expect("a new run");
 

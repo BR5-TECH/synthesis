@@ -30,16 +30,16 @@
 //! (`WKS-work-streams.md`) — and it merges nothing into a base branch, which is
 //! `GRB-graduation-rebase.md`'s and happens at the author's request alone.
 
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 use crate::fs::{self as fsa};
 use crate::log_fields;
 use crate::logging::{self, Domain, BUFFER};
-use crate::project::ProjectState;
 
 pub mod driver;
 pub mod logs;
@@ -137,7 +137,7 @@ pub fn interrupt_running<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     reason: GraduationInterruptionReason,
 ) {
-    let Some(state) = app.try_state::<GraduationState>() else {
+    let Some(state) = app.try_project_store::<GraduationState>() else {
         return;
     };
     let Some(queue) = project_queue(app) else {
@@ -187,7 +187,7 @@ pub fn advance_stream_queue<R: tauri::Runtime>(app: &tauri::AppHandle<R>, stream
 /// The stream it held is released with it, so a stream nothing will ever release
 /// is not left busy for good (WKS-FR-LWEI).
 pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue: &GraduationQueue) {
-    let Some(state) = app.try_state::<GraduationState>() else {
+    let Some(state) = app.try_project_store::<GraduationState>() else {
         return;
     };
     // GRL-FR-YKRI: a review checkout the application never finished is reclaimed

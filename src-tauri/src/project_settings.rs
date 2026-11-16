@@ -19,6 +19,7 @@
 //! missing or malformed project-local file is repaired to defaults rather than
 //! surfaced as an error (PSS-FR-10).
 
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,7 @@ pub use build_seam::ImageBuilderSeam;
 pub mod loop_settings;
 pub mod openspec_mode;
 pub mod public_store;
+pub mod publication_remote;
 pub mod publication_settings;
 pub use concurrency::GraduationConcurrency;
 pub use delivery_settings::*;
@@ -46,6 +48,7 @@ pub use docker_in_docker::*;
 pub use github_polling::*;
 pub use public_store::*;
 use public_store::{load_public, save_public};
+pub use publication_remote::*;
 pub use publication_settings::*;
 
 // ---------------------------------------------------------------------------
@@ -517,20 +520,22 @@ pub fn resolve_project_vendor_image(
         .ok_or_else(|| images::ERR_VENDOR_IMAGE_UNCONFIGURED.to_string())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_project_docker_images(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<images::ProjectVendorImageStatus>, String> {
     let root = project.require_root()?;
     load_project_docker_images_from(&root)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_project_vendor_image(
     vendor: String,
     entry: images::ProjectVendorImage,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<images::ProjectVendorImageStatus, String> {
     let root = project.require_root()?;
     let result = save_project_vendor_image_to(&root, &vendor, &entry);
@@ -562,11 +567,12 @@ pub fn save_project_vendor_image(
 ///
 /// Every refusal happens before anything is started, and the project's one build
 /// slot is claimed last, so a refused build leaves the slot free.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn build_project_vendor_image(
     vendor: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     store: State<'_, crate::global_settings::GlobalSettingsStore>,
     registry: State<'_, images::ImageBuildRegistry>,
 ) -> Result<images::StartedImageBuild, String> {
@@ -620,12 +626,12 @@ pub fn build_project_vendor_image(
     // section can render against it.
     let started = images::StartedImageBuild { operation_id: operation_id.clone() };
     let scope = root.path().to_path_buf();
-    std::thread::spawn(move || {
+    crate::project_scope::context::thread_spawn(move || {
         use tauri::Manager;
         // PSS-FR-27: the status bar shows a build in flight on
         // `PRG-progress-reporting.md`'s opt-in terms (PRG-FR-11), beside the
         // section's own inline report rather than instead of it.
-        let progress = app.state::<crate::progress::ProgressRegistry>();
+        let progress = app.project_store::<crate::progress::ProgressRegistry>();
         let operation = crate::progress::register_and_publish(
             &app,
             &progress,
@@ -673,6 +679,7 @@ pub fn build_project_vendor_image(
 /// this when it mounts rather than forgetting a build is running: that is what
 /// keeps a running build rendered against its own tab and every Build control
 /// disabled on re-entry (`../ui/SET-project-settings.md` SET-FR-25, SET-FR-26).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_project_image_build_in_flight(
     registry: State<'_, images::ImageBuildRegistry>,
@@ -683,6 +690,7 @@ pub fn load_project_image_build_in_flight(
 /// PSS-FR-28: ask the named build to stop. The terminal result arrives on
 /// `"project image build finished"` as `cancelled`, and the project's image
 /// configuration is left exactly as it was.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_project_vendor_image_build(
     operation_id: String,
@@ -721,9 +729,10 @@ pub fn save_changes_panel_state_to(
     save_local(root, &config)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_changes_panel_state(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangesPanelState, String> {
     // No project open -> the defaults, exactly as a project with no persisted
     // state (PSS-FR-15); the panel has nothing to restore either way.
@@ -733,10 +742,11 @@ pub fn load_changes_panel_state(
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_changes_panel_state(
     state: ChangesPanelState,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     save_changes_panel_state_to(&root, state)
@@ -789,9 +799,10 @@ pub fn save_library_panel_state_to(
     save_local(root, &config)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_library_panel_state(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<LibraryPanelState, String> {
     // No project open -> the defaults, exactly as a worktree with no persisted
     // state (PSS-FR-18); the panel has nothing to restore either way.
@@ -801,10 +812,11 @@ pub fn load_library_panel_state(
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_library_panel_state(
     state: LibraryPanelState,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     save_library_panel_state_to(&root, state)
@@ -850,8 +862,11 @@ pub fn save_notes_panel_state_to(
     save_local(root, &config)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn load_notes_panel_state(project: State<'_, ProjectState>) -> Result<NotesPanelState, String> {
+pub fn load_notes_panel_state(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<NotesPanelState, String> {
     // No project open -> the defaults, exactly as a worktree with no persisted
     // state; the panel has nothing to restore either way.
     match project.require_root() {
@@ -860,10 +875,11 @@ pub fn load_notes_panel_state(project: State<'_, ProjectState>) -> Result<NotesP
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_notes_panel_state(
     state: NotesPanelState,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     save_notes_panel_state_to(&root, state)
@@ -913,9 +929,10 @@ pub fn save_drafts_panel_state_to(
     save_local(root, &config)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_drafts_panel_state(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftsPanelState, String> {
     // No project open -> the defaults, exactly as a worktree with no persisted
     // state; the panel has nothing to restore either way.
@@ -925,68 +942,14 @@ pub fn load_drafts_panel_state(
     }
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_drafts_panel_state(
     state: DraftsPanelState,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     save_drafts_panel_state_to(&root, state)
-}
-
-// ---------------------------------------------------------------------------
-// Publication remote selection (PSS-FR-TQFB, PSS-FR-NKRE)
-// ---------------------------------------------------------------------------
-
-/// PSS-FR-TQFB: the remote a draft publication reuses — a configured Git
-/// remote's name together with its canonicalized URL.
-///
-/// Both halves are stored because a name alone is not an identity: a remote
-/// renamed or re-pointed since the choice was made is a different destination,
-/// and the reader compares both before it trusts the choice
-/// (`GHP-github-publication.md` GHP-FR-HVQG).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct PublicationRemoteSelection {
-    pub name: String,
-    pub url: String,
-}
-
-/// PSS-FR-TQFB / PSS-FR-NKRE: the stored choice, or `None`.
-///
-/// A **hint and never an authority**: nothing here checks that the remote still
-/// exists or that the token may reach it. A malformed or half-written value
-/// reads as `None` rather than as an error, on the terms PSS-FR-10 repairs any
-/// project-local value.
-pub fn load_publication_remote_selection_from(
-    root: &crate::fs::RootFs,
-) -> Option<PublicationRemoteSelection> {
-    let section = load_local(root).get(PUBLICATION_REMOTE_KEY).cloned()?;
-    let selection = section.try_into::<PublicationRemoteSelection>().ok()?;
-    if selection.name.is_empty() || selection.url.is_empty() {
-        return None;
-    }
-    Some(selection)
-}
-
-/// PSS-FR-TQFB: persist the choice, or clear it with `None`, leaving every
-/// other section of `local.toml` exactly as it was.
-pub fn save_publication_remote_selection_to(
-    root: &crate::fs::RootFs,
-    selection: Option<PublicationRemoteSelection>,
-) -> Result<(), String> {
-    let mut config = load_local(root);
-    match selection {
-        Some(selection) => {
-            let value = toml::Value::try_from(selection)
-                .map_err(|e| format!("failed to encode publication remote: {e}"))?;
-            config.insert(PUBLICATION_REMOTE_KEY.to_string(), value);
-        }
-        None => {
-            config.remove(PUBLICATION_REMOTE_KEY);
-        }
-    }
-    save_local(root, &config)
 }
 
 #[cfg(test)]

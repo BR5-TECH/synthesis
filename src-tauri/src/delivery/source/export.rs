@@ -6,6 +6,7 @@
 //! plan. The new file is written through the save path of
 //! `PST-project-storage.md`, which validates a Flow before it writes it.
 
+use crate::project_scope::ProjectStores;
 use std::time::Instant;
 
 use serde::Serialize;
@@ -132,9 +133,8 @@ pub fn export_impl<R: Runtime>(
 /// DSR-FR-RZUH, DSR-FR-JWYO: remove the file that a failed export wrote, so
 /// that a retry does not find it. The content tracker forgets the file too.
 fn remove_exported_file<R: Runtime>(app: &AppHandle<R>, root: &crate::fs::RootFs, path: &str) {
-    use tauri::Manager;
     let removed = root.delete_under(root.path(), path, false);
-    if let Some(tracker) = app.try_state::<crate::artifacts::ContentTracker>() {
+    if let Some(tracker) = app.try_project_store::<crate::artifacts::ContentTracker>() {
         tracker.forget(path);
     }
     let level = if removed.is_ok() { LogLevel::Warn } else { LogLevel::Error };
@@ -148,6 +148,7 @@ fn remove_exported_file<R: Runtime>(app: &AppHandle<R>, root: &crate::fs::RootFs
 }
 
 /// DSR contract surface: `"export delivery to file (path)"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn export_delivery_to_file(
     app: AppHandle,

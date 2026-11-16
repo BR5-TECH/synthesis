@@ -1,9 +1,8 @@
 //! Reading the files a pass considers (BMI-FR-03, BMI-FR-04, BMI-FR-09, BMI-FR-26, BMI-FR-28).
 
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeMap;
 use std::path::Path;
-
-use tauri::Manager;
 
 use crate::logging::{log_warn, Domain, BUFFER};
 use crate::scanning::{Candidate, CandidateStore};
@@ -32,7 +31,7 @@ pub(super) fn collect_sources<R: tauri::Runtime>(
 ) -> (Vec<SourceFile>, Vec<crate::skills::SkillDescriptor>, BTreeMap<String, &'static str>) {
     let mut sources = Vec::new();
     if scope.artifacts {
-        let candidates = app.state::<CandidateStore>().candidates(root);
+        let candidates = app.project_store::<CandidateStore>().candidates(root);
         for candidate in candidates.iter() {
             let Some(index) = candidate.artifact_type.and_then(IndexId::for_artifact_type) else {
                 continue;

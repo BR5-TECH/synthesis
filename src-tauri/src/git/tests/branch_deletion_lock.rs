@@ -237,8 +237,14 @@ fn a_lock_is_read_and_removed_while_the_project_is_rooted_in_another_linked_work
 #[test]
 fn the_plan_of_a_stream_branch_carries_the_lock_of_its_working_copy() {
     let fx = DeletionFixture::new();
-    let stream =
-        crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
+    let stream = crate::streams::create_work_stream(
+        fx.app.clone(),
+        "Editor".into(),
+        None,
+        None,
+        Default::default(),
+    )
+    .unwrap();
     lock(&fx, std::path::Path::new(&stream.worktree_path), Some(REASON));
 
     let plan = fx.inspect(&stream.branch).unwrap();

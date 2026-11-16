@@ -9,6 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { NavigationSettings } from "./NavigationSettings";
 import { resetAppPreferencesCache } from "../state/appPreferences";
+import { resetLogBufferForTest } from "../logging";
 import {
   resetSelectionFollowsTab,
   selectionFollowsTabEnabled,
@@ -32,8 +33,12 @@ beforeEach(() => {
   // The preferences record is a module-level cache shared across the process.
   resetAppPreferencesCache();
   resetSelectionFollowsTab();
+  resetLogBufferForTest();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetLogBufferForTest();
+});
 
 describe("Navigation section (GLS-FR-28)", () => {
   it("GLS-FR-03, GLS-FR-28, GLS-FR-10, GLS-FR-13, GLS-FR-14, GSS-FR-33, GSS-FR-20: reads on, on a machine that has never saved a preference", async () => {
@@ -152,5 +157,52 @@ describe("Navigation section (GLS-FR-28)", () => {
     await waitFor(() => expect(theSwitch()).toBeChecked());
     expect(selectionFollowsTabEnabled()).toBe(true);
     expect(await screen.findByRole("alert")).toHaveTextContent("disk is full");
+  });
+});
+
+describe("Open another project in (GLS-FR-OPNB)", () => {
+  const theSelector = () => screen.getByRole("combobox", { name: "Open another project in" });
+
+  it("GLS-FR-OPNB, GSS-FR-OPBH: offers the three choices and shows Ask every time for a record with no value", async () => {
+    backend({ theme: "system" });
+    render(<NavigationSettings />);
+    await waitFor(() => expect(theSelector()).not.toBeDisabled());
+    expect(theSelector()).toHaveValue("ask");
+    const labels = Array.from(theSelector().querySelectorAll("option")).map((o) => o.textContent);
+    expect(labels).toEqual(["Ask every time", "This tab", "New tab"]);
+    expect(calls("save_app_preferences")).toHaveLength(0);
+  });
+
+  it("GLS-FR-OPNB: shows the stored choice", async () => {
+    backend({ theme: "system", openProjectBehaviour: "new_tab" });
+    render(<NavigationSettings />);
+    await waitFor(() => expect(theSelector()).toHaveValue("new_tab"));
+  });
+
+  it("GLS-FR-OPNB, GSS-FR-20: a change saves at once, and carries the rest of the record", async () => {
+    backend({ theme: "dark", selectionFollowsTab: false });
+    render(<NavigationSettings />);
+    await waitFor(() => expect(theSelector()).not.toBeDisabled());
+    await userEvent.selectOptions(theSelector(), "this_tab");
+    await waitFor(() => expect(calls("save_app_preferences")).toHaveLength(1));
+    const saved = calls("save_app_preferences")[0][1] as { preferences: Record<string, unknown> };
+    expect(saved.preferences).toMatchObject({
+      theme: "dark",
+      selectionFollowsTab: false,
+      openProjectBehaviour: "this_tab",
+    });
+  });
+
+  it("GLS-FR-OPNB: a failed save restores the choice and shows the failure", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "load_app_preferences") return { theme: "system", openProjectBehaviour: "ask" };
+      if (cmd === "save_app_preferences") throw new Error("disk full");
+      return undefined;
+    });
+    render(<NavigationSettings />);
+    await waitFor(() => expect(theSelector()).not.toBeDisabled());
+    await userEvent.selectOptions(theSelector(), "new_tab");
+    expect(await screen.findByRole("alert")).toHaveTextContent("disk full");
+    expect(theSelector()).toHaveValue("ask");
   });
 });

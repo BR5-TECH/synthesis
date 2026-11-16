@@ -209,6 +209,7 @@ pub fn describe(report: &ValidationReport) -> String {
 }
 
 /// FGV-FR-02: `"validate flow document"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn validate_flow_document(app: tauri::AppHandle, body: String) -> ValidationReport {
     let report = validate(&body);

@@ -113,6 +113,7 @@ The backend module that turns a finished draft prompt into committed work. A dra
 68. **GRD-FR-RVXK** `revert_graduation_run` (per GRD-FR-BLCR) records a **revert** in the run's `reverts`: the branch of the revert, its last revert commit, and the time. A stream merge carries that commit into the base branch, so the run also leaves the list of the base branch.
 69. **GRD-FR-WJLO** `start_graduation`, `restart_graduation_run`, `start_direct_graduation`, and the starts of `OCR-openspec-change-runs.md` run the main branch write check of `GTC-git.md` GTC-FR-JWOL before they enqueue anything: on the branch of the active worktree, which takes the draft storage commit, for a run with a draft; on the stream branch for a run with no draft; and on the pinned branch of a direct run.
 70. **GRD-FR-MOWZ** A run that started past the check of GRD-FR-WJLO makes its later commits, its revert (GRD-FR-BLCR), and a merge run its apply, with no further check, also after an application relaunch. The check covers the start, which is the moment the author decides.
+71. **GRD-FR-LFRU** Graduation runs and their queue are held per open project, keyed by project id. Every command takes `project_id`, and every event carries it and goes to the window of that project only. A run of a project tab that is not in front continues, and a run that needs the user raises through that project's window (`../ui/NTF-notifications.md` NTF-FR-ZTGX).
 
 
 ## Contract surface

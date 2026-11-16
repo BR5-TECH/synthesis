@@ -417,3 +417,41 @@ fn a_request_discarded_by_a_deselection_answers_not_selected() {
     assert_eq!(answer.error_code.as_deref(), Some(ERR_GITHUB_PROJECT_NOT_SELECTED));
     assert_eq!(mr::finish(&s.handle(), &ticket, Err(ERR_GITHUB_UNREACHABLE.into())), None);
 }
+
+// GHP-FR-JDMU, PWN-FR-CTXT: `"github tokens changed"` names no project, so
+// with two projects open it starts one refresh in each of them.
+#[test]
+fn a_token_change_starts_one_refresh_in_each_open_project() {
+    use crate::project::ProjectState;
+    use crate::project_scope::{context, ProjectScopes};
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    app.manage(ProjectScopes::default());
+    let mut dirs = Vec::new();
+    for id in ["one", "two"] {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::project_settings::GithubPollingSettings {
+            project_node_id: Some("PVT_1".to_string()),
+            ..Default::default()
+        };
+        crate::project_settings::save_github_polling_settings_to(
+            &crate::fs::RootFs::for_root(dir.path()),
+            &settings,
+        )
+        .unwrap();
+        app.state::<ProjectScopes>().get::<ProjectState>(id).set_root(dir.path().to_path_buf());
+        dirs.push(dir);
+    }
+    let handle = app.handle().clone();
+    for id in ["one", "two"] {
+        context::run_in(id, || mr::open_for_test(&handle));
+    }
+    let starts_of = |id: &str| context::run_in(id, || mr::starts_for_test(&handle).0);
+    assert_eq!((starts_of("one"), starts_of("two")), (0, 0));
+
+    mr::listen_for_token_changes(&handle);
+    handle.emit(crate::github_tokens::GITHUB_TOKENS_CHANGED, ()).unwrap();
+
+    wait_until(|| starts_of("one") == 1 && starts_of("two") == 1);
+}

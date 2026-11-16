@@ -8,7 +8,7 @@
  * re-export this module, so the map session takes its operations from here
  * alone and a test replaces them as one set.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 import { logDebug } from "../logging";
 import type { DeliverySource } from "../types/delivery";

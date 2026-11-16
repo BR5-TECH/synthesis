@@ -6,7 +6,7 @@
 //! shows it as one operation of every window, so the progress is read from the
 //! backend and not only from the window that started the merge.
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 /// A guard rather than a call at each exit: the check leaves by many paths, and
 /// an operation left registered animates in the status bar for the rest of the
@@ -18,7 +18,7 @@ pub(super) struct MergeProgress<'a, R: tauri::Runtime> {
 
 impl<'a, R: tauri::Runtime> MergeProgress<'a, R> {
     pub(super) fn begin(app: &'a tauri::AppHandle<R>, stream_name: &str) -> Self {
-        let id = app.try_state::<crate::progress::ProgressRegistry>().map(|registry| {
+        let id = app.try_project_store::<crate::progress::ProgressRegistry>().map(|registry| {
             crate::progress::register_and_publish(
                 app,
                 &registry,
@@ -35,7 +35,7 @@ impl<'a, R: tauri::Runtime> MergeProgress<'a, R> {
 impl<R: tauri::Runtime> Drop for MergeProgress<'_, R> {
     fn drop(&mut self) {
         let (Some(id), Some(registry)) =
-            (self.id, self.app.try_state::<crate::progress::ProgressRegistry>())
+            (self.id, self.app.try_project_store::<crate::progress::ProgressRegistry>())
         else {
             return;
         };

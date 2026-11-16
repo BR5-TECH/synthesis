@@ -21,6 +21,7 @@
 //! The pure halves — [`prompt_target`] and [`PromptActivity`] — are unit-tested
 //! here without a Tauri runtime.
 
+use crate::project_scope::events::EmitToProject;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -28,7 +29,6 @@ use std::time::Duration;
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult, Debouncer};
 use serde::Serialize;
-use tauri::Emitter;
 
 /// DRS-FR-42: the content of one draft's prompt file changed on disk.
 ///
@@ -187,84 +187,91 @@ pub fn start_watching<R: tauri::Runtime>(
     let root_owned = root.clone();
     let drafts_root_owned = drafts_root.clone();
     let activity = std::sync::Arc::clone(&watcher.activity);
-    let debouncer = new_debouncer(DEBOUNCE, move |result: DebounceEventResult| {
-        let Ok(events) = &result else { return };
-        // The batch is collapsed to one entry per draft before anything is
-        // read: a save is several filesystem events for the same file, and the
-        // stat below is what this watch costs (DRS non-functional).
-        let mut candidates: Vec<(String, std::path::PathBuf)> = Vec::new();
-        for event in events {
-            let Ok(rel) = event.path.strip_prefix(&drafts_root_owned) else {
-                continue;
-            };
-            let parts: Vec<String> = rel
-                .components()
-                .filter_map(|c| match c {
-                    std::path::Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
-                    _ => None,
-                })
-                .collect();
-            let Some((draft_id, _)) = prompt_target(&parts.join("/")) else {
-                continue;
-            };
-            if candidates.iter().any(|(id, _)| *id == draft_id) {
-                continue;
+    let debouncer = new_debouncer(
+        DEBOUNCE,
+        crate::project_scope::context::wrap_handler(move |result: DebounceEventResult| {
+            let Ok(events) = &result else { return };
+            // The batch is collapsed to one entry per draft before anything is
+            // read: a save is several filesystem events for the same file, and the
+            // stat below is what this watch costs (DRS non-functional).
+            let mut candidates: Vec<(String, std::path::PathBuf)> = Vec::new();
+            for event in events {
+                let Ok(rel) = event.path.strip_prefix(&drafts_root_owned) else {
+                    continue;
+                };
+                let parts: Vec<String> = rel
+                    .components()
+                    .filter_map(|c| match c {
+                        std::path::Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
+                        _ => None,
+                    })
+                    .collect();
+                let Some((draft_id, _)) = prompt_target(&parts.join("/")) else {
+                    continue;
+                };
+                if candidates.iter().any(|(id, _)| *id == draft_id) {
+                    continue;
+                }
+                // The draft's own directory is everything above `files/<name>`, and
+                // the event already names it: re-deriving it by walking the drafts
+                // root would make a burst of writes to one prompt cost a walk per
+                // batch (DRS non-functional).
+                let dir = parts[..parts.len() - 2]
+                    .iter()
+                    .fold(drafts_root_owned.clone(), |acc, part| acc.join(part));
+                candidates.push((draft_id, dir));
             }
-            // The draft's own directory is everything above `files/<name>`, and
-            // the event already names it: re-deriving it by walking the drafts
-            // root would make a burst of writes to one prompt cost a walk per
-            // batch (DRS non-functional).
-            let dir = parts[..parts.len() - 2]
-                .iter()
-                .fold(drafts_root_owned.clone(), |acc, part| acc.join(part));
-            candidates.push((draft_id, dir));
-        }
-        for (draft_id, dir) in candidates {
-            // DRS-FR-41: two small reads and one stat. A draft made inconsistent
-            // by the very write that was reported has no single prompt to stat
-            // and is passed over — `"drafts changed"` still carries it to the
-            // panel (DRS-FR-22).
-            let Some(at) = crate::drafts::prompt_activity_in(&root_owned, &dir, &draft_id) else {
-                // Handled, and therefore invisible unless it is said out loud:
-                // the draft was deleted between the write and this read, or the
-                // write is what made it inconsistent (DRS-FR-15). Either way
-                // there is no prompt to report activity for, and
-                // `"drafts changed"` still carries the draft to the panel.
+            for (draft_id, dir) in candidates {
+                // DRS-FR-41: two small reads and one stat. A draft made inconsistent
+                // by the very write that was reported has no single prompt to stat
+                // and is passed over — `"drafts changed"` still carries it to the
+                // panel (DRS-FR-22).
+                let Some(at) = crate::drafts::prompt_activity_in(&root_owned, &dir, &draft_id)
+                else {
+                    // Handled, and therefore invisible unless it is said out loud:
+                    // the draft was deleted between the write and this read, or the
+                    // write is what made it inconsistent (DRS-FR-15). Either way
+                    // there is no prompt to report activity for, and
+                    // `"drafts changed"` still carries the draft to the panel.
+                    crate::logging::log_debug(
+                        &app_handle,
+                        &crate::logging::BUFFER,
+                        &[crate::logging::Domain::Backend],
+                        "draft prompt change skipped: no single prompt to stat",
+                        crate::log_fields! { "draft" => draft_id.clone() },
+                    );
+                    continue;
+                };
+                let news =
+                    activity.lock().map(|mut guard| guard.observe(&draft_id, &at)).unwrap_or(false);
+                if !news {
+                    // A rename or a move: the path under `files/` changed and the
+                    // prompt's bytes did not (DRS-FR-42). `"drafts changed"` reports
+                    // those on its own terms (DRS-FR-22).
+                    continue;
+                }
                 crate::logging::log_debug(
                     &app_handle,
                     &crate::logging::BUFFER,
                     &[crate::logging::Domain::Backend],
-                    "draft prompt change skipped: no single prompt to stat",
-                    crate::log_fields! { "draft" => draft_id.clone() },
+                    "draft prompt changed on disk",
+                    crate::log_fields! {
+                        "draft" => draft_id.clone(),
+                        "promptActivityAt" => at.clone(),
+                    },
                 );
-                continue;
-            };
-            let news =
-                activity.lock().map(|mut guard| guard.observe(&draft_id, &at)).unwrap_or(false);
-            if !news {
-                // A rename or a move: the path under `files/` changed and the
-                // prompt's bytes did not (DRS-FR-42). `"drafts changed"` reports
-                // those on its own terms (DRS-FR-22).
-                continue;
+                let _ = app_handle.emit_project(
+                    DRAFT_PROMPT_CHANGED,
+                    DraftPromptChangedPayload {
+                        draft_id: draft_id.clone(),
+                        prompt_activity_at: at,
+                    },
+                );
+                // PST-FR-35: what moves the Dashboard's Active workstreams ordering.
+                crate::dashboard::note_active_drafts_changed(&app_handle);
             }
-            crate::logging::log_debug(
-                &app_handle,
-                &crate::logging::BUFFER,
-                &[crate::logging::Domain::Backend],
-                "draft prompt changed on disk",
-                crate::log_fields! {
-                    "draft" => draft_id.clone(),
-                    "promptActivityAt" => at.clone(),
-                },
-            );
-            let _ = app_handle.emit(
-                DRAFT_PROMPT_CHANGED,
-                DraftPromptChangedPayload { draft_id: draft_id.clone(), prompt_activity_at: at },
-            );
-            // PST-FR-35: what moves the Dashboard's Active workstreams ordering.
-            crate::dashboard::note_active_drafts_changed(&app_handle);
-        }
-    });
+        }),
+    );
     let mut debouncer = match debouncer {
         Ok(d) => d,
         Err(e) => {
@@ -294,6 +301,7 @@ pub fn start_watching<R: tauri::Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project_scope::ProjectStores;
 
     #[test]
     fn prompt_target_names_the_draft_and_its_prompt() {
@@ -440,7 +448,7 @@ mod tests {
         let app = tauri::test::mock_app();
         app.manage(DraftsWatcher::default());
         let seen = collect_prompt_events(&app);
-        let watcher = app.state::<DraftsWatcher>();
+        let watcher = app.project_store::<DraftsWatcher>();
         start_watching(&app.handle().clone(), &watcher, &root);
         assert!(
             watcher.is_active(),
@@ -507,7 +515,7 @@ mod tests {
         let app = tauri::test::mock_app();
         app.manage(DraftsWatcher::default());
         let seen = collect_prompt_events(&app);
-        let watcher = app.state::<DraftsWatcher>();
+        let watcher = app.project_store::<DraftsWatcher>();
         start_watching(&app.handle().clone(), &watcher, &root);
         assert!(watcher.is_active(), "precondition");
 

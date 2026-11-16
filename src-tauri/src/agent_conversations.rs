@@ -43,13 +43,14 @@
 //! (LGC-FR-16), and an exported record travels as far as the bug report it is
 //! attached to.
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
+use tauri::State;
 
 use crate::agents::{self, Agent};
 use crate::ai_api::{self, reasoning_label, AiApiCall, AiApiIntegrations};
@@ -135,6 +136,7 @@ mod failures;
 mod flow_context;
 mod groups;
 mod key_input;
+pub(crate) mod map_context;
 mod material;
 mod native_calls;
 mod openrouter_carrier;
@@ -144,6 +146,7 @@ mod provider_memory;
 mod registry;
 mod reporting;
 mod responses_repair;
+mod retiring;
 mod retries;
 mod rig_bridge;
 mod rig_messages;
@@ -184,6 +187,7 @@ use material::*;
 use provider_memory::*;
 pub use registry::*;
 use reporting::*;
+pub use retiring::*;
 use retries::*;
 pub use rig_bridge::*;
 pub use rig_messages::*;
@@ -264,6 +268,11 @@ pub const DISCUSS_NOTE_PROMPT_TEMPLATE: &str =
 pub const DISCUSS_CHANGE_PROMPT_TEMPLATE: &str =
     include_str!("../../resources/prompts/discuss-change.md");
 
+/// CVL-FR-LCSN: a Map thread, in which the author plans delivery from the HLD
+/// down to milestones, features, and tasks.
+pub const DISCUSS_MAP_PROMPT_TEMPLATE: &str =
+    include_str!("../../resources/prompts/discuss-map.md");
+
 /// CVL-FR-03: a turn's prompt is selected by its origin kind and by nothing else.
 ///
 /// The selection is the extension point beside the builder of AGC-FR-05: a
@@ -289,6 +298,8 @@ pub fn prompt_template(kind: OriginKind) -> &'static str {
         OriginKind::NoteDiscussion => DISCUSS_NOTE_PROMPT_TEMPLATE,
         // CVL-FR-FGGI: the whole change.
         OriginKind::ChangeDiscussion => DISCUSS_CHANGE_PROMPT_TEMPLATE,
+        // CVL-FR-LCSN: the Map.
+        OriginKind::MapDiscussion => DISCUSS_MAP_PROMPT_TEMPLATE,
     }
 }
 
@@ -715,6 +726,9 @@ fn conversation_tools<R: tauri::Runtime>(
             session,
         )));
     }
+    // CVL-FR-LCSN: the plan tools of a Map turn, while the delivery source allows
+    // them. Decided at the start of this turn, and never for another turn.
+    tools.extend(plan_tools_for_turn(app, roots, origin, author, proposed));
     // CVL-FR-TJZI: the tools of the ready MCP servers of the project, last.
     tools.extend(crate::mcp::conversation_tools(app));
     tools
@@ -734,13 +748,14 @@ struct ContributionFlags<'a> {
 // Tauri commands (AGC contract surface)
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn dispatch_agent_turn<R: tauri::Runtime>(
     nickname: String,
     origin: ConversationOrigin,
     trigger_comment_id: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
@@ -758,13 +773,14 @@ pub fn dispatch_agent_turn<R: tauri::Runtime>(
     )
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn cancel_agent_turn<R: tauri::Runtime>(
     turn_id: String,
     app: tauri::AppHandle<R>,
-    turns: State<'_, TurnRegistry>,
-    progress_registry: State<'_, ProgressRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    progress_registry: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -772,11 +788,12 @@ pub fn cancel_agent_turn<R: tauri::Runtime>(
     cancel_impl(&app, &turns, &progress_registry, &turn_id)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_agent_turns(
     origin: Option<ConversationOrigin>,
-    turns: State<'_, TurnRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -791,11 +808,12 @@ pub fn list_agent_turns(
 /// to retry it would otherwise have lost with the event it was not listening
 /// for. A turn returned here is not outstanding, so `list_agent_turns` returns
 /// it under neither form.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_recoverable_agent_turn_failures(
     origin: Option<ConversationOrigin>,
-    turns: State<'_, TurnRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -813,11 +831,12 @@ pub fn list_recoverable_agent_turn_failures(
 /// of it: an entry is replaced by a later turn that also omitted images and
 /// retired by a later turn that carried its images successfully or carried none
 /// at all.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_agent_turn_image_notices(
     origin: Option<ConversationOrigin>,
-    turns: State<'_, TurnRegistry>,
-    project: State<'_, ProjectState>,
+    turns: crate::project_scope::Scoped<'_, TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -835,11 +854,12 @@ pub fn list_agent_turn_image_notices(
 /// assembles its input afresh (AGC-FR-13), begins its own session, and resolves
 /// its own endpoint and key, so the failed turn is neither mutated nor
 /// resurrected and keeps its own id and terminal state.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn retry_agent_turn<R: tauri::Runtime>(
     turn_id: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
@@ -857,8 +877,7 @@ pub fn retry_impl<R: tauri::Runtime>(
     project_key: &str,
     turn_id: &str,
 ) -> Result<AgentTurn, String> {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
 
     // The entry is taken under one lock, so two retries issued together leave
     // exactly one new turn: the loser finds nothing to take and is refused,
@@ -914,7 +933,7 @@ pub fn retry_impl<R: tauri::Runtime>(
         // restores its failed contribution and the offer is there to take again.
         // Without this a resolved thread would silently swallow the only route
         // back to a turn that never happened.
-        let turns = app.state::<TurnRegistry>();
+        let turns = app.project_store::<TurnRegistry>();
         turns.remember_recoverable(failed.clone(), entry_project_key.clone());
         logging::log_warn(
             app,
@@ -928,65 +947,6 @@ pub fn retry_impl<R: tauri::Runtime>(
             },
         );
     })
-}
-
-/// AGC-FR-31: a later **human** comment in this conversation retires its offer
-/// to retry.
-///
-/// Called from the human write path alone (CMS-FR-11's acting participant), so
-/// an agent's own answer retires nothing: an agent answering elsewhere in the
-/// thread does not mean the author has stopped wanting the answer that failed.
-pub fn retire_recoverable_for_human_comment<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    thread_id: &str,
-) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else {
-        return;
-    };
-    let Some(turn) = turns.retire_recoverable(thread_id) else {
-        return;
-    };
-    logging::log_info(
-        app,
-        turns.buffer(),
-        &[Domain::Ai, Domain::Backend],
-        "an offer to retry was retired by a later comment",
-        log_fields! {
-            "turnId" => &turn.id,
-            "agent" => &turn.nickname,
-            "discussionId" => thread_id,
-        },
-    );
-}
-
-/// AGC-FR-TQLC: retire the turns a discussion has outstanding, because its
-/// question set has been answered.
-///
-/// A submission retires or discards the asking turn **whether or not that agent
-/// is among the agents the submission dispatches to**. The ordinary retirement
-/// is per agent at dispatch (`dispatch.rs`), which would leave an agent that
-/// asked and was not dispatched to awaiting a reply for good — the answers reach
-/// the agents as fresh later turns and never by resuming the turn that asked
-/// (ADQ-FR-ZXAF).
-///
-/// Called from the submission alone, on its success path.
-pub fn retire_awaiting_for_thread<R: tauri::Runtime>(app: &tauri::AppHandle<R>, thread_id: &str) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else {
-        return;
-    };
-    let retired = turns.retire_awaiting_on_thread(thread_id);
-    if retired == 0 {
-        return;
-    }
-    logging::log_info(
-        app,
-        turns.buffer(),
-        &[Domain::Ai, Domain::Backend],
-        "turns awaiting a question set were retired by its answers",
-        log_fields! { "discussionId" => thread_id, "turns" => retired as u64 },
-    );
 }
 
 #[cfg(test)]

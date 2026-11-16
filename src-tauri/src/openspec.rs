@@ -13,6 +13,7 @@
 //! (OSM-FR-XKQB). Each call to the CLI is blocking and bounded; a caller on an
 //! async path runs the seam on a blocking thread.
 
+use crate::project::OpenProject as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -648,13 +649,14 @@ impl OpenSpec {
 /// thread, because the first CLI check of a session starts a Node process.
 /// `recheck`, false where absent, first clears a kept `failed` check
 /// (OFP-FR-ITUD).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_openspec_status<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     recheck: Option<bool>,
 ) -> Result<OpenSpecStatus, String> {
     let recheck = recheck.unwrap_or(false);
-    tauri::async_runtime::spawn_blocking(move || status_now(&app, recheck))
+    crate::project_scope::context::spawn_blocking(move || status_now(&app, recheck))
         .await
         .map_err(|e| format!("openspec status failed: {e}"))
 }
@@ -664,7 +666,7 @@ pub(crate) fn status_now<R: tauri::Runtime>(
     recheck: bool,
 ) -> OpenSpecStatus {
     use tauri::Manager;
-    let root = app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let root = app.open_project_state().and_then(|p| p.require_root().ok());
     let status = match app.try_state::<OpenSpec>() {
         Some(seam) => seam.status_checked(app, &logging::BUFFER, root.as_ref(), recheck),
         None => OpenSpec::default().status(app, &logging::BUFFER, root.as_ref()),
@@ -699,10 +701,9 @@ pub fn warm_cli_check<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         return;
     }
     let app = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         if let Some(seam) = app.try_state::<OpenSpec>() {
-            let root =
-                app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+            let root = app.open_project_state().and_then(|p| p.require_root().ok());
             let _ = seam.cli_state_in(&app, &logging::BUFFER, root.as_ref());
         }
     });

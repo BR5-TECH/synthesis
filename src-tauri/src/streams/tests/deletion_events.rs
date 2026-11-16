@@ -49,7 +49,8 @@ fn deleting_a_stream_emits_branches_changed_once() {
     let stream = fx.create("spent", None).expect("created");
     let count = count_branches_changed(&fx);
 
-    delete_work_stream(fx.app.clone(), stream.id, false, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id, false, false, Default::default())
+        .expect("deleted");
 
     assert_eq!(count.load(Ordering::SeqCst), 1);
 }
@@ -61,7 +62,8 @@ fn a_refused_deletion_emits_nothing() {
     let stream = stream_ahead(&fx, "kept");
     let count = count_branches_changed(&fx);
 
-    let refusal = delete_work_stream(fx.app.clone(), stream.id, false, false).expect_err("refused");
+    let refusal = delete_work_stream(fx.app.clone(), stream.id, false, false, Default::default())
+        .expect_err("refused");
 
     assert!(refusal.starts_with(ERR_STREAM_UNMERGED), "{refusal}");
     assert_eq!(count.load(Ordering::SeqCst), 0);
@@ -76,11 +78,13 @@ fn force_deletes_a_stream_whose_merge_was_left_uncommitted() {
     let stream = stream_ahead(&fx, "merged-loose");
     merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect("merged");
 
-    let refusal = delete_work_stream(fx.app.clone(), stream.id.clone(), false, false)
-        .expect_err("still unmerged");
+    let refusal =
+        delete_work_stream(fx.app.clone(), stream.id.clone(), false, false, Default::default())
+            .expect_err("still unmerged");
     assert!(refusal.starts_with(ERR_STREAM_UNMERGED), "{refusal}");
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), true, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), true, false, Default::default())
+        .expect("deleted");
     let repo = fx.repo();
     assert!(!branch_names(&repo).contains(&stream.branch));
     assert!(!Path::new(&stream.worktree_path).exists());
@@ -120,7 +124,7 @@ fn a_deletion_that_strands_part_of_the_stream_emits_branches_changed_once() {
     let _guard = ReadOnly::new(worktree.parent().expect("a parent"));
     let count = count_branches_changed(&fx);
 
-    let error = delete_work_stream(fx.app.clone(), stream.id, false, false)
+    let error = delete_work_stream(fx.app.clone(), stream.id, false, false, Default::default())
         .expect_err("part of the stream stays");
 
     assert!(error.starts_with(ERR_STREAM_CLEANUP_FAILED), "{error}");

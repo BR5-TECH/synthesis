@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::model_downgrades::{ModelDowngrade, MODEL_DOWNGRADE_DETECTED};
+use crate::project_scope::events::EmitToProject;
 
 /// AGC-FR-UVKF: the requested→served pairs a turn has emitted, so a turn of
 /// many rounds emits each pair once.
@@ -76,7 +77,7 @@ pub(super) fn report_served_model<R: tauri::Runtime>(
             "servedModel" => truncated(served, IDENTIFIER_LIMIT),
         },
     );
-    if let Err(error) = app.emit(MODEL_DOWNGRADE_DETECTED, payload) {
+    if let Err(error) = app.emit_project(MODEL_DOWNGRADE_DETECTED, payload) {
         logging::log_warn(
             app,
             turns.buffer(),

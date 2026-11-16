@@ -481,7 +481,7 @@ pub(crate) fn spawn_live(
         session_id: session_id.to_string(),
         chunk_text,
     };
-    tauri::async_runtime::spawn(run_live(live, receiver, sink));
+    crate::project_scope::context::spawn(run_live(live, receiver, sink));
     sender
 }
 

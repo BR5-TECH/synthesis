@@ -6,6 +6,7 @@
 //! and its task progress from one `apply_instructions` in the stream's working
 //! copy. A check writes nothing.
 
+use crate::project::OpenProject as _;
 use std::time::Instant;
 
 use super::*;
@@ -104,11 +105,7 @@ pub(super) fn check_all<R: tauri::Runtime>(
     seam: Option<&OpenSpec>,
     changes: &[String],
 ) -> Result<(), Refusal> {
-    use tauri::Manager;
-    let store = cx
-        .app
-        .try_state::<crate::project::ProjectState>()
-        .and_then(|project| project.require_store().ok());
+    let store = cx.app.open_project_state().and_then(|project| project.require_store().ok());
     if store.is_none() {
         // No store holds no record, and so no pending item.
         logging::log_warn(

@@ -154,13 +154,22 @@ fn a_discard_removes_the_runs_queued_behind_in_its_own_queue_alone() {
     let direct =
         fx.direct_in(&stream.worktree(), &stream.branch, Some(&stream), "direct", "d-direct");
     let elsewhere = fx.enqueue_for(&other, "elsewhere", "d-else");
-    crate::graduation::set_graduation_auto_start(fx.app.clone(), off.id.clone(), false)
-        .expect("auto-start off");
+    crate::graduation::set_graduation_auto_start(
+        fx.app.clone(),
+        off.id.clone(),
+        false,
+        Default::default(),
+    )
+    .expect("auto-start off");
     rest(&fx, &ahead, GraduationRunState::Completed);
     rest(&fx, &held, GraduationRunState::AwaitingAuthor);
 
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone())
-        .expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        held.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
@@ -213,13 +222,22 @@ fn a_discard_removes_the_runs_behind_a_direct_run_on_an_ordinary_worktree() {
     let held = fx.direct("held", "d-held");
     let off = fx.direct("off", "d-off");
     let on = fx.direct("on", "d-on");
-    crate::graduation::set_graduation_auto_start(fx.app.clone(), off.id.clone(), false)
-        .expect("auto-start off");
+    crate::graduation::set_graduation_auto_start(
+        fx.app.clone(),
+        off.id.clone(),
+        false,
+        Default::default(),
+    )
+    .expect("auto-start off");
     rest(&fx, &ahead, GraduationRunState::Completed);
     rest(&fx, &held, GraduationRunState::AwaitingAuthor);
 
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone())
-        .expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        held.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
@@ -245,7 +263,8 @@ fn the_discard_of_a_run_that_never_held_its_queue_removes_nothing() {
     let stream = fx.stream("editor");
     let first = fx.enqueue_for(&stream, "first", "d1");
     let second = fx.enqueue_for(&stream, "second", "d2");
-    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone(), Default::default())
+        .expect("discarded");
     assert_eq!(fx.reload(&second.id).state, GraduationRunState::Queued);
 
     let held = fx.enqueue_for(&stream, "held", "d3");
@@ -253,7 +272,8 @@ fn the_discard_of_a_run_that_never_held_its_queue_removes_nothing() {
     rest(&fx, &held, GraduationRunState::Interrupted);
     let continued = fx.continue_run(&fx.reload(&held.id));
     assert_eq!(continued.state, GraduationRunState::Queued);
-    crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone(), Default::default())
+        .expect("discarded");
     assert!(
         crate::graduation::load_run(&fx.app, &behind.id).is_err(),
         "a continued run held the queue, so its discard removed the run behind it"
@@ -283,12 +303,17 @@ fn a_failed_run_holds_its_queue_until_it_is_discarded() {
         stream.id.clone(),
         StandingWork::Keep,
         None,
+        Default::default(),
     )
     .expect_err("a failed run is not restarted");
     assert!(refused.starts_with("run_state_not_permitted"), "{refused}");
 
-    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), failed.id.clone())
-        .expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        failed.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
     assert!(crate::graduation::load_run(&fx.app, &behind.id).is_err());
 }
@@ -305,11 +330,18 @@ fn a_merge_run_queued_behind_a_discarded_run_is_removed_with_what_it_owns() {
     assert!(snapshot_ref_stands(&fx, &merge_id));
     let held = fx.enqueue_for(&stream, "held", "d1");
     // The draft run is moved ahead of the merge run, and it rests.
-    crate::graduation::reorder_graduation_run(fx.app.clone(), held.id.clone(), 1, 0)
-        .expect("reordered");
+    crate::graduation::reorder_graduation_run(
+        fx.app.clone(),
+        held.id.clone(),
+        1,
+        0,
+        Default::default(),
+    )
+    .expect("reordered");
     rest(&fx, &held, GraduationRunState::AwaitingAuthor);
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone()).expect("discarded");
+    crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone(), Default::default())
+        .expect("discarded");
 
     assert!(crate::graduation::load_run(&fx.app, &merge_id).is_err(), "the merge run is removed");
     assert!(!snapshot_ref_stands(&fx, &merge_id), "its snapshot ref is removed");

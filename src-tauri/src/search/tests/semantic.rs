@@ -41,8 +41,8 @@ fn run_semantic(
         query.into(),
         SearchMode::Semantic,
         scope,
-        app.state::<crate::project::ProjectState>(),
-        app.state::<SearchRegistry>(),
+        app.state::<crate::project::ProjectState>().into(),
+        app.state::<SearchRegistry>().into(),
     )
     .expect("SCC-FR-DBBK: a semantic query is never invalid");
     let recorder = Recorder::default();

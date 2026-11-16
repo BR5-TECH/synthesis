@@ -3,7 +3,8 @@
 use super::*;
 use crate::global_settings::GlobalSettingsStore;
 use crate::project::ProjectState;
-use tauri::{Emitter, State};
+use crate::project_scope::events::EmitToProject;
+use tauri::State;
 
 /// CEP-FR-SQCG: `"change edit proposals changed"`, kebab-case as every event.
 pub const CHANGE_PROPOSALS_CHANGED: &str = "change-edit-proposals-changed";
@@ -53,7 +54,7 @@ pub fn announce<R: tauri::Runtime>(
 ) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let _ = app.emit(
+    let _ = app.emit_project(
         CHANGE_PROPOSALS_CHANGED,
         ChangeProposalsChanged {
             stream_id: proposal.stream_id.clone(),
@@ -169,12 +170,13 @@ pub(super) fn require_store(project: &ProjectState) -> Result<fs::RootFs, String
 /// after any interrupted acceptance has been settled.
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn list_change_edit_proposals<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
     change: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ChangeEditProposal>, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -191,11 +193,12 @@ where
 /// CEP-FR-HUFE: the hunks of a proposal and their placements.
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn load_change_edit_proposal_hunks<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeProposalHunks, String> {
     let store = require_store(&project)?;
     load_hunks_impl(&store, &AppSites { app: &app }, &proposal_id)
@@ -250,6 +253,7 @@ where
 }
 
 /// CEP-FR-OPGW: accept one hunk, writing its file in the stream's working copy.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn accept_change_edit_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -257,7 +261,7 @@ pub fn accept_change_edit_hunk<R: tauri::Runtime>(
     hunk_id: String,
     feedback: Option<String>,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -268,6 +272,7 @@ where
 }
 
 /// CEP-FR-UCVO: reject one hunk. It writes nothing into the working copy.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn reject_change_edit_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -275,7 +280,7 @@ pub fn reject_change_edit_hunk<R: tauri::Runtime>(
     hunk_id: String,
     feedback: Option<String>,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -286,13 +291,14 @@ where
 }
 
 /// CEP-FR-UCVO: decline the proposal — reject every undecided hunk.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn decline_change_edit_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     feedback: Option<String>,
     settings: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -304,13 +310,14 @@ where
 /// CEP-FR-UCVO: hold one hunk for discussion, or release it.
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn set_change_edit_hunk_discussing<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     hunk_id: String,
     discussing: bool,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeEditProposal, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -344,6 +351,7 @@ where
 /// CEP-FR-UCVO: the author's own text over one undecided hunk.
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn edit_change_edit_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -351,7 +359,7 @@ pub fn edit_change_edit_hunk<R: tauri::Runtime>(
     hunk_id: String,
     after: String,
     baseline_checksum: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeCandidateSaved, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -376,11 +384,12 @@ where
 
 /// CEP-FR-IYHP: finish a decision: settle an interrupted acceptance, append an
 /// owed comment, and commit every file the change still owes.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn complete_change_edit_decision<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangeDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,

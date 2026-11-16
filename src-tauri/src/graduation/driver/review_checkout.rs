@@ -14,6 +14,7 @@
 //! `ready` verdict writes, so the reviewer judges what will land rather than
 //! something near it.
 
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 
 use super::throwaway_checkout::Throwaway;
@@ -153,7 +154,7 @@ pub(super) fn release<R: tauri::Runtime>(
 /// `WKS-work-streams.md` WKS-FR-LWEI releases a stream the application stopped
 /// while holding.
 pub fn sweep_stranded<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue: &GraduationQueue) {
-    let Some(state) = app.try_state::<GraduationState>() else {
+    let Some(state) = app.try_project_store::<GraduationState>() else {
         return;
     };
     for run in &queue.runs {

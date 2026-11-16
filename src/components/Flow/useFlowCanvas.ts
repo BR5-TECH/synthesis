@@ -108,6 +108,11 @@ export interface FlowCanvasProps {
   onViewChange?: (state: FlowViewState) => void;
   /** MDL-FR-GDUP: each new answer of the delivery state, or null before one. */
   onDeliveryStates?: (states: ReadonlyMap<string, ItemDeliveryState> | null) => void;
+  /**
+   * MDL-FR-HULA / MDL-FR-QELI: the **Discuss** entry of the context menu of an
+   * item or a milestone. Without it, an item has no context menu.
+   */
+  onDiscuss?: (item: FlowItem) => void;
 }
 
 /** SMP-FR-RNLH: the view state of a canvas that a host keeps for it. */
@@ -459,6 +464,8 @@ export function useFlowCanvas({
    * or on the body of a container, clears it and pans the view (FLO-FR-22).
    */
   const onSurfacePointerDown = (e: React.PointerEvent) => {
+    // MDL-FR-JBEL: a secondary press opens a menu and changes no selection.
+    if (e.button === 2) return;
     const el = e.target as HTMLElement | null;
     if (!el?.closest?.(".flow-addmenu")) setAddMenuOpen(false);
     if (el?.closest?.(chrome)) return;
@@ -491,7 +498,7 @@ export function useFlowCanvas({
 
   /** FLO-FR-21: start a drag of an item and everything it holds. */
   const onItemDragStart = (id: string, e: React.PointerEvent) => {
-    if (!doc || inert) return;
+    if (!doc || inert || e.button === 2) return;
     dragCapture.current = { el: e.currentTarget, pointerId: e.pointerId };
     const at = absolutePosition(doc, layout, id);
     const p = toCanvas(e.clientX, e.clientY);

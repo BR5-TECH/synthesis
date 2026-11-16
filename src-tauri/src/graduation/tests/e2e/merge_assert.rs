@@ -99,9 +99,11 @@ impl Outcome {
     /// WKS-FR-PZKD: the run store and the queue index hold no merge run, and the
     /// run store holds nothing a run did not make.
     pub(crate) fn expect_no_merge_run(self) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
-            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
-        );
+        let queue =
+            crate::graduation::list_graduation_queue(self.fx.app.clone(), Default::default())
+                .unwrap_or_else(|reason| {
+                    panic!("[{}] the queue was not readable: {reason}", self.name)
+                });
         assert!(
             queue.runs.iter().all(|run| !run.is_merge()),
             "[{}] the queue holds no merge run",
@@ -523,7 +525,8 @@ impl Outcome {
     /// WKS-FR-KHJS: the stream's row in the listing carries its merge run and the
     /// state of that run.
     pub(crate) fn expect_stream_row_merge_run(self, state: GraduationRunState) -> Self {
-        let rows = crate::streams::list_work_streams(self.fx.app.clone()).expect("the streams");
+        let rows = crate::streams::list_work_streams(self.fx.app.clone(), Default::default())
+            .expect("the streams");
         let row = rows
             .into_iter()
             .find(|row| row.stream.id == self.stream_id)
@@ -544,7 +547,8 @@ impl Outcome {
 
     /// WKS-FR-KHJS: a stream's row names no merge run.
     pub(crate) fn expect_stream_row_without_a_merge_run(self) -> Self {
-        let rows = crate::streams::list_work_streams(self.fx.app.clone()).expect("the streams");
+        let rows = crate::streams::list_work_streams(self.fx.app.clone(), Default::default())
+            .expect("the streams");
         let row = rows
             .into_iter()
             .find(|row| row.stream.id == self.stream_id)
@@ -562,9 +566,11 @@ impl Outcome {
 
     /// GRD-FR-MRNQ: the queue holds this many runs, whatever their kind.
     pub(crate) fn expect_runs_in_the_queue(self, count: usize) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
-            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
-        );
+        let queue =
+            crate::graduation::list_graduation_queue(self.fx.app.clone(), Default::default())
+                .unwrap_or_else(|reason| {
+                    panic!("[{}] the queue was not readable: {reason}", self.name)
+                });
         assert_eq!(queue.runs.len(), count, "[{}] the runs in the queue", self.name);
         self
     }
@@ -572,19 +578,22 @@ impl Outcome {
     /// GRD-FR-BHCS: the queue and the single-run read both answer for the merge
     /// run with its title and its merge data, as they do for every run.
     pub(crate) fn expect_listings_carry_the_merge_run(self) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
-            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
-        );
+        let queue =
+            crate::graduation::list_graduation_queue(self.fx.app.clone(), Default::default())
+                .unwrap_or_else(|reason| {
+                    panic!("[{}] the queue was not readable: {reason}", self.name)
+                });
         let listed = queue
             .runs
             .iter()
             .find(|run| run.id == self.run.id)
             .unwrap_or_else(|| panic!("[{}] the queue lists the merge run", self.name));
-        let single =
-            crate::graduation::get_graduation_run(self.fx.app.clone(), self.run.id.clone())
-                .unwrap_or_else(|reason| {
-                    panic!("[{}] the run was not readable: {reason}", self.name)
-                });
+        let single = crate::graduation::get_graduation_run(
+            self.fx.app.clone(),
+            self.run.id.clone(),
+            Default::default(),
+        )
+        .unwrap_or_else(|reason| panic!("[{}] the run was not readable: {reason}", self.name));
         for run in [listed, &single] {
             assert_eq!(
                 run.merge.as_ref().map(|data| data.name.clone()),
@@ -671,9 +680,11 @@ impl Outcome {
     /// GRD-FR-RHNP: the merge run's place in its stream's queue, counted from
     /// the run that dispatches first.
     pub(crate) fn expect_queue_position(self, position: usize) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
-            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
-        );
+        let queue =
+            crate::graduation::list_graduation_queue(self.fx.app.clone(), Default::default())
+                .unwrap_or_else(|reason| {
+                    panic!("[{}] the queue was not readable: {reason}", self.name)
+                });
         let members: Vec<&str> = queue
             .runs
             .iter()

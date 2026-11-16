@@ -39,6 +39,39 @@ pub enum SearchQueryMode {
     Regex,
 }
 
+/// GSS-FR-OPBH: where a project that the author opens from the project switcher
+/// opens. `Ask` shows the open project dialog (`PJT-project-tabs.md`
+/// PJT-FR-GASB); the other two run that choice with no dialog (PJT-FR-RMBR).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenProjectBehaviour {
+    #[default]
+    Ask,
+    ThisTab,
+    NewTab,
+}
+
+/// GSS-FR-OPBH: a stored value that is not one of the three reads as `Ask`, so
+/// one bad field never makes the whole record unreadable.
+fn open_project_behaviour_lenient<'de, D>(deserializer: D) -> Result<OpenProjectBehaviour, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Any value is read whole, so a value of another type leaves the rest of
+    // the record readable.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Text(String),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Text(text) if text == "this_tab" => OpenProjectBehaviour::ThisTab,
+        Stored::Text(text) if text == "new_tab" => OpenProjectBehaviour::NewTab,
+        Stored::Text(_) | Stored::Other(_) => OpenProjectBehaviour::Ask,
+    })
+}
+
 /// How a Diff tab lays a comparison out (GSS-FR-24).
 ///
 /// User-global rather than project-scoped or per-tab because it describes how
@@ -387,6 +420,11 @@ pub struct AppPreferences {
     /// machine — this attribute is the whole of what makes that true.
     #[serde(default = "selection_follows_tab_default")]
     pub selection_follows_tab: bool,
+    /// GSS-FR-OPBH: where a project opened from the project switcher opens,
+    /// `ask` when unset or unknown. The open project dialog writes it, and the
+    /// Navigation section reads and writes it. This module does not interpret it.
+    #[serde(deserialize_with = "open_project_behaviour_lenient")]
+    pub open_project_behaviour: OpenProjectBehaviour,
     /// GSS-FR-34: the width of the Runs panel's graduation history rail as a
     /// fraction of that panel's usable content width, `0.20` when unset.
     ///
@@ -530,6 +568,7 @@ impl Default for AppPreferences {
             voice_hotkey: voice_hotkey_default(),
             voice_hotkey_behaviour: VoiceHotkeyBehaviour::default(),
             selection_follows_tab: selection_follows_tab_default(),
+            open_project_behaviour: OpenProjectBehaviour::default(),
             graduation_rail_width_fraction: graduation_rail_width_default(),
             graduation_paths_width_fraction: graduation_paths_width_default(),
             git_files_width_fraction: git_files_width_default(),

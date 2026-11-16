@@ -4,6 +4,7 @@
 //! the call itself happens on a thread of its own, in `turn_body`.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// Everything a running turn needs, gathered before the thread starts so the
 /// thread borrows nothing.
@@ -114,7 +115,7 @@ pub(super) fn progress_label_of(
                 .unwrap_or_else(|_| draft_id.clone()),
         ),
         DiscussionTarget::Artifact { artifact_id } => Some(artifact_id.clone()),
-        DiscussionTarget::Note { .. } => None,
+        DiscussionTarget::Note { .. } | DiscussionTarget::Map => None,
         DiscussionTarget::Change { change, .. } => Some(change.clone()),
     };
     match subject {
@@ -209,7 +210,7 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     let joins_conversation =
         setup.as_ref().is_none_or(|s| matches!(s.role, GroupRole::Participant | GroupRole::Meta));
     let store = app.state::<GlobalSettingsStore>();
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
 
     // AGC-FR-05: the owner and the fragment are read from the discussion the id
     // names, so the origin every later step works from is the stored one.
@@ -397,6 +398,11 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     // AGC-FR-KQNF: a Flow's material also carries its delivery state and its
     // overlaps, which need the run queue only the application holds.
     flow_context::extend_flow_material(app, roots, &document_budget, &mut input);
+    // AGC-FR-UOPJ: a Map thread's material also carries the short summary of the
+    // delivery plan, read from the cache of the GitHub plan with no request.
+    if origin.is_map() {
+        map_context::extend_map_material(app, roots, &document_budget, &mut input);
+    }
     // AGC-FR-QSWD: a record that cannot be read adds no question set. The kind
     // is the whole of the record: no path and no content.
     if let Some(kind) = question_set_unreadable {
@@ -605,7 +611,7 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     };
 
     let app = app.clone();
-    let thread = std::thread::spawn(move || {
+    let thread = crate::project_scope::context::thread_spawn(move || {
         run_turn(&app, plan);
     });
     turns.keep_turn_thread(thread);
@@ -662,8 +668,8 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
     let started = std::time::Instant::now();
     let store = app.state::<GlobalSettingsStore>();
     let ai = app.state::<AiApiIntegrations>();
-    let turns = app.state::<TurnRegistry>();
-    let progress_registry = app.state::<ProgressRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
+    let progress_registry = app.project_store::<ProgressRegistry>();
 
     // CVL-FR-24: a session of its own, begun when the turn starts running and
     // ended when it terminates by any route. A failure to open one is not fatal:

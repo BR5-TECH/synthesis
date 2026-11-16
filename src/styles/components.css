@@ -2,11 +2,13 @@
 @import "./components/notification-toasts.css";
 @import "./components/create-pull-request.css";
 @import "./components/about-panel.css";
+@import "./components/project-tabs.css";
 @import "./components/main-branch-write.css";
 @import "./components/header.css";
 @import "./components/changes-panel.css";
 @import "./components/spec-map.css";
 @import "./components/delivery-lens.css";
+@import "./components/map-discussion.css";
 @import "./components/graduation.css";
 @import "./components/graduation-cont.css";
 @import "./components/graduation-cont-2.css";

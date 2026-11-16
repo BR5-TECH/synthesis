@@ -1,6 +1,6 @@
 // OpenSpec mode (OSM-openspec-mode.md)
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 import type { ChangeDetail, ChangeLocation, OpenSpecStatus } from "../types";
 

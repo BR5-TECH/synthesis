@@ -96,6 +96,7 @@ A descriptor carries no node id: a skill is eligible whether or not the project 
 33. **DSL-FR-NXRB** Each JSON example in the `calm` skill files is a complete CALM document that is valid against the CALM 1.3 schema (per `../ui/CLM-calm-model.md` CLM-FR-KDTA). The description of the `calm` skill names CALM and architecture as code, so that a query for a Mermaid chart type ranks `mermaid` above `calm`.
 34. **DSL-FR-PEHR** `list_project_skills()` returns one `ProjectSkill` for each eligible synthesis skill and project skill of the open project's registry, ordered by `path`, and never a built-in skill. It answers from the registry as it stands and never blocks on a pass in flight. With no project open it returns a typed `no_project_open`. It reads no file and writes nothing.
 35. **DSL-FR-WJPI** `list_project_skills` emits one `DEBUG` record through `LGC-logging.md`'s internal API under the `backend` domain, naming the count of skills it returned, and one `WARN` record naming the refusal when it refuses. No record names a skill's path, name, or description.
+36. **DSL-FR-BRJG** The skill registry is held per open project. `list_skills` and every other command of this module take `project_id` and read the registry of that project only. Closing one project discards only its registry (`PWN-project-windows.md` PWN-FR-NXQW).
 
 ## Non-functional requirements
 - The built-in skills are a few files of text in the binary, so adding them to every pass costs no disk access and no measurable time.

@@ -5,6 +5,19 @@ import "./styles/kit.css";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProjectPicker } from "./components/ProjectPicker";
+import { ProjectPickerModal } from "./components/ProjectPickerModal";
+import { OpenProjectDialog } from "./components/OpenProjectDialog";
+import { CloseProjectConfirm } from "./components/CloseProjectConfirm";
+import { ProjectTabStrip } from "./components/ProjectTabStrip";
+import {
+  countRunsInFlight,
+  isMacPlatform,
+  restoresGeometry,
+  useProjectTabs,
+} from "./hooks/useProjectTabs";
+import { ProjectWindowLoading } from "./components/ProjectWindowLoading";
+import type { ProjectWindowBoot } from "./projectWindowBoot";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AboutPanel } from "./components/AboutPanel";
 import { AppShell } from "./AppShell";
 import { GitTransferProvider, useGitTransferState } from "./hooks/useGitTransfer";
@@ -52,7 +65,12 @@ import {
  * is on (SNV-FR-49).
  */
 
-function App() {
+interface AppProps {
+  /** PWN-FR-KQZB: set when "open project window" created this window. */
+  projectWindowBoot?: ProjectWindowBoot | null;
+}
+
+function App({ projectWindowBoot = null }: AppProps = {}) {
   const { themePref, selectTheme } = useThemePreference();
   // OVW-FR-14: the three typographic roles, applied to the application root
   // before any surface renders and re-applied the moment the Appearance section
@@ -105,6 +123,24 @@ function App() {
   // the shell subtree's remount on a project or worktree switch.
   const operations = useInFlightOperations();
 
+  // PJT-project-tabs.md: this window is one project tab. The hook mounts its
+  // project, asks where a chosen project opens, and runs the close flow.
+  const tabs = useProjectTabs({
+    screen: s.screen,
+    loadProject: s.loadProject,
+    flushBeforeTeardown: s.flushBeforeTeardown,
+    requestCloseProject: s.requestCloseProject,
+    runningOperations: countRunsInFlight(operations),
+    boot: projectWindowBoot,
+    closeWindow: () => getCurrentWindow().destroy(),
+  });
+  // PJT-FR-PCCL: the Close Project menu item and the close controls of the shell
+  // run the close flow of the project tab, which asks first when a run is active.
+  const shell = useMemo(
+    () => ({ ...s, requestCloseProject: tabs.requestClose }),
+    [s, tabs.requestClose],
+  );
+
   // STB-FR-25 / STB-FR-30: the uncommitted diff summary, reloaded against the
   // new content root whenever the active worktree changes.
   const diffTotals = useDiffTotals(s.contentRootEpoch);
@@ -154,7 +190,20 @@ function App() {
   // and write the *per-project* layout slot: a switch (OVW-FR-11) must re-read
   // the new project's own layout rather than leave the previous project's
   // applied — and, worse, written into the new project's slot (SNV-FR-35, SNV-FR-40, OVW-FR-11).
-  useMainWindowState(s.screen === "ide", s.projectPath);
+  // PWN-FR-XGTO: a window that joined a macOS tab group takes the frame of the
+  // group, so it restores no geometry of its own over the other tabs.
+  // PJT-FR-QFRM: the same holds for any window in a tab group with other
+  // project windows, also when This tab replaces its project.
+  useMainWindowState(
+    s.screen === "ide",
+    s.projectPath,
+    () =>
+      restoresGeometry({
+        created: projectWindowBoot !== null,
+        mac: isMacPlatform(),
+        inTabGroup: tabs.inTabGroup(),
+      }),
+  );
 
   /**
    * SNV-FR-56 / CMW-FR-01 / GHA-FR-21: the modal action surfaces of this window
@@ -378,7 +427,7 @@ function App() {
   // NTF-notifications.md: the facility this window drives, and the attention
   // the tab strip shows for what it raised.
   const { notifications, tabAttention, runsAttention } = useAppNotifications({
-    s,
+    s: shell,
     overlays,
     vpanel,
     projectFolders,
@@ -405,10 +454,30 @@ function App() {
     resetKey: `${s.projectPath}::${s.contentRootEpoch}`,
   });
 
+  // PWN-FR-KQZB: a created project window never shows the Project picker while
+  // it mounts its project.
+  if (s.screen === "picker" && tabs.boot) {
+    return (
+      <div className="app">
+        <ProjectWindowLoading
+          name={tabs.boot.name}
+          error={tabs.boot.error}
+          onClose={() => void tabs.closeBootWindow()}
+        />
+      </div>
+    );
+  }
   if (s.screen === "picker") {
     return (
       <div className="app">
-        <ProjectPicker onOpen={s.loadProject} />
+        {/* PJT-FR-JSAW: the last project tab closed, or no project is open yet.
+            A choice mounts the project in this window (PPK-FR-06). */}
+        <ProjectPicker onOpen={tabs.chooseProject} resolveOnly />
+        {tabs.error && (
+          <p className="project-picker-modal__error" role="alert">
+            {tabs.error}
+          </p>
+        )}
         {/* PPK-FR-EWQH / ABT-FR-ZEJM: the About panel overlays and blocks the
             picker, which stays mounted beneath it and so is unchanged when the
             panel closes. */}
@@ -427,7 +496,7 @@ function App() {
           takes no focus and is outside the single-overlay rule (SNV-FR-56). */}
       <NotificationToasts onActivate={notifications.activate} />
       <AppShell
-        s={s}
+        s={shell}
         overlays={overlays}
         vpanel={vpanel}
         bpanel={bpanel}
@@ -446,7 +515,45 @@ function App() {
         tabAttention={tabAttention}
         runsAttention={runsAttention}
         githubPolling={githubPolling}
+        projectTabs={{
+          strip: (
+            <ProjectTabStrip
+              windows={tabs.stripWindows}
+              ownProjectId={tabs.ownProjectId}
+              onActivate={tabs.activateTab}
+              onClose={tabs.closeTab}
+            />
+          ),
+          openPicker: tabs.openPicker,
+          choose: (handle) => void tabs.chooseProject(handle),
+        }}
       />
+      {/* PPK-FR-GMYH: the Project picker over this project window. */}
+      {tabs.pickerOpen && (
+        <ProjectPickerModal
+          onChoose={(handle) => void tabs.chooseProject(handle)}
+          onDismiss={tabs.closePicker}
+          error={tabs.error}
+          opening={tabs.opening}
+        />
+      )}
+      {/* PJT-FR-GASB: where the chosen project opens. */}
+      {tabs.pending && (
+        <OpenProjectDialog
+          projectName={tabs.pending.name}
+          currentName={s.projectName}
+          onChoose={(choice, remember) => void tabs.answerDialog(choice, remember)}
+          onCancel={tabs.cancelDialog}
+        />
+      )}
+      {/* PJT-FR-OJZG: a run is still working in this project. */}
+      {tabs.confirmingClose && (
+        <CloseProjectConfirm
+          projectName={s.projectName}
+          onConfirm={() => void tabs.confirmClose()}
+          onCancel={tabs.cancelClose}
+        />
+      )}
     </GitTransferProvider>
   );
 }

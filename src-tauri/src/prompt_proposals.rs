@@ -64,7 +64,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
+use tauri::State;
 
 use crate::artifacts::ContentTracker;
 use crate::comments::{self, Attachment, Participant, ThreadRef};

@@ -7,7 +7,7 @@
 //! it replays the local commits onto the pinned upstream tip, answering each
 //! conflicting step from the tree the run settled.
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use super::commands::project_root;
 use super::merge_apply::{markers_in, tips_moved};
@@ -44,7 +44,7 @@ pub fn apply_pull_run<R: tauri::Runtime>(
     let root = project_root(app).map_err(failed)?;
     let main = git::primary_repo(&root).map_err(failed)?;
 
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
     let _hold = match state.as_ref() {
         Some(state) => match state.begin_repository_update(
             &format!("pull:{}", subject.worktree_path),

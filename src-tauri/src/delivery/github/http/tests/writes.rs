@@ -78,6 +78,7 @@ fn create_issue_posts_the_issue() {
         body: "B".into(),
         issue_type: Some("Bug".into()),
         milestone: Some(2),
+        labels: Vec::new(),
     };
     let created = t.create_issue(&new).unwrap();
     assert_eq!(
@@ -98,8 +99,13 @@ fn create_issue_posts_the_issue() {
     );
 
     let (t, r) = recorded(vec![json!({ "number": 102 })]);
-    let plain =
-        NewIssue { title: "T".into(), body: String::new(), issue_type: None, milestone: None };
+    let plain = NewIssue {
+        title: "T".into(),
+        body: String::new(),
+        issue_type: None,
+        milestone: None,
+        labels: Vec::new(),
+    };
     t.create_issue(&plain).unwrap();
     assert_eq!(sent(&r), [rest("POST", "/issues", Some(json!({ "title": "T", "body": "" })))]);
     // An answer with no number is a failed request.

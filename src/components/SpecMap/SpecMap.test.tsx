@@ -87,6 +87,7 @@ describe("the tab frame (SMP)", () => {
       "smap-toolbar__spacer",
       "smap-filter:deps",
       "smap-filter:gaps",
+      "smap-filter:discussion",
     ]);
     const lenses = within(screen.getByRole("radiogroup", { name: "Lens" })).getAllByRole("radio");
     expect(lenses.map((r) => [r.textContent, r.getAttribute("aria-checked")])).toEqual([
@@ -140,7 +141,7 @@ describe("the tab frame (SMP)", () => {
     view.rerender(<SpecMap store={store} onOpenArtifact={vi.fn()} unplanned={{ on: true, onToggle }} />);
     const toolbar = screen.getByRole("toolbar", { name: "Map controls" });
     const filters = [...toolbar.querySelectorAll(".smap-filter")].map((el) => el.getAttribute("data-filter"));
-    expect(filters).toEqual(["deps", "gaps", "unplanned"]);
+    expect(filters).toEqual(["deps", "gaps", "unplanned", "discussion"]);
     const unplanned = screen.getByRole("button", { name: "Unplanned" });
     expect(unplanned).toHaveAttribute("aria-pressed", "true");
     expect(unplanned).toHaveTextContent("unplanned");

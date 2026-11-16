@@ -99,6 +99,18 @@ export function readSettingsWindowBoot(
 }
 
 /**
+ * PWN-FR-VIYR: the project that the Settings window edits: the project of the
+ * project window that opened it. `null` while that window held none.
+ */
+export function readSettingsWindowProject(search: string): string | null {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const project = params.get("project");
+  return project && project.length > 0 ? project : null;
+}
+
+/**
  * What the Settings window knows about the project behind it, as
  * `get_settings_window_context` answers (SWN-FR-02).
  *

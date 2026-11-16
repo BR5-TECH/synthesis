@@ -54,10 +54,10 @@
 //! against a draft is a separate concern with no core spec yet, and this module
 //! neither calls one nor knows one exists.
 
+use crate::project_scope::events::EmitToProject;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
 
 use crate::fs;
 use crate::notes::now_rfc3339;
@@ -722,7 +722,7 @@ impl DraftChange {
 /// internal channel is not a precondition of any command here — a consumer's
 /// absence or slowness delays no draft operation.
 pub(crate) fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, change: DraftChange) {
-    let _ = app.emit(DRAFTS_CHANGED, ());
+    let _ = app.emit_project(DRAFTS_CHANGED, ());
     // PST-FR-35: which drafts qualify for the Dashboard's Active workstreams
     // widget, and what their names and statuses are, follow this event. A
     // refresh caused by it re-reads the same prompt-file times and therefore

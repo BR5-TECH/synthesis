@@ -35,6 +35,7 @@ fn answer(fx: &Fixture, run: &GraduationRun) -> Result<GraduationRun, String> {
         fx.app.clone(),
         run.id.clone(),
         one_answer(),
+        Default::default(),
     );
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     answered
@@ -54,8 +55,12 @@ fn continue_is_refused_while_the_run_waits_on_its_questions() {
     let before = serde_json::to_value(fx.reload(&run.id)).expect("the record");
 
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let refusal = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
-        .expect_err("a run that waits on its questions does not continue");
+    let refusal = crate::graduation::continue_graduation_run(
+        fx.app.clone(),
+        run.id.clone(),
+        Default::default(),
+    )
+    .expect_err("a run that waits on its questions does not continue");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert!(refusal.to_string().starts_with(ERR_RUN_STATE_NOT_PERMITTED), "{refusal}");
 

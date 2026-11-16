@@ -19,10 +19,13 @@ pub mod tool;
 #[cfg(test)]
 pub(crate) mod tests;
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use tauri::{Emitter, Manager};
+use crate::project_scope::events::EmitToProject;
+use tauri::Manager;
 
 use crate::logging::{self, Domain, Fields, LogLevel};
 pub use manager::{McpManager, McpObserver};
@@ -51,7 +54,7 @@ struct AppObserver<R: tauri::Runtime>(tauri::AppHandle<R>);
 impl<R: tauri::Runtime> McpObserver for AppObserver<R> {
     fn status_changed(&self, id: &str, status: &status::McpServerStatus) {
         let payload = StatusChanged { id: id.to_string(), status: status.clone() };
-        let _ = self.0.emit(STATUS_EVENT, payload);
+        let _ = self.0.emit_project(STATUS_EVENT, payload);
     }
 
     fn log(&self, level: LogLevel, message: &str, fields: Fields) {
@@ -59,10 +62,12 @@ impl<R: tauri::Runtime> McpObserver for AppObserver<R> {
     }
 }
 
-/// Give the manager the application's event and log channels. Called once, at
-/// start.
+/// Give the manager of the project of the running code the application's event
+/// and log channels. Called at start for the default scope, and again when a
+/// project scope mounts its content root: every project scope makes its own
+/// manager, which starts with no observer (PWN-FR-ISOL).
 pub fn install<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(manager) = app.try_state::<McpManager>() {
+    if let Some(manager) = app.try_project_store::<McpManager>() {
         manager.install_observer(Arc::new(AppObserver(app.clone())));
     }
 }
@@ -148,8 +153,8 @@ pub fn reconcile_now<R: tauri::Runtime>(
     restart: Option<&str>,
 ) -> Result<(), String> {
     let (Some(manager), Some(project), Some(store)) = (
-        app.try_state::<McpManager>(),
-        app.try_state::<crate::project::ProjectState>(),
+        app.try_project_store::<McpManager>(),
+        app.open_project_state(),
         app.try_state::<crate::global_settings::GlobalSettingsStore>(),
     ) else {
         return Ok(());
@@ -160,6 +165,7 @@ pub fn reconcile_now<R: tauri::Runtime>(
 
 /// MCS-FR-RYIK: a project opened, or its active worktree changed.
 pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    install(app);
     if let Err(error) = reconcile_now(app, None) {
         logging::log_warn(
             app,
@@ -173,17 +179,21 @@ pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 
 /// MCS-FR-QTSW: the project closed.
 pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(manager) = app.try_state::<McpManager>() {
+    if let Some(manager) = app.try_project_store::<McpManager>() {
         manager.close_project();
     }
 }
 
 /// MCS-FR-QTSW: the application quits. Waits up to five seconds.
+///
+/// Every open project stops the servers of its own manager (PWN-FR-CTXT).
 pub fn on_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(manager) = app.try_state::<McpManager>() {
-        let manager = manager.inner().clone();
-        tauri::async_runtime::block_on(manager.shutdown());
-    }
+    crate::project_scope::for_each_project(app, || {
+        if let Some(manager) = app.try_project_store::<McpManager>() {
+            let manager = manager.inner().clone();
+            tauri::async_runtime::block_on(manager.shutdown());
+        }
+    });
 }
 
 /// CVL-FR-TJZI, MCT-FR-GPCO: the MCP tools of a turn of the open project.
@@ -191,7 +201,7 @@ pub fn conversation_tools<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Vec<rig::tool::DynamicTool> {
     let (Some(manager), Some(project)) =
-        (app.try_state::<McpManager>(), app.try_state::<crate::project::ProjectState>())
+        (app.try_project_store::<McpManager>(), app.open_project_state())
     else {
         return Vec::new();
     };

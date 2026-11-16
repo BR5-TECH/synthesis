@@ -5,6 +5,7 @@
 //! never declines a dispatch (AGC-FR-03).
 
 use super::*;
+use crate::project::OpenProject as _;
 
 mod groups;
 
@@ -245,10 +246,8 @@ impl TurnRegistry {
         provider_timeout_ms: Option<u64>,
     ) -> TurnBounds {
         let mut bounds = TurnBounds { timeout: self.timeout, retry: self.retry };
-        use tauri::Manager;
-        let root = app
-            .try_state::<crate::project::ProjectState>()
-            .and_then(|state| state.require_root().ok());
+
+        let root = app.open_project_state().and_then(|state| state.require_root().ok());
         if let Some(root) = root {
             let stored = crate::project_settings::loop_settings::SharedLoopSettings::read(&root);
             if let Some(ms) = stored.execution_timeout_ms {

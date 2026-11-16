@@ -23,8 +23,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use crate::project_scope::events::EmitToProject;
 use serde::Serialize;
-use tauri::{Emitter, State};
 
 /// The event every registration, update and terminal state is published on
 /// (PRG contract surface).
@@ -137,7 +137,7 @@ impl<R: tauri::Runtime> ProgressSink for tauri::AppHandle<R> {
         // dropped *terminal* event is not cosmetic, it strands the operation in
         // the status bar's in-flight set (STB-FR-06), which leaves an
         // indeterminate progress bar animating forever on an idle window.
-        if let Err(e) = self.emit(OPERATION_PROGRESS, operation) {
+        if let Err(e) = self.emit_project(OPERATION_PROGRESS, operation) {
             eprintln!("synthesis: failed to emit {OPERATION_PROGRESS} for {}: {e}", operation.id);
         }
     }
@@ -501,8 +501,11 @@ pub fn terminate_scope_and_publish(
 /// PRG-FR-02 / PRG-FR-15: the operations in flight right now, most-recently
 /// started first. Answers normally with no project open, because an operation
 /// need not be project-scoped. Never returns an error.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn list_in_flight_operations(registry: State<'_, ProgressRegistry>) -> Vec<Operation> {
+pub fn list_in_flight_operations(
+    registry: crate::project_scope::Scoped<'_, ProgressRegistry>,
+) -> Vec<Operation> {
     registry.in_flight()
 }
 

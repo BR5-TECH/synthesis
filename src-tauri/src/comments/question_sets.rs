@@ -36,8 +36,8 @@
 //! act is not one filesystem operation and cannot be made into one, so both
 //! sides take this lock and the pair is serialized.
 
+use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
-use tauri::State;
 
 use super::*;
 
@@ -180,6 +180,9 @@ pub enum DiscussionRef {
         stream_id: String,
         change: String,
     },
+    /// CMS-FR-ACLX: the log of the Map owner. All Map threads share it, and the
+    /// thread id picks the thread.
+    Map,
 }
 
 impl DiscussionRef {
@@ -189,6 +192,7 @@ impl DiscussionRef {
             DiscussionRef::Draft { draft_id } => ThreadRef::discussion(draft_id),
             DiscussionRef::Artifact { artifact_id } => ThreadRef::artifact_discussion(artifact_id),
             DiscussionRef::Note { note_id } => ThreadRef::note_discussion(note_id),
+            DiscussionRef::Map => ThreadRef::map_discussion(),
             DiscussionRef::Change { stream_id, change } => {
                 ThreadRef::change_discussion(stream_id, change)
             }
@@ -216,6 +220,7 @@ pub fn discussion_ref_of(discussion: &Discussion) -> Option<DiscussionRef> {
         DiscussionTarget::Change { stream_id, change } => {
             DiscussionRef::Change { stream_id: stream_id.clone(), change: change.clone() }
         }
+        DiscussionTarget::Map => DiscussionRef::Map,
     })
 }
 
@@ -261,11 +266,12 @@ pub fn read_question_set_checked(
 }
 
 /// CMS-FR-JWVH: `"read discussion question set"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_discussion_question_set<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Option<PendingQuestionSet>, String> {
     let thread_id = discussion_id;
     let root = project.require_store()?;
@@ -465,8 +471,7 @@ pub fn emit_question_set_changed<R: tauri::Runtime>(
     thread_id: &str,
     set: Option<&PendingQuestionSet>,
 ) {
-    use tauri::Emitter as _;
-    let _ = app.emit(
+    let _ = app.emit_project(
         DISCUSSION_QUESTION_SET_CHANGED,
         serde_json::json!({ "discussionId": thread_id, "set": set }),
     );

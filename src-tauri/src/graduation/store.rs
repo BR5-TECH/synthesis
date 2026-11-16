@@ -1,6 +1,7 @@
 //! Where a run lives on disk, and how it is read back (GSU-FR-RJRF).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// GSU-FR-RJRF: a project's run order, under the store root.
 const QUEUES_DIR: &str = "q";
@@ -325,7 +326,7 @@ pub fn is_directory(fs: &fsa::FsAccess, path: &Path) -> bool {
 
 /// The store root: `short_data_dir()`, or whatever root the managed state names.
 pub fn store_base<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<StoreBase, String> {
-    if let Some(root) = app.try_state::<GraduationState>().and_then(|state| state.root()) {
+    if let Some(root) = app.try_project_store::<GraduationState>().and_then(|state| state.root()) {
         return Ok(StoreBase::new(root));
     }
     fsa::short_data_dir().map(StoreBase::new).map_err(|e| e.to_string())

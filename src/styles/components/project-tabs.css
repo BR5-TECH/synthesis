@@ -1,0 +1,231 @@
+/* PJT-FR-VRRI: the strip scrolls inside its own region and never pushes the
+   trailing cluster of the top chrome out. */
+.project-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+}
+.project-tabs::-webkit-scrollbar { display: none; }
+/* One tab: a flat segment. The tab of this window is raised, the others stay
+   quiet until the pointer is over them. */
+.project-tabs__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 22px;
+  border-radius: var(--r-xs);
+  color: var(--fg-3);
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.project-tabs__item:hover {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+}
+.project-tabs__item[data-own="true"] {
+  background: var(--bg-elevated);
+  color: var(--fg-1);
+  box-shadow: 0 0 0 1px var(--border-1), 0 1px 2px rgb(0 0 0 / 0.06);
+}
+.project-tabs__tab,
+.project-tabs__close {
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  color: inherit;
+  background: none;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+}
+.project-tabs__tab {
+  gap: var(--sp-1-5);
+  padding: 0 var(--sp-1) 0 var(--sp-2);
+  max-width: 180px;
+}
+.project-tabs__item[data-own="true"] .project-tabs__tab { font-weight: var(--fw-semi); }
+.project-tabs__close {
+  justify-content: center;
+  width: 18px;
+  margin-right: 2px;
+  color: var(--fg-4);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.project-tabs__item:hover .project-tabs__close,
+.project-tabs__item[data-own="true"] .project-tabs__close,
+.project-tabs__close:focus-visible { opacity: 1; }
+.project-tabs__close:hover {
+  color: var(--fg-1);
+  background: var(--bg-active);
+}
+.project-tabs__tab:focus-visible,
+.project-tabs__close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.project-tabs__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-tabs__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+/* PJT-FR-DLGT / PJT-FR-RMCB: the open project dialog. Each choice is a card
+   that says what it does to the project of the window. */
+.modal.open-project-dialog { width: 460px; }
+.open-project-dialog__lead {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+  line-height: 1.5;
+}
+.open-project-dialog__choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.open-project-dialog__choice {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  width: 100%;
+  padding: var(--sp-3);
+  text-align: left;
+  font: inherit;
+  color: var(--fg-1);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.open-project-dialog__choice:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-2);
+}
+.open-project-dialog__choice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.open-project-dialog__label {
+  font-weight: var(--fw-semi);
+  font-size: var(--fs-ui-sm);
+}
+.open-project-dialog__desc {
+  display: block;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  line-height: 1.45;
+}
+.open-project-dialog__remember {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+.open-project-dialog__remember input { margin-top: 2px; }
+.open-project-dialog__remember-label {
+  display: block;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+
+/* PJT-FR-PNDG: the picker modal while a project opens in a new tab. */
+.project-picker-modal__opening {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+}
+
+/* PWN-FR-KQZB: a created project window while it mounts its project. */
+.project-window-loading {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--bg-canvas);
+  color: var(--fg-2);
+  text-align: center;
+}
+.project-window-loading__title {
+  margin: 0;
+  font-size: var(--fs-ui-title);
+  color: var(--fg-1);
+}
+.project-window-loading__error {
+  margin: 0;
+  max-width: 520px;
+  color: var(--danger);
+  font-size: var(--fs-ui-sm);
+}
+
+/* The strip sits at the leading edge of the trailing cluster, so the grid of the
+   top chrome keeps its three tracks. It is capped, and scrolls inside the cap. */
+.top-chrome__right .project-tabs {
+  max-width: min(360px, 32vw);
+}
+
+/* PPK-FR-GMYH: the Project picker as a modal over a project window. */
+.project-picker-modal {
+  position: relative;
+  width: min(820px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+}
+.project-picker-modal__close {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 1;
+}
+.project-picker-modal__error {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--danger, #f85149);
+}
+
+.project-picker-modal__scrim {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-project-confirm {
+  max-width: 420px;
+}

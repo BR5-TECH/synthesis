@@ -24,9 +24,10 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use tauri::Emitter;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
+use tauri::{Manager, State};
 
 use crate::log_fields;
 use crate::logging::{log_debug, log_error, log_info, log_warn, Domain, BUFFER};
@@ -79,6 +80,10 @@ pub struct NotificationRequest {
     pub body: String,
     /// Opaque; never parsed here (NTD-FR-08).
     pub payload: String,
+    /// PWN-FR-NTFY: the project the notification is about. A click on it
+    /// activates the project window of this project. Empty means no project.
+    #[serde(default)]
+    pub project_id: String,
 }
 
 /// What `post_notification` answers with.
@@ -95,6 +100,8 @@ pub struct Activation {
     pub id: String,
     pub key: String,
     pub payload: String,
+    /// PWN-FR-NTFY: the project of the notification; empty means no project.
+    pub project_id: String,
 }
 
 /// Why a post produced nothing (NTD contract surface).
@@ -221,6 +228,7 @@ pub fn post_through(
 struct Showing {
     key: String,
     payload: String,
+    project_id: String,
     /// What the platform was last actually shown for this key. Held so a repeat
     /// post carrying the same words can be recognised as adding nothing and
     /// skipped, rather than becoming a second banner saying what the first one
@@ -284,6 +292,7 @@ impl NotificationRegistry {
         let showing = Showing {
             key: request.key.clone(),
             payload: request.payload.clone(),
+            project_id: request.project_id.clone(),
             title: request.title.clone(),
             subtitle: request.subtitle.clone(),
             body: request.body.clone(),
@@ -348,7 +357,12 @@ impl NotificationRegistry {
         if inner.by_key.get(&showing.key).map(String::as_str) == Some(id) {
             inner.by_key.remove(&showing.key);
         }
-        Some(Activation { id: id.to_string(), key: showing.key, payload: showing.payload })
+        Some(Activation {
+            id: id.to_string(),
+            key: showing.key,
+            payload: showing.payload,
+            project_id: showing.project_id,
+        })
     }
 
     /// How many notifications are currently showing. Tests and diagnostics only.
@@ -442,8 +456,14 @@ pub fn deliver_activation<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str
 
     // The main window when a project is open, the picker otherwise — whichever
     // is mounted (NTD-FR-09).
-    let window =
-        app.get_webview_window("main").or_else(|| app.webview_windows().into_values().next());
+    // PWN-FR-NTFY: with several project windows, the window of the notification's
+    // project comes first.
+    let project_window =
+        crate::project_windows::activate_project_for_notification(app, &activation.project_id);
+    let window = project_window
+        .and_then(|label| app.get_webview_window(&label))
+        .or_else(|| app.get_webview_window("main"))
+        .or_else(|| app.webview_windows().into_values().next());
     match window {
         Some(window) => {
             if let Err(e) = window.set_focus() {
@@ -478,7 +498,12 @@ pub fn deliver_activation<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str
             "payloadLength" => activation.payload.len() as i64
         },
     );
-    if let Err(e) = app.emit(NOTIFICATION_ACTIVATED, &activation) {
+    let published =
+        match crate::project_windows::window_label_of_project(app, &activation.project_id) {
+            Some(label) => app.emit_to(label.as_str(), NOTIFICATION_ACTIVATED, &activation),
+            None => app.emit(NOTIFICATION_ACTIVATED, &activation),
+        };
+    if let Err(e) = published {
         log_error(
             app,
             &BUFFER,
@@ -527,7 +552,7 @@ async fn off_main_thread<T: Send + 'static>(
     work: impl FnOnce(tauri::AppHandle) -> T + Send + 'static,
 ) -> Option<T> {
     let handle = app.clone();
-    match tauri::async_runtime::spawn_blocking(move || work(handle)).await {
+    match crate::project_scope::context::spawn_blocking(move || work(handle)).await {
         Ok(value) => Some(value),
         Err(e) => {
             log_error(
@@ -544,6 +569,7 @@ async fn off_main_thread<T: Send + 'static>(
 
 /// NTD-FR-02: the platform's current disposition. Prompts for nothing, persists
 /// nothing, and never returns an error.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn get_notification_permission(app: tauri::AppHandle) -> PermissionState {
     off_main_thread(&app, "get permission", |app| app.state::<Notifier>().0.permission())
@@ -552,6 +578,7 @@ pub async fn get_notification_permission(app: tauri::AppHandle) -> PermissionSta
 }
 
 /// NTD-FR-03: the only operation here that can present a permission prompt.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn request_notification_permission(app: tauri::AppHandle) -> PermissionState {
     let state = off_main_thread(&app, "request permission", |app| {
@@ -572,6 +599,7 @@ pub async fn request_notification_permission(app: tauri::AppHandle) -> Permissio
 /// NTD-FR-06 / NTD-FR-14: show a notification, replacing one already showing
 /// under the same key. Posts nothing while permission is anything other than
 /// granted, and never prompts on its own.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn post_notification(
     request: NotificationRequest,
@@ -637,6 +665,7 @@ pub async fn post_notification(
 }
 
 /// Idempotent: an id that names nothing showing is not an error.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn withdraw_notification(
     id: String,
@@ -649,6 +678,7 @@ pub fn withdraw_notification(
 }
 
 /// NTD-FR-12: withdraw everything this run posted.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn withdraw_all_notifications(
     registry: State<'_, NotificationRegistry>,

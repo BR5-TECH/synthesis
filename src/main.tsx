@@ -2,7 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { SettingsWindowApp } from "./SettingsWindowApp";
-import { readSettingsWindowBoot } from "./settingsWindow";
+import { readSettingsWindowBoot, readSettingsWindowProject } from "./settingsWindow";
+import { setWindowProjectId } from "./api/invoke";
+import { readProjectWindowBoot } from "./projectWindowBoot";
+import { markPlatform } from "./platform";
 import { installDropGuard } from "./dropGuard";
 
 /**
@@ -16,16 +19,23 @@ import { installDropGuard } from "./dropGuard";
  */
 const boot = readSettingsWindowBoot(window.location.search);
 
+// PJT-FR-PBQT: the top chrome meets the system-drawn bar of macOS.
+markPlatform(document.documentElement, navigator.platform);
+
 // SNV-FR-UKER: the main window hands every drag to its web content
 // (SNV-FR-RQLF), so a drop no surface takes must not load the dropped file.
 if (!boot) installDropGuard(window);
+
+// PWN-FR-VIYR: the Settings window serves the project of the window that opened
+// it, so its calls carry that project's id.
+if (boot) setWindowProjectId(readSettingsWindowProject(window.location.search));
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     {boot ? (
       <SettingsWindowApp initialSection={boot.section} />
     ) : (
-      <App />
+      <App projectWindowBoot={readProjectWindowBoot(window.location.search)} />
     )}
   </React.StrictMode>,
 );

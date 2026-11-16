@@ -1,8 +1,10 @@
 /**
- * Global settings → **Navigation** (GLS-FR-28).
+ * Global settings → **Navigation** (GLS-FR-28, GLS-FR-OPNB).
  *
- * One switch: whether a change of the main viewport's active tab moves the
+ * A switch: whether a change of the main viewport's active tab moves the
  * vertical panel's selection to the item that tab is a view onto (SNV-FR-64).
+ * A selector: where a project opened from the project switcher opens
+ * (`PJT-project-tabs.md` PJT-FR-RMBR).
  *
  * The section holds no dirty state and contributes nothing to the discard
  * confirmation of GLS-FR-13 — the switch persists at once, exactly as the theme
@@ -18,12 +20,22 @@ import {
 } from "../state/appPreferences";
 import { setSelectionFollowsTab } from "../state/selectionFollowsTab";
 import { logWarn } from "../logging";
+import type { OpenProjectBehaviour } from "../types";
+
+/** GLS-FR-OPNB: the three choices, in their order. */
+const OPEN_PROJECT_CHOICES: { value: OpenProjectBehaviour; label: string }[] = [
+  { value: "ask", label: "Ask every time" },
+  { value: "this_tab", label: "This tab" },
+  { value: "new_tab", label: "New tab" },
+];
 
 export function NavigationSettings() {
   // Null until the stored value has landed, so the switch is never rendered
   // asserting a value nobody chose.
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openIn, setOpenIn] = useState<OpenProjectBehaviour | null>(null);
+  const [openInError, setOpenInError] = useState<string | null>(null);
 
   // GLS-FR-28: initialised from "load app preferences" on mount.
   useEffect(() => {
@@ -35,6 +47,8 @@ export function NavigationSettings() {
       // an author mid-upgrade rather than presenting them as opted out.
       const value = prefs.selectionFollowsTab ?? true;
       setEnabled(value);
+      // GSS-FR-OPBH: absent means never chosen, which asks.
+      setOpenIn(prefs.openProjectBehaviour ?? "ask");
       // SNV-FR-64: the shell reads the gate at activation time, so it learns the
       // stored value here rather than at the next relaunch.
       setSelectionFollowsTab(value);
@@ -68,6 +82,27 @@ export function NavigationSettings() {
     }
   }, []);
 
+  // GLS-FR-OPNB: a change saves at once; the section holds no dirty state.
+  const onOpenInChange = useCallback(
+    async (next: OpenProjectBehaviour) => {
+      const previous = openIn;
+      setOpenInError(null);
+      setOpenIn(next);
+      try {
+        await patchAppPreferences({ openProjectBehaviour: next });
+      } catch (e) {
+        setOpenIn(previous);
+        const message = e instanceof Error ? e.message : "could not save";
+        setOpenInError(message);
+        logWarn(["frontend"], "open project behaviour not saved", {
+          requested: next,
+          error: message,
+        });
+      }
+    },
+    [openIn],
+  );
+
   return (
     <div>
       <p className="t-p" style={{ marginBottom: 20 }}>
@@ -95,6 +130,34 @@ export function NavigationSettings() {
       {error && (
         <p className="t-ui-xs" style={{ marginTop: 12, color: "var(--danger)" }} role="alert">
           {error}
+        </p>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 24 }}>
+        <span id="navigation-open-project-in">Open another project in</span>
+        <select
+          aria-labelledby="navigation-open-project-in"
+          value={openIn ?? "ask"}
+          disabled={openIn === null}
+          onChange={(e) => void onOpenInChange(e.target.value as OpenProjectBehaviour)}
+        >
+          {OPEN_PROJECT_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <p className="t-ui-xs t-muted" style={{ marginTop: 12, maxWidth: 520 }}>
+        When you choose another project in the project switcher, it can ask where to
+        open it, replace the project in this tab, or open it in a new tab. File → New
+        Tab always opens a new tab.
+      </p>
+
+      {openInError && (
+        <p className="t-ui-xs" style={{ marginTop: 12, color: "var(--danger)" }} role="alert">
+          {openInError}
         </p>
       )}
     </div>

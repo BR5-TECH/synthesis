@@ -11,6 +11,7 @@
 //! (GRD-FR-IKVE). That is why [`emit`] answers whether the run may go on, and
 //! why every caller reads the answer.
 
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -130,7 +131,7 @@ fn handle_of<R: tauri::Runtime>(
     run_id: &str,
     seed: impl FnOnce() -> GraduationLogIndexes,
 ) -> Option<Arc<Mutex<GraduationLogIndexes>>> {
-    let registry = app.try_state::<LogRegistry>()?;
+    let registry = app.try_project_store::<LogRegistry>()?;
     Some(registry.handle(run_id, || {
         let mut seeded = seed();
         if let (Ok(fs), Ok(paths)) = (super::store_fs(app), paths_for(app, run_id)) {
@@ -149,7 +150,7 @@ fn locked(handle: &Mutex<GraduationLogIndexes>) -> std::sync::MutexGuard<'_, Gra
 
 /// Forget a run this process has stopped driving.
 pub fn release<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str) {
-    if let Some(registry) = app.try_state::<LogRegistry>() {
+    if let Some(registry) = app.try_project_store::<LogRegistry>() {
         registry.release(run_id);
     }
 }
@@ -438,7 +439,7 @@ fn held_handle<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
 ) -> Option<Arc<Mutex<GraduationLogIndexes>>> {
-    let registry = app.try_state::<LogRegistry>()?;
+    let registry = app.try_project_store::<LogRegistry>()?;
     let held = match registry.held.lock() {
         Ok(held) => held,
         Err(poisoned) => poisoned.into_inner(),

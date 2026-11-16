@@ -71,10 +71,12 @@ pub use write_guard::{BranchWriteGuard, ERR_MAIN_BRANCH_WRITE_UNCONFIRMED};
 // Every record helper is this crate's alone; nothing outside reports git.
 pub(crate) use telemetry::*;
 
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::path::Path;
 use std::time::Instant;
 
-use tauri::{Emitter, Manager, State};
+use tauri::Manager;
 
 use crate::changes::{self};
 use crate::github_tokens::GithubTokens;
@@ -323,6 +325,7 @@ pub fn branches_reported<S: LogSink + Clone + Send + 'static>(
 
 /// GTC-FR-19 / GTC-FR-20: commit exactly the named paths. The commit the
 /// application makes, invoked by `../ui/CMW-commit-message.md`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn commit_paths<R: tauri::Runtime>(
     message: String,
@@ -350,7 +353,7 @@ where
         // CHC-FR-16: the change set the commit just emptied is reloaded by every
         // surface that follows the event (`../ui/CHG-changes.md` CHG-FR-41). Emitted
         // here rather than left to the watcher, which does not watch `.git`.
-        if let Err(e) = app.emit(
+        if let Err(e) = app.emit_project(
             changes::CHANGES_UPDATED,
             changes::ChangesUpdatedPayload { change_count: paths.len() },
         ) {
@@ -377,22 +380,24 @@ where
 /// classified one, and what reads this is `GRD-graduation.md`'s start preflight
 /// (GSU-FR-MLEJ), which needs the whole of what Git reports rather than a
 /// classified and filterable change set.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_working_tree_status(
     expected_worktree: Option<String>,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<WorkingTreeStatus, String> {
     let root = project.require_root()?;
     working_tree_status_reported(&app, &logging::BUFFER, &root, expected_worktree.as_deref())
 }
 
 /// GTC-FR-23: return the named paths to `HEAD`, per path rather than atomically.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn rollback_paths(
     paths: Vec<String>,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<RollbackOutcome, String> {
     let root = project.require_root()?;
     // GTC-FR-28: this operation emits **nothing of its own**. A rollback writes
@@ -407,19 +412,21 @@ pub fn rollback_paths(
 
 /// GTC-FR-21: the current branch's standing against its upstream, from local
 /// refs alone.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_upstream_sync_state(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<UpstreamSyncState, String> {
     upstream_sync_state_reported(&app, &logging::BUFFER, &project.require_root()?)
 }
 
 /// GTC-FR-04 / GTC-FR-22: push the current branch, streaming its output.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn push_current_branch(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
@@ -427,16 +434,16 @@ pub async fn push_current_branch(
     // The managed state is resolved inside the closure rather than taken as
     // parameters: a `State<'_, T>` borrows the invoke context and cannot cross
     // onto another thread, while the `AppHandle` can and reaches the same values.
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         // GTC-FR-EMLM: the main branch write check, before anything is written.
         write_guard::commands::require_active_branch_write(&app, &root, "push_current_branch")?;
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        let registry = app.state::<ProgressRegistry>();
+        let registry = app.project_store::<ProgressRegistry>();
         let emit = |name: &str, payload: serde_json::Value| {
             // An event that cannot be delivered is dropped rather than
             // propagated: reporting must never take down the transfer.
-            let _ = app.emit(name, payload);
+            let _ = app.emit_project(name, payload);
         };
         push_branch_at(
             &app,
@@ -452,24 +459,25 @@ pub async fn push_current_branch(
 
 /// GTC-FR-RZNQ / GTC-FR-KUVE: push a named local branch from the checkout that
 /// holds it, streaming its output on the channels `push_current_branch` uses.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn push_branch(
     branch: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
 
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         // GTC-FR-EMLM: the main branch write check, before anything is written.
         write_guard::commands::require_branch_write(&app, &root, Some(&branch), "push_branch")?;
         let checkout = push_checkout(&app, &root, &branch);
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        let registry = app.state::<ProgressRegistry>();
+        let registry = app.project_store::<ProgressRegistry>();
         let emit = |name: &str, payload: serde_json::Value| {
-            let _ = app.emit(name, payload);
+            let _ = app.emit_project(name, payload);
         };
         push_named_branch_at(
             &app,
@@ -521,11 +529,12 @@ pub(crate) fn push_checkout<R: tauri::Runtime>(
     checkout
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_diff(
     scope: DiffScope,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DiffPayload, String> {
     diff_reported(&app, &logging::BUFFER, &project.require_root()?, &scope)
 }
@@ -533,19 +542,21 @@ pub fn get_diff(
 /// GTC-FR-16: both sides of the comparison for one file, whole. What the
 /// side-by-side, final, and rich modes of `../ui/DFV-diff-viewer.md` render
 /// (DFV-FR-25).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_file_revisions(
     scope: DiffScope,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<FileRevisions, String> {
     file_revisions_reported(&app, &logging::BUFFER, &project.require_root()?, &scope)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_branches(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<GitBranch>, String> {
     branches_reported(&app, &logging::BUFFER, &project.require_root()?)
 }

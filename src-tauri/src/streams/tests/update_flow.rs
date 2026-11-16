@@ -263,8 +263,12 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
     assert_eq!(record.base_revision, pinned.to_string(), "the pin is retained");
 
     // WKS-FR-DPNM: an escalated update is answered, never retried.
-    let refusal = update_commands::retry_work_stream_update(fx.app.clone(), stream.id.clone())
-        .expect_err("a retry of an escalated update is refused");
+    let refusal = update_commands::retry_work_stream_update(
+        fx.app.clone(),
+        stream.id.clone(),
+        Default::default(),
+    )
+    .expect_err("a retry of an escalated update is refused");
     assert_eq!(refusal, ERR_UPDATE_STATE_NOT_PERMITTED);
 
     let answers = vec![crate::graduation::GraduationEscalationAnswer {
@@ -277,6 +281,7 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
         fx.app.clone(),
         stream.id.clone(),
         answers,
+        Default::default(),
     )
     .expect("accepted");
     assert_eq!(started.state, StreamUpdateState::Running);
@@ -326,6 +331,7 @@ fn a_later_escalation_of_an_update_adds_to_its_ledger() {
             summary: String::new(),
             note: None,
         }],
+        Default::default(),
     )
     .expect("accepted");
     assert_eq!(started.decisions.len(), 2);
@@ -399,7 +405,12 @@ fn clearing_an_update_removes_its_record_and_moves_no_branch() {
     .expect("started");
     assert!(update_of(&fx, &stream.id).is_some());
 
-    update_commands::clear_work_stream_update(fx.app.clone(), stream.id.clone()).expect("cleared");
+    update_commands::clear_work_stream_update(
+        fx.app.clone(),
+        stream.id.clone(),
+        Default::default(),
+    )
+    .expect("cleared");
     assert!(update_of(&fx, &stream.id).is_none());
     let repo = fx.repo();
     assert_eq!(tip_of(&repo, &stream.base_branch), base_before);
@@ -445,7 +456,8 @@ fn deleting_a_stream_removes_its_update_record() {
     );
     update_record::write_update(&fs, &store, &record).expect("written");
 
-    delete_work_stream(fx.app.clone(), stream.id.clone(), true, false).expect("deleted");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), true, false, Default::default())
+        .expect("deleted");
     assert!(update_record::read_update(&fs, &store, &stream.id).is_none());
 }
 
@@ -671,8 +683,12 @@ fn a_retry_runs_under_the_recorded_strategy_and_pinned_revision() {
     .expect("started");
     assert_eq!(record.state, StreamUpdateState::Conflicted);
 
-    let started = update_commands::retry_work_stream_update(fx.app.clone(), stream.id.clone())
-        .expect("a conflicted update runs again");
+    let started = update_commands::retry_work_stream_update(
+        fx.app.clone(),
+        stream.id.clone(),
+        Default::default(),
+    )
+    .expect("a conflicted update runs again");
     assert_eq!(started.state, StreamUpdateState::Running);
     assert_eq!(started.strategy, StreamUpdateStrategy::RebaseSource);
     assert_eq!(started.base_revision, pinned);
@@ -697,8 +713,12 @@ fn a_settled_update_permits_no_retry() {
     assert_eq!(record.state, StreamUpdateState::NothingToUpdate, "{record:?}");
 
     assert_eq!(
-        update_commands::retry_work_stream_update(fx.app.clone(), stream.id.clone())
-            .expect_err("a settled update is not retryable"),
+        update_commands::retry_work_stream_update(
+            fx.app.clone(),
+            stream.id.clone(),
+            Default::default()
+        )
+        .expect_err("a settled update is not retryable"),
         ERR_UPDATE_STATE_NOT_PERMITTED,
     );
 }
@@ -725,6 +745,7 @@ fn an_answer_set_that_does_not_cover_every_question_starts_nothing() {
             fx.app.clone(),
             stream.id.clone(),
             answers,
+            Default::default(),
         )
         .expect_err("refused")
     };
@@ -786,6 +807,7 @@ fn the_update_command_answers_at_once_with_a_running_record() {
         stream.id.clone(),
         StreamUpdateStrategy::MergeSource,
         pinned.clone(),
+        Default::default(),
     )
     .expect("started");
 

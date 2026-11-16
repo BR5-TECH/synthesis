@@ -1,8 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the main window and the project windows",
+  "windows": [
+    "main",
+    "project-*"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-set-resizable",
@@ -22,6 +25,7 @@
     "core:window:allow-available-monitors",
     "core:window:allow-primary-monitor",
     "core:window:allow-scale-factor",
+    "core:window:allow-destroy",
     "opener:default",
     "dialog:allow-open",
     "dialog:allow-save"

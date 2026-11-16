@@ -13,7 +13,6 @@ use std::time::Instant;
 
 use git2::{BranchType, Commit, Repository};
 use serde::Serialize;
-use tauri::State;
 
 use crate::changes::{self, ERR_UNKNOWN_BRANCH};
 use crate::log_fields;
@@ -305,24 +304,26 @@ pub fn branch_compare_file_diff_reported<R: tauri::Runtime>(
 // ---------------------------------------------------------------------------
 
 /// GTC-FR-YQVD / GTC-FR-MBBH: the paths one branch changed against its base.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_branch_compare_files(
     name: String,
     kind: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<BranchComparison, String> {
     branch_comparison_reported(&app, &logging::BUFFER, &project.require_root()?, &name, &kind)
 }
 
 /// GTC-FR-PYVV: one branch's change to one path against its base.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_branch_compare_file_diff(
     name: String,
     kind: String,
     path: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DiffPayload, String> {
     branch_compare_file_diff_reported(
         &app,

@@ -340,7 +340,11 @@ fn a_decision_needs_an_open_project() {
 fn the_list_needs_an_open_project() {
     let app = crate::tools::tests::mock_app();
     app.manage(crate::project::ProjectState::default());
-    let listed = list_change_action_requests(STREAM.into(), CHANGE.into(), app.state());
+    let listed = list_change_action_requests(
+        STREAM.into(),
+        CHANGE.into(),
+        app.state::<crate::project::ProjectState>().into(),
+    );
     assert_eq!(listed.unwrap_err(), ERR_NO_PROJECT_OPEN);
 }
 
@@ -368,11 +372,17 @@ fn a_decision_command_returns_the_identity_refusal_and_writes_nothing() {
     app.manage(settings);
     let selection = crate::github_tokens::ERR_SELECTION_REQUIRED;
 
-    let declined = decline_change_action_request(app.handle().clone(), record.id.clone(), None);
+    let declined = decline_change_action_request(
+        app.handle().clone(),
+        record.id.clone(),
+        None,
+        Default::default(),
+    );
     assert_eq!(declined.unwrap_err(), selection);
     let confirmed = tauri::async_runtime::block_on(confirm_change_action_request(
         app.handle().clone(),
         record.id.clone(),
+        Default::default(),
     ));
     assert_eq!(confirmed.unwrap_err(), selection);
     assert_eq!(f.requests()[0].state, ChangeActionRequestState::Pending);

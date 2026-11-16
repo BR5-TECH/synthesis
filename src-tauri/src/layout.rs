@@ -132,10 +132,11 @@ pub enum BottomSurface {
 
 /// PSS-FR-06: the open project's layout, read from the user-global per-project
 /// slot. An empty slot key (no project open) selects the global default slot.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_layout_preferences(
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Option<LayoutPreferences>, String> {
     store.load_project_layout(&project.slot_key())
 }
@@ -143,11 +144,12 @@ pub fn load_layout_preferences(
 /// PSS-FR-06 / GSS-FR-17: persist the open project's layout. The value is
 /// keyed by project, never by worktree, so a switch of active worktree reads
 /// back exactly what was saved.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_layout_preferences(
     preferences: LayoutPreferences,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<(), String> {
     store.save_project_layout(&project.slot_key(), preferences)
 }

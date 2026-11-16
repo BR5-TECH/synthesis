@@ -236,6 +236,9 @@ export async function renderLens(options: {
     ),
   };
   const store = options.store ?? new SpecMapSessionStore(ops);
+  // SMP-FR-WNLR shows the Discussion column on the first open. A test of
+  // another requirement hides it, so its queries meet the lens alone.
+  if (!options.store) store.setDiscussionVisible(false);
   const flows = new FlowSessionStore();
   stores.push(flows);
   const host = {

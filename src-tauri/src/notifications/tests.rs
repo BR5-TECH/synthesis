@@ -83,6 +83,7 @@ fn request(key: &str, payload: &str) -> NotificationRequest {
         subtitle: String::new(),
         body: "Body".into(),
         payload: payload.to_string(),
+        project_id: String::new(),
     }
 }
 
@@ -98,6 +99,7 @@ fn the_wire_shapes_match_the_contract_surface() {
         id: "notif-0".into(),
         key: "run:abc".into(),
         payload: "synthesis://p/w/dashboard".into(),
+        project_id: String::new(),
     };
     let json = serde_json::to_value(&activation).unwrap();
     assert_eq!(json.get("id").and_then(|v| v.as_str()), Some("notif-0"));
@@ -133,6 +135,7 @@ fn request_of(key: &str, title: &str, body: &str, payload: &str) -> Notification
         subtitle: String::new(),
         body: body.into(),
         payload: payload.into(),
+        project_id: String::new(),
     }
 }
 
@@ -477,6 +480,7 @@ fn a_granted_post_records_it_and_shows_it_with_its_text_unmodified() {
         subtitle: String::new(),
         body: "Body with\nnewlines and *asterisks* and 🎧".into(),
         payload: "synthesis://p/w/dashboard".into(),
+        project_id: String::new(),
     };
 
     let posted = post_through(&registry, &sink, &req, |_| Box::new(|| {})).unwrap();
@@ -559,6 +563,7 @@ fn a_repeat_key_with_new_words_is_shown_again_and_routes_to_the_latest() {
             subtitle: String::new(),
             body: "Finished.".into(),
             payload: "synthesis://p/w/bottom/runs".into(),
+            project_id: String::new(),
         },
         |_| Box::new(|| {}),
     )
@@ -573,6 +578,7 @@ fn a_repeat_key_with_new_words_is_shown_again_and_routes_to_the_latest() {
             subtitle: String::new(),
             body: "Needs your input.".into(),
             payload: "synthesis://p/w/dashboard".into(),
+            project_id: String::new(),
         },
         |_| Box::new(|| {}),
     )

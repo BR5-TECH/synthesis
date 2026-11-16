@@ -7,6 +7,7 @@
 //! root the Library/artifact commands read. The pure `*_impl` halves and the
 //! `record_open` / `deactivate_project` seams are unit-tested without a runtime.
 
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -293,7 +294,10 @@ pub fn discard_diagnostics_for_switch<R: tauri::Runtime>(
     project: &ProjectState,
     buffer: &'static crate::logging::LogBuffer,
 ) {
-    if project.root().is_some() {
+    // LGC-FR-15: the buffer serves every open project window. A switch in one
+    // project must not remove the records of another.
+    let own = crate::project_scope::context::current();
+    if project.root().is_some() && !crate::project_scope::other_project_open(app, own.as_deref()) {
         crate::logging::clear_and_publish(app, buffer);
     }
 }
@@ -346,7 +350,7 @@ pub fn remount_content_root<R: tauri::Runtime>(
     if let Some(outgoing) = project.root() {
         progress::terminate_scope_and_publish(
             app,
-            &app.state::<progress::ProgressRegistry>(),
+            &app.project_store::<progress::ProgressRegistry>(),
             &outgoing,
         );
     }
@@ -354,7 +358,7 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // nothing left to answer for. Stopped before the root moves, so it ends with
     // its one terminal event rather than streaming hits from a checkout the
     // application is no longer showing.
-    app.state::<crate::search::SearchRegistry>().cancel_running();
+    app.project_store::<crate::search::SearchRegistry>().cancel_running();
     // FSA-FR-21: the shared filesystem instance is REPLACED, not widened — the
     // outgoing worktree stops being reachable at the moment it stops being
     // active, because the new instance's allowlist simply does not contain it.
@@ -403,14 +407,14 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // artifact checksum baselines so a stale id cannot collide across projects.
     // The same applies across worktrees: an id is a project-relative path, so
     // the identical id names different bytes in a different checkout.
-    app.state::<ContentTracker>().clear();
+    app.project_store::<ContentTracker>().clear();
     // ASC-FR-16 / ASC-FR-17: the candidate list belongs to the content root, so
     // it is torn down with it rather than carried into the new one.
-    app.state::<crate::scanning::CandidateStore>().clear();
+    app.project_store::<crate::scanning::CandidateStore>().clear();
     // ASC-FR-16: likewise the attribution baseline — the incoming worktree has
     // its own `.synthesis/library.toml`, so the outgoing root's checksum would
     // name different bytes and could suppress the first genuine change here.
-    app.state::<crate::scanning::AttributionBaseline>().clear();
+    app.project_store::<crate::scanning::AttributionBaseline>().clear();
     // PCP-FR-14 / PCP-FR-20: an acceptance interrupted by a crash or a kill is
     // settled here, **before any surface has been served that artifact**, and
     // the record and candidate of a decided proposal whose artifact the project
@@ -462,7 +466,7 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // the project watcher is. It is what keeps the Dashboard's Active
     // workstreams widget current when an external editor writes a prompt
     // (PST-FR-35).
-    if let Some(drafts_watcher) = app.try_state::<crate::draft_watcher::DraftsWatcher>() {
+    if let Some(drafts_watcher) = app.try_project_store::<crate::draft_watcher::DraftsWatcher>() {
         match project.require_root() {
             Ok(rooted) => crate::draft_watcher::start_watching(app, &drafts_watcher, &rooted),
             Err(_) => drafts_watcher.stop(),
@@ -472,7 +476,10 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // outgoing root's are discarded rather than merged into the new one, and a
     // full build of the new root is requested. It runs in the background, so
     // the project is usable throughout (BMI-FR-12).
-    if let Some(indexer) = app.try_state::<crate::bm25_index::Bm25Indexer>() {
+    if let Some(indexer) = crate::project_scope::ProjectStores::try_project_store::<
+        crate::bm25_index::Bm25Indexer,
+    >(app)
+    {
         // Mounted with the guarded root rather than a bare path: an index pass
         // runs on its own thread, and this is what keeps its reads inside the
         // same allowlist the command that scheduled it was bound by.
@@ -632,25 +639,31 @@ pub fn deactivate_project(
 /// of File -> Close project, *after* it has written every artifact's pending
 /// changes (EDT-FR-33) — a torn-down project has no root, so `save_artifact_contents`
 /// would fail from here on. Writes no file itself, and is idempotent.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 // Reason: the parameters of a Tauri command are its IPC contract with `invoke()`.
 #[allow(clippy::too_many_arguments)]
 pub fn close_project<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
-    tracker: State<'_, ContentTracker>,
-    drafts_watcher: State<'_, crate::draft_watcher::DraftsWatcher>,
-    progress_registry: State<'_, progress::ProgressRegistry>,
-    candidates: State<'_, crate::scanning::CandidateStore>,
-    searches: State<'_, crate::search::SearchRegistry>,
-    turns: State<'_, crate::agent_conversations::TurnRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
+    tracker: crate::project_scope::Scoped<'_, ContentTracker>,
+    drafts_watcher: crate::project_scope::Scoped<'_, crate::draft_watcher::DraftsWatcher>,
+    progress_registry: crate::project_scope::Scoped<'_, progress::ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, crate::scanning::CandidateStore>,
+    searches: crate::project_scope::Scoped<'_, crate::search::SearchRegistry>,
+    turns: crate::project_scope::Scoped<'_, crate::agent_conversations::TurnRegistry>,
 ) {
     // LGC-FR-15: the session's diagnostic buffer is discarded in full when the
     // project closes. First, before anything else the close does, so every
     // record the teardown itself emits lands in the fresh buffer rather than
     // being discarded by a clear that followed it.
-    crate::logging::clear_and_publish(&app, &crate::logging::BUFFER);
+    // The buffer is shared by every open project window, so the clear waits
+    // until no other project is open: closing one project keeps the records of
+    // the others.
+    if !crate::project_scope::other_project_open(&app, Some(project.project_id())) {
+        crate::logging::clear_and_publish(&app, &crate::logging::BUFFER);
+    }
     crate::logging::log(
         &app,
         &crate::logging::BUFFER,
@@ -676,9 +689,9 @@ pub fn close_project<R: tauri::Runtime>(
         &app,
         crate::graduation::GraduationInterruptionReason::ProjectChanged,
     );
-    // EAC-FR-ABHG: the runs are stopped, so every sandbox VM stops with the
-    // project.
-    crate::tools::agent_exec::sandbox::stop_all_in_background(&app);
+    // EAC-FR-ABHG: the runs are stopped, so the sandbox VMs of this project stop
+    // with it. The VMs of the other open projects go on.
+    crate::tools::agent_exec::sandbox::stop_project_in_background(&app, project.slot_key());
     // GPP-FR-DATH: the polling session ends with the project, so a project
     // opened again starts a new session with nothing reported.
     crate::github_polling::end_session(&app);
@@ -694,7 +707,10 @@ pub fn close_project<R: tauri::Runtime>(
     // BMI-FR-25: the nine indexes go with the rest of the content root's
     // in-memory state, so a query after the close returns an empty list rather
     // than the closed project's chunks.
-    if let Some(indexer) = app.try_state::<crate::bm25_index::Bm25Indexer>() {
+    if let Some(indexer) = crate::project_scope::ProjectStores::try_project_store::<
+        crate::bm25_index::Bm25Indexer,
+    >(&app)
+    {
         indexer.clear();
     }
     // DCL-FR-XHSJ: the Documents collection stops its watch and discards its
@@ -716,12 +732,12 @@ pub fn close_project<R: tauri::Runtime>(
     // whatever the pass is doing.
     crate::draft_assets::sweep_project_draft_assets(&app);
     deactivate_project(
-        project.inner(),
+        &project,
         watcher.inner(),
         tracker.inner(),
         drafts_watcher.inner(),
         candidates.inner(),
-        &app.state::<crate::scanning::AttributionBaseline>(),
+        &app.project_store::<crate::scanning::AttributionBaseline>(),
     );
 }
 
@@ -780,16 +796,47 @@ fn open_project_at_path_impl(
     Ok(resolve_handle(store, &path))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_project_at_path(
     path: String,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
 ) -> Result<ProjectHandle, String> {
     let handle = open_project_at_path_impl(&store, path)?;
     open_resolved(&app, &store, &project, &watcher, handle)
+}
+
+/// PJT-FR-IOEV: resolve a path into a project without mounting it. The Project
+/// picker uses it, so the choice of This tab or New tab comes before any mount.
+#[tauri::command]
+pub fn resolve_project_at_path(
+    path: String,
+    store: State<'_, GlobalSettingsStore>,
+) -> Result<ProjectHandle, String> {
+    open_project_at_path_impl(&store, path)
+}
+
+/// PJT-FR-IOEV: [`resolve_project_at_path`] for a Git URL.
+#[tauri::command]
+pub fn resolve_project_from_git_url(
+    url: String,
+    store: State<'_, GlobalSettingsStore>,
+) -> Result<ProjectHandle, String> {
+    open_project_from_git_url_impl(&store, url)
+}
+
+/// PJT-FR-IOEV: [`resolve_project_at_path`] for a new project.
+#[tauri::command]
+pub fn resolve_new_project(
+    name: String,
+    mode: CreateMode,
+    target_path: String,
+    store: State<'_, GlobalSettingsStore>,
+) -> Result<ProjectHandle, String> {
+    create_project_impl(&store, name, mode, target_path)
 }
 
 /// The last step of every route that opens or creates a project: refuse a
@@ -830,13 +877,14 @@ fn open_project_from_git_url_impl(
     Ok(resolve_handle(store, &format!("~/dev/{}", name)))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_project_from_git_url(
     url: String,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
 ) -> Result<ProjectHandle, String> {
     let handle = open_project_from_git_url_impl(&store, url)?;
     open_resolved(&app, &store, &project, &watcher, handle)
@@ -861,6 +909,7 @@ fn create_project_impl(
     Ok(ProjectHandle { name, ..resolve_handle(store, &target_path) })
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn create_project(
     name: String,
@@ -868,8 +917,8 @@ pub fn create_project(
     target_path: String,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
-    watcher: State<'_, ProjectWatcher>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    watcher: crate::project_scope::Scoped<'_, ProjectWatcher>,
 ) -> Result<ProjectHandle, String> {
     create_project_routed(&app, &store, &project, &watcher, name, mode, target_path)
 }
@@ -893,3 +942,51 @@ mod asset_housekeeping_tests;
 
 #[cfg(test)]
 mod tests;
+
+/// The project state for code that runs without a command call: a timer, a
+/// watcher callback, a worker. Such code has no `projectId` yet. It gets the
+/// state of the one open project. When two projects are open it gets nothing,
+/// because a guess could reach the wrong project; the code must carry the id of
+/// its project (PWN-FR-ISOL).
+pub trait OpenProject<R: tauri::Runtime> {
+    /// The state of the one open project, or `None`. A project that a call without
+    /// `projectId` opened sits in the default scope and counts as open.
+    fn open_project_state(&self) -> Option<crate::project_scope::Scoped<'_, ProjectState>>;
+
+    /// The state of the one open project, or the empty default state, whose
+    /// reads answer "no project open".
+    fn open_project_state_or_default(&self) -> crate::project_scope::Scoped<'_, ProjectState>;
+}
+
+impl<R: tauri::Runtime, M: tauri::Manager<R>> OpenProject<R> for M {
+    fn open_project_state(&self) -> Option<crate::project_scope::Scoped<'_, ProjectState>> {
+        use crate::project_scope::{context, ProjectScopes, Scoped, DEFAULT_SCOPE};
+        let Some(scopes) = self.try_state::<ProjectScopes>() else {
+            return self.try_state::<ProjectState>().map(Scoped::Managed);
+        };
+        // PWN-FR-CTXT: code that runs for one project gets that project, and
+        // never the project of another scope.
+        if let Some(id) = context::current() {
+            let found = scopes.peek::<ProjectState>(&id).filter(|state| state.root().is_some());
+            match found {
+                Some(state) => return Some(Scoped::Owned(state, id)),
+                None if id != DEFAULT_SCOPE => return None,
+                None => {}
+            }
+        }
+        let mut open = scopes.scope_ids().into_iter().filter_map(|id| {
+            let state = scopes.peek::<ProjectState>(&id)?;
+            state.root().is_some().then_some((state, id))
+        });
+        let (first, id) = open.next()?;
+        if open.next().is_some() {
+            return None;
+        }
+        Some(Scoped::Owned(first, id))
+    }
+
+    fn open_project_state_or_default(&self) -> crate::project_scope::Scoped<'_, ProjectState> {
+        use crate::project_scope::{ScopeAccess, DEFAULT_SCOPE};
+        self.open_project_state().unwrap_or_else(|| self.scoped::<ProjectState>(DEFAULT_SCOPE))
+    }
+}

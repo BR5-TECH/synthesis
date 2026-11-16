@@ -2,6 +2,8 @@
 //! the project works at once (GRD-FR-KKKN, GRD-FR-NYSH, GRD-FR-IJKV,
 //! GRD-FR-KPET, GRD-FR-GRHC).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use std::collections::BTreeSet;
 
 use super::*;
@@ -24,7 +26,7 @@ pub struct GraduationCapacity {
 pub(super) fn concurrency_limit<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> GraduationConcurrency {
-    app.try_state::<ProjectState>()
+    app.open_project_state()
         .and_then(|state| state.require_root().ok())
         .and_then(|root| crate::project_settings::load_project_config_from(&root).ok())
         .and_then(|config| config.graduation_concurrency_limit)
@@ -54,7 +56,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     mut start: impl FnMut(&str, &str) -> bool,
 ) {
-    let Some(state) = app.try_state::<GraduationState>() else {
+    let Some(state) = app.try_project_store::<GraduationState>() else {
         return;
     };
     // One pass at a time: two ends of runs must not each offer a slot to a
@@ -123,7 +125,7 @@ pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> G
     let queue = queue::project_queue(app);
     let holders = queue.as_ref().map(queue::slot_holders).unwrap_or_default();
     let in_use = app
-        .try_state::<GraduationState>()
+        .try_project_store::<GraduationState>()
         .map(|state| state.slots_in_use(&holders))
         .unwrap_or(holders.len());
     let mut waiting_for_slot = Vec::new();
@@ -140,7 +142,7 @@ pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> G
                 // A run claimed a moment ago still reads `queued` until its first
                 // turn is recorded, so the claim in memory names the queue too.
                 let claimed = app
-                    .try_state::<GraduationState>()
+                    .try_project_store::<GraduationState>()
                     .is_some_and(|state| state.holder_of(&run.queue_key()).is_some());
                 if held || claimed || run.holds_queue() || !seen.insert(run.queue_key()) {
                     continue;
@@ -154,6 +156,7 @@ pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> G
 
 /// GRD-FR-GRHC: what the project's slots hold now, and which queued runs wait
 /// for a slot alone.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_graduation_capacity<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,

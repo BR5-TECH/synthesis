@@ -133,14 +133,14 @@ fn close_project_command_performs_the_teardown() {
 
     crate::project::close_project(
         app.handle().clone(),
-        app.state::<ProjectState>(),
-        app.state::<ProjectWatcher>(),
-        app.state::<ContentTracker>(),
-        app.state::<crate::draft_watcher::DraftsWatcher>(),
-        app.state::<crate::progress::ProgressRegistry>(),
-        app.state::<crate::scanning::CandidateStore>(),
-        app.state::<crate::search::SearchRegistry>(),
-        app.state::<crate::agent_conversations::TurnRegistry>(),
+        app.state::<ProjectState>().into(),
+        app.state::<ProjectWatcher>().into(),
+        app.state::<ContentTracker>().into(),
+        app.state::<crate::draft_watcher::DraftsWatcher>().into(),
+        app.state::<crate::progress::ProgressRegistry>().into(),
+        app.state::<crate::scanning::CandidateStore>().into(),
+        app.state::<crate::search::SearchRegistry>().into(),
+        app.state::<crate::agent_conversations::TurnRegistry>().into(),
     );
 
     assert_eq!(app.state::<ProjectState>().require_root().unwrap_err(), "no project open");
@@ -172,14 +172,14 @@ fn close_project_terminates_the_projects_in_flight_operations() {
 
     crate::project::close_project(
         app.handle().clone(),
-        app.state::<ProjectState>(),
-        app.state::<ProjectWatcher>(),
-        app.state::<ContentTracker>(),
-        app.state::<crate::draft_watcher::DraftsWatcher>(),
-        app.state::<crate::progress::ProgressRegistry>(),
-        app.state::<crate::scanning::CandidateStore>(),
-        app.state::<crate::search::SearchRegistry>(),
-        app.state::<crate::agent_conversations::TurnRegistry>(),
+        app.state::<ProjectState>().into(),
+        app.state::<ProjectWatcher>().into(),
+        app.state::<ContentTracker>().into(),
+        app.state::<crate::draft_watcher::DraftsWatcher>().into(),
+        app.state::<crate::progress::ProgressRegistry>().into(),
+        app.state::<crate::scanning::CandidateStore>().into(),
+        app.state::<crate::search::SearchRegistry>().into(),
+        app.state::<crate::agent_conversations::TurnRegistry>().into(),
     );
 
     let remaining: Vec<String> = app
@@ -237,7 +237,7 @@ fn finish_exit_releases_the_hold_and_only_quits_when_told_to() {
     let t0 = Instant::now();
     assert!(app.state::<ExitGate>().claim_at(t0, EXIT_FLUSH_GRACE));
 
-    finish_exit(false, app.handle().clone(), app.state::<ExitGate>());
+    finish_exit_for("main", false, app.handle(), &app.state::<ExitGate>());
 
     assert!(
         app.state::<ExitGate>().claim_at(t0 + Duration::from_secs(1), EXIT_FLUSH_GRACE),
@@ -394,7 +394,7 @@ fn menu_event_names_match_the_frontend_listener_literals_byte_for_byte() {
 }
 
 #[test]
-fn file_menu_full_order_is_the_ten_items_the_spec_names() {
+fn file_menu_full_order_is_the_ten_items_the_spec_names_with_new_tab() {
     // SNV-FR-23 / SWN-FR-14 / ABT-FR-KMVD: off macOS the File menu shows
     // EXACTLY ten items in order. `build_app_menu` renders the
     // `file_menu_order` labels then the `file_menu_tail` ones (About, Exit),
@@ -416,6 +416,7 @@ fn file_menu_full_order_is_the_ten_items_the_spec_names() {
             "Save",
             "Save All",
             "Settings",
+            "New Tab",
             "Close Project",
             "About",
             "Exit"
@@ -435,11 +436,91 @@ fn setting_the_save_menu_state_before_the_menu_is_installed_is_inert() {
     let app = mock_app_with_window(dir.path());
     app.manage(SaveMenuItems::<tauri::test::MockRuntime>::default());
 
-    set_save_menu_state(true, true, app.handle().clone(), app.state());
-    set_save_menu_state(false, false, app.handle().clone(), app.state());
+    set_save_menu_state(true, true, app.handle().clone(), app.state(), Default::default());
+    set_save_menu_state(false, false, app.handle().clone(), app.state(), Default::default());
 }
 
 #[test]
 fn save_menu_state_command_compiles_with_a_generic_runtime() {
     let _cmd = set_save_menu_state::<tauri::Wry>;
+}
+
+// PWN-FR-WVUO: with several project windows, the quit waits for every window to
+// write its changes, and one blocked window cancels it.
+#[test]
+fn a_quit_waits_for_every_window_to_answer() {
+    let gate = ExitGate::default();
+    gate.expect_windows(["main".to_string(), "project-1".to_string()]);
+    assert_eq!(gate.answer("main", true), ExitAnswer::Wait);
+    assert_eq!(gate.answer("project-1", true), ExitAnswer::Quit);
+}
+
+#[test]
+fn one_blocked_window_cancels_the_quit() {
+    let gate = ExitGate::default();
+    gate.expect_windows(["main".to_string(), "project-1".to_string()]);
+    assert_eq!(gate.answer("main", true), ExitAnswer::Wait);
+    assert_eq!(gate.answer("project-1", false), ExitAnswer::Cancel);
+    // A late answer to the cancelled quit does not quit.
+    assert_eq!(gate.answer("main", true), ExitAnswer::Wait);
+    // A new quit starts again.
+    gate.expect_windows(["main".to_string()]);
+    assert_eq!(gate.answer("main", true), ExitAnswer::Quit);
+}
+
+#[test]
+fn a_cancel_then_a_proceed_does_not_quit() {
+    let gate = ExitGate::default();
+    gate.expect_windows(["main".to_string(), "project-1".to_string()]);
+    assert_eq!(gate.answer("main", false), ExitAnswer::Cancel);
+    assert_eq!(gate.answer("project-1", true), ExitAnswer::Wait);
+    assert_eq!(gate.answer("project-1", true), ExitAnswer::Wait);
+}
+
+#[test]
+fn an_answer_with_no_window_list_decides_alone() {
+    let gate = ExitGate::default();
+    assert_eq!(gate.answer("main", true), ExitAnswer::Quit);
+    assert_eq!(gate.answer("main", false), ExitAnswer::Cancel);
+}
+
+#[test]
+fn a_quit_interrupts_the_running_turns_of_every_open_project() {
+    // GRD-FR-TWMA, PWN-FR-CTXT: the window that answers last must not decide
+    // which project the shutdown reaches.
+    use crate::graduation::{GraduationInterruptionReason as Reason, GraduationState};
+    use crate::project_scope::ProjectScopes;
+    use crate::tools::agent_exec::runtime::CancellationToken;
+    use tauri::Manager;
+    let app = tauri::test::mock_app();
+    app.manage(ProjectScopes::default());
+    let tokens: Vec<CancellationToken> = ["one", "two"]
+        .iter()
+        .map(|id| {
+            let dir = tempfile::tempdir().unwrap();
+            let scopes = app.state::<ProjectScopes>();
+            scopes.get::<ProjectState>(id).set_root(dir.keep());
+            let token = CancellationToken::new();
+            assert!(scopes.get::<GraduationState>(id).claim(
+                "stream",
+                &format!("run-{id}"),
+                false,
+                crate::project_settings::GraduationConcurrency::limited(1),
+                token.clone(),
+            ));
+            token
+        })
+        .collect();
+
+    exit::shut_down_projects(app.handle());
+
+    let scopes = app.state::<ProjectScopes>();
+    for id in ["one", "two"] {
+        assert_eq!(
+            scopes.get::<GraduationState>(id).cancellation_reason(&format!("run-{id}")),
+            Some(Reason::ApplicationShutdown),
+            "the run of the project {id} is stopped for the shutdown"
+        );
+    }
+    assert!(tokens.iter().all(|token| token.is_cancelled()));
 }

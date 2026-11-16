@@ -158,16 +158,16 @@ fn every_command_refuses_while_no_project_is_open() {
     let store = h.store();
 
     assert_eq!(
-        list_agent_turns(None, turns.clone(), project.clone()).unwrap_err(),
+        list_agent_turns(None, turns.clone().into(), project.clone().into()).unwrap_err(),
         ERR_NO_PROJECT_OPEN,
     );
     assert_eq!(
         cancel_agent_turn(
             "turn-1".into(),
             h.app.handle().clone(),
-            turns.clone(),
-            progress.clone(),
-            project.clone(),
+            turns.clone().into(),
+            progress.clone().into(),
+            project.clone().into(),
         )
         .unwrap_err(),
         ERR_NO_PROJECT_OPEN,
@@ -178,7 +178,7 @@ fn every_command_refuses_while_no_project_is_open() {
             ConversationOrigin::stub_artifact("t1", "a.md", true),
             "c1".into(),
             h.app.handle().clone(),
-            project.clone(),
+            project.clone().into(),
         )
         .unwrap_err(),
         ERR_NO_PROJECT_OPEN,
@@ -187,7 +187,7 @@ fn every_command_refuses_while_no_project_is_open() {
     // AGR-FR-22: the commands of the Project scope refuse on the same terms,
     // while the Personal commands answer regardless.
     assert_eq!(
-        agents::list_project_agents(h.app.handle().clone(), store.clone(), project.clone())
+        agents::list_project_agents(h.app.handle().clone(), store.clone(), project.clone().into())
             .unwrap_err(),
         agents::ERR_NO_PROJECT_OPEN,
     );
@@ -197,7 +197,7 @@ fn every_command_refuses_while_no_project_is_open() {
             agents::AgentDraft::default(),
             h.app.handle().clone(),
             store.clone(),
-            project.clone(),
+            project.clone().into(),
         )
         .unwrap_err(),
         agents::ERR_NO_PROJECT_OPEN,
@@ -208,14 +208,14 @@ fn every_command_refuses_while_no_project_is_open() {
             "a1".into(),
             h.app.handle().clone(),
             store.clone(),
-            project.clone(),
-            turns,
-            progress,
+            project.clone().into(),
+            turns.into(),
+            progress.into(),
         )
         .unwrap_err(),
         agents::ERR_NO_PROJECT_OPEN,
     );
-    assert!(agents::list_personal_agents(store, project).is_ok());
+    assert!(agents::list_personal_agents(store, project.into()).is_ok());
 }
 
 #[test]

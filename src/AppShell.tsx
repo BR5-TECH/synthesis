@@ -35,6 +35,7 @@ import { GithubTokenPicker } from "./components/GithubTokenPicker";
 import { CommitMessageModal } from "./components/CommitMessageModal";
 import { RollbackConfirm } from "./components/RollbackConfirm";
 import { ShellGraduationStart } from "./components/ShellGraduationStart";
+import type { ProjectHandle } from "./types";
 import type { GithubPollingController } from "./hooks/useGithubPolling";
 import { useAppOverlays } from "./hooks/useAppOverlays";
 import { useThemePreference } from "./hooks/useThemePreference";
@@ -94,6 +95,18 @@ export interface AppShellProps {
   runsAttention: TabAttention | undefined;
   /** GIT-FR-OGHO: the polling view and the Ready tasks actions. */
   githubPolling: GithubPollingController;
+  /**
+   * PJT-FR-IOEV / PJT-FR-GASB: the project tab layer. Absent, the switcher opens
+   * a pick in this window as it did before project tabs.
+   */
+  projectTabs?: {
+    /** The in-app strip, or nothing on macOS and with one project open. */
+    strip: React.ReactNode;
+    /** Open Another Project… shows the Project picker modal. */
+    openPicker: () => void;
+    /** PJT-FR-GASB: a pick of the switcher asks where the project opens. */
+    choose: (handle: ProjectHandle) => void;
+  };
 }
 
 export function AppShell(props: AppShellProps) {
@@ -117,6 +130,7 @@ export function AppShell(props: AppShellProps) {
     tabAttention,
     runsAttention,
     githubPolling,
+    projectTabs,
   } = props;
   const {
     picker,
@@ -236,12 +250,16 @@ export function AppShell(props: AppShellProps) {
         <TopChrome
           projectName={s.projectName}
           projectPath={s.projectPath}
-          onSwitchProject={s.loadProject}
+          onSwitchProject={projectTabs ? projectTabs.choose : s.loadProject}
           // OVW-FR-11 / EDT-FR-33: a switch writes the outgoing project's
           // pending edits before it opens the next project, and is cancelled if
           // one of those writes is blocked.
           onBeforeSwitchProject={s.flushBeforeTeardown}
-          onOpenAnother={() => void s.openAnother()}
+          onOpenAnother={() =>
+            projectTabs ? projectTabs.openPicker() : void s.openAnother()
+          }
+          resolveProjects={projectTabs !== undefined}
+          projectTabs={projectTabs?.strip}
           // WTS-worktree-selector.md: the worktree selector sits immediately
           // after the project switcher (SNV-FR-32), and is absent entirely
           // while the project is not inside a Git repository (WTS-FR-02).

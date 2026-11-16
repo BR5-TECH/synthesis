@@ -9,6 +9,7 @@
 //! or when it is idle for too long (AGC-FR-YLJW). A speech ends once
 //! (AGC-FR-TCXX).
 
+use crate::project_scope::ProjectStores;
 use std::collections::HashSet;
 
 use super::*;
@@ -490,9 +491,8 @@ pub fn dispatch_speech_impl<R: tauri::Runtime>(
     text: &str,
     speaker: &Participant,
 ) -> Result<AgentTurn, String> {
-    use tauri::Manager;
     expire_idle_speeches(app);
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     if !turns.open_speech(speech_id) {
         logging::log_warn(
             app,
@@ -538,9 +538,8 @@ pub fn steer_speech_impl<R: tauri::Runtime>(
     speech_id: &str,
     text: &str,
 ) -> Vec<AgentTurn> {
-    use tauri::Manager;
     expire_idle_speeches(app);
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let taken = turns.steer_speech(app, speech_id, text);
     logging::log_debug(
         app,
@@ -579,8 +578,7 @@ pub fn end_speech_impl<R: tauri::Runtime>(
 /// AGC-FR-YLJW: end each speech that is idle for the limit or longer, as a
 /// speech with no comment ends (AGC-FR-NFYK).
 pub fn expire_idle_speeches<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    use tauri::Manager;
-    let Some(turns) = app.try_state::<TurnRegistry>() else { return };
+    let Some(turns) = app.try_project_store::<TurnRegistry>() else { return };
     for speech_id in turns.idle_speeches() {
         logging::log_info(
             app,
@@ -599,8 +597,7 @@ fn end_speech<R: tauri::Runtime>(
     ending: SpeechEnding<'_>,
     roots: Option<Roots<'_>>,
 ) -> Vec<AgentTurn> {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let Some((speech, unbound)) = turns.close_speech(app, speech_id, ending) else {
         logging::log_debug(
             app,
@@ -611,7 +608,7 @@ fn end_speech<R: tauri::Runtime>(
         );
         return Vec::new();
     };
-    let progress_registry = app.state::<ProgressRegistry>();
+    let progress_registry = app.project_store::<ProgressRegistry>();
     let mut reached: Vec<AgentTurn> = Vec::new();
     let mut served: Vec<(String, ConversationOrigin)> = Vec::new();
     for entry in unbound {
@@ -684,6 +681,7 @@ fn end_speech<R: tauri::Runtime>(
 // ---------------------------------------------------------------------------
 
 /// AGC-FR-SJQP: `dispatch_speech_turn(nickname, origin, speech_id, text)`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn dispatch_speech_turn<R: tauri::Runtime>(
     nickname: String,
@@ -691,7 +689,7 @@ pub fn dispatch_speech_turn<R: tauri::Runtime>(
     speech_id: String,
     text: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
     settings: State<'_, GlobalSettingsStore>,
 ) -> Result<AgentTurn, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
@@ -701,10 +699,9 @@ pub fn dispatch_speech_turn<R: tauri::Runtime>(
     // as. A speech is not refused for an identity that does not resolve: it is
     // then the local participant.
     let speaker = comments::acting_participant(&settings, &project).unwrap_or_else(|reason| {
-        use tauri::Manager;
         logging::log_warn(
             &app,
-            app.state::<TurnRegistry>().buffer(),
+            app.project_store::<TurnRegistry>().buffer(),
             &[Domain::Ai],
             "speaking author did not resolve",
             log_fields! { "reason" => reason },
@@ -724,12 +721,13 @@ pub fn dispatch_speech_turn<R: tauri::Runtime>(
 }
 
 /// AGC-FR-KXOJ: `steer_speech_turn(speech_id, text)`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn steer_speech_turn<R: tauri::Runtime>(
     speech_id: String,
     text: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());
@@ -738,12 +736,13 @@ pub fn steer_speech_turn<R: tauri::Runtime>(
 }
 
 /// AGC-FR-TCDQ / AGC-FR-NFYK: `end_speech_turn(speech_id, comment_id?)`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn end_speech_turn<R: tauri::Runtime>(
     speech_id: String,
     comment_id: Option<String>,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<AgentTurn>, String> {
     if project.anchor().is_none() {
         return Err(ERR_NO_PROJECT_OPEN.to_string());

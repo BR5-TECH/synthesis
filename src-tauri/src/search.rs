@@ -21,13 +21,14 @@
 //!   matcher, scope, stop). The `#[tauri::command]` halves only resolve state and
 //!   spawn it.
 
+use crate::project_scope::ProjectStores;
 use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, RecvTimeoutError, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
 
 use crate::fs as fsa;
 use crate::progress::{self, OperationState, ProgressRegistry};
@@ -261,11 +262,11 @@ impl<R: tauri::Runtime> SearchSink for tauri::AppHandle<R> {
         // A dropped event must never take down the search it reports on; the
         // terminal event is what a consumer keys its teardown on, and it is
         // emitted on every path out of `run_search`.
-        let _ = self.emit(SEARCH_RESULTS, payload);
+        let _ = self.emit_project(SEARCH_RESULTS, payload);
     }
 
     fn ended(&self, payload: &SearchEndedPayload) {
-        let _ = self.emit(SEARCH_ENDED, payload);
+        let _ = self.emit_project(SEARCH_ENDED, payload);
     }
 }
 
@@ -600,7 +601,7 @@ pub fn run_search<S: SearchSink + ?Sized>(
     let producer = {
         let stop = stop.clone();
         let candidates = Arc::clone(&candidates);
-        std::thread::spawn(move || {
+        crate::project_scope::context::thread_spawn(move || {
             'enumerate: for candidate in candidates.iter() {
                 // SCC-FR-11 / SCC-FR-14: the producer stops at the cap and at a
                 // cancellation rather than finishing the tree.
@@ -638,7 +639,7 @@ pub fn run_search<S: SearchSink + ?Sized>(
             let stop = stop.clone();
             let consumed = Arc::clone(&consumed);
             let root = root.clone();
-            std::thread::spawn(move || loop {
+            crate::project_scope::context::thread_spawn(move || loop {
                 // SCC-FR-14: cancellation is observed at file boundaries, so a
                 // file already being matched is finished rather than abandoned
                 // half-read.
@@ -834,14 +835,15 @@ impl SearchRegistry {
 /// SCC-FR-17: with no project open the search still issues an id, emits no hits,
 /// and ends immediately with `completed`. That is not an error: v1 search is
 /// scoped to the open project's content root.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn start_search<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     query: String,
     mode: SearchMode,
     scope: SearchScope,
-    project: State<'_, ProjectState>,
-    registry: State<'_, SearchRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    registry: crate::project_scope::Scoped<'_, SearchRegistry>,
 ) -> Result<String, String> {
     // Compiled before anything is registered, so an invalid pattern leaves no
     // trace at all (SCC-FR-06).
@@ -851,8 +853,8 @@ pub fn start_search<R: tauri::Runtime>(
     let stop = registry.install(&search_id);
 
     let spawned_id = search_id.clone();
-    std::thread::spawn(move || {
-        let progress_registry = app.state::<ProgressRegistry>();
+    crate::project_scope::context::thread_spawn(move || {
+        let progress_registry = app.project_store::<ProgressRegistry>();
         // SCC-FR-18: every search attributes, capped and full alike. Registered
         // out here rather than inside the guarded body, because PRG-FR-09 says a
         // failure must never strand an operation as permanently running — and an
@@ -888,7 +890,7 @@ pub fn start_search<R: tauri::Runtime>(
             }
         };
         progress::terminate_and_publish(&app, &progress_registry, operation, state);
-        app.state::<SearchRegistry>().retire(&spawned_id);
+        app.project_store::<SearchRegistry>().retire(&spawned_id);
     });
     Ok(search_id)
 }
@@ -906,7 +908,7 @@ fn search_thread_body<R: tauri::Runtime>(
     stop: &Stop,
     operation: progress::OperationId,
 ) -> EndReason {
-    let progress_registry = app.state::<ProgressRegistry>();
+    let progress_registry = app.project_store::<ProgressRegistry>();
 
     let Some(root) = root else {
         // SCC-FR-17: no project open — an id, no hits, and an immediate end.
@@ -919,7 +921,7 @@ fn search_thread_body<R: tauri::Runtime>(
 
     // SCC-FR-03 / SCC-FR-04: the candidates are the scan's file nodes, served
     // from the mounted list. This module walks no tree of its own.
-    let candidates = app.state::<CandidateStore>().candidates(&root);
+    let candidates = app.project_store::<CandidateStore>().candidates(&root);
     // PRG-FR-05: the operation becomes determinate once the candidate count is
     // known (SCC-FR-18).
     progress::update_and_publish(
@@ -938,8 +940,12 @@ fn search_thread_body<R: tauri::Runtime>(
 
 /// SCC-FR-14: stop a running search. A `search_id` that is already ended is a
 /// no-op, not an error.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn cancel_search(search_id: String, registry: State<'_, SearchRegistry>) {
+pub fn cancel_search(
+    search_id: String,
+    registry: crate::project_scope::Scoped<'_, SearchRegistry>,
+) {
     registry.cancel(&search_id);
 }
 

@@ -1,12 +1,14 @@
 //! Moving a run within its own stream's queue (GRD-FR-RHNP).
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// GRD-FR-RHNP: move one run's place in the order of **its own stream's**
 /// queue, and nothing else.
 ///
 /// Both positions index that queue from its earliest-dispatching member as
 /// zero. Every refusal leaves the order exactly as it was.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn reorder_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -14,7 +16,7 @@ pub fn reorder_graduation_run<R: tauri::Runtime>(
     expected_position: usize,
     new_position: usize,
 ) -> Result<GraduationQueue, String> {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let queue = queue::project_queue(&app).ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;

@@ -190,7 +190,7 @@ fn every_refused_continue_changes_nothing() {
     crate::change_proposals::complete_change_edit_decision(
         fx.app.clone(),
         proposal_id.clone(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("the commit is made");
     assert!(plan_proposal(&fx, rested.rest.as_ref().unwrap()).commit.is_some());
@@ -260,7 +260,7 @@ fn the_ledger_numbers_the_hunks_of_a_path_and_skips_a_withdrawn_one() {
         all[1].hunk.id.clone(),
         "Line I.\n".into(),
         loaded.checksum.clone(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("edited");
     accept(&fx, &proposal_id, &all[1].hunk.id, None).expect("accepted");
@@ -314,7 +314,7 @@ fn an_edit_and_a_decline_wait_on_the_questions() {
         design,
         "# Other\n".into(),
         loaded.checksum,
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     );
     assert_eq!(edited.map(|_| ()).unwrap_err(), "plan_questions_pending");
     let declined = crate::change_proposals::decline_change_edit_proposal(
@@ -322,7 +322,7 @@ fn an_edit_and_a_decline_wait_on_the_questions() {
         proposal_id.clone(),
         None,
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     );
     assert_eq!(declined.map(|_| ()).unwrap_err(), "plan_questions_pending");
     let held = plan_proposal(&fx, rested.rest.as_ref().unwrap());
@@ -382,8 +382,12 @@ fn a_discard_after_continue_removes_the_plan_base_and_keeps_the_close_commit() {
     let repo = git2::Repository::open(stream.worktree()).unwrap();
     assert!(repo.find_reference(&plan::plan_base::ref_name(&rested.id)).is_ok());
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), rested.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        rested.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert!(repo.find_reference(&plan::plan_base::ref_name(&rested.id)).is_err());
     assert_eq!(head_of(&stream.worktree()), close, "the close commit stays on the branch");
 }

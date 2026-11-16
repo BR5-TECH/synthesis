@@ -12,9 +12,9 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
-const listeners: Record<string, (() => void)[]> = {};
+const listeners: Record<string, ((event: { payload: unknown }) => void)[]> = {};
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async (name: string, handler: () => void) => {
+  listen: vi.fn(async (name: string, handler: (event: { payload: unknown }) => void) => {
     (listeners[name] ??= []).push(handler);
     return () => {
       listeners[name] = (listeners[name] ?? []).filter((h) => h !== handler);
@@ -225,7 +225,7 @@ describe("the Source choice (SET-FR-WDYJ / SET-FR-XUKD)", () => {
     await renderSection();
     await waitFor(() => expect((listeners["delivery-source-changed"] ?? []).length).toBe(1));
     stored = { ...DEFAULTS, source: { kind: "github" } };
-    listeners["delivery-source-changed"][0]();
+    listeners["delivery-source-changed"][0]({ payload: null });
     await waitFor(() => expect(radio("GitHub Project").checked).toBe(true));
     expect(calls("get_delivery_source")).toHaveLength(2);
   });

@@ -43,6 +43,7 @@ pub fn set_turn_timeout_impl(
         .ok_or_else(|| ERR_UNKNOWN_PROVIDER.to_string())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_ai_api_turn_timeout(
     provider: String,

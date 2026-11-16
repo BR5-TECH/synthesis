@@ -11,6 +11,7 @@ mod manager;
 mod oauth;
 mod oauth_flow;
 mod operations;
+mod scope_setup;
 mod scopes;
 mod stdio;
 mod tool;

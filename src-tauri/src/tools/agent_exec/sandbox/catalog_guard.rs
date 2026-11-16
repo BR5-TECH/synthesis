@@ -148,7 +148,7 @@ impl CatalogGuard {
         let (locked, waiting) = mpsc::channel();
         // The reader drains the output until the guard ends, so the guard
         // never blocks on a full pipe.
-        std::thread::spawn(move || {
+        crate::project_scope::context::thread_spawn(move || {
             let mut locked = Some(locked);
             for line in BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };

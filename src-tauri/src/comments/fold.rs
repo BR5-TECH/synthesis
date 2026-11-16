@@ -67,6 +67,9 @@ pub enum FoldTarget<'a> {
     /// one discussion that note carries rather than every discussion of a
     /// target that may accumulate several.
     NoteDiscussion { note_id: &'a str },
+    /// CMS-FR-ACLX: the one log of the Map owner, which holds the Map thread and
+    /// every node thread.
+    MapDiscussion,
     /// CMS-FR-GJEY: one file's fragment log of a change, keyed by the file's
     /// change-relative path.
     ChangeFile { stream_id: &'a str, change: &'a str, file_rel: &'a str },
@@ -88,6 +91,7 @@ impl<'a> FoldTarget<'a> {
             FoldTarget::NoteDiscussion { note_id } => {
                 DiscussionTarget::Note { note_id: note_id.to_string() }
             }
+            FoldTarget::MapDiscussion => DiscussionTarget::Map,
             FoldTarget::ChangeFile { stream_id, change, .. }
             | FoldTarget::ChangeDiscussion { stream_id, change } => DiscussionTarget::Change {
                 stream_id: stream_id.to_string(),
@@ -190,6 +194,14 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
         let Some(fragment_target) = fragment else {
             continue;
         };
+        // CMS-FR-SJTY: the node reference is read from the opening event alone,
+        // and only a log of the Map owner can hold one.
+        let map_node = match (&event.body, target) {
+            (EventBody::DiscussionOpened { map_node, .. }, FoldTarget::MapDiscussion) => {
+                map_node.clone()
+            }
+            _ => None,
+        };
         if discussions.contains_key(&event.thread_id) {
             // A second opening for one discussion id: the first is the one that
             // happened. Ignoring the later one keeps the fold total rather than
@@ -207,6 +219,7 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                 resolved: false,
                 created_at: event.at.clone(),
                 updated_at: event.at.clone(),
+                map_node,
                 resolution: ResolutionMarks::default(),
             },
         );

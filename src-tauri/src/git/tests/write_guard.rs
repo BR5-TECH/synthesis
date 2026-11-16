@@ -370,19 +370,28 @@ fn the_commands_read_the_active_branch_and_record_a_confirmation() {
     app.state::<crate::project::ProjectState>().set_root(f.root());
     let handle = app.handle().clone();
 
-    let read = tauri::async_runtime::block_on(get_branch_write_guard(None, false, handle.clone()))
-        .expect("a guard");
+    let read = tauri::async_runtime::block_on(get_branch_write_guard(
+        None,
+        false,
+        handle.clone(),
+        Default::default(),
+    ))
+    .expect("a guard");
     assert_eq!(read.branch, current);
     assert!(read.is_default && read.is_main && !read.confirmed);
 
-    let confirmed =
-        tauri::async_runtime::block_on(confirm_main_branch_write(current.clone(), handle.clone()))
-            .expect("confirmed");
+    let confirmed = tauri::async_runtime::block_on(confirm_main_branch_write(
+        current.clone(),
+        handle.clone(),
+        Default::default(),
+    ))
+    .expect("confirmed");
     assert!(confirmed.confirmed);
     let again = tauri::async_runtime::block_on(get_branch_write_guard(
         Some(current.clone()),
         false,
         handle,
+        Default::default(),
     ))
     .expect("a guard");
     assert!(again.confirmed);

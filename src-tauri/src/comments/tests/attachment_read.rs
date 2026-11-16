@@ -522,6 +522,7 @@ fn an_opening_event_of_the_wrong_kind_for_its_log_folds_to_nothing() {
                 target: Some(DiscussionTarget::Draft { draft_id: "d1".into() }),
                 draft_id: None,
                 fragment_target: None,
+                map_node: None,
             },
         },
         Event {

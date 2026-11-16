@@ -21,6 +21,7 @@
 //! no agent turn: the calling turn is running and reads the close in the
 //! result (DDC-FR-KQZN).
 
+use crate::project::OpenProject as _;
 use tauri::Manager;
 
 use super::decide_changes::{
@@ -119,7 +120,7 @@ where
         }
         let missing = || crate::prompt_proposals::ERR_NO_PROJECT_OPEN.to_string();
         let store = self.app.try_state::<crate::global_settings::GlobalSettingsStore>();
-        let project = self.app.try_state::<crate::project::ProjectState>();
+        let project = self.app.open_project_state();
         match (store, project) {
             (Some(store), Some(project)) => comments::acting_participant(&store, &project),
             _ => Err(missing()),

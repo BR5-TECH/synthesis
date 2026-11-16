@@ -1,31 +1,39 @@
 //! The Tauri commands of the notes contract surface.
 
 use super::*;
-use tauri::Manager;
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 
 // ---------------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_notes_for_entity(
     entity_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<NoteListItem>, String> {
     let root = project.require_root()?;
     let store = project.require_store()?;
     Ok(list_notes_for_entity_in(&root, &store, &entity_id))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn list_project_notes(project: State<'_, ProjectState>) -> Result<Vec<NoteListItem>, String> {
+pub fn list_project_notes(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<Vec<NoteListItem>, String> {
     let root = project.require_root()?;
     let store = project.require_store()?;
     Ok(list_project_notes_in(&root, &store))
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn list_all_notes(project: State<'_, ProjectState>) -> Result<Vec<NoteListItem>, String> {
+pub fn list_all_notes(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<Vec<NoteListItem>, String> {
     let root = project.require_root()?;
     let store = project.require_store()?;
     Ok(list_all_notes_in(&root, &store))
@@ -75,6 +83,7 @@ fn note_warn<R: tauri::Runtime>(
 /// Both outcomes are reported. The refusal especially: `note_body_too_large`
 /// (NTC-FR-23) is the one an author hits in ordinary use, and a handled error
 /// that reports nothing is invisible in the one place anybody will look.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn create_note<R: tauri::Runtime>(
     scope: NoteScope,
@@ -82,7 +91,7 @@ pub fn create_note<R: tauri::Runtime>(
     reminder: Option<String>,
     revision: Option<String>,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Note, String> {
     let root = project.require_root()?;
     let body_bytes = body.len();
@@ -110,12 +119,13 @@ pub fn create_note<R: tauri::Runtime>(
 /// NTC-FR-05, and NTC-FR-24: a **body** rewrite surfaces on the internal
 /// channel; an update that changed only the reminder or only the scope does not,
 /// neither of them changing what is indexed (BMI-FR-29).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn update_note<R: tauri::Runtime>(
     id: String,
     fields: NoteFields,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Note, String> {
     let root = project.require_root()?;
     // The shape of what was submitted, not what it said: whether a body was
@@ -164,6 +174,7 @@ pub fn update_note<R: tauri::Runtime>(
 /// its success: a cleanup that failed leaves the note and its conversation
 /// whole, and cancelling an agent mid-answer in a conversation that is still
 /// there would cost the author work for nothing (AGC-FR-30).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn delete_note<R: tauri::Runtime>(id: String, app: tauri::AppHandle<R>) -> Result<(), String> {
     delete_note_transaction(&app, &id)
@@ -177,7 +188,7 @@ pub(crate) fn delete_note_transaction<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     id: &str,
 ) -> Result<(), String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = project.require_root()?;
     let store = project.require_store()?;
     delete_note_in(&root, &store, id).inspect_err(|err| {
@@ -189,8 +200,8 @@ pub(crate) fn delete_note_transaction<R: tauri::Runtime>(
             crate::log_fields! { "noteId" => id, "error" => err.clone() },
         );
     })?;
-    let turns = app.state::<crate::agent_conversations::TurnRegistry>();
-    let progress = app.state::<crate::progress::ProgressRegistry>();
+    let turns = app.project_store::<crate::agent_conversations::TurnRegistry>();
+    let progress = app.project_store::<crate::progress::ProgressRegistry>();
     crate::agent_conversations::cancel_turns_for_note(app, &turns, &progress, id);
     // NTC-FR-24: a deletion is a change to the set of notes, so the `notes`
     // index loses its document on the next pass (BMI-FR-29). Announced after the

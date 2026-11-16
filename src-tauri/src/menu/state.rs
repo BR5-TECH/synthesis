@@ -53,6 +53,7 @@ impl<R: tauri::Runtime> SaveMenuItems<R> {
 /// Menu mutation must happen on the main thread on macOS, so the setters are
 /// hopped there. Best-effort throughout: a menu that cannot be updated must not
 /// fail the frontend's render path.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_save_menu_state<R: tauri::Runtime>(
     save: bool,
@@ -126,6 +127,7 @@ impl<R: tauri::Runtime> FindMenuItems<R> {
 /// Menu mutation must happen on the main thread on macOS, so the setters are
 /// hopped there. Best-effort throughout: a menu that cannot be updated must not
 /// fail the frontend's render path.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_find_menu_state<R: tauri::Runtime>(
     enabled: bool,

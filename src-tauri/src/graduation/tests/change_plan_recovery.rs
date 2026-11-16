@@ -187,7 +187,7 @@ fn a_plan_proposal_that_an_earlier_attempt_recorded_is_taken_on_continue() {
         earlier[0].id.clone(),
         None,
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("declined");
 
@@ -237,8 +237,12 @@ fn a_discard_while_the_recording_is_blocked_deletes_the_reserved_set() {
         .expect("the reserved set");
     assert_eq!(Some(held.set_id), recording.set_id);
 
-    crate::graduation::discard_graduation_run(fx.app.clone(), blocked.id.clone())
-        .expect("discarded");
+    crate::graduation::discard_graduation_run(
+        fx.app.clone(),
+        blocked.id.clone(),
+        Default::default(),
+    )
+    .expect("discarded");
     assert!(
         crate::comments::read_question_set(&store(&fx), &project_root(&fx), &thread_id).is_none()
     );
@@ -271,7 +275,7 @@ fn a_submission_whose_append_fails_takes_its_answers_back() {
             set_id.clone(),
             answers,
             fx.app.state(),
-            fx.app.state(),
+            fx.app.state::<crate::project::ProjectState>().into(),
         )
         .map(|_| ())
     };

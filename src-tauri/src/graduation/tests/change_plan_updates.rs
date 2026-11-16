@@ -622,7 +622,7 @@ fn a_refused_recording_step_is_continued_alone() {
         earlier[0].id.clone(),
         None,
         fx.app.state(),
-        fx.app.state(),
+        fx.app.state::<crate::project::ProjectState>().into(),
     )
     .expect("declined");
     let continued = fx.continue_run(&blocked);

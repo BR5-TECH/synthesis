@@ -9,6 +9,8 @@
 //! the run from writing anywhere else — the dispatch gate (GRD-FR-XRDY) and the
 //! commit guard (GRD-FR-VAUE).
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use std::path::{Path, PathBuf};
 
 use super::*;
@@ -36,6 +38,7 @@ pub struct DirectGraduationPreflight {
 ///
 /// Read-only. It creates nothing, and the start uses the same reading, so the
 /// dialog and the refusal cannot disagree about what is dirty.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn preflight_direct_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -53,6 +56,7 @@ pub fn preflight_direct_graduation<R: tauri::Runtime>(
 
 /// GSU-FR-PVFP: start a direct run, or start nothing.
 // GRD-FR-WJLO: the guard read can reach GitHub, so not on the main thread.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn start_direct_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -64,7 +68,7 @@ pub fn start_direct_graduation<R: tauri::Runtime>(
     // write lock.
     let pinned = Some((expected_worktree.as_str(), expected_branch.as_str()));
     super::write_check::prime_start_write(&app, &queue::project_key(&app), pinned);
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let refuse = |reason: String| -> String {
@@ -85,7 +89,7 @@ pub fn start_direct_graduation<R: tauri::Runtime>(
     // GSU-FR-IJEE: the draft checks come first.
     queue::require_unlocked_draft(&app, &draft_id).map_err(&refuse)?;
     let root = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|state| state.require_root().ok())
         .ok_or_else(|| refuse(ERR_NO_PROJECT_OPEN.to_string()))?;
     let record = crate::drafts::read_draft_prompt(&root, &draft_id).map_err(|reason| {
@@ -196,7 +200,7 @@ fn read_preflight<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<DirectGraduationPreflight, String> {
     let root = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|state| state.require_root().ok())
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let entry = crate::worktree::active_entry_for(&root).map_err(|reason| {
@@ -327,7 +331,7 @@ pub fn target_worktree<R: tauri::Runtime>(
 pub fn require_no_dispatched_direct_run<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    let claimed = app.try_state::<GraduationState>().and_then(|state| state.direct_claim());
+    let claimed = app.try_project_store::<GraduationState>().and_then(|state| state.direct_claim());
     match claimed.or_else(|| queue::dispatched_direct_run(app)) {
         Some(run_id) => {
             logging::log_warn(

@@ -15,3 +15,4 @@ mod loaders;
 mod recent;
 mod refresh;
 mod runs;
+mod ticks;

@@ -10,7 +10,6 @@ use std::time::Instant;
 
 use git2::BranchType;
 use serde::Serialize;
-use tauri::State;
 
 use crate::changes::{self, ERR_UNKNOWN_BRANCH};
 use crate::log_fields;
@@ -166,12 +165,13 @@ pub fn branch_information_reported<R: tauri::Runtime>(
 }
 
 /// GTC-FR-TGOI: what one branch is and holds.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_branch_information(
     name: String,
     kind: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<BranchInformation, String> {
     branch_information_reported(&app, &logging::BUFFER, &project.require_root()?, &name, &kind)
 }

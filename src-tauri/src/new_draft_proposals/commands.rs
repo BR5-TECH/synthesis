@@ -17,20 +17,22 @@ pub struct NewDraftBody {
 }
 
 /// DCP-FR-ZDSP: every new-draft proposal of the draft, newest first.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_new_draft_proposals(
     draft_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<NewDraftProposal>, String> {
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     list_impl(&root, &draft_id)
 }
 
 /// DCP contract surface: the proposed body as it stands.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_new_draft_proposal_body(
     proposal_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewDraftBody, String> {
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     Ok(NewDraftBody { body: load_body_impl(&root, &proposal_id)? })
@@ -42,7 +44,7 @@ fn decide_command<R: tauri::Runtime>(
     decision: NewDraftDecision,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewDraftDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -62,13 +64,14 @@ where
 }
 
 /// DCP-FR-KOOA: accept one new-draft proposal and create its draft.
+#[project_scope_macros::project_scoped]
 #[tauri::command(async)]
 pub fn accept_new_draft_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewDraftDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -82,13 +85,14 @@ where
 }
 
 /// DCP-FR-FZEP: reject one new-draft proposal; nothing is created.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn reject_new_draft_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
     feedback: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NewDraftDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
@@ -97,12 +101,13 @@ where
 }
 
 /// DCP-FR-VLLP: the author ends the decomposition.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn confirm_draft_decomposition<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<drafts::DraftRecord, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,

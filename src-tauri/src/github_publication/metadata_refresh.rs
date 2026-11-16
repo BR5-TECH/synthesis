@@ -6,12 +6,15 @@
 //! timeout, runs the 30-minute timer, emits the two events, and answers the
 //! two commands of the publication chooser.
 
+use crate::project::OpenProject as _;
+use crate::project_scope::events::EmitToProject;
+use crate::project_scope::ProjectStores;
 use std::future::Future;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 use tokio::sync::oneshot;
 
 use super::metadata_cache::*;
@@ -19,7 +22,6 @@ use super::records::*;
 use super::{flow, issues_client, project_token, resolve_publication_repository_with};
 use crate::log_fields;
 use crate::logging::{self, Domain};
-use crate::project::ProjectState;
 
 /// GHP-FR-JIAU: the cache changed. Kebab-case, because Tauri rejects a space
 /// in an event name at `emit`.
@@ -105,13 +107,15 @@ pub fn refresh_error_text(code: &str) -> String {
     }
 }
 
-fn cache<R: Runtime>(app: &AppHandle<R>) -> Option<tauri::State<'_, PublicationMetadataCache>> {
-    app.try_state::<PublicationMetadataCache>()
+fn cache<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Option<crate::project_scope::Scoped<'_, PublicationMetadataCache>> {
+    app.try_project_store::<PublicationMetadataCache>()
 }
 
 /// The open project and its active worktree, or `None` where none is open.
 fn current_key<R: Runtime>(app: &AppHandle<R>) -> Option<CacheKey> {
-    let project = app.try_state::<ProjectState>()?;
+    let project = app.open_project_state()?;
     let root = project.require_root().ok()?;
     Some(CacheKey { project: project.slot_key(), worktree: root.path().to_path_buf() })
 }
@@ -120,7 +124,7 @@ fn current_key<R: Runtime>(app: &AppHandle<R>) -> Option<CacheKey> {
 /// selected. Settings that cannot be read state nothing, so a refresh still
 /// runs and fails with `invalid_publication_settings` (GHP-FR-ISJI).
 fn no_github_project_selected<R: Runtime>(app: &AppHandle<R>) -> bool {
-    let Some(project) = app.try_state::<ProjectState>() else {
+    let Some(project) = app.open_project_state() else {
         return false;
     };
     let Ok(root) = project.require_root() else {
@@ -167,7 +171,7 @@ fn clear<R: Runtime>(
         had
     };
     if had_lists {
-        let _ = app.emit(
+        let _ = app.emit_project(
             PUBLICATION_METADATA_CHANGED,
             PublicationMetadataCacheChanged { remote_name: None, metadata: None },
         );
@@ -244,7 +248,9 @@ pub fn listen_for_token_changes<R: Runtime>(app: &AppHandle<R>) {
     use tauri::Listener as _;
     let handle = app.clone();
     app.listen_any(crate::github_tokens::GITHUB_TOKENS_CHANGED, move |_| {
-        invalidate(&handle, "github_token");
+        // The event names no project, so every open project is invalidated in
+        // its own context (PWN-FR-CTXT).
+        crate::project_scope::for_each_project(&handle, || invalidate(&handle, "github_token"));
     });
 }
 
@@ -289,7 +295,7 @@ fn arm_idle_timer<R: Runtime>(app: &AppHandle<R>) {
 }
 
 fn spawn_timer<R: Runtime>(app: &AppHandle<R>, epoch: u64) {
-    tauri::async_runtime::spawn(periodic_tick(app.clone(), epoch));
+    crate::project_scope::context::spawn(periodic_tick(app.clone(), epoch));
 }
 
 /// GHP-FR-RVCL: one periodic refresh 30 minutes after `epoch` was armed,
@@ -306,9 +312,9 @@ pub(super) async fn periodic_tick<R: Runtime>(app: AppHandle<R>, epoch: u64) {
 /// GHP-FR-AWEZ: read the lists off the window thread, then settle.
 fn spawn_refresh<R: Runtime>(app: &AppHandle<R>, ticket: RefreshTicket) {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    crate::project_scope::context::spawn(async move {
         let reader = app.clone();
-        let work = tauri::async_runtime::spawn_blocking(move || read_fresh(&reader));
+        let work = crate::project_scope::context::spawn_blocking(move || read_fresh(&reader));
         settle_within_timeout(&app, &ticket, work).await;
     });
 }
@@ -354,7 +360,7 @@ pub(super) async fn settle_within_timeout<R: Runtime, E>(
 /// GHP-FR-HGVL / GHP-FR-AWEZ: one read of the four lists for the resolved
 /// publication remote, through the read of GHP-FR-MDLD.
 pub(super) fn read_fresh<R: Runtime>(app: &AppHandle<R>) -> Result<CachedLists, String> {
-    let project = app.state::<ProjectState>();
+    let project = app.open_project_state_or_default();
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT.to_string())?;
     let polling = crate::project_settings::load_github_polling_settings_from(&root)
         .map_err(|_| ERR_INVALID_PUBLICATION_SETTINGS.to_string())?;
@@ -412,7 +418,7 @@ pub(super) fn finish<R: Runtime>(
         let _order = state.emit_lock();
         let (remote_name, metadata) = cached_view(app);
         if state.slot().generation() == ticket.generation {
-            let _ = app.emit(
+            let _ = app.emit_project(
                 PUBLICATION_METADATA_CHANGED,
                 PublicationMetadataCacheChanged { remote_name, metadata },
             );
@@ -465,7 +471,7 @@ fn report<R: Runtime>(app: &AppHandle<R>, ticket: &RefreshTicket, settlement: &S
             // GHP-FR-KPXF: the settlement kept the failure before this event,
             // so a window that takes it when the event comes finds it.
             if ticket.trigger == RefreshTrigger::Startup {
-                let _ = app.emit(
+                let _ = app.emit_project(
                     PUBLICATION_METADATA_STARTUP_FAILED,
                     PublicationMetadataStartupFailed {
                         error_code: code.to_string(),
@@ -497,7 +503,7 @@ fn report<R: Runtime>(app: &AppHandle<R>, ticket: &RefreshTicket, settlement: &S
 /// the Types they resolve to (GHP-FR-JTYL).
 fn compose<R: Runtime>(app: &AppHandle<R>, lists: &CachedLists) -> PublicationMetadata {
     let settings = app
-        .try_state::<ProjectState>()
+        .open_project_state()
         .and_then(|project| project.require_root().ok())
         .and_then(|root| crate::project_settings::load_github_publication_settings_from(&root).ok())
         .unwrap_or_default();
@@ -563,6 +569,7 @@ pub(super) fn cached_metadata_for<R: Runtime>(
 }
 
 /// GHP-FR-JTYL: the cached lists of `remote_name`. Contacts no network.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_publication_metadata_cache(
     remote_name: String,
@@ -585,6 +592,7 @@ pub fn get_publication_metadata_cache(
 
 /// GHP-FR-KPXF: the kept startup failure, which this call discards. Contacts
 /// no network.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn take_publication_metadata_startup_failure(
     app: AppHandle,
@@ -611,6 +619,7 @@ pub(super) fn take_startup_failure<R: Runtime>(
 
 /// GHP-FR-SIMK: start a refresh, or join the running one, and answer when it
 /// ends. It runs in the background and blocks no other command.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn refresh_publication_metadata(
     app: AppHandle,

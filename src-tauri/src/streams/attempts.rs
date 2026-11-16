@@ -5,7 +5,7 @@
 //! three go when the attempt completes, whatever it decided, and what a killed
 //! process stranded is reclaimed at the next listing.
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use super::artifact::MergeArtifact;
 use super::*;
@@ -53,8 +53,10 @@ pub(super) fn sweep_stranded_attempts<R: tauri::Runtime>(app: &tauri::AppHandle<
     let Ok(main) = git::primary_repo(&root) else {
         return;
     };
-    let live: Vec<String> =
-        app.try_state::<StreamState>().map(|state| state.attempts_running()).unwrap_or_default();
+    let live: Vec<String> = app
+        .try_project_store::<StreamState>()
+        .map(|state| state.attempts_running())
+        .unwrap_or_default();
 
     let attempts_root = store.root().join(artifact::ATTEMPTS_DIR);
     let stranded: Vec<String> = fs
@@ -101,7 +103,7 @@ pub(super) fn sweep_interrupted_updates<R: tauri::Runtime>(app: &tauri::AppHandl
         return;
     };
     let key = commands::project_key(app);
-    let state = app.try_state::<StreamState>();
+    let state = app.try_project_store::<StreamState>();
     let live = |stream_id: &str| {
         state
             .as_ref()

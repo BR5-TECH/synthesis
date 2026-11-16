@@ -25,7 +25,6 @@ use std::path::Path;
 use git2::{BranchType, Delta, Diff, DiffFindOptions, DiffOptions, Oid, Repository};
 use notify_debouncer_mini::DebounceEventResult;
 use serde::Serialize;
-use tauri::State;
 
 use crate::progress::{self, ProgressRegistry};
 use crate::project::ProjectState;
@@ -753,11 +752,12 @@ pub fn common_dir_change_count(result: &DebounceEventResult, common_dir: Option<
 /// tree the diff walk is long enough to be worth showing, and on a small one it
 /// registers and terminates within the call, which is exactly what PRG-FR-06
 /// prescribes for work that finishes quickly.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_uncommitted_changes(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    progress: State<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
 ) -> Result<ChangeSet, String> {
     let root = project.require_root()?;
     progress::attribute(
@@ -770,12 +770,13 @@ pub fn list_uncommitted_changes(
     )
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_branch_changes(
     target_branch: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    progress: State<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
 ) -> Result<ChangeSet, String> {
     let root = project.require_root()?;
     progress::attribute(
@@ -791,11 +792,12 @@ pub fn list_branch_changes(
 /// CHC-FR-21 / CHC-FR-22: the diff summary `../ui/STB-status-bar.md` STB-FR-25
 /// renders. Independent of the Changes panel — it holds no change set of its own
 /// and needs none to have been loaded.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_uncommitted_diff_totals(
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
-    progress: State<'_, ProgressRegistry>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
 ) -> Result<DiffTotals, String> {
     let root = project.require_root()?;
     progress::attribute(
@@ -808,16 +810,20 @@ pub fn get_uncommitted_diff_totals(
     )
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn get_default_branch(project: State<'_, ProjectState>) -> Result<String, String> {
+pub fn get_default_branch(
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<String, String> {
     let root = project.require_root()?;
     let repo = open_repo(&root)?;
     default_branch(&repo)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_comparison_branches(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<BranchOption>, String> {
     let root = project.require_root()?;
     comparison_branches(&root)

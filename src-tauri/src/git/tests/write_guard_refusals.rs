@@ -65,6 +65,7 @@ fn a_commit_on_an_unconfirmed_main_branch_moves_no_head() {
         vec!["README.md".to_string()],
         None,
         app.handle().clone(),
+        Default::default(),
     )));
 
     assert_eq!(head_of(&dir), before, "the refused commit moved HEAD");
@@ -84,6 +85,7 @@ fn a_save_on_an_unconfirmed_main_branch_keeps_the_bytes() {
         app.handle().clone(),
         "spec.md".to_string(),
         "# Changed\n".to_string(),
+        Default::default(),
     )));
 
     assert_eq!(std::fs::read_to_string(dir.path().join("spec.md")).unwrap(), "# Spec\n");
@@ -102,6 +104,7 @@ fn a_draft_deletion_on_an_unconfirmed_main_branch_keeps_the_draft() {
     assert_unconfirmed(tauri::async_runtime::block_on(crate::drafts::delete_draft(
         created.draft.id.clone(),
         app.handle().clone(),
+        Default::default(),
     )));
 
     assert!(draft.is_dir(), "the refused deletion removed the draft");

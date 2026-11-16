@@ -218,6 +218,17 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
             None => format!("[asked the author to export {path}]"),
         },
         comments::Attachment::ChangeActionRequest { .. } => action_request_line(attachment),
+        // MPR-FR-PMLX: the focus of the turn the comment triggers. The same
+        // line serves the history, so the agent sees what each comment pointed at.
+        comments::Attachment::MapNode { node } => {
+            crate::agent_conversations::map_context::node_line(node)
+        }
+        // CMS-FR-OIUO: a reference to a plan proposal. The rows and their states
+        // come from the `map_context` section (MPR-FR-NXDX), so the line names
+        // the proposal and nothing more.
+        comments::Attachment::MapPlanProposal { proposal_id } => {
+            format!("[recorded plan proposal {proposal_id}]")
+        }
         // CMS-FR-TUHL, CMS-FR-KVDV: the group marks name who took part and show
         // none of what the advisors said, which the reply already used.
         comments::Attachment::Synthesis => {

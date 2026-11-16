@@ -149,6 +149,7 @@ fn an_update_is_refused_while_a_run_holds_the_stream() {
         stream.id.clone(),
         StreamUpdateStrategy::MergeSource,
         pinned,
+        Default::default(),
     )
     .expect_err("refused");
     assert_eq!(refusal, ERR_STREAM_BUSY);
@@ -233,16 +234,28 @@ fn cancelling_an_update_reaches_its_token_and_an_idle_stream_is_no_error() {
     let fx = Fixture::new();
     let stream = fx.create("idle", None).expect("created");
 
-    update_commands::cancel_work_stream_update(fx.app.clone(), stream.id.clone())
-        .expect("a stream with no update is answered, not refused");
-    update_commands::cancel_work_stream_update(fx.app.clone(), "no-such-stream".to_string())
-        .expect("and so is a stream that does not exist");
+    update_commands::cancel_work_stream_update(
+        fx.app.clone(),
+        stream.id.clone(),
+        Default::default(),
+    )
+    .expect("a stream with no update is answered, not refused");
+    update_commands::cancel_work_stream_update(
+        fx.app.clone(),
+        "no-such-stream".to_string(),
+        Default::default(),
+    )
+    .expect("and so is a stream that does not exist");
 
     let state = fx.app.state::<StreamState>();
     let hold = state.begin_repository_update(&stream.id, Reconciliation::Update).expect("the hold");
     assert!(!hold.cancellation().is_cancelled());
-    update_commands::cancel_work_stream_update(fx.app.clone(), stream.id.clone())
-        .expect("answered");
+    update_commands::cancel_work_stream_update(
+        fx.app.clone(),
+        stream.id.clone(),
+        Default::default(),
+    )
+    .expect("answered");
     assert!(hold.cancellation().is_cancelled());
 }
 
@@ -263,7 +276,11 @@ fn a_cancelled_update_records_cancelled_and_moves_neither_branch() {
     let dispatch = ScriptedDispatch::new(vec![Script::SettleAnd(
         Vec::new(),
         Box::new(move || {
-            let _ = update_commands::cancel_work_stream_update(app.clone(), stream_id.clone());
+            let _ = update_commands::cancel_work_stream_update(
+                app.clone(),
+                stream_id.clone(),
+                Default::default(),
+            );
         }),
     )]);
     let record = update_job_scripted(
@@ -301,13 +318,21 @@ fn clearing_and_retrying_are_refused_while_an_update_runs() {
     update_record::write_update(&fs, &store, &record).expect("written");
 
     assert_eq!(
-        update_commands::clear_work_stream_update(fx.app.clone(), stream.id.clone())
-            .expect_err("refused"),
+        update_commands::clear_work_stream_update(
+            fx.app.clone(),
+            stream.id.clone(),
+            Default::default()
+        )
+        .expect_err("refused"),
         ERR_UPDATE_IN_PROGRESS,
     );
     assert_eq!(
-        update_commands::retry_work_stream_update(fx.app.clone(), stream.id.clone())
-            .expect_err("refused"),
+        update_commands::retry_work_stream_update(
+            fx.app.clone(),
+            stream.id.clone(),
+            Default::default()
+        )
+        .expect_err("refused"),
         ERR_UPDATE_IN_PROGRESS,
     );
 }
@@ -320,8 +345,12 @@ fn an_unknown_stream_is_refused_by_every_update_command() {
     let unknown = "no-such-stream".to_string();
 
     assert_eq!(
-        update_commands::get_work_stream_update(fx.app.clone(), unknown.clone())
-            .expect_err("refused"),
+        update_commands::get_work_stream_update(
+            fx.app.clone(),
+            unknown.clone(),
+            Default::default()
+        )
+        .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
@@ -330,12 +359,14 @@ fn an_unknown_stream_is_refused_by_every_update_command() {
             unknown.clone(),
             StreamUpdateStrategy::MergeSource,
             "0000000000000000000000000000000000000000".to_string(),
+            Default::default(),
         )
         .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
-        update_commands::clear_work_stream_update(fx.app.clone(), unknown).expect_err("refused"),
+        update_commands::clear_work_stream_update(fx.app.clone(), unknown, Default::default())
+            .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
 }
@@ -368,7 +399,8 @@ fn every_update_command_refuses_a_stream_the_project_does_not_hold() {
     let unknown = || "no-such-stream".to_string();
 
     assert_eq!(
-        update_commands::get_work_stream_update(fx.app.clone(), unknown()).expect_err("refused"),
+        update_commands::get_work_stream_update(fx.app.clone(), unknown(), Default::default())
+            .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
@@ -377,12 +409,14 @@ fn every_update_command_refuses_a_stream_the_project_does_not_hold() {
             unknown(),
             StreamUpdateStrategy::MergeSource,
             "0000000000000000000000000000000000000000".to_string(),
+            Default::default(),
         )
         .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
-        update_commands::retry_work_stream_update(fx.app.clone(), unknown()).expect_err("refused"),
+        update_commands::retry_work_stream_update(fx.app.clone(), unknown(), Default::default())
+            .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
@@ -390,17 +424,20 @@ fn every_update_command_refuses_a_stream_the_project_does_not_hold() {
             fx.app.clone(),
             unknown(),
             Vec::new(),
+            Default::default(),
         )
         .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
-        update_commands::clear_work_stream_update(fx.app.clone(), unknown()).expect_err("refused"),
+        update_commands::clear_work_stream_update(fx.app.clone(), unknown(), Default::default())
+            .expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     // WKS-FR-WEJK: cancellation alone is answered without an error, a stream
     // with no update running being no failure of the request.
-    update_commands::cancel_work_stream_update(fx.app.clone(), unknown()).expect("answered");
+    update_commands::cancel_work_stream_update(fx.app.clone(), unknown(), Default::default())
+        .expect("answered");
 }
 
 // GRB-FR-TXVL / WKS-FR-ZHTC: a `rebase_source` update that settles nothing

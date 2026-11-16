@@ -1,6 +1,6 @@
 //! Pass scopes and pass scheduling (BMI-FR-12, BMI-FR-15 to BMI-FR-21).
 
-use tauri::Manager;
+use crate::project_scope::ProjectStores;
 
 use super::{Bm25Indexer, IndexId, COALESCE_WINDOW};
 
@@ -78,7 +78,7 @@ pub fn request_pass<R: tauri::Runtime>(app: &tauri::AppHandle<R>, scope: PassSco
     // `try_state` rather than `state`: a mock app in another module's test
     // manages only the stores that test needs, and a panic here would land on a
     // background thread where it takes down the process rather than the test.
-    let Some(indexer) = app.try_state::<Bm25Indexer>() else {
+    let Some(indexer) = app.try_project_store::<Bm25Indexer>() else {
         return;
     };
     if !enqueue(&indexer, scope) {
@@ -86,8 +86,8 @@ pub fn request_pass<R: tauri::Runtime>(app: &tauri::AppHandle<R>, scope: PassSco
     }
 
     let app = app.clone();
-    std::thread::spawn(move || {
-        let Some(indexer) = app.try_state::<Bm25Indexer>() else {
+    crate::project_scope::context::thread_spawn(move || {
+        let Some(indexer) = app.try_project_store::<Bm25Indexer>() else {
             return;
         };
         run_scheduled(
@@ -183,7 +183,7 @@ pub fn note_draft_change<R: tauri::Runtime>(
     change: &crate::drafts::DraftChange,
 ) {
     let scope = scope_for_draft_change(change);
-    if let Some(indexer) = app.try_state::<Bm25Indexer>() {
+    if let Some(indexer) = app.try_project_store::<Bm25Indexer>() {
         indexer.record_draft_change(change);
     }
     request_pass(app, scope);
@@ -212,7 +212,7 @@ pub fn note_notes_change<R: tauri::Runtime>(
     change: &crate::notes::NoteChange,
 ) {
     let scope = scope_for_note_change(change);
-    if let Some(indexer) = app.try_state::<Bm25Indexer>() {
+    if let Some(indexer) = app.try_project_store::<Bm25Indexer>() {
         indexer.record_note_change(change);
     }
     request_pass(app, scope);

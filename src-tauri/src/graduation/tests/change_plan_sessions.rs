@@ -61,7 +61,8 @@ fn a_paused_plan_correction_turn_runs_again_on_continue() {
     let paused = {
         let (app, id) = (fx.app.clone(), run.id.clone());
         Turn::work().doing(move || {
-            crate::graduation::pause_graduation_run(app.clone(), id.clone()).expect("paused");
+            crate::graduation::pause_graduation_run(app.clone(), id.clone(), Default::default())
+                .expect("paused");
         })
     };
     let first = ScriptedDispatch::new(vec![Turn::work().with_session("w1"), plan_review(), paused]);
@@ -207,6 +208,7 @@ fn an_escalation_answer_is_refused_at_every_plan_rest() {
                 summary: "x".into(),
                 note: None,
             }],
+            Default::default(),
         );
         assert!(refused.unwrap_err().starts_with("run_state_not_permitted"));
         let reloaded = fx.reload(&rested.id);

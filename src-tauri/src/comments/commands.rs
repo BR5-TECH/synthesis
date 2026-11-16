@@ -1,6 +1,7 @@
 //! The Tauri commands of the comments contract surface.
 
 use super::*;
+use crate::project_scope::events::EmitToProject;
 
 // ---------------------------------------------------------------------------
 // Tauri commands
@@ -49,10 +50,11 @@ fn discussion_for_write(
 /// Fragment discussions come first, ordered by `fragment_target.start` and then
 /// `created_at`; whole-target ones follow, ordered by `created_at`. A note holds at
 /// most one.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_discussions(
     target: DiscussionTarget,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<Discussion>, String> {
     let root = project.require_store()?;
     Ok(list_discussions_in(&root, &target))
@@ -67,6 +69,7 @@ pub fn list_discussions(
 /// conversations. The `"discussion changed"` event is emitted on the creating call
 /// alone (CMS-FR-52) — a call that found an existing discussion appended nothing
 /// and has nothing to announce.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn get_or_create_note_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -75,7 +78,7 @@ pub fn get_or_create_note_discussion<R: tauri::Runtime>(
     attachments: Vec<AttachmentInput>,
     spoken_original: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -113,9 +116,10 @@ pub fn get_or_create_note_discussion<R: tauri::Runtime>(
 
 /// CMS-FR-32: every discussion the project holds, of every owner, for
 /// `CMP-comments-panel.md`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_all_discussions(
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<DiscussionListItem>, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -130,10 +134,11 @@ pub fn list_all_discussions(
 /// longer holds that owner: a conversation tab whose owner surface has closed, or
 /// whose artifact has since been deleted. Writes nothing and emits nothing
 /// (CMS-FR-52).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_discussion(
     discussion_id: String,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -141,10 +146,11 @@ pub fn read_discussion(
         .ok_or_else(|| ERR_DISCUSSION_NOT_FOUND.to_string())
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn resolve_comment_author_identity(
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Participant, String> {
     acting_participant(&store, &project)
 }
@@ -163,8 +169,7 @@ pub fn emit_discussion_changed<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     discussion: &Discussion,
 ) {
-    use tauri::Emitter as _;
-    let _ = app.emit(DISCUSSION_CHANGED, discussion);
+    let _ = app.emit_project(DISCUSSION_CHANGED, discussion);
 }
 
 /// CMS-FR-57: open a discussion over a target — a whole one, or about a fragment
@@ -175,6 +180,7 @@ pub fn emit_discussion_changed<R: tauri::Runtime>(
 /// `get_or_create_note_discussion`, so a note never holds two.
 // Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
 #[allow(clippy::too_many_arguments)]
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn open_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -184,7 +190,7 @@ pub fn open_discussion<R: tauri::Runtime>(
     attachments: Vec<AttachmentInput>,
     spoken_original: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -229,6 +235,7 @@ pub fn open_discussion<R: tauri::Runtime>(
 
 // Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
 #[allow(clippy::too_many_arguments)]
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn add_comment<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -238,7 +245,7 @@ pub fn add_comment<R: tauri::Runtime>(
     attachments: Vec<AttachmentInput>,
     spoken_original: Option<String>,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -280,12 +287,13 @@ pub fn add_comment<R: tauri::Runtime>(
 /// here because locating a discussion by its id alone means reading and folding
 /// every log the scope holds, and this command is on the hot path — a card
 /// carrying three screenshots calls it three times as it renders (CMT-FR-49).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn read_comment_attachment(
     discussion_id: String,
     digest: String,
     draft_id: Option<String>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AttachmentContent, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -306,6 +314,8 @@ pub(super) fn attachment_scope(discussion: &Discussion) -> LogScope<'_> {
         // CMS-FR-49: a note's blobs live in that note's own folder.
         DiscussionTarget::Note { note_id } => LogScope::NoteDiscussion { note_id },
         DiscussionTarget::Artifact { .. } => LogScope::Artifact,
+        // CMS-FR-ACLX: the blobs of a Map thread live under `comments/map/attachments/`.
+        DiscussionTarget::Map => LogScope::MapDiscussion,
         // CMS-FR-GJEY: a change's blobs live in the change's own folder.
         DiscussionTarget::Change { stream_id, change } => {
             LogScope::ChangeDiscussion { stream_id, change }
@@ -330,13 +340,14 @@ pub(super) fn locate_discussion_for_attachment(
     read_discussion_by_id(root, worktree, discussion_id)
 }
 
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn set_discussion_resolution<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
     resolved: bool,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;
@@ -352,13 +363,14 @@ pub fn set_discussion_resolution<R: tauri::Runtime>(
 }
 
 /// CMS-FR-21: move a discussion's fragment to where its text now is.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn reanchor_discussion_fragment<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
     fragment_target: FragmentTarget,
     store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Discussion, String> {
     let root = project.require_store()?;
     let worktree = project.require_root()?;

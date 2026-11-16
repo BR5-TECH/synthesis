@@ -121,6 +121,7 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
         { name: "acme", path: "~/dev/acme", lastOpenedAt: "2026-05-15T10:00:00Z" },
       ];
     case "open_project_at_path":
+    case "resolve_project_at_path":
       return {
         name: "acme",
         path: "~/dev/acme",
@@ -854,5 +855,41 @@ describe("the indentation control (STB-FR-21 / STB-FR-22)", () => {
     expect(screen.queryByTestId("indentation-select")).not.toBeInTheDocument();
     // STB-FR-20: the line-ending control is unaffected by the tab type.
     expect(screen.getByTestId("line-ending-select")).toBeEnabled();
+  });
+});
+
+describe("the close confirmation counts runs only (PJT-FR-OJZG)", () => {
+  async function closeProject() {
+    await act(async () => {
+      for (const h of [...(eventHandlers["menu:close-project"] ?? [])]) h({ payload: null });
+    });
+  }
+
+  it("closes at once while only an indexing operation is in flight", async () => {
+    inFlight = [
+      { id: "op-1", kind: "scan", label: "Indexing project…", state: "running", sequence: 1 },
+    ];
+    render(<App />);
+    await enterIde();
+    await screen.findByTestId("status-bar-progress");
+
+    await closeProject();
+
+    await waitFor(() => expect(invoked()).toContain("close_project"));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("asks first while an agent turn is in flight", async () => {
+    inFlight = [
+      { id: "op-1", kind: "agent", label: "Reply…", state: "running", sequence: 1 },
+    ];
+    render(<App />);
+    await enterIde();
+    await screen.findByTestId("status-bar-progress");
+
+    await closeProject();
+
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(invoked()).not.toContain("close_project");
   });
 });

@@ -1,6 +1,7 @@
 //! GRS-FR-EYNU: the damage a run log read met, kept on the run record.
 
 use super::*;
+use crate::project_scope::ProjectStores;
 
 /// Whether two read failures name the same damage.
 ///
@@ -27,7 +28,7 @@ pub(super) fn record_read_failure<R: tauri::Runtime>(
     stream: GraduationLogStream,
     met: Option<logs::GraduationLogFailure>,
 ) {
-    let state = app.try_state::<GraduationState>();
+    let state = app.try_project_store::<GraduationState>();
     let _write = state.as_ref().map(|state| state.write_guard());
     // Read the record back inside the guard: the copy this command read before
     // the file may be behind what the run's own thread has since written.

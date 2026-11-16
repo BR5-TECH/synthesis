@@ -481,8 +481,12 @@ fn a_reverted_direct_run_records_its_revert_and_leaves_the_listing() {
     let branch = fx.branch();
     assert_eq!(branch_completed_runs_blocking(&fx.app, &branch).expect("listed").len(), 1);
 
-    let reverted = crate::graduation::revert_graduation_run(fx.app.clone(), done.id.clone())
-        .expect("reverted");
+    let reverted = crate::graduation::revert_graduation_run(
+        fx.app.clone(),
+        done.id.clone(),
+        Default::default(),
+    )
+    .expect("reverted");
 
     assert_eq!(reverted.state, GraduationRunState::Completed);
     assert_eq!(reverted.reverts.len(), 1);
@@ -517,6 +521,7 @@ fn a_combine_run_captures_the_summaries_of_the_runs_landed_on_its_head() {
         stream.base_branch.clone(),
         "release".to_string(),
         PrSummaryMode::Combine,
+        Default::default(),
     )
     .expect("started");
     assert_eq!(run.pr_summary.as_ref().unwrap().inputs, summaries);
@@ -543,6 +548,7 @@ fn a_combine_run_over_landed_runs_with_no_summary_is_refused() {
         stream.base_branch.clone(),
         "release".to_string(),
         PrSummaryMode::Combine,
+        Default::default(),
     )
     .unwrap_err();
 
@@ -592,8 +598,12 @@ fn a_run_reverted_in_its_stream_stays_off_the_base_branch_listing_and_the_combin
     let kept = completed_stream_run(&fx, &stream, "src/a.ts", Some("Kept change"));
     let undone = completed_stream_run(&fx, &stream, "src/b.ts", Some("Undone change"));
 
-    let reverted = crate::graduation::revert_graduation_run(fx.app.clone(), undone.id.clone())
-        .expect("reverted in the stream");
+    let reverted = crate::graduation::revert_graduation_run(
+        fx.app.clone(),
+        undone.id.clone(),
+        Default::default(),
+    )
+    .expect("reverted in the stream");
     assert_eq!(reverted.reverts[0].branch, stream.branch);
     merge(&fx, &stream, commit_publication());
     fx.other_branch("release");
@@ -606,6 +616,7 @@ fn a_run_reverted_in_its_stream_stays_off_the_base_branch_listing_and_the_combin
         stream.base_branch.clone(),
         "release".to_string(),
         PrSummaryMode::Combine,
+        Default::default(),
     )
     .expect("started");
     let inputs = &run.pr_summary.as_ref().unwrap().inputs;

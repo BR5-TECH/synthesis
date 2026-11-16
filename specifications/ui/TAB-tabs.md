@@ -103,6 +103,7 @@ The context menu on `spec.md`, right-clicked while `plan.md` is the active tab a
 40. **TAB-FR-OMWY** A draft preview tab is not a draft's tab. Renaming, deleting, or graduating any draft does not rename or close it. It closes with no prompt when its proposal is decided or withdrawn (per `DCR-draft-change-review.md` DCR-FR-RJZP), when the original draft is deleted, and with every other tab on TAB-FR-14's terms.
 41. **TAB-FR-SZGD** An Editor tab carries the resolved artifact type of its file, whichever surface opens it, also the Documents panel (TAB-FR-UEKW) and a discussion. When the surface gives no type, the shell reads it from `open_artifact_by_id` (per `../core/PST-project-storage.md` PST-FR-QQAE) and sets it on the tab. A read that fails leaves the tab with no type and logs a `WARN` record.
    - *Why:* the action control gates **Export to...** on the type, so a tab with no type does not afford it (per `ACT-action-control.md` ACT-FR-04).
+42. **TAB-FR-BRMG** The tab strip, its tabs, and their state belong to one project tab (`PJT-project-tabs.md` PJT-FR-HWWO). Another project's tabs never appear in the strip, and a project tab is not a tab of this strip. Switching to another project tab changes no tab here.
 
 ## Non-functional requirements
 - Tab focus and close are immediate UI operations (no backend round-trip required to respond), except for an Editor, Diff, or Flow tab close that must first write pending changes. An automatic close under TAB-FR-19 writes nothing and is therefore immediate in every case.

@@ -7,6 +7,7 @@
 //! and leaves on the checkpoint what the next work turn carries. The caller,
 //! `continue_graduation_run`, writes all of it in its one durable write.
 
+use crate::project::OpenProject as _;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -236,7 +237,7 @@ fn read_change<R: tauri::Runtime>(
     let seam = app
         .try_state::<crate::openspec::OpenSpec>()
         .ok_or(OpenSpecReadError::OpenSpecModeInactive)?;
-    let active = app.try_state::<ProjectState>().and_then(|state| state.require_root().ok());
+    let active = app.open_project_state().and_then(|state| state.require_root().ok());
     let location = crate::openspec::ChangeLocation::Stream { stream_id: run.stream_id.clone() };
     let at = crate::openspec::change::working_copy(app, &location)?;
     let validation = seam.validate_change(app, &BUFFER, active.as_ref(), &at, change)?;

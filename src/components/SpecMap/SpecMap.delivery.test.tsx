@@ -242,7 +242,7 @@ describe("the planned mark and the unplanned toggle (SDL-FR-SGQM .. SDL-FR-VUQH,
     await openSpecifications();
     const toolbar = screen.getByRole("toolbar", { name: "Map controls" });
     const filters = [...toolbar.querySelectorAll(".smap-filter")].map((f) => f.getAttribute("data-filter"));
-    expect(filters.slice(-2)).toEqual(["gaps", "unplanned"]);
+    expect(filters.slice(-3)).toEqual(["gaps", "unplanned", "discussion"]);
     const toggle = screen.getByRole("button", { name: "Unplanned" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(toggle).toHaveClass("smap-filter");

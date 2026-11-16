@@ -12,6 +12,12 @@ pub(super) const MENU_SAVE: &str = "menu:save";
 pub(super) const MENU_SAVE_ALL: &str = "menu:save-all";
 /// Menu-item id AND outgoing event name for File -> Close Project (SNV-FR-25).
 pub(super) const MENU_CLOSE_PROJECT: &str = "menu:close-project";
+/// Menu-item id AND outgoing event name for File -> New Tab (PJT-FR-PILG).
+pub(super) const MENU_NEW_TAB: &str = "menu:new-tab";
+/// Menu-item id for Window -> Next Tab (PJT-FR-EKKA). The backend handles it.
+pub(super) const MENU_NEXT_TAB: &str = "menu:next-tab";
+/// Menu-item id for Window -> Previous Tab (PJT-FR-EKKA). The backend handles it.
+pub(super) const MENU_PREVIOUS_TAB: &str = "menu:previous-tab";
 /// Outgoing event name announcing a held application quit (SNV-FR-26). Not a
 /// menu id: it is emitted for every quit request whatever its source (the Exit
 /// item, the app submenu's Quit, or closing the window).
@@ -57,8 +63,16 @@ pub(super) const FILE_MENU_ITEMS_BEFORE_SETTINGS: &[MenuItemSpec] = &[
 ];
 
 /// The File menu's items *after* the settings entry (SNV-FR-23).
-pub(super) const FILE_MENU_ITEMS_AFTER_SETTINGS: &[MenuItemSpec] =
-    &[(MENU_CLOSE_PROJECT, "Close Project", None)];
+pub(super) const FILE_MENU_ITEMS_AFTER_SETTINGS: &[MenuItemSpec] = &[
+    (MENU_NEW_TAB, "New Tab", Some("CmdOrCtrl+T")),
+    (MENU_CLOSE_PROJECT, "Close Project", Some("CmdOrCtrl+W")),
+];
+
+/// The Window menu's custom items (PJT-FR-EKKA), after Minimize and Zoom.
+pub(super) const WINDOW_MENU_ITEMS: &[MenuItemSpec] = &[
+    (MENU_NEXT_TAB, "Next Tab", Some("Ctrl+Tab")),
+    (MENU_PREVIOUS_TAB, "Previous Tab", Some("Ctrl+Shift+Tab")),
+];
 
 /// The one settings entry (SWN-FR-14). It is offered whether or not a project is
 /// open (SWN-FR-15).

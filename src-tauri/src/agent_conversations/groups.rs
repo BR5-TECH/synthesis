@@ -10,6 +10,7 @@ use crate::agent_groups::{
     JoinOutcome, MemberStatus, PlannedMode,
 };
 use crate::agents::Agent;
+use crate::project_scope::ProjectStores;
 
 /// CVL-FR-VUDT: the fixed prompt of the classifier.
 const CLASSIFIER_PROMPT: &str = include_str!("../../../resources/prompts/group-classifier.md");
@@ -28,12 +29,14 @@ const CLASSIFIER_INSTRUCTIONS_CHARS: usize = 2_000;
 
 /// CVL-FR-HNGB: the tools an advisor turn does not carry — the tools that end a
 /// turn on a contribution, and the tools that decide a proposal.
-pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 12] = [
+pub(super) const ADVISOR_WITHHELD_TOOLS: [&str; 13] = [
     crate::tools::ask_user_comment::NAME,
     crate::tools::request_document_export::NAME,
     crate::tools::ask_discussion_questions::NAME,
     crate::tools::propose_draft_changes::NAME,
     crate::tools::propose_new_draft::NAME,
+    // CVL-FR-HNGB, CVL-FR-FCWM: a plan proposal ends a turn on a contribution.
+    crate::tools::propose_plan_changes::NAME,
     crate::tools::propose_prompt_changes::NAME,
     crate::tools::decide_draft_changes::NAME,
     crate::tools::decide_prompt_changes::NAME,
@@ -128,7 +131,7 @@ pub fn dispatch_group_impl<R: tauri::Runtime>(
 ) -> Result<AgentGroup, String> {
     use tauri::Manager;
     let store = app.state::<GlobalSettingsStore>();
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let nicknames = distinct(nicknames);
     let settings = store.load_agent_group_settings(project_key).unwrap_or_default();
     if !settings.enabled {
@@ -272,8 +275,7 @@ fn dispatch_advisor<R: tauri::Runtime>(
     trigger_comment_id: &str,
     timeout: Duration,
 ) -> Result<AgentGroup, String> {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let setup = meta_setup(timeout);
     let state = Arc::clone(&setup.state);
     let meta_turn = dispatch_grouped(
@@ -325,8 +327,7 @@ fn dispatch_synthesis<R: tauri::Runtime>(
     trigger_comment_id: &str,
     timeout: Duration,
 ) -> Result<AgentGroup, String> {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let driver =
         match classify_driver(app, roots, project_key, &origin, trigger_comment_id, candidates) {
             Ok(driver) => driver,
@@ -418,7 +419,7 @@ fn dispatch_synthesis<R: tauri::Runtime>(
         let origin = origin.clone();
         let trigger = trigger_comment_id.to_string();
         let driver = driver.clone();
-        std::thread::spawn(move || {
+        crate::project_scope::context::thread_spawn(move || {
             run_synthesis_monitor(&app, owned, &project_key, state, &driver, origin, &trigger)
         })
     };
@@ -439,9 +440,8 @@ pub(super) fn skip_pending<R: tauri::Runtime>(
     pending: &[agent_groups::PendingMember],
     reason: SkipReason,
 ) {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
-    let progress_registry = app.state::<ProgressRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
+    let progress_registry = app.project_store::<ProgressRegistry>();
     for member in pending {
         turns.mark_skipped(&member.turn_id, reason);
         if let Err(error) = cancel_impl(app, &turns, &progress_registry, &member.turn_id) {
@@ -467,8 +467,7 @@ fn run_synthesis_monitor<R: tauri::Runtime>(
     origin: ConversationOrigin,
     trigger_comment_id: &str,
 ) {
-    use tauri::Manager;
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let never = AtomicBool::new(false);
     let timed_out = match state.wait_join(&never) {
         JoinOutcome::Over { pending, timed_out } => {
@@ -812,7 +811,7 @@ fn classify_driver<R: tauri::Runtime>(
     use tauri::Manager;
     let store = app.state::<GlobalSettingsStore>();
     let ai = app.state::<AiApiIntegrations>();
-    let turns = app.state::<TurnRegistry>();
+    let turns = app.project_store::<TurnRegistry>();
     let endpoint = ai_api::resolve_ai_api_call(&store, &ai, project_key)
         .map_err(|_| "provider_unconfigured")?;
     let budget = DocumentBudget::resolve(
@@ -842,20 +841,21 @@ fn classify_driver<R: tauri::Runtime>(
 }
 
 /// `"dispatch agent group"` (AGC-FR-KOHJ).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn dispatch_agent_group<R: tauri::Runtime>(
     nicknames: Vec<String>,
     origin: ConversationOrigin,
     trigger_comment_id: String,
     app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentGroup, String> {
     let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     let store = project.require_store()?;
     // The classifier is a model call, so the command runs off the main thread
     // and returns once the turns are registered.
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let roots = Roots { worktree: &root, store: &store };
         dispatch_group_impl(&app, roots, &key, &nicknames, origin, &trigger_comment_id)
     })

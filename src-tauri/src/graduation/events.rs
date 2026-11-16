@@ -1,6 +1,7 @@
 //! What the frontend is told when a run or a queue moves (GRD-FR-EFAU).
 
 use super::*;
+use crate::project_scope::events::EmitToProject;
 
 pub const GRADUATION_QUEUE_CHANGED: &str = "graduation-queue-changed";
 pub const GRADUATION_RUN_CHANGED: &str = "graduation-run-changed";
@@ -45,7 +46,7 @@ pub(super) fn announce_log_records<R: tauri::Runtime>(
     stream: logs::GraduationLogStream,
     latest_sequence: u64,
 ) {
-    let _ = app.emit(
+    let _ = app.emit_project(
         GRADUATION_LOG_RECORDS_APPENDED,
         LogRecordsAppendedPayload { run_id: run_id.to_string(), stream, latest_sequence },
     );
@@ -54,7 +55,7 @@ pub(super) fn announce_log_records<R: tauri::Runtime>(
 /// GRD-FR-EFAU: emitted after the change is durable, so a listener that
 /// re-reads on it sees the result rather than racing it.
 pub(super) fn announce_queue<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
-    let _ = app.emit(
+    let _ = app.emit_project(
         GRADUATION_QUEUE_CHANGED,
         QueueChangedPayload {
             project_key: run.project_key.clone(),
@@ -69,7 +70,7 @@ pub(super) fn announce_queue<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: 
 }
 
 pub(super) fn announce_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
-    let _ = app.emit(
+    let _ = app.emit_project(
         GRADUATION_RUN_CHANGED,
         RunChangedPayload { run_id: run.id.clone(), state: run.state },
     );

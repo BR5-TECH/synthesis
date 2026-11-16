@@ -322,6 +322,20 @@ fn the_quit_interceptions_are_registered_on_the_builder() {
 }
 
 #[test]
+fn the_notification_commands_find_every_type_they_read_on_the_builder() {
+    // The notification commands and the activation delivery read these types
+    // with `State` or `app.state()`, which panics when the builder does not
+    // manage the type. The registry serves the whole application, not one
+    // project, so it is managed once here and not in a project scope.
+    for registration in [
+        ".manage(notifications::NotificationRegistry::default())",
+        ".manage(notifications::Notifier::default())",
+    ] {
+        assert!(SOURCE.contains(registration), "{registration} must stay managed on the builder",);
+    }
+}
+
+#[test]
 fn command_names_list_contains_layout_preferences_commands() {
     // Guard against silently dropping a command from
     // `tauri::generate_handler!`. If the list below changes, the
@@ -389,6 +403,12 @@ fn command_names_list_contains_layout_preferences_commands() {
         "read_discussion",
         "open_discussion",
         "get_or_create_note_discussion",
+        "find_map_discussion",
+        "get_or_create_map_discussion",
+        "list_map_discussions",
+        "list_map_plan_proposals",
+        "accept_map_plan_row",
+        "reject_map_plan_row",
         "add_comment",
         "set_discussion_resolution",
         "reanchor_discussion_fragment",

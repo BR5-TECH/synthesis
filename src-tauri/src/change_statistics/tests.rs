@@ -277,8 +277,15 @@ fn the_interval_command_records_and_announces() {
         }
     });
     let handle = app.handle().clone();
-    record_change_working_interval(handle.clone(), STREAM.into(), CHANGE.into(), at(0), at(5_000))
-        .expect("recorded");
+    record_change_working_interval(
+        handle.clone(),
+        STREAM.into(),
+        CHANGE.into(),
+        at(0),
+        at(5_000),
+        Default::default(),
+    )
+    .expect("recorded");
     crate::statistics::wait_for_writer();
     let store = fsa::RootFs::for_root(dir.path());
     assert_eq!(read(&store).working_time_ms.value, Some(5_000));
@@ -292,12 +299,20 @@ fn the_interval_command_records_and_announces() {
             STREAM.into(),
             CHANGE.into(),
             at(5_000),
-            at(5_000)
+            at(5_000),
+            Default::default(),
         ),
         Err(ERR_INVALID_INTERVAL.to_string())
     );
     assert_eq!(
-        record_change_working_interval(handle, STREAM.into(), "Bad".into(), at(0), at(1)),
+        record_change_working_interval(
+            handle,
+            STREAM.into(),
+            "Bad".into(),
+            at(0),
+            at(1),
+            Default::default()
+        ),
         Err(ERR_INVALID_CHANGE_NAME.to_string())
     );
 }
@@ -307,7 +322,13 @@ fn the_interval_command_records_and_announces() {
 fn no_project_is_refused() {
     let app = crate::tools::tests::mock_app();
     assert_eq!(
-        read_change_statistics(app.handle().clone(), STREAM.into(), CHANGE.into()).map(|_| ()),
+        read_change_statistics(
+            app.handle().clone(),
+            STREAM.into(),
+            CHANGE.into(),
+            Default::default()
+        )
+        .map(|_| ()),
         Err(ERR_NO_PROJECT_OPEN.to_string())
     );
 }

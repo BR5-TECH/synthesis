@@ -5,13 +5,14 @@
 //! worker thread, reports each stage to the window, and writes the result to
 //! the destination the author chose in the save dialog.
 
+use crate::project::OpenProject as _;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use std::collections::HashMap;
 
+use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
 
 use super::convert::diagrams::{self, DiagramFailure, DiagramRenderer};
 use super::convert::model::DiagramKind;
@@ -99,6 +100,7 @@ pub fn diagram_renderer<'a>(
 }
 
 /// DXP-FR-IEQA: export the DOC artifact at `path` to `destination`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn export_document<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -124,12 +126,11 @@ pub async fn export_document<R: tauri::Runtime>(
     // DXP-FR-WLGE: the managed state is read on the worker thread too, because
     // a `State` can not cross onto it and the `AppHandle` can.
     let worker = app.clone();
-    let joined = tauri::async_runtime::spawn_blocking(move || {
-        let root =
-            worker.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let joined = crate::project_scope::context::spawn_blocking(move || {
+        let root = worker.open_project_state().and_then(|p| p.require_root().ok());
         let emitter = worker.clone();
         let emit = move |progress: ExportProgress| {
-            let _ = emitter.emit(DOCUMENT_EXPORT_PROGRESS, progress);
+            let _ = emitter.emit_project(DOCUMENT_EXPORT_PROGRESS, progress);
         };
         let pictures = calm_pictures.unwrap_or_default();
         let render = diagram_renderer(&pictures, &diagrams::render_png);
@@ -195,15 +196,15 @@ pub fn run_list_calm_sources<S: LogSink + Clone + Send + 'static>(
 }
 
 /// DXP-FR-TQCQ: list the CALM sources of the DOC artifact at `path`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn list_export_calm_sources<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     path: String,
 ) -> Result<Vec<String>, String> {
     let worker = app.clone();
-    let joined = tauri::async_runtime::spawn_blocking(move || {
-        let root =
-            worker.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok());
+    let joined = crate::project_scope::context::spawn_blocking(move || {
+        let root = worker.open_project_state().and_then(|p| p.require_root().ok());
         run_list_calm_sources(&worker, &BUFFER, root.as_ref(), &path)
     })
     .await;

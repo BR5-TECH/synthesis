@@ -1,6 +1,8 @@
 //! The Tauri commands of the embeddings index (EMB contract surface), used by
 //! the Global and the Project Indexing sections.
 
+use crate::project::OpenProject as _;
+use crate::project_scope::ProjectStores;
 use tauri::Manager;
 
 use super::engine::ReindexScope;
@@ -10,6 +12,7 @@ use crate::global_settings::GlobalSettingsStore;
 use crate::logging::{log_info, Domain, BUFFER};
 
 /// `"load embeddings settings"`.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_embeddings_settings(
     store: tauri::State<'_, GlobalSettingsStore>,
@@ -18,6 +21,7 @@ pub fn load_embeddings_settings(
 }
 
 /// `"save embeddings settings"` (EMB-FR-JFOV, EMB-FR-TGCL).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_embeddings_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -43,26 +47,32 @@ pub(crate) fn save_settings<R: tauri::Runtime>(
         "embeddings settings saved",
         crate::log_fields! { "enabled" => record.enabled, "model" => record.model_id() },
     );
-    if let Some(service) = app.try_state::<EmbeddingsService>() {
-        service.apply_settings(record.clone());
-        service.ensure_worker(app);
-        service.emit(app);
-    }
+    // The record is Global: every open project follows it, each in the context
+    // of its project, and not only the project of the calling window.
+    crate::project_scope::for_each_project(app, || {
+        if let Some(service) = app.try_project_store::<EmbeddingsService>() {
+            service.apply_settings(record.clone());
+            service.ensure_worker(app);
+            service.emit(app);
+        }
+    });
     Ok(EmbeddingsSettings::from(&record))
 }
 
 /// `"list embedding models"` (EMB-FR-MIDG).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn list_embedding_models() -> Vec<super::catalog::EmbeddingModelEntry> {
     super::catalog::list()
 }
 
 /// `"retry embeddings model download"` (EMB-FR-KEGS).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn retry_embeddings_model_download<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> EmbeddingsStatus {
-    let service = app.state::<EmbeddingsService>();
+    let service = app.project_store::<EmbeddingsService>();
     service.retry_download();
     service.ensure_worker(&app);
     service.emit(&app);
@@ -70,9 +80,10 @@ pub fn retry_embeddings_model_download<R: tauri::Runtime>(
 }
 
 /// `"load project embeddings mode"` (GSS-FR-DSUG).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn load_project_embeddings_mode(
-    project: tauri::State<'_, crate::project::ProjectState>,
+    project: crate::project_scope::Scoped<'_, crate::project::ProjectState>,
     store: tauri::State<'_, GlobalSettingsStore>,
 ) -> Result<ProjectEmbeddingsMode, String> {
     let key = project.anchor().ok_or_else(|| super::ERR_NO_PROJECT_OPEN.to_string())?;
@@ -80,12 +91,13 @@ pub fn load_project_embeddings_mode(
 }
 
 /// `"save project embeddings mode"` (EMB-FR-CTXC).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn save_project_embeddings_mode<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     mode: ProjectEmbeddingsMode,
 ) -> Result<ProjectEmbeddingsMode, String> {
-    let project = app.state::<crate::project::ProjectState>();
+    let project = app.open_project_state_or_default();
     let key = project.anchor().ok_or_else(|| super::ERR_NO_PROJECT_OPEN.to_string())?;
     app.state::<GlobalSettingsStore>().save_embeddings_mode(&key, mode)?;
     log_info(
@@ -95,7 +107,7 @@ pub fn save_project_embeddings_mode<R: tauri::Runtime>(
         "project embeddings mode saved",
         crate::log_fields! { "mode" => serde_json::to_value(mode).unwrap_or_default() },
     );
-    if let Some(service) = app.try_state::<EmbeddingsService>() {
+    if let Some(service) = app.try_project_store::<EmbeddingsService>() {
         service.apply_mode(mode);
         service.ensure_worker(&app);
         service.emit(&app);
@@ -104,18 +116,22 @@ pub fn save_project_embeddings_mode<R: tauri::Runtime>(
 }
 
 /// `"get embeddings status"` (EMB-FR-ZFGT).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn get_embeddings_status(service: tauri::State<'_, EmbeddingsService>) -> EmbeddingsStatus {
+pub fn get_embeddings_status(
+    service: crate::project_scope::Scoped<'_, EmbeddingsService>,
+) -> EmbeddingsStatus {
     service.status()
 }
 
 /// `"start reindex (scope)"` (EMB-FR-HRYV, EMB-FR-QNWF).
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn start_reindex<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     scope: ReindexScope,
 ) -> Result<EmbeddingsStatus, String> {
-    let service = app.state::<EmbeddingsService>();
+    let service = app.project_store::<EmbeddingsService>();
     service.request_reindex(scope)?;
     log_info(
         &app,

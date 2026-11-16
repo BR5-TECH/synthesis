@@ -13,6 +13,7 @@ import {
 import type { FlowViolation } from "../../types";
 import { ActionControl } from "../ActionControl";
 import { Icon } from "../icons";
+import { useDiscussMenu } from "../MapDiscussion/NodeMenu";
 import { Band } from "./Band";
 import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges, SequenceArrows } from "./edges";
 import { edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
@@ -123,6 +124,13 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
     return out;
   }, [delivery.overlaps]);
 
+  // MDL-FR-HULA .. MDL-FR-JBEL: the **Discuss** menu of an item. It opens
+  // nowhere while a name is being edited.
+  const discussMenu = useDiscussMenu<FlowItem>(
+    (item) => props.onDiscuss?.(item),
+    { blocked: c.editingName !== null },
+  );
+
   const nameOf = (id: string) => (doc ? findItem(doc, id)?.name || id : id);
 
   const factsOf = (item: FlowItem): ItemFacts => {
@@ -163,6 +171,7 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
     },
     onOpenTracker: a.openTracker,
     onOpenReference: a.openReferenced,
+    ...(props.onDiscuss ? { menu: discussMenu.bindings(item) } : {}),
   });
 
   const today = todayIso();
@@ -505,6 +514,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
           <div className="flow-status" data-testid="flow-status">
             {readout}
           </div>
+
+          {discussMenu.menu}
 
           {/* FLO-FR-45: removing a container that holds anything asks first. */}
           {a.pendingRemoval && (

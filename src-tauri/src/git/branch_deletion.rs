@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use git2::BranchType;
 use serde::Serialize;
-use tauri::{Manager, State};
+use tauri::Manager;
 
 use crate::changes::{self, ERR_UNKNOWN_BRANCH};
 use crate::github_tokens::GithubTokens;
@@ -444,11 +444,12 @@ fn carry_out<R: tauri::Runtime>(
 
 /// GTC-FR-UMXA: read-only. What deleting a local branch would remove and
 /// discard, or the typed refusal.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub fn inspect_branch_deletion(
     name: String,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<BranchDeletionPlan, String> {
     inspect_branch_deletion_reported(&app, &logging::BUFFER, &project.require_root()?, &name)
 }
@@ -459,17 +460,18 @@ pub fn inspect_branch_deletion(
 /// Runs on the blocking pool, because the remote leg is a blocking transfer that
 /// would otherwise hold the main thread for as long as an unreachable remote
 /// takes to time out.
+#[project_scope_macros::project_scoped]
 #[tauri::command]
 pub async fn delete_branch(
     name: String,
     delete_remote: bool,
     discard_uncommitted: bool,
     app: tauri::AppHandle,
-    project: State<'_, ProjectState>,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<BranchDeletionOutcome, String> {
     let root = project.require_root()?;
     let project_key = project.slot_key();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::project_scope::context::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         delete_branch_at(

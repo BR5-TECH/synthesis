@@ -251,7 +251,7 @@ pub(super) fn context<'a>(
     root: &'a crate::fs::RootFs,
     repository: &'a RepositoryRef,
 ) -> super::claims::ClaimContext<'a> {
-    static STATUSES: StatusNames = StatusNames { ready: None, in_progress: None };
+    static STATUSES: StatusNames = StatusNames { ready: None, in_progress: None, blocked: None };
     super::claims::ClaimContext {
         root,
         secret: SECRET,

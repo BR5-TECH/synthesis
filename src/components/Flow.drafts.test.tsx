@@ -59,6 +59,12 @@ const twoTasks = (linked = false, extra: Record<string, unknown> = {}) =>
     item("t2", "task", { parentId: "f1", name: "Card form" }),
   ]);
 
+/** FLO-FR-NRBV: select the item, then take the Create draft action of its panel. */
+const createDraftOf = (id: string) => {
+  selectItem(id);
+  return within(panel()).getByRole("button", { name: "Create draft" });
+};
+
 describe("Create draft (FLO-FR-NRBV)", () => {
   it("FLO-FR-NRBV: Create draft invokes \"create draft (name)\" with the item's name, stores the id, and opens the draft", async () => {
     const b = flowBackend(twoTasks());
@@ -69,7 +75,7 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onOpenDraft });
 
-    await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Create draft" }));
+    await userEvent.click(createDraftOf("t1"));
     await waitFor(() => expect(onOpenDraft).toHaveBeenCalledWith({ id: "d-9", name: "Tokenize" }));
     expect(callsOf(b, "create_draft")).toEqual([{ name: "Tokenize", folder: null }]);
     expect(findItem(planOf(flows), "t1")!.draftId).toBe("d-9");
@@ -81,7 +87,7 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onCreateDraft, onOpenDraft });
 
-    await userEvent.click(within(itemEl("t2")).getByRole("button", { name: "Create draft" }));
+    await userEvent.click(createDraftOf("t2"));
     await waitFor(() => expect(onOpenDraft).toHaveBeenCalledWith({ id: "d-7", name: "Card form" }));
     expect(onCreateDraft).toHaveBeenCalledWith("Card form");
     expect(findItem(planOf(flows), "t2")!.draftId).toBe("d-7");
@@ -93,7 +99,7 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onOpenDraft });
 
-    await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Create draft" }));
+    await userEvent.click(createDraftOf("t1"));
     expect(await within(itemEl("t1")).findByRole("alert")).toHaveTextContent(
       "The draft was not created. The drafts store is not valid.",
     );
@@ -111,9 +117,9 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onCreateDraft, onOpenDraft });
 
-    await userEvent.click(within(itemEl("t1")).getByRole("button", { name: "Create draft" }));
+    await userEvent.click(createDraftOf("t1"));
     expect(await within(itemEl("t1")).findByRole("alert")).toHaveTextContent("The name is in use.");
-    await userEvent.click(within(itemEl("t2")).getByRole("button", { name: "Create draft" }));
+    await userEvent.click(createDraftOf("t2"));
     await waitFor(() => expect(onCreateDraft).toHaveBeenCalledTimes(2));
     expect(within(itemEl("t2")).queryByRole("alert")).toBeNull();
     expect(findItem(planOf(flows), "t1")!.draftId).toBeUndefined();
@@ -129,10 +135,10 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onOpenDraft });
 
-    const button = within(itemEl("t1")).getByRole("button", { name: "Create draft" });
+    const button = createDraftOf("t1");
     fireEvent.click(button);
     fireEvent.click(button);
-    fireEvent.click(within(itemEl("t1")).getByRole("button", { name: "Creating draft…" }));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Creating draft…" }));
     await waitFor(() => expect(callsOf(b, "create_draft")).toHaveLength(1));
     await act(async () =>
       answer({ draft: { id: "d-9", name: "Tokenize", status: "active" }, file: "Tokenize.md" }),
@@ -156,7 +162,7 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onOpenDraft });
 
-    await userEvent.click(within(itemEl("x1")).getByRole("button", { name: "Create draft" }));
+    await userEvent.click(createDraftOf("x1"));
     await waitFor(() => expect(onOpenDraft).toHaveBeenCalledWith({ id: "d-5", name: "Decline message" }));
     expect(callsOf(b, "create_draft")).toEqual([{ name: "Decline message", folder: null }]);
     expect(findItem(planOf(flows), "x1")!.draftId).toBe("d-5");
@@ -166,8 +172,20 @@ describe("Create draft (FLO-FR-NRBV)", () => {
     const b = flowBackend(twoTasks(true));
     await renderFlow(b);
 
-    expect(within(itemEl("t1")).queryByRole("button", { name: "Create draft" })).toBeNull();
-    expect(within(itemEl("f1")).queryByRole("button", { name: "Create draft" })).toBeNull();
+    selectItem("t1");
+    expect(within(panel()).queryByRole("button", { name: "Create draft" })).toBeNull();
+    selectItem("f1");
+    expect(within(panel()).queryByRole("button", { name: "Create draft" })).toBeNull();
+  });
+
+  it("FLO-FR-CMPK, FLO-FR-NRBV: a card never shows a draft action, also before or after a selection", async () => {
+    const b = flowBackend(twoTasks());
+    await renderFlow(b);
+
+    expect(within(itemEl("t2")).queryByRole("button", { name: "Create draft" })).toBeNull();
+    selectItem("t2");
+    expect(within(itemEl("t2")).queryByRole("button", { name: "Create draft" })).toBeNull();
+    expect(within(panel()).getByRole("button", { name: "Create draft" })).toBeEnabled();
   });
 });
 

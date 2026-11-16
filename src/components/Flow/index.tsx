@@ -366,10 +366,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                 inert={inert}
                 handlers={handlersOf(item)}
                 renameOnEnd={planMode}
-                creating={a.creating === item.id}
                 draftError={a.draftErrors[item.id]}
                 onMeasure={c.onMeasureCard}
-                onCreateDraft={() => void a.createDraftFor(item.id)}
                 onOpenDraft={a.openDraft}
                 onUnlinkDraft={() => a.linkDraft(item.id, null)}
               />
@@ -420,6 +418,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
               onDescribe={(text) => a.describe(c.selected!.id, text)}
               onKind={(kind) => a.requestKind(c.selected!.id, kind)}
               onLinkDraft={(id) => a.linkDraft(c.selected!.id, id)}
+              creating={a.creating === c.selected.id}
+              onCreateDraft={() => void a.createDraftFor(c.selected!.id)}
               onAddFootprint={(p) => a.addFootprint(c.selected!.id, p)}
               onRemoveFootprint={(p) => a.removeFootprint(c.selected!.id, p)}
               onDue={(due) => a.setDueDate(c.selected!.id, due)}

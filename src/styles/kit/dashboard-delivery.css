@@ -1,6 +1,8 @@
 /* ---------- Dashboard: Delivery widget ---------- */
 /* DSH-FR-AHRJ: the full-width last row, below the grid of the other widgets. */
-.dash-delivery { grid-column: 1 / -1; }
+/* Its row is as tall as the axis and the No date track need; the Dashboard
+   scrolls instead of clipping them (DSH-FR-HVOQ). */
+.dash-delivery { grid-column: 1 / -1; min-height: max-content; }
 
 /* DSH-FR-DFDW: the header opens the Map tab on its Delivery lens. */
 .dash-delivery__head {
@@ -20,12 +22,12 @@
 .dash-delivery__count { white-space: nowrap; }
 
 /* The body holds one wide row, so it must not take its min-content width. */
-.dash-delivery__body { min-width: 0; }
-.dash-delivery__content { display: flex; align-items: stretch; min-width: 0; }
+.dash-delivery__body { min-width: 0; flex: none; }
+.dash-delivery__content { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 
 /* DSH-FR-EWPI: the axis scrolls horizontally when it is wider than the widget. */
 .dash-delivery__scroller {
-  flex: 1; min-width: 0;
+  min-width: 0;
   overflow-x: auto; overflow-y: hidden;
   padding-bottom: 4px;
 }
@@ -80,6 +82,11 @@
 .dash-delivery__fraction { flex: none; font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
 /* DSH-FR-BBRC: the counts line wraps inside the card; it never runs past the
    border. Its text breaks only after the middle dot. */
+/* DSH-FR-NNWM: blocked work items, in a shape, in words, and in colour. */
+.dash-delivery__blocked {
+  font-size: var(--fs-ui-xs); font-weight: 600; color: var(--danger);
+  white-space: nowrap;
+}
 .dash-delivery__current-line {
   font-size: var(--fs-ui-xs); color: var(--fg-2);
   white-space: normal; overflow-wrap: anywhere;
@@ -116,15 +123,32 @@
   font-size: var(--fs-ui-xs); color: var(--accent); font-weight: 600; white-space: nowrap;
 }
 
-/* DSH-FR-HVOQ: the No date group sits after the axis, behind a 1px rule. */
-.dash-delivery__nodate {
-  flex: none;
-  display: flex; flex-direction: column; gap: 6px;
-  margin-left: 12px; padding-left: 12px; padding-top: 18px;
-  border-left: 1px solid var(--border-1);
-}
+/* DSH-FR-HVOQ: the milestones with no due date, in one horizontal track in
+   plan order. Under an axis it sits behind a 1px rule with its label; alone it
+   is the whole content. */
+.dash-delivery__nodate { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dash-delivery__nodate[data-labelled="true"] { padding-top: 10px; border-top: 1px solid var(--border-1); }
 .dash-delivery__nodate-title {
   font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps);
   color: var(--fg-3); font-weight: 600;
 }
-.dash-delivery__nodate .dash-delivery__milestone { position: static; width: 132px; }
+.dash-delivery__track-scroller {
+  min-width: 0;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 2px 2px 6px;
+}
+.dash-delivery__steps {
+  display: flex; align-items: flex-start;
+  margin: 0; padding: 0; list-style: none;
+  width: max-content;
+}
+.dash-delivery__step { position: relative; flex: none; display: flex; align-items: flex-start; }
+/* The line that joins a milestone to the one before it, at the height of the name line. */
+.dash-delivery__step + .dash-delivery__step { padding-left: 28px; }
+.dash-delivery__step + .dash-delivery__step::before {
+  content: "";
+  position: absolute; left: 4px; top: 16px;
+  width: 20px; height: 0;
+  border-top: 1px solid var(--border-2);
+}
+.dash-delivery__step .dash-delivery__milestone { position: static; width: 168px; }

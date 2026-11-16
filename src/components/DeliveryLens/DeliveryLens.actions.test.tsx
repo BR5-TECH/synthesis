@@ -459,7 +459,8 @@ describe("requests of the map (MDL-FR-EEDO, MDL-FR-JIKK)", () => {
     const onCreateDraft = vi.fn(async () => ({ ok: true as const, draft: { id: "d-new", name: "T3" } }));
     const onOpenDraft = vi.fn();
     await openPlan({ onCreateDraft, onOpenDraft });
-    fireEvent.click(within(itemEl("t3")).getByRole("button", { name: "Create draft" }));
+    selectItem("t3");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Create draft" }));
     await waitFor(() => expect(onCreateDraft).toHaveBeenCalledWith("T3"));
     await waitFor(() => expect(onOpenDraft).toHaveBeenCalledWith({ id: "d-new", name: "T3" }));
   });

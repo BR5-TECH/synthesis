@@ -39,7 +39,8 @@ const STATUS_OPTIONS: Record<string, { id: string; name: string }[]> = {
     { id: "s1", name: "Todo" },
     { id: "s2", name: "Ready" },
     { id: "s3", name: "In progress" },
-    { id: "s4", name: "Done" },
+    { id: "s4", name: "Blocked" },
+    { id: "s5", name: "Done" },
   ],
 };
 
@@ -67,6 +68,7 @@ const state: any = {
     intervalMinutes: flag("githubPollingUnset") ? null : 5,
     readyStatus: flag("githubPollingUnset") ? null : flag("githubPollingInvalid") ? "Queued" : "Ready",
     inProgressStatus: flag("githubPollingUnset") ? null : "In progress",
+    blockedStatus: null,
   },
   configuration: flag("githubPollingUnset")
     ? { state: "unset", errorCode: null, error: null, missingStatus: null, projectTitle: null }
@@ -177,12 +179,15 @@ export function githubPollingInvoke(
       const selected = a.projectNodeId ?? null;
       const ready = selected === null ? null : (a.readyStatus || null);
       const inProgress = selected === null ? null : (a.inProgressStatus || null);
-      if (ready !== null && ready === inProgress) throw "duplicate_status_option";
+      const blocked = selected === null ? null : (a.blockedStatus || null);
+      const named = [ready, inProgress, blocked].filter((n) => n !== null);
+      if (new Set(named).size < named.length) throw "duplicate_status_option";
       state.settings = {
         projectNodeId: selected,
         intervalMinutes: interval,
         readyStatus: ready,
         inProgressStatus: inProgress,
+        blockedStatus: blocked,
       };
       const project = PROJECTS.find((p) => p.nodeId === selected);
       const title = project?.title ?? null;

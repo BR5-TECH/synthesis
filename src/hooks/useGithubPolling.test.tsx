@@ -109,7 +109,7 @@ describe("the polling schedule (GIT-FR-CVSB, GIT-FR-SLRD)", () => {
   });
 
   it("GIT-FR-CVSB / SET-FR-NLIX: no interval starts no launch poll and no timed poll", async () => {
-    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } });
+    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null } });
     mount();
     await flush();
     await advance(60 * 60_000);
@@ -118,7 +118,7 @@ describe("the polling schedule (GIT-FR-CVSB, GIT-FR-SLRD)", () => {
   });
 
   it("GIT-FR-CVSB: no selected Project starts no poll", async () => {
-    state = pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } });
+    state = pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null, blockedStatus: null } });
     mount();
     await flush();
     await advance(10 * 60_000);
@@ -165,7 +165,7 @@ describe("the polling schedule (GIT-FR-CVSB, GIT-FR-SLRD)", () => {
     expect(calls("poll_github_ready_tasks")).toHaveLength(1);
     await advance(3 * 60_000);
 
-    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: 1, readyStatus: null, inProgressStatus: null } });
+    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: 1, readyStatus: null, inProgressStatus: null, blockedStatus: null } });
     firePollingChanged();
     await flush();
     await advance(60_000);
@@ -177,7 +177,7 @@ describe("the polling schedule (GIT-FR-CVSB, GIT-FR-SLRD)", () => {
   it("GIT-FR-SLRD: setting the interval Off through Project settings stops the timer", async () => {
     mount();
     await flush();
-    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } });
+    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null } });
     firePollingChanged();
     await flush();
     await advance(30 * 60_000);
@@ -241,7 +241,7 @@ describe("the polling schedule (GIT-FR-CVSB, GIT-FR-SLRD)", () => {
   });
 
   it("GIT-FR-EZFL: Refresh polls at once even with the interval Off, and a refusal is reported", async () => {
-    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } });
+    state = pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null } });
     const { result } = mount();
     await flush();
     await act(async () => {

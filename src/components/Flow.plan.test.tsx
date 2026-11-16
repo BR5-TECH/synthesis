@@ -22,7 +22,7 @@ import {
   type FlowRemovalRequest,
 } from "./Flow";
 import { callsOf, flowBackend, itemState, type FlowBackend } from "../test/flowCanvasHarness";
-import { connectItems, dragItem, HLD_ID, itemEl, panel, selectItem } from "../test/flowFixtures";
+import { connectItems, dragItem, HLD_ID, itemEl, descriptionSource, panel, selectItem } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
 import { blocks, item, plan, sampleLayout, samplePlan } from "../test/flowPlanFixtures";
 
@@ -220,13 +220,26 @@ describe("the plan binding (MDL-FR-XJBV)", () => {
     await settle();
 
     selectItem("t1");
-    const source = within(panel()).getByRole("textbox", { name: "Description" });
+    const source = descriptionSource();
     await userEvent.type(source, "Use **Visa**");
     expect(host.changes).toEqual([]);
     fireEvent.blur(source);
     expect(host.changes.map((c) => c.edits)).toEqual([
       [{ kind: "set_description", itemId: "t1", description: "Use **Visa**", updatedAt: "at-t1" }],
     ]);
+  });
+
+  it("MDL-FR-XJBV, FLO-FR-13: Done makes the one edit of the typed text and shows it as rich text", async () => {
+    const host = renderPlan(samplePlan());
+    await settle();
+
+    selectItem("t1");
+    await userEvent.type(descriptionSource(), "Use **Visa**");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Done editing the description" }));
+    expect(host.changes.map((c) => c.edits)).toEqual([
+      [{ kind: "set_description", itemId: "t1", description: "Use **Visa**", updatedAt: "at-t1" }],
+    ]);
+    expect(within(panel()).queryByRole("textbox", { name: "Description" })).toBeNull();
   });
 
   it("GDP-FR-EJTS: the kind choice offers no change to or from a milestone", async () => {

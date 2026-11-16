@@ -158,7 +158,7 @@ export function deliveryBackend(doc: FlowDocument | string = "", answer?: Github
 /** The polling view of a valid configuration, with nothing claimed. */
 export function pollingView(extra: Partial<GithubPollingView> = {}): GithubPollingView {
   return {
-    settings: { projectNodeId: PROJECT_NODE, intervalMinutes: 15, readyStatus: "Ready", inProgressStatus: "In Progress" },
+    settings: { projectNodeId: PROJECT_NODE, intervalMinutes: 15, readyStatus: "Ready", inProgressStatus: "In Progress", blockedStatus: null },
     configuration: {
       state: "valid",
       errorCode: null,

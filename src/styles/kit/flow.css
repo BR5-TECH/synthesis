@@ -282,6 +282,14 @@ button.flow-ref:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-card__head { display: flex; align-items: flex-start; gap: 5px; min-width: 0; }
 .flow-card__head .flow-glyph { margin-top: 1px; }
 .flow-card__name { font-weight: 600; flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+/* FLO-FR-CMPK: a card's name takes at most two lines. */
+span.flow-card__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 .flow-card__name--edit,
 .flow-ctr__name--edit {
   font: inherit;
@@ -425,18 +433,20 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-desc > :last-child { margin-bottom: 0; }
 .flow-desc p { margin: 0 0 4px; }
 .flow-desc code { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); background: var(--bg-sunken); padding: 0 3px; border-radius: 3px; }
-/* A container's description: one line under its header. */
-.flow-desc-ctr {
+/* FLO-FR-XCRP: the excerpt of a description, in at most two lines. */
+.flow-excerpt {
+  margin: 0;
   font-size: var(--fs-ui-xs);
-  color: var(--fg-2);
   line-height: 1.4;
-  white-space: nowrap;
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
-.flow-desc-ctr > * { display: inline; margin: 0; }
-.flow-desc-ctr code { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); }
+.flow-ctr__about .flow-excerpt { max-width: 56ch; }
 
 /* ---- edges (FLO-FR-48, FLO-FR-32) ---- */
 .flow-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
@@ -545,6 +555,7 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 .flow-panel__fieldset { display: contents; }
 .flow-panel__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .flow-panel__row--head { margin-bottom: 2px; }
+.flow-panel__row--label { min-height: 20px; }
 .flow-panel__title { font-size: var(--fs-ui-xs); font-weight: 600; color: var(--fg-2); }
 .flow-panel__spacer { flex: 1; }
 .flow-panel__label { font-size: var(--fs-ui-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-4); }
@@ -564,6 +575,21 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 }
 .flow-panel__src:focus { outline: none; border-color: var(--accent); }
 .flow-panel__note { font-size: var(--fs-ui-xs); color: var(--warn); }
+.flow-panel__empty { font-size: var(--fs-ui-xs); color: var(--fg-4); font-style: italic; }
+/* FLO-FR-13: the full description in the panel, read in place. */
+.flow-panel__desc {
+  /* The fields scroll as one column; this box keeps its height in it. */
+  flex: none;
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 8px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+}
+.flow-panel__desc .comment__body-heading { margin: 6px 0 2px; }
+.flow-panel__desc ul, .flow-panel__desc ol { margin: 2px 0 4px; padding-left: 16px; }
 .flow-panel__error { width: 100%; font-size: var(--fs-ui-xs); color: var(--danger); }
 .flow-panel .flow-select[aria-label="Add path"],
 .flow-panel .flow-select[aria-label="Link draft"] { max-width: 220px; }

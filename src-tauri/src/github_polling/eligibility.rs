@@ -9,12 +9,13 @@ use super::client::{GithubProjects, ProjectItem, ProjectShape, StatusOption};
 use super::records::*;
 use crate::drafts::GithubIssueLink;
 
-/// GPP-FR-VXSB: the two status names of the polling settings. `None` is an
-/// unset name.
+/// GPP-FR-VXSB / GPP-FR-BLVX: the three status names of the polling
+/// settings. `None` is an unset name.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StatusNames {
     pub ready: Option<String>,
     pub in_progress: Option<String>,
+    pub blocked: Option<String>,
 }
 
 impl StatusNames {
@@ -22,6 +23,7 @@ impl StatusNames {
         Self {
             ready: settings.ready_status.clone(),
             in_progress: settings.in_progress_status.clone(),
+            blocked: settings.blocked_status.clone(),
         }
     }
 }

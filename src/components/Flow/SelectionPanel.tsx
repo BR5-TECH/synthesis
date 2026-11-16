@@ -16,6 +16,19 @@ import type { DraftSummary, ItemDeliveryState } from "../../types";
 import type { PanelPlacement, Reference } from "./geometry";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { ArtifactPicker, ReferenceRows } from "./references";
+import { CommentMarkdown } from "../CommentMarkdown";
+import { parseMarkdownBlocks } from "../../diff/markdown";
+
+/**
+ * Whether a description opens with its own `Description` heading. The panel
+ * then keeps its label for assistive technology alone, so the word does not
+ * show twice.
+ */
+function opensWithDescriptionHeading(markdown: string | undefined): boolean {
+  if (!markdown) return false;
+  const first = parseMarkdownBlocks(markdown).find((b) => b.kind !== "break" && b.kind !== "comment");
+  return first?.kind === "heading" && first.text.trim().toLowerCase() === "description";
+}
 
 export interface SelectionPanelProps {
   doc: FlowDocument;
@@ -35,6 +48,10 @@ export interface SelectionPanelProps {
   onDescribe: (text: string) => void;
   onKind: (kind: FlowItemKind) => void;
   onLinkDraft: (draftId: string | null) => void;
+  /** FLO-FR-NRBV: a draft creation for the item is in flight. */
+  creating?: boolean;
+  /** FLO-FR-NRBV: create a draft for a task or a defect with no draft link. */
+  onCreateDraft?: () => void;
   onAddFootprint: (path: string) => void;
   onRemoveFootprint: (path: string) => void;
   onDue: (due: string) => void;
@@ -71,6 +88,17 @@ function DescriptionField({
   onDescribe: (text: string) => void;
 }) {
   const [text, setText] = useState(item.description ?? "");
+  // FLO-FR-13 / MDL-FR-XJBV: a field that goes away with no blur (Done, or
+  // the canvas turning inert) still makes its one edit.
+  const pending = useRef({ text, onBlurOnly, onDescribe, saved: item.description ?? "" });
+  pending.current = { text, onBlurOnly, onDescribe, saved: pending.current.saved };
+  useEffect(
+    () => () => {
+      const p = pending.current;
+      if (p.onBlurOnly && p.text !== p.saved) p.onDescribe(p.text);
+    },
+    [],
+  );
   return (
     <textarea
       id={`flow-desc-${item.id}`}
@@ -85,7 +113,10 @@ function DescriptionField({
         else onDescribe(e.target.value);
       }}
       onBlur={() => {
-        if (onBlurOnly && text !== (item.description ?? "")) onDescribe(text);
+        if (onBlurOnly && text !== pending.current.saved) {
+          pending.current.saved = text;
+          onDescribe(text);
+        }
       }}
     />
   );
@@ -103,6 +134,8 @@ export function SelectionPanel(props: SelectionPanelProps) {
     (k) => k === item.kind || (props.kindFilter?.(k) ?? true),
   );
   const [drafts, setDrafts] = useState<DraftSummary[] | null>(null);
+  // FLO-FR-13: the panel opens on the rich text; Edit shows the source.
+  const [editing, setEditing] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
   const { onMeasure } = props;
 
@@ -178,16 +211,47 @@ export function SelectionPanel(props: SelectionPanelProps) {
             </button>
           </div>
 
-          <label className="flow-panel__label" htmlFor={`flow-desc-${item.id}`}>
-            Description
-          </label>
-          {/* FLO-FR-13: the Markdown source, in a plain field with no toolbar. */}
-          <DescriptionField
-            item={item}
-            inert={inert}
-            onBlurOnly={props.describeOnBlur === true}
-            onDescribe={props.onDescribe}
-          />
+          <div className="flow-panel__row flow-panel__row--label">
+            <label
+              className={
+                !editing && opensWithDescriptionHeading(item.description)
+                  ? "flow-panel__label sr-only"
+                  : "flow-panel__label"
+              }
+              htmlFor={`flow-desc-${item.id}`}
+            >
+              Description
+            </label>
+            <span className="flow-panel__spacer" />
+            <button
+              type="button"
+              className="flow-btn flow-btn--xs flow-btn--quiet"
+              aria-label={editing ? "Done editing the description" : "Edit the description"}
+              aria-pressed={editing}
+              disabled={inert}
+              onClick={() => setEditing((e) => !e)}
+            >
+              {editing ? "Done" : "Edit"}
+            </button>
+          </div>
+          {/* FLO-FR-13: the full description as rich text, and its Markdown
+              source in a plain field with no toolbar behind Edit. */}
+          {editing && !inert ? (
+            <DescriptionField
+              item={item}
+              inert={inert}
+              onBlurOnly={props.describeOnBlur === true}
+              onDescribe={props.onDescribe}
+            />
+          ) : item.description ? (
+            <CommentMarkdown
+              body={item.description}
+              className="flow-desc flow-panel__desc"
+              testId={`flow-item-description-${item.id}`}
+            />
+          ) : (
+            <div className="flow-panel__empty">No description.</div>
+          )}
 
           <div className="flow-panel__row">
             <label className="flow-panel__label" htmlFor={`flow-kind-${item.id}`}>
@@ -228,6 +292,18 @@ export function SelectionPanel(props: SelectionPanelProps) {
           {leaf && (
             <>
               <span className="flow-panel__label">Draft</span>
+              {item.draftId === undefined && props.onCreateDraft && (
+                <div className="flow-panel__row">
+                  <button
+                    type="button"
+                    className="flow-btn flow-btn--xs"
+                    disabled={inert || props.creating}
+                    onClick={props.onCreateDraft}
+                  >
+                    {props.creating ? "Creating draft…" : "Create draft"}
+                  </button>
+                </div>
+              )}
               <div className="flow-panel__row">
                 <select
                   className="flow-select"

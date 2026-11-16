@@ -20,6 +20,8 @@ export interface GithubPollingSettings {
   intervalMinutes: GithubPollingInterval | null;
   readyStatus: string | null;
   inProgressStatus: string | null;
+  /** GPP-FR-BLVX: the optional Blocked status name. */
+  blockedStatus: string | null;
 }
 
 /** GPP-FR-NNSJ: one option of a Project's `Status` field. */

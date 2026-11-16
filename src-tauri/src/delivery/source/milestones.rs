@@ -87,7 +87,7 @@ pub fn milestones_of(doc: &FlowDocument, states: &[ItemDeliveryState]) -> Vec<De
         .map(|item| {
             let state = state_of(&item.id);
             let blocked_leaves = hierarchy
-                .leaves_under(&item.id)
+                .work_items_under(&item.id)
                 .iter()
                 .filter(|leaf| state_of(leaf).is_some_and(|s| s.blocked))
                 .count();

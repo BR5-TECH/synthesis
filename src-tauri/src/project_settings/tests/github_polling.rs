@@ -129,6 +129,7 @@ fn the_status_names_are_stored_and_repaired_to_unset() {
         interval_minutes: Some(15),
         ready_status: Some("Queued".into()),
         in_progress_status: Some("In progress".into()),
+        blocked_status: Some("On hold".into()),
     };
     save_github_polling_settings_to(&root, &saved).unwrap();
     assert_eq!(load_github_polling_settings_from(&root).unwrap(), saved);

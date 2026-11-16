@@ -1,6 +1,6 @@
 /**
  * MDL-FR-GDUP: the roll-up of the toolbar of the Delivery lens: a 170 × 8px
- * bar of the leaf states and the counts line.
+ * bar of the states of the work items and the counts line.
  */
 import { isContainerKind, type FlowDocument } from "../../state/flowDocument";
 import type { FlowItemState, ItemDeliveryState } from "../../types";
@@ -28,7 +28,10 @@ export interface LeafRollup {
   blocked: number;
 }
 
-/** MDL-FR-GDUP: the leaves of the plan by state, and the blocked leaves. */
+/**
+ * MDL-FR-GDUP / FDL-FR-KWMT: the work items of the plan by state, and the
+ * blocked work items. A work item is a leaf, or a container that holds no item.
+ */
 export function leafRollup(
   doc: FlowDocument | null,
   states: ReadonlyMap<string, ItemDeliveryState> | null,
@@ -43,8 +46,9 @@ export function leafRollup(
   };
   let leaves = 0;
   let blocked = 0;
+  const holders = new Set(doc.items.map((i) => i.parentId).filter((p) => p !== undefined));
   for (const item of doc.items) {
-    if (isContainerKind(item.kind)) continue;
+    if (isContainerKind(item.kind) && holders.has(item.id)) continue;
     const state = states.get(item.id);
     if (!state) continue;
     leaves += 1;

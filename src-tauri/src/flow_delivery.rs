@@ -161,6 +161,9 @@ pub struct ItemTrackerFacts {
     /// Whether `status` is the option that the In Progress status resolves to
     /// (GPP-FR-VXSB). The caller resolves it, so this module reads no setting.
     pub status_is_in_progress: bool,
+    /// Whether `status` is the option that the Blocked status resolves to
+    /// (GPP-FR-BLVX, FDL-FR-SBLQ). The caller resolves it.
+    pub status_is_blocked: bool,
     /// The count of the item's open blockers that are not items of the plan
     /// (GDP-FR-URZL).
     pub open_external_blockers: usize,
@@ -243,11 +246,14 @@ fn work_state(draft: Option<&DraftSummary>) -> ItemState {
     }
 }
 
-/// FDL-FR-JYKC, FDL-FR-YIAZ: a container's state from its tracker facts and
-/// the leaves under it.
+/// FDL-FR-JYKC, FDL-FR-YIAZ: the state of a container that holds an item,
+/// from its tracker facts and the work items under it. A closed container
+/// with unfinished work takes its state from that work.
 fn container_state(facts: Option<&ItemTrackerFacts>, leaves: &[ItemState]) -> ItemState {
     if let Some(closed) = closed_state(facts) {
-        return closed;
+        if leaves.iter().all(|s| finished(*s)) {
+            return closed;
+        }
     }
     if leaves.is_empty() {
         return ItemState::NotStarted;
@@ -290,10 +296,16 @@ pub fn delivery_state_with_tracker(
     let by_id: HashMap<&str, &DraftSummary> = drafts.iter().map(|d| (d.id.as_str(), d)).collect();
     let hierarchy = Hierarchy::new(&doc.items);
 
+    // FDL-FR-KWMT: a work item is a leaf, or a container that holds no item.
+    // A container work item takes the state of a leaf with no draft.
     let mut leaf_states: HashMap<&str, ItemState> = HashMap::new();
     let mut leaf_drafts: HashMap<&str, (Option<&DraftSummary>, bool)> = HashMap::new();
-    for item in doc.items.iter().filter(|i| !i.kind.is_container()) {
+    for item in doc.items.iter().filter(|i| hierarchy.is_work_item(&i.id)) {
         let facts = tracker.get(&item.id);
+        if item.kind.is_container() {
+            leaf_states.insert(&item.id, leaf_state(facts, None));
+            continue;
+        }
         let (draft, missing) = leaf_draft(item, facts, &by_id);
         leaf_states.insert(&item.id, leaf_state(facts, draft));
         leaf_drafts.insert(&item.id, (draft, missing));
@@ -304,10 +316,14 @@ pub fn delivery_state_with_tracker(
     for item in &doc.items {
         if let Some(s) = leaf_states.get(item.id.as_str()) {
             states.insert(&item.id, *s);
+            if item.kind.is_container() {
+                // FDL-FR-IJXW: a container that holds no item counts nothing.
+                counts.insert(&item.id, LeafCounts::default());
+            }
             continue;
         }
         let leaves: Vec<ItemState> = hierarchy
-            .leaves_under(&item.id)
+            .work_items_under(&item.id)
             .iter()
             .filter_map(|l| leaf_states.get(l).copied())
             .collect();
@@ -339,6 +355,11 @@ pub fn delivery_state_with_tracker(
             // is not finished, and is not listed in `blocked_by`.
             let external = !finished(state)
                 && tracker.get(&item.id).is_some_and(|f| f.open_external_blockers > 0);
+            // FDL-FR-SBLQ: an open item on the Blocked option of the board.
+            let by_status = !finished(state)
+                && tracker
+                    .get(&item.id)
+                    .is_some_and(|f| f.state == TrackerState::Open && f.status_is_blocked);
             let (draft, missing) =
                 leaf_drafts.get(item.id.as_str()).copied().unwrap_or((None, false));
             ItemDeliveryState {
@@ -353,7 +374,7 @@ pub fn delivery_state_with_tracker(
                 run: draft
                     .and_then(|d| d.graduation.as_ref())
                     .map(|g| RunRef { run_id: g.run_id.clone(), state: g.state }),
-                blocked: external || !blocked_by.is_empty(),
+                blocked: external || by_status || !blocked_by.is_empty(),
                 blocked_by,
                 leaf_counts: counts.remove(item.id.as_str()),
             }
@@ -375,7 +396,7 @@ fn drafts_with_runs<R: tauri::Runtime>(
 
 /// FDL contract surface: `compute_delivery_state(document, tracker_facts)` for
 /// a GitHub plan (GDP-FR-XWES). It reads the drafts of the active worktree and
-/// their runs once (FDL-FR-PBSD), and applies FDL-FR-TTZZ, FDL-FR-YIAZ,
+/// their runs once (FDL-FR-PBSD), and applies FDL-FR-TTZZ, FDL-FR-YIAZ, FDL-FR-SBLQ,
 /// FDL-FR-WPSZ, and FDL-FR-UEPM. The caller has the document from the plan it
 /// built, so no validation is made here.
 pub fn compute_delivery_state<R: tauri::Runtime>(
@@ -589,3 +610,5 @@ fn delivery_flow_id<R: tauri::Runtime>(
 pub(crate) mod tests;
 #[cfg(test)]
 mod tests_tracker;
+#[cfg(test)]
+mod tests_work_items;

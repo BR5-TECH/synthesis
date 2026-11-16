@@ -392,8 +392,7 @@ describe("geometry helpers (FLO-FR-21, FLO-FR-42, FLO-FR-44)", () => {
 
   it("FLO-FR-42: where two sibling containers overlap, the first in document order wins", () => {
     const pair = plan([item("m1", "milestone"), item("m2", "milestone")]);
-    const placed = layoutFor(
-      pair,
+    const placed = placedAsStored(
       storedLayout({
         m1: { x: 0, y: 0, width: 100, height: 100 },
         m2: { x: 50, y: 50, width: 100, height: 100 },

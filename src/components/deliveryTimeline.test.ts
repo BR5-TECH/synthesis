@@ -79,6 +79,14 @@ describe("leaves and counts", () => {
     expect(milestoneCountLine([done, open, dropped])).toBe("1 of 3 milestones done");
     expect(milestoneCountLine([done, dropped])).toBe("All milestones done");
   });
+
+  it("DSH-FR-OUPX: the count line ends in the sum of the blocked work items, and only when there is one", () => {
+    const a = milestone("a", null, { state: "in_progress", blockedLeaves: 2 });
+    const b = milestone("b", null, { blockedLeaves: 1 });
+    const c = milestone("c", null, { state: "done" });
+    expect(milestoneCountLine([a, b, c])).toBe("1 of 3 milestones done · 3 blocked");
+    expect(milestoneCountLine([c])).toBe("All milestones done");
+  });
 });
 
 describe("the axis (DSH-FR-PLRL / DSH-FR-EWPI)", () => {

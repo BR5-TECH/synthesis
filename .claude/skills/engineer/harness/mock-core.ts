@@ -8327,6 +8327,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- project ---------------------------------------------------------
     case "open_project_at_path":
+    case "resolve_project_at_path":
     case "open_project_from_git_url":
     case "create_project":
       return {

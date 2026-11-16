@@ -91,7 +91,8 @@ describe("every edit affordance is inert while the host keeps the canvas inert (
     for (const name of ["Kind", "Link draft", "Add path", "Add reference"]) {
       expect(p.getByRole("combobox", { name })).toBeDisabled();
     }
-    expect(p.getByRole("textbox", { name: "Description" })).toBeDisabled();
+    expect(p.getByRole("button", { name: "Edit the description" })).toBeDisabled();
+    expect(p.queryByRole("textbox", { name: "Description" })).toBeNull();
   });
 
   it("MDL-FR-WMGU: the edge panel's type, Reverse, and Remove edge are disabled", async () => {
@@ -113,8 +114,9 @@ describe("every edit affordance is inert while the host keeps the canvas inert (
     const missing = await screen.findByTestId("flow-draft-missing");
 
     expect(within(missing).getByRole("button", { name: "Unlink" })).toBeDisabled();
-    expect(within(itemEl("t2")).getByRole("button", { name: "Create draft" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Add to plan" })).toBeDisabled();
+    selectItem("t2");
+    expect(within(panel()).getByRole("button", { name: "Create draft" })).toBeDisabled();
     fireEvent.doubleClick(screen.getByTestId("flow-item-name-t2"));
     fireEvent.doubleClick(screen.getByTestId("flow-item-name-f1"));
     expect(screen.queryByRole("textbox", { name: "Item name" })).toBeNull();
@@ -145,8 +147,9 @@ describe("an edit the plan cannot take when its backend call returns (FLO-FR-NRB
     const onOpenDraft = vi.fn();
     const { flows } = await renderFlow(b, { onCreateDraft, onOpenDraft });
 
+    selectItem("t2");
     await act(async () => {
-      fireEvent.click(within(itemEl("t2")).getByRole("button", { name: "Create draft" }));
+      fireEvent.click(within(panel()).getByRole("button", { name: "Create draft" }));
     });
 
     expect(await within(itemEl("t2")).findByRole("alert")).toHaveTextContent(unlinkedDraftText("T2"));

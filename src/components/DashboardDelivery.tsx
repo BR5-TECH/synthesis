@@ -46,9 +46,10 @@ const LEAF_WORD: Readonly<Record<FlowItemState, string>> = {
 
 /**
  * The height of one label row above the axis. It holds the current milestone
- * with its counts line on two lines (DSH-FR-BBRC).
+ * with its counts line on two lines (DSH-FR-BBRC) and its blocked mark
+ * (DSH-FR-NNWM).
  */
-const ROW_HEIGHT = 112;
+const ROW_HEIGHT = 152;
 
 /** DSH-FR-YGWR: a refused load shows its error text. The log carries the code alone. */
 export const DELIVERY_ERROR_TEXT: WidgetErrorText = {
@@ -173,6 +174,14 @@ function MilestoneCard({
         </span>
       )}
       <LeafBar milestone={milestone} />
+      {milestone.blockedLeaves > 0 && !milestone.current && (
+        // DSH-FR-NNWM: blocked work is said in a shape and in words. The
+        // current milestone says it in its counts line (DSH-FR-BBRC).
+        <span className="dash-delivery__blocked" data-testid={`delivery-blocked-${milestone.itemId}`}>
+          <span aria-hidden="true">⊘</span>
+          {`\u00a0${milestone.blockedLeaves}\u00a0blocked`}
+        </span>
+      )}
       {milestone.current && (
         // DSH-FR-BBRC: the line wraps only after `·`, so a card of the
         // axis keeps its width and shows the two counts on two lines.
@@ -181,6 +190,54 @@ function MilestoneCard({
         </span>
       )}
     </button>
+  );
+}
+
+/**
+ * DSH-FR-HVOQ: the milestones with no due date, in plan order, in one
+ * horizontal track joined by a line. It scrolls when it is wider than the
+ * widget, and each render of an answer first shows the current milestone.
+ */
+function MilestoneTrack({
+  answer,
+  milestones,
+  today,
+  labelled,
+  onShow,
+}: {
+  answer: DeliveryMilestones;
+  milestones: DeliveryMilestone[];
+  today: string;
+  /** Whether the track sits under an axis and so carries the No date label. */
+  labelled: boolean;
+  onShow: (itemId: string) => void;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const current = el.querySelector<HTMLElement>('[data-current="true"]');
+    if (!current) return;
+    // The card's x in the track, measured on the screen: its offset parent is
+    // its step, not the scroller.
+    const x = current.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft;
+    const max = Math.max(el.scrollWidth - el.clientWidth, 0);
+    el.scrollLeft = Math.min(Math.max(x - el.clientWidth / 3, 0), max);
+  }, [answer, milestones]);
+
+  return (
+    <div className="dash-delivery__nodate" data-testid="delivery-no-date" data-labelled={labelled ? "true" : undefined}>
+      {labelled && <span className="dash-delivery__nodate-title">No date</span>}
+      <div className="dash-delivery__track-scroller" ref={scroller} data-testid="delivery-no-date-scroller">
+        <ol className="dash-delivery__steps">
+          {milestones.map((m) => (
+            <li key={m.itemId} className="dash-delivery__step">
+              <MilestoneCard milestone={m} today={today} onShow={onShow} />
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
   );
 }
 
@@ -279,8 +336,10 @@ interface DeliveryWidgetProps {
 /** DSH-FR-AHRJ: the full-width last row of the Dashboard. */
 export function DeliveryWidget({ state, today, onShow }: DeliveryWidgetProps) {
   const data = isAnswer(state.data) ? state.data : null;
-  const milestones = data?.milestones ?? [];
-  const undated = milestones.filter((m) => !isDated(m));
+  const milestones = useMemo(() => data?.milestones ?? [], [data]);
+  // DSH-FR-HVOQ: one array per answer, so the track scrolls again only on a new answer.
+  const undated = useMemo(() => milestones.filter((m) => !isDated(m)), [milestones]);
+  const dated = milestones.length > undated.length;
   const answerStale = data?.stale === true;
   const readAt = answerStale ? readTime(data?.readAt ?? null) : null;
 
@@ -323,15 +382,18 @@ export function DeliveryWidget({ state, today, onShow }: DeliveryWidgetProps) {
           <WidgetNotice kind="loading">Loading…</WidgetNotice>
         ) : (
           <div className="dash-delivery__content">
-            {/* DSH-FR-NZXN: the axis shows today also when no milestone is dated. */}
-            <Timeline answer={data} milestones={milestones} today={today} onShow={(id) => show(id)} />
+            {/* DSH-FR-NZXN: no axis and no Today line where no milestone is dated. */}
+            {dated && (
+              <Timeline answer={data} milestones={milestones} today={today} onShow={(id) => show(id)} />
+            )}
             {undated.length > 0 && (
-              <div className="dash-delivery__nodate" data-testid="delivery-no-date">
-                <span className="dash-delivery__nodate-title">No date</span>
-                {undated.map((m) => (
-                  <MilestoneCard key={m.itemId} milestone={m} today={today} onShow={(id) => show(id)} />
-                ))}
-              </div>
+              <MilestoneTrack
+                answer={data}
+                milestones={undated}
+                today={today}
+                labelled={dated}
+                onShow={(id) => show(id)}
+              />
             )}
           </div>
         )}

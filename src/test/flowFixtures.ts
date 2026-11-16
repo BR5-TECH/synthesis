@@ -126,3 +126,15 @@ export function panCanvas(dx: number, dy: number) {
 
 /** The selection panel of the selected item. */
 export const panel = () => screen.getByTestId("flow-selection-panel");
+
+/**
+ * FLO-FR-13: the Markdown source field of the selected item's description.
+ * The panel opens on the rich text, so this activates Edit first.
+ */
+export function descriptionSource(): HTMLElement {
+  const p = within(panel());
+  const open = p.queryByRole("textbox", { name: "Description" });
+  if (open) return open;
+  fireEvent.click(p.getByRole("button", { name: "Edit the description" }));
+  return p.getByRole("textbox", { name: "Description" });
+}

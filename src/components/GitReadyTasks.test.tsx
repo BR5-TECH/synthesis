@@ -227,7 +227,7 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
     show(
       controller({
         view: pollingView({
-          settings: { projectNodeId: null, intervalMinutes: null, readyStatus: null, inProgressStatus: null },
+          settings: { projectNodeId: null, intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null },
           configuration: { state: "unset", errorCode: null, error: null, missingStatus: null, projectTitle: null },
           tasks: [],
         }),
@@ -316,7 +316,7 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
 
   it("GIT-FR-EZFL: Refresh polls at once, with or without an interval", async () => {
     const polling = controller({
-      view: pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } }),
+      view: pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
     });
     show(polling);
     const refresh = screen.getByRole("button", { name: "Refresh ready tasks" });
@@ -336,7 +336,7 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
   it("GIT-FR-EZFL: Refresh is unavailable with no Project, and says why", () => {
     show(
       controller({
-        view: pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
+        view: pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null, blockedStatus: null } }),
       }),
     );
     const refresh = screen.getByRole("button", { name: /Refresh ready tasks \(unavailable: No GitHub Project is selected\)/ });

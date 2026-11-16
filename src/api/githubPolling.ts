@@ -30,7 +30,7 @@ export const getGithubPollingState = () =>
   invoke<GithubPollingView>("get_github_polling_state");
 
 /**
- * GPP-FR-IURX / GPP-FR-DBPI: persist the Project, the interval, and the two
+ * GPP-FR-IURX / GPP-FR-DBPI: persist the Project, the interval, and the three
  * status names, then validate.
  */
 export const setGithubPollingSettings = (
@@ -38,12 +38,14 @@ export const setGithubPollingSettings = (
   intervalMinutes: GithubPollingInterval | null,
   readyStatus: string | null,
   inProgressStatus: string | null,
+  blockedStatus: string | null,
 ) =>
   invoke<GithubPollingView>("set_github_polling_settings", {
     projectNodeId,
     intervalMinutes,
     readyStatus,
     inProgressStatus,
+    blockedStatus,
   });
 
 /** GPP-FR-XSKT / GPP-FR-XZTP: run one poll, or join the one in flight. */

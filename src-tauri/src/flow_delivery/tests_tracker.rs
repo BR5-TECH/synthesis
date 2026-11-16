@@ -1,6 +1,7 @@
 //! The tests of the delivery state of a GitHub plan: the rules that read the
 //! tracker facts of each item (`FDL-flow-delivery.md` FDL-FR-TTZZ,
-//! FDL-FR-YIAZ, FDL-FR-WPSZ, FDL-FR-UEPM).
+//! FDL-FR-YIAZ, FDL-FR-WPSZ, FDL-FR-UEPM, FDL-FR-SBLQ). The work-item rules
+//! are in `tests_work_items.rs`.
 
 use serde_json::json;
 
@@ -228,8 +229,8 @@ fn the_tracker_answer_is_pure_and_matches_a_file_without_facts() {
 
 /// FDL-FR-YIAZ, FDL-FR-PXHL, FDL-FR-UEPM: a closed `not_planned` item is
 /// dropped, so a `blocks` edge from it blocks nothing; a dropped item with an
-/// open external blocker is not blocked; and a closed container with open
-/// leaves is `done`.
+/// open external blocker is not blocked; and a closed container with an open
+/// leaf takes its state from its work (FDL-FR-JYKC).
 #[test]
 fn a_closed_blocker_blocks_nothing_and_a_closed_container_is_finished() {
     let d = doc(
@@ -246,7 +247,7 @@ fn a_closed_blocker_blocks_nothing_and_a_closed_container_is_finished() {
     let t2 = state_of(&s, "t2");
     assert_eq!(t2.state, ItemState::NotStarted);
     assert!(!t2.blocked && t2.blocked_by.is_empty(), "a dropped blocker blocks nothing");
-    assert_eq!(state_of(&s, "f2").state, ItemState::Done, "closed with an open leaf");
+    assert_eq!(state_of(&s, "f2").state, ItemState::NotStarted, "closed with an open leaf");
 }
 
 /// FDL-FR-UEPM: an external blocker of a container blocks the container

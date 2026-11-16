@@ -592,6 +592,24 @@ fn milestones_of_a_flow_are_ordered_and_counted() {
     assert_eq!(value["blockedLeaves"], 0);
 }
 
+/// DSR-FR-FQZD, FDL-FR-KWMT: a milestone counts its work items, an empty
+/// feature among them, and counts a blocked empty feature as a blocked work
+/// item. An epic that holds the feature is not counted.
+#[test]
+fn milestones_count_blocked_work_items() {
+    let body = json!({ "version": 3, "items": [
+        { "id": "m", "kind": "milestone", "name": "M" },
+        { "id": "e", "kind": "epic", "name": "E", "parentId": "m" },
+        { "id": "f", "kind": "feature", "name": "F", "parentId": "e" },
+        { "id": "a", "kind": "task", "name": "A", "parentId": "m" }
+    ], "edges": [ { "id": "x", "from": "a", "to": "f", "type": "blocks" } ] });
+    let doc = parse_valid(&body.to_string()).unwrap();
+    let states = crate::flow_delivery::delivery_state(&doc, &[]);
+    let out = milestones_of(&doc, &states.items);
+    assert_eq!(out[0].leaf_counts.not_started, 2, "the task and the empty feature");
+    assert_eq!(out[0].blocked_leaves, 1, "the empty feature is blocked");
+}
+
 /// FLO-FR-MCFR: the dated milestones take the dated places by due date, one
 /// date keeps the plan order, and each undated milestone keeps its place.
 #[test]

@@ -5,8 +5,8 @@
  *
  * It lists the options of the selected Project's `Status` field by name. A
  * stored name that the list does not hold stays selected and is marked
- * unavailable, so nothing is replaced behind the author's back. The option
- * that the other selector holds is disabled, so the two statuses always
+ * unavailable, so nothing is replaced behind the author's back. The options
+ * that the other selectors hold are disabled, so the three statuses always
  * differ.
  */
 import type { GithubProjectStatusOption } from "../types";
@@ -17,8 +17,8 @@ const UNSET = "";
 export function StatusSelector({
   id,
   value,
-  other,
-  otherLabel,
+  others,
+  optional = false,
   options,
   loading,
   disabled,
@@ -27,10 +27,10 @@ export function StatusSelector({
   id: string;
   /** The stored status name, or `null` where none is stored. */
   value: string | null;
-  /** The name the other selector holds. */
-  other: string | null;
-  /** The other selector's name, for the reason an option is disabled. */
-  otherLabel: string;
+  /** The names the other selectors hold, each with that selector's name. */
+  others: ReadonlyArray<{ name: string | null; label: string }>;
+  /** GPP-FR-BLVX: an unset optional status is not an error. */
+  optional?: boolean;
   /** The options of the `Status` field; `null` while unread or unreadable. */
   options: GithubProjectStatusOption[] | null;
   /** The status read is outstanding. */
@@ -51,7 +51,7 @@ export function StatusSelector({
         value={value ?? UNSET}
         // SET-FR-JGAK: no choice while the options are unread.
         disabled={disabled || !loaded}
-        aria-invalid={value === null || unavailable ? true : undefined}
+        aria-invalid={(value === null && !optional) || unavailable ? true : undefined}
         onChange={(e) => {
           if (e.target.value !== UNSET) onChange(e.target.value);
         }}
@@ -66,12 +66,15 @@ export function StatusSelector({
             {unavailable ? `${value} (unavailable)` : value}
           </option>
         )}
-        {(options ?? []).map((o) => (
-          // SET-FR-QZYV: the other selector's option cannot be chosen here.
-          <option key={o.id} value={o.name} disabled={o.name === other}>
-            {o.name === other ? `${o.name} (the ${otherLabel})` : o.name}
-          </option>
-        ))}
+        {(options ?? []).map((o) => {
+          // SET-FR-QZYV: an option another selector holds cannot be chosen here.
+          const holder = others.find((h) => h.name === o.name);
+          return (
+            <option key={o.id} value={o.name} disabled={holder !== undefined}>
+              {holder ? `${o.name} (the ${holder.label})` : o.name}
+            </option>
+          );
+        })}
       </select>
       {loading && (
         <span className="t-ui-xs t-muted" data-testid={`${id}-loading`}>

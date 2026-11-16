@@ -17,7 +17,10 @@ use crate::flow_validation::model::{
     Edge, EdgeType, FlowDocument, Hierarchy, Item, Kind, WaitGraph,
 };
 use crate::github_polling::client::ProjectShape;
-use crate::github_polling::eligibility::{is_eligible, validate_shape, StatusNames};
+use crate::github_polling::eligibility::{
+    is_eligible, resolve_status, validate_shape, StatusNames,
+};
+use crate::github_polling::records::BLOCKED;
 use crate::github_polling::RepositoryRef;
 
 use super::adapter::{ItemContent, StateReason, TrackerIssue, TrackerMilestone};
@@ -142,6 +145,19 @@ fn resolved_statuses(read: &TrackerRead, statuses: &StatusNames) -> Option<(Stri
         status_field: read.project.status_field.as_ref().map(|f| f.as_polling()),
     };
     validate_shape(&shape, statuses).ok().map(|v| (v.ready_name, v.in_progress_name))
+}
+
+/// GPP-FR-BLVX: the option name the Blocked status resolves to, also where
+/// the Ready or the In Progress status resolves to none. An unset name never
+/// takes an option that the other two statuses name.
+fn resolved_blocked(read: &TrackerRead, statuses: &StatusNames) -> Option<String> {
+    let field = read.project.status_field.as_ref()?.as_polling();
+    let found = resolve_status(&field.options, statuses.blocked.as_deref(), BLOCKED, None)?;
+    let taken = [statuses.ready.as_deref(), statuses.in_progress.as_deref()];
+    match statuses.blocked.is_none() && taken.contains(&Some(found.name.as_str())) {
+        true => None,
+        false => Some(found.name.clone()),
+    }
 }
 
 fn non_empty(text: &str) -> Option<String> {
@@ -367,6 +383,7 @@ pub fn build_plan(
 
     // GDP-FR-QGFO: the tracker facts.
     let resolved = resolved_statuses(read, statuses);
+    let blocked_option = resolved_blocked(read, statuses);
     let repository = RepositoryRef {
         host: read.repository.host.clone(),
         owner: read.repository.owner.clone(),
@@ -418,6 +435,7 @@ pub fn build_plan(
                 close_reason: reason,
                 status: status.map(str::to_string),
                 status_is_in_progress: in_progress,
+                status_is_blocked: blocked_option.is_some() && *status == blocked_option.as_deref(),
                 open_external_blockers: blockers.len(),
                 issue: Some(IssueReference {
                     host: read.repository.host.clone(),

@@ -734,6 +734,7 @@ impl Harness {
             interval_minutes: None,
             ready_status: None,
             in_progress_status: None,
+            blocked_status: None,
         };
         crate::project_settings::save_github_polling_settings_to(&self.root(), &settings).unwrap();
     }

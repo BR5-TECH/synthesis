@@ -360,6 +360,7 @@ pub async fn set_github_polling_settings(
     interval_minutes: Option<u32>,
     ready_status: Option<String>,
     in_progress_status: Option<String>,
+    blocked_status: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<GithubPollingView, String> {
     let settings = GithubPollingSettings {
@@ -367,12 +368,13 @@ pub async fn set_github_polling_settings(
         interval_minutes,
         ready_status,
         in_progress_status,
+        blocked_status,
     };
     off_thread(move || set_settings_impl(&app, settings)).await
 }
 
 /// GPP-FR-IURX: the settings as they are stored. An empty value is unset, and
-/// a cleared Project clears both status names.
+/// a cleared Project clears the three status names.
 pub fn normalize_settings(settings: GithubPollingSettings) -> GithubPollingSettings {
     let present = |value: Option<String>| value.filter(|v| !v.trim().is_empty());
     let project_node_id =
@@ -383,16 +385,21 @@ pub fn normalize_settings(settings: GithubPollingSettings) -> GithubPollingSetti
         interval_minutes: settings.interval_minutes,
         ready_status: present(settings.ready_status).filter(|_| selected),
         in_progress_status: present(settings.in_progress_status).filter(|_| selected),
+        blocked_status: present(settings.blocked_status).filter(|_| selected),
     }
 }
 
-/// GPP-FR-DBPI: the two status names must differ.
+/// GPP-FR-DBPI: the three status names must differ.
 pub fn validate_statuses(settings: &GithubPollingSettings) -> Result<(), String> {
-    match (&settings.ready_status, &settings.in_progress_status) {
-        (Some(ready), Some(in_progress)) if ready == in_progress => {
-            Err(ERR_DUPLICATE_STATUS_OPTION.to_string())
-        }
-        _ => Ok(()),
+    let names: Vec<&String> =
+        [&settings.ready_status, &settings.in_progress_status, &settings.blocked_status]
+            .into_iter()
+            .flatten()
+            .collect();
+    let duplicate = names.iter().enumerate().any(|(i, a)| names[i + 1..].contains(a));
+    match duplicate {
+        true => Err(ERR_DUPLICATE_STATUS_OPTION.to_string()),
+        false => Ok(()),
     }
 }
 
@@ -434,6 +441,7 @@ pub(crate) fn set_settings_impl<R: Runtime>(
             "interval_minutes" => interval_minutes,
             "ready_status_set" => statuses.ready.is_some(),
             "in_progress_status_set" => statuses.in_progress.is_some(),
+            "blocked_status_set" => statuses.blocked.is_some(),
         },
     );
     if let Some(project_id) = project_node_id.as_deref() {

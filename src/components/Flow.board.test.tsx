@@ -77,7 +77,7 @@ async function open(doc: FlowDocument = DOC, layout: StoredLayout = { items: {} 
   } as never;
   const r = await renderFlow(b, { board: true });
   await screen.findByTestId("flow-item-t1");
-  await waitFor(() => expect(within(itemEl("t1")).queryByTestId("flow-state-glyph")).not.toBeNull());
+  await waitFor(() => expect(within(itemEl("t1")).queryByTestId("flow-status-dot")).not.toBeNull());
   return { b, ...r };
 }
 
@@ -104,65 +104,109 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
   it("DBR-FR-ERHW: with the board the canvas lays the plan out as a board; a Flow tab has no board", async () => {
     await open();
     expect(canvas()).toHaveAttribute("data-board", "true");
-    expect(itemEl("t1")).toHaveClass("flow-bcard");
+    expect(itemEl("t1")).toHaveClass("dm-card");
     cleanup();
     clearFlowStores();
     const b = flowBackend(DOC, { items: {} });
     await renderFlow(b);
     await screen.findByTestId("flow-item-t1");
     expect(canvas()).toHaveAttribute("data-board", "false");
-    expect(itemEl("t1")).not.toHaveClass("flow-bcard");
+    expect(itemEl("t1")).not.toHaveClass("dm-card");
   });
 
-  it("DBR-FR-LNZI, DBR-FR-XOOU, DBR-FR-LVBY, DBR-FR-HWHO: a card has three lines: the kind, the name, and the state name of a Flow file", async () => {
+  it("DBR-FR-LNZI, DBR-FR-XOOU, DBR-FR-DZSU, DBR-FR-LVBY, DBR-FR-HWHO: a card has three lines: the kind chip, the name, and the state name of a Flow file in lowercase", async () => {
     await open();
     const card = itemEl("t2");
-    const lines = card.querySelectorAll(".flow-bcard__line");
-    expect(lines).toHaveLength(3);
-    expect(lines[0]).toHaveTextContent("Task");
+    const face = card.querySelector(".dm-card__face")!;
+    expect([...face.children].map((el) => el.className)).toEqual(["dm-card__id", "dm-card__title", "dm-card__meta"]);
+    const chip = within(card).getByTestId("flow-kind-chip");
+    expect(chip).toHaveTextContent("TSK");
+    expect(chip).toHaveAccessibleName("Task");
     expect(within(card).queryByTestId("flow-tracker-tag")).toBeNull();
-    expect(lines[1]).toHaveTextContent("Card form");
+    expect(within(card).getByTestId("flow-item-name-t2")).toHaveTextContent("Card form");
     expect(card).toHaveAttribute("title", "Card form");
-    expect(within(card).getByTestId("flow-card-status")).toHaveTextContent("Drafting");
-    expect(card.style.height).toBe(`${BOARD_CARD_H}px`);
-    expect(itemEl("x1").querySelectorAll(".flow-bcard__line")[0]).toHaveTextContent("Defect");
+    expect(within(card).getByTestId("flow-card-status")).toHaveTextContent("drafting");
+    expect(within(itemEl("x1")).getByTestId("flow-kind-chip")).toHaveTextContent("DEF");
   });
 
-  it("DBR-FR-LNZI: every card has the same height, whatever its name and its markers", async () => {
+  it("DBR-FR-LNZI: a card that the canvas has not measured takes the default height of three lines", async () => {
     await open();
     const heights = ["t1", "t2", "t3", "t4", "x1"].map((id) => itemEl(id).style.height);
     expect(new Set(heights)).toEqual(new Set([`${BOARD_CARD_H}px`]));
   });
 
-  it("DBR-FR-QZPA: the bottom line starts with the state glyph, named in its tooltip, and the card carries the state for its stripe", async () => {
-    await open();
-    const glyph = within(itemEl("t4")).getByTestId("flow-state-glyph");
-    expect(glyph).toHaveAttribute("title", "Done");
-    expect(glyph).toHaveAccessibleName("Done");
-    expect(itemEl("t4")).toHaveAttribute("data-state", "done");
-    expect(itemEl("t1").querySelector(".flow-bcard__status")!.firstElementChild).toBe(
-      within(itemEl("t1")).getByTestId("flow-state-glyph"),
-    );
+  it("DBR-FR-LNZI: a card takes the height its lines measure, and the members below it move down", async () => {
+    const proto = HTMLElement.prototype;
+    const own = Object.getOwnPropertyDescriptor(proto, "offsetHeight")!;
+    Object.defineProperty(proto, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("dm-card__face") && this.closest('[data-item-id="t1"]') ? 102 : 0;
+      },
+    });
+    try {
+      await open();
+      // The face and its 1px border on each side.
+      await waitFor(() => expect(itemEl("t1").style.height).toBe("104px"));
+      expect(parseFloat(itemEl("t2").style.top)).toBe(parseFloat(itemEl("t1").style.top) + 104 + 8);
+      expect(itemEl("t2").style.height).toBe(`${BOARD_CARD_H}px`);
+    } finally {
+      Object.defineProperty(proto, "offsetHeight", own);
+    }
   });
 
-  it("DBR-FR-GFGG: the markers are glyphs at the end of the bottom line; Blocked keeps its activation and the draft glyph names the draft", async () => {
+  it("MDL-FR-XKCH: on the board the popover opens beside the item and has a footer; a Flow tab keeps its panel below the item", async () => {
+    await open();
+    press("t3", { x: 0, y: 0 });
+    release();
+    const pop = await screen.findByTestId("flow-selection-panel");
+    expect(pop).toHaveAttribute("data-placement", "beside");
+    expect(pop).toHaveClass("dm-pop");
+    cleanup();
+    clearFlowStores();
+    await renderFlow(flowBackend(DOC, { items: {} }));
+    await screen.findByTestId("flow-item-t3");
+    fireEvent.pointerDown(itemEl("t3"), { pointerId: 1, buttons: 1, ...client({ x: 0, y: 0 }) });
+    release();
+    const panel = await screen.findByTestId("flow-selection-panel");
+    expect(panel.getAttribute("data-placement")).not.toBe("beside");
+    expect(panel).not.toHaveClass("dm-pop");
+    expect(screen.queryByTestId("flow-panel-foot")).toBeNull();
+  });
+
+  it("DBR-FR-QZPA, DBR-FR-GHDZ: the bottom line starts with the status dot, and the status word is beside it", async () => {
+    await open();
+    const status = within(itemEl("t4")).getByTestId("flow-card-status");
+    expect(status).toHaveTextContent("done");
+    expect(status.firstElementChild).toBe(within(itemEl("t4")).getByTestId("flow-status-dot"));
+    expect(within(itemEl("t4")).getByTestId("flow-status-dot")).toHaveAttribute("data-s", "done");
+    expect(itemEl("t4").querySelector(".flow-sglyph, .flow-chip")).toBeNull();
+  });
+
+  it("DBR-FR-GFGG, DBR-FR-ZBVZ: the markers are lowercase badges at the end of the bottom line; Blocked keeps its activation and the draft badge names the draft", async () => {
     await open();
     const blocked = within(itemEl("t2")).getByTestId("flow-marker-blocked");
+    expect(blocked).toHaveTextContent("blocked");
+    expect(blocked).toHaveClass("badge", "badge--danger");
     expect(blocked).toHaveAttribute("title", "Blocked by Tokenize card numbers");
     fireEvent.click(blocked);
     expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
-    expect(within(itemEl("t1")).getByTestId("flow-draft-glyph")).toHaveAttribute("title", "Draft tokenize-cards");
+    const draft = within(itemEl("t1")).getByTestId("flow-draft-glyph");
+    expect(draft).toHaveTextContent("draft");
+    expect(draft).toHaveAttribute("title", "Draft tokenize-cards");
     expect(within(itemEl("x1")).queryByTestId("flow-draft-glyph")).toBeNull();
   });
 
-  it("DBR-FR-GFGG: a missing draft shows a warning glyph in place of the draft glyph", async () => {
+  it("DBR-FR-GFGG: a missing draft shows the draft missing badge in place of the draft badge", async () => {
     const doc = plan([...DOC.items.map((i) => (i.id === "x1" ? { ...i, draftId: "gone" } : i))], DOC.edges);
     await open(doc);
     const warn = within(itemEl("x1")).getByTestId("flow-draft-missing");
+    expect(warn).toHaveTextContent("draft missing");
+    expect(warn).toHaveClass("badge--warn");
     expect(warn).toHaveAttribute("title", "Draft gone is missing");
   });
 
-  it("DBR-FR-ZRBD: a card shows no chip, no reference, no excerpt, and no draft row; the panel shows the draft row with its open action", async () => {
+  it("DBR-FR-ZRBD: a card shows no status chip, no reference, no excerpt, and no draft row; the panel shows the draft row with its open action", async () => {
     await open();
     const card = itemEl("t1");
     expect(card.querySelector(".flow-chip")).toBeNull();
@@ -177,20 +221,59 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     expect(within(panel).getByRole("button", { name: "Unlink draft" })).toBeInTheDocument();
   });
 
-  it("DBR-FR-SBTR, DBR-FR-BKWE: a group header is one line with the state glyph; a group shows no excerpt and offers no resize", async () => {
+  it("DBR-FR-SBTR, DBR-FR-SBLK, DBR-FR-VNSJ, DBR-FR-BKWE: a group has the face of a card with its count and its toggle; it shows no excerpt and offers no resize", async () => {
     await open();
     const epic = itemEl("e1");
     expect(epic).toHaveAttribute("data-board", "true");
+    expect(epic).toHaveClass("dm-group");
+    const face = epic.querySelector(".dm-group__head")!;
+    expect(within(face as HTMLElement).getByTestId("flow-kind-chip")).toHaveTextContent("EPC");
+    expect(within(face as HTMLElement).getByTestId("flow-item-name-e1")).toHaveTextContent("E1");
+    // The leaves under e1 are t1 (in progress) and t2 (drafting): none is done.
+    expect(within(face as HTMLElement).getByTestId("flow-leaf-counts-e1")).toHaveTextContent("0/2");
+    expect(within(face as HTMLElement).getByRole("button", { name: "Collapse E1" })).toBeInTheDocument();
+    expect(epic.querySelector(".dm-group__body")).not.toBeNull();
     expect(epic.querySelector(".flow-ctr__about")).toBeNull();
     expect(screen.queryByTestId("flow-resize-e1-se")).toBeNull();
     expect(screen.queryByTestId("flow-resize-f1-se")).toBeNull();
   });
 
-  it("DBR-FR-BYQX: a column header keeps its order number, due date, and state chip", async () => {
-    await open();
-    const head = itemEl("m1").querySelector(".flow-ctr__head")!;
-    expect(within(head as HTMLElement).getByTestId("flow-column-order-m1")).toHaveTextContent("1");
-    expect(within(head as HTMLElement).getByTestId("flow-due")).toHaveTextContent("2027-03-31");
+  it("DBR-FR-SBLK: a group that holds no item shows no stack, no count, and no toggle", async () => {
+    const doc = plan([...DOC.items, item("f9", "feature", { parentId: "m2", name: "Empty" })], DOC.edges);
+    await open(doc);
+    const empty = itemEl("f9");
+    expect(empty.querySelector(".dm-group__body")).toBeNull();
+    expect(within(empty).queryByTestId("flow-leaf-counts-f9")).toBeNull();
+    expect(within(empty).queryByRole("button", { name: /Collapse/ })).toBeNull();
+  });
+
+  it("DBR-FR-BYQX, DBR-FR-VNSJ: a column header shows its flag, name, state badge, due date, and done count, and no order number", async () => {
+    const b = flowBackend(DOC, { items: {} });
+    b.delivery = {
+      items: [itemState("m1", "in_progress"), itemState("t1", "in_progress"), itemState("t4", "done")],
+    } as never;
+    await renderFlow(b, { board: true });
+    await waitFor(() => expect(within(itemEl("m1")).queryByTestId("flow-status-chip")).not.toBeNull());
+    const head = itemEl("m1").querySelector(".dm-lane__head") as HTMLElement;
+    const row = head.querySelector(".dm-lane__row") as HTMLElement;
+    expect(row.querySelector(".dm-lane__flag")).not.toBeNull();
+    expect(within(row).getByTestId("flow-item-name-m1")).toHaveTextContent("M1");
+    const badge = within(row).getByTestId("flow-status-chip");
+    expect(badge).toHaveTextContent("in progress");
+    expect(badge).toHaveClass("badge", "badge--live");
+    expect(row.lastElementChild).toBe(within(row).getByTestId("flow-leaf-counts-m1"));
+    expect(within(head).queryByTestId("flow-column-order-m1")).toBeNull();
+    expect(within(head).getByTestId("flow-due")).toHaveTextContent("2027-03-31");
+    // m2 holds t4, which is done.
+    expect(within(itemEl("m2")).getByTestId("flow-leaf-counts-m2")).toHaveTextContent("1/1");
+    expect(within(head).getByRole("button", { name: "Collapse M1" })).toBeInTheDocument();
+  });
+
+  it("DBR-FR-BYQX: a column with a description shows it below the header row", async () => {
+    const doc = plan(DOC.items.map((i) => (i.id === "m1" ? { ...i, description: "Accept **Visa** first." } : i)), DOC.edges);
+    await open(doc);
+    expect(screen.getByTestId("flow-column-description-m1")).toHaveTextContent("Accept Visa first.");
+    expect(screen.queryByTestId("flow-column-description-m2")).toBeNull();
   });
 
   it("DBR-FR-HTCE: the stored positions give the stack order", async () => {
@@ -368,7 +451,7 @@ describe("a drag of the board (DBR-FR-MYVI .. DBR-FR-BBDZ)", () => {
 });
 
 describe("the card in detail (DBR-FR-QZPA, DBR-FR-GFGG, DBR-FR-SBTR)", () => {
-  it("DBR-FR-QZPA: each delivery state has its own glyph and state on the card, and an item with no state answer has neither", async () => {
+  it("DBR-FR-GHDZ: each delivery state of a Flow file gives its dot, and an item with no state answer has no dot and no status", async () => {
     const doc = plan([
       item("m1", "milestone"),
       ...(["a", "b", "c", "d", "e", "z"] as const).map((id) => item(id, "task", { parentId: "m1" })),
@@ -377,17 +460,18 @@ describe("the card in detail (DBR-FR-QZPA, DBR-FR-GFGG, DBR-FR-SBTR)", () => {
     const states = ["not_started", "drafting", "in_progress", "done", "dropped"] as const;
     b.delivery = { items: states.map((st, k) => itemState("abcde"[k], st)) } as never;
     await renderFlow(b, { board: true });
-    await waitFor(() => expect(within(itemEl("a")).queryByTestId("flow-state-glyph")).not.toBeNull());
-    const glyphs = states.map((st, k) => {
+    await waitFor(() => expect(within(itemEl("a")).queryByTestId("flow-status-dot")).not.toBeNull());
+    const dots = states.map((st, k) => {
       expect(itemEl("abcde"[k])).toHaveAttribute("data-state", st);
-      return within(itemEl("abcde"[k])).getByTestId("flow-state-glyph").textContent;
+      return within(itemEl("abcde"[k])).getByTestId("flow-status-dot").getAttribute("data-s");
     });
-    expect(new Set(glyphs).size).toBe(5);
-    expect(within(itemEl("z")).queryByTestId("flow-state-glyph")).toBeNull();
-    expect(itemEl("z")).not.toHaveAttribute("data-state");
+    expect(dots).toEqual(["backlog", "ready", "in progress", "done", "backlog"]);
+    expect(within(itemEl("e")).getByTestId("flow-card-status")).toHaveTextContent("dropped");
+    expect(within(itemEl("z")).queryByTestId("flow-status-dot")).toBeNull();
+    expect(within(itemEl("z")).queryByTestId("flow-card-status")).toBeNull();
   });
 
-  it("DBR-FR-GFGG: the bottom line ends with Blocked, Overlap, and the draft glyph, in that order", async () => {
+  it("DBR-FR-GFGG: the bottom line ends with Blocked, Overlap, and the draft badge, in that order", async () => {
     const b = flowBackend(DOC, { items: {} });
     b.delivery = {
       items: [itemState("t1", "in_progress", { blocked: true, blockedBy: ["t3"], draft: { id: "d-1", name: "tokenize-cards", status: "drafting" } })],
@@ -395,7 +479,8 @@ describe("the card in detail (DBR-FR-QZPA, DBR-FR-GFGG, DBR-FR-SBTR)", () => {
     b.overlaps = { overlaps: [{ items: ["t1", "t3"], paths: ["src/pay.rs"] }] };
     await renderFlow(b, { board: true });
     await waitFor(() => expect(within(itemEl("t1")).queryByTestId("flow-marker-overlap")).not.toBeNull());
-    const marks = itemEl("t1").querySelector(".flow-bcard__status .flow-bmarks")!;
+    const marks = itemEl("t1").querySelector(".dm-card__meta .dm-card__markers")!;
+    expect(marks.parentElement).toHaveClass("dm-card__meta");
     expect([...marks.children].map((el) => el.getAttribute("data-testid"))).toEqual([
       "flow-marker-blocked",
       "flow-marker-overlap",
@@ -405,10 +490,13 @@ describe("the card in detail (DBR-FR-QZPA, DBR-FR-GFGG, DBR-FR-SBTR)", () => {
     expect(itemEl("t3")).toHaveAttribute("data-selected", "true");
   });
 
-  it("DBR-FR-SBTR: a collapsed group shows its header and the line of counts", async () => {
+  it("DBR-FR-SBLK: a collapsed group shows its face alone, with its count in place of the counts line", async () => {
     const b = flowBackend(DOC, { items: { f1: { collapsed: true } } });
     await renderFlow(b, { board: true });
-    expect(await screen.findByTestId("flow-leaf-counts-f1")).toBeInTheDocument();
+    const count = await screen.findByTestId("flow-leaf-counts-f1");
+    expect(count.closest(".dm-group__head")).not.toBeNull();
+    expect(itemEl("f1").querySelector(".dm-group__body")).toBeNull();
+    expect(within(itemEl("f1")).getByRole("button", { name: "Expand F1" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("flow-item-t1")).toBeNull();
   });
 });

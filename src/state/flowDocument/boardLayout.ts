@@ -5,7 +5,9 @@
  * (DBR-FR-ZGNB). An epic and a feature are groups: a header and a stack of
  * their members (DBR-FR-IQBN). A stack puts its members one below the other
  * with one gap, and a member fills the inner width of its stack
- * (DBR-FR-FISH). Every card has one height (DBR-FR-LNZI). The stored
+ * (DBR-FR-FISH). A card is as high as its lines (DBR-FR-LNZI), and a group
+ * and a column are as high as their header and their stack: the canvas
+ * measures these heights, and the defaults stand in until it does. The stored
  * positions give the stack order alone (DBR-FR-HTCE, DBR-FR-BKWE).
  *
  * Pure: the drag of the canvas asks for a layout with the dragged item lifted
@@ -16,7 +18,6 @@ import { ancestorsOf, findItem, permitsParent } from "./containment";
 import { COLUMN_GAP, memberOrder, siblingWaits } from "./autoLayout";
 import { isColumnMilestone, milestoneOrder } from "./milestoneOrder";
 import {
-  CONTAINER_HEADER_H,
   isContainerKind,
   type FlowDocument,
   type FlowItem,
@@ -27,20 +28,32 @@ import {
 } from "./types";
 import type { FlowRect } from "./containment";
 
-/** DBR-FR-ZGNB: the width of a card at the deepest nesting of the plan. */
-export const BOARD_CARD_W = 288;
-/** DBR-FR-LNZI: the one height of every card: three lines and the padding. */
-export const BOARD_CARD_H = 72;
+/**
+ * DBR-FR-ZGNB: the width of a card at the deepest nesting of the plan. A
+ * column around one group around a card is then 304px wide.
+ */
+export const BOARD_CARD_W = 272;
+/** DBR-FR-LNZI: the height of a card with a name on one line, until it is measured. */
+export const BOARD_CARD_H = 86;
+/** DBR-FR-SBTR: the height of the face of a group, until it is measured. */
+export const BOARD_FACE_H = 85;
 /** DBR-FR-FISH: the one gap between two members of a stack. */
 export const BOARD_GAP = 8;
 /** DBR-FR-IQBN: the inset between the border of a holder and its stack. */
 export const BOARD_INSET = 8;
-/** DBR-FR-SBTR: the header line of a group and of a column. */
-export const BOARD_HEAD_H = CONTAINER_HEADER_H;
+/** DBR-FR-BYQX: the height of the header of a column with no description, until it is measured. */
+export const BOARD_HEAD_H = 49;
 /** The room of a stack that holds nothing, so a drop can reach it. */
 export const BOARD_EMPTY_H = 40;
-/** DBR-FR-SBTR / FLO-FR-ZASL: a collapsed group: its header and one line of counts. */
-export const BOARD_COLLAPSED_H = CONTAINER_HEADER_H + 26;
+/** DBR-FR-SBLK: the divider between the face of a group and its stack, and the bottom border. */
+const BOARD_RULE = 1;
+
+/**
+ * DBR-FR-LNZI / DBR-FR-SBTR / DBR-FR-BYQX: the measured height of a card, or
+ * of the face of a group, or of the header of a column, by item id. A value
+ * that is missing or not positive is not measured.
+ */
+export type BoardHeights = Readonly<Record<string, number>>;
 
 /**
  * The holder of a stack: the id of a column or a group, or null for the No
@@ -62,6 +75,8 @@ export interface BoardOptions {
   lifted?: ReadonlySet<string>;
   /** DBR-FR-CZEU: the placeholder of the drag. */
   gap?: BoardGap | null;
+  /** DBR-FR-LNZI: the heights the canvas measured. */
+  heights?: BoardHeights;
 }
 
 export interface BoardLayout {
@@ -156,6 +171,11 @@ export function resolveBoardLayout(
   const lifted = options.lifted ?? new Set<string>();
   const gap = options.gap ?? null;
   const collapsed = (id: string) => stored.items[id]?.collapsed === true;
+  const heights = options.heights ?? {};
+  const measured = (id: string, fallback: number) => {
+    const h = heights[id];
+    return finite(h) && h > 0 ? h : fallback;
+  };
   const out: Record<string, PlacedItem> = {};
   /** The placeholder, relative to its holder. */
   let gapAt: { holder: BoardHolder; x: number; y: number; width: number; height: number } | null = null;
@@ -178,7 +198,7 @@ export function resolveBoardLayout(
       if (gap && gap.holder === holder && gap.index === k) putGap();
       const item = findItem(doc, id)!;
       if (any) at += BOARD_GAP;
-      const height = isContainerKind(item.kind) ? group(item, width) : BOARD_CARD_H;
+      const height = isContainerKind(item.kind) ? group(item, width) : measured(id, BOARD_CARD_H);
       out[id] = {
         ...out[id],
         position: { x, y: at },
@@ -192,22 +212,34 @@ export function resolveBoardLayout(
     return at;
   };
 
-  /** A group: its header and its stack, and the height they take. */
+  /**
+   * DBR-FR-SBTR / DBR-FR-SBLK: a group: its face and, below the divider, its
+   * stack. A group that holds no item, and a collapsed group, is its face
+   * alone, unless the placeholder of a drag opens its stack (DBR-FR-CZEU).
+   */
   const group = (item: FlowItem, width: number): number => {
+    const face = measured(item.id, BOARD_FACE_H);
+    const members = (orders.get(item.id) ?? []).filter((id) => !lifted.has(id));
+    const target = gap !== null && gap.holder === item.id;
     const inner = width - 2 * BOARD_INSET;
-    const bottom = stack(item.id, BOARD_INSET, BOARD_HEAD_H, inner) + BOARD_INSET;
-    if (collapsed(item.id)) out[item.id] = { ...out[item.id], position: { x: 0, y: 0 }, collapsed: true };
-    return collapsed(item.id) ? BOARD_COLLAPSED_H : bottom;
+    if (collapsed(item.id)) {
+      out[item.id] = { ...out[item.id], position: { x: 0, y: 0 }, collapsed: true };
+      if (target) stack(item.id, BOARD_INSET, face + BOARD_RULE + BOARD_INSET, inner);
+      return face + BOARD_RULE;
+    }
+    if (members.length === 0 && !target) return face + BOARD_RULE;
+    return stack(item.id, BOARD_INSET, face + BOARD_RULE + BOARD_INSET, inner) + BOARD_INSET + BOARD_RULE;
   };
 
   const columnInner = BOARD_CARD_W + 2 * BOARD_INSET * deepestNesting(doc);
   const columnWidth = columnInner + 2 * BOARD_INSET;
   const columns = milestoneOrder(doc);
   columns.forEach((m, k) => {
-    const bottom = stack(m.id, BOARD_INSET, BOARD_HEAD_H, columnInner) + BOARD_INSET;
+    const head = measured(m.id, BOARD_HEAD_H);
+    const bottom = stack(m.id, BOARD_INSET, head, columnInner) + BOARD_INSET;
     out[m.id] = {
       position: { x: k * (columnWidth + COLUMN_GAP), y: 0 },
-      size: { width: columnWidth, height: collapsed(m.id) ? BOARD_COLLAPSED_H : bottom },
+      size: { width: columnWidth, height: collapsed(m.id) ? head + BOARD_RULE : bottom },
       ...(collapsed(m.id) ? { collapsed: true } : {}),
     };
   });

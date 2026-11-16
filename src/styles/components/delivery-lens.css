@@ -3,23 +3,6 @@
    sits in the Map tab's frame (.smap) and hosts the Flow canvas (flow.css);
    these rules hold what the lens adds around it. */
 
-/* MDL-FR-GDUP: the 170 × 8px bar of the leaf states. */
-.dlens-bar {
-  flex: none;
-  display: flex;
-  width: 170px;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--bg-sunken);
-}
-.dlens-bar__segment { height: 100%; }
-.dlens-bar__segment[data-state="done"] { background: var(--ok); }
-.dlens-bar__segment[data-state="in_progress"] { background: var(--warn); }
-.dlens-bar__segment[data-state="drafting"] { background: var(--accent); }
-.dlens-bar__segment[data-state="not_started"] { background: var(--fg-4); opacity: 0.55; }
-.dlens-bar__segment[data-state="dropped"] { background: var(--border-2); }
-
 /* The canvas column: the notices, then the canvas that takes the rest. */
 .dlens-main { position: relative; }
 .dlens-plan { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -59,57 +42,6 @@
   color: var(--fg-2);
 }
 
-/* MDL-FR-KKYH: what the band of a GitHub plan adds. */
-.dlens-band__repo {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: var(--fs-ui-xs);
-  color: var(--fg-2);
-}
-/* MDL-FR-BZHY / MDL-FR-DHHW: the repository and the Flow path are links. */
-.dlens-band__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 4px;
-  border: 1px solid transparent;
-  border-radius: var(--r-xs);
-  background: none;
-  cursor: pointer;
-}
-.dlens-band__link:hover:not(:disabled) { color: var(--accent); }
-.dlens-band__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.dlens-band__link:disabled { cursor: default; color: var(--fg-3); }
-.dlens-band__read { flex: none; font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; }
-.dlens-band__refresh { display: inline-flex; align-items: center; gap: 4px; }
-
-/* The band menu: a transient surface of the tab. */
-.dlens-menu { position: relative; flex: none; }
-.dlens-menu__toggle { width: 26px; height: 26px; padding: 0; font-size: var(--fs-ui-md); line-height: 1; }
-.dlens-menu__list.draft-actions__menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  bottom: auto;
-  z-index: 40;
-  width: 188px;
-  gap: 0;
-  padding: 4px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-3);
-}
-.dlens-menu__list .draft-actions__item {
-  min-width: 0;
-  border-color: transparent;
-  background: var(--bg-elevated);
-  box-shadow: none;
-  padding: 5px 8px;
-}
-.dlens-menu__list .draft-actions__item:hover,
-.dlens-menu__list .draft-actions__item:focus-visible { background: var(--accent-soft); outline: none; }
-
 /* SDL-FR-KNOP / MDL-FR-QEXS / MDL-FR-PUKL: the rows the lens adds to the panel. */
 .dlens-panel {
   display: flex;
@@ -143,7 +75,7 @@
 .dlens-spec .smap-code { padding: 1px 3px; font-size: var(--fs-ui-2xs); }
 .dlens-spec__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dlens-add-issue .flow-panel__row { flex-wrap: nowrap; }
-.dlens-add-issue__input { width: 96px; font-family: var(--font-mono); }
+.dlens-add-issue__input { width: 96px; }
 
 /* MDL-FR-PUKL: Add existing issue at the top level, from the add affordance. */
 .dlens-add-top {

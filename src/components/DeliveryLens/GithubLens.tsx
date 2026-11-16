@@ -91,6 +91,11 @@ export function GithubLens(props: GithubLensProps) {
 
   const repository = `${source.repository.owner}/${source.repository.name}`;
   const tracker = useMemo(() => new Map((answer?.tracker ?? []).map((t) => [t.itemId, t])), [answer]);
+  const settings = host.claims?.view?.settings;
+  const statusNames = useMemo(
+    () => ({ ready: settings?.readyStatus ?? null, inProgress: settings?.inProgressStatus ?? null }),
+    [settings?.readyStatus, settings?.inProgressStatus],
+  );
   const states = useMemo(
     () => new Map<string, ItemDeliveryState>((answer?.states ?? []).map((s) => [s.itemId, s])),
     [answer],
@@ -268,16 +273,21 @@ export function GithubLens(props: GithubLensProps) {
             />
           </>
         }
+        // DBR-FR-TCPE: the status dot reads the Ready and In Progress status names.
+        statusNames={statusNames}
+        // MDL-FR-XKCH / MDL-FR-QEXS: the claim and graduate actions sit in the footer of the popover.
+        panelFooter={(item) => (
+          <ClaimActions
+            item={item}
+            tracker={tracker.get(item.id)}
+            state={states.get(item.id)}
+            claims={host.claims}
+            inert={false}
+          />
+        )}
         panelExtras={(item) => (
           <>
             {props.panelSpecs(item.id)}
-            <ClaimActions
-              item={item}
-              tracker={tracker.get(item.id)}
-              state={states.get(item.id)}
-              claims={host.claims}
-              inert={false}
-            />
             {isContainerKind(item.kind) && (
               <AddExistingIssue
                 key={item.id}

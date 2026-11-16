@@ -154,7 +154,7 @@ describe("a Flow file source (MDL-FR-VLQJ, MDL-FR-NTVL, MDL-FR-GDUP)", () => {
     const r = await openFile();
     // DBR-FR-ERHW: the lens lays the file out as the board.
     expect(document.querySelector(".flow")).toHaveAttribute("data-board", "true");
-    expect(screen.getByTestId("flow-item-t1")).toHaveClass("flow-bcard");
+    expect(screen.getByTestId("flow-item-t1")).toHaveClass("dm-card");
     expect(callsOf(b, "load_artifact_contents_by_id")[0]).toMatchObject({ id: FLOW });
     await waitFor(() => expect(callsOf(b, "load_flow_delivery_state").length).toBeGreaterThan(0));
     act(() => {
@@ -208,7 +208,8 @@ describe("a Flow file source (MDL-FR-VLQJ, MDL-FR-NTVL, MDL-FR-GDUP)", () => {
 
   it("MDL-FR-GDUP: the roll-up counts the leaves of the file by their state", async () => {
     await openFile();
-    expect(await screen.findByTestId("delivery-rollup-counts")).toHaveTextContent("1 done · 1 in progress · 1 blocked");
+    const legend = await screen.findByTestId("delivery-rollup-counts");
+    expect([...legend.children].map((c) => c.textContent)).toEqual(["1 done", "1 in progress", "1 blocked"]);
   });
 
   it("MDL-FR-QAJN: Reset layout stores the empty layout of the file's scope", async () => {

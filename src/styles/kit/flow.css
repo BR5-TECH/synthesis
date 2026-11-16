@@ -553,6 +553,8 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 }
 /* MDL-FR-WMGU: the fieldset only disables its controls; it takes no box. */
 .flow-panel__fieldset { display: contents; }
+/* A section of the panel takes a box only in the popover of the board (MDL-FR-XKCH). */
+.flow-panel__section { display: contents; }
 .flow-panel__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .flow-panel__row--head { margin-bottom: 2px; }
 .flow-panel__row--label { min-height: 20px; }

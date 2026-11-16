@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { PANEL_W, panelPlacement } from "./geometry";
+import { BOARD_PANEL_W, boardPanelPlacement, PANEL_W, panelPlacement } from "./geometry";
 
 const SURFACE = { width: 1200, height: 800 };
 /** The canvas keeps its bottom line (52) free; the panel stops above it. */
@@ -68,6 +68,37 @@ describe("panelPlacement (FLO layout notes, FLO-FR-44)", () => {
       left: 40,
       top: 70,
       placement: "below",
+    });
+  });
+});
+
+describe("boardPanelPlacement (MDL-FR-XKCH)", () => {
+  const surface = { width: 1200, height: 800 };
+
+  it("MDL-FR-XKCH: the popover opens at the trailing edge of the item, with its top at the top of the item", () => {
+    const at = boardPanelPlacement({ left: 100, top: 120, right: 400 }, surface, 300);
+    expect(at).toMatchObject({ left: 410, top: 120, placement: "beside" });
+    expect(at.maxHeight).toBeGreaterThanOrEqual(300);
+  });
+
+  it("MDL-FR-XKCH: where the trailing side has no room, it opens at the leading edge", () => {
+    const at = boardPanelPlacement({ left: 800, top: 120, right: 1100 }, surface, 300);
+    expect(at.left).toBe(800 - 10 - BOARD_PANEL_W);
+  });
+
+  it("MDL-FR-XKCH: it stays inside the canvas, and moves up so that its content fits", () => {
+    const low = boardPanelPlacement({ left: 100, top: 700, right: 400 }, surface, 300);
+    expect(low.top! + 300).toBeLessThanOrEqual(800);
+    const off = boardPanelPlacement({ left: -500, top: -200, right: -100 }, surface, 300);
+    expect(off.left).toBeGreaterThanOrEqual(0);
+    expect(off.top).toBeGreaterThanOrEqual(0);
+  });
+
+  it("MDL-FR-XKCH: a canvas with no size yet gives the plain place beside the item", () => {
+    expect(boardPanelPlacement({ left: 10, top: 20, right: 300 }, { width: 0, height: 0 })).toEqual({
+      left: 310,
+      top: 20,
+      placement: "beside",
     });
   });
 });

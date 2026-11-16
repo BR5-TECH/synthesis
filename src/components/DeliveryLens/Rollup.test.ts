@@ -39,4 +39,27 @@ describe("leafRollup (MDL-FR-GDUP, FDL-FR-KWMT)", () => {
     expect(leafRollup(null, new Map())).toBeNull();
     expect(leafRollup(doc([]), null)).toBeNull();
   });
+
+  it("MDL-FR-GDUP: a blocked item counts in the blocked segment alone, and the legend counts every item in progress", () => {
+    const plan = doc([
+      { id: "a", kind: "task" },
+      { id: "b", kind: "task" },
+      { id: "c", kind: "task" },
+      { id: "d", kind: "task" },
+      { id: "e", kind: "task" },
+    ]);
+    const states = new Map(
+      [
+        state("a", "in_progress", true),
+        state("b", "in_progress"),
+        state("c", "drafting", true),
+        state("d", "done"),
+        state("e", "not_started"),
+      ].map((s) => [s.itemId, s]),
+    );
+    const rollup = leafRollup(plan, states)!;
+    expect(rollup.segments).toEqual({ done: 1, active: 1, blocked: 2 });
+    expect(rollup.counts.in_progress).toBe(2);
+    expect(rollup.blocked).toBe(2);
+  });
 });

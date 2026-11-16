@@ -5,8 +5,8 @@ import {
   absolutePosition,
   BOARD_CARD_H,
   BOARD_CARD_W,
-  BOARD_COLLAPSED_H,
   BOARD_EMPTY_H,
+  BOARD_FACE_H,
   BOARD_GAP,
   BOARD_HEAD_H,
   BOARD_INSET,
@@ -20,6 +20,8 @@ import {
 import { blocks, item, plan } from "../test/flowPlanFixtures";
 
 const EMPTY: StoredLayout = { items: {} };
+/** DBR-FR-SBLK: the top of the stack of a group: its face, the divider, and the inset. */
+const STACK = BOARD_FACE_H + 1 + BOARD_INSET;
 
 /** Beta holds an epic with a feature of two tasks, and a task; GA holds a task. */
 function board(): FlowDocument {
@@ -64,7 +66,7 @@ describe("columns, groups, and stacks (DBR-FR-ZGNB, DBR-FR-IQBN, DBR-FR-FISH, DB
     expect(flat.columnWidth).toBe(BOARD_CARD_W + 2 * BOARD_INSET);
   });
 
-  it("DBR-FR-IQBN, DBR-FR-LNZI: a group fills the inner width of its stack, a card fills its stack, and every card has one height", () => {
+  it("DBR-FR-IQBN, DBR-FR-LNZI: a group fills the inner width of its stack, a card fills its stack, and a card with no measure has the default height", () => {
     const doc = board();
     const b = resolveBoardLayout(doc, EMPTY);
     const inner = b.columnWidth - 2 * BOARD_INSET;
@@ -78,31 +80,59 @@ describe("columns, groups, and stacks (DBR-FR-ZGNB, DBR-FR-IQBN, DBR-FR-FISH, DB
   it("DBR-FR-FISH: a stack puts its members one below the other with one gap, and no member overlaps another", () => {
     const doc = board();
     const b = resolveBoardLayout(doc, EMPTY);
-    expect(b.layout.f1.position).toEqual({ x: BOARD_INSET, y: BOARD_HEAD_H });
-    expect(b.layout.t1.position).toEqual({ x: BOARD_INSET, y: BOARD_HEAD_H });
-    expect(b.layout.t2.position).toEqual({ x: BOARD_INSET, y: BOARD_HEAD_H + BOARD_CARD_H + BOARD_GAP });
+    expect(b.layout.e1.position).toEqual({ x: BOARD_INSET, y: BOARD_HEAD_H });
+    expect(b.layout.f1.position).toEqual({ x: BOARD_INSET, y: STACK });
+    expect(b.layout.t1.position).toEqual({ x: BOARD_INSET, y: STACK });
+    expect(b.layout.t2.position).toEqual({ x: BOARD_INSET, y: STACK + BOARD_CARD_H + BOARD_GAP });
     // The group comes before the card in the automatic order (FLO-FR-PLUZ).
     const e1 = rectOf(doc, b.layout, "e1");
     const t3 = rectOf(doc, b.layout, "t3");
     expect(t3.y).toBe(e1.y + e1.height + BOARD_GAP);
     expect(t3.x).toBe(e1.x);
-    // The group holds its stack and its inset.
+    // The group holds its stack, its inset, and its bottom border.
     const t2 = rectOf(doc, b.layout, "t2");
     const f1 = rectOf(doc, b.layout, "f1");
-    expect(f1.y + f1.height).toBe(t2.y + t2.height + BOARD_INSET);
+    expect(f1.y + f1.height).toBe(t2.y + t2.height + BOARD_INSET + 1);
   });
 
-  it("DBR-FR-IQBN: an empty stack keeps room for a drop", () => {
-    const doc = plan([item("m1", "milestone"), item("e1", "epic", { parentId: "m1" })]);
+  it("DBR-FR-SBLK: a group that holds no item is its face alone, and an empty column keeps room for a drop", () => {
+    const doc = plan([item("m1", "milestone"), item("e1", "epic", { parentId: "m1" }), item("m2", "milestone")]);
     const b = resolveBoardLayout(doc, EMPTY);
-    expect(b.layout.e1.size!.height).toBe(BOARD_HEAD_H + BOARD_EMPTY_H + BOARD_INSET);
+    expect(b.layout.e1.size!.height).toBe(BOARD_FACE_H + 1);
+    expect(b.layout.m2.size!.height).toBe(BOARD_HEAD_H + BOARD_EMPTY_H + BOARD_INSET);
   });
 
-  it("DBR-FR-SBTR: a collapsed group takes the height of its header and one line of counts", () => {
+  it("DBR-FR-SBLK, DBR-FR-CZEU: a group that holds no item opens its stack for the placeholder of a drag", () => {
+    const doc = plan([item("m1", "milestone"), item("e1", "epic", { parentId: "m1" }), item("f9", "feature", { parentId: "m1" })]);
+    const b = resolveBoardLayout(doc, EMPTY, { lifted: new Set(["f9"]), gap: { holder: "e1", index: 0, height: 50 } });
+    expect(b.layout.e1.size!.height).toBe(STACK + 50 + BOARD_INSET + 1);
+    expect(b.gapRect).toEqual({
+      x: b.layout.e1.position.x + BOARD_INSET,
+      y: b.layout.e1.position.y + STACK,
+      width: b.layout.e1.size!.width - 2 * BOARD_INSET,
+      height: 50,
+    });
+  });
+
+  it("DBR-FR-SBLK: a collapsed group takes the height of its face alone", () => {
     const doc = board();
     const b = resolveBoardLayout(doc, { items: { f1: { collapsed: true } } });
-    expect(b.layout.f1.size!.height).toBe(BOARD_COLLAPSED_H);
+    expect(b.layout.f1.size!.height).toBe(BOARD_FACE_H + 1);
     expect(b.layout.f1.collapsed).toBe(true);
+  });
+
+  it("DBR-FR-LNZI, DBR-FR-SBTR, DBR-FR-BYQX: a measured card, face, or column header takes its measured height; a measure that is not positive is ignored", () => {
+    const doc = board();
+    const b = resolveBoardLayout(doc, EMPTY, { heights: { t1: 104, t2: 0, f1: 90, m1: 70, t3: Number.NaN } });
+    expect(b.layout.t1.size!.height).toBe(104);
+    expect(b.layout.t2.size!.height).toBe(BOARD_CARD_H);
+    expect(b.layout.t3.size!.height).toBe(BOARD_CARD_H);
+    // The stack of f1 starts below its measured face, and t2 below the taller t1.
+    expect(b.layout.t1.position.y).toBe(90 + 1 + BOARD_INSET);
+    expect(b.layout.t2.position.y).toBe(90 + 1 + BOARD_INSET + 104 + BOARD_GAP);
+    // The stack of m1 starts below its measured header.
+    expect(b.layout.e1.position.y).toBe(70);
+    expect(b.layout.t4.position.y).toBe(BOARD_HEAD_H);
   });
 });
 
@@ -143,10 +173,10 @@ describe("the stack order (DBR-FR-HTCE, DBR-FR-BKWE)", () => {
     expect(boardOrders(doc, stored).get("m1")).toEqual(["c", "a", "b", "d"]);
   });
 
-  it("DBR-FR-SBTR, DBR-FR-BKWE: a collapsed column takes the collapsed height and stores its flag with no position", () => {
+  it("DBR-FR-BYQX, DBR-FR-BKWE: a collapsed column takes the height of its header and stores its flag with no position", () => {
     const doc = board();
     const b = resolveBoardLayout(doc, { items: { m1: { collapsed: true } } });
-    expect(b.layout.m1.size!.height).toBe(BOARD_COLLAPSED_H);
+    expect(b.layout.m1.size!.height).toBe(BOARD_HEAD_H + 1);
     expect(toBoardStoredLayout(doc, b.layout).items.m1).toEqual({ collapsed: true });
   });
 
@@ -179,7 +209,7 @@ describe("a drag of the board (DBR-FR-QCAJ, DBR-FR-CZEU)", () => {
   it("DBR-FR-QCAJ: a lifted item takes no slot, and the members below it move up", () => {
     const doc = board();
     const b = resolveBoardLayout(doc, EMPTY, { lifted: new Set(["t1"]) });
-    expect(b.layout.t2.position.y).toBe(BOARD_HEAD_H);
+    expect(b.layout.t2.position.y).toBe(STACK);
   });
 
   it("DBR-FR-CZEU: the placeholder opens at its slot, the members after it move down, and its rectangle is in canvas units", () => {

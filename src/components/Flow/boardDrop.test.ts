@@ -103,6 +103,14 @@ describe("the target of a drag (DBR-FR-CZEU, DBR-FR-EEKD)", () => {
     expect(target.drop).toEqual({ holder: "f1", index: 2, collapsed: true });
   });
 
+  it("DBR-FR-CZEU, DBR-FR-SBLK: a group that holds no item takes the item as the first of its stack", () => {
+    const doc = plan([...board().items, item("f9", "feature", { parentId: "m2" })]);
+    const b = resolveBoardLayout(doc, EMPTY, { lifted: new Set(["t4"]) });
+    const f9 = absolutePosition(doc, b.layout, "f9");
+    const target = targetOf(doc, "t4", { x: f9.x + 20, y: f9.y + 10 });
+    expect(target.drop).toEqual({ holder: "f9", index: 0, collapsed: false });
+  });
+
   it("DBR-FR-EEKD: a point on open canvas has no target and no hint", () => {
     const doc = board();
     expect(targetOf(doc, "t4", { x: -500, y: -500 })).toEqual({ drop: null, hint: null });
@@ -119,10 +127,11 @@ describe("the target of a drag (DBR-FR-CZEU, DBR-FR-EEKD)", () => {
 
   it("DBR-FR-QCAJ: the dragged item and what it holds are never a target", () => {
     const doc = board();
-    // Where the feature of the dragged epic was, the column now shows t3.
+    // Over the face of the dragged epic and over its feature, the column now shows t3.
     const b = resolveBoardLayout(doc, EMPTY);
+    const e1 = absolutePosition(doc, b.layout, "e1");
     const f1 = absolutePosition(doc, b.layout, "f1");
-    const target = targetOf(doc, "e1", { x: f1.x + 10, y: f1.y + 10 });
+    const target = targetOf(doc, "e1", { x: f1.x + 10, y: e1.y + 10 });
     expect(target.drop?.holder).toBe("m1");
   });
 });

@@ -92,26 +92,30 @@ describe("the board of a GitHub plan (DBR-FR-ERHW, DBR-FR-XOOU, DBR-FR-SBTR)", (
   it("DBR-FR-ERHW, MDL-FR-XJBV: the lens lays a GitHub plan out as the board", async () => {
     await openPlan();
     expect(canvas()).toHaveAttribute("data-board", "true");
-    expect(itemEl("t1")).toHaveClass("flow-bcard");
+    expect(itemEl("t1")).toHaveClass("dm-card");
   });
 
   it("DBR-FR-XOOU: the address of an issue opens the issue on GitHub", async () => {
     await openPlan();
     const address = within(itemEl("t1")).getByTestId("flow-tracker-tag");
-    expect(address).toHaveTextContent("acme/payments#51");
+    expect(address).toHaveTextContent("#51");
+    expect(address).toHaveAccessibleName("Open acme/payments#51 on GitHub");
+    expect(address).toHaveAttribute("title", "Open acme/payments#51 on GitHub");
     fireEvent.click(address);
     await waitFor(() => expect(callsOf(b, "open_tracker_link")).toHaveLength(1));
     expect(callsOf(b, "open_tracker_link")[0]).toEqual({ url: "https://github.com/acme/payments/issues/51" });
   });
 
-  it("DBR-FR-SBTR: a group header shows the state glyph, the marker glyphs, the Status, and the address in that order", async () => {
+  it("DBR-FR-SBTR, DBR-FR-XOOU, DBR-FR-HWHO, DBR-FR-TCPE: a group face shows the kind chip and the address, the name, and the Status in lowercase with its dot", async () => {
     await openPlan();
-    const head = itemEl("f1").querySelector(".flow-ctr__head")!;
-    const order = [...head.querySelectorAll(".flow-sglyph, .flow-bmarks, .flow-ctr__status, .flow-baddr")].map(
-      (el) => el.className.split(" ")[0],
-    );
-    expect(order).toEqual(["flow-sglyph", "flow-bmarks", "flow-ctr__status", "flow-baddr"]);
-    expect(within(head as HTMLElement).getByTestId("flow-group-status")).toHaveTextContent("In Progress");
+    const face = itemEl("f1").querySelector(".dm-group__head") as HTMLElement;
+    const lines = [...face.children].filter((el) => !el.classList.contains("flow-port"));
+    expect(lines.map((el) => el.className.split(" ")[0])).toEqual(["dm-card__id", "dm-card__title", "dm-card__meta"]);
+    expect(within(lines[0] as HTMLElement).getByTestId("flow-kind-chip")).toHaveTextContent("FTR");
+    expect(within(lines[0] as HTMLElement).getByTestId("flow-tracker-tag")).toHaveTextContent(/^#\d+$/);
+    const status = within(face).getByTestId("flow-card-status");
+    expect(status).toHaveTextContent("in progress");
+    expect(within(status).getByTestId("flow-status-dot")).toHaveAttribute("data-s", "in progress");
   });
 });
 
@@ -134,16 +138,16 @@ describe("a drop of a GitHub plan (DBR-FR-KTJS, DBR-FR-CVJY, DBR-FR-CJSG)", () =
   it("DBR-FR-CVJY, DBR-FR-CJSG: a refused move puts the item back in its stack, restores its slot, and shows the error on it and in its panel", async () => {
     b.apply = () => Promise.reject({ code: "request_failed", message: "GitHub refused the move." });
     await openPlan();
-    const before = { top: itemEl("x1").style.top, left: itemEl("x1").style.left, height: itemEl("x1").style.height };
+    const before = { top: itemEl("x1").style.top, left: itemEl("x1").style.left };
     dragDefectIntoFeature();
     const error = await screen.findByTestId("flow-item-error-x1");
     expect(error).toHaveAttribute("title", "GitHub refused the move.");
     expect(itemEl("x1")).toHaveAttribute("data-error", "true");
     await waitFor(() => expect(itemEl("x1").style.top).toBe(before.top));
     expect(itemEl("x1").style.left).toBe(before.left);
-    // DBR-FR-CJSG: the card keeps its height, and the error glyph comes before the other marker glyphs.
-    expect(itemEl("x1").style.height).toBe(before.height);
-    expect(itemEl("x1").querySelector(".flow-bmarks")!.firstElementChild).toBe(error);
+    // DBR-FR-CJSG: the error strip is below the bottom line of the card and holds the text.
+    expect(itemEl("x1").querySelector(".dm-card__face")!.lastElementChild).toBe(error);
+    expect(error).toHaveTextContent("GitHub refused the move.");
     // The stored slot of the item is the one it had before the drop.
     await waitFor(() => expect(b.layout.items.x1).toBeUndefined());
     selectItem("x1");

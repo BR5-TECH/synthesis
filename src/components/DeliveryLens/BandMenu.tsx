@@ -86,23 +86,27 @@ export function BandMenu({ entries }: { entries: BandMenuEntry[] }) {
     >
       <button
         type="button"
-        className="flow-btn flow-btn--quiet dlens-menu__toggle"
+        className="btn btn--ghost btn--sm btn--icon dlens-menu__toggle"
         aria-label="Plan actions"
         title="Plan actions"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <span aria-hidden="true">⋯</span>
+        <svg className="icon" viewBox="0 0 24 24" width={14} height={14} aria-hidden="true">
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
+        </svg>
       </button>
       {open && (
-        <div className="draft-actions__menu dlens-menu__list" role="menu" aria-label="Plan actions">
+        <div className="menu dlens-menu__list" role="menu" aria-label="Plan actions">
           {entries.map((entry) => (
             <button
               key={entry.label}
               type="button"
               role="menuitem"
-              className="draft-actions__item"
+              className="menu-item"
               onClick={() => {
                 setOpen(false);
                 entry.onSelect();
@@ -157,7 +161,7 @@ export function GithubBandFacts({
       )}
       <button
         type="button"
-        className="flow-btn flow-btn--xs dlens-band__refresh"
+        className="btn btn--default btn--sm dlens-band__refresh"
         disabled={refreshing}
         onClick={onRefresh}
       >

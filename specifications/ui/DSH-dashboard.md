@@ -23,7 +23,6 @@ Project home tab; the initial tab on project open. It is the project's looking g
 │  2026-09-30     2026-10-31      │         2027-03-31         2027-06-30         │
 │  ▮▮▮▮▮▮ 12/12   ▮▮▮▮▮▮ 8/8      │         ▮▮▮▯▯▯ 7/19        ▯▯▯ 0/9            │
 │                                 │         5 in progress · 4 blocked             │
-│                                 │         ⊘ 4 blocked                           │
 │ ──●───────────────●─────────────┼───────────────●─────────────────●──────────── │
 │  Sep            Oct          Nov│ Dec  Jan  Feb  Mar  Apr  May  Jun             │
 │ ─────────────────────────────────────────────────────────────────────────────── │
@@ -35,7 +34,6 @@ Project home tab; the initial tab on project open. It is the project's looking g
 │  ✓ M0 ──────────── ● M1 ──────────── ○ M2 ──────────── ○ M3                     │
 │  ▮▮▮▮ 4/4          ▮▯▯▯ 1/4          ▯▯ 0/2            ▯ 0/1                    │
 │                    0 in progress · 3 blocked                                    │
-│                    ⊘ 3 blocked                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 - Layout notes: the Delivery widget is the last row of the Dashboard and spans the full width of the content area, under the grid of the other widgets. Its milestone labels sit above the axis. The current milestone uses the `--accent` border and the Today line uses `--accent`. The **No date** track sits under the axis, separated by a 1px `--border-1` rule, and its milestones are joined by a 1px line in plan order. Where no milestone has a due date, the track is the whole content, with no axis and no `No date` label. State glyphs and the leaf bar carry state in shape and in words, not in colour alone.
@@ -79,7 +77,7 @@ Project home tab; the initial tab on project open. It is the project's looking g
 22. **DSH-FR-OUPX** The widget's header shows `DELIVERY`, the plan's name, and the count line `N of M milestones done`. Where every milestone is done or dropped, the count line reads `All milestones done`. Where a milestone holds a blocked work item, the count line ends in `· N blocked`, the sum of the milestones' blocked work items.
 23. **DSH-FR-PLRL** Each milestone with a due date sits on one horizontal time axis at its due date, with month labels below the axis. The axis runs from the earliest to the latest of the due dates and today, with half a month of margin at each end.
 24. **DSH-FR-NZXN** A vertical **Today** line, labelled `today`, marks today's date on the axis. Where no milestone has a due date, the widget shows no axis and no Today line.
-25. **DSH-FR-NNWM** Each milestone shows its state glyph, name, due date, a 6px bar of its work-item states in the order of `MDL-map-delivery-lens.md` MDL-FR-GDUP, and `done/total` work items. A milestone with a blocked work item shows `⊘ N blocked`. A due date before today on a milestone that is not done is marked as past (per `FLO-flow.md` FLO-FR-XAPK).
+25. **DSH-FR-NNWM** Each milestone shows its state glyph, name, due date, a 6px bar of its work-item states in the order of `MDL-map-delivery-lens.md` MDL-FR-GDUP, and `done/total` work items. A milestone that is not current and holds blocked work items shows `⊘ N blocked`. A due date before today on a milestone that is not done is marked as past (per `FLO-flow.md` FLO-FR-XAPK).
 26. **DSH-FR-BBRC** The milestone that the answer marks as **current** (per `../core/DSR-delivery-source.md` DSR-FR-FQZD) takes the `--accent` border and also shows the line `N in progress · N blocked`. No milestone is current where every milestone is done or dropped.
 27. **DSH-FR-HVOQ** Milestones without a due date sit in one horizontal **No date** track, in plan order, with the content of DSH-FR-NNWM. The track spans the widget's width under the axis, and is the whole content where no milestone has a due date. A track wider than the widget scrolls horizontally and first shows the current milestone.
 28. **DSH-FR-EWPI** The axis gives each dated milestone at least 140px. Where the axis is wider than the widget, the widget scrolls horizontally, and on each render it first shows the current milestone, or today where none is current. Labels that would overlap take a second row.

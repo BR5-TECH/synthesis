@@ -478,6 +478,16 @@ describe("description and name (FLO-FR-09, FLO-FR-13)", () => {
     expect(planOf(flows).items[1].description).toBe("Plain");
   });
 
+  it("FLO-FR-13: a description that opens with its own Description heading does not show the panel's Description label as well", async () => {
+    const b = flowBackend(plan([item("f1", "feature"), item("t1", "task", { parentId: "f1", description: "## Description\n\nBody" }), item("t2", "task", { parentId: "f1", description: "Body" })]));
+    await renderFlow(b);
+
+    selectItem("t1");
+    expect(within(panel()).getByText("Description", { selector: "label" })).toHaveClass("sr-only");
+    selectItem("t2");
+    expect(within(panel()).getByText("Description", { selector: "label" })).not.toHaveClass("sr-only");
+  });
+
   it("FLO-FR-13: a container's panel renders its description as rich text; an item with none says so", async () => {
     const b = flowBackend(plan([item("f1", "feature", { description: "A **wide** feature" }), item("t1", "task", { parentId: "f1" })]));
     await renderFlow(b);

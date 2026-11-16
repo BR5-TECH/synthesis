@@ -17,6 +17,18 @@ import type { PanelPlacement, Reference } from "./geometry";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { ArtifactPicker, ReferenceRows } from "./references";
 import { CommentMarkdown } from "../CommentMarkdown";
+import { parseMarkdownBlocks } from "../../diff/markdown";
+
+/**
+ * Whether a description opens with its own `Description` heading. The panel
+ * then keeps its label for assistive technology alone, so the word does not
+ * show twice.
+ */
+function opensWithDescriptionHeading(markdown: string | undefined): boolean {
+  if (!markdown) return false;
+  const first = parseMarkdownBlocks(markdown).find((b) => b.kind !== "break" && b.kind !== "comment");
+  return first?.kind === "heading" && first.text.trim().toLowerCase() === "description";
+}
 
 export interface SelectionPanelProps {
   doc: FlowDocument;
@@ -200,7 +212,14 @@ export function SelectionPanel(props: SelectionPanelProps) {
           </div>
 
           <div className="flow-panel__row flow-panel__row--label">
-            <label className="flow-panel__label" htmlFor={`flow-desc-${item.id}`}>
+            <label
+              className={
+                !editing && opensWithDescriptionHeading(item.description)
+                  ? "flow-panel__label sr-only"
+                  : "flow-panel__label"
+              }
+              htmlFor={`flow-desc-${item.id}`}
+            >
               Description
             </label>
             <span className="flow-panel__spacer" />

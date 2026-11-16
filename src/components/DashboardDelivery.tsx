@@ -174,8 +174,9 @@ function MilestoneCard({
         </span>
       )}
       <LeafBar milestone={milestone} />
-      {milestone.blockedLeaves > 0 && (
-        // DSH-FR-NNWM: blocked work is said in a shape and in words.
+      {milestone.blockedLeaves > 0 && !milestone.current && (
+        // DSH-FR-NNWM: blocked work is said in a shape and in words. The
+        // current milestone says it in its counts line (DSH-FR-BBRC).
         <span className="dash-delivery__blocked" data-testid={`delivery-blocked-${milestone.itemId}`}>
           <span aria-hidden="true">⊘</span>
           {`\u00a0${milestone.blockedLeaves}\u00a0blocked`}

@@ -126,8 +126,14 @@ describe("a plan with no dated milestone (DSH-FR-NZXN, DSH-FR-HVOQ)", () => {
 
 describe("blocked work items (DSH-FR-NNWM, DSH-FR-OUPX)", () => {
   it("DSH-FR-NNWM: a dated milestone on the axis also shows its blocked mark", () => {
-    renderWidget([milestone("ma", "2026-12-01", { blockedLeaves: 1, current: true })]);
+    renderWidget([milestone("ma", "2026-12-01", { blockedLeaves: 1 })]);
     expect(within(screen.getByTestId("delivery-scroller")).getByTestId("delivery-blocked-ma")).toBeInTheDocument();
+  });
+
+  it("DSH-FR-NNWM, DSH-FR-BBRC: the current milestone says its blocked work once, in its counts line", () => {
+    renderWidget(DATELESS);
+    expect(screen.queryByTestId("delivery-blocked-m1")).toBeNull();
+    expect(within(screen.getByTestId("delivery-milestone-m1")).getByText(/0\sin\sprogress · 3\sblocked/)).toBeInTheDocument();
   });
 
   it("DSH-FR-NNWM: a milestone with a blocked work item shows ⊘ N blocked; one without shows no mark", () => {

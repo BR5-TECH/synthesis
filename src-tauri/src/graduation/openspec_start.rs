@@ -109,8 +109,7 @@ pub(super) fn change_folder_stands<R: tauri::Runtime>(
     stream: &crate::streams::WorkStream,
     name: &str,
 ) -> bool {
-    app.try_state::<crate::fs::FsAccessState>()
-        .and_then(|state| state.get())
+    crate::fs::ide_instance(app)
         .map(|access| crate::fs::RootFs::new(stream.worktree(), access))
         .and_then(|copy| copy.file_info(copy.path().join("openspec/changes").join(name)).ok())
         .is_some_and(|info| info.kind == crate::fs::EntryKind::Dir)

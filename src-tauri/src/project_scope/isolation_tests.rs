@@ -135,6 +135,20 @@ fn code_with_no_context_and_one_open_project_gets_that_project() {
     assert!(std::sync::Arc::ptr_eq(&sole, &named));
 }
 
+// PWN-FR-CTXT, PWN-FR-UHLU: the context of the default scope is a context.
+// Code in it gets no open project, also when exactly one project is open.
+#[test]
+fn the_default_scope_context_gets_no_open_project() {
+    let app = mock_app();
+    app.manage(ProjectScopes::default());
+    let dir = tempfile::tempdir().unwrap();
+    app.state::<ProjectScopes>().get::<ProjectState>("only").set_root(dir.path().to_path_buf());
+    let handle = app.handle();
+    assert!(handle.open_project_state().is_some(), "no context finds the one open project");
+    context::run_in(DEFAULT_SCOPE, || assert!(handle.open_project_state().is_none()));
+    context::run_in("only", || assert!(handle.open_project_state().is_some()));
+}
+
 #[test]
 fn no_context_and_two_open_projects_use_the_default_scope() {
     let (app, _one, _two) = app_with_two_projects();
@@ -173,6 +187,90 @@ fn closing_one_of_two_projects_keeps_the_log_of_the_other() {
 
     context::run_in("two", || close(&app, "two"));
     assert_eq!(BUFFER.state().generation, before + 1, "the last close clears the buffer");
+}
+
+// FSA-FR-21, FSA-FR-29, FSA-FR-TSHC, PWN-FR-ISOL: the close of one project
+// discards the filesystem instances of that project and keeps every instance of
+// the other open project.
+#[test]
+fn closing_one_of_two_projects_keeps_the_filesystem_instances_of_the_other() {
+    use crate::fs::FsAccessState;
+    let (app, one, two) = app_with_two_projects();
+    let scopes = app.state::<ProjectScopes>();
+    for (id, dir) in [("one", &one), ("two", &two)] {
+        let fs = scopes.get::<FsAccessState>(id);
+        fs.install_for_worktree(dir.path()).unwrap();
+        fs.open_agent_session(&format!("turn-{id}")).unwrap();
+    }
+    let kept = scopes.get::<FsAccessState>("one").get().unwrap();
+
+    context::run_in("two", || close(&app, "two"));
+
+    let closed = scopes.get::<FsAccessState>("two");
+    assert!(closed.get().is_none());
+    assert_eq!(closed.agent_session_count(), 0);
+    let open = scopes.get::<FsAccessState>("one");
+    assert!(std::sync::Arc::ptr_eq(&kept, &open.get().unwrap()));
+    assert!(open.agent_session("turn-one").is_some());
+}
+
+// PWN-FR-UHLU, PST-FR-14: a close that names a project tears down that project
+// alone. The call runs with no outer context, so the command sets the context
+// itself.
+#[test]
+fn a_named_close_tears_down_that_project_alone() {
+    use crate::documents::DocumentsCollection;
+    use crate::fs::FsAccessState;
+    let (app, one, two) = app_with_two_projects();
+    let scopes = app.state::<ProjectScopes>();
+    for (id, dir) in [("one", &one), ("two", &two)] {
+        let fs = scopes.get::<FsAccessState>(id);
+        fs.install_for_worktree(dir.path()).unwrap();
+        let root = crate::fs::RootFs::new(dir.path().to_path_buf(), fs.get().unwrap());
+        scopes.get::<Bm25Indexer>(id).mount(&root);
+        scopes.get::<DocumentsCollection>(id).open(id, Ok(Vec::new()));
+    }
+
+    close(&app, "two");
+
+    assert!(scopes.get::<ProjectState>("two").root().is_none());
+    assert!(scopes.get::<Bm25Indexer>("two").root().is_none());
+    assert!(!scopes.get::<DocumentsCollection>("two").is_open());
+    assert!(scopes.get::<FsAccessState>("two").get().is_none());
+    assert_eq!(scopes.get::<ProjectState>("one").root().as_deref(), Some(one.path()));
+    assert_eq!(scopes.get::<Bm25Indexer>("one").root().as_deref(), Some(one.path()));
+    assert!(scopes.get::<DocumentsCollection>("one").is_open());
+    assert!(scopes.get::<FsAccessState>("one").get().is_some());
+}
+
+// PWN-FR-UHLU, FSA-FR-TSHC, FSA-FR-ZZNJ: a close that names no project runs
+// its teardown in the default scope. The one open project keeps its root, its
+// indexes, its Documents collection, and its filesystem instances.
+#[test]
+fn a_close_with_no_project_id_closes_no_open_project() {
+    use crate::documents::DocumentsCollection;
+    use crate::fs::FsAccessState;
+    let app = mock_app();
+    app.manage(ProjectScopes::default());
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let scopes = app.state::<ProjectScopes>();
+    let fs = scopes.get::<FsAccessState>("only");
+    fs.install_for_worktree(&root).unwrap();
+    fs.open_agent_session("turn-only").unwrap();
+    let kept = fs.get().unwrap();
+    scopes.get::<ProjectState>("only").set_root_with_access(root.clone(), Some(kept.clone()));
+    scopes.get::<Bm25Indexer>("only").mount(&crate::fs::RootFs::new(root.clone(), kept.clone()));
+    scopes.get::<DocumentsCollection>("only").open("only", Ok(Vec::new()));
+
+    close(&app, DEFAULT_SCOPE);
+
+    assert_eq!(scopes.get::<ProjectState>("only").root().as_deref(), Some(root.as_path()));
+    assert_eq!(scopes.get::<Bm25Indexer>("only").root().as_deref(), Some(root.as_path()));
+    assert!(scopes.get::<DocumentsCollection>("only").is_open());
+    let open = scopes.get::<FsAccessState>("only");
+    assert!(std::sync::Arc::ptr_eq(&kept, &open.get().unwrap()));
+    assert!(open.agent_session("turn-only").is_some());
 }
 
 mod events_to_windows {

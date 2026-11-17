@@ -19,9 +19,10 @@ fn production_half(file: &str) -> &str {
 #[test]
 fn pst_ts34_a_close_schedules_housekeeping_before_it_unmounts() {
     const FILE: &str = include_str!("../../project.rs");
+    const CLOSE: &str = include_str!("../close.rs");
     let source = production_half(FILE);
-    let close = source.find("pub fn close_project").expect("the close command");
-    let body = &source[close..];
+    let close = CLOSE.find("fn close_project_in_scope").expect("the close command");
+    let body = &CLOSE[close..];
     let scheduled =
         body.find("sweep_project_draft_assets").expect("PST-FR-30: a close schedules the pass");
     let unmounted = body.find("deactivate_project(").expect("the unmount");
@@ -35,7 +36,7 @@ fn pst_ts34_a_close_schedules_housekeeping_before_it_unmounts() {
     // the application-start pass that runs once after the active project
     // has been loaded.
     let activate = source.find("fn activate_project").expect("the activation");
-    let after = &source[activate..close.max(activate)];
+    let after = &source[activate..];
     assert!(
         after.contains("sweep_project_draft_assets"),
         "PST-FR-30: opening a project schedules the pass",

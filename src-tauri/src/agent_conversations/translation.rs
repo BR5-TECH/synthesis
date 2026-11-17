@@ -66,14 +66,9 @@ pub struct Translation {
     pub text: String,
 }
 
+/// AGC-FR-GZSI: a section of the translation request, bound by AGC-FR-11.
 fn section(tag: &str, body: String) -> InputSection {
-    InputSection {
-        tag: tag.to_string(),
-        attributes: Vec::new(),
-        body,
-        truncated: false,
-        parts: Vec::new(),
-    }
+    crate::agent_conversations::sections::section(tag, Vec::new(), body)
 }
 
 /// AGC-FR-QEOF: the request of one translation.
@@ -141,6 +136,21 @@ pub fn translate_impl<R: tauri::Runtime>(
         })?;
     let spoken_name = spoken.as_ref().map_or("Not known", |language| language.name.as_str());
     let request = translation_request(spoken_name, document, nicknames, text);
+    // AGC-FR-GZSI: a transcript above the bound of AGC-FR-11 is cut, so the
+    // end of the speech is not translated. Counts alone, never the text.
+    if request.input.iter().any(|section| section.tag == "transcript" && section.truncated) {
+        logging::log_warn(
+            app,
+            turns.buffer(),
+            &[Domain::Ai],
+            "voice transcript cut to the section bound before translation",
+            log_fields! {
+                "documentLanguage" => document,
+                "transcriptChars" => text.chars().count(),
+                "boundChars" => SECTION_MAX_CHARS,
+            },
+        );
+    }
     let started = std::time::Instant::now();
     let outcome = turns.seam.complete(&request, &[], &endpoint, TRANSLATE_LIMIT);
     let reply = match outcome {

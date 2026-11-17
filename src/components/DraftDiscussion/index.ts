@@ -1,6 +1,7 @@
 export { DiscussionColumn } from "./DiscussionColumn";
 export { GutterMap } from "./GutterMap";
-export { HunkChip } from "./HunkChip";
+export { COMPARE_LABEL, HunkChip } from "./HunkChip";
+export { diagramSourceOf, type DiagramChange } from "./diagramFence";
 export { ReviewBar } from "./ReviewBar";
 export { stepTo, useHunkNavigation } from "./useHunkNavigation";
 export { useScrollToHunk } from "./useScrollToHunk";

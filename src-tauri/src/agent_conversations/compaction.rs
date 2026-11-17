@@ -209,15 +209,21 @@ pub(super) fn compaction_request() -> AgentRequest {
 
 /// CVL-FR-BSMY: the input with its `discussion_history` body replaced by one
 /// text part that holds the summary. An input with no such section receives
-/// one before its current comment.
-pub(super) fn compacted_request(request: &AgentRequest, summary: &str) -> AgentRequest {
+/// one before its current comment. AGC-FR-KLID: the summary is bound by the
+/// history bound of AGC-FR-HOND, `max_chars`.
+pub(super) fn compacted_request(
+    request: &AgentRequest,
+    summary: &str,
+    max_chars: usize,
+) -> AgentRequest {
     let mut compacted = request.clone();
-    let body = format!("{SUMMARY_LEAD}\n\n{}", summary.trim());
+    let (body, truncated) =
+        bounded_within(format!("{SUMMARY_LEAD}\n\n{}", summary.trim()), max_chars);
     let section = InputSection {
         tag: TAG_DISCUSSION_HISTORY.to_string(),
         attributes: Vec::new(),
         body,
-        truncated: false,
+        truncated,
         parts: Vec::new(),
     };
     match compacted.input.iter().position(|s| s.tag == TAG_DISCUSSION_HISTORY) {
@@ -297,17 +303,32 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
     conversation: &mut Conversation,
     call: ModelCall,
 ) -> Result<(), TurnEnd> {
+    compact(app, turns, plan, endpoint, conversation, call, false).map(|_| ())
+}
+
+/// CVL-FR-ZLSM, CVL-FR-QJLU: compact the older history, where the estimate is
+/// over the budget or where `force` is set. Returns whether a summary replaced
+/// the older history.
+pub(super) fn compact<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    turns: &TurnRegistry,
+    plan: &TurnPlan,
+    endpoint: &AiApiCall,
+    conversation: &mut Conversation,
+    call: ModelCall,
+    force: bool,
+) -> Result<bool, TurnEnd> {
     // CVL-FR-LCXM: every turn has a budget.
     let budget = endpoint.context_size;
     let request = conversation.request(plan);
     let estimate = estimate_input_tokens(request, &conversation.exchange);
-    if !over_budget(estimate, budget) {
-        return Ok(());
+    if !force && !over_budget(estimate, budget) {
+        return Ok(false);
     }
     let older_messages = latest_round_start(&conversation.exchange).saturating_sub(1);
     if !has_older_history(request, &conversation.exchange) {
         log_compaction(app, turns, plan, endpoint, estimate, budget, 0, Outcome::NothingOlder);
-        return Ok(());
+        return Ok(false);
     }
     let compaction = compaction_request();
     let older = vec![Message::user(older_history_text(request, &conversation.exchange))];
@@ -323,7 +344,8 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
     let compacted_messages = older_messages + usize::from(discussion_history(request).is_some());
     match result {
         Ok(reply) if !reply.text.trim().is_empty() => {
-            let compacted = compacted_request(request, &reply.text);
+            let compacted =
+                compacted_request(request, &reply.text, plan.document_budget.history_bound_chars());
             conversation.exchange =
                 compacted_exchange(&compacted, conversation.with_images, &conversation.exchange);
             conversation.compacted = Some(compacted);
@@ -337,7 +359,7 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
                 compacted_messages,
                 Outcome::Compacted,
             );
-            Ok(())
+            Ok(true)
         }
         Err(end @ (TurnEnd::Cancelled | TurnEnd::TimedOut)) => Err(end),
         Err(TurnEnd::Failed(FAIL_DISCUSSION_RESOLVED)) => {
@@ -345,7 +367,7 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
         }
         _ => {
             log_compaction(app, turns, plan, endpoint, estimate, budget, 0, Outcome::Failed);
-            Ok(())
+            Ok(false)
         }
     }
 }

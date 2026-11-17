@@ -4227,6 +4227,7 @@ function mockTurnContext(): Record<string, unknown> {
 
 /** GSS-FR-PCTL: the Document size limit the harness holds. */
 let documentLimitPercent = 30;
+let historyLimitPercent = 20;
 
 /**
  * AGC-FR-33 / CMT-FR-80: begin a tool call in a running turn, so its pending
@@ -11468,6 +11469,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (!Number.isInteger(percent) || percent < 1 || percent > 100) throw "percent_out_of_range";
       documentLimitPercent = percent;
       return documentLimitPercent;
+    }
+    // GSS-FR-USGD / GSS-FR-RMJH: the History size limit.
+    case "load_history_limit_percent":
+      return historyLimitPercent;
+    case "save_history_limit_percent": {
+      const percent = a.percent;
+      if (!Number.isInteger(percent) || percent < 1 || percent > 100) throw "percent_out_of_range";
+      historyLimitPercent = percent;
+      return historyLimitPercent;
     }
     // AGC-FR-JFBZ: the context figures before any turn, all estimates.
     case "estimate_discussion_context": {

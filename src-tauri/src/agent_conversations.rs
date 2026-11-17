@@ -140,12 +140,14 @@ pub(crate) mod map_context;
 mod material;
 mod native_calls;
 mod openrouter_carrier;
+mod overflow;
 mod progress_update;
 mod prose_tool_calls;
 mod provider_memory;
 mod registry;
 mod reporting;
 mod responses_repair;
+mod result_cap;
 mod retiring;
 mod retries;
 mod rig_bridge;
@@ -695,6 +697,21 @@ fn conversation_tools<R: tauri::Runtime>(
             author.clone(),
             Arc::clone(asked),
         )));
+    }
+    // CVL-FR-08 / PDM-FR-ZXQE: the diagram tool goes to a draft origin and to an
+    // artifact origin, beside the proposal tool of that origin. It is bound to
+    // this conversation by its constructor for the reason the others are
+    // (PDM-FR-LJGN) and ends the turn on the same flag (CVL-FR-15).
+    if origin.is_draft() || origin.is_artifact() {
+        tools.push(erase_tool(
+            crate::tools::propose_diagram_changes::ProposeDiagramChangesTool::new(
+                app.clone(),
+                roots.owned(),
+                origin.clone(),
+                author.clone(),
+                Arc::clone(proposed),
+            ),
+        ));
     }
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool, by the same
     // rule. Never both, none on a note, and neither ends the turn (CVL-FR-15).

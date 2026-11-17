@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { DiagramChange } from "../DraftDiscussion/diagramFence";
 import type { EditorImageHost } from "../hostImages";
 import type { EditSessionStore } from "../../state/editSessions";
 import type { ArtifactType, HunkState, NodeType } from "../../types";
@@ -53,6 +54,12 @@ export interface ReviewHunk {
   draft?: string | null;
   /** DCR-FR-KDSV: a legacy proposal's text is not editable. */
   editable: boolean;
+  /**
+   * DCR-FR-JKVA: present for a diagram hunk. `before` and `after` then hold
+   * fence text, and this holds the source of the old and of the new diagram.
+   * A diagram hunk is never editable (DCR-FR-WTCQ).
+   */
+  diagram?: DiagramChange;
 }
 
 /**
@@ -89,6 +96,13 @@ export interface EditorReview {
   onDiscuss: (hunkId: string) => void;
   /** DCR-FR-24 / DCR-FR-26: the author rewrote a change's proposed text. */
   onEdit: (hunkId: string, after: string) => void;
+  /**
+   * DCR-FR-ESIY: open the comparison pop-up of a diagram hunk. `opener` is the
+   * Compare button, which takes the focus back when the pop-up closes, and
+   * `fallback` is the document column, which takes it where the button is gone
+   * (DCR-FR-UKMP). Absent where the review has no diagram hunk.
+   */
+  onCompare?: (hunkId: string, opener: HTMLElement | null, fallback: HTMLElement | null) => void;
   /**
    * DCR-FR-11 / DDS layout: the review bar, rendered by the host and placed
    * here — between the formatting toolbar and the scroller, so it reads as

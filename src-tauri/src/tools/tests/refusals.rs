@@ -105,6 +105,20 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
             at: 2,
             of: 4,
         },
+        // PDM-FR-UITL, PDM-FR-HOQI, PDM-FR-TPYC: the diagram tool's refusals join
+        // the group and are held to exactly the same rules.
+        ToolRefusal::NotADocumentConversation,
+        ToolRefusal::InvalidDiagramAt {
+            message: crate::tools::propose_diagram_changes::DIAGRAM_NOT_FOUND,
+            at: 3,
+            of: 8,
+        },
+        ToolRefusal::NotValidMermaid {
+            error: "Expecting a node, got an edge.".to_string(),
+            at: 2,
+            of: 4,
+            update: false,
+        },
         // MDT-FR-OTUZ, MDT-FR-TWVZ, MDT-FR-TVWI, MDT-FR-VHHI: this tool's own
         // refusals join the group and are held to exactly the same rules.
         ToolRefusal::InvalidArguments(crate::tools::MEASURE_NOT_ONE_TARGET),
@@ -161,6 +175,9 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::InvalidArguments(_)
         | ToolRefusal::InvalidArgumentsAt { .. }
         | ToolRefusal::InvalidUpdateAt { .. }
+        | ToolRefusal::InvalidDiagramAt { .. }
+        | ToolRefusal::NotValidMermaid { .. }
+        | ToolRefusal::NotADocumentConversation
         | ToolRefusal::SkillNotFound
         | ToolRefusal::SkillUnreadable
         | ToolRefusal::SkillFileNotFound

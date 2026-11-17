@@ -29,14 +29,44 @@ pub enum UpdateRefusal {
     NoUpdates,
     ArtifactNotFound,
     NotAPromptArtifact,
-    HunkNotFound { at: usize, of: usize },
-    HunkNotUpdatable { at: usize, of: usize },
-    HunkNamedTwice { at: usize, of: usize },
-    NoChange { at: usize, of: usize },
-    HunkAnchorLost { at: usize, of: usize },
-    HunkAmbiguous { at: usize, of: usize },
-    HunkOverlap { at: usize, of: usize },
-    HunkContextTooLong { at: usize, of: usize, side: ContextSide },
+    HunkNotFound {
+        at: usize,
+        of: usize,
+    },
+    /// PCP-FR-WSGE: a `change` or a `withdraw` across text and diagram hunks.
+    HunkSubjectMismatch {
+        at: usize,
+        of: usize,
+    },
+    HunkNotUpdatable {
+        at: usize,
+        of: usize,
+    },
+    HunkNamedTwice {
+        at: usize,
+        of: usize,
+    },
+    NoChange {
+        at: usize,
+        of: usize,
+    },
+    HunkAnchorLost {
+        at: usize,
+        of: usize,
+    },
+    HunkAmbiguous {
+        at: usize,
+        of: usize,
+    },
+    HunkOverlap {
+        at: usize,
+        of: usize,
+    },
+    HunkContextTooLong {
+        at: usize,
+        of: usize,
+        side: ContextSide,
+    },
     ThreadResolved,
     NotRecorded,
 }
@@ -46,6 +76,7 @@ impl UpdateRefusal {
         match error {
             UpdateError::NoUpdates | UpdateError::Plan(PlanError::NoHunks) => Self::NoUpdates,
             UpdateError::UnknownHunk(at) => Self::HunkNotFound { at, of },
+            UpdateError::SubjectMismatch(at) => Self::HunkSubjectMismatch { at, of },
             UpdateError::NotUpdatable(at) => Self::HunkNotUpdatable { at, of },
             UpdateError::NamedTwice(at) => Self::HunkNamedTwice { at, of },
             UpdateError::NoChange(at) => Self::NoChange { at, of },
@@ -66,6 +97,7 @@ impl UpdateRefusal {
             Self::ArtifactNotFound => ERR_ARTIFACT_NOT_FOUND,
             Self::NotAPromptArtifact => ERR_NOT_A_PROMPT_ARTIFACT,
             Self::HunkNotFound { .. } => ERR_HUNK_NOT_FOUND,
+            Self::HunkSubjectMismatch { .. } => ERR_HUNK_SUBJECT_MISMATCH,
             Self::HunkNotUpdatable { .. } => "hunk_not_updatable",
             Self::HunkNamedTwice { .. } => "hunk_named_twice",
             Self::NoChange { .. } => "no_change",

@@ -251,6 +251,9 @@ export function backendFor(invokeMock: Mock) {
           // GLS-FR-DLMP: the Document size limit, read when the section mounts.
           case "load_document_limit_percent":
             return 30;
+          // GLS-FR-UTNL: the History size limit, read when the section mounts.
+          case "load_history_limit_percent":
+            return 20;
           case "detect_agentic_cli_binary":
             return { path: null };
           case "get_project_agentic_integration":

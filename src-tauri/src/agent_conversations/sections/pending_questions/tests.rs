@@ -178,7 +178,8 @@ fn a_broken_record_adds_no_set_and_reports_its_kind() {
     let thread = f.thread();
     let path = find_file(f._dir.path(), &format!("{}.json", f.thread_id)).expect("the record");
     std::fs::write(path, b"{ not json").expect("broken");
-    let (section, unreadable) = discussion_history_with_status(f.roots(), &thread, "");
+    let (section, unreadable) =
+        discussion_history_with_status(f.roots(), &thread, "", SECTION_MAX_CHARS);
     assert_eq!(unreadable, Some("malformed"));
     assert!(!section.body.contains("A question set from"));
 }
@@ -187,6 +188,7 @@ fn a_broken_record_adds_no_set_and_reports_its_kind() {
 #[test]
 fn an_absent_set_reports_no_failure() {
     let f = fixture();
-    let (_, unreadable) = discussion_history_with_status(f.roots(), &f.thread(), "");
+    let (_, unreadable) =
+        discussion_history_with_status(f.roots(), &f.thread(), "", SECTION_MAX_CHARS);
     assert_eq!(unreadable, None);
 }

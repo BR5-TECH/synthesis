@@ -426,6 +426,15 @@ fn the_description_states_the_rule_of_the_spoken_part() {
     assert!(RATIONALE_DESCRIPTION.contains("`<spoken>…</spoken>`"));
 }
 
+// PPC-FR-LDXW: the model is told in the tool list that a diagram change goes to
+// `propose_diagram_changes`, in a call of its own.
+#[test]
+fn the_description_sends_a_diagram_change_to_the_diagram_tool() {
+    assert!(DESCRIPTION.contains(
+        "A change to a Mermaid diagram never goes in a change of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own."
+    ));
+}
+
 #[test]
 fn a_blank_rationale_and_a_no_change_candidate_are_told_apart() {
     // PPC-FR-08.

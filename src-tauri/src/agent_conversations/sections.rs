@@ -12,6 +12,10 @@ pub(super) use decomposition::*;
 mod open_proposal;
 pub(super) use open_proposal::*;
 
+/// AGC-FR-HOND / AGC-FR-XOZQ / AGC-FR-MATQ: the bound of `discussion_history`.
+mod history_bound;
+pub(super) use history_bound::*;
+
 /// AGC-FR-QSWD: the pending question set that ends `discussion_history`.
 mod pending_questions;
 pub(super) use pending_questions::*;
@@ -25,8 +29,10 @@ pub(super) use action_requests::*;
 /// AGC-FR-JNOS / AGC-FR-LTLT: the split of a change.
 mod split;
 pub(super) use split::*;
+mod kind_label;
 /// AGC-FR-DKHT: a prompt proposal's hunk in a draft hunk's shape.
 mod prompt_view;
+use kind_label::kind_label;
 pub(super) use prompt_view::*;
 
 // ---------------------------------------------------------------------------
@@ -36,10 +42,15 @@ pub(super) use prompt_view::*;
 /// AGC-FR-11: bound a section's material, and say so in the section's own text
 /// when it was bounded. An agent is never silently handed half a document.
 pub(super) fn bounded(body: String) -> (String, bool) {
-    if body.chars().count() <= SECTION_MAX_CHARS {
+    bounded_within(body, SECTION_MAX_CHARS)
+}
+
+/// [`bounded`] with a bound of its own, in characters (AGC-FR-KLID).
+pub(super) fn bounded_within(body: String, max_chars: usize) -> (String, bool) {
+    if body.chars().count() <= max_chars {
         return (body, false);
     }
-    let mut truncated: String = body.chars().take(SECTION_MAX_CHARS).collect();
+    let mut truncated: String = body.chars().take(max_chars).collect();
     truncated.push_str("\n\n[This material is partial: it was truncated here.]");
     (truncated, true)
 }
@@ -259,7 +270,7 @@ pub(super) fn proposal_hunk_line(
     let mut line = format!(
         "[about proposed change {} to {path}: {} — {}",
         change.id,
-        kind_label(change.kind),
+        kind_label(change.kind, change.diagram),
         state_label(change.state)
     );
     if !change.before.is_empty() {
@@ -270,15 +281,6 @@ pub(super) fn proposal_hunk_line(
     }
     line.push(']');
     line
-}
-
-/// The word a rendering names a change's kind by (AGC-FR-RVQP, AGC-FR-DKHT).
-fn kind_label(kind: crate::draft_proposals::anchors::HunkKind) -> &'static str {
-    match kind {
-        crate::draft_proposals::anchors::HunkKind::Replace => "replace",
-        crate::draft_proposals::anchors::HunkKind::Add => "add",
-        crate::draft_proposals::anchors::HunkKind::Del => "del",
-    }
 }
 
 /// The word a rendering names a change's state by (AGC-FR-RVQP, AGC-FR-DKHT).
@@ -544,7 +546,7 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
         return line;
     };
     for (position, change) in changes.iter().take(CHANGES_RENDERED_PER_PROPOSAL).enumerate() {
-        let kind = kind_label(change.kind);
+        let kind = kind_label(change.kind, change.diagram);
         let state = state_label(change.state);
         line.push_str(&format!("\n  {}. {kind} — {state}", position + 1));
         if !change.before.is_empty() {
@@ -829,12 +831,17 @@ pub(super) fn handles_of(thread: &comments::Discussion) -> HashMap<&str, &str> {
 /// AGC-FR-06: a discussion about a whole target (CMS-FR-53) opens this section
 /// with its comments directly — an absent fragment being nothing to report rather
 /// than something to describe.
+///
+/// The bound is the least one of AGC-FR-HOND, so a test reaches it with a
+/// small fixture. A turn and an estimate pass their own bound to
+/// [`discussion_history_with_status`].
+#[cfg(test)]
 pub(super) fn discussion_history_section(
     roots: Roots<'_>,
     thread: &comments::Discussion,
     trigger_comment_id: &str,
 ) -> InputSection {
-    discussion_history_with_status(roots, thread, trigger_comment_id).0
+    discussion_history_with_status(roots, thread, trigger_comment_id, SECTION_MAX_CHARS).0
 }
 
 /// [`discussion_history_section`], and the kind of a pending question set
@@ -843,6 +850,7 @@ pub(super) fn discussion_history_with_status(
     roots: Roots<'_>,
     thread: &comments::Discussion,
     trigger_comment_id: &str,
+    bound: usize,
 ) -> (InputSection, Option<&'static str>) {
     let anchor = match thread.fragment_target.as_ref() {
         Some(fragment) => format!(
@@ -858,16 +866,14 @@ pub(super) fn discussion_history_with_status(
     // AGC-FR-09 / AGC-FR-35: a comment's attachments contribute into the section
     // holding it, in the order the comment carries them and in the position that
     // comment occupies.
-    let mut parts: Vec<InputPart> = Vec::new();
-    if !anchor.is_empty() {
-        parts.push(InputPart::Text(anchor));
-    }
+    let mut comment_list: Vec<Vec<InputPart>> = Vec::new();
     for comment in &thread.comments {
         if comment.id == trigger_comment_id {
             break;
         }
-        parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
+        let mut parts = comment_parts(roots, thread, comment, &handles, &reads);
         parts.push(InputPart::Text("\n".to_string()));
+        comment_list.push(parts);
     }
     // AGC-FR-KRMV / AGC-FR-JNOS / AGC-FR-EPNB / AGC-FR-TCCV / AGC-FR-QSWD: the
     // action requests, the split, the open proposal, then the pending question
@@ -877,23 +883,9 @@ pub(super) fn discussion_history_with_status(
         Ok(text) => (text, None),
         Err(kind) => (None, Some(kind)),
     };
-    let tail: String = [
-        decomposition_text(roots, &thread.target),
-        action_requests_text(roots, &thread.target),
-        split_text(roots, &thread.target),
-        open_proposal_text(roots, &thread.target),
-        questions,
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    if tail.is_empty() {
-        return (section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts), unreadable);
-    }
-    let room = SECTION_MAX_CHARS.saturating_sub(tail.chars().count());
-    let mut section = section_of_parts_within(TAG_DISCUSSION_HISTORY, Vec::new(), parts, room);
-    append_open_proposal(&mut section, tail);
-    (section, unreadable)
+    // AGC-FR-YQVB / AGC-FR-MATQ: the tail fills at most half of the bound.
+    let tail = history_tail(roots, &thread.target, questions, bound);
+    (bounded_history(anchor, comment_list, tail, bound), unreadable)
 }
 
 /// AGC-FR-06: the body of the comment that addressed the agent.

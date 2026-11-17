@@ -58,6 +58,12 @@ export interface OverlayFrameProps {
   onClose: (reason: "close" | "escape") => void;
   /** A key pressed inside the overlay, before the window could see it. */
   onKeyDown?: (e: ReactKeyboardEvent<HTMLElement>) => void;
+  /**
+   * PCR-FR-TNQA: true while a dialog of the window stands over the overlay,
+   * such as the confirmation of a write to the main branch. The overlay then
+   * leaves the keys to that dialog.
+   */
+  suspended?: () => boolean;
   children: ReactNode;
 }
 
@@ -70,18 +76,22 @@ export function OverlayFrame({
   controls,
   onClose,
   onKeyDown,
+  suspended,
   children,
 }: OverlayFrameProps) {
   const [rect, setRect] = useState<Rect>(() => openRect(windowBounds()));
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const suspendedRef = useRef(suspended);
+  suspendedRef.current = suspended;
 
   // EDT-FR-SRXG: Escape closes the overlay. EDT-FR-HGAZ: Tab and Shift+Tab stay
   // inside it. Captured ahead of the surfaces beneath, which must not react to
   // a key that the overlay answers.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (suspendedRef.current?.()) return;
       const dialog = dialogRef.current;
       // EDT-FR-SJGJ: a key that reaches the window while focus is outside the
       // overlay goes to no surface and no shortcut. Focus goes back inside.

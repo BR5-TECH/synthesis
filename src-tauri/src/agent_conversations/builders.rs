@@ -73,8 +73,12 @@ pub fn build_input_within(
             material.document
         }
     };
-    let (history, question_set_unreadable) =
-        discussion_history_with_status(roots, &discussion, trigger_comment_id);
+    let (history, question_set_unreadable) = discussion_history_with_status(
+        roots,
+        &discussion,
+        trigger_comment_id,
+        budget.history_bound_chars(),
+    );
     sections.push(history);
     sections.push(current_comment_section(roots, &discussion, trigger_comment_id));
     BuiltInput { sections, document, question_set_unreadable }

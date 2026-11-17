@@ -159,7 +159,10 @@ fn a_prompt_proposal_reference_renders_its_changes_and_an_update_its_counts() {
         &h.root(),
         crate::prompt_proposals::PromptProposalUpdate {
             artifact_id: PROMPT_PATH,
-            updates: &[crate::text_hunks::updates::UpdateEntry::Withdraw { id: hunk_id.clone() }],
+            updates: &[crate::text_hunks::updates::UpdateEntry::Withdraw {
+                id: hunk_id.clone(),
+                diagram: false,
+            }],
             rationale: "Not needed. <spoken>Withdrawn.</spoken>",
             agent: &crate::comments::Participant::Agent {
                 agent_id: "a1".into(),

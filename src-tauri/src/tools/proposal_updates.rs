@@ -29,6 +29,9 @@ pub const UPDATE_CHANGE_SETTLED: &str =
 pub const UPDATE_NAMED_TWICE: &str =
     "Two of your updates name the same change. Put what you want for it in one update.";
 
+/// DCP-FR-GMYT: a `change` or a `withdraw` of a diagram change, sent to the text tool.
+pub const UPDATE_CHANGE_IS_DIAGRAM: &str = "The change you named is a diagram change, so this tool can not update it. Update it with `propose_diagram_changes`.";
+
 /// One entry of `updates`, as the model composed it.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct UpdateArg {
@@ -53,9 +56,11 @@ pub struct UpdateArg {
 }
 
 impl UpdateArg {
-    /// The hunk fields, the kind read from the fields (PDC-FR-VKMR).
-    fn hunk(&self) -> ProposedHunk {
-        ProposedHunk::from_fields(
+    /// The hunk fields, the kind read from the fields (PDC-FR-VKMR). For a
+    /// diagram update the fields are Mermaid sources (DCP-FR-HXNP).
+    fn hunk(&self, diagram: bool) -> ProposedHunk {
+        let make = if diagram { ProposedHunk::diagram_fields } else { ProposedHunk::from_fields };
+        make(
             self.before.clone(),
             self.after.clone(),
             self.after_text.clone(),
@@ -82,6 +87,12 @@ where
 /// PDC-FR-UOBH / PDC-FR-SNUK: the entries, or the refusal of the first
 /// malformed one with its place.
 pub fn to_entries(args: &[UpdateArg]) -> Result<Vec<UpdateEntry>, ToolRefusal> {
+    to_entries_for(args, false)
+}
+
+/// As [`to_entries`], for the tool of one subject: `diagram` is true for the
+/// diagram tool, and every entry then names a diagram hunk (DCP-FR-GMYT).
+pub fn to_entries_for(args: &[UpdateArg], diagram: bool) -> Result<Vec<UpdateEntry>, ToolRefusal> {
     let of = args.len();
     let malformed = |at: usize| ToolRefusal::InvalidUpdateAt { message: UPDATE_MALFORMED, at, of };
     args.iter()
@@ -89,9 +100,11 @@ pub fn to_entries(args: &[UpdateArg]) -> Result<Vec<UpdateEntry>, ToolRefusal> {
         .map(|(index, arg)| {
             let action = arg.action.as_deref().map(str::trim).map(str::to_ascii_lowercase);
             match (action.as_deref(), arg.named()) {
-                (Some("change"), Some(id)) => Ok(UpdateEntry::Change { id, hunk: arg.hunk() }),
-                (Some("withdraw"), Some(id)) => Ok(UpdateEntry::Withdraw { id }),
-                (Some("add"), None) => Ok(UpdateEntry::Add(arg.hunk())),
+                (Some("change"), Some(id)) => {
+                    Ok(UpdateEntry::Change { id, hunk: arg.hunk(diagram) })
+                }
+                (Some("withdraw"), Some(id)) => Ok(UpdateEntry::Withdraw { id, diagram }),
+                (Some("add"), None) => Ok(UpdateEntry::Add(arg.hunk(diagram))),
                 _ => Err(malformed(index + 1)),
             }
         })
@@ -193,6 +206,6 @@ mod tests {
         .unwrap();
         assert!(matches!(&entries[0], UpdateEntry::Change { id, .. } if id == "h1"));
         assert!(matches!(&entries[1], UpdateEntry::Add(_)));
-        assert!(matches!(&entries[2], UpdateEntry::Withdraw { id } if id == "h2"));
+        assert!(matches!(&entries[2], UpdateEntry::Withdraw { id, .. } if id == "h2"));
     }
 }

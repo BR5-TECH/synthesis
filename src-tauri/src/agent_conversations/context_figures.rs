@@ -98,12 +98,14 @@ pub struct DiscussionContext {
     pub above_limit: bool,
 }
 
-/// AGC-FR-GMSF: the window of the turn's model and the Document size limit
-/// percent, resolved at dispatch.
+/// AGC-FR-GMSF, AGC-FR-CLRX: the window of the turn's model, the Document
+/// size limit percent, and the History size limit percent, resolved at
+/// dispatch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DocumentBudget {
     pub window: u64,
     pub percent: u8,
+    pub history_percent: u8,
 }
 
 impl DocumentBudget {
@@ -113,6 +115,7 @@ impl DocumentBudget {
         DocumentBudget {
             window: ai_api::DEFAULT_CONTEXT_SIZE,
             percent: crate::global_settings::DOCUMENT_LIMIT_PERCENT_DEFAULT,
+            history_percent: crate::global_settings::HISTORY_LIMIT_PERCENT_DEFAULT,
         }
     }
 
@@ -123,7 +126,29 @@ impl DocumentBudget {
             percent: store
                 .load_document_limit_percent()
                 .unwrap_or(crate::global_settings::DOCUMENT_LIMIT_PERCENT_DEFAULT),
+            history_percent: store
+                .load_history_limit_percent()
+                .unwrap_or(crate::global_settings::HISTORY_LIMIT_PERCENT_DEFAULT),
         }
+    }
+
+    /// A budget of this window and these two percents.
+    pub fn new(window: u64, percent: u8, history_percent: u8) -> Self {
+        DocumentBudget { window, percent, history_percent }
+    }
+
+    /// AGC-FR-CLRX: the whole part of `window × history_percent / 100`.
+    pub fn history_tokens(&self) -> u64 {
+        self.window.saturating_mul(u64::from(self.history_percent)) / 100
+    }
+
+    /// AGC-FR-HOND: the bound of the `discussion_history` section in
+    /// characters — the greater of `history_tokens × 4` and the bound of
+    /// AGC-FR-11.
+    pub fn history_bound_chars(&self) -> usize {
+        usize::try_from(self.history_tokens().saturating_mul(CHARS_PER_TOKEN))
+            .unwrap_or(usize::MAX)
+            .max(SECTION_MAX_CHARS)
     }
 
     /// AGC-FR-GMSF: the whole part of `window × percent / 100`.

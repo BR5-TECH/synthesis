@@ -877,6 +877,11 @@ describe("the AI API level's explanation (AII-FR-54, AII-FR-12, AII-FR-45)", () 
       "How much of the model's context window the document under discussion " +
         "may fill. A larger document is given to the agent in part, and the " +
         "agent reads the rest when it needs it.",
+      // GLS-FR-UTNL: the History size limit's note, which says what the agent
+      // is given and not what it runs on.
+      "How much of the model's context window the discussion history may " +
+        "fill. In a longer discussion the agent gets the newest comments, and " +
+        "older comments are left out.",
       "Bounds each agent conversation turn on this provider. Empty uses the " +
         "project's execution timeout, or 5 minutes.",
     ]);

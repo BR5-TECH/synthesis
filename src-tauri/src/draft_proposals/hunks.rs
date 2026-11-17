@@ -69,6 +69,9 @@ pub struct HunkLedgerRow {
     pub revision: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_at: Option<String>,
+    /// True for a diagram hunk (DCP-FR-QRVD). Absent when false.
+    #[serde(default, skip_serializing_if = "crate::text_hunks::hunks::is_false")]
+    pub diagram: bool,
 }
 
 fn pending() -> HunkState {
@@ -84,6 +87,7 @@ impl HunkLedgerRow {
             edited: false,
             revision: hunk.revision,
             decided_at: None,
+            diagram: hunk.diagram,
         }
     }
 }
@@ -109,6 +113,7 @@ pub fn legacy_document(prompt: &str, candidate: &str, hunk_id: &str) -> HunkDocu
             hint_start: 0,
             hint_end: prompt.len(),
         },
+        diagram: false,
     }])
 }
 
@@ -192,6 +197,7 @@ mod tests {
             before: (!before.is_empty()).then(|| before.to_string()),
             after: (!after.is_empty()).then(|| after.to_string()),
             anchor,
+            diagram: false,
         }
     }
 
@@ -227,6 +233,7 @@ mod tests {
                     lead: None,
                     trail: None,
                     note: None,
+                    diagram: false,
                 },
                 ProposedHunk {
                     kind: HunkKind::Del,
@@ -237,6 +244,7 @@ mod tests {
                     lead: None,
                     trail: None,
                     note: None,
+                    diagram: false,
                 },
                 // A replacement carries both, and keeps both.
                 ProposedHunk {
@@ -247,6 +255,7 @@ mod tests {
                     lead: None,
                     trail: None,
                     note: None,
+                    diagram: false,
                 },
             ],
             || "id".to_string(),

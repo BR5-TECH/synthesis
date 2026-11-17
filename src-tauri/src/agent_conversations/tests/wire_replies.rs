@@ -219,6 +219,8 @@ fn an_openai_refusal_is_recorded_in_the_providers_own_terms() {
     assert_eq!(failure.status, Some(400));
     assert_eq!(failure.class, class::HTTP_STATUS);
     assert_eq!(failure.provider_code.as_deref(), Some("context_length_exceeded"));
+    // CVL-FR-PFNV: the refusal as the wire gives it is a context overflow.
+    assert!(crate::agent_conversations::overflow::is_context_overflow(&failure));
     assert_eq!(
         failure.provider_message.as_deref(),
         Some("This model's maximum context length is exceeded."),

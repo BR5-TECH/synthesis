@@ -10,6 +10,7 @@
 //! no store. The caller says where each hunk stands, and writes the result.
 
 use super::anchors::{self, HunkKind};
+use super::fences::comparable;
 use super::hunks::{plan_among, HunkDocument, PlanError, ProposedHunk};
 
 /// One entry of an update, as the tool read it from the model's arguments.
@@ -19,16 +20,25 @@ pub enum UpdateEntry {
     Change { id: String, hunk: ProposedHunk },
     /// DCP-FR-IAFV: a new hunk after the existing hunks.
     Add(ProposedHunk),
-    /// DCP-FR-IAFV: take the hunk `id` back.
-    Withdraw { id: String },
+    /// DCP-FR-IAFV: take the hunk `id` back. `diagram` is the subject of the
+    /// tool that made the update (DCP-FR-GMYT).
+    Withdraw { id: String, diagram: bool },
 }
 
 impl UpdateEntry {
     /// The hunk id the entry names, if it names one.
     pub fn id(&self) -> Option<&str> {
         match self {
-            UpdateEntry::Change { id, .. } | UpdateEntry::Withdraw { id } => Some(id),
+            UpdateEntry::Change { id, .. } | UpdateEntry::Withdraw { id, .. } => Some(id),
             UpdateEntry::Add(_) => None,
+        }
+    }
+
+    /// The subject the entry names: true for a diagram hunk (DCP-FR-GMYT).
+    fn diagram(&self) -> bool {
+        match self {
+            UpdateEntry::Change { hunk, .. } | UpdateEntry::Add(hunk) => hunk.diagram,
+            UpdateEntry::Withdraw { diagram, .. } => *diagram,
         }
     }
 
@@ -59,6 +69,9 @@ pub enum UpdateError {
     NoUpdates,
     /// The id names no hunk of the open proposal.
     UnknownHunk(usize),
+    /// The id names a hunk of the other subject: a `change` or a `withdraw`
+    /// across text and diagram hunks (DCP-FR-GMYT).
+    SubjectMismatch(usize),
     /// The id names an accepted or a withdrawn hunk.
     NotUpdatable(usize),
     /// An earlier entry of the call already named this id.
@@ -104,6 +117,10 @@ pub fn plan_update(
         match standing(id) {
             None => return Err(UpdateError::UnknownHunk(at)),
             Some(_) if doc.find(id).is_none() => return Err(UpdateError::UnknownHunk(at)),
+            // DCP-FR-GMYT: an update names the subject of its tool.
+            Some(_) if doc.find(id).is_some_and(|h| h.diagram != entry.diagram()) => {
+                return Err(UpdateError::SubjectMismatch(at));
+            }
             Some(Standing::Settled) => return Err(UpdateError::NotUpdatable(at)),
             Some(Standing::Live) => {}
         }
@@ -116,8 +133,14 @@ pub fn plan_update(
     // PDC-FR-VSMM: a change that leaves its text as it is decides nothing.
     for (index, entry) in entries.iter().enumerate() {
         if let Some(hunk) = entry.proposed() {
-            let before = anchors::normalise_newlines(hunk.before.as_deref().unwrap_or(""));
-            let after = anchors::normalise_newlines(hunk.after.as_deref().unwrap_or(""));
+            let mut before = anchors::normalise_newlines(hunk.before.as_deref().unwrap_or(""));
+            let mut after = anchors::normalise_newlines(hunk.after.as_deref().unwrap_or(""));
+            if hunk.diagram {
+                // DCP-FR-HXNP: a source is the same when only its blank lines
+                // at the ends and its white space at the end differ.
+                before = comparable(&before);
+                after = comparable(&after);
+            }
             if hunk.kind == HunkKind::Replace && !before.is_empty() && before == after {
                 return Err(UpdateError::NoChange(index + 1));
             }
@@ -183,7 +206,7 @@ pub fn plan_update(
                     next.hunks.push(hunk);
                 }
             }
-            UpdateEntry::Withdraw { id } => out.withdrawn.push(id.clone()),
+            UpdateEntry::Withdraw { id, .. } => out.withdrawn.push(id.clone()),
         }
     }
     // DCP-FR-BFDR: a kept hunk's context stops short of every new or changed
@@ -256,7 +279,7 @@ mod tests {
             &[
                 UpdateEntry::Add(replace("epsilon", "EPSILON")),
                 UpdateEntry::Change { id: "h1".into(), hunk: replace("beta", "Beta") },
-                UpdateEntry::Withdraw { id: "h2".into() },
+                UpdateEntry::Withdraw { diagram: false, id: "h2".into() },
             ],
             ids(),
         )
@@ -283,7 +306,7 @@ mod tests {
         let refused = |entries: &[UpdateEntry]| {
             plan_update(PROMPT, &doc, settled, entries, ids()).unwrap_err()
         };
-        let withdraw = |id: &str| UpdateEntry::Withdraw { id: id.into() };
+        let withdraw = |id: &str| UpdateEntry::Withdraw { diagram: false, id: id.into() };
         assert_eq!(refused(&[withdraw("h2"), withdraw("nope")]), UpdateError::UnknownHunk(2));
         assert_eq!(refused(&[withdraw("h1")]), UpdateError::NotUpdatable(1));
         assert_eq!(refused(&[withdraw("h2"), withdraw("h2")]), UpdateError::NamedTwice(2));
@@ -300,7 +323,7 @@ mod tests {
             plan_update(PROMPT, &doc, live, std::slice::from_ref(&add), ids()).unwrap_err(),
             UpdateError::Plan(PlanError::Overlap(1))
         );
-        let entries = [UpdateEntry::Withdraw { id: "h1".into() }, add];
+        let entries = [UpdateEntry::Withdraw { diagram: false, id: "h1".into() }, add];
         assert!(plan_update(PROMPT, &doc, live, &entries, ids()).is_ok());
         // An accepted hunk is in the text already, so nothing can overlap it.
         let accepted = |id: &str| Some(if id == "h1" { Standing::Settled } else { Standing::Live });
@@ -314,7 +337,7 @@ mod tests {
     fn a_placement_refusal_names_the_entry_place() {
         let doc = recorded();
         let entries = [
-            UpdateEntry::Withdraw { id: "h2".into() },
+            UpdateEntry::Withdraw { diagram: false, id: "h2".into() },
             UpdateEntry::Add(replace("not there", "x")),
         ];
         assert_eq!(
@@ -352,7 +375,7 @@ mod tests {
         let doc = recorded();
         // h2 is withdrawn, so the second add overlaps the first alone.
         let two_adds = [
-            UpdateEntry::Withdraw { id: "h2".into() },
+            UpdateEntry::Withdraw { diagram: false, id: "h2".into() },
             UpdateEntry::Add(replace("gamma", "G")),
             UpdateEntry::Add(replace("gamma delta", "GD")),
         ];

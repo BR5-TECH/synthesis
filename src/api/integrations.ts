@@ -305,6 +305,20 @@ export const saveDocumentLimitPercent = (percent: number) =>
   invoke<number>("save_document_limit_percent", { percent });
 
 /**
+ * GSS-FR-USGD: the History size limit, a whole percent of the model's context
+ * window. 20 while nothing is stored.
+ */
+export const loadHistoryLimitPercent = () =>
+  invoke<number>("load_history_limit_percent");
+
+/**
+ * GSS-FR-RMJH: store the History size limit. Rejects `percent_out_of_range`
+ * for a value outside 1 to 100, and writes nothing then.
+ */
+export const saveHistoryLimitPercent = (percent: number) =>
+  invoke<number>("save_history_limit_percent", { percent });
+
+/**
  * AAP-FR-ITBL: store the max context size of any provider. `null` clears it.
  * Rejects `token_limit_invalid` for a value that is not a whole number from 1
  * to 4294967295.

@@ -692,6 +692,8 @@ pub fn run() {
             embeddings::save_embeddings_settings,
             global_settings::load_document_limit_percent,
             global_settings::save_document_limit_percent,
+            global_settings::load_history_limit_percent,
+            global_settings::save_history_limit_percent,
             embeddings::list_embedding_models,
             embeddings::retry_embeddings_model_download,
             embeddings::load_project_embeddings_mode,

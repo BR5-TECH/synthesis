@@ -303,7 +303,7 @@ fn a_file_too_large_contributes_no_image() {
     std::fs::write(base.join("design.md"), format!("![flow](flow.png)\n{}", "x".repeat(400)))
         .expect("design");
     let thread = open(&h, "ct-big", None);
-    let tiny = DocumentBudget { window: 100, percent: 1 };
+    let tiny = DocumentBudget { window: 100, percent: 1, history_percent: 20 };
     let input = build_input_within(
         Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),

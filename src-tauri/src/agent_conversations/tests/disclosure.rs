@@ -324,9 +324,11 @@ fn a_failure_message_is_classified_by_what_it_calls_for() {
     assert_eq!(classify_provider_error("invalid api key").failure, FAIL_REJECTED);
 }
 
+// AGC-FR-11, AGC-FR-HOND, AGC-FR-XOZQ: the history has a bound of its own,
+// and a history past it keeps the newest comments and says how many older
+// ones it left out.
 #[test]
 fn a_long_discussion_history_is_bounded_like_any_other_section() {
-    // AGC-FR-11 applies to every section, not only the artifact's.
     let h = Harness::new(vec![]);
     let thread = h.seed_artifact_thread("spec.md", "Short source.");
     // A conversation past the bound.
@@ -347,11 +349,22 @@ fn a_long_discussion_history_is_bounded_like_any_other_section() {
     }
     let refreshed = h.threads("spec.md");
     let last = refreshed[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &last);
+    // A small window, so the bound is the least one of 40,000 characters.
+    let budget = DocumentBudget { window: 10_000, percent: 30, history_percent: 20 };
+    let sections = build_input_within(
+        Roots::same(&h.root()),
+        &ConversationOrigin::of(&thread),
+        &last,
+        &budget,
+    )
+    .sections;
     let conversation = section_of(&sections, TAG_DISCUSSION_HISTORY);
     assert!(conversation.truncated);
-    assert!(conversation.body.contains("partial"));
-    assert!(conversation.body.chars().count() < 41_000);
+    assert!(conversation.body.contains("[Earlier comments omitted:"));
+    assert!(conversation.body.chars().count() <= 40_000);
+    // The newest comment before the trigger stands at the end.
+    let newest = &refreshed[0].comments[refreshed[0].comments.len() - 2];
+    assert!(conversation.body.trim_end().ends_with(newest.body.trim_end()));
 }
 
 #[test]

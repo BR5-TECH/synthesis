@@ -84,10 +84,32 @@ pub(in crate::agent_conversations) fn new_draft_line(
 /// AGC-FR-TIGM: the decomposition that ends `discussion_history`, before an
 /// open proposal, or `None` where the target is no draft or holds no
 /// new-draft proposal.
+#[cfg(test)]
 pub(in crate::agent_conversations) fn decomposition_text(
     roots: Roots<'_>,
     target: &DiscussionTarget,
 ) -> Option<String> {
+    decomposition_text_within(roots, target, usize::MAX).map(|d| d.text)
+}
+
+/// AGC-FR-MATQ: the line that ends a pending new-draft body that was cut.
+pub(in crate::agent_conversations) const DRAFT_BODY_PARTIAL_LINE: &str =
+    "[This draft body is partial: it was truncated here.]";
+
+/// The decomposition text, and the characters of the whole pending body in it.
+pub(in crate::agent_conversations) struct DecompositionText {
+    pub(in crate::agent_conversations) text: String,
+    pub(in crate::agent_conversations) body_chars: usize,
+}
+
+/// AGC-FR-TIGM, AGC-FR-MATQ: [`decomposition_text`] with the pending body cut
+/// to `body_max_chars`. A cut body keeps its start and ends with
+/// [`DRAFT_BODY_PARTIAL_LINE`].
+pub(in crate::agent_conversations) fn decomposition_text_within(
+    roots: Roots<'_>,
+    target: &DiscussionTarget,
+    body_max_chars: usize,
+) -> Option<DecompositionText> {
     let DiscussionTarget::Draft { draft_id } = target else {
         return None;
     };
@@ -106,14 +128,22 @@ pub(in crate::agent_conversations) fn decomposition_text(
     for p in &all {
         text.push_str(&format!("  {}\n", summary(p)));
     }
+    let mut body_chars = 0;
     if let (Some(open), Some(body)) = (all.iter().find(|p| p.state == NewDraftState::Pending), body)
     {
+        body_chars = body.chars().count();
+        let shown = if body_chars > body_max_chars {
+            let kept: String = body.chars().take(body_max_chars).collect();
+            format!("{kept}\n{DRAFT_BODY_PARTIAL_LINE}")
+        } else {
+            body
+        };
         text.push_str(&format!(
-            "The proposed new draft {} waits on the author. Its body:\n{body}\n",
+            "The proposed new draft {} waits on the author. Its body:\n{shown}\n",
             open.id
         ));
     }
-    Some(text)
+    Some(DecompositionText { text, body_chars })
 }
 
 #[cfg(test)]

@@ -164,14 +164,10 @@ pub(super) fn question_of(
     Ok(question.to_string())
 }
 
-fn meta_question_section(question: &str) -> InputSection {
-    InputSection {
-        tag: "meta_question".to_string(),
-        attributes: Vec::new(),
-        body: question.to_string(),
-        truncated: false,
-        parts: Vec::new(),
-    }
+/// AGC-FR-NXPQ: the question of Meta, bound by AGC-FR-11 like every other
+/// section.
+pub(super) fn meta_question_section(question: &str) -> InputSection {
+    section("meta_question", Vec::new(), question.to_string())
 }
 
 /// AGC-FR-HVQD, AGC-FR-KRTP: one call of the tool.

@@ -14,6 +14,7 @@ import {
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { AiApiTurnTimeoutRow } from "./AiApiTurnTimeoutRow";
 import { AiApiDocumentLimitRow } from "./AiApiDocumentLimitRow";
+import { AiApiHistoryLimitRow } from "./AiApiHistoryLimitRow";
 import { aiErrorMessage } from "./aiErrorMessage";
 import {
   CUSTOM_GATEWAY_ORIGIN,
@@ -514,8 +515,9 @@ export function AiApiIntegrations() {
         </p>
       </div>
 
-      {/* GLS-FR-DLMP: one setting for every provider, above the tabs. */}
+      {/* GLS-FR-DLMP, GLS-FR-UTNL: one setting each for every provider, above the tabs. */}
       <AiApiDocumentLimitRow />
+      <AiApiHistoryLimitRow />
 
       {integrations === null && <div className="t-muted">Loading…</div>}
 

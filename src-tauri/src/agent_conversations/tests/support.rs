@@ -715,7 +715,7 @@ pub(super) const DISCUSSION_ONLY_TOOL: &str = crate::tools::ask_discussion_quest
 /// AGC-FR-XHHT: a budget whose `artifact` bound is the section bound of
 /// AGC-FR-11, 40,000 characters (10% of 100,000 tokens, four characters each).
 pub(super) const SECTION_BOUND_BUDGET: DocumentBudget =
-    DocumentBudget { window: 100_000, percent: 10 };
+    DocumentBudget { window: 100_000, percent: 10, history_percent: 20 };
 
 /// [`build_input_within`] under [`SECTION_BOUND_BUDGET`], for a test of the
 /// bound itself.

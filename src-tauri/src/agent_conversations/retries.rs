@@ -9,6 +9,7 @@ use super::*;
 /// One logical model call: the retry budget, the whole-turn deadline, the
 /// call's ordinal in the turn, and whether the loop's bound falls on it
 /// (CVL-FR-13, CVL-FR-19).
+#[derive(Clone, Copy)]
 pub(super) struct ModelCall {
     pub(super) policy: RetryPolicy,
     pub(super) deadline: std::time::Instant,
@@ -20,6 +21,10 @@ pub(super) struct ModelCall {
     pub(super) compaction: bool,
     /// CVL-FR-KPOY: the turn is bound to an open speech when the call begins.
     pub(super) speech_open: bool,
+    /// CVL-FR-QJLU: the call is the compaction call of a recovery, so its usage
+    /// record has an identity apart from a compaction before the same
+    /// invocation (CVL-FR-WQZD).
+    pub(super) recovery: bool,
 }
 
 /// CVL-FR-17 / CVL-FR-19: one **logical** `complete` invocation, made as up to
@@ -41,7 +46,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
     exchange: &[rig::completion::Message],
     call: ModelCall,
 ) -> Result<ModelReply, TurnEnd> {
-    let ModelCall { policy, deadline, model_calls, at_bound, compaction, speech_open } = call;
+    let ModelCall { policy, deadline, model_calls, at_bound, compaction, speech_open, recovery } =
+        call;
     let model_label = endpoint.model_id.as_deref().unwrap_or("<provider default>");
     for attempt in 1..=policy.max_attempts {
         check_cancelled(plan)?;
@@ -189,7 +195,14 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 if placeholder
                     || (!no_spoken_part && reply_is_usable(&reply, at_bound, &request.tools)) =>
             {
-                count_answered_call(app, plan, model_calls, attempt as u32, compaction, &reply);
+                count_answered_call(
+                    app,
+                    plan,
+                    model_calls,
+                    attempt as u32,
+                    (compaction, recovery),
+                    &reply,
+                );
                 // CVL-FR-OPTI: the context figures of this answered call, for
                 // every target kind. A compaction call reports none.
                 if !compaction {
@@ -285,7 +298,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                         plan,
                         model_calls,
                         attempt as u32,
-                        compaction,
+                        (compaction, recovery),
                         &rejected,
                     );
                     // CVL-FR-NOHO: the size of the reply, and never its text.
@@ -361,7 +374,10 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         // cancellation, or after the conversation is resolved. Each is read
         // *before* the delay is planned, so a record never promises a retry that
         // will not be made.
-        let budget_left = attempt < policy.max_attempts;
+        // CVL-FR-ZFMU: the same exchange is refused again for its size, so a
+        // context overflow spends no further attempt.
+        let overflow = overflow::is_context_overflow(&failure);
+        let budget_left = attempt < policy.max_attempts && !overflow;
         let time_left = !turns
             .deadline_of(&plan.turn_id, deadline)
             .saturating_duration_since(std::time::Instant::now())
@@ -460,6 +476,12 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
             if let Some(tls) = failure.tls {
                 return Err(TurnEnd::TlsUntrusted(tls));
             }
+            // CVL-FR-PFNV: a context overflow of a turn's own invocation is
+            // flagged, so the loop can recover (CVL-FR-QJLU). A compaction call
+            // has nothing to recover with.
+            if !compaction && overflow {
+                plan.overflowed.store(true, Ordering::SeqCst);
+            }
             return Err(TurnEnd::Failed(failure.failure));
         }
 
@@ -536,7 +558,7 @@ fn count_answered_call<R: tauri::Runtime>(
     plan: &TurnPlan,
     model_calls: usize,
     attempt: u32,
-    compaction: bool,
+    compaction: (bool, bool),
     reply: &ModelReply,
 ) where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,

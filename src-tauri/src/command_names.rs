@@ -332,6 +332,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "list_map_plan_proposals",
     "accept_map_plan_row",
     "reject_map_plan_row",
+    "reopen_map_plan_row",
+    "request_map_plan_reprepare",
     "add_comment",
     "set_discussion_resolution",
     "reanchor_discussion_fragment",

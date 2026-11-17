@@ -30,8 +30,8 @@ import type { AttachmentInput, Discussion, DiscussionTarget, MapNodeRef } from "
 import { DiscussionColumn } from "../DraftDiscussion/DiscussionColumn";
 import type { OpeningCopy, OpenState } from "../DraftDiscussion/OpenDiscussion";
 import { Icon } from "../icons";
-import { MapPlanHostContext, type MapPlanHost } from "../MapPlanProposal";
 import { FocusChip } from "./FocusChip";
+import { useMapPlan } from "../MapPlanProposal";
 
 export interface MapColumnProps {
   store: SpecMapSessionStore;
@@ -39,8 +39,6 @@ export interface MapColumnProps {
   selected: MapNodeRef | null;
   /** SMP-FR-XGBI: whether the delivery source is a GitHub Project, so the agent has the plan tools. */
   planTool: boolean;
-  /** MPV-FR-NMYT: what the cards of the column need of the canvas. */
-  planHost: MapPlanHost | null;
 }
 
 const MAP_TARGET: DiscussionTarget = { kind: "map" };
@@ -91,7 +89,7 @@ function openingCopy(node: MapNodeRef | null, planTool: boolean): OpeningCopy {
   };
 }
 
-export function MapDiscussionColumn({ store, selected, planTool, planHost }: MapColumnProps) {
+export function MapDiscussionColumn({ store, selected, planTool }: MapColumnProps) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const state = store.snapshot().discussion;
   const { node, composing, threadId, focusSignal, discussSignal } = state;
@@ -155,6 +153,12 @@ export function MapDiscussionColumn({ store, selected, planTool, planHost }: Map
   const offered = state.showResolved ? [...open, ...threads.filter((t) => t.resolved)] : open;
   const shown = composing ? undefined : (offered.find((t) => t.id === threadId) ?? offered[0]);
   const subject = composing ? node : (shown?.mapNode ?? null);
+  // DBR-FR-AGIN: the proposals of the thread the column shows mark the board.
+  const { store: planReview } = useMapPlan();
+  const shownId = shown?.id ?? null;
+  useEffect(() => {
+    planReview.setActiveDiscussion(shownId);
+  }, [planReview, shownId]);
 
   // SMP-FR-DUUU: the focus of the next message. It starts as the node of the
   // thread or of the opening composer, and it returns there after each post.
@@ -194,7 +198,7 @@ export function MapDiscussionColumn({ store, selected, planTool, planHost }: Map
   ) : null;
 
   return (
-    <MapPlanHostContext.Provider value={planHost}>
+    <>
       <DiscussionColumn
         column={MAP_COLUMN}
         target={MAP_TARGET}
@@ -240,6 +244,6 @@ export function MapDiscussionColumn({ store, selected, planTool, planHost }: Map
         composerAttachments={focusAttachments}
         opening={openingCopy(node, planTool)}
       />
-    </MapPlanHostContext.Provider>
+    </>
   );
 }

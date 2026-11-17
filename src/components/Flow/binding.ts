@@ -63,6 +63,16 @@ export interface FlowRemovalRequest {
   count: number;
 }
 
+/** DBR-FR-AGIN .. DBR-FR-PMGS: the plan proposals as the board shows them. */
+export interface FlowProposalView {
+  /** DBR-FR-AGIN: the proposal mark of each item id. */
+  marks: ReadonlyMap<string, "proposed" | "withdrawn">;
+  /** DBR-FR-WKNI: the ghost cards by item id, and whether the plan names the kind of each. */
+  ghosts: ReadonlyMap<string, { kindKnown: boolean }>;
+  /** DBR-FR-PMGS: the item id of the row the review sheet selects, or null. */
+  reviewed: string | null;
+}
+
 /** MDL-FR-XJBV: the canvas over a plan the host holds. */
 export interface FlowPlanBinding {
   kind: "plan";
@@ -92,6 +102,8 @@ export interface FlowPlanBinding {
    * keeps one of its own.
    */
   layouts?: FlowLayoutStore;
+  /** DBR-FR-AGIN .. DBR-FR-PMGS: what the open plan proposals show on the board. */
+  proposal?: FlowProposalView;
   /** MDL-FR-XJBV / MDL-FR-XWGP: each edit, in the order the author made it. */
   onEdit: (change: FlowPlanChange) => Promise<FlowPlanAnswer>;
   /** MDL-FR-XQGD: a removal, which the host asks about and applies. */

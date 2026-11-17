@@ -2,6 +2,8 @@
 //! fake GitHub tracker and a mock application with a project open. No test
 //! reaches a network.
 
+use std::sync::{Arc, Mutex};
+
 use serde_json::{json, Value};
 use tauri::Manager;
 
@@ -14,6 +16,8 @@ mod drafts;
 mod issue_rows;
 mod recording;
 mod refusals;
+mod reopening;
+mod reprepare;
 
 const AT: &str = "2026-03-01T10:00:00Z";
 
@@ -30,10 +34,15 @@ pub(super) fn agent() -> Participant {
     }
 }
 
-/// A GitHub plan (issues 1, 2, 3 and milestone 1) with a Map thread.
+/// A GitHub plan (issues 1, 2, 3 and milestone 1) with a Map thread. Each turn
+/// that a re-prepare request starts goes to `turns`, and no model is called.
 pub(super) struct Plan {
     pub h: Harness,
     pub discussion: String,
+    pub turns: Arc<Mutex<Vec<super::reprepare::TurnRequest>>>,
+    /// The failure that the next dispatch gives, or `None` for a turn that
+    /// starts.
+    pub dispatch_failure: Arc<Mutex<Option<String>>>,
 }
 
 impl Plan {
@@ -60,7 +69,17 @@ pub(super) fn setup() -> Plan {
         Stamp { by: &human(), at: AT },
     )
     .unwrap();
-    Plan { h, discussion: write.discussion.id }
+    let turns: Arc<Mutex<Vec<super::reprepare::TurnRequest>>> = Arc::default();
+    let dispatch_failure: Arc<Mutex<Option<String>>> = Arc::default();
+    let (seen, failure) = (Arc::clone(&turns), Arc::clone(&dispatch_failure));
+    h.handle().manage(super::reprepare::DispatchSeam(Arc::new(move |turn| {
+        seen.lock().unwrap().push(turn.clone());
+        match failure.lock().unwrap().clone() {
+            Some(code) => Err(code),
+            None => Ok(()),
+        }
+    })));
+    Plan { h, discussion: write.discussion.id, turns, dispatch_failure }
 }
 
 pub(super) fn comment() -> ProposalComment {

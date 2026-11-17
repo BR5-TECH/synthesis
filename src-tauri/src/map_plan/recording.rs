@@ -81,6 +81,7 @@ fn record_in(
         discussion_id: thread.id.clone(),
         comment_id: crate::notes::new_note_id(),
         created_at: now.clone(),
+        reprepare_requested_at: None,
         rows: rows.into_iter().map(as_new_row).collect(),
     };
     store::write(store, &proposal)?;

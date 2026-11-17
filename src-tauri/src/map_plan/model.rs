@@ -145,6 +145,10 @@ pub struct MapPlanProposal {
     pub discussion_id: String,
     pub comment_id: String,
     pub created_at: String,
+    /// MPR-FR-QIJF: when the module asked the agent to propose the failed rows
+    /// again (RFC 3339). `None` where it did not ask.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reprepare_requested_at: Option<String>,
     pub rows: Vec<MapPlanRow>,
 }
 

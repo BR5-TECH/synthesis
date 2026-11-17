@@ -85,8 +85,6 @@ pub struct Needs {
     pub labels: bool,
     /// The plan issues that the modify rows name.
     pub numbers: Vec<u64>,
-    /// The modify rows that change labels.
-    pub label_numbers: Vec<u64>,
 }
 
 fn names(list: &Option<Vec<String>>) -> &[String] {
@@ -202,7 +200,6 @@ fn check_issue_row(
         needs.numbers.push(number);
         if !names(&row.labels_add).is_empty() || !names(&row.labels_remove).is_empty() {
             needs.labels = true;
-            needs.label_numbers.push(number);
         }
     }
     Ok(())

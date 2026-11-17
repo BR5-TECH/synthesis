@@ -27,6 +27,7 @@ import {
   type TypeChoice,
 } from "./dialogs";
 import type { DeliveryHost } from "./host";
+import { useProposalBoard, withoutGhosts } from "./useProposalBoard";
 import { AddExistingIssue, ClaimActions } from "./ItemPanel";
 import { StaleNotice, StructureNotice, UnmappedNotice } from "./Notices";
 
@@ -101,10 +102,12 @@ export function GithubLens(props: GithubLensProps) {
     [answer],
   );
   // MDL-FR-KKYH: the plan name is the Project's title.
-  const document = useMemo(
+  const named = useMemo(
     () => (shown ? { ...shown, name: source.project.title } : null),
     [shown, source.project.title],
   );
+  // DBR-FR-AGIN .. DBR-FR-PMGS: the marks and the ghost cards of the plan proposals.
+  const { document, proposal } = useProposalBoard(named, answer?.tracker);
 
   const open = (next: Dialog) => {
     props.onOverlayOpening?.();
@@ -121,8 +124,10 @@ export function GithubLens(props: GithubLensProps) {
     repository,
     pending,
     itemErrors,
+    proposal,
     layouts: data.layouts,
-    onEdit: (change) => session.change(change),
+    // DBR-FR-WKNI: a ghost card is not part of the plan, so an edit never carries it.
+    onEdit: (change) => session.change(withoutGhosts(change, proposal.ghosts)),
     // MDL-FR-XQGD: a removal opens the remove dialog.
     onRemoveRequest: (request) =>
       open({ kind: "remove", itemId: request.itemId, name: request.name, itemKind: request.kind, count: request.count }),

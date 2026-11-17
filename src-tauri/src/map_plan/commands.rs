@@ -60,6 +60,30 @@ pub async fn reject_map_plan_row(
     run_off_thread(move || deciding::reject_row(&app, &discussion_id, &proposal_id, &row_key)).await
 }
 
+/// `"reopen map plan row (discussion id, proposal id, row key)"` (MPR-FR-MVRX).
+/// It needs no network, but it waits for a decision that runs.
+#[project_scope_macros::project_scoped]
+#[tauri::command]
+pub async fn reopen_map_plan_row(
+    app: tauri::AppHandle,
+    discussion_id: String,
+    proposal_id: String,
+    row_key: String,
+) -> Result<MapPlanProposal, MapPlanError> {
+    run_off_thread(move || deciding::reopen_row(&app, &discussion_id, &proposal_id, &row_key)).await
+}
+
+/// `"request map plan reprepare (discussion id, proposal id)"` (MPR-FR-GIJN).
+#[project_scope_macros::project_scoped]
+#[tauri::command]
+pub async fn request_map_plan_reprepare(
+    app: tauri::AppHandle,
+    discussion_id: String,
+    proposal_id: String,
+) -> Result<MapPlanProposal, MapPlanError> {
+    run_off_thread(move || deciding::request_reprepare(&app, &discussion_id, &proposal_id)).await
+}
+
 async fn run_off_thread<F>(work: F) -> Result<MapPlanProposal, MapPlanError>
 where
     F: FnOnce() -> Result<MapPlanProposal, MapPlanError> + Send + 'static,

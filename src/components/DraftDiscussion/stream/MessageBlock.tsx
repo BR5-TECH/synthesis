@@ -187,6 +187,7 @@ export function MessageBlock({
           <CommentAttachmentList
             threadId={threadId}
             draftId={draftId}
+            author={comment.author}
             attachments={comment.attachments.filter(
               (a) =>
                 a.kind !== "proposal" &&

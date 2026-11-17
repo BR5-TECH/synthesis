@@ -740,11 +740,12 @@ fn each_call_is_logged_without_content() {
     }
 }
 
-// PPT-FR-XMZF, TLC-FR-18, TLC-FR-MOWF: the tool reads the Types, the labels, and
-// the Status options through the delivery plan, at most three requests, writes
+// PPT-FR-XMZF, PPT-FR-UZEK, GDP-FR-PBSD, TLC-FR-18, TLC-FR-MOWF: the tool reads
+// the Types and the labels once each, and each changed issue in full and as the
+// read cache holds it. The Status options come from the read cache. It writes
 // nothing, and carries no credential in an argument or a record.
 #[test]
-fn a_call_makes_at_most_three_reads_and_carries_no_credential() {
+fn a_call_reads_only_what_it_needs_and_carries_no_credential() {
     let f = Fixture::new();
     f.plan.h.fake.lock().calls.clear();
     f.rows(json!([
@@ -753,16 +754,87 @@ fn a_call_makes_at_most_three_reads_and_carries_no_credential() {
         { "key": "c", "op": "new_draft", "name": "n", "body": "b" },
     ]))
     .unwrap();
-    let calls = f.plan.h.fake.calls();
-    assert!(calls.len() <= 3, "{calls:?}");
-    assert!(calls.iter().all(|c| c == "list_issue_types" || c == "list_labels"), "{calls:?}");
+    let mut calls = f.plan.h.fake.calls();
+    calls.sort();
+    let project = crate::delivery::github::tests::fake::PROJECT;
+    let detail = format!("read_issue_detail 2 {project}");
+    assert_eq!(calls, ["list_issue_types", "list_labels", "read_issue 2", detail.as_str()]);
     assert!(f.plan.h.fake.writes().is_empty());
     f.decide_all();
     f.plan.h.fake.lock().calls.clear();
-    f.rows(json!([modify("a", 2, json!({ "status": "Done" }))])).unwrap();
-    assert!(f.plan.h.fake.calls().is_empty(), "the Status options come from the read cache");
+    f.rows(json!([
+        modify("a", 2, json!({ "status": "Done" })),
+        modify("b", 2, json!({ "title": "Renamed" })),
+    ]))
+    .unwrap();
+    let mut calls = f.plan.h.fake.calls();
+    calls.sort();
+    assert_eq!(
+        calls,
+        ["read_issue 2", detail.as_str()],
+        "one issue is read once, and the Status options come from the cache"
+    );
     let text = format!("{:?}{}", DESCRIPTION, f.tool().parameters());
     assert!(!text.contains(SECRET) && !text.to_lowercase().contains("token"));
+}
+
+// PPT-FR-UZEK, GDP-FR-PBSD, MPR-FR-RTGH, MPR-FR-GKOL: a change that gives no
+// label still reads the issue from GitHub. The row carries the `updated_at` and
+// the values before of that read, not of an older read cache, and the read
+// cache takes the issue as GitHub holds it, with an event.
+#[test]
+fn a_change_reads_the_issue_from_github_and_updates_the_cache() {
+    let f = Fixture::new();
+    {
+        let mut fake = f.plan.h.fake.lock();
+        let issue = fake.issues.iter_mut().find(|i| i.number == 3).unwrap();
+        issue.title = "Renamed on GitHub".into();
+        issue.body = "Body on GitHub".into();
+        issue.assignees = vec!["octocat".into()];
+        issue.updated_at = "2026-02-02T00:00:00Z".into();
+        let board = fake.board.iter_mut().find(|(_, _, b)| matches!(b, Board::Issue(3))).unwrap();
+        board.1 = Some("In Progress".into());
+    }
+    let cached_title = |f: &Fixture| f.plan.h.cache().unwrap().issue(3).unwrap().title.clone();
+    assert_eq!(cached_title(&f), "Issue 3", "the cache is older than GitHub");
+    let seen = crate::delivery::github::tests::fake::listen(
+        &f.plan.app(),
+        crate::delivery::github::GITHUB_DELIVERY_PLAN_CHANGED,
+    );
+    f.rows(json!([modify("a", 3, json!({ "body": "A new body", "status": "Done" }))])).unwrap();
+    let row = f.only_row();
+    let fields = modify_fields(&row);
+    assert_eq!(fields.base_updated_at, "2026-02-02T00:00:00Z");
+    assert_eq!(fields.title, "Renamed on GitHub");
+    let by = |field: &str| fields.changes.iter().find(|c| c.field == field).unwrap().clone();
+    assert_eq!(by("body").before, json!("Body on GitHub"));
+    assert_eq!(by("status").before, json!("In Progress"));
+    let cache = f.plan.h.cache().unwrap();
+    let cached = cache.issue(3).unwrap();
+    assert_eq!(cached.title, "Renamed on GitHub");
+    assert_eq!(cached.updated_at, "2026-02-02T00:00:00Z");
+    assert_eq!(cached.assignees, ["octocat"]);
+    let status = cache.project.items.iter().find_map(|item| match &item.content {
+        crate::delivery::github::adapter::ItemContent::Issue(i) if i.number == 3 => {
+            item.status.clone()
+        }
+        _ => None,
+    });
+    assert_eq!(status.as_deref(), Some("In Progress"));
+    crate::delivery::github::tests::wait_until("the plan event", || {
+        !seen.lock().unwrap().is_empty()
+    });
+    assert!(f.plan.h.fake.writes().is_empty());
+}
+
+// PPT-FR-UZEK: where the read of a changed issue fails, the call is refused,
+// and nothing is recorded.
+#[test]
+fn a_failed_issue_read_refuses_the_call() {
+    let f = Fixture::new();
+    f.plan.h.fake.lock().read_error = Some("github_request_failed".into());
+    refused(f.rows(json!([modify("a", 2, json!({ "title": "Renamed" }))])));
+    assert!(f.proposals().is_empty());
 }
 
 // PPT-FR-KVFB: a pull request and an issue of another repository are not plan

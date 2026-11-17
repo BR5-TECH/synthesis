@@ -15,8 +15,6 @@ use crate::project_scope::ProjectStores;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use tauri::Manager;
-
 use crate::fs::FsAccess;
 use crate::log_fields;
 use crate::logging::{self, Domain};
@@ -655,5 +653,5 @@ pub fn note_durable_failure<R: tauri::Runtime>(
 pub fn store_fs_of<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Option<std::sync::Arc<FsAccess>> {
-    app.try_state::<crate::fs::FsAccessState>().and_then(|state| state.get())
+    crate::fs::ide_instance(app)
 }

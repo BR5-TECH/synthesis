@@ -3,7 +3,6 @@
 use crate::project::OpenProject as _;
 use crate::project_scope::events::EmitToProject;
 use crate::project_scope::ProjectStores;
-use tauri::Manager;
 
 use super::*;
 use crate::log_fields;
@@ -39,9 +38,7 @@ pub(super) fn store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Stre
 pub(super) fn store_fs<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<std::sync::Arc<fsa::FsAccess>, String> {
-    app.try_state::<fsa::FsAccessState>()
-        .and_then(|state| state.get())
-        .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())
+    fsa::ide_instance(app).ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())
 }
 
 /// The open project's root, or the typed refusal.

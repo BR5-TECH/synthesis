@@ -17,7 +17,6 @@ use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 use crate::bm25_index::{self, PassScope};
-use crate::fs::FsAccessState;
 use crate::global_settings::GlobalSettingsStore;
 use crate::logging::LogLevel;
 
@@ -88,7 +87,7 @@ pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(watcher) = app.try_project_store::<DocumentsWatcher>() {
         watcher.stop();
     }
-    if let Some(fs) = app.try_state::<FsAccessState>() {
+    if let Some(fs) = crate::fs::project_fs_state(app) {
         fs.discard_documents();
     }
 }
@@ -136,7 +135,7 @@ pub fn request_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// and bring the watch in line with the sources.
 pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutcome {
     let (Some(collection), Some(fs)) =
-        (app.try_project_store::<DocumentsCollection>(), app.try_state::<FsAccessState>())
+        (app.try_project_store::<DocumentsCollection>(), crate::fs::project_fs_state(app))
     else {
         return RefreshOutcome { changed: None, stale: true };
     };

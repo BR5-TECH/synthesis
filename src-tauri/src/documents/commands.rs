@@ -11,8 +11,6 @@ use std::path::PathBuf;
 
 use tauri_plugin_dialog::DialogExt;
 
-use crate::fs::FsAccessState;
-
 use super::lifecycle;
 use super::manager::DocumentsCollection;
 use super::model::{
@@ -110,7 +108,7 @@ pub async fn read_document(app: tauri::AppHandle, id: String) -> Result<Document
         let collection =
             crate::project_scope::ProjectStores::try_project_store::<DocumentsCollection>(&app)
                 .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
-        let fs = tauri::Manager::try_state::<FsAccessState>(&app)
+        let fs = crate::fs::project_fs_state(&app)
             .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
         collection.read_document(&fs, &id).map_err(|error| {
             lifecycle::log_refused(&app, "read document", error);
@@ -130,7 +128,7 @@ pub async fn read_document_pdf(app: tauri::AppHandle, id: String) -> Result<Docu
         let collection =
             crate::project_scope::ProjectStores::try_project_store::<DocumentsCollection>(&app)
                 .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
-        let fs = tauri::Manager::try_state::<FsAccessState>(&app)
+        let fs = crate::fs::project_fs_state(&app)
             .ok_or_else(|| String::from(super::model::DocumentsError::NoProjectOpen))?;
         collection.read_document_pdf(&fs, &id).map_err(|error| {
             lifecycle::log_refused(&app, "read document pdf", error);

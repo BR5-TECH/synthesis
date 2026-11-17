@@ -675,7 +675,7 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
     // ended when it terminates by any route. A failure to open one is not fatal:
     // only `read_file` needs it, and that tool refuses on its own terms
     // (RFT-FR-17) rather than costing the turn the other four and its answer.
-    if let Some(fs_state) = app.try_state::<crate::fs::FsAccessState>() {
+    if let Some(fs_state) = crate::fs::project_fs_state(app) {
         if let Err(e) = fs_state.open_agent_session(&plan.turn_id) {
             logging::log_warn(
                 app,
@@ -702,7 +702,7 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
     // Ended on every route out — delivered, failed, cancelled, timed out, or
     // panicked — which is what takes the session's temp directory with it
     // (CVL-FR-24).
-    if let Some(fs_state) = app.try_state::<crate::fs::FsAccessState>() {
+    if let Some(fs_state) = crate::fs::project_fs_state(app) {
         fs_state.close_agent_session(&plan.turn_id);
     }
 

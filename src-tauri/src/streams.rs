@@ -514,8 +514,7 @@ fn store_for<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<StreamStore
 fn access_for<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Option<std::sync::Arc<fsa::FsAccess>> {
-    use tauri::Manager;
-    app.try_state::<fsa::FsAccessState>().and_then(|state| state.get())
+    fsa::ide_instance(app)
 }
 
 fn project_key_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {

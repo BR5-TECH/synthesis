@@ -50,12 +50,9 @@ pub fn progress_request(activity: &[ActivityEntry], spoken_language: &str) -> Ag
             None => format!("- {}", plain(&entry.tool)),
         })
         .collect();
-    let section = |tag: &str, body: String| InputSection {
-        tag: tag.to_string(),
-        attributes: Vec::new(),
-        body,
-        truncated: false,
-        parts: Vec::new(),
+    // AGC-FR-GZSI: each section is bound by AGC-FR-11.
+    let section = |tag: &str, body: String| {
+        crate::agent_conversations::sections::section(tag, Vec::new(), body)
     };
     AgentRequest {
         instructions: crate::prompts::instruction_text(PROGRESS_PROMPT),

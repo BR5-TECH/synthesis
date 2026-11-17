@@ -189,7 +189,7 @@ fn a_truncation_cuts_comments_and_keeps_the_open_proposal_whole() {
     assert!(section.truncated, "the comments run past the bound");
     let listing = open_proposal_text(d.roots(), &d.thread().target).expect("open");
     assert!(section.body.ends_with(&listing), "the proposal is whole at the end");
-    assert!(section.body.contains("[This material is partial: it was truncated here.]"));
+    assert!(section.body.contains("[Earlier comments omitted:"));
 }
 
 // AGC-FR-EPNB, AGC-FR-TCCV
@@ -265,4 +265,87 @@ fn the_open_proposal_stands_before_the_pending_question_set() {
     let questions = body.find("A question set from arch").expect("the set");
     assert!(proposal < questions, "the proposal comes first");
     assert!(body.ends_with(&super::super::render_pending_questions(&set)));
+}
+
+// AGC-FR-MATQ, AGC-FR-EPNB: a bounded listing keeps its hunks in order while
+// they fit and counts the rest; with room for all it is the whole listing.
+#[test]
+fn a_bounded_listing_keeps_hunks_in_order_and_counts_the_rest() {
+    let d = draft();
+    let whole = open_proposal_text(d.roots(), &d.thread().target).expect("open");
+    let target = d.thread().target;
+    assert_eq!(open_proposal_text_within(d.roots(), &target, usize::MAX).unwrap(), whole);
+    assert_eq!(
+        open_proposal_text_within(d.roots(), &target, whole.chars().count()).unwrap(),
+        whole
+    );
+
+    let short = open_proposal_text_within(d.roots(), &target, whole.chars().count() - 1).unwrap();
+    assert!(short.ends_with("  …and 1 more changes.\n"), "{short}");
+    assert!(short.chars().count() < whole.chars().count());
+    // The lines it keeps are the first lines of the whole listing.
+    let kept = short.trim_end_matches("  …and 1 more changes.\n");
+    assert!(whole.starts_with(kept));
+    assert!(kept.contains(&d.hunks[0]) && kept.contains(&d.hunks[1]));
+    assert!(!kept.contains(&d.hunks[2]));
+
+    // Room for the opening line alone counts every hunk.
+    let none = open_proposal_text_within(d.roots(), &target, 10).unwrap();
+    assert!(none.ends_with("  …and 3 more changes.\n"));
+    assert!(!d.hunks.iter().any(|id| none.contains(id)));
+}
+
+/// Record one pending new-draft proposal on the fixture draft, with `body`.
+fn pending_new_draft(d: &Draft, body: &str) {
+    crate::new_draft_proposals::record_new_draft_proposal(
+        &crate::tools::tests::mock_app().handle().clone(),
+        &d.root,
+        &d.root,
+        crate::new_draft_proposals::NewDraftInput {
+            draft_id: &d.draft_id,
+            name: "part-one",
+            body,
+            position: 1,
+            total: 2,
+            rationale: "<spoken>A part.</spoken>",
+            agent: &agent(),
+            target: ThreadRef::discussion(&d.draft_id),
+            thread_id: &d.thread_id,
+        },
+    )
+    .expect("new draft");
+}
+
+// AGC-FR-MATQ, AGC-FR-YQVB, AGC-FR-QSWD: a tail above half of the bound cuts
+// the pending body first and keeps the proposal whole while that is enough;
+// at a smaller bound it cuts the proposal too and counts the hunks it left
+// out; a question set stays whole through both cuts.
+#[test]
+fn the_tail_cuts_the_body_before_the_proposal() {
+    let d = draft();
+    pending_new_draft(&d, &format!("BODY-START{}BODY-END", "b".repeat(3_000)));
+    let target = d.thread().target;
+    let listing = open_proposal_text(d.roots(), &target).expect("open");
+    let (whole, cut) = history_tail(d.roots(), &target, None, usize::MAX);
+    assert!(!cut);
+    assert!(whole.contains("BODY-END") && whole.ends_with(&listing));
+
+    // Half of the bound is 1,000 under the whole tail: the body cut is enough.
+    let bound = 2 * (whole.chars().count() - 1_000);
+    let (tail, cut) = history_tail(d.roots(), &target, None, bound);
+    assert!(cut);
+    assert!(tail.chars().count() <= bound / 2);
+    assert!(tail.contains(DRAFT_BODY_PARTIAL_LINE) && !tail.contains("BODY-END"));
+    assert!(tail.ends_with(&listing), "the proposal stays whole");
+
+    // Half of the bound below the tail without its body: the proposal is cut.
+    let without_body = whole.chars().count() - 3_018;
+    let small = 2 * (without_body - 150);
+    let questions = "\nQUESTIONS-WHOLE\n".to_string();
+    let (tail, cut) = history_tail(d.roots(), &target, Some(questions.clone()), small);
+    assert!(cut);
+    assert!(tail.contains(DRAFT_BODY_PARTIAL_LINE));
+    assert!(tail.contains("more changes.\n"));
+    assert!(!tail.contains(&listing));
+    assert!(tail.ends_with(&questions), "the question set is never cut");
 }

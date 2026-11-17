@@ -234,6 +234,8 @@ fn steering_message(
 /// CVL-FR-VCYR: one user message for one chunk of speech, under the fixed
 /// partial-speech line.
 pub(super) fn chunk_message(text: &str) -> rig::completion::Message {
+    // AGC-FR-GZSI: a speech chunk is bound by AGC-FR-11.
+    let (text, _) = bounded(text.to_string());
     rig::completion::Message::user(format!("{PARTIAL_SPEECH_LINE}\n\n{text}"))
 }
 

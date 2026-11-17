@@ -19,6 +19,11 @@ use super::*;
 /// searching become an open-ended expense.
 pub(super) const MAX_MODEL_CALLS: usize = 8;
 
+/// CVL-FR-FSAY: the line the loop appends before the last invocation under the
+/// logical bound, so the model answers rather than asks for tools that will not
+/// run.
+pub(super) const LAST_CALL_LINE: &str = "This is your last model call in this turn. No tool call will run. Give your answer now with what you have.";
+
 /// CVL-FR-33: the most searches a turn reports from a provider's own count
 /// alone, where the provider named no call to report.
 ///

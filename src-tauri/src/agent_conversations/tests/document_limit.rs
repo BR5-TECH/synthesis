@@ -75,10 +75,10 @@ fn attribute(section: &InputSection, name: &str) -> Option<String> {
 // the default limit.
 #[test]
 fn the_limit_and_the_bound_follow_the_window_and_the_percent() {
-    let budget = DocumentBudget { window: 200_000, percent: 30 };
+    let budget = DocumentBudget { window: 200_000, percent: 30, history_percent: 20 };
     assert_eq!(budget.limit_tokens(), 60_000);
     assert_eq!(budget.bound_chars(), 240_000);
-    let odd = DocumentBudget { window: 999, percent: 30 };
+    let odd = DocumentBudget { window: 999, percent: 30, history_percent: 20 };
     assert_eq!(odd.limit_tokens(), 299, "rounded down");
     let default = DocumentBudget::default_window();
     assert_eq!(default.window, crate::ai_api::DEFAULT_CONTEXT_SIZE);
@@ -92,7 +92,7 @@ fn the_limit_and_the_bound_follow_the_window_and_the_percent() {
 fn the_budget_is_resolved_from_the_registry_and_the_setting() {
     let h = window_harness(Vec::new(), Some(10_000), 7);
     let budget = DocumentBudget::resolve(&h.store(), "custom", "m");
-    assert_eq!(budget, DocumentBudget { window: 10_000, percent: 7 });
+    assert_eq!(budget, DocumentBudget { window: 10_000, percent: 7, history_percent: 20 });
     // AAP-FR-BKBF: an unlisted model gets the default window.
     assert_eq!(
         DocumentBudget::resolve(&h.store(), "custom", "no-such").window,
@@ -269,7 +269,7 @@ fn a_whole_target_discussion_above_the_bound_carries_metadata_only() {
         Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,
-        &DocumentBudget { window: 10_000_000, percent: 30 },
+        &DocumentBudget { window: 10_000_000, percent: 30, history_percent: 20 },
     );
     let artifact = section_of(&whole.sections, TAG_ARTIFACT);
     assert!(!artifact.truncated);

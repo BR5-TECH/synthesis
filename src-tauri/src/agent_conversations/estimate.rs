@@ -59,6 +59,9 @@ pub fn estimate_impl<R: tauri::Runtime>(
             percent: store
                 .load_document_limit_percent()
                 .unwrap_or(crate::global_settings::DOCUMENT_LIMIT_PERCENT_DEFAULT),
+            history_percent: store
+                .load_history_limit_percent()
+                .unwrap_or(crate::global_settings::HISTORY_LIMIT_PERCENT_DEFAULT),
             ..DocumentBudget::default_window()
         },
     };
@@ -86,7 +89,10 @@ pub fn estimate_impl<R: tauri::Runtime>(
     if let Some(discussion) = &discussion {
         // The trigger is no comment of the discussion, so every comment stands
         // in the history.
-        sections.push(discussion_history_section(roots, discussion, ""));
+        // AGC-FR-HOND: the estimate bounds the history as a turn bounds it.
+        sections.push(
+            discussion_history_with_status(roots, discussion, "", budget.history_bound_chars()).0,
+        );
     }
 
     let (instructions, title, handle, agent_key, model) = match &agent {

@@ -71,15 +71,17 @@ fn the_measure_tool_holds_the_turns_window_and_percent() {
     assert_eq!(measured["above_limit"], false);
 }
 
-// CVL-FR-OPTI: a compaction call reports no context figures; the two answered
-// calls of the turn report one each.
+// CVL-FR-OPTI: a compaction call reports no context figures; the three
+// answered calls of the turn report one each.
 #[test]
 fn a_compaction_call_reports_no_context() {
     // The first call carries a passage of 400 characters and stays under the
-    // compaction budget of this small window (CVL-FR-EBJG). The whole file it
-    // reads puts the second call over it, so the loop compacts before it.
+    // compaction budget of this small window (CVL-FR-EBJG). The first read
+    // fills the free room (CVL-FR-XMGI); the second gets the minimum bound and
+    // puts the third call over the mark, so the loop compacts before it.
     let h = window_harness(
         vec![
+            Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "hld.md" }))),
             Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "hld.md" }))),
             Ok(ScriptedReply::answer("The earlier rounds read hld.md.")),
             Ok(ScriptedReply::answer("Done.")),
@@ -92,10 +94,10 @@ fn a_compaction_call_reports_no_context() {
     let thread = artifact_fragment(&h, "hld.md", &numbered_lines(1_000), 105, 110);
     let turn = h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).unwrap();
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::Delivered);
-    assert_eq!(h.seam.call_count(), 3, "two answered calls and one compaction call");
+    assert_eq!(h.seam.call_count(), 4, "three answered calls and one compaction call");
     deliver_queued_events(&h);
     let reports = h.context_events.lock().unwrap().iter().filter(|t| t.id == turn.id).count();
-    assert_eq!(reports, 2, "the compaction call reports nothing");
+    assert_eq!(reports, 3, "the compaction call reports nothing");
 }
 
 // CVL-FR-HLVG, AGC-FR-NUKP: the context reports add no usage record, so a

@@ -138,6 +138,7 @@ describe("the Agentic level", () => {
         "list_ai_api_integrations",
         "list_agentic_integrations",
         "load_document_limit_percent",
+        "load_history_limit_percent",
         "set_agentic_integration_model",
         "set_agentic_integration_effort",
       ]),

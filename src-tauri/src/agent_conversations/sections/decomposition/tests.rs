@@ -176,3 +176,56 @@ fn a_reference_names_the_proposal_as_it_stands() {
     );
     assert_eq!(unknown, "[about the proposed new draft gone]");
 }
+
+// AGC-FR-MATQ, AGC-FR-TIGM: a bounded pending body keeps its start and ends
+// with the partial line; at its own size it is whole.
+#[test]
+fn a_bounded_pending_body_keeps_its_start() {
+    let d = Draft::new();
+    let body = format!("BODY-START{}BODY-END", "b".repeat(100));
+    d.propose("relay-auth", &body, 1);
+    let target = d.thread().target;
+    let whole = decomposition_text_within(d.roots(), &target, usize::MAX).unwrap();
+    assert_eq!(whole.body_chars, body.chars().count());
+    assert!(whole.text.contains("BODY-END"));
+    let same = decomposition_text_within(d.roots(), &target, whole.body_chars).unwrap();
+    assert_eq!(same.text, whole.text);
+
+    let cut = decomposition_text_within(d.roots(), &target, 10).unwrap();
+    assert!(cut.text.contains(&format!("BODY-START\n{DRAFT_BODY_PARTIAL_LINE}")));
+    assert!(!cut.text.contains("BODY-END"));
+    let none = decomposition_text_within(d.roots(), &target, 0).unwrap();
+    assert!(none.text.contains(&format!("Its body:\n\n{DRAFT_BODY_PARTIAL_LINE}")));
+}
+
+// AGC-FR-YQVB, AGC-FR-MATQ: a tail above half of the bound cuts the pending
+// body first, and the tail then fits half.
+#[test]
+fn a_large_tail_cuts_the_pending_body_first() {
+    let d = Draft::new();
+    d.propose("relay-auth", &format!("BODY-START{}BODY-END", "b".repeat(60_000)), 1);
+    let target = d.thread().target;
+    let (tail, cut) = history_tail(d.roots(), &target, None, 40_000);
+    assert!(cut);
+    assert!(tail.chars().count() <= 20_000, "{}", tail.chars().count());
+    assert!(tail.contains("BODY-START"));
+    assert!(tail.contains(DRAFT_BODY_PARTIAL_LINE));
+    assert!(!tail.contains("BODY-END"));
+
+    // Within half, the tail is whole and nothing is cut.
+    let (whole, cut) = history_tail(d.roots(), &target, None, 1_000_000);
+    assert!(!cut);
+    assert!(whole.contains("BODY-END"));
+}
+
+// AGC-FR-MATQ, AGC-FR-QSWD: the question set is never cut, also when it alone
+// is above half of the bound.
+#[test]
+fn the_question_set_is_never_cut() {
+    let d = Draft::new();
+    let target = d.thread().target;
+    let questions = format!("QUESTIONS{}END", "q".repeat(5_000));
+    let (tail, cut) = history_tail(d.roots(), &target, Some(questions.clone()), 2_000);
+    assert!(!cut);
+    assert!(tail.ends_with(&questions));
+}

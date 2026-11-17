@@ -97,27 +97,56 @@ pub(in crate::agent_conversations) fn open_proposal_text(
     roots: Roots<'_>,
     target: &DiscussionTarget,
 ) -> Option<String> {
+    open_proposal_text_within(roots, target, usize::MAX)
+}
+
+/// AGC-FR-MATQ: [`open_proposal_text`] in at most `max_chars` characters. The
+/// hunks stand in proposal order while they fit, and a line that counts the
+/// rest ends the text. The opening line always stands.
+pub(in crate::agent_conversations) fn open_proposal_text_within(
+    roots: Roots<'_>,
+    target: &DiscussionTarget,
+    max_chars: usize,
+) -> Option<String> {
     let (path, hunks) = open_hunks(roots, target)?;
     let mut text = format!(
         "\nThe open proposal to {path}, every change in proposal order. When the author names a change by its place, it is the change with that place:\n"
     );
+    let total = hunks.len();
     let mut place = 0;
-    for hunk in hunks {
-        if hunk.withdrawn {
-            text.push_str(&format!("  no place — id {} — {}", hunk.id, hunk.state));
+    for (index, hunk) in hunks.into_iter().enumerate() {
+        let mut line = if hunk.withdrawn {
+            format!("  no place — id {} — {}", hunk.id, hunk.state)
         } else {
-            place += 1;
-            text.push_str(&format!("  place {place} — id {} — {}", hunk.id, hunk.state));
-        }
+            format!("  place {} — id {} — {}", place + 1, hunk.id, hunk.state)
+        };
         if !hunk.before.is_empty() {
-            text.push_str(&format!(" — changes: {}", bounded_excerpt(&hunk.before)));
+            line.push_str(&format!(" — changes: {}", bounded_excerpt(&hunk.before)));
         }
         if !hunk.after.is_empty() {
-            text.push_str(&format!(" — offers: {}", bounded_excerpt(&hunk.after)));
+            line.push_str(&format!(" — offers: {}", bounded_excerpt(&hunk.after)));
         }
-        text.push('\n');
+        line.push('\n');
+        // The room of the closing count stays free while a hunk is still left
+        // after this one.
+        let rest = total - index - 1;
+        let reserve = if rest > 0 { more_changes_line(rest).chars().count() } else { 0 };
+        let used = text.chars().count();
+        if used.saturating_add(line.chars().count()).saturating_add(reserve) > max_chars {
+            text.push_str(&more_changes_line(total - index));
+            return Some(text);
+        }
+        if !hunk.withdrawn {
+            place += 1;
+        }
+        text.push_str(&line);
     }
     Some(text)
+}
+
+/// AGC-FR-MATQ: the line that counts the hunks a bounded proposal left out.
+fn more_changes_line(count: usize) -> String {
+    format!("  …and {count} more changes.\n")
 }
 
 /// AGC-FR-TCCV: put the open proposal at the end of a section that was

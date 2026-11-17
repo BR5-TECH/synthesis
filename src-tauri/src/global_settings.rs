@@ -112,6 +112,13 @@ pub struct PersistedState {
         deserialize_with = "document_limit::lenient_percent"
     )]
     pub document_limit_percent: Option<u8>,
+    /// GSS-FR-USGD: the history size limit, a whole percent from 1 to 100.
+    /// `None` reads as 20. A scalar, so it is declared before the tables.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "document_limit::lenient_percent"
+    )]
+    pub history_limit_percent: Option<u8>,
     /// GSS-FR-CKQG: the active Voice AI provider, or `None`. A scalar, so
     /// it is declared before the tables.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,6 +224,7 @@ pub struct PersistedState {
 mod agent_group;
 mod document_limit;
 mod embeddings;
+mod history_limit;
 mod legacy;
 mod mcp_trust;
 mod model_downgrades;
@@ -224,6 +232,7 @@ pub use model_downgrades::LoadedSuppressions;
 mod recents;
 mod voice_ai;
 pub use document_limit::*;
+pub use history_limit::*;
 pub use recents::*;
 
 /// Disk-backed user-global store (GSS-FR-01/02/03). State is persisted to

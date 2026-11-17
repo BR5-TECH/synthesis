@@ -92,14 +92,9 @@ pub struct GroupRefusal {
     pub failure: String,
 }
 
-fn section(tag: &str, body: String) -> InputSection {
-    InputSection {
-        tag: tag.to_string(),
-        attributes: Vec::new(),
-        body,
-        truncated: false,
-        parts: Vec::new(),
-    }
+/// AGC-FR-NXPQ: a group section, bound by AGC-FR-11 like every other section.
+pub(super) fn group_section(tag: &str, body: String) -> InputSection {
+    crate::agent_conversations::sections::section(tag, Vec::new(), body)
 }
 
 pub(super) fn new_group_id() -> String {
@@ -551,7 +546,7 @@ fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<In
             MemberStatus::Pending => {}
         }
     }
-    let mut sections = vec![section("synthesis", body.trim_end().to_string())];
+    let mut sections = vec![group_section("synthesis", body.trim_end().to_string())];
     let held_questions = state.held_questions();
     if !held_questions.is_empty() {
         let body = held_questions
@@ -559,7 +554,7 @@ fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<In
             .map(|h| format!("@{}\n{}", h.nickname, h.text))
             .collect::<Vec<_>>()
             .join("\n\n");
-        sections.push(section("group_questions", body));
+        sections.push(group_section("group_questions", body));
     }
     let held_proposals = state.held_proposals();
     if !held_proposals.is_empty() {
@@ -573,7 +568,7 @@ fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<In
         // AGC-FR-WPAP: a change turn has `propose_change_edits`.
         let tool = proposal_tool_of(&origin.target);
         let body = format!("Propose the merged change with `{tool}`.\n\n{offers}");
-        sections.push(section("group_proposals", body));
+        sections.push(group_section("group_proposals", body));
     }
     sections
 }
@@ -771,7 +766,7 @@ pub(super) fn classifier_request(
         })
         .collect::<Vec<_>>()
         .join("\n\n");
-    let mut input = vec![section("candidates", body)];
+    let mut input = vec![group_section("candidates", body)];
     input.extend(material);
     AgentRequest {
         instructions: crate::prompts::instruction_text(CLASSIFIER_PROMPT),

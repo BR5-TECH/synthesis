@@ -226,10 +226,24 @@ pub struct ScriptedCompletion {
     /// How many calls have ever been inside `complete` at once — the only place
     /// AGC-FR-25's bound can be measured without racing it.
     pub(super) concurrency: Mutex<(usize, usize)>,
+    /// The structured provider errors that a scripted `Err(SCRIPTED_STRUCTURED)`
+    /// stands for, in order (CVL-FR-35, CVL-FR-PFNV).
+    pub(super) structured: Mutex<std::collections::VecDeque<CallFailure>>,
 }
+
+/// A scripted failure that takes the next structured provider error of
+/// [`ScriptedCompletion::push_structured`].
+#[cfg(test)]
+pub const SCRIPTED_STRUCTURED: &str = "scripted_structured";
 
 #[cfg(test)]
 impl ScriptedCompletion {
+    /// Queue one structured provider error for the next
+    /// `Err(SCRIPTED_STRUCTURED)` of the script.
+    pub fn push_structured(&self, failure: CallFailure) {
+        self.structured.lock().unwrap_or_else(|e| e.into_inner()).push_back(failure);
+    }
+
     /// The common case: a script of plain text answers, each ending its turn.
     pub fn new(replies: Vec<Result<String, &'static str>>) -> Self {
         Self::scripted(replies.into_iter().map(|reply| reply.map(ScriptedReply::answer)).collect())
@@ -243,6 +257,7 @@ impl ScriptedCompletion {
             exchanges: Mutex::new(Vec::new()),
             delay: Duration::ZERO,
             concurrency: Mutex::new((0, 0)),
+            structured: Mutex::new(std::collections::VecDeque::new()),
         }
     }
 
@@ -650,6 +665,12 @@ impl CompletionSeam for ScriptedCompletion {
             Err(FAIL_TLS_UNTRUSTED) => Err(CallFailure::tls_untrusted(
                 crate::tls::TlsFailure::new(SCRIPTED_TLS_HOST, crate::tls::TlsCause::UnknownIssuer),
             )),
+            Err(SCRIPTED_STRUCTURED) => Err(self
+                .structured
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .pop_front()
+                .expect("a structured error queued with push_structured")),
             Err(failure) => Err(CallFailure::from(failure)),
         }
     }

@@ -59,6 +59,9 @@ pub(super) struct TurnPlan {
     /// that made four calls and one that made four calls across nine attempts
     /// are the same turn to the loop and very different ones to the endpoint.
     pub(super) physical_calls: AtomicUsize,
+    /// CVL-FR-PFNV: set when the last failed invocation ended on a context
+    /// overflow, so the loop can recover (CVL-FR-QJLU). The loop clears it.
+    pub(super) overflowed: AtomicBool,
     /// CVL-FR-28: the turn's input tokens, split by whether the provider served
     /// them from its cache (CVL-FR-23), accumulated over every call that
     /// reported the split.
@@ -595,6 +598,7 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
         tools,
         model_calls: AtomicUsize::new(0),
         physical_calls: AtomicUsize::new(0),
+        overflowed: AtomicBool::new(false),
         cached_input_tokens: AtomicU64::new(0),
         uncached_input_tokens: AtomicU64::new(0),
         tokens_reported: AtomicBool::new(false),

@@ -433,3 +433,34 @@ fn the_key_input_reaches_no_log_record_and_no_registry_entry() {
     let entries = h.turns().recoverable_failures(None);
     assert!(entries.iter().all(|e| e.tool_calls.is_empty()), "an entry holds no tool call");
 }
+
+// AGC-FR-GZSI: a steering comment above the bound of AGC-FR-11 reaches the
+// turn cut there, under its fixed line, and says it is partial.
+#[test]
+fn a_long_steering_comment_is_bound() {
+    let (h, gate) = gated(
+        vec![
+            Ok(ScriptedReply::answer("The answer to the first question.")),
+            Ok(ScriptedReply::answer("The answer that takes the new comment in.")),
+        ],
+        DEFAULT_CONCURRENCY,
+    );
+    let (draft_id, thread) = seed_discussion(&h, &["@arch what now?"]);
+    let origin = ConversationOrigin::of(&thread);
+    let turn = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
+    gate.wait_entered(1);
+    let long = format!("STEER-START{}STEER-END", "w".repeat(40_001));
+    let steer_id = post(&h, &draft_id, &thread, &long);
+    h.dispatch("arch", origin, &steer_id).expect("steer");
+    gate.release();
+    gate.wait_entered(2);
+    gate.release();
+    assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::Delivered);
+    h.settle();
+
+    let second = user_texts(&h.seam.exchanges()[1]);
+    let steering = second.last().expect("a steering message");
+    assert!(steering.starts_with(STEERING_PREFACE));
+    assert!(steering.contains("STEER-START") && !steering.contains("STEER-END"));
+    assert!(steering.contains("[This material is partial: it was truncated here.]"));
+}

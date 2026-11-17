@@ -192,7 +192,11 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         rig::tool::tool_definition(&measure_document::MeasureDocumentTool::new(
             app.handle().clone(),
             "definitions",
-            crate::agent_conversations::DocumentBudget { window: 1_000, percent: 30 },
+            crate::agent_conversations::DocumentBudget {
+                window: 1_000,
+                percent: 30,
+                history_percent: 20,
+            },
         )),
     ]
 }

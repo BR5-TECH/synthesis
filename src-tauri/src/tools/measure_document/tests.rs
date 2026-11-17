@@ -55,7 +55,7 @@ impl MeasureFixture {
         MeasureDocumentTool::new(
             self.fixture.handle(),
             self.session.clone(),
-            DocumentBudget { window, percent },
+            DocumentBudget { window, percent, history_percent: 20 },
         )
     }
 

@@ -253,6 +253,8 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         with_images,
     };
     let mut model_calls = 0usize;
+    // CVL-FR-LQDM: a turn recovers from a context overflow at most once.
+    let mut recovered = false;
 
     let answer = loop {
         // AGC-FR-YLJW: an idle speech ends here too, so a turn that it
@@ -290,8 +292,16 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 at_bound: false,
                 compaction: true,
                 speech_open: false,
+                recovery: false,
             },
         )?;
+
+        // CVL-FR-FSAY: the last invocation under the bound is told so, after the
+        // steering messages and after any compaction, so the line stays in the
+        // exchange that call carries.
+        if model_calls + 1 == MAX_MODEL_CALLS {
+            conversation.exchange.push(rig::completion::Message::user(LAST_CALL_LINE));
+        }
 
         model_calls += 1;
         plan.model_calls.store(model_calls, Ordering::SeqCst);
@@ -303,22 +313,49 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // CVL-FR-KPOY, CVL-FR-WHEY: a call below the bound, made while the turn
         // is bound to an open speech, can return a placeholder.
         let speech_open = !at_bound && turns.bound_to_open_speech(&plan.turn_id);
-        let reply = complete_with_retries(
+        let model_call = ModelCall {
+            policy: bounds.retry,
+            deadline,
+            model_calls,
+            at_bound,
+            compaction: false,
+            speech_open,
+            recovery: false,
+        };
+        let outcome = complete_with_retries(
             app,
             turns,
             plan,
             &endpoint,
             conversation.request(plan),
             &conversation.exchange,
-            ModelCall {
-                policy: bounds.retry,
-                deadline,
-                model_calls,
-                at_bound,
-                compaction: false,
-                speech_open,
-            },
-        )?;
+            model_call,
+        );
+        // CVL-FR-QJLU / CVL-FR-LQDM: a context overflow is recovered one time
+        // in a turn. The recovery changes the exchange, so it is no retry of
+        // CVL-FR-20, and the call it makes is one further physical attempt.
+        let overflowed = plan.overflowed.swap(false, Ordering::SeqCst);
+        let reply = match outcome {
+            Err(TurnEnd::Failed(failure)) if overflowed && !recovered => {
+                recovered = true;
+                if !overflow::recover(app, turns, plan, &endpoint, &mut conversation, model_call)? {
+                    return Err(TurnEnd::Failed(failure));
+                }
+                let once = RetryPolicy { max_attempts: 1, ..model_call.policy };
+                let outcome = complete_with_retries(
+                    app,
+                    turns,
+                    plan,
+                    &endpoint,
+                    conversation.request(plan),
+                    &conversation.exchange,
+                    ModelCall { policy: once, ..model_call },
+                );
+                plan.overflowed.store(false, Ordering::SeqCst);
+                outcome?
+            }
+            outcome => outcome?,
+        };
 
         // CVL-FR-31: what the provider ran for itself is reported and recorded
         // here, and goes no further. It was carried out inside the call that has
@@ -490,11 +527,15 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             // CVL-FR-EKHH: every result carries the id of its call, unchanged,
             // and the name of the tool. The Responses route matches a result to
             // its call by `call_id`, which is that id.
-            conversation.exchange.push(rig::completion::Message::tool_result(
-                call.id.clone(),
-                call.function.name.clone(),
+            result_cap::push_tool_result(
+                app,
+                turns,
+                plan,
+                endpoint.context_size,
+                &mut conversation,
+                call,
                 result,
-            ));
+            );
         }
 
         for (index, call) in reply.tool_calls.iter().enumerate() {
@@ -538,11 +579,15 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 None
             };
             if let Some(message) = one_at_a_time {
-                conversation.exchange.push(rig::completion::Message::tool_result(
-                    call.id.clone(),
-                    call.function.name.clone(),
+                result_cap::push_tool_result(
+                    app,
+                    turns,
+                    plan,
+                    endpoint.context_size,
+                    &mut conversation,
+                    call,
                     message.to_string(),
-                ));
+                );
                 // CVL-FR-33: a refusal is a result produced, so the call leaves
                 // the active list exactly as a successful one does.
                 activity.finish(app, turns, &plan.turn_id, index, ToolCallState::Failed);
@@ -557,11 +602,15 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             let remaining = deadline_now().saturating_duration_since(std::time::Instant::now());
             let (result, outcome) = dispatch_tool(app, turns, plan, call, remaining);
             activity.finish(app, turns, &plan.turn_id, index, outcome);
-            conversation.exchange.push(rig::completion::Message::tool_result(
-                call.id.clone(),
-                call.function.name.clone(),
+            result_cap::push_tool_result(
+                app,
+                turns,
+                plan,
+                endpoint.context_size,
+                &mut conversation,
+                call,
                 result,
-            ));
+            );
         }
         // Every call of this round has been reported finished by now; this is
         // the backstop that keeps that true whatever is added above.

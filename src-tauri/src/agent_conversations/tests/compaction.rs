@@ -149,7 +149,7 @@ fn the_older_history_is_text_with_images_as_their_context() {
 #[test]
 fn the_summary_replaces_the_older_history_and_the_latest_round_stays() {
     let request = input_with_history("ada: earlier");
-    let compacted = compacted_request(&request, "THE SUMMARY");
+    let compacted = compacted_request(&request, "THE SUMMARY", SECTION_MAX_CHARS);
     assert_eq!(
         tags_of(&compacted.input),
         [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
@@ -161,7 +161,7 @@ fn the_summary_replaces_the_older_history_and_the_latest_round_stays() {
     // An input with no discussion history gains one before the current comment.
     let mut bare = request.clone();
     bare.input.remove(1);
-    let compacted_bare = compacted_request(&bare, "S");
+    let compacted_bare = compacted_request(&bare, "S", SECTION_MAX_CHARS);
     assert_eq!(
         tags_of(&compacted_bare.input),
         [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
@@ -188,7 +188,7 @@ fn custom_budget_harness(
 
 /// A Custom provider whose model `m` has the given detected context size and
 /// whose record has the given max context size, and an agent on it.
-fn sized_harness(
+pub(super) fn sized_harness(
     replies: Vec<Result<ScriptedReply, &'static str>>,
     detected: Option<u64>,
     max_context_size: Option<u64>,
@@ -217,7 +217,7 @@ fn assistant_text_len(message: &Message) -> Option<usize> {
 }
 
 /// A reply that asks for `read_file` and carries `chars` characters of prose.
-fn big_tool_reply(chars: usize) -> ScriptedReply {
+pub(super) fn big_tool_reply(chars: usize) -> ScriptedReply {
     ScriptedReply {
         text: "x".repeat(chars),
         ..ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))

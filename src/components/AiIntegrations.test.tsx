@@ -254,6 +254,7 @@ describe("the AI integrations section", () => {
         "list_ai_api_integrations",
         "list_agentic_integrations",
         "load_document_limit_percent",
+        "load_history_limit_percent",
         "set_ai_api_model",
         "set_agentic_integration_model",
       ]),
@@ -317,8 +318,9 @@ describe("the AI integrations section", () => {
       new Set([
         "list_ai_api_integrations",
         "list_agentic_integrations",
-        // GLS-FR-DLMP: a stored-state read, not a verification.
+        // GLS-FR-DLMP, GLS-FR-UTNL: stored-state reads, not verifications.
         "load_document_limit_percent",
+        "load_history_limit_percent",
       ]),
     );
   });

@@ -11,6 +11,7 @@ import type { FlowItem, FlowPosition, FlowSize } from "../../state/flowDocument"
 import { Icon } from "../icons";
 import {
   BoardAddress,
+  BoardAssignee,
   BoardMarks,
   BoardStatus,
   ErrorStrip,
@@ -190,6 +191,7 @@ export function BoardContainer(props: BoardContainerProps) {
         <div className="dm-card__meta">
           <BoardStatus facts={facts} />
           <BoardMarks item={item} facts={facts} handlers={handlers} />
+          <BoardAssignee facts={facts} />
         </div>
         <ErrorStrip item={item} error={facts.error} />
         {port}

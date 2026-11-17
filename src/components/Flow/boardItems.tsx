@@ -72,7 +72,7 @@ export function BoardStatus({ facts }: { facts: ItemFacts }) {
   return (
     <span className="dm-card__status" data-testid="flow-card-status" data-dot={dot ?? undefined}>
       {dot && <i className="dm-dot" data-s={dot} aria-hidden="true" data-testid="flow-status-dot" />}
-      {word}
+      <span className="dm-card__status-word">{word}</span>
     </span>
   );
 }
@@ -153,6 +153,25 @@ export function BoardMarks({
             draft
           </span>
         ))}
+    </span>
+  );
+}
+
+/**
+ * DBR-FR-WQAN: the assignee of an issue of a GitHub plan: `@login` of the
+ * first assignee and `+N` for the others, with every login in its tooltip and
+ * accessible name. Nothing for an issue with no assignee, a milestone, or an
+ * item of a Flow file.
+ */
+export function BoardAssignee({ facts }: { facts: ItemFacts }) {
+  const tracker = facts.tracker?.facts;
+  const logins = tracker?.ref.kind === "issue" ? (tracker.assignees ?? []) : [];
+  if (logins.length === 0) return null;
+  const label = `Assigned to ${logins.map((l) => `@${l}`).join(", ")}`;
+  return (
+    <span className="dm-card__assignee" role="img" title={label} aria-label={label} data-testid="flow-card-assignee">
+      <span className="dm-card__login">@{logins[0]}</span>
+      {logins.length > 1 && <span>+{logins.length - 1}</span>}
     </span>
   );
 }
@@ -264,6 +283,7 @@ export function BoardCard(props: BoardCardProps) {
         <div className="dm-card__meta">
           <BoardStatus facts={facts} />
           <BoardMarks item={item} facts={facts} handlers={handlers} />
+          <BoardAssignee facts={facts} />
         </div>
         <ErrorStrip item={item} error={facts.error} />
       </div>

@@ -16,6 +16,28 @@ function first(selector: string): string {
 }
 
 describe("the board stylesheet (DBR)", () => {
+  it("DBR-FR-WQAN: a login wider than 16 characters ends in an ellipsis", () => {
+    const rule = first(".dm-card__login");
+    expect(decl(rule, "max-width")).toBe("16ch");
+    expect(decl(rule, "overflow")).toBe("hidden");
+    expect(decl(rule, "text-overflow")).toBe("ellipsis");
+  });
+
+  it("DBR-FR-WQAN: the assignee keeps its full width at the trailing edge, after the markers, in the muted monospace face", () => {
+    const rule = first(".dm-card__assignee");
+    expect(decl(rule, "flex")).toBe("none");
+    expect(decl(rule, "margin-left")).toBe("auto");
+    expect(decl(rule, "white-space")).toBe("nowrap");
+    expect(decl(rule, "color")).toBe("var(--fg-3)");
+    expect(decl(rule, "font")).toContain("var(--font-mono)");
+    expect(decl(first(".dm-card__markers + .dm-card__assignee"), "margin-left")).toBe("0");
+    expect(decl(first(".dm-card__status"), "overflow")).toBe("hidden");
+    const word = first(".dm-card__status-word");
+    expect(decl(word, "min-width")).toBe("0");
+    expect(decl(word, "overflow")).toBe("hidden");
+    expect(decl(word, "text-overflow")).toBe("ellipsis");
+  });
+
   it("DBR-FR-EEKD: where no stack takes the drop, the pointer shows that a drop is not allowed", () => {
     expect(decl(first('.flow[data-dragging="true"][data-refuse="true"]'), "cursor")).toBe("not-allowed");
   });

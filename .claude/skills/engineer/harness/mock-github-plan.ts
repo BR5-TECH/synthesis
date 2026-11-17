@@ -57,6 +57,9 @@ const issueOf = (id: string) => {
 };
 for (const item of doc.items) issueOf(item.id);
 
+/** GDP-FR-QGFO / DBR-FR-WQAN: the assignee logins of some issues. */
+const ASSIGNEES: Record<string, string[]> = { ep1: ["mia", "lee"], t1: ["mia"], t2: ["jo", "ana", "kai"], x1: ["kai"] };
+
 const STATUS: Record<string, string> = { t1: "In Progress", t2: "Ready", x1: "In Progress", t7: "In Progress", t8: "Todo" };
 
 function tracker() {
@@ -77,6 +80,7 @@ function tracker() {
       claimEligible: item.kind === "task" && (STATUS[item.id] ?? "Todo") === "Ready" && !item.draftId,
       externalBlockers:
         item.id === "t8" ? [{ number: 88, title: "Payout provider contract", url: "https://github.com/acme/legal/issues/88" }] : [],
+      assignees: milestone ? [] : (ASSIGNEES[item.id] ?? []),
     };
   });
 }

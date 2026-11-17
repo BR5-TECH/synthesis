@@ -78,6 +78,10 @@ pub struct TrackerIssue {
     pub parent: Option<IssueLink>,
     #[serde(default)]
     pub blocked_by: Vec<IssueLink>,
+    /// GDP-FR-QGFO: the logins of the assignees, in GitHub order. A read
+    /// cache from before this field reads as no assignee.
+    #[serde(default)]
+    pub assignees: Vec<String>,
     pub updated_at: String,
 }
 

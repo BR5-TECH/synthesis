@@ -86,6 +86,8 @@ pub struct PlanTrackerFacts {
     pub status: Option<String>,
     pub claim_eligible: bool,
     pub external_blockers: Vec<ExternalBlocker>,
+    /// GDP-FR-QGFO: the assignee logins of an issue; empty for a milestone.
+    pub assignees: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -403,6 +405,7 @@ pub fn build_plan(
             status: None,
             claim_eligible: false,
             external_blockers: Vec::new(),
+            assignees: Vec::new(),
         });
         let state = if closed { TrackerState::Closed } else { TrackerState::Open };
         facts.insert(id, ItemTrackerFacts { state, ..ItemTrackerFacts::default() });
@@ -457,6 +460,7 @@ pub fn build_plan(
             status: status.map(str::to_string),
             claim_eligible: eligible,
             external_blockers: blockers,
+            assignees: issue.assignees.clone(),
         });
     }
 

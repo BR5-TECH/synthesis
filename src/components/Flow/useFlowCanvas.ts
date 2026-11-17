@@ -334,7 +334,7 @@ export function useFlowCanvas({
     return shown[id]?.size;
   };
 
-  const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf });
+  const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf, board: boardMode });
   /** FLO-FR-SQUS / FLO-FR-IAOQ: the milestone columns and the No milestone column. */
   const columnsBase = doc
     ? columnsOf(doc, layout, frames.rectOf, boardMode ? BOARD_ROW_MID : undefined)

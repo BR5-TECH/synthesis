@@ -102,6 +102,8 @@ export interface TrackerFacts {
   status: string | null;
   claimEligible: boolean;
   externalBlockers: { number: number; title: string; url: string }[];
+  /** GDP-FR-QGFO: the assignee logins of an issue, in GitHub order. Absent reads as none. */
+  assignees?: string[];
 }
 
 /** GDP-FR-XWES: the notices of a GitHub plan. */

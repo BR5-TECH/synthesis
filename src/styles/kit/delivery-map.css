@@ -286,8 +286,23 @@
 }
 .flow[data-board="true"] input.dm-card__title { display: block; width: 100%; box-sizing: border-box; }
 .dm-card__meta { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 20px; font-size: var(--fs-ui-sm); color: var(--fg-2); }
-.dm-card__status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-card__status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+/* DBR-FR-WQAN: the word is its own box, so a word that does not fit ends in an ellipsis. */
+.dm-card__status-word { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dm-card__markers { margin-left: auto; display: inline-flex; flex: none; gap: var(--sp-1); }
+/* DBR-FR-WQAN: the assignee closes the bottom line, after the markers. */
+.dm-card__assignee {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  font: 400 var(--fs-ui-xs) / 1.35 var(--font-mono);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+.dm-card__markers + .dm-card__assignee { margin-left: 0; }
+.dm-card__login { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
 .dm-mark { border: 0; font-family: inherit; cursor: pointer; }
 .dm-mark:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 .dm-card__error {

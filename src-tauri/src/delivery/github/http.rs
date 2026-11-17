@@ -263,9 +263,25 @@ fn issue_fields() -> String {
     format!(
         "id number url state stateReason title body updatedAt \
          repository {{ name owner {{ login }} }} issueType {{ name }} milestone {{ number }} \
+         assignees(first: {ASSIGNEE_PAGE}) {{ nodes {{ login }} }} \
          parent {{ {LINK_FIELDS} }} \
          blockedBy(first: {CONNECTION_SIZE}) {{ nodes {{ {LINK_FIELDS} }} {PAGE_INFO} }}"
     )
+}
+
+/// GDP-FR-QGFO: GitHub lets an issue have at most 10 assignees, so one page
+/// holds them all.
+const ASSIGNEE_PAGE: usize = 10;
+
+/// GDP-FR-QGFO: the assignee logins of an issue value. A GraphQL value holds
+/// them in `assignees.nodes`, and a REST value in `assignees`. Pure.
+pub fn assignees_of(value: &Value) -> Vec<String> {
+    let list = value.get("assignees");
+    list.and_then(|a| a.get("nodes"))
+        .or(list)
+        .and_then(Value::as_array)
+        .map(|nodes| nodes.iter().map(|n| str_of(n, "login")).filter(|l| !l.is_empty()).collect())
+        .unwrap_or_default()
 }
 
 const MILESTONE_FIELDS: &str = "number url title description dueOn state updatedAt";
@@ -361,6 +377,7 @@ pub fn issue_of(value: &Value) -> Option<TrackerIssue> {
             .and_then(Value::as_array)
             .map(|nodes| nodes.iter().filter_map(link_of).collect())
             .unwrap_or_default(),
+        assignees: assignees_of(value),
         updated_at: str_of(value, "updatedAt"),
     })
 }
@@ -599,6 +616,7 @@ impl TrackerAdapter for GithubTracker {
             milestone: value.get("milestone").and_then(|m| m.get("number")).and_then(Value::as_u64),
             parent: None,
             blocked_by: Vec::new(),
+            assignees: assignees_of(&value),
             updated_at: str_of(&value, "updated_at"),
         })
     }

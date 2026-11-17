@@ -107,6 +107,7 @@ pub fn issue(number: u64, issue_type: Option<&str>) -> TrackerIssue {
         milestone: None,
         parent: None,
         blocked_by: Vec::new(),
+        assignees: Vec::new(),
         updated_at: format!("2026-01-01T00:00:{number:02}Z"),
     }
 }

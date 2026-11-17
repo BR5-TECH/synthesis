@@ -292,7 +292,7 @@ fn each_item_carries_its_tracker_facts() {
             "ref": { "kind": "milestone", "number": 2,
                      "url": "https://github.com/acme/widgets/milestone/2" },
             "state": "open", "closeReason": null, "updatedAt": "2026-01-02T00:00:02Z",
-            "status": null, "claimEligible": false, "externalBlockers": []
+            "status": null, "claimEligible": false, "externalBlockers": [], "assignees": []
         })
     );
     assert_eq!(
@@ -302,7 +302,7 @@ fn each_item_carries_its_tracker_facts() {
             "ref": { "kind": "issue", "number": 1,
                      "url": "https://github.com/acme/widgets/issues/1" },
             "state": "open", "closeReason": null, "updatedAt": "2026-01-01T00:00:01Z",
-            "status": "Ready", "claimEligible": true, "externalBlockers": []
+            "status": "Ready", "claimEligible": true, "externalBlockers": [], "assignees": []
         })
     );
     assert_eq!(value[2]["closeReason"], "completed");
@@ -321,6 +321,35 @@ fn each_item_carries_its_tracker_facts() {
     let plan =
         build_plan(&r2, &DeliverySettings::default(), &DeliveryOverlay::default(), &statuses);
     assert!(plan.facts["issue-5"].status_is_in_progress);
+}
+
+/// GDP-FR-QGFO: the tracker facts of an issue carry the logins of its
+/// assignees in GitHub order, and a milestone carries none.
+#[test]
+fn the_tracker_facts_carry_the_assignees() {
+    let mut taken = issue(1, Some("Task"));
+    taken.assignees = vec!["mia".into(), "jo".into()];
+    let r = read(
+        vec![on_board(taken, None), on_board(issue(2, Some("Task")), None)],
+        vec![milestone(1, None, "open")],
+    );
+    let value = serde_json::to_value(&build(&r).tracker).unwrap();
+    let of = |id: &str| {
+        value.as_array().unwrap().iter().find(|f| f["itemId"] == id).unwrap()["assignees"].clone()
+    };
+    assert_eq!(of("issue-1"), json!(["mia", "jo"]));
+    assert_eq!(of("issue-2"), json!([]));
+    assert_eq!(of("milestone-1"), json!([]));
+}
+
+/// GDP-FR-QGFO: an issue of a read cache that holds no assignees reads as an
+/// issue with no assignee.
+#[test]
+fn a_cached_issue_without_assignees_has_none() {
+    let mut cached = serde_json::to_value(issue(1, Some("Task"))).unwrap();
+    cached.as_object_mut().unwrap().remove("assignees").expect("an issue holds its assignees");
+    let back: TrackerIssue = serde_json::from_value(cached).unwrap();
+    assert!(back.assignees.is_empty());
 }
 
 /// GDP-FR-CRRO: the overlay adds each item's references, footprint, and draft

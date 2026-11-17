@@ -10,6 +10,8 @@ import { resetLogBufferForTest } from "../logging";
 import {
   absolutePosition,
   BOARD_CARD_H,
+  BOARD_FACE_H,
+  BOARD_HEAD_H,
   boardOrders,
   findItem,
   resolveBoardLayout,
@@ -498,6 +500,24 @@ describe("the card in detail (DBR-FR-QZPA, DBR-FR-GFGG, DBR-FR-SBTR)", () => {
     expect(itemEl("f1").querySelector(".dm-group__body")).toBeNull();
     expect(within(itemEl("f1")).getByRole("button", { name: "Expand F1" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("flow-item-t1")).toBeNull();
+  });
+
+  it("DBR-FR-SBLK, DBR-FR-FISH: a collapsed group, also one that holds no item, and a collapsed column are as high as their slot", async () => {
+    const doc = plan([...DOC.items, item("f9", "feature", { parentId: "m1", name: "Empty" })], DOC.edges);
+    const stored: StoredLayout = { items: { f1: { collapsed: true }, f9: { collapsed: true }, m2: { collapsed: true } } };
+    await renderFlow(flowBackend(doc, stored), { board: true });
+    await screen.findByTestId("flow-leaf-counts-f1");
+    const slots = resolveBoardLayout(doc, stored).layout;
+    expect(slots.f1.size!.height).toBe(BOARD_FACE_H + 1);
+    for (const id of ["f1", "f9", "m2"]) {
+      expect(itemEl(id).style.height).toBe(`${slots[id].size!.height}px`);
+    }
+    expect(slots.m2.size!.height).toBe(BOARD_HEAD_H + 1);
+  });
+
+  it("DBR-FR-WQAN: an item of a Flow file shows no assignee", async () => {
+    await open();
+    expect(screen.queryByTestId("flow-card-assignee")).toBeNull();
   });
 });
 

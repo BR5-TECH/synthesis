@@ -423,6 +423,21 @@ fn issues_and_milestones_are_read_from_an_answer() {
     assert_eq!(due_on(None), Value::Null);
 }
 
+/// GDP-FR-QGFO: the issue query asks for the assignees, and an issue value
+/// gives their logins in order: from `assignees.nodes` of GraphQL, and from
+/// `assignees` of REST. An issue with no assignee value has none.
+#[test]
+fn an_issue_gives_its_assignee_logins() {
+    assert!(issue_fields().contains("assignees(first: 10) { nodes { login } }"));
+    let mut raw = raw_issue(1);
+    raw["assignees"] = json!({ "nodes": [ { "login": "mia" }, { "login": "jo" } ] });
+    assert_eq!(issue_of(&raw).unwrap().assignees, vec!["mia", "jo"]);
+    assert!(issue_of(&raw_issue(2)).unwrap().assignees.is_empty());
+    let rest = json!({ "assignees": [ { "login": "kai" }, { "id": 5 } ] });
+    assert_eq!(assignees_of(&rest), vec!["kai"]);
+    assert!(assignees_of(&json!({ "assignees": null })).is_empty());
+}
+
 /// DSR-FR-EDHP: the Project query asks for the Project's `url`.
 #[test]
 fn the_project_query_asks_for_the_url() {

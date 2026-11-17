@@ -32,6 +32,10 @@ export interface EdgeRoute {
  * A factory and not free functions, because it reads the live document, the
  * positions and sizes of the layout with an in-flight drag or resize applied,
  * the card heights that the cards report, and the collapse state.
+ *
+ * DBR-FR-SBLK: on the board, a container paints at the size of its slot, also
+ * when it is collapsed: the fixed collapsed height of the Flow tab does not
+ * apply there.
  */
 export function createFrames(ctx: {
   doc: FlowDocument | null;
@@ -39,8 +43,10 @@ export function createFrames(ctx: {
   collapsed: ReadonlySet<string>;
   absOf: (id: string) => FlowPosition;
   sizeOf: (id: string) => FlowSize | undefined;
+  /** DBR-FR-ERHW: the canvas lays the plan out as the board. */
+  board?: boolean;
 }) {
-  const { doc, heights, collapsed, absOf, sizeOf } = ctx;
+  const { doc, heights, collapsed, absOf, sizeOf, board = false } = ctx;
 
   /**
    * FLO-FR-ZASL: the outermost collapsed container that holds `id`, or
@@ -65,7 +71,7 @@ export function createFrames(ctx: {
         x: at.x,
         y: at.y,
         width: size.width,
-        height: collapsed.has(id) ? COLLAPSED_H : size.height,
+        height: collapsed.has(id) && !board ? COLLAPSED_H : size.height,
       };
     }
     // DBR-FR-LNZI: a card of the board has the size of its slot.

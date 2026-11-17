@@ -119,6 +119,66 @@ describe("the board of a GitHub plan (DBR-FR-ERHW, DBR-FR-XOOU, DBR-FR-SBTR)", (
   });
 });
 
+describe("the assignee of a GitHub plan (DBR-FR-WQAN, DBR-FR-GFGG)", () => {
+  const ASSIGNED = plan(DOC.items.map((i) => (i.id === "t1" ? { ...i, draftId: "d-1" } : i)));
+
+  async function openAssigned() {
+    b = deliveryBackend(
+      "",
+      githubAnswer(ASSIGNED, {
+        tracker: [
+          { ...milestoneFacts("m1", 3), assignees: ["ola"] },
+          issueFacts("f1", 42, { status: "In Progress", assignees: ["kai"] }),
+          issueFacts("t1", 51, { status: "Ready", assignees: ["mia", "jo", "ana"] }),
+          issueFacts("x1", 47, { status: null, assignees: [] }),
+        ],
+        states: STATES,
+      }),
+    );
+    await openPlan();
+  }
+
+  it("DBR-FR-WQAN, GDP-FR-QGFO: a card shows the first assignee and the count of the others, with every login in its name and tooltip", async () => {
+    await openAssigned();
+    const assignee = within(itemEl("t1")).getByTestId("flow-card-assignee");
+    expect(assignee).toHaveTextContent(/^@mia\+2$/);
+    expect(assignee).toHaveAccessibleName("Assigned to @mia, @jo, @ana");
+    expect(assignee).toHaveAttribute("title", "Assigned to @mia, @jo, @ana");
+  });
+
+  it("DBR-FR-WQAN, DBR-FR-SBTR: a group face shows its one assignee with no count", async () => {
+    await openAssigned();
+    const face = itemEl("f1").querySelector(".dm-group__head") as HTMLElement;
+    const assignee = within(face).getByTestId("flow-card-assignee");
+    expect(assignee).toHaveTextContent(/^@kai$/);
+    expect(assignee.closest(".dm-card__meta")).not.toBeNull();
+  });
+
+  it("DBR-FR-WQAN: an issue with no assignee and a milestone show no assignee", async () => {
+    await openAssigned();
+    expect(within(itemEl("t1")).getByTestId("flow-card-assignee")).toBeInTheDocument();
+    expect(within(itemEl("x1")).getByTestId("flow-card-status")).toHaveTextContent("no status");
+    expect(within(itemEl("x1")).queryByTestId("flow-card-assignee")).toBeNull();
+    expect(within(itemEl("m1").querySelector(".dm-lane__head") as HTMLElement).queryByTestId("flow-card-assignee")).toBeNull();
+  });
+
+  it("DBR-FR-WQAN: tracker facts with no assignee list show no assignee", async () => {
+    await openPlan();
+    expect(within(itemEl("t1")).getByTestId("flow-card-status")).toHaveTextContent("ready");
+    expect(screen.queryByTestId("flow-card-assignee")).toBeNull();
+  });
+
+  it("DBR-FR-GFGG, DBR-FR-WQAN: the bottom line starts with the status and ends with the markers and then the assignee", async () => {
+    await openAssigned();
+    const meta = itemEl("t1").querySelector(".dm-card__meta") as HTMLElement;
+    expect([...meta.children].map((el) => el.className.split(" ")[0])).toEqual([
+      "dm-card__status",
+      "dm-card__markers",
+      "dm-card__assignee",
+    ]);
+  });
+});
+
 describe("a drop of a GitHub plan (DBR-FR-KTJS, DBR-FR-CVJY, DBR-FR-CJSG)", () => {
   it("DBR-FR-KTJS: a drop into another container sends one move edit and writes the layout once", async () => {
     b.apply = async () => answerOf(moved());

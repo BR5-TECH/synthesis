@@ -238,6 +238,7 @@ fn the_ledger_numbers_the_hunks_of_a_path_and_skips_a_withdrawn_one() {
             updates: &[crate::change_proposals::ChangeUpdateEntry {
                 entry: crate::text_hunks::updates::UpdateEntry::Withdraw {
                     id: all[0].hunk.id.clone(),
+                    diagram: false,
                 },
                 path: None,
             }],

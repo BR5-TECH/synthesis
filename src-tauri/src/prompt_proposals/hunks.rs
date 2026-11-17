@@ -81,6 +81,11 @@ pub fn edit_hunk_impl(
         return Err(ERR_WRITE_FAILED.to_string());
     }
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // PCP-FR-KDTA: the source of a diagram hunk is not the author's to edit.
+    // Nothing is written and no event is emitted.
+    if row.diagram || doc.find(hunk_id).is_some_and(|h| h.diagram) {
+        return Err(ERR_HUNK_NOT_EDITABLE.to_string());
+    }
     // PCP-FR-18: a withdrawn hunk is not the author's to shape.
     if row.state == HunkState::Withdrawn {
         return Err(ERR_HUNK_WITHDRAWN.to_string());
@@ -134,6 +139,9 @@ pub struct PromptProposalChange {
     pub before: String,
     /// The exact text the hunk offers. Empty for a deletion.
     pub after: String,
+    /// PCP-FR-VNPS: true for a diagram hunk. Its `before` and `after` are then
+    /// Mermaid sources, with no fence marker lines.
+    pub diagram: bool,
 }
 
 /// AGC-FR-DKHT: one hunk of one proposal, for a turn's input.
@@ -161,8 +169,9 @@ pub fn read_proposal_change(
         id: hunk.id.clone(),
         kind: hunk.kind,
         state,
-        before: hunk.before_text().to_string(),
-        after: hunk.after_text().to_string(),
+        before: hunk.readable_before(),
+        after: hunk.readable_after(),
+        diagram: hunk.diagram,
     })
 }
 
@@ -200,8 +209,9 @@ pub fn read_prompt_proposal_changes(
             id: hunk.id.clone(),
             kind: hunk.kind,
             state: state_of(&hunk.id),
-            before: hunk.before_text().to_string(),
-            after: hunk.after_text().to_string(),
+            before: hunk.readable_before(),
+            after: hunk.readable_after(),
+            diagram: hunk.diagram,
         })
         .collect();
     Some(PromptProposalChanges { path: record.path.clone(), counts: record.counts, changes })

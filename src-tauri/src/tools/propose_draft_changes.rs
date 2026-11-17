@@ -51,8 +51,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::proposal_updates::{
-    self, updates_or_none, UpdateArg, UPDATE_CHANGE_SETTLED, UPDATE_MALFORMED, UPDATE_NAMED_TWICE,
-    UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
+    self, updates_or_none, UpdateArg, UPDATE_CHANGE_IS_DIAGRAM, UPDATE_CHANGE_SETTLED,
+    UPDATE_MALFORMED, UPDATE_NAMED_TWICE, UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
 };
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PROPOSAL_NO_CHANGE,
@@ -114,7 +114,7 @@ pub const PROPOSAL_LEAD_AND_TRAIL_TOO_LONG: &str =
     "The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name.";
 
 /// The refusal text for the context that is too long (PDC-FR-DMTH, PPC-FR-KWQB).
-fn context_too_long(side: ContextSide) -> &'static str {
+pub(super) fn context_too_long(side: ContextSide) -> &'static str {
     match side {
         ContextSide::Lead => PROPOSAL_LEAD_TOO_LONG,
         ContextSide::Trail => PROPOSAL_TRAIL_TOO_LONG,
@@ -175,6 +175,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         UPDATE_MALFORMED => "update_malformed",
         UPDATE_NO_SUCH_CHANGE => "no_such_change",
         UPDATE_CHANGE_SETTLED => "change_already_settled",
+        UPDATE_CHANGE_IS_DIAGRAM => "change_is_diagram_change",
         UPDATE_NAMED_TWICE => "change_named_twice",
         PROPOSAL_RATIONALE_BLANK => "rationale_blank",
         RATIONALE_NO_SPOKEN_PART => "no_spoken_part",
@@ -200,7 +201,7 @@ pub const ONE_AT_A_TIME: &str = "Only one change can be proposed at a time, so t
 /// A draft-relative path is short by construction, and the bound is what keeps a
 /// model-composed value from growing a record past `LGC-logging.md`'s per-record
 /// ceiling (LGC-FR-08) and costing it the tool name and the reason.
-const PATH_LOG_CHARS: usize = 200;
+pub(super) const PATH_LOG_CHARS: usize = 200;
 
 /// The arguments, as the model composed them.
 ///
@@ -405,7 +406,7 @@ fn draft_of(origin: &ConversationOrigin) -> Result<(&str, &str), ToolRefusal> {
 /// borrows, and because a fragment discussion's own file has to be located. A
 /// whole-draft discussion belongs to no file of the draft; a fragment discussion
 /// belongs to one.
-fn target_for<'a>(
+pub(super) fn target_for<'a>(
     store: &crate::fs::RootFs,
     origin: &'a ConversationOrigin,
     draft_id: &'a str,
@@ -702,6 +703,7 @@ fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
         UpdateRefusal::PathMissing => ToolRefusal::ProposalPathMissing,
         UpdateRefusal::HunkNotFound { at: n, of } => at(UPDATE_NO_SUCH_CHANGE, n, of),
         UpdateRefusal::HunkNotUpdatable { at: n, of } => at(UPDATE_CHANGE_SETTLED, n, of),
+        UpdateRefusal::HunkSubjectMismatch { at: n, of } => at(UPDATE_CHANGE_IS_DIAGRAM, n, of),
         UpdateRefusal::HunkNamedTwice { at: n, of } => at(UPDATE_NAMED_TWICE, n, of),
         UpdateRefusal::NoChange { at: n, of } => at(PROPOSAL_NO_CHANGE, n, of),
         UpdateRefusal::HunkAnchorLost { at: n, of } => at(PROPOSAL_TEXT_NOT_FOUND, n, of),

@@ -43,6 +43,7 @@ pub(in crate::agent_conversations) fn change_hunk_view(
         } else {
             in_file(change.after)
         },
+        diagram: false,
     }
 }
 

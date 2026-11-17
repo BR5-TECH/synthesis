@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useRef } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { HunkChip } from "./HunkChip";
 import { HUNK_ATTR, hunkLabel, type DecoratedHunk } from "./hunkDecorations";
@@ -41,7 +42,12 @@ function mount(h: DecoratedHunk) {
   scroller.appendChild(block);
   document.body.appendChild(scroller);
   hosts.push(scroller);
-  const handlers = { onAccept: vi.fn(), onReject: vi.fn(), onDiscuss: vi.fn() };
+  const handlers = {
+    onAccept: vi.fn(),
+    onReject: vi.fn(),
+    onDiscuss: vi.fn(),
+    onCompare: vi.fn(),
+  };
   render(<HunkChip hunk={h} hostRef={{ current: scroller }} busy={false} {...handlers} />);
   return handlers;
 }
@@ -99,5 +105,109 @@ describe("OCW-FR-COLR: a chip whose host mounts with it", () => {
   it("OCW-FR-COLR, DCR-FR-12: the chip shows when it mounts in the same commit as its host", () => {
     render(<HostWithChip h={hunk()} />);
     expect(screen.getByRole("button", { name: /Accept/ })).toBeInTheDocument();
+  });
+});
+
+describe("DCR-FR-HBTM: Compare on the chip of a diagram hunk", () => {
+  const diagram = { oldSource: "flowchart TD\n  A --> B", newSource: "flowchart TD\n  A --> C" };
+
+  it("DCR-FR-HBTM: a text hunk's chip has no Compare button", () => {
+    mount(hunk());
+    expect(screen.queryByRole("button", { name: "Compare diagrams" })).toBeNull();
+  });
+
+  it("DCR-FR-HBTM: an undecided diagram hunk's chip holds Accept, Reject, Discuss, and Compare, in that order", () => {
+    mount(hunk({ diagram, editable: false }));
+    const names = screen
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label") ?? b.textContent?.trim());
+    expect(names).toEqual(["Accept", "Reject", "Discuss →", "Compare diagrams"]);
+  });
+
+  it("DCR-FR-HBTM: Compare is an icon with a text label, named and titled Compare diagrams", () => {
+    mount(hunk({ diagram, editable: false }));
+    const compare = screen.getByRole("button", { name: "Compare diagrams" });
+    expect(compare).toHaveAttribute("title", "Compare diagrams");
+    expect(compare).toHaveTextContent("Compare");
+    expect(compare.querySelector("svg")).not.toBeNull();
+  });
+
+  it("DCR-FR-HBTM: a rejected diagram hunk's chip says Rejected and holds Accept, Discuss, and Compare", () => {
+    mount(hunk({ diagram, editable: false, state: "rejected" }));
+    expect(screen.getByTestId("hunk-chip-rejected")).toHaveTextContent("Rejected");
+    expect(screen.queryByRole("button", { name: /^Reject/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Accept/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Discuss/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Compare diagrams" })).toBeInTheDocument();
+  });
+
+  it("DCR-FR-HBTM, DCR-FR-UKMP: Compare decides nothing, gives its button to the review, and works by keyboard", async () => {
+    const handlers = mount(hunk({ diagram, editable: false }));
+    const compare = screen.getByRole("button", { name: "Compare diagrams" });
+    compare.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(handlers.onCompare).toHaveBeenCalledTimes(1);
+    expect(handlers.onCompare).toHaveBeenCalledWith(compare);
+    expect(handlers.onAccept).not.toHaveBeenCalled();
+    expect(handlers.onReject).not.toHaveBeenCalled();
+  });
+
+  it("DCR-FR-HBTM: Compare stays on while a decision is in flight, because it decides nothing", () => {
+    const scroller = document.createElement("div");
+    const block = document.createElement("div");
+    block.className = "hunk hunk--add";
+    block.setAttribute(HUNK_ATTR, "h2");
+    scroller.appendChild(block);
+    document.body.appendChild(scroller);
+    hosts.push(scroller);
+    render(
+      <HunkChip
+        hunk={hunk({ diagram, editable: false })}
+        hostRef={{ current: scroller }}
+        busy
+        onAccept={vi.fn()}
+        onReject={vi.fn()}
+        onDiscuss={vi.fn()}
+        onCompare={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Compare diagrams" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Accept/ })).toBeDisabled();
+  });
+
+  it("DCR-FR-UKMP: when the chip goes away with the focus on Compare, the focus goes to the document column", () => {
+    const scroller = document.createElement("div");
+    const block = document.createElement("div");
+    block.className = "hunk hunk--add";
+    block.setAttribute(HUNK_ATTR, "h2");
+    scroller.appendChild(block);
+    document.body.appendChild(scroller);
+    hosts.push(scroller);
+    const view = render(
+      <HunkChip
+        hunk={hunk({ diagram, editable: false })}
+        hostRef={{ current: scroller }}
+        busy={false}
+        onAccept={vi.fn()}
+        onReject={vi.fn()}
+        onDiscuss={vi.fn()}
+        onCompare={vi.fn()}
+      />,
+    );
+    screen.getByRole("button", { name: "Compare diagrams" }).focus();
+    view.unmount();
+    expect(scroller).toHaveFocus();
+  });
+
+  it("DCR-FR-BYSX, DCR-FR-10: a diagram hunk's accessible name gives its kind as a diagram change, addition, or removal", () => {
+    expect(hunkLabel(hunk({ diagram }))).toBe(
+      "Change 2 of 3, diagram change proposed by @arch",
+    );
+    expect(hunkLabel(hunk({ diagram: { ...diagram, oldSource: null }, kind: "add" }))).toBe(
+      "Change 2 of 3, diagram addition proposed by @arch",
+    );
+    expect(hunkLabel(hunk({ diagram: { ...diagram, newSource: null }, kind: "del" }))).toBe(
+      "Change 2 of 3, diagram removal proposed by @arch",
+    );
   });
 });

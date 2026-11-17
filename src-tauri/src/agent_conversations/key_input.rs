@@ -21,7 +21,7 @@ fn key_arguments(tool: &str) -> &'static [&'static str] {
         "read_draft" => &["draft_id"],
         "get_document" => &["id"],
         "load_skill" | "propose_new_draft" => &["name"],
-        "propose_draft_changes" | "propose_prompt_changes" => &["path"],
+        "propose_draft_changes" | "propose_prompt_changes" | "propose_diagram_changes" => &["path"],
         crate::tools::web_search::ENTRY_TYPE => &["query"],
         crate::tools::web_fetch::ENTRY_TYPE => &["url"],
         _ => &[],

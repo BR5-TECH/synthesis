@@ -206,6 +206,9 @@ pub struct ProposalChange {
     pub before: String,
     /// The exact text the change offered. Empty for a deletion.
     pub after: String,
+    /// DCP-FR-NDAQ: true for a diagram change. Its `before` and `after` are
+    /// then Mermaid sources, with no fence marker lines.
+    pub diagram: bool,
 }
 
 /// One proposal of a draft, with its changes and how each was decided.
@@ -264,8 +267,9 @@ pub fn read_proposal_changes(
                     .find(|row| row.id == hunk.id)
                     .map(|row| row.state)
                     .unwrap_or(hunks::HunkState::Pending),
-                before: hunk.before_text().to_string(),
-                after: hunk.after_text().to_string(),
+                before: hunk.readable_before(),
+                after: hunk.readable_after(),
+                diagram: hunk.diagram,
             })
             .collect();
         out.push(ProposalChanges {

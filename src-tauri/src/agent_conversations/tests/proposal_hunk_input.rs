@@ -28,6 +28,7 @@ fn record_one(
                 lead: None,
                 trail: None,
                 note: None,
+                diagram: false,
             }],
             rationale: "The opening buries the point.",
             agent: &crate::comments::Participant::Agent {
@@ -201,6 +202,7 @@ fn a_proposal_hunk_line_bounds_its_excerpts() {
         state: HunkState::Accepted,
         before: long,
         after: String::new(),
+        diagram: false,
     };
     let line = super::sections::proposal_hunk_line("prompt.md", &change);
     assert!(

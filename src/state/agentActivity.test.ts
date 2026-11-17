@@ -37,6 +37,7 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
       ["ask_discussion_questions", "Preparing questions for you…"],
       ["propose_draft_changes", "Preparing draft changes…"],
       ["propose_prompt_changes", "Preparing prompt changes…"],
+      ["propose_diagram_changes", "Preparing diagram changes…"],
       ["decide_draft_changes", "Deciding draft changes…"],
       ["decide_prompt_changes", "Deciding prompt changes…"],
       ["openrouter:web_search", "Searching the web…"],
@@ -51,7 +52,7 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
     expect(Object.keys(TOOL_ACTIVITY_STATUS).sort()).toEqual(
       vocabulary.map(([tool]) => tool).sort(),
     );
-    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(17);
+    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(18);
   });
 
   it("CTA-FR-HEYB, CTA-FR-HPXE: the advisors tool waits for the end of an open speech", () => {

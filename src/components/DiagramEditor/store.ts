@@ -3,6 +3,10 @@
  * edits, or the diagram viewer overlay shows, now, and the window rules around
  * them. The two overlays are modal, so at most one of them is open.
  *
+ * The same store holds the comparison pop-up of a diagram hunk (EDT-FR-BRVQ),
+ * the third diagram overlay. It is open on its own, and every other diagram
+ * overlay closes it as it opens (EDT-FR-TOVY).
+ *
  * A module store rather than React state, because the Edit button is an editor
  * widget drawn outside React (EDT-FR-ADNU), and the overlay is drawn by the
  * window rather than by the surface. Each window is a webview of its own, so
@@ -45,7 +49,10 @@ export type CloseReason =
   | "write-failed"
   | "surface-ended"
   | "surface-hidden"
-  | "surface-inert";
+  | "surface-inert"
+  | "decided"
+  | "hunk-decided"
+  | "review-ended";
 
 type Listener = () => void;
 
@@ -89,6 +96,8 @@ function openOverlay(
   opener: HTMLElement | null,
 ): void {
   focusReturn = null;
+  // EDT-FR-TOVY: the comparison pop-up is a diagram overlay too.
+  closeComparison("other-overlay");
   // EDT-FR-TOVY: opening closes every other overlay of the main window. That
   // also closes a diagram overlay that is open on another fence.
   opening?.();
@@ -122,6 +131,13 @@ export function openDiagramViewer(
  * editor or the viewer. A close discards nothing.
  */
 export function closeDiagramEditor(reason: CloseReason): void {
+  // EDT-FR-TOVY, EDT-FR-PQAS: the window closes the comparison pop-up with the
+  // other diagram overlays.
+  closeComparison(reason);
+  closeDiagramRequest(reason);
+}
+
+function closeDiagramRequest(reason: CloseReason): void {
   if (!request) return;
   const { kind } = request;
   request = null;
@@ -208,6 +224,122 @@ export function notifyDiagramSurface(view: EditorView, change: SurfaceChange): v
   for (const listener of [...set]) listener(change);
 }
 
+/**
+ * EDT-FR-BRVQ, DCR-FR-ESIY: what the comparison pop-up shows and does for one
+ * diagram hunk. The review that owns the hunk builds it and builds it again at
+ * each change of the hunk, so the pop-up follows the proposal (DCR-FR-GAFN).
+ */
+export interface ComparisonContent {
+  hunkId: string;
+  /** The diagram of the document. Null where the hunk adds a diagram. */
+  oldSource: string | null;
+  /** The diagram of the hunk. Null where the hunk removes the diagram. */
+  newSource: string | null;
+  /** False where the chip of the hunk has no Reject (DCR-FR-OLDZ). */
+  canReject: boolean;
+  /** The reason that Accept is off, or null where Accept is on (DCR-FR-31). */
+  acceptBlocked: string | null;
+  /** A decision is in flight, so the decision controls are off. */
+  busy: boolean;
+  /** DCR-FR-16: the typed error of the last refused decision, in words. */
+  error: string | null;
+  /** The same operation as Accept of the chip. True when the hunk is decided. */
+  onAccept: () => Promise<boolean>;
+  /** The same operation as Reject of the chip. True when the hunk is decided. */
+  onReject: () => Promise<boolean>;
+}
+
+export interface ComparisonRequest {
+  /** A new number for each opening, so each opening starts fresh. */
+  id: number;
+  /** The review that owns the hunk. */
+  owner: string;
+  /** The state of the hunk when the pop-up opened. */
+  openedState: string;
+  /** The Compare button that opened the pop-up (DCR-FR-UKMP). */
+  opener: HTMLElement | null;
+  /** Where focus goes when the Compare button is gone: the document column. */
+  fallback: HTMLElement | null;
+  content: ComparisonContent;
+}
+
+let comparison: ComparisonRequest | null = null;
+const comparisonListeners = new Set<Listener>();
+/**
+ * PCR-FR-TNQA: a decision of the pop-up is in flight. The confirmation of a
+ * write to the main branch can show during it, and it closes the other
+ * overlays as it opens, which must not close the pop-up.
+ */
+let comparisonHeld = false;
+
+function emitComparison(): void {
+  for (const listener of [...comparisonListeners]) listener();
+}
+
+export function subscribeComparison(listener: Listener): () => void {
+  comparisonListeners.add(listener);
+  return () => {
+    comparisonListeners.delete(listener);
+  };
+}
+
+export function comparisonRequest(): ComparisonRequest | null {
+  return comparison;
+}
+
+/** PCR-FR-TNQA: whether a decision of the pop-up is in flight. */
+export function isComparisonHeld(): boolean {
+  return comparisonHeld;
+}
+
+/** PCR-FR-TNQA: a decision of the pop-up starts or ends. */
+export function holdComparison(held: boolean): void {
+  comparisonHeld = held;
+}
+
+/**
+ * DCR-FR-ESIY: open the comparison pop-up for one hunk. It closes every other
+ * overlay as it opens (EDT-FR-TOVY, SNV-FR-56).
+ */
+export function openComparison(
+  owner: string,
+  openedState: string,
+  content: ComparisonContent,
+  opener: HTMLElement | null,
+  fallback: HTMLElement | null,
+): void {
+  comparison = null;
+  comparisonHeld = false;
+  closeDiagramRequest("other-overlay");
+  opening?.();
+  comparison = { id: nextId++, owner, openedState, opener, fallback, content };
+  logInfo(["frontend"], "diagram comparison opened", {});
+  emitComparison();
+}
+
+/** DCR-FR-GAFN: the owner built the content again, so the pop-up shows it. */
+export function updateComparison(owner: string, content: ComparisonContent): void {
+  if (!comparison || comparison.owner !== owner) return;
+  comparison = { ...comparison, content };
+  emitComparison();
+}
+
+/** DCR-FR-OLDZ, EDT-FR-HCWP: close the pop-up. A close decides nothing. */
+export function closeComparison(reason: CloseReason): void {
+  if (!comparison) return;
+  // PCR-FR-TNQA: the confirmation of a write opens during a decision.
+  if (reason === "other-overlay" && comparisonHeld) return;
+  comparison = null;
+  comparisonHeld = false;
+  logInfo(["frontend"], "diagram comparison closed", { reason });
+  emitComparison();
+}
+
+/** DCR-FR-GAFN: close the pop-up of one review, and no other. */
+export function closeComparisonOf(owner: string, reason: CloseReason): void {
+  if (comparison?.owner === owner) closeComparison(reason);
+}
+
 /** Test seam: forgets the request, the listeners, and the window rule. */
 export function resetDiagramEditorForTest(): void {
   request = null;
@@ -215,4 +347,7 @@ export function resetDiagramEditorForTest(): void {
   opening = null;
   focusReturn = null;
   nextId = 1;
+  comparison = null;
+  comparisonListeners.clear();
+  comparisonHeld = false;
 }

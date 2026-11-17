@@ -73,6 +73,9 @@ pub struct HunkLedgerRow {
     pub revision: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_at: Option<String>,
+    /// PCP-FR-QRVD: true for a diagram hunk. Absent when false.
+    #[serde(default, skip_serializing_if = "crate::text_hunks::hunks::is_false")]
+    pub diagram: bool,
 }
 
 fn pending() -> HunkState {
@@ -88,6 +91,7 @@ impl HunkLedgerRow {
             edited: false,
             revision: hunk.revision,
             decided_at: None,
+            diagram: hunk.diagram,
         }
     }
 }
@@ -177,6 +181,7 @@ pub(super) fn backfill_legacy_ledger(record: &mut PromptChangeProposal) {
         edited: record.candidate_edited,
         revision: 0,
         decided_at: if state.is_undecided() { None } else { record.decided_at.clone() },
+        diagram: false,
     }];
     record.counts = HunkCounts::of(record.ledger.iter().map(|row| row.state));
     record.hunk_count = 1;
@@ -199,6 +204,7 @@ pub(super) fn legacy_document(current: &str, candidate: &str) -> text::HunkDocum
             hint_start: 0,
             hint_end: current.len(),
         },
+        diagram: false,
     }])
 }
 

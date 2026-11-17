@@ -100,6 +100,10 @@ Send all the changes of the pass together in that one call. The author decides e
 
 Offering changes ends your turn. The offer is posted as your comment and you say nothing else. It changes no file: the prompt keeps its text until the author accepts a change. When your call is refused because a change of yours still waits for the author, say that plainly in your reply, and do not say that you made a new offer.
 
+### Changes to a Mermaid diagram
+
+A change to a Mermaid diagram never goes in a text change, and never in the same call as text changes. Offer each diagram change with `propose_diagram_changes`, and send the text changes in their own call with `propose_draft_changes`. A diagram change gives the current source of the diagram and its complete new source, and the new source must be valid Mermaid. Where a proposal of this draft is already open, your diagram changes join it. A call ends your turn, so when you have both kinds of change, offer the kind that matters most first, and offer the other kind in a later turn.
+
 ### Examples of changes worth offering
 
 - A functional or non-functional requirement that the prompt does not state.

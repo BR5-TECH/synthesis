@@ -268,3 +268,95 @@
 .diagram-overlay__edge--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
 .diagram-overlay__edge--nw { top: -4px; left: -4px; cursor: nwse-resize; }
 .diagram-overlay__edge--se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+
+/* ---------- Comparison pop-up (EDT-editor.md EDT-FR-BRVQ – EDT-FR-PQAS) ---------- */
+
+/* EDT-FR-BRVQ: the edges that resize the pop-up sit across its border. */
+.modal.diagram-comparison { overflow: visible; }
+.diagram-comparison__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* EDT-FR-NZLC: two panes side by side, in equal parts. */
+.diagram-comparison__panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.diagram-comparison__pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--doc-page-bg);
+}
+.diagram-comparison__pane + .diagram-comparison__pane { border-left: 1px solid var(--border-1); }
+.diagram-comparison__heading {
+  flex: none;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+  font-family: var(--font-ui-family);
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+}
+/* EDT-FR-JMTD: the zoom and the Fit control of a pane, in the line of its heading. */
+.diagram-comparison__tools {
+  position: absolute;
+  top: 0;
+  right: var(--sp-2);
+  height: 30px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.diagram-viewer__area.diagram-comparison__area.doc { border-radius: 0; }
+/* EDT-FR-NZLC: an empty pane states why it is empty, in its middle. */
+.diagram-comparison__empty {
+  margin: auto;
+  padding: var(--sp-4);
+  text-align: center;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-md);
+  color: var(--fg-3);
+}
+/* EDT-FR-JMTD: a diagram that does not render shows its source and the message. */
+.diagram-comparison__failed.doc {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.diagram-comparison__failed .mermaid-error { margin-top: 0; user-select: text; -webkit-user-select: text; }
+.diagram-comparison__source {
+  margin: 0;
+  white-space: pre;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* DCR-FR-OLDZ: the decision controls stand in the foot of the pop-up. */
+.diagram-comparison__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+.diagram-comparison__error { margin-right: auto; color: var(--danger); }
+.diagram-comparison__note { margin-right: auto; color: var(--fg-3); }

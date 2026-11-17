@@ -5,7 +5,6 @@
 use super::*;
 
 static SUCCESS_LOG: LogBuffer = LogBuffer::new();
-static REFUSAL_LOG: LogBuffer = LogBuffer::new();
 static PARSE_LOG: LogBuffer = LogBuffer::new();
 static UPDATE_LOG: LogBuffer = LogBuffer::new();
 static BOUND_LOG: LogBuffer = LogBuffer::new();

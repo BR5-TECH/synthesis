@@ -321,18 +321,6 @@ impl Fixture {
         }
     }
 
-    /// Put `body` in the file, as the author's own edit would.
-    pub fn set_body(&self, body: &str) {
-        match self.subject {
-            Subject::Draft => {
-                crate::drafts::save_draft_file_impl(&self.root(), &self.draft_id, DRAFT_FILE, body)
-                    .map(|_| ())
-                    .expect("seed")
-            }
-            Subject::Artifact => write_file(&self.root(), PROMPT, body),
-        }
-    }
-
     pub fn world(&self) -> World {
         World { proposals: self.proposals(), comments: self.comment_count(), body: self.body() }
     }

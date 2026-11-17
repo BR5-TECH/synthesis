@@ -311,9 +311,7 @@ pub fn remove_run_home(fs: &fsa::FsAccess, base: &StoreBase, run_id: &str) -> Re
 pub fn store_fs<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Arc<fsa::FsAccess>, String> {
-    app.try_state::<fsa::FsAccessState>()
-        .and_then(|state| state.get())
-        .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())
+    fsa::ide_instance(app).ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())
 }
 
 /// Whether a directory stands at `path`, read through the guarded instance.

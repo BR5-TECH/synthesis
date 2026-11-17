@@ -21,7 +21,6 @@
 
 use crate::project_scope::ProjectStores;
 use serde::Deserialize;
-use tauri::Manager;
 
 use super::file_read::{normalize_range, slice_lines};
 use super::{
@@ -285,7 +284,7 @@ impl<R: tauri::Runtime> GetDocumentTool<R> {
                 .try_project_store::<DocumentsCollection>()
                 .filter(|collection| collection.is_open())
                 .ok_or(ToolRefusal::NoProjectOpen)?;
-            let fs = self.app.try_state::<FsAccessState>().ok_or(ToolRefusal::NoProjectOpen)?;
+            let fs = crate::fs::project_fs_state(&self.app).ok_or(ToolRefusal::NoProjectOpen)?;
             read(&collection, &fs, &self.app, &args)
         });
         match &outcome {

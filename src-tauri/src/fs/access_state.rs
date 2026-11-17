@@ -274,6 +274,18 @@ impl FsAccessState {
         self.documents.read().ok().and_then(|g| g.clone())
     }
 
+    /// FSA-FR-21, FSA-FR-29, FSA-FR-TSHC: discard every instance of this
+    /// project, on the close of the project. The state is the state of one
+    /// project, so no other project loses an instance.
+    pub fn discard_project(&self) {
+        self.set_worktree(None);
+        self.discard_agent_sessions();
+        if let Ok(mut guard) = self.current.write() {
+            *guard = None;
+        }
+        self.discard_documents();
+    }
+
     /// FSA-FR-WBKZ: discard the documents instance, on project close.
     pub fn discard_documents(&self) {
         if let Ok(mut guard) = self.documents.write() {

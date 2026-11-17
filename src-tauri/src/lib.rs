@@ -493,7 +493,7 @@ pub fn run() {
             delivery::github::load_github_delivery_plan,
             delivery::github::apply_github_delivery_edit,
             delivery::github::open_tracker_link,
-            project::close_project,
+            project::close::close_project,
             menu::finish_exit,
             project::resolve_project_at_path,
             project::resolve_project_from_git_url,

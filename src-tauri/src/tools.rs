@@ -40,8 +40,6 @@
 //! tool produced it. One type spanning the group is what holds that in place;
 //! two types with two copies of the sentence would drift on the first edit.
 
-use tauri::Manager;
-
 use crate::log_fields;
 use crate::logging::{self, Domain, Fields, LogBuffer, LogSink};
 
@@ -418,8 +416,7 @@ pub fn require_project_root<R: tauri::Runtime>(
     // `try_state`, not `state`: a mock app in another module's test manages only
     // what that test needs, and a panic here would be a far worse answer than
     // the refusal this returns anyway.
-    let access = app
-        .try_state::<crate::fs::FsAccessState>()
+    let access = crate::fs::project_fs_state(app)
         .ok_or(ToolRefusal::NoProjectOpen)?
         .agent_session(session)
         .ok_or(ToolRefusal::NoProjectOpen)?;

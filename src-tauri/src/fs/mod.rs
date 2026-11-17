@@ -63,6 +63,9 @@ pub mod identity_probe;
 pub mod owned_tree;
 #[cfg(test)]
 pub mod permission_probe;
+pub mod project_access;
+#[cfg(test)]
+mod project_access_tests;
 pub mod socket_probe;
 pub mod volume_probe;
 #[cfg(test)]
@@ -75,6 +78,7 @@ pub use access::{
 pub use device_probe::{probe_kvm_device, KvmDevice};
 pub use error::{FsAccessBuildError, FsError, GrantRefusal};
 pub use identity_probe::{probe_directory_identity, probe_entry_is_dir};
+pub use project_access::{ide_instance, project_fs_state, project_fs_state_of};
 pub use socket_probe::{probe_unix_socket, SocketProbeError};
 pub use volume_probe::probe_volume_size;
 

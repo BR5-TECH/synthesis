@@ -535,17 +535,12 @@ pub fn working_copy<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     location: &ChangeLocation,
 ) -> Result<RootFs, OpenSpecReadError> {
-    use tauri::Manager;
     let active = || {
         app.open_project_state()
             .and_then(|p| p.require_root().ok())
             .ok_or(OpenSpecReadError::NoOpenProject)
     };
-    let shared = || {
-        app.try_state::<crate::fs::FsAccessState>()
-            .and_then(|state| state.get())
-            .ok_or(OpenSpecReadError::NoOpenProject)
-    };
+    let shared = || crate::fs::ide_instance(app).ok_or(OpenSpecReadError::NoOpenProject);
     match location {
         ChangeLocation::ActiveWorktree => active(),
         ChangeLocation::Stream { stream_id } => {

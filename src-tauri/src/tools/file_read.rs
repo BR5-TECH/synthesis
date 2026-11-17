@@ -31,7 +31,6 @@ use serde::Deserialize;
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PATH_BLANK,
 };
-use tauri::Manager;
 
 use crate::fs::{EntryKind, FsAccess, FsError};
 use crate::log_fields;
@@ -304,8 +303,8 @@ impl<R: tauri::Runtime> FileReadTool<R> {
         // `try_state`, not `state`: a mock app in another module's test manages
         // only what that test needs, and a panic here would be a far worse
         // answer than the refusal this returns anyway.
-        let state =
-            self.app.try_state::<crate::fs::FsAccessState>().ok_or(ToolRefusal::NoProjectOpen)?;
+        // FSA-FR-ZZNJ: the state of the project of this turn, never of another.
+        let state = crate::fs::project_fs_state(&self.app).ok_or(ToolRefusal::NoProjectOpen)?;
         state.agent_session(&self.session).ok_or(ToolRefusal::NoProjectOpen)
     }
 

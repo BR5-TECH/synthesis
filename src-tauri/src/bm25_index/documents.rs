@@ -8,10 +8,8 @@
 //! named by its id.
 
 use crate::project_scope::ProjectStores;
-use tauri::Manager;
 
 use crate::documents::{DocumentFormat, DocumentsCollection};
-use crate::fs::FsAccessState;
 
 use super::{FileRef, IndexId, SourceFile, MAX_FILE_BYTES};
 
@@ -23,7 +21,7 @@ use super::{FileRef, IndexId, SourceFile, MAX_FILE_BYTES};
 /// listed at all, so a pass removes its chunks (BMI-FR-MWNQ).
 pub(super) fn collect_documents<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<SourceFile> {
     let (Some(collection), Some(fs)) =
-        (app.try_project_store::<DocumentsCollection>(), app.try_state::<FsAccessState>())
+        (app.try_project_store::<DocumentsCollection>(), crate::fs::project_fs_state(app))
     else {
         return Vec::new();
     };

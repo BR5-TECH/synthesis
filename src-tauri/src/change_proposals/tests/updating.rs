@@ -45,7 +45,10 @@ fn an_update_changes_adds_and_withdraws_across_files() {
                 entry: UpdateEntry::Add(added.hunk),
                 path: Some("proposal.md".into()),
             },
-            ChangeUpdateEntry { entry: UpdateEntry::Withdraw { id: spec.clone() }, path: None },
+            ChangeUpdateEntry {
+                entry: UpdateEntry::Withdraw { id: spec.clone(), diagram: false },
+                path: None,
+            },
         ],
     )
     .expect("updated");
@@ -102,7 +105,10 @@ fn an_update_needs_an_open_proposal_and_a_path_for_an_add() {
     assert_eq!(
         update(
             &f,
-            &[ChangeUpdateEntry { entry: UpdateEntry::Withdraw { id: "nope".into() }, path: None }]
+            &[ChangeUpdateEntry {
+                entry: UpdateEntry::Withdraw { id: "nope".into(), diagram: false },
+                path: None
+            }]
         ),
         Err(UpdateRefusal::HunkNotFound { at: 1, of: 1 })
     );
@@ -116,7 +122,13 @@ fn an_accepted_hunk_is_not_updatable() {
     let tasks = row_id(&record, "tasks.md");
     f.accept(&record.id, &tasks).expect("accepted");
     assert_eq!(
-        update(&f, &[ChangeUpdateEntry { entry: UpdateEntry::Withdraw { id: tasks }, path: None }]),
+        update(
+            &f,
+            &[ChangeUpdateEntry {
+                entry: UpdateEntry::Withdraw { id: tasks, diagram: false },
+                path: None
+            }]
+        ),
         Err(UpdateRefusal::HunkNotUpdatable { at: 1, of: 1 })
     );
 }
@@ -130,7 +142,7 @@ fn an_update_emits_the_event() {
     update(
         &f,
         &[ChangeUpdateEntry {
-            entry: UpdateEntry::Withdraw { id: row_id(&record, "tasks.md") },
+            entry: UpdateEntry::Withdraw { id: row_id(&record, "tasks.md"), diagram: false },
             path: None,
         }],
     )

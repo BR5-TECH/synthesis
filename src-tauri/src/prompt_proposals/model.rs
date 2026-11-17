@@ -33,6 +33,12 @@ pub const ERR_HUNK_NOT_FOUND: &str = "hunk_not_found";
 pub const ERR_HUNK_ALREADY_DECIDED: &str = "hunk_already_decided";
 /// PCP-FR-18: a decision, a hold, or an edit of a hunk its agent withdrew.
 pub const ERR_HUNK_WITHDRAWN: &str = "hunk_withdrawn";
+/// PCP-FR-KDTA: an edit of a diagram hunk, whose source is not the author's to
+/// edit.
+pub const ERR_HUNK_NOT_EDITABLE: &str = "hunk_not_editable";
+/// PCP-FR-WSGE: a `change` or a `withdraw` that names a hunk of the other
+/// subject, text or diagram.
+pub const ERR_HUNK_SUBJECT_MISMATCH: &str = "hunk_subject_mismatch";
 /// PCP-FR-14: a failure at or before the commit point. The artifact was never
 /// written and the proposal is still `pending`.
 pub const ERR_WRITE_FAILED: &str = "write_failed";

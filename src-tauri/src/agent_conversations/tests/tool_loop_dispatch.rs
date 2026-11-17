@@ -77,6 +77,11 @@ fn expected_tools(is_discussion: bool, proposal: Option<&'static str>) -> Vec<&'
     if proposal == Some(DRAFT_ONLY_TOOL) {
         names.push(crate::tools::propose_new_draft::NAME);
     }
+    // CVL-FR-08 / PDM-FR-ZXQE: a draft turn and an artifact turn are also
+    // offered the diagram tool, after the proposal tool of their store.
+    if proposal.is_some() {
+        names.push(crate::tools::propose_diagram_changes::NAME);
+    }
     // CVL-FR-08 / DDC-FR-UOLP / DPC-FR-RFEF: the decision tool of the same
     // store follows the proposal tool, and the other one is never offered.
     names.extend(proposal.map(|tool| {

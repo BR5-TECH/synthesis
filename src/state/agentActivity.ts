@@ -68,6 +68,7 @@ export const TOOL_ACTIVITY_STATUS: Readonly<Record<string, string>> = {
   ask_discussion_questions: "Preparing questions for you…",
   propose_draft_changes: "Preparing draft changes…",
   propose_prompt_changes: "Preparing prompt changes…",
+  propose_diagram_changes: "Preparing diagram changes…",
   decide_draft_changes: "Deciding draft changes…",
   decide_prompt_changes: "Deciding prompt changes…",
   "openrouter:web_search": "Searching the web…",

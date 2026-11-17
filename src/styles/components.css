@@ -18,6 +18,7 @@
 @import "./components/indexing.css";
 @import "./components/drafts-panel.css";
 @import "./components/draft-discussion.css";
+@import "./components/diagram-hunk.css";
 @import "./components/discussion-surface.css";
 @import "./components/the-drafts-tree.css";
 @import "./components/decomposition.css";

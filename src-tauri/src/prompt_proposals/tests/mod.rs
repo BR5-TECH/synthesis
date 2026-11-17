@@ -316,6 +316,7 @@ fn stage_for_test(f: &Fixture, proposal: &PromptChangeProposal, committed: bool)
 mod accepting;
 mod containment;
 mod deciding;
+mod diagram_hunks;
 mod edits;
 mod hunks;
 mod legacy;

@@ -317,6 +317,10 @@ pub const PROPOSAL_NOT_RECORDED: &str = "The proposed change could not be record
 /// rather than its caller's.
 pub const NOT_AN_ARTIFACT_CONVERSATION: &str = "This conversation is not about a file of the project, so there is nothing here to propose a change to. Say what you would change instead; asking again will not succeed.";
 
+/// PDM-FR-TPYC: the turn's conversation is about neither a draft nor a file of the
+/// project.
+pub const NOT_A_DOCUMENT_CONVERSATION: &str = "This conversation is not about a draft or a file of the project, so there is nothing here to propose a change to. Say what you would change instead; asking again will not succeed.";
+
 /// PPC-FR-05 / PPC-FR-06: `path` names no file the project holds.
 ///
 /// Names no path of its own: TLC-FR-09 keeps a message free of anything the
@@ -409,6 +413,17 @@ pub enum ToolRefusal {
         at: usize,
         of: usize,
     },
+    /// PDM-FR-UITL: the same, about one **diagram change** of several.
+    InvalidDiagramAt {
+        message: &'static str,
+        /// One-based, as the model would count its own list.
+        at: usize,
+        of: usize,
+    },
+    /// PDM-FR-HOQI: a new source that the Mermaid parser refuses. The parse
+    /// error is the parser's own text, cut to a bound, and `update` says whether
+    /// the place is an entry of `updates` or a change of `diagrams`.
+    NotValidMermaid { error: String, at: usize, of: usize, update: bool },
     /// PDC-FR-SNUK / PPC-FR-RVKS: the same, about one entry of `updates`.
     InvalidUpdateAt {
         message: &'static str,
@@ -467,6 +482,9 @@ pub enum ToolRefusal {
     ProposalNotRecorded,
     /// PPC-FR-07: the turn's conversation is not about a file of the project.
     NotAnArtifactConversation,
+    /// PDM-FR-TPYC: the turn's conversation is about neither a draft nor a file
+    /// of the project.
+    NotADocumentConversation,
     /// PPC-FR-05 / PPC-FR-06: the project holds no file at the path the model
     /// named.
     PromptProposalPathMissing,
@@ -586,6 +604,8 @@ impl ToolRefusal {
             | ToolRefusal::NotFoundWith(_) => ToolErrorKind::NotFound,
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidDiagramAt { .. }
+            | ToolRefusal::NotValidMermaid { .. }
             | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillAmbiguous(_)
@@ -612,6 +632,7 @@ impl ToolRefusal {
             ToolRefusal::ConversationResolved
             | ToolRefusal::NotADraftConversation
             | ToolRefusal::NotAnArtifactConversation
+            | ToolRefusal::NotADocumentConversation
             | ToolRefusal::ProposalPending
             | ToolRefusal::PromptProposalPending
             // ADQ-FR-QNJU, ADQ-FR-VDGT, AUC-FR-QSVN: a slot the author holds and
@@ -691,6 +712,7 @@ impl ToolRefusal {
             // PPC-FR-07: no argument makes a draft or a note into a file of the
             // project, on exactly those terms.
             | ToolRefusal::NotAnArtifactConversation
+            | ToolRefusal::NotADocumentConversation
             | ToolRefusal::ProposalConversationResolved
             // RGF-FR-14: no path the model composes brings a removed working
             // copy back. ESU-FR-08, ESU-FR-05: no argument un-escalates a run
@@ -713,6 +735,8 @@ impl ToolRefusal {
             // a text file instead of a binary one.
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidDiagramAt { .. }
+            | ToolRefusal::NotValidMermaid { .. }
             | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillNotFound
@@ -772,6 +796,8 @@ impl ToolRefusal {
             ToolRefusal::NoProjectOpen => "no_project_open",
             ToolRefusal::InvalidArguments(_)
             | ToolRefusal::InvalidArgumentsAt { .. }
+            | ToolRefusal::InvalidDiagramAt { .. }
+            | ToolRefusal::NotValidMermaid { .. }
             | ToolRefusal::InvalidUpdateAt { .. } => "invalid_arguments",
             ToolRefusal::InvalidQuestion(..) => "invalid_arguments",
             ToolRefusal::SkillNotFound => "skill_not_found",
@@ -796,6 +822,7 @@ impl ToolRefusal {
             ToolRefusal::ProposalConversationResolved => "proposal_conversation_resolved",
             ToolRefusal::ProposalNotRecorded => "proposal_not_recorded",
             ToolRefusal::NotAnArtifactConversation => "not_an_artifact_conversation",
+            ToolRefusal::NotADocumentConversation => "not_a_document_conversation",
             ToolRefusal::PromptProposalPathMissing => "artifact_not_found",
             ToolRefusal::NotAPromptArtifact => "not_a_prompt_artifact",
             ToolRefusal::PromptProposalPending => "proposal_pending",
@@ -843,6 +870,16 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::InvalidUpdateAt { message, at, of } => {
                 write!(f, "Update {at} of {of}: {message}")
             }
+            ToolRefusal::InvalidDiagramAt { message, at, of } => {
+                write!(f, "Diagram change {at} of {of}: {message}")
+            }
+            ToolRefusal::NotValidMermaid { error, at, of, update } => {
+                let place = if *update { "Update" } else { "Diagram change" };
+                write!(
+                    f,
+                    "{place} {at} of {of}: The new source is not valid Mermaid. The parser says: {error} Correct the source and call again."
+                )
+            }
             // The number is the position this application assigned, in the order
             // the model wrote its questions — not a value it supplied.
             ToolRefusal::InvalidQuestion(message, position) => {
@@ -875,6 +912,7 @@ impl std::fmt::Display for ToolRefusal {
             }
             ToolRefusal::ProposalNotRecorded => f.write_str(PROPOSAL_NOT_RECORDED),
             ToolRefusal::NotAnArtifactConversation => f.write_str(NOT_AN_ARTIFACT_CONVERSATION),
+            ToolRefusal::NotADocumentConversation => f.write_str(NOT_A_DOCUMENT_CONVERSATION),
             ToolRefusal::PromptProposalPathMissing => f.write_str(PROMPT_PROPOSAL_PATH_MISSING),
             ToolRefusal::NotAPromptArtifact => f.write_str(NOT_A_PROMPT_ARTIFACT),
             ToolRefusal::PromptProposalPending => f.write_str(PROMPT_PROPOSAL_PENDING),

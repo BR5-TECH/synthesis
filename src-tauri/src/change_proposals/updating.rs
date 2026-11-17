@@ -85,6 +85,9 @@ impl UpdateRefusal {
         match error {
             UpdateError::NoUpdates | UpdateError::Plan(PlanError::NoHunks) => Self::NoUpdates,
             UpdateError::UnknownHunk(k) => Self::HunkNotFound { at: p(k), of },
+            // A change proposal holds no diagram hunk and no tool of it names
+            // one, so a subject mismatch here reads as an id it does not hold.
+            UpdateError::SubjectMismatch(k) => Self::HunkNotFound { at: p(k), of },
             UpdateError::NotUpdatable(k) => Self::HunkNotUpdatable { at: p(k), of },
             UpdateError::NamedTwice(k) => Self::HunkNamedTwice { at: p(k), of },
             UpdateError::NoChange(k) => Self::NoChange { at: p(k), of },

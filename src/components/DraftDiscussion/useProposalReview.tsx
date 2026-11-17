@@ -14,10 +14,19 @@
  * accelerators, and Accept all — so what a decision does, what it reports, and
  * what it leaves standing is one behaviour rather than three.
  */
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { participantName } from "../../types";
 import type { HunkCounts, HunkLedgerRow, Participant } from "../../types";
+import {
+  closeComparison,
+  closeComparisonOf,
+  comparisonRequest,
+  openComparison,
+  updateComparison,
+  type ComparisonContent,
+} from "../DiagramEditor/store";
+import { diagramSourceOf } from "./diagramFence";
 import { ReviewBar } from "./ReviewBar";
 import { stepTo, useHunkNavigation } from "./useHunkNavigation";
 import type { EditorReview, ReviewHunk } from "../Editor/props";
@@ -33,6 +42,18 @@ import {
 } from "../../state/draftProposals";
 import { rereadHunks, useProposalHunks, type HunkSource } from "../../state/proposalHunks";
 import { requestDiscussionFoot } from "../../state/discussionSession";
+
+/** DCR-FR-31: why Accept is off for a change whose text the prompt lacks. */
+const LOST_REASON = "The text this change alters is no longer in the prompt";
+
+/**
+ * DCR-FR-GAFN: whether the state of a hunk ends the pop-up that opened on it.
+ * A decision made elsewhere does. A hunk held for discussion is still undecided.
+ */
+function leavesComparison(state: string, openedState: string): boolean {
+  if (state === "accepted" || state === "withdrawn") return true;
+  return state === "rejected" && openedState !== "rejected";
+}
 
 /** DCR-FR-GNRL: what the review reads of a proposal, of either kind. */
 export interface ReviewableProposal {
@@ -137,12 +158,22 @@ export function useProposalReview<P extends ReviewableProposal>({
       total: shown.length,
       agent,
       // DCR-FR-25: what the author has written into this change, if anything.
-      draft: hunkBufferVersion >= 0
-        ? buffers.get(hunkKey(pendingProposal.id, hunk.id))?.text
-        : undefined,
+      // DCR-FR-WTCQ: a diagram hunk is never edited, so it holds no edit.
+      draft:
+        hunkBufferVersion >= 0 && !hunk.diagram
+          ? buffers.get(hunkKey(pendingProposal.id, hunk.id))?.text
+          : undefined,
       // DCR-FR-KDSV / PCR-FR-LGVY: a legacy proposal is one change covering
       // the whole document and accepts no edit to it.
-      editable: !legacy,
+      // DCR-FR-WTCQ: nor does a diagram hunk.
+      editable: !legacy && !hunk.diagram,
+      // DCR-FR-JKVA: the source of each diagram, read from the fence text.
+      diagram: hunk.diagram
+        ? {
+            oldSource: hunk.kind === "add" ? null : diagramSourceOf(hunk.before),
+            newSource: hunk.kind === "del" ? null : diagramSourceOf(hunk.after),
+          }
+        : undefined,
     }));
     // `hunkBufferVersion` stands in for the mutable buffer store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,6 +254,20 @@ export function useProposalReview<P extends ReviewableProposal>({
     },
     [decide, pendingProposal],
   );
+  /**
+   * DCR-FR-OLDZ: the decision of the comparison pop-up. It is the operation of
+   * the chip, and tells the pop-up whether the hunk is decided.
+   */
+  const decideFromPopup = useCallback(
+    (hunkId: string, how: "accept" | "reject"): Promise<boolean> => {
+      const state = pendingProposal ? hunkStateOf(pendingProposal, hunkId) : undefined;
+      if (isWithdrawn(state)) return Promise.resolve(false);
+      // DCR-FR-12: a rejected change offers no Reject.
+      if (how === "reject" && state === "rejected") return Promise.resolve(false);
+      return decide(hunkId, how);
+    },
+    [decide, pendingProposal],
+  );
   const rejectHunk = useCallback(
     (hunkId: string) => {
       // DCR-FR-12: a rejected change offers no Reject, so its accelerator does
@@ -273,7 +318,8 @@ export function useProposalReview<P extends ReviewableProposal>({
       const key = hunkKey(proposalId, hunkId);
       const hunk = reviewHunks.find((h) => h.id === hunkId);
       // DCR-FR-NYDA: no edit on a change the review does not show.
-      if (hunk === undefined) return;
+      // DCR-FR-WTCQ: and none on a diagram hunk, which is not edited.
+      if (hunk === undefined || hunk.diagram) return;
       // DCR-FR-25: the buffer is adopted from the agent's own text the first
       // time the author touches it, and never afterwards.
       if (!buffers.get(key)) {
@@ -336,6 +382,68 @@ export function useProposalReview<P extends ReviewableProposal>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId, focusedHunkId, hunkBufferVersion, reviewHunks, hunkReading, buffers]);
 
+  /** DCR-FR-12: a decision cannot start now. */
+  const busy = deciding || locked || conflict !== null;
+
+  /** DCR-FR-ESIY: what the comparison pop-up shows and does for one hunk. */
+  const comparisonContent = useCallback(
+    (hunk: ReviewHunk): ComparisonContent => ({
+      hunkId: hunk.id,
+      oldSource: hunk.diagram?.oldSource ?? null,
+      newSource: hunk.diagram?.newSource ?? null,
+      canReject: hunk.state !== "rejected",
+      // DCR-FR-31: Accept is off for a change that the prompt cannot take.
+      acceptBlocked: hunk.lost ? LOST_REASON : null,
+      busy,
+      error: decisionError,
+      onAccept: () => decideFromPopup(hunk.id, "accept"),
+      onReject: () => decideFromPopup(hunk.id, "reject"),
+    }),
+    [busy, decisionError, decideFromPopup],
+  );
+
+  const comparisonOwner = proposalId === null ? null : `${reviewKey}:${proposalId}`;
+
+  /** DCR-FR-ESIY: Compare opens the pop-up of a diagram hunk. */
+  const compareHunk = useCallback(
+    (hunkId: string, opener: HTMLElement | null, fallback: HTMLElement | null) => {
+      const hunk = reviewHunks.find((h) => h.id === hunkId);
+      if (hunk === undefined || !hunk.diagram || comparisonOwner === null) return;
+      openComparison(comparisonOwner, hunk.state, comparisonContent(hunk), opener, fallback);
+    },
+    [reviewHunks, comparisonOwner, comparisonContent],
+  );
+
+  // DCR-FR-GAFN: the pop-up follows the proposal. A hunk decided elsewhere or
+  // withdrawn, a proposal that is resolved, and the end of the review close it,
+  // and an update of the hunk draws the new source in it.
+  useEffect(() => {
+    const open = comparisonRequest();
+    if (open === null || !open.owner.startsWith(`${reviewKey}:`)) return;
+    if (comparisonOwner === null || open.owner !== comparisonOwner) {
+      closeComparisonOf(open.owner, "review-ended");
+      return;
+    }
+    // The changes are read again after a decision or an update. What the review
+    // holds in between is not the proposal's end.
+    if (hunkReading?.status !== "read") return;
+    const hunk = reviewHunks.find((h) => h.id === open.content.hunkId);
+    if (hunk === undefined || !hunk.diagram || leavesComparison(hunk.state, open.openedState)) {
+      closeComparison("hunk-decided");
+      return;
+    }
+    updateComparison(comparisonOwner, comparisonContent(hunk));
+  }, [reviewKey, comparisonOwner, hunkReading, reviewHunks, comparisonContent]);
+
+  // The pop-up of a review that is gone has nothing to follow.
+  useEffect(
+    () => () => {
+      const open = comparisonRequest();
+      if (open?.owner.startsWith(`${reviewKey}:`)) closeComparisonOf(open.owner, "review-ended");
+    },
+    [reviewKey],
+  );
+
   /**
    * DCR-FR-27: what the surface says about the document, in words — nothing
    * has happened yet; the author has rewritten a change and still nothing has
@@ -364,12 +472,13 @@ export function useProposalReview<P extends ReviewableProposal>({
     reveal: view.hunkReveal,
     // DCR-FR-29: a change with an unresolved edit is not decided until the
     // author has said which text survives.
-    busy: deciding || locked || conflict !== null,
+    busy,
     onFocus: (hunkId) => setFocusedHunk(reviewKey, hunkId),
     onAccept: acceptHunk,
     onReject: rejectHunk,
     onDiscuss: onDiscussHunk,
     onEdit: editHunk,
+    onCompare: compareHunk,
     // DCR-FR-11: the review bar, at the foot of the document column.
     bar: !viewingVersion ? (
       <ReviewBar

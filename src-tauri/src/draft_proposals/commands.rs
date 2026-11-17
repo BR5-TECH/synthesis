@@ -18,6 +18,10 @@ use crate::project::ProjectState;
 
 use super::*;
 
+/// DCP-FR-RKBE: an edit of a diagram hunk, whose source is not the author's to
+/// edit.
+pub const ERR_HUNK_NOT_EDITABLE: &str = "hunk_not_editable";
+
 /// DCP-FR-09 / DCP-FR-28: every proposal the draft holds, after the draft's
 /// acceptance journal has been reconciled — so no proposal is ever reported in a
 /// state the journal has not yet settled.
@@ -175,6 +179,11 @@ pub fn edit_hunk_impl(
         return Err(ERR_WRITE_FAILED.to_string());
     }
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
+    // DCP-FR-RKBE: the source of a diagram hunk is not the author's to edit.
+    // Nothing is written and no event is emitted.
+    if row.diagram || doc.find(hunk_id).is_some_and(|h| h.diagram) {
+        return Err(ERR_HUNK_NOT_EDITABLE.to_string());
+    }
     // DCP-FR-MKIM: a withdrawn change is not the author's to shape.
     if row.state == hunks::HunkState::Withdrawn {
         return Err(ERR_HUNK_WITHDRAWN.to_string());

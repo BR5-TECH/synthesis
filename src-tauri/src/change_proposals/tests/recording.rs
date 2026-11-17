@@ -115,6 +115,7 @@ fn an_update_is_refused_while_a_rework_run_stands() {
             updates: &[ChangeUpdateEntry {
                 entry: crate::text_hunks::updates::UpdateEntry::Withdraw {
                     id: record.ledger[0].id.clone(),
+                    diagram: false,
                 },
                 path: None,
             }],

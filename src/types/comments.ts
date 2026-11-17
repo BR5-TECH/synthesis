@@ -373,6 +373,11 @@ export interface ProposalHunk {
   /** The exact new text. Absent for a deletion. */
   after?: string | null;
   anchor: HunkAnchor;
+  /**
+   * DCP-FR-QRVD: true for a diagram hunk, whose `before` and `after` hold the
+   * fence text of a Mermaid diagram. Absent when false.
+   */
+  diagram?: boolean;
 }
 
 /**
@@ -409,6 +414,8 @@ export interface HunkLedgerRow {
   revision: number;
   /** RFC 3339 UTC; absent while undecided. */
   decidedAt?: string | null;
+  /** DCP-FR-QRVD: true for a diagram hunk. Absent when false. */
+  diagram?: boolean;
 }
 
 /**

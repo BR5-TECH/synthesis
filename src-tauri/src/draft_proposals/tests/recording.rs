@@ -276,6 +276,7 @@ fn replace(before: &str, after: &str) -> hunks::ProposedHunk {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }
 }
 

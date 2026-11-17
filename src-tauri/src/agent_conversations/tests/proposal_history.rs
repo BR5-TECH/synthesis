@@ -36,6 +36,7 @@ fn propose_and_decide(
                 lead: None,
                 trail: None,
                 note: None,
+                diagram: false,
             }],
             rationale: "The opening buries the point.",
             agent: &crate::comments::Participant::Agent {
@@ -195,6 +196,7 @@ fn change(
         state,
         before: before.into(),
         after: after.into(),
+        diagram: false,
     }
 }
 

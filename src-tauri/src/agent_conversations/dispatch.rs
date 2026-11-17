@@ -514,6 +514,9 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     // AGC-FR-DIZM: an addressed agent of a synthesis group offers its questions and
     // its proposals to the group instead of recording them.
     if let Some(setup) = setup.as_ref().filter(|s| s.role == GroupRole::Participant) {
+        // AGC-FR-DIZM: the diagram tool is not offered to an addressed agent of a
+        // synthesis group. The synthesis turn keeps it.
+        tools.retain(|tool| tool.definition().name != crate::tools::propose_diagram_changes::NAME);
         tools = capture_contributions(
             tools,
             &setup.state,

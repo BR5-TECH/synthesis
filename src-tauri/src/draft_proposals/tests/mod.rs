@@ -141,6 +141,7 @@ impl Fixture {
             lead: None,
             trail: None,
             note: None,
+            diagram: false,
         }]
     }
 
@@ -294,6 +295,7 @@ impl Fixture {
 
 mod candidate_edits;
 mod deciding;
+mod diagram_hunks;
 mod hunk_decisions;
 mod hunk_reads;
 mod lifecycle;

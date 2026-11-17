@@ -16,6 +16,9 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 import type { HunkKind, HunkState } from "../../types";
+import type { DiagramChange } from "./diagramFence";
+import { diagramDecorations } from "./diagramHunkDecorations";
+import { HUNK_ATTR, HUNK_CLASS } from "./hunkConstants";
 import { mountProposedText } from "./proposedText";
 
 /**
@@ -46,6 +49,11 @@ export interface DecoratedHunk {
   draft?: string | null;
   /** DCR-FR-KDSV: a legacy proposal's text is not editable. */
   editable: boolean;
+  /**
+   * DCR-FR-JKVA: present for a diagram hunk, which is drawn as a diagram. It
+   * holds the source of the old diagram and of the new one.
+   */
+  diagram?: DiagramChange;
 }
 
 export interface HunkDecorationPayload {
@@ -66,9 +74,7 @@ export const hunkDecorationKey = new PluginKey<HunkDecorationPayload>(
   "synthesisHunkDecorations",
 );
 
-/** Carries the change's id to the click handler through the DOM. */
-export const HUNK_ATTR = "data-hunk";
-export const HUNK_CLASS = "hunk";
+export { HUNK_ATTR, HUNK_CLASS };
 
 /**
  * DCR-FR-07 / DCR-FR-28: what a change's state looks like.
@@ -93,8 +99,14 @@ function classesFor(hunk: DecoratedHunk, part: "del" | "add"): string {
  * decoration says nothing.
  */
 export function hunkLabel(hunk: DecoratedHunk): string {
-  const kind =
-    hunk.kind === "add"
+  // DCR-FR-BYSX: a diagram hunk names its kind as a diagram change.
+  const kind = hunk.diagram
+    ? hunk.kind === "add"
+      ? "diagram addition"
+      : hunk.kind === "del"
+        ? "diagram removal"
+        : "diagram change"
+    : hunk.kind === "add"
       ? "insertion"
       : hunk.kind === "del"
         ? "deletion"
@@ -256,6 +268,12 @@ export function buildDecorations(
     // The change's own block sits between the document's blocks rather than
     // inside one of them (DCR-FR-09).
     const boundary = blockBoundary(doc, hunk.to);
+
+    // DCR-FR-JKVA: a diagram hunk is drawn as a diagram, in its own module.
+    if (hunk.diagram) {
+      decos.push(...diagramDecorations(doc, hunk, focused, boundary, hunkLabel(hunk)));
+      continue;
+    }
 
     // DCR-FR-07: the text a change removes or replaces, struck through where it
     // stands rather than moved anywhere. An insertion removes nothing, so it

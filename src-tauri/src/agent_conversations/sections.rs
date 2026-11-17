@@ -29,8 +29,10 @@ pub(super) use action_requests::*;
 /// AGC-FR-JNOS / AGC-FR-LTLT: the split of a change.
 mod split;
 pub(super) use split::*;
+mod kind_label;
 /// AGC-FR-DKHT: a prompt proposal's hunk in a draft hunk's shape.
 mod prompt_view;
+use kind_label::kind_label;
 pub(super) use prompt_view::*;
 
 // ---------------------------------------------------------------------------
@@ -268,7 +270,7 @@ pub(super) fn proposal_hunk_line(
     let mut line = format!(
         "[about proposed change {} to {path}: {} — {}",
         change.id,
-        kind_label(change.kind),
+        kind_label(change.kind, change.diagram),
         state_label(change.state)
     );
     if !change.before.is_empty() {
@@ -279,15 +281,6 @@ pub(super) fn proposal_hunk_line(
     }
     line.push(']');
     line
-}
-
-/// The word a rendering names a change's kind by (AGC-FR-RVQP, AGC-FR-DKHT).
-fn kind_label(kind: crate::draft_proposals::anchors::HunkKind) -> &'static str {
-    match kind {
-        crate::draft_proposals::anchors::HunkKind::Replace => "replace",
-        crate::draft_proposals::anchors::HunkKind::Add => "add",
-        crate::draft_proposals::anchors::HunkKind::Del => "del",
-    }
 }
 
 /// The word a rendering names a change's state by (AGC-FR-RVQP, AGC-FR-DKHT).
@@ -553,7 +546,7 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
         return line;
     };
     for (position, change) in changes.iter().take(CHANGES_RENDERED_PER_PROPOSAL).enumerate() {
-        let kind = kind_label(change.kind);
+        let kind = kind_label(change.kind, change.diagram);
         let state = state_label(change.state);
         line.push_str(&format!("\n  {}. {kind} — {state}", position + 1));
         if !change.before.is_empty() {

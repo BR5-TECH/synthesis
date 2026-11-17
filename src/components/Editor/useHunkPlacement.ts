@@ -16,18 +16,38 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 
-import { docText } from "../findHighlight";
+import { docText, type PosRange } from "../findHighlight";
 import { placeHunk, reduce, type RenderedNeedles } from "./hunkMatch";
+import { placeDiagramFence } from "./diagramPlacement";
 import { leadTail, renderedText } from "./hunkNeedle";
 import {
   hunkDecorationKey,
   HUNK_ATTR,
   type DecoratedHunk,
 } from "../DraftDiscussion";
-import type { EditorReview } from "./props";
+import type { EditorReview, ReviewHunk } from "./props";
 
 /** DCR-FR-LGHZ: the rendered texts kept before the cache starts again. */
 const RENDERED_CACHE_LIMIT = 256;
+
+/** DCR-FR-05: a change of the review, placed at `range`. */
+function decorated(hunk: ReviewHunk, range: PosRange): DecoratedHunk {
+  return {
+    id: hunk.id,
+    kind: hunk.kind,
+    state: hunk.state,
+    from: range.from,
+    to: range.to,
+    after: hunk.after,
+    lost: hunk.lost,
+    position: hunk.position,
+    total: hunk.total,
+    agent: hunk.agent,
+    draft: hunk.draft,
+    editable: hunk.editable,
+    diagram: hunk.diagram,
+  };
+}
 
 export function useHunkPlacement(
   editor: TiptapEditor | null,
@@ -100,6 +120,20 @@ export function useHunkPlacement(
       // rejected one stays drawn while its proposal is open. DCR-FR-OZVU: a
       // withdrawn change is not drawn.
       if (hunk.state === "accepted" || hunk.state === "withdrawn") continue;
+      // DCR-FR-JKVA: a diagram hunk that changes or removes a diagram is placed
+      // by the fence that holds the old source. An addition is placed as an
+      // insertion, below. A diagram hunk that finds no fence is not drawn, and
+      // stays in the review as any hunk does (DCR-FR-BYSX, DCR-FR-31).
+      if (hunk.diagram && hunk.kind !== "add") {
+        const fence = placeDiagramFence(
+          editor.state.doc,
+          index,
+          hunk.diagram.oldSource,
+          hunk.hint,
+        );
+        if (fence !== null) placed.push(decorated(hunk, fence));
+        continue;
+      }
       // DCR-FR-05: placed by its kind, in `./hunkMatch`.
       //
       // DCR-FR-31: a change this surface cannot place stays in the review,
@@ -113,20 +147,7 @@ export function useHunkPlacement(
       };
       const range = placeHunk(index, reducedDoc, hunk, needles);
       if (range === null) continue;
-      placed.push({
-        id: hunk.id,
-        kind: hunk.kind,
-        state: hunk.state,
-        from: range.from,
-        to: range.to,
-        after: hunk.after,
-        lost: hunk.lost,
-        position: hunk.position,
-        total: hunk.total,
-        agent: hunk.agent,
-        draft: hunk.draft,
-        editable: hunk.editable,
-      });
+      placed.push(decorated(hunk, range));
     }
     setPlacedHunks((prev) =>
       prev.length === placed.length &&
@@ -137,7 +158,9 @@ export function useHunkPlacement(
           h.to === placed[i].to &&
           h.state === placed[i].state &&
           h.after === placed[i].after &&
-          h.lost === placed[i].lost,
+          h.lost === placed[i].lost &&
+          h.diagram?.oldSource === placed[i].diagram?.oldSource &&
+          h.diagram?.newSource === placed[i].diagram?.newSource,
       )
         ? prev
         : placed,

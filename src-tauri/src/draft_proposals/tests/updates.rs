@@ -16,6 +16,7 @@ fn replace(before: &str, after: &str) -> ProposedHunk {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }
 }
 
@@ -44,7 +45,7 @@ fn update(f: &Fixture, updates: &[UpdateEntry]) -> Result<DraftChangeProposal, U
 }
 
 fn withdraw(id: &str) -> UpdateEntry {
-    UpdateEntry::Withdraw { id: id.into() }
+    UpdateEntry::Withdraw { id: id.into(), diagram: false }
 }
 
 // DCP-FR-XDRV: no open proposal, nothing to update; an empty list is refused.

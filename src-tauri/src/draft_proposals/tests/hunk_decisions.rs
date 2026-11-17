@@ -13,6 +13,7 @@ fn replace(before: &str, after: &str) -> ProposedHunk {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }
 }
 
@@ -256,6 +257,7 @@ fn an_insertion_with_no_context_is_refused_unless_the_prompt_is_empty() {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     };
 
     // A model that gave no context has proposed a change nobody can place. It

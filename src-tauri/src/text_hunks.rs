@@ -5,9 +5,13 @@
 //! neither store, so sharing it shares no operation between them.
 
 pub mod anchors;
+mod diagrams;
+pub mod fences;
 pub mod hunks;
 pub mod line_diff;
 pub mod updates;
 
+#[cfg(test)]
+mod diagram_tests;
 #[cfg(test)]
 mod tests;

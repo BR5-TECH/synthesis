@@ -36,6 +36,7 @@ fn replace(before: &str, after: &str) -> crate::draft_proposals::hunks::Proposed
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }
 }
 
@@ -88,6 +89,7 @@ fn replace_hunk(
             hint_start: at,
             hint_end: at + before.len(),
         },
+        diagram: false,
     }
 }
 
@@ -348,6 +350,7 @@ fn replacing(before: &str, after: &str) -> hunks::ProposedHunk {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }
 }
 

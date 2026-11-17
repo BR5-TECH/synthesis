@@ -74,6 +74,7 @@ pub(super) fn ends_turn(name: &str) -> bool {
         crate::tools::propose_new_draft::NAME,
         crate::tools::propose_plan_changes::NAME,
         crate::tools::propose_prompt_changes::NAME,
+        crate::tools::propose_diagram_changes::NAME,
         crate::tools::propose_change_edits::NAME,
         crate::tools::propose_new_change::NAME,
         crate::tools::request_document_export::NAME,
@@ -561,6 +562,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::propose_draft_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_new_draft::NAME {
                 Some(crate::tools::propose_new_draft::ONE_AT_A_TIME)
+            } else if call.function.name == crate::tools::propose_diagram_changes::NAME {
+                // CVL-FR-15, PDM-FR-JLYU: one proposal per turn.
+                Some(crate::tools::propose_diagram_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_plan_changes::NAME {
                 // CVL-FR-15, PPT-FR-PRPX: one plan proposal per turn.
                 Some(crate::tools::propose_plan_changes::ONE_AT_A_TIME)

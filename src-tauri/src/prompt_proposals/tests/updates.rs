@@ -24,7 +24,7 @@ impl Fixture {
 }
 
 fn withdraw(id: &str) -> UpdateEntry {
-    UpdateEntry::Withdraw { id: id.into() }
+    UpdateEntry::Withdraw { id: id.into(), diagram: false }
 }
 
 // PCP-FR-RVSN / PCP-FR-RKJI / PCP-FR-17: an update changes one hunk in place,

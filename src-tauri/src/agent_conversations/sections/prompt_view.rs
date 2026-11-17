@@ -20,5 +20,6 @@ pub(in crate::agent_conversations) fn prompt_change_view(
         },
         before: change.before,
         after: change.after,
+        diagram: change.diagram,
     }
 }

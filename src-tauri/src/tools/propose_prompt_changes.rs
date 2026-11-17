@@ -53,8 +53,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::proposal_updates::{
-    self, updates_or_none, UpdateArg, UPDATE_CHANGE_SETTLED, UPDATE_MALFORMED, UPDATE_NAMED_TWICE,
-    UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
+    self, updates_or_none, UpdateArg, UPDATE_CHANGE_IS_DIAGRAM, UPDATE_CHANGE_SETTLED,
+    UPDATE_MALFORMED, UPDATE_NAMED_TWICE, UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
 };
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal,
@@ -81,7 +81,7 @@ mod tests;
 pub const NAME: &str = "propose_prompt_changes";
 
 /// PPC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to a prompt or a project document the project holds, when you can see how its text would be better and want the author to decide. It reaches a prompt or a project document and no other kind of file, and the file has to exist already — this offers changes and never a new file. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Give the change in one of two forms, never both. Pass `hunks`, a list of changes: each one names, in `before`, the exact text it changes, copied character for character from the file, and gives in `after` the text that should stand in its place; to insert, give `after` alone and put the exact text it follows in `after_text`; to delete, give `before` alone. Or pass `content` with the complete new text of the file, and it is converted into changes for you. Use `hunks` for a large document: you do not need the whole file in front of you, only the parts you change, which you can read with `offset` and `limit` on `read_file`. The text you name must appear once in the file. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each. A change whose text is not found, or not found once, is refused and you are told which change to correct. The author decides each change separately, so send the changes you believe in together rather than holding some back. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. When your proposal is still open and the discussion asks for a different change, send `updates` in place of `hunks` and `content`. Each update gives `action`: `change` with the `id` of a change and its new fields, `add` with the fields of a new change, or `withdraw` with the `id` of a change you no longer offer. One call can hold several updates, and it also takes a `rationale`. It changes nothing — the file is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose changes to a prompt or a project document the project holds, when you can see how its text would be better and want the author to decide. It reaches a prompt or a project document and no other kind of file, and the file has to exist already — this offers changes and never a new file. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Give the change in one of two forms, never both. Pass `hunks`, a list of changes: each one names, in `before`, the exact text it changes, copied character for character from the file, and gives in `after` the text that should stand in its place; to insert, give `after` alone and put the exact text it follows in `after_text`; to delete, give `before` alone. Or pass `content` with the complete new text of the file, and it is converted into changes for you. Use `hunks` for a large document: you do not need the whole file in front of you, only the parts you change, which you can read with `offset` and `limit` on `read_file`. The text you name must appear once in the file. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each. A change whose text is not found, or not found once, is refused and you are told which change to correct. The author decides each change separately, so send the changes you believe in together rather than holding some back. A change to a Mermaid diagram never goes in a change of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. When your proposal is still open and the discussion asks for a different change, send `updates` in place of `hunks` and `content`. Each update gives `action`: `change` with the `id` of a change and its new fields, `add` with the fields of a new change, or `withdraw` with the `id` of a change you no longer offer. One call can hold several updates, and it also takes a `rationale`. It changes nothing — the file is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The project-relative path of the prompt or project document you are proposing changes to. The file has to exist and has to be a prompt or a project document; anything else is refused and nothing is created.";
 
@@ -167,6 +167,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         UPDATE_MALFORMED => "update_malformed",
         UPDATE_NO_SUCH_CHANGE => "no_such_change",
         UPDATE_CHANGE_SETTLED => "change_already_settled",
+        UPDATE_CHANGE_IS_DIAGRAM => "change_is_diagram_change",
         UPDATE_NAMED_TWICE => "change_named_twice",
         PROMPT_PROPOSAL_RATIONALE_BLANK => "rationale_blank",
         RATIONALE_NO_SPOKEN_PART => "no_spoken_part",
@@ -324,7 +325,7 @@ fn thread_of(origin: &ConversationOrigin) -> Result<&str, ToolRefusal> {
 /// An absolute path, a path escaping the project root, and a path with no
 /// content are each the same answer as a path naming nothing: `resolve_under`
 /// would refuse them, and this says so before a byte is read.
-fn is_project_relative(path: &str) -> bool {
+pub(super) fn is_project_relative(path: &str) -> bool {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return false;
@@ -607,6 +608,7 @@ fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
         UpdateRefusal::NotAPromptArtifact => ToolRefusal::NotAPromptArtifact,
         UpdateRefusal::HunkNotFound { at: n, of } => at(UPDATE_NO_SUCH_CHANGE, n, of),
         UpdateRefusal::HunkNotUpdatable { at: n, of } => at(UPDATE_CHANGE_SETTLED, n, of),
+        UpdateRefusal::HunkSubjectMismatch { at: n, of } => at(UPDATE_CHANGE_IS_DIAGRAM, n, of),
         UpdateRefusal::HunkNamedTwice { at: n, of } => at(UPDATE_NAMED_TWICE, n, of),
         UpdateRefusal::NoChange { at: n, of } => at(PROPOSAL_NO_CHANGE, n, of),
         UpdateRefusal::HunkAnchorLost { at: n, of } => at(PROPOSAL_TEXT_NOT_FOUND, n, of),

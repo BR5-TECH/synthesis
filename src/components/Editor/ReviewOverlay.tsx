@@ -48,6 +48,13 @@ export function ReviewOverlay({
           onAccept={() => review.onAccept(focused.id)}
           onReject={() => review.onReject(focused.id)}
           onDiscuss={() => review.onDiscuss(focused.id)}
+          // DCR-FR-ESIY, DCR-FR-UKMP: the document column takes the focus back
+          // where the Compare button is gone when the pop-up closes.
+          onCompare={
+            review.onCompare
+              ? (opener) => review.onCompare?.(focused.id, opener, hostRef.current)
+              : undefined
+          }
         />
       )}
       <GutterMap

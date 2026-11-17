@@ -44,10 +44,14 @@ export function placeOnSource(text: string, hunks: readonly ReviewHunk[]): Decor
       to = from;
     } else {
       if (hunk.before === "") continue;
-      const at = findNearest(text, hunk.before, hunk.hint);
+      // PCR-FR-GZSV: the fence text of a removed diagram can end in line breaks
+      // that the file does not hold in the same number, so they are not named.
+      const needle = hunk.diagram ? hunk.before.replace(/[\r\n]+$/, "") : hunk.before;
+      if (needle === "") continue;
+      const at = findNearest(text, needle, hunk.hint);
       if (at === -1) continue;
       from = at;
-      to = at + hunk.before.length;
+      to = at + needle.length;
     }
     placed.push({
       id: hunk.id,
@@ -62,6 +66,7 @@ export function placeOnSource(text: string, hunks: readonly ReviewHunk[]): Decor
       agent: hunk.agent,
       draft: hunk.draft,
       editable: hunk.editable,
+      diagram: hunk.diagram,
     });
   }
   // Changes do not overlap (PPC-FR-RJCA). One that reaches back into the one

@@ -14,6 +14,7 @@ fn replace(before: &str, after: &str) -> ProposedHunk {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }
 }
 

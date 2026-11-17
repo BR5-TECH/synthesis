@@ -19,6 +19,9 @@ struct OpenHunk {
     withdrawn: bool,
     before: String,
     after: String,
+    /// AGC-FR-DKHT: the kind of a diagram hunk, named so the agent updates it
+    /// with the diagram tool. `None` for a text hunk.
+    diagram: Option<&'static str>,
 }
 
 /// AGC-FR-TCCV: the open proposal of the target, read through
@@ -74,6 +77,7 @@ fn open_hunk(change: crate::draft_proposals::ProposalChange) -> OpenHunk {
         withdrawn: change.state == HunkState::Withdrawn,
         before: change.before,
         after: change.after,
+        diagram: change.diagram.then(|| kind_label(change.kind, true)),
     }
 }
 
@@ -120,6 +124,10 @@ pub(in crate::agent_conversations) fn open_proposal_text_within(
         } else {
             format!("  place {} — id {} — {}", place + 1, hunk.id, hunk.state)
         };
+        // AGC-FR-DKHT: a diagram hunk names its kind.
+        if let Some(label) = hunk.diagram {
+            line.push_str(&format!(" — {label}"));
+        }
         if !hunk.before.is_empty() {
             line.push_str(&format!(" — changes: {}", bounded_excerpt(&hunk.before)));
         }

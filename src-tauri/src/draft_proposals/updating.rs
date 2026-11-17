@@ -11,6 +11,10 @@ use super::*;
 use crate::comments::ProposalUpdateCounts;
 use crate::text_hunks::updates::{self, Standing, UpdateEntry, UpdateError};
 
+/// DCP-FR-GMYT: a `change` or a `withdraw` that names a hunk of the other
+/// subject, text or diagram.
+pub const ERR_HUNK_SUBJECT_MISMATCH: &str = "hunk_subject_mismatch";
+
 /// What a caller hands `update_proposal`.
 pub struct ProposalUpdate<'a> {
     pub draft_id: &'a str,
@@ -30,14 +34,44 @@ pub enum UpdateRefusal {
     NoOpenProposal,
     NoUpdates,
     PathMissing,
-    HunkNotFound { at: usize, of: usize },
-    HunkNotUpdatable { at: usize, of: usize },
-    HunkNamedTwice { at: usize, of: usize },
-    NoChange { at: usize, of: usize },
-    HunkAnchorLost { at: usize, of: usize },
-    HunkAmbiguous { at: usize, of: usize },
-    HunkOverlap { at: usize, of: usize },
-    HunkContextTooLong { at: usize, of: usize, side: hunks::ContextSide },
+    HunkNotFound {
+        at: usize,
+        of: usize,
+    },
+    /// DCP-FR-GMYT: a `change` or a `withdraw` across text and diagram hunks.
+    HunkSubjectMismatch {
+        at: usize,
+        of: usize,
+    },
+    HunkNotUpdatable {
+        at: usize,
+        of: usize,
+    },
+    HunkNamedTwice {
+        at: usize,
+        of: usize,
+    },
+    NoChange {
+        at: usize,
+        of: usize,
+    },
+    HunkAnchorLost {
+        at: usize,
+        of: usize,
+    },
+    HunkAmbiguous {
+        at: usize,
+        of: usize,
+    },
+    HunkOverlap {
+        at: usize,
+        of: usize,
+    },
+    HunkContextTooLong {
+        at: usize,
+        of: usize,
+        side: hunks::ContextSide,
+    },
     ThreadResolved,
     NotRecorded,
 }
@@ -48,6 +82,7 @@ impl UpdateRefusal {
         match error {
             UpdateError::NoUpdates => UpdateRefusal::NoUpdates,
             UpdateError::UnknownHunk(at) => UpdateRefusal::HunkNotFound { at, of },
+            UpdateError::SubjectMismatch(at) => UpdateRefusal::HunkSubjectMismatch { at, of },
             UpdateError::NotUpdatable(at) => UpdateRefusal::HunkNotUpdatable { at, of },
             UpdateError::NamedTwice(at) => UpdateRefusal::HunkNamedTwice { at, of },
             UpdateError::NoChange(at) => UpdateRefusal::NoChange { at, of },
@@ -74,6 +109,7 @@ impl UpdateRefusal {
             UpdateRefusal::NoUpdates => "no_updates",
             UpdateRefusal::PathMissing => ERR_PATH_MISSING,
             UpdateRefusal::HunkNotFound { .. } => ERR_HUNK_NOT_FOUND,
+            UpdateRefusal::HunkSubjectMismatch { .. } => ERR_HUNK_SUBJECT_MISMATCH,
             UpdateRefusal::HunkNotUpdatable { .. } => "hunk_not_updatable",
             UpdateRefusal::HunkNamedTwice { .. } => "hunk_named_twice",
             UpdateRefusal::NoChange { .. } => "no_change",

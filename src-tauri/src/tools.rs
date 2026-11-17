@@ -68,6 +68,7 @@ pub mod plan_issue_read;
 pub mod plan_refusals;
 pub mod proposal_updates;
 pub mod propose_change_edits;
+pub mod propose_diagram_changes;
 pub mod propose_draft_changes;
 pub mod propose_new_change;
 pub mod propose_new_draft;

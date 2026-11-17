@@ -47,6 +47,8 @@ export const CALM_EDITOR_LABEL = "Edit CALM architecture";
 export const SOURCE_LABEL = "Diagram source";
 export const DIVIDER_LABEL = "Resize the panes";
 
+export { DiagramComparisonHost } from "./DiagramComparison";
+
 /** Each window mounts one host: the main window and the Settings window. */
 export function DiagramEditorHost() {
   const request = useSyncExternalStore(subscribeDiagramEditor, diagramEditorRequest);

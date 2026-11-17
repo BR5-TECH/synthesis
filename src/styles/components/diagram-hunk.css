@@ -1,0 +1,66 @@
+/* ---------- Diagram hunks (DCR-draft-change-review.md DCR-FR-JKVA – DCR-FR-BYSX) ---------- */
+
+/* DCR-FR-JKVA: where a hunk changes a diagram, the old fence stays in the
+   document and is not drawn; the new diagram stands in its place. The fence is
+   hidden by a class and never changed, so no byte of the document moves. */
+.hunk--diagram-old { display: none; }
+
+/* DCR-FR-JKVA: the new diagram, on the ground and the rail of an added text.
+   The kind of the hunk is also said in words in the corner of the block, so
+   the block does not rely on its colour (DCR-FR-28). */
+.hunk--diagram { position: relative; }
+.hunk--diagram .hunk__tag {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-4);
+  font-family: var(--font-ui-family);
+  font-weight: var(--fw-semi);
+  color: var(--diff-add-fg);
+}
+.hunk--diagram .hunk__diagram { min-width: 0; overflow: auto; }
+.hunk--diagram .hunk__diagram-figure svg { max-width: 100%; height: auto; }
+.hunk--diagram.hunk--discussing .hunk__tag { color: var(--warn); }
+.hunk__diagram-statement {
+  margin: 0;
+  color: var(--fg-3);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-md);
+}
+/* XTEB: the source of a diagram that does not render, and its message. */
+.hunk__diagram-source {
+  margin: var(--sp-2) 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* DCR-FR-JKVA: an old diagram that stays in the document and is marked. A
+   removal is marked on the colours of a deletion, with the words in the foot
+   below it. A held hunk and a rejected one are marked on the held tone. */
+.hunk.hunk--diagram-marked {
+  background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+.hunk.hunk--diagram-marked.hunk--discussing,
+.hunk.hunk--diagram-marked.hunk--rejected {
+  background: var(--warn-soft);
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+/* DCR-FR-12: the foot holds the space of the chip and says in words what the
+   mark above means. The words stand at the end of the line, away from the chip. */
+.hunk--diagram-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4);
+  color: var(--diff-del-fg);
+  font-family: var(--font-ui-family);
+  font-weight: var(--fw-semi);
+}
+.hunk--diagram-foot.hunk--discussing,
+.hunk--diagram-foot.hunk--rejected { color: var(--warn); }
+.hunk__foot-mark { font-family: var(--font-mono); }

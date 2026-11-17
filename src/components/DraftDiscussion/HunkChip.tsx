@@ -10,10 +10,15 @@
  * own that holds the space open — the head of the proposed text, and a block
  * below the struck passage of a deletion — and this is placed in that space.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { Icon } from "../icons";
+import { DIAGRAM_LAYOUT_EVENT } from "../markdownMermaid";
 import type { DecoratedHunk } from "./hunkDecorations";
 import { HUNK_ATTR } from "./hunkDecorations";
+
+/** DCR-FR-HBTM: the accessible name and the tooltip of Compare. */
+export const COMPARE_LABEL = "Compare diagrams";
 
 /** The chip's own height, so a deletion's chip sits inside the space it reserves. */
 const CHIP_H = 34;
@@ -25,6 +30,7 @@ export function HunkChip({
   onAccept,
   onReject,
   onDiscuss,
+  onCompare,
 }: {
   hunk: DecoratedHunk;
   /** The element the chip is positioned within — the document's scroller. */
@@ -33,6 +39,11 @@ export function HunkChip({
   onAccept: () => void;
   onReject: () => void;
   onDiscuss: () => void;
+  /**
+   * DCR-FR-HBTM: opens the comparison pop-up of a diagram hunk. Given the
+   * Compare button, which takes the focus back when the pop-up closes.
+   */
+  onCompare?: (opener: HTMLElement) => void;
 }) {
   const [box, setBox] = useState<{ top: number; left: number } | null>(null);
   // DCR-FR-12: a rejected change can still be taken or talked about while its
@@ -40,6 +51,20 @@ export function HunkChip({
   // is no Reject.
   const rejected = hunk.state === "rejected";
   const ref = useRef<HTMLDivElement>(null);
+  const compareRef = useRef<HTMLButtonElement>(null);
+
+  // DCR-FR-UKMP: where the pop-up closes on a hunk that is decided, the chip
+  // goes with the hunk, and the focus that the Compare button holds goes to the
+  // document column. A layout cleanup runs while the button is still in place.
+  useLayoutEffect(
+    () => () => {
+      const host = hostRef.current;
+      if (!host || !compareRef.current || document.activeElement !== compareRef.current) return;
+      if (!host.hasAttribute("tabindex")) host.setAttribute("tabindex", "-1");
+      host.focus({ preventScroll: true });
+    },
+    [hostRef],
+  );
 
   // Measured from the decorated element rather than from ProseMirror positions:
   // what the chip must sit over is the padding the decoration reserves, which is
@@ -87,10 +112,17 @@ export function HunkChip({
       setBox({ top, left: a.left - b.left });
     };
     place();
-    if (typeof ResizeObserver === "undefined") return;
+    // DCR-FR-XNPE: a diagram that settles changes the height of the blocks.
+    host.addEventListener(DIAGRAM_LAYOUT_EVENT, place);
+    if (typeof ResizeObserver === "undefined") {
+      return () => host.removeEventListener(DIAGRAM_LAYOUT_EVENT, place);
+    }
     const observer = new ResizeObserver(place);
     observer.observe(host);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      host.removeEventListener(DIAGRAM_LAYOUT_EVENT, place);
+    };
   }, [hunk.id, hunk.kind, hunk.state, hostRef]);
 
   // The chip stays inside its host: in a narrow pane, a chip placed at the
@@ -156,6 +188,21 @@ export function HunkChip({
       >
         Discuss →
       </button>
+      {/* DCR-FR-HBTM: a diagram hunk is compared side by side. Compare decides
+          nothing, so it stays on while a decision is in flight. */}
+      {hunk.diagram && onCompare && (
+        <button
+          ref={compareRef}
+          type="button"
+          className="btn btn--ghost btn--sm"
+          aria-label={COMPARE_LABEL}
+          title={COMPARE_LABEL}
+          onClick={(event) => onCompare(event.currentTarget)}
+        >
+          <Icon.SideBySide size={12} />
+          <span>Compare</span>
+        </button>
+      )}
       {hunk.lost && (
         <span className="dds-chip__lost t-ui-xs" role="status">
           no longer in the prompt

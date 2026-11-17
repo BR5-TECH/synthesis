@@ -51,8 +51,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::proposal_updates::{
-    self, updates_or_none, UpdateArg, UPDATE_CHANGE_SETTLED, UPDATE_MALFORMED, UPDATE_NAMED_TWICE,
-    UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
+    self, updates_or_none, UpdateArg, UPDATE_CHANGE_IS_DIAGRAM, UPDATE_CHANGE_SETTLED,
+    UPDATE_MALFORMED, UPDATE_NAMED_TWICE, UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
 };
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PROPOSAL_NO_CHANGE,
@@ -77,7 +77,7 @@ mod tests;
 pub const NAME: &str = "propose_draft_changes";
 
 /// PDC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When your proposal is still open and the discussion asks for a different change, send `updates` in place of `hunks`. Each update gives `action`: `change` with the `id` of a change and its new fields, `add` with the fields of a new change, or `withdraw` with the `id` of a change you no longer offer. One call can hold several updates, and it also takes a `rationale`. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. A change to a Mermaid diagram never goes in a change of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own. When your proposal is still open and the discussion asks for a different change, send `updates` in place of `hunks`. Each update gives `action`: `change` with the `id` of a change and its new fields, `add` with the fields of a new change, or `withdraw` with the `id` of a change you no longer offer. One call can hold several updates, and it also takes a `rationale`. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The draft-relative path of the draft's prompt, which is the one file a draft holds and the only thing you can propose changes to.";
 
@@ -114,7 +114,7 @@ pub const PROPOSAL_LEAD_AND_TRAIL_TOO_LONG: &str =
     "The `lead` and the `trail` you gave are each longer than 200 characters. Shorten both to the few words next to the text you name.";
 
 /// The refusal text for the context that is too long (PDC-FR-DMTH, PPC-FR-KWQB).
-fn context_too_long(side: ContextSide) -> &'static str {
+pub(super) fn context_too_long(side: ContextSide) -> &'static str {
     match side {
         ContextSide::Lead => PROPOSAL_LEAD_TOO_LONG,
         ContextSide::Trail => PROPOSAL_TRAIL_TOO_LONG,
@@ -175,6 +175,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         UPDATE_MALFORMED => "update_malformed",
         UPDATE_NO_SUCH_CHANGE => "no_such_change",
         UPDATE_CHANGE_SETTLED => "change_already_settled",
+        UPDATE_CHANGE_IS_DIAGRAM => "change_is_diagram_change",
         UPDATE_NAMED_TWICE => "change_named_twice",
         PROPOSAL_RATIONALE_BLANK => "rationale_blank",
         RATIONALE_NO_SPOKEN_PART => "no_spoken_part",
@@ -200,7 +201,7 @@ pub const ONE_AT_A_TIME: &str = "Only one change can be proposed at a time, so t
 /// A draft-relative path is short by construction, and the bound is what keeps a
 /// model-composed value from growing a record past `LGC-logging.md`'s per-record
 /// ceiling (LGC-FR-08) and costing it the tool name and the reason.
-const PATH_LOG_CHARS: usize = 200;
+pub(super) const PATH_LOG_CHARS: usize = 200;
 
 /// The arguments, as the model composed them.
 ///
@@ -405,7 +406,7 @@ fn draft_of(origin: &ConversationOrigin) -> Result<(&str, &str), ToolRefusal> {
 /// borrows, and because a fragment discussion's own file has to be located. A
 /// whole-draft discussion belongs to no file of the draft; a fragment discussion
 /// belongs to one.
-fn target_for<'a>(
+pub(super) fn target_for<'a>(
     store: &crate::fs::RootFs,
     origin: &'a ConversationOrigin,
     draft_id: &'a str,
@@ -702,6 +703,7 @@ fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
         UpdateRefusal::PathMissing => ToolRefusal::ProposalPathMissing,
         UpdateRefusal::HunkNotFound { at: n, of } => at(UPDATE_NO_SUCH_CHANGE, n, of),
         UpdateRefusal::HunkNotUpdatable { at: n, of } => at(UPDATE_CHANGE_SETTLED, n, of),
+        UpdateRefusal::HunkSubjectMismatch { at: n, of } => at(UPDATE_CHANGE_IS_DIAGRAM, n, of),
         UpdateRefusal::HunkNamedTwice { at: n, of } => at(UPDATE_NAMED_TWICE, n, of),
         UpdateRefusal::NoChange { at: n, of } => at(PROPOSAL_NO_CHANGE, n, of),
         UpdateRefusal::HunkAnchorLost { at: n, of } => at(PROPOSAL_TEXT_NOT_FOUND, n, of),

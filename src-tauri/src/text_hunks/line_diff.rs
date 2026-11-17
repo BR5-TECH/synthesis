@@ -58,6 +58,7 @@ pub fn line_changes(current: &str, next: &str) -> Vec<ProposedHunk> {
                 lead: non_empty(lead_context_from(&current, start, floor)),
                 trail: non_empty(trail_context_to(&current, end, ceiling)),
                 note: None,
+                diagram: false,
             });
         } else if region.old.0 > 0 {
             // An insertion follows the line before it.
@@ -70,6 +71,7 @@ pub fn line_changes(current: &str, next: &str) -> Vec<ProposedHunk> {
                 lead: non_empty(lead_context_from(&current, line, floor)),
                 trail: non_empty(trail_context_to(&current, start, ceiling)),
                 note: None,
+                diagram: false,
             });
         } else if region.old.0 < old.len() {
             // An insertion at the start of the text follows nothing, so it
@@ -83,6 +85,7 @@ pub fn line_changes(current: &str, next: &str) -> Vec<ProposedHunk> {
                 lead: None,
                 trail: non_empty(trail_context_to(&current, first, ceiling.max(first))),
                 note: None,
+                diagram: false,
             });
         } else {
             // The current text is empty: the change fills it.

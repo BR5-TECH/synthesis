@@ -27,7 +27,7 @@ import { BottomPanel } from "./components/BottomPanel";
 import { StatusBar } from "./components/StatusBar";
 import { NewFileModal } from "./components/NewFileModal";
 import { AboutPanel } from "./components/AboutPanel";
-import { DiagramEditorHost } from "./components/DiagramEditor";
+import { DiagramComparisonHost, DiagramEditorHost } from "./components/DiagramEditor";
 import { ExportDialogHost } from "./components/ExportDialog";
 import { NewFolderModal } from "./components/NewFolderModal";
 import { NewTypedArtifactModal } from "./components/NewTypedArtifactModal";
@@ -754,6 +754,11 @@ export function AppShell(props: AppShellProps) {
       {/* ABT-about-panel.md: the About panel, mounted only while open. One of
           the floating overlays of SNV-FR-56 (ABT-FR-GCPK). */}
       {overlays.aboutOpen && <AboutPanel onClose={overlays.closeAbout} />}
+      {/* EDT-FR-BRVQ / EDT-FR-TOVY: the comparison pop-up of a diagram hunk,
+          mounted only while open. One of the floating overlays of SNV-FR-56.
+          Before the confirmation of a main branch write in the document, so
+          the confirmation shows above it (PCR-FR-TNQA). */}
+      <DiagramComparisonHost />
       <MainBranchWriteHost />
 
       {/* EDT-FR-SJGJ / EDT-FR-TOVY: the diagram editor overlay, mounted only

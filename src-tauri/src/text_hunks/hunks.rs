@@ -14,6 +14,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::anchors::{self, HunkAnchor, HunkKind, Resolution};
+use super::diagrams;
 
 /// One change, as the agent composed it or as the author has since edited it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +33,16 @@ pub struct ProposalHunk {
     pub after: Option<String>,
     #[serde(default)]
     pub anchor: HunkAnchor,
+    /// True for a diagram hunk: its `before` and `after` hold fence text
+    /// (DCP-FR-QRVD, DCP-FR-WSLE). Absent when false, so a record written
+    /// before diagram hunks existed reads as text hunks.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub diagram: bool,
+}
+
+/// For `skip_serializing_if`: a text hunk writes no `diagram` key.
+pub fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl ProposalHunk {
@@ -41,6 +52,25 @@ impl ProposalHunk {
 
     pub fn after_text(&self) -> &str {
         self.after.as_deref().unwrap_or("")
+    }
+
+    /// The `before` as an agent reads it: for a diagram hunk the Mermaid
+    /// source and not the fence text (DCP-FR-NDAQ), else the text itself.
+    pub fn readable_before(&self) -> String {
+        self.readable(self.before_text())
+    }
+
+    /// The `after` as an agent reads it (DCP-FR-NDAQ).
+    pub fn readable_after(&self) -> String {
+        self.readable(self.after_text())
+    }
+
+    fn readable(&self, text: &str) -> String {
+        if self.diagram && !text.is_empty() {
+            super::fences::source_of(text)
+        } else {
+            text.to_string()
+        }
     }
 }
 
@@ -144,6 +174,10 @@ pub struct ProposedHunk {
     /// `after_text`). It names the place and is never changed (PDC-FR-WCXD).
     pub trail: Option<String>,
     pub note: Option<String>,
+    /// True for a diagram hunk. Its `before` and `after` are Mermaid sources
+    /// as the agent gave them, with no fence markers (DCP-FR-HXNP). `plan`
+    /// turns them into fence text.
+    pub diagram: bool,
 }
 
 /// The most characters `lead` or `trail` may hold (PDC-FR-DMTH, PPC-FR-RJCA).
@@ -173,7 +207,24 @@ impl ProposedHunk {
             (false, true) => HunkKind::Add,
             (false, false) => HunkKind::Replace,
         };
-        ProposedHunk { kind, before, after, after_text, lead, trail, note }
+        ProposedHunk { kind, before, after, after_text, lead, trail, note, diagram: false }
+    }
+
+    /// One diagram change from the fields a model sent. The kind is read as
+    /// `from_fields` reads it, and `before` and `after` are Mermaid sources
+    /// (DCP-FR-HXNP).
+    pub fn diagram_fields(
+        before: Option<String>,
+        after: Option<String>,
+        after_text: Option<String>,
+        lead: Option<String>,
+        trail: Option<String>,
+        note: Option<String>,
+    ) -> Self {
+        ProposedHunk {
+            diagram: true,
+            ..Self::from_fields(before, after, after_text, lead, trail, note)
+        }
     }
 }
 
@@ -264,7 +315,6 @@ pub fn plan_among(
     for (index, item) in proposed.iter().enumerate() {
         // One-based, as the model counts the list it sent.
         let at = index + 1;
-        let before = anchors::normalise_newlines(item.before.as_deref().unwrap_or(""));
         let lead = anchors::normalise_newlines(item.lead.as_deref().unwrap_or(""));
         let trail = anchors::normalise_newlines(item.trail.as_deref().unwrap_or(""));
         // PDC-FR-DMTH: the context names a place in a few words. A longer one
@@ -280,8 +330,19 @@ pub fn plan_among(
         if let Some(side) = side {
             return Err(PlanError::ContextTooLong(at, side));
         }
-        let (start, end) = match item.kind {
-            HunkKind::Add => {
+        // DCP-FR-HXNP: a diagram hunk is turned into fence text and placed on
+        // the fence it names. From here it is a hunk like any other.
+        let diagram_placed;
+        let (item, fixed_range) = if item.diagram {
+            diagram_placed = diagrams::place(&prompt, item, at)?;
+            (&diagram_placed.hunk, Some(diagram_placed.range))
+        } else {
+            (item, None)
+        };
+        let before = anchors::normalise_newlines(item.before.as_deref().unwrap_or(""));
+        let (start, end) = match (fixed_range, item.kind) {
+            (Some(range), _) => range,
+            (None, HunkKind::Add) => {
                 let follows = anchors::normalise_newlines(item.after_text.as_deref().unwrap_or(""));
                 if follows.is_empty() && lead.is_empty() && trail.is_empty() {
                     // DCP-FR-JGCD: an insertion that names no text to follow
@@ -302,7 +363,7 @@ pub fn plan_among(
                     (point, point)
                 }
             }
-            HunkKind::Del | HunkKind::Replace => {
+            (None, HunkKind::Del | HunkKind::Replace) => {
                 if before.is_empty() {
                     return Err(PlanError::AnchorLost(at));
                 }
@@ -350,6 +411,7 @@ pub fn plan_among(
                     hint_start: start,
                     hint_end: end,
                 },
+                diagram: item.diagram,
             },
         ));
     }
@@ -439,7 +501,7 @@ fn spliced(prompt: &str, placed: &[(usize, usize, ProposalHunk)]) -> Option<Stri
 /// the byte offset where `text` starts (PDC-FR-WCXD, PDC-FR-YSKV).
 ///
 /// `at` is the change's one-based place, which every refusal carries.
-fn find_run(
+pub(super) fn find_run(
     prompt: &str,
     lead: &str,
     text: &str,
@@ -471,6 +533,7 @@ pub fn whole_document(current: &str, next: &str) -> Vec<ProposedHunk> {
             lead: None,
             trail: None,
             note: None,
+            diagram: false,
         }];
     }
     vec![ProposedHunk {
@@ -481,6 +544,7 @@ pub fn whole_document(current: &str, next: &str) -> Vec<ProposedHunk> {
         lead: None,
         trail: None,
         note: None,
+        diagram: false,
     }]
 }
 

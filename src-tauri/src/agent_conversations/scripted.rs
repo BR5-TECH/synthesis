@@ -496,10 +496,13 @@ impl CompletionSeam for ScriptedCompletion {
                 // CVL-FR-08 / PND-FR-YFES: a draft turn can also propose one
                 // new draft of a decomposition.
                 with_draft.push(crate::tools::propose_new_draft::NAME);
+                // CVL-FR-08 / PDM-FR-ZXQE: the diagram tool follows.
+                with_draft.push(crate::tools::propose_diagram_changes::NAME);
                 // CVL-FR-08: the decision tool of the same store follows.
                 with_draft.push(crate::tools::decide_draft_changes::NAME);
                 let mut with_prompt = base.clone();
                 with_prompt.push(crate::tools::propose_prompt_changes::NAME);
+                with_prompt.push(crate::tools::propose_diagram_changes::NAME);
                 with_prompt.push(crate::tools::decide_prompt_changes::NAME);
                 // CVL-FR-EZKH: a change turn has the change tools.
                 let mut with_change = base.clone();

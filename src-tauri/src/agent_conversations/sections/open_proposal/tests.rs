@@ -349,3 +349,32 @@ fn the_tail_cuts_the_body_before_the_proposal() {
     assert!(!tail.contains(&listing));
     assert!(tail.ends_with(&questions), "the question set is never cut");
 }
+
+// AGC-FR-DKHT, AGC-FR-RVQP: a diagram hunk is named as a diagram change,
+// addition, or removal, and its excerpts are its sources. A text hunk keeps its
+// kind word.
+#[test]
+fn a_diagram_hunk_is_named_as_a_diagram_change_with_its_source() {
+    use crate::draft_proposals::anchors::HunkKind;
+    use crate::draft_proposals::hunks::HunkState;
+    let change = |kind, diagram| crate::draft_proposals::ProposalChange {
+        id: "h1".into(),
+        kind,
+        state: HunkState::Pending,
+        before: "A --> B".into(),
+        after: "A --> C".into(),
+        diagram,
+    };
+    let line = super::super::proposal_hunk_line(FILE, &change(HunkKind::Replace, true));
+    assert!(line.contains("diagram change"), "{line}");
+    assert!(line.contains("changes: \"A --> B\"") && line.contains("offers: \"A --> C\""));
+    let add = super::super::proposal_hunk_line(FILE, &change(HunkKind::Add, true));
+    assert!(add.contains("diagram addition"), "{add}");
+    let del = super::super::proposal_hunk_line(FILE, &change(HunkKind::Del, true));
+    assert!(del.contains("diagram removal"), "{del}");
+    let text = super::super::proposal_hunk_line(FILE, &change(HunkKind::Replace, false));
+    assert!(text.contains(": replace — undecided"), "{text}");
+
+    assert_eq!(open_hunk(change(HunkKind::Replace, true)).diagram, Some("diagram change"));
+    assert_eq!(open_hunk(change(HunkKind::Replace, false)).diagram, None);
+}

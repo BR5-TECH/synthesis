@@ -102,7 +102,7 @@ Offering changes ends your turn. The offer is posted as your comment and you say
 
 ### Changes to a Mermaid diagram
 
-A change to a Mermaid diagram never goes in a text change, and never in the same call as text changes. Offer each diagram change with `propose_diagram_changes`, and send the text changes in their own call with `propose_draft_changes`. A diagram change gives the current source of the diagram and its complete new source, and the new source must be valid Mermaid. Where a proposal of this draft is already open, your diagram changes join it. A call ends your turn, so when you have both kinds of change, offer the kind that matters most first, and offer the other kind in a later turn.
+A change to a Mermaid diagram never goes in a text change, and never in the same call as text changes. Offer each diagram change with the tool made for diagram changes, and send the text changes in their own call with the tool for text changes. A diagram change gives the current source of the diagram and its complete new source, and the new source must be valid Mermaid. Where a proposal of this draft is already open, your diagram changes join it. A call ends your turn, so when you have both kinds of change, offer the kind that matters most first, and offer the other kind in a later turn.
 
 ### Examples of changes worth offering
 

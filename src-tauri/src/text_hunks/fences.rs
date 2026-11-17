@@ -140,6 +140,30 @@ pub fn find_fences(text: &str) -> Vec<Fence> {
     found
 }
 
+/// The byte range of every fenced code block of `text`, of any language, in
+/// order. The range runs from the start of the opening line to the end of the
+/// closing line. A block that is not closed runs to the end of the text.
+///
+/// `text` is already normalised for line endings.
+pub(super) fn code_block_ranges(text: &str) -> Vec<(usize, usize)> {
+    let lines = lines_of(text);
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < lines.len() {
+        let (start, end) = lines[index];
+        let Some(opener) = read_opener(&text[start..end]) else {
+            index += 1;
+            continue;
+        };
+        let close =
+            (index + 1..lines.len()).find(|&i| closes(&text[lines[i].0..lines[i].1], &opener));
+        let last = close.unwrap_or(lines.len() - 1);
+        found.push((start, lines[last].1));
+        index = last + 1;
+    }
+    found
+}
+
 /// A source made ready to compare: line endings normalised, blank lines at the
 /// start cut, and white space at the end cut.
 pub fn comparable(source: &str) -> String {

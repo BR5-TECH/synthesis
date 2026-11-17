@@ -48,6 +48,136 @@ fn a_diagram_that_is_not_found_is_refused_with_its_place() {
     }
 }
 
+// PDM-FR-RNUS, PDM-FR-UITL: an addition whose `after_text` the file does not
+// hold is refused with the message that names `after_text`, and a change that
+// stands beside it keeps the message that names `before`.
+#[test]
+fn an_addition_anchor_that_is_not_found_is_refused_with_its_place() {
+    for subject in SUBJECTS {
+        let f = Fixture::new(subject);
+        let refusal = refused(
+            &f,
+            f.args(vec![
+                change(SRC_A, SRC_A2),
+                addition(SRC_B, "Not in the file."),
+                change("flowchart TD\n  Z --> Q", SRC_A3),
+            ]),
+        );
+        assert_eq!(
+            refusal,
+            ToolRefusal::InvalidDiagramAt { message: ADDITION_ANCHOR_NOT_FOUND, at: 2, of: 3 },
+            "{subject:?}",
+        );
+        assert_correctable(&refusal);
+        let text = refusal.to_string();
+        assert!(text.starts_with("Diagram change 2 of 3: "), "{text}");
+        assert!(text.contains("`after_text`") && !text.contains("`before`"), "{text}");
+
+        let later = refused(
+            &f,
+            f.args(vec![addition(SRC_B, "End line."), change("flowchart TD\n  Z --> Q", SRC_A3)]),
+        );
+        assert_eq!(
+            later,
+            ToolRefusal::InvalidDiagramAt { message: DIAGRAM_NOT_FOUND, at: 2, of: 2 },
+            "{subject:?}",
+        );
+    }
+}
+
+// PDM-FR-RNUS, PDM-FR-UITL: an addition whose `after_text` the file holds more
+// than once is refused with the message that names `after_text`, and `lead`
+// or `trail` that leave one place name it.
+#[test]
+fn an_addition_anchor_that_is_not_unique_is_refused_with_its_place() {
+    for subject in SUBJECTS {
+        let f = Fixture::with_body(subject, TWICE);
+        let refusal = refused(&f, f.args(vec![addition(SRC_B, "A --> B")]));
+        assert_eq!(
+            refusal,
+            ToolRefusal::InvalidDiagramAt { message: ADDITION_ANCHOR_NOT_UNIQUE, at: 1, of: 1 },
+            "{subject:?}",
+        );
+        assert_correctable(&refusal);
+        let text = refusal.to_string();
+        assert!(text.contains("`after_text`") && !text.contains("`before`"), "{text}");
+        assert!(text.contains("`lead` or `trail`"), "{text}");
+
+        let named = with_lead(addition(SRC_B, "section."), "Second ");
+        f.propose(vec![named]).expect("one place is named");
+    }
+}
+
+/// The file after the hunks of the one standing proposal are accepted.
+fn accepted(f: &Fixture) -> String {
+    let doc = crate::text_hunks::hunks::HunkDocument::new(f.one().hunks);
+    crate::text_hunks::hunks::apply_all(&f.body(), &doc).expect("the hunks apply")
+}
+
+// DCP-FR-WSLE, PDM-FR-RNUS: an addition anchor inside a Mermaid fence is not
+// refused. The new fence goes after the closing line of that fence, so the
+// fence that holds the anchor stays whole.
+#[test]
+fn an_addition_anchor_inside_a_mermaid_fence_goes_after_that_fence() {
+    for subject in SUBJECTS {
+        let f = Fixture::with_body(subject, TWICE);
+        let named = with_trail(addition(SRC_B, "A --> B"), "\n```\n\nEnd line.");
+        f.propose(vec![named]).expect("the anchor is found");
+        let fence = "```mermaid\nflowchart TD\n  A --> B\n```";
+        let new = "```mermaid\ngraph LR\n  X --> Y\n```";
+        let expected = format!(
+            "# Spec\n\nFirst section.\n\n{fence}\n\nSecond section.\n\n{fence}\n\n{new}\n\nEnd line.\n"
+        );
+        assert_eq!(accepted(&f), expected, "{subject:?}");
+    }
+}
+
+// DCP-FR-WSLE, PDM-FR-RNUS: the same for a fence of another language.
+#[test]
+fn an_addition_anchor_inside_a_fence_of_another_language_goes_after_that_fence() {
+    for subject in SUBJECTS {
+        let f = Fixture::with_body(subject, OTHER_FENCE);
+        f.propose(vec![addition(SRC_B, "nodes: [a, b]")]).expect("the anchor is found");
+        let new = "```mermaid\ngraph LR\n  X --> Y\n```";
+        let expected = format!(
+            "# Spec\n\n```calm\nnodes: [a, b]\n```\n\n{new}\n\n```mermaid\nflowchart TD\n  A --> B\n```\n\nEnd line.\n"
+        );
+        assert_eq!(accepted(&f), expected, "{subject:?}");
+    }
+}
+
+// PDM-FR-RNUS, PDM-FR-BWOH: the same two refusals for an `add` entry and a
+// `change` entry of `updates`, each with the place of the update.
+#[test]
+fn an_addition_anchor_of_an_update_is_refused_with_its_place() {
+    for subject in SUBJECTS {
+        let f = Fixture::with_body(subject, TWICE);
+        f.offer_text("First section.", "Opening.").expect("a text proposal stands");
+        let before = f.world();
+        let cases = [
+            (
+                vec![entry("add", None, None, Some(SRC_B), Some("Not in the file."))],
+                ADDITION_ANCHOR_NOT_FOUND,
+            ),
+            (
+                vec![entry("add", None, None, Some(SRC_B), Some("A --> B"))],
+                ADDITION_ANCHOR_NOT_UNIQUE,
+            ),
+            (vec![entry("add", None, Some(SRC_A), Some(SRC_A2), None)], DIAGRAM_NOT_UNIQUE),
+        ];
+        for (updates, message) in cases {
+            let refusal = f.call(f.updating(updates)).expect_err("refused");
+            assert_eq!(
+                refusal,
+                ToolRefusal::InvalidUpdateAt { message, at: 1, of: 1 },
+                "{subject:?}",
+            );
+            assert_correctable(&refusal);
+            f.assert_untouched(&before);
+        }
+    }
+}
+
 // PDM-FR-YKMV: a `before` that is text and not the source of a diagram never
 // reaches a diagram hunk.
 #[test]

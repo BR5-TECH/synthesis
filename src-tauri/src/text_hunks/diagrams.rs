@@ -9,7 +9,7 @@
 //! Pure over `&str`. It judges no source (PDM-FR-HOQI).
 
 use super::anchors::{normalise_newlines, HunkKind};
-use super::fences::{comparable, find_fences, Fence};
+use super::fences::{code_block_ranges, comparable, find_fences, Fence};
 use super::hunks::{find_run, PlanError, ProposedHunk};
 
 /// A diagram hunk in its text form, and the byte range of the prompt it covers.
@@ -34,7 +34,8 @@ pub(super) fn place(prompt: &str, item: &ProposedHunk, at: usize) -> Result<Plac
 }
 
 /// An insertion of a new fence after the end of the line that holds the text
-/// the new fence follows (DCP-FR-WSLE).
+/// the new fence follows, or after the closing line of the fenced code block
+/// that holds that line (DCP-FR-WSLE).
 fn place_addition(
     prompt: &str,
     item: &ProposedHunk,
@@ -55,6 +56,12 @@ fn place_addition(
         let found = find_run(prompt, lead, &follows, trail, at)?;
         let point = found + follows.len();
         let line_end = prompt[point..].find('\n').map_or(prompt.len(), |i| point + i);
+        // A line inside a fenced code block of any language: the new fence goes
+        // after the closing line of that block, so the block stays whole.
+        let line_end = code_block_ranges(prompt)
+            .into_iter()
+            .find(|&(start, end)| start <= line_end && line_end <= end)
+            .map_or(line_end, |(_, end)| end);
         (line_end, format!("\n\n{fence}"))
     };
     Ok(Placed { hunk: text_form(item, None, Some(after)), range: (point, point) })

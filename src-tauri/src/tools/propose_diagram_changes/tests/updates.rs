@@ -227,7 +227,7 @@ fn entry_refusals_name_the_place_of_the_update() {
             ),
             (
                 vec![ok(), entry("add", None, None, Some(SRC_B), Some("Not in the file."))],
-                DIAGRAM_NOT_FOUND,
+                ADDITION_ANCHOR_NOT_FOUND,
                 2,
                 2,
             ),

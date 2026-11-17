@@ -314,6 +314,15 @@ fn the_description_states_the_rule_of_the_spoken_part() {
     assert!(RATIONALE_DESCRIPTION.contains("`<spoken>…</spoken>`"));
 }
 
+// PDC-FR-RQMA: the model is told in the tool list that a diagram change goes to
+// `propose_diagram_changes`, in a call of its own.
+#[test]
+fn the_description_sends_a_diagram_change_to_the_diagram_tool() {
+    assert!(DESCRIPTION.contains(
+        "A change to a Mermaid diagram never goes in a change of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own."
+    ));
+}
+
 // PDC-FR-ZQOH, PDC-FR-18: the refusal is found by its code, with no text in it.
 #[test]
 fn a_refusal_for_no_spoken_part_logs_its_code_and_no_text() {

@@ -50,6 +50,7 @@ use crate::draft_proposals::{self, NewProposal, ProposalUpdate};
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
 use crate::prompt_proposals::{self, NewPromptProposal, PromptProposalUpdate, ProposedChange};
+use crate::text_hunks::anchors::HunkKind;
 use crate::text_hunks::hunks::ProposedHunk;
 use crate::text_hunks::updates::UpdateEntry;
 
@@ -107,6 +108,12 @@ pub const DIAGRAM_NOT_FOUND: &str =
 /// PDM-FR-RNUS: more than one Mermaid diagram holds the source.
 pub const DIAGRAM_NOT_UNIQUE: &str =
     "The source you gave in `before` belongs to more than one Mermaid diagram of the file. Add `lead` or `trail` with the exact text around the diagram so it names one diagram.";
+/// PDM-FR-RNUS: the text an addition follows is not in the file.
+pub const ADDITION_ANCHOR_NOT_FOUND: &str =
+    "The text you gave in `after_text` is not in the file. Copy it character for character from the file as you read it.";
+/// PDM-FR-RNUS: the text an addition follows is in the file more than once.
+pub const ADDITION_ANCHOR_NOT_UNIQUE: &str =
+    "The text you gave in `after_text` appears more than once in the file. Add `lead` or `trail` with the exact text around it so it names one place.";
 /// PDM-FR-CEZB: a line of the new source would end the fence.
 pub const FENCE_IN_SOURCE: &str =
     "The new source has a line that would end the code fence. Remove the line of backticks or tildes and give the source alone.";
@@ -128,6 +135,8 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_NO_HUNKS => "no_changes",
         DIAGRAM_NOT_FOUND => "diagram_not_found",
         DIAGRAM_NOT_UNIQUE => "diagram_not_unique",
+        ADDITION_ANCHOR_NOT_FOUND => "addition_anchor_not_found",
+        ADDITION_ANCHOR_NOT_UNIQUE => "addition_anchor_not_unique",
         FENCE_IN_SOURCE => "fence_in_source",
         CHANGE_IS_TEXT => "change_is_text_change",
         PROPOSAL_HUNKS_OVERLAP => "changes_overlap",
@@ -299,7 +308,59 @@ fn path_is_valid(target: &Target<'_>, path: &str) -> bool {
 // The refusals of the two modules, in this tool's terms
 // ---------------------------------------------------------------------------
 
-fn draft_record_refusal(refusal: draft_proposals::RecordRefusal) -> ToolRefusal {
+/// PDM-FR-RNUS: which hunks of a call are additions, by place. The refusal of
+/// a lost or an ambiguous anchor names `after_text` for an addition and
+/// `before` for a change and a removal, so the model corrects the field it
+/// sent.
+struct Additions(Vec<bool>);
+
+impl Additions {
+    fn of_hunks(hunks: &[ProposedHunk]) -> Self {
+        Additions(hunks.iter().map(|hunk| hunk.kind == HunkKind::Add).collect())
+    }
+
+    fn of_entries(entries: &[UpdateEntry]) -> Self {
+        Additions(
+            entries
+                .iter()
+                .map(|entry| match entry {
+                    UpdateEntry::Change { hunk, .. } | UpdateEntry::Add(hunk) => {
+                        hunk.kind == HunkKind::Add
+                    }
+                    UpdateEntry::Withdraw { .. } => false,
+                })
+                .collect(),
+        )
+    }
+
+    /// The message for the hunk at the one-based place `at`, for an anchor
+    /// that the file does not hold.
+    fn not_found(&self, at: usize) -> &'static str {
+        if self.is_addition(at) {
+            ADDITION_ANCHOR_NOT_FOUND
+        } else {
+            DIAGRAM_NOT_FOUND
+        }
+    }
+
+    /// The same, for an anchor that the file holds more than once.
+    fn not_unique(&self, at: usize) -> &'static str {
+        if self.is_addition(at) {
+            ADDITION_ANCHOR_NOT_UNIQUE
+        } else {
+            DIAGRAM_NOT_UNIQUE
+        }
+    }
+
+    fn is_addition(&self, at: usize) -> bool {
+        at.checked_sub(1).and_then(|index| self.0.get(index)).copied().unwrap_or(false)
+    }
+}
+
+fn draft_record_refusal(
+    refusal: draft_proposals::RecordRefusal,
+    additions: &Additions,
+) -> ToolRefusal {
     use draft_proposals::RecordRefusal as R;
     let place = |message, at, of| ToolRefusal::InvalidDiagramAt { message, at, of };
     match refusal {
@@ -307,8 +368,8 @@ fn draft_record_refusal(refusal: draft_proposals::RecordRefusal) -> ToolRefusal 
         R::PathMissing => ToolRefusal::ProposalPathMissing,
         R::NoChange => ToolRefusal::InvalidArguments(PROPOSAL_NO_CHANGE),
         R::NoHunks => ToolRefusal::InvalidArguments(PROPOSAL_NO_HUNKS),
-        R::HunkAnchorLost { at, of } => place(DIAGRAM_NOT_FOUND, at, of),
-        R::HunkAmbiguous { at, of } => place(DIAGRAM_NOT_UNIQUE, at, of),
+        R::HunkAnchorLost { at, of } => place(additions.not_found(at), at, of),
+        R::HunkAmbiguous { at, of } => place(additions.not_unique(at), at, of),
         R::HunkOverlap { at, of } => place(PROPOSAL_HUNKS_OVERLAP, at, of),
         R::HunkContextTooLong { at, of, side } => place(context_too_long(side), at, of),
         R::ThreadResolved => ToolRefusal::ProposalConversationResolved,
@@ -316,7 +377,10 @@ fn draft_record_refusal(refusal: draft_proposals::RecordRefusal) -> ToolRefusal 
     }
 }
 
-fn prompt_record_refusal(refusal: prompt_proposals::RecordRefusal) -> ToolRefusal {
+fn prompt_record_refusal(
+    refusal: prompt_proposals::RecordRefusal,
+    additions: &Additions,
+) -> ToolRefusal {
     use prompt_proposals::RecordRefusal as R;
     let place = |message, at, of| ToolRefusal::InvalidDiagramAt { message, at, of };
     match refusal {
@@ -325,8 +389,8 @@ fn prompt_record_refusal(refusal: prompt_proposals::RecordRefusal) -> ToolRefusa
         R::NotAPromptArtifact => ToolRefusal::NotAPromptArtifact,
         R::NoChange => ToolRefusal::InvalidArguments(PROPOSAL_NO_CHANGE),
         R::NoHunks => ToolRefusal::InvalidArguments(PROPOSAL_NO_HUNKS),
-        R::HunkAnchorLost { at, of } => place(DIAGRAM_NOT_FOUND, at, of),
-        R::HunkAmbiguous { at, of } => place(DIAGRAM_NOT_UNIQUE, at, of),
+        R::HunkAnchorLost { at, of } => place(additions.not_found(at), at, of),
+        R::HunkAmbiguous { at, of } => place(additions.not_unique(at), at, of),
         R::HunkOverlap { at, of } => place(PROPOSAL_HUNKS_OVERLAP, at, of),
         R::HunkContextTooLong { at, of, side } => place(context_too_long(side), at, of),
         R::ThreadResolved => ToolRefusal::ProposalConversationResolved,
@@ -351,7 +415,10 @@ fn entry_refusal(message: &'static str, at: usize, of: usize) -> ToolRefusal {
     ToolRefusal::InvalidUpdateAt { message, at, of }
 }
 
-fn draft_update_refusal(refusal: draft_proposals::UpdateRefusal) -> ToolRefusal {
+fn draft_update_refusal(
+    refusal: draft_proposals::UpdateRefusal,
+    additions: &Additions,
+) -> ToolRefusal {
     use draft_proposals::UpdateRefusal as R;
     match refusal {
         R::NoOpenProposal => ToolRefusal::InvalidArguments(NO_OPEN_PROPOSAL),
@@ -362,8 +429,8 @@ fn draft_update_refusal(refusal: draft_proposals::UpdateRefusal) -> ToolRefusal 
         R::HunkNotUpdatable { at, of } => entry_refusal(UPDATE_CHANGE_SETTLED, at, of),
         R::HunkNamedTwice { at, of } => entry_refusal(UPDATE_NAMED_TWICE, at, of),
         R::NoChange { at, of } => entry_refusal(PROPOSAL_NO_CHANGE, at, of),
-        R::HunkAnchorLost { at, of } => entry_refusal(DIAGRAM_NOT_FOUND, at, of),
-        R::HunkAmbiguous { at, of } => entry_refusal(DIAGRAM_NOT_UNIQUE, at, of),
+        R::HunkAnchorLost { at, of } => entry_refusal(additions.not_found(at), at, of),
+        R::HunkAmbiguous { at, of } => entry_refusal(additions.not_unique(at), at, of),
         R::HunkOverlap { at, of } => entry_refusal(PROPOSAL_HUNKS_OVERLAP, at, of),
         R::HunkContextTooLong { at, of, side } => entry_refusal(context_too_long(side), at, of),
         R::ThreadResolved => ToolRefusal::ProposalConversationResolved,
@@ -371,7 +438,10 @@ fn draft_update_refusal(refusal: draft_proposals::UpdateRefusal) -> ToolRefusal 
     }
 }
 
-fn prompt_update_refusal(refusal: prompt_proposals::UpdateRefusal) -> ToolRefusal {
+fn prompt_update_refusal(
+    refusal: prompt_proposals::UpdateRefusal,
+    additions: &Additions,
+) -> ToolRefusal {
     use prompt_proposals::UpdateRefusal as R;
     match refusal {
         R::NoOpenProposal => ToolRefusal::InvalidArguments(NO_OPEN_PROPOSAL),
@@ -383,8 +453,8 @@ fn prompt_update_refusal(refusal: prompt_proposals::UpdateRefusal) -> ToolRefusa
         R::HunkNotUpdatable { at, of } => entry_refusal(UPDATE_CHANGE_SETTLED, at, of),
         R::HunkNamedTwice { at, of } => entry_refusal(UPDATE_NAMED_TWICE, at, of),
         R::NoChange { at, of } => entry_refusal(PROPOSAL_NO_CHANGE, at, of),
-        R::HunkAnchorLost { at, of } => entry_refusal(DIAGRAM_NOT_FOUND, at, of),
-        R::HunkAmbiguous { at, of } => entry_refusal(DIAGRAM_NOT_UNIQUE, at, of),
+        R::HunkAnchorLost { at, of } => entry_refusal(additions.not_found(at), at, of),
+        R::HunkAmbiguous { at, of } => entry_refusal(additions.not_unique(at), at, of),
         R::HunkOverlap { at, of } => entry_refusal(PROPOSAL_HUNKS_OVERLAP, at, of),
         R::HunkContextTooLong { at, of, side } => entry_refusal(context_too_long(side), at, of),
         R::ThreadResolved => ToolRefusal::ProposalConversationResolved,
@@ -617,7 +687,7 @@ impl<R: tauri::Runtime> ProposeDiagramChangesTool<R> {
                     },
                 )
                 .map(|_| ())
-                .map_err(draft_record_refusal)
+                .map_err(|refusal| draft_record_refusal(refusal, &Additions::of_hunks(hunks)))
             }
             Target::Artifact { thread_id } => {
                 if prompt_proposals::pending_for(&self.roots.worktree, path).is_some() {
@@ -640,7 +710,7 @@ impl<R: tauri::Runtime> ProposeDiagramChangesTool<R> {
                     },
                 )
                 .map(|_| ())
-                .map_err(prompt_record_refusal)
+                .map_err(|refusal| prompt_record_refusal(refusal, &Additions::of_hunks(hunks)))
             }
         }
     }
@@ -653,7 +723,7 @@ impl<R: tauri::Runtime> ProposeDiagramChangesTool<R> {
         updates: &[UpdateArg],
     ) -> Result<(), ToolRefusal> {
         let path = args.path.trim();
-        // PDM-FR-UOBH rules of the text tools: a malformed entry is refused
+        // PDC-FR-UOBH rules of the text tools: a malformed entry is refused
         // with its place. Every entry names a diagram hunk (PDM-FR-NQEK).
         let entries = proposal_updates::to_entries_for(updates, true)?;
         match target {
@@ -700,7 +770,7 @@ impl<R: tauri::Runtime> ProposeDiagramChangesTool<R> {
             },
         )
         .map(|_| ())
-        .map_err(draft_update_refusal)
+        .map_err(|refusal| draft_update_refusal(refusal, &Additions::of_entries(entries)))
     }
 
     fn update_artifact(
@@ -723,7 +793,7 @@ impl<R: tauri::Runtime> ProposeDiagramChangesTool<R> {
             },
         )
         .map(|_| ())
-        .map_err(prompt_update_refusal)
+        .map_err(|refusal| prompt_update_refusal(refusal, &Additions::of_entries(entries)))
     }
 }
 

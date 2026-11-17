@@ -1,10 +1,12 @@
 //! The check of a new diagram source (`PDM-propose-diagram-changes-tool.md`
 //! PDM-FR-HOQI, PDM-FR-CEZB).
 //!
-//! A source is valid when the Mermaid parser that the application bundles
-//! reads it as a diagram. The parser runs in the backend, works offline, and
-//! runs no script from the source. A parse has a size bound and a deadline, so
-//! a call never holds the turn.
+//! A source is valid when `merman`, the Rust Mermaid parser of the backend,
+//! reads it as a diagram. The Editor renders with the JavaScript `mermaid`
+//! library, so the two parsers can disagree about one source. The Editor
+//! render decides what the author sees (PDM-FR-HOQI, EDT-FR-XTEB). The parser
+//! runs in the backend, works offline, and runs no script from the source. A
+//! parse has a size bound and a deadline, so a call never holds the turn.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
@@ -84,6 +86,31 @@ mod tests {
     #[test]
     fn a_valid_flowchart_passes() {
         assert_eq!(check_source("flowchart TD\n  A[Start] --> B[Done]"), Ok(()));
+    }
+
+    // PDM-FR-HOQI: sources that the Editor renders as diagrams are not refused.
+    // They cover the chart types of the Editor hint sets, with labels, quoted
+    // text, a comment line, and a front matter block.
+    #[test]
+    fn sources_that_the_editor_renders_are_not_refused() {
+        let sources = [
+            "flowchart LR\n  A[\"Quoted: text\"] -->|yes| B(Round)\n  B --> C{Choice}\n  %% comment\n  C -.-> D((End))",
+            "---\ntitle: Flow\n---\nflowchart TD\n  subgraph one [Group]\n    A --> B\n  end",
+            "sequenceDiagram\n  participant A as Alice\n  A->>B: Hello\n  B-->>A: Reply\n  Note over A,B: Done",
+            "classDiagram\n  class Animal {\n    +String name\n    +eat()\n  }\n  Animal <|-- Dog",
+            "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy : start\n  Busy --> [*]",
+            "erDiagram\n  CUSTOMER ||--o{ ORDER : places",
+            "gantt\n  title Plan\n  dateFormat YYYY-MM-DD\n  section One\n  Task :a1, 2026-01-01, 3d",
+            "pie title Share\n  \"A\" : 40\n  \"B\" : 60",
+            "mindmap\n  root((Idea))\n    Branch\n      Leaf",
+        ];
+        for source in sources {
+            assert_eq!(
+                check_source(source),
+                Ok(()),
+                "refused a source that the Editor renders: {source}"
+            );
+        }
     }
 
     // PDM-FR-HOQI: an empty source and a source that is not a diagram are refused.

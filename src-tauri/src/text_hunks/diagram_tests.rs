@@ -224,6 +224,55 @@ fn an_addition_goes_after_the_line_that_holds_the_text_it_follows() {
     assert_eq!(doc.hunks[0].after_text(), "\n\n```mermaid\nA-->B\n```");
 }
 
+// DCP-FR-WSLE: an addition that follows text inside a Mermaid fence goes after
+// the closing line of that fence, and not inside it.
+#[test]
+fn an_addition_that_follows_text_in_a_mermaid_fence_goes_after_the_fence() {
+    let out = build(PROMPT, &[add_after("A --> B", "C-->D")]).unwrap();
+    assert_eq!(
+        out,
+        "# Title\n\n```mermaid\nflowchart TD\n  A --> B\n```\n\n```mermaid\nC-->D\n```\n\nEnd.\n"
+    );
+    // The opening line holds the anchor: the fence is still whole.
+    let out = build(PROMPT, &[add_after("```mermaid", "C-->D")]).unwrap();
+    assert_eq!(
+        out,
+        "# Title\n\n```mermaid\nflowchart TD\n  A --> B\n```\n\n```mermaid\nC-->D\n```\n\nEnd.\n"
+    );
+}
+
+// DCP-FR-WSLE: the same for a fence of another language, a tilde fence, and an
+// indented one.
+#[test]
+fn an_addition_that_follows_text_in_another_fence_goes_after_the_fence() {
+    let new = "\n\n```mermaid\nC-->D\n```";
+    let text = "Intro.\n\n```rust\nlet x = 1;\n```\n\nEnd.\n";
+    let out = build(text, &[add_after("let x", "C-->D")]).unwrap();
+    assert_eq!(out, format!("Intro.\n\n```rust\nlet x = 1;\n```{new}\n\nEnd.\n"));
+
+    let text = "Intro.\n\n~~~text\nnote\n~~~\n\nEnd.\n";
+    let out = build(text, &[add_after("note", "C-->D")]).unwrap();
+    assert_eq!(out, format!("Intro.\n\n~~~text\nnote\n~~~{new}\n\nEnd.\n"));
+
+    let text = "- item\n  ```rust\n  let x = 1;\n  ```\n- next\n";
+    let out = build(text, &[add_after("let x", "C-->D")]).unwrap();
+    assert_eq!(out, format!("- item\n  ```rust\n  let x = 1;\n  ```{new}\n- next\n"));
+}
+
+// DCP-FR-WSLE: a code block that is not closed runs to the end of the prompt, so
+// the new fence goes at the end of the prompt. A line outside a block is as
+// before.
+#[test]
+fn an_addition_after_an_unclosed_fence_goes_at_the_end_and_text_outside_is_unchanged() {
+    let text = "Intro.\n\n```rust\nlet x = 1;\nlet y = 2;\n";
+    let out = build(text, &[add_after("let x", "C-->D")]).unwrap();
+    assert_eq!(out, "Intro.\n\n```rust\nlet x = 1;\nlet y = 2;\n\n```mermaid\nC-->D\n```\n");
+
+    let text = "Intro.\n\n```rust\nlet x = 1;\n```\n\nEnd.\n";
+    let out = build(text, &[add_after("Intro", "C-->D")]).unwrap();
+    assert_eq!(out, "Intro.\n\n```mermaid\nC-->D\n```\n\n```rust\nlet x = 1;\n```\n\nEnd.\n");
+}
+
 // DCP-FR-WSLE: an addition after the last line of a prompt without a final line
 // break.
 #[test]

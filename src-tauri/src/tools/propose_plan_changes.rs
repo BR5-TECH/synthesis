@@ -331,7 +331,6 @@ where
                 need_types: needs.types,
                 need_labels: needs.labels,
                 numbers: needs.numbers,
-                label_numbers: needs.label_numbers,
             },
         )
         .await

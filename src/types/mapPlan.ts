@@ -94,6 +94,8 @@ export interface MapPlanProposal {
   discussionId: string;
   commentId: string;
   createdAt: string;
+  /** MPR-FR-QIJF: when Synthesis asked the agent to prepare the failed rows again. */
+  reprepareRequestedAt?: string;
   rows: MapPlanRow[];
 }
 

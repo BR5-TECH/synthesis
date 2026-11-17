@@ -95,7 +95,9 @@ export function BoardMarks({
   const blockers = [...facts.blockers.map((b) => b.name), ...external];
   const draftName = facts.state?.draft?.name ?? item.draftId;
   const blocked = facts.state?.blocked === true && blockers.length > 0;
-  if (!facts.pending && !blocked && !facts.overlap && item.draftId === undefined) return null;
+  if (!facts.pending && !facts.proposal && !facts.ghost && !blocked && !facts.overlap && item.draftId === undefined) {
+    return null;
+  }
   return (
     <span className="dm-card__markers">
       {facts.pending && (
@@ -105,6 +107,22 @@ export function BoardMarks({
           data-testid="flow-pending"
         >
           pending
+        </span>
+      )}
+      {facts.proposal && (
+        // DBR-FR-AGIN: a plan proposal changes or withdraws the item.
+        <span
+          className={facts.proposal === "withdrawn" ? "badge badge--danger" : "badge badge--accent"}
+          title={facts.proposal === "withdrawn" ? "A plan proposal closes this issue" : "A plan proposal changes this issue"}
+          data-testid="flow-marker-proposal"
+        >
+          {facts.proposal}
+        </span>
+      )}
+      {facts.ghost && (
+        // DBR-FR-WKNI: the issue a plan proposal adds.
+        <span className="badge badge--ok" title="A plan proposal adds this issue" data-testid="flow-marker-added">
+          added
         </span>
       )}
       {blocked && (
@@ -235,6 +253,46 @@ export interface BoardCardProps {
  * reference, excerpt, or draft row; the panel shows them.
  */
 export function BoardCard(props: BoardCardProps) {
+  if (props.facts.ghost) return <GhostCard {...props} ghost={props.facts.ghost} />;
+  return <LiveCard {...props} />;
+}
+
+/**
+ * DBR-FR-WKNI: the ghost card of an issue a plan proposal adds. It has the
+ * lines of a card and a dashed border, and no drag, rename, menu, or port.
+ */
+function GhostCard(props: BoardCardProps & { ghost: { kindKnown: boolean } }) {
+  const { item, at, size, facts, selected, handlers } = props;
+  const faceRef = useRef<HTMLDivElement>(null);
+  useBoardHeight(faceRef, item.id, 2, props.onMeasure);
+  return (
+    <div
+      className="dm-card dm-card--ghost"
+      role="group"
+      aria-label={`New issue ${item.name}, proposed`}
+      title={item.name}
+      data-testid={`flow-item-${item.id}`}
+      data-item-id={item.id}
+      data-kind={item.kind}
+      data-ghost="true"
+      data-selected={selected}
+      style={{ left: at.x, top: at.y, width: size.width, height: size.height }}
+    >
+      <div className="dm-card__face" ref={faceRef}>
+        <div className="dm-card__id">
+          {props.ghost.kindKnown && <KindChip kind={item.kind} />}
+          <span className="dm-card__ref">new</span>
+        </div>
+        <div className="dm-card__title">{item.name}</div>
+        <div className="dm-card__meta">
+          <BoardMarks item={item} facts={facts} handlers={handlers} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveCard(props: BoardCardProps) {
   const { item, at, size, facts, selected, magnet, lifted, editingName, inert, handlers } = props;
   const faceRef = useRef<HTMLDivElement>(null);
   useBoardHeight(faceRef, item.id, 2, props.onMeasure);

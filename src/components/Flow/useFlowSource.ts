@@ -9,7 +9,7 @@ import {
 import { FlowLayoutStore } from "../../state/flowLayouts";
 import type { FlowSession } from "../../state/flowSessions";
 import { flowLayoutScope, type TrackerFacts } from "../../types";
-import type { FlowBinding, FlowPlanAnswer, FlowRemovalRequest } from "./binding";
+import type { FlowBinding, FlowPlanAnswer, FlowProposalView, FlowRemovalRequest } from "./binding";
 import { errorText } from "./geometry";
 import { useDeliveryState, type DeliveryView } from "./useDeliveryState";
 
@@ -17,6 +17,7 @@ const noSubscribe = () => () => {};
 const noVersion = () => 0;
 const NO_PENDING: ReadonlySet<string> = new Set();
 const NO_ERRORS: Readonly<Record<string, string>> = {};
+const NO_PROPOSAL: FlowProposalView = { marks: new Map(), ghosts: new Map(), reviewed: null };
 
 /** What the canvas reads and changes, whichever binding it runs with. */
 export interface FlowSource {
@@ -40,6 +41,8 @@ export interface FlowSource {
   /** MDL-FR-PUCM: the items with an edit pending, and the errors to show. */
   pending: ReadonlySet<string>;
   itemErrors: Readonly<Record<string, string>>;
+  /** DBR-FR-AGIN .. DBR-FR-PMGS: the plan proposals as the board shows them. */
+  proposal: FlowProposalView;
   /**
    * FLO-FR-26: apply one edit of the plan. Returns true when the edit changed
    * the plan. In a plan binding it goes to the host as semantic edits.
@@ -183,6 +186,7 @@ export function useFlowSource(binding: FlowBinding): FlowSource {
       repository: plan.repository,
       pending: plan.pending ?? NO_PENDING,
       itemErrors: plan.itemErrors ?? NO_ERRORS,
+      proposal: plan.proposal ?? NO_PROPOSAL,
       edit,
       editAndWait,
       requestRemoval: plan.onRemoveRequest,
@@ -201,6 +205,7 @@ export function useFlowSource(binding: FlowBinding): FlowSource {
     repository: null,
     pending: NO_PENDING,
     itemErrors: NO_ERRORS,
+    proposal: NO_PROPOSAL,
     edit,
     editAndWait,
   };

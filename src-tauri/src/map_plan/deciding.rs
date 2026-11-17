@@ -1,15 +1,17 @@
-//! MPR-FR-QUYY to MPR-FR-SKLA, MPR-FR-HKYH: the decision on one row. A decision
-//! changes that row alone (MPR-FR-MQEQ). One decision runs at a time for the
-//! open project, in the order the decisions arrive.
+//! MPR-FR-QUYY to MPR-FR-SKLA, MPR-FR-HKYH: the decision on one row, the
+//! reopen of a rejected row (MPR-FR-MVRX), and the re-prepare request on the
+//! demand of the author (MPR-FR-GIJN). A decision changes that row alone
+//! (MPR-FR-MQEQ). One decision runs at a time for the open project, in the
+//! order the decisions arrive.
 
 use super::applying::{apply_row_kind, Applied};
 use super::errors::{
-    announce, error, log_operation, no_project, ERR_PROPOSAL_NOT_FOUND, ERR_ROW_DECIDED,
-    ERR_ROW_NOT_FOUND,
+    announce, error, log_operation, no_project, ERR_PROPOSAL_NOT_FOUND, ERR_PROPOSAL_OPEN,
+    ERR_ROW_DECIDED, ERR_ROW_NOT_FOUND, ERR_ROW_NOT_REJECTED,
 };
 use super::model::{MapPlanError, MapPlanProposal, RowState};
 use super::recording::open_store;
-use super::{rules, store};
+use super::{reprepare, rules, store};
 use crate::fs::RootFs;
 use crate::project::OpenProject;
 
@@ -72,7 +74,12 @@ fn decide<R: tauri::Runtime>(
     let mut kind = "";
     let result = open_store(app).and_then(|store| {
         let _turn = lock_decisions();
-        decide_in(app, &store, discussion_id, proposal_id, row_key, decision, &mut kind)
+        let mut proposal =
+            decide_in(app, &store, discussion_id, proposal_id, row_key, decision, &mut kind)?;
+        // MPR-FR-LJRO: the decision is made. A request that fails is logged and
+        // leaves the decision as it is.
+        reprepare::request_automatic(app, &store, &mut proposal);
+        Ok(proposal)
     });
     match &result {
         Ok(proposal) => {
@@ -92,6 +99,101 @@ fn decide<R: tauri::Runtime>(
     result.map(rules::with_blocks)
 }
 
+/// The proposal of the discussion, or `proposal_not_found`.
+fn find_proposal(
+    store: &RootFs,
+    discussion_id: &str,
+    proposal_id: &str,
+) -> Result<MapPlanProposal, MapPlanError> {
+    store::find(store, proposal_id)
+        .filter(|p| p.discussion_id == discussion_id)
+        .ok_or_else(|| error(ERR_PROPOSAL_NOT_FOUND, "The proposal does not exist."))
+}
+
+/// MPR-FR-MVRX: move a `rejected` row back to `waiting`. It writes nothing to
+/// GitHub and needs no network. A refusal changes nothing.
+pub fn reopen_row<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    discussion_id: &str,
+    proposal_id: &str,
+    row_key: &str,
+) -> Result<MapPlanProposal, MapPlanError> {
+    let mut kind = "";
+    let result = open_store(app).and_then(|store| {
+        let _turn = lock_decisions();
+        reopen_in(&store, discussion_id, proposal_id, row_key, &mut kind)
+    });
+    match &result {
+        Ok(_) => {
+            log_operation(app, false, "reopen", "waiting", kind, "");
+            announce(app, discussion_id);
+        }
+        Err(e) => log_operation(app, true, "reopen", "refused", kind, &e.code),
+    }
+    result.map(rules::with_blocks)
+}
+
+fn reopen_in(
+    store: &RootFs,
+    discussion_id: &str,
+    proposal_id: &str,
+    row_key: &str,
+    kind: &mut &'static str,
+) -> Result<MapPlanProposal, MapPlanError> {
+    let mut proposal = find_proposal(store, discussion_id, proposal_id)?;
+    let at = proposal
+        .rows
+        .iter()
+        .position(|r| r.key == row_key)
+        .ok_or_else(|| error(ERR_ROW_NOT_FOUND, "The proposal has no such row."))?;
+    *kind = rules::kind_name(&proposal.rows[at].fields);
+    if proposal.rows[at].state != RowState::Rejected {
+        return Err(error(ERR_ROW_NOT_REJECTED, "Only a rejected row can be reopened."));
+    }
+    // MPR-FR-SBYA: another proposal of the discussion has an open row.
+    let others: Vec<MapPlanProposal> =
+        store::read_for(store, discussion_id).into_iter().filter(|p| p.id != proposal.id).collect();
+    if rules::has_open_row(&others) {
+        return Err(error(
+            ERR_PROPOSAL_OPEN,
+            "Another proposal of the discussion has a row that waits for a decision.",
+        ));
+    }
+    let row = &mut proposal.rows[at];
+    row.state = RowState::Waiting;
+    row.error = None;
+    row.result = None;
+    store::write(store, &proposal)?;
+    Ok(proposal)
+}
+
+/// MPR-FR-GIJN: request a re-prepare on the demand of the author. A refusal
+/// changes nothing.
+pub fn request_reprepare<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    discussion_id: &str,
+    proposal_id: &str,
+) -> Result<MapPlanProposal, MapPlanError> {
+    let result = open_store(app).and_then(|store| {
+        let _turn = lock_decisions();
+        let mut proposal = find_proposal(&store, discussion_id, proposal_id)?;
+        let discussion = store::read_for(&store, discussion_id);
+        if let Some(refusal) = reprepare::manual_refusal(&proposal, &discussion) {
+            return Err(refusal);
+        }
+        reprepare::request(app, &store, &mut proposal)?;
+        Ok(proposal)
+    });
+    match &result {
+        Ok(_) => {
+            log_operation(app, false, "reprepare", "requested", "manual", "");
+            announce(app, discussion_id);
+        }
+        Err(e) => log_operation(app, true, "reprepare", "refused", "manual", &e.code),
+    }
+    result.map(rules::with_blocks)
+}
+
 fn decide_in<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     store: &RootFs,
@@ -101,9 +203,7 @@ fn decide_in<R: tauri::Runtime>(
     decision: Decision,
     kind: &mut &'static str,
 ) -> Result<MapPlanProposal, MapPlanError> {
-    let mut proposal = store::find(store, proposal_id)
-        .filter(|p| p.discussion_id == discussion_id)
-        .ok_or_else(|| error(ERR_PROPOSAL_NOT_FOUND, "The proposal does not exist."))?;
+    let mut proposal = find_proposal(store, discussion_id, proposal_id)?;
     let at = proposal
         .rows
         .iter()

@@ -40,3 +40,11 @@ export const acceptMapPlanRow = (discussionId: string, proposalId: string, rowKe
 /** MPV-FR-XYDR: reject one row. */
 export const rejectMapPlanRow = (discussionId: string, proposalId: string, rowKey: string) =>
   invoke<MapPlanProposal>("reject_map_plan_row", { discussionId, proposalId, rowKey });
+
+/** MPV-FR-XYDR / MPR-FR-MVRX: move a rejected row back to waiting. */
+export const reopenMapPlanRow = (discussionId: string, proposalId: string, rowKey: string) =>
+  invoke<MapPlanProposal>("reopen_map_plan_row", { discussionId, proposalId, rowKey });
+
+/** MPV-FR-AAFF / MPR-FR-GIJN: ask the agent that proposed to prepare the failed rows again. */
+export const requestMapPlanReprepare = (discussionId: string, proposalId: string) =>
+  invoke<MapPlanProposal>("request_map_plan_reprepare", { discussionId, proposalId });

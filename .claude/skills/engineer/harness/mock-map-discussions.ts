@@ -7,6 +7,13 @@
  * thread in the order it was opened (MPR-FR-NRNZ). `add_comment`,
  * `set_discussion_resolution` and `read_discussion` serve a Map thread here and
  * fall through for every other discussion. Starts with no thread.
+ *
+ * With `?mapProposal` (use it with `?deliveryGithub`) one whole-map thread
+ * holds two plan proposals (MPV-map-proposal-review.md): an older one whose row
+ * failed with `changed_on_tracker`, and a pending one with a changed, an added,
+ * and a withdrawn issue. With `?mapProposalFail` every accept fails with
+ * `changed_on_tracker`. Accept, reject, undo, and the re-prepare request change
+ * the proposals in memory and emit `map-plan-proposals-changed`.
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
@@ -17,6 +24,174 @@ type MapNode = { lens: string; kind: string; id: string; label: string } | null;
 
 const threads: any[] = [];
 let nextThread = 1;
+
+const flag = (name: string) => new URLSearchParams(location.search).has(name);
+const AGENT = { kind: "agent", agentId: "claude", handle: "claude", model: "opus-5", title: "Software architect" };
+const row = (key: string, kind: string, fields: any, over: any = {}) => ({
+  key,
+  kind,
+  fields,
+  state: "waiting",
+  blockedBy: null,
+  error: null,
+  result: null,
+  ...over,
+});
+const BODY_BEFORE = [
+  "## Description",
+  "",
+  "Card numbers are expected to be tokenized before they reach the service.",
+  "",
+  "## Acceptance criteria",
+  "",
+  "- Tokens are stored per merchant.",
+  "- The `vault` and `proxy` endpoints are available to the checkout.",
+  "",
+].join("\n");
+const BODY_AFTER = [
+  "## Description",
+  "",
+  "Card numbers are tokenized in the browser before they reach the service.",
+  "",
+  "## User stories",
+  "",
+  "### Pay with a saved card",
+  "",
+  "As a returning buyer, I want to pay with a saved card, so that checkout takes one step.",
+  "",
+  "- **When** the buyer picks a saved card",
+  "- **Then** the token is sent, and never the card number",
+  "",
+  "## Acceptance criteria",
+  "",
+  "- Tokens are stored per merchant, with a rotation date.",
+  "- The `vault` and `proxy` endpoints are available to the checkout.",
+  "",
+].join("\n");
+
+const proposals: any[] = [];
+if (flag("mapProposal")) {
+  const at = "2026-11-17T09:00:00Z";
+  proposals.push(
+    {
+      id: "pp-old",
+      discussionId: "map-1",
+      commentId: "map-1-c2",
+      createdAt: "2026-11-17T08:40:00Z",
+      reprepareRequestedAt: "2026-11-17T08:45:00Z",
+      rows: [
+        row(
+          "r42",
+          "modify_issue",
+          { number: 42, title: "Tokenize card numbers", baseUpdatedAt: at, changes: [{ field: "body", before: BODY_BEFORE, after: BODY_AFTER }] },
+          { state: "failed", error: { code: "changed_on_tracker", message: "The item changed on the tracker." } },
+        ),
+      ],
+    },
+    {
+      id: "pp-new",
+      discussionId: "map-1",
+      commentId: "map-1-c4",
+      createdAt: at,
+      rows: [
+        row("r42", "modify_issue", {
+          number: 42,
+          title: "Tokenize card numbers",
+          baseUpdatedAt: at,
+          changes: [{ field: "body", before: BODY_BEFORE, after: BODY_AFTER }],
+        }),
+        row("r49", "modify_issue", {
+          number: 49,
+          title: "Decline message is wrong",
+          baseUpdatedAt: at,
+          changes: [
+            { field: "title", before: "Decline mesage is wrong", after: "Decline message is wrong" },
+            { field: "milestone", before: { number: 3, title: "Beta" }, after: { number: 4, title: "GA" } },
+            { field: "status", before: "Todo", after: "In Progress" },
+            { field: "labels", before: ["legacy"], after: ["payments"], added: ["payments"], removed: ["legacy"] },
+          ],
+        }),
+        row("rnew", "create_issue", {
+          title: "Payout retry limits",
+          type: "Task",
+          milestone: { number: 4, title: "GA" },
+          labels: ["payments"],
+          body: "## Description\n\nA failed payout is retried within configured limits.\n\n- Maximum attempts can be configured.\n- A failed payout notifies the merchant.\n",
+        }),
+        row("r48", "modify_issue", {
+          number: 48,
+          title: "Refund emails",
+          baseUpdatedAt: at,
+          changes: [{ field: "close", before: "open", after: "closed", reason: "not_planned" }],
+        }),
+      ],
+    },
+  );
+  const human = (id: string, body: string, createdAt: string) => ({ id, author: ME, body, quotes: [], attachments: [], createdAt });
+  const agentSays = (id: string, body: string, proposalId: string, createdAt: string) => ({
+    id,
+    author: AGENT,
+    body,
+    quotes: [],
+    attachments: [{ kind: "mapPlanProposal", proposalId }],
+    createdAt,
+  });
+  threads.push({
+    id: "map-1",
+    target: { kind: "map" },
+    fragmentTarget: null,
+    mapNode: null,
+    comments: [
+      human("map-1-c1", "What is left for the beta? Propose a change.", "2026-11-17T08:39:00Z"),
+      agentSays("map-1-c2", "Card tokenization lacks its user story. I propose to add it.", "pp-old", "2026-11-17T08:40:00Z"),
+      human("map-1-c3", "The request failed.", "2026-11-17T08:58:00Z"),
+      agentSays(
+        "map-1-c4",
+        "The request failed because #42 changed on GitHub. I read its current content and prepared the change again. I also fixed #49, added a retry limits task, and withdrew #48.",
+        "pp-new",
+        at,
+      ),
+    ],
+    resolved: false,
+    createdAt: "2026-11-17T08:39:00Z",
+    updatedAt: at,
+  });
+  nextThread = 2;
+}
+
+function fireChanged(discussionId: string) {
+  queueMicrotask(() => (window as any).__fireBusEvent?.("map-plan-proposals-changed", { discussionId }));
+}
+
+/** MPR-FR-QUYY / MPR-FR-MVRX / MPR-FR-GIJN: one decision on a seeded proposal. */
+function decide(cmd: string, a: Record<string, any>): unknown {
+  const p = proposals.find((x) => x.id === a.proposalId && x.discussionId === a.discussionId);
+  if (!p) return Promise.reject({ code: "proposal_not_found", message: "The proposal is gone." });
+  if (cmd === "request_map_plan_reprepare") {
+    p.reprepareRequestedAt = new Date().toISOString();
+    fireChanged(p.discussionId);
+    return structuredClone(p);
+  }
+  const r = p.rows.find((x: any) => x.key === a.rowKey);
+  if (!r) return Promise.reject({ code: "row_not_found", message: "The row is gone." });
+  if (cmd === "reopen_map_plan_row") {
+    if (r.state !== "rejected") return Promise.reject({ code: "row_not_rejected", message: "Only a rejected row can be reopened." });
+    r.state = "waiting";
+  } else if (r.state !== "waiting") {
+    return Promise.reject({ code: "row_decided", message: "The row is decided." });
+  } else if (cmd === "reject_map_plan_row") {
+    r.state = "rejected";
+  } else if (flag("mapProposalFail")) {
+    r.state = "failed";
+    r.error = { code: "changed_on_tracker", message: "The item changed on the tracker." };
+  } else {
+    r.state = "accepted";
+    const number = r.kind === "modify_issue" ? r.fields.number : 90;
+    r.result = { issueNumber: number, issueUrl: `https://github.com/acme/platform/issues/${number}` };
+  }
+  fireChanged(p.discussionId);
+  return new Promise((resolve) => setTimeout(() => resolve(structuredClone(p)), 600));
+}
 
 const sameNode = (a: MapNode, b: MapNode) =>
   (a ?? null) === null || (b ?? null) === null
@@ -82,7 +257,12 @@ export function mapDiscussionsInvoke(cmd: string, a: Record<string, any>): unkno
       return t ? { ...t } : NOT_HANDLED;
     }
     case "list_map_plan_proposals":
-      return own(a.discussionId) ? [] : NOT_HANDLED;
+      return own(a.discussionId) ? structuredClone(proposals.filter((p) => p.discussionId === a.discussionId)) : NOT_HANDLED;
+    case "accept_map_plan_row":
+    case "reject_map_plan_row":
+    case "reopen_map_plan_row":
+    case "request_map_plan_reprepare":
+      return decide(cmd, a);
     default:
       return NOT_HANDLED;
   }

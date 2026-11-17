@@ -33,6 +33,10 @@ export interface ItemFacts {
   tracker?: { repository: string; facts: TrackerFacts };
   /** MDL-FR-PUCM: an edit of the item is pending. */
   pending: boolean;
+  /** DBR-FR-AGIN: the proposal mark of the item. */
+  proposal?: "proposed" | "withdrawn";
+  /** DBR-FR-WKNI: the item is the ghost card of an added row. */
+  ghost?: { kindKnown: boolean };
   /** MDL-FR-PUCM / MDL-FR-HNLP: the error the host shows on the item. */
   error?: string;
   references: Reference[];

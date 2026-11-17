@@ -56,6 +56,7 @@ import {
   createRow,
 } from "../../test/mapPlanFixtures";
 import type { Discussion, MapNodeRef } from "../../types";
+import { resetMapPlanFallbackForTest } from "../MapPlanProposal";
 import { DiscussionPane, DiscussionToggle, type MapColumnProps } from ".";
 import { MapDiscussionColumn } from "./Column";
 
@@ -157,7 +158,7 @@ function Column(props: Partial<MapColumnProps> = {}) {
       store={store}
       selected={null}
       planTool
-      planHost={null}
+     
       {...props}
     />
   );
@@ -177,6 +178,7 @@ const lookedUp = (found: boolean) =>
 const tabNames = () => screen.getAllByRole("tab").map((t) => t.textContent?.trim());
 
 beforeEach(() => {
+  resetMapPlanFallbackForTest();
   invokeMock.mockReset();
   vi.mocked(logDebug).mockClear();
   vi.mocked(logWarn).mockClear();
@@ -205,7 +207,7 @@ describe("the column (SMP-FR-WNLR, CMT-FR-LVNQ)", () => {
 
   it("SMP-FR-WNLR: the pane draws the column and a splitter while it is shown, and nothing while it is hidden", async () => {
     backend();
-    render(<DiscussionPane store={store} selected={null} planTool planHost={null} />);
+    render(<DiscussionPane store={store} selected={null} planTool />);
     expect(await screen.findByTestId("map-discussion")).toBeInTheDocument();
     expect(screen.getByTestId("map-discussion-splitter")).toBeInTheDocument();
     act(() => store.setDiscussionVisible(false));
@@ -649,7 +651,7 @@ describe("the opening composer of a whole-map thread (SMP-FR-XGBI)", () => {
 });
 
 describe("the transcript (SMP-FR-PPJB)", () => {
-  it("SMP-FR-PPJB: an agent comment that carries a map_plan_proposal attachment renders the review card", async () => {
+  it("SMP-FR-PPJB, MPV-FR-IBSF: an agent comment that carries a map_plan_proposal attachment renders the summary row", async () => {
     const thread = mapThread("t1", ["plan it"]);
     thread.comments.push(
       mapComment("t1-c1", AGENT, "I propose one step.", {
@@ -658,9 +660,11 @@ describe("the transcript (SMP-FR-PPJB)", () => {
     );
     const b = backend([thread]);
     await renderColumn();
-    const card = await screen.findByTestId("map-plan-proposal");
-    expect(card).toHaveTextContent("Plan proposal");
-    expect(await within(card).findByText("Payout schedule")).toBeInTheDocument();
+    const row = await screen.findByTestId("map-plan-entry");
+    expect(row).toHaveTextContent("Plan proposal");
+    expect(row).toHaveTextContent("1 added");
+    // MPV-FR-IBSF: the discussion shows no other part of the proposal.
+    expect(screen.queryByText("Payout schedule")).toBeNull();
     expect(callsOf(b, "list_map_plan_proposals")[0]).toEqual({ discussionId: "t1" });
   });
 
@@ -681,7 +685,7 @@ describe("the transcript (SMP-FR-PPJB)", () => {
     );
     backend([thread]);
     await renderColumn();
-    await screen.findByTestId("map-plan-proposal");
+    await screen.findByTestId("map-plan-entry");
     expect(await composer("Reply to thread t1")).toBeEnabled();
   });
 });
@@ -689,7 +693,7 @@ describe("the transcript (SMP-FR-PPJB)", () => {
 describe("the session of the column (SMP-FR-AUFA)", () => {
   it("SMP-FR-AUFA: the unsent text of the composer is kept while the column is hidden and shown again", async () => {
     backend([]);
-    render(<DiscussionPane store={store} selected={null} planTool planHost={null} />);
+    render(<DiscussionPane store={store} selected={null} planTool />);
     const user = userEvent.setup();
     await user.type(await composer("Discuss the map"), "half a thought");
     act(() => store.setDiscussionVisible(false));
@@ -701,7 +705,7 @@ describe("the session of the column (SMP-FR-AUFA)", () => {
   it("SMP-FR-AUFA: the unsent text of a node composer is its own", async () => {
     backend([]);
     store.discuss(ITEM_NODE);
-    render(<DiscussionPane store={store} selected={null} planTool planHost={null} />);
+    render(<DiscussionPane store={store} selected={null} planTool />);
     const user = userEvent.setup();
     await user.type(await composer("Discuss this node"), "about the node");
     act(() => store.cancelDiscussionComposer());
@@ -712,14 +716,14 @@ describe("the session of the column (SMP-FR-AUFA)", () => {
 
   it("SMP-FR-AUFA: a project switch discards the text with the session", async () => {
     backend([]);
-    const first = render(<DiscussionPane store={store} selected={null} planTool planHost={null} />);
+    const first = render(<DiscussionPane store={store} selected={null} planTool />);
     const user = userEvent.setup();
     await user.type(await composer("Discuss the map"), "half a thought");
     first.unmount();
     // The shell clears the map session and the discussion sessions in one step.
     store.clear();
     clearAllDiscussionSessions();
-    render(<DiscussionPane store={store} selected={null} planTool planHost={null} />);
+    render(<DiscussionPane store={store} selected={null} planTool />);
     expect(await composer("Discuss the map")).toHaveValue("");
   });
 });

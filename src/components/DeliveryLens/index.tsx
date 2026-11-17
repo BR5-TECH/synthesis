@@ -40,6 +40,7 @@ import { leafRollup, Rollup } from "./Rollup";
 import { githubSourceOf, useDeliveryPlan } from "./useDeliveryPlan";
 import { useLensEvents } from "./useLensEvents";
 import { useSourceChangeFocus } from "./useSourceChangeFocus";
+import { MapPlanReviewLayer } from "../MapPlanProposal";
 
 export type { DeliveryHost } from "./host";
 
@@ -325,6 +326,8 @@ function ActiveLens({
         <div className="smap-main dlens-main">
           {/* MDL-FR-RILW: an item of the plan reads as its name, with no excerpt. */}
           <FlowExcerptsContext.Provider value={false}>{body}</FlowExcerptsContext.Provider>
+          {/* MPV-FR-CTTA: the review sheet covers the canvas area only. */}
+          <MapPlanReviewLayer />
         </div>
         {discussion}
       </div>

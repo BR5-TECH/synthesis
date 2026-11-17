@@ -646,11 +646,9 @@ pub struct PlanFactsQuery {
     pub need_types: bool,
     /// Read the label names of the repository.
     pub need_labels: bool,
-    /// The plan issues that a change names.
+    /// The plan issues that a change names. GitHub is read for each of them
+    /// (GDP-FR-PBSD).
     pub numbers: Vec<u64>,
-    /// The subset of `numbers` that a change gives labels for. GitHub is read
-    /// for each of them, because the read cache holds no labels.
-    pub label_numbers: Vec<u64>,
 }
 
 /// The facts that a proposal of plan changes is checked against
@@ -665,16 +663,16 @@ pub struct PlanFacts {
     pub labels: Option<Vec<String>>,
     /// The numbers of all plan issues.
     pub plan_numbers: HashSet<u64>,
-    /// The detail of each named plan issue. It comes from GitHub, with its
-    /// labels, for a number of `label_numbers`, and from the read cache, with
-    /// no labels, for another.
+    /// The detail of each named plan issue, read from GitHub now with its
+    /// labels (PPT-FR-UZEK).
     pub issues: std::collections::HashMap<u64, PlanIssueDetail>,
 }
 
-/// PPT-FR-XMZF: the facts for a proposal. It makes at most one request for the
-/// Types, one for the labels, and one for each issue of `label_numbers`; the
+/// PPT-FR-XMZF, PPT-FR-UZEK, GDP-FR-PBSD: the facts for a proposal. It makes at
+/// most one request for the Types, one for the labels, and two for each named
+/// plan issue: its detail, and the issue as the read cache holds it. The
 /// milestones and the Status options come from the read cache. It changes
-/// nothing on GitHub and does not update the read cache.
+/// nothing on GitHub. It puts each issue that it read into the read cache.
 pub async fn plan_facts<R: Runtime>(
     app: AppHandle<R>,
     query: PlanFactsQuery,
@@ -696,9 +694,14 @@ fn plan_facts_blocking<R: Runtime>(
         }
     }
     let plan_numbers: HashSet<u64> = plan.iter().map(|(i, _)| i.number).collect();
-    let reads_github = query.need_types
-        || query.need_labels
-        || query.label_numbers.iter().any(|n| plan_numbers.contains(n));
+    // PPT-FR-UZEK: each named plan issue is read from GitHub once.
+    let mut fresh_numbers: Vec<u64> = Vec::new();
+    for number in query.numbers.iter().filter(|n| plan_numbers.contains(n)) {
+        if !fresh_numbers.contains(number) {
+            fresh_numbers.push(*number);
+        }
+    }
+    let reads_github = query.need_types || query.need_labels || !fresh_numbers.is_empty();
     let adapter = if reads_github { Some(connect(app)?) } else { None };
     let mut types = None;
     let mut labels = None;
@@ -709,15 +712,18 @@ fn plan_facts_blocking<R: Runtime>(
         if query.need_labels {
             labels = Some(adapter.list_labels().map_err(|code| github_error(&code))?);
         }
-        for number in query.label_numbers.iter().filter(|n| plan_numbers.contains(n)) {
+        let mut statuses = Vec::new();
+        for number in &fresh_numbers {
             let detail = adapter
                 .read_issue_detail(*number, &target.project_node_id)
                 .map_err(|code| github_error(&code))?
                 .ok_or_else(|| {
                     DeliveryError::new(ERR_TRACKER_ITEM_NOT_FOUND, "The tracker has no such issue.")
                 })?;
+            statuses.push((*number, detail.status.clone()));
             issues.insert(*number, detail_from_github(detail));
         }
+        cache_fresh_issues(app, &target, adapter.as_ref(), &statuses);
     }
     let facts = PlanFacts {
         milestones: read
@@ -752,4 +758,63 @@ fn plan_facts_blocking<R: Runtime>(
         },
     );
     Ok(facts)
+}
+
+/// GDP-FR-PBSD: put each issue that a proposal read from GitHub into the read
+/// cache, and announce the change. The detail read holds no node ID and no
+/// assignees, which the cache needs, so each issue is read once more as the
+/// cache holds it. The write takes the turn of the edit queue (GDP-FR-IRDD).
+/// A failure here leaves the cache as it was and never refuses the proposal:
+/// it is logged.
+fn cache_fresh_issues<R: Runtime>(
+    app: &AppHandle<R>,
+    target: &GithubTarget,
+    adapter: &dyn super::adapter::TrackerAdapter,
+    statuses: &[(u64, Option<String>)],
+) {
+    let mut fresh: Vec<(TrackerIssue, Option<String>)> = Vec::new();
+    for (number, status) in statuses {
+        match adapter.read_issue(*number) {
+            Ok(Some(issue)) => fresh.push((issue, status.clone())),
+            Ok(None) => {}
+            Err(code) => log(
+                app,
+                LogLevel::Warn,
+                "plan issue cache update skipped",
+                crate::log_fields! { "code" => &code },
+            ),
+        }
+    }
+    if fresh.is_empty() {
+        return;
+    }
+    let state = app.project_store::<GithubDeliveryState>();
+    let _turn = state.edits.enter();
+    let stored = cached(app, target).and_then(|read| {
+        let Some(mut read) = read else { return Ok(false) };
+        let before = read.clone();
+        for (issue, status) in fresh {
+            let number = issue.number;
+            read.replace_issue(issue);
+            read.set_status(number, status);
+        }
+        if read == before {
+            return Ok(false);
+        }
+        store_edit(app, target, &read).map(|_| true)
+    });
+    match stored {
+        Ok(changed) => log(
+            app,
+            LogLevel::Debug,
+            "plan issues cached after a proposal read",
+            crate::log_fields! { "issues" => statuses.len(), "changed" => changed },
+        ),
+        Err(error) => log(
+            app,
+            LogLevel::Warn,
+            "plan issue cache update failed",
+            crate::log_fields! { "code" => &error.code },
+        ),
+    }
 }

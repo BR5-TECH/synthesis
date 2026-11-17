@@ -678,6 +678,20 @@ export const Icon = {
       <path d="m2 14 10 6 10-6" />
     </I>
   ),
+  /** MPV-FR-CCDM: the arrow from a value before to a value after. */
+  ArrowRight: (p: IconProps) => (
+    <I data-icon="arrow-right" {...p}>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </I>
+  ),
+  /** MPV-FR-VMYF: a fold of unchanged blocks that expands in place. */
+  Unfold: (p: IconProps) => (
+    <I data-icon="unfold" {...p}>
+      <path d="m7 15 5 5 5-5" />
+      <path d="m7 9 5-5 5 5" />
+    </I>
+  ),
   Terminal: (p: IconProps) => (
     <I {...p}>
       <rect x="3" y="4" width="18" height="16" rx="2" />

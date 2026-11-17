@@ -72,7 +72,7 @@ function renderPane() {
     y: 0,
     toJSON: () => ({}),
   });
-  return render(<DiscussionPane store={store} selected={null} planTool planHost={null} />, {
+  return render(<DiscussionPane store={store} selected={null} planTool />, {
     container: body,
   });
 }

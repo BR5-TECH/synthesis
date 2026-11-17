@@ -160,6 +160,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
         ? { tracker: { repository: source.repository, facts: source.tracker.get(item.id)! } }
         : {}),
       pending: source.pending.has(item.id),
+      ...(source.proposal.marks.has(item.id) ? { proposal: source.proposal.marks.get(item.id) } : {}),
+      ...(source.proposal.ghosts.has(item.id) ? { ghost: source.proposal.ghosts.get(item.id) } : {}),
       ...(source.itemErrors[item.id] ? { error: source.itemErrors[item.id] } : {}),
       references: resolveReferences(item.artifactIds, byId, project.loaded),
     };
@@ -478,7 +480,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                     at={c.absOf(item.id)}
                     size={c.sizeOf(item.id) ?? { width: 0, height: 0 }}
                     facts={factsOf(item)}
-                    selected={selectionSet.has(item.id)}
+                    // DBR-FR-PMGS: the card of the row the review sheet selects.
+                    selected={selectionSet.has(item.id) || source.proposal.reviewed === item.id}
                     magnet={c.magnet === item.id}
                     lifted={c.lifted?.has(item.id) ?? false}
                     editingName={c.editingName === item.id}

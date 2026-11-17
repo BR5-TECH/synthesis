@@ -549,6 +549,8 @@ pub fn run() {
             map_plan::list_map_plan_proposals,
             map_plan::accept_map_plan_row,
             map_plan::reject_map_plan_row,
+            map_plan::reopen_map_plan_row,
+            map_plan::request_map_plan_reprepare,
             comments::add_comment,
             comments::set_discussion_resolution,
             comments::reanchor_discussion_fragment,

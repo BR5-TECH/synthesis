@@ -3,9 +3,12 @@
    SMZ (canvas and zoom), SMN (nodes), SME (edges), SMI (inspector). The layout
    sets each node's position and size inline; everything else is here. */
 
+/* SMP-FR-AOZF: the Map tab never scrolls as a whole. `clip` makes no scroll
+   box, so neither a wheel nor a focus can scroll the tab. */
 .smap {
   height: 100%;
   min-height: 0;
+  overflow: clip;
   display: flex;
   flex-direction: column;
   background: var(--bg-canvas);

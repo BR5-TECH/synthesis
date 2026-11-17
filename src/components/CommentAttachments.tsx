@@ -18,7 +18,7 @@
  */
 import { AdvisorsListView } from "./discussion/GroupMarks";
 import { ExportRequestCard } from "./ExportDialog/ExportRequestCard";
-import { MapNodeChip, MapPlanProposalCard } from "./MapPlanProposal";
+import { MapNodeChip, MapPlanEntry } from "./MapPlanProposal";
 import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
@@ -45,6 +45,7 @@ import {
   undecidedCount,
   type Attachment,
   type AttachmentInput,
+  type Participant,
   type ProposalUpdateCounts,
 } from "../types";
 
@@ -884,8 +885,11 @@ export function CommentAttachmentList({
   threadId,
   draftId,
   attachments,
+  author,
 }: {
   threadId: string;
+  /** MPV-FR-AAFF: the author of the comment, which names the agent of a plan proposal. */
+  author?: Participant;
   /** CMS-FR-49: set for a thread in a draft, so the read is scoped to it. */
   draftId?: string;
   attachments: readonly Attachment[];
@@ -919,8 +923,13 @@ export function CommentAttachmentList({
           // OCW-FR-QCPB: a reference control that opens the change.
           <ChangeActionReferenceControl key={i} attachment={a} />
         ) : a.kind === "mapPlanProposal" ? (
-          // SMP-FR-PPJB / MPV-FR-IBSF: the review card of a plan proposal.
-          <MapPlanProposalCard key={i} discussionId={threadId} proposalId={a.proposalId} />
+          // SMP-FR-PPJB / MPV-FR-IBSF: the summary row of a plan proposal.
+          <MapPlanEntry
+            key={i}
+            discussionId={threadId}
+            proposalId={a.proposalId}
+            proposer={author?.kind === "agent" ? author.handle : undefined}
+          />
         ) : a.kind === "mapNode" ? (
           // MPR-FR-PMLX: the focus a message was sent with.
           <MapNodeChip key={i} node={a.node} />

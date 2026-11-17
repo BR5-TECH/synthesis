@@ -18,9 +18,16 @@ import { LensSwitch } from "./LensSwitch";
 import { SpecificationsLens } from "./SpecificationsLens";
 import type { UnplannedToggle } from "./Toolbar";
 import { githubSourceOf, useDeliveryPlan } from "../DeliveryLens/useDeliveryPlan";
+import { itemIdResolver } from "../DeliveryLens/useProposalBoard";
 import { DiscussionPane } from "../MapDiscussion";
-import type { MapPlanHost } from "../MapPlanProposal";
-import { issueItemId, specNodeOf } from "../../state/specMap/nodeRefs";
+import { MapPlanContext, type MapPlanContextValue, type MapPlanHost } from "../MapPlanProposal";
+import { deliveryNodeOf, issueItemId, specNodeOf } from "../../state/specMap/nodeRefs";
+import { MapPlanReviewStore } from "../../state/mapPlan/reviewStore";
+import { requestPendingFocus } from "../../state/discussionFocus";
+import { getDeliverySettings } from "../../api";
+import { logWarn } from "../../logging";
+import type { DeliverySettings } from "../../types";
+import { kindOfType } from "../../state/mapPlan/kinds";
 
 export { DOCKED_INSPECTOR_WIDTH, openSpecNotice } from "./SpecificationsLens";
 
@@ -63,17 +70,58 @@ export function SpecMap({
   const selected =
     lens === "delivery" ? state.deliveryNode : tree ? specNodeOf(tree, state.selection) : null;
   const openDraftById = host.onOpenDraftById;
-  const planHost = useMemo<MapPlanHost>(
-    () => ({
-      itemOnCanvas: (number) => planDoc?.items.some((i) => i.id === issueItemId(number)) ?? false,
-      selectItem: (number) => store.showDeliveryItem(issueItemId(number)),
+  // MPV-FR-CZDO: the one review state of the plan proposals of this map session.
+  const [reviewStore] = useState(() => new MapPlanReviewStore());
+  useEffect(() => reviewStore.retain(), [reviewStore]);
+  // MPV-FR-SNCR: the Type mapping gives the kind chip of a new issue.
+  const [settings, setSettings] = useState<DeliverySettings | null>(null);
+  useEffect(() => {
+    if (!planTool) return;
+    let live = true;
+    getDeliverySettings().then(
+      (read) => {
+        if (live) setSettings(read);
+      },
+      () => logWarn(["frontend"], "delivery settings could not be read for the plan review", {}),
+    );
+    return () => {
+      live = false;
+    };
+  }, [planTool]);
+  const github = githubSourceOf(plan.source);
+  const repository = github ? `${github.repository.owner}/${github.repository.name}` : null;
+  const planSession = plan.github;
+  const planHost = useMemo<MapPlanHost>(() => {
+    // MPV-FR-NMYT: the plan item of an issue, read from the tracker facts.
+    const resolve = itemIdResolver(planSession?.snapshot().answer?.tracker ?? []);
+    const itemOf = (number: number) => resolve(issueItemId(number));
+    return {
+      itemOnCanvas: (number) => planDoc?.items.some((i) => i.id === itemOf(number)) ?? false,
+      selectItem: (number) => store.showDeliveryItem(itemOf(number)),
       ...(openDraftById ? { openDraft: openDraftById } : {}),
-    }),
-    [planDoc, store, openDraftById],
+      discuss: (number) => {
+        const item = number === null ? undefined : planDoc?.items.find((i) => i.id === itemOf(number));
+        if (item) {
+          store.discuss(deliveryNodeOf(item));
+          return;
+        }
+        const thread = store.snapshot().discussion.threadId;
+        if (thread) requestPendingFocus(thread, "composer");
+      },
+      showDelivery: () => store.setLens("delivery"),
+      repository,
+      kindOfIssue: (number) => {
+        const kind = planDoc?.items.find((i) => i.id === itemOf(number))?.kind;
+        return kind && kind !== "milestone" ? kind : null;
+      },
+      kindOfType: (type) => kindOfType(settings, type),
+    };
+  }, [planDoc, planSession, store, openDraftById, repository, settings]);
+  const planContext = useMemo<MapPlanContextValue>(
+    () => ({ store: reviewStore, host: planHost }),
+    [reviewStore, planHost],
   );
-  const discussion = (
-    <DiscussionPane store={store} selected={selected} planTool={planTool} planHost={planHost} />
-  );
+  const discussion = <DiscussionPane store={store} selected={selected} planTool={planTool} />;
 
   // SMP-FR-TKUS: the first render of a map session asks for the default lens.
   useEffect(() => {
@@ -106,7 +154,7 @@ export function SpecMap({
   };
 
   return (
-    <>
+    <MapPlanContext.Provider value={planContext}>
       <DeliveryLens
         isActive={lens === "delivery"}
         store={store}
@@ -129,6 +177,6 @@ export function SpecMap({
           onOverlayOpening={onOverlayOpening}
         />
       )}
-    </>
+    </MapPlanContext.Provider>
   );
 }

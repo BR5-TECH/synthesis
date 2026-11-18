@@ -49,12 +49,15 @@ The backend that reads and writes the project's delivery plan when its source is
 41. **GDP-FR-RMNF** `set_parent` sets or removes the parent issue of an issue, and `set_milestone` sets or removes its milestone. Each is independent of the other and of the container of the item. `create_item` also takes optional `parent_id`, `milestone_id`, and `labels`. Where given, they replace the container rule of GDP-FR-NJJZ for the new issue.
 42. **GDP-FR-QFQF** The adapter reads the names of the labels of the polling repository, the Types it offers, the options of the Status field, and the full detail of one issue: title, body, labels, Type, milestone, parent, sub-issues, state, close reason, `Status`, blocked-by relations, and `updated_at`. These reads change nothing, and only the read of GDP-FR-PBSD updates the read cache.
 43. **GDP-FR-PBSD** For a proposal of `../tools/PPT-propose-plan-changes-tool.md`, each changed issue is read from GitHub and put into the read cache. Where the cache changes, the change emits `"github delivery plan changed"`. A failed write of the cache does not stop the proposal.
+44. **GDP-FR-WQEN** `read_github_plan_issue(number)` returns the full detail of one plan issue, read from GitHub now (GDP-FR-QFQF). A number that is not a plan issue of the read cache refuses with `tracker_item_not_found`, and no request goes to GitHub. The read changes nothing and updates no cache.
+45. **GDP-FR-KRMB** Where the GitHub read of `read_github_plan_issue(number)` fails, the answer holds the detail of the read cache, marked `stale`, with no labels, the typed error, and the `read_at` of the cache.
 
 ## Contract surface
 ### Tauri commands
 - `"load github delivery plan (refresh)"` → `load_github_delivery_plan(refresh)` → `GithubDeliveryPlan`. Invoked by `../ui/MDL-map-delivery-lens.md` (MDL-FR-LZIE) and in-process by `DSR-delivery-source.md` (DSR-FR-OIAS) and `FDL-flow-delivery.md`, which reads its read cache (FDL-FR-JLUJ).
 - `"apply github delivery edit (edit)"` → `apply_github_delivery_edit(edit)` → `GithubDeliveryPlan`. Invoked by `../ui/MDL-map-delivery-lens.md` (MDL-FR-XJBV), `../ui/DBR-delivery-board.md` (DBR-FR-KTJS), and in-process by `DSR-delivery-source.md` (DSR-FR-GXSE).
-- `"open tracker link (url)"` → `open_tracker_link(url)` → nothing. Invoked by `../ui/FLO-flow.md` (FLO-FR-ULEM), `../ui/MDL-map-delivery-lens.md` (MDL-FR-BZHY), and `../ui/DBR-delivery-board.md` (DBR-FR-XOOU).
+- `"read github plan issue (number)"` → `read_github_plan_issue(number)` → `PlanIssueRead`. Invoked by `../ui/MIV-map-issue-view.md` (MIV-FR-EDKQ).
+- `"open tracker link (url)"` → `open_tracker_link(url)` → nothing. Invoked by `../ui/FLO-flow.md` (FLO-FR-ULEM), `../ui/MDL-map-delivery-lens.md` (MDL-FR-BZHY), `../ui/DBR-delivery-board.md` (DBR-FR-XOOU), and `../ui/MIV-map-issue-view.md` (MIV-FR-PGEC, MIV-FR-ZQAX).
 
 ### Events
 - `"github delivery plan changed"` — payload `{ project_node_id }` (GDP-FR-URZY). Consumed by `../ui/DSH-dashboard.md` (DSH-FR-LGJT).
@@ -86,6 +89,26 @@ TrackerFacts {
   claim_eligible,  // GPP-FR-BOQX; issues alone
   assignees,       // string[] of logins; empty for a milestone
   external_blockers   // { number, title, url }[] (GDP-FR-URZL)
+}
+
+PlanIssueRead {
+  issue: {
+    number, url, title, body,
+    issueType,       // the Type name, or null
+    state,           // "open" | "closed"
+    closeReason,     // "completed" | "not_planned" | null
+    milestone,       // the milestone number, or null
+    milestoneTitle,  // or null
+    parent,          // the parent issue number, or null
+    subIssues,       // issue numbers
+    labels,          // label names; empty where stale
+    status,          // the Project Status name, or null
+    blockedBy,       // issue numbers
+    updatedAt
+  },
+  stale,           // true where the GitHub read failed (GDP-FR-KRMB)
+  error,           // the typed error of that read, or null
+  readAt           // the read_at of the cache where stale, or null
 }
 
 GithubDeliveryEdit =

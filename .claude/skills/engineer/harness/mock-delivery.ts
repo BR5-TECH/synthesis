@@ -20,7 +20,7 @@
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
-import { GITHUB_PROJECT, applyGithubEdit, githubPlanAnswer, githubPlanBody } from "./mock-github-plan";
+import { GITHUB_PROJECT, applyGithubEdit, githubIssueRead, githubPlanAnswer, githubPlanBody } from "./mock-github-plan";
 
 const FLOW_ID = "flows/release.flow.md";
 
@@ -158,6 +158,8 @@ export function deliveryInvoke(
         return Promise.reject({ code: "not_github_source", message: "The delivery source is not GitHub." });
       }
       return githubPlanAnswer(settings);
+    case "read_github_plan_issue":
+      return githubIssueRead(Number(a.number));
     case "apply_github_delivery_edit": {
       const refused = applyGithubEdit(a.edit);
       if (refused) return Promise.reject(refused);

@@ -167,9 +167,12 @@ describe("the menu keys and the focus (MDL-FR-JBEL)", () => {
     expect(menu()).toBeNull();
   });
 
-  it("MDL-FR-JBEL: where a name is being edited the request opens no menu", async () => {
+  it("MDL-FR-JBEL, MIV-FR-DYXQ: a card holds no rename field, and while a name is edited in the issue view the request opens no menu", async () => {
     await openFile();
     fireEvent.doubleClick(screen.getByTestId("flow-item-name-t1"));
+    expect(screen.queryByRole("textbox", { name: "Item name" })).toBeNull();
+    selectItem("t1");
+    fireEvent.click(within(screen.getByTestId("map-issue-view")).getByRole("button", { name: "Rename" }));
     await screen.findByRole("textbox", { name: "Item name" });
     fireEvent.contextMenu(itemEl("f1"), { clientX: 30, clientY: 40 });
     expect(menu()).toBeNull();

@@ -13,7 +13,7 @@ import { showToast } from "../../state/toasts";
 import type { DeliverySource } from "../../types/delivery";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import type { FlowItem } from "../../state/flowDocument";
-import { FlowCanvas, fileBinding, type FlowCanvasHandle, type FlowViewState } from "../Flow";
+import { FlowCanvas, fileBinding, type FlowCanvasHandle, type FlowViewState, type IssueViewHost } from "../Flow";
 import { BandMenu, FlowPathLink, type BandMenuEntry } from "./BandMenu";
 import { PublishDialog, type PublishState } from "./dialogs";
 import type { DeliveryHost } from "./host";
@@ -38,6 +38,8 @@ export interface FileLensProps {
   initialView?: FlowViewState;
   onViewChange: (state: FlowViewState) => void;
   panelSpecs: (itemId: string) => ReactNode;
+  /** MIV-FR-ITSA / MIV-FR-RPAU: what the lens keeps of the issue view. */
+  issueView: IssueViewHost;
   onOpenArtifact: (item: OpenableArtifact) => void;
   onStates: (states: ReadonlyMap<string, ItemDeliveryState> | null) => void;
   /** SNV-FR-56: close every other floating overlay before a dialog opens. */
@@ -157,7 +159,8 @@ export function FileLens(props: FileLensProps) {
               </div>
             )
           }
-          panelExtras={(item) => props.panelSpecs(item.id)}
+          // MIV-FR-VHDP: the sidebar of the issue view ends with the Specs list.
+          issueView={{ ...props.issueView, parts: (item) => ({ specs: props.panelSpecs(item.id) }) }}
         />
       </div>
       {publish && (

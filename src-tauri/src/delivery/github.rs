@@ -644,6 +644,17 @@ pub async fn apply_github_delivery_edit(
     source::off_thread(move || edits::apply_edit_impl(&app, edit)).await
 }
 
+/// GDP contract surface: `"read github plan issue (number)"`
+/// (GDP-FR-WQEN, GDP-FR-KRMB). The read logs its own outcome.
+#[project_scope_macros::project_scoped]
+#[tauri::command]
+pub async fn read_github_plan_issue(
+    app: AppHandle,
+    number: u64,
+) -> Result<plan_reads::PlanIssueRead, DeliveryError> {
+    plan_reads::read_plan_issue_detail(app, number).await
+}
+
 /// GDP contract surface: `"open tracker link (url)"`. The OS default browser
 /// opens the URL; no page opens inside the application.
 #[project_scope_macros::project_scoped]

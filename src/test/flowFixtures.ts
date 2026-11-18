@@ -81,6 +81,15 @@ export function selectItem(id: string) {
   fireEvent.pointerUp(grip(id), { pointerId: 1 });
 }
 
+/**
+ * MIV-FR-SVXH: a click on an item of the board: a press on its grip and a
+ * release on the canvas at the same point.
+ */
+export function clickItem(id: string, at: FlowPosition = { x: 0, y: 0 }) {
+  fireEvent.pointerDown(grip(id), { pointerId: 1, buttons: 1, ...client(at) });
+  fireEvent.pointerUp(canvas(), { pointerId: 1, ...client(at) });
+}
+
 /** Draw a connection from `from`'s port and release it on `to`. */
 export function connectItems(from: string, to: string) {
   const port = within(itemEl(from)).getByLabelText(/^Connect from /);
@@ -125,7 +134,12 @@ export function panCanvas(dx: number, dy: number) {
 }
 
 /** The selection panel of the selected item. */
-export const panel = () => screen.getByTestId("flow-selection-panel");
+export const panel = () =>
+  screen.queryByTestId("map-issue-view") ?? screen.getByTestId("flow-selection-panel");
+
+/** MIV-FR-SVXH: the issue view of the board, which takes the place of the panel. */
+export const issueView = () => screen.getByTestId("map-issue-view");
+export const queryIssueView = () => screen.queryByTestId("map-issue-view");
 
 /**
  * FLO-FR-13: the Markdown source field of the selected item's description.

@@ -9,7 +9,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import { bindCanvasGestures } from "../canvasGestures";
 
 /** The surfaces over the canvas that scroll on their own. */
-const SCROLLS_ON_ITS_OWN = ".flow-panel, [role='menu'], [role='listbox']";
+const SCROLLS_ON_ITS_OWN = ".flow-panel, .miv-sheet, [role='menu'], [role='listbox']";
 
 export function useCanvasWheel(
   surfaceRef: RefObject<HTMLDivElement | null>,

@@ -22,7 +22,17 @@ import {
   type FlowRemovalRequest,
 } from "./Flow";
 import { callsOf, flowBackend, itemState, type FlowBackend } from "../test/flowCanvasHarness";
-import { connectItems, dragItem, HLD_ID, itemEl, descriptionSource, panel, selectItem } from "../test/flowFixtures";
+import {
+  clickItem,
+  connectItems,
+  dragItem,
+  HLD_ID,
+  itemEl,
+  descriptionSource,
+  panel,
+  queryIssueView,
+  selectItem,
+} from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
 import { blocks, item, plan, sampleLayout, samplePlan } from "../test/flowPlanFixtures";
 
@@ -372,11 +382,14 @@ describe("the band and the chrome of a plan binding (MDL-FR-KKYH, MDL-FR-NTVL)",
     expect(document.querySelector(".flow-actionhost")).toBeNull();
   });
 
-  it("MDL-FR-KKYH, SDL-FR-KNOP, MDL-FR-PUKL: the host's band, panel, and add-menu rows render in place", async () => {
+  it("MDL-FR-KKYH, SDL-FR-KNOP, MDL-FR-PUKL, MIV-FR-VHDP: the host's band, issue view, and add-menu rows render in place", async () => {
     renderPlan(samplePlan(), {
       extra: {
+        board: true,
         bandExtras: <button type="button">Refresh</button>,
-        panelExtras: (item) => <div data-testid="host-row">Specs of {item.name}</div>,
+        issueView: {
+          parts: (item) => ({ specs: <div data-testid="host-row">Specs of {item.name}</div> }),
+        },
         addMenuExtras: (close) => (
           <button type="button" role="menuitem" onClick={close}>
             Add existing issue
@@ -392,6 +405,32 @@ describe("the band and the chrome of a plan binding (MDL-FR-KKYH, MDL-FR-NTVL)",
     await userEvent.click(screen.getByRole("button", { name: "Add to plan" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Add existing issue" }));
     expect(screen.queryByTestId("flow-add-menu")).toBeNull();
+  });
+
+  it("MIV-FR-TTZU, DBR-FR-WKNI: a click on a ghost card selects it and opens no issue view; a live card opens one", async () => {
+    renderPlan(samplePlan(), {
+      extra: { board: true },
+      binding: { proposal: { marks: new Map(), ghosts: new Map([["t1", { kindKnown: true }]]), reviewed: null } },
+    });
+    await settle();
+    clickItem("t1");
+    expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
+    expect(queryIssueView()).toBeNull();
+    clickItem("t2");
+    expect(await screen.findByTestId("map-issue-view")).toHaveAttribute("data-item", "t2");
+  });
+
+  it("MIV-FR-HHQR: while the host keeps the canvas inert, the issue view opens and every edit in it is disabled", async () => {
+    renderPlan(samplePlan(), { extra: { board: true, inert: true } });
+    await settle();
+    clickItem("t1");
+    const view = await screen.findByTestId("map-issue-view");
+    for (const name of ["Rename", "Edit the description", "Remove"]) {
+      expect(within(view).getByRole("button", { name })).toBeDisabled();
+    }
+    expect(within(view).getByRole("combobox", { name: "Kind" })).toBeDisabled();
+    expect(within(view).getByRole("combobox", { name: "Add path" })).toBeDisabled();
+    expect(within(view).getByRole("button", { name: "Close" })).toBeEnabled();
   });
 
   it("FLO-FR-21: a host that gives a layout store keeps the layout in it", async () => {

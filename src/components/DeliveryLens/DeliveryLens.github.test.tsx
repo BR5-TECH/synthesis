@@ -22,7 +22,7 @@ import { resetToasts, visibleToasts } from "../../state/toasts";
 import type { DeliverySource } from "../../types/delivery";
 import { renameItem } from "../../state/flowDocument";
 import { callsOf } from "../../test/flowCanvasHarness";
-import { itemEl, selectItem } from "../../test/flowFixtures";
+import { clickItem, itemEl, selectItem } from "../../test/flowFixtures";
 import { emitEvent, resetListeners } from "../../test/flowMocks";
 import { blocks, item, plan } from "../../test/flowPlanFixtures";
 import {
@@ -380,10 +380,10 @@ describe("the items of a GitHub plan (MDL-FR-JPYU, MDL-FR-ECPZ, MDL-FR-NTVL, MDL
     for (const id of ["f1", "t1", "t2", "x1"]) {
       expect(within(itemEl(id)).getAllByTestId("flow-tracker-tag").length).toBeGreaterThan(0);
     }
-    // DBR-FR-VNSJ: the tracker tag of a milestone is in its panel, not on its column.
+    // DBR-FR-VNSJ: the tracker tag of a milestone is in its issue view, not on its column.
     expect(within(itemEl("m1")).queryByTestId("flow-tracker-tag")).toBeNull();
     selectItem("m1");
-    const panel = await screen.findByTestId("flow-selection-panel");
+    const panel = await screen.findByTestId("map-issue-view");
     expect(within(panel).getByTestId("flow-tracker-tag")).toHaveAccessibleName(/milestone 3/);
     expect(within(itemEl("t2")).getByTestId("flow-tracker-tag")).toHaveTextContent(/^#\d+$/);
     expect(within(itemEl("t2")).getByTestId("flow-tracker-tag")).toHaveAccessibleName(/^Open acme\/payments#\d+ on GitHub$/);
@@ -411,13 +411,21 @@ describe("the items of a GitHub plan (MDL-FR-JPYU, MDL-FR-ECPZ, MDL-FR-NTVL, MDL
   });
 });
 
+/** MIV-FR-XMMS: the rename field of the item, in its issue view. */
+async function renameField(id: string) {
+  clickItem(id);
+  const view = await screen.findByTestId("map-issue-view");
+  await waitFor(() => expect(view).toHaveAttribute("data-item", id));
+  fireEvent.click(within(view).getByRole("button", { name: "Rename" }));
+  return within(view).getByRole("textbox", { name: "Item name" });
+}
+
 describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () => {
   it("MDL-FR-PUCM: a rename renders at once with a pending mark, and the answer replaces the plan", async () => {
     let answer!: (a: GithubDeliveryPlan) => void;
     b.apply = () => new Promise((r) => (answer = r));
     await openPlan();
-    fireEvent.doubleClick(screen.getByTestId("flow-item-name-x1"));
-    const field = screen.getByLabelText("Item name");
+    const field = await renameField("x1");
     fireEvent.change(field, { target: { value: "Decline text" } });
     fireEvent.keyDown(field, { key: "Enter" });
     expect(screen.getByTestId("flow-item-name-x1")).toHaveTextContent("Decline text");
@@ -442,8 +450,7 @@ describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () =>
     b.apply = () => Promise.reject({ code: "changed_on_tracker", message: "changed" });
     await openPlan();
     const before = callsOf(b, "load_github_delivery_plan").length;
-    fireEvent.doubleClick(screen.getByTestId("flow-item-name-x1"));
-    const field = screen.getByLabelText("Item name");
+    const field = await renameField("x1");
     fireEvent.change(field, { target: { value: "Other" } });
     fireEvent.keyDown(field, { key: "Enter" });
     // DBR-FR-CJSG: the error strip of the item carries the error text.
@@ -459,8 +466,7 @@ describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () =>
     b.apply = () => new Promise((r) => answers.push(r));
     await openPlan();
     for (const [id, name] of [["x1", "First"], ["t1", "Second"]] as const) {
-      fireEvent.doubleClick(screen.getByTestId(`flow-item-name-${id}`));
-      const field = screen.getByLabelText("Item name");
+      const field = await renameField(id);
       fireEvent.change(field, { target: { value: name } });
       fireEvent.keyDown(field, { key: "Enter" });
     }
@@ -483,10 +489,10 @@ describe("edits of a GitHub plan (MDL-FR-PUCM, MDL-FR-XWGP, MDL-FR-HNLP)", () =>
     expect(itemEl("t2")).toBeInTheDocument();
   });
 
-  it("MDL-FR-XJBV: a selected item shows its panel, and the plan's name and description are read-only", async () => {
+  it("MDL-FR-XJBV, MIV-FR-SVXH: a clicked item shows its issue view, and the plan's name and description are read-only", async () => {
     await openPlan();
     selectItem("t1");
-    expect(await screen.findByTestId("flow-selection-panel")).toBeInTheDocument();
+    expect(await screen.findByTestId("map-issue-view")).toBeInTheDocument();
     const name = screen.getByLabelText("Flow name");
     const description = screen.getByLabelText("Flow description");
     expect(name).toHaveAttribute("readonly");

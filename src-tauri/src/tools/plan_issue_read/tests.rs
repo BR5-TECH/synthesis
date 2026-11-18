@@ -547,3 +547,59 @@ fn each_call_is_logged_without_content() {
     let text = serde_json::to_string(&ai).unwrap();
     assert!(!text.contains("ZEBRA") && !text.contains("Issue 1") && !text.contains(SECRET));
 }
+
+/// One answer of the `read_github_plan_issue` command as the frontend gets it.
+fn command_read(f: &PlanFixture, number: u64) -> Result<Value, DeliveryError> {
+    let read = tauri::async_runtime::block_on(
+        crate::delivery::github::plan_reads::read_plan_issue_detail(f.app(), number),
+    )?;
+    Ok(serde_json::to_value(read).unwrap())
+}
+
+// GDP-FR-WQEN, GDP-FR-QFQF: the command answers the full detail of one plan
+// issue, read from GitHub now, in the camelCase shape of the contract surface.
+#[test]
+fn the_command_answers_the_detail_in_the_frontend_shape() {
+    let f = PlanFixture::new();
+    f.h.fake.lock().issue_labels.insert(2, vec!["docs".into()]);
+    let out = command_read(&f, 2).unwrap();
+    assert_eq!(out["stale"], false);
+    assert_eq!(out["error"], Value::Null);
+    assert_eq!(out["readAt"], Value::Null);
+    let issue = &out["issue"];
+    assert_eq!(issue["number"], 2);
+    assert_eq!(issue["labels"], json!(["docs"]));
+    assert_eq!(issue["subIssues"], json!([3]));
+    for key in ["milestoneTitle", "issueType", "closeReason", "blockedBy", "updatedAt"] {
+        assert!(issue.get(key).is_some(), "{key} is in {issue}");
+    }
+    assert!(issue.get("sub_issues").is_none(), "{issue}");
+}
+
+// GDP-FR-WQEN: a number that is not a plan issue refuses with
+// `tracker_item_not_found` and sends no request.
+#[test]
+fn the_command_refuses_a_number_outside_the_plan() {
+    let f = PlanFixture::new();
+    run(&list(&f), json!({})).unwrap();
+    f.h.fake.lock().calls.clear();
+    let refused = command_read(&f, 99).unwrap_err();
+    assert_eq!(refused.code, "tracker_item_not_found");
+    assert!(f.h.fake.calls().is_empty(), "no request: {:?}", f.h.fake.calls());
+}
+
+// GDP-FR-KRMB: a failed GitHub read answers the cache, stale, with no labels,
+// the typed error, and the read_at of the cache.
+#[test]
+fn the_command_falls_back_to_the_cache_when_github_fails() {
+    let f = PlanFixture::new();
+    run(&list(&f), json!({})).unwrap();
+    let cached = f.h.cache().expect("a read cache");
+    f.h.fake.lock().issue_labels.insert(2, vec!["docs".into()]);
+    f.h.fake.lock().read_error = Some("github_request_failed".into());
+    let out = command_read(&f, 2).unwrap();
+    assert_eq!(out["stale"], true);
+    assert_eq!(out["readAt"], json!(cached.read_at));
+    assert_eq!(out["issue"]["labels"], json!([]));
+    assert_eq!(out["error"]["code"], "github_request_failed");
+}

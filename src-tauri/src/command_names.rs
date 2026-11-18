@@ -260,6 +260,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // GitHub delivery plan (GDP-github-delivery-plan.md).
     "load_github_delivery_plan",
     "apply_github_delivery_edit",
+    "read_github_plan_issue",
     "open_tracker_link",
     // Held project close / application quit (SNV-FR-25 / SNV-FR-26 / EDT-FR-33).
     "close_project",

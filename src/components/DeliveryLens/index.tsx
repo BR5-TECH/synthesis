@@ -30,7 +30,7 @@ import type { SpecMapSessionStore } from "../../state/specMap/session";
 import type { FlowItem } from "../../state/flowDocument";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import { describeSource } from "../DeliverySettingsSection";
-import { FlowExcerptsContext, type FlowCanvasHandle, type FlowViewState } from "../Flow";
+import { FlowExcerptsContext, type FlowCanvasHandle, type FlowViewState, type IssueViewHost } from "../Flow";
 import { DEFAULT_VIEW, type View } from "../Flow/geometry";
 import { FileLens } from "./FileLens";
 import { GithubLens } from "./GithubLens";
@@ -40,7 +40,7 @@ import { leafRollup, Rollup } from "./Rollup";
 import { githubSourceOf, useDeliveryPlan } from "./useDeliveryPlan";
 import { useLensEvents } from "./useLensEvents";
 import { useSourceChangeFocus } from "./useSourceChangeFocus";
-import { MapPlanReviewLayer } from "../MapPlanProposal";
+import { MapPlanReviewLayer, useMapPlan } from "../MapPlanProposal";
 
 export type { DeliveryHost } from "./host";
 
@@ -182,6 +182,22 @@ function ActiveLens({
     (item: FlowItem) => store.discuss(deliveryNodeOf(item)),
     [store],
   );
+  // MIV-FR-ITSA: the review sheet and the issue view never show together.
+  const { store: review } = useMapPlan();
+  useSyncExternalStore(review.subscribe, review.getVersion);
+  const reviewOpen = review.snapshot().review !== null;
+  // MIV-FR-RPAU: the open issue view outlives each mount of the canvas.
+  const onIssueViewChange = useCallback(
+    (itemId: string | null) => {
+      data.issueView = itemId;
+    },
+    [data],
+  );
+  const issueView: IssueViewHost = {
+    blocked: reviewOpen,
+    initialOpen: data.issueView,
+    onOpenChange: onIssueViewChange,
+  };
   const windowWidth = useWindowWidth();
   // SMP-FR-VDND: the width of the Map tab decides which split controls show.
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
@@ -275,6 +291,7 @@ function ActiveLens({
         initialView={initialView}
         onViewChange={onViewChange}
         panelSpecs={panelSpecs}
+        issueView={issueView}
         onOpenArtifact={onOpenArtifact}
         onOverlayOpening={onOverlayOpening}
         onSourceChanged={onSourceChanged}
@@ -292,6 +309,7 @@ function ActiveLens({
         initialView={initialView}
         onViewChange={onViewChange}
         panelSpecs={panelSpecs}
+        issueView={issueView}
         onOpenArtifact={onOpenArtifact}
         onStates={setFileStates}
         onOverlayOpening={onOverlayOpening}

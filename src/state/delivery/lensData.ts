@@ -18,6 +18,8 @@ export class DeliveryLensData {
    * tab closes; the view, which a close resets, is in the session's slot.
    */
   selection: string[] = [];
+  /** MIV-FR-RPAU: the item whose issue view is open, or null. */
+  issueView: string | null = null;
 
   constructor(private readonly ops?: GithubPlanOps) {}
 

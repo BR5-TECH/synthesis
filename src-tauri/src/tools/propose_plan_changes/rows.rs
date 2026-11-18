@@ -36,15 +36,15 @@ pub const BAD_CLOSE_REASON: &str = "`close_reason` is `completed` or `not_planne
 /// The longest name of the model that a refusal repeats, in characters.
 const ECHO_CHARS: usize = 100;
 
-fn echo(name: &str) -> String {
+pub fn echo(name: &str) -> String {
     bounded_argument(name.trim(), ECHO_CHARS)
 }
 
-fn invalid(code: &'static str, message: impl Into<String>) -> PlanRefusal {
+pub fn invalid(code: &'static str, message: impl Into<String>) -> PlanRefusal {
     PlanRefusal::invalid(code, message)
 }
 
-fn bad_rows() -> PlanRefusal {
+pub fn bad_rows() -> PlanRefusal {
     invalid("bad_rows", BAD_ROWS)
 }
 
@@ -126,26 +126,37 @@ pub fn check_shape(rows: &[PlanRowArg]) -> Result<Needs, PlanRefusal> {
         if key.is_empty() || !keys.insert(key) {
             return Err(bad_rows());
         }
-        let op = row.op.as_str();
-        if ![OP_CREATE, OP_MODIFY, OP_DRAFT].contains(&op) || has_stray_field(op, row) {
-            return Err(bad_rows());
-        }
-        match op {
-            OP_DRAFT => {
-                if given(&row.name).is_none() {
-                    return Err(invalid("blank_name", BLANK_NAME));
-                }
-                if given(&row.body).is_none() {
-                    return Err(invalid("blank_body", BLANK_BODY));
-                }
-            }
-            _ => check_issue_row(op, row, at, &creates, &mut needs)?,
-        }
-        if op == OP_CREATE {
+        check_row(row, at, &creates, &mut needs)?;
+        if row.op == OP_CREATE {
             creates.insert(key);
         }
     }
     Ok(needs)
+}
+
+/// PPT-FR-OVKT to PPT-FR-QCTM: the checks of one row that the arguments alone
+/// decide. `creates` holds the keys of the `create_issue` rows before it, which
+/// `parent_row` can name. The key is checked by the caller.
+pub fn check_row(
+    row: &PlanRowArg,
+    at: usize,
+    creates: &HashSet<&str>,
+    needs: &mut Needs,
+) -> Result<(), PlanRefusal> {
+    let op = row.op.as_str();
+    if ![OP_CREATE, OP_MODIFY, OP_DRAFT].contains(&op) || has_stray_field(op, row) {
+        return Err(bad_rows());
+    }
+    if op != OP_DRAFT {
+        return check_issue_row(op, row, at, creates, needs);
+    }
+    if given(&row.name).is_none() {
+        return Err(invalid("blank_name", BLANK_NAME));
+    }
+    if given(&row.body).is_none() {
+        return Err(invalid("blank_body", BLANK_BODY));
+    }
+    Ok(())
 }
 
 fn check_issue_row(
@@ -286,20 +297,25 @@ fn waiting(key: &str, fields: RowFields) -> MapPlanRow {
 
 /// PPT-FR-UZEK: the rows of the proposal, every one `waiting`.
 pub fn build_rows(rows: &[PlanRowArg], facts: &PlanFacts) -> Result<Vec<MapPlanRow>, PlanRefusal> {
-    rows.iter()
-        .enumerate()
-        .map(|(index, row)| {
-            let fields = match row.op.as_str() {
-                OP_CREATE => RowFields::CreateIssue(create_fields(row, facts)?),
-                OP_MODIFY => RowFields::ModifyIssue(modify_fields(row, index + 1, facts)?),
-                _ => RowFields::NewDraft(NewDraftFields {
-                    name: given(&row.name).unwrap_or_default().to_string(),
-                    body: row.body.clone().unwrap_or_default(),
-                }),
-            };
-            Ok(waiting(&row.key, fields))
-        })
-        .collect()
+    rows.iter().enumerate().map(|(index, row)| build_row(row, index + 1, facts)).collect()
+}
+
+/// PPT-FR-UZEK: one `waiting` row, checked against the facts of the plan. `at`
+/// is the place that a refusal names.
+pub fn build_row(
+    row: &PlanRowArg,
+    at: usize,
+    facts: &PlanFacts,
+) -> Result<MapPlanRow, PlanRefusal> {
+    let fields = match row.op.as_str() {
+        OP_CREATE => RowFields::CreateIssue(create_fields(row, facts)?),
+        OP_MODIFY => RowFields::ModifyIssue(modify_fields(row, at, facts)?),
+        _ => RowFields::NewDraft(NewDraftFields {
+            name: given(&row.name).unwrap_or_default().to_string(),
+            body: row.body.clone().unwrap_or_default(),
+        }),
+    };
+    Ok(waiting(&row.key, fields))
 }
 
 /// PPT-FR-OVKT.

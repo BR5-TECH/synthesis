@@ -237,9 +237,14 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         // CMS-FR-OIUO: a reference to a plan proposal. The rows and their states
         // come from the `map_context` section (MPR-FR-NXDX), so the line names
         // the proposal and nothing more.
-        comments::Attachment::MapPlanProposal { proposal_id } => {
+        comments::Attachment::MapPlanProposal { proposal_id, update: None } => {
             format!("[recorded plan proposal {proposal_id}]")
         }
+        // CMS-FR-BSQB: an update of the open proposal, in counts.
+        comments::Attachment::MapPlanProposal { proposal_id, update: Some(update) } => format!(
+            "[updated plan proposal {proposal_id}: {} changed, {} added, {} withdrawn]",
+            update.changed, update.added, update.withdrawn
+        ),
         // CMS-FR-TUHL, CMS-FR-KVDV: the group marks name who took part and show
         // none of what the advisors said, which the reply already used.
         comments::Attachment::Synthesis => {

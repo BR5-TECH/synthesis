@@ -1,11 +1,12 @@
 /**
- * MPV-FR-ZFDO .. MPV-FR-PVXW: the body of a row typeset as the issue reads,
+ * MPV-FR-ZFDO .. MPV-FR-RQWN: the body of a row typeset as the issue reads,
  * with a gutter mark on each added or removed block, the changed words of an
- * edited block marked inline, and folds of unchanged blocks.
+ * edited block marked inline, the changed lines of an edited code block marked
+ * in a gutter of their own, and folds of unchanged blocks.
  */
 import { useMemo, useState } from "react";
 
-import { bodyCountLabel, diffBody, type BodyBlock, type Piece } from "../../diff/bodyDiff";
+import { bodyCountLabel, diffBody, type BodyBlock, type CodeLine, type Piece } from "../../diff/bodyDiff";
 import type { MapPlanRow } from "../../types";
 import { Icon } from "../icons";
 
@@ -33,6 +34,40 @@ const SPOKEN: Readonly<Record<BodyBlock["mode"], string>> = {
   ctx: "",
 };
 
+const LINE_GUTTER: Readonly<Record<NonNullable<CodeLine["mark"]>, string>> = { ins: "+", del: "−" };
+const LINE_SPOKEN: Readonly<Record<NonNullable<CodeLine["mark"]>, string>> = { ins: "added line", del: "removed line" };
+
+/**
+ * MPV-FR-ZCWQ / MPV-FR-JVZN: a fenced code block as the issue shows it: every
+ * line break and indentation kept, its language at the trailing edge, and in an
+ * edited block a mark on each changed line.
+ */
+function CodeView({ block }: { block: BodyBlock }) {
+  const lines = block.lines ?? [];
+  const marked = lines.some((line) => line.mark !== undefined);
+  return (
+    <div className="pp-code" data-testid="pp-code" data-language={block.language ?? ""}>
+      {block.language && <span className="pp-code__lang">{block.language}</span>}
+      <pre className="pp-code__pre">
+        <code>
+          {lines.map((line, i) => (
+            <span key={i} className="pp-code__line" data-mark={line.mark ?? "ctx"}>
+              {marked && (
+                <span className="pp-code__g" aria-hidden="true">
+                  {line.mark ? LINE_GUTTER[line.mark] : " "}
+                </span>
+              )}
+              {line.mark && <span className="pp-sr-only">{LINE_SPOKEN[line.mark]}: </span>}
+              {line.text}
+              {"\n"}
+            </span>
+          ))}
+        </code>
+      </pre>
+    </div>
+  );
+}
+
 function BlockView({ block }: { block: BodyBlock }) {
   const m = block.mode === "edit" ? "ctx" : block.mode;
   return (
@@ -41,13 +76,15 @@ function BlockView({ block }: { block: BodyBlock }) {
         {GUTTER[block.mode]}
       </span>
       <div
-        className={`pp-b__c pp-${block.kind}`}
+        className={`pp-b__c pp-${block.kind === "code" ? "codeblock" : block.kind}`}
         style={block.kind === "li" && block.depth > 0 ? { marginLeft: block.depth * 16 } : undefined}
       >
         {SPOKEN[block.mode] && <span className="pp-sr-only">{SPOKEN[block.mode]}: </span>}
-        {block.pieces.map((piece, i) => (
-          <PieceView key={i} piece={piece} />
-        ))}
+        {block.kind === "code" ? (
+          <CodeView block={block} />
+        ) : (
+          block.pieces.map((piece, i) => <PieceView key={i} piece={piece} />)
+        )}
       </div>
     </div>
   );

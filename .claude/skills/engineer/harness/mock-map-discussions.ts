@@ -47,6 +47,16 @@ const BODY_BEFORE = [
   "- Tokens are stored per merchant.",
   "- The `vault` and `proxy` endpoints are available to the checkout.",
   "",
+  "> The card number never reaches the service, not even in its logs.",
+  "",
+  "## Flow",
+  "",
+  "```mermaid",
+  "sequenceDiagram",
+  "  Browser->>Vault: card number",
+  "  Vault-->>Browser: token",
+  "```",
+  "",
 ].join("\n");
 const BODY_AFTER = [
   "## Description",
@@ -66,6 +76,18 @@ const BODY_AFTER = [
   "",
   "- Tokens are stored per merchant, with a rotation date.",
   "- The `vault` and `proxy` endpoints are available to the checkout.",
+  "",
+  "> The card number never reaches the service, not even in its logs.",
+  "",
+  "## Flow",
+  "",
+  "```mermaid",
+  "sequenceDiagram",
+  "  Browser->>Vault: card number",
+  "  Vault-->>Browser: token and its expiry",
+  "  Browser->>Service: token, merchant id, amount, currency, and an idempotency key that the checkout makes once per attempt",
+  "    Note over Service: the token is stored per merchant",
+  "```",
   "",
 ].join("\n");
 
@@ -158,6 +180,47 @@ if (flag("mapProposal")) {
   });
   nextThread = 2;
 }
+
+/*
+ * With `?mapProposal`, `window.__mapProposalArrive()` appends an agent comment
+ * that updates the proposal (MPV-FR-QZUD) to `map-1`, adds its pending
+ * proposal `pp-upd`, and emits `discussion-changed` (MPV-FR-UWQL).
+ */
+(window as any).__mapProposalArrive = () => {
+  const t = threads.find((x) => x.id === "map-1");
+  if (!t) return false;
+  const at = new Date().toISOString();
+  const id = `map-1-c${t.comments.length + 1}`;
+  proposals.push({
+    id: "pp-upd",
+    discussionId: "map-1",
+    commentId: id,
+    createdAt: at,
+    rows: [
+      row("r51", "modify_issue", {
+        number: 51,
+        title: "Payout report",
+        baseUpdatedAt: at,
+        changes: [{ field: "status", before: "Todo", after: "In Progress" }],
+      }),
+    ],
+  });
+  t.comments = [
+    ...t.comments,
+    {
+      id,
+      author: AGENT,
+      body: "I updated the proposal.",
+      quotes: [],
+      attachments: [{ kind: "mapPlanProposal", proposalId: "pp-upd", update: { changed: 1, added: 1, withdrawn: 1 } }],
+      createdAt: at,
+    },
+  ];
+  t.updatedAt = at;
+  (window as any).__fireBusEvent?.("discussion-changed", structuredClone(t));
+  fireChanged("map-1");
+  return true;
+};
 
 function fireChanged(discussionId: string) {
   queueMicrotask(() => (window as any).__fireBusEvent?.("map-plan-proposals-changed", { discussionId }));

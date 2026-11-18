@@ -12,6 +12,7 @@ use crate::map_plan::{MapPlanProposal, RowFields};
 use crate::tools::tests::plan_fixture::{agent, human, PlanFixture};
 
 mod cache_reads;
+mod updates;
 
 type Tool = ProposePlanChangesTool<Mock>;
 
@@ -143,9 +144,18 @@ fn the_description_and_the_schema_are_fixed() {
     assert_eq!(other.tool().description(), DESCRIPTION);
     assert_eq!(f.tool().parameters(), other.tool().parameters());
     assert!(DESCRIPTION.starts_with("Propose work on the delivery plan"));
-    assert!(DESCRIPTION.ends_with("Your turn ends when the proposal is recorded."));
+    assert!(DESCRIPTION.ends_with("Your turn ends when the proposal is recorded or updated."));
+    assert!(DESCRIPTION.contains("send `updates` in place of `rows`"));
     let schema = f.tool().parameters();
-    assert_eq!(schema["required"], json!(["rationale", "rows"]));
+    assert_eq!(schema["required"], json!(["rationale"]));
+    let update = &schema["properties"]["updates"]["items"];
+    assert_eq!(update["required"], json!(["action", "key"]));
+    assert_eq!(update["properties"]["action"]["enum"], json!(["change", "add", "withdraw"]));
+    assert_eq!(
+        update["properties"]["row"]["properties"],
+        schema["properties"]["rows"]["items"]["properties"]
+    );
+    assert_eq!(schema["properties"]["updates"]["maxItems"], 20);
     assert_eq!(schema["properties"]["rows"]["minItems"], 1);
     assert_eq!(schema["properties"]["rows"]["maxItems"], 20);
     let row = &schema["properties"]["rows"]["items"];
@@ -546,7 +556,7 @@ fn a_new_draft_needs_a_name_and_a_prompt_and_no_github() {
     }
 }
 
-// PPT-FR-AYQT, MPR-FR-SBYA: a call while a row waits is refused. A call is
+// PPT-FR-AYQT, MPR-FR-SBYA: a call with `rows` while a row waits is refused. A call is
 // accepted again when every row is decided.
 #[test]
 fn a_card_that_waits_refuses_a_new_call() {
@@ -556,7 +566,7 @@ fn a_card_that_waits_refuses_a_new_call() {
     assert_eq!(refusal.kind, ToolErrorKind::PermissionDenied);
     assert!(refusal.retryable);
     assert_eq!(refusal.message, CARD_OPEN);
-    assert!(refusal.message.contains("Wait for them"));
+    assert!(refusal.message.contains("send `updates` in place of `rows`"));
     let proposal = f.proposals().remove(0);
     crate::map_plan::reject_row(&f.plan.app(), &f.plan.discussion_id, &proposal.id, "a").unwrap();
     assert_eq!(refused(f.rows(json!([draft("c")]))).message, CARD_OPEN, "one row still waits");
@@ -649,7 +659,10 @@ fn the_comment_is_the_rationale_with_one_proposal_attachment() {
         .iter()
         .filter(|a| matches!(a, Attachment::MapPlanProposal { .. }))
         .collect();
-    assert_eq!(references, vec![&Attachment::MapPlanProposal { proposal_id: proposal.id.clone() }]);
+    assert_eq!(
+        references,
+        vec![&Attachment::MapPlanProposal { proposal_id: proposal.id.clone(), update: None }]
+    );
 }
 
 // PPT-FR-PRPX, CVL-FR-15: a valid call returns the data object and sets the

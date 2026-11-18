@@ -18,6 +18,7 @@ mod recording;
 mod refusals;
 mod reopening;
 mod reprepare;
+mod updating;
 
 const AT: &str = "2026-03-01T10:00:00Z";
 

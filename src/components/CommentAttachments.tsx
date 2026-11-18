@@ -929,6 +929,7 @@ export function CommentAttachmentList({
             discussionId={threadId}
             proposalId={a.proposalId}
             proposer={author?.kind === "agent" ? author.handle : undefined}
+            update={a.update}
           />
         ) : a.kind === "mapNode" ? (
           // MPR-FR-PMLX: the focus a message was sent with.

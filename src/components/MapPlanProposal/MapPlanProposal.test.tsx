@@ -485,7 +485,7 @@ describe("review bar (MPV-FR-MTSP .. MPV-FR-IZLJ)", () => {
     expect(callsOf(b, "accept_map_plan_row").map((c) => c.rowKey)).toEqual(["a", "parent"]);
   });
 
-  it("MPV-FR-TWSY: Reject all rejects every pending row and leaves decided rows alone", async () => {
+  it("MPV-FR-TWSY, MPV-FR-VXHC: Reject all rejects every pending row, leaves decided rows alone, and closes the sheet", async () => {
     const p = withRow(FOUR(), "r18", { state: "accepted" });
     const b = backend(invokeMock, p);
     b.reject = async ({ rowKey }) => (b.proposal = withRow(b.proposal, rowKey, { state: "rejected" }));
@@ -493,8 +493,11 @@ describe("review bar (MPV-FR-MTSP .. MPV-FR-IZLJ)", () => {
     await screen.findByText("1 of 4");
     const { user } = await openSheet();
     await user.click(within(screen.getByTestId("pp-bar")).getByRole("button", { name: "Reject all" }));
-    await waitFor(() => expect(screen.getByTestId("pp-bar")).toHaveTextContent("All rows decided: 1 applied, 3 rejected"));
+    // MPV-FR-VXHC: the run leaves no row pending, so the sheet closes on its own.
+    await waitFor(() => expect(screen.queryByTestId("pp-sheet")).toBeNull());
     expect(callsOf(b, "reject_map_plan_row").map((c) => c.rowKey)).toEqual(["r11", "rnew", "r16"]);
+    await user.click(screen.getByRole("button", { name: /^Show review/ }));
+    expect(screen.getByTestId("pp-bar")).toHaveTextContent("All rows decided: 1 applied, 3 rejected");
   });
 
   it("MPV-FR-IZLJ, MPV-FR-XYXY: with no pending row the bar is the neutral line, and no row offers Accept or Reject", async () => {
@@ -733,7 +736,7 @@ describe("smaller cases (MPV-FR-LYKS, MPV-FR-CCDM, MPV-FR-PVXW, MPV-FR-PBAD, MPV
     await screen.findByText("1 added, 1 draft");
     const { user } = await openSheet();
     await user.click(within(screen.getByTestId("pp-bar")).getByRole("button", { name: "Accept all" }));
-    await waitFor(() => expect(screen.getByTestId("pp-bar")).toHaveClass("pp-bar--done"));
+    await waitFor(() => expect(screen.queryByTestId("pp-sheet")).toBeNull());
     const logged = JSON.stringify([vi.mocked(logInfo).mock.calls, vi.mocked(logWarn).mock.calls]);
     for (const secret of ["Secret body", "secret-label", "Secret draft", "Secret prompt"]) expect(logged).not.toContain(secret);
   });

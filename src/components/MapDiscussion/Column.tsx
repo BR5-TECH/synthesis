@@ -32,6 +32,7 @@ import type { OpeningCopy, OpenState } from "../DraftDiscussion/OpenDiscussion";
 import { Icon } from "../icons";
 import { FocusChip } from "./FocusChip";
 import { useMapPlan } from "../MapPlanProposal";
+import { showDeliveryKeepingFocus, useProposalArrivals } from "./useProposalArrivals";
 
 export interface MapColumnProps {
   store: SpecMapSessionStore;
@@ -154,11 +155,21 @@ export function MapDiscussionColumn({ store, selected, planTool }: MapColumnProp
   const shown = composing ? undefined : (offered.find((t) => t.id === threadId) ?? offered[0]);
   const subject = composing ? node : (shown?.mapNode ?? null);
   // DBR-FR-AGIN: the proposals of the thread the column shows mark the board.
-  const { store: planReview } = useMapPlan();
+  const { store: planReview, host: planHost } = useMapPlan();
   const shownId = shown?.id ?? null;
   useEffect(() => {
     planReview.setActiveDiscussion(shownId);
   }, [planReview, shownId]);
+  // MPV-FR-UWQL: a proposal that arrives in the shown thread opens its sheet on
+  // the Delivery lens.
+  useProposalArrivals(shown, planReview, () =>
+    showDeliveryKeepingFocus(
+      planHost?.showDelivery,
+      store.snapshot().lens !== "delivery",
+      shownId,
+      '[data-testid="map-discussion-column"]',
+    ),
+  );
 
   // SMP-FR-DUUU: the focus of the next message. It starts as the node of the
   // thread or of the opening composer, and it returns there after each post.

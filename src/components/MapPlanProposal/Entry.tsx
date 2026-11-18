@@ -1,7 +1,8 @@
 /**
- * MPV-FR-IBSF .. MPV-FR-FNIS: the summary row of a plan proposal in a Map
- * discussion. It is the only part of the proposal the discussion shows; the
- * review opens as a sheet over the Delivery canvas.
+ * MPV-FR-IBSF .. MPV-FR-FNIS, MPV-FR-QZUD: the summary row of a plan proposal
+ * in a Map discussion. It is the only part of the proposal the discussion
+ * shows; the review opens as a sheet over the Delivery canvas. The row of a
+ * comment that updated the proposal names the counts of that update.
  */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
@@ -11,7 +12,9 @@ import {
   proposalStatus,
   rowStatuses,
   summaryOf,
+  updateSummaryOf,
 } from "../../state/mapPlan/derive";
+import type { ProposalUpdateCounts } from "../../types";
 import { useMapPlan } from "./host";
 import { StatusWord } from "./parts";
 
@@ -19,9 +22,12 @@ export function MapPlanEntry({
   discussionId,
   proposalId,
   proposer,
+  update,
 }: {
   discussionId: string;
   proposalId: string;
+  /** MPV-FR-QZUD: the counts of the update that the comment made, if it made one. */
+  update?: ProposalUpdateCounts;
   /** MPV-FR-AAFF: the handle of the agent whose comment carries the proposal. */
   proposer?: string;
 }) {
@@ -34,7 +40,7 @@ export function MapPlanEntry({
     if (proposer) store.noteProposer(proposalId, proposer);
   }, [store, proposalId, proposer]);
   const buttonRef = useCallback(
-    (el: HTMLButtonElement | null) => store.registerReturn(proposalId, el),
+    (el: HTMLButtonElement | null) => (el ? store.registerReturn(proposalId, el) : undefined),
     [store, proposalId],
   );
 
@@ -61,7 +67,7 @@ export function MapPlanEntry({
       : formatRelative(proposal.createdAt);
   const shown = snap.review?.proposalId === proposalId;
   const label = shown ? "Hide review" : status === "pending" || status === "applying" ? "Review" : "Show review";
-  const summary = summaryOf(proposal);
+  const summary = update ? updateSummaryOf(update) : summaryOf(proposal);
 
   const toggle = () => {
     if (shown) {

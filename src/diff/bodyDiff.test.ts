@@ -1,9 +1,9 @@
 /**
- * MPV-FR-WYTL .. MPV-FR-PVXW: the body block diff of a plan proposal row.
+ * MPV-FR-WYTL .. MPV-FR-RQWN: the body block diff of a plan proposal row.
  */
 import { describe, expect, it } from "vitest";
 
-import { bodyCountLabel, diffBody, mergedWordPieces, type BodyBlock, type BodyItem } from "./bodyDiff";
+import { bodyCountLabel, codeLineDiff, diffBody, mergedWordPieces, type BodyBlock, type BodyItem } from "./bodyDiff";
 
 /** The blocks of a diff as `mode:kind:text`, folds as `fold(n)`. */
 function shape(items: readonly BodyItem[]): string[] {
@@ -120,7 +120,7 @@ describe("typesetting (MPV-FR-PVXW)", () => {
     expect(blocks[3].depth).toBeGreaterThan(0);
   });
 
-  it("MPV-FR-PVXW: a rule carries no block, and a code fence shows as its plain text", () => {
+  it("MPV-FR-PVXW, MPV-FR-ZCWQ: a rule carries no block, and a code fence is a code block of its text", () => {
     const diff = diffBody(null, "Text.\n\n---\n\n```\nlet a = 1;\n```\n");
     expect(shape(diff.items)).toEqual(["add:p:Text.", "add:code:let a = 1;"]);
   });
@@ -181,5 +181,68 @@ describe("grouped word marks (MPV-FR-PPHV)", () => {
     expect(shape(diff.items)).toEqual([
       "edit:p:Card numbers are [-expected to be tokenized][+tokenized in the browser] before they reach the service.",
     ]);
+  });
+});
+
+describe("code blocks and quotes (MPV-FR-PVXW, MPV-FR-ZCWQ, MPV-FR-JVZN, MPV-FR-RQWN)", () => {
+  const MERMAID_OLD = "```mermaid\nflowchart LR\n    A --> B\n    B --> C\n```\n";
+  const MERMAID_NEW = "```mermaid\nflowchart LR\n    A --> B\n    B --> D\n      D --> E\n```\n";
+
+  it("MPV-FR-ZCWQ: a fenced code block keeps each line, its indentation, and its language", () => {
+    const diff = diffBody(null, MERMAID_OLD);
+    const item = diff.items[0];
+    expect(item.type).toBe("block");
+    const block = (item as { block: BodyBlock }).block;
+    expect(block.kind).toBe("code");
+    expect(block.language).toBe("mermaid");
+    expect(block.lines).toEqual([{ text: "flowchart LR" }, { text: "    A --> B" }, { text: "    B --> C" }]);
+  });
+
+  it("MPV-FR-JVZN: a removed and an added code block of one language are one edited block with marked lines", () => {
+    const diff = diffBody(`Intro.\n\n${MERMAID_OLD}`, `Intro.\n\n${MERMAID_NEW}`);
+    const blocks = diff.items.flatMap((i) => (i.type === "block" ? [i.block] : i.blocks));
+    const code = blocks.find((b) => b.kind === "code")!;
+    expect(code.mode).toBe("edit");
+    expect(code.lines).toEqual([
+      { text: "flowchart LR" },
+      { text: "    A --> B" },
+      { text: "    B --> C", mark: "del" },
+      { text: "    B --> D", mark: "ins" },
+      { text: "      D --> E", mark: "ins" },
+    ]);
+    expect(diff.edited).toBe(1);
+    expect(diff.added).toBe(0);
+    expect(diff.removed).toBe(0);
+    expect(bodyCountLabel(diff)).toBe("1 block edited");
+  });
+
+  it("MPV-FR-JVZN: code blocks of two languages stay a removed and an added block", () => {
+    const diff = diffBody("```js\nlet a = 1;\n```\n", "```ts\nlet a = 1;\n```\n");
+    expect(shape(diff.items)).toEqual(["del:code:let a = 1;", "add:code:let a = 1;"]);
+    expect(diff.edited).toBe(0);
+  });
+
+  it("MPV-FR-JVZN: the removed lines of a changed run come before the lines that replace them", () => {
+    expect(codeLineDiff("a\nb\nc\nz", "a\nB\nC\nz")).toEqual([
+      { text: "a" },
+      { text: "b", mark: "del" },
+      { text: "c", mark: "del" },
+      { text: "B", mark: "ins" },
+      { text: "C", mark: "ins" },
+      { text: "z" },
+    ]);
+  });
+
+  it("MPV-FR-ZCWQ: an unchanged code block is context, and an empty line stays a line", () => {
+    const body = "```\nfirst\n\n  third\n```\n";
+    const diff = diffBody(body, `${body}\nAdded.\n`);
+    const ctx = diff.items[0];
+    expect(ctx.type === "block" && ctx.block.mode).toBe("ctx");
+    expect(ctx.type === "block" && ctx.block.lines).toEqual([{ text: "first" }, { text: "" }, { text: "  third" }]);
+  });
+
+  it("MPV-FR-RQWN, MPV-FR-PVXW: a quote is its own kind", () => {
+    const diff = diffBody(null, "> Quoted words.\n");
+    expect(shape(diff.items)).toEqual(["add:quote:Quoted words."]);
   });
 });

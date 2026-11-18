@@ -19,6 +19,11 @@ pub const ERR_PROPOSAL_OPEN: &str = "proposal_open";
 pub const ERR_DRAFT_CREATE_FAILED: &str = "draft_create_failed";
 pub const ERR_DISCUSSION_NOT_FOUND: &str = "discussion_not_found";
 pub const ERR_STORE_UNAVAILABLE: &str = "store_unavailable";
+pub const ERR_NO_OPEN_PROPOSAL: &str = "no_open_proposal";
+pub const ERR_KIND_CHANGED: &str = "kind_changed";
+pub const ERR_KEY_TAKEN: &str = "key_taken";
+pub const ERR_NO_ROW_LEFT: &str = "no_row_left";
+pub const ERR_PARENT_WITHDRAWN: &str = "parent_withdrawn";
 /// A stored row whose change cannot be read as a write.
 pub const ERR_ROW_INVALID: &str = "row_invalid";
 

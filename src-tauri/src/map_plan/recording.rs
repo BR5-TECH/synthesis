@@ -92,6 +92,7 @@ fn record_in(
         comment.body,
         comment.spoken_original,
         &proposal.id,
+        None,
         Stamp { by: &comment.author, at: &now },
     );
     match appended {

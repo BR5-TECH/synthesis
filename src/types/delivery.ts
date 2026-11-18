@@ -182,6 +182,36 @@ export type GithubDeliveryEdit =
  * The typed error of the delivery operations (DSR, GDP, DMS). `code` is one of
  * the codes those specs name; `message` is displayable text.
  */
+/** GDP-FR-QFQF: the full detail of one plan issue. */
+export interface GithubPlanIssueDetail {
+  number: number;
+  url: string;
+  title: string;
+  body: string;
+  issueType: string | null;
+  state: string;
+  closeReason: string | null;
+  milestone: number | null;
+  milestoneTitle: string | null;
+  parent: number | null;
+  subIssues: number[];
+  /** Empty where the answer is stale. */
+  labels: string[];
+  status: string | null;
+  blockedBy: number[];
+  updatedAt: string;
+}
+
+/** GDP-FR-WQEN / GDP-FR-KRMB: the answer of `"read github plan issue (number)"`. */
+export interface GithubPlanIssueRead {
+  issue: GithubPlanIssueDetail;
+  /** True where the GitHub read failed and the detail comes from the read cache. */
+  stale: boolean;
+  error: DeliveryError | null;
+  /** The `read_at` of the cache, where stale. */
+  readAt: string | null;
+}
+
 export interface DeliveryError {
   code: string;
   message: string;

@@ -16,6 +16,7 @@ import type {
   DeliveryExportResult,
   GithubDeliveryEdit,
   GithubDeliveryPlan,
+  GithubPlanIssueRead,
   PublishResult,
 } from "../types/delivery";
 
@@ -48,6 +49,10 @@ export const loadGithubDeliveryPlan = (refresh: boolean) =>
 /** GDP-FR-VNNU: `"apply github delivery edit (edit)"`. */
 export const applyGithubDeliveryEdit = (edit: GithubDeliveryEdit) =>
   invoke<GithubDeliveryPlan>("apply_github_delivery_edit", { edit });
+
+/** GDP-FR-WQEN / GDP-FR-KRMB: `"read github plan issue (number)"`. */
+export const readGithubPlanIssue = (number: number) =>
+  invoke<GithubPlanIssueRead>("read_github_plan_issue", { number });
 
 /** GDP-FR-PIAQ: `"open tracker link (url)"`. */
 export const openTrackerLink = (url: string) => invoke<void>("open_tracker_link", { url });

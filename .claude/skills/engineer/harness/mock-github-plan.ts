@@ -57,6 +57,43 @@ const issueOf = (id: string) => {
 };
 for (const item of doc.items) issueOf(item.id);
 
+/** MIV-FR-RNVP .. MIV-FR-CTJU: an issue body with the fences the issue view renders. */
+const RICH_BODY = [
+  "Capture a card at checkout and keep only a token of it.",
+  "",
+  "## Acceptance",
+  "",
+  "```gherkin",
+  "@payments",
+  "Feature: Card capture",
+  "  Scenario: A valid card",
+  "    Given a cart with one item",
+  "    When the buyer enters a valid card \"4242\"",
+  "    Then the order is paid",
+  "    And no card number is stored",
+  "```",
+  "",
+  "## Notes",
+  "",
+  "- The token comes from the provider.",
+  "- A declined card shows the reason.",
+  "",
+  "```ts",
+  "export function tokenize(card: string): Promise<string> {",
+  "  return provider.tokenize({ number: card }); // never logged",
+  "}",
+  "```",
+  "",
+  "```mermaid",
+  "flowchart LR",
+  "  Cart --> Checkout --> Provider",
+  "```",
+].join("\n");
+{
+  const first = doc.items.find((i) => i.kind === "task");
+  if (first) first.description = RICH_BODY;
+}
+
 /** GDP-FR-QGFO / DBR-FR-WQAN: the assignee logins of some issues. */
 const ASSIGNEES: Record<string, string[]> = { ep1: ["mia", "lee"], t1: ["mia"], t2: ["jo", "ana", "kai"], x1: ["kai"] };
 
@@ -83,6 +120,43 @@ function tracker() {
       assignees: milestone ? [] : (ASSIGNEES[item.id] ?? []),
     };
   });
+}
+
+/** GDP-FR-WQEN: `"read github plan issue (number)"`. The labels come from the number. */
+export function githubIssueRead(number: number) {
+  const facts = tracker().find((t) => t.ref.kind === "issue" && t.ref.number === number);
+  if (!facts) return Promise.reject({ code: "tracker_item_not_found", message: "The issue is not part of the delivery plan." });
+  const item = doc.items.find((i) => i.id === facts.itemId)!;
+  const milestone = (() => {
+    let at: Item | undefined = item;
+    while (at && at.kind !== "milestone") at = doc.items.find((i) => i.id === at!.parentId);
+    return at;
+  })();
+  const subIssues = doc.items.filter((i) => i.parentId === item.id && i.kind !== "milestone").map((i) => issueOf(i.id));
+  if (item.kind !== "task" && item.kind !== "defect") subIssues.push(97);
+  const labels = [["payments", "p1"], ["backend"], [], ["ux", "needs-design", "p2"]][number % 4];
+  return {
+    issue: {
+      number,
+      url: facts.ref.url,
+      title: item.name,
+      body: item.description ?? "",
+      issueType: null,
+      state: "open",
+      closeReason: null,
+      milestone: milestone ? issueOf(milestone.id) : null,
+      milestoneTitle: milestone?.name ?? null,
+      parent: null,
+      subIssues,
+      labels: flag("issueDetailStale") ? [] : labels,
+      status: facts.status,
+      blockedBy: [],
+      updatedAt: facts.updatedAt,
+    },
+    stale: flag("issueDetailStale"),
+    error: flag("issueDetailStale") ? { code: "github_unreachable", message: "GitHub could not be reached." } : null,
+    readAt: flag("issueDetailStale") ? "2026-11-01T09:00:00Z" : null,
+  };
 }
 
 /** MDL-FR-IEWL: the Types that the read entries do not map yet. */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useDiscussionControl } from "../../hooks/useDiscussionControl";
 import { useProjectArtifacts } from "../../hooks/useProjectArtifacts";
@@ -28,7 +28,6 @@ import {
   subtreeOf,
   type FlowDocument,
   type FlowEditResult,
-  type FlowItem,
   type FlowItemKind,
   type FlowLayout,
   type FlowPosition,
@@ -36,10 +35,8 @@ import {
   type StoredLayout,
 } from "../../state/flowDocument";
 import { isEditHeld, primeEditGate, waitEditGate } from "../../state/mainBranchWrite";
-import type { DiscussionTarget, ItemDeliveryState, OpenableArtifact } from "../../types";
-import type { FlowBinding } from "./binding";
+import type { DiscussionTarget } from "../../types";
 import { boardTargetAt, pointOutside } from "./boardDrop";
-import type { BoardStatusNames } from "./boardStatus";
 import { commitBoardDrop } from "./boardCommit";
 import { columnDropIndex, columnsOf } from "./columns";
 import { createFrames } from "./frames";
@@ -58,6 +55,7 @@ import {
 } from "./geometry";
 import { refusalMessage, type FlowAction, type RefusalMessage } from "./refusals";
 import { useFlowLayout, type ContainerMeasure } from "./useFlowLayout";
+import type { FlowCanvasProps } from "./canvasProps";
 import { useFlowSource } from "./useFlowSource";
 import { useBoardDrag } from "./useBoardDrag";
 import { resizedRect, resizeFrom } from "./resize";
@@ -70,75 +68,7 @@ export const BOARD_DRAG_THRESHOLD = 4;
 /** The layout before the stored layout is read: nothing is drawn yet. */
 const EMPTY_PLACEMENT: FlowLayout = {};
 
-/** FLO-FR-NRBV: what the shell answers to a request to create a task's draft. */
-export type CreatedDraftOutcome =
-  | { ok: true; draft: { id: string; name: string } }
-  /** `error` is null where the author cancelled the creation. */
-  | { ok: false; error: string | null };
-
-export interface FlowCanvasProps {
-  /** The plan the canvas shows, and where its edits go (`./binding.ts`). */
-  binding: FlowBinding;
-  /**
-   * MDL-FR-WMGU: the host keeps every edit affordance inert, for example while
-   * a publish runs.
-   */
-  inert?: boolean;
-  /** MDL-FR-KKYH / MDL-FR-JRGK: what the host adds at the trailing end of the band. */
-  bandExtras?: ReactNode;
-  /**
-   * MDL-FR-LSKL / MDL-FR-IEWL / MDL-FR-MWMO: the host's notice lines, below
-   * the band and above the canvas.
-   */
-  belowBand?: ReactNode;
-  /**
-   * SDL-FR-KNOP / MDL-FR-QEXS: rows the host adds at the end of the selected
-   * item's panel.
-   */
-  panelExtras?: (item: FlowItem) => ReactNode;
-  /**
-   * MDL-FR-XKCH / MDL-FR-QEXS: the actions the host adds to the footer of the
-   * popover of a selected item on the board, after **Discuss**.
-   */
-  panelFooter?: (item: FlowItem) => ReactNode;
-  /** DBR-FR-TCPE: the Ready and In Progress status names of a GitHub plan. */
-  statusNames?: BoardStatusNames;
-  /** MDL-FR-PUKL: entries the host adds to the add menu; `close` closes it. */
-  addMenuExtras?: (close: () => void) => ReactNode;
-  /** FLO-FR-12: open a referenced artifact in its natural surface. */
-  onOpenArtifact?: (item: OpenableArtifact) => void;
-  /**
-   * FLO-FR-NRBV: create a draft with the given name through
-   * `"create draft (name)"`. Without it, the canvas calls the operation itself.
-   */
-  onCreateDraft?: (name: string) => Promise<CreatedDraftOutcome>;
-  /** FLO-FR-NRBV: open a draft that was just created in a New Artifact tab. */
-  onOpenDraft?: (draft: { id: string; name: string }) => void;
-  /** FLO-FR-QZUR: open a linked draft through `"open draft (id)"`. */
-  onOpenDraftById?: (draftId: string) => void;
-  /**
-   * SMP-FR-RNLH / SMP-FR-QNUH: the view and the selection the canvas starts
-   * from. Without it, the canvas starts from the default view (FLO-FR-22).
-   */
-  initialView?: FlowViewState;
-  /** SMP-FR-RNLH: each change of the view or of the selection. */
-  onViewChange?: (state: FlowViewState) => void;
-  /** MDL-FR-GDUP: each new answer of the delivery state, or null before one. */
-  onDeliveryStates?: (states: ReadonlyMap<string, ItemDeliveryState> | null) => void;
-  /**
-   * MDL-FR-HULA / MDL-FR-QELI: the **Discuss** entry of the context menu of an
-   * item or a milestone. Without it, an item has no context menu.
-   */
-  onDiscuss?: (item: FlowItem) => void;
-  /** DBR-FR-ERHW: lay the plan out as the board of the Delivery lens. */
-  board?: boolean;
-}
-
-/** SMP-FR-RNLH: the view state of a canvas that a host keeps for it. */
-export interface FlowViewState {
-  view: View;
-  selection: string[];
-}
+export type { CreatedDraftOutcome, FlowCanvasProps, FlowViewState } from "./canvasProps";
 
 /**
  * The view state, the gestures, and the selection of the canvas (FLO-FR-21,
@@ -223,6 +153,8 @@ export function useFlowCanvas({
 
   const surfaceRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
+  /** MIV-FR-SVXH: the item a press went down on and where, until the release. */
+  const pressRef = useRef<{ id: string; x: number; y: number } | null>(null);
   /**
    * FLO-FR-09 / FLO-FR-21: the card a press went down on. It captures the
    * pointer only once the drag moves: a capture at the press retargets the
@@ -536,13 +468,14 @@ export function useFlowCanvas({
   };
 
   const chrome =
-    ".flow-panel, .flow-edge-panel, .flow-overlay, .flow-refusal, .flow-dialog, .flow-addmenu, .flow-actionhost, [data-flow-chrome]";
+    ".flow-panel, .miv-sheet, .flow-edge-panel, .flow-overlay, .flow-refusal, .flow-dialog, .flow-addmenu, .flow-actionhost, [data-flow-chrome]";
 
   /**
    * Selection follows what the pointer went down on. A press on empty canvas,
    * or on the body of a container, clears it and pans the view (FLO-FR-22).
    */
   const onSurfacePointerDown = (e: React.PointerEvent) => {
+    pressRef.current = null;
     // MDL-FR-JBEL: a secondary press opens a menu and changes no selection.
     if (e.button === 2) return;
     const el = e.target as HTMLElement | null;
@@ -554,6 +487,8 @@ export function useFlowCanvas({
     const edgeEl = el?.closest?.("[data-edge-id]") as HTMLElement | null;
     if (itemEl?.dataset.itemId) {
       const id = itemEl.dataset.itemId;
+      // MIV-FR-SVXH: a press that is not on a control of the item can be a click.
+      if (!isInteractive(el)) pressRef.current = { id, x: e.clientX, y: e.clientY };
       setSelection([id]);
       setSelectedEdge(null);
       if (editingName !== id) setEditingName(null);
@@ -650,6 +585,21 @@ export function useFlowCanvas({
     setConnectingFrom(id);
     setMagnet(null);
     setConnectPoint(toCanvas(e.clientX, e.clientY));
+  };
+
+  /**
+   * MIV-FR-SVXH / DBR-FR-MYVI: a release on the surface ends the gesture. It
+   * names the item that a click on the board went to, or null: a click is a
+   * press on an item that moved no more than the drag threshold.
+   */
+  const onSurfacePointerUp = (e: React.PointerEvent): string | null => {
+    const press = pressRef.current;
+    pressRef.current = null;
+    const dragged = dragRef.current?.moved === true;
+    endGesture();
+    if (!press || !boardMode || dragged) return null;
+    const travel = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+    return travel > BOARD_DRAG_THRESHOLD ? null : press.id;
   };
 
   /** A release on an item lands an in-flight connection on it (FLO-FR-33). */
@@ -968,6 +918,7 @@ export function useFlowCanvas({
     onResizeStart,
     beginConnection,
     onItemPointerUp,
+    onSurfacePointerUp,
     endGesture,
     connectionPreview,
     board: boardMode,

@@ -16,7 +16,15 @@ import type { DeliveryLensData } from "../../state/delivery/lensData";
 import { showToast } from "../../state/toasts";
 import { githubLayoutScope, type DeliverySettings, type DeliverySource } from "../../types/delivery";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
-import { FlowCanvas, type FlowCanvasHandle, type FlowPlanBinding, type FlowViewState } from "../Flow";
+import {
+  FlowCanvas,
+  type FlowCanvasHandle,
+  type FlowPlanBinding,
+  type FlowViewState,
+  type IssueViewContext,
+  type IssueViewHost,
+} from "../Flow";
+import { GithubIssueDetails, SubIssues, useGithubIssueDetail, type PlanIssue } from "./IssueDetailFields";
 import { BandMenu, GithubBandFacts } from "./BandMenu";
 import {
   ExportDialog,
@@ -68,6 +76,8 @@ export interface GithubLensProps {
   initialView?: FlowViewState;
   onViewChange: (state: FlowViewState) => void;
   panelSpecs: (itemId: string) => React.ReactNode;
+  /** MIV-FR-ITSA / MIV-FR-RPAU: what the lens keeps of the issue view. */
+  issueView: IssueViewHost;
   onOpenArtifact: (item: OpenableArtifact) => void;
   /** SNV-FR-56: close every other floating overlay before a dialog opens. */
   onOverlayOpening?: () => void;
@@ -108,6 +118,72 @@ export function GithubLens(props: GithubLensProps) {
   );
   // DBR-FR-AGIN .. DBR-FR-PMGS: the marks and the ghost cards of the plan proposals.
   const { document, proposal } = useProposalBoard(named, answer?.tracker);
+
+  // MIV-FR-EDKQ: the issue view of an issue reads its detail.
+  const [openItem, setOpenItem] = useState<string | null>(props.issueView.initialOpen ?? null);
+  const hostOpenChange = props.issueView.onOpenChange;
+  const openFacts = openItem === null ? undefined : tracker.get(openItem);
+  const detail = useGithubIssueDetail(
+    openFacts && openFacts.ref.kind === "issue"
+      ? { itemId: openFacts.itemId, number: openFacts.ref.number, updatedAt: openFacts.updatedAt }
+      : null,
+  );
+  const issueByNumber = useMemo(() => {
+    const out = new Map<number, string>();
+    for (const t of tracker.values()) if (t.ref.kind === "issue") out.set(t.ref.number, t.itemId);
+    return out;
+  }, [tracker]);
+  const planIssue = (number: number): PlanIssue | undefined => {
+    const itemId = issueByNumber.get(number);
+    const item = itemId === undefined ? undefined : document?.items.find((i) => i.id === itemId);
+    const facts = itemId === undefined ? undefined : tracker.get(itemId);
+    return item && facts ? { item, tracker: facts, state: states.get(item.id) } : undefined;
+  };
+  const issueParts = (item: FlowItem, context: IssueViewContext) => {
+    const facts = tracker.get(item.id);
+    const isIssue = facts?.ref.kind === "issue";
+    const shown = detail?.itemId === item.id ? detail : null;
+    return {
+      // MIV-FR-POMI / MDL-FR-QEXS: the claim and graduate actions in the header.
+      actions: (
+        <ClaimActions
+          item={item}
+          tracker={facts}
+          state={states.get(item.id)}
+          claims={host.claims}
+          inert={false}
+        />
+      ),
+      // MIV-FR-NBHF: Labels and Milestone apply to an issue.
+      details: isIssue ? <GithubIssueDetails detail={shown} /> : undefined,
+      specs: props.panelSpecs(item.id),
+      below: (
+        <>
+          {isIssue && facts && (
+            <SubIssues
+              detail={shown}
+              issueUrl={facts.ref.url}
+              repository={repository}
+              planIssue={planIssue}
+              context={context}
+            />
+          )}
+          {isContainerKind(item.kind) && (
+            <AddExistingIssue
+              key={item.id}
+              containerName={item.name}
+              inert={false}
+              onAdd={async (number) => {
+                const done = session.addExistingIssue(number, item.id);
+                const answer = done ? await done : null;
+                return answer && !answer.ok ? answer.error : null;
+              }}
+            />
+          )}
+        </>
+      ),
+    };
+  };
 
   const open = (next: Dialog) => {
     props.onOverlayOpening?.();
@@ -280,33 +356,15 @@ export function GithubLens(props: GithubLensProps) {
         }
         // DBR-FR-TCPE: the status dot reads the Ready and In Progress status names.
         statusNames={statusNames}
-        // MDL-FR-XKCH / MDL-FR-QEXS: the claim and graduate actions sit in the footer of the popover.
-        panelFooter={(item) => (
-          <ClaimActions
-            item={item}
-            tracker={tracker.get(item.id)}
-            state={states.get(item.id)}
-            claims={host.claims}
-            inert={false}
-          />
-        )}
-        panelExtras={(item) => (
-          <>
-            {props.panelSpecs(item.id)}
-            {isContainerKind(item.kind) && (
-              <AddExistingIssue
-                key={item.id}
-                containerName={item.name}
-                inert={false}
-                onAdd={async (number) => {
-                  const done = session.addExistingIssue(number, item.id);
-                  const answer = done ? await done : null;
-                  return answer && !answer.ok ? answer.error : null;
-                }}
-              />
-            )}
-          </>
-        )}
+        // MDL-FR-XKCH / MIV-FR-VHDP: the issue view of an item of the plan.
+        issueView={{
+          ...props.issueView,
+          onOpenChange: (itemId) => {
+            setOpenItem(itemId);
+            hostOpenChange?.(itemId);
+          },
+          parts: issueParts,
+        }}
         addMenuExtras={(close) => (
           <button
             type="button"

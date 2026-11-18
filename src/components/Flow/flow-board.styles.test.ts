@@ -127,16 +127,6 @@ describe("the board stylesheet (DBR)", () => {
     expect(decl(first(".dm-lane__desc"), "-webkit-line-clamp")).toBe("2");
   });
 
-  it("MDL-FR-XKCH: the popover is 340px on the elevated ground with a 1px border, and its sections take the uppercase label", () => {
-    const pop = first(".flow-panel.dm-pop");
-    expect(decl(pop, "width")).toBe("340px");
-    expect(decl(pop, "background")).toBe("var(--bg-elevated)");
-    expect(decl(pop, "border")).toBe("1px solid var(--border-2)");
-    expect(decl(first(".dm-pop .flow-panel__label"), "text-transform")).toBe("uppercase");
-    expect(decl(first(".dm-pop__foot"), "background")).toBe("var(--bg-panel)");
-    expect(decl(first(".flow-panel__section"), "display")).toBe("contents");
-  });
-
   it("DBR layout notes: the board styles take every colour from a token", () => {
     const own = sheet("kit/delivery-map.css") + sheet("kit/flow-board.css");
     expect(own).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

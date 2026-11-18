@@ -31,6 +31,14 @@ export type DocumentImageRender = (alt: string, src: string) => ReactNode;
 
 export const DocumentImageContext = createContext<DocumentImageRender | null>(null);
 
+/**
+ * How a surface draws a fenced code block, where it has a rule of its own
+ * (MIV-FR-DDAF). Absent, a code block is the plain `<pre>` below.
+ */
+export type DocumentCodeRender = (text: string, language: string | undefined) => ReactNode;
+
+export const DocumentCodeContext = createContext<DocumentCodeRender | null>(null);
+
 function Inline({ text }: { text: string }) {
   const parts = parseInlineWithImages(text);
   const renderImage = useContext(DocumentImageContext);
@@ -129,6 +137,7 @@ function List({ list }: { list: ListNode }) {
 const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 
 function Node({ node }: { node: DocNode }) {
+  const renderCode = useContext(DocumentCodeContext);
   switch (node.kind) {
     case "frontmatter":
       return (
@@ -185,6 +194,9 @@ function Node({ node }: { node: DocNode }) {
           );
         }
         case "code":
+          if (renderCode) {
+            return <Fragment>{renderCode(block.text, block.language)}</Fragment>;
+          }
           return (
             <pre data-language={block.language} data-align={align}>
               <code>{block.text}</code>

@@ -6,6 +6,7 @@
  * command by name on top of `flowBackend`: it answers the background
  * `append_log_records`, and it rejects a command it does not know.
  */
+import { StrictMode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { expect, vi } from "vitest";
 
@@ -28,6 +29,7 @@ import type {
   DeliverySettings,
   DeliverySource,
   GithubDeliveryPlan,
+  GithubPlanIssueRead,
   TrackerFacts,
 } from "../types/delivery";
 import type { GithubPollingView, ItemDeliveryState } from "../types";
@@ -135,7 +137,41 @@ export interface DeliveryBackend extends FlowBackend {
   plan: (refresh: boolean) => GithubDeliveryPlan | Promise<GithubDeliveryPlan>;
   /** The answer of each `apply_github_delivery_edit`. */
   apply: (edit: Record<string, unknown>) => GithubDeliveryPlan | Promise<GithubDeliveryPlan>;
+  /** The answer of each `read_github_plan_issue` (MIV-FR-EDKQ). */
+  issue: (number: number) => GithubPlanIssueRead | Promise<GithubPlanIssueRead>;
   settings: DeliverySettings;
+}
+
+/** GDP-FR-WQEN: the detail of issue `number`, read from GitHub now. */
+export function issueRead(
+  number: number,
+  extra: Partial<GithubPlanIssueRead["issue"]> = {},
+  answer: Partial<Omit<GithubPlanIssueRead, "issue">> = {},
+): GithubPlanIssueRead {
+  return {
+    issue: {
+      number,
+      url: `https://github.com/acme/payments/issues/${number}`,
+      title: `Issue ${number}`,
+      body: "",
+      issueType: null,
+      state: "open",
+      closeReason: null,
+      milestone: null,
+      milestoneTitle: null,
+      parent: null,
+      subIssues: [],
+      labels: [],
+      status: null,
+      blockedBy: [],
+      updatedAt: "2026-01-01T00:00:00Z",
+      ...extra,
+    },
+    stale: false,
+    error: null,
+    readAt: null,
+    ...answer,
+  };
 }
 
 /** The Flow backend, with the delivery commands of DSR, GDP, and DMS on top. */
@@ -146,6 +182,8 @@ export function deliveryBackend(doc: FlowDocument | string = "", answer?: Github
   b.apply = () => Promise.reject({ code: "not_github_source", message: "Not a GitHub source." });
   b.on.load_github_delivery_plan = (args) => b.plan(Boolean(args.refresh));
   b.on.apply_github_delivery_edit = (args) => b.apply(args.edit as Record<string, unknown>);
+  b.issue = (number) => issueRead(number);
+  b.on.read_github_plan_issue = (args) => b.issue(Number(args.number));
   b.on.get_delivery_settings = () => structuredClone(b.settings);
   b.on.set_delivery_settings = (args) => {
     b.settings = structuredClone(args.settings as DeliverySettings);
@@ -228,6 +266,8 @@ export async function renderLens(options: {
   host?: Partial<DeliveryHost>;
   store?: SpecMapSessionStore;
   windowWidth?: number;
+  /** Render under React StrictMode, as `src/main.tsx` does in development. */
+  strict?: boolean;
 }): Promise<LensRender> {
   setWindowWidth(options.windowWidth ?? 1440);
   const ops = {
@@ -254,7 +294,7 @@ export async function renderLens(options: {
   } as LensRender["host"];
   const onOpenArtifact = vi.fn();
   const onOverlayOpening = vi.fn();
-  const ui = () => (
+  const map = () => (
     <SpecMap
       store={store}
       onOpenArtifact={onOpenArtifact}
@@ -262,6 +302,7 @@ export async function renderLens(options: {
       delivery={host}
     />
   );
+  const ui = () => (options.strict ? <StrictMode>{map()}</StrictMode> : map());
   const view = render(ui());
   await act(async () => {});
   return {

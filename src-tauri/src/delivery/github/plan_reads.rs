@@ -121,8 +121,10 @@ pub struct PlanIssueHit {
     pub snippet: String,
 }
 
-/// One plan issue in full, from [`read_plan_issue_detail`].
+/// One plan issue in full, from [`read_plan_issue_detail`]. The serde form is
+/// the frontend's `GithubPlanIssueDetail` of `src/types/delivery.ts`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlanIssueDetail {
     pub number: u64,
     pub url: String,
@@ -142,8 +144,10 @@ pub struct PlanIssueDetail {
     pub updated_at: String,
 }
 
-/// The answer of [`read_plan_issue_detail`].
+/// The answer of [`read_plan_issue_detail`]. The serde form is the
+/// frontend's `GithubPlanIssueRead` of `src/types/delivery.ts`.
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlanIssueRead {
     pub issue: PlanIssueDetail,
     /// True where the GitHub read failed and the detail comes from the read

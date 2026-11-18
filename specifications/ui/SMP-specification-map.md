@@ -8,7 +8,7 @@ The Map tab is the project's control plane: one tab that shows what the project 
 ## Functional requirements
 1. **SMP-FR-KQTD** The Map tab is a main-viewport tab. Its label is `Map` and the tab strip shows the layers icon in front of the label.
 2. **SMP-FR-TKUS** The toolbar starts with a two-way lens switch, **Delivery** and **Specifications**. On the first render of a map session, the tab invokes `"get delivery source"` and shows **Delivery** where the source is not `none`, and **Specifications** otherwise. The active lens is part of the map session.
-3. **SMP-FR-RNLH** A switch of lens keeps the state of the other lens: its selection, its view, and its loaded data. The Delivery lens's toolbar follows the lens switch on the terms of `MDL-map-delivery-lens.md` MDL-FR-GDUP.
+3. **SMP-FR-RNLH** A switch of lens keeps the state of the other lens: its selection, its open issue view (per `MIV-map-issue-view.md` MIV-FR-RPAU), its view, and its loaded data. The Delivery lens's toolbar follows the lens switch on the terms of `MDL-map-delivery-lens.md` MDL-FR-GDUP.
 4. **SMP-FR-WBNL** At most one Map tab is open per project. A request to open the map while a Map tab is open activates that tab and creates no second tab (per `TAB-tabs.md` TAB-FR-KXMW).
 5. **SMP-FR-HZRA** The **View map** affordance of the Project panel opens the Map tab and makes it the active tab (per `LIB-library.md` LIB-FR-VMAQ).
 6. **SMP-FR-PMCX** When the Specifications lens renders and the session holds no index, the tab invokes `"load specification map"` once and shows a loading state in the canvas area until the result arrives.

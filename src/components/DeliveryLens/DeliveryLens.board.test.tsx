@@ -195,7 +195,7 @@ describe("a drop of a GitHub plan (DBR-FR-KTJS, DBR-FR-CVJY, DBR-FR-CJSG)", () =
     expect(b.layoutWrites.length - writes).toBe(1);
   });
 
-  it("DBR-FR-CVJY, DBR-FR-CJSG: a refused move puts the item back in its stack, restores its slot, and shows the error on it and in its panel", async () => {
+  it("DBR-FR-CVJY, DBR-FR-CJSG, MIV-FR-XMMS: a refused move puts the item back in its stack, restores its slot, and shows the error on it and in its issue view", async () => {
     b.apply = () => Promise.reject({ code: "request_failed", message: "GitHub refused the move." });
     await openPlan();
     const before = { top: itemEl("x1").style.top, left: itemEl("x1").style.left };
@@ -211,7 +211,7 @@ describe("a drop of a GitHub plan (DBR-FR-KTJS, DBR-FR-CVJY, DBR-FR-CJSG)", () =
     // The stored slot of the item is the one it had before the drop.
     await waitFor(() => expect(b.layout.items.x1).toBeUndefined());
     selectItem("x1");
-    expect(within(screen.getByTestId("flow-selection-panel")).getByTestId("flow-panel-error")).toHaveTextContent(
+    expect(within(screen.getByTestId("map-issue-view")).getByTestId("flow-panel-error")).toHaveTextContent(
       "GitHub refused the move.",
     );
   });

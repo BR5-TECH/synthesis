@@ -21,6 +21,7 @@
 import hljs from "highlight.js/lib/common";
 import dart from "highlight.js/lib/languages/dart";
 import scala from "highlight.js/lib/languages/scala";
+import gherkin from "highlight.js/lib/languages/gherkin";
 import { logWarn } from "../logging";
 
 /**
@@ -33,6 +34,17 @@ import { logWarn } from "../logging";
  */
 hljs.registerLanguage("dart", dart);
 hljs.registerLanguage("scala", scala);
+
+/**
+ * ESH-FR-LMNI, MIV-FR-EDFS: Gherkin, with its own aliases `gherkin` and
+ * `feature`, for the fenced code blocks of the Map issue view. It takes no part
+ * in autodetection (ESH-FR-QBZJ): a prose file with "Given" and "When" in it
+ * must not start to read as Gherkin.
+ */
+hljs.registerLanguage("gherkin", (api) => ({
+  ...gherkin(api),
+  disableAutodetect: true,
+}));
 
 /**
  * The roles a token can carry. Deliberately a small set of our own rather than
@@ -440,4 +452,28 @@ export function highlightFile(name: string, text: string): TokenSpan[] | null {
   const resolved = resolveLanguage(name, text);
   if (!resolved) return null;
   return tokenize(text, resolved.language);
+}
+
+/** The fence languages that draw as a diagram and are never highlighted. */
+const DIAGRAM_FENCES = new Set(["mermaid", "calm"]);
+
+/**
+ * MIV-FR-ALPJ, MIV-FR-IVGV: the language a fenced code block is highlighted in,
+ * or `null` where it renders plain.
+ *
+ * The language is the first word of the info string, with case ignored and a
+ * leading `.`, `{`, or `language-` removed. The word resolves where the
+ * installation knows it as a language or an alias, or where the extension map
+ * names it. A fence is never put to autodetection, so the same fence always
+ * reads the same way whatever it holds.
+ */
+export function fenceLanguage(info: string | undefined | null): string | null {
+  let word = (info ?? "").trim().toLowerCase();
+  word = word.replace(/^\{/, "").replace(/^\./, "").replace(/^language-/, "");
+  word = word.split(/[\s,{}]/)[0] ?? "";
+  if (word === "" || DIAGRAM_FENCES.has(word)) return null;
+  if (hljs.getLanguage(word)) return word;
+  const mapped = EXTENSION_LANGUAGES[word];
+  if (mapped !== undefined && hljs.getLanguage(mapped)) return mapped;
+  return null;
 }

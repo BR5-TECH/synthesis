@@ -26,13 +26,13 @@ The Delivery lens is the first lens of the Map tab (`SMP-specification-map.md`).
 16. **MDL-FR-MWMO** Where the answer reports misplaced items or omitted relations, one notice line states their counts. Activating it lists each one with its issue numbers and the reason in words.
 17. **MDL-FR-JPYU** An item with an open external blocker carries the **Blocked** marker of FLO-FR-IKMM. Its tooltip names each external blocker by number and title.
 18. **MDL-FR-ECPZ** In a GitHub plan, each issue card shows its `Status` name on its bottom line (per `DBR-delivery-board.md` DBR-FR-HWHO), each group face shows it on its bottom line (DBR-FR-SBTR), and every item carries the tracker tag of FLO-FR-ULEM as its address (DBR-FR-XOOU).
-18. **MDL-FR-RILW** In the lens, a card and a container show no excerpt of the item's description (FLO-FR-XCRP), for a `github` source and for a `file` source. Every other part of FLO-FR-CMPK applies. The panel of a selected item still shows the full description (per FLO-FR-13).
+18. **MDL-FR-RILW** In the lens, a card and a container show no excerpt of the item's description (FLO-FR-XCRP), for a `github` source and for a `file` source. Every other part of FLO-FR-CMPK applies. The issue view of a selected item still shows the full description (per `MIV-map-issue-view.md` MIV-FR-LENY).
     - *Why:* On the plan canvas a long issue body hides the structure, and the title is enough to find the item.
-18. **MDL-FR-XKCH** In the lens, the panel of a selected item or milestone is a 340px popover beside it. Its header shows the kind chip (per `DBR-delivery-board.md` DBR-FR-DZSU), the address, the name, **Rename**, and **Remove**. Each section of its body sits under an uppercase label. Its footer offers **Discuss** and, where MDL-FR-QEXS or MDL-FR-UKGH offers one, the claim or graduate action.
-18. **MDL-FR-XCJN** **Discuss** in the footer of the panel has the effect of the **Discuss** entry of MDL-FR-HULA for that item or milestone (per MDL-FR-QELI).
+18. **MDL-FR-XKCH** In the lens, the panel of a selected item or milestone is its issue view (per `MIV-map-issue-view.md`). The lens shows no popover beside an item. The header of the issue view offers **Discuss** and, where MDL-FR-QEXS or MDL-FR-UKGH offers one, the claim or graduate action (per MIV-FR-POMI).
+18. **MDL-FR-XCJN** **Discuss** in the header of the issue view has the effect of the **Discuss** entry of MDL-FR-HULA for that item or milestone (per MDL-FR-QELI).
 19. **MDL-FR-QEXS** A selected task that is eligible for a claim, and that no GitHub-shadow draft or pending claim names, offers **Claim and graduate** on the terms of `GIT-git.md` GIT-FR-NQTZ. A pending claim offers **Retry** on the terms of GIT-FR-FTHT.
 20. **MDL-FR-UKGH** A selected item whose draft is a GitHub-shadow draft with the status `github_shadow`, and that no graduation run holds, offers **Graduate**. It opens the start dialog of `GSD-graduation-start-dialog.md` for that draft.
-21. **MDL-FR-PUKL** In a GitHub plan, a selected container item, and the add affordance of FLO-FR-07, offer **Add existing issue**. It takes an issue number and applies the `add_existing_issue` edit into that container or the top level. A refusal shows its error text in place.
+21. **MDL-FR-PUKL** In a GitHub plan, the issue view of a container item, and the add affordance of FLO-FR-07, offer **Add existing issue**. It takes an issue number and applies the `add_existing_issue` edit into that container or the top level. A refusal shows its error text in place.
 22. **MDL-FR-JRGK** For a `file` source while the GitHub configuration is `valid`, the band menu offers **Publish to GitHub**. A confirmation dialog states that GitHub becomes the source and that the file stays on disk unchanged. Confirm writes any pending changes and then invokes `"publish delivery to github"`.
 23. **MDL-FR-WMGU** While a publish runs, the lens shows its progress and every edit affordance is inert. A failed publish shows the error text and the links of the items it created, and offers **Retry**, which invokes the publish again.
 24. **MDL-FR-QIXG** For a `github` source, the band menu offers **Export to file**. A dialog takes a project-relative path, which ends in `.flow` and is prefilled from the Project title. Confirm invokes `"export delivery to file (path)"`. A refusal shows its error text in the dialog.
@@ -40,7 +40,7 @@ The Delivery lens is the first lens of the Map tab (`SMP-specification-map.md`).
 26. **MDL-FR-GDUP** The toolbar of the lens holds, after the lens switch of `SMP-specification-map.md` (SMP-FR-TKUS), a 160 × 4px progress track of the plan's work items (per `../core/FDL-flow-delivery.md` FDL-FR-KWMT) with a segment for done, in progress, and blocked items, and the legend `N done`, `N in progress`, `N blocked` over the same work items. A blocked item counts in the blocked segment alone, and each legend entry carries a dot in the colour of its segment.
 27. **MDL-FR-NTVL** In a GitHub plan, the lens carries no action control and no discussions control. With a `file` source, both are present on the terms of FLO-FR-34 and FLO-FR-35.
 28. **MDL-FR-YSMB** Opening the delivery's Flow file from the Project panel, Search, a Dashboard widget, or a plan tag (per `NAW-new-artifact.md` NAW-FR-TXKN) opens the Map tab on the Delivery lens and opens no Flow tab.
-28. **MDL-FR-JIKK** A request to show a delivery item, from the Dashboard (per `DSH-dashboard.md` DSH-FR-DFDW) or a plan tag (per `NAW-new-artifact.md` NAW-FR-PHGO), opens the Map tab on the Delivery lens, selects that item, expands each collapsed container that holds it, and centres it.
+28. **MDL-FR-JIKK** A request to show a delivery item, from the Dashboard (per `DSH-dashboard.md` DSH-FR-DFDW) or a plan tag (per `NAW-new-artifact.md` NAW-FR-PHGO), opens the Map tab on the Delivery lens, selects that item, expands each collapsed container that holds it, and centres it. It opens no issue view (per `MIV-map-issue-view.md` MIV-FR-TTZU).
 29. **MDL-FR-EFQF** When a Flow file with an open Flow tab becomes the delivery source, that tab writes its pending changes and closes (per `FLO-flow.md` FLO-FR-28).
 30. **MDL-FR-EEDO** A request of `SDL-specification-delivery-links.md` to plan work (SDL-FR-CFHH) adds a `task` at the top level with the name and references it gives: through the `create_item` edit and then the `set_references` edit for a GitHub plan, and as an add of FLO-FR-07 for a file source. The new item becomes the selection.
 31. **MDL-FR-HULA** A right-click on an item or a milestone of the canvas, and the context-menu key or `Shift+F10` on a focused item or milestone, opens a context menu that holds a **Discuss** entry. It is available for a `github` source and for a `file` source, for every kind of item and for milestones. Its leading icon follows `LCM-library-context-menu.md` LCM-FR-07.
@@ -62,33 +62,31 @@ The Delivery lens is the first lens of the Map tab (`SMP-specification-map.md`).
 │ Payments v2  Description  [DOC payments-hld.md ↗] +        acme/payments ↗  read 2 min ago [Refresh] ⋯ │
 │ ⚠ 5 issues have no kind: Spike (3), No Type (2)                                         [Map Types] │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ ┌ ▾ ⚑ Beta  in progress ── 1/3 ┐ ──▶ ┌ ▾ ⚑ GA  not started ─ 0/1 ┐   ┌ FTR #41 ─── Rename [Remove] ┐ │
-│ │ ┌───────────────────────────┐ │     │ ┌───────────────────────┐ │   │ Card capture                 │ │
-│ │ │ FTR #41               1/2 ▾│ │     │ │ TSK #53               │ │   │ STATUS                       │ │
-│ │ │ Card capture              │ │     │ │ Payout schedule       │ │   │ ● in progress                │ │
-│ │ │ ● in progress             │ │     │ │ ● ready     [blocked] │ │   │ DESCRIPTION             Edit │ │
-│ │ ├───────────────────────────┤ │     │ └───────────────────────┘ │   │ Capture a card at checkout.  │ │
-│ │ │ ┌───────────────────────┐ │ │     └───────────────────────────┘   │ ADD EXISTING ISSUE           │ │
-│ │ │ │ TSK #51               │ │ │                                     │ [#123                ] [Add] │ │
-│ │ │ │ Tokenize card numbers │ │ │                                     ├──────────────────────────────┤ │
-│ │ │ │ ● done                │ │ │                                     │ [Discuss]                    │ │
-│ │ │ └───────────────────────┘ │ │                                     └──────────────────────────────┘ │
-│ │ └───────────────────────────┘ │                                                                    │
-│ └───────────────────────────────┘                                                                    │
+│ ┌ ▾ ⚑ Beta  in progress ── 1/3 ┐ ──▶ ┌ ▾ ⚑ GA  not started ─ 0/1 ┐                                 │
+│ │ ┌───────────────────────────┐ │     │ ┌───────────────────────┐ │                                │
+│ │ │ FTR #41               1/2 ▾│ │     │ │ TSK #53               │ │                               │
+│ │ │ Card capture              │ │     │ │ Payout schedule       │ │                                │
+│ │ │ ● in progress             │ │     │ │ ● ready     [blocked] │ │                                │
+│ │ ├───────────────────────────┤ │     │ └───────────────────────┘ │                                │
+│ │ │ ┌───────────────────────┐ │ │     └───────────────────────────┘                                │
+│ │ │ │ TSK #51               │ │ │                                                                  │
+│ │ │ │ Tokenize card numbers │ │ │                                                                  │
+│ │ │ │ ● done                │ │ │                                                                  │
+│ │ │ └───────────────────────┘ │ │                                                                  │
+│ │ └───────────────────────────┘ │                                                                  │
+│ └───────────────────────────────┘                                                                  │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ 16 items · 4 edges · 8 blocked · 1 overlap                                       − 100% + ⤢        │
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-selected ready task                          remove in a GitHub plan
-┌ TSK #53 ──────────── Rename [Remove] ┐    ┌ Remove "Refunds" ──────────────────────────┐
-│ Card form                            │    │ 3 items are under it.                      │
-│ STATUS                               │    │ [Remove from board] [Close as not planned] │
-│ ● ready                              │    │                               [Cancel]     │
-├──────────────────────────────────────┤    └────────────────────────────────────────────┘
-│ [Discuss] [Claim and graduate]       │
-└──────────────────────────────────────┘
+remove in a GitHub plan
+┌ Remove "Refunds" ──────────────────────────┐
+│ 3 items are under it.                      │
+│ [Remove from board] [Close as not planned] │
+│                               [Cancel]     │
+└────────────────────────────────────────────┘
 ```
-- Layout notes: the toolbar is the Map tab's toolbar (per `SMP-specification-map.md` SMP-FR-CVIB) and keeps its 38px height. Its lens switch is the segmented control of the design system. The band is 44px high and sits between the toolbar and the canvas: the plan name in the title size, the description, the reference chips with their add affordance, and then, at the trailing edge, the source and the time of the read in the monospace face, **Refresh** as a small default button, and the band menu. The band menu items are in sentence case. The notice lines sit below the band, one line each, and never cover the canvas. Below the canvas, a 28px strip on the panel ground holds the element readout in the monospace face at its leading edge, and the action control, the discussions control, and the view controls at its trailing edge. The canvas and its add affordance are those of `FLO-flow.md`. The board inside the canvas, its cards, and its groups are those of `DBR-delivery-board.md`. The popover of MDL-FR-XKCH has the elevated ground, a 1px border, the medium radius, and the raised shadow, and its footer sits on the panel ground.
+- Layout notes: the toolbar is the Map tab's toolbar (per `SMP-specification-map.md` SMP-FR-CVIB) and keeps its 38px height. Its lens switch is the segmented control of the design system. The band is 44px high and sits between the toolbar and the canvas: the plan name in the title size, the description, the reference chips with their add affordance, and then, at the trailing edge, the source and the time of the read in the monospace face, **Refresh** as a small default button, and the band menu. The band menu items are in sentence case. The notice lines sit below the band, one line each, and never cover the canvas. Below the canvas, a 28px strip on the panel ground holds the element readout in the monospace face at its leading edge, and the action control, the discussions control, and the view controls at its trailing edge. The canvas and its add affordance are those of `FLO-flow.md`. The board inside the canvas, its cards, and its groups are those of `DBR-delivery-board.md`. The issue view of MDL-FR-XKCH covers the canvas as `MIV-map-issue-view.md` shows.
 
 ## UI contract boundary
 - **Owned by the UI**: the resolution of which binding hosts the canvas, the loading, empty, error, and stale states, the band and its menu, the notice lines and the Map Types dialog, the pending marks and the restore after a refusal, the remove dialog, the claim, retry, and graduate actions on an item, the Add existing issue input, the publish and export dialogs and their progress, the roll-up of the toolbar, and the routing of the delivery's Flow file to the Map tab.

@@ -18,20 +18,24 @@ import { Icon } from "../icons";
 import { useDiscussMenu } from "../MapDiscussion/NodeMenu";
 import { Band } from "./Band";
 import { EdgeHandles, EdgeLayer, EdgePanel, routeEdges, SequenceArrows } from "./edges";
-import { boardPanelPlacement, edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
+import { edgeMidpoint, panelPlacement, resolveReferences, todayIso, ZOOM_STEP } from "./geometry";
 import { CardView, ContainerView, type ItemFacts, type ItemHandlers } from "./items";
-import { BoardAddress, BoardCard, BoardStatus } from "./boardItems";
+import { BoardCard } from "./boardItems";
 import { BoardContainer } from "./BoardContainer";
-import { boardDot, BoardStatusNamesContext, boardStatusWord, NO_STATUS_NAMES } from "./boardStatus";
+import { boardDot, BoardStatusNamesContext, NO_STATUS_NAMES } from "./boardStatus";
 import { KIND_GLYPHS, kindLabel } from "./kindGlyphs";
 import { SelectionPanel } from "./SelectionPanel";
 import { useCanvasHandle, type FlowCanvasHandle } from "./useCanvasHandle";
 import { useFlowCanvas, type FlowCanvasProps } from "./useFlowCanvas";
+import { IssueView } from "./issueView/IssueView";
+import { useIssueView } from "./issueView/useIssueView";
+import type { ItemEditHandlers } from "./panelSections";
 import { useItemActions } from "./useItemActions";
 import { useCanvasWheel } from "./useCanvasWheel";
 
 export type { CreatedDraftOutcome, FlowCanvasProps, FlowViewState } from "./useFlowCanvas";
 export type { FlowCanvasHandle, FlowTaskRequest } from "./useCanvasHandle";
+export type { IssueViewContext, IssueViewHost, IssueViewParts } from "./issueView/host";
 export { FlowExcerptsContext } from "./excerptContext";
 export {
   fileBinding,
@@ -131,11 +135,18 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
     return out;
   }, [delivery.overlaps]);
 
+  // MIV-FR-SVXH: the issue view of the board, in place of the panel. A ghost
+  // card opens none (MIV-FR-TTZU).
+  const iv = useIssueView(c, props.issueView, (id) =>
+    doc !== null && findItem(doc, id) !== undefined && !source.proposal.ghosts.has(id),
+  );
+
   // MDL-FR-HULA .. MDL-FR-JBEL: the **Discuss** menu of an item. It opens
-  // nowhere while a name is being edited.
+  // nowhere while a name is being edited, or while the issue view, which
+  // holds the edits of the board, shows.
   const discussMenu = useDiscussMenu<FlowItem>(
     (item) => props.onDiscuss?.(item),
-    { blocked: c.editingName !== null },
+    { blocked: c.editingName !== null || iv.shown !== null },
   );
 
   const nameOf = (id: string) => (doc ? findItem(doc, id)?.name || id : id);
@@ -167,45 +178,69 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
     };
   };
 
-  const handlersOf = (item: FlowItem): ItemHandlers => ({
-    onDragStart: (e) => c.onItemDragStart(item.id, e),
-    onPointerUp: () => c.onItemPointerUp(item.id),
-    onConnectStart: (e) => c.beginConnection(item.id, e),
-    onRename: (name) => a.rename(item.id, name),
-    onStartRename: () => c.setEditingName(item.id),
-    onEndRename: () => c.setEditingName(null),
-    onSelectItems: (ids) => {
-      c.setSelection(ids);
-      c.setSelectedEdge(null);
-    },
-    onOpenTracker: a.openTracker,
-    onOpenReference: a.openReferenced,
-    ...(props.onDiscuss ? { menu: discussMenu.bindings(item) } : {}),
-  });
-
-  const statusNames = props.statusNames ?? NO_STATUS_NAMES;
-  /** MDL-FR-XKCH / MDL-FR-XCJN: the header, the status, and the footer of the popover of the board. */
-  const boardPanelProps = (item: FlowItem) => {
-    const facts = factsOf(item);
+  /** MIV-FR-SVXH / MDL-FR-HULA: Enter opens the issue view; the menu keys open the menu. */
+  const keysOf = (item: FlowItem) => {
+    const menu = props.onDiscuss ? discussMenu.bindings(item) : undefined;
+    if (!c.board) return menu;
     return {
-      board: true,
-      address: facts.tracker ? (
-        <BoardAddress
-          repository={facts.tracker.repository}
-          tracker={facts.tracker.facts}
-          onOpen={a.openTracker}
-        />
-      ) : undefined,
-      // MDL-FR-XKCH: a milestone shows its state on its column, not in a section.
-      status:
-        item.kind !== "milestone" &&
-        boardStatusWord({ tracker: facts.tracker?.facts, state: facts.state?.state }) !== null ? (
-          <BoardStatus facts={facts} />
-        ) : undefined,
-      onDiscuss: props.onDiscuss ? () => props.onDiscuss?.(item) : undefined,
-      footer: props.panelFooter?.(item),
+      onContextMenu: (e: React.MouseEvent<HTMLElement>) => menu?.onContextMenu(e),
+      onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
+        if (e.key === "Enter" && e.target === e.currentTarget) {
+          e.preventDefault();
+          iv.openFor(item.id);
+          return;
+        }
+        menu?.onKeyDown(e);
+      },
     };
   };
+
+  const handlersOf = (item: FlowItem): ItemHandlers => {
+    const keys = keysOf(item);
+    return {
+      onDragStart: (e) => c.onItemDragStart(item.id, e),
+      onPointerUp: () => c.onItemPointerUp(item.id),
+      onConnectStart: (e) => c.beginConnection(item.id, e),
+      onRename: (name) => a.rename(item.id, name),
+      // MIV-FR-DYXQ: on the board, a card or a header holds no rename field;
+      // a name is renamed in the issue view.
+      onStartRename: () => {
+        if (!c.board) c.setEditingName(item.id);
+      },
+      onEndRename: () => c.setEditingName(null),
+      onSelectItems: (ids) => {
+        c.setSelection(ids);
+        c.setSelectedEdge(null);
+      },
+      onOpenTracker: a.openTracker,
+      onOpenReference: a.openReferenced,
+      ...(keys ? { menu: keys } : {}),
+    };
+  };
+
+  /** The edits of a selected item, for its panel or its issue view. */
+  const editHandlersOf = (item: FlowItem): ItemEditHandlers => ({
+    onRemove: () => a.requestRemove(item.id),
+    onDescribe: (text) => a.describe(item.id, text),
+    onKind: (kind) => a.requestKind(item.id, kind),
+    onLinkDraft: (id) => a.linkDraft(item.id, id),
+    onCreateDraft: () => void a.createDraftFor(item.id),
+    onAddFootprint: (p) => a.addFootprint(item.id, p),
+    onRemoveFootprint: (p) => a.removeFootprint(item.id, p),
+    onDue: (due) => a.setDueDate(item.id, due),
+    onAddReference: (id) => a.addReference(item.id, id),
+    onRemoveReference: (id) => a.removeReference(item.id, id),
+    onOpenReference: a.openReferenced,
+    ...(c.board ? { onOpenDraft: a.openDraft } : {}),
+  });
+
+  /** MIV-FR-PGEC / MIV-FR-ZQAX: select an item, show it, and open its issue view. */
+  const showItem = (id: string) => {
+    if (!c.revealItem(id)) return;
+    iv.openFor(id);
+  };
+
+  const statusNames = props.statusNames ?? NO_STATUS_NAMES;
   /** DBR-FR-VNSJ: the leaves under an item whose status dot is done. */
   const doneUnder = (leaves: string[]) =>
     leaves.filter((id) => {
@@ -235,20 +270,10 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
 
   const panelAt = (() => {
     const item = c.selected;
-    if (!item || frames.hiddenBy(item.id)) return null;
+    // MIV-FR-SVXH: the board shows the issue view, not the panel.
+    if (!item || c.board || frames.hiddenBy(item.id)) return null;
     const r = frames.rectOf(item.id);
     if (!r) return null;
-    if (c.board) {
-      // MDL-FR-XKCH: the popover of the board opens beside the item.
-      const head = toScreen(r.x, r.y);
-      const end = toScreen(r.x + r.width, r.y);
-      const el = c.surfaceRef.current;
-      return boardPanelPlacement(
-        { left: head.left, top: head.top, right: end.left },
-        { width: el?.clientWidth ?? 0, height: el?.clientHeight ?? 0 },
-        panelHeight?.id === item.id ? panelHeight.height : undefined,
-      );
-    }
     const below = isContainerKind(item.kind) ? r.y + CONTAINER_HEADER_H : r.y + r.height;
     const head = toScreen(r.x, r.y);
     const foot = toScreen(r.x, below);
@@ -348,7 +373,11 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
             ref={c.surfaceRef}
             onPointerDown={c.onSurfacePointerDown}
             onPointerMove={c.onSurfacePointerMove}
-            onPointerUp={() => c.endGesture()}
+            onPointerUp={(e) => {
+              // MIV-FR-SVXH: a click on an item of the board opens its issue view.
+              const clicked = c.onSurfacePointerUp(e);
+              if (clicked !== null) iv.openFor(clicked);
+            }}
             onPointerCancel={() => c.endGesture({ abandon: true })}
           >
             <div
@@ -550,8 +579,7 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
               </div>
             )}
 
-            {/* DBR-FR-QCAJ: the panel gives way while an item of the board is dragged. */}
-            {c.selected && panelAt && c.lifted === null && (
+            {c.selected && panelAt && (
               <SelectionPanel
                 key={c.selected.id}
                 doc={doc}
@@ -565,24 +593,49 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                 at={panelAt}
                 onMeasure={onPanelMeasure}
                 onRename={() => c.setEditingName(c.selected!.id)}
-                onRemove={() => a.requestRemove(c.selected!.id)}
-                onDescribe={(text) => a.describe(c.selected!.id, text)}
-                onKind={(kind) => a.requestKind(c.selected!.id, kind)}
-                onLinkDraft={(id) => a.linkDraft(c.selected!.id, id)}
+                {...editHandlersOf(c.selected)}
                 creating={a.creating === c.selected.id}
-                onCreateDraft={() => void a.createDraftFor(c.selected!.id)}
-                onAddFootprint={(p) => a.addFootprint(c.selected!.id, p)}
-                onRemoveFootprint={(p) => a.removeFootprint(c.selected!.id, p)}
-                onDue={(due) => a.setDueDate(c.selected!.id, due)}
-                onAddReference={(id) => a.addReference(c.selected!.id, id)}
-                onRemoveReference={(id) => a.removeReference(c.selected!.id, id)}
-                onOpenReference={a.openReferenced}
-                {...(c.board ? { onOpenDraft: a.openDraft } : {})}
                 error={factsOf(c.selected).error}
                 describeOnBlur={planMode}
                 kindFilter={planMode ? noMilestoneChange(c.selected) : undefined}
-                extras={props.panelExtras?.(c.selected)}
-                {...(c.board ? boardPanelProps(c.selected) : {})}
+              />
+            )}
+
+            {/* MIV-FR-SVXH .. MIV-FR-HGGS: the issue view covers the canvas. */}
+            {iv.shown && c.selected && (
+              <IssueView
+                key={c.selected.id}
+                doc={doc}
+                item={c.selected}
+                facts={factsOf(c.selected)}
+                references={resolveReferences(c.selected.artifactIds, byId, project.loaded)}
+                artifacts={project.referenceable}
+                paths={project.paths}
+                treeLoaded={project.loaded}
+                inert={inert}
+                handlers={editHandlersOf(c.selected)}
+                creating={a.creating === c.selected.id}
+                onRenameTo={(name) => a.rename(c.selected!.id, name)}
+                describeOnBlur={planMode}
+                kindFilter={planMode ? noMilestoneChange(c.selected) : undefined}
+                blockers={factsOf(c.selected).blockers.map((b) => {
+                  const blocker = findItem(doc, b.id);
+                  const ref = source.tracker.get(b.id)?.ref;
+                  return {
+                    id: b.id,
+                    name: b.name,
+                    kind: blocker?.kind ?? "task",
+                    ...(ref ? { number: ref.number } : {}),
+                  };
+                })}
+                takeFocus={iv.shown.focus}
+                onOpenTracker={a.openTracker}
+                onDiscuss={props.onDiscuss ? () => props.onDiscuss!(c.selected!) : undefined}
+                onShowItem={showItem}
+                onClose={iv.close}
+                parts={
+                  props.issueView?.parts?.(c.selected, { showItem, openTracker: a.openTracker }) ?? {}
+                }
               />
             )}
 

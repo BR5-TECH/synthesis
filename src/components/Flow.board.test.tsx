@@ -28,7 +28,7 @@ import {
 } from "../state/mainBranchWrite";
 import { mainGuard, scriptedReads } from "../test/mainBranchWriteFixtures";
 import { callsOf, clearFlowStores, flowBackend, itemState, planOf, renderFlow } from "../test/flowCanvasHarness";
-import { canvas, client, ID, itemEl } from "../test/flowFixtures";
+import { canvas, clickItem, client, ID, itemEl } from "../test/flowFixtures";
 import { resetListeners } from "../test/flowMocks";
 import { blocks, item, plan } from "../test/flowPlanFixtures";
 
@@ -157,13 +157,13 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     }
   });
 
-  it("MDL-FR-XKCH: on the board the popover opens beside the item and has a footer; a Flow tab keeps its panel below the item", async () => {
+  it("MIV-FR-SVXH, MIV-FR-HGGS: on the board a click opens the issue view in place of the panel; a Flow tab keeps its panel below the item", async () => {
     await open();
-    press("t3", { x: 0, y: 0 });
-    release();
-    const pop = await screen.findByTestId("flow-selection-panel");
-    expect(pop).toHaveAttribute("data-placement", "beside");
-    expect(pop).toHaveClass("dm-pop");
+    clickItem("t3");
+    const view = await screen.findByTestId("map-issue-view");
+    expect(view).toHaveAttribute("role", "dialog");
+    expect(view).toHaveAttribute("aria-modal", "false");
+    expect(screen.queryByTestId("flow-selection-panel")).toBeNull();
     cleanup();
     clearFlowStores();
     await renderFlow(flowBackend(DOC, { items: {} }));
@@ -172,8 +172,7 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     release();
     const panel = await screen.findByTestId("flow-selection-panel");
     expect(panel.getAttribute("data-placement")).not.toBe("beside");
-    expect(panel).not.toHaveClass("dm-pop");
-    expect(screen.queryByTestId("flow-panel-foot")).toBeNull();
+    expect(screen.queryByTestId("map-issue-view")).toBeNull();
   });
 
   it("DBR-FR-QZPA, DBR-FR-GHDZ: the bottom line starts with the status dot, and the status word is beside it", async () => {
@@ -208,7 +207,7 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     expect(warn).toHaveAttribute("title", "Draft gone is missing");
   });
 
-  it("DBR-FR-ZRBD: a card shows no status chip, no reference, no excerpt, and no draft row; the panel shows the draft row with its open action", async () => {
+  it("DBR-FR-ZRBD, MIV-FR-VHDP: a card shows no status chip, no reference, no excerpt, and no draft row; the issue view shows the draft row with its open action", async () => {
     await open();
     const card = itemEl("t1");
     expect(card.querySelector(".flow-chip")).toBeNull();
@@ -216,9 +215,8 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     expect(card.querySelector(".flow-excerpt")).toBeNull();
     expect(card.querySelector(".flow-draft")).toBeNull();
     expect(within(itemEl("t2")).queryByTestId("flow-item-excerpt-t2")).toBeNull();
-    press("t1", { x: 0, y: 0 });
-    release();
-    const panel = await screen.findByTestId("flow-selection-panel");
+    clickItem("t1");
+    const panel = await screen.findByTestId("map-issue-view");
     expect(within(panel).getByTestId("flow-panel-draft")).toHaveTextContent("tokenize-cards");
     expect(within(panel).getByRole("button", { name: "Unlink draft" })).toBeInTheDocument();
   });

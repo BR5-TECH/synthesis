@@ -492,6 +492,7 @@ pub fn run() {
             delivery::source::milestones::load_delivery_milestones,
             delivery::github::load_github_delivery_plan,
             delivery::github::apply_github_delivery_edit,
+            delivery::github::read_github_plan_issue,
             delivery::github::open_tracker_link,
             project::close::close_project,
             menu::finish_exit,

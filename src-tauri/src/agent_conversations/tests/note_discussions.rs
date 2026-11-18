@@ -262,6 +262,7 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
                 TAG_ARTIFACT,
                 TAG_NOTE_CONTEXT,
                 TAG_MAP_CONTEXT,
+                TAG_PLAN_REFERENCES,
                 TAG_DISCUSSION_HISTORY,
                 TAG_CURRENT_COMMENT,
             ]

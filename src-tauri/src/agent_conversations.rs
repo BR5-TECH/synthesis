@@ -141,6 +141,7 @@ mod material;
 mod native_calls;
 mod openrouter_carrier;
 mod overflow;
+mod plan_references;
 mod progress_update;
 mod prose_tool_calls;
 mod provider_memory;

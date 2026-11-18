@@ -11,6 +11,8 @@ use crate::logging::{Domain, LogFilter, LogLevel};
 use crate::map_plan::{MapPlanProposal, RowFields};
 use crate::tools::tests::plan_fixture::{agent, human, PlanFixture};
 
+mod cache_reads;
+
 type Tool = ProposePlanChangesTool<Mock>;
 
 const RATIONALE: &str = "I offer one step. <spoken>One step first.</spoken>";
@@ -797,6 +799,7 @@ fn a_change_reads_the_issue_from_github_and_updates_the_cache() {
     }
     let cached_title = |f: &Fixture| f.plan.h.cache().unwrap().issue(3).unwrap().title.clone();
     assert_eq!(cached_title(&f), "Issue 3", "the cache is older than GitHub");
+    cache_reads::fence(&f);
     let seen = crate::delivery::github::tests::fake::listen(
         &f.plan.app(),
         crate::delivery::github::GITHUB_DELIVERY_PLAN_CHANGED,
@@ -812,6 +815,7 @@ fn a_change_reads_the_issue_from_github_and_updates_the_cache() {
     let cache = f.plan.h.cache().unwrap();
     let cached = cache.issue(3).unwrap();
     assert_eq!(cached.title, "Renamed on GitHub");
+    assert_eq!(cached.body, "Body on GitHub");
     assert_eq!(cached.updated_at, "2026-02-02T00:00:00Z");
     assert_eq!(cached.assignees, ["octocat"]);
     let status = cache.project.items.iter().find_map(|item| match &item.content {
@@ -821,9 +825,11 @@ fn a_change_reads_the_issue_from_github_and_updates_the_cache() {
         _ => None,
     });
     assert_eq!(status.as_deref(), Some("In Progress"));
-    crate::delivery::github::tests::wait_until("the plan event", || {
-        !seen.lock().unwrap().is_empty()
-    });
+    cache_reads::fence(&f);
+    let payloads = seen.lock().unwrap().clone();
+    assert_eq!(payloads.len(), 1, "one plan event: {payloads:?}");
+    let payload: Value = serde_json::from_str(&payloads[0]).unwrap();
+    assert_eq!(payload["projectNodeId"], json!(crate::delivery::github::tests::fake::PROJECT));
     assert!(f.plan.h.fake.writes().is_empty());
 }
 

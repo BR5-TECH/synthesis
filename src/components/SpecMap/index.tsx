@@ -23,7 +23,7 @@ import { DiscussionPane } from "../MapDiscussion";
 import { MapPlanContext, type MapPlanContextValue, type MapPlanHost } from "../MapPlanProposal";
 import { deliveryNodeOf, issueItemId, specNodeOf } from "../../state/specMap/nodeRefs";
 import { MapPlanReviewStore } from "../../state/mapPlan/reviewStore";
-import { requestPendingFocus } from "../../state/discussionFocus";
+import { focusDiscussion, requestPendingFocus } from "../../state/discussionFocus";
 import { getDeliverySettings } from "../../api";
 import { logWarn } from "../../logging";
 import type { DeliverySettings } from "../../types";
@@ -105,8 +105,10 @@ export function SpecMap({
           store.discuss(deliveryNodeOf(item));
           return;
         }
-        const thread = store.snapshot().discussion.threadId;
-        if (thread) requestPendingFocus(thread, "composer");
+        // The thread the column shows, which can be its first thread when none was chosen.
+        const thread = reviewStore.snapshot().activeDiscussionId;
+        // The column already shows it, so focus it at once; a column that mounts later takes the request.
+        if (thread && focusDiscussion(thread, "composer") === "closed") requestPendingFocus(thread, "composer");
       },
       showDelivery: () => store.setLens("delivery"),
       repository,
@@ -116,7 +118,7 @@ export function SpecMap({
       },
       kindOfType: (type) => kindOfType(settings, type),
     };
-  }, [planDoc, planSession, store, openDraftById, repository, settings]);
+  }, [planDoc, planSession, store, reviewStore, openDraftById, repository, settings]);
   const planContext = useMemo<MapPlanContextValue>(
     () => ({ store: reviewStore, host: planHost }),
     [reviewStore, planHost],

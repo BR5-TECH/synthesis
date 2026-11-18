@@ -34,6 +34,7 @@ import type { GithubPollingView, ItemDeliveryState } from "../types";
 import { flowBackend, type FlowBackend } from "./flowCanvasHarness";
 import { setWindowWidth } from "./specMapRender";
 import { smallIndex } from "./specMapFixtures";
+import { resetMapPlanFallbackForTest } from "../components/MapPlanProposal";
 
 export const PROJECT_NODE = "PVT_1";
 
@@ -213,6 +214,8 @@ const stores: FlowSessionStore[] = [];
 /** Drop every scheduled write of the stores this file made. Call in `afterEach`. */
 export function clearLensStores() {
   for (const s of stores.splice(0)) s.clear();
+  // A lens rendered with no Map tab context reads the module review store.
+  resetMapPlanFallbackForTest();
 }
 
 /**

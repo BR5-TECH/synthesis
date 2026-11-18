@@ -4,7 +4,7 @@
  * assertion is about what the surface renders and which operation it sends.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const invokeMock = vi.fn();
@@ -633,5 +633,108 @@ describe("more row states (MPV-FR-QOPR, MPV-FR-PIQU, MPV-FR-GYLV)", () => {
     await openSheet();
     expect(within(detail()).getByTestId("pp-failure")).toHaveTextContent("Only the title was written.");
     expect(within(detail()).queryByRole("button", { name: "Reject" })).toBeNull();
+  });
+});
+
+describe("smaller cases (MPV-FR-LYKS, MPV-FR-CCDM, MPV-FR-PVXW, MPV-FR-PBAD, MPV-FR-CTTA, MPV-FR-KMJX)", () => {
+  it("MPV-FR-LYKS, MPV-FR-UXHR: a close as completed is a change to `closed as completed`", async () => {
+    const p = proposal([modifyRow("c", 5, "Done item", [{ field: "close", before: "open", after: "closed", reason: "completed" }])]);
+    await renderReview(backend(invokeMock, p));
+    await screen.findByText("#5, 1 changed");
+    await openSheet();
+    expect(within(detail()).getByText("closed as completed")).toHaveClass("pp-v--new");
+    expect(within(detail()).getByRole("button", { name: "Accept: closed as completed" })).toBeEnabled();
+  });
+
+  it("MPV-FR-CCDM: all seven fields show in the fixed order, with an arrow between a before and an after", async () => {
+    const p = proposal([
+      modifyRow("m", 9, "All", [
+        { field: "close", before: "open", after: "closed", reason: "completed" },
+        { field: "labels", before: [], after: ["a"], added: ["a"], removed: [] },
+        { field: "status", before: "Todo", after: "Done" },
+        { field: "parent", before: { issue: 1 }, after: { issue: 2 } },
+        { field: "milestone", before: null, after: { number: 4, title: "GA" } },
+        { field: "type", before: "Task", after: "Bug" },
+        { field: "title", before: "Al", after: "All" },
+      ]),
+    ]);
+    await renderReview(backend(invokeMock, p));
+    await screen.findByText("#9, 1 changed");
+    await openSheet();
+    const fields = within(detail()).getByTestId("pp-fields");
+    expect([...fields.querySelectorAll(".pp-fields__k")].map((e) => e.textContent)).toEqual([
+      "Title",
+      "Type",
+      "Milestone",
+      "Parent",
+      "Status",
+      "Labels",
+      "State",
+    ]);
+    const type = within(fields).getByText("Task").closest(".pp-fields__v")!;
+    expect(type.querySelector(".pp-arrow")).not.toBeNull();
+    // A milestone that had none shows the value after alone.
+    const milestone = within(fields).getByText("GA").closest(".pp-fields__v")!;
+    expect(milestone.querySelector(".pp-arrow")).toBeNull();
+  });
+
+  it("MPV-FR-PVXW: emphasis keeps its face and a table row shows as plain text", async () => {
+    const p = proposal([createRow("a", "A", {}, { body: "Text with *weight*.\n\n| a | b |\n|---|---|\n| c | d |\n" })]);
+    await renderReview(backend(invokeMock, p));
+    await screen.findByText("1 added");
+    await openSheet();
+    const doc = within(detail()).getByTestId("pp-doc");
+    expect(doc.querySelector("em")).toHaveTextContent("weight");
+    expect(doc).toHaveTextContent("a | b");
+    expect(doc).not.toHaveTextContent("|---|");
+  });
+
+  it("MPV-FR-XAOG: the fold expands from the keyboard", async () => {
+    const body = "A one.\n\nB two.\n\nC three.\n\nD four.\n";
+    const p = proposal([modifyRow("m", 7, "F", [{ field: "body", before: body, after: body + "\nE five.\n" }])]);
+    await renderReview(backend(invokeMock, p));
+    await screen.findByText("#7, 1 changed");
+    const { user } = await openSheet();
+    within(detail()).getByTestId("pp-fold").focus();
+    await user.keyboard("{Enter}");
+    expect(within(detail()).getByText("A one.")).toBeInTheDocument();
+  });
+
+  it("MPV-FR-PBAD: a proposal of one row says `1 issue` and shows its summary in the header", async () => {
+    await renderReview(backend(invokeMock, proposal([modifyRow("m", 18, "M", [close])])));
+    await screen.findByText("#18, 1 withdrawn");
+    const { sheet } = await openSheet();
+    expect(sheet.querySelector(".pp-sheet__meta")).toHaveTextContent("1 issue");
+    expect(sheet.querySelector(".pp-sheet__sum")).toHaveTextContent("#18, 1 withdrawn");
+  });
+
+  it("MPV-FR-CTTA: opening a second proposal replaces the first sheet", async () => {
+    const b = backend(invokeMock, FOUR());
+    const second = proposal([createRow("x", "Other")], { id: "p2" });
+    invokeMock.mockImplementation((cmd: string, args: Record<string, unknown>) =>
+      cmd === "list_map_plan_proposals" ? Promise.resolve([b.proposal, second]) : Promise.reject(new Error(cmd)),
+    );
+    const { store } = await renderReview(b);
+    await screen.findByText("2 changed, 1 added, 1 withdrawn");
+    await openSheet();
+    act(() => store.openReview("t1", "p2"));
+    expect(screen.getAllByTestId("pp-sheet")).toHaveLength(1);
+    expect(screen.getByTestId("pp-sheet")).toHaveTextContent("Other");
+  });
+
+  it("MPV-FR-KMJX: no log record carries a body, a label name, or a draft name", async () => {
+    const p = proposal([
+      createRow("a", "A", {}, { body: "Secret body", labels: ["secret-label"] }),
+      draftRow("d", "Secret draft", "Secret prompt"),
+    ]);
+    const b = backend(invokeMock, p);
+    b.accept = async ({ rowKey }) => (b.proposal = withRow(b.proposal, rowKey, { state: "accepted" }));
+    await renderReview(b);
+    await screen.findByText("1 added, 1 draft");
+    const { user } = await openSheet();
+    await user.click(within(screen.getByTestId("pp-bar")).getByRole("button", { name: "Accept all" }));
+    await waitFor(() => expect(screen.getByTestId("pp-bar")).toHaveClass("pp-bar--done"));
+    const logged = JSON.stringify([vi.mocked(logInfo).mock.calls, vi.mocked(logWarn).mock.calls]);
+    for (const secret of ["Secret body", "secret-label", "Secret draft", "Secret prompt"]) expect(logged).not.toContain(secret);
   });
 });

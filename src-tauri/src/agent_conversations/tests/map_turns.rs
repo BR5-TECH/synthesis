@@ -394,3 +394,75 @@ fn the_plan_proposal_ends_the_turn_and_advisors_lack_it() {
     assert!(crate::agent_conversations::groups::ADVISOR_WITHHELD_TOOLS
         .contains(&crate::tools::propose_plan_changes::NAME));
 }
+
+// MPR-FR-NWEZ, MPR-FR-QIJF, CTA-FR-YWSU: with no seam of a test, a re-prepare
+// request dispatches one real turn of the agent that proposed. It is a turn of
+// the Map discussion, and the Synthesis comment of the request is its trigger
+// and the current comment of its input.
+#[test]
+fn a_reprepare_request_dispatches_a_map_turn_on_its_comment() {
+    let h = Harness::new(vec![Ok("I read the issues again.".into())]);
+    h.mount();
+    let root = h.root().path().to_path_buf();
+    let access = h.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
+    let project = h.app.state::<ProjectState>();
+    project.set_root_with_access(root.clone(), Some(access));
+    project.set_anchor(PROJECT_KEY.into());
+    project.set_store(root.clone());
+    h.create_agent("arch", "");
+    let thread = open_map(&h.root(), None, "Plan the next step");
+    let app = h.app.handle().clone();
+    let draft = MapPlanRow {
+        key: "d".into(),
+        fields: RowFields::NewDraft(NewDraftFields { name: "Relay".into(), body: "x".into() }),
+        state: RowState::Waiting,
+        blocked_by: None,
+        error: None,
+        result: None,
+    };
+    let comment = ProposalComment {
+        body: "Rows. <spoken>Rows.</spoken>".into(),
+        author: agent("a1", "arch"),
+        spoken_original: None,
+    };
+    let proposal =
+        crate::map_plan::record_map_plan_proposal(&app, &thread.id, vec![draft], comment).unwrap();
+    // DRS-FR-39: a project settings file that cannot be read fails the draft.
+    let settings = root.join(".synthesis/project.toml");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    std::fs::write(&settings, "this is = not [ toml").unwrap();
+    let decided = crate::map_plan::accept_row(&app, &thread.id, &proposal.id, "d").unwrap();
+    std::fs::remove_file(&settings).unwrap();
+    assert_eq!(decided.rows[0].state, RowState::Failed);
+    assert!(h.turns().all_turn_ids().is_empty(), "a failed draft asks nothing on its own");
+
+    let asked = crate::map_plan::request_reprepare(&app, &thread.id, &proposal.id).unwrap();
+    assert!(asked.reprepare_requested_at.is_some());
+    // The turn can append its reply at any time from now, so the comment is
+    // found by its author, not by its place in the thread.
+    let synthesis: Vec<_> = thread_of(&h.root(), &thread.id)
+        .comments
+        .into_iter()
+        .filter(|c| c.author == Participant::synthesis())
+        .collect();
+    assert_eq!(synthesis.len(), 1, "one Synthesis comment is appended");
+    let request_comment = synthesis[0].clone();
+    // The wait is on the turn threads, not on time. An emit that Tauri queued
+    // is delivered by the next emit, so the flush makes the terminal event seen.
+    h.settle();
+    crate::delivery::github::tests::wait_until("the terminal event", || {
+        let _ = tauri::Emitter::emit(&h.app, FLUSH_QUEUED_EMITS, ());
+        !h.terminal.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
+    });
+    let ended = h.terminal.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert_eq!(ended.len(), 1, "one turn is dispatched");
+    let turn = ended[0].clone();
+    assert_eq!(turn.nickname, "arch");
+    assert_eq!(turn.origin.kind(), OriginKind::MapDiscussion);
+    assert_eq!(turn.origin.discussion_id(), thread.id);
+    assert_eq!(turn.trigger_comment_id.as_deref(), Some(request_comment.id.as_str()));
+    let (request, _) = h.seam.requests().into_iter().next().expect("one request");
+    let current =
+        request.input.iter().find(|s| s.tag == TAG_CURRENT_COMMENT).expect("a current comment");
+    assert!(current.body.contains(&request_comment.body), "{}", current.body);
+}

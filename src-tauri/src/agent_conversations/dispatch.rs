@@ -97,6 +97,9 @@ pub(super) struct TurnPlan {
     pub(super) group: Option<GroupBinding>,
     /// AGC-FR-VDOO, AGC-FR-CZCU: the attachments the turn's comment carries.
     pub(super) attachments: Vec<comments::Attachment>,
+    /// AGC-FR-EFCL: the plan reference fingerprints that a Map turn's input was
+    /// assembled with. A turn of another kind has none.
+    pub(super) plan_fingerprints: Option<plan_references::AssembledFingerprints>,
 }
 
 /// AGC-FR-24: `@<nickname> is thinking about <draft name>…` for a draft,
@@ -403,9 +406,19 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     flow_context::extend_flow_material(app, roots, &document_budget, &mut input);
     // AGC-FR-UOPJ: a Map thread's material also carries the short summary of the
     // delivery plan, read from the cache of the GitHub plan with no request.
-    if origin.is_map() {
+    // AGC-FR-UOPJ, MPR-FR-HRUK: and the plan references, read from disk now.
+    let plan_fingerprints = if origin.is_map() {
         map_context::extend_map_material(app, roots, &document_budget, &mut input);
-    }
+        plan_references::extend_plan_references(
+            app,
+            roots,
+            &document_budget,
+            origin.discussion_id(),
+            &mut input,
+        )
+    } else {
+        None
+    };
     // AGC-FR-QSWD: a record that cannot be read adds no question set. The kind
     // is the whole of the record: no path and no content.
     if let Some(kind) = question_set_unreadable {
@@ -615,6 +628,7 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
         reported_downgrades: ReportedDowngrades::default(),
         group,
         attachments,
+        plan_fingerprints,
     };
 
     let app = app.clone();
@@ -781,6 +795,15 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
         }
     };
     clear_marks(&plan);
+    // AGC-FR-EFCL, MPR-FR-VGCX: a Map turn that delivered or asked replaces the
+    // fingerprint record of its discussion, where its contribution reaches the
+    // discussion. A failed or cancelled turn, an advisor turn, and a participant
+    // turn of a synthesis group do not.
+    if plan_references::records_fingerprints(role_of(&plan), state) {
+        if let Some(assembled) = &plan.plan_fingerprints {
+            plan_references::record_fingerprints(app, turns.buffer(), &plan.roots.store, assembled);
+        }
+    }
     // AGC-FR-GNMP: an advisor's failure is shown in the Advisors list of the reply
     // it advised, so it offers no retry of its own.
     let recoverable = recoverable && role_of(&plan) != Some(GroupRole::Advisor);

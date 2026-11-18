@@ -493,6 +493,21 @@ fn join_rel(parent: &str, child: &str) -> String {
 // I/O scan — composes the FSA walk + pure builder (ASC-FR-01 / ASC-FR-09 / ASC-FR-11)
 // ---------------------------------------------------------------------------
 
+/// ASC-FR-19: the name that one file shows: the name that it declares where its
+/// filename does not identify it, else its filename.
+pub fn file_display_name(
+    root: &crate::fs::RootFs,
+    rel: &str,
+    artifact_type: Option<ArtifactType>,
+) -> String {
+    let declared = if names_itself(rel, artifact_type) {
+        markdown_facts(root)(rel).declared_name
+    } else {
+        None
+    };
+    declared.unwrap_or_else(|| rel.rsplit('/').next().unwrap_or(rel).to_string())
+}
+
 /// Perform a full recursive scan of `root` and return the type-tagged tree.
 ///
 /// Walks the whole project root but skips `.git/`, honours `.gitignore`, and

@@ -77,6 +77,15 @@ pub fn estimate_impl<R: tauri::Runtime>(
             if let Some(discussion) = &discussion {
                 sections.push(map_context::map_context_section(roots, discussion, ""));
                 map_context::extend_map_material(app, roots, &budget, &mut sections);
+                // AGC-FR-UOPJ: the estimate carries the plan references as a turn
+                // does, and records no fingerprint.
+                plan_references::extend_plan_references(
+                    app,
+                    roots,
+                    &budget,
+                    &discussion.id,
+                    &mut sections,
+                );
             }
             None
         }

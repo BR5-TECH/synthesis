@@ -479,9 +479,14 @@ pub const INPUT_TAGS: [&str; 3] = [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CUR
 pub const NOTE_INPUT_TAGS: [&str; 3] =
     [TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
+/// AGC-FR-UOPJ: the second material tag of a **map** turn. It holds the plan
+/// references of the delivery plan, read from disk at the dispatch of the turn
+/// (MPR-FR-HRUK, MPR-FR-CHRV).
+pub const TAG_PLAN_REFERENCES: &str = "plan_references";
+
 /// AGC-FR-UOPJ / CVL-FR-06: the tag vocabulary of a map turn.
-pub const MAP_INPUT_TAGS: [&str; 3] =
-    [TAG_MAP_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
+pub const MAP_INPUT_TAGS: [&str; 4] =
+    [TAG_MAP_CONTEXT, TAG_PLAN_REFERENCES, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// AGC-FR-NBZN / CVL-FR-06: the tag vocabulary of a change turn.
 pub const CHANGE_INPUT_TAGS: [&str; 3] =
@@ -492,12 +497,12 @@ pub const CHANGE_INPUT_TAGS: [&str; 3] =
 /// The parity check of CVL-FR-06 reads this and the prompt the same kind
 /// selects, so the instruction and the material cannot drift apart across a
 /// change to either.
-pub fn input_tags(kind: OriginKind) -> [&'static str; 3] {
+pub fn input_tags(kind: OriginKind) -> &'static [&'static str] {
     match kind {
-        OriginKind::NoteDiscussion => NOTE_INPUT_TAGS,
-        OriginKind::MapDiscussion => MAP_INPUT_TAGS,
-        OriginKind::ChangeComment | OriginKind::ChangeDiscussion => CHANGE_INPUT_TAGS,
-        _ => INPUT_TAGS,
+        OriginKind::NoteDiscussion => &NOTE_INPUT_TAGS,
+        OriginKind::MapDiscussion => &MAP_INPUT_TAGS,
+        OriginKind::ChangeComment | OriginKind::ChangeDiscussion => &CHANGE_INPUT_TAGS,
+        _ => &INPUT_TAGS,
     }
 }
 

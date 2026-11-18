@@ -253,7 +253,12 @@ fn the_input_holds_each_row_with_its_state() {
     f.h.fake.lock().calls.clear();
     let input =
         build_input(roots, &origin, &thread_of(roots.store, &f.discussion_id).comments[0].id);
-    assert_eq!(input.iter().map(|s| s.tag.as_str()).collect::<Vec<_>>(), MAP_INPUT_TAGS.to_vec());
+    // The pure builder gives no `plan_references`: the dispatch path adds it,
+    // because the read of the delivery source needs the application handle.
+    assert_eq!(
+        input.iter().map(|s| s.tag.as_str()).collect::<Vec<_>>(),
+        vec![TAG_MAP_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
+    );
     let body = &input[0].body;
     assert!(body.contains("Focus: the whole Map."), "{body}");
     for line in [

@@ -11,6 +11,7 @@ mod applying;
 mod commands;
 mod deciding;
 mod errors;
+mod fingerprints;
 mod model;
 mod recording;
 mod reprepare;
@@ -24,6 +25,9 @@ mod tests;
 pub use commands::*;
 pub use deciding::{accept_row, reject_row, reopen_row, request_reprepare};
 pub use errors::MAP_PLAN_PROPOSALS_CHANGED;
+pub use fingerprints::{
+    fingerprint_of, read_fingerprints, write_fingerprints, FingerprintRecord, ReferenceFingerprint,
+};
 pub use model::*;
 pub use recording::*;
 pub use updating::{apply_updates, read_open_proposal, update_map_plan_proposal, MapPlanUpdate};

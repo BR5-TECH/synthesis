@@ -13,6 +13,9 @@ use super::*;
 /// MPR-FR-RVRN: the subfolder of the plan proposals in the Map folder.
 const MAP_PROPOSALS_SUBDIR: &str = "proposals";
 
+/// MPR-FR-VGCX: the subfolder of the fingerprint records in the Map folder.
+const MAP_FINGERPRINTS_SUBDIR: &str = "references";
+
 /// MPR-FR-RVTT: no project is open.
 const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 
@@ -128,6 +131,12 @@ pub fn open_map_discussion_in(
 /// beside the log of the Map threads and behind the FSA-FR-10 escape gate.
 pub fn map_proposals_dir(root: &crate::fs::RootFs) -> Result<PathBuf, String> {
     fsa::resolve_under(map_comments_dir(root)?, MAP_PROPOSALS_SUBDIR).map_err(|e| e.to_string())
+}
+
+/// MPR-FR-VGCX: the folder of the fingerprint records of the Map threads, one
+/// record for each thread, beside the log of the Map owner.
+pub fn map_fingerprints_dir(root: &crate::fs::RootFs) -> Result<PathBuf, String> {
+    fsa::resolve_under(map_comments_dir(root)?, MAP_FINGERPRINTS_SUBDIR).map_err(|e| e.to_string())
 }
 
 /// MPR-FR-RVRN, CMS-FR-OIUO: append the one agent comment that announces a plan

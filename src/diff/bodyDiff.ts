@@ -1,8 +1,9 @@
 /**
- * MPV-FR-WYTL .. MPV-FR-PVXW: the body diff of a plan proposal row. Both
+ * MPV-FR-WYTL .. MPV-FR-RQWN: the body diff of a plan proposal row. Both
  * Markdown revisions are parsed into blocks, the blocks are aligned, a
  * replaced block that reads as an edit of the block before it gets its words
- * marked inline, and runs of unchanged blocks fold. Pure, so the renderer and
+ * marked inline, a replaced code block gets its lines marked, and runs of
+ * unchanged blocks fold. Pure, so the renderer and
  * its tests read one answer.
  */
 import { alignBy } from "./lineAlign";
@@ -10,7 +11,7 @@ import { parseInline, parseMarkdownBlocks, type MarkdownBlock } from "./markdown
 import { diffWords, tokenize } from "./wordDiff";
 
 /** The typeset kind of a block (MPV-FR-PVXW). */
-export type BodyBlockKind = "h2" | "h3" | "p" | "li" | "code" | "plain";
+export type BodyBlockKind = "h2" | "h3" | "p" | "quote" | "li" | "code" | "plain";
 
 /** The face of a run of text. */
 export type PieceStyle = "text" | "strong" | "em" | "code";
@@ -22,6 +23,12 @@ export interface Piece {
   mark?: "ins" | "del";
 }
 
+/** MPV-FR-ZCWQ / MPV-FR-JVZN: one line of a code block, marked inside an edited block. */
+export interface CodeLine {
+  text: string;
+  mark?: "ins" | "del";
+}
+
 export interface BodyBlock {
   /** `add` and `del` take a gutter mark; `edit` and `ctx` take none. */
   mode: "add" | "del" | "edit" | "ctx";
@@ -29,6 +36,10 @@ export interface BodyBlock {
   /** The nesting depth of a list item. */
   depth: number;
   pieces: Piece[];
+  /** MPV-FR-ZCWQ: the lines of a code block, with their indentation. */
+  lines?: CodeLine[];
+  /** MPV-FR-ZCWQ: the language of a fenced code block, for example `mermaid`. */
+  language?: string;
 }
 
 export type BodyItem = { type: "block"; block: BodyBlock } | { type: "fold"; blocks: BodyBlock[] };
@@ -52,8 +63,9 @@ function kindOf(block: MarkdownBlock): BodyBlockKind {
     case "heading":
       return (block.level ?? 1) <= 2 ? "h2" : "h3";
     case "paragraph":
-    case "quote":
       return "p";
+    case "quote":
+      return "quote";
     case "list-item":
       return "li";
     case "code":
@@ -189,7 +201,43 @@ export function mergedWordPieces(before: readonly Piece[], after: readonly Piece
 }
 
 function blockOf(block: MarkdownBlock, mode: BodyBlock["mode"], pieces = piecesOf(block)): BodyBlock {
-  return { mode, kind: kindOf(block), depth: block.depth ?? 0, pieces };
+  const out: BodyBlock = { mode, kind: kindOf(block), depth: block.depth ?? 0, pieces };
+  if (block.kind === "code") {
+    out.lines = block.text.split("\n").map((text) => ({ text }));
+    if (block.language) out.language = block.language;
+  }
+  return out;
+}
+
+/**
+ * MPV-FR-JVZN: the lines of the new code block, with each removed line in its
+ * place before the lines that replaced it.
+ */
+export function codeLineDiff(before: string, after: string): CodeLine[] {
+  const out: CodeLine[] = [];
+  let dels: CodeLine[] = [];
+  let inss: CodeLine[] = [];
+  const flush = () => {
+    out.push(...dels, ...inss);
+    dels = [];
+    inss = [];
+  };
+  for (const pair of alignBy(before.split("\n"), after.split("\n"), (line) => line)) {
+    if (!pair.changed) {
+      flush();
+      out.push({ text: pair.new! });
+      continue;
+    }
+    if (pair.old !== null) dels.push({ text: pair.old, mark: "del" });
+    if (pair.new !== null) inss.push({ text: pair.new, mark: "ins" });
+  }
+  flush();
+  return out;
+}
+
+/** MPV-FR-JVZN: a removed and an added code block of the same language are one edit. */
+function sameCode(a: MarkdownBlock, b: MarkdownBlock): boolean {
+  return a.kind === "code" && b.kind === "code" && (a.language ?? "") === (b.language ?? "");
 }
 
 /** MPV-FR-PPHV: whether two blocks can be one edited block. */
@@ -210,6 +258,11 @@ export function diffBody(before: string | null, after: string | null): BodyDiff 
   for (const pair of pairs) {
     if (!pair.changed) {
       flat.push(blockOf(pair.new!, "ctx"));
+      continue;
+    }
+    if (pair.old && pair.new && sameCode(pair.old, pair.new)) {
+      flat.push({ ...blockOf(pair.new, "edit"), lines: codeLineDiff(pair.old.text, pair.new.text) });
+      edited++;
       continue;
     }
     if (pair.old && pair.new && sameKind(pair.old, pair.new)) {

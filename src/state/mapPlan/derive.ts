@@ -6,7 +6,7 @@
  * Pure functions, so the summary row, the sheet, the board, and the tests read
  * one source.
  */
-import type { MapPlanProposal, MapPlanRow, RowChange } from "../../types";
+import type { MapPlanProposal, MapPlanRow, ProposalUpdateCounts, RowChange } from "../../types";
 
 export type RowOp = "changed" | "added" | "withdrawn" | "draft";
 export type RowStatus = "pending" | "applying" | "applied" | "rejected" | "failed";
@@ -113,6 +113,19 @@ export function summaryOf(proposal: MapPlanProposal): string {
   const counts = opCounts(proposal);
   const only = proposal.rows.length === 1 ? proposal.rows[0] : null;
   return only !== null && only.kind === "modify_issue" ? `#${only.fields.number}, ${counts}` : counts;
+}
+
+/**
+ * MPV-FR-QZUD: the summary of an update comment: the counts of the update, with
+ * a count of zero left out. `removed` counts the rows that the agent withdrew.
+ */
+export function updateSummaryOf(update: ProposalUpdateCounts): string {
+  const parts = [
+    update.changed > 0 ? `${update.changed} changed` : null,
+    update.added > 0 ? `${update.added} added` : null,
+    update.withdrawn > 0 ? `${update.withdrawn} removed` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? `Updated: ${parts.join(", ")}` : "Updated";
 }
 
 /**

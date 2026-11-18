@@ -30,6 +30,15 @@ export interface OpenReview {
   discussionId: string;
   proposalId: string;
   selectedKey: string | null;
+  /** MPV-FR-KHDP: the sheet opened on its own, so it took no focus. */
+  auto?: boolean;
+}
+
+/** MPV-FR-UWQL: a proposal comment that arrived in the shown thread, waiting for its proposal to be read. */
+interface Arrival {
+  discussionId: string;
+  proposalId: string;
+  onOpen?: () => void;
 }
 
 export interface ReviewSnapshot {
@@ -100,8 +109,10 @@ export class MapPlanReviewStore {
   private listenGeneration = 0;
   private listening = false;
   private holders = 0;
-  /** MPV-FR-PBAD: the summary-row button of each proposal, which takes the focus back. */
-  private returns = new Map<string, HTMLElement>();
+  /** MPV-FR-PBAD: the summary-row buttons of each proposal; the newest takes the focus back. */
+  private returns = new Map<string, HTMLElement[]>();
+  /** MPV-FR-UWQL: the latest proposal comment that arrived and was not opened yet. */
+  private arrival: Arrival | null = null;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -202,12 +213,89 @@ export class MapPlanReviewStore {
     const unavailable = new Set(this.state.unavailable);
     unavailable.delete(discussionId);
     const changed = before === null ? [] : this.changedStatuses(before, list);
+    const review = this.reselected(discussionId, before, list);
     this.set({
       proposals,
       unavailable,
       ...(changed.length > 0 ? { announcement: changed.join(". ") } : {}),
+      ...(review !== this.state.review ? { review } : {}),
     });
+    this.tryArrival(discussionId);
   }
+
+  /**
+   * MPV-FR-GRTP: an update redraws the open sheet in place. The selection stays
+   * on its row while the row is in the list, else it moves as MPV-FR-CAQL says.
+   */
+  private reselected(
+    discussionId: string,
+    before: MapPlanProposal[] | null,
+    list: MapPlanProposal[],
+  ): OpenReview | null {
+    const review = this.state.review;
+    if (review === null || review.discussionId !== discussionId) return review;
+    const proposal = list.find((p) => p.id === review.proposalId);
+    if (!proposal || proposal.rows.some((r) => r.key === review.selectedKey)) return review;
+    // The next `pending` row after the place of the row that left, else the
+    // first `pending` row, as after a decision.
+    const held = before?.find((p) => p.id === review.proposalId)?.rows ?? [];
+    const from = held.findIndex((r) => r.key === review.selectedKey);
+    const later = new Set(from >= 0 ? held.slice(from + 1).map((r) => r.key) : []);
+    const statuses = rowStatuses(proposal, this.state.busy);
+    const next = proposal.rows.find((r, i) => later.has(r.key) && statuses[i] === "pending");
+    return { ...review, selectedKey: next?.key ?? firstSelection(proposal, statuses) };
+  }
+
+  /**
+   * MPV-FR-UWQL: a comment with a plan proposal arrived in the thread that the
+   * Discussion column shows. Once the proposal is read, and while it has a
+   * `pending` row, the sheet opens it on its own. `onOpen` runs just before,
+   * so the Map tab can show the Delivery lens.
+   */
+  arrived = (discussionId: string, proposalId: string, onOpen?: () => void): void => {
+    this.arrival = { discussionId, proposalId, ...(onOpen ? { onOpen } : {}) };
+    this.want(discussionId);
+    if (this.proposalOf(discussionId, proposalId) === null) {
+      // The event of the change can come before the comment or after it; a read
+      // now does not wait for it.
+      if (this.state.proposals.get(discussionId) != null) this.read(discussionId);
+      return;
+    }
+    this.tryArrival(discussionId);
+  };
+
+  private tryArrival(discussionId: string) {
+    const arrival = this.arrival;
+    if (arrival === null || arrival.discussionId !== discussionId) return;
+    const proposal = this.proposalOf(discussionId, arrival.proposalId);
+    if (proposal === null) return;
+    this.arrival = null;
+    if (!proposal.rows.some((r) => r.state === "waiting")) return;
+    // MPV-FR-GRTP: a sheet that shows the proposal already redraws in place.
+    if (this.state.review?.proposalId === proposal.id) return;
+    arrival.onOpen?.();
+    logInfo(["frontend"], "map plan review opened on its own", { rows: proposal.rows.length });
+    this.openReview(discussionId, proposal.id, true);
+  }
+
+  /**
+   * MPV-FR-BBQY / MPV-FR-VXHC: after decisions made in the sheet on `keys`,
+   * close the sheet when no row is `pending`. Where one of those rows failed,
+   * the sheet stays open and selects the first failed row.
+   */
+  closeWhenDecided = (discussionId: string, proposalId: string, keys: readonly string[]): void => {
+    const review = this.state.review;
+    if (review === null || review.proposalId !== proposalId) return;
+    const proposal = this.proposalOf(discussionId, proposalId);
+    if (!proposal || proposal.rows.some((r) => r.state === "waiting")) return;
+    const failed = proposal.rows.find((r) => keys.includes(r.key) && r.state === "failed");
+    if (failed) {
+      this.select(failed.key);
+      return;
+    }
+    logInfo(["frontend"], "map plan review closed on its own", { rows: proposal.rows.length });
+    this.closeReview(true);
+  };
 
   /** MPV-FR-XAOG: the rows whose state differs between two reads. */
   private changedStatuses(before: MapPlanProposal[], after: MapPlanProposal[]): string[] {
@@ -316,7 +404,7 @@ export class MapPlanReviewStore {
    * other, in proposal order. A pass that unblocks a row listed before its
    * parent is followed by another pass; each row is sent at most once.
    */
-  decideAll = async (discussionId: string, proposalId: string, action: "accept" | "reject"): Promise<void> => {
+  decideAll = async (discussionId: string, proposalId: string, action: "accept" | "reject"): Promise<string[]> => {
     const sent = new Set<string>();
     for (let progress = true; progress; ) {
       progress = false;
@@ -329,6 +417,7 @@ export class MapPlanReviewStore {
         if (await this.decide(discussionId, proposalId, key, action)) progress = true;
       }
     }
+    return [...sent];
   };
 
   /** MPV-FR-AAFF: ask the agent that proposed to prepare the failed rows again. */
@@ -352,11 +441,11 @@ export class MapPlanReviewStore {
   };
 
   /** MPV-FR-RJKZ / MPV-FR-CAQL: open the sheet of a proposal. */
-  openReview = (discussionId: string, proposalId: string): void => {
+  openReview = (discussionId: string, proposalId: string, auto = false): void => {
     const proposal = this.proposalOf(discussionId, proposalId);
     const selectedKey = proposal ? firstSelection(proposal, rowStatuses(proposal, this.state.busy)) : null;
-    logInfo(["frontend"], "map plan review opened", { rows: proposal?.rows.length ?? 0 });
-    this.set({ review: { discussionId, proposalId, selectedKey } });
+    if (!auto) logInfo(["frontend"], "map plan review opened", { rows: proposal?.rows.length ?? 0 });
+    this.set({ review: { discussionId, proposalId, selectedKey, ...(auto ? { auto } : {}) } });
   };
 
   /** MPV-FR-PBAD: close the sheet, and give the focus back to its summary row. */
@@ -364,7 +453,9 @@ export class MapPlanReviewStore {
     const review = this.state.review;
     if (review === null) return;
     this.set({ review: null });
-    if (returnFocus) this.returns.get(review.proposalId)?.focus({ preventScroll: true });
+    if (!returnFocus) return;
+    const buttons = (this.returns.get(review.proposalId) ?? []).filter((el) => el.isConnected);
+    buttons[buttons.length - 1]?.focus({ preventScroll: true });
   };
 
   /** Select a row of the open sheet. */
@@ -418,9 +509,17 @@ export class MapPlanReviewStore {
     this.set({ proposers });
   };
 
-  /** MPV-FR-PBAD: the element that takes the focus back when the sheet of a proposal closes. */
-  registerReturn = (proposalId: string, element: HTMLElement | null): void => {
-    if (element === null) this.returns.delete(proposalId);
-    else this.returns.set(proposalId, element);
+  /**
+   * MPV-FR-PBAD: an element that takes the focus back when the sheet of a
+   * proposal closes. Each comment that names the proposal holds one, and the
+   * newest one takes the focus. The answer takes the element back.
+   */
+  registerReturn = (proposalId: string, element: HTMLElement): (() => void) => {
+    this.returns.set(proposalId, [...(this.returns.get(proposalId) ?? []), element]);
+    return () => {
+      const left = (this.returns.get(proposalId) ?? []).filter((el) => el !== element);
+      if (left.length > 0) this.returns.set(proposalId, left);
+      else this.returns.delete(proposalId);
+    };
   };
 }

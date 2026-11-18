@@ -212,6 +212,11 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         : null;
       if (field) field.focus();
       else root.focus();
+      // A composer that a new surface took over keeps its text: the caret goes
+      // after that text, so the author writes on.
+      if (target === "composer" && field instanceof HTMLTextAreaElement) {
+        field.setSelectionRange(field.value.length, field.value.length);
+      }
     },
     [thread.id],
   );

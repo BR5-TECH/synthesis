@@ -3,6 +3,7 @@
  * (`MPR-map-plan-proposals.md`, Contract surface). Field names are the camelCase
  * names of the wire.
  */
+import type { ProposalUpdateCounts } from "./proposalReferences";
 
 /** MPR-FR-CEKS: one node of the Map that a thread is about. */
 export interface MapNodeRef {
@@ -114,4 +115,6 @@ export interface MapNodeAttachment {
 export interface MapPlanProposalReference {
   kind: "mapPlanProposal";
   proposalId: string;
+  /** CMS-FR-BSQB: present on the comment an update of the proposal appended. */
+  update?: ProposalUpdateCounts;
 }

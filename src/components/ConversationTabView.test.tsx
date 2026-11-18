@@ -179,6 +179,19 @@ describe("CVP-FR-45, CVP-FR-46: the unavailable-owner fallback tab", () => {
   });
 });
 
+describe("CVP-FR-42, MPV-FR-KHDP: a held composer focus lands after the unsent text", () => {
+  it("puts the caret after the text the composer keeps, so the author writes on", async () => {
+    publishThread(discussion());
+    act(() => setComposerBody("d1", "half a thought"));
+    requestPendingFocus("d1", "composer");
+    render(<ConversationTabView tab={noteTab()} onOpened={vi.fn()} />);
+    const field = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(field.selectionStart).toBe("half a thought".length);
+    expect(field.selectionEnd).toBe("half a thought".length);
+  });
+});
+
 describe("TAB-FR-25, CVP-FR-47: closing and reopening the tab keeps the session", () => {
   it("keeps the unsent composer text, the pending placeholder, and the unread state", async () => {
     publishThread(discussion());

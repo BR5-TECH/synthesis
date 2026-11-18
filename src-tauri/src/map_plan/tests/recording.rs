@@ -29,7 +29,7 @@ fn a_proposal_is_stored_with_its_comment() {
     assert!(last.body.starts_with("I propose"));
     assert_eq!(
         last.attachments,
-        [Attachment::MapPlanProposal { proposal_id: proposal.id.clone() }]
+        [Attachment::MapPlanProposal { proposal_id: proposal.id.clone(), update: None }]
     );
     assert_eq!(listed(&plan), [proposal]);
 }

@@ -76,6 +76,20 @@
 .pp-b[data-m="add"] .pp-b__c code { background: transparent; }
 .pp-b__c ins { text-decoration: none; background: var(--diff-add-bg); color: var(--diff-add-fg); border-radius: 2px; padding: 0 2px; }
 .pp-b__c del { background: var(--diff-del-bg); color: var(--diff-del-fg); text-decoration: line-through; border-radius: 2px; padding: 0 2px; }
+/* MPV-FR-RQWN: a quote, as the issue shows it. */
+.pp-quote { padding-left: var(--sp-3); border-left: 2px solid var(--border-2); color: var(--fg-3); }
+/* MPV-FR-ZCWQ / MPV-FR-JVZN: a fenced code block, line breaks and indentation kept, a scroll in place of a wrap. */
+.pp-code { position: relative; margin: 2px 0; background: var(--bg-sunken); border: 1px solid var(--border-1); border-radius: var(--r-xs); overflow: hidden; }
+.pp-code__lang { position: absolute; top: 4px; right: var(--sp-2); font: 400 var(--fs-src-xs)/1.35 var(--font-mono); color: var(--fg-3); user-select: none; }
+.pp-code__pre { margin: 0; padding: var(--sp-2) 0; overflow-x: auto; font: 400 var(--fs-src-sm)/1.6 var(--font-mono); font-variant-ligatures: none; color: var(--fg-1); white-space: pre; overflow-wrap: normal; text-decoration: none; }
+/* The lines share the width of the widest line, so a tone spans the scrolled width. */
+.pp-b__c .pp-code__pre code { display: inline-grid; min-width: 100%; padding: 0; background: transparent; border-radius: 0; font: inherit; color: inherit; }
+.pp-code__line { display: block; padding: 0 var(--sp-3); }
+.pp-code__g { display: inline-block; width: 16px; margin-left: calc(-1 * var(--sp-1)); color: var(--fg-3); user-select: none; }
+.pp-code__line[data-mark="ins"] { background: var(--diff-add-bg); }
+.pp-code__line[data-mark="ins"] .pp-code__g { color: var(--diff-add-fg); }
+.pp-code__line[data-mark="del"] { background: var(--diff-del-bg); color: var(--diff-del-fg); text-decoration: line-through; }
+.pp-code__line[data-mark="del"] .pp-code__g { color: var(--diff-del-fg); text-decoration: none; }
 .pp-fold {
   display: flex; align-items: center; gap: var(--sp-2); width: 100%; height: 26px; padding: 0 var(--sp-3);
   border: 0; border-top: 1px solid var(--border-1); border-bottom: 1px solid var(--border-1); background: var(--bg-panel);
@@ -172,3 +186,4 @@
   .pp-entry__name, .pp-entry__sum { display: none; }
 }
 .pp-detail__scroll > *, .pp-detail__foot > * { box-sizing: border-box; }
+.pp-code:not([data-language=""]) .pp-code__pre { padding-top: 20px; }

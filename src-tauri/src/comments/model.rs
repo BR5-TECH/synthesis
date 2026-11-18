@@ -121,8 +121,8 @@ pub struct CommentQuote {
     pub excerpt: String,
 }
 
-/// CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
-/// withdrawn. Stored and folded as appended; this module validates nothing
+/// CMS-FR-BSQB: how many hunks, or plan rows, one update of a proposal
+/// changed, added, and withdrew. Stored and folded as appended; this module validates nothing
 /// about the counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProposalUpdateCounts {
@@ -304,7 +304,13 @@ pub enum Attachment {
     /// (`MPR-map-plan-proposals.md`). Identity alone, appended through
     /// `append_as` alone; no [`AttachmentInput`] produces one.
     #[serde(rename_all = "camelCase")]
-    MapPlanProposal { proposal_id: String },
+    MapPlanProposal {
+        proposal_id: String,
+        /// CMS-FR-BSQB: present on the comment an update of the proposal
+        /// appended, and absent on the comment that recorded it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        update: Option<ProposalUpdateCounts>,
+    },
     /// CMS-FR-TUHL: the comment is the Synthesis of an agent group
     /// (`AGC-agent-conversations.md` AGC-FR-CZCU). Holds no content, and appears
     /// through an agent turn's append alone.

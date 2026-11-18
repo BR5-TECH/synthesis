@@ -144,6 +144,7 @@ pub fn append_map_proposal_comment(
     body: String,
     spoken_original: Option<String>,
     proposal_id: &str,
+    update: Option<super::ProposalUpdateCounts>,
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
     let Stamp { by, at } = stamp;
@@ -155,7 +156,7 @@ pub fn append_map_proposal_comment(
     let attachments = turn_marks::with_turn_marks(
         thread_id,
         by,
-        vec![Attachment::MapPlanProposal { proposal_id: proposal_id.to_string() }],
+        vec![Attachment::MapPlanProposal { proposal_id: proposal_id.to_string(), update }],
     );
     append_as_scoped(
         root,

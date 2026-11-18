@@ -148,10 +148,14 @@ export function ReviewSheet({ store, host }: { store: MapPlanReviewStore; host: 
   const sheet = useRef<HTMLDivElement>(null);
   const proposal = review ? store.proposalOf(review.discussionId, review.proposalId) : null;
 
-  // MPV-FR-PBAD: the sheet takes the focus when it opens.
+  // MPV-FR-PBAD: the sheet takes the focus when it opens. MPV-FR-KHDP: a sheet
+  // that opened on its own leaves the focus where it was.
   const openedFor = review?.proposalId ?? null;
+  const openedAuto = review?.auto === true;
   useEffect(() => {
-    if (openedFor !== null) sheet.current?.focus({ preventScroll: true });
+    if (openedFor !== null && !openedAuto) sheet.current?.focus({ preventScroll: true });
+    // The focus is taken once, when the sheet opens for a proposal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedFor]);
 
   // MPV-FR-XAOG: a decision removes the control that had the focus. Where the
@@ -162,7 +166,12 @@ export function ReviewSheet({ store, host }: { store: MapPlanReviewStore; host: 
     if (!refocus.current) return;
     const active = document.activeElement;
     const el = sheet.current;
-    if (!el || el.contains(active)) return;
+    // A sheet that closed keeps no request: the next sheet starts without one.
+    if (!el) {
+      refocus.current = false;
+      return;
+    }
+    if (el.contains(active)) return;
     if (active === null || active === document.body) el.focus({ preventScroll: true });
     else refocus.current = false;
   });
@@ -180,7 +189,11 @@ export function ReviewSheet({ store, host }: { store: MapPlanReviewStore; host: 
     keepFocus();
     // MPV-FR-CAQL: only a decision the backend answered moves the selection.
     void store.decide(discussionId, proposal.id, row.key, action).then((answered) => {
-      if (answered && action !== "reopen") store.advanceFrom(row.key);
+      if (answered && action !== "reopen") {
+        store.advanceFrom(row.key);
+        // MPV-FR-BBQY: the last decision closes the sheet.
+        store.closeWhenDecided(discussionId, proposal.id, [row.key]);
+      }
       keepFocus();
     });
   };
@@ -251,8 +264,10 @@ export function ReviewSheet({ store, host }: { store: MapPlanReviewStore; host: 
         selectedKey={row.key}
         onSelect={store.select}
         onAll={(action) => {
-          void store.decideAll(discussionId, proposal.id, action).then(() => {
+          void store.decideAll(discussionId, proposal.id, action).then((sent) => {
             store.advanceFrom(row.key);
+            // MPV-FR-VXHC: a run that leaves no row pending closes the sheet.
+            store.closeWhenDecided(discussionId, proposal.id, sent);
             keepFocus();
           });
         }}

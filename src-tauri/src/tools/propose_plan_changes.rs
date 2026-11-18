@@ -3,7 +3,8 @@
 //!
 //! One call carries a batch of rows: a new issue, a change to a plan issue, or
 //! a new draft. The tool records the batch as one plan proposal and appends one
-//! comment of the agent, through `crate::map_plan`. It writes nothing to
+//! comment of the agent, through `crate::map_plan`. While a row of its
+//! proposal waits, a call with `updates` changes that proposal in place. It writes nothing to
 //! GitHub, creates no draft and no label, and does not change the read cache
 //! of the plan (PPT-FR-WBYJ). The rows are applied only when the author accepts
 //! them.
@@ -24,9 +25,11 @@ use crate::comments::{self, Participant};
 use crate::delivery::github::plan_reads::{self, PlanFactsQuery};
 use crate::delivery::DeliveryError;
 use crate::logging::{LogBuffer, LogSink, BUFFER};
-use crate::map_plan::{self, MapPlanError, ProposalComment, RowFields};
+use crate::map_plan::{self, MapPlanError, MapPlanProposal, ProposalComment, RowFields};
+use updates::PlanUpdateArg;
 
 pub mod rows;
+pub mod updates;
 
 #[cfg(test)]
 mod tests;
@@ -38,11 +41,16 @@ pub const NAME: &str = "propose_plan_changes";
 pub const MAX_ROWS: usize = 20;
 
 /// PPT-FR-FFML: the fixed description of the contract surface.
-pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`). A new issue can also have an earlier new issue of the same call as parent (`parent_row`). Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Do not propose all work at once. Keep the discussion on one topic, propose one step, and propose again after the author decided every row. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.";
+pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`). A new issue can also have an earlier new issue of the same call as parent (`parent_row`). Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Do not propose all work at once. Keep the discussion on one topic, propose one step, and propose a new batch after the author decided every row. While a row of your proposal still waits and the discussion asks for a different change, send `updates` in place of `rows`. Each update gives `action`: `change` with the `key` of a row and the full new row, `add` with a new row and a new `key`, or `withdraw` with the `key` of a row you no longer offer. A rejected row can be changed, and the author decides it again. An accepted or failed row can not be updated. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded or updated.";
 
 const RATIONALE_DESCRIPTION: &str = "What you propose and why, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
-const ROWS_DESCRIPTION: &str =
-    "The rows of the proposal, 1 to 20. The author decides each row on its own.";
+const ROWS_DESCRIPTION: &str = "The rows of a new proposal, 1 to 20. The author decides each row on its own. Leave it out when you pass `updates`.";
+const UPDATES_DESCRIPTION: &str = "Changes to your proposal that still has a waiting row, in place of `rows`, in the order they apply. A `change` gives the `key` of a row and the full new `row`, with the same `op`; the author decides it again. An `add` gives a new `key` and its `row`. A `withdraw` gives the `key` of a row you no longer offer, and no `row`. An accepted or failed row can not be updated.";
+const ACTION_DESCRIPTION: &str =
+    "`change` replaces a row, `add` adds a row, and `withdraw` takes a row out of the proposal.";
+const UPDATE_KEY_DESCRIPTION: &str =
+    "The `key` of the row to change or withdraw, or the new `key` of the row to add.";
+const UPDATE_ROW_DESCRIPTION: &str = "The full row, with the fields of a row of `rows`. Its `key` is the `key` of the update. For `change` and `add` only.";
 const KEY_DESCRIPTION: &str =
     "A name for the row that no other row of the call has. `parent_row` uses it.";
 const OP_DESCRIPTION: &str = "`create_issue` proposes a new issue, `modify_issue` proposes a change to a plan issue, and `new_draft` proposes a new draft.";
@@ -69,7 +77,7 @@ pub const NOT_A_MAP: &str = "This conversation is not a Map discussion, so there
 pub const PLAN_UNAVAILABLE: &str = "The project has no valid GitHub Project for its plan. Tell the author; asking again will not succeed.";
 pub const CONVERSATION_RESOLVED: &str =
     "This conversation is resolved and takes no further comments, so nothing was proposed.";
-pub const CARD_OPEN: &str = "A proposal of yours still waits for the decisions of the author. Wait for them, then propose again. Nothing was proposed.";
+pub const CARD_OPEN: &str = "A proposal of yours still waits for the decisions of the author. To change it, send `updates` in place of `rows`. Otherwise wait for the decisions, then propose again. Nothing was proposed.";
 pub const BLANK_RATIONALE: &str =
     "Say what you propose and why. The author reads this beside the card.";
 pub const NOT_RECORDED: &str = "The proposal could not be recorded.";
@@ -128,14 +136,19 @@ pub struct ProposePlanChangesArgs {
     #[serde(default)]
     pub rationale: String,
     #[serde(default)]
-    pub rows: Vec<PlanRowArg>,
+    pub rows: Option<Vec<PlanRowArg>>,
+    /// PPT-FR-STLY: the updates of the open proposal, in place of `rows`.
+    #[serde(default)]
+    pub updates: Option<Vec<PlanUpdateArg>>,
 }
 
-/// The data object of the contract surface.
+/// The data object of the contract surface: one shape for a new proposal, and
+/// one for an update (PPT contract surface, "Output").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ProposePlanChangesOutput {
-    pub proposed: bool,
-    pub rows: usize,
+#[serde(untagged)]
+pub enum ProposePlanChangesOutput {
+    Proposed { proposed: bool, rows: usize },
+    Updated { updated: bool, changed: usize, added: usize, withdrawn: usize },
 }
 
 /// TLC-FR-06: the JSON Schema of the contract surface.
@@ -149,34 +162,64 @@ pub fn parameters() -> serde_json::Value {
                 "description": ROWS_DESCRIPTION,
                 "minItems": 1,
                 "maxItems": MAX_ROWS,
+                "items": row_schema(),
+            },
+            "updates": {
+                "type": "array",
+                "description": UPDATES_DESCRIPTION,
+                "minItems": 1,
+                "maxItems": MAX_ROWS,
                 "items": {
                     "type": "object",
                     "properties": {
-                        "key": { "type": "string", "description": KEY_DESCRIPTION },
-                        "op": {
+                        "action": {
                             "type": "string",
-                            "enum": [rows::OP_CREATE, rows::OP_MODIFY, rows::OP_DRAFT],
-                            "description": OP_DESCRIPTION,
+                            "enum": [updates::ACTION_CHANGE, updates::ACTION_ADD, updates::ACTION_WITHDRAW],
+                            "description": ACTION_DESCRIPTION,
                         },
-                        "title": { "type": "string", "description": TITLE_DESCRIPTION },
-                        "body": { "type": "string", "description": BODY_DESCRIPTION },
-                        "type": { "type": "string", "description": TYPE_DESCRIPTION },
-                        "milestone": { "type": ["string", "null"], "description": MILESTONE_DESCRIPTION },
-                        "parent_issue": { "type": ["integer", "null"], "description": PARENT_ISSUE_DESCRIPTION },
-                        "parent_row": { "type": "string", "description": PARENT_ROW_DESCRIPTION },
-                        "labels": { "type": "array", "items": { "type": "string" }, "description": LABELS_DESCRIPTION },
-                        "number": { "type": "integer", "description": NUMBER_DESCRIPTION },
-                        "labels_add": { "type": "array", "items": { "type": "string" }, "description": LABELS_ADD_DESCRIPTION },
-                        "labels_remove": { "type": "array", "items": { "type": "string" }, "description": LABELS_REMOVE_DESCRIPTION },
-                        "close_reason": { "type": "string", "enum": ["completed", "not_planned"], "description": CLOSE_REASON_DESCRIPTION },
-                        "status": { "type": "string", "description": STATUS_DESCRIPTION },
-                        "name": { "type": "string", "description": NAME_DESCRIPTION },
+                        "key": { "type": "string", "description": UPDATE_KEY_DESCRIPTION },
+                        "row": described(row_schema(), UPDATE_ROW_DESCRIPTION),
                     },
-                    "required": ["key", "op"],
+                    "required": ["action", "key"],
                 },
             },
         },
-        "required": ["rationale", "rows"],
+        "required": ["rationale"],
+    })
+}
+
+/// `schema` with its description.
+fn described(mut schema: serde_json::Value, description: &str) -> serde_json::Value {
+    schema["description"] = serde_json::json!(description);
+    schema
+}
+
+/// TLC-FR-06: the schema of one row, for `rows` and for the `row` of an update.
+fn row_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "key": { "type": "string", "description": KEY_DESCRIPTION },
+            "op": {
+                "type": "string",
+                "enum": [rows::OP_CREATE, rows::OP_MODIFY, rows::OP_DRAFT],
+                "description": OP_DESCRIPTION,
+            },
+            "title": { "type": "string", "description": TITLE_DESCRIPTION },
+            "body": { "type": "string", "description": BODY_DESCRIPTION },
+            "type": { "type": "string", "description": TYPE_DESCRIPTION },
+            "milestone": { "type": ["string", "null"], "description": MILESTONE_DESCRIPTION },
+            "parent_issue": { "type": ["integer", "null"], "description": PARENT_ISSUE_DESCRIPTION },
+            "parent_row": { "type": "string", "description": PARENT_ROW_DESCRIPTION },
+            "labels": { "type": "array", "items": { "type": "string" }, "description": LABELS_DESCRIPTION },
+            "number": { "type": "integer", "description": NUMBER_DESCRIPTION },
+            "labels_add": { "type": "array", "items": { "type": "string" }, "description": LABELS_ADD_DESCRIPTION },
+            "labels_remove": { "type": "array", "items": { "type": "string" }, "description": LABELS_REMOVE_DESCRIPTION },
+            "close_reason": { "type": "string", "enum": ["completed", "not_planned"], "description": CLOSE_REASON_DESCRIPTION },
+            "status": { "type": "string", "description": STATUS_DESCRIPTION },
+            "name": { "type": "string", "description": NAME_DESCRIPTION },
+        },
+        "required": ["key", "op"],
     })
 }
 
@@ -264,13 +307,14 @@ where
     ) -> Result<ProposePlanChangesOutput, PlanRefusal> {
         let mut fields = crate::log_fields! {
             "discussionId" => self.origin.discussion_id(),
-            "rows" => args.rows.len(),
+            "rows" => args.rows.as_ref().map_or(0, Vec::len),
+            "updates" => args.updates.as_ref().map_or(0, Vec::len),
         };
         let outcome = self.propose(args).await;
         match &outcome {
-            Ok((_, kinds)) => {
-                for (kind, count) in kinds {
-                    fields.insert((*kind).to_string(), serde_json::json!(count));
+            Ok((_, counts)) => {
+                for (name, count) in counts {
+                    fields.insert((*name).to_string(), serde_json::json!(count));
                 }
                 log_recorded(&self.app, self.buffer, NAME, fields)
             }
@@ -293,39 +337,30 @@ where
         kinds
     }
 
-    async fn propose(
-        &self,
-        args: ProposePlanChangesArgs,
-    ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
-        gate(&self.app, &self.origin, &WORDS)?;
-        let discussion_id = self.origin.discussion_id();
-        // PPT-FR-BSSO.
-        let folded =
-            comments::locate_discussion_of(&self.roots.store, &self.origin.target, discussion_id);
-        if folded.is_some_and(|d| d.resolved) {
-            return Err(resolved());
+    /// PPT-FR-CXFG: the rationale as the model wrote it, less its citation
+    /// markers, with its spoken part in place.
+    fn comment_of(&self, rationale: &str) -> ProposalComment {
+        ProposalComment {
+            body: crate::agent_conversations::strip_citation_markers(rationale).into_owned(),
+            author: self.author.clone(),
+            spoken_original: None,
         }
-        // PPT-FR-AYQT.
-        // The store reads are synchronous and an accept can hold the lock for a
-        // while: they run off the async runtime.
-        let (app, id) = (self.app.clone(), discussion_id.to_string());
-        let open = crate::project_scope::context::spawn_blocking(move || {
-            map_plan::open_row_exists(&app, &id)
-        })
-        .await
-        .map_err(|_| not_recorded())?;
-        if open {
-            return Err(card_open());
-        }
-        // PPT-FR-NXPZ.
-        if args.rationale.trim().is_empty() {
+    }
+
+    /// PPT-FR-NXPZ.
+    fn check_rationale(rationale: &str) -> Result<(), PlanRefusal> {
+        if rationale.trim().is_empty() {
             return Err(PlanRefusal::invalid("rationale_blank", BLANK_RATIONALE));
         }
-        if comments::spoken_part(&args.rationale).is_none() {
+        if comments::spoken_part(rationale).is_none() {
             return Err(PlanRefusal::invalid("no_spoken_part", RATIONALE_NO_SPOKEN_PART));
         }
-        let needs = rows::check_shape(&args.rows)?;
-        let facts = plan_reads::plan_facts(
+        Ok(())
+    }
+
+    /// The facts of the plan that the rows need, read from GitHub.
+    async fn facts(&self, needs: rows::Needs) -> Result<plan_reads::PlanFacts, PlanRefusal> {
+        plan_reads::plan_facts(
             self.app.clone(),
             PlanFactsQuery {
                 need_types: needs.types,
@@ -334,18 +369,69 @@ where
             },
         )
         .await
-        .map_err(|e| plan_refusal(&e))?;
-        let built = rows::build_rows(&args.rows, &facts)?;
+        .map_err(|e| plan_refusal(&e))
+    }
+
+    /// The open proposal of the discussion. The store reads are synchronous and
+    /// an accept can hold the lock for a while: they run off the async runtime.
+    async fn open_proposal(&self) -> Result<Option<MapPlanProposal>, PlanRefusal> {
+        let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
+        crate::project_scope::context::spawn_blocking(move || {
+            map_plan::read_open_proposal(&app, &id)
+        })
+        .await
+        .map_err(|_| not_recorded())
+    }
+
+    async fn propose(
+        &self,
+        args: ProposePlanChangesArgs,
+    ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
+        gate(&self.app, &self.origin, &WORDS)?;
+        // PPT-FR-MYQS.
+        let form = match (args.rows, args.updates) {
+            (Some(rows), None) => Ok(rows),
+            (None, Some(updates)) => Err(updates),
+            _ => return Err(updates::not_one_form()),
+        };
+        // PPT-FR-BSSO.
+        let discussion_id = self.origin.discussion_id();
+        let folded =
+            comments::locate_discussion_of(&self.roots.store, &self.origin.target, discussion_id);
+        if folded.is_some_and(|d| d.resolved) {
+            return Err(resolved());
+        }
+        let open = self.open_proposal().await?;
+        match form {
+            Ok(rows) => {
+                // PPT-FR-AYQT.
+                if open.is_some() {
+                    return Err(card_open());
+                }
+                self.record(&args.rationale, &rows).await
+            }
+            // PPT-FR-STLY.
+            Err(updates) => {
+                let open = open.ok_or_else(updates::no_open_proposal)?;
+                self.update(&args.rationale, &updates, &open).await
+            }
+        }
+    }
+
+    /// PPT-FR-PMQL to PPT-FR-UZEK: record a new proposal.
+    async fn record(
+        &self,
+        rationale: &str,
+        rows: &[PlanRowArg],
+    ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
+        Self::check_rationale(rationale)?;
+        let needs = rows::check_shape(rows)?;
+        let facts = self.facts(needs).await?;
+        let built = rows::build_rows(rows, &facts)?;
         let kinds = Self::kinds(&built);
         let count = built.len();
-        // PPT-FR-CXFG: the rationale as the model wrote it, less its citation
-        // markers, with its spoken part in place.
-        let comment = ProposalComment {
-            body: crate::agent_conversations::strip_citation_markers(&args.rationale).into_owned(),
-            author: self.author.clone(),
-            spoken_original: None,
-        };
-        let (app, id) = (self.app.clone(), discussion_id.to_string());
+        let comment = self.comment_of(rationale);
+        let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
         crate::project_scope::context::spawn_blocking(move || {
             map_plan::record_map_plan_proposal(&app, &id, built, comment)
         })
@@ -354,7 +440,46 @@ where
         .map_err(|e| record_refusal(&e))?;
         // CVL-FR-15: set only after the record and its comment both landed.
         self.proposed.store(true, Ordering::SeqCst);
-        Ok((ProposePlanChangesOutput { proposed: true, rows: count }, kinds))
+        Ok((ProposePlanChangesOutput::Proposed { proposed: true, rows: count }, kinds))
+    }
+
+    /// PPT-FR-STLY to PPT-FR-ISZR: update the open proposal in place.
+    async fn update(
+        &self,
+        rationale: &str,
+        updates: &[PlanUpdateArg],
+        open: &MapPlanProposal,
+    ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
+        Self::check_rationale(rationale)?;
+        let (checked, needs) = updates::check_updates(updates, open)?;
+        let facts = self.facts(needs).await?;
+        let built = updates::build_updates(&checked, &facts)?;
+        let new_rows: Vec<map_plan::MapPlanRow> = built
+            .iter()
+            .filter_map(|u| match u {
+                map_plan::MapPlanUpdate::Change(row) | map_plan::MapPlanUpdate::Add(row) => {
+                    Some(row.clone())
+                }
+                map_plan::MapPlanUpdate::Withdraw(_) => None,
+            })
+            .collect();
+        let mut counts = Self::kinds(&new_rows);
+        let (changed, added, withdrawn) = updates::counts(&checked);
+        counts.insert("changeUpdates", changed);
+        counts.insert("addUpdates", added);
+        counts.insert("withdrawUpdates", withdrawn);
+        let comment = self.comment_of(rationale);
+        let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
+        crate::project_scope::context::spawn_blocking(move || {
+            map_plan::update_map_plan_proposal(&app, &id, built, comment)
+        })
+        .await
+        .map_err(|_| not_recorded())?
+        .map_err(|e| updates::update_refusal(&e).unwrap_or_else(|| record_refusal(&e)))?;
+        // CVL-FR-15: set only after the update and its comment both landed.
+        self.proposed.store(true, Ordering::SeqCst);
+        let output = ProposePlanChangesOutput::Updated { updated: true, changed, added, withdrawn };
+        Ok((output, counts))
     }
 }
 

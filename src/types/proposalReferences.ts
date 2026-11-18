@@ -3,8 +3,8 @@
 // Re-exported from `./comments`.
 
 /**
- * CMS-FR-BSQB: how many hunks one update of a proposal changed, added, and
- * withdrawn. The values are as the update appended them.
+ * CMS-FR-BSQB: how many hunks, or plan rows, one update of a proposal
+ * changed, added, and withdrew. The values are as the update appended them.
  */
 export interface ProposalUpdateCounts {
   changed: number;

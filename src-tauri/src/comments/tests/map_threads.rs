@@ -578,8 +578,11 @@ fn a_map_node_attachment_is_stored_as_appended() {
     let wire = serde_json::to_value(&stored[0]).unwrap();
     assert_eq!(wire["kind"], "mapNode");
     assert_eq!(wire["node"]["id"], "issue-9999");
-    let proposal =
-        serde_json::to_value(Attachment::MapPlanProposal { proposal_id: "p1".into() }).unwrap();
+    let proposal = serde_json::to_value(Attachment::MapPlanProposal {
+        proposal_id: "p1".into(),
+        update: None,
+    })
+    .unwrap();
     assert_eq!(proposal["kind"], "mapPlanProposal");
     assert_eq!(proposal["proposalId"], "p1");
     let input = serde_json::json!({ "kind": "mapPlanProposal", "proposalId": "p1" });

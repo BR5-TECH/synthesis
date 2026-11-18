@@ -53,6 +53,9 @@ pub struct FakeState {
     pub last_issue: u64,
     /// Fail every read with this code.
     pub read_error: Option<String>,
+    /// Fail `read_issue` of this issue alone with this code, so the other
+    /// reads still answer.
+    pub read_issue_error: Option<(u64, String)>,
     pub clock: u64,
     /// When set, `read_project` reads the board, reports that it was entered,
     /// and then waits for a release, so a test can hold a read in flight with
@@ -154,6 +157,7 @@ impl FakeTracker {
                 lost_answer: None,
                 last_issue: 0,
                 read_error: None,
+                read_issue_error: None,
                 clock: 0,
                 pause: None,
                 pull_requests: Vec::new(),
@@ -318,6 +322,9 @@ impl TrackerAdapter for FakeTracker {
 
     fn read_issue(&self, number: u64) -> Result<Option<TrackerIssue>, String> {
         let s = self.read(format!("read_issue {number}"))?;
+        if let Some((_, code)) = s.read_issue_error.clone().filter(|(n, _)| *n == number) {
+            return Err(code);
+        }
         if s.pull_requests.contains(&number) {
             return Ok(None);
         }

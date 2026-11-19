@@ -185,6 +185,64 @@ if (flag("mapProposal")) {
 }
 
 /*
+ * MPV-FR-HGLN: with `?planProposal` (use it with `?deliveryGithub`), the
+ * discussions of other tabs hold one plan proposal each: the draft discussion
+ * `disc-1` (New Artifact tab), the file discussion `disc-edt-1` (Editor tab of
+ * EDT-editor.md), `disc-flow-1` (Flow tab of release.flow.md), and the
+ * note conversation `disc-note-2`. Each has a
+ * new issue with a Type, a change of #42, and a new draft. `mock-core.ts` adds
+ * the agent comment of each (`planProposalComments`), and
+ * `window.__planProposalArrive(discussionId)` appends one more (MPV-FR-UWQL).
+ */
+const PLAN_DISCUSSIONS = ["disc-1", "disc-edt-1", "disc-flow-1", "disc-note-2"];
+const planRows = (at: string) => [
+  row("pnew", "create_issue", {
+    title: "Retry failed cleanup",
+    type: "Task",
+    milestone: { number: 4, title: "GA" },
+    labels: ["cli"],
+    body: "## Description\n\nThe cleanup command retries a worktree that is locked.\n",
+  }),
+  row("p42", "modify_issue", {
+    number: 42,
+    title: "Tokenize card numbers",
+    baseUpdatedAt: at,
+    changes: [{ field: "status", before: "Todo", after: "In Progress" }],
+  }),
+  row("pdraft", "new_draft", { name: "Cleanup dry run", body: "Show what the cleanup would remove, and remove nothing." }),
+];
+const planComment = (discussionId: string, n: number, proposalId: string, createdAt: string) => ({
+  id: `${discussionId}-pp${n}`,
+  author: AGENT,
+  body: "I propose a task for the retry, a status change of #42, and a draft for the dry run.",
+  quotes: [],
+  attachments: [{ kind: "mapPlanProposal", proposalId }],
+  createdAt,
+});
+if (flag("planProposal")) {
+  for (const id of PLAN_DISCUSSIONS) {
+    const at = "2026-11-17T09:30:00Z";
+    proposals.push({ id: `pp-${id}`, discussionId: id, commentId: `${id}-pp1`, createdAt: at, rows: planRows(at) });
+  }
+}
+
+/** The seeded plan proposal comment of a discussion of another tab, if any. */
+export function planProposalComments(discussionId: string): any[] {
+  if (!flag("planProposal") || !PLAN_DISCUSSIONS.includes(discussionId)) return [];
+  return [planComment(discussionId, 1, `pp-${discussionId}`, "2026-11-17T09:30:00Z")];
+}
+
+/** A new pending proposal of a discussion of another tab, and its comment. */
+export function arrivingPlanProposal(discussionId: string): any {
+  const at = new Date().toISOString();
+  const n = proposals.filter((p) => p.discussionId === discussionId).length + 1;
+  const proposalId = `pp-${discussionId}-${n}`;
+  proposals.push({ id: proposalId, discussionId, commentId: `${discussionId}-pp${n}`, createdAt: at, rows: planRows(at) });
+  fireChanged(discussionId);
+  return planComment(discussionId, n, proposalId, at);
+}
+
+/*
  * With `?mapProposal`, `window.__mapProposalArrive()` appends an agent comment
  * that updates the proposal (MPV-FR-QZUD) to `map-1`, adds its pending
  * proposal `pp-upd`, and emits `discussion-changed` (MPV-FR-UWQL).
@@ -253,7 +311,10 @@ function decide(cmd: string, a: Record<string, any>): unknown {
   } else {
     r.state = "accepted";
     const number = r.kind === "modify_issue" ? r.fields.number : 90;
-    r.result = { issueNumber: number, issueUrl: `https://github.com/acme/platform/issues/${number}` };
+    r.result =
+      r.kind === "new_draft"
+        ? { draftId: "d-1" }
+        : { issueNumber: number, issueUrl: `https://github.com/acme/platform/issues/${number}` };
   }
   fireChanged(p.discussionId);
   return new Promise((resolve) => setTimeout(() => resolve(structuredClone(p)), 600));
@@ -323,7 +384,8 @@ export function mapDiscussionsInvoke(cmd: string, a: Record<string, any>): unkno
       return t ? { ...t } : NOT_HANDLED;
     }
     case "list_map_plan_proposals":
-      return own(a.discussionId) ? structuredClone(proposals.filter((p) => p.discussionId === a.discussionId)) : NOT_HANDLED;
+      return own(a.discussionId) || proposals.some((p) => p.discussionId === a.discussionId)
+        ? structuredClone(proposals.filter((p) => p.discussionId === a.discussionId)) : NOT_HANDLED;
     case "accept_map_plan_row":
     case "reject_map_plan_row":
     case "reopen_map_plan_row":

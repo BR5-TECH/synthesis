@@ -87,6 +87,9 @@ pub fn build_input_within(
     if matches!(discussion.target, DiscussionTarget::Map) {
         let focus = map_context::map_state_text(roots, &discussion, trigger_comment_id);
         prepend_state_text(&mut sections, &format!("{focus}\n"));
+    } else if let Some(rows) = map_context::proposal_state_text(roots, &discussion) {
+        // MPR-FR-VYPE: the rows of the plan proposals of any other discussion.
+        append_state_text(&mut sections, &rows);
     }
     BuiltInput { sections, document, question_set_unreadable: parts.unreadable }
 }

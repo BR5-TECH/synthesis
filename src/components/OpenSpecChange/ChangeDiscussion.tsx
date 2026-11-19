@@ -49,6 +49,7 @@ import {
 import { documentFraction, type SplitRatio } from "../DraftDiscussion/ratio";
 import { hunkDiscussionOf, openingHunkOf } from "../DraftDiscussion/hunkDiscussion";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
+import { MapPlanReviewLayer } from "../MapPlanProposal";
 import { seededBody } from "../NewArtifactWorkspace/useHunkDiscussion";
 import {
   discussionTargetKey,
@@ -317,7 +318,12 @@ export function ChangeDiscussionSplit({
       data-history={historyOpen ? "open" : undefined}
       data-testid="openspec-change-split"
     >
-      <div className="openspec-change__doc">{children}</div>
+      <div className="openspec-change__doc">
+        {children}
+        {/* MPV-FR-ZQRE: the plan review sheet shows over the change, beside
+            the discussion column. */}
+        <MapPlanReviewLayer placement="tab" />
+      </div>
       <Splitter
         ratio={split.view.ratio}
         onChange={split.setRatio}

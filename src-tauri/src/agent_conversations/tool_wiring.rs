@@ -67,21 +67,20 @@ pub(crate) fn map_plan_tools_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R
     crate::delivery::source::resolve_source(app).is_ok_and(|source| plan_tools_allowed(&source))
 }
 
-/// CVL-FR-LCSN, MPR-FR-ZCAM: whether a turn is attached the plan tools. Only a
-/// Map turn is, and only where the delivery source allows them (`enabled`).
-/// No other turn ever is. Pure.
-pub(crate) fn plan_tools_wanted(origin: &ConversationOrigin, enabled: bool) -> bool {
-    origin.is_map() && enabled
+/// CVL-FR-RWQB, MPR-FR-ZCAM: whether a turn is attached the plan tools. Every
+/// turn is, of every discussion and target, where the delivery source allows
+/// them (`enabled`). Pure.
+pub(crate) fn plan_tools_wanted(_origin: &ConversationOrigin, enabled: bool) -> bool {
+    enabled
 }
 
-/// CVL-FR-LCSN: the plan tools of one turn: `list_plan_issues`,
+/// CVL-FR-RWQB: the plan tools of one turn: `list_plan_issues`,
 /// `search_plan_issues`, `read_plan_issue`, and `propose_plan_changes`.
 ///
-/// The gate decides first: a turn that is not a Map turn, and a Map turn whose
-/// delivery source does not allow the tools, get nothing. After the gate, the
-/// four tools are bound to `origin`, and `propose_plan_changes` to `author`,
-/// `roots`, and the plan card of the turn. None of the four ends the turn
-/// (CVL-FR-FCWM).
+/// The gate decides first: a turn whose delivery source does not allow the
+/// tools gets nothing. After the gate, the four tools are bound to `origin`,
+/// and `propose_plan_changes` to `author`, `roots`, and the plan card of the
+/// turn. None of the four ends the turn (CVL-FR-FCWM).
 pub(super) fn plan_tools_for_turn<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     roots: Roots<'_>,
@@ -89,7 +88,7 @@ pub(super) fn plan_tools_for_turn<R: tauri::Runtime>(
     author: &Participant,
     plan_card: &Arc<crate::tools::propose_plan_changes::PlanTurnCard>,
 ) -> Vec<rig::tool::DynamicTool> {
-    if !plan_tools_wanted(origin, origin.is_map() && map_plan_tools_enabled(app)) {
+    if !plan_tools_wanted(origin, map_plan_tools_enabled(app)) {
         return Vec::new();
     }
     vec![

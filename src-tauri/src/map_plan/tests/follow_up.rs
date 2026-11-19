@@ -84,6 +84,7 @@ fn the_body_names_urls_and_error_codes() {
     let mut proposal = MapPlanProposal {
         id: "p".into(),
         discussion_id: "d".into(),
+        owner: None,
         comment_id: "c".into(),
         created_at: AT.into(),
         reprepare_requested_at: None,
@@ -188,6 +189,7 @@ fn a_follow_up_wants_a_decided_proposal_with_an_accepted_row() {
     let mut proposal = MapPlanProposal {
         id: "p".into(),
         discussion_id: "d".into(),
+        owner: None,
         comment_id: "c".into(),
         created_at: AT.into(),
         reprepare_requested_at: None,

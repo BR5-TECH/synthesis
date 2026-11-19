@@ -139,8 +139,9 @@ pub fn map_fingerprints_dir(root: &crate::fs::RootFs) -> Result<PathBuf, String>
     fsa::resolve_under(map_comments_dir(root)?, MAP_FINGERPRINTS_SUBDIR).map_err(|e| e.to_string())
 }
 
-/// MPR-FR-RVRN, CMS-FR-OIUO: append the one agent comment that announces a plan
-/// proposal to a Map thread. The comment carries one `map_plan_proposal`
+/// MPR-FR-RVRN, MPR-FR-KDTQ, CMS-FR-OIUO: append the one agent comment that
+/// announces a plan proposal to its discussion, in the log `thread_ref`: a Map
+/// thread or any other discussion. The comment carries one `map_plan_proposal`
 /// attachment, and the caller chose its id, so the record of the proposal can
 /// name it. A thread that does not exist is `discussion_not_found`, and a
 /// thread that is resolved refuses the comment as every thread does (CMS-FR-17).
@@ -148,6 +149,7 @@ pub fn map_fingerprints_dir(root: &crate::fs::RootFs) -> Result<PathBuf, String>
 // Reason: one comment has these parts, and the caller holds each of them already.
 pub fn append_map_proposal_comment(
     root: &crate::fs::RootFs,
+    thread_ref: ThreadRef<'_>,
     thread_id: &str,
     comment_id: String,
     body: String,
@@ -157,7 +159,6 @@ pub fn append_map_proposal_comment(
     stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
     let Stamp { by, at } = stamp;
-    let thread_ref = ThreadRef::map_discussion();
     let thread = thread_ref.find(root, thread_id)?;
     if thread.resolved {
         return Err(ERR_DISCUSSION_RESOLVED.to_string());

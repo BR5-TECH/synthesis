@@ -14,6 +14,7 @@ mod errors;
 mod fingerprints;
 pub mod follow_up;
 mod model;
+pub mod owner;
 mod recording;
 mod reprepare;
 mod rules;
@@ -30,6 +31,7 @@ pub use fingerprints::{
     fingerprint_of, read_fingerprints, write_fingerprints, FingerprintRecord, ReferenceFingerprint,
 };
 pub use model::*;
+pub use owner::{ProposalDiscussion, ProposalOwner};
 pub use recording::*;
 #[cfg(test)]
 pub use reprepare::{DispatchSeam, TurnRequest};

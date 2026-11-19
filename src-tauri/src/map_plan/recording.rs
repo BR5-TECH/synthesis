@@ -2,10 +2,10 @@
 //! `propose_plan_changes` calls.
 
 use super::errors::{
-    announce, error, log_operation, no_project, store_unavailable, ERR_DISCUSSION_NOT_FOUND,
-    ERR_PROPOSAL_OPEN,
+    announce, error, log_operation, no_project, store_unavailable, ERR_PROPOSAL_OPEN,
 };
 use super::model::{MapPlanError, MapPlanProposal, MapPlanRow, ProposalComment, RowState};
+use super::owner::ProposalDiscussion;
 use super::{rules, store};
 use crate::comments::{Stamp, ERR_DISCUSSION_RESOLVED};
 use crate::fs::RootFs;
@@ -29,18 +29,21 @@ pub fn open_row_exists<R: tauri::Runtime>(app: &tauri::AppHandle<R>, discussion_
 
 /// MPR-FR-TQVZ, MPR-FR-RVRN, MPR-FR-SBYA: records a proposal and appends its one
 /// agent comment as one step. Refuses with `proposal_open` where the discussion
-/// has an open row. The tool validated the rows already.
+/// has an open row. The tool validated the rows already. `discussion` is a Map
+/// thread id or the origin of a turn of any discussion (MPR-FR-KDTQ).
 pub fn record_map_plan_proposal<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    discussion_id: &str,
+    discussion: impl Into<ProposalDiscussion>,
     rows: Vec<MapPlanRow>,
     comment: ProposalComment,
 ) -> Result<MapPlanProposal, MapPlanError> {
+    let discussion = discussion.into();
+    let discussion_id = discussion.id.as_str();
     let result = open_store(app).and_then(|store| {
         // MPR-FR-HKYH: a recording waits for a decision that runs, so the check
         // of the open row and the write see the same rows.
         let _turn = super::deciding::lock_decisions();
-        record_in(&store, discussion_id, rows, comment)
+        record_in(&store, &discussion, rows, comment)
     });
     match &result {
         Ok((proposal, discussion)) => {
@@ -61,14 +64,12 @@ pub fn record_map_plan_proposal<R: tauri::Runtime>(
 /// the record back.
 fn record_in(
     store: &RootFs,
-    discussion_id: &str,
+    discussion: &ProposalDiscussion,
     rows: Vec<MapPlanRow>,
     comment: ProposalComment,
 ) -> Result<(MapPlanProposal, crate::comments::Discussion), MapPlanError> {
-    let thread = crate::comments::fold_map_discussions(store)
-        .into_iter()
-        .find(|d| d.id == discussion_id)
-        .ok_or_else(|| error(ERR_DISCUSSION_NOT_FOUND, "The Map discussion does not exist."))?;
+    let owner = discussion.owner.as_ref();
+    let thread = super::owner::find_thread(store, owner, &discussion.id)?;
     if rules::has_open_row(&store::read_for(store, &thread.id)) {
         return Err(error(
             ERR_PROPOSAL_OPEN,
@@ -79,6 +80,7 @@ fn record_in(
     let proposal = MapPlanProposal {
         id: crate::notes::new_note_id(),
         discussion_id: thread.id.clone(),
+        owner: discussion.owner.clone(),
         comment_id: crate::notes::new_note_id(),
         created_at: now.clone(),
         reprepare_requested_at: None,
@@ -88,6 +90,7 @@ fn record_in(
     store::write(store, &proposal)?;
     let appended = crate::comments::append_map_proposal_comment(
         store,
+        super::owner::log_of(owner),
         &thread.id,
         proposal.comment_id.clone(),
         comment.body,

@@ -18,6 +18,7 @@ import { SpecMap } from "./SpecMap";
 import { DocumentTextViewer } from "./DocumentViewer";
 import { PdfViewer } from "./PdfViewer";
 import { OpenSpecChangeWorkspace } from "./OpenSpecChange";
+import { InPlaceReviewScope } from "./MapPlanProposal";
 import type { Discussion, SearchHit } from "../types";
 
 interface ViewportProps {
@@ -118,7 +119,21 @@ interface ViewportProps {
  * artifact nothing: its buffer, dirty flag, mode and undo history live in the
  * shell's session store, which the Editor resumes from (EDT-FR-29/EDT-FR-30).
  */
-export function Viewport({
+export function Viewport(props: ViewportProps) {
+  const surface = <ViewportSurface {...props} />;
+  const { activeTab, activeT } = props;
+  // MPV-FR-HGLN: each tab that shows a discussion holds its own review of plan
+  // proposals. The Map tab holds the review of its map session, and the
+  // Dashboard shows no discussion.
+  if (!activeTab || activeTab === "dashboard" || activeT?.kind === "map") return surface;
+  return (
+    <InPlaceReviewScope key={activeT?.id ?? activeTab} openDraft={props.onOpenDraft}>
+      {surface}
+    </InPlaceReviewScope>
+  );
+}
+
+function ViewportSurface({
   activeTab,
   activeT,
   onOpenArtifact,

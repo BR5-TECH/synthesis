@@ -12,6 +12,7 @@ import { useMapPlan } from "./host";
 import { ReviewSheet } from "./Sheet";
 
 export { MapPlanEntry } from "./Entry";
+export { InPlaceReviewScope } from "./InPlaceScope";
 export {
   MapPlanContext,
   resetMapPlanFallbackForTest,
@@ -24,13 +25,20 @@ export {
  * MPV-FR-CTTA / MPV-FR-XAOG: what the canvas area holds of the review: the
  * sheet while one is open, and the announcement of each change of a status.
  * The canvas area is a positioned box, so both stay inside it.
+ *
+ * MPV-FR-ZQRE: with `placement` "tab", the layer is the one of a tab other
+ * than the Map tab, in the positioned box of the content of the tab. It shows
+ * only inside an in-place scope (`InPlaceScope.tsx`), and its sheet stacks
+ * below the chrome of the tab: the action control, the floating composer, and
+ * the floating discussion panel.
  */
-export function MapPlanReviewLayer() {
-  const { store, host } = useMapPlan();
+export function MapPlanReviewLayer({ placement = "map" }: { placement?: "map" | "tab" }) {
+  const { store, host, inPlace } = useMapPlan();
   useSyncExternalStore(store.subscribe, store.getVersion);
+  if (placement === "tab" && !inPlace) return null;
   return (
     <>
-      <ReviewSheet store={store} host={host} />
+      <ReviewSheet store={store} host={host} placement={placement} />
       <span className="pp-sr-only" role="status" aria-live="polite" data-testid="map-plan-announcement">
         {store.snapshot().announcement}
       </span>

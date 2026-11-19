@@ -33,7 +33,7 @@ import {
 } from "./mock-openspec-plan";
 import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-plan";
 import { deliveryInvoke } from "./mock-delivery";
-import { mapDiscussionsInvoke } from "./mock-map-discussions";
+import { arrivingPlanProposal, mapDiscussionsInvoke, planProposalComments } from "./mock-map-discussions";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
 import {
   DECOMPOSITION_ORIGINAL,
@@ -1616,6 +1616,8 @@ function discussion(id: string, draftId: string, over: Record<string, unknown> =
       // can do in the window removes a proposal record while leaving the comment
       // that announced it behind.
       ...spokenComments(id),
+      // MPV-FR-HGLN: `?planProposal` adds a plan proposal comment (mock-map-discussions.ts).
+      ...planProposalComments(id),
       ...(harnessFlag("goneProposal")
         ? [
             {
@@ -1706,6 +1708,7 @@ function noteDiscussion(id: string, noteId: string, over: Record<string, unknown
         createdAt: "2026-08-02T10:06:00Z",
       },
       ...spokenComments(id),
+      ...planProposalComments(id),
     ],
     createdAt: "2026-08-02T10:02:00Z",
     updatedAt: "2026-08-02T10:06:00Z",
@@ -3931,6 +3934,17 @@ function fireBus(name: string, payload?: unknown): void {
     | undefined;
   fire?.(...toUnifiedEvent(name, payload));
 }
+
+/** MPV-FR-UWQL: `window.__planProposalArrive("disc-1")` appends a plan proposal comment. */
+(window as any).__planProposalArrive = (discussionId: string) => {
+  const stored = allDiscussions().find((t) => t.id === discussionId);
+  if (!stored) return false;
+  const posted = arrivingPlanProposal(discussionId);
+  stored.comments = [...stored.comments, posted];
+  stored.updatedAt = posted.createdAt;
+  fireBus("comment-thread-changed", foldedThread(discussionId));
+  return true;
+};
 
 /**
  * The thread as `add_comment` would return it — the fixture (or the stored

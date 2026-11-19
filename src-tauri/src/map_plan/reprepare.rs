@@ -12,7 +12,7 @@ use super::errors::{
 };
 use super::model::{MapPlanError, MapPlanProposal, MapPlanRow, RowFields, RowState};
 use super::{rules, store};
-use crate::comments::{Participant, Stamp, ThreadRef};
+use crate::comments::{Participant, Stamp};
 use crate::delivery::github::ERR_CHANGED_ON_TRACKER;
 use crate::fs::RootFs;
 
@@ -20,6 +20,8 @@ use crate::fs::RootFs;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TurnRequest {
     pub discussion_id: String,
+    /// MPR-FR-KDTQ: the owner target of the discussion, where the turn runs.
+    pub target: crate::comments::DiscussionTarget,
     /// The handle of the agent that proposed (MPR-FR-QIJF).
     pub nickname: String,
     /// The id of the Synthesis comment of the request.
@@ -127,10 +129,8 @@ pub fn request_body(proposal: &MapPlanProposal, handle: &str) -> String {
 /// comment of the proposal.
 pub(super) fn proposer(store: &RootFs, proposal: &MapPlanProposal) -> Result<String, MapPlanError> {
     let missing = || error(ERR_DISCUSSION_NOT_FOUND, "The comment of the proposal has no agent.");
-    let thread = crate::comments::fold_map_discussions(store)
-        .into_iter()
-        .find(|d| d.id == proposal.discussion_id)
-        .ok_or_else(|| error(ERR_DISCUSSION_NOT_FOUND, "The Map discussion does not exist."))?;
+    let thread =
+        super::owner::find_thread(store, proposal.owner.as_ref(), &proposal.discussion_id)?;
     let comment =
         thread.comments.iter().find(|c| c.id == proposal.comment_id).ok_or_else(missing)?;
     match &comment.author {
@@ -153,9 +153,10 @@ pub fn request<R: tauri::Runtime>(
     let handle = proposer(store, proposal)?;
     let comment_id = crate::notes::new_note_id();
     let now = crate::notes::now_rfc3339();
+    // MPR-FR-KDTQ: the comment goes to the discussion of the proposal.
     let appended = crate::comments::append_agent_comment_with(
         store,
-        ThreadRef::map_discussion(),
+        super::owner::log_of(proposal.owner.as_ref()),
         &proposal.discussion_id,
         comment_id.clone(),
         request_body(proposal, &handle),
@@ -171,6 +172,7 @@ pub fn request<R: tauri::Runtime>(
     crate::comments::emit_discussion_changed(app, &appended);
     let turn = TurnRequest {
         discussion_id: proposal.discussion_id.clone(),
+        target: super::owner::target_of(proposal.owner.as_ref()),
         nickname: handle,
         trigger_comment_id: comment_id,
     };
@@ -201,7 +203,8 @@ pub fn request_automatic<R: tauri::Runtime>(
     }
 }
 
-/// MPR-FR-NWEZ: start the turn of the agent in the Map discussion, as a
+/// MPR-FR-NWEZ, MPR-FR-KDTQ: start the turn of the agent in the discussion of
+/// the proposal, as a
 /// comment that addressed the agent does.
 #[cfg(not(test))]
 pub(super) fn dispatch_turn<R: tauri::Runtime>(
@@ -236,7 +239,7 @@ fn dispatch_agent<R: tauri::Runtime>(
     let store = project.require_store()?;
     let origin = crate::agent_conversations::ConversationOrigin {
         discussion_id: turn.discussion_id.clone(),
-        target: crate::comments::DiscussionTarget::Map,
+        target: turn.target.clone(),
         fragment_target: None,
     };
     crate::agent_conversations::dispatch_impl(

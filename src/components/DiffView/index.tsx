@@ -39,6 +39,7 @@ import { onChangesUpdated } from "../../events";
 import { ERR_NOT_A_REPOSITORY } from "../../comparison";
 import { hydrateDiffModes, useDiffModes } from "../../state/diffModes";
 import { ActionControl } from "../ActionControl";
+import { MapPlanReviewLayer } from "../MapPlanProposal";
 import { useDiscussionControl } from "../../hooks/useDiscussionControl";
 import { useArtifactDocument } from "../../hooks/useArtifactDocument";
 import { useExternalChanges } from "../../hooks/useExternalChanges";
@@ -331,6 +332,9 @@ export function DiffView({ target, sessions }: DiffViewProps) {
           shows. It offers Discuss alone whatever the file's type, this tab being
           one reading of one comparison of a file (ACT-FR-04), and what it writes
           is a comment log and never a byte of the material under comparison. */}
+      {/* MPV-FR-ZQRE: the plan review sheet shows over the diff, below the
+          floating discussion panel. */}
+      <MapPlanReviewLayer placement="tab" />
       <ActionControl
         discussions={control.discussions}
         readOnly
